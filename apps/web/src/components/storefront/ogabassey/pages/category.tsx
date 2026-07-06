@@ -36,12 +36,13 @@ export const OgabasseyV2CategoryPage: React.FC<
     condition: [],
     storage: [],
     ram: [],
+    graphics: [],
     colors: [],
     simType: [],
     displayType: [],
     displaySize: [],
     minPrice: 0,
-    maxPrice: 3000000,
+    maxPrice: 10000000,
   };
 
   const [filters, setFilters] = useState<FilterState>(initialFilterState);
@@ -64,6 +65,7 @@ export const OgabasseyV2CategoryPage: React.FC<
     condition: new Set<string>(),
     storage: new Set<string>(),
     ram: new Set<string>(),
+    graphics: new Set<string>(),
     colors: new Set<string>(),
     simType: new Set<string>(),
     displayType: new Set<string>(),
@@ -82,6 +84,7 @@ export const OgabasseyV2CategoryPage: React.FC<
       }
     }
     if (p.ram) options.ram.add(p.ram);
+    if (p.graphics) options.graphics.add(p.graphics);
     if (p.colors) p.colors.forEach((c) => {
       const colorName = typeof c === 'string' ? c : c.name;
       options.colors.add(colorName);
@@ -96,6 +99,7 @@ export const OgabasseyV2CategoryPage: React.FC<
     condition: Array.from(options.condition).sort(),
     storage: Array.from(options.storage).sort(),
     ram: Array.from(options.ram).sort(),
+    graphics: Array.from(options.graphics).sort(),
     colors: Array.from(options.colors).sort(),
     simType: Array.from(options.simType).sort(),
     displayType: Array.from(options.displayType).sort(),
@@ -131,6 +135,11 @@ export const OgabasseyV2CategoryPage: React.FC<
     )
       return false;
     if (filters.ram.length > 0 && (!p.ram || !filters.ram.includes(p.ram)))
+      return false;
+    if (
+      filters.graphics.length > 0 &&
+      (!p.graphics || !filters.graphics.includes(p.graphics))
+    )
       return false;
     if (
       filters.simType.length > 0 &&

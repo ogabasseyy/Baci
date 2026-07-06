@@ -111,6 +111,7 @@ export interface FilterState {
   condition: string[];
   storage: string[];
   ram: string[];
+  graphics: string[];
   colors: string[];
   simType: string[];
   displayType: string[];
@@ -230,6 +231,15 @@ export const CategoryFiltersSidebar: React.FC<CategoryFiltersSidebarProps> = ({
           options={availableOptions.ram}
           selectedOptions={filters.ram}
           onChange={(val) => onFilterChange('ram', val)}
+        />
+      )}
+
+      {availableOptions.graphics.length > 0 && (
+        <FilterSection
+          title="Graphics Card"
+          options={availableOptions.graphics}
+          selectedOptions={filters.graphics}
+          onChange={(val) => onFilterChange('graphics', val)}
         />
       )}
 

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const originalMatchMedia = window.matchMedia;
 const mockAddToCart = vi.fn();
+const mockRouterPush = vi.hoisted(() => vi.fn());
 
 function mockMatchMedia(matches: boolean) {
   Object.defineProperty(window, 'matchMedia', {
@@ -33,7 +34,7 @@ vi.mock('next/link', () => ({
 }));
 vi.mock('next/navigation', () => ({
   useParams: vi.fn(() => ({ slug: 'test', category: 'electronics' })),
-  useRouter: vi.fn(() => ({ push: vi.fn(), back: vi.fn() })),
+  useRouter: vi.fn(() => ({ push: mockRouterPush, back: vi.fn() })),
 }));
 vi.mock('@/hooks/cart', () => ({
   useCart: vi.fn(() => ({
@@ -102,7 +103,9 @@ import { CategoryPage } from './category-page';
 describe('CategoryPage', () => {
   beforeEach(() => {
     window.scrollTo = vi.fn();
+    window.history.replaceState({}, '', '/test-store/electronics');
     mockAddToCart.mockReset();
+    mockRouterPush.mockReset();
     yieldSpy.mockClear();
     filterHarness.onFilterChange = null;
     vi.mocked(useParams).mockReturnValue({
@@ -150,6 +153,33 @@ describe('CategoryPage', () => {
       await filterHarness.onFilterChange?.('brand', 'apple');
     });
     expect(yieldSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes graphics changes through the server when the category is pre-paginated', async () => {
+    mockMatchMedia(true);
+    window.history.replaceState(
+      {},
+      '',
+      '/test-store/gaming-laptops?page=2'
+    );
+
+    render(
+      <CategoryPage
+        graphicsOptions={['Integrated Graphics', 'NVIDIA RTX 4070']}
+        products={[PRODUCT_WITH_IMAGE]}
+        productsArePrePaginated={true}
+        totalProductCount={40}
+      />
+    );
+
+    await act(async () => {
+      await filterHarness.onFilterChange?.('graphics', 'NVIDIA RTX 4070');
+    });
+
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      '/test-store/gaming-laptops?graphics=NVIDIA+RTX+4070'
+    );
+    expect(yieldSpy).not.toHaveBeenCalled();
   });
 
   it('renders the recently-added product carousel in place of the promo banner', () => {

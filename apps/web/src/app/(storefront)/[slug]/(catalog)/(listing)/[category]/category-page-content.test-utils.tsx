@@ -10,6 +10,7 @@ const {
   mockGenerateCollectionPageSchema,
   mockGenerateFAQSchema,
   mockGetCachedCategoryPageData,
+  mockGetCachedCategoryPageGraphicsOptions,
   mockGetCachedBrandAuthorityEntries,
   mockGetCachedProductSemanticInventory,
   mockGetMerchantByIdentifier,
@@ -27,6 +28,7 @@ const {
   mockGenerateCollectionPageSchema: vi.fn(() => ({})),
   mockGenerateFAQSchema: vi.fn(() => ({})),
   mockGetCachedCategoryPageData: vi.fn(),
+  mockGetCachedCategoryPageGraphicsOptions: vi.fn(),
   mockGetCachedBrandAuthorityEntries: vi.fn(),
   mockGetCachedProductSemanticInventory: vi.fn(),
   mockGetMerchantByIdentifier: vi.fn(),
@@ -47,6 +49,7 @@ export {
   mockGenerateFAQSchema,
   mockGetCachedBrandAuthorityEntries,
   mockGetCachedCategoryPageData,
+  mockGetCachedCategoryPageGraphicsOptions,
   mockGetCachedProductSemanticInventory,
   mockGetMerchantByIdentifier,
   mockGetPublishedClusterPosts,
@@ -69,12 +72,16 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/storefront/ogabassey/pages/category-page', () => ({
   CategoryPage: ({
     currentPage,
+    graphicsOptions,
     productsArePrePaginated,
+    selectedGraphics,
     totalProductCount,
     products,
   }: {
     currentPage?: number;
+    graphicsOptions?: string[];
     productsArePrePaginated?: boolean;
+    selectedGraphics?: string[];
     totalProductCount?: number;
     products?: Array<{ id: string; name: string; price: string }>;
   }) => (
@@ -83,6 +90,12 @@ vi.mock('@/components/storefront/ogabassey/pages/category-page', () => ({
       {currentPage ? <div>Page: {currentPage}</div> : null}
       {totalProductCount ? <div>Total: {totalProductCount}</div> : null}
       {productsArePrePaginated ? <div>Prepaginated</div> : null}
+      {graphicsOptions?.map((graphics) => (
+        <div key={`graphics-option-${graphics}`}>Option: {graphics}</div>
+      ))}
+      {selectedGraphics?.map((graphics) => (
+        <div key={`selected-graphics-${graphics}`}>Selected: {graphics}</div>
+      ))}
       {products?.map((product) => (
         <div key={product.id}>
           {product.name}: {product.price}
@@ -131,6 +144,8 @@ vi.mock('./category-page-deferred-compare-links', () => ({
 vi.mock('@/lib/cached-data', () => ({
   getCachedCategoryPageData: (...args: unknown[]) =>
     mockGetCachedCategoryPageData(...args),
+  getCachedCategoryPageGraphicsOptions: (...args: unknown[]) =>
+    mockGetCachedCategoryPageGraphicsOptions(...args),
   getMerchantByIdentifier: (...args: unknown[]) =>
     mockGetMerchantByIdentifier(...args),
 }));
@@ -206,6 +221,7 @@ export function resetCategoryPageContentMocks() {
     category: null,
     products: [{ id: 'product-1' }],
   });
+  mockGetCachedCategoryPageGraphicsOptions.mockResolvedValue([]);
   mockGetCachedBrandAuthorityEntries.mockResolvedValue([]);
   mockResolveCategoryPageName.mockReturnValue('Phones');
   mockNormalizeCategoryPageProducts.mockReturnValue([

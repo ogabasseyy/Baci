@@ -14,6 +14,7 @@ import type {
   CachedCategorySeo,
 } from '@/lib/cached-category-page-shell-types';
 import {
+  type CategoryPageProductFilters,
   type CachedCategoryPageProductScope,
   categoryPageProductIdCache,
 } from '@/lib/category-page-product-id-cache';
@@ -1601,11 +1602,13 @@ const CATEGORY_PAGE_PRODUCT_ID_ASSEMBLY_MAX_WINDOWS = 64;
  * loop terminates.
  */
 async function fetchAllCategoryPageProductIds({
+  filters,
   merchantId,
   scope,
   seedIds,
   totalProductCount,
 }: {
+  filters?: CategoryPageProductFilters;
   merchantId: string;
   scope: CachedCategoryPageProductScope;
   seedIds: string[];
@@ -1627,6 +1630,7 @@ async function fetchAllCategoryPageProductIds({
     }
 
     const window = await categoryPageProductIdCache.fetchProductIdWindow({
+      filters,
       merchantId,
       scope,
       from,
@@ -1674,9 +1678,11 @@ async function fetchAllCategoryPageProductIds({
  *                           (PR4b review round 4).
  */
 async function getCategoryPageProductIds({
+  filters,
   merchantId,
   scope,
 }: {
+  filters?: CategoryPageProductFilters;
   merchantId: string;
   scope: CachedCategoryPageProductScope;
 }): Promise<CachedCategoryPageProductIdsResult> {
@@ -1686,10 +1692,15 @@ async function getCategoryPageProductIds({
     productIds =
       scope.kind === 'legacy'
         ? await categoryPageProductIdCache.getLegacyProductIds({
+            filters,
             merchantId,
             scope,
           })
-        : await categoryPageProductIdCache.getProductIds({ merchantId, scope });
+        : await categoryPageProductIdCache.getProductIds({
+            filters,
+            merchantId,
+            scope,
+          });
   } catch (error) {
     console.error('Product ID query failed outside cache:', error);
     return {
@@ -1704,10 +1715,12 @@ async function getCategoryPageProductIds({
     const exactCount =
       scope.kind === 'legacy'
         ? await categoryPageProductIdCache.getLegacyProductTotalCount({
+            filters,
             merchantId,
             scope,
           })
         : await categoryPageProductIdCache.getProductTotalCount({
+            filters,
             merchantId,
             scope,
           });
@@ -1853,6 +1866,74 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+const CATEGORY_PAGE_GRAPHICS_FACET_CHUNK_SIZE = 200;
+
+async function getCachedCategoryPageGraphicsOptionsRead(
+  merchantId: string,
+  scope: CachedCategoryPageProductScope
+): Promise<string[]> {
+  'use cache';
+  cacheLife('storefront-page');
+  cacheTag(
+    'category-page-data',
+    'products',
+    'categories',
+    `products-${merchantId}`,
+    `categories-${merchantId}`
+  );
+
+  if (scope.kind === 'none') return [];
+
+  const idResult = await getCategoryPageProductIds({ merchantId, scope });
+  if (idResult.productsQueryFailed) {
+    throw new Error('Category graphics options product IDs unavailable');
+  }
+
+  const productIds =
+    idResult.productIds.length >= idResult.totalProductCount
+      ? idResult.productIds
+      : await fetchAllCategoryPageProductIds({
+          merchantId,
+          scope,
+          seedIds: idResult.productIds,
+          totalProductCount: idResult.totalProductCountExact
+            ? idResult.totalProductCount
+            : null,
+        });
+  const idChunks = Array.from(
+    {
+      length: Math.ceil(
+        productIds.length / CATEGORY_PAGE_GRAPHICS_FACET_CHUNK_SIZE
+      ),
+    },
+    (_, chunkIndex) =>
+      productIds.slice(
+        chunkIndex * CATEGORY_PAGE_GRAPHICS_FACET_CHUNK_SIZE,
+        (chunkIndex + 1) * CATEGORY_PAGE_GRAPHICS_FACET_CHUNK_SIZE
+      )
+  );
+  const supabase = getPublicSupabaseClient();
+  const rows = await mapWithConcurrency(idChunks, 3, async (productIdChunk) => {
+    const { data, error } = await supabase
+      .from('product_key_specs')
+      .select('gpu')
+      .in('product_id', productIdChunk)
+      .not('gpu', 'is', null);
+
+    if (error) throw error;
+    return (data || []) as Array<{ gpu?: string | null }>;
+  });
+
+  return Array.from(
+    new Set(
+      rows
+        .flat()
+        .map((row) => row.gpu?.trim())
+        .filter((gpu): gpu is string => Boolean(gpu))
+    )
+  ).sort((left, right) => left.localeCompare(right));
+}
+
 /**
  * Every way a category product read can come back incomplete.
  *
@@ -1911,11 +1992,13 @@ function assertUnboundedCatalogueIsComplete(
 }
 
 async function getCachedCategoryPageProductsUncached({
+  filters,
   merchantId,
   productLimit,
   productOffset,
   scope,
 }: {
+  filters?: CategoryPageProductFilters;
   merchantId: string;
   productLimit?: number;
   productOffset?: number;
@@ -1935,6 +2018,7 @@ async function getCachedCategoryPageProductsUncached({
   };
 
   const idResult = await getCategoryPageProductIds({
+    filters,
     merchantId,
     scope,
   });
@@ -1966,6 +2050,7 @@ async function getCachedCategoryPageProductsUncached({
     // the complete catalogue, or an explicit typed failure (PR4b review r5).
     try {
       productWindow = await fetchAllCategoryPageProductIds({
+        filters,
         merchantId,
         scope,
         seedIds: idResult.productIds,
@@ -2002,6 +2087,7 @@ async function getCachedCategoryPageProductsUncached({
     // (PR4b review r5).
     try {
       productWindow = await categoryPageProductIdCache.fetchProductIdWindow({
+        filters,
         merchantId,
         scope,
         from: windowStart,
@@ -2092,15 +2178,39 @@ const getCachedCategoryPageProducts = cache(
     merchantId: string,
     scope: CachedCategoryPageProductScope,
     productOffset?: number,
-    productLimit?: number
+    productLimit?: number,
+    filters?: CategoryPageProductFilters
   ) =>
     getCachedCategoryPageProductsUncached({
+      filters,
       merchantId,
       productLimit,
       productOffset,
       scope,
     })
 );
+
+export async function getCachedCategoryPageGraphicsOptions(
+  merchantId: string,
+  categorySlug: string,
+  _storeSlug: string
+): Promise<string[]> {
+  const shell = await getCategoryPageShellData(merchantId, categorySlug);
+
+  try {
+    return await getCachedCategoryPageGraphicsOptionsRead(
+      merchantId,
+      shell.productScope
+    );
+  } catch (error) {
+    console.warn('Category graphics facet query failed outside cache:', {
+      categorySlug,
+      error,
+      merchantId,
+    });
+    return [];
+  }
+}
 
 /**
  * Cache-friendly data fetcher for Category/Collection pages.
@@ -2114,14 +2224,16 @@ export async function getCachedCategoryPageData(
   categorySlug: string,
   _storeSlug: string,
   productOffset?: number,
-  productLimit?: number
+  productLimit?: number,
+  filters?: CategoryPageProductFilters
 ): Promise<CachedCategoryPageData> {
   const shell = await getCategoryPageShellData(merchantId, categorySlug);
   const productResult = await getCachedCategoryPageProducts(
     merchantId,
     shell.productScope,
     productOffset,
-    productLimit
+    productLimit,
+    filters
   );
 
   if (shell.isCollection) {

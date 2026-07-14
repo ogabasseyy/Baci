@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CATEGORY_HUB_DEFAULTS } from '@/config/category-hub-defaults';
 import {
   getCachedCategoryPageData,
+  getCachedCategoryPageGraphicsOptions,
   getCachedMerchant,
   getCachedMerchantByDomain,
   getMerchantByIdentifier,
@@ -111,6 +112,7 @@ vi.mock(
 
 vi.mock('@/lib/cached-data', () => ({
   getCachedCategoryPageData: vi.fn(),
+  getCachedCategoryPageGraphicsOptions: vi.fn(),
   getCachedMerchant: vi.fn(),
   getCachedMerchantByDomain: vi.fn(),
   getMerchantByIdentifier: vi.fn(),
@@ -546,6 +548,7 @@ describe('category page route', () => {
     vi.mocked(getCachedMerchantByDomain).mockReset();
     vi.mocked(getMerchantByIdentifier).mockReset();
     vi.mocked(getCachedCategoryPageData).mockReset();
+    vi.mocked(getCachedCategoryPageGraphicsOptions).mockReset();
     categoryPageSpy.mockClear();
     categoryPageSpy.mockImplementation(defaultCategoryPageImplementation);
     notFound.mockClear();
@@ -588,6 +591,7 @@ describe('category page route', () => {
         ReturnType<typeof getCachedCategoryPageData>
       >
     );
+    vi.mocked(getCachedCategoryPageGraphicsOptions).mockResolvedValue([]);
     mockGetPublishedClusterPosts.mockResolvedValue([
       {
         slug: 'best-phones-in-nigeria',

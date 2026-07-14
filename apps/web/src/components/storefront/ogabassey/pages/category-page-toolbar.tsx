@@ -12,7 +12,7 @@ interface CategoryPageToolbarProps {
   titleHeading?: 'h1' | 'h2';
   viewMode: 'grid' | 'list';
   onViewModeChange: (mode: 'grid' | 'list') => void;
-  canUseClientFilters: boolean;
+  canShowFilters: boolean;
   onOpenMobileFilter: () => void;
 }
 
@@ -28,7 +28,7 @@ export function CategoryPageToolbar({
   titleHeading = 'h1',
   viewMode,
   onViewModeChange,
-  canUseClientFilters,
+  canShowFilters,
   onOpenMobileFilter,
 }: CategoryPageToolbarProps) {
   const Title = titleHeading === 'h2' ? 'h2' : 'h1';
@@ -76,7 +76,7 @@ export function CategoryPageToolbar({
             </button>
           </div>
 
-          {canUseClientFilters && (
+          {canShowFilters && (
             <button
               type="button"
               onClick={onOpenMobileFilter}

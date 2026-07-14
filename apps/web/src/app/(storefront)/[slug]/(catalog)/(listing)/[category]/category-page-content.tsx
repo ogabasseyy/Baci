@@ -6,10 +6,7 @@ import { JsonLd, type JsonLdData } from '@/components/seo/json-ld';
 import { CategoryPage as OgabasseyCategoryPage } from '@/components/storefront/ogabassey/pages/category-page';
 import { V2ComparisonScope } from '@/components/storefront/ogabassey/providers/v2-comparison-scope';
 import { CategoryHubSections } from '@/components/storefront/ogabassey/seo/category-hub-sections';
-import {
-  getCachedCategoryPageData,
-  getMerchantByIdentifier,
-} from '@/lib/cached-data';
+import { getMerchantByIdentifier } from '@/lib/cached-data';
 import type { RawDbProduct } from '@/lib/normalize-product';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
@@ -37,6 +34,7 @@ import {
 import { CategoryPageCrawlSummary } from './category-page-crawl-summary';
 import { CategoryPageDeferredCompareLinks } from './category-page-deferred-compare-links';
 import { loadCategoryHubContent } from './load-category-hub-content';
+import { loadFilteredCategoryPageData } from './load-filtered-category-page-data';
 
 interface PageProps {
   params: Promise<{
@@ -71,7 +69,7 @@ export async function CategoryPageContent({
   titleHeading = 'h1',
 }: PageProps) {
   const { slug, category } = await params;
-  const { page } = await searchParams;
+  const { graphics, page } = await searchParams;
   const merchant = await getMerchantByIdentifier(slug);
 
   if (!merchant) {
@@ -93,13 +91,15 @@ export async function CategoryPageContent({
   }
 
   const productOffset = (currentPage - 1) * STOREFRONT_PRODUCTS_PER_PAGE;
-  const data = await getCachedCategoryPageData(
-    merchant.id,
-    category,
-    slug,
-    productOffset,
-    STOREFRONT_PRODUCTS_PER_PAGE
-  );
+  const { data, graphicsOptions, selectedGraphics } =
+    await loadFilteredCategoryPageData({
+      category,
+      merchantId: merchant.id,
+      productLimit: STOREFRONT_PRODUCTS_PER_PAGE,
+      productOffset,
+      rawGraphics: graphics,
+      storeSlug: slug,
+    });
 
   if (!data.isCollection && data.isInactiveCategory) {
     return renderCategoryNotFoundContent({ slug });
@@ -242,6 +242,8 @@ export async function CategoryPageContent({
           }
           itemsPerPage={STOREFRONT_PRODUCTS_PER_PAGE}
           products={categoryPageProducts}
+          graphicsOptions={graphicsOptions}
+          selectedGraphics={selectedGraphics}
           titleHeading={titleHeading}
           totalProductCount={
             productsArePrePaginated

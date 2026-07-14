@@ -1,6 +1,6 @@
 'use client';
 // Migrated from temp-source/components/CategoryPage.tsx
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import React, { type ReactNode, useEffect, useState } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -20,6 +20,7 @@ import { CategoryPageMobileFilterDrawer } from './category-page-mobile-filter-dr
 import { CategoryPageResults } from './category-page-results';
 import { CategoryPageToolbar } from './category-page-toolbar';
 import { toRelatedProductsProduct } from './product-details-page/related-product';
+import { useServerCategoryGraphicsFilter } from './use-server-category-graphics-filter';
 
 export interface CategorySEOProps {
   /**
@@ -39,6 +40,8 @@ export interface CategorySEOProps {
   /** Demote when a parent route already committed the page H1. */
   titleHeading?: 'h1' | 'h2';
   totalProductCount?: number;
+  graphicsOptions?: string[];
+  selectedGraphics?: string[];
 }
 
 export const CategoryPage: React.FC<CategorySEOProps> = ({
@@ -50,15 +53,13 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
   productsArePrePaginated = false,
   titleHeading = 'h1',
   totalProductCount,
+  graphicsOptions = [],
+  selectedGraphics = [],
 }) => {
   const params = useParams();
   const categoryName = (params?.category || 'All') as string;
-  // The raw URL slug (kebab-case, e.g. "best-sellers") — distinct from the
-  // human-readable display title. Used for slug-based checks like the
-  // non-recency collection gate below.
   const categorySlug =
     typeof params?.category === 'string' ? params.category : '';
-  const _router = useRouter();
   const { addToCart } = useCart();
   const [addedItems, setAddedItems] = useState<string[]>([]);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
@@ -66,20 +67,17 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
 
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath ?? '';
+  const serverGraphicsFilter = useServerCategoryGraphicsFilter({
+    availableGraphics: graphicsOptions,
+    basePath,
+    categoryName,
+    selectedGraphics,
+  });
   const safeItemsPerPage =
     Number.isInteger(itemsPerPage) && itemsPerPage > 0
       ? itemsPerPage
       : STOREFRONT_PRODUCTS_PER_PAGE;
-  const [filters, setFilters] = useState<FilterState>(
-    INITIAL_CATEGORY_FILTER_STATE
-  );
-
-  // Reset filters inline during render when the category changes
-  const [prevCategoryName, setPrevCategoryName] = useState(categoryName);
-  if (categoryName !== prevCategoryName) {
-    setPrevCategoryName(categoryName);
-    setFilters(INITIAL_CATEGORY_FILTER_STATE);
-  }
+  const { filters, setFilters } = serverGraphicsFilter;
 
   // Scroll to top when category changes
   useEffect(() => {
@@ -105,11 +103,19 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
     Number.isInteger(totalProductCount) &&
     totalProductCount > products.length;
   const canUseClientFilters = !hasPartialPrePaginatedProducts;
+  const hasServerGraphicsFilter = serverGraphicsFilter.enabled;
+  const canShowFilters = canUseClientFilters || hasServerGraphicsFilter;
 
-  const availableOptions = buildAvailableFilterOptions(
+  const clientAvailableOptions = buildAvailableFilterOptions(
     products,
     canUseClientFilters
   );
+  const availableOptions = {
+    ...clientAvailableOptions,
+    graphics: hasServerGraphicsFilter
+      ? graphicsOptions
+      : clientAvailableOptions.graphics,
+  };
   const filteredProducts = filterCategoryProducts(
     products,
     filters,
@@ -156,6 +162,11 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
     section: keyof FilterState,
     value: string | number
   ) => {
+    if (section === 'graphics' && hasServerGraphicsFilter) {
+      serverGraphicsFilter.toggle(String(value), filters.graphics);
+      return;
+    }
+
     if (!canUseClientFilters) return;
 
     // The min/max price fields are controlled <input>s (value={filters.minPrice}
@@ -205,8 +216,13 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
   })();
 
   const pageTitle = displayTitle;
-  const categoryPath = `${basePath}/${categoryName}`;
-  const clearFilters = () => setFilters(INITIAL_CATEGORY_FILTER_STATE);
+  const categoryPath = serverGraphicsFilter.paginationPath;
+  const clearFilters = () => {
+    if (hasServerGraphicsFilter && selectedGraphics.length > 0) {
+      serverGraphicsFilter.clear();
+    }
+    setFilters(INITIAL_CATEGORY_FILTER_STATE);
+  };
 
   // Switching grid/list re-renders every ProductCard with a new layout — the
   // heaviest toggle on the page. Yield first so the click paints before it.
@@ -242,12 +258,13 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
         titleHeading={titleHeading}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
-        canUseClientFilters={canUseClientFilters}
+        canShowFilters={canShowFilters}
         onOpenMobileFilter={() => setIsMobileFilterOpen(true)}
       />
 
       <CategoryPageResults
-        canUseClientFilters={canUseClientFilters}
+        canShowFilters={canShowFilters}
+        showPriceFilter={canUseClientFilters}
         filters={filters}
         availableOptions={availableOptions}
         onFilterChange={handleFilterChange}
@@ -271,7 +288,7 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
 
       {hubSections}
 
-      {isMobileFilterOpen && canUseClientFilters && (
+      {isMobileFilterOpen && canShowFilters && (
         <CategoryPageMobileFilterDrawer
           filters={filters}
           availableOptions={availableOptions}
@@ -279,6 +296,7 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
           onClearFilters={clearFilters}
           onClose={() => setIsMobileFilterOpen(false)}
           paginationProductCount={paginationProductCount}
+          showPriceFilter={canUseClientFilters}
         />
       )}
     </div>

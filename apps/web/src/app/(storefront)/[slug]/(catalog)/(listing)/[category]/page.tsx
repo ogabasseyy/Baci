@@ -3,7 +3,6 @@ import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { CatalogListingLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import {
-  getCachedCategoryPageData,
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
@@ -36,6 +35,7 @@ import {
   normalizeCategoryPageProducts,
   resolveCategoryPageName,
 } from './category-page-content-helpers';
+import { loadFilteredCategoryPageData } from './load-filtered-category-page-data';
 
 interface PageProps {
   params: Promise<{
@@ -106,13 +106,14 @@ export async function generateMetadata({
   }
 
   const productOffset = (currentPage - 1) * STOREFRONT_PRODUCTS_PER_PAGE;
-  const data = await getCachedCategoryPageData(
-    merchant.id,
+  const { data } = await loadFilteredCategoryPageData({
     category,
-    slug,
+    merchantId: merchant.id,
+    productLimit: STOREFRONT_PRODUCTS_PER_PAGE,
     productOffset,
-    STOREFRONT_PRODUCTS_PER_PAGE
-  );
+    rawGraphics: resolvedSearchParams.graphics,
+    storeSlug: slug,
+  });
 
   if (!data.isCollection && data.isInactiveCategory) {
     return buildCategoryNotFoundMetadata();

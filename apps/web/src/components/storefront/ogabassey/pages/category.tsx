@@ -42,7 +42,7 @@ export const OgabasseyV2CategoryPage: React.FC<
     displayType: [],
     displaySize: [],
     minPrice: 0,
-    maxPrice: 10000000,
+    maxPrice: 0,
   };
 
   const [filters, setFilters] = useState<FilterState>(initialFilterState);
@@ -111,7 +111,7 @@ export const OgabasseyV2CategoryPage: React.FC<
     // Price
     if (
       (p.rawPrice || 0) < filters.minPrice ||
-      (p.rawPrice || 0) > filters.maxPrice
+      (filters.maxPrice > 0 && (p.rawPrice || 0) > filters.maxPrice)
     )
       return false;
 

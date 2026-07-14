@@ -2,6 +2,7 @@ import { cacheTag } from 'next/cache';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getCachedCategoryPageData,
+  getCachedCategoryPageGraphicsOptions,
   getCachedLegacyProductRedirectTarget,
   getCachedProductCanonicalRedirectTarget,
   getCachedProductLcpHint,
@@ -784,6 +785,102 @@ describe('cached-data product query projections', () => {
       ascending: true,
     });
     expect(harness.mockRange).not.toHaveBeenCalled();
+  });
+
+  it('filters server-paginated category IDs and counts through the key-spec relation', async () => {
+    harness.mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'cat-laptops',
+        name: 'Gaming Laptops',
+        slug: 'gaming-laptops',
+        description: 'Gaming laptops',
+        image_url: null,
+        is_active: true,
+        seo_heading: null,
+        seo_description: null,
+        seo_features: null,
+        seo_faq: null,
+        parent: null,
+      },
+      error: null,
+    });
+    harness.mockListResult.data = [{ id: 'cat-laptops' }];
+    harness.mockQueryExecution
+      .mockResolvedValueOnce(harness.mockListResult)
+      .mockResolvedValueOnce({ data: [{ id: 'product-rtx' }], error: null })
+      .mockResolvedValueOnce({ data: null, error: null, count: 1 })
+      .mockResolvedValueOnce({
+        data: [{ id: 'product-rtx', name: 'RTX Laptop' }],
+        error: null,
+      });
+
+    const result = await getCachedCategoryPageData(
+      'merchant-123',
+      'gaming-laptops',
+      'test-store',
+      0,
+      20,
+      { graphics: ['NVIDIA RTX 4070'] }
+    );
+
+    expect(harness.mockIn).toHaveBeenCalledWith('product_key_specs.gpu', [
+      'NVIDIA RTX 4070',
+    ]);
+    const idSelects = harness.mockSelect.mock.calls
+      .map(([selection]) => String(selection))
+      .filter((selection) =>
+        selection.includes('product_key_specs!inner(gpu)')
+      );
+    expect(idSelects).toHaveLength(2);
+    expect(result.productCount).toBe(1);
+    expect(result.products).toEqual([
+      { id: 'product-rtx', name: 'RTX Laptop' },
+    ]);
+  });
+
+  it('builds distinct graphics facets from the complete category ID scope', async () => {
+    harness.mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'cat-laptops',
+        name: 'Gaming Laptops',
+        slug: 'gaming-laptops',
+        description: 'Gaming laptops',
+        image_url: null,
+        is_active: true,
+        seo_heading: null,
+        seo_description: null,
+        seo_features: null,
+        seo_faq: null,
+        parent: null,
+      },
+      error: null,
+    });
+    harness.mockListResult.data = [{ id: 'cat-laptops' }];
+    harness.mockQueryExecution
+      .mockResolvedValueOnce(harness.mockListResult)
+      .mockResolvedValueOnce({
+        data: [{ id: 'product-1' }, { id: 'product-2' }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: null, error: null, count: 2 })
+      .mockResolvedValueOnce({
+        data: [
+          { gpu: ' NVIDIA RTX 4070 ' },
+          { gpu: 'Integrated Graphics' },
+          { gpu: 'NVIDIA RTX 4070' },
+        ],
+        error: null,
+      });
+
+    const result = await getCachedCategoryPageGraphicsOptions(
+      'merchant-123',
+      'gaming-laptops',
+      'test-store'
+    );
+
+    expect(harness.mockFrom).toHaveBeenCalledWith('product_key_specs');
+    expect(harness.mockSelect).toHaveBeenCalledWith('gpu');
+    expect(result).toEqual(['Integrated Graphics', 'NVIDIA RTX 4070']);
   });
 
   it('getCachedCategoryPageData applies deterministic ordering to collection ID lists', async () => {

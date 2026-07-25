@@ -105,8 +105,8 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
     }
 
     // Anything listed here is a live route that a retired slug of the same name
-    // would shadow — add it to NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS in
-    // proxy.ts, which is what feeds STOREFRONT_ROUTE_FIRST_SEGMENTS.
+    // would shadow — add it to RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS in
+    // proxy.ts, the set this strip consults.
     expect(stripped).toEqual([]);
   });
 
@@ -152,6 +152,39 @@ describe('reserving a route segment must not spill into unrelated proxy paths', 
 
     // A reserved first segment makes isStorefrontHomeDocument reject the URL,
     // and the merchant loses its public cache headers entirely.
+    expect(response.headers.get('cache-control')).not.toBe('no-store');
+  });
+
+  it('still rewrites the retired-alias API subtree for unlock-orders', async () => {
+    // The live page owns the exact /unlock-orders path, never an /api subtree.
+    // Excluding the prefix from the API branch would break stale same-origin
+    // calls like custom.example/unlock-orders/api/storefront/customer.
+    vi.mocked(getSlugForCustomDomain).mockResolvedValue(MERCHANT_SLUG);
+    vi.mocked(getCurrentSlugForAlias).mockImplementation(
+      async (slug: string) => (slug === 'unlock-orders' ? MERCHANT_SLUG : null)
+    );
+    const request = new NextRequest(
+      `https://${CUSTOM_DOMAIN}/unlock-orders/api/storefront/customer`
+    );
+    request.headers.set('host', CUSTOM_DOMAIN);
+
+    const response = await proxy(request);
+
+    // A 302 here means it fell through to the page strip instead.
+    expect(response.status).not.toBe(302);
+  });
+
+  it('still classifies a PDP whose CATEGORY is slugged unlock-orders', async () => {
+    vi.mocked(getSlugForCustomDomain).mockResolvedValue(MERCHANT_SLUG);
+    vi.mocked(getCurrentSlugForAlias).mockResolvedValue(null);
+    const request = new NextRequest(
+      `https://${CUSTOM_DOMAIN}/unlock-orders/some-product`
+    );
+    request.headers.set('host', CUSTOM_DOMAIN);
+
+    const response = await proxy(request);
+
+    // NON_CACHEABLE membership would force no-store on a legitimate PDP.
     expect(response.headers.get('cache-control')).not.toBe('no-store');
   });
 

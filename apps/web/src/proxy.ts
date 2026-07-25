@@ -755,24 +755,6 @@ const NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS = new Set<string>([
   'imei-check',
   'quiz',
   'reviews',
-  // Live (storefront)/[slug]/unlock-orders route — the ONLY live storefront
-  // first-segment that was in NEITHER this set nor RESERVED_STOREFRONT_SEGMENTS,
-  // so on a custom domain a merchant whose RETIRED slug was "unlock-orders" had
-  // their own live /unlock-orders/* route 302-stripped as a legacy
-  // slug-prefixed link. Deliberately NOT in RESERVED_STOREFRONT_SEGMENTS: that
-  // set also drives merchant-slug validity (isStorefrontHomeDocument), the
-  // metadata-cache partition, and the PDP hard-404 / canonical-308 helpers, so
-  // reserving it there would strip the CDN policy from a merchant legitimately
-  // slugged `unlock-orders` and drop proxy handling for a PRODUCT of that slug.
-  // This set is the one that feeds STOREFRONT_ROUTE_FIRST_SEGMENTS, which is
-  // what the retired-slug prefix strip consults.
-  //
-  // Like `quiz` above, the route is template-gated (its page calls notFound()
-  // unless template_id === 'ogabassey'). Treating a template-gated route as
-  // universally reserved is this file's existing, deliberate tradeoff, not a
-  // new one: the alternative is resolving the merchant's template inside the
-  // prefix strip, which the strip runs too early to do.
-  'unlock-orders',
 ]);
 
 // Every FIRST URL segment that resolves to a real storefront route under
@@ -799,6 +781,38 @@ const STOREFRONT_ROUTE_FIRST_SEGMENTS = new Set<string>([
   'terms-and-conditions',
   'terms-of-service',
   'storefront',
+]);
+
+// Live storefront PAGE first-segments that must be excluded from the
+// retired-slug PREFIX STRIP but from NOTHING ELSE.
+//
+// `unlock-orders` is a real (storefront)/[slug]/unlock-orders page, and it was
+// the only live first segment missing from the strip's exclusion list — so on a
+// custom domain a merchant whose RETIRED slug was "unlock-orders" had their own
+// live page 302-stripped as if it were a legacy slug-prefixed link.
+//
+// It gets its own set because every existing set is too broad for it:
+//   - RESERVED_STOREFRONT_SEGMENTS also drives merchant-slug validity
+//     (isStorefrontHomeDocument), the metadata-cache partition and the PDP
+//     hard-404 / canonical-308 helpers — a merchant or PRODUCT legitimately
+//     slugged `unlock-orders` would lose its CDN policy and proxy handling.
+//   - NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS additionally rejects
+//     `/<category>/<product>` PDPs whose CATEGORY is slugged `unlock-orders`
+//     and forces those URLs to no-store.
+//   - STOREFRONT_ROUTE_FIRST_SEGMENTS also guards the retired-alias API
+//     rewrites (matchAliasApiPrefixShape and the custom-domain API branch), so
+//     `custom.example/unlock-orders/api/...` would stop being rewritten. The
+//     live page owns the exact `/unlock-orders` path only, never an `/api`
+//     subtree, so that rewrite must keep working.
+//
+// Like `quiz`, the page is template-gated (notFound() unless
+// template_id === 'ogabassey'). Treating a template-gated route as universally
+// excluded is this file's existing tradeoff: the strip runs before the
+// merchant's template is resolved, so the alternative is reinstating the
+// shadowing bug for OgaBassey.
+const RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS = new Set<string>([
+  ...STOREFRONT_ROUTE_FIRST_SEGMENTS,
+  'unlock-orders',
 ]);
 
 // First URL segments that are PLATFORM/app routes reachable on a custom domain
@@ -3438,7 +3452,7 @@ export async function proxy(request: NextRequest) {
           // SAME limitation the pre-existing current-slug canonicalization below
           // (~/<currentSlug>/<cat>/<prod>) already has — a per-request category
           // membership DB lookup on every custom-domain path isn't worth it.
-          !STOREFRONT_ROUTE_FIRST_SEGMENTS.has(firstSegment) &&
+          !RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS.has(firstSegment) &&
           !CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS.has(firstSegment)
         ) {
           const aliasCurrentSlug = await getCurrentSlugForAlias(firstSegment);

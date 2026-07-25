@@ -681,6 +681,15 @@ const RESERVED_STOREFRONT_SEGMENTS = new Set([
   'swap',
   'terms',
   'track-order',
+  // Live (storefront)/[slug]/unlock-orders route. It was the ONLY live storefront
+  // first-segment missing from this set, which flows into
+  // NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS -> STOREFRONT_ROUTE_FIRST_SEGMENTS —
+  // so on a custom domain a merchant whose RETIRED slug was "unlock-orders" had
+  // their own live /unlock-orders/* route 302-stripped as if it were a legacy
+  // slug-prefixed link. See the route-collision regression test in proxy.test.ts,
+  // which enumerates the route tree so a newly added segment fails CI instead of
+  // silently drifting.
+  'unlock-orders',
   'wallet',
   'wishlist',
 ]);

@@ -105,7 +105,8 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
     }
 
     // Anything listed here is a live route that a retired slug of the same name
-    // would shadow — reserve it in RESERVED_STOREFRONT_SEGMENTS in proxy.ts.
+    // would shadow — add it to NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS in
+    // proxy.ts, which is what feeds STOREFRONT_ROUTE_FIRST_SEGMENTS.
     expect(stripped).toEqual([]);
   });
 
@@ -126,5 +127,46 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
     expect(response.headers.get('location')).toBe(
       `https://${CUSTOM_DOMAIN}/summer-sale`
     );
+  });
+});
+
+describe('reserving a route segment must not spill into unrelated proxy paths', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /**
+   * `unlock-orders` belongs in NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS, NOT in
+   * RESERVED_STOREFRONT_SEGMENTS. The reserved set additionally drives
+   * merchant-slug validity, the metadata-cache partition, and the PDP
+   * hard-404 / canonical-308 helpers, so reserving it there would penalise a
+   * merchant or a product that legitimately carries that slug.
+   */
+  it('keeps the storefront-home CDN policy for a merchant slugged unlock-orders', async () => {
+    vi.mocked(getSlugForCustomDomain).mockResolvedValue(null);
+    vi.mocked(getCurrentSlugForAlias).mockResolvedValue(null);
+    const request = new NextRequest('https://usebaci.com/unlock-orders');
+    request.headers.set('host', 'usebaci.com');
+
+    const response = await proxy(request);
+
+    // A reserved first segment makes isStorefrontHomeDocument reject the URL,
+    // and the merchant loses its public cache headers entirely.
+    expect(response.headers.get('cache-control')).not.toBe('no-store');
+  });
+
+  it('still treats a PRODUCT slugged unlock-orders as a product URL', async () => {
+    vi.mocked(getSlugForCustomDomain).mockResolvedValue(MERCHANT_SLUG);
+    vi.mocked(getCurrentSlugForAlias).mockResolvedValue(null);
+    const request = new NextRequest(
+      `https://${CUSTOM_DOMAIN}/products/unlock-orders`
+    );
+    request.headers.set('host', CUSTOM_DOMAIN);
+
+    const response = await proxy(request);
+
+    // The PDP helpers bail out early on a reserved second segment, which would
+    // hand the request to the streamed App Router response they exist to avoid.
+    expect(response.status).not.toBe(404);
   });
 });

@@ -681,15 +681,6 @@ const RESERVED_STOREFRONT_SEGMENTS = new Set([
   'swap',
   'terms',
   'track-order',
-  // Live (storefront)/[slug]/unlock-orders route. It was the ONLY live storefront
-  // first-segment missing from this set, which flows into
-  // NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS -> STOREFRONT_ROUTE_FIRST_SEGMENTS —
-  // so on a custom domain a merchant whose RETIRED slug was "unlock-orders" had
-  // their own live /unlock-orders/* route 302-stripped as if it were a legacy
-  // slug-prefixed link. See the route-collision regression test in proxy.test.ts,
-  // which enumerates the route tree so a newly added segment fails CI instead of
-  // silently drifting.
-  'unlock-orders',
   'wallet',
   'wishlist',
 ]);
@@ -764,6 +755,24 @@ const NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS = new Set<string>([
   'imei-check',
   'quiz',
   'reviews',
+  // Live (storefront)/[slug]/unlock-orders route — the ONLY live storefront
+  // first-segment that was in NEITHER this set nor RESERVED_STOREFRONT_SEGMENTS,
+  // so on a custom domain a merchant whose RETIRED slug was "unlock-orders" had
+  // their own live /unlock-orders/* route 302-stripped as a legacy
+  // slug-prefixed link. Deliberately NOT in RESERVED_STOREFRONT_SEGMENTS: that
+  // set also drives merchant-slug validity (isStorefrontHomeDocument), the
+  // metadata-cache partition, and the PDP hard-404 / canonical-308 helpers, so
+  // reserving it there would strip the CDN policy from a merchant legitimately
+  // slugged `unlock-orders` and drop proxy handling for a PRODUCT of that slug.
+  // This set is the one that feeds STOREFRONT_ROUTE_FIRST_SEGMENTS, which is
+  // what the retired-slug prefix strip consults.
+  //
+  // Like `quiz` above, the route is template-gated (its page calls notFound()
+  // unless template_id === 'ogabassey'). Treating a template-gated route as
+  // universally reserved is this file's existing, deliberate tradeoff, not a
+  // new one: the alternative is resolving the merchant's template inside the
+  // prefix strip, which the strip runs too early to do.
+  'unlock-orders',
 ]);
 
 // Every FIRST URL segment that resolves to a real storefront route under

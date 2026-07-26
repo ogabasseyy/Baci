@@ -268,3 +268,20 @@ describe('bugfix: cancelling review could strand the app with nothing under revi
     );
   });
 });
+
+describe('bugfix: reject_if_possible silently withdrew a live App Review', () => {
+  it('rejects a submit lane whose deliver passes reject_if_possible', () => {
+    // deliver's own reject_if_possible cancels whatever is in App Review,
+    // bypassing the opt-in guard — it withdrew build 2.1.527 when 2.1.528 shipped.
+    const withRejectIfPossible = VALID_FASTFILE.replace(
+      '  deliver(deliver_opts)',
+      '  deliver(deliver_opts.merge(reject_if_possible: true))'
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(withRejectIfPossible, VALID_SLOT)
+    ).toContain(
+      'Fastfile: submit lane must not pass reject_if_possible — cancellation is owned solely by app_store_version_slot_ready? (opt-in via IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT); deliver reject_if_possible is an unguarded second path that withdraws live App Reviews'
+    );
+  });
+});

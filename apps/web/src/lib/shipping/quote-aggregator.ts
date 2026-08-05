@@ -4,6 +4,7 @@
  */
 
 import { rankQuotes, selectFeaturedQuotes } from './aggregator';
+import { getEmptyQuoteDiagnostics } from './empty-quote-diagnostics';
 import {
   getNoProviderWarning,
   selectQuoteProviders,
@@ -71,11 +72,17 @@ export class QuoteAggregator {
       }
     });
 
-    // If all providers failed, return fallback
+    // An empty fulfilled result means the provider had no rates for this
+    // request; only rejected calls are provider failures.
     if (allQuotes.length === 0) {
-      console.warn(
-        '[QuoteAggregator] All providers failed, using fallback quote'
+      const failedProviderCount = results.filter(
+        (result) => result.status === 'rejected'
+      ).length;
+      const diagnostics = getEmptyQuoteDiagnostics(
+        providers.length,
+        failedProviderCount
       );
+      console.warn(diagnostics.message, diagnostics.context);
       return createFallbackQuoteResponse(request.sessionId, warnings);
     }
 

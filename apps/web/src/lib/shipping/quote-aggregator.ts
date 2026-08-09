@@ -5,6 +5,7 @@
 
 import { rankQuotes, selectFeaturedQuotes } from './aggregator';
 import { getEmptyQuoteDiagnostics } from './empty-quote-diagnostics';
+import { quoteProviderFailure } from './quote-provider-failure';
 import {
   getNoProviderWarning,
   selectQuoteProviders,
@@ -57,11 +58,23 @@ export class QuoteAggregator {
 
     const allQuotes: ShippingQuote[] = [];
     const warnings: string[] = [];
+    let failedProviderCount = 0;
 
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') {
+        const providerFailure = quoteProviderFailure.get(result.value);
+        if (providerFailure) {
+          failedProviderCount += 1;
+          warnings.push(`${providers[index].name}: ${providerFailure.message}`);
+          console.error('[QuoteAggregator] Provider failed', {
+            provider: providers[index].name,
+            reason: providerFailure,
+          });
+          return;
+        }
         allQuotes.push(...result.value);
       } else {
+        failedProviderCount += 1;
         warnings.push(
           `${providers[index].name}: ${result.reason?.message || 'Unknown error'}`
         );
@@ -72,12 +85,10 @@ export class QuoteAggregator {
       }
     });
 
-    // An empty fulfilled result means the provider had no rates for this
-    // request; only rejected calls are provider failures.
+    // A provider can either reject or return an explicitly marked empty result
+    // when its public contract must stay array-shaped. Unmarked empty arrays
+    // mean the provider completed successfully but had no rates.
     if (allQuotes.length === 0) {
-      const failedProviderCount = results.filter(
-        (result) => result.status === 'rejected'
-      ).length;
       const diagnostics = getEmptyQuoteDiagnostics(
         providers.length,
         failedProviderCount

@@ -3,6 +3,7 @@
  * Aggregator that provides access to multiple carriers (DHL, FedEx, etc.)
  */
 
+import { quoteProviderFailure } from '../quote-provider-failure';
 import { mapTopshipStatus } from '../status-mapper';
 import type {
   BookingRequest,
@@ -725,7 +726,7 @@ export class TopshipProvider extends BaseShippingProvider {
           status: response.status,
           error,
         });
-        return [];
+        throw new Error(`Topship quote request failed (${response.status})`);
       }
 
       const result = await response.json();
@@ -774,7 +775,7 @@ export class TopshipProvider extends BaseShippingProvider {
       this.log('error', 'Failed to get Topship quotes', {
         error: String(error),
       });
-      return [];
+      return quoteProviderFailure.mark([], error);
     }
   }
 

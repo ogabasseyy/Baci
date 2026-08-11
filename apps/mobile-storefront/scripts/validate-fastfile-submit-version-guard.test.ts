@@ -63,6 +63,9 @@ const VALID_FASTFILE = `import("asc_version_slot.rb")
 
 lane :submit do
   api_key = asc_api_key
+  deliver_opts = {
+    submit_for_review: true
+  }
 
   unless app_store_version_slot_ready?(app_version: app_version, build_number: build_number)
     next
@@ -274,8 +277,13 @@ describe('bugfix: reject_if_possible silently withdrew a live App Review', () =>
     // deliver's own reject_if_possible cancels whatever is in App Review,
     // bypassing the opt-in guard — it withdrew build 2.1.527 when 2.1.528 shipped.
     const withRejectIfPossible = VALID_FASTFILE.replace(
-      '  deliver(deliver_opts)',
-      '  deliver(deliver_opts.merge(reject_if_possible: true))'
+      `  deliver_opts = {
+    submit_for_review: true
+  }`,
+      `  deliver_opts = {
+    reject_if_possible: true,
+    submit_for_review: true
+  }`
     );
 
     expect(

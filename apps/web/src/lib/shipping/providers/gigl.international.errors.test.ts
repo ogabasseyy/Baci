@@ -10,6 +10,7 @@ vi.hoisted(() => {
 import { GiglApiClient } from './gigl.auth';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
+import { quoteProviderFailure } from '../quote-provider-failure';
 import {
   baseUrl,
   internationalCountriesResponse,
@@ -90,7 +91,11 @@ describe('GiglProvider international quote errors', () => {
 
     const provider = buildHarness();
 
-    await expect(provider.getQuotes()).resolves.toEqual([]);
+    const result = await provider.getQuotes();
+    expect(result).toEqual([]);
+    expect(quoteProviderFailure.get(result)?.message).toBe(
+      'GIGL international quote request failed'
+    );
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -104,7 +109,11 @@ describe('GiglProvider international quote errors', () => {
 
     const provider = buildHarness();
 
-    await expect(provider.getQuotes()).resolves.toEqual([]);
+    const result = await provider.getQuotes();
+    expect(result).toEqual([]);
+    expect(quoteProviderFailure.get(result)?.message).toBe(
+      'GIGL international quote request timed out'
+    );
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 

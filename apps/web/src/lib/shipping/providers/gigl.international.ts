@@ -1,4 +1,5 @@
 import { priceGiglQuote } from '../gigl-platform-pricing';
+import { quoteProviderFailure } from '../quote-provider-failure';
 import type { QuoteRequest, ShippingQuote } from '../types';
 import type { GiglApiClient } from './gigl.auth';
 import {
@@ -54,7 +55,10 @@ export async function getGiglInternationalQuotes(
         envelopeStatus: destinationCountry.envelopeStatus,
         responseStatus: destinationCountry.responseStatus,
       });
-      return [];
+      return quoteProviderFailure.mark(
+        [],
+        new Error('GIGL international destination lookup failed')
+      );
     }
     if (destinationCountry.status === 'not_found') {
       io.log('warn', 'GIGL international destination country not found', {
@@ -98,7 +102,10 @@ export async function getGiglInternationalQuotes(
         status: response.status,
         envelopeStatus: envelope?.status,
       });
-      return [];
+      return quoteProviderFailure.mark(
+        [],
+        new Error('GIGL international quote request failed')
+      );
     }
 
     const rates = parseInternationalRates(envelope.data, io);
@@ -152,13 +159,16 @@ export async function getGiglInternationalQuotes(
       io.log('warn', 'GIGL international quote timed out', {
         timeoutMs: GIGL_QUOTE_TIMEOUT_MS,
       });
-      return [];
+      return quoteProviderFailure.mark(
+        [],
+        new Error('GIGL international quote request timed out')
+      );
     }
 
     io.log('error', 'Failed to get GIGL international quotes', {
       error: String(error),
     });
-    return [];
+    return quoteProviderFailure.mark([], error);
   }
 }
 

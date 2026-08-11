@@ -1,3 +1,4 @@
+import { quoteProviderFailure } from '../quote-provider-failure';
 import type { QuoteRequest, ShippingQuote } from '../types';
 import type { GiglApiClient } from './gigl.auth';
 import {
@@ -208,9 +209,9 @@ async function getQuotesWithinTimeout(
       io.log('warn', 'GIGL quote timed out', {
         timeoutMs: GIGL_QUOTE_TIMEOUT_MS,
       });
-      return [];
+      return quoteProviderFailure.mark([], new Error('GIGL quote request timed out'));
     }
     io.log('error', 'Failed to get GIGL quotes', { error: String(error) });
-    return [];
+    return quoteProviderFailure.mark([], error);
   }
 }

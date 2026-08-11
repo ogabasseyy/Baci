@@ -10,6 +10,7 @@ vi.hoisted(() => {
 import { GiglApiClient } from './gigl.auth';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
+import { quoteProviderFailure } from '../quote-provider-failure';
 import {
   baseUrl,
   failedStationsEnvelope,
@@ -259,5 +260,15 @@ describe('GiglProvider quote requests', () => {
     const provider = buildQuoteHarness();
 
     await expect(provider.getQuotes(quoteRequest)).resolves.toEqual([]);
+  });
+
+  it('marks a domestic GIGL request failure for aggregate diagnostics', async () => {
+    mockGiglFetchSequence(() => Promise.reject(new Error('login unavailable')));
+
+    const provider = buildQuoteHarness();
+    const result = await provider.getQuotes(quoteRequest);
+
+    expect(result).toEqual([]);
+    expect(quoteProviderFailure.get(result)?.message).toBe('login unavailable');
   });
 });

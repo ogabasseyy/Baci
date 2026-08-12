@@ -31,6 +31,7 @@ interface RunGiglQuoteSelectionsOptions {
 export function runGiglQuoteSelections(
   options: RunGiglQuoteSelectionsOptions
 ): Promise<(ShippingQuote | null)[]> {
+  const failures: unknown[] = [];
   return Promise.all(
     options.selections.map((selection) =>
       options.fetchQuote(selection).catch((error) => {
@@ -44,6 +45,7 @@ export function runGiglQuoteSelections(
           });
           return null;
         }
+        failures.push(error);
         options.log('error', 'GIGL quote option failed', {
           error: String(error),
           ...selection,
@@ -51,5 +53,10 @@ export function runGiglQuoteSelections(
         return null;
       })
     )
-  );
+  ).then((quotes) => {
+    if (failures.length === options.selections.length) {
+      throw failures[0];
+    }
+    return quotes;
+  });
 }

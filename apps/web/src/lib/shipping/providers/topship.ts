@@ -751,8 +751,10 @@ export class TopshipProvider extends BaseShippingProvider {
             deliveryEta: r.duration,
           })
         );
-      } else if (result.status && result.data) {
+      } else if (result.status === true && Array.isArray(result.data)) {
         rates = result.data;
+      } else if (result.status === false) {
+        throw new Error(result.message || 'Topship quote request failed');
       }
 
       if (rates.length === 0) {

@@ -53,6 +53,16 @@ describe('TopshipProvider quote failure signaling', () => {
           })
         ),
     },
+    {
+      name: 'the provider returns a wrapped failure envelope',
+      fetchResult: () =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({ status: false, message: 'Provider unavailable' }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+        ),
+    },
   ])('marks an empty result when $name', async ({ fetchResult }) => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(fetchResult));
     const [{ TopshipProvider }, { quoteProviderFailure }] = await Promise.all([

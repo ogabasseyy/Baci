@@ -7,10 +7,10 @@ vi.hoisted(() => {
   process.env.GIGL_PASSWORD = 'test-password';
 });
 
+import { quoteProviderFailure } from '../quote-provider-failure';
 import { GiglApiClient } from './gigl.auth';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
-import { quoteProviderFailure } from '../quote-provider-failure';
 import {
   baseUrl,
   failedStationsEnvelope,

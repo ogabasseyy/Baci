@@ -7,10 +7,10 @@ vi.hoisted(() => {
   process.env.GIGL_PASSWORD = 'test-password';
 });
 
+import { quoteProviderFailure } from '../quote-provider-failure';
 import { GiglApiClient } from './gigl.auth';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
-import { quoteProviderFailure } from '../quote-provider-failure';
 import {
   baseUrl,
   internationalCountriesResponse,
@@ -112,7 +112,7 @@ describe('GiglProvider international quote errors', () => {
     const result = await provider.getQuotes();
     expect(result).toEqual([]);
     expect(quoteProviderFailure.get(result)?.message).toBe(
-      'GIGL international quote request timed out'
+      'network unavailable'
     );
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });

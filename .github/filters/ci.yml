@@ -84,7 +84,7 @@ quiz_db:
   - 'supabase/tests/storefront_order_private_schema_boundary*.sql'
   - 'supabase/tests/run-storefront-order-private-schema-boundary-test.sh'
   - 'supabase/tests/paystack_reference_claim_concurrency_fixture.sql'
-  - 'supabase/tests/serialized_variant_inventory_concurrency_contract.test.mjs'
+  - 'supabase/tests/serialized_variant_inventory_concurrency_contract*.mjs'
   - 'supabase/tests/run-paystack-reference-claim-concurrency-test.sh'
   - 'supabase/tests/order_notification_outbox_rpc_privileges*.sql'
   - 'supabase/tests/negotiation_customer_contact.sql'

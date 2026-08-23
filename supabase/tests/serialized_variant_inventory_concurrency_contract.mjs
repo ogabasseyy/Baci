@@ -11,6 +11,9 @@ function migrationFileNames() {
     .filter((fileName) => fileName.endsWith('.sql'))
     .sort();
 }
+const migrationSources = migrationFileNames().map((fileName) =>
+  fs.readFileSync(path.join(migrationsDir, fileName), 'utf8')
+);
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -28,7 +31,7 @@ function functionMarkerPattern(functionName, flags = 'i') {
 function functionDropPattern(functionName, flags = 'i') {
   const name = functionName.replace(/\($/, '');
   return new RegExp(
-    `DROP\\s+FUNCTION\\s+(?:IF\\s+EXISTS\\s+)?${escapeRegex(name)}\\s*\\([^;]*\\)\\s*(?:CASCADE|RESTRICT)?\\s*;`,
+    `DROP\\s+FUNCTION\\s+(?:IF\\s+EXISTS\\s+)?${escapeRegex(name)}(?:\\s*\\([^;]*\\))?\\s*(?:CASCADE|RESTRICT)?\\s*;`,
     flags
   );
 }
@@ -53,12 +56,7 @@ function functionBody(source, functionName) {
   assert.ok(closing, `unterminated ${functionName}`);
   return source.slice(start, bodyStart + closing.index);
 }
-function latestFunctionBody(
-  functionName,
-  sources = migrationFileNames().map((fileName) =>
-    fs.readFileSync(path.join(migrationsDir, fileName), 'utf8')
-  )
-) {
+function latestFunctionBody(functionName, sources = migrationSources) {
   let latestBody;
 
   for (const rawSource of sources) {
@@ -112,21 +110,65 @@ function extractIfBranches(source, openingPattern) {
   assert.fail('unterminated target IF branch');
 }
 function legacyDecrementMatches(source) {
+  const stockDecrement =
+    /\bstock_quantity\s*=\s*(?:GREATEST\s*\(\s*)?(?:\(\s*)*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*stock_rec\s*\.\s*total_quantity\b(?:\s*\))*\s*(?:,\s*0\s*)?(?:\s*\))*/i;
   return [
     ...stripSqlComments(source).matchAll(
       /UPDATE\s+(?:ONLY\s+)?(?:public\s*\.\s*)?(product_variants|products)(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET\b([\s\S]*?);/gi
     ),
-  ].filter(([, , statement]) =>
-    /\bstock_quantity\s*=\s*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*stock_rec\s*\.\s*total_quantity\b/i.test(
-      statement
-    )
-  );
+  ].filter(([, , statement]) => stockDecrement.test(statement));
+}
+function maskNestedSql(source) {
+  let depth = 0;
+  let quote;
+  let masked = '';
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (quote) {
+      masked += ' ';
+      if (char === quote) {
+        if (source[index + 1] === quote) {
+          masked += ' ';
+          index += 1;
+        } else {
+          quote = undefined;
+        }
+      }
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      masked += ' ';
+    } else if (char === '(') {
+      depth += 1;
+      masked += ' ';
+    } else if (char === ')') {
+      depth = Math.max(depth - 1, 0);
+      masked += ' ';
+    } else {
+      masked += depth === 0 ? char : ' ';
+    }
+  }
+  return masked;
 }
 function legacyDecrementHasCompareAndSetGuard(statement) {
-  const whereClause = /\bWHERE\b([\s\S]*)$/i.exec(statement)?.[1] ?? '';
-  return /(?:^|\bAND\b)\s*(?:\(\s*)?(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s*>=\s*stock_rec\s*\.\s*total_quantity\b/i.test(
-    whereClause
-  );
+  const maskedStatement = maskNestedSql(statement);
+  const whereMatches = [...maskedStatement.matchAll(/\bWHERE\b/gi)];
+  const where = whereMatches.at(-1);
+  if (!where) return false;
+
+  const whereClause = maskedStatement.slice(where.index + where[0].length);
+  if (/\bOR\b/i.test(whereClause)) return false;
+
+  const comparison =
+    /(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s*>=\s*stock_rec\s*\.\s*total_quantity\b/i.exec(
+      whereClause
+    );
+  if (!comparison) return false;
+
+  const prefix = whereClause.slice(0, comparison.index).trimEnd();
+  return prefix.length === 0 || /\bAND\s*$/i.test(prefix);
 }
 
 export const serializedInventoryContract = {

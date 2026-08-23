@@ -35,7 +35,7 @@ test('function extraction tolerates tagged dollar quotes and trailing clauses', 
     () =>
       latestFunctionBody('private.fixture(', [
         source,
-        'DROP FUNCTION private.fixture();',
+        'DROP FUNCTION private.fixture;',
       ]),
     /missing private\.fixture/
   );
@@ -119,9 +119,9 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
     /v_fulfillment_data\s*:=\s*jsonb_build_object\([\s\S]*?'missingUnitCount',\s*GREATEST\(v_qty\s*-\s*v_reserved_count,\s*0\)/,
     'serialized_then_unlimited must report missing units instead of fabricating reservations'
   );
-  assert.doesNotMatch(
-    claim,
-    /UPDATE\s+(?:ONLY\s+)?(?:public\s*\.\s*)?(?:products|product_variants)(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET[\s\S]*?stock_quantity\s*=\s*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*/i,
+  assert.equal(
+    legacyDecrementMatches(claim).length,
+    0,
     'serialized claims must not also decrement legacy product stock'
   );
 
@@ -206,6 +206,31 @@ test('legacy decrement scanning recognizes qualified aliases and flexible SQL fo
   `);
   assert.equal(unguarded.length, 1);
   assert.equal(legacyDecrementHasCompareAndSetGuard(unguarded[0][2]), false);
+
+  const wrapped = legacyDecrementMatches(`
+    UPDATE products
+    SET stock_quantity = (stock_quantity - stock_rec.total_quantity)
+    WHERE products.id = stock_rec.product_id AND stock_quantity >= stock_rec.total_quantity;
+    UPDATE product_variants AS p
+    SET stock_quantity = GREATEST(p.stock_quantity - stock_rec.total_quantity, 0)
+    WHERE p.id = stock_rec.variant_id AND stock_quantity >= stock_rec.total_quantity;
+  `);
+  assert.equal(wrapped.length, 2);
+
+  const nestedWhere = `
+    UPDATE products
+    SET stock_quantity = stock_quantity - stock_rec.total_quantity
+    WHERE id IN (SELECT id FROM products WHERE stock_quantity >= stock_rec.total_quantity)
+      AND stock_quantity >= stock_rec.total_quantity;
+  `;
+  assert.equal(legacyDecrementHasCompareAndSetGuard(nestedWhere), true);
+  const subqueryOnly = `
+    UPDATE products
+    SET stock_quantity = stock_quantity - stock_rec.total_quantity
+    WHERE id IN (SELECT id FROM products WHERE stock_quantity >= stock_rec.total_quantity)
+      AND active = true;
+  `;
+  assert.equal(legacyDecrementHasCompareAndSetGuard(subqueryOnly), false);
 });
 
 test('every legacy stock decrement remains compare-and-set guarded', () => {

@@ -48,6 +48,22 @@ test('invalidates a function body after an ALTER FUNCTION rename', () => {
   );
 });
 
+test('invalidates a function body after an ALTER FUNCTION schema move', () => {
+  const source = [
+    'CREATE FUNCTION private.fixture(integer) RETURNS void AS $$',
+    'BEGIN',
+    '  NULL;',
+    'END;',
+    '$$;',
+    'ALTER FUNCTION private.fixture(integer) SET SCHEMA public;',
+  ].join('\n');
+
+  assert.throws(
+    () => latestFunctionBody('private.fixture(integer)', [source]),
+    /missing private\.fixture/
+  );
+});
+
 test('distinguishes scalar and array function argument types', () => {
   const source = [
     'CREATE FUNCTION private.fixture(p_value uuid[]) RETURNS void AS $$',

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { serializedInventoryAvailability } from './serialized_variant_inventory_concurrency_contract_availability.mjs';
 import { serializedInventoryLocks } from './serialized_variant_inventory_concurrency_contract_locks.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
+import { hasImmediateUnconditionalException } from './serialized_variant_inventory_concurrency_contract_zero_row.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const migrationsDir = path.join(repoRoot, 'supabase', 'migrations');
@@ -82,10 +83,10 @@ function functionDropPattern(functionName, flags = 'i') {
     flags
   );
 }
-function functionRenamePattern(functionName, flags = 'i') {
+function functionMovePattern(functionName, flags = 'i') {
   const { name, argumentTypes } = parseFunctionSignature(functionName);
   return new RegExp(
-    `ALTER\\s+FUNCTION\\s+${identifierPattern(name)}\\s*\\(${parameterListPattern(argumentTypes)}\\)\\s+RENAME\\s+TO\\s+(?:[a-z_][a-z0-9_]*|"[^"]+")\\s*;`,
+    `ALTER\\s+FUNCTION\\s+${identifierPattern(name)}\\s*\\(${parameterListPattern(argumentTypes)}\\)\\s+(?:RENAME\\s+TO\\s+(?:[a-z_][a-z0-9_]*|"[^"]+")|SET\\s+SCHEMA\\s+(?:[a-z_][a-z0-9_]*|"[^"]+"))\\s*;`,
     flags
   );
 }
@@ -115,15 +116,13 @@ function latestFunctionBody(functionName, sources = migrationSources) {
     const drop = [
       ...source.matchAll(functionDropPattern(functionName, 'gi')),
     ].at(-1);
-    const rename = [
-      ...source.matchAll(functionRenamePattern(functionName, 'gi')),
+    const move = [
+      ...source.matchAll(functionMovePattern(functionName, 'gi')),
     ].at(-1);
-    const invalidator =
-      drop && rename
-        ? drop.index > rename.index
-          ? drop
-          : rename
-        : (drop ?? rename);
+    const invalidator = [drop, move]
+      .filter(Boolean)
+      .sort((left, right) => left.index - right.index)
+      .at(-1);
     if (invalidator && (!create || invalidator.index > create.index)) {
       latestBody = undefined;
     } else if (create) {
@@ -192,15 +191,6 @@ function legacyDecrementMatches(source) {
     match.input = cleanSource;
     return [match];
   });
-}
-function legacyDecrementHasZeroRowHandling(match) {
-  if (!match || typeof match.input !== 'string' || match.index === undefined) {
-    return false;
-  }
-  const remainder = match.input.slice(match.index + match[0].length);
-  const immediateIf =
-    /^\s*IF\s+NOT\s+FOUND\s+THEN\b([\s\S]*?)\bEND\s+IF\s*;/i.exec(remainder);
-  return immediateIf !== null && /\bRAISE\s+EXCEPTION\b/i.test(immediateIf[1]);
 }
 function maskNestedSql(source) {
   let quote;
@@ -292,7 +282,7 @@ export const serializedInventoryContract = {
   latestFunctionBody,
   extractIfBranches,
   legacyDecrementMatches,
-  legacyDecrementHasZeroRowHandling,
+  legacyDecrementHasZeroRowHandling: hasImmediateUnconditionalException,
   legacyDecrementHasCompareAndSetGuard,
   availableUnitPredicatesMatch:
     serializedInventoryAvailability.availableUnitPredicatesMatch,

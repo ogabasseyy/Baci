@@ -21,17 +21,47 @@ function escapeRegex(value) {
 
 const stripSqlComments = (source) =>
   source.replace(/--[^\r\n]*|\/\*[\s\S]*?\*\//g, '');
+function parseFunctionSignature(functionSignature) {
+  const normalized = functionSignature.trim();
+  const match = /^(.*)\(([^()]*)\)$/.exec(normalized);
+  if (!match) {
+    return {
+      name: normalized.replace(/\($/, ''),
+      argumentTypes: [],
+    };
+  }
+
+  return {
+    name: match[1].trim(),
+    argumentTypes: match[2]
+      .split(',')
+      .map((type) => type.trim())
+      .filter(Boolean),
+  };
+}
+function parameterListPattern(argumentTypes) {
+  if (argumentTypes.length === 0) return '[^)]*';
+  return argumentTypes
+    .map(
+      (type) =>
+        `[^,()]*\\b${type.split(/\s+/).map(escapeRegex).join('\\s+')}\\b[^,()]*`
+    )
+    .join('\\s*,\\s*');
+}
 function functionMarkerPattern(functionName, flags = 'i') {
-  const name = functionName.replace(/\($/, '');
+  const { name, argumentTypes } = parseFunctionSignature(functionName);
   return new RegExp(
-    `CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${escapeRegex(name)}\\s*\\(`,
+    `CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${escapeRegex(name)}\\s*\\(${parameterListPattern(argumentTypes)}\\)`,
     flags
   );
 }
 function functionDropPattern(functionName, flags = 'i') {
-  const name = functionName.replace(/\($/, '');
+  const { name, argumentTypes } = parseFunctionSignature(functionName);
+  const argumentList = argumentTypes.length
+    ? `(?:\\s*\\(${parameterListPattern(argumentTypes)}\\))?`
+    : '(?:\\s*\\([^;]*\\))?';
   return new RegExp(
-    `DROP\\s+FUNCTION\\s+(?:IF\\s+EXISTS\\s+)?${escapeRegex(name)}(?:\\s*\\([^;]*\\))?\\s*(?:CASCADE|RESTRICT)?\\s*;`,
+    `DROP\\s+FUNCTION\\s+(?:IF\\s+EXISTS\\s+)?${escapeRegex(name)}${argumentList}\\s*(?:CASCADE|RESTRICT)?\\s*;`,
     flags
   );
 }
@@ -118,8 +148,16 @@ function legacyDecrementMatches(source) {
     ),
   ].filter(([, , statement]) => stockDecrement.test(statement));
 }
+function legacyDecrementHasZeroRowHandling(match) {
+  if (!match || typeof match.input !== 'string' || match.index === undefined) {
+    return false;
+  }
+  const remainder = match.input.slice(match.index + match[0].length);
+  return /^\s*IF\s+NOT\s+FOUND\s+THEN\b[\s\S]*?\bRAISE\s+EXCEPTION\b[\s\S]*?\bEND\s+IF\s*;/i.test(
+    remainder
+  );
+}
 function maskNestedSql(source) {
-  let depth = 0;
   let quote;
   let masked = '';
 
@@ -140,14 +178,45 @@ function maskNestedSql(source) {
     if (char === "'" || char === '"') {
       quote = char;
       masked += ' ';
-    } else if (char === '(') {
-      depth += 1;
-      masked += ' ';
-    } else if (char === ')') {
-      depth = Math.max(depth - 1, 0);
-      masked += ' ';
+    } else if (
+      char === '(' &&
+      /^\s*(?:SELECT|WITH|VALUES|TABLE|INSERT|UPDATE|DELETE)\b/i.test(
+        source.slice(index + 1)
+      )
+    ) {
+      masked += '(';
+      let nestedDepth = 1;
+      let nestedQuote;
+      for (index += 1; index < source.length; index += 1) {
+        const nestedChar = source[index];
+        if (nestedQuote) {
+          masked += ' ';
+          if (nestedChar === nestedQuote) {
+            if (source[index + 1] === nestedQuote) {
+              masked += ' ';
+              index += 1;
+            } else {
+              nestedQuote = undefined;
+            }
+          }
+          continue;
+        }
+        if (nestedChar === "'" || nestedChar === '"') {
+          nestedQuote = nestedChar;
+          masked += ' ';
+        } else if (nestedChar === '(') {
+          nestedDepth += 1;
+          masked += ' ';
+        } else if (nestedChar === ')') {
+          nestedDepth -= 1;
+          masked += ')';
+          if (nestedDepth === 0) break;
+        } else {
+          masked += ' ';
+        }
+      }
     } else {
-      masked += depth === 0 ? char : ' ';
+      masked += char;
     }
   }
   return masked;
@@ -167,8 +236,34 @@ function legacyDecrementHasCompareAndSetGuard(statement) {
     );
   if (!comparison) return false;
 
-  const prefix = whereClause.slice(0, comparison.index).trimEnd();
+  const prefix = whereClause.slice(0, comparison.index).replace(/[\s(]+$/g, '');
   return prefix.length === 0 || /\bAND\s*$/i.test(prefix);
+}
+function availableUnitWhereClause(source) {
+  const match =
+    /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+vi\b[\s\S]*?\bWHERE\b([\s\S]*?)\bORDER\s+BY\b[\s\S]*?\bLIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i.exec(
+      stripSqlComments(source)
+    );
+  return match?.[1] ?? null;
+}
+function availableUnitPredicatePatterns(variantVariable) {
+  return [
+    /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id/i,
+    new RegExp(`vi\\s*\\.\\s*variant_id\\s*=\\s*${variantVariable}`, 'i'),
+    /vi\s*\.\s*status\s*=\s*'available'/i,
+    /vi\s*\.\s*order_id\s+IS\s+NULL/i,
+    /vi\s*\.\s*order_item_id\s+IS\s+NULL/i,
+    /vi\s*\.\s*sold_at\s+IS\s+NULL/i,
+  ];
+}
+function availableUnitPredicatesMatch(source, variantVariable) {
+  const where = availableUnitWhereClause(source);
+  return (
+    where !== null &&
+    availableUnitPredicatePatterns(variantVariable).every((pattern) =>
+      pattern.test(where)
+    )
+  );
 }
 
 export const serializedInventoryContract = {
@@ -178,5 +273,7 @@ export const serializedInventoryContract = {
   latestFunctionBody,
   extractIfBranches,
   legacyDecrementMatches,
+  legacyDecrementHasZeroRowHandling,
   legacyDecrementHasCompareAndSetGuard,
+  availableUnitPredicatesMatch,
 };

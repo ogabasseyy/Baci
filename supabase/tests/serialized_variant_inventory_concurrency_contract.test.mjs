@@ -11,7 +11,9 @@ const {
   latestFunctionBody,
   extractIfBranches,
   legacyDecrementMatches,
+  legacyDecrementHasZeroRowHandling,
   legacyDecrementHasCompareAndSetGuard,
+  availableUnitPredicatesMatch,
 } = serializedInventoryContract;
 
 test('function extraction tolerates tagged dollar quotes and trailing clauses', () => {
@@ -28,17 +30,36 @@ test('function extraction tolerates tagged dollar quotes and trailing clauses', 
   ].join('\r\n');
 
   assert.match(
-    functionBody(source, 'private.fixture('),
+    functionBody(source, 'private.fixture(integer)'),
     /\r\nBEGIN\r\n\s+NULL;/
   );
   assert.throws(
     () =>
-      latestFunctionBody('private.fixture(', [
+      latestFunctionBody('private.fixture(integer)', [
         source,
         'DROP FUNCTION private.fixture;',
       ]),
     /missing private\.fixture/
   );
+});
+
+test('function extraction resolves overloads by expected input types', () => {
+  const source = [
+    'CREATE FUNCTION private.fixture(p_value integer) RETURNS void AS $$',
+    'BEGIN',
+    '  NULL;',
+    'END;',
+    '$$;',
+    'CREATE FUNCTION private.fixture(p_value text) RETURNS void AS $$',
+    'BEGIN',
+    "  RAISE NOTICE 'text';",
+    'END;',
+    '$$;',
+  ].join('\n');
+
+  const body = latestFunctionBody('private.fixture(integer)', [source]);
+  assert.match(body, /p_value integer/);
+  assert.doesNotMatch(body, /p_value text/);
 });
 
 test('branch extraction handles nested IF blocks without fixed indentation', () => {
@@ -70,16 +91,13 @@ function migrationFilesWithLegacyDecrements() {
 
 test('serialized claims lock the order before the item and skip locked available units', () => {
   const claim = latestFunctionBody(
-    'private.claim_variant_inventory_units_for_order_item_internal('
+    'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)'
   );
 
   const orderLock =
     /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id\s+FOR\s+UPDATE/i;
   const itemLock =
     /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_item_id[^;]*?FOR\s+UPDATE/i;
-  const availableUnitLock =
-    /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id[^;]*?vi\s*\.\s*variant_id\s*=\s*v_variant_id[^;]*?vi\s*\.\s*status\s*=\s*'available'[^;]*?vi\s*\.\s*order_id\s+IS\s+NULL[^;]*?vi\s*\.\s*order_item_id\s+IS\s+NULL[^;]*?vi\s*\.\s*sold_at\s+IS\s+NULL[^;]*?LIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i;
-
   assert.match(
     claim,
     orderLock,
@@ -90,28 +108,33 @@ test('serialized claims lock the order before the item and skip locked available
     itemLock,
     'same-item retries must serialize on the order item row'
   );
-  assert.match(
-    claim,
-    availableUnitLock,
-    'claims must lock only still-available, unlinked units'
+  assert.ok(
+    availableUnitPredicatesMatch(claim, 'v_variant_id'),
+    'claims must enforce each scoped availability predicate'
   );
   assert.ok(
     claim.search(orderLock) < claim.search(itemLock),
     'claims must take the parent-order lock before the order-item lock'
   );
+  const strictShortage =
+    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+(?:\(\s*)?v_reserved_count\s*\+\s*v_claimed_count\s*(?:\s*\))?\s*<\s*v_qty\s+THEN[\s\S]*?RAISE\s+EXCEPTION\s+['"]serialized_inventory_unavailable['"]/i;
   assert.match(
     claim,
-    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND[^;]*?THEN[^;]*?RAISE\s+EXCEPTION\s+['"]serialized_inventory_unavailable['"]/i,
+    strictShortage,
     'strict serialized inventory must fail closed when another order claims the last unit'
+  );
+  assert.doesNotMatch(
+    "IF v_effective_policy = 'serialized_strict' AND false THEN RAISE EXCEPTION 'serialized_inventory_unavailable'; END IF;",
+    strictShortage
   );
 });
 
 test('serialized policy boundaries preserve fallback counts and payment-loss reporting', () => {
   const claim = latestFunctionBody(
-    'private.claim_variant_inventory_units_for_order_item_internal('
+    'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)'
   );
   const confirm = latestFunctionBody(
-    'private.confirm_order_inventory_reservations('
+    'private.confirm_order_inventory_reservations(uuid, uuid)'
   );
 
   assert.match(
@@ -129,8 +152,10 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
     /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id[^;]*?FOR\s+UPDATE/i;
   const orderItemsQuery =
     /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?order_id\s*=\s*p_order_id[^;]*?FOR\s+UPDATE/i;
-  const confirmAvailableUnitLock =
-    /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id[^;]*?vi\s*\.\s*variant_id\s*=\s*v_actual_variant_id[^;]*?vi\s*\.\s*status\s*=\s*'available'[^;]*?vi\s*\.\s*order_id\s+IS\s+NULL[^;]*?vi\s*\.\s*order_item_id\s+IS\s+NULL[^;]*?vi\s*\.\s*sold_at\s+IS\s+NULL[^;]*?LIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i;
+  assert.ok(
+    availableUnitPredicatesMatch(confirm, 'v_actual_variant_id'),
+    'payment confirmation must enforce each scoped availability predicate'
+  );
   assert.match(
     confirm,
     confirmOrderLock,
@@ -151,11 +176,6 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
     confirmOrderItemsIndex >= 0,
     'payment confirmation must reconcile order items'
   );
-  assert.match(
-    confirm,
-    confirmAvailableUnitLock,
-    'payment confirmation reclaim must lock scoped available units'
-  );
   assert.ok(
     confirm.search(confirmOrderLock) < confirmOrderItemsIndex,
     'payment confirmation must take the parent-order lock before item locks'
@@ -163,9 +183,11 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
 });
 
 test('release locks only reserved units owned by the target merchant and order', () => {
-  const release = latestFunctionBody('private.release_order_inventory_units(');
+  const release = latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
   const releaseLock =
-    /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+(?:AS\s+)?vi[\s\S]*?WHERE\s+vi\s*\.\s*order_id\s*=\s*p_order_id\s+AND\s+vi\s*\.\s*merchant_id\s*=\s*p_merchant_id\s+AND\s+vi\s*\.\s*status\s*=\s*'reserved'[\s\S]*?FOR\s+UPDATE/i;
+    /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+(?:AS\s+)?vi[\s\S]*?WHERE\s+vi\s*\.\s*order_id\s*=\s*p_order_id\s+AND\s+vi\s*\.\s*merchant_id\s*=\s*p_merchant_id\s+AND\s+vi\s*\.\s*status\s*=\s*'reserved'[\s\S]*?FOR\s+UPDATE(?:\s+OF\s+vi\b)?(?!\s+OF\b)/i;
   const branches = extractIfBranches(
     release,
     /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
@@ -180,6 +202,10 @@ test('release locks only reserved units owned by the target merchant and order',
     branches.elseBranch,
     releaseLock,
     'returned release must lock only reserved units belonging to the target merchant and order'
+  );
+  assert.doesNotMatch(
+    "FROM variant_inventory vi WHERE vi.order_id = p_order_id AND vi.merchant_id = p_merchant_id AND vi.status = 'reserved' FOR UPDATE OF pv",
+    releaseLock
   );
 });
 
@@ -211,17 +237,26 @@ test('legacy decrement scanning recognizes qualified aliases and flexible SQL fo
     UPDATE products
     SET stock_quantity = (stock_quantity - stock_rec.total_quantity)
     WHERE products.id = stock_rec.product_id AND stock_quantity >= stock_rec.total_quantity;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'insufficient_stock';
+    END IF;
     UPDATE product_variants AS p
     SET stock_quantity = GREATEST(p.stock_quantity - stock_rec.total_quantity, 0)
     WHERE p.id = stock_rec.variant_id AND stock_quantity >= stock_rec.total_quantity;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'insufficient_variant_stock';
+    END IF;
   `);
   assert.equal(wrapped.length, 2);
+  assert.equal(legacyDecrementHasZeroRowHandling(wrapped[0]), true);
+  assert.equal(legacyDecrementHasZeroRowHandling(wrapped[1]), true);
+  assert.equal(legacyDecrementHasZeroRowHandling(unguarded[0]), false);
 
   const nestedWhere = `
     UPDATE products
     SET stock_quantity = stock_quantity - stock_rec.total_quantity
     WHERE id IN (SELECT id FROM products WHERE stock_quantity >= stock_rec.total_quantity)
-      AND stock_quantity >= stock_rec.total_quantity;
+      AND (stock_quantity >= stock_rec.total_quantity);
   `;
   assert.equal(legacyDecrementHasCompareAndSetGuard(nestedWhere), true);
   const subqueryOnly = `
@@ -232,7 +267,6 @@ test('legacy decrement scanning recognizes qualified aliases and flexible SQL fo
   `;
   assert.equal(legacyDecrementHasCompareAndSetGuard(subqueryOnly), false);
 });
-
 test('every legacy stock decrement remains compare-and-set guarded', () => {
   const migrationFiles = migrationFilesWithLegacyDecrements();
   assert.ok(
@@ -244,10 +278,15 @@ test('every legacy stock decrement remains compare-and-set guarded', () => {
     const source = fs.readFileSync(path.join(migrationsDir, migration), 'utf8');
     const decrements = legacyDecrementMatches(source);
 
-    for (const [, table, statement] of decrements) {
+    for (const decrement of decrements) {
+      const [, table, statement] = decrement;
       assert.ok(
         legacyDecrementHasCompareAndSetGuard(statement),
         `${migration} must compare-and-set guard each ${table} legacy decrement`
+      );
+      assert.ok(
+        legacyDecrementHasZeroRowHandling(decrement),
+        `${migration} must fail closed when each ${table} legacy decrement affects zero rows`
       );
     }
   }

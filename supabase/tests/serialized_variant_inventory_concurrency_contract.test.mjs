@@ -17,14 +17,15 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+const stripSqlComments = (source) =>
+  source.replace(/--[^\r\n]*|\/\*[\s\S]*?\*\//g, '');
 function functionMarkerPattern(functionName, flags = 'i') {
   const name = functionName.replace(/\($/, '');
   return new RegExp(
-    `CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+${escapeRegex(name)}\\s*\\(`,
+    `CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${escapeRegex(name)}\\s*\\(`,
     flags
   );
 }
-
 function functionBody(source, functionName) {
   const markerMatches = [
     ...source.matchAll(functionMarkerPattern(functionName, 'gi')),
@@ -46,12 +47,13 @@ function functionBody(source, functionName) {
   assert.ok(closing, `unterminated ${functionName}`);
   return source.slice(start, bodyStart + closing.index);
 }
-
 function latestFunctionBody(functionName) {
   let latestBody;
 
   for (const fileName of migrationFileNames()) {
-    const source = fs.readFileSync(path.join(migrationsDir, fileName), 'utf8');
+    const source = stripSqlComments(
+      fs.readFileSync(path.join(migrationsDir, fileName), 'utf8')
+    );
     if (functionMarkerPattern(functionName).test(source)) {
       latestBody = functionBody(source, functionName);
     }
@@ -60,7 +62,6 @@ function latestFunctionBody(functionName) {
   assert.ok(latestBody, `missing ${functionName} in migrations`);
   return latestBody;
 }
-
 function extractIfBranches(source, openingPattern) {
   const lines = source.split(/\r?\n/);
   const openingIndex = lines.findIndex((line) => openingPattern.test(line));
@@ -93,18 +94,21 @@ function extractIfBranches(source, openingPattern) {
 
   assert.fail('unterminated target IF branch');
 }
-
 function legacyDecrementMatches(source) {
   return [
-    ...source.matchAll(
-      /UPDATE\s+(?:ONLY\s+)?(?:public\s*\.\s*)?(product_variants|products)(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET\s+stock_quantity\s*=\s*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*stock_rec\s*\.\s*total_quantity([\s\S]*?);/gi
+    ...stripSqlComments(source).matchAll(
+      /UPDATE\s+(?:ONLY\s+)?(?:public\s*\.\s*)?(product_variants|products)(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET\b([\s\S]*?);/gi
     ),
-  ];
+  ].filter(([, , statement]) =>
+    /\bstock_quantity\s*=\s*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*stock_rec\s*\.\s*total_quantity\b/i.test(
+      statement
+    )
+  );
 }
 
 test('function extraction tolerates tagged dollar quotes and trailing clauses', () => {
   const source = [
-    'CREATE OR REPLACE FUNCTION private.fixture(',
+    'CREATE FUNCTION private.fixture(',
     '  p_value integer',
     ') RETURNS void',
     'LANGUAGE plpgsql',
@@ -156,9 +160,9 @@ test('serialized claims lock the order before the item and skip locked available
   const orderLock =
     /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id\s+FOR\s+UPDATE/i;
   const itemLock =
-    /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[\s\S]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_item_id[\s\S]*?FOR\s+UPDATE/i;
+    /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_item_id[^;]*?FOR\s+UPDATE/i;
   const availableUnitLock =
-    /vi\s*\.\s*status\s*=\s*'available'[\s\S]*?vi\s*\.\s*order_id\s+IS\s+NULL[\s\S]*?vi\s*\.\s*order_item_id\s+IS\s+NULL[\s\S]*?vi\s*\.\s*sold_at\s+IS\s+NULL[\s\S]*?FOR\s+UPDATE\s+SKIP\s+LOCKED/i;
+    /vi\s*\.\s*status\s*=\s*'available'[^;]*?vi\s*\.\s*order_id\s+IS\s+NULL[^;]*?vi\s*\.\s*order_item_id\s+IS\s+NULL[^;]*?vi\s*\.\s*sold_at\s+IS\s+NULL[^;]*?LIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i;
 
   assert.match(
     claim,
@@ -181,7 +185,7 @@ test('serialized claims lock the order before the item and skip locked available
   );
   assert.match(
     claim,
-    /v_effective_policy\s*=\s*'serialized_strict'[\s\S]*?serialized_inventory_unavailable/i,
+    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND[^;]*?THEN[^;]*?RAISE\s+EXCEPTION\s+['"]serialized_inventory_unavailable['"]/i,
     'strict serialized inventory must fail closed when another order claims the last unit'
   );
 });
@@ -208,7 +212,7 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
   const confirmOrderLock =
     /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id[^;]*?FOR\s+UPDATE/i;
   const orderItemsQuery =
-    /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?/i;
+    /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?order_id\s*=\s*p_order_id[^;]*?FOR\s+UPDATE/i;
   assert.match(
     confirm,
     confirmOrderLock,
@@ -216,8 +220,13 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
   );
   assert.match(
     confirm,
-    /v_effective_policy\s*=\s*'serialized_strict'[\s\S]*?late_payment_reservation_lost/i,
-    'strict payment confirmation must expose a reservation-loss exception'
+    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND[^;]*?THEN[^;]*?v_fulfillment_data\s*:=\s*jsonb_set\([^;]*?'\{serializedInventoryException\}'[^;]*?'late_payment_reservation_lost'/i,
+    'strict payment confirmation must write the reservation-loss exception into fulfillment data'
+  );
+  assert.match(
+    confirm,
+    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+THEN[^;]*?v_exceptions\s*:=\s*v_exceptions\s*\|\|\s*jsonb_build_object\([^;]*?'code'\s*,\s*'late_payment_reservation_lost'[\s\S]*?RETURN\s+jsonb_build_object\([^;]*?'exceptionCodes'\s*,\s*v_exceptions\b/i,
+    'strict payment confirmation must append and return reservation-loss exception codes'
   );
   const confirmOrderItemsIndex = confirm.search(orderItemsQuery);
   assert.ok(
@@ -253,8 +262,10 @@ test('release locks only reserved units owned by the target merchant and order',
 
 test('legacy decrement scanning recognizes qualified aliases and flexible SQL formatting', () => {
   const matches = legacyDecrementMatches(`
+    -- UPDATE public.products SET stock_quantity = stock_quantity - stock_rec.total_quantity;
     UPDATE public.products AS p
-    SET stock_quantity = p.stock_quantity
+    SET updated_at = now(),
+        stock_quantity = p.stock_quantity
       - stock_rec . total_quantity
     WHERE p.stock_quantity >= stock_rec.total_quantity;
   `);

@@ -13,14 +13,38 @@ function migrationFileNames() {
     .sort();
 }
 
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function functionMarkerPattern(functionName, flags = 'i') {
+  const name = functionName.replace(/\($/, '');
+  return new RegExp(
+    `CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+${escapeRegex(name)}\\s*\\(`,
+    flags
+  );
+}
+
 function functionBody(source, functionName) {
-  const marker = `CREATE OR REPLACE FUNCTION ${functionName}`;
-  const start = source.lastIndexOf(marker);
+  const markerMatches = [
+    ...source.matchAll(functionMarkerPattern(functionName, 'gi')),
+  ];
+  const start = markerMatches.at(-1)?.index ?? -1;
   assert.notEqual(start, -1, `missing ${functionName}`);
 
-  const end = source.indexOf('\n$$;', start);
-  assert.notEqual(end, -1, `unterminated ${functionName}`);
-  return source.slice(start, end);
+  const opening = /\bAS\s+(\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)/i.exec(
+    source.slice(start)
+  );
+  assert.ok(opening, `missing dollar-quote opener for ${functionName}`);
+
+  const bodyStart = start + opening.index + opening[0].length;
+  const delimiter = escapeRegex(opening[1]);
+  const closing = new RegExp(
+    `\\r?\\n[\\t ]*${delimiter}[\\t ]*[^\\r\\n;]*;`,
+    'i'
+  ).exec(source.slice(bodyStart));
+  assert.ok(closing, `unterminated ${functionName}`);
+  return source.slice(start, bodyStart + closing.index);
 }
 
 function latestFunctionBody(functionName) {
@@ -28,13 +52,46 @@ function latestFunctionBody(functionName) {
 
   for (const fileName of migrationFileNames()) {
     const source = fs.readFileSync(path.join(migrationsDir, fileName), 'utf8');
-    if (source.includes(`CREATE OR REPLACE FUNCTION ${functionName}`)) {
+    if (functionMarkerPattern(functionName).test(source)) {
       latestBody = functionBody(source, functionName);
     }
   }
 
   assert.ok(latestBody, `missing ${functionName} in migrations`);
   return latestBody;
+}
+
+function extractIfBranches(source, openingPattern) {
+  const lines = source.split(/\r?\n/);
+  const openingIndex = lines.findIndex((line) => openingPattern.test(line));
+  assert.notEqual(openingIndex, -1, 'missing target IF branch');
+
+  let depth = 1;
+  let inElse = false;
+  const thenLines = [];
+  const elseLines = [];
+
+  for (const line of lines.slice(openingIndex + 1)) {
+    if (/^\s*IF\b/i.test(line)) {
+      depth += 1;
+    } else if (/^\s*END\s+IF\b/i.test(line)) {
+      depth -= 1;
+      if (depth === 0) {
+        assert.ok(inElse, 'target IF branch is missing ELSE');
+        return {
+          thenBranch: thenLines.join('\n'),
+          elseBranch: elseLines.join('\n'),
+        };
+      }
+    } else if (depth === 1 && /^\s*ELSE\b/i.test(line)) {
+      inElse = true;
+      continue;
+    }
+
+    (inElse ? elseLines : thenLines).push(line);
+  }
+
+  assert.fail('unterminated target IF branch');
 }
 
 function legacyDecrementMatches(source) {
@@ -44,6 +101,45 @@ function legacyDecrementMatches(source) {
     ),
   ];
 }
+
+test('function extraction tolerates tagged dollar quotes and trailing clauses', () => {
+  const source = [
+    'CREATE OR REPLACE FUNCTION private.fixture(',
+    '  p_value integer',
+    ') RETURNS void',
+    'LANGUAGE plpgsql',
+    'AS $fixture$',
+    'BEGIN',
+    '  NULL;',
+    'END;',
+    '$fixture$ LANGUAGE plpgsql;',
+  ].join('\r\n');
+
+  assert.match(
+    functionBody(source, 'private.fixture('),
+    /\r\nBEGIN\r\n\s+NULL;/
+  );
+});
+
+test('branch extraction handles nested IF blocks without fixed indentation', () => {
+  const branches = extractIfBranches(
+    [
+      "IF v_target_status = 'available' THEN",
+      '    IF v_nested THEN',
+      '      PERFORM 1;',
+      '    END IF;',
+      '  ELSE',
+      'IF v_other_nested THEN',
+      '  PERFORM 2;',
+      'END IF;',
+      'END IF;',
+    ].join('\n'),
+    /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
+  );
+
+  assert.match(branches.thenBranch, /v_nested/);
+  assert.match(branches.elseBranch, /v_other_nested/);
+});
 
 function migrationFilesWithLegacyDecrements() {
   return migrationFileNames().filter((fileName) => {
@@ -58,11 +154,11 @@ test('serialized claims lock the order before the item and skip locked available
   );
 
   const orderLock =
-    /FROM public\.orders WHERE id = p_order_id AND merchant_id = p_merchant_id FOR UPDATE/;
+    /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id\s+FOR\s+UPDATE/i;
   const itemLock =
-    /FROM public\.order_items oi[\s\S]*WHERE oi\.id = p_order_item_id[\s\S]*FOR UPDATE/;
+    /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[\s\S]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_item_id[\s\S]*?FOR\s+UPDATE/i;
   const availableUnitLock =
-    /vi\.status = 'available'[\s\S]*vi\.order_id IS NULL[\s\S]*vi\.order_item_id IS NULL[\s\S]*vi\.sold_at IS NULL[\s\S]*FOR UPDATE SKIP LOCKED/;
+    /vi\s*\.\s*status\s*=\s*'available'[\s\S]*?vi\s*\.\s*order_id\s+IS\s+NULL[\s\S]*?vi\s*\.\s*order_item_id\s+IS\s+NULL[\s\S]*?vi\s*\.\s*sold_at\s+IS\s+NULL[\s\S]*?FOR\s+UPDATE\s+SKIP\s+LOCKED/i;
 
   assert.match(
     claim,
@@ -85,7 +181,7 @@ test('serialized claims lock the order before the item and skip locked available
   );
   assert.match(
     claim,
-    /v_effective_policy = 'serialized_strict'[\s\S]*serialized_inventory_unavailable/,
+    /v_effective_policy\s*=\s*'serialized_strict'[\s\S]*?serialized_inventory_unavailable/i,
     'strict serialized inventory must fail closed when another order claims the last unit'
   );
 });
@@ -105,12 +201,14 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
   );
   assert.doesNotMatch(
     claim,
-    /UPDATE (?:public\.)?(?:products|product_variants)(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET[\s\S]*stock_quantity = stock_quantity -/i,
+    /UPDATE\s+(?:ONLY\s+)?(?:public\s*\.\s*)?(?:products|product_variants)(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET[\s\S]*?stock_quantity\s*=\s*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*/i,
     'serialized claims must not also decrement legacy product stock'
   );
 
   const confirmOrderLock =
-    /FROM public\.orders[^;]*?WHERE id = p_order_id AND merchant_id = p_merchant_id[^;]*?FOR UPDATE/;
+    /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id[^;]*?FOR\s+UPDATE/i;
+  const orderItemsQuery =
+    /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?/i;
   assert.match(
     confirm,
     confirmOrderLock,
@@ -118,12 +216,16 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
   );
   assert.match(
     confirm,
-    /v_effective_policy = 'serialized_strict'[\s\S]*late_payment_reservation_lost/,
+    /v_effective_policy\s*=\s*'serialized_strict'[\s\S]*?late_payment_reservation_lost/i,
     'strict payment confirmation must expose a reservation-loss exception'
   );
+  const confirmOrderItemsIndex = confirm.search(orderItemsQuery);
   assert.ok(
-    confirm.search(confirmOrderLock) <
-      confirm.indexOf('FROM public.order_items oi'),
+    confirmOrderItemsIndex >= 0,
+    'payment confirmation must reconcile order items'
+  );
+  assert.ok(
+    confirm.search(confirmOrderLock) < confirmOrderItemsIndex,
     'payment confirmation must take the parent-order lock before item locks'
   );
 });
@@ -131,22 +233,19 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
 test('release locks only reserved units owned by the target merchant and order', () => {
   const release = latestFunctionBody('private.release_order_inventory_units(');
   const releaseLock =
-    /FROM public\.variant_inventory vi[\s\S]*?WHERE vi\.order_id = p_order_id AND vi\.merchant_id = p_merchant_id AND vi\.status = 'reserved'[\s\S]*?FOR UPDATE/;
-  const availableBranch = release.match(
-    /IF v_target_status = 'available' THEN([\s\S]*?)\n\s{2}ELSE/
+    /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+(?:AS\s+)?vi[\s\S]*?WHERE\s+vi\s*\.\s*order_id\s*=\s*p_order_id\s+AND\s+vi\s*\.\s*merchant_id\s*=\s*p_merchant_id\s+AND\s+vi\s*\.\s*status\s*=\s*'reserved'[\s\S]*?FOR\s+UPDATE/i;
+  const branches = extractIfBranches(
+    release,
+    /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
   );
-  const returnedBranch = release.match(/\n\s{2}ELSE([\s\S]*?)\n\s{2}END IF;/);
-
-  assert.ok(availableBranch, 'release must retain its available branch');
-  assert.ok(returnedBranch, 'release must retain its returned branch');
 
   assert.match(
-    availableBranch[1],
+    branches.thenBranch,
     releaseLock,
     'available release must lock only reserved units belonging to the target merchant and order'
   );
   assert.match(
-    returnedBranch[1],
+    branches.elseBranch,
     releaseLock,
     'returned release must lock only reserved units belonging to the target merchant and order'
   );
@@ -181,7 +280,7 @@ test('every legacy stock decrement remains compare-and-set guarded', () => {
     for (const [, table, statement] of decrements) {
       assert.match(
         statement,
-        /stock_quantity >= stock_rec\.total_quantity/,
+        /stock_quantity\s*>=\s*stock_rec\s*\.\s*total_quantity/i,
         `${migration} must compare-and-set guard each ${table} legacy decrement`
       );
     }

@@ -179,8 +179,44 @@ function unwrapOuterParentheses(source) {
   return expression;
 }
 
+function findDollarQuoteEnd(source, start, delimiter) {
+  let quote;
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (quote) {
+      if (char === '\\' && next !== undefined) {
+        index += 1;
+      } else if (char === quote) {
+        if (next === quote) index += 1;
+        else quote = undefined;
+      }
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
+    if (!source.startsWith(delimiter, index)) continue;
+
+    let boundary = index - 1;
+    while (boundary >= start && /[\t ]/.test(source[boundary])) boundary -= 1;
+    const atBoundary =
+      index === start || source[index - 1] === '\n' || source[boundary] === ';';
+    if (!atBoundary) continue;
+    const suffix = /^[\t ]*[^\r\n;]*;/.exec(
+      source.slice(index + delimiter.length)
+    );
+    if (suffix) {
+      return { index };
+    }
+  }
+  return null;
+}
+
 function isRequiredConjunct(source, pattern) {
   const expression = unwrapOuterParentheses(source);
+  if (/^NOT\b/i.test(expression)) return false;
   const orBranches = splitTopLevel(expression, 'OR');
   if (orBranches.length > 1) {
     return orBranches.every((branch) => isRequiredConjunct(branch, pattern));
@@ -256,6 +292,7 @@ function splitSqlStatements(source) {
 }
 
 export const serializedInventorySqlParser = {
+  findDollarQuoteEnd,
   isRequiredConjunct,
   splitSqlStatements,
   stripSqlComments,

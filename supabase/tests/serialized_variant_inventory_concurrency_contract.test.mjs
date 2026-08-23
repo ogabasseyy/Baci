@@ -14,6 +14,7 @@ const {
   legacyDecrementHasZeroRowHandling,
   legacyDecrementHasCompareAndSetGuard,
   availableUnitPredicatesMatch,
+  findClaimLocks,
 } = serializedInventoryContract;
 
 test('function extraction tolerates tagged dollar quotes and trailing clauses', () => {
@@ -94,18 +95,13 @@ test('serialized claims lock the order before the item and skip locked available
     'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)'
   );
 
-  const orderLock =
-    /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id\s+FOR\s+UPDATE/i;
-  const itemLock =
-    /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?JOIN\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+[^;]*?(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_item_id[^;]*?(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id[^;]*?(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id[^;]*?FOR\s+UPDATE/i;
-  assert.match(
-    claim,
-    orderLock,
+  const claimLocks = findClaimLocks(claim);
+  assert.ok(
+    claimLocks.order,
     'same-order claims must serialize on the parent order row'
   );
-  assert.match(
-    claim,
-    itemLock,
+  assert.ok(
+    claimLocks.item,
     'same-item retries must serialize on the order item row'
   );
   assert.ok(
@@ -113,7 +109,7 @@ test('serialized claims lock the order before the item and skip locked available
     'claims must enforce each scoped availability predicate'
   );
   assert.ok(
-    claim.search(orderLock) < claim.search(itemLock),
+    claimLocks.order.index < claimLocks.item.index,
     'claims must take the parent-order lock before the order-item lock'
   );
   const strictShortage =

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
-const { splitSqlStatements, stripSqlComments } = serializedInventorySqlParser;
+const { findDollarQuoteEnd, splitSqlStatements, stripSqlComments } =
+  serializedInventorySqlParser;
 
 test('preserves comment-like text in quoted and dollar-quoted SQL', () => {
   const source = [
@@ -36,4 +37,12 @@ test('strips nested block comments through their matching outer terminator', () 
 
   assert.doesNotMatch(stripped, /CREATE FUNCTION private\.fake/);
   assert.match(stripped, /SELECT 1;/);
+});
+
+test('finds same-line dollar-quote terminators outside string literals', () => {
+  const source = "\n RAISE NOTICE 'semi; $$;'; NULL; END; $$ LANGUAGE plpgsql;";
+  const closing = findDollarQuoteEnd(source, 0, '$$');
+
+  assert.ok(closing);
+  assert.equal(source.slice(closing.index), '$$ LANGUAGE plpgsql;');
 });

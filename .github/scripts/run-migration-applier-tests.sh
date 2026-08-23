@@ -9,6 +9,7 @@ cd "$repo_root"
 
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_sql_parser.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_availability.test.mjs"
+node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_locks.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_review.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract.test.mjs"
 bash "$script_dir/apply-pending-migrations.test.sh"

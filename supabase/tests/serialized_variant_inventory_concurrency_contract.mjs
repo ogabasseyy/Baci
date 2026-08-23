@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { serializedInventoryAvailability } from './serialized_variant_inventory_concurrency_contract_availability.mjs';
+import { serializedInventoryLocks } from './serialized_variant_inventory_concurrency_contract_locks.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
@@ -16,8 +17,12 @@ function migrationFileNames() {
 const migrationSources = migrationFileNames().map((fileName) =>
   fs.readFileSync(path.join(migrationsDir, fileName), 'utf8')
 );
-const { isRequiredConjunct, splitSqlStatements, stripSqlComments } =
-  serializedInventorySqlParser;
+const {
+  findDollarQuoteEnd,
+  isRequiredConjunct,
+  splitSqlStatements,
+  stripSqlComments,
+} = serializedInventorySqlParser;
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -54,10 +59,15 @@ function parseFunctionSignature(functionSignature) {
 function parameterListPattern(argumentTypes) {
   if (argumentTypes.length === 0) return '[^)]*';
   return argumentTypes
-    .map(
-      (type) =>
-        `[^,()]*\\b${type.split(/\s+/).map(escapeRegex).join('\\s+')}\\b[^,()]*`
-    )
+    .map((type) => {
+      const normalized = type.trim().replace(/\s+/g, ' ');
+      const isArray = /\[\s*\]$/.test(normalized);
+      const baseType = isArray
+        ? normalized.replace(/\s*\[\s*\]$/, '').trim()
+        : normalized;
+      const basePattern = baseType.split(' ').map(escapeRegex).join('\\s+');
+      return `[^,()]*\\b${basePattern}\\b${isArray ? '\\s*\\[\\s*\\]' : '(?!\\s*\\[\\s*\\])'}[^,()]*`;
+    })
     .join('\\s*,\\s*');
 }
 function functionMarkerPattern(functionName, flags = 'i') {
@@ -90,13 +100,9 @@ function functionBody(source, functionName) {
   assert.ok(opening, `missing dollar-quote opener for ${functionName}`);
 
   const bodyStart = start + opening.index + opening[0].length;
-  const delimiter = escapeRegex(opening[1]);
-  const closing = new RegExp(
-    `\\r?\\n[\\t ]*${delimiter}[\\t ]*[^\\r\\n;]*;`,
-    'i'
-  ).exec(source.slice(bodyStart));
+  const closing = findDollarQuoteEnd(source, bodyStart, opening[1]);
   assert.ok(closing, `unterminated ${functionName}`);
-  return source.slice(start, bodyStart + closing.index);
+  return source.slice(start, closing.index);
 }
 function latestFunctionBody(functionName, sources = migrationSources) {
   let latestBody;
@@ -125,11 +131,17 @@ function extractIfBranches(source, openingPattern) {
   assert.notEqual(openingIndex, -1, 'missing target IF branch');
 
   let depth = 1;
+  let caseDepth = 0;
   let inElse = false;
   const thenLines = [];
   const elseLines = [];
 
   for (const line of lines.slice(openingIndex + 1)) {
+    const sqlLine = line.replace(/'(?:''|[^'])*'|"(?:""|[^"])*"/g, '');
+    const endCaseCount = (sqlLine.match(/\bEND\s+CASE\b/gi) ?? []).length;
+    const caseTokenCount = (sqlLine.match(/\bCASE\b/gi) ?? []).length;
+    caseDepth = Math.max(0, caseDepth + caseTokenCount - endCaseCount * 2);
+
     if (/^\s*IF\b/i.test(line)) {
       depth += 1;
     } else if (/^\s*END\s+IF\b/i.test(line)) {
@@ -141,7 +153,7 @@ function extractIfBranches(source, openingPattern) {
           elseBranch: elseLines.join('\n'),
         };
       }
-    } else if (depth === 1 && /^\s*ELSE\b/i.test(line)) {
+    } else if (depth === 1 && caseDepth === 0 && /^\s*ELSE\b/i.test(line)) {
       inElse = true;
       continue;
     }
@@ -276,4 +288,5 @@ export const serializedInventoryContract = {
   legacyDecrementHasCompareAndSetGuard,
   availableUnitPredicatesMatch:
     serializedInventoryAvailability.availableUnitPredicatesMatch,
+  findClaimLocks: serializedInventoryLocks.findClaimLocks,
 };

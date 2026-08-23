@@ -28,3 +28,12 @@ test('does not split statements at semicolons inside quoted literals', () => {
   assert.match(statements[0].text, /semi;--literal\/\*text\*\//);
   assert.match(statements[1].text, /stock_quantity = 1/);
 });
+
+test('strips nested block comments through their matching outer terminator', () => {
+  const stripped = stripSqlComments(
+    '/* outer /* inner */ CREATE FUNCTION private.fake() RETURNS void AS $$ BEGIN NULL; END; $$; */ SELECT 1;'
+  );
+
+  assert.doesNotMatch(stripped, /CREATE FUNCTION private\.fake/);
+  assert.match(stripped, /SELECT 1;/);
+});

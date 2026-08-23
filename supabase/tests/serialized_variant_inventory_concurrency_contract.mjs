@@ -16,10 +16,21 @@ function migrationFileNames() {
 const migrationSources = migrationFileNames().map((fileName) =>
   fs.readFileSync(path.join(migrationsDir, fileName), 'utf8')
 );
-const { splitSqlStatements, stripSqlComments } = serializedInventorySqlParser;
+const { isRequiredConjunct, splitSqlStatements, stripSqlComments } =
+  serializedInventorySqlParser;
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function identifierPattern(identifier) {
+  return identifier
+    .split('.')
+    .map((part) => {
+      const unquoted = part.replace(/^"|"$/g, '');
+      return `(?:${escapeRegex(unquoted)}|"${escapeRegex(unquoted)}")`;
+    })
+    .join('\\s*\\.\\s*');
 }
 
 function parseFunctionSignature(functionSignature) {
@@ -52,7 +63,7 @@ function parameterListPattern(argumentTypes) {
 function functionMarkerPattern(functionName, flags = 'i') {
   const { name, argumentTypes } = parseFunctionSignature(functionName);
   return new RegExp(
-    `CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${escapeRegex(name)}\\s*\\(${parameterListPattern(argumentTypes)}\\)`,
+    `CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${identifierPattern(name)}\\s*\\(${parameterListPattern(argumentTypes)}\\)`,
     flags
   );
 }
@@ -62,7 +73,7 @@ function functionDropPattern(functionName, flags = 'i') {
     ? `(?:\\s*\\(${parameterListPattern(argumentTypes)}\\))?`
     : '(?:\\s*\\([^;]*\\))?';
   return new RegExp(
-    `DROP\\s+FUNCTION\\s+(?:IF\\s+EXISTS\\s+)?${escapeRegex(name)}${argumentList}\\s*(?:CASCADE|RESTRICT)?\\s*;`,
+    `DROP\\s+FUNCTION\\s+(?:IF\\s+EXISTS\\s+)?${identifierPattern(name)}${argumentList}\\s*(?:CASCADE|RESTRICT)?\\s*;`,
     flags
   );
 }
@@ -241,7 +252,6 @@ function legacyDecrementHasCompareAndSetGuard(statement) {
   if (!where) return false;
 
   const whereClause = maskedStatement.slice(where.index + where[0].length);
-  if (/\bOR\b/i.test(whereClause)) return false;
 
   const decrement =
     /\bstock_quantity\s*=\s*(?:GREATEST\s*\(\s*)?(?:\(\s*)*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*([a-z_][a-z0-9_]*)\s*\.\s*total_quantity\b/i.exec(
@@ -252,11 +262,8 @@ function legacyDecrementHasCompareAndSetGuard(statement) {
   const comparison = new RegExp(
     `(?:\\(\\s*)*(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?stock_quantity\\s*>=\\s*(?:\\(\\s*)*${record}\\s*\\.\\s*total_quantity\\b(?:\\s*\\))*|(?:\\(\\s*)*${record}\\s*\\.\\s*total_quantity\\s*<=\\s*(?:\\(\\s*)*(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?stock_quantity\\b(?:\\s*\\))*`,
     'i'
-  ).exec(whereClause);
-  if (!comparison) return false;
-
-  const prefix = whereClause.slice(0, comparison.index).replace(/[\s(]+$/g, '');
-  return prefix.length === 0 || /\bAND\s*$/i.test(prefix);
+  );
+  return isRequiredConjunct(whereClause, comparison);
 }
 export const serializedInventoryContract = {
   migrationsDir,

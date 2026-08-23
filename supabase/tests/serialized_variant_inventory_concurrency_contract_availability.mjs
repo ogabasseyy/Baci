@@ -1,6 +1,7 @@
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
-const { splitSqlStatements, stripSqlComments } = serializedInventorySqlParser;
+const { isRequiredConjunct, splitSqlStatements, stripSqlComments } =
+  serializedInventorySqlParser;
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -40,7 +41,7 @@ function availableUnitPredicatesMatch(source, variantVariable) {
   return (
     query !== null &&
     availableUnitPredicatePatterns(variantVariable, query.alias).every(
-      (pattern) => pattern.test(query.where.replace(/[()]/g, ' '))
+      (pattern) => isRequiredConjunct(query.where, pattern)
     )
   );
 }

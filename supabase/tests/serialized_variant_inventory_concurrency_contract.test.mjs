@@ -97,7 +97,7 @@ test('serialized claims lock the order before the item and skip locked available
   const orderLock =
     /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id\s+FOR\s+UPDATE/i;
   const itemLock =
-    /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_item_id[^;]*?FOR\s+UPDATE/i;
+    /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?JOIN\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+[^;]*?(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_item_id[^;]*?(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id[^;]*?(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id[^;]*?FOR\s+UPDATE/i;
   assert.match(
     claim,
     orderLock,

@@ -4,11 +4,9 @@ function dollarQuoteAt(source, index) {
     /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/.exec(source.slice(index))?.[0] ?? null
   );
 }
-
 function dollarQuoteMode(source, index) {
   return /(?:\bAS|\bDO)\s*$/i.test(source.slice(0, index)) ? 'body' : 'literal';
 }
-
 function stripSqlComments(source) {
   let output = '';
   let quote;
@@ -103,7 +101,6 @@ function stripSqlComments(source) {
 
   return output;
 }
-
 function splitTopLevel(source, operator) {
   const parts = [];
   let start = 0;
@@ -214,9 +211,13 @@ function findDollarQuoteEnd(source, start, delimiter) {
   return null;
 }
 
+const negativePredicatePattern = /\bIS\s+(?:FALSE|NOT\s+TRUE)\b\s*;?$/i;
+
 function isRequiredConjunct(source, pattern) {
   const expression = unwrapOuterParentheses(source);
-  if (/^NOT\b/i.test(expression)) return false;
+  if (/^NOT\b/i.test(expression) || negativePredicatePattern.test(expression)) {
+    return false;
+  }
   const orBranches = splitTopLevel(expression, 'OR');
   if (orBranches.length > 1) {
     return orBranches.every((branch) => isRequiredConjunct(branch, pattern));

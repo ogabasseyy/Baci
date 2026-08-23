@@ -26,4 +26,28 @@ test('matches reordered lock predicates and targets the order-item alias', () =>
     serializedInventoryLocks.findClaimLocks(wrongTarget).item,
     undefined
   );
+
+  const wrongOrderAlias = source.replace(
+    'AND o.id = p_order_id\n    FOR UPDATE OF oi',
+    'AND oi.id = p_order_id\n    FOR UPDATE OF oi'
+  );
+  assert.equal(
+    serializedInventoryLocks.findClaimLocks(wrongOrderAlias).item,
+    undefined
+  );
+
+  const skippedOrder = source.replace('FOR UPDATE;', 'FOR UPDATE SKIP LOCKED;');
+  assert.equal(
+    serializedInventoryLocks.findClaimLocks(skippedOrder).order,
+    undefined
+  );
+
+  const skippedItem = source.replace(
+    'FOR UPDATE OF oi;',
+    'FOR UPDATE OF oi SKIP LOCKED;'
+  );
+  assert.equal(
+    serializedInventoryLocks.findClaimLocks(skippedItem).item,
+    undefined
+  );
 });

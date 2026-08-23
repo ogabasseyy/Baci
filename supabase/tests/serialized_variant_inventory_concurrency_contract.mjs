@@ -7,7 +7,6 @@ import { serializedInventorySqlParser } from './serialized_variant_inventory_con
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const migrationsDir = path.join(repoRoot, 'supabase', 'migrations');
-
 function migrationFileNames() {
   return fs
     .readdirSync(migrationsDir)
@@ -23,11 +22,9 @@ const {
   splitSqlStatements,
   stripSqlComments,
 } = serializedInventorySqlParser;
-
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
-
 function identifierPattern(identifier) {
   return identifier
     .split('.')
@@ -37,7 +34,6 @@ function identifierPattern(identifier) {
     })
     .join('\\s*\\.\\s*');
 }
-
 function parseFunctionSignature(functionSignature) {
   const normalized = functionSignature.trim();
   const match = /^(.*)\(([^()]*)\)$/.exec(normalized);
@@ -47,7 +43,6 @@ function parseFunctionSignature(functionSignature) {
       argumentTypes: [],
     };
   }
-
   return {
     name: match[1].trim(),
     argumentTypes: match[2]
@@ -87,18 +82,23 @@ function functionDropPattern(functionName, flags = 'i') {
     flags
   );
 }
+function functionRenamePattern(functionName, flags = 'i') {
+  const { name, argumentTypes } = parseFunctionSignature(functionName);
+  return new RegExp(
+    `ALTER\\s+FUNCTION\\s+${identifierPattern(name)}\\s*\\(${parameterListPattern(argumentTypes)}\\)\\s+RENAME\\s+TO\\s+(?:[a-z_][a-z0-9_]*|"[^"]+")\\s*;`,
+    flags
+  );
+}
 function functionBody(source, functionName) {
   const markerMatches = [
     ...source.matchAll(functionMarkerPattern(functionName, 'gi')),
   ];
   const start = markerMatches.at(-1)?.index ?? -1;
   assert.notEqual(start, -1, `missing ${functionName}`);
-
   const opening = /\bAS\s+(\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)/i.exec(
     source.slice(start)
   );
   assert.ok(opening, `missing dollar-quote opener for ${functionName}`);
-
   const bodyStart = start + opening.index + opening[0].length;
   const closing = findDollarQuoteEnd(source, bodyStart, opening[1]);
   assert.ok(closing, `unterminated ${functionName}`);
@@ -115,7 +115,16 @@ function latestFunctionBody(functionName, sources = migrationSources) {
     const drop = [
       ...source.matchAll(functionDropPattern(functionName, 'gi')),
     ].at(-1);
-    if (drop && (!create || drop.index > create.index)) {
+    const rename = [
+      ...source.matchAll(functionRenamePattern(functionName, 'gi')),
+    ].at(-1);
+    const invalidator =
+      drop && rename
+        ? drop.index > rename.index
+          ? drop
+          : rename
+        : (drop ?? rename);
+    if (invalidator && (!create || invalidator.index > create.index)) {
       latestBody = undefined;
     } else if (create) {
       latestBody = functionBody(source, functionName);
@@ -189,9 +198,9 @@ function legacyDecrementHasZeroRowHandling(match) {
     return false;
   }
   const remainder = match.input.slice(match.index + match[0].length);
-  return /^\s*IF\s+NOT\s+FOUND\s+THEN\b[\s\S]*?\bRAISE\s+EXCEPTION\b[\s\S]*?\bEND\s+IF\s*;/i.test(
-    remainder
-  );
+  const immediateIf =
+    /^\s*IF\s+NOT\s+FOUND\s+THEN\b([\s\S]*?)\bEND\s+IF\s*;/i.exec(remainder);
+  return immediateIf !== null && /\bRAISE\s+EXCEPTION\b/i.test(immediateIf[1]);
 }
 function maskNestedSql(source) {
   let quote;
@@ -262,7 +271,6 @@ function legacyDecrementHasCompareAndSetGuard(statement) {
   const whereMatches = [...maskedStatement.matchAll(/\bWHERE\b/gi)];
   const where = whereMatches.at(-1);
   if (!where) return false;
-
   const whereClause = maskedStatement.slice(where.index + where[0].length);
 
   const decrement =

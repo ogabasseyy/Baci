@@ -159,7 +159,7 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
   );
   assert.match(
     confirm,
-    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND[^;]*?THEN[^;]*?v_fulfillment_data\s*:=\s*jsonb_set\([^;]*?'\{serializedInventoryException\}'[^;]*?'late_payment_reservation_lost'/i,
+    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+v_reserved_count\s*<\s*v_item\.quantity\s+THEN[\s\S]*?v_fulfillment_data\s*:=\s*jsonb_set\([^;]*?'\{serializedInventoryException\}'[^;]*?'late_payment_reservation_lost'/i,
     'strict payment confirmation must write the reservation-loss exception into fulfillment data'
   );
   assert.match(

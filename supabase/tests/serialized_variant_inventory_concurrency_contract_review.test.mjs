@@ -7,6 +7,7 @@ const {
   latestFunctionBody,
   extractIfBranches,
   legacyDecrementHasCompareAndSetGuard,
+  legacyDecrementHasZeroRowHandling,
   legacyDecrementMatches,
 } = serializedInventoryContract;
 
@@ -28,6 +29,22 @@ test('resolves quoted function replacements and public confirmation delegation',
   assert.match(
     publicBody,
     /RETURN\s+private\.confirm_order_inventory_reservations\s*\(\s*p_merchant_id\s*,\s*p_order_id\s*\)/i
+  );
+});
+
+test('invalidates a function body after an ALTER FUNCTION rename', () => {
+  const source = [
+    'CREATE FUNCTION private.fixture(integer) RETURNS void AS $$',
+    'BEGIN',
+    '  NULL;',
+    'END;',
+    '$$;',
+    'ALTER FUNCTION private.fixture(integer) RENAME TO fixture_old;',
+  ].join('\n');
+
+  assert.throws(
+    () => latestFunctionBody('private.fixture(integer)', [source]),
+    /missing private\.fixture/
   );
 });
 
@@ -94,6 +111,32 @@ test('requires each availability scope predicate as an AND-conjunct', () => {
     ),
     false
   );
+
+  const postfixNegated = unsafe.replace(
+    'unit.merchant_id = p_merchant_id',
+    '(unit.merchant_id = p_merchant_id) IS FALSE'
+  );
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      postfixNegated,
+      'v_variant_id'
+    ),
+    false
+  );
+});
+
+test('requires the item shortfall predicate for payment-loss reporting', () => {
+  const confirm = latestFunctionBody(
+    'private.confirm_order_inventory_reservations(uuid, uuid)'
+  );
+  const paymentLossGuard =
+    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+v_reserved_count\s*<\s*v_item\.quantity\s+THEN[\s\S]*?v_fulfillment_data\s*:=\s*jsonb_set\([^;]*?'\{serializedInventoryException\}'[^;]*?'late_payment_reservation_lost'/i;
+
+  assert.match(confirm, paymentLossGuard);
+  assert.doesNotMatch(
+    confirm.replace('v_reserved_count < v_item.quantity', 'false'),
+    paymentLossGuard
+  );
 });
 
 test('accepts unrelated disjunctions when the stock bound remains conjunctive', () => {
@@ -107,6 +150,20 @@ test('accepts unrelated disjunctions when the stock bound remains conjunctive', 
   assert.equal(matches.length, 1);
   assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), true);
 
+  const crossedIfBlock = legacyDecrementMatches(`
+    UPDATE products
+    SET stock_quantity = stock_quantity - stock_rec.total_quantity
+    WHERE stock_quantity >= stock_rec.total_quantity;
+    IF NOT FOUND THEN
+      NULL;
+    END IF;
+    IF v_other THEN
+      RAISE EXCEPTION 'unrelated';
+    END IF;
+  `);
+  assert.equal(crossedIfBlock.length, 1);
+  assert.equal(legacyDecrementHasZeroRowHandling(crossedIfBlock[0]), false);
+
   const negated = legacyDecrementMatches(`
     UPDATE products
     SET stock_quantity = stock_quantity - stock_rec.total_quantity
@@ -114,6 +171,17 @@ test('accepts unrelated disjunctions when the stock bound remains conjunctive', 
   `);
   assert.equal(negated.length, 1);
   assert.equal(legacyDecrementHasCompareAndSetGuard(negated[0][2]), false);
+
+  const postfixNegated = legacyDecrementMatches(`
+    UPDATE products
+    SET stock_quantity = stock_quantity - stock_rec.total_quantity
+    WHERE (stock_quantity >= stock_rec.total_quantity) IS FALSE;
+  `);
+  assert.equal(postfixNegated.length, 1);
+  assert.equal(
+    legacyDecrementHasCompareAndSetGuard(postfixNegated[0][2]),
+    false
+  );
 });
 
 test('does not mistake CASE ELSE for the target IF branch', () => {

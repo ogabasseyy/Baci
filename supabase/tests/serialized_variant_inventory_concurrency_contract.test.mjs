@@ -5,14 +5,17 @@ import test from 'node:test';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const migrationsDir = path.join(repoRoot, 'supabase', 'migrations');
-const serializedMigration = fs.readFileSync(
-  path.join(migrationsDir, '20260615181534_serialized_variant_inventory.sql'),
-  'utf8'
-);
+
+function migrationFileNames() {
+  return fs
+    .readdirSync(migrationsDir)
+    .filter((fileName) => fileName.endsWith('.sql'))
+    .sort();
+}
 
 function functionBody(source, functionName) {
   const marker = `CREATE OR REPLACE FUNCTION ${functionName}`;
-  const start = source.indexOf(marker);
+  const start = source.lastIndexOf(marker);
   assert.notEqual(start, -1, `missing ${functionName}`);
 
   const end = source.indexOf('\n$$;', start);
@@ -20,24 +23,37 @@ function functionBody(source, functionName) {
   return source.slice(start, end);
 }
 
+function latestFunctionBody(functionName) {
+  let latestBody;
+
+  for (const fileName of migrationFileNames()) {
+    const source = fs.readFileSync(path.join(migrationsDir, fileName), 'utf8');
+    if (source.includes(`CREATE OR REPLACE FUNCTION ${functionName}`)) {
+      latestBody = functionBody(source, functionName);
+    }
+  }
+
+  assert.ok(latestBody, `missing ${functionName} in migrations`);
+  return latestBody;
+}
+
+function legacyDecrementMatches(source) {
+  return [
+    ...source.matchAll(
+      /UPDATE\s+(?:ONLY\s+)?(?:public\s*\.\s*)?(product_variants|products)(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET\s+stock_quantity\s*=\s*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*stock_rec\s*\.\s*total_quantity([\s\S]*?);/gi
+    ),
+  ];
+}
+
 function migrationFilesWithLegacyDecrements() {
-  return fs
-    .readdirSync(migrationsDir)
-    .filter((fileName) => fileName.endsWith('.sql'))
-    .filter((fileName) => {
-      const source = fs.readFileSync(
-        path.join(migrationsDir, fileName),
-        'utf8'
-      );
-      return source.includes(
-        'stock_quantity = stock_quantity - stock_rec.total_quantity'
-      );
-    });
+  return migrationFileNames().filter((fileName) => {
+    const source = fs.readFileSync(path.join(migrationsDir, fileName), 'utf8');
+    return legacyDecrementMatches(source).length > 0;
+  });
 }
 
 test('serialized claims lock the order before the item and skip locked available units', () => {
-  const claim = functionBody(
-    serializedMigration,
+  const claim = latestFunctionBody(
     'private.claim_variant_inventory_units_for_order_item_internal('
   );
 
@@ -75,18 +91,16 @@ test('serialized claims lock the order before the item and skip locked available
 });
 
 test('serialized policy boundaries preserve fallback counts and payment-loss reporting', () => {
-  const claim = functionBody(
-    serializedMigration,
+  const claim = latestFunctionBody(
     'private.claim_variant_inventory_units_for_order_item_internal('
   );
-  const confirm = functionBody(
-    serializedMigration,
+  const confirm = latestFunctionBody(
     'private.confirm_order_inventory_reservations('
   );
 
   assert.match(
     claim,
-    /v_effective_policy = 'serialized_then_unlimited'[\s\S]*v_missing_count/,
+    /v_fulfillment_data\s*:=\s*jsonb_build_object\([\s\S]*?'missingUnitCount',\s*GREATEST\(v_qty\s*-\s*v_reserved_count,\s*0\)/,
     'serialized_then_unlimited must report missing units instead of fabricating reservations'
   );
   assert.doesNotMatch(
@@ -96,7 +110,7 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
   );
 
   const confirmOrderLock =
-    /FROM public\.orders[\s\S]*WHERE id = p_order_id AND merchant_id = p_merchant_id[\s\S]*FOR UPDATE/;
+    /FROM public\.orders[^;]*?WHERE id = p_order_id AND merchant_id = p_merchant_id[^;]*?FOR UPDATE/;
   assert.match(
     confirm,
     confirmOrderLock,
@@ -115,15 +129,41 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
 });
 
 test('release locks only reserved units owned by the target merchant and order', () => {
-  const release = functionBody(
-    serializedMigration,
-    'private.release_order_inventory_units('
+  const release = latestFunctionBody('private.release_order_inventory_units(');
+  const releaseLock =
+    /FROM public\.variant_inventory vi[\s\S]*?WHERE vi\.order_id = p_order_id AND vi\.merchant_id = p_merchant_id AND vi\.status = 'reserved'[\s\S]*?FOR UPDATE/;
+  const availableBranch = release.match(
+    /IF v_target_status = 'available' THEN([\s\S]*?)\n\s{2}ELSE/
   );
+  const returnedBranch = release.match(/\n\s{2}ELSE([\s\S]*?)\n\s{2}END IF;/);
+
+  assert.ok(availableBranch, 'release must retain its available branch');
+  assert.ok(returnedBranch, 'release must retain its returned branch');
 
   assert.match(
-    release,
-    /vi\.order_id = p_order_id AND vi\.merchant_id = p_merchant_id AND vi\.status = 'reserved'[\s\S]*FOR UPDATE/,
-    'release must lock only reserved units belonging to the target merchant and order'
+    availableBranch[1],
+    releaseLock,
+    'available release must lock only reserved units belonging to the target merchant and order'
+  );
+  assert.match(
+    returnedBranch[1],
+    releaseLock,
+    'returned release must lock only reserved units belonging to the target merchant and order'
+  );
+});
+
+test('legacy decrement scanning recognizes qualified aliases and flexible SQL formatting', () => {
+  const matches = legacyDecrementMatches(`
+    UPDATE public.products AS p
+    SET stock_quantity = p.stock_quantity
+      - stock_rec . total_quantity
+    WHERE p.stock_quantity >= stock_rec.total_quantity;
+  `);
+
+  assert.equal(matches.length, 1);
+  assert.match(
+    matches[0][2],
+    /stock_quantity\s*>=\s*stock_rec\.total_quantity/
   );
 });
 
@@ -136,9 +176,7 @@ test('every legacy stock decrement remains compare-and-set guarded', () => {
 
   for (const migration of migrationFiles) {
     const source = fs.readFileSync(path.join(migrationsDir, migration), 'utf8');
-    const decrements = source.matchAll(
-      /UPDATE (?:public\.)?(product_variants|products)(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET stock_quantity = stock_quantity - stock_rec\.total_quantity([\s\S]*?);/gi
-    );
+    const decrements = legacyDecrementMatches(source);
 
     for (const [, table, statement] of decrements) {
       assert.match(

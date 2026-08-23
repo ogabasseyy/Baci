@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { serializedInventoryAvailability } from './serialized_variant_inventory_concurrency_contract_availability.mjs';
+import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const migrationsDir = path.join(repoRoot, 'supabase', 'migrations');
@@ -14,13 +16,12 @@ function migrationFileNames() {
 const migrationSources = migrationFileNames().map((fileName) =>
   fs.readFileSync(path.join(migrationsDir, fileName), 'utf8')
 );
+const { splitSqlStatements, stripSqlComments } = serializedInventorySqlParser;
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-const stripSqlComments = (source) =>
-  source.replace(/--[^\r\n]*|\/\*[\s\S]*?\*\//g, '');
 function parseFunctionSignature(functionSignature) {
   const normalized = functionSignature.trim();
   const match = /^(.*)\(([^()]*)\)$/.exec(normalized);
@@ -141,12 +142,24 @@ function extractIfBranches(source, openingPattern) {
 }
 function legacyDecrementMatches(source) {
   const stockDecrement =
-    /\bstock_quantity\s*=\s*(?:GREATEST\s*\(\s*)?(?:\(\s*)*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*stock_rec\s*\.\s*total_quantity\b(?:\s*\))*\s*(?:,\s*0\s*)?(?:\s*\))*/i;
-  return [
-    ...stripSqlComments(source).matchAll(
-      /UPDATE\s+(?:ONLY\s+)?(?:public\s*\.\s*)?(product_variants|products)(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET\b([\s\S]*?);/gi
-    ),
-  ].filter(([, , statement]) => stockDecrement.test(statement));
+    /\bstock_quantity\s*=\s*(?:GREATEST\s*\(\s*)?(?:\(\s*)*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*[a-z_][a-z0-9_]*\s*\.\s*total_quantity\b(?:\s*\))*\s*(?:,\s*0\s*)?(?:\s*\))*/i;
+  const cleanSource = stripSqlComments(source);
+  return splitSqlStatements(cleanSource).flatMap(({ index, text }) => {
+    const update =
+      /UPDATE\s+(?:ONLY\s+)?(?:public\s*\.\s*)?(product_variants|products)(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET\b/i.exec(
+        text
+      );
+    if (!update || !stockDecrement.test(text)) return [];
+
+    const match = [
+      text.slice(update.index),
+      update[1],
+      text.slice(update.index),
+    ];
+    match.index = index + update.index;
+    match.input = cleanSource;
+    return [match];
+  });
 }
 function legacyDecrementHasZeroRowHandling(match) {
   if (!match || typeof match.input !== 'string' || match.index === undefined) {
@@ -230,42 +243,21 @@ function legacyDecrementHasCompareAndSetGuard(statement) {
   const whereClause = maskedStatement.slice(where.index + where[0].length);
   if (/\bOR\b/i.test(whereClause)) return false;
 
-  const comparison =
-    /(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s*>=\s*stock_rec\s*\.\s*total_quantity\b/i.exec(
-      whereClause
+  const decrement =
+    /\bstock_quantity\s*=\s*(?:GREATEST\s*\(\s*)?(?:\(\s*)*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*([a-z_][a-z0-9_]*)\s*\.\s*total_quantity\b/i.exec(
+      maskedStatement
     );
+  const recordName = decrement?.[1] ?? 'stock_rec';
+  const record = escapeRegex(recordName);
+  const comparison = new RegExp(
+    `(?:\\(\\s*)*(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?stock_quantity\\s*>=\\s*(?:\\(\\s*)*${record}\\s*\\.\\s*total_quantity\\b(?:\\s*\\))*|(?:\\(\\s*)*${record}\\s*\\.\\s*total_quantity\\s*<=\\s*(?:\\(\\s*)*(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?stock_quantity\\b(?:\\s*\\))*`,
+    'i'
+  ).exec(whereClause);
   if (!comparison) return false;
 
   const prefix = whereClause.slice(0, comparison.index).replace(/[\s(]+$/g, '');
   return prefix.length === 0 || /\bAND\s*$/i.test(prefix);
 }
-function availableUnitWhereClause(source) {
-  const match =
-    /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+vi\b[\s\S]*?\bWHERE\b([\s\S]*?)\bORDER\s+BY\b[\s\S]*?\bLIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i.exec(
-      stripSqlComments(source)
-    );
-  return match?.[1] ?? null;
-}
-function availableUnitPredicatePatterns(variantVariable) {
-  return [
-    /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id/i,
-    new RegExp(`vi\\s*\\.\\s*variant_id\\s*=\\s*${variantVariable}`, 'i'),
-    /vi\s*\.\s*status\s*=\s*'available'/i,
-    /vi\s*\.\s*order_id\s+IS\s+NULL/i,
-    /vi\s*\.\s*order_item_id\s+IS\s+NULL/i,
-    /vi\s*\.\s*sold_at\s+IS\s+NULL/i,
-  ];
-}
-function availableUnitPredicatesMatch(source, variantVariable) {
-  const where = availableUnitWhereClause(source);
-  return (
-    where !== null &&
-    availableUnitPredicatePatterns(variantVariable).every((pattern) =>
-      pattern.test(where)
-    )
-  );
-}
-
 export const serializedInventoryContract = {
   migrationsDir,
   migrationFileNames,
@@ -275,5 +267,6 @@ export const serializedInventoryContract = {
   legacyDecrementMatches,
   legacyDecrementHasZeroRowHandling,
   legacyDecrementHasCompareAndSetGuard,
-  availableUnitPredicatesMatch,
+  availableUnitPredicatesMatch:
+    serializedInventoryAvailability.availableUnitPredicatesMatch,
 };

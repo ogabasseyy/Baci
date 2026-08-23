@@ -24,14 +24,14 @@ test('function extraction tolerates tagged dollar quotes and trailing clauses', 
     'LANGUAGE plpgsql',
     'AS $fixture$',
     'BEGIN',
-    '  NULL;',
+    "  RAISE NOTICE 'https://example.test/a--b/*literal*/;';",
     'END;',
     '$fixture$ LANGUAGE plpgsql;',
   ].join('\r\n');
 
   assert.match(
     functionBody(source, 'private.fixture(integer)'),
-    /\r\nBEGIN\r\n\s+NULL;/
+    /\r\nBEGIN\r\n\s+RAISE NOTICE 'https:\/\/example\.test\/a--b\/\*literal\*\/;'/
   );
   assert.throws(
     () =>
@@ -241,7 +241,8 @@ test('legacy decrement scanning recognizes qualified aliases and flexible SQL fo
       RAISE EXCEPTION 'insufficient_stock';
     END IF;
     UPDATE product_variants AS p
-    SET stock_quantity = GREATEST(p.stock_quantity - stock_rec.total_quantity, 0)
+    SET note = 'semi;--literal/*text*/',
+        stock_quantity = GREATEST(p.stock_quantity - stock_rec.total_quantity, 0)
     WHERE p.id = stock_rec.variant_id AND stock_quantity >= stock_rec.total_quantity;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'insufficient_variant_stock';
@@ -251,6 +252,12 @@ test('legacy decrement scanning recognizes qualified aliases and flexible SQL fo
   assert.equal(legacyDecrementHasZeroRowHandling(wrapped[0]), true);
   assert.equal(legacyDecrementHasZeroRowHandling(wrapped[1]), true);
   assert.equal(legacyDecrementHasZeroRowHandling(unguarded[0]), false);
+
+  const equivalent = legacyDecrementMatches(
+    'UPDATE products SET stock_quantity = stock_quantity - inventory_rec.total_quantity WHERE (inventory_rec.total_quantity <= (stock_quantity));'
+  );
+  assert.equal(equivalent.length, 1);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(equivalent[0][2]), true);
 
   const nestedWhere = `
     UPDATE products

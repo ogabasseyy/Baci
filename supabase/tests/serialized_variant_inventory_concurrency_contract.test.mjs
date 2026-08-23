@@ -2,109 +2,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 
-const repoRoot = path.resolve(import.meta.dirname, '..', '..');
-const migrationsDir = path.join(repoRoot, 'supabase', 'migrations');
-
-function migrationFileNames() {
-  return fs
-    .readdirSync(migrationsDir)
-    .filter((fileName) => fileName.endsWith('.sql'))
-    .sort();
-}
-
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-const stripSqlComments = (source) =>
-  source.replace(/--[^\r\n]*|\/\*[\s\S]*?\*\//g, '');
-function functionMarkerPattern(functionName, flags = 'i') {
-  const name = functionName.replace(/\($/, '');
-  return new RegExp(
-    `CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${escapeRegex(name)}\\s*\\(`,
-    flags
-  );
-}
-function functionBody(source, functionName) {
-  const markerMatches = [
-    ...source.matchAll(functionMarkerPattern(functionName, 'gi')),
-  ];
-  const start = markerMatches.at(-1)?.index ?? -1;
-  assert.notEqual(start, -1, `missing ${functionName}`);
-
-  const opening = /\bAS\s+(\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)/i.exec(
-    source.slice(start)
-  );
-  assert.ok(opening, `missing dollar-quote opener for ${functionName}`);
-
-  const bodyStart = start + opening.index + opening[0].length;
-  const delimiter = escapeRegex(opening[1]);
-  const closing = new RegExp(
-    `\\r?\\n[\\t ]*${delimiter}[\\t ]*[^\\r\\n;]*;`,
-    'i'
-  ).exec(source.slice(bodyStart));
-  assert.ok(closing, `unterminated ${functionName}`);
-  return source.slice(start, bodyStart + closing.index);
-}
-function latestFunctionBody(functionName) {
-  let latestBody;
-
-  for (const fileName of migrationFileNames()) {
-    const source = stripSqlComments(
-      fs.readFileSync(path.join(migrationsDir, fileName), 'utf8')
-    );
-    if (functionMarkerPattern(functionName).test(source)) {
-      latestBody = functionBody(source, functionName);
-    }
-  }
-
-  assert.ok(latestBody, `missing ${functionName} in migrations`);
-  return latestBody;
-}
-function extractIfBranches(source, openingPattern) {
-  const lines = source.split(/\r?\n/);
-  const openingIndex = lines.findIndex((line) => openingPattern.test(line));
-  assert.notEqual(openingIndex, -1, 'missing target IF branch');
-
-  let depth = 1;
-  let inElse = false;
-  const thenLines = [];
-  const elseLines = [];
-
-  for (const line of lines.slice(openingIndex + 1)) {
-    if (/^\s*IF\b/i.test(line)) {
-      depth += 1;
-    } else if (/^\s*END\s+IF\b/i.test(line)) {
-      depth -= 1;
-      if (depth === 0) {
-        assert.ok(inElse, 'target IF branch is missing ELSE');
-        return {
-          thenBranch: thenLines.join('\n'),
-          elseBranch: elseLines.join('\n'),
-        };
-      }
-    } else if (depth === 1 && /^\s*ELSE\b/i.test(line)) {
-      inElse = true;
-      continue;
-    }
-
-    (inElse ? elseLines : thenLines).push(line);
-  }
-
-  assert.fail('unterminated target IF branch');
-}
-function legacyDecrementMatches(source) {
-  return [
-    ...stripSqlComments(source).matchAll(
-      /UPDATE\s+(?:ONLY\s+)?(?:public\s*\.\s*)?(product_variants|products)(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET\b([\s\S]*?);/gi
-    ),
-  ].filter(([, , statement]) =>
-    /\bstock_quantity\s*=\s*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*stock_rec\s*\.\s*total_quantity\b/i.test(
-      statement
-    )
-  );
-}
+const {
+  migrationsDir,
+  migrationFileNames,
+  functionBody,
+  latestFunctionBody,
+  extractIfBranches,
+  legacyDecrementMatches,
+  legacyDecrementHasCompareAndSetGuard,
+} = serializedInventoryContract;
 
 test('function extraction tolerates tagged dollar quotes and trailing clauses', () => {
   const source = [
@@ -122,6 +30,14 @@ test('function extraction tolerates tagged dollar quotes and trailing clauses', 
   assert.match(
     functionBody(source, 'private.fixture('),
     /\r\nBEGIN\r\n\s+NULL;/
+  );
+  assert.throws(
+    () =>
+      latestFunctionBody('private.fixture(', [
+        source,
+        'DROP FUNCTION private.fixture();',
+      ]),
+    /missing private\.fixture/
   );
 });
 
@@ -162,7 +78,7 @@ test('serialized claims lock the order before the item and skip locked available
   const itemLock =
     /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_item_id[^;]*?FOR\s+UPDATE/i;
   const availableUnitLock =
-    /vi\s*\.\s*status\s*=\s*'available'[^;]*?vi\s*\.\s*order_id\s+IS\s+NULL[^;]*?vi\s*\.\s*order_item_id\s+IS\s+NULL[^;]*?vi\s*\.\s*sold_at\s+IS\s+NULL[^;]*?LIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i;
+    /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id[^;]*?vi\s*\.\s*variant_id\s*=\s*v_variant_id[^;]*?vi\s*\.\s*status\s*=\s*'available'[^;]*?vi\s*\.\s*order_id\s+IS\s+NULL[^;]*?vi\s*\.\s*order_item_id\s+IS\s+NULL[^;]*?vi\s*\.\s*sold_at\s+IS\s+NULL[^;]*?LIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i;
 
   assert.match(
     claim,
@@ -213,6 +129,8 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
     /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id[^;]*?FOR\s+UPDATE/i;
   const orderItemsQuery =
     /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?order_id\s*=\s*p_order_id[^;]*?FOR\s+UPDATE/i;
+  const confirmAvailableUnitLock =
+    /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id[^;]*?vi\s*\.\s*variant_id\s*=\s*v_actual_variant_id[^;]*?vi\s*\.\s*status\s*=\s*'available'[^;]*?vi\s*\.\s*order_id\s+IS\s+NULL[^;]*?vi\s*\.\s*order_item_id\s+IS\s+NULL[^;]*?vi\s*\.\s*sold_at\s+IS\s+NULL[^;]*?LIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i;
   assert.match(
     confirm,
     confirmOrderLock,
@@ -232,6 +150,11 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
   assert.ok(
     confirmOrderItemsIndex >= 0,
     'payment confirmation must reconcile order items'
+  );
+  assert.match(
+    confirm,
+    confirmAvailableUnitLock,
+    'payment confirmation reclaim must lock scoped available units'
   );
   assert.ok(
     confirm.search(confirmOrderLock) < confirmOrderItemsIndex,
@@ -275,6 +198,14 @@ test('legacy decrement scanning recognizes qualified aliases and flexible SQL fo
     matches[0][2],
     /stock_quantity\s*>=\s*stock_rec\.total_quantity/
   );
+  const unguarded = legacyDecrementMatches(`
+    UPDATE products
+    SET stock_quantity = stock_quantity - stock_rec.total_quantity
+    WHERE products.id = stock_rec.product_id
+       OR stock_quantity >= stock_rec.total_quantity;
+  `);
+  assert.equal(unguarded.length, 1);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(unguarded[0][2]), false);
 });
 
 test('every legacy stock decrement remains compare-and-set guarded', () => {
@@ -289,9 +220,8 @@ test('every legacy stock decrement remains compare-and-set guarded', () => {
     const decrements = legacyDecrementMatches(source);
 
     for (const [, table, statement] of decrements) {
-      assert.match(
-        statement,
-        /stock_quantity\s*>=\s*stock_rec\s*\.\s*total_quantity/i,
+      assert.ok(
+        legacyDecrementHasCompareAndSetGuard(statement),
         `${migration} must compare-and-set guard each ${table} legacy decrement`
       );
     }

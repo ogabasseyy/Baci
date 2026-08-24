@@ -39,7 +39,7 @@ function lockQueries(source) {
     if (
       !where ||
       !lock ||
-      /\bFOR\s+UPDATE\b[\s\S]*?\bSKIP\s+LOCKED\b/i.test(segment)
+      /\bFOR\s+UPDATE\b[\s\S]*?\b(?:SKIP\s+LOCKED|NOWAIT)\b/i.test(segment)
     ) {
       return [];
     }

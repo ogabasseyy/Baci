@@ -4,6 +4,7 @@ import { serializedInventoryContract } from './serialized_variant_inventory_conc
 import { serializedInventoryAvailability } from './serialized_variant_inventory_concurrency_contract_availability.mjs';
 
 const {
+  functionBody,
   latestFunctionBody,
   extractIfBranches,
   legacyDecrementHasCompareAndSetGuard,
@@ -62,6 +63,22 @@ test('invalidates a function body after an ALTER FUNCTION schema move', () => {
     () => latestFunctionBody('private.fixture(integer)', [source]),
     /missing private\.fixture/
   );
+});
+
+test('ignores function markers embedded in SQL string literals', () => {
+  const source = [
+    'CREATE FUNCTION private.fixture(integer) RETURNS void AS $$',
+    'BEGIN',
+    '  NULL;',
+    'END;',
+    '$$;',
+    "COMMENT ON FUNCTION private.fixture(integer) IS 'CREATE FUNCTION private.fixture(integer) RETURNS void AS $$ BEGIN RAISE EXCEPTION ''fake''; END; $$;';",
+  ].join('\n');
+
+  const body = latestFunctionBody('private.fixture(integer)', [source]);
+  assert.match(body, /NULL/);
+  assert.doesNotMatch(body, /fake/);
+  assert.match(functionBody(source, 'private.fixture(integer)'), /NULL/);
 });
 
 test('distinguishes scalar and array function argument types', () => {
@@ -218,4 +235,35 @@ test('does not mistake CASE ELSE for the target IF branch', () => {
 
   assert.match(branches.thenBranch, /lock_available_units/);
   assert.match(branches.elseBranch, /release_reserved_units/);
+});
+
+test('release lock contracts cover every reserved unit', () => {
+  const releaseLock =
+    /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+(?:AS\s+)?vi[\s\S]*?WHERE\s+vi\s*\.\s*order_id\s*=\s*p_order_id\s+AND\s+vi\s*\.\s*merchant_id\s*=\s*p_merchant_id\s+AND\s+vi\s*\.\s*status\s*=\s*'reserved'(?:(?!\b(?:LIMIT|OFFSET|FETCH)\b)[\s\S])*?FOR\s+UPDATE(?:\s+OF\s+vi\b)?(?!\s+(?:OF\b|SKIP\s+LOCKED\b))/i;
+  assert.doesNotMatch(
+    "FROM variant_inventory vi WHERE vi.order_id = p_order_id AND vi.merchant_id = p_merchant_id AND vi.status = 'reserved' LIMIT 1 FOR UPDATE",
+    releaseLock
+  );
+});
+
+test('binds returned payment exceptions to an actual reservation shortfall', () => {
+  const confirm = latestFunctionBody(
+    'private.confirm_order_inventory_reservations(uuid, uuid)'
+  );
+  const shortfallException =
+    /IF\s*\(\s*v_reserved_count\s*\+\s*v_reclaimed_count\s*\)\s*<\s*v_item\.quantity\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?v_exceptions\s*:=\s*v_exceptions\s*\|\|\s*jsonb_build_object\([^;]*?'code'\s*,\s*'late_payment_reservation_lost'[\s\S]*?RETURN\s+jsonb_build_object\([^;]*?'exceptionCodes'\s*,\s*v_exceptions\b/i;
+
+  assert.match(confirm, shortfallException);
+  assert.doesNotMatch(
+    [
+      'IF (v_reserved_count + v_reclaimed_count) < v_item.quantity THEN',
+      '  NULL;',
+      'END IF;',
+      "IF v_effective_policy = 'serialized_strict' THEN",
+      "  v_exceptions := v_exceptions || jsonb_build_object('code', 'late_payment_reservation_lost');",
+      'END IF;',
+      "RETURN jsonb_build_object('exceptionCodes', v_exceptions);",
+    ].join('\n'),
+    shortfallException
+  );
 });

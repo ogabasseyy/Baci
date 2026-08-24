@@ -50,4 +50,19 @@ test('matches reordered lock predicates and targets the order-item alias', () =>
     serializedInventoryLocks.findClaimLocks(skippedItem).item,
     undefined
   );
+
+  const nowaitOrder = source.replace('FOR UPDATE;', 'FOR UPDATE NOWAIT;');
+  assert.equal(
+    serializedInventoryLocks.findClaimLocks(nowaitOrder).order,
+    undefined
+  );
+
+  const nowaitItem = source.replace(
+    'FOR UPDATE OF oi;',
+    'FOR UPDATE OF oi NOWAIT;'
+  );
+  assert.equal(
+    serializedInventoryLocks.findClaimLocks(nowaitItem).item,
+    undefined
+  );
 });

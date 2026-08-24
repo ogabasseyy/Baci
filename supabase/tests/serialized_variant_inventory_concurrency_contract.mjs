@@ -90,11 +90,12 @@ function functionMovePattern(functionName, flags = 'i') {
     flags
   );
 }
-function functionBody(source, functionName) {
-  const markerMatches = [
-    ...source.matchAll(functionMarkerPattern(functionName, 'gi')),
-  ];
-  const start = markerMatches.at(-1)?.index ?? -1;
+function functionBody(source, functionName, markerIndex) {
+  const start =
+    markerIndex ??
+    latestStatementMatch(source, functionMarkerPattern(functionName, 'gi'))
+      ?.index ??
+    -1;
   assert.notEqual(start, -1, `missing ${functionName}`);
   const opening = /\bAS\s+(\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)/i.exec(
     source.slice(start)
@@ -105,20 +106,35 @@ function functionBody(source, functionName) {
   assert.ok(closing, `unterminated ${functionName}`);
   return source.slice(start, closing.index);
 }
+function latestStatementMatch(source, pattern) {
+  return splitSqlStatements(source)
+    .flatMap(({ index, text }) => {
+      const leading = text.search(/\S/);
+      const match = [...text.matchAll(pattern)].find(
+        (candidate) => candidate.index === leading
+      );
+      if (!match) return [];
+      match.index += index;
+      return [match];
+    })
+    .at(-1);
+}
 function latestFunctionBody(functionName, sources = migrationSources) {
   let latestBody;
-
   for (const rawSource of sources) {
     const source = stripSqlComments(rawSource);
-    const create = [
-      ...source.matchAll(functionMarkerPattern(functionName, 'gi')),
-    ].at(-1);
-    const drop = [
-      ...source.matchAll(functionDropPattern(functionName, 'gi')),
-    ].at(-1);
-    const move = [
-      ...source.matchAll(functionMovePattern(functionName, 'gi')),
-    ].at(-1);
+    const create = latestStatementMatch(
+      source,
+      functionMarkerPattern(functionName, 'gi')
+    );
+    const drop = latestStatementMatch(
+      source,
+      functionDropPattern(functionName, 'gi')
+    );
+    const move = latestStatementMatch(
+      source,
+      functionMovePattern(functionName, 'gi')
+    );
     const invalidator = [drop, move]
       .filter(Boolean)
       .sort((left, right) => left.index - right.index)
@@ -126,10 +142,9 @@ function latestFunctionBody(functionName, sources = migrationSources) {
     if (invalidator && (!create || invalidator.index > create.index)) {
       latestBody = undefined;
     } else if (create) {
-      latestBody = functionBody(source, functionName);
+      latestBody = functionBody(source, functionName, create.index);
     }
   }
-
   assert.ok(latestBody, `missing ${functionName} in migrations`);
   return latestBody;
 }
@@ -137,19 +152,16 @@ function extractIfBranches(source, openingPattern) {
   const lines = source.split(/\r?\n/);
   const openingIndex = lines.findIndex((line) => openingPattern.test(line));
   assert.notEqual(openingIndex, -1, 'missing target IF branch');
-
   let depth = 1;
   let caseDepth = 0;
   let inElse = false;
   const thenLines = [];
   const elseLines = [];
-
   for (const line of lines.slice(openingIndex + 1)) {
     const sqlLine = line.replace(/'(?:''|[^'])*'|"(?:""|[^"])*"/g, '');
     const endCaseCount = (sqlLine.match(/\bEND\s+CASE\b/gi) ?? []).length;
     const caseTokenCount = (sqlLine.match(/\bCASE\b/gi) ?? []).length;
     caseDepth = Math.max(0, caseDepth + caseTokenCount - endCaseCount * 2);
-
     if (/^\s*IF\b/i.test(line)) {
       depth += 1;
     } else if (/^\s*END\s+IF\b/i.test(line)) {
@@ -165,10 +177,8 @@ function extractIfBranches(source, openingPattern) {
       inElse = true;
       continue;
     }
-
     (inElse ? elseLines : thenLines).push(line);
   }
-
   assert.fail('unterminated target IF branch');
 }
 function legacyDecrementMatches(source) {

@@ -24,9 +24,9 @@ function availableUnitPredicatePatterns(variantVariable, alias) {
     ? `${escapeRegex(alias)}\\s*\\.\\s*`
     : '(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?';
   return [
-    new RegExp(`${qualifier}merchant_id\\s*=\\s*p_merchant_id`, 'i'),
+    new RegExp(`${qualifier}merchant_id\\s*=\\s*p_merchant_id\\b`, 'i'),
     new RegExp(
-      `${qualifier}variant_id\\s*=\\s*${escapeRegex(variantVariable)}`,
+      `${qualifier}variant_id\\s*=\\s*${escapeRegex(variantVariable)}\\b`,
       'i'
     ),
     new RegExp(`${qualifier}status\\s*=\\s*'available'`, 'i'),

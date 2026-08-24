@@ -6,7 +6,6 @@ import { serializedInventoryAvailability } from './serialized_variant_inventory_
 const {
   functionBody,
   latestFunctionBody,
-  extractIfBranches,
   legacyDecrementHasCompareAndSetGuard,
   legacyDecrementHasZeroRowHandling,
   legacyDecrementMatches,
@@ -217,24 +216,39 @@ test('accepts unrelated disjunctions when the stock bound remains conjunctive', 
   );
 });
 
-test('does not mistake CASE ELSE for the target IF branch', () => {
-  const branches = extractIfBranches(
-    [
-      "IF v_target_status = 'available' THEN",
-      '  v_label := CASE v_state',
-      "    WHEN 'ready' THEN 'ready'",
-      "    ELSE 'other'",
-      '  END CASE;',
-      '  PERFORM lock_available_units();',
-      'ELSE',
-      '  PERFORM release_reserved_units();',
-      'END IF;',
-    ].join('\n'),
-    /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
-  );
+test('resolves function declarations separated by block comments', () => {
+  const source = [
+    'CREATE FUNCTION private.fixture(integer) RETURNS void AS $$',
+    'BEGIN',
+    '  NULL;',
+    'END;',
+    '$$;',
+    'CREATE/* replacement */OR REPLACE FUNCTION private.fixture(integer) RETURNS void AS $$',
+    'BEGIN',
+    "  RAISE EXCEPTION 'replacement';",
+    'END;',
+    '$$;',
+  ].join('\n');
 
-  assert.match(branches.thenBranch, /lock_available_units/);
-  assert.match(branches.elseBranch, /release_reserved_units/);
+  assert.match(
+    latestFunctionBody('private.fixture(integer)', [source]),
+    /replacement/
+  );
+});
+
+test('scans scalar legacy decrement operands', () => {
+  const scalar = legacyDecrementMatches(`
+    UPDATE products
+    SET stock_quantity = (stock_quantity - p_quantity)
+    WHERE stock_quantity >= p_quantity;
+    UPDATE product_variants
+    SET stock_quantity = stock_quantity - 1
+    WHERE stock_quantity >= 1;
+  `);
+
+  assert.equal(scalar.length, 2);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(scalar[0][2]), true);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(scalar[1][2]), true);
 });
 
 test('release lock contracts cover every reserved unit', () => {

@@ -24,3 +24,26 @@ test('matches scoped availability predicates with aliases and parentheses', () =
     true
   );
 });
+
+test('rejects availability predicates with prefixed scope variables', () => {
+  const query = `
+    SELECT unit.id
+    FROM variant_inventory unit
+    WHERE unit.merchant_id = p_merchant_id_backup
+      AND unit.variant_id = v_variant_id_old
+      AND unit.status = 'available'
+      AND unit.order_id IS NULL
+      AND unit.order_item_id IS NULL
+      AND unit.sold_at IS NULL
+    ORDER BY unit.id
+    LIMIT v_needed FOR UPDATE SKIP LOCKED;
+  `;
+
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      query,
+      'v_variant_id'
+    ),
+    false
+  );
+});

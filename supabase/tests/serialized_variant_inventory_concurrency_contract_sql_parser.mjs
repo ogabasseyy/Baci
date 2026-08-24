@@ -78,6 +78,7 @@ function stripSqlComments(source) {
     }
     if (char === '/' && next === '*') {
       blockCommentDepth = 1;
+      output += ' ';
       index += 1;
       continue;
     }

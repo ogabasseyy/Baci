@@ -132,7 +132,6 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
   const confirm = latestFunctionBody(
     'private.confirm_order_inventory_reservations(uuid, uuid)'
   );
-
   assert.match(
     claim,
     /v_fulfillment_data\s*:=\s*jsonb_build_object\([\s\S]*?'missingUnitCount',\s*GREATEST\(v_qty\s*-\s*v_reserved_count,\s*0\)/,
@@ -143,11 +142,10 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
     0,
     'serialized claims must not also decrement legacy product stock'
   );
-
   const confirmOrderLock =
     /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id[^;]*?FOR\s+UPDATE/i;
   const orderItemsQuery =
-    /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?order_id\s*=\s*p_order_id[^;]*?FOR\s+UPDATE/i;
+    /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?order_id\s*=\s*p_order_id[^;]*?FOR\s+UPDATE(?!\s+(?:OF\s+[a-z_][a-z0-9_]*\s+)?(?:SKIP\s+LOCKED|NOWAIT)\b)/i;
   assert.ok(
     availableUnitPredicatesMatch(confirm, 'v_actual_variant_id'),
     'payment confirmation must enforce each scoped availability predicate'
@@ -176,8 +174,11 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
     confirm.search(confirmOrderLock) < confirmOrderItemsIndex,
     'payment confirmation must take the parent-order lock before item locks'
   );
+  assert.doesNotMatch(
+    'FROM order_items oi WHERE oi.order_id = p_order_id FOR UPDATE SKIP LOCKED;',
+    orderItemsQuery
+  );
 });
-
 test('release locks only reserved units owned by the target merchant and order', () => {
   const release = latestFunctionBody(
     'private.release_order_inventory_units(uuid, uuid, text)'
@@ -188,7 +189,6 @@ test('release locks only reserved units owned by the target merchant and order',
     release,
     /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
   );
-
   assert.match(
     branches.thenBranch,
     releaseLock,
@@ -252,7 +252,6 @@ test('legacy decrement scanning recognizes qualified aliases and flexible SQL fo
   assert.equal(legacyDecrementHasZeroRowHandling(wrapped[0]), true);
   assert.equal(legacyDecrementHasZeroRowHandling(wrapped[1]), true);
   assert.equal(legacyDecrementHasZeroRowHandling(unguarded[0]), false);
-
   const equivalent = legacyDecrementMatches(
     'UPDATE products SET stock_quantity = stock_quantity - inventory_rec.total_quantity WHERE (inventory_rec.total_quantity <= (stock_quantity));'
   );

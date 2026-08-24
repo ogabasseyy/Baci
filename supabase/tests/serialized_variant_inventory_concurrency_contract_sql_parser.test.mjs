@@ -39,6 +39,15 @@ test('strips nested block comments through their matching outer terminator', () 
   assert.match(stripped, /SELECT 1;/);
 });
 
+test('preserves a token separator when stripping block comments', () => {
+  assert.match(
+    stripSqlComments(
+      'CREATE/* rationale */OR REPLACE FUNCTION private.fixture();'
+    ),
+    /CREATE\s+OR\s+REPLACE/
+  );
+});
+
 test('finds same-line dollar-quote terminators outside string literals', () => {
   const source = "\n RAISE NOTICE 'semi; $$;'; NULL; END; $$ LANGUAGE plpgsql;";
   const closing = findDollarQuoteEnd(source, 0, '$$');

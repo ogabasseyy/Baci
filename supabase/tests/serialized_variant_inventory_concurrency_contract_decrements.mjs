@@ -1,8 +1,12 @@
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 import { hasImmediateUnconditionalException } from './serialized_variant_inventory_concurrency_contract_zero_row.mjs';
 
-const { isRequiredConjunct, splitSqlStatements, stripSqlComments } =
-  serializedInventorySqlParser;
+const {
+  isRequiredConjunct,
+  maskSqlLiterals,
+  splitSqlStatements,
+  stripSqlComments,
+} = serializedInventorySqlParser;
 const identifier = '(?:"[a-z_][a-z0-9_]*"|[a-z_][a-z0-9_]*)';
 const legacyTable = '("product_variants"|product_variants|"products"|products)';
 const publicSchema = '(?:(?:"public"|public)\\s*\\.\\s*)?';
@@ -142,7 +146,9 @@ function updateLockTarget(statement, decrement) {
   const where = [...updateText.matchAll(/\bWHERE\b/gi)].at(-1);
   if (!where) return null;
   const rowReference = requiredRowReference(
-    updateText.slice(where.index + where[0].length)
+    updateText
+      .slice(where.index + where[0].length)
+      .split(/\bRETURNING\b/i, 1)[0]
   );
   return rowReference
     ? { rowReference, table: normalizedIdentifier(updates[1]) }
@@ -188,7 +194,7 @@ function matchingLockedPrecheck(statement, decrement) {
   return false;
 }
 function legacyDecrementHasCompareAndSetGuard(statement) {
-  const masked = maskNestedSql(statement);
+  const masked = maskNestedSql(maskSqlLiterals(statement));
   const where = [...masked.matchAll(/\bWHERE\b/gi)].at(-1);
   if (!where) return false;
   const decrement = stockDecrementMatch(masked);

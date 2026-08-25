@@ -74,6 +74,12 @@ function findReclaimReservationTransition(source) {
   ];
   const transition = updates.find(
     (update) =>
+      !/\bIF\b/i.test(
+        beforeCounter
+          .slice(0, update.index)
+          .split(/\bLOOP\b/i)
+          .at(-1) ?? ''
+      ) &&
       /\bstatus\s*=\s*'reserved'/i.test(update[1]) &&
       /\border_id\s*=\s*p_order_id\b/i.test(update[1]) &&
       /\border_item_id\s*=\s*v_item\s*\.\s*id\b/i.test(update[1]) &&

@@ -2,15 +2,21 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 import { serializedInventoryConfirmation } from './serialized_variant_inventory_concurrency_contract_confirmation.mjs';
+import { serializedInventoryNestedQueries } from './serialized_variant_inventory_concurrency_contract_nested_queries.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const { extractIfBranches, latestFunctionBody } = serializedInventoryContract;
 const { isRequiredConjunct } = serializedInventorySqlParser;
 
 function releaseLockMatches(source) {
+  const searchableSource = serializedInventoryNestedQueries.maskNestedQueries(
+    serializedInventorySqlParser.maskSqlLiterals(source, {
+      preserveStrings: true,
+    })
+  );
   const query =
     /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+(?:AS\s+)?vi[\s\S]*?WHERE\s+([\s\S]*?)FOR\s+UPDATE(?:\s+OF\s+vi\b)?(?!\s+(?:OF\b|SKIP\s+LOCKED\b|NOWAIT\b))/i.exec(
-      source
+      searchableSource
     );
   if (!query || /\b(?:LIMIT|OFFSET|FETCH)\b/i.test(query[1])) return false;
   return [
@@ -137,6 +143,12 @@ test('release inventory locks remain blocking and target their selected rows', (
   assert.equal(
     releaseLockMatches(
       "FROM variant_inventory vi WHERE vi.order_id = p_order_id AND vi.merchant_id = p_merchant_id AND vi.status = 'reserved' OR true FOR UPDATE"
+    ),
+    false
+  );
+  assert.equal(
+    releaseLockMatches(
+      "FROM variant_inventory vi WHERE vi.order_id = p_order_id AND vi.merchant_id = p_merchant_id AND vi.status = 'reserved' AND EXISTS (SELECT 1 FROM merchants m WHERE m.id = vi.merchant_id FOR UPDATE)"
     ),
     false
   );

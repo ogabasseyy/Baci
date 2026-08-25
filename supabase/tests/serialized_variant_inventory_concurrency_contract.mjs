@@ -52,8 +52,8 @@ function parseFunctionSignature(functionSignature) {
 }
 function parameterListPattern(argumentTypes) {
   if (argumentTypes.length === 0) return '[^)]*';
-  const parameterName = '(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s+)?';
-  const parameterMode = '(?:(?:INOUT|IN|OUT|VARIADIC)\\s+)?';
+  const parameterName = '(?:(?!OUT\\b)(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s+)?';
+  const parameterMode = '(?:(?:INOUT|IN|VARIADIC)\\s+)?';
   return argumentTypes
     .map((type) => {
       const normalized = type.trim().replace(/\s+/g, ' ');
@@ -69,6 +69,24 @@ function parameterListPattern(argumentTypes) {
       return `\\s*${parameterMode}${parameterName}${qualifiedBasePattern}${arrayPattern}(?:\\s+(?:DEFAULT\\b|=)[^,)]*)?\\s*`;
     })
     .join('\\s*,\\s*');
+}
+function normalizedFunctionIdentifier(source) {
+  return [...source.matchAll(/"[^"]+"|[a-z_][a-z0-9_]*/gi)].map((part) =>
+    part[0].startsWith('"') ? part[0].slice(1, -1) : part[0].toLowerCase()
+  );
+}
+function createTargetsFunction(statement, functionName) {
+  const target =
+    /^\s*CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+((?:"[^"]+"|[a-z_][a-z0-9_]*)(?:\s*\.\s*(?:"[^"]+"|[a-z_][a-z0-9_]*))*)/i.exec(
+      statement
+    );
+  if (!target) return false;
+  return (
+    JSON.stringify(normalizedFunctionIdentifier(target[1])) ===
+    JSON.stringify(
+      normalizedFunctionIdentifier(parseFunctionSignature(functionName).name)
+    )
+  );
 }
 function functionMarkerPattern(functionName, flags = 'i') {
   const { name, argumentTypes } = parseFunctionSignature(functionName);
@@ -110,14 +128,14 @@ function functionBody(source, functionName, markerIndex) {
   assert.ok(closing, `unterminated ${functionName}`);
   return source.slice(start, closing.index);
 }
-function latestStatementMatch(source, pattern) {
+function latestStatementMatch(source, pattern, validator = () => true) {
   return splitSqlStatements(source)
     .flatMap(({ index, text }) => {
       const leading = text.search(/\S/);
       const match = [...text.matchAll(pattern)].find(
         (candidate) => candidate.index === leading
       );
-      if (!match) return [];
+      if (!match || !validator(text)) return [];
       match.index += index;
       return [match];
     })
@@ -129,7 +147,8 @@ function latestFunctionBody(functionName, sources = migrationSources) {
     const source = stripSqlComments(rawSource);
     const create = latestStatementMatch(
       source,
-      functionMarkerPattern(functionName, 'gi')
+      functionMarkerPattern(functionName, 'gi'),
+      (statement) => createTargetsFunction(statement, functionName)
     );
     const drop = latestStatementMatch(
       source,

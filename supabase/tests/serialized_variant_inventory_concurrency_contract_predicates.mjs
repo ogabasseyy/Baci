@@ -81,7 +81,15 @@ function isRequiredConjunct(source, pattern) {
   if (/^NOT\b/i.test(expression) || negativePredicatePattern.test(expression)) {
     return false;
   }
-  return pattern.test(expression);
+  pattern.lastIndex = 0;
+  const match = pattern.exec(expression);
+  pattern.lastIndex = 0;
+  if (!match || match.index === undefined) return false;
+  return (
+    /^[\s(]*(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\s*\.\s*)?$/i.test(
+      expression.slice(0, match.index)
+    ) && /^[\s);]*$/.test(expression.slice(match.index + match[0].length))
+  );
 }
 
 export const serializedInventoryPredicates = { isRequiredConjunct };

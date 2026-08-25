@@ -119,3 +119,14 @@ test('binds stock bounds to the complete decrement expression', () => {
   assert.equal(matches.length, 1);
   assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), false);
 });
+
+test('rejects stock bounds supplied only by dollar-quoted literals', () => {
+  const matches = legacyDecrementMatches(`
+    UPDATE products
+    SET stock_quantity = stock_quantity - quantity_param
+    WHERE id = product_id_param
+      AND note = $$stock_quantity >= quantity_param$$;
+  `);
+  assert.equal(matches.length, 1);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), false);
+});

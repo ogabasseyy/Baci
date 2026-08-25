@@ -33,3 +33,21 @@ test('schema-qualified built-in types replace the effective function body', () =
   assert.match(body, /RETURN 'new'/);
   assert.doesNotMatch(body, /RETURN 'old'/);
 });
+
+test('does not confuse quoted uppercase siblings with unquoted functions', () => {
+  const body = latestFunctionBody('private.fixture(uuid)', [
+    "CREATE FUNCTION private.fixture(uuid) RETURNS text AS $$ BEGIN RETURN 'safe'; END; $$;",
+    'CREATE FUNCTION private."FIXTURE"(uuid) RETURNS text AS $$ BEGIN RETURN \'sibling\'; END; $$;',
+  ]);
+  assert.match(body, /RETURN 'safe'/);
+  assert.doesNotMatch(body, /RETURN 'sibling'/);
+});
+
+test('does not count OUT-only parameters as function inputs', () => {
+  const body = latestFunctionBody('private.fixture(uuid)', [
+    "CREATE FUNCTION private.fixture(uuid) RETURNS text AS $$ BEGIN RETURN 'input'; END; $$;",
+    'CREATE FUNCTION private.fixture(OUT result uuid) RETURNS uuid AS $$ BEGIN result := null; END; $$;',
+  ]);
+  assert.match(body, /RETURN 'input'/);
+  assert.doesNotMatch(body, /result := null/);
+});

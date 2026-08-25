@@ -55,3 +55,21 @@ test('accepts a locked precheck for the same legacy inventory row', () => {
   assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), true);
   assert.equal(legacyDecrementHasZeroRowHandling(matches[0]), true);
 });
+
+test('scans every decrement inside a data-modifying CTE statement', () => {
+  const matches = legacyDecrementMatches(`
+    WITH changed AS (
+      UPDATE products
+      SET stock_quantity = stock_quantity - p_quantity
+      WHERE id = p_first_id
+      RETURNING id
+    )
+    UPDATE products
+    SET stock_quantity = stock_quantity - p_quantity
+    WHERE id = p_second_id AND stock_quantity >= p_quantity;
+  `);
+
+  assert.equal(matches.length, 2);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), false);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(matches[1][2]), true);
+});

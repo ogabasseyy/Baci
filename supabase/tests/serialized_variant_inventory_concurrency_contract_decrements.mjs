@@ -29,19 +29,22 @@ function referencePattern(value) {
 function legacyDecrementMatches(source) {
   const cleanSource = stripSqlComments(source);
   return splitSqlStatements(cleanSource).flatMap(({ index, text }) => {
-    const update = updatePattern.exec(text);
-    const decrement = stockDecrement.exec(text);
-    if (!update || !decrement) return [];
-    const updateStart = index + update.index;
-    const context = cleanSource.slice(0, updateStart).slice(-2000);
-    const match = [
-      text.slice(update.index),
-      normalizedIdentifier(update[1]),
-      context + text.slice(update.index),
-    ];
-    match.index = updateStart;
-    match.input = cleanSource;
-    return [match];
+    const updates = [...text.matchAll(new RegExp(updatePattern.source, 'gi'))];
+    return updates.flatMap((update, updateIndex) => {
+      const end = updates[updateIndex + 1]?.index ?? text.length;
+      const updateText = text.slice(update.index, end);
+      if (!stockDecrement.test(updateText)) return [];
+      const updateStart = index + update.index;
+      const context = cleanSource.slice(0, updateStart).slice(-2000);
+      const match = [
+        updateText,
+        normalizedIdentifier(update[1]),
+        context + updateText,
+      ];
+      match.index = updateStart;
+      match.input = cleanSource;
+      return [match];
+    });
   });
 }
 function maskNestedSql(source) {

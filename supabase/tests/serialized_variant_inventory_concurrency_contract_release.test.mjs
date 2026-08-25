@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
+import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const { extractIfBranches, latestFunctionBody } = serializedInventoryContract;
+const { isRequiredConjunct } = serializedInventorySqlParser;
 const orderLock =
   /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id[^;]*?FOR\s+UPDATE(?!\s+(?:SKIP\s+LOCKED|NOWAIT|OF\s+[a-z_][a-z0-9_]*\s+(?:SKIP\s+LOCKED|NOWAIT))\b)(?:\s+OF\s+[a-z_][a-z0-9_]*)?/i;
 const releaseLock =
@@ -10,7 +12,7 @@ const releaseLock =
 
 function releaseTransition(branch, targetStatus) {
   const update =
-    /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([\s\S]*?)\s+WHERE\s+id\s*=\s*v_unit\s*\.\s*id\b/i.exec(
+    /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([\s\S]*?)\s+WHERE\s+([\s\S]*?);/i.exec(
       branch
     );
   if (
@@ -19,7 +21,7 @@ function releaseTransition(branch, targetStatus) {
   ) {
     return false;
   }
-  return (
+  const clearsOwnership =
     targetStatus !== 'available' ||
     [
       'order_id',
@@ -28,6 +30,12 @@ function releaseTransition(branch, targetStatus) {
       'reservation_expires_at',
     ].every((column) =>
       new RegExp(`\\b${column}\\s*=\\s*NULL\\b`, 'i').test(update[1])
+    );
+  return (
+    clearsOwnership &&
+    isRequiredConjunct(
+      update[2],
+      /(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*v_unit\s*\.\s*id\b/i
     )
   );
 }
@@ -42,6 +50,14 @@ test('release serializes on its order before locking reserved inventory', () => 
   );
 
   assert.match(release, orderLock, 'release must lock its parent order');
+  assert.match(
+    release,
+    new RegExp(
+      `${orderLock.source}\\s*;\\s*IF\\s+NOT\\s+FOUND\\s+THEN\\s+RAISE\\s+EXCEPTION\\s+['"]order_not_found['"]`,
+      'i'
+    ),
+    'release must fail closed when its scoped parent order does not exist'
+  );
   assert.ok(
     release.search(orderLock) <
       release.indexOf("IF v_target_status = 'available'"),
@@ -62,6 +78,16 @@ test('release serializes on its order before locking reserved inventory', () => 
   assert.equal(
     releaseTransition(
       branches.thenBranch.replace("status = 'available',", ''),
+      'available'
+    ),
+    false
+  );
+  assert.equal(
+    releaseTransition(
+      branches.thenBranch.replace(
+        'WHERE id = v_unit.id;',
+        'WHERE id = v_unit.id OR merchant_id = p_merchant_id;'
+      ),
       'available'
     ),
     false

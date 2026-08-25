@@ -36,6 +36,12 @@ test('matches reordered lock predicates and targets the order-item alias', () =>
     undefined
   );
 
+  const disconnectedJoin = source.replace('ON o.id = oi.order_id', 'ON true');
+  assert.equal(
+    serializedInventoryLocks.findClaimLocks(disconnectedJoin).item,
+    undefined
+  );
+
   const skippedOrder = source.replace('FOR UPDATE;', 'FOR UPDATE SKIP LOCKED;');
   assert.equal(
     serializedInventoryLocks.findClaimLocks(skippedOrder).order,
@@ -63,6 +69,18 @@ test('matches reordered lock predicates and targets the order-item alias', () =>
   );
   assert.equal(
     serializedInventoryLocks.findClaimLocks(nowaitItem).item,
+    undefined
+  );
+
+  const literalDecoys = source
+    .replace('FOR UPDATE;', "AND 'FOR UPDATE' = 'FOR UPDATE';")
+    .replace('FOR UPDATE OF oi;', "AND 'FOR UPDATE' = 'FOR UPDATE';");
+  assert.equal(
+    serializedInventoryLocks.findClaimLocks(literalDecoys).order,
+    undefined
+  );
+  assert.equal(
+    serializedInventoryLocks.findClaimLocks(literalDecoys).item,
     undefined
   );
 });

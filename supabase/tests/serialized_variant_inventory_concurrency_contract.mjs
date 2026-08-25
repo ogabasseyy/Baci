@@ -52,6 +52,8 @@ function parseFunctionSignature(functionSignature) {
 }
 function parameterListPattern(argumentTypes) {
   if (argumentTypes.length === 0) return '[^)]*';
+  const parameterName = '(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s+)?';
+  const parameterMode = '(?:(?:INOUT|IN|OUT|VARIADIC)\\s+)?';
   return argumentTypes
     .map((type) => {
       const normalized = type.trim().replace(/\s+/g, ' ');
@@ -60,7 +62,8 @@ function parameterListPattern(argumentTypes) {
         ? normalized.replace(/\s*\[\s*\]$/, '').trim()
         : normalized;
       const basePattern = baseType.split(' ').map(escapeRegex).join('\\s+');
-      return `[^,()]*\\b${basePattern}\\b${isArray ? '\\s*\\[\\s*\\]' : '(?!\\s*\\[\\s*\\])'}[^,()]*`;
+      const arrayPattern = isArray ? '\\s*\\[\\s*\\]' : '(?!\\s*\\[\\s*\\])';
+      return `\\s*${parameterMode}${parameterName}${basePattern}${arrayPattern}(?:\\s+(?:DEFAULT\\b|=)[^,)]*)?\\s*`;
     })
     .join('\\s*,\\s*');
 }

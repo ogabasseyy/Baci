@@ -55,3 +55,11 @@ test('finds same-line dollar-quote terminators outside string literals', () => {
   assert.ok(closing);
   assert.equal(source.slice(closing.index), '$$ LANGUAGE plpgsql;');
 });
+
+test('treats backslashes as ordinary characters in standard SQL strings', () => {
+  const source = "BEGIN; RAISE NOTICE '\\'; END; $$;";
+  const statements = splitSqlStatements("SELECT '\\'; SELECT 2;");
+
+  assert.equal(statements.length, 2);
+  assert.ok(findDollarQuoteEnd(source, 0, '$$'));
+});

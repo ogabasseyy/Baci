@@ -9,6 +9,16 @@ function dollarQuoteAt(source, index) {
 function dollarQuoteMode(source, index) {
   return /(?:\bAS|\bDO)\s*$/i.test(source.slice(0, index)) ? 'body' : 'literal';
 }
+function quoteMode(source, index) {
+  const char = source[index];
+  return {
+    char,
+    escapeBackslashes:
+      char === "'" &&
+      /[eE]/.test(source[index - 1] ?? '') &&
+      (index < 2 || !/[A-Za-z0-9_$]/.test(source[index - 2])),
+  };
+}
 function stripSqlComments(source) {
   let output = '';
   let quote;
@@ -52,13 +62,13 @@ function stripSqlComments(source) {
     }
     if (quote) {
       output += char;
-      if (char === '\\' && next !== undefined) {
+      if (quote.escapeBackslashes && char === '\\' && next !== undefined) {
         output += next;
         index += 1;
         continue;
       }
-      if (char === quote) {
-        if (next === quote) {
+      if (char === quote.char) {
+        if (next === quote.char) {
           output += next;
           index += 1;
         } else {
@@ -85,7 +95,7 @@ function stripSqlComments(source) {
       continue;
     }
     if (char === "'" || char === '"') {
-      quote = char;
+      quote = quoteMode(source, index);
       output += char;
       continue;
     }
@@ -110,16 +120,16 @@ function findDollarQuoteEnd(source, start, delimiter) {
     const char = source[index];
     const next = source[index + 1];
     if (quote) {
-      if (char === '\\' && next !== undefined) {
+      if (quote.escapeBackslashes && char === '\\' && next !== undefined) {
         index += 1;
-      } else if (char === quote) {
-        if (next === quote) index += 1;
+      } else if (char === quote.char) {
+        if (next === quote.char) index += 1;
         else quote = undefined;
       }
       continue;
     }
     if (char === "'" || char === '"') {
-      quote = char;
+      quote = quoteMode(source, index);
       continue;
     }
     if (!source.startsWith(delimiter, index)) continue;
@@ -163,12 +173,12 @@ function splitSqlStatements(source) {
       continue;
     }
     if (quote) {
-      if (char === '\\' && next !== undefined) {
+      if (quote.escapeBackslashes && char === '\\' && next !== undefined) {
         index += 1;
         continue;
       }
-      if (char === quote) {
-        if (next === quote) {
+      if (char === quote.char) {
+        if (next === quote.char) {
           index += 1;
         } else {
           quote = undefined;
@@ -177,7 +187,7 @@ function splitSqlStatements(source) {
       continue;
     }
     if (char === "'" || char === '"') {
-      quote = char;
+      quote = quoteMode(source, index);
       continue;
     }
     const tag = dollarQuoteAt(source, index);
@@ -202,9 +212,59 @@ function splitSqlStatements(source) {
   return statements;
 }
 
+function maskSqlLiterals(source) {
+  let output = '';
+  let quote;
+  let dollarTag;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (dollarTag) {
+      if (source.startsWith(dollarTag, index)) {
+        output += ' '.repeat(dollarTag.length);
+        index += dollarTag.length - 1;
+        dollarTag = undefined;
+      } else {
+        output += char === '\n' || char === '\r' ? char : ' ';
+      }
+      continue;
+    }
+    if (quote) {
+      output += char === '\n' || char === '\r' ? char : ' ';
+      if (quote.escapeBackslashes && char === '\\' && next !== undefined) {
+        output += ' ';
+        index += 1;
+      } else if (char === quote.char) {
+        if (next === quote.char) {
+          output += ' ';
+          index += 1;
+        } else {
+          quote = undefined;
+        }
+      }
+      continue;
+    }
+    if (char === "'") {
+      quote = quoteMode(source, index);
+      output += ' ';
+      continue;
+    }
+    const tag = dollarQuoteAt(source, index);
+    if (tag) {
+      dollarTag = tag;
+      output += ' '.repeat(tag.length);
+      index += tag.length - 1;
+      continue;
+    }
+    output += char;
+  }
+  return output;
+}
+
 export const serializedInventorySqlParser = {
   findDollarQuoteEnd,
   isRequiredConjunct: serializedInventoryPredicates.isRequiredConjunct,
+  maskSqlLiterals,
   splitSqlStatements,
   stripSqlComments,
 };

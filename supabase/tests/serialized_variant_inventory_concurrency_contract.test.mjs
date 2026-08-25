@@ -63,6 +63,21 @@ test('function extraction resolves overloads by expected input types', () => {
   assert.doesNotMatch(body, /p_value text/);
 });
 
+test('function extraction does not match expected types inside defaults', () => {
+  const source = [
+    'CREATE FUNCTION private.fixture(p_value uuid) RETURNS void AS $$',
+    "BEGIN RAISE NOTICE 'uuid overload'; END;",
+    '$$;',
+    "CREATE FUNCTION private.fixture(p_value text DEFAULT 'uuid') RETURNS void AS $$",
+    "BEGIN RAISE NOTICE 'text overload'; END;",
+    '$$;',
+  ].join('\n');
+
+  const body = latestFunctionBody('private.fixture(uuid)', [source]);
+  assert.match(body, /uuid overload/);
+  assert.doesNotMatch(body, /text overload/);
+});
+
 test('branch extraction handles nested IF blocks without fixed indentation', () => {
   const branches = extractIfBranches(
     [

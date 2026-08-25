@@ -221,6 +221,7 @@ function legacyDecrementHasCompareAndSetGuard(statement) {
   const whereClause = masked
     .slice(where.index + where[0].length)
     .split(/\bRETURNING\b/i, 1)[0];
+  if (/\bFALSE\b|\bNOT\s+TRUE\b/i.test(whereClause)) return false;
   if (!requiredRowReference(whereClause)) return false;
   return (
     isRequiredConjunct(whereClause, comparison) ||

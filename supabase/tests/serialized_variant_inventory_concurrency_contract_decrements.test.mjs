@@ -146,6 +146,18 @@ test('binds stock bounds to the complete decrement expression', () => {
   assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), false);
 });
 
+test('rejects contradictory stock update predicates', () => {
+  const [decrement] = serializedInventoryDecrements.legacyDecrementMatches(
+    'UPDATE products SET stock_quantity = stock_quantity - quantity_param WHERE id = product_id_param AND stock_quantity >= quantity_param AND false;'
+  );
+  assert.equal(
+    serializedInventoryDecrements.legacyDecrementHasCompareAndSetGuard(
+      decrement[2]
+    ),
+    false
+  );
+});
+
 test('rejects stock bounds supplied only by dollar-quoted literals', () => {
   const matches = legacyDecrementMatches(`
     UPDATE products

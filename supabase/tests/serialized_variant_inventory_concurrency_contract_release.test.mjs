@@ -114,7 +114,14 @@ test('release serializes on its order before locking reserved inventory', () => 
   const authorizationGuard =
     /IF\s+auth\.role\(\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(p_merchant_id\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]forbidden['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i;
   assert.match(executableRelease, authorizationGuard);
-  assert.ok(authorizationGuard.exec(executableRelease).index < orderLock.index);
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      executableRelease,
+      authorizationGuard.exec(executableRelease).index,
+      orderLock.index
+    ),
+    true
+  );
   assert.doesNotMatch(
     executableRelease.replace(authorizationGuard, ''),
     authorizationGuard
@@ -138,6 +145,14 @@ test('release serializes on its order before locking reserved inventory', () => 
   assert.ok(
     orderLock.index < release.indexOf("IF v_target_status = 'available'"),
     'release must lock its parent order before inventory reconciliation'
+  );
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      executableRelease,
+      orderLock.index,
+      executableRelease.indexOf("IF v_target_status = 'available'")
+    ),
+    true
   );
   assert.equal(releaseBranchesMatch(branches), true);
   assert.match(

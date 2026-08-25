@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 import { serializedInventoryConfirmation } from './serialized_variant_inventory_concurrency_contract_confirmation.mjs';
+import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const {
@@ -108,7 +109,14 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
     );
   assert.ok(authorization);
   assert.ok(delegation);
-  assert.ok(authorization.index < delegation.index);
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      executablePublicConfirm,
+      authorization.index,
+      delegation.index
+    ),
+    true
+  );
   const migrationSql = serializedInventoryContract
     .migrationFileNames()
     .map((file) =>
@@ -146,6 +154,18 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
       )
     ),
     undefined
+  );
+  assert.match(confirm, /v_claimed_in_loop\s*:=\s*0\s*;/i);
+  assert.match(
+    confirm,
+    /v_claimed_in_loop\s*:=\s*v_claimed_in_loop\s*\+\s*1\s*;/i
+  );
+  assert.doesNotMatch(
+    confirm.replace(
+      /v_claimed_in_loop\s*:=\s*v_claimed_in_loop\s*\+\s*1\s*;/i,
+      ''
+    ),
+    /v_claimed_in_loop\s*:=\s*v_claimed_in_loop\s*\+\s*1\s*;/i
   );
   const neededAssignment =
     /\bv_needed\s*:=\s*v_item\s*\.\s*quantity\s*-\s*v_reserved_count\s*;/i;

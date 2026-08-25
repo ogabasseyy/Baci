@@ -271,4 +271,6 @@ export const serializedInventoryContract = {
   availableUnitWhereClause:
     serializedInventoryAvailability.availableUnitWhereClause,
   findClaimLocks: serializedInventoryLocks.findClaimLocks,
+  claimLocksDominateSelector:
+    serializedInventoryLocks.claimLocksDominateSelector,
 };

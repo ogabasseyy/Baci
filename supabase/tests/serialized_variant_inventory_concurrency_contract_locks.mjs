@@ -1,3 +1,5 @@
+import { serializedInventoryAvailability } from './serialized_variant_inventory_concurrency_contract_availability.mjs';
+import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const {
@@ -142,4 +144,28 @@ function findClaimLocks(source) {
   return { item, order };
 }
 
-export const serializedInventoryLocks = { findClaimLocks };
+function claimLocksDominateSelector(source) {
+  const locks = findClaimLocks(source);
+  const selector =
+    serializedInventoryAvailability.availableUnitWhereClause(source);
+  return Boolean(
+    locks.order &&
+      locks.item &&
+      selector &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        source,
+        locks.order.index,
+        selector.index
+      ) &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        source,
+        locks.item.index,
+        selector.index
+      )
+  );
+}
+
+export const serializedInventoryLocks = {
+  claimLocksDominateSelector,
+  findClaimLocks,
+};

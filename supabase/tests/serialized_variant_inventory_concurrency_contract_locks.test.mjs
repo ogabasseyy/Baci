@@ -93,3 +93,31 @@ test('matches reordered lock predicates and targets the order-item alias', () =>
     undefined
   );
 });
+
+test('claim locks must dominate the available-unit selector', () => {
+  const locks = `
+    PERFORM 1 FROM public.orders
+    WHERE id = p_order_id AND merchant_id = p_merchant_id FOR UPDATE;
+    SELECT oi.id FROM public.order_items oi
+    JOIN public.orders o ON o.id = oi.order_id
+    WHERE oi.id = p_order_item_id AND o.id = p_order_id
+      AND o.merchant_id = p_merchant_id FOR UPDATE OF oi;
+  `;
+  const selector = `
+    SELECT vi.id FROM public.variant_inventory vi
+    WHERE vi.merchant_id = p_merchant_id AND vi.variant_id = v_variant_id
+      AND vi.status = 'available' AND vi.order_id IS NULL
+      AND vi.order_item_id IS NULL AND vi.sold_at IS NULL
+    ORDER BY vi.id LIMIT v_needed FOR UPDATE SKIP LOCKED;
+  `;
+  assert.equal(
+    serializedInventoryLocks.claimLocksDominateSelector(`${locks}${selector}`),
+    true
+  );
+  assert.equal(
+    serializedInventoryLocks.claimLocksDominateSelector(
+      `IF false THEN\n${locks}\nEND IF;\n${selector}`
+    ),
+    false
+  );
+});

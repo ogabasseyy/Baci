@@ -4,13 +4,25 @@ function pathAt(source, targetIndex) {
   const searchable = serializedInventorySqlParser.maskSqlLiterals(source);
   const stack = [];
   const tokens =
-    /\bEND\s+(?:IF|CASE)\b|\bELSIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bWHEN\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bELSE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b/gi;
+    /\bEND\s+(?:IF|CASE)\b|\bEND\b(?!\s+(?:IF|CASE|LOOP)\b)|\bELSIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bWHEN\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bELSE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b/gi;
   for (const token of searchable.matchAll(tokens)) {
     if (token.index >= targetIndex) break;
-    if (/^END\s+(?:IF|CASE)$/i.test(token[0])) stack.pop();
-    else if (/^(?:ELSIF|WHEN|ELSE)\b/i.test(token[0])) {
+    if (/^END\s+IF$/i.test(token[0]) && stack.at(-1)?.kind === 'if') {
+      stack.pop();
+    } else if (
+      /^END(?:\s+CASE)?$/i.test(token[0]) &&
+      stack.at(-1)?.kind === 'case'
+    ) {
+      stack.pop();
+    } else if (/^(?:ELSIF|WHEN|ELSE)\b/i.test(token[0])) {
       if (stack.length > 0) stack[stack.length - 1].branch = token.index;
-    } else stack.push({ branch: token.index, id: token.index });
+    } else {
+      stack.push({
+        branch: token.index,
+        id: token.index,
+        kind: /^CASE$/i.test(token[0]) ? 'case' : 'if',
+      });
+    }
   }
   return stack.map(({ branch, id }) => `${id}:${branch}`);
 }

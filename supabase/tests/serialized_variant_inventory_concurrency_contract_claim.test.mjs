@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
+import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const { latestFunctionBody } = serializedInventoryContract;
@@ -11,6 +12,27 @@ function hasOnlyUnitIdPredicate(whereClause) {
     whereClause
       .replace(/(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*v_unit\.id\b/i, '')
       .replace(/[\s();]/g, '') === ''
+  );
+}
+
+function findEffectiveReserveUpdate(source) {
+  const reserveUnitUpdate =
+    /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([^;]*?)\s+WHERE\s+([^;]*);/gi;
+  const masked = maskSqlLiterals(source, { preserveStrings: true });
+  const counter = /v_claimed_count\s*:=\s*v_claimed_count\s*\+\s*1/i.exec(
+    masked
+  );
+  if (!counter) return undefined;
+  return [...masked.matchAll(reserveUnitUpdate)].find(
+    (match) =>
+      /\bstatus\s*=\s*'reserved'/i.test(match[1]) &&
+      /\border_id\s*=\s*p_order_id\b/i.test(match[1]) &&
+      /\border_item_id\s*=\s*p_order_item_id\b/i.test(match[1]) &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        masked,
+        match.index,
+        counter.index
+      )
   );
 }
 
@@ -50,16 +72,7 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
 
   const reserveUnitUpdate =
     /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([^;]*?)\s+WHERE\s+([^;]*);/gi;
-  const reserveUpdate = [
-    ...maskSqlLiterals(claim, { preserveStrings: true }).matchAll(
-      reserveUnitUpdate
-    ),
-  ].find(
-    (match) =>
-      /\bstatus\s*=\s*'reserved'/i.test(match[1]) &&
-      /\border_id\s*=\s*p_order_id\b/i.test(match[1]) &&
-      /\border_item_id\s*=\s*p_order_item_id\b/i.test(match[1])
-  );
+  const reserveUpdate = findEffectiveReserveUpdate(claim);
   assert.ok(
     reserveUpdate &&
       /\bstatus\s*=\s*'reserved'/i.test(reserveUpdate[1]) &&
@@ -96,6 +109,15 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
   assert.equal(
     hasOnlyUnitIdPredicate("id = v_unit.id AND status = 'reserved'"),
     false
+  );
+  assert.equal(
+    findEffectiveReserveUpdate(
+      claim.replace(
+        /UPDATE\s+public\.variant_inventory\s+SET\s+status\s*=\s*'reserved',[\s\S]*?WHERE\s+id\s*=\s*v_unit\.id;/i,
+        (update) => `IF false THEN\n${update}\nEND IF;`
+      )
+    ),
+    undefined
   );
   const whereOnlyAssignments = [
     ..."UPDATE variant_inventory SET updated_at = now() WHERE id = v_unit.id AND status = 'reserved' AND order_id = p_order_id AND order_item_id = p_order_item_id;".matchAll(

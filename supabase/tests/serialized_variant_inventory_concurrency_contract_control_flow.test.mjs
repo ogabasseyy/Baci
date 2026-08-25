@@ -30,3 +30,16 @@ test('distinguishes statements in conditional and sibling branches', () => {
     true
   );
 });
+
+test('closes SQL CASE expressions before later control-flow checks', () => {
+  const source =
+    'IF false THEN\nUPDATE x SET value = CASE WHEN ready THEN 1 ELSE 0 END;\nEND IF;\ncounter;';
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      source,
+      source.indexOf('UPDATE'),
+      source.indexOf('counter')
+    ),
+    false
+  );
+});

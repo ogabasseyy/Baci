@@ -12,6 +12,7 @@ const {
   legacyDecrementHasCompareAndSetGuard,
   availableUnitPredicatesMatch,
   availableUnitWhereClause,
+  claimLocksDominateSelector,
   findClaimLocks,
 } = serializedInventoryContract;
 
@@ -123,6 +124,11 @@ test('serialized claims lock the order before the item and skip locked available
   assert.ok(
     claimLocks.item.index < availableUnits.index,
     'claims must serialize the parent and item before selecting available units'
+  );
+  assert.equal(
+    claimLocksDominateSelector(claim),
+    true,
+    'claim locks must dominate the available-unit selector'
   );
   const strictShortage =
     /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+(?:\(\s*)?v_reserved_count\s*\+\s*v_claimed_count\s*(?:\s*\))?\s*<\s*v_qty\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]serialized_inventory_unavailable['"]/i;

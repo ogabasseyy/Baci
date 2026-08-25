@@ -1,13 +1,25 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 import { serializedInventoryConfirmation } from './serialized_variant_inventory_concurrency_contract_confirmation.mjs';
+import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const {
   confirmationLocksPrecedeReclaim,
   findConfirmationLocks,
   findReclaimReservationTransition,
 } = serializedInventoryConfirmation;
+
+function privateConfirmationIsRestricted(source) {
+  const statements = [
+    ...source.matchAll(
+      /(?:REVOKE\s+ALL|GRANT\s+EXECUTE)\s+ON\s+FUNCTION\s+private\.confirm_order_inventory_reservations\s*\(\s*uuid\s*,\s*uuid\s*\)[^;]*;/gi
+    ),
+  ].filter((match) => /\bauthenticated\b/i.test(match[0]));
+  return /^REVOKE\s+ALL\b/i.test(statements.at(-1)?.[0] ?? '');
+}
 
 test('confirmation locks require mandatory tenant and order scopes', () => {
   const valid = `
@@ -73,17 +85,37 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
   const publicConfirm = serializedInventoryContract.latestFunctionBody(
     'public.confirm_order_inventory_reservations(uuid, uuid)'
   );
+  const executablePublicConfirm = serializedInventorySqlParser.maskSqlLiterals(
+    publicConfirm,
+    { preserveStrings: true }
+  );
   const authorization =
     /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\.role\(\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(p_merchant_id\)\s+THEN[\s\S]*?RAISE\s+EXCEPTION\s+['"]forbidden['"][\s\S]*?END\s+IF\s*;/i.exec(
-      publicConfirm
+      executablePublicConfirm
     );
   const delegation =
     /RETURN\s+private\.confirm_order_inventory_reservations\s*\(/i.exec(
-      publicConfirm
+      executablePublicConfirm
     );
   assert.ok(authorization);
   assert.ok(delegation);
   assert.ok(authorization.index < delegation.index);
+  const migrationSql = serializedInventoryContract
+    .migrationFileNames()
+    .map((file) =>
+      fs.readFileSync(
+        path.join(serializedInventoryContract.migrationsDir, file),
+        'utf8'
+      )
+    )
+    .join('\n');
+  assert.equal(privateConfirmationIsRestricted(migrationSql), true);
+  assert.equal(
+    privateConfirmationIsRestricted(
+      `${migrationSql}\nGRANT EXECUTE ON FUNCTION private.confirm_order_inventory_reservations(uuid, uuid) TO authenticated;`
+    ),
+    false
+  );
 
   assert.ok(locks.order);
   assert.ok(locks.item);

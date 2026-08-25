@@ -112,6 +112,11 @@ test('release serializes on its order before locking reserved inventory', () => 
     release,
     /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
   );
+  const decoyBranches = extractIfBranches(
+    `PERFORM $decoy$${release}$decoy$;\nIF v_target_status = 'available' THEN\nNULL;\nELSE\nNULL;\nEND IF;`,
+    /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
+  );
+  assert.equal(releaseBranchesMatch(decoyBranches), false);
   const executablePublicRelease = serializedInventorySqlParser.maskSqlLiterals(
     publicRelease,
     {

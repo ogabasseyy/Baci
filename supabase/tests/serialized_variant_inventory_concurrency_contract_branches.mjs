@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 function extractIfBranches(source, openingPattern) {
-  const lines = source.split(/\r?\n/);
+  const lines = serializedInventorySqlParser
+    .maskSqlLiterals(source, { preserveStrings: true })
+    .split(/\r?\n/);
   const openingIndex = lines.findIndex((line) => openingPattern.test(line));
   assert.notEqual(openingIndex, -1, 'missing target IF branch');
   let depth = 1;

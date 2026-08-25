@@ -76,10 +76,30 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
       false
     );
     assert.equal(
+      serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
+        body.replace(
+          authorization[0],
+          `IF false THEN\n${authorization[0]}\nEND IF;`
+        )
+      ),
+      false
+    );
+    const unlimitedStockReturn =
+      /IF\s+NOT\s+COALESCE\s*\(\s*v_manage_stock[\s\S]*?END\s+IF\s*;/i.exec(
+        body
+      );
+    assert.ok(unlimitedStockReturn);
+    assert.equal(
+      serializedInventoryDecrementGuards.hasUnlimitedStockReturn(
+        body.replace(unlimitedStockReturn[0], '')
+      ),
+      false
+    );
+    assert.equal(
       serializedInventoryDecrementGuards.hasUnlimitedStockReturn(
         body.replace(
-          /IF\s+NOT\s+COALESCE\s*\(\s*v_manage_stock[\s\S]*?END\s+IF\s*;/i,
-          ''
+          unlimitedStockReturn[0],
+          `IF false THEN\n${unlimitedStockReturn[0]}\nEND IF;`
         )
       ),
       false

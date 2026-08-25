@@ -40,7 +40,13 @@ function hasMerchantAuthorizationGuard(source) {
       executable
     );
   return Boolean(
-    guard && protectedOperation && guard.index < protectedOperation.index
+    guard &&
+      protectedOperation &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        guard.index,
+        protectedOperation.index
+      )
   );
 }
 
@@ -48,8 +54,22 @@ function hasUnlimitedStockReturn(source) {
   const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
     preserveStrings: true,
   });
-  return /IF\s+NOT\s+COALESCE\s*\(\s*v_manage_stock\s*,\s*false\s*\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?\bRETURN\b(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.test(
-    executable
+  const guard =
+    /IF\s+NOT\s+COALESCE\s*\(\s*v_manage_stock\s*,\s*false\s*\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?\bRETURN\b(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
+      executable
+    );
+  const protectedOperation =
+    /(?:SELECT\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s+INTO[\s\S]*?\bFOR\s+UPDATE\b|UPDATE\s+(?:public\s*\.\s*)?(?:products|product_variants)\b)/i.exec(
+      executable
+    );
+  return Boolean(
+    guard &&
+      protectedOperation &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        guard.index,
+        protectedOperation.index
+      )
   );
 }
 

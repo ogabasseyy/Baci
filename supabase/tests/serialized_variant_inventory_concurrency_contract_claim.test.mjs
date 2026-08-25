@@ -84,13 +84,40 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
   );
   const neededAssignment =
     /\bv_needed\s*:=\s*v_qty\s*-\s*v_reserved_count\s*;/i;
-  assert.match(claim, neededAssignment);
+  const needed = neededAssignment.exec(claim);
+  const neededSelector = /\bLIMIT\s+v_needed\b/i.exec(claim);
+  assert.ok(needed);
+  assert.ok(neededSelector);
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      claim,
+      needed.index,
+      neededSelector.index
+    ),
+    true
+  );
   assert.doesNotMatch(
     claim.replace(
       'v_needed := v_qty - v_reserved_count;',
       'v_needed := v_qty - v_reserved_count + 1;'
     ),
     neededAssignment
+  );
+  const unreachableNeeded = claim.replace(
+    needed[0],
+    `v_needed := v_qty - v_reserved_count + 1;\nIF false THEN\n${needed[0]}\nEND IF;`
+  );
+  const unreachableAssignment = neededAssignment.exec(unreachableNeeded);
+  const unreachableSelector = /\bLIMIT\s+v_needed\b/i.exec(unreachableNeeded);
+  assert.ok(unreachableAssignment);
+  assert.ok(unreachableSelector);
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      unreachableNeeded,
+      unreachableAssignment.index,
+      unreachableSelector.index
+    ),
+    false
   );
   assert.ok(
     reservedCountQueries.every((query) =>

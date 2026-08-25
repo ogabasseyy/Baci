@@ -125,13 +125,40 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
   );
   const neededAssignment =
     /\bv_needed\s*:=\s*v_item\s*\.\s*quantity\s*-\s*v_reserved_count\s*;/i;
-  assert.match(confirm, neededAssignment);
+  const needed = neededAssignment.exec(confirm);
+  const neededSelector = /\bLIMIT\s+v_needed\b/i.exec(confirm);
+  assert.ok(needed);
+  assert.ok(neededSelector);
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      confirm,
+      needed.index,
+      neededSelector.index
+    ),
+    true
+  );
   assert.doesNotMatch(
     confirm.replace(
       'v_needed := v_item.quantity - v_reserved_count;',
       'v_needed := v_item.quantity - v_reserved_count + 1;'
     ),
     neededAssignment
+  );
+  const unreachableNeeded = confirm.replace(
+    needed[0],
+    `v_needed := v_item.quantity - v_reserved_count + 1;\nIF false THEN\n${needed[0]}\nEND IF;`
+  );
+  const unreachableAssignment = neededAssignment.exec(unreachableNeeded);
+  const unreachableSelector = /\bLIMIT\s+v_needed\b/i.exec(unreachableNeeded);
+  assert.ok(unreachableAssignment);
+  assert.ok(unreachableSelector);
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      unreachableNeeded,
+      unreachableAssignment.index,
+      unreachableSelector.index
+    ),
+    false
   );
   const confirmedHoldGuard =
     /IF\s+NOT\s+v_is_confirmed_hold\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]order_not_confirmed_for_inventory_hold['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i;

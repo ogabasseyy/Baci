@@ -23,3 +23,13 @@ test('function extraction invalidates generic ROUTINE DDL', () => {
     );
   }
 });
+
+test('schema-qualified built-in types replace the effective function body', () => {
+  const body = latestFunctionBody('private.fixture(uuid)', [
+    "CREATE FUNCTION private.fixture(uuid) RETURNS text AS $$ BEGIN RETURN 'old'; END; $$;",
+    "CREATE OR REPLACE FUNCTION private.fixture(pg_catalog.uuid) RETURNS text AS $$ BEGIN RETURN 'new'; END; $$;",
+  ]);
+
+  assert.match(body, /RETURN 'new'/);
+  assert.doesNotMatch(body, /RETURN 'old'/);
+});

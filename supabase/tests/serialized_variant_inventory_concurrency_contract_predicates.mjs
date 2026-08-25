@@ -65,7 +65,8 @@ function unwrapOuterParentheses(source) {
   return expression;
 }
 
-const negativePredicatePattern = /\bIS\s+(?:FALSE|NOT\s+TRUE)\b\s*;?$/i;
+const negativePredicatePattern =
+  /(?:\bIS\s+(?:FALSE|NOT\s+TRUE)\b|=\s*FALSE\b|<>\s*TRUE\b)\s*;?$/i;
 
 function isRequiredConjunct(source, pattern) {
   const expression = unwrapOuterParentheses(source);

@@ -36,4 +36,11 @@ test('rejects a matching predicate when that atom is negated or optional', () =>
     ),
     false
   );
+  assert.equal(
+    serializedInventoryPredicates.isRequiredConjunct(
+      '(vi.merchant_id = p_merchant_id) = FALSE',
+      requiredMerchant
+    ),
+    false
+  );
 });

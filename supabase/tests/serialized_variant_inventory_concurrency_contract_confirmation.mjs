@@ -1,3 +1,5 @@
+import { serializedInventoryAvailability } from './serialized_variant_inventory_concurrency_contract_availability.mjs';
+import { serializedInventoryNestedQueries } from './serialized_variant_inventory_concurrency_contract_nested_queries.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const {
@@ -7,27 +9,7 @@ const {
   stripSqlComments,
 } = serializedInventorySqlParser;
 
-function maskNestedQueries(source) {
-  let output = '';
-  for (let index = 0; index < source.length; index += 1) {
-    if (
-      source[index] !== '(' ||
-      !/^\(\s*(?:SELECT|WITH|VALUES|TABLE)\b/i.test(source.slice(index))
-    ) {
-      output += source[index];
-      continue;
-    }
-    let depth = 0;
-    for (; index < source.length; index += 1) {
-      const char = source[index];
-      if (char === '(') depth += 1;
-      if (char === ')') depth -= 1;
-      output += char === '\n' || char === '\r' ? char : ' ';
-      if (depth === 0) break;
-    }
-  }
-  return output;
-}
+const { maskNestedQueries } = serializedInventoryNestedQueries;
 
 function findConfirmationLocks(source) {
   const statements = splitSqlStatements(
@@ -73,4 +55,49 @@ function findConfirmationLocks(source) {
   };
 }
 
-export const serializedInventoryConfirmation = { findConfirmationLocks };
+function findReclaimReservationTransition(source) {
+  const selector =
+    serializedInventoryAvailability.availableUnitWhereClause(source);
+  if (!selector) return undefined;
+  const cleanSource = maskSqlLiterals(stripSqlComments(source), {
+    preserveStrings: true,
+  });
+  const remainder = cleanSource.slice(selector.index);
+  const counter =
+    /\bv_reclaimed_count\s*:=\s*v_reclaimed_count\s*\+\s*1\b/i.exec(remainder);
+  if (!counter) return undefined;
+  const beforeCounter = remainder.slice(0, counter.index);
+  const updates = [
+    ...beforeCounter.matchAll(
+      /UPDATE\s+(?:public\s*\.\s*)?variant_inventory(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET\s+([\s\S]*?)\s+WHERE\s+([\s\S]*?);/gi
+    ),
+  ];
+  const transition = updates.find(
+    (update) =>
+      /\bstatus\s*=\s*'reserved'/i.test(update[1]) &&
+      /\border_id\s*=\s*p_order_id\b/i.test(update[1]) &&
+      /\border_item_id\s*=\s*v_item\s*\.\s*id\b/i.test(update[1]) &&
+      isRequiredConjunct(update[2], /\bid\s*=\s*v_unit\s*\.\s*id\b/i)
+  );
+  if (!transition) return undefined;
+  return { index: selector.index + transition.index };
+}
+
+function confirmationLocksPrecedeReclaim(source) {
+  const locks = findConfirmationLocks(source);
+  const selector =
+    serializedInventoryAvailability.availableUnitWhereClause(source);
+  return Boolean(
+    locks.order &&
+      locks.item &&
+      selector &&
+      locks.order.index < selector.index &&
+      locks.item.index < selector.index
+  );
+}
+
+export const serializedInventoryConfirmation = {
+  confirmationLocksPrecedeReclaim,
+  findConfirmationLocks,
+  findReclaimReservationTransition,
+};

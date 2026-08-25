@@ -1,3 +1,4 @@
+import { serializedInventoryNestedQueries } from './serialized_variant_inventory_concurrency_contract_nested_queries.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const {
@@ -6,15 +7,16 @@ const {
   splitSqlStatements,
   stripSqlComments,
 } = serializedInventorySqlParser;
+const { maskNestedQueries } = serializedInventoryNestedQueries;
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function availableUnitWhereClause(source, preserveStrings = false) {
-  const cleanSource = maskSqlLiterals(stripSqlComments(source), {
-    preserveStrings,
-  });
+  const cleanSource = maskNestedQueries(
+    maskSqlLiterals(stripSqlComments(source), { preserveStrings })
+  );
   for (const { index, text } of splitSqlStatements(cleanSource)) {
     const match =
       /FROM\s+(?:public\s*\.\s*)?variant_inventory(?:\s+(?:AS\s+)?(?!WHERE\b|ORDER\b|LIMIT\b|FOR\b)([a-z_][a-z0-9_]*))?\s+WHERE\b([\s\S]*?)\bORDER\s+BY\b[\s\S]*?\bLIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i.exec(

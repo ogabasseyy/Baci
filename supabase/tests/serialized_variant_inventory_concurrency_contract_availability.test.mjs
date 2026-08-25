@@ -84,3 +84,25 @@ test('requires the available lifecycle status', () => {
     false
   );
 });
+
+test('rejects availability clauses supplied only by a nested query', () => {
+  const source = `
+    SELECT unit.id FROM variant_inventory unit
+    WHERE EXISTS (
+      SELECT 1 FROM variant_inventory nested
+      WHERE nested.merchant_id = p_merchant_id
+        AND nested.variant_id = v_variant_id
+        AND nested.status = 'available'
+        AND nested.order_id IS NULL AND nested.order_item_id IS NULL
+        AND nested.sold_at IS NULL
+      ORDER BY nested.id LIMIT v_needed FOR UPDATE SKIP LOCKED
+    );
+  `;
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      source,
+      'v_variant_id'
+    ),
+    false
+  );
+});

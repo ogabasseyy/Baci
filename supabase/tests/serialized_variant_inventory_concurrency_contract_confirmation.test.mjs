@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 import { serializedInventoryConfirmation } from './serialized_variant_inventory_concurrency_contract_confirmation.mjs';
 
-const { findConfirmationLocks } = serializedInventoryConfirmation;
+const {
+  confirmationLocksPrecedeReclaim,
+  findConfirmationLocks,
+  findReclaimReservationTransition,
+} = serializedInventoryConfirmation;
 
 test('confirmation locks require mandatory tenant and order scopes', () => {
   const valid = `
@@ -55,4 +60,40 @@ test('confirmation locks require mandatory tenant and order scopes', () => {
     ).item,
     undefined
   );
+});
+
+test('confirmation locks before reclaiming and reserves each counted unit', () => {
+  const confirm = serializedInventoryContract.latestFunctionBody(
+    'private.confirm_order_inventory_reservations(uuid, uuid)'
+  );
+  const locks = findConfirmationLocks(confirm);
+  const selector =
+    serializedInventoryContract.availableUnitWhereClause(confirm);
+  const transition = findReclaimReservationTransition(confirm);
+
+  assert.ok(locks.order);
+  assert.ok(locks.item);
+  assert.ok(selector);
+  assert.ok(transition);
+  assert.equal(confirmationLocksPrecedeReclaim(confirm), true);
+
+  const withoutTransition = confirm.replace(
+    /UPDATE public\.variant_inventory\s+SET status = 'reserved',[\s\S]*?WHERE id = v_unit\.id;/i,
+    'PERFORM v_unit.id;'
+  );
+  assert.equal(findReclaimReservationTransition(withoutTransition), undefined);
+
+  const outOfOrder = `
+    SELECT vi.id FROM variant_inventory vi
+    WHERE vi.merchant_id = p_merchant_id
+      AND vi.variant_id = v_actual_variant_id AND vi.status = 'available'
+      AND vi.order_id IS NULL AND vi.order_item_id IS NULL
+      AND vi.sold_at IS NULL
+    ORDER BY vi.id LIMIT v_needed FOR UPDATE SKIP LOCKED;
+    SELECT 1 FROM orders o
+    WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id FOR UPDATE;
+    SELECT oi.id FROM order_items oi
+    WHERE oi.order_id = p_order_id FOR UPDATE;
+  `;
+  assert.equal(confirmationLocksPrecedeReclaim(outOfOrder), false);
 });

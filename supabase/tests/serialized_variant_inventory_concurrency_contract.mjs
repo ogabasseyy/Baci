@@ -62,8 +62,11 @@ function parameterListPattern(argumentTypes) {
         ? normalized.replace(/\s*\[\s*\]$/, '').trim()
         : normalized;
       const basePattern = baseType.split(' ').map(escapeRegex).join('\\s+');
+      const qualifiedBasePattern = baseType.includes('.')
+        ? basePattern
+        : `(?:(?:pg_catalog|"pg_catalog")\\s*\\.\\s*)?${basePattern}`;
       const arrayPattern = isArray ? '\\s*\\[\\s*\\]' : '(?!\\s*\\[\\s*\\])';
-      return `\\s*${parameterMode}${parameterName}${basePattern}${arrayPattern}(?:\\s+(?:DEFAULT\\b|=)[^,)]*)?\\s*`;
+      return `\\s*${parameterMode}${parameterName}${qualifiedBasePattern}${arrayPattern}(?:\\s+(?:DEFAULT\\b|=)[^,)]*)?\\s*`;
     })
     .join('\\s*,\\s*');
 }

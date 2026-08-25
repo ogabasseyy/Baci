@@ -23,6 +23,10 @@ const publicFunctions = [
   'public.claim_variant_inventory_units_for_order_item(uuid, uuid, uuid)',
   'public.confirm_order_inventory_reservations(uuid, uuid)',
 ];
+const releaseFunctions = [
+  ['public.release_order_inventory_units(uuid, uuid, text)', 'invoker'],
+  ['private.release_order_inventory_units(uuid, uuid, text)', 'definer'],
+];
 
 test('private inventory functions remain inaccessible to authenticated callers', () => {
   for (const signature of privateFunctions) {
@@ -89,4 +93,30 @@ test('later function definitions replace earlier security alterations', () => {
     serializedInventoryPrivileges.effectiveSecurityMode(source, signature),
     'definer'
   );
+});
+
+test('release wrapper and delegate remain executable by authenticated callers', () => {
+  for (const [signature, mode] of releaseFunctions) {
+    assert.equal(
+      serializedInventoryPrivileges.authenticatedCanExecute(
+        migrationSql,
+        signature
+      ),
+      true
+    );
+    assert.equal(
+      serializedInventoryPrivileges.authenticatedCanExecute(
+        `${migrationSql}\nREVOKE ALL ON FUNCTION ${signature} FROM authenticated;`,
+        signature
+      ),
+      false
+    );
+    assert.equal(
+      serializedInventoryPrivileges.effectiveSecurityMode(
+        migrationSql,
+        signature
+      ),
+      mode
+    );
+  }
 });

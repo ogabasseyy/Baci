@@ -90,6 +90,14 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
     findReclaimReservationTransition(conditionalTransition),
     undefined
   );
+  const caseGuardedTransition = confirm.replace(
+    /UPDATE public\.variant_inventory\s+SET status = 'reserved',[\s\S]*?WHERE id = v_unit\.id;/i,
+    (update) => `CASE WHEN false THEN\n${update}\nEND CASE;`
+  );
+  assert.equal(
+    findReclaimReservationTransition(caseGuardedTransition),
+    undefined
+  );
 
   const outOfOrder = `
     SELECT vi.id FROM variant_inventory vi

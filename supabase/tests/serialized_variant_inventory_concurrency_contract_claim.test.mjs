@@ -6,6 +6,14 @@ import { serializedInventorySqlParser } from './serialized_variant_inventory_con
 const { latestFunctionBody } = serializedInventoryContract;
 const { isRequiredConjunct, maskSqlLiterals } = serializedInventorySqlParser;
 
+function hasOnlyUnitIdPredicate(whereClause) {
+  return (
+    whereClause
+      .replace(/(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*v_unit\.id\b/i, '')
+      .replace(/[\s();]/g, '') === ''
+  );
+}
+
 test('serialized claims keep counts item-scoped and reserve each selected unit', () => {
   const claim = latestFunctionBody(
     'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)'
@@ -58,6 +66,7 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
       /\border_id\s*=\s*p_order_id\b/i.test(reserveUpdate[1]) &&
       /\border_item_id\s*=\s*p_order_item_id\b/i.test(reserveUpdate[1]) &&
       isRequiredConjunct(reserveUpdate[2], /\bid\s*=\s*v_unit\.id\b/i) &&
+      hasOnlyUnitIdPredicate(reserveUpdate[2]) &&
       !/\bOR\b|\bFALSE\b|\bNOT\s+TRUE\b|\bIS\s+(?:FALSE|NOT\s+TRUE)\b/i.test(
         reserveUpdate[2]
       ),
@@ -82,6 +91,10 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
         !/\bFALSE\b/i.test(match[2])
       );
     })(),
+    false
+  );
+  assert.equal(
+    hasOnlyUnitIdPredicate("id = v_unit.id AND status = 'reserved'"),
     false
   );
   const whereOnlyAssignments = [

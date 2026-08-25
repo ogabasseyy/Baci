@@ -80,6 +80,20 @@ test('rejects a locked precheck that does not handle a missing row', () => {
   assert.equal(legacyDecrementHasZeroRowHandling(matches[0]), false);
 });
 
+test('does not reuse a stale missing-row handler for the locked precheck', () => {
+  const matches = legacyDecrementMatches(`
+    SELECT id INTO authorized_id FROM products WHERE id = product_id_param;
+    IF NOT FOUND THEN RETURN; END IF;
+    SELECT stock_quantity INTO current_stock
+    FROM products WHERE id = product_id_param FOR UPDATE;
+    IF current_stock < quantity_param THEN RETURN; END IF;
+    UPDATE products SET stock_quantity = stock_quantity - quantity_param
+    WHERE id = product_id_param;
+  `);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), false);
+  assert.equal(legacyDecrementHasZeroRowHandling(matches[0]), false);
+});
+
 test('scans every decrement inside a data-modifying CTE statement', () => {
   const matches = legacyDecrementMatches(`
     WITH changed AS (

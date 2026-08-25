@@ -62,6 +62,16 @@ function releaseTransition(branch, targetStatus) {
   );
 }
 
+function hasReleaseTargetStatusWhitelist(source) {
+  const guard =
+    /IF\s+v_target_status\s+NOT\s+IN\s*\(\s*'available'\s*,\s*'returned'\s*\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]invalid_target_status['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
+      source
+    );
+  return Boolean(
+    guard && guard.index < source.indexOf("IF v_target_status = 'available'")
+  );
+}
+
 test('release serializes on its order before locking reserved inventory', () => {
   const release = latestFunctionBody(
     'private.release_order_inventory_units(uuid, uuid, text)'
@@ -76,6 +86,7 @@ test('release serializes on its order before locking reserved inventory', () => 
     /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
   );
 
+  assert.equal(hasReleaseTargetStatusWhitelist(release), true);
   assert.ok(orderLock, 'release must lock its parent order');
   assert.match(
     release.slice(orderLock.index),
@@ -99,6 +110,15 @@ test('release serializes on its order before locking reserved inventory', () => 
     releaseTransition(
       branches.thenBranch.replace("status = 'available',", ''),
       'available'
+    ),
+    false
+  );
+  assert.equal(
+    hasReleaseTargetStatusWhitelist(
+      release.replace(
+        /IF\s+v_target_status\s+NOT\s+IN[\s\S]*?END\s+IF\s*;/i,
+        ''
+      )
     ),
     false
   );

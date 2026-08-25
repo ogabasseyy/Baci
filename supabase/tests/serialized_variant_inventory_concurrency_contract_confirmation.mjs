@@ -74,7 +74,7 @@ function findReclaimReservationTransition(source) {
   ];
   const transition = updates.find(
     (update) =>
-      !/\bIF\b/i.test(
+      !/\b(?:IF|CASE)\b/i.test(
         beforeCounter
           .slice(0, update.index)
           .split(/\bLOOP\b/i)

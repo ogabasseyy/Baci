@@ -1,13 +1,9 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 import { serializedInventoryConfirmation } from './serialized_variant_inventory_concurrency_contract_confirmation.mjs';
 
 const {
-  migrationsDir,
-  migrationFileNames,
   functionBody,
   latestFunctionBody,
   extractIfBranches,
@@ -99,13 +95,6 @@ test('branch extraction handles nested IF blocks without fixed indentation', () 
   assert.match(branches.thenBranch, /v_nested/);
   assert.match(branches.elseBranch, /v_other_nested/);
 });
-
-function migrationFilesWithLegacyDecrements() {
-  return migrationFileNames().filter((fileName) => {
-    const source = fs.readFileSync(path.join(migrationsDir, fileName), 'utf8');
-    return legacyDecrementMatches(source).length > 0;
-  });
-}
 
 test('serialized claims lock the order before the item and skip locked available units', () => {
   const claim = latestFunctionBody(
@@ -262,26 +251,22 @@ test('legacy decrement scanning recognizes qualified aliases and flexible SQL fo
   `;
   assert.equal(legacyDecrementHasCompareAndSetGuard(subqueryOnly), false);
 });
-test('every legacy stock decrement remains compare-and-set guarded', () => {
-  const migrationFiles = migrationFilesWithLegacyDecrements();
-  assert.ok(
-    migrationFiles.length > 0,
-    'expected at least one legacy stock decrement migration'
-  );
-
-  for (const migration of migrationFiles) {
-    const source = fs.readFileSync(path.join(migrationsDir, migration), 'utf8');
-    const decrements = legacyDecrementMatches(source);
-
+test('effective legacy stock decrements remain compare-and-set guarded', () => {
+  for (const functionName of [
+    'public.decrement_product_stock(uuid, integer)',
+    'public.decrement_variant_stock(uuid, integer)',
+  ]) {
+    const decrements = legacyDecrementMatches(latestFunctionBody(functionName));
+    assert.equal(decrements.length, 1, `${functionName} must decrement stock`);
     for (const decrement of decrements) {
       const [, table, statement] = decrement;
       assert.ok(
         legacyDecrementHasCompareAndSetGuard(statement),
-        `${migration} must compare-and-set guard each ${table} legacy decrement`
+        `${functionName} must compare-and-set guard each ${table} decrement`
       );
       assert.ok(
         legacyDecrementHasZeroRowHandling(decrement),
-        `${migration} must fail closed when each ${table} legacy decrement affects zero rows`
+        `${functionName} must fail closed when each ${table} decrement affects zero rows`
       );
     }
   }

@@ -176,13 +176,9 @@ function matchingLockedPrecheck(statement, decrement) {
       /^\s*IF\s+NOT\s+FOUND\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?\b(?:RAISE\s+EXCEPTION|RETURN)\b(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
         afterLock
       );
-    const earlierMissingRowHandler =
-      /IF\s+NOT\s+FOUND\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?\b(?:RAISE\s+EXCEPTION|RETURN)\b(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;[\s\S]*$/i.test(
-        prefix.slice(0, index)
-      );
     const shortageStart = missingRowHandler?.[0].length ?? 0;
     if (
-      (missingRowHandler || earlierMissingRowHandler) &&
+      missingRowHandler &&
       new RegExp(
         `^\\s*IF\\s+current_stock\\s*<\\s*(?:\\(\\s*)*${quantity}\\b[\\s\\)]*\\s+THEN(?:(?!\\bEND\\s+IF\\b)[\\s\\S])*?\\bRETURN\\b`,
         'i'

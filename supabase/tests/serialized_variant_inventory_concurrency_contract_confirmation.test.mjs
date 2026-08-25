@@ -21,6 +21,15 @@ function privateConfirmationIsRestricted(source) {
   return /^REVOKE\s+ALL\b/i.test(statements.at(-1)?.[0] ?? '');
 }
 
+function privateClaimIsRestricted(source) {
+  const statements = [
+    ...source.matchAll(
+      /(?:REVOKE\s+ALL|GRANT\s+EXECUTE)\s+ON\s+FUNCTION\s+private\.claim_variant_inventory_units_for_order_item_internal\s*\(\s*uuid\s*,\s*uuid\s*,\s*uuid\s*\)[^;]*;/gi
+    ),
+  ].filter((match) => /\bauthenticated\b/i.test(match[0]));
+  return /^REVOKE\s+ALL\b/i.test(statements.at(-1)?.[0] ?? '');
+}
+
 test('confirmation locks require mandatory tenant and order scopes', () => {
   const valid = `
     SELECT 1 FROM orders o WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id FOR UPDATE;
@@ -110,9 +119,16 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
     )
     .join('\n');
   assert.equal(privateConfirmationIsRestricted(migrationSql), true);
+  assert.equal(privateClaimIsRestricted(migrationSql), true);
   assert.equal(
     privateConfirmationIsRestricted(
       `${migrationSql}\nGRANT EXECUTE ON FUNCTION private.confirm_order_inventory_reservations(uuid, uuid) TO authenticated;`
+    ),
+    false
+  );
+  assert.equal(
+    privateClaimIsRestricted(
+      `${migrationSql}\nGRANT EXECUTE ON FUNCTION private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid) TO authenticated;`
     ),
     false
   );

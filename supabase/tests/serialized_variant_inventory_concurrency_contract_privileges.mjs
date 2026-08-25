@@ -83,24 +83,35 @@ function authenticatedCanExecute(source, signature) {
   return state.exists && (state.public || state.authenticated);
 }
 
-function effectiveSecurityMode(source, signature) {
-  const body = serializedInventoryContract.latestFunctionBody(signature, [
-    source,
-  ]);
+function effectiveSecurityMode(sourceOrSources, signature) {
+  const sources = Array.isArray(sourceOrSources)
+    ? sourceOrSources
+    : [sourceOrSources];
+  const body = serializedInventoryContract.latestFunctionBody(
+    signature,
+    sources
+  );
   const createMode = /\bSECURITY\s+(DEFINER|INVOKER)\b/i.exec(body);
-  const createIndex = source.lastIndexOf(body);
-  const alterations = [
-    ...source.matchAll(
-      new RegExp(
-        `ALTER\\s+FUNCTION\\s+${signaturePattern(signature)}\\s+SECURITY\\s+(DEFINER|INVOKER)\\s*;`,
-        'gi'
+  const definitionSourceIndex = sources.findLastIndex((source) =>
+    source.includes(body)
+  );
+  const definitionIndex = sources[definitionSourceIndex].lastIndexOf(body);
+  const alterationPattern = new RegExp(
+    `ALTER\\s+FUNCTION\\s+${signaturePattern(signature)}\\s+SECURITY\\s+(DEFINER|INVOKER)\\s*;`,
+    'gi'
+  );
+  const alterations = sources.flatMap((source, sourceIndex) =>
+    [...source.matchAll(alterationPattern)]
+      .filter(
+        (match) =>
+          sourceIndex > definitionSourceIndex ||
+          (sourceIndex === definitionSourceIndex &&
+            match.index > definitionIndex)
       )
-    ),
-  ];
+      .map((match) => match[1])
+  );
   const latestAlter = alterations.at(-1);
-  return latestAlter && latestAlter.index > createIndex
-    ? latestAlter[1].toLowerCase()
-    : createMode?.[1].toLowerCase();
+  return latestAlter?.toLowerCase() ?? createMode?.[1].toLowerCase();
 }
 
 export const serializedInventoryPrivileges = {

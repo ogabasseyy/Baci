@@ -5,15 +5,15 @@ import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 import { serializedInventoryPrivileges } from './serialized_variant_inventory_concurrency_contract_privileges.mjs';
 
-const migrationSql = serializedInventoryContract
+const migrationSources = serializedInventoryContract
   .migrationFileNames()
   .map((file) =>
     fs.readFileSync(
       path.join(serializedInventoryContract.migrationsDir, file),
       'utf8'
     )
-  )
-  .join('\n');
+  );
+const migrationSql = migrationSources.join('\n');
 
 const privateFunctions = [
   'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)',
@@ -81,14 +81,14 @@ test('public inventory wrappers stay executable and security definer', () => {
     );
     assert.equal(
       serializedInventoryPrivileges.effectiveSecurityMode(
-        migrationSql,
+        migrationSources,
         signature
       ),
       'definer'
     );
     assert.equal(
       serializedInventoryPrivileges.effectiveSecurityMode(
-        `${migrationSql}\nALTER FUNCTION ${signature} SECURITY INVOKER;`,
+        [...migrationSources, `ALTER FUNCTION ${signature} SECURITY INVOKER;`],
         signature
       ),
       'invoker'
@@ -129,7 +129,7 @@ test('release wrapper and delegate remain executable by authenticated callers', 
     );
     assert.equal(
       serializedInventoryPrivileges.effectiveSecurityMode(
-        migrationSql,
+        migrationSources,
         signature
       ),
       mode

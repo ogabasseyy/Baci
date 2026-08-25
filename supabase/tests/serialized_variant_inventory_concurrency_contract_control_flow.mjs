@@ -4,15 +4,15 @@ function pathAt(source, targetIndex) {
   const searchable = serializedInventorySqlParser.maskSqlLiterals(source);
   const stack = [];
   const tokens =
-    /\bEND\s+IF\b|\bELSIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bELSE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b/gi;
+    /\bEND\s+(?:IF|CASE)\b|\bELSIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bWHEN\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bELSE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b/gi;
   for (const token of searchable.matchAll(tokens)) {
     if (token.index >= targetIndex) break;
-    if (/^END\s+IF$/i.test(token[0])) stack.pop();
-    else if (/^(?:ELSIF|ELSE)\b/i.test(token[0])) {
-      if (stack.length > 0) stack[stack.length - 1] = token.index;
-    } else stack.push(token.index);
+    if (/^END\s+(?:IF|CASE)$/i.test(token[0])) stack.pop();
+    else if (/^(?:ELSIF|WHEN|ELSE)\b/i.test(token[0])) {
+      if (stack.length > 0) stack[stack.length - 1].branch = token.index;
+    } else stack.push({ branch: token.index, id: token.index });
   }
-  return stack;
+  return stack.map(({ branch, id }) => `${id}:${branch}`);
 }
 
 function dominatesControlFlow(source, prerequisiteIndex, targetIndex) {

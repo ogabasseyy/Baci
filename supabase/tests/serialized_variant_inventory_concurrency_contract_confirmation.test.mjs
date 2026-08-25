@@ -119,6 +119,12 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
     false
   );
   assert.equal(
+    confirmationLocksPrecedeReclaim(
+      `CASE WHEN false THEN\n${outOfOrder.slice(outOfOrder.indexOf('SELECT 1 FROM orders'))}\nEND CASE;\n${outOfOrder.slice(0, outOfOrder.indexOf('SELECT 1 FROM orders'))}`
+    ),
+    false
+  );
+  assert.equal(
     findReclaimReservationTransition(
       confirm.replace(
         'WHERE id = v_unit.id;',

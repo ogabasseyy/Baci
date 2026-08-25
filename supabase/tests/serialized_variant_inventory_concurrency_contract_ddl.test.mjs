@@ -44,6 +44,16 @@ test('PostgreSQL integer aliases replace the same effective function', () => {
   assert.doesNotMatch(body, /RETURN 'old'/);
 });
 
+test('resolves the requested overload instead of the last sibling', () => {
+  const body = latestFunctionBody('private.fixture(integer)', [
+    "CREATE FUNCTION private.fixture(integer) RETURNS text AS $$ BEGIN RETURN 'target'; END; $$;",
+    "CREATE FUNCTION private.fixture(text) RETURNS text AS $$ BEGIN RETURN 'sibling'; END; $$;",
+  ]);
+
+  assert.match(body, /RETURN 'target'/);
+  assert.doesNotMatch(body, /RETURN 'sibling'/);
+});
+
 test('does not confuse quoted uppercase siblings with unquoted functions', () => {
   const body = latestFunctionBody('private.fixture(uuid)', [
     "CREATE FUNCTION private.fixture(uuid) RETURNS text AS $$ BEGIN RETURN 'safe'; END; $$;",

@@ -52,7 +52,6 @@ function parseFunctionSignature(functionSignature) {
 }
 function parameterListPattern(argumentTypes) {
   if (argumentTypes.length === 0) return '[^)]*';
-  const parameterName = '(?:(?!OUT\\b)(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s+)?';
   const parameterMode = '(?:(?:INOUT|IN|VARIADIC)\\s+)?';
   return argumentTypes
     .map((type) => {
@@ -71,6 +70,7 @@ function parameterListPattern(argumentTypes) {
       const qualifiedBasePattern = baseType.includes('.')
         ? basePattern
         : `(?:(?:pg_catalog|"pg_catalog")\\s*\\.\\s*)?${basePattern}`;
+      const parameterName = `(?:(?!OUT\\b)(?!${qualifiedBasePattern}\\b)(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s+)?`;
       const arrayPattern = isArray ? '\\s*\\[\\s*\\]' : '(?!\\s*\\[\\s*\\])';
       return `\\s*${parameterMode}${parameterName}${qualifiedBasePattern}${arrayPattern}(?:\\s+(?:DEFAULT\\b|=)[^,)]*)?\\s*`;
     })
@@ -92,6 +92,75 @@ function createTargetsFunction(statement, functionName) {
     JSON.stringify(
       normalizedFunctionIdentifier(parseFunctionSignature(functionName).name)
     )
+  );
+}
+function splitParameters(source) {
+  const parameters = [];
+  let start = 0;
+  let depth = 0;
+  let quote;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (quote) {
+      if (char === quote && source[index + 1] === quote) index += 1;
+      else if (char === quote) quote = undefined;
+    } else if (char === "'" || char === '"') quote = char;
+    else if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+    else if (char === ',' && depth === 0) {
+      parameters.push(source.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parameters.push(source.slice(start));
+  return parameters;
+}
+function canonicalType(type) {
+  const normalized = type
+    .trim()
+    .toLowerCase()
+    .replaceAll('"', '')
+    .replace(/^pg_catalog\s*\.\s*/, '')
+    .replace(/\s*\[\s*\]/g, '[]')
+    .replace(/\s+/g, ' ');
+  return { int4: 'integer' }[normalized] ?? normalized;
+}
+function declarationInputTypes(statement) {
+  const declaration =
+    /^\s*CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\s*\.\s*)?(?:"[^"]+"|[a-z_][a-z0-9_]*)\s*\(/i.exec(
+      statement
+    );
+  if (!declaration) return [];
+  const start = declaration[0].length;
+  let depth = 1;
+  let quote;
+  let end = start;
+  for (; end < statement.length && depth > 0; end += 1) {
+    const char = statement[end];
+    if (quote) {
+      if (char === quote && statement[end + 1] === quote) end += 1;
+      else if (char === quote) quote = undefined;
+    } else if (char === "'" || char === '"') quote = char;
+    else if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+  }
+  return splitParameters(statement.slice(start, end - 1)).flatMap((raw) => {
+    const withoutDefault = raw.split(/\s+(?:DEFAULT\b|=)/i, 1)[0].trim();
+    const mode = /^(INOUT|IN|OUT|VARIADIC)\s+/i.exec(withoutDefault);
+    if (mode?.[1].toUpperCase() === 'OUT') return [];
+    const parameter = withoutDefault.slice(mode?.[0].length ?? 0).trim();
+    const tokens = parameter.split(/\s+/);
+    const type = tokens.length > 1 ? tokens.slice(1).join(' ') : parameter;
+    return canonicalType(type);
+  });
+}
+function declarationMatchesSignature(statement, functionName) {
+  const expected =
+    parseFunctionSignature(functionName).argumentTypes.map(canonicalType);
+  const actual = declarationInputTypes(statement);
+  return (
+    createTargetsFunction(statement, functionName) &&
+    JSON.stringify(actual) === JSON.stringify(expected)
   );
 }
 function functionMarkerPattern(functionName, flags = 'i') {
@@ -156,8 +225,11 @@ function latestFunctionBody(functionName, sources = migrationSources) {
     const source = stripSqlComments(rawSource);
     const create = latestStatementMatch(
       source,
-      functionMarkerPattern(functionName, 'gi'),
-      (statement) => createTargetsFunction(statement, functionName)
+      new RegExp(
+        `CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${identifierPattern(name)}\\s*\\(`,
+        'gi'
+      ),
+      (statement) => declarationMatchesSignature(statement, functionName)
     );
     const drop = latestStatementMatch(
       source,
@@ -180,34 +252,6 @@ function latestFunctionBody(functionName, sources = migrationSources) {
   assert.ok(latestBody, `missing ${functionName} in migrations`);
   return latestBody;
 }
-function latestFunctionBodyByName(functionName, sources = migrationSources) {
-  const name = parseFunctionSignature(functionName).name;
-  const marker = new RegExp(
-    `CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${identifierPattern(name)}\\s*\\(`,
-    'gi'
-  );
-  const invalidator = new RegExp(
-    `(?:DROP\\s+(?:FUNCTION|ROUTINE)\\s+(?:IF\\s+EXISTS\\s+)?${identifierPattern(name)}(?:\\s*\\([^;]*\\))?|ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${identifierPattern(name)}\\s*\\([^;]*\\)\\s+(?:RENAME\\s+TO|SET\\s+SCHEMA))[^;]*;`,
-    'gi'
-  );
-  let latestBody;
-  const namePresence = new RegExp(identifierPattern(name), 'i');
-  for (const rawSource of sources) {
-    if (!namePresence.test(rawSource)) continue;
-    const source = stripSqlComments(rawSource);
-    const create = latestStatementMatch(source, marker, (statement) =>
-      createTargetsFunction(statement, name)
-    );
-    const invalidate = latestStatementMatch(source, invalidator);
-    if (invalidate && (!create || invalidate.index > create.index)) {
-      latestBody = undefined;
-    } else if (create) {
-      latestBody = functionBody(source, name, create.index);
-    }
-  }
-  assert.ok(latestBody, `missing ${name} in migrations`);
-  return latestBody;
-}
 const {
   legacyDecrementHasCompareAndSetGuard,
   legacyDecrementHasZeroRowHandling,
@@ -218,7 +262,6 @@ export const serializedInventoryContract = {
   migrationFileNames,
   functionBody,
   latestFunctionBody,
-  latestFunctionBodyByName,
   extractIfBranches,
   legacyDecrementMatches,
   legacyDecrementHasZeroRowHandling,

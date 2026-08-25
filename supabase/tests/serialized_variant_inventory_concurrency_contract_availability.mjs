@@ -20,11 +20,16 @@ function availableUnitWhereClause(source, preserveStrings = false) {
   );
   for (const { index, text } of splitSqlStatements(cleanSource)) {
     const match =
-      /FROM\s+(?:public\s*\.\s*)?variant_inventory(?:\s+(?:AS\s+)?(?!WHERE\b|ORDER\b|LIMIT\b|FOR\b)([a-z_][a-z0-9_]*))?\s+WHERE\b([\s\S]*?)\bORDER\s+BY\b[\s\S]*?\bLIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i.exec(
+      /FROM\s+(?:public\s*\.\s*)?variant_inventory(?:\s+(?:AS\s+)?(?!WHERE\b|ORDER\b|LIMIT\b|FOR\b)([a-z_][a-z0-9_]*))?\s+WHERE\b([\s\S]*?)\bORDER\s+BY\b([\s\S]*?)\bLIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i.exec(
         text
       );
     if (match && !/\b(?:OFFSET|FETCH)\b/i.test(text)) {
-      return { alias: match[1], index: index + match.index, where: match[2] };
+      return {
+        alias: match[1],
+        index: index + match.index,
+        orderBy: match[3],
+        where: match[2],
+      };
     }
   }
   return null;
@@ -64,6 +69,12 @@ function availableUnitPredicatesMatch(source, variantVariable, branchVariable) {
       )
     : null;
   const branchMatch = branchPattern?.exec(valueQuery?.where ?? '');
+  const branchFirst = branchVariable
+    ? new RegExp(
+        `CASE\\s+WHEN\\s+${branchQualifier}branch_id\\s*=\\s*${escapeRegex(branchVariable)}\\b\\s+THEN\\s+0\\s+ELSE\\s+1\\s+END\\s*\\)?\\s+ASC`,
+        'i'
+      ).test(valueQuery?.orderBy ?? '')
+    : true;
   const branchScopedWhere = branchMatch
     ? valueQuery.where.replace(branchMatch[0], 'branch_eligible = true')
     : valueQuery?.where;
@@ -73,6 +84,7 @@ function availableUnitPredicatesMatch(source, variantVariable, branchVariable) {
     patterns.every((pattern, index) =>
       isRequiredConjunct(index === 2 ? valueQuery.where : query.where, pattern)
     ) &&
+    branchFirst &&
     (!branchPattern ||
       (branchMatch !== null &&
         isRequiredGroupedConjunct(

@@ -94,7 +94,8 @@ test('requires branch eligibility when the selector is order-scoped', () => {
       AND ((v_order_branch_id IS NULL AND unit.branch_id IS NULL)
         OR (v_order_branch_id IS NOT NULL AND
           (unit.branch_id = v_order_branch_id OR unit.branch_id IS NULL)))
-    ORDER BY unit.id LIMIT v_needed FOR UPDATE SKIP LOCKED;
+    ORDER BY CASE WHEN unit.branch_id = v_order_branch_id THEN 0 ELSE 1 END ASC, unit.id
+    LIMIT v_needed FOR UPDATE SKIP LOCKED;
   `;
   assert.equal(
     serializedInventoryAvailability.availableUnitPredicatesMatch(
@@ -109,6 +110,17 @@ test('requires branch eligibility when the selector is order-scoped', () => {
       source.replace(
         /\s+AND\s+\(\(v_order_branch_id[\s\S]*?\)\)\s*\n\s*ORDER/i,
         '\nORDER'
+      ),
+      'v_variant_id',
+      'v_order_branch_id'
+    ),
+    false
+  );
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      source.replace(
+        /ORDER BY[\s\S]*?LIMIT/i,
+        'ORDER BY unit.created_at, unit.id LIMIT'
       ),
       'v_variant_id',
       'v_order_branch_id'

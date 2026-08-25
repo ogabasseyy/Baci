@@ -54,15 +54,16 @@ function releaseTransition(branch, targetStatus) {
     return false;
   }
   const clearsOwnership =
-    targetStatus !== 'available' ||
-    [
-      'order_id',
-      'order_item_id',
-      'reserved_at',
-      'reservation_expires_at',
-    ].every((column) =>
-      new RegExp(`\\b${column}\\s*=\\s*NULL\\b`, 'i').test(update[1])
-    );
+    targetStatus === 'available'
+      ? [
+          'order_id',
+          'order_item_id',
+          'reserved_at',
+          'reservation_expires_at',
+        ].every((column) =>
+          new RegExp(`\\b${column}\\s*=\\s*NULL\\b`, 'i').test(update[1])
+        )
+      : !/\b(?:order_id|order_item_id)\s*=/i.test(update[1]);
   return (
     clearsOwnership &&
     /^(?:\s*\(\s*)*(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*v_unit\s*\.\s*id(?:\s*\)\s*)*$/i.test(
@@ -72,12 +73,19 @@ function releaseTransition(branch, targetStatus) {
 }
 
 function hasReleaseTargetStatusWhitelist(source) {
+  const defaultStatus =
+    /\bv_target_status\s+text\s*:=\s*COALESCE\s*\(\s*p_target_status\s*,\s*'available'\s*\)\s*;/i.exec(
+      source
+    );
   const guard =
     /IF\s+v_target_status\s+NOT\s+IN\s*\(\s*'available'\s*,\s*'returned'\s*\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]invalid_target_status['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
       source
     );
   return Boolean(
-    guard && guard.index < source.indexOf("IF v_target_status = 'available'")
+    defaultStatus &&
+      guard &&
+      defaultStatus.index < guard.index &&
+      guard.index < source.indexOf("IF v_target_status = 'available'")
   );
 }
 
@@ -195,6 +203,15 @@ test('release serializes on its order before locking reserved inventory', () => 
     false
   );
   assert.equal(
+    hasReleaseTargetStatusWhitelist(
+      release.replace(
+        /COALESCE\s*\(\s*p_target_status\s*,\s*'available'\s*\)/i,
+        'p_target_status'
+      )
+    ),
+    false
+  );
+  assert.equal(
     releaseTransition(
       "UPDATE variant_inventory SET source = $$status = 'returned'$$ WHERE id = v_unit.id;",
       'returned'
@@ -208,6 +225,16 @@ test('release serializes on its order before locking reserved inventory', () => 
         'WHERE id = v_unit.id OR merchant_id = p_merchant_id;'
       ),
       'available'
+    ),
+    false
+  );
+  assert.equal(
+    releaseTransition(
+      branches.elseBranch.replace(
+        "SET status = 'returned',",
+        "SET status = 'returned', order_id = NULL, order_item_id = NULL,"
+      ),
+      'returned'
     ),
     false
   );

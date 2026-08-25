@@ -39,10 +39,26 @@ function pathAt(source, targetIndex) {
 }
 
 function dominatesControlFlow(source, prerequisiteIndex, targetIndex) {
+  if (prerequisiteIndex >= targetIndex) return false;
   const prerequisitePath = pathAt(source, prerequisiteIndex);
   const targetPath = pathAt(source, targetIndex);
-  return prerequisitePath.every(
-    (branch, index) => targetPath[index] === branch
+  const terminator =
+    /\bRETURN\b(?!\s+(?:NEXT|QUERY)\b)|\bRAISE\s+EXCEPTION\b/gi;
+  const searchable = serializedInventorySqlParser.maskSqlLiterals(source);
+  const isReachable = (index) => {
+    const target = pathAt(source, index);
+    for (const match of searchable.slice(0, index).matchAll(terminator)) {
+      const terminatorPath = pathAt(source, match.index);
+      if (terminatorPath.every((branch, depth) => target[depth] === branch)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  return (
+    isReachable(prerequisiteIndex) &&
+    isReachable(targetIndex) &&
+    prerequisitePath.every((branch, index) => targetPath[index] === branch)
   );
 }
 

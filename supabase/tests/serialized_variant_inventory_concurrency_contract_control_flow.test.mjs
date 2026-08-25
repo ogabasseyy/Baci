@@ -55,3 +55,15 @@ test('does not let zero-iteration loops dominate later statements', () => {
     false
   );
 });
+
+test('rejects protected operations after an unconditional early return', () => {
+  const source = 'RETURN success;\nauthorize;\nlock_row;';
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      source,
+      source.indexOf('authorize'),
+      source.indexOf('lock_row')
+    ),
+    false
+  );
+});

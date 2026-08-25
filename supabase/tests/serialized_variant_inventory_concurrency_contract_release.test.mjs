@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 import { serializedInventoryConfirmation } from './serialized_variant_inventory_concurrency_contract_confirmation.mjs';
+import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventoryNestedQueries } from './serialized_variant_inventory_concurrency_contract_nested_queries.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
@@ -37,8 +38,17 @@ function releaseTransition(branch, targetStatus) {
     /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([\s\S]*?)\s+WHERE\s+([\s\S]*?);/i.exec(
       searchableBranch
     );
+  const counters = [
+    ...searchableBranch.matchAll(/\bv_count\s*:=\s*v_count\s*\+\s*1\b/gi),
+  ];
   if (
     !update ||
+    counters.length !== 1 ||
+    !serializedInventoryControlFlow.dominatesControlFlow(
+      searchableBranch,
+      update.index,
+      counters[0].index
+    ) ||
     !new RegExp(`\\bstatus\\s*=\\s*'${targetStatus}'`, 'i').test(update[1])
   ) {
     return false;
@@ -55,9 +65,8 @@ function releaseTransition(branch, targetStatus) {
     );
   return (
     clearsOwnership &&
-    isRequiredConjunct(
-      update[2],
-      /(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*v_unit\s*\.\s*id\b/i
+    /^(?:\s*\(\s*)*(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*v_unit\s*\.\s*id(?:\s*\)\s*)*$/i.test(
+      update[2]
     )
   );
 }
@@ -144,6 +153,26 @@ test('release serializes on its order before locking reserved inventory', () => 
   assert.equal(
     releaseTransition(
       branches.thenBranch.replace("status = 'available',", ''),
+      'available'
+    ),
+    false
+  );
+  assert.equal(
+    releaseTransition(
+      branches.thenBranch.replace(
+        /UPDATE\s+public\.variant_inventory[\s\S]*?WHERE\s+id\s*=\s*v_unit\.id;/i,
+        (update) => `IF false THEN\n${update}\nEND IF;`
+      ),
+      'available'
+    ),
+    false
+  );
+  assert.equal(
+    releaseTransition(
+      branches.thenBranch.replace(
+        'WHERE id = v_unit.id;',
+        "WHERE id = v_unit.id AND status = 'available';"
+      ),
       'available'
     ),
     false

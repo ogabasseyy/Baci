@@ -43,3 +43,15 @@ test('closes SQL CASE expressions before later control-flow checks', () => {
     false
   );
 });
+
+test('does not let zero-iteration loops dominate later statements', () => {
+  const source = 'WHILE false LOOP\nlock_row;\nEND LOOP;\nselector;';
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      source,
+      source.indexOf('lock_row'),
+      source.indexOf('selector')
+    ),
+    false
+  );
+});

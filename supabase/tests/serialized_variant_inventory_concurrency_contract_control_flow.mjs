@@ -4,10 +4,15 @@ function pathAt(source, targetIndex) {
   const searchable = serializedInventorySqlParser.maskSqlLiterals(source);
   const stack = [];
   const tokens =
-    /\bEND\s+(?:IF|CASE)\b|\bEND\b(?!\s+(?:IF|CASE|LOOP)\b)|\bELSIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bWHEN\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bELSE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b/gi;
+    /\bEND\s+(?:IF|CASE|LOOP)\b|\bEND\b(?!\s+(?:IF|CASE|LOOP)\b)|\bELSIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bWHEN\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bELSE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bWHILE\b(?:(?!\bLOOP\b)[\s\S])*?\bLOOP\b|\bFOR\s+[a-z_][a-z0-9_]*\s+IN\b(?:(?!\bLOOP\b)[\s\S])*?\bLOOP\b|\bLOOP\b/gi;
   for (const token of searchable.matchAll(tokens)) {
     if (token.index >= targetIndex) break;
     if (/^END\s+IF$/i.test(token[0]) && stack.at(-1)?.kind === 'if') {
+      stack.pop();
+    } else if (
+      /^END\s+LOOP$/i.test(token[0]) &&
+      stack.at(-1)?.kind === 'loop'
+    ) {
       stack.pop();
     } else if (
       /^END(?:\s+CASE)?$/i.test(token[0]) &&
@@ -20,7 +25,11 @@ function pathAt(source, targetIndex) {
       stack.push({
         branch: token.index,
         id: token.index,
-        kind: /^CASE$/i.test(token[0]) ? 'case' : 'if',
+        kind: /^CASE$/i.test(token[0])
+          ? 'case'
+          : /LOOP$/i.test(token[0])
+            ? 'loop'
+            : 'if',
       });
     }
   }

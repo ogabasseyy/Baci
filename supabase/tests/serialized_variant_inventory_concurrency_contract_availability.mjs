@@ -23,7 +23,7 @@ function availableUnitWhereClause(source, preserveStrings = false) {
       /FROM\s+(?:public\s*\.\s*)?variant_inventory(?:\s+(?:AS\s+)?(?!WHERE\b|ORDER\b|LIMIT\b|FOR\b)([a-z_][a-z0-9_]*))?\s+WHERE\b([\s\S]*?)\bORDER\s+BY\b[\s\S]*?\bLIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i.exec(
         text
       );
-    if (match) {
+    if (match && !/\b(?:OFFSET|FETCH)\b/i.test(text)) {
       return { alias: match[1], index: index + match.index, where: match[2] };
     }
   }

@@ -85,6 +85,38 @@ test('requires the available lifecycle status', () => {
   );
 });
 
+test('requires branch eligibility when the selector is order-scoped', () => {
+  const source = `
+    SELECT unit.id FROM variant_inventory unit
+    WHERE unit.merchant_id = p_merchant_id AND unit.variant_id = v_variant_id
+      AND unit.status = 'available' AND unit.order_id IS NULL
+      AND unit.order_item_id IS NULL AND unit.sold_at IS NULL
+      AND ((v_order_branch_id IS NULL AND unit.branch_id IS NULL)
+        OR (v_order_branch_id IS NOT NULL AND
+          (unit.branch_id = v_order_branch_id OR unit.branch_id IS NULL)))
+    ORDER BY unit.id LIMIT v_needed FOR UPDATE SKIP LOCKED;
+  `;
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      source,
+      'v_variant_id',
+      'v_order_branch_id'
+    ),
+    true
+  );
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      source.replace(
+        /\s+AND\s+\(\(v_order_branch_id[\s\S]*?\)\)\s*\n\s*ORDER/i,
+        '\nORDER'
+      ),
+      'v_variant_id',
+      'v_order_branch_id'
+    ),
+    false
+  );
+});
+
 test('rejects availability clauses supplied only by a nested query', () => {
   const source = `
     SELECT unit.id FROM variant_inventory unit

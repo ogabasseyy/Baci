@@ -123,7 +123,7 @@ function canonicalType(type) {
     .replace(/^pg_catalog\s*\.\s*/, '')
     .replace(/\s*\[\s*\]/g, '[]')
     .replace(/\s+/g, ' ');
-  return { int4: 'integer' }[normalized] ?? normalized;
+  return { decimal: 'numeric', int4: 'integer' }[normalized] ?? normalized;
 }
 function declarationInputTypes(statement) {
   const declaration =

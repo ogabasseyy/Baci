@@ -92,4 +92,18 @@ function isRequiredConjunct(source, pattern) {
   );
 }
 
-export const serializedInventoryPredicates = { isRequiredConjunct };
+function isRequiredGroupedConjunct(source, pattern) {
+  const expression = unwrapOuterParentheses(source);
+  if (splitTopLevel(expression, 'OR').length > 1) return false;
+  return splitTopLevel(expression, 'AND').some((branch) => {
+    pattern.lastIndex = 0;
+    const matches = pattern.test(unwrapOuterParentheses(branch));
+    pattern.lastIndex = 0;
+    return matches;
+  });
+}
+
+export const serializedInventoryPredicates = {
+  isRequiredConjunct,
+  isRequiredGroupedConjunct,
+};

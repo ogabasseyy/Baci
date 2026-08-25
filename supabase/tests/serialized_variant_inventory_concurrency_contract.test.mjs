@@ -111,7 +111,7 @@ test('serialized claims lock the order before the item and skip locked available
     'same-item retries must serialize on the order item row'
   );
   assert.ok(
-    availableUnitPredicatesMatch(claim, 'v_variant_id'),
+    availableUnitPredicatesMatch(claim, 'v_variant_id', 'v_order_branch_id'),
     'claims must enforce each scoped availability predicate'
   );
   assert.ok(
@@ -161,7 +161,11 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
   const confirmationLocks =
     serializedInventoryConfirmation.findConfirmationLocks(confirm);
   assert.ok(
-    availableUnitPredicatesMatch(confirm, 'v_actual_variant_id'),
+    availableUnitPredicatesMatch(
+      confirm,
+      'v_actual_variant_id',
+      'v_order.branch_id'
+    ),
     'payment confirmation must enforce each scoped availability predicate'
   );
   assert.ok(
@@ -231,7 +235,7 @@ test('legacy decrement scanning recognizes qualified aliases and flexible SQL fo
   assert.equal(legacyDecrementHasZeroRowHandling(wrapped[1]), true);
   assert.equal(legacyDecrementHasZeroRowHandling(unguarded[0]), false);
   const equivalent = legacyDecrementMatches(
-    'UPDATE products SET stock_quantity = stock_quantity - inventory_rec.total_quantity WHERE (inventory_rec.total_quantity <= (stock_quantity));'
+    'UPDATE products SET stock_quantity = stock_quantity - inventory_rec.total_quantity WHERE id = inventory_rec.product_id AND (inventory_rec.total_quantity <= (stock_quantity));'
   );
   assert.equal(equivalent.length, 1);
   assert.equal(legacyDecrementHasCompareAndSetGuard(equivalent[0][2]), true);
@@ -239,7 +243,8 @@ test('legacy decrement scanning recognizes qualified aliases and flexible SQL fo
   const nestedWhere = `
     UPDATE products
     SET stock_quantity = stock_quantity - stock_rec.total_quantity
-    WHERE id IN (SELECT id FROM products WHERE stock_quantity >= stock_rec.total_quantity)
+    WHERE id = stock_rec.product_id
+      AND id IN (SELECT id FROM products WHERE stock_quantity >= stock_rec.total_quantity)
       AND (stock_quantity >= stock_rec.total_quantity);
   `;
   assert.equal(legacyDecrementHasCompareAndSetGuard(nestedWhere), true);

@@ -10,7 +10,7 @@ const {
 
 test('recognizes quoted lowercase legacy inventory tables', () => {
   const matches = legacyDecrementMatches(
-    'UPDATE public."products" SET stock_quantity = stock_quantity - 1 WHERE stock_quantity >= 1;'
+    'UPDATE public."products" SET stock_quantity = stock_quantity - 1 WHERE id = product_id_param AND stock_quantity >= 1;'
   );
 
   assert.equal(matches.length, 1);
@@ -119,6 +119,18 @@ test('binds compare-and-set stock bounds to the updated table', () => {
     FROM product_variants AS pv
     WHERE p.id = product_id_param AND pv.stock_quantity >= quantity_param;
   `);
+  assert.equal(matches.length, 1);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), false);
+});
+
+test('requires compare-and-set decrements to target one inventory row', () => {
+  const matches = legacyDecrementMatches(`
+    UPDATE products
+    SET stock_quantity = stock_quantity - quantity_param
+    WHERE stock_quantity >= quantity_param;
+    IF NOT FOUND THEN RAISE EXCEPTION 'insufficient_stock'; END IF;
+  `);
+
   assert.equal(matches.length, 1);
   assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), false);
 });

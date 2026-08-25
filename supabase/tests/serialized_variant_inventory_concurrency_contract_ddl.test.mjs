@@ -44,6 +44,16 @@ test('PostgreSQL integer aliases replace the same effective function', () => {
   assert.doesNotMatch(body, /RETURN 'old'/);
 });
 
+test('PostgreSQL decimal aliases replace numeric function arguments', () => {
+  const body = latestFunctionBody('private.fixture(numeric)', [
+    "CREATE FUNCTION private.fixture(numeric) RETURNS text AS $$ BEGIN RETURN 'old'; END; $$;",
+    "CREATE OR REPLACE FUNCTION private.fixture(decimal) RETURNS text AS $$ BEGIN RETURN 'new'; END; $$;",
+  ]);
+
+  assert.match(body, /RETURN 'new'/);
+  assert.doesNotMatch(body, /RETURN 'old'/);
+});
+
 test('resolves the requested overload instead of the last sibling', () => {
   const body = latestFunctionBody('private.fixture(integer)', [
     "CREATE FUNCTION private.fixture(integer) RETURNS text AS $$ BEGIN RETURN 'target'; END; $$;",

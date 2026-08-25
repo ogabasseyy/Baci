@@ -3,6 +3,7 @@ import { serializedInventorySqlParser } from './serialized_variant_inventory_con
 
 const {
   isRequiredConjunct,
+  isRequiredGroupedConjunct,
   maskSqlLiterals,
   splitSqlStatements,
   stripSqlComments,
@@ -46,19 +47,38 @@ function availableUnitPredicatePatterns(variantVariable, alias) {
   ];
 }
 
-function availableUnitPredicatesMatch(source, variantVariable) {
+function availableUnitPredicatesMatch(source, variantVariable, branchVariable) {
   const query = availableUnitWhereClause(source);
   const valueQuery = availableUnitWhereClause(source, true);
   const patterns = availableUnitPredicatePatterns(
     variantVariable,
     query?.alias
   );
+  const branchQualifier = query?.alias
+    ? `${escapeRegex(query.alias)}\\s*\\.\\s*`
+    : '(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?';
+  const branchPattern = branchVariable
+    ? new RegExp(
+        `\\(\\s*${escapeRegex(branchVariable)}\\s+IS\\s+NULL\\s+AND\\s+${branchQualifier}branch_id\\s+IS\\s+NULL\\s*\\)\\s+OR\\s+\\(\\s*${escapeRegex(branchVariable)}\\s+IS\\s+NOT\\s+NULL\\s+AND\\s+\\(\\s*${branchQualifier}branch_id\\s*=\\s*${escapeRegex(branchVariable)}\\b\\s+OR\\s+${branchQualifier}branch_id\\s+IS\\s+NULL\\s*\\)\\s*\\)`,
+        'i'
+      )
+    : null;
+  const branchMatch = branchPattern?.exec(valueQuery?.where ?? '');
+  const branchScopedWhere = branchMatch
+    ? valueQuery.where.replace(branchMatch[0], 'branch_eligible = true')
+    : valueQuery?.where;
   return (
     query !== null &&
     valueQuery !== null &&
     patterns.every((pattern, index) =>
       isRequiredConjunct(index === 2 ? valueQuery.where : query.where, pattern)
-    )
+    ) &&
+    (!branchPattern ||
+      (branchMatch !== null &&
+        isRequiredGroupedConjunct(
+          branchScopedWhere,
+          /^\s*branch_eligible\s*=\s*true\s*$/i
+        )))
   );
 }
 

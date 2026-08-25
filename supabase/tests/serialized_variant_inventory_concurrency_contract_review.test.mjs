@@ -175,7 +175,8 @@ test('accepts unrelated disjunctions when the stock bound remains conjunctive', 
   const matches = legacyDecrementMatches(`
     UPDATE products
     SET stock_quantity = stock_quantity - stock_rec.total_quantity
-    WHERE (id = stock_rec.product_id OR legacy_id = stock_rec.product_id)
+    WHERE id = stock_rec.product_id
+      AND (active = true OR legacy_active = true)
       AND stock_quantity >= stock_rec.total_quantity;
   `);
 
@@ -256,10 +257,10 @@ test('scans scalar legacy decrement operands', () => {
   const scalar = legacyDecrementMatches(`
     UPDATE products
     SET stock_quantity = (stock_quantity - p_quantity)
-    WHERE stock_quantity >= p_quantity;
+    WHERE id = p_product_id AND stock_quantity >= p_quantity;
     UPDATE product_variants
     SET stock_quantity = stock_quantity - 1
-    WHERE stock_quantity >= 1;
+    WHERE id = p_variant_id AND stock_quantity >= 1;
   `);
 
   assert.equal(scalar.length, 2);

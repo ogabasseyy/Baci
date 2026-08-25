@@ -126,7 +126,7 @@ function decrementQuantityPattern(decrement) {
 }
 function requiredRowReference(whereClause) {
   const equality = new RegExp(
-    `(?:(?:${identifier})\\s*\\.\\s*)?id\\s*=\\s*((?:${identifier}\\s*\\.\\s*)*${identifier})`,
+    `(?:(?:${identifier})\\s*\\.\\s*)*id\\s*=\\s*((?:${identifier}\\s*\\.\\s*)*${identifier})`,
     'gi'
   );
   for (const candidate of whereClause.matchAll(equality)) {
@@ -218,11 +218,13 @@ function legacyDecrementHasCompareAndSetGuard(statement) {
     `(?:\\(\\s*)*${targetStock}\\s*>=\\s*(?:\\(\\s*)*${quantity}\\b(?:\\s*\\))*|(?:\\(\\s*)*${quantity}\\s*<=\\s*(?:\\(\\s*)*${targetStock}(?:\\s*\\))*`,
     'i'
   );
+  const whereClause = masked
+    .slice(where.index + where[0].length)
+    .split(/\bRETURNING\b/i, 1)[0];
+  if (!requiredRowReference(whereClause)) return false;
   return (
-    isRequiredConjunct(
-      masked.slice(where.index + where[0].length),
-      comparison
-    ) || matchingLockedPrecheck(masked, decrement)
+    isRequiredConjunct(whereClause, comparison) ||
+    matchingLockedPrecheck(masked, decrement)
   );
 }
 function legacyDecrementHasZeroRowHandling(match) {

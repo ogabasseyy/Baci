@@ -275,6 +275,8 @@ function maskSqlLiterals(source, { preserveStrings = false } = {}) {
 export const serializedInventorySqlParser = {
   findDollarQuoteEnd,
   isRequiredConjunct: serializedInventoryPredicates.isRequiredConjunct,
+  isRequiredGroupedConjunct:
+    serializedInventoryPredicates.isRequiredGroupedConjunct,
   maskSqlLiterals,
   splitSqlStatements,
   stripSqlComments,

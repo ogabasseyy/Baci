@@ -36,12 +36,14 @@ function findConfirmationLocks(source) {
   function find(table, predicates) {
     for (const { index, text } of statements) {
       const query = new RegExp(
-        `FROM\\s+(?:public\\s*\\.\\s*)?${table}(?:\\s+(?:AS\\s+)?([a-z_][a-z0-9_]*))?[^;]*?WHERE\\s+([\\s\\S]*?)FOR\\s+UPDATE(?!\\s+(?:OF\\s+[a-z_][a-z0-9_]*\\s+)?(?:SKIP\\s+LOCKED|NOWAIT)\\b)`,
+        `FROM\\s+(?:public\\s*\\.\\s*)?${table}(?:\\s+(?:AS\\s+)?([a-z_][a-z0-9_]*))?[^;]*?WHERE\\s+([\\s\\S]*?)FOR\\s+UPDATE(?!\\s+(?:OF\\s+[a-z_][a-z0-9_]*\\s+)?(?:SKIP\\s+LOCKED|NOWAIT)\\b)(?:\\s+OF\\s+([a-z_][a-z0-9_]*))?(?=\\s*(?:;|LOOP\\b))`,
         'i'
       ).exec(text);
       if (
         query &&
         !/\b(?:LIMIT|OFFSET|FETCH)\b/i.test(query[2]) &&
+        (!query[3] ||
+          (query[1] && query[3].toLowerCase() === query[1].toLowerCase())) &&
         predicates(query[1]).every((predicate) =>
           isRequiredConjunct(query[2], predicate)
         )

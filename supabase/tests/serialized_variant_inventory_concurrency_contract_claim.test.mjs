@@ -4,7 +4,7 @@ import { serializedInventoryContract } from './serialized_variant_inventory_conc
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const { latestFunctionBody } = serializedInventoryContract;
-const { isRequiredConjunct } = serializedInventorySqlParser;
+const { isRequiredConjunct, maskSqlLiterals } = serializedInventorySqlParser;
 
 test('serialized claims keep counts item-scoped and reserve each selected unit', () => {
   const claim = latestFunctionBody(
@@ -42,7 +42,11 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
 
   const reserveUnitUpdate =
     /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([^;]*?)\s+WHERE\s+([^;]*);/gi;
-  const reserveUpdate = [...claim.matchAll(reserveUnitUpdate)].find(
+  const reserveUpdate = [
+    ...maskSqlLiterals(claim, { preserveStrings: true }).matchAll(
+      reserveUnitUpdate
+    ),
+  ].find(
     (match) =>
       /\bstatus\s*=\s*'reserved'/i.test(match[1]) &&
       /\border_id\s*=\s*p_order_id\b/i.test(match[1]) &&
@@ -88,6 +92,17 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
   assert.equal(
     whereOnlyAssignments !== null &&
       /\bstatus\s*=\s*'reserved'/i.test(whereOnlyAssignments[1]),
+    false
+  );
+  const literalAssignments = [
+    ...maskSqlLiterals(
+      "UPDATE variant_inventory SET source = $$status = 'reserved', order_id = p_order_id, order_item_id = p_order_item_id$$ WHERE id = v_unit.id;",
+      { preserveStrings: true }
+    ).matchAll(reserveUnitUpdate),
+  ].at(0);
+  assert.equal(
+    literalAssignments !== undefined &&
+      /\bstatus\s*=\s*'reserved'/i.test(literalAssignments[1]),
     false
   );
 });

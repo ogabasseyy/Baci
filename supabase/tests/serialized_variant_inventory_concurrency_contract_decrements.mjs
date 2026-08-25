@@ -7,12 +7,15 @@ const identifier = '(?:"[a-z_][a-z0-9_]*"|[a-z_][a-z0-9_]*)';
 const legacyTable = '("product_variants"|product_variants|"products"|products)';
 const publicSchema = '(?:(?:"public"|public)\\s*\\.\\s*)?';
 const stockColumn = '(?:"stock_quantity"|stock_quantity)';
+const quantityAtom =
+  '(?:(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)*[a-z_][a-z0-9_]*|\\d+(?:\\.\\d+)?)';
+const quantityExpression = `${quantityAtom}(?:\\s*[*+/-]\\s*${quantityAtom})*`;
 const updatePattern = new RegExp(
   `UPDATE\\s+(?:ONLY\\s+)?${publicSchema}${legacyTable}(?:\\s+(?:AS\\s+)?(${identifier}))?\\s+SET\\b`,
   'i'
 );
 const stockDecrement = new RegExp(
-  `${stockColumn}\\s*=\\s*(?:GREATEST\\s*\\(\\s*)?(?:\\(\\s*)*(?:(?:${identifier})\\s*\\.\\s*)?${stockColumn}\\s*-\\s*(?:\\(\\s*)*((?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)*[a-z_][a-z0-9_]*|\\d+(?:\\.\\d+)?)(?:\\s*\\))*\\s*(?:,\\s*0\\s*)?(?:\\s*\\))*`,
+  `${stockColumn}\\s*=\\s*(?:GREATEST\\s*\\(\\s*)?(?:\\(\\s*)*(?:(?:${identifier})\\s*\\.\\s*)?${stockColumn}\\s*-\\s*(?:\\(\\s*)*(${quantityExpression})(?:\\s*\\))*\\s*(?:,\\s*0\\s*)?(?:\\s*\\))*`,
   'i'
 );
 
@@ -23,11 +26,12 @@ function normalizedIdentifier(value) {
   return value.replace(/^"|"$/g, '').toLowerCase();
 }
 function referencePattern(value) {
-  return value
-    .replace(/\s+/g, '')
-    .split('.')
-    .map(escapeRegex)
-    .join('\\s*\\.\\s*');
+  return escapeRegex(value.replace(/\s+/g, ''))
+    .replaceAll('\\.', '\\s*\\.\\s*')
+    .replaceAll('\\*', '\\s*\\*\\s*')
+    .replaceAll('\\+', '\\s*\\+\\s*')
+    .replaceAll('\\-', '\\s*-\\s*')
+    .replaceAll('/', '\\s*/\\s*');
 }
 function legacyDecrementMatches(source) {
   const cleanSource = stripSqlComments(source);

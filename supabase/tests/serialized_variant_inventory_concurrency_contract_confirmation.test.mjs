@@ -22,6 +22,17 @@ test('confirmation locks require mandatory tenant and order scopes', () => {
   );
   assert.equal(
     findConfirmationLocks(
+      valid
+        .replace(
+          'FROM orders o WHERE',
+          'FROM orders o JOIN merchants m ON m.id = o.merchant_id WHERE'
+        )
+        .replace('FOR UPDATE;', 'FOR UPDATE OF m;')
+    ).order,
+    undefined
+  );
+  assert.equal(
+    findConfirmationLocks(
       valid.replace('o.id = p_order_id', 'o.id = p_order_id OR true')
     ).order,
     undefined

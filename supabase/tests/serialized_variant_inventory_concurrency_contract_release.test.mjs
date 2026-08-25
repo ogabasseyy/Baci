@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
+import { serializedInventoryConfirmation } from './serialized_variant_inventory_concurrency_contract_confirmation.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const { extractIfBranches, latestFunctionBody } = serializedInventoryContract;
 const { isRequiredConjunct } = serializedInventorySqlParser;
-const orderLock =
-  /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id[^;]*?FOR\s+UPDATE(?!\s+(?:SKIP\s+LOCKED|NOWAIT|OF\s+[a-z_][a-z0-9_]*\s+(?:SKIP\s+LOCKED|NOWAIT))\b)(?:\s+OF\s+[a-z_][a-z0-9_]*)?/i;
 
 function releaseLockMatches(source) {
   const query =
@@ -22,9 +21,15 @@ function releaseLockMatches(source) {
 }
 
 function releaseTransition(branch, targetStatus) {
+  const searchableBranch = serializedInventorySqlParser.maskSqlLiterals(
+    branch,
+    {
+      preserveStrings: true,
+    }
+  );
   const update =
     /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([\s\S]*?)\s+WHERE\s+([\s\S]*?);/i.exec(
-      branch
+      searchableBranch
     );
   if (
     !update ||
@@ -58,23 +63,21 @@ test('release serializes on its order before locking reserved inventory', () => 
   const publicRelease = latestFunctionBody(
     'public.release_order_inventory_units(uuid, uuid, text)'
   );
+  const orderLock =
+    serializedInventoryConfirmation.findConfirmationLocks(release).order;
   const branches = extractIfBranches(
     release,
     /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
   );
 
-  assert.match(release, orderLock, 'release must lock its parent order');
+  assert.ok(orderLock, 'release must lock its parent order');
   assert.match(
-    release,
-    new RegExp(
-      `${orderLock.source}\\s*;\\s*IF\\s+NOT\\s+FOUND\\s+THEN\\s+RAISE\\s+EXCEPTION\\s+['"]order_not_found['"]`,
-      'i'
-    ),
+    release.slice(orderLock.index),
+    /FOR\s+UPDATE(?:\s+OF\s+[a-z_][a-z0-9_]*)?\s*;\s*IF\s+NOT\s+FOUND\s+THEN\s+RAISE\s+EXCEPTION\s+['"]order_not_found['"]/i,
     'release must fail closed when its scoped parent order does not exist'
   );
   assert.ok(
-    release.search(orderLock) <
-      release.indexOf("IF v_target_status = 'available'"),
+    orderLock.index < release.indexOf("IF v_target_status = 'available'"),
     'release must lock its parent order before inventory reconciliation'
   );
   assert.equal(releaseLockMatches(branches.thenBranch), true);
@@ -90,6 +93,13 @@ test('release serializes on its order before locking reserved inventory', () => 
     releaseTransition(
       branches.thenBranch.replace("status = 'available',", ''),
       'available'
+    ),
+    false
+  );
+  assert.equal(
+    releaseTransition(
+      "UPDATE variant_inventory SET source = $$status = 'returned'$$ WHERE id = v_unit.id;",
+      'returned'
     ),
     false
   );
@@ -130,12 +140,14 @@ test('release inventory locks remain blocking and target their selected rows', (
     ),
     false
   );
-  assert.doesNotMatch(
-    'FROM orders o WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id FOR UPDATE OF o SKIP LOCKED',
-    orderLock
-  );
-  assert.doesNotMatch(
-    'FROM orders o WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id FOR UPDATE OF o NOWAIT',
-    orderLock
-  );
+  for (const unsafe of [
+    'FROM orders o WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id FOR UPDATE OF o SKIP LOCKED;',
+    'FROM orders o WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id FOR UPDATE OF o NOWAIT;',
+    'FROM orders o JOIN merchants m ON m.id = o.merchant_id WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id FOR UPDATE OF m;',
+  ]) {
+    assert.equal(
+      serializedInventoryConfirmation.findConfirmationLocks(unsafe).order,
+      undefined
+    );
+  }
 });

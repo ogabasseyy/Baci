@@ -108,3 +108,14 @@ test('binds compare-and-set stock bounds to the updated table', () => {
   assert.equal(matches.length, 1);
   assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), false);
 });
+
+test('binds stock bounds to the complete decrement expression', () => {
+  const matches = legacyDecrementMatches(`
+    UPDATE products
+    SET stock_quantity = stock_quantity - quantity_param * 2
+    WHERE id = product_id_param AND stock_quantity >= quantity_param;
+    IF NOT FOUND THEN RAISE EXCEPTION 'insufficient_stock'; END IF;
+  `);
+  assert.equal(matches.length, 1);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), false);
+});

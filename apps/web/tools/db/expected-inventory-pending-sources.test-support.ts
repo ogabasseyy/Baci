@@ -9,4 +9,9 @@ export const EXPECTED_INVENTORY_PENDING_SOURCES = [
       'supabase/migrations/20260825123500_fail_closed_missing_stock_rows.sql',
     sha256: '754d41bb57151cd31b21937d5bc6b00397de43c6ff1070dd3725c37982866448',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260825173500_authorize_serialized_inventory_claims.sql',
+    sha256: '6e1d8936c5a69ab3c98825e93914a31fa9cf3689bd3984758e956fec1c0b7b7d',
+  },
 ] as const;

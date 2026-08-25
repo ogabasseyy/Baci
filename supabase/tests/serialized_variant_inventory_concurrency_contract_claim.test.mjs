@@ -29,6 +29,9 @@ function findEffectiveReserveUpdate(source) {
       /\bstatus\s*=\s*'reserved'/i.test(match[1]) &&
       /\border_id\s*=\s*p_order_id\b/i.test(match[1]) &&
       /\border_item_id\s*=\s*p_order_item_id\b/i.test(match[1]) &&
+      /\breservation_expires_at\s*=\s*CASE\s+WHEN\s+v_is_confirmed_hold\s+THEN\s+NULL\s+ELSE\s+now\(\)\s*\+\s*interval\s+'2 hours'\s+END\b/i.test(
+        match[1]
+      ) &&
       serializedInventoryControlFlow.dominatesControlFlow(
         masked,
         match.index,
@@ -43,6 +46,28 @@ function claimedIncrementCount(source) {
       /\bv_claimed_count\s*:=\s*v_claimed_count\s*\+\s*1\b/gi
     ) ?? []
   ).length;
+}
+
+function strictShortagePrecedesSuccess(source) {
+  const executable = maskSqlLiterals(source, { preserveStrings: true });
+  const shortage =
+    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+(?:\(\s*)?v_reserved_count\s*\+\s*v_claimed_count\s*(?:\s*\))?\s*<\s*v_qty\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]serialized_inventory_unavailable['"]/i.exec(
+      executable
+    );
+  const success = /RETURN\s+v_fulfillment_data\s*;/i.exec(executable);
+  if (!shortage || !success) return false;
+  const unreachableWrapper = /IF\s+false\s+THEN\s*$/i.test(
+    executable.slice(0, shortage.index)
+  );
+  return (
+    !unreachableWrapper &&
+    shortage.index < success.index &&
+    serializedInventoryControlFlow.dominatesControlFlow(
+      executable,
+      shortage.index,
+      shortage.index + shortage[0].indexOf('RAISE')
+    )
+  );
 }
 
 test('serialized claims keep counts item-scoped and reserve each selected unit', () => {
@@ -64,6 +89,12 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
         'v_claimed_count := v_claimed_count + 1;',
         'v_claimed_count := v_claimed_count + 1;\nv_claimed_count := v_claimed_count + 1;'
       )
+    ),
+    undefined
+  );
+  assert.equal(
+    findEffectiveReserveUpdate(
+      claim.replace(/\s*reservation_expires_at\s*=\s*CASE[\s\S]*?END,?/i, '')
     ),
     undefined
   );
@@ -175,17 +206,35 @@ test('serialized claims authorize callers and fail strict shortages before succe
   const publicClaim = latestFunctionBody(
     'public.claim_variant_inventory_units_for_order_item(uuid, uuid, uuid)'
   );
+  const executablePublicClaim = maskSqlLiterals(publicClaim, {
+    preserveStrings: true,
+  });
   const authorization =
     /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\.role\(\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(p_merchant_id\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]forbidden['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
-      publicClaim
+      executablePublicClaim
     );
   const delegation =
     /RETURN\s+private\.claim_variant_inventory_units_for_order_item_internal\s*\(/i.exec(
-      publicClaim
+      executablePublicClaim
     );
   assert.ok(authorization, 'public claims must authorize the merchant');
   assert.ok(delegation, 'public claims must delegate to the internal claim');
-  assert.ok(authorization.index < delegation.index);
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      executablePublicClaim,
+      authorization.index,
+      delegation.index
+    ),
+    true
+  );
+  const decoyClaim = maskSqlLiterals(
+    publicClaim.replace(
+      authorization[0],
+      `PERFORM $decoy$${authorization[0]}$decoy$;`
+    ),
+    { preserveStrings: true }
+  );
+  assert.doesNotMatch(decoyClaim, /RAISE\s+EXCEPTION\s+['"]forbidden['"]/i);
 
   const claim = latestFunctionBody(
     'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)'
@@ -197,15 +246,13 @@ test('serialized claims authorize callers and fail strict shortages before succe
   const success = /RETURN\s+v_fulfillment_data\s*;/i.exec(claim);
   assert.ok(shortage);
   assert.ok(success);
+  assert.equal(strictShortagePrecedesSuccess(claim), true);
   assert.equal(
-    serializedInventoryControlFlow.dominatesControlFlow(
-      claim,
-      shortage.index,
-      shortage.index + shortage[0].indexOf('RAISE')
+    strictShortagePrecedesSuccess(
+      claim.replace(shortage[0], `IF false THEN\n${shortage[0]}\nEND IF;`)
     ),
-    true
+    false
   );
-  assert.ok(shortage.index < success.index);
   const relocated = `${claim.replace(shortage[0], '')}\n${shortage[0]}`;
   assert.ok(
     relocated.lastIndexOf(shortage[0]) >

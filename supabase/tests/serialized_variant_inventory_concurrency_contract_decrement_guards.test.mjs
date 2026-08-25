@@ -22,6 +22,16 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
       true
     );
     assert.equal(
+      serializedInventoryDecrementGuards.decrementsRequestedQuantity(body),
+      true
+    );
+    assert.equal(
+      serializedInventoryDecrementGuards.decrementsRequestedQuantity(
+        body.replace(/\bquantity_param\b/gi, 'quantity_param * 2')
+      ),
+      false
+    );
+    assert.equal(
       serializedInventoryDecrementGuards.hasPositiveQuantityGuard(
         body.replace(/IF\s+quantity_param\s*<=\s*0[\s\S]*?END\s+IF\s*;/i, '')
       ),
@@ -42,6 +52,17 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
           /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\.role\(\)\)[\s\S]*?END\s+IF\s*;/i,
           ''
         )
+      ),
+      false
+    );
+    const authorization =
+      /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\.role\(\)\)[\s\S]*?END\s+IF\s*;/i.exec(
+        body
+      );
+    assert.ok(authorization);
+    assert.equal(
+      serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
+        `${body.replace(authorization[0], '')}\n${authorization[0]}`
       ),
       false
     );

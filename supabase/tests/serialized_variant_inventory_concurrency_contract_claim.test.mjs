@@ -19,10 +19,11 @@ function findEffectiveReserveUpdate(source) {
   const reserveUnitUpdate =
     /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([^;]*?)\s+WHERE\s+([^;]*);/gi;
   const masked = maskSqlLiterals(source, { preserveStrings: true });
-  const counter = /v_claimed_count\s*:=\s*v_claimed_count\s*\+\s*1/i.exec(
-    masked
-  );
-  if (!counter) return undefined;
+  const counters = [
+    ...masked.matchAll(/v_claimed_count\s*:=\s*v_claimed_count\s*\+\s*1/gi),
+  ];
+  if (counters.length !== 1) return undefined;
+  const [counter] = counters;
   return [...masked.matchAll(reserveUnitUpdate)].find(
     (match) =>
       /\bstatus\s*=\s*'reserved'/i.test(match[1]) &&
@@ -36,6 +37,14 @@ function findEffectiveReserveUpdate(source) {
   );
 }
 
+function claimedIncrementCount(source) {
+  return (
+    maskSqlLiterals(source).match(
+      /\bv_claimed_count\s*:=\s*v_claimed_count\s*\+\s*1\b/gi
+    ) ?? []
+  ).length;
+}
+
 test('serialized claims keep counts item-scoped and reserve each selected unit', () => {
   const claim = latestFunctionBody(
     'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)'
@@ -47,6 +56,26 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
   assert.ok(
     reservedCountQueries.length > 0,
     'claim must populate reserved counts'
+  );
+  assert.equal(claimedIncrementCount(claim), 1);
+  assert.equal(
+    findEffectiveReserveUpdate(
+      claim.replace(
+        'v_claimed_count := v_claimed_count + 1;',
+        'v_claimed_count := v_claimed_count + 1;\nv_claimed_count := v_claimed_count + 1;'
+      )
+    ),
+    undefined
+  );
+  const neededAssignment =
+    /\bv_needed\s*:=\s*v_qty\s*-\s*v_reserved_count\s*;/i;
+  assert.match(claim, neededAssignment);
+  assert.doesNotMatch(
+    claim.replace(
+      'v_needed := v_qty - v_reserved_count;',
+      'v_needed := v_qty - v_reserved_count + 1;'
+    ),
+    neededAssignment
   );
   assert.ok(
     reservedCountQueries.every((query) =>

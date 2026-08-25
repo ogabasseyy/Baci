@@ -64,9 +64,13 @@ function findReclaimReservationTransition(source) {
     preserveStrings: true,
   });
   const remainder = cleanSource.slice(selector.index);
-  const counter =
-    /\bv_reclaimed_count\s*:=\s*v_reclaimed_count\s*\+\s*1\b/i.exec(remainder);
-  if (!counter) return undefined;
+  const counters = [
+    ...remainder.matchAll(
+      /\bv_reclaimed_count\s*:=\s*v_reclaimed_count\s*\+\s*1\b/gi
+    ),
+  ];
+  if (counters.length !== 1) return undefined;
+  const [counter] = counters;
   const beforeCounter = remainder.slice(0, counter.index);
   const updates = [
     ...beforeCounter.matchAll(

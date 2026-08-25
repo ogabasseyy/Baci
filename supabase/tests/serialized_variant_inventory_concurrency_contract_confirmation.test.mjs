@@ -76,6 +76,46 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
   assert.ok(selector);
   assert.ok(transition);
   assert.equal(confirmationLocksPrecedeReclaim(confirm), true);
+  assert.equal(
+    findReclaimReservationTransition(
+      confirm.replace(
+        'v_reclaimed_count := v_reclaimed_count + 1;',
+        'v_reclaimed_count := v_reclaimed_count + 1;\nv_reclaimed_count := v_reclaimed_count + 1;'
+      )
+    ),
+    undefined
+  );
+  const neededAssignment =
+    /\bv_needed\s*:=\s*v_item\s*\.\s*quantity\s*-\s*v_reserved_count\s*;/i;
+  assert.match(confirm, neededAssignment);
+  assert.doesNotMatch(
+    confirm.replace(
+      'v_needed := v_item.quantity - v_reserved_count;',
+      'v_needed := v_item.quantity - v_reserved_count + 1;'
+    ),
+    neededAssignment
+  );
+  const confirmedHoldGuard =
+    /IF\s+NOT\s+v_is_confirmed_hold\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]order_not_confirmed_for_inventory_hold['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i;
+  assert.match(confirm, confirmedHoldGuard);
+  assert.doesNotMatch(
+    confirm.replace(confirmedHoldGuard, ''),
+    confirmedHoldGuard
+  );
+  const fullyReservedExpiryClear =
+    /IF\s+v_reserved_count\s*=\s*v_item\.quantity\s+THEN[\s\S]*?UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL[\s\S]*?WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL\s*;/i;
+  const partialExpiryClear =
+    /ELSE[\s\S]*?UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL[\s\S]*?WHERE\s+order_item_id\s*=\s*v_item\.id\s*;/i;
+  assert.match(confirm, fullyReservedExpiryClear);
+  assert.match(confirm, partialExpiryClear);
+  const withoutExistingExpiryClears = confirm
+    .replace(
+      fullyReservedExpiryClear,
+      'IF v_reserved_count = v_item.quantity THEN NULL;'
+    )
+    .replace(partialExpiryClear, 'ELSE NULL;');
+  assert.doesNotMatch(withoutExistingExpiryClears, fullyReservedExpiryClear);
+  assert.doesNotMatch(withoutExistingExpiryClears, partialExpiryClear);
 
   const withoutTransition = confirm.replace(
     /UPDATE public\.variant_inventory\s+SET status = 'reserved',[\s\S]*?WHERE id = v_unit\.id;/i,

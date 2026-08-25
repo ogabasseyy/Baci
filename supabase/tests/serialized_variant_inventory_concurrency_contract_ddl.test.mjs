@@ -34,6 +34,16 @@ test('schema-qualified built-in types replace the effective function body', () =
   assert.doesNotMatch(body, /RETURN 'old'/);
 });
 
+test('PostgreSQL integer aliases replace the same effective function', () => {
+  const body = latestFunctionBody('private.fixture(integer)', [
+    "CREATE FUNCTION private.fixture(integer) RETURNS text AS $$ BEGIN RETURN 'old'; END; $$;",
+    "CREATE OR REPLACE FUNCTION private.fixture(int4) RETURNS text AS $$ BEGIN RETURN 'new'; END; $$;",
+  ]);
+
+  assert.match(body, /RETURN 'new'/);
+  assert.doesNotMatch(body, /RETURN 'old'/);
+});
+
 test('does not confuse quoted uppercase siblings with unquoted functions', () => {
   const body = latestFunctionBody('private.fixture(uuid)', [
     "CREATE FUNCTION private.fixture(uuid) RETURNS text AS $$ BEGIN RETURN 'safe'; END; $$;",

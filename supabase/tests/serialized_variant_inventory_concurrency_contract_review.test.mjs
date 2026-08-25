@@ -216,6 +216,22 @@ test('accepts unrelated disjunctions when the stock bound remains conjunctive', 
   );
 });
 
+test('rejects locked decrement prechecks hidden in an unreachable branch', () => {
+  const [decrement] = legacyDecrementMatches(`
+    IF false THEN
+      SELECT stock_quantity INTO current_stock FROM products
+      WHERE id = stock_rec.product_id FOR UPDATE;
+      IF NOT FOUND THEN RETURN; END IF;
+      IF current_stock < stock_rec.total_quantity THEN RETURN; END IF;
+    END IF;
+    UPDATE products SET stock_quantity = stock_quantity - stock_rec.total_quantity
+    WHERE id = stock_rec.product_id;
+  `);
+
+  assert.equal(legacyDecrementHasCompareAndSetGuard(decrement[2]), false);
+  assert.equal(legacyDecrementHasZeroRowHandling(decrement), false);
+});
+
 test('resolves function declarations separated by block comments', () => {
   const source = [
     'CREATE FUNCTION private.fixture(integer) RETURNS void AS $$',

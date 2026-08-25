@@ -1,4 +1,5 @@
 import { serializedInventoryAvailability } from './serialized_variant_inventory_concurrency_contract_availability.mjs';
+import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventoryNestedQueries } from './serialized_variant_inventory_concurrency_contract_nested_queries.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
@@ -83,7 +84,9 @@ function findReclaimReservationTransition(source) {
       /\bstatus\s*=\s*'reserved'/i.test(update[1]) &&
       /\border_id\s*=\s*p_order_id\b/i.test(update[1]) &&
       /\border_item_id\s*=\s*v_item\s*\.\s*id\b/i.test(update[1]) &&
-      isRequiredConjunct(update[2], /\bid\s*=\s*v_unit\s*\.\s*id\b/i)
+      /^(?:\s*\(\s*)*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?id\s*=\s*v_unit\s*\.\s*id(?:\s*\)\s*)*$/i.test(
+        update[2]
+      )
   );
   if (!transition) return undefined;
   return { index: selector.index + transition.index };
@@ -97,6 +100,16 @@ function confirmationLocksPrecedeReclaim(source) {
     locks.order &&
       locks.item &&
       selector &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        source,
+        locks.order.index,
+        selector.index
+      ) &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        source,
+        locks.item.index,
+        selector.index
+      ) &&
       locks.order.index < selector.index &&
       locks.item.index < selector.index
   );

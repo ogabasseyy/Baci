@@ -61,7 +61,13 @@ function parameterListPattern(argumentTypes) {
       const baseType = isArray
         ? normalized.replace(/\s*\[\s*\]$/, '').trim()
         : normalized;
-      const basePattern = baseType.split(' ').map(escapeRegex).join('\\s+');
+      const typeAliases = {
+        integer: '(?:integer|int4)',
+        int4: '(?:integer|int4)',
+      };
+      const basePattern =
+        typeAliases[baseType.toLowerCase()] ??
+        baseType.split(' ').map(escapeRegex).join('\\s+');
       const qualifiedBasePattern = baseType.includes('.')
         ? basePattern
         : `(?:(?:pg_catalog|"pg_catalog")\\s*\\.\\s*)?${basePattern}`;
@@ -143,7 +149,10 @@ function latestStatementMatch(source, pattern, validator = () => true) {
 }
 function latestFunctionBody(functionName, sources = migrationSources) {
   let latestBody;
+  const { name } = parseFunctionSignature(functionName);
+  const namePresence = new RegExp(identifierPattern(name), 'i');
   for (const rawSource of sources) {
+    if (!namePresence.test(rawSource)) continue;
     const source = stripSqlComments(rawSource);
     const create = latestStatementMatch(
       source,
@@ -171,6 +180,34 @@ function latestFunctionBody(functionName, sources = migrationSources) {
   assert.ok(latestBody, `missing ${functionName} in migrations`);
   return latestBody;
 }
+function latestFunctionBodyByName(functionName, sources = migrationSources) {
+  const name = parseFunctionSignature(functionName).name;
+  const marker = new RegExp(
+    `CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${identifierPattern(name)}\\s*\\(`,
+    'gi'
+  );
+  const invalidator = new RegExp(
+    `(?:DROP\\s+(?:FUNCTION|ROUTINE)\\s+(?:IF\\s+EXISTS\\s+)?${identifierPattern(name)}(?:\\s*\\([^;]*\\))?|ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${identifierPattern(name)}\\s*\\([^;]*\\)\\s+(?:RENAME\\s+TO|SET\\s+SCHEMA))[^;]*;`,
+    'gi'
+  );
+  let latestBody;
+  const namePresence = new RegExp(identifierPattern(name), 'i');
+  for (const rawSource of sources) {
+    if (!namePresence.test(rawSource)) continue;
+    const source = stripSqlComments(rawSource);
+    const create = latestStatementMatch(source, marker, (statement) =>
+      createTargetsFunction(statement, name)
+    );
+    const invalidate = latestStatementMatch(source, invalidator);
+    if (invalidate && (!create || invalidate.index > create.index)) {
+      latestBody = undefined;
+    } else if (create) {
+      latestBody = functionBody(source, name, create.index);
+    }
+  }
+  assert.ok(latestBody, `missing ${name} in migrations`);
+  return latestBody;
+}
 const {
   legacyDecrementHasCompareAndSetGuard,
   legacyDecrementHasZeroRowHandling,
@@ -181,6 +218,7 @@ export const serializedInventoryContract = {
   migrationFileNames,
   functionBody,
   latestFunctionBody,
+  latestFunctionBodyByName,
   extractIfBranches,
   legacyDecrementMatches,
   legacyDecrementHasZeroRowHandling,

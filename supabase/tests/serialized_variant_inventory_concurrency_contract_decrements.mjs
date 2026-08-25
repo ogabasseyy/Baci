@@ -1,3 +1,4 @@
+import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 import { hasImmediateUnconditionalException } from './serialized_variant_inventory_concurrency_contract_zero_row.mjs';
 
@@ -165,7 +166,17 @@ function matchingLockedPrecheck(statement, decrement) {
       `\\bSELECT\\s+(?:(?:${identifier})\\s*\\.\\s*)?${stockColumn}\\s+INTO\\s+current_stock\\s+FROM\\s+${publicSchema}${legacyTable}(?:\\s+(?:AS\\s+)?${identifier})?\\s+WHERE\\b([\\s\\S]*?)\\bFOR\\s+UPDATE\\s*;?$`,
       'i'
     ).exec(text.trim());
-    if (!select || normalizedIdentifier(select[1]) !== target.table) continue;
+    if (
+      !select ||
+      normalizedIdentifier(select[1]) !== target.table ||
+      !serializedInventoryControlFlow.dominatesControlFlow(
+        prefix,
+        index + select.index,
+        decrement.index
+      )
+    ) {
+      continue;
+    }
     const rowEquality = new RegExp(
       `(?:(?:${identifier})\\s*\\.\\s*)?id\\s*=\\s*${referencePattern(target.rowReference)}\\b`,
       'i'

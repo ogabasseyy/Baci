@@ -112,4 +112,19 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
     WHERE oi.order_id = p_order_id FOR UPDATE;
   `;
   assert.equal(confirmationLocksPrecedeReclaim(outOfOrder), false);
+  assert.equal(
+    confirmationLocksPrecedeReclaim(
+      `IF false THEN\n${outOfOrder.slice(outOfOrder.indexOf('SELECT 1 FROM orders'))}\nEND IF;\n${outOfOrder.slice(0, outOfOrder.indexOf('SELECT 1 FROM orders'))}`
+    ),
+    false
+  );
+  assert.equal(
+    findReclaimReservationTransition(
+      confirm.replace(
+        'WHERE id = v_unit.id;',
+        "WHERE id = v_unit.id AND status = 'reserved';"
+      )
+    ),
+    undefined
+  );
 });

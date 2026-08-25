@@ -72,6 +72,16 @@ function hasReleaseTargetStatusWhitelist(source) {
   );
 }
 
+function releaseBranchesMatch(branches) {
+  return (
+    branches.elsifBranches.length === 0 &&
+    releaseLockMatches(branches.thenBranch) &&
+    releaseLockMatches(branches.elseBranch) &&
+    releaseTransition(branches.thenBranch, 'available') &&
+    releaseTransition(branches.elseBranch, 'returned')
+  );
+}
+
 test('release serializes on its order before locking reserved inventory', () => {
   const release = latestFunctionBody(
     'private.release_order_inventory_units(uuid, uuid, text)'
@@ -85,6 +95,12 @@ test('release serializes on its order before locking reserved inventory', () => 
     release,
     /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
   );
+  const executablePublicRelease = serializedInventorySqlParser.maskSqlLiterals(
+    publicRelease,
+    {
+      preserveStrings: true,
+    }
+  );
 
   assert.equal(hasReleaseTargetStatusWhitelist(release), true);
   assert.ok(orderLock, 'release must lock its parent order');
@@ -97,14 +113,33 @@ test('release serializes on its order before locking reserved inventory', () => 
     orderLock.index < release.indexOf("IF v_target_status = 'available'"),
     'release must lock its parent order before inventory reconciliation'
   );
-  assert.equal(releaseLockMatches(branches.thenBranch), true);
-  assert.equal(releaseLockMatches(branches.elseBranch), true);
-  assert.equal(releaseTransition(branches.thenBranch, 'available'), true);
-  assert.equal(releaseTransition(branches.elseBranch, 'returned'), true);
+  assert.equal(releaseBranchesMatch(branches), true);
   assert.match(
-    publicRelease,
+    executablePublicRelease,
     /RETURN\s+private\s*\.\s*release_order_inventory_units\s*\(\s*p_merchant_id\s*,\s*p_order_id\s*,\s*p_target_status\s*\)\s*;/i,
     'public release must delegate all validated parameters unchanged'
+  );
+  assert.doesNotMatch(
+    serializedInventorySqlParser.maskSqlLiterals(
+      publicRelease.replace(
+        /RETURN\s+private\s*\.\s*release_order_inventory_units[\s\S]*?;/i,
+        "$decoy$RETURN private.release_order_inventory_units(p_merchant_id, p_order_id, p_target_status);$decoy$ RETURN '{}'::jsonb;"
+      ),
+      { preserveStrings: true }
+    ),
+    /RETURN\s+private\s*\.\s*release_order_inventory_units/i
+  );
+  assert.equal(
+    releaseBranchesMatch(
+      extractIfBranches(
+        release.replace(
+          /\s+ELSE\s+/i,
+          "\nELSIF v_target_status = 'returned' THEN\n  NULL;\nELSE\n"
+        ),
+        /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/im
+      )
+    ),
+    false
   );
   assert.equal(
     releaseTransition(

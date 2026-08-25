@@ -252,12 +252,21 @@ test('legacy decrement scanning recognizes qualified aliases and flexible SQL fo
   assert.equal(legacyDecrementHasCompareAndSetGuard(subqueryOnly), false);
 });
 test('effective legacy stock decrements remain compare-and-set guarded', () => {
-  for (const functionName of [
-    'public.decrement_product_stock(uuid, integer)',
-    'public.decrement_variant_stock(uuid, integer)',
+  for (const [functionName, resolveByName, expectedDecrements] of [
+    ['public.decrement_product_stock(uuid, integer)', false, 1],
+    ['public.decrement_variant_stock(uuid, integer)', false, 1],
+    ['private.create_storefront_order', true, 2],
+    ['private.transfer_quiz_prize_to_winner_v2', true, 2],
   ]) {
-    const decrements = legacyDecrementMatches(latestFunctionBody(functionName));
-    assert.equal(decrements.length, 1, `${functionName} must decrement stock`);
+    const body = resolveByName
+      ? serializedInventoryContract.latestFunctionBodyByName(functionName)
+      : latestFunctionBody(functionName);
+    const decrements = legacyDecrementMatches(body);
+    assert.equal(
+      decrements.length,
+      expectedDecrements,
+      `${functionName} must decrement stock`
+    );
     for (const decrement of decrements) {
       const [, table, statement] = decrement;
       assert.ok(

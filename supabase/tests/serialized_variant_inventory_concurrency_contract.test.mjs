@@ -185,7 +185,7 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
   );
   assert.match(
     confirm,
-    /IF\s*\(\s*v_reserved_count\s*\+\s*v_reclaimed_count\s*\)\s*<\s*v_item\.quantity\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?v_exceptions\s*:=\s*v_exceptions\s*\|\|\s*jsonb_build_object\([^;]*?'code'\s*,\s*'late_payment_reservation_lost'[\s\S]*?RETURN\s+jsonb_build_object\([^;]*?'exceptionCodes'\s*,\s*v_exceptions\b/i,
+    /IF\s*\(\s*v_reserved_count\s*\+\s*v_claimed_in_loop\s*\)\s*<\s*v_item\.quantity\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?v_exceptions\s*:=\s*v_exceptions\s*\|\|\s*jsonb_build_object\([^;]*?'code'\s*,\s*'late_payment_reservation_lost'[\s\S]*?RETURN\s+jsonb_build_object\([^;]*?'exceptionCodes'\s*,\s*v_exceptions\b/i,
     'strict payment confirmation must append and return reservation-loss exception codes'
   );
   assert.ok(

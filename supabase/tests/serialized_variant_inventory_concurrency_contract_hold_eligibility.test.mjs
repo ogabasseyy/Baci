@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
+
+const { latestFunctionBody } = serializedInventoryContract;
+
+function hasConfirmedHoldEligibility(source, orderPrefix) {
+  const paymentStatus = `${orderPrefix}payment_status`;
+  const paymentMethod = `${orderPrefix}payment_method`;
+  const eligibility = new RegExp(
+    `IF\\s+${paymentStatus}\\s+IN\\s*\\(\\s*'paid'\\s*,\\s*'bnpl_approved'\\s*\\)\\s+OR\\s*\\(\\s*lower\\(trim\\(${paymentMethod}\\)\\)\\s+IN\\s*\\(\\s*'pod'\\s*,\\s*'pay_on_delivery'\\s*\\)\\s+AND\\s+${paymentStatus}\\s*=\\s*'pending'\\s*\\)\\s+THEN[\\s\\S]*?v_is_confirmed_hold\\s*:=\\s*true\\s*;`,
+    'i'
+  );
+  return (
+    /v_is_confirmed_hold\s+boolean\s*:=\s*false\s*;/i.test(source) &&
+    eligibility.test(source)
+  );
+}
+
+test('claim and confirmation preserve protected wrapper modes and hold eligibility', () => {
+  const publicClaim = latestFunctionBody(
+    'public.claim_variant_inventory_units_for_order_item(uuid, uuid, uuid)'
+  );
+  const publicConfirm = latestFunctionBody(
+    'public.confirm_order_inventory_reservations(uuid, uuid)'
+  );
+  assert.match(publicClaim, /SECURITY\s+DEFINER/i);
+  assert.match(publicConfirm, /SECURITY\s+DEFINER/i);
+  assert.doesNotMatch(
+    publicClaim.replace(/SECURITY\s+DEFINER/i, 'SECURITY INVOKER'),
+    /SECURITY\s+DEFINER/i
+  );
+  assert.doesNotMatch(
+    publicConfirm.replace(/SECURITY\s+DEFINER/i, 'SECURITY INVOKER'),
+    /SECURITY\s+DEFINER/i
+  );
+
+  for (const [functionName, prefix] of [
+    [
+      'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)',
+      'v_',
+    ],
+    ['private.confirm_order_inventory_reservations(uuid, uuid)', 'v_order\\.'],
+  ]) {
+    const body = latestFunctionBody(functionName);
+    assert.equal(hasConfirmedHoldEligibility(body, prefix), true);
+    assert.equal(
+      hasConfirmedHoldEligibility(
+        body.replace(
+          'v_is_confirmed_hold boolean := false;',
+          'v_is_confirmed_hold boolean := true;'
+        ),
+        prefix
+      ),
+      false
+    );
+  }
+});

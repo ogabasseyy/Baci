@@ -19,4 +19,9 @@ export const EXPECTED_INVENTORY_PENDING_SOURCES = [
       'supabase/migrations/20260825180500_authorize_inventory_confirmation.sql',
     sha256: '0e4c28c67751b4ceb90b75d937fb6a2cc569a325380d75a660e8696622c4b533',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260825185000_scope_confirmation_reclaims_per_item.sql',
+    sha256: 'b48e1267c12f890c7eb7a51dddaf9aefacd2c635319334303b738707be999f20',
+  },
 ] as const;

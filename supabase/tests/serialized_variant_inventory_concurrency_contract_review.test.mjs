@@ -282,12 +282,12 @@ test('binds returned payment exceptions to an actual reservation shortfall', () 
     'private.confirm_order_inventory_reservations(uuid, uuid)'
   );
   const shortfallException =
-    /IF\s*\(\s*v_reserved_count\s*\+\s*v_reclaimed_count\s*\)\s*<\s*v_item\.quantity\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?v_exceptions\s*:=\s*v_exceptions\s*\|\|\s*jsonb_build_object\([^;]*?'code'\s*,\s*'late_payment_reservation_lost'[\s\S]*?RETURN\s+jsonb_build_object\([^;]*?'exceptionCodes'\s*,\s*v_exceptions\b/i;
+    /IF\s*\(\s*v_reserved_count\s*\+\s*v_claimed_in_loop\s*\)\s*<\s*v_item\.quantity\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?v_exceptions\s*:=\s*v_exceptions\s*\|\|\s*jsonb_build_object\([^;]*?'code'\s*,\s*'late_payment_reservation_lost'[\s\S]*?RETURN\s+jsonb_build_object\([^;]*?'exceptionCodes'\s*,\s*v_exceptions\b/i;
 
   assert.match(confirm, shortfallException);
   assert.doesNotMatch(
     [
-      'IF (v_reserved_count + v_reclaimed_count) < v_item.quantity THEN',
+      'IF (v_reserved_count + v_claimed_in_loop) < v_item.quantity THEN',
       '  NULL;',
       'END IF;',
       "IF v_effective_policy = 'serialized_strict' THEN",

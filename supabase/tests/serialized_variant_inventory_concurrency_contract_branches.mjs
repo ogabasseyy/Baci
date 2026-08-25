@@ -14,9 +14,16 @@ function extractIfBranches(source, openingPattern) {
   currentLines = thenLines;
   for (const line of lines.slice(openingIndex + 1)) {
     const sqlLine = line.replace(/'(?:''|[^'])*'|"(?:""|[^"])*"/g, '');
-    const endCaseCount = (sqlLine.match(/\bEND\s+CASE\b/gi) ?? []).length;
-    const caseTokenCount = (sqlLine.match(/\bCASE\b/gi) ?? []).length;
-    caseDepth = Math.max(0, caseDepth + caseTokenCount - endCaseCount * 2);
+    const caseTokens = sqlLine.matchAll(
+      /\bEND\s+CASE\b|\bCASE\b|\bEND\b(?!\s+(?:IF|LOOP|CASE)\b)/gi
+    );
+    for (const token of caseTokens) {
+      if (/^CASE$/i.test(token[0])) {
+        caseDepth += 1;
+      } else if (caseDepth > 0) {
+        caseDepth -= 1;
+      }
+    }
     if (/^\s*IF\b/i.test(line)) {
       depth += 1;
     } else if (/^\s*END\s+IF\b/i.test(line)) {

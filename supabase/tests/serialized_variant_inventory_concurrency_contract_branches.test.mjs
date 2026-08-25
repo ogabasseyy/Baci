@@ -12,7 +12,24 @@ test('does not mistake CASE ELSE for the target IF branch', () => {
       '  v_label := CASE v_state',
       "    WHEN 'ready' THEN 'ready'",
       "    ELSE 'other'",
-      '  END CASE;',
+      '  END;',
+      '  PERFORM lock_available_units();',
+      'ELSE',
+      '  PERFORM release_reserved_units();',
+      'END IF;',
+    ].join('\n'),
+    targetIf
+  );
+
+  assert.match(branches.thenBranch, /lock_available_units/);
+  assert.match(branches.elseBranch, /release_reserved_units/);
+});
+
+test('tracks a same-line SQL CASE expression through its END token', () => {
+  const branches = extractIfBranches(
+    [
+      "IF v_target_status = 'available' THEN",
+      "  v_label := CASE WHEN v_state = 'ready' THEN 'ready' ELSE 'other' END;",
       '  PERFORM lock_available_units();',
       'ELSE',
       '  PERFORM release_reserved_units();',

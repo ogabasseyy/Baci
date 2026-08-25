@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { serializedInventoryAvailability } from './serialized_variant_inventory_concurrency_contract_availability.mjs';
 import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
+import { serializedInventoryDecrements } from './serialized_variant_inventory_concurrency_contract_decrements.mjs';
 import { serializedInventoryLocks } from './serialized_variant_inventory_concurrency_contract_locks.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
-import { hasImmediateUnconditionalException } from './serialized_variant_inventory_concurrency_contract_zero_row.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const migrationsDir = path.join(repoRoot, 'supabase', 'migrations');
@@ -18,12 +18,8 @@ function migrationFileNames() {
 const migrationSources = migrationFileNames().map((fileName) =>
   fs.readFileSync(path.join(migrationsDir, fileName), 'utf8')
 );
-const {
-  findDollarQuoteEnd,
-  isRequiredConjunct,
-  splitSqlStatements,
-  stripSqlComments,
-} = serializedInventorySqlParser;
+const { findDollarQuoteEnd, splitSqlStatements, stripSqlComments } =
+  serializedInventorySqlParser;
 const { extractIfBranches } = serializedInventoryBranches;
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -150,140 +146,11 @@ function latestFunctionBody(functionName, sources = migrationSources) {
   assert.ok(latestBody, `missing ${functionName} in migrations`);
   return latestBody;
 }
-const stockDecrement =
-  /\bstock_quantity\s*=\s*(?:GREATEST\s*\(\s*)?(?:\(\s*)*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*(?:\(\s*)*((?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)*[a-z_][a-z0-9_]*|\d+(?:\.\d+)?)(?:\s*\))*\s*(?:,\s*0\s*)?(?:\s*\))*/i;
-function legacyDecrementMatches(source) {
-  const cleanSource = stripSqlComments(source);
-  return splitSqlStatements(cleanSource).flatMap(({ index, text }) => {
-    const update =
-      /UPDATE\s+(?:ONLY\s+)?(?:public\s*\.\s*)?(product_variants|products)(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s+SET\b/i.exec(
-        text
-      );
-    const decrement = stockDecrement.exec(text);
-    if (!update || !decrement) return [];
-    const updateStart = index + update.index;
-    const context = cleanSource.slice(0, updateStart).slice(-2000);
-    const match = [
-      text.slice(update.index),
-      update[1],
-      context + text.slice(update.index),
-    ];
-    match.index = index + update.index;
-    match.input = cleanSource;
-    return [match];
-  });
-}
-function maskNestedSql(source) {
-  let quote;
-  let masked = '';
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index];
-    if (quote) {
-      masked += ' ';
-      if (char === quote) {
-        if (source[index + 1] === quote) {
-          masked += ' ';
-          index += 1;
-        } else {
-          quote = undefined;
-        }
-      }
-      continue;
-    }
-    if (char === "'" || char === '"') {
-      quote = char;
-      masked += ' ';
-    } else if (
-      char === '(' &&
-      /^\s*(?:SELECT|WITH|VALUES|TABLE|INSERT|UPDATE|DELETE)\b/i.test(
-        source.slice(index + 1)
-      )
-    ) {
-      masked += '(';
-      let nestedDepth = 1;
-      let nestedQuote;
-      for (index += 1; index < source.length; index += 1) {
-        const nestedChar = source[index];
-        if (nestedQuote) {
-          masked += ' ';
-          if (nestedChar === nestedQuote) {
-            if (source[index + 1] === nestedQuote) {
-              masked += ' ';
-              index += 1;
-            } else {
-              nestedQuote = undefined;
-            }
-          }
-          continue;
-        }
-        if (nestedChar === "'" || nestedChar === '"') {
-          nestedQuote = nestedChar;
-          masked += ' ';
-        } else if (nestedChar === '(') {
-          nestedDepth += 1;
-          masked += ' ';
-        } else if (nestedChar === ')') {
-          nestedDepth -= 1;
-          masked += ')';
-          if (nestedDepth === 0) break;
-        } else {
-          masked += ' ';
-        }
-      }
-    } else {
-      masked += char;
-    }
-  }
-  return masked;
-}
-function stockDecrementMatch(source) {
-  return [...source.matchAll(new RegExp(stockDecrement.source, 'gi'))].at(-1);
-}
-function decrementQuantityPattern(decrement) {
-  return (decrement?.[1]?.replace(/\s+/g, '') ?? 'stock_rec.total_quantity')
-    .split('.')
-    .map(escapeRegex)
-    .join('\\s*\\.\\s*');
-}
-function hasLockedPrecheck(statement, decrement) {
-  if (!decrement || decrement.index === undefined) return false;
-  const quantityPattern = decrementQuantityPattern(decrement);
-  return new RegExp(
-    `\\bSELECT\\s+(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?stock_quantity\\s+INTO\\s+current_stock\\b(?:(?!\\bUPDATE\\b)[\\s\\S])*?\\bFOR\\s+UPDATE\\s*;(?:(?!\\bUPDATE\\b)[\\s\\S])*?\\bIF\\s+current_stock\\s*<\\s*(?:\\(\\s*)*${quantityPattern}\\b[\\s\\)]*(?:(?!\\bUPDATE\\b)[\\s\\S])*?\\bRETURN\\b`,
-    'i'
-  ).test(statement.slice(0, decrement.index));
-}
-function legacyDecrementHasCompareAndSetGuard(statement) {
-  const maskedStatement = maskNestedSql(statement);
-  const whereMatches = [...maskedStatement.matchAll(/\bWHERE\b/gi)];
-  const where = whereMatches.at(-1);
-  if (!where) return false;
-  const whereClause = maskedStatement.slice(where.index + where[0].length);
-  const decrement = stockDecrementMatch(maskedStatement);
-  const quantityPattern = decrementQuantityPattern(decrement);
-  const comparison = new RegExp(
-    `(?:\\(\\s*)*(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?stock_quantity\\s*>=\\s*(?:\\(\\s*)*${quantityPattern}\\b(?:\\s*\\))*|(?:\\(\\s*)*${quantityPattern}\\s*<=\\s*(?:\\(\\s*)*(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?stock_quantity\\b(?:\\s*\\))*`,
-    'i'
-  );
-  return (
-    isRequiredConjunct(whereClause, comparison) ||
-    hasLockedPrecheck(maskedStatement, decrement)
-  );
-}
-function legacyDecrementHasZeroRowHandling(match) {
-  if (hasImmediateUnconditionalException(match)) return true;
-  if (!match || typeof match[2] !== 'string') return false;
-  const maskedStatement = maskNestedSql(match[2]);
-  if (
-    hasLockedPrecheck(maskedStatement, stockDecrementMatch(maskedStatement))
-  ) {
-    return true;
-  }
-  const remainder = match.input?.slice(match.index + match[0].length) ?? '';
-  return /^\s*(?:ELSE\b(?:(?!\bEND\s+IF\b)[\s\S])*)?END\s+IF\s*;\s*IF\s+NOT\s+FOUND\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?\bRAISE\s+EXCEPTION\b/i.test(
-    remainder
-  );
-}
+const {
+  legacyDecrementHasCompareAndSetGuard,
+  legacyDecrementHasZeroRowHandling,
+  legacyDecrementMatches,
+} = serializedInventoryDecrements;
 export const serializedInventoryContract = {
   migrationsDir,
   migrationFileNames,

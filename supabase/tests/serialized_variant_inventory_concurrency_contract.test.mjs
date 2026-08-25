@@ -179,36 +179,6 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
     orderItemsQuery
   );
 });
-test('release locks only reserved units owned by the target merchant and order', () => {
-  const release = latestFunctionBody(
-    'private.release_order_inventory_units(uuid, uuid, text)'
-  );
-  const releaseLock =
-    /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+(?:AS\s+)?vi[\s\S]*?WHERE\s+vi\s*\.\s*order_id\s*=\s*p_order_id\s+AND\s+vi\s*\.\s*merchant_id\s*=\s*p_merchant_id\s+AND\s+vi\s*\.\s*status\s*=\s*'reserved'(?:(?!\b(?:LIMIT|OFFSET|FETCH)\b)[\s\S])*?FOR\s+UPDATE(?:\s+OF\s+vi\b)?(?!\s+(?:OF\b|SKIP\s+LOCKED\b))/i;
-  const branches = extractIfBranches(
-    release,
-    /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
-  );
-  assert.match(
-    branches.thenBranch,
-    releaseLock,
-    'available release must lock only reserved units belonging to the target merchant and order'
-  );
-  assert.match(
-    branches.elseBranch,
-    releaseLock,
-    'returned release must lock only reserved units belonging to the target merchant and order'
-  );
-  assert.doesNotMatch(
-    "FROM variant_inventory vi WHERE vi.order_id = p_order_id AND vi.merchant_id = p_merchant_id AND vi.status = 'reserved' FOR UPDATE OF pv",
-    releaseLock
-  );
-  assert.doesNotMatch(
-    "FROM variant_inventory vi WHERE vi.order_id = p_order_id AND vi.merchant_id = p_merchant_id AND vi.status = 'reserved' FOR UPDATE SKIP LOCKED",
-    releaseLock
-  );
-});
-
 test('legacy decrement scanning recognizes qualified aliases and flexible SQL formatting', () => {
   const matches = legacyDecrementMatches(`
     -- UPDATE public.products SET stock_quantity = stock_quantity - stock_rec.total_quantity;

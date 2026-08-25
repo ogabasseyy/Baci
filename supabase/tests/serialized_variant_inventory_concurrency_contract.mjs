@@ -80,14 +80,14 @@ function functionDropPattern(functionName, flags = 'i') {
     ? `(?:\\s*\\(${parameterListPattern(argumentTypes)}\\))?`
     : '(?:\\s*\\([^;]*\\))?';
   return new RegExp(
-    `DROP\\s+FUNCTION\\s+(?:IF\\s+EXISTS\\s+)?${identifierPattern(name)}${argumentList}\\s*(?:CASCADE|RESTRICT)?\\s*;`,
+    `DROP\\s+(?:FUNCTION|ROUTINE)\\s+(?:IF\\s+EXISTS\\s+)?${identifierPattern(name)}${argumentList}\\s*(?:CASCADE|RESTRICT)?\\s*;`,
     flags
   );
 }
 function functionMovePattern(functionName, flags = 'i') {
   const { name, argumentTypes } = parseFunctionSignature(functionName);
   return new RegExp(
-    `ALTER\\s+FUNCTION\\s+${identifierPattern(name)}\\s*\\(${parameterListPattern(argumentTypes)}\\)\\s+(?:RENAME\\s+TO\\s+(?:[a-z_][a-z0-9_]*|"[^"]+")|SET\\s+SCHEMA\\s+(?:[a-z_][a-z0-9_]*|"[^"]+"))\\s*;`,
+    `ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${identifierPattern(name)}\\s*\\(${parameterListPattern(argumentTypes)}\\)\\s+(?:RENAME\\s+TO\\s+(?:[a-z_][a-z0-9_]*|"[^"]+")|SET\\s+SCHEMA\\s+(?:[a-z_][a-z0-9_]*|"[^"]+"))\\s*;`,
     flags
   );
 }

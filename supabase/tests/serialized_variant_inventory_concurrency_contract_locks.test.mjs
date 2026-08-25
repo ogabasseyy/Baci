@@ -83,4 +83,13 @@ test('matches reordered lock predicates and targets the order-item alias', () =>
     serializedInventoryLocks.findClaimLocks(literalDecoys).item,
     undefined
   );
+
+  const nestedLockDecoy = source.replace(
+    'FOR UPDATE;',
+    'AND EXISTS (SELECT 1 FROM merchants m WHERE m.id = o.merchant_id FOR UPDATE);'
+  );
+  assert.equal(
+    serializedInventoryLocks.findClaimLocks(nestedLockDecoy).order,
+    undefined
+  );
 });

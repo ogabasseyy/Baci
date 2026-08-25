@@ -128,7 +128,7 @@ test('serialized claims lock the order before the item and skip locked available
     'claims must take the parent-order lock before the order-item lock'
   );
   const strictShortage =
-    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+(?:\(\s*)?v_reserved_count\s*\+\s*v_claimed_count\s*(?:\s*\))?\s*<\s*v_qty\s+THEN[\s\S]*?RAISE\s+EXCEPTION\s+['"]serialized_inventory_unavailable['"]/i;
+    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+(?:\(\s*)?v_reserved_count\s*\+\s*v_claimed_count\s*(?:\s*\))?\s*<\s*v_qty\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]serialized_inventory_unavailable['"]/i;
   assert.match(
     claim,
     strictShortage,
@@ -136,6 +136,10 @@ test('serialized claims lock the order before the item and skip locked available
   );
   assert.doesNotMatch(
     "IF v_effective_policy = 'serialized_strict' AND false THEN RAISE EXCEPTION 'serialized_inventory_unavailable'; END IF;",
+    strictShortage
+  );
+  assert.doesNotMatch(
+    "IF v_effective_policy = 'serialized_strict' AND v_reserved_count + v_claimed_count < v_qty THEN NULL; END IF; RAISE EXCEPTION 'serialized_inventory_unavailable';",
     strictShortage
   );
 });

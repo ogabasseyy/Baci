@@ -6,12 +6,15 @@ const { isRequiredConjunct, splitSqlStatements, stripSqlComments } =
 const identifier = '(?:"[a-z_][a-z0-9_]*"|[a-z_][a-z0-9_]*)';
 const legacyTable = '("product_variants"|product_variants|"products"|products)';
 const publicSchema = '(?:(?:"public"|public)\\s*\\.\\s*)?';
+const stockColumn = '(?:"stock_quantity"|stock_quantity)';
 const updatePattern = new RegExp(
   `UPDATE\\s+(?:ONLY\\s+)?${publicSchema}${legacyTable}(?:\\s+(?:AS\\s+)?${identifier})?\\s+SET\\b`,
   'i'
 );
-const stockDecrement =
-  /\bstock_quantity\s*=\s*(?:GREATEST\s*\(\s*)?(?:\(\s*)*(?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)?stock_quantity\s*-\s*(?:\(\s*)*((?:(?:[a-z_][a-z0-9_]*)\s*\.\s*)*[a-z_][a-z0-9_]*|\d+(?:\.\d+)?)(?:\s*\))*\s*(?:,\s*0\s*)?(?:\s*\))*/i;
+const stockDecrement = new RegExp(
+  `${stockColumn}\\s*=\\s*(?:GREATEST\\s*\\(\\s*)?(?:\\(\\s*)*(?:(?:${identifier})\\s*\\.\\s*)?${stockColumn}\\s*-\\s*(?:\\(\\s*)*((?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)*[a-z_][a-z0-9_]*|\\d+(?:\\.\\d+)?)(?:\\s*\\))*\\s*(?:,\\s*0\\s*)?(?:\\s*\\))*`,
+  'i'
+);
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -62,7 +65,7 @@ function maskNestedSql(source) {
       }
       continue;
     }
-    if (char === "'" || char === '"') {
+    if (char === "'") {
       quote = char;
       masked += ' ';
     } else if (
@@ -84,7 +87,7 @@ function maskNestedSql(source) {
               index += 1;
             } else nestedQuote = undefined;
           }
-        } else if (nestedChar === "'" || nestedChar === '"') {
+        } else if (nestedChar === "'") {
           nestedQuote = nestedChar;
           masked += ' ';
         } else if (nestedChar === '(') {
@@ -143,7 +146,7 @@ function matchingLockedPrecheck(statement, decrement) {
   const quantity = decrementQuantityPattern(decrement);
   for (const { index, text } of splitSqlStatements(prefix)) {
     const select = new RegExp(
-      `\\bSELECT\\s+(?:(?:${identifier})\\s*\\.\\s*)?stock_quantity\\s+INTO\\s+current_stock\\s+FROM\\s+${publicSchema}${legacyTable}(?:\\s+(?:AS\\s+)?${identifier})?\\s+WHERE\\b([\\s\\S]*?)\\bFOR\\s+UPDATE\\s*;?$`,
+      `\\bSELECT\\s+(?:(?:${identifier})\\s*\\.\\s*)?${stockColumn}\\s+INTO\\s+current_stock\\s+FROM\\s+${publicSchema}${legacyTable}(?:\\s+(?:AS\\s+)?${identifier})?\\s+WHERE\\b([\\s\\S]*?)\\bFOR\\s+UPDATE\\s*;?$`,
       'i'
     ).exec(text.trim());
     if (!select || normalizedIdentifier(select[1]) !== target.table) continue;
@@ -171,7 +174,7 @@ function legacyDecrementHasCompareAndSetGuard(statement) {
   const decrement = stockDecrementMatch(masked);
   const quantity = decrementQuantityPattern(decrement);
   const comparison = new RegExp(
-    `(?:\\(\\s*)*(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?stock_quantity\\s*>=\\s*(?:\\(\\s*)*${quantity}\\b(?:\\s*\\))*|(?:\\(\\s*)*${quantity}\\s*<=\\s*(?:\\(\\s*)*(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?stock_quantity\\b(?:\\s*\\))*`,
+    `(?:\\(\\s*)*(?:(?:${identifier})\\s*\\.\\s*)?${stockColumn}\\s*>=\\s*(?:\\(\\s*)*${quantity}\\b(?:\\s*\\))*|(?:\\(\\s*)*${quantity}\\s*<=\\s*(?:\\(\\s*)*(?:(?:${identifier})\\s*\\.\\s*)?${stockColumn}(?:\\s*\\))*`,
     'i'
   );
   return (

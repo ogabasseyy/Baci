@@ -18,6 +18,17 @@ test('recognizes quoted lowercase legacy inventory tables', () => {
   assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), true);
 });
 
+test('recognizes quoted lowercase stock columns', () => {
+  const matches = legacyDecrementMatches(`
+    UPDATE public.products
+    SET "stock_quantity" = "stock_quantity" - 1
+    WHERE id = p_product_id AND "stock_quantity" >= 1;
+  `);
+
+  assert.equal(matches.length, 1);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), true);
+});
+
 test('rejects a locked precheck for a different legacy inventory row', () => {
   const matches = legacyDecrementMatches(`
     SELECT stock_quantity INTO current_stock

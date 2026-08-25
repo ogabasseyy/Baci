@@ -11,6 +11,8 @@ test('function extraction invalidates generic ROUTINE DDL', () => {
     'DROP ROUTINE private.fixture(integer);',
     'ALTER ROUTINE private.fixture(integer) RENAME TO fixture_old;',
     'ALTER ROUTINE private.fixture(integer) SET SCHEMA public;',
+    'DROP FUNCTION private.fixture(integer), private.other(text);',
+    'DROP ROUTINE private.other(text), private.fixture(integer);',
   ]) {
     assert.throws(
       () =>

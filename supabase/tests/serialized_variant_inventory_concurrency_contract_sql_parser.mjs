@@ -212,7 +212,7 @@ function splitSqlStatements(source) {
   return statements;
 }
 
-function maskSqlLiterals(source) {
+function maskSqlLiterals(source, { preserveStrings = false } = {}) {
   let output = '';
   let quote;
   const dollarQuotes = [];
@@ -238,7 +238,9 @@ function maskSqlLiterals(source) {
     }
     if (quote) {
       output +=
-        char === '\n' || char === '\r' || char === quote.char ? char : ' ';
+        preserveStrings || char === '\n' || char === '\r' || char === quote.char
+          ? char
+          : ' ';
       if (quote.escapeBackslashes && char === '\\' && next !== undefined) {
         output += ' ';
         index += 1;

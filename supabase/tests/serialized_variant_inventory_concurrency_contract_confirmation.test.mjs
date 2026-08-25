@@ -26,4 +26,22 @@ test('confirmation locks require mandatory tenant and order scopes', () => {
     ).order,
     undefined
   );
+  assert.equal(
+    findConfirmationLocks(
+      valid.replace(
+        'FOR UPDATE;',
+        'AND EXISTS (SELECT 1 FROM merchants m WHERE m.id = o.merchant_id FOR UPDATE);'
+      )
+    ).order,
+    undefined
+  );
+  assert.equal(
+    findConfirmationLocks(
+      valid.replace(
+        'WHERE oi.order_id = p_order_id FOR UPDATE',
+        'WHERE oi.order_id = p_order_id LIMIT 1 FOR UPDATE'
+      )
+    ).item,
+    undefined
+  );
 });

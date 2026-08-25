@@ -80,7 +80,7 @@ function functionDropPattern(functionName, flags = 'i') {
     ? `(?:\\s*\\(${parameterListPattern(argumentTypes)}\\))?`
     : '(?:\\s*\\([^;]*\\))?';
   return new RegExp(
-    `DROP\\s+(?:FUNCTION|ROUTINE)\\s+(?:IF\\s+EXISTS\\s+)?${identifierPattern(name)}${argumentList}\\s*(?:CASCADE|RESTRICT)?\\s*;`,
+    `DROP\\s+(?:FUNCTION|ROUTINE)\\s+(?:IF\\s+EXISTS\\s+)?(?:[^;]*,\\s*)?${identifierPattern(name)}${argumentList}(?:\\s*,[^;]*)?\\s*(?:CASCADE|RESTRICT)?\\s*;`,
     flags
   );
 }

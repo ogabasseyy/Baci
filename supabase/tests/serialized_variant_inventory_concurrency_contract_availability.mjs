@@ -11,8 +11,10 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function availableUnitWhereClause(source) {
-  const cleanSource = maskSqlLiterals(stripSqlComments(source));
+function availableUnitWhereClause(source, preserveStrings = false) {
+  const cleanSource = maskSqlLiterals(stripSqlComments(source), {
+    preserveStrings,
+  });
   for (const { index, text } of splitSqlStatements(cleanSource)) {
     const match =
       /FROM\s+(?:public\s*\.\s*)?variant_inventory(?:\s+(?:AS\s+)?(?!WHERE\b|ORDER\b|LIMIT\b|FOR\b)([a-z_][a-z0-9_]*))?\s+WHERE\b([\s\S]*?)\bORDER\s+BY\b[\s\S]*?\bLIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i.exec(
@@ -35,7 +37,7 @@ function availableUnitPredicatePatterns(variantVariable, alias) {
       `${qualifier}variant_id\\s*=\\s*${escapeRegex(variantVariable)}\\b`,
       'i'
     ),
-    new RegExp(`${qualifier}status\\s*=\\s*'\\s*'`, 'i'),
+    new RegExp(`${qualifier}status\\s*=\\s*'available'`, 'i'),
     new RegExp(`${qualifier}order_id\\s+IS\\s+NULL`, 'i'),
     new RegExp(`${qualifier}order_item_id\\s+IS\\s+NULL`, 'i'),
     new RegExp(`${qualifier}sold_at\\s+IS\\s+NULL`, 'i'),
@@ -44,10 +46,16 @@ function availableUnitPredicatePatterns(variantVariable, alias) {
 
 function availableUnitPredicatesMatch(source, variantVariable) {
   const query = availableUnitWhereClause(source);
+  const valueQuery = availableUnitWhereClause(source, true);
+  const patterns = availableUnitPredicatePatterns(
+    variantVariable,
+    query?.alias
+  );
   return (
     query !== null &&
-    availableUnitPredicatePatterns(variantVariable, query.alias).every(
-      (pattern) => isRequiredConjunct(query.where, pattern)
+    valueQuery !== null &&
+    patterns.every((pattern, index) =>
+      isRequiredConjunct(index === 2 ? valueQuery.where : query.where, pattern)
     )
   );
 }

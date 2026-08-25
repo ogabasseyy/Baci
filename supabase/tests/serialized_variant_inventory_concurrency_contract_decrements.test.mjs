@@ -97,3 +97,14 @@ test('scans every decrement inside a data-modifying CTE statement', () => {
   assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), false);
   assert.equal(legacyDecrementHasCompareAndSetGuard(matches[1][2]), true);
 });
+
+test('binds compare-and-set stock bounds to the updated table', () => {
+  const matches = legacyDecrementMatches(`
+    UPDATE products AS p
+    SET stock_quantity = p.stock_quantity - quantity_param
+    FROM product_variants AS pv
+    WHERE p.id = product_id_param AND pv.stock_quantity >= quantity_param;
+  `);
+  assert.equal(matches.length, 1);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), false);
+});

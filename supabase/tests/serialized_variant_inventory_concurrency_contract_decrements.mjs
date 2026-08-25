@@ -8,7 +8,7 @@ const legacyTable = '("product_variants"|product_variants|"products"|products)';
 const publicSchema = '(?:(?:"public"|public)\\s*\\.\\s*)?';
 const stockColumn = '(?:"stock_quantity"|stock_quantity)';
 const updatePattern = new RegExp(
-  `UPDATE\\s+(?:ONLY\\s+)?${publicSchema}${legacyTable}(?:\\s+(?:AS\\s+)?${identifier})?\\s+SET\\b`,
+  `UPDATE\\s+(?:ONLY\\s+)?${publicSchema}${legacyTable}(?:\\s+(?:AS\\s+)?(${identifier}))?\\s+SET\\b`,
   'i'
 );
 const stockDecrement = new RegExp(
@@ -188,9 +188,17 @@ function legacyDecrementHasCompareAndSetGuard(statement) {
   const where = [...masked.matchAll(/\bWHERE\b/gi)].at(-1);
   if (!where) return false;
   const decrement = stockDecrementMatch(masked);
+  const update = decrement
+    ? [...masked.matchAll(new RegExp(updatePattern.source, 'gi'))]
+        .filter((candidate) => candidate.index <= decrement.index)
+        .at(-1)
+    : undefined;
+  if (!update) return false;
   const quantity = decrementQuantityPattern(decrement);
+  const target = referencePattern(update[2] ?? normalizedIdentifier(update[1]));
+  const targetStock = `(?:${target}\\s*\\.\\s*${stockColumn}|(?<![A-Za-z0-9_."])${stockColumn})`;
   const comparison = new RegExp(
-    `(?:\\(\\s*)*(?:(?:${identifier})\\s*\\.\\s*)?${stockColumn}\\s*>=\\s*(?:\\(\\s*)*${quantity}\\b(?:\\s*\\))*|(?:\\(\\s*)*${quantity}\\s*<=\\s*(?:\\(\\s*)*(?:(?:${identifier})\\s*\\.\\s*)?${stockColumn}(?:\\s*\\))*`,
+    `(?:\\(\\s*)*${targetStock}\\s*>=\\s*(?:\\(\\s*)*${quantity}\\b(?:\\s*\\))*|(?:\\(\\s*)*${quantity}\\s*<=\\s*(?:\\(\\s*)*${targetStock}(?:\\s*\\))*`,
     'i'
   );
   return (

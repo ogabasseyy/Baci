@@ -47,6 +47,22 @@ test('private inventory functions remain inaccessible to authenticated callers',
   }
 });
 
+test('freshly recreated private functions regain the default PUBLIC grant', () => {
+  const signature = privateFunctions[0];
+  const recreated = `${migrationSql}
+    DROP FUNCTION ${signature};
+    CREATE FUNCTION private.claim_variant_inventory_units_for_order_item_internal(
+      p_merchant_id uuid,
+      p_order_id uuid,
+      p_order_item_id uuid
+    ) RETURNS jsonb LANGUAGE sql SECURITY DEFINER AS $$ SELECT '{}'::jsonb $$;
+  `;
+  assert.equal(
+    serializedInventoryPrivileges.authenticatedCanExecute(recreated, signature),
+    true
+  );
+});
+
 test('public inventory wrappers stay executable and security definer', () => {
   for (const signature of publicFunctions) {
     assert.equal(

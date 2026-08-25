@@ -61,8 +61,10 @@ function parameterListPattern(argumentTypes) {
         ? normalized.replace(/\s*\[\s*\]$/, '').trim()
         : normalized;
       const typeAliases = {
+        decimal: '(?:numeric|decimal)',
         integer: '(?:integer|int4)',
         int4: '(?:integer|int4)',
+        numeric: '(?:numeric|decimal)',
       };
       const basePattern =
         typeAliases[baseType.toLowerCase()] ??

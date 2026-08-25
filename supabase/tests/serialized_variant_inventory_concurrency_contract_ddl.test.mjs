@@ -24,6 +24,24 @@ test('function extraction invalidates generic ROUTINE DDL', () => {
   }
 });
 
+test('numeric signatures are invalidated through decimal aliases', () => {
+  const definition =
+    'CREATE FUNCTION private.fixture(numeric) RETURNS void AS $$ BEGIN NULL; END; $$;';
+  for (const invalidator of [
+    'DROP FUNCTION private.fixture(decimal);',
+    'ALTER FUNCTION private.fixture(decimal) RENAME TO fixture_old;',
+    'ALTER FUNCTION private.fixture(decimal) SET SCHEMA public;',
+  ]) {
+    assert.throws(
+      () =>
+        latestFunctionBody('private.fixture(numeric)', [
+          `${definition}\n${invalidator}`,
+        ]),
+      /missing private\.fixture/
+    );
+  }
+});
+
 test('schema-qualified built-in types replace the effective function body', () => {
   const body = latestFunctionBody('private.fixture(uuid)', [
     "CREATE FUNCTION private.fixture(uuid) RETURNS text AS $$ BEGIN RETURN 'old'; END; $$;",

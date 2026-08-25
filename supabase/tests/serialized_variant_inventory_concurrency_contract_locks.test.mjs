@@ -126,4 +126,10 @@ test('claim locks must dominate the available-unit selector', () => {
     ),
     false
   );
+  assert.equal(
+    serializedInventoryLocks.claimLocksDominateSelector(
+      `BEGIN\nNULL;\nEXCEPTION WHEN OTHERS THEN\n${locks}\nEND;\n${selector}`
+    ),
+    false
+  );
 });

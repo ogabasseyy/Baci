@@ -18,7 +18,17 @@ function hasMerchantAuthorizationGuard(source) {
   );
 }
 
+function hasUnlimitedStockReturn(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
+    preserveStrings: true,
+  });
+  return /IF\s+NOT\s+COALESCE\s*\(\s*v_manage_stock\s*,\s*false\s*\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?\bRETURN\b(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.test(
+    executable
+  );
+}
+
 export const serializedInventoryDecrementGuards = {
   hasMerchantAuthorizationGuard,
   hasPositiveQuantityGuard,
+  hasUnlimitedStockReturn,
 };

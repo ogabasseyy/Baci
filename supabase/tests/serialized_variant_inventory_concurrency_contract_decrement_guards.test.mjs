@@ -18,6 +18,10 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
       true
     );
     assert.equal(
+      serializedInventoryDecrementGuards.hasUnlimitedStockReturn(body),
+      true
+    );
+    assert.equal(
       serializedInventoryDecrementGuards.hasPositiveQuantityGuard(
         body.replace(/IF\s+quantity_param\s*<=\s*0[\s\S]*?END\s+IF\s*;/i, '')
       ),
@@ -27,6 +31,15 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
       serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
         body.replace(
           /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\.role\(\)\)[\s\S]*?END\s+IF\s*;/i,
+          ''
+        )
+      ),
+      false
+    );
+    assert.equal(
+      serializedInventoryDecrementGuards.hasUnlimitedStockReturn(
+        body.replace(
+          /IF\s+NOT\s+COALESCE\s*\(\s*v_manage_stock[\s\S]*?END\s+IF\s*;/i,
           ''
         )
       ),

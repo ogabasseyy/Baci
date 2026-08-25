@@ -32,7 +32,10 @@ function pathAt(source, targetIndex) {
             : /^BEGIN$/i.test(token[0])
               ? 'block'
               : 'if',
-        unreachable: /^IF\s+false\s+THEN$/i.test(token[0].trim()),
+        unreachable:
+          /^IF\s+(?:\(\s*)*(?:false(?:\s*::\s*(?:pg_catalog\s*\.\s*)?boolean)?|NOT\s+true)(?:\s*\))*\s+THEN$/i.test(
+            serializedInventorySqlParser.stripSqlComments(token[0]).trim()
+          ),
       });
     }
   }

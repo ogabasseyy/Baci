@@ -78,12 +78,17 @@ function availableUnitPredicatesMatch(source, variantVariable, branchVariable) {
   const branchScopedWhere = branchMatch
     ? valueQuery.where.replace(branchMatch[0], 'branch_eligible = true')
     : valueQuery?.where;
+  const contradictoryStatus = new RegExp(
+    `(?:${branchQualifier}status\\s*(?:<>|!=)\\s*'available'|${branchQualifier}status\\s+NOT\\s+IN\\s*\\([^)]*'available'|NOT\\s*\\(\\s*${branchQualifier}status\\s*=\\s*'available'\\s*\\)|\\(\\s*${branchQualifier}status\\s*=\\s*'available'\\s*\\)\\s+IS\\s+FALSE)`,
+    'i'
+  );
   return (
     query !== null &&
     valueQuery !== null &&
     patterns.every((pattern, index) =>
       isRequiredConjunct(index === 2 ? valueQuery.where : query.where, pattern)
     ) &&
+    !contradictoryStatus.test(valueQuery.where) &&
     branchFirst &&
     (!branchPattern ||
       (branchMatch !== null &&

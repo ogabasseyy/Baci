@@ -69,13 +69,21 @@ test('rejects protected operations after an unconditional early return', () => {
 });
 
 test('rejects prerequisites hidden in a constant-false branch', () => {
-  const source = 'IF false THEN\nauthorize;\nEND IF;\nlock_row;';
-  assert.equal(
-    serializedInventoryControlFlow.dominatesControlFlow(
-      source,
-      source.indexOf('authorize'),
-      source.indexOf('lock_row')
-    ),
-    false
-  );
+  for (const condition of [
+    'false',
+    '(false)',
+    'false::boolean',
+    'false /* unreachable */',
+    'NOT true',
+  ]) {
+    const source = `IF ${condition} THEN\nauthorize;\nEND IF;\nlock_row;`;
+    assert.equal(
+      serializedInventoryControlFlow.dominatesControlFlow(
+        source,
+        source.indexOf('authorize'),
+        source.indexOf('lock_row')
+      ),
+      false
+    );
+  }
 });

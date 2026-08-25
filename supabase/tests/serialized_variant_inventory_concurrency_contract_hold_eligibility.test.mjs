@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
+import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 
 const { latestFunctionBody } = serializedInventoryContract;
 
@@ -11,9 +12,18 @@ function hasConfirmedHoldEligibility(source, orderPrefix) {
     `IF\\s+${paymentStatus}\\s+IN\\s*\\(\\s*'paid'\\s*,\\s*'bnpl_approved'\\s*\\)\\s+OR\\s*\\(\\s*lower\\(trim\\(${paymentMethod}\\)\\)\\s+IN\\s*\\(\\s*'pod'\\s*,\\s*'pay_on_delivery'\\s*\\)\\s+AND\\s+${paymentStatus}\\s*=\\s*'pending'\\s*\\)\\s+THEN[\\s\\S]*?v_is_confirmed_hold\\s*:=\\s*true\\s*;`,
     'i'
   );
+  const match = eligibility.exec(source);
+  const assignmentOffset = match?.[0].search(
+    /v_is_confirmed_hold\s*:=\s*true\s*;/i
+  );
   return (
     /v_is_confirmed_hold\s+boolean\s*:=\s*false\s*;/i.test(source) &&
-    eligibility.test(source)
+    match &&
+    assignmentOffset >= 0 &&
+    serializedInventoryControlFlow.isReachable(
+      source,
+      match.index + assignmentOffset
+    )
   );
 }
 
@@ -49,6 +59,16 @@ test('claim and confirmation preserve protected wrapper modes and hold eligibili
         body.replace(
           'v_is_confirmed_hold boolean := false;',
           'v_is_confirmed_hold boolean := true;'
+        ),
+        prefix
+      ),
+      false
+    );
+    assert.equal(
+      hasConfirmedHoldEligibility(
+        body.replace(
+          /IF\s+(?:v_|v_order\.)payment_status\s+IN[\s\S]*?v_is_confirmed_hold\s*:=\s*true\s*;/i,
+          (eligibilityBlock) => `IF false THEN\n${eligibilityBlock}\nEND IF;`
         ),
         prefix
       ),

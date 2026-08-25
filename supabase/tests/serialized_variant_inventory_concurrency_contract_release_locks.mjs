@@ -1,3 +1,4 @@
+import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventoryNestedQueries } from './serialized_variant_inventory_concurrency_contract_nested_queries.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
@@ -25,4 +26,35 @@ function releaseLockMatches(source) {
   );
 }
 
-export const serializedInventoryReleaseLocks = { releaseLockMatches };
+function hasTargetStatusWhitelist(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
+    preserveStrings: true,
+  });
+  const defaultStatus =
+    /\bv_target_status\s+text\s*:=\s*COALESCE\s*\(\s*p_target_status\s*,\s*'available'\s*\)\s*;/i.exec(
+      executable
+    );
+  const guard =
+    /IF\s+v_target_status\s+NOT\s+IN\s*\(\s*'available'\s*,\s*'returned'\s*\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]invalid_target_status['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
+      executable
+    );
+  const dispatch = /IF\s+v_target_status\s*=\s*'available'\s+THEN/i.exec(
+    executable
+  );
+  return Boolean(
+    defaultStatus &&
+      guard &&
+      dispatch &&
+      defaultStatus.index < guard.index &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        guard.index,
+        dispatch.index
+      )
+  );
+}
+
+export const serializedInventoryReleaseLocks = {
+  hasTargetStatusWhitelist,
+  releaseLockMatches,
+};

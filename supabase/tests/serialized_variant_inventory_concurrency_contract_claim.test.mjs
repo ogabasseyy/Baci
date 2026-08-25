@@ -106,10 +106,17 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
     undefined
   );
   const excessRelease =
-    /ELSIF\s+v_reserved_count\s*>\s*v_qty\s+THEN[\s\S]*?UPDATE\s+public\.variant_inventory\s+SET\s+status\s*=\s*'available',[\s\S]*?order_id\s*=\s*NULL,[\s\S]*?order_item_id\s*=\s*NULL[\s\S]*?WHERE\s+id\s*=\s*v_unit_id\s*;/i;
+    /ELSIF\s+v_reserved_count\s*>\s*v_qty\s+THEN[\s\S]*?SELECT\s+id\s+FROM\s+public\.variant_inventory\s+WHERE\s+order_item_id\s*=\s*p_order_item_id\s+AND\s+status\s*=\s*'reserved'[\s\S]*?LIMIT\s+v_excess\s+LOOP[\s\S]*?UPDATE\s+public\.variant_inventory\s+SET\s+status\s*=\s*'available',[\s\S]*?order_id\s*=\s*NULL,[\s\S]*?order_item_id\s*=\s*NULL[\s\S]*?WHERE\s+id\s*=\s*v_unit_id\s*;/i;
   assert.match(claim, excessRelease);
   assert.doesNotMatch(
     claim.replace(excessRelease, 'ELSIF v_reserved_count > v_qty THEN NULL;'),
+    excessRelease
+  );
+  assert.doesNotMatch(
+    claim.replace(
+      "WHERE order_item_id = p_order_item_id AND status = 'reserved'",
+      "WHERE status = 'available'"
+    ),
     excessRelease
   );
   const fulfillmentSnapshot =

@@ -220,6 +220,13 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
     findReclaimReservationTransition(caseGuardedTransition),
     undefined
   );
+  const fulfillmentSnapshot =
+    /UPDATE\s+public\.order_items\s+SET\s+fulfillment_data\s*=\s*v_fulfillment_data\s+WHERE\s+id\s*=\s*v_item\.id\s*;/i;
+  assert.match(confirm, fulfillmentSnapshot);
+  assert.doesNotMatch(
+    confirm.replace(fulfillmentSnapshot, 'PERFORM v_item.id;'),
+    fulfillmentSnapshot
+  );
 
   const outOfOrder = `
     SELECT vi.id FROM variant_inventory vi

@@ -7,7 +7,8 @@ import { serializedInventoryReleaseLocks } from './serialized_variant_inventory_
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const { extractIfBranches, latestFunctionBody } = serializedInventoryContract;
-const { releaseLockMatches } = serializedInventoryReleaseLocks;
+const { hasTargetStatusWhitelist, releaseLockMatches } =
+  serializedInventoryReleaseLocks;
 
 function releaseTransition(branch, targetStatus) {
   const searchableBranch = serializedInventorySqlParser.maskSqlLiterals(
@@ -54,23 +55,6 @@ function releaseTransition(branch, targetStatus) {
   );
 }
 
-function hasReleaseTargetStatusWhitelist(source) {
-  const defaultStatus =
-    /\bv_target_status\s+text\s*:=\s*COALESCE\s*\(\s*p_target_status\s*,\s*'available'\s*\)\s*;/i.exec(
-      source
-    );
-  const guard =
-    /IF\s+v_target_status\s+NOT\s+IN\s*\(\s*'available'\s*,\s*'returned'\s*\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]invalid_target_status['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
-      source
-    );
-  return Boolean(
-    defaultStatus &&
-      guard &&
-      defaultStatus.index < guard.index &&
-      guard.index < source.indexOf("IF v_target_status = 'available'")
-  );
-}
-
 function releaseBranchesMatch(branches) {
   return (
     branches.elsifBranches.length === 0 &&
@@ -110,7 +94,7 @@ test('release serializes on its order before locking reserved inventory', () => 
     { preserveStrings: true }
   );
 
-  assert.equal(hasReleaseTargetStatusWhitelist(release), true);
+  assert.equal(hasTargetStatusWhitelist(release), true);
   const authorizationGuard =
     /IF\s+auth\.role\(\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(p_merchant_id\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]forbidden['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i;
   assert.match(executableRelease, authorizationGuard);
@@ -210,7 +194,7 @@ test('release serializes on its order before locking reserved inventory', () => 
     false
   );
   assert.equal(
-    hasReleaseTargetStatusWhitelist(
+    hasTargetStatusWhitelist(
       release.replace(
         /IF\s+v_target_status\s+NOT\s+IN[\s\S]*?END\s+IF\s*;/i,
         ''
@@ -219,10 +203,19 @@ test('release serializes on its order before locking reserved inventory', () => 
     false
   );
   assert.equal(
-    hasReleaseTargetStatusWhitelist(
+    hasTargetStatusWhitelist(
       release.replace(
         /COALESCE\s*\(\s*p_target_status\s*,\s*'available'\s*\)/i,
         'p_target_status'
+      )
+    ),
+    false
+  );
+  assert.equal(
+    hasTargetStatusWhitelist(
+      release.replace(
+        /IF\s+v_target_status\s+NOT\s+IN[\s\S]*?END\s+IF\s*;/i,
+        (guard) => `IF false THEN\n${guard}\nEND IF;`
       )
     ),
     false

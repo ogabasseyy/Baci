@@ -1,3 +1,4 @@
+import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 function hasPositiveQuantityGuard(source) {
@@ -8,12 +9,21 @@ function hasPositiveQuantityGuard(source) {
     /IF\s+quantity_param\s*<=\s*0\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?\bRETURN\b(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
       executable
     );
-  const protectedOperation =
-    /(?:SELECT\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s+INTO[\s\S]*?\bFOR\s+UPDATE\b|UPDATE\s+(?:public\s*\.\s*)?(?:products|product_variants)\b)/i.exec(
-      executable
-    );
+  const protectedOperations = [
+    ...executable.matchAll(
+      /SELECT\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s+INTO[\s\S]*?\bFOR\s+UPDATE\b|UPDATE\s+(?:public\s*\.\s*)?(?:products|product_variants)\b/gi
+    ),
+  ];
   return Boolean(
-    guard && protectedOperation && guard.index < protectedOperation.index
+    guard &&
+      protectedOperations.length > 0 &&
+      protectedOperations.every((operation) =>
+        serializedInventoryControlFlow.dominatesControlFlow(
+          executable,
+          guard.index,
+          operation.index
+        )
+      )
   );
 }
 

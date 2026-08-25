@@ -170,3 +170,45 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
     false
   );
 });
+
+test('serialized claims authorize callers and fail strict shortages before success', () => {
+  const publicClaim = latestFunctionBody(
+    'public.claim_variant_inventory_units_for_order_item(uuid, uuid, uuid)'
+  );
+  const authorization =
+    /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\.role\(\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(p_merchant_id\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]forbidden['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
+      publicClaim
+    );
+  const delegation =
+    /RETURN\s+private\.claim_variant_inventory_units_for_order_item_internal\s*\(/i.exec(
+      publicClaim
+    );
+  assert.ok(authorization, 'public claims must authorize the merchant');
+  assert.ok(delegation, 'public claims must delegate to the internal claim');
+  assert.ok(authorization.index < delegation.index);
+
+  const claim = latestFunctionBody(
+    'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)'
+  );
+  const shortage =
+    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+(?:\(\s*)?v_reserved_count\s*\+\s*v_claimed_count\s*(?:\s*\))?\s*<\s*v_qty\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]serialized_inventory_unavailable['"]/i.exec(
+      claim
+    );
+  const success = /RETURN\s+v_fulfillment_data\s*;/i.exec(claim);
+  assert.ok(shortage);
+  assert.ok(success);
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      claim,
+      shortage.index,
+      shortage.index + shortage[0].indexOf('RAISE')
+    ),
+    true
+  );
+  assert.ok(shortage.index < success.index);
+  const relocated = `${claim.replace(shortage[0], '')}\n${shortage[0]}`;
+  assert.ok(
+    relocated.lastIndexOf(shortage[0]) >
+      /RETURN\s+v_fulfillment_data\s*;/i.exec(relocated).index
+  );
+});

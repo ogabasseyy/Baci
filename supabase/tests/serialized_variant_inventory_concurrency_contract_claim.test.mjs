@@ -41,13 +41,21 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
   );
 
   const reserveUnitUpdate =
-    /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\b(?=[^;]*\bSET\b)(?=[^;]*\bstatus\s*=\s*'reserved')(?=[^;]*\border_id\s*=\s*p_order_id)(?=[^;]*\border_item_id\s*=\s*p_order_item_id)[^;]*\bWHERE\s+([^;]*);/i;
-  const reserveUpdate = reserveUnitUpdate.exec(claim);
+    /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([^;]*?)\s+WHERE\s+([^;]*);/gi;
+  const reserveUpdate = [...claim.matchAll(reserveUnitUpdate)].find(
+    (match) =>
+      /\bstatus\s*=\s*'reserved'/i.test(match[1]) &&
+      /\border_id\s*=\s*p_order_id\b/i.test(match[1]) &&
+      /\border_item_id\s*=\s*p_order_item_id\b/i.test(match[1])
+  );
   assert.ok(
     reserveUpdate &&
-      isRequiredConjunct(reserveUpdate[1], /\bid\s*=\s*v_unit\.id\b/i) &&
+      /\bstatus\s*=\s*'reserved'/i.test(reserveUpdate[1]) &&
+      /\border_id\s*=\s*p_order_id\b/i.test(reserveUpdate[1]) &&
+      /\border_item_id\s*=\s*p_order_item_id\b/i.test(reserveUpdate[1]) &&
+      isRequiredConjunct(reserveUpdate[2], /\bid\s*=\s*v_unit\.id\b/i) &&
       !/\bOR\b|\bFALSE\b|\bNOT\s+TRUE\b|\bIS\s+(?:FALSE|NOT\s+TRUE)\b/i.test(
-        reserveUpdate[1]
+        reserveUpdate[2]
       ),
     'each claimed unit must be transitioned by an effective scoped update'
   );
@@ -63,13 +71,23 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
     (() => {
       const unsafe =
         "UPDATE public.variant_inventory SET status = 'reserved', order_id = p_order_id, order_item_id = p_order_item_id WHERE id = v_unit.id AND false;";
-      const match = reserveUnitUpdate.exec(unsafe);
+      const match = [...unsafe.matchAll(reserveUnitUpdate)].at(0);
       return (
         match !== null &&
-        isRequiredConjunct(match[1], /\bid\s*=\s*v_unit\.id\b/i) &&
-        !/\bFALSE\b/i.test(match[1])
+        isRequiredConjunct(match[2], /\bid\s*=\s*v_unit\.id\b/i) &&
+        !/\bFALSE\b/i.test(match[2])
       );
     })(),
+    false
+  );
+  const whereOnlyAssignments = [
+    ..."UPDATE variant_inventory SET updated_at = now() WHERE id = v_unit.id AND status = 'reserved' AND order_id = p_order_id AND order_item_id = p_order_item_id;".matchAll(
+      reserveUnitUpdate
+    ),
+  ].at(0);
+  assert.equal(
+    whereOnlyAssignments !== null &&
+      /\bstatus\s*=\s*'reserved'/i.test(whereOnlyAssignments[1]),
     false
   );
 });

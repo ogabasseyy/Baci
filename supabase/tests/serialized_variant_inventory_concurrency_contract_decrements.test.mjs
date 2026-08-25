@@ -54,6 +54,9 @@ test('accepts a locked precheck for the same legacy inventory row', () => {
     FROM public.product_variants
     WHERE id = variant_id_param
     FOR UPDATE;
+    IF NOT FOUND THEN
+      RETURN;
+    END IF;
     IF current_stock < quantity_param THEN
       RETURN;
     END IF;
@@ -65,6 +68,16 @@ test('accepts a locked precheck for the same legacy inventory row', () => {
   assert.equal(matches.length, 1);
   assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), true);
   assert.equal(legacyDecrementHasZeroRowHandling(matches[0]), true);
+});
+
+test('rejects a locked precheck that does not handle a missing row', () => {
+  const matches = legacyDecrementMatches(`
+    SELECT stock_quantity INTO current_stock FROM products WHERE id = product_id FOR UPDATE;
+    IF current_stock < p_quantity THEN RETURN; END IF;
+    UPDATE products SET stock_quantity = stock_quantity - p_quantity WHERE id = product_id;
+  `);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(matches[0][2]), false);
+  assert.equal(legacyDecrementHasZeroRowHandling(matches[0]), false);
 });
 
 test('scans every decrement inside a data-modifying CTE statement', () => {

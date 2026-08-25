@@ -11,15 +11,20 @@ function hasImmediateUnconditionalException(match) {
       literal.replace(/[^\r\n]/g, ' ')
     );
   let depth = 1;
+  let caseDepth = 0;
   for (const token of body.matchAll(
-    /\bEND\s+IF\b|\bIF\b|\bRAISE\s+EXCEPTION\b/gi
+    /\bEND\s+IF\b|\bEND\s+CASE\b|\bIF\b|\bCASE\b|\bRAISE\s+EXCEPTION\b/gi
   )) {
     if (/^END\s+IF/i.test(token[0])) {
       depth -= 1;
       if (depth === 0) return false;
     } else if (/^IF$/i.test(token[0])) {
       depth += 1;
-    } else if (depth === 1) {
+    } else if (/^END\s+CASE/i.test(token[0])) {
+      caseDepth = Math.max(0, caseDepth - 1);
+    } else if (/^CASE$/i.test(token[0])) {
+      caseDepth += 1;
+    } else if (depth === 1 && caseDepth === 0) {
       return true;
     }
   }

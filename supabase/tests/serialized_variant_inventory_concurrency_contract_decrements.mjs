@@ -38,7 +38,13 @@ function legacyDecrementMatches(source) {
       const updateText = text.slice(update.index, end);
       if (!stockDecrement.test(updateText)) return [];
       const updateStart = index + update.index;
-      const context = cleanSource.slice(0, updateStart).slice(-2000);
+      const precedingSource = cleanSource.slice(0, updateStart);
+      const functionStart = [
+        ...precedingSource.matchAll(
+          /\bCREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b/gi
+        ),
+      ].at(-1)?.index;
+      const context = precedingSource.slice(functionStart ?? -2000);
       const match = [
         updateText,
         normalizedIdentifier(update[1]),
@@ -156,11 +162,21 @@ function matchingLockedPrecheck(statement, decrement) {
     );
     if (!isRequiredConjunct(select[2], rowEquality)) continue;
     const afterLock = prefix.slice(index + text.length);
+    const missingRowHandler =
+      /^\s*IF\s+NOT\s+FOUND\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?\b(?:RAISE\s+EXCEPTION|RETURN)\b(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
+        afterLock
+      );
+    const earlierMissingRowHandler =
+      /IF\s+NOT\s+FOUND\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?\b(?:RAISE\s+EXCEPTION|RETURN)\b(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;[\s\S]*$/i.test(
+        prefix.slice(0, index)
+      );
+    const shortageStart = missingRowHandler?.[0].length ?? 0;
     if (
+      (missingRowHandler || earlierMissingRowHandler) &&
       new RegExp(
         `^\\s*IF\\s+current_stock\\s*<\\s*(?:\\(\\s*)*${quantity}\\b[\\s\\)]*\\s+THEN(?:(?!\\bEND\\s+IF\\b)[\\s\\S])*?\\bRETURN\\b`,
         'i'
-      ).test(afterLock)
+      ).test(afterLock.slice(shortageStart))
     ) {
       return true;
     }

@@ -165,5 +165,7 @@ export const serializedInventoryContract = {
   legacyDecrementHasCompareAndSetGuard,
   availableUnitPredicatesMatch:
     serializedInventoryAvailability.availableUnitPredicatesMatch,
+  availableUnitWhereClause:
+    serializedInventoryAvailability.availableUnitWhereClause,
   findClaimLocks: serializedInventoryLocks.findClaimLocks,
 };

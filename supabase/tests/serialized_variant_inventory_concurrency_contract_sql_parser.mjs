@@ -215,22 +215,30 @@ function splitSqlStatements(source) {
 function maskSqlLiterals(source) {
   let output = '';
   let quote;
-  let dollarTag;
+  const dollarQuotes = [];
   for (let index = 0; index < source.length; index += 1) {
     const char = source[index];
     const next = source[index + 1];
-    if (dollarTag) {
-      if (source.startsWith(dollarTag, index)) {
-        output += ' '.repeat(dollarTag.length);
-        index += dollarTag.length - 1;
-        dollarTag = undefined;
+    const dollarQuote = dollarQuotes.at(-1);
+    if (dollarQuote?.mode === 'literal') {
+      if (source.startsWith(dollarQuote.tag, index)) {
+        output += ' '.repeat(dollarQuote.tag.length);
+        index += dollarQuote.tag.length - 1;
+        dollarQuotes.pop();
       } else {
         output += char === '\n' || char === '\r' ? char : ' ';
       }
       continue;
     }
+    if (dollarQuote && source.startsWith(dollarQuote.tag, index)) {
+      output += dollarQuote.tag;
+      index += dollarQuote.tag.length - 1;
+      dollarQuotes.pop();
+      continue;
+    }
     if (quote) {
-      output += char === '\n' || char === '\r' ? char : ' ';
+      output +=
+        char === '\n' || char === '\r' || char === quote.char ? char : ' ';
       if (quote.escapeBackslashes && char === '\\' && next !== undefined) {
         output += ' ';
         index += 1;
@@ -246,13 +254,14 @@ function maskSqlLiterals(source) {
     }
     if (char === "'") {
       quote = quoteMode(source, index);
-      output += ' ';
+      output += char;
       continue;
     }
     const tag = dollarQuoteAt(source, index);
     if (tag) {
-      dollarTag = tag;
-      output += ' '.repeat(tag.length);
+      const mode = dollarQuote ? 'literal' : dollarQuoteMode(source, index);
+      dollarQuotes.push({ mode, tag });
+      output += mode === 'body' ? tag : ' '.repeat(tag.length);
       index += tag.length - 1;
       continue;
     }

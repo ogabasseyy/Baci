@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
+import { serializedInventoryConfirmation } from './serialized_variant_inventory_concurrency_contract_confirmation.mjs';
 
 const {
   migrationsDir,
@@ -14,6 +15,7 @@ const {
   legacyDecrementHasZeroRowHandling,
   legacyDecrementHasCompareAndSetGuard,
   availableUnitPredicatesMatch,
+  availableUnitWhereClause,
   findClaimLocks,
 } = serializedInventoryContract;
 
@@ -127,6 +129,12 @@ test('serialized claims lock the order before the item and skip locked available
     claimLocks.order.index < claimLocks.item.index,
     'claims must take the parent-order lock before the order-item lock'
   );
+  const availableUnits = availableUnitWhereClause(claim);
+  assert.ok(availableUnits, 'claims must select available units');
+  assert.ok(
+    claimLocks.item.index < availableUnits.index,
+    'claims must serialize the parent and item before selecting available units'
+  );
   const strictShortage =
     /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+(?:\(\s*)?v_reserved_count\s*\+\s*v_claimed_count\s*(?:\s*\))?\s*<\s*v_qty\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]serialized_inventory_unavailable['"]/i;
   assert.match(
@@ -161,17 +169,14 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
     0,
     'serialized claims must not also decrement legacy product stock'
   );
-  const confirmOrderLock =
-    /FROM\s+(?:public\s*\.\s*)?orders(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*p_order_id\s+AND\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?merchant_id\s*=\s*p_merchant_id[^;]*?FOR\s+UPDATE/i;
-  const orderItemsQuery =
-    /FROM\s+(?:public\s*\.\s*)?order_items(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[^;]*?WHERE\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?order_id\s*=\s*p_order_id[^;]*?FOR\s+UPDATE(?!\s+(?:OF\s+[a-z_][a-z0-9_]*\s+)?(?:SKIP\s+LOCKED|NOWAIT)\b)/i;
+  const confirmationLocks =
+    serializedInventoryConfirmation.findConfirmationLocks(confirm);
   assert.ok(
     availableUnitPredicatesMatch(confirm, 'v_actual_variant_id'),
     'payment confirmation must enforce each scoped availability predicate'
   );
-  assert.match(
-    confirm,
-    confirmOrderLock,
+  assert.ok(
+    confirmationLocks.order,
     'payment confirmation must re-lock the parent order'
   );
   assert.match(
@@ -184,18 +189,13 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
     /IF\s*\(\s*v_reserved_count\s*\+\s*v_reclaimed_count\s*\)\s*<\s*v_item\.quantity\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?v_exceptions\s*:=\s*v_exceptions\s*\|\|\s*jsonb_build_object\([^;]*?'code'\s*,\s*'late_payment_reservation_lost'[\s\S]*?RETURN\s+jsonb_build_object\([^;]*?'exceptionCodes'\s*,\s*v_exceptions\b/i,
     'strict payment confirmation must append and return reservation-loss exception codes'
   );
-  const confirmOrderItemsIndex = confirm.search(orderItemsQuery);
   assert.ok(
-    confirmOrderItemsIndex >= 0,
+    confirmationLocks.item,
     'payment confirmation must reconcile order items'
   );
   assert.ok(
-    confirm.search(confirmOrderLock) < confirmOrderItemsIndex,
+    confirmationLocks.order.index < confirmationLocks.item.index,
     'payment confirmation must take the parent-order lock before item locks'
-  );
-  assert.doesNotMatch(
-    'FROM order_items oi WHERE oi.order_id = p_order_id FOR UPDATE SKIP LOCKED;',
-    orderItemsQuery
   );
 });
 test('legacy decrement scanning recognizes qualified aliases and flexible SQL formatting', () => {

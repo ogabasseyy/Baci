@@ -47,3 +47,23 @@ test('rejects availability predicates with prefixed scope variables', () => {
     false
   );
 });
+
+test('rejects required predicates embedded in dollar-quoted literals', () => {
+  const source = `
+    SELECT unit.id FROM variant_inventory unit
+    WHERE $$unit.merchant_id = p_merchant_id$$ IS NOT NULL
+      AND $$unit.variant_id = v_variant_id$$ IS NOT NULL
+      AND $$unit.status = 'available'$$ IS NOT NULL
+      AND $$unit.order_id IS NULL$$ IS NOT NULL
+      AND $$unit.order_item_id IS NULL$$ IS NOT NULL
+      AND $$unit.sold_at IS NULL$$ IS NOT NULL
+    ORDER BY unit.created_at LIMIT v_needed FOR UPDATE SKIP LOCKED;
+  `;
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      source,
+      'v_variant_id'
+    ),
+    false
+  );
+});

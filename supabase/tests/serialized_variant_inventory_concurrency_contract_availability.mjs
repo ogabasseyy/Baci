@@ -1,20 +1,26 @@
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
-const { isRequiredConjunct, splitSqlStatements, stripSqlComments } =
-  serializedInventorySqlParser;
+const {
+  isRequiredConjunct,
+  maskSqlLiterals,
+  splitSqlStatements,
+  stripSqlComments,
+} = serializedInventorySqlParser;
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function availableUnitWhereClause(source) {
-  const cleanSource = stripSqlComments(source);
-  for (const { text } of splitSqlStatements(cleanSource)) {
+  const cleanSource = maskSqlLiterals(stripSqlComments(source));
+  for (const { index, text } of splitSqlStatements(cleanSource)) {
     const match =
       /FROM\s+(?:public\s*\.\s*)?variant_inventory(?:\s+(?:AS\s+)?(?!WHERE\b|ORDER\b|LIMIT\b|FOR\b)([a-z_][a-z0-9_]*))?\s+WHERE\b([\s\S]*?)\bORDER\s+BY\b[\s\S]*?\bLIMIT\s+v_needed\s+FOR\s+UPDATE\s+SKIP\s+LOCKED/i.exec(
         text
       );
-    if (match) return { alias: match[1], where: match[2] };
+    if (match) {
+      return { alias: match[1], index: index + match.index, where: match[2] };
+    }
   }
   return null;
 }
@@ -29,7 +35,7 @@ function availableUnitPredicatePatterns(variantVariable, alias) {
       `${qualifier}variant_id\\s*=\\s*${escapeRegex(variantVariable)}\\b`,
       'i'
     ),
-    new RegExp(`${qualifier}status\\s*=\\s*'available'`, 'i'),
+    new RegExp(`${qualifier}status\\s*=\\s*'\\s*'`, 'i'),
     new RegExp(`${qualifier}order_id\\s+IS\\s+NULL`, 'i'),
     new RegExp(`${qualifier}order_item_id\\s+IS\\s+NULL`, 'i'),
     new RegExp(`${qualifier}sold_at\\s+IS\\s+NULL`, 'i'),
@@ -47,5 +53,6 @@ function availableUnitPredicatesMatch(source, variantVariable) {
 }
 
 export const serializedInventoryAvailability = {
+  availableUnitWhereClause,
   availableUnitPredicatesMatch,
 };

@@ -29,4 +29,12 @@ test('requires an unconditional exception in the immediate zero-row handler', ()
   `);
   assert.equal(nested.length, 1);
   assert.equal(legacyDecrementHasZeroRowHandling(nested[0]), false);
+
+  const caseGated = legacyDecrementMatches(`
+    UPDATE products SET stock_quantity = stock_quantity - 1 WHERE stock_quantity >= 1;
+    IF NOT FOUND THEN
+      CASE WHEN v_should_raise THEN RAISE EXCEPTION 'nested'; ELSE NULL; END CASE;
+    END IF;
+  `);
+  assert.equal(legacyDecrementHasZeroRowHandling(caseGated[0]), false);
 });

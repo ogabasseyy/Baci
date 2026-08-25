@@ -29,6 +29,7 @@ function findEffectiveReserveUpdate(source) {
       /\bstatus\s*=\s*'reserved'/i.test(match[1]) &&
       /\border_id\s*=\s*p_order_id\b/i.test(match[1]) &&
       /\border_item_id\s*=\s*p_order_item_id\b/i.test(match[1]) &&
+      /\bbranch_id\s*=\s*v_unit_branch_id\b/i.test(match[1]) &&
       /\breservation_expires_at\s*=\s*CASE\s+WHEN\s+v_is_confirmed_hold\s+THEN\s+NULL\s+ELSE\s+now\(\)\s*\+\s*interval\s+'2 hours'\s+END\b/i.test(
         match[1]
       ) &&
@@ -97,6 +98,26 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
       claim.replace(/\s*reservation_expires_at\s*=\s*CASE[\s\S]*?END,?/i, '')
     ),
     undefined
+  );
+  assert.equal(
+    findEffectiveReserveUpdate(
+      claim.replace(/\s*branch_id\s*=\s*v_unit_branch_id\s*,?/i, '')
+    ),
+    undefined
+  );
+  const excessRelease =
+    /ELSIF\s+v_reserved_count\s*>\s*v_qty\s+THEN[\s\S]*?UPDATE\s+public\.variant_inventory\s+SET\s+status\s*=\s*'available',[\s\S]*?order_id\s*=\s*NULL,[\s\S]*?order_item_id\s*=\s*NULL[\s\S]*?WHERE\s+id\s*=\s*v_unit_id\s*;/i;
+  assert.match(claim, excessRelease);
+  assert.doesNotMatch(
+    claim.replace(excessRelease, 'ELSIF v_reserved_count > v_qty THEN NULL;'),
+    excessRelease
+  );
+  const fulfillmentSnapshot =
+    /UPDATE\s+public\.order_items\s+SET\s+fulfillment_data\s*=\s*v_fulfillment_data\s+WHERE\s+id\s*=\s*p_order_item_id\s*;/i;
+  assert.match(claim, fulfillmentSnapshot);
+  assert.doesNotMatch(
+    claim.replace(fulfillmentSnapshot, 'PERFORM 1;'),
+    fulfillmentSnapshot
   );
   const neededAssignment =
     /\bv_needed\s*:=\s*v_qty\s*-\s*v_reserved_count\s*;/i;

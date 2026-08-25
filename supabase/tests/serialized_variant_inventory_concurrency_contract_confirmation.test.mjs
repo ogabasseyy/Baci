@@ -70,6 +70,20 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
   const selector =
     serializedInventoryContract.availableUnitWhereClause(confirm);
   const transition = findReclaimReservationTransition(confirm);
+  const publicConfirm = serializedInventoryContract.latestFunctionBody(
+    'public.confirm_order_inventory_reservations(uuid, uuid)'
+  );
+  const authorization =
+    /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\.role\(\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(p_merchant_id\)\s+THEN[\s\S]*?RAISE\s+EXCEPTION\s+['"]forbidden['"][\s\S]*?END\s+IF\s*;/i.exec(
+      publicConfirm
+    );
+  const delegation =
+    /RETURN\s+private\.confirm_order_inventory_reservations\s*\(/i.exec(
+      publicConfirm
+    );
+  assert.ok(authorization);
+  assert.ok(delegation);
+  assert.ok(authorization.index < delegation.index);
 
   assert.ok(locks.order);
   assert.ok(locks.item);

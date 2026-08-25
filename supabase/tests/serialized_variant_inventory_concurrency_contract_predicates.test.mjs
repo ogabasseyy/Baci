@@ -43,6 +43,22 @@ test('rejects a matching predicate when that atom is negated or optional', () =>
     ),
     false
   );
+  for (const inverted of ['FALSE::boolean', '(FALSE)']) {
+    assert.equal(
+      serializedInventoryPredicates.isRequiredConjunct(
+        `(vi.merchant_id = p_merchant_id) = ${inverted}`,
+        requiredMerchant
+      ),
+      false
+    );
+  }
+  assert.equal(
+    serializedInventoryPredicates.isRequiredConjunct(
+      'vi.merchant_id = p_merchant_id AND (FALSE)',
+      requiredMerchant
+    ),
+    false
+  );
   assert.equal(
     serializedInventoryPredicates.isRequiredConjunct(
       '(vi.merchant_id = p_merchant_id) = (vi.merchant_id = p_merchant_id)',

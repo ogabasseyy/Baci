@@ -70,6 +70,21 @@ test('accepts a locked precheck for the same legacy inventory row', () => {
   assert.equal(legacyDecrementHasZeroRowHandling(matches[0]), true);
 });
 
+test('requires locked shortage checks to terminate after returning a row', () => {
+  const [match] = legacyDecrementMatches(`
+    SELECT stock_quantity INTO current_stock FROM products
+    WHERE id = product_id_param FOR UPDATE;
+    IF NOT FOUND THEN RETURN; END IF;
+    IF current_stock < quantity_param THEN
+      RETURN QUERY SELECT false, current_stock, 'insufficient';
+    END IF;
+    UPDATE products SET stock_quantity = stock_quantity - quantity_param
+    WHERE id = product_id_param;
+  `);
+  assert.equal(legacyDecrementHasCompareAndSetGuard(match[2]), false);
+  assert.equal(legacyDecrementHasZeroRowHandling(match), false);
+});
+
 test('rejects a locked precheck that does not handle a missing row', () => {
   const matches = legacyDecrementMatches(`
     SELECT stock_quantity INTO current_stock FROM products WHERE id = product_id FOR UPDATE;

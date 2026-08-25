@@ -184,14 +184,14 @@ function matchingLockedPrecheck(statement, decrement) {
     if (!isRequiredConjunct(select[2], rowEquality)) continue;
     const afterLock = prefix.slice(index + text.length);
     const missingRowHandler =
-      /^\s*IF\s+NOT\s+FOUND\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?\b(?:RAISE\s+EXCEPTION|RETURN)\b(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
+      /^\s*IF\s+NOT\s+FOUND\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?(?:\bRAISE\s+EXCEPTION\b|\bRETURN\s*;)(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
         afterLock
       );
     const shortageStart = missingRowHandler?.[0].length ?? 0;
     if (
       missingRowHandler &&
       new RegExp(
-        `^\\s*IF\\s+current_stock\\s*<\\s*(?:\\(\\s*)*${quantity}\\b[\\s\\)]*\\s+THEN(?:(?!\\bEND\\s+IF\\b)[\\s\\S])*?\\bRETURN\\b`,
+        `^\\s*IF\\s+current_stock\\s*<\\s*(?:\\(\\s*)*${quantity}\\b[\\s\\)]*\\s+THEN(?:(?!\\bEND\\s+IF\\b)[\\s\\S])*?(?:\\bRAISE\\s+EXCEPTION\\b|\\bRETURN\\s*;)`,
         'i'
       ).test(afterLock.slice(shortageStart))
     ) {

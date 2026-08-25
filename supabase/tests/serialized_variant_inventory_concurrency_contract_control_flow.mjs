@@ -37,33 +37,48 @@ function pathAt(source, targetIndex) {
     }
   }
   return stack.map(
-    ({ branch, id, unreachable }) => `${id}:${branch}:${unreachable}`
+    ({ branch, id, kind, unreachable }) =>
+      `${kind}:${id}:${branch}:${unreachable}`
   );
+}
+
+function isReachable(source, index) {
+  const terminator =
+    /\bRETURN\b(?!\s+(?:NEXT|QUERY)\b)|\bRAISE\s+EXCEPTION\b/gi;
+  const searchable = serializedInventorySqlParser.maskSqlLiterals(source);
+  const target = pathAt(source, index);
+  if (target.some((branch) => branch.endsWith(':true'))) return false;
+  for (const match of searchable.slice(0, index).matchAll(terminator)) {
+    const terminatorPath = pathAt(source, match.index);
+    if (terminatorPath.every((branch, depth) => target[depth] === branch)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function dominatesControlFlow(source, prerequisiteIndex, targetIndex) {
   if (prerequisiteIndex >= targetIndex) return false;
   const prerequisitePath = pathAt(source, prerequisiteIndex);
   const targetPath = pathAt(source, targetIndex);
-  const terminator =
-    /\bRETURN\b(?!\s+(?:NEXT|QUERY)\b)|\bRAISE\s+EXCEPTION\b/gi;
-  const searchable = serializedInventorySqlParser.maskSqlLiterals(source);
-  const isReachable = (index) => {
-    const target = pathAt(source, index);
-    if (target.some((branch) => branch.endsWith(':true'))) return false;
-    for (const match of searchable.slice(0, index).matchAll(terminator)) {
-      const terminatorPath = pathAt(source, match.index);
-      if (terminatorPath.every((branch, depth) => target[depth] === branch)) {
-        return false;
-      }
-    }
-    return true;
-  };
   return (
-    isReachable(prerequisiteIndex) &&
-    isReachable(targetIndex) &&
+    isReachable(source, prerequisiteIndex) &&
+    isReachable(source, targetIndex) &&
     prerequisitePath.every((branch, index) => targetPath[index] === branch)
   );
 }
 
-export const serializedInventoryControlFlow = { dominatesControlFlow };
+function sharesInnermostLoop(source, ...indexes) {
+  const loops = indexes.map((index) =>
+    pathAt(source, index)
+      .filter((branch) => branch.startsWith('loop:'))
+      .at(-1)
+  );
+  return loops[0] !== undefined && loops.every((loop) => loop === loops[0]);
+}
+
+export const serializedInventoryControlFlow = {
+  dominatesControlFlow,
+  isReachable,
+  sharesInnermostLoop,
+};

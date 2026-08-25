@@ -65,8 +65,12 @@ function unwrapOuterParentheses(source) {
   return expression;
 }
 
-const negativePredicatePattern =
-  /(?:\bIS\s+(?:FALSE|NOT\s+TRUE)\b|=\s*FALSE\b|<>\s*TRUE\b)\s*;?$/i;
+const falseValue = String.raw`(?:\(\s*)*FALSE(?:\s*::\s*(?:pg_catalog\s*\.\s*)?boolean)?(?:\s*\))*`;
+const trueValue = String.raw`(?:\(\s*)*TRUE(?:\s*::\s*(?:pg_catalog\s*\.\s*)?boolean)?(?:\s*\))*`;
+const negativePredicatePattern = new RegExp(
+  String.raw`(?:\bIS\s+(?:FALSE|NOT\s+TRUE)\b|=\s*${falseValue}|<>\s*${trueValue})\s*;?$`,
+  'i'
+);
 
 function isRequiredConjunct(source, pattern) {
   const expression = unwrapOuterParentheses(source);
@@ -76,7 +80,11 @@ function isRequiredConjunct(source, pattern) {
   }
   const andBranches = splitTopLevel(expression, 'AND');
   if (andBranches.length > 1) {
-    return andBranches.some((branch) => isRequiredConjunct(branch, pattern));
+    return (
+      !andBranches.some((branch) =>
+        new RegExp(`^${falseValue}$`, 'i').test(unwrapOuterParentheses(branch))
+      ) && andBranches.some((branch) => isRequiredConjunct(branch, pattern))
+    );
   }
   if (/^NOT\b/i.test(expression) || negativePredicatePattern.test(expression)) {
     return false;

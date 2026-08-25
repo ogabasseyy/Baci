@@ -31,7 +31,11 @@ function findConfirmationLocks(source) {
           isRequiredConjunct(query[2], predicate)
         )
       ) {
-        return { index: index + query.index, where: query[2] };
+        return {
+          end: index + text.length,
+          index: index + query.index,
+          where: query[2],
+        };
       }
     }
     return undefined;
@@ -54,6 +58,19 @@ function findConfirmationLocks(source) {
       ),
     ]),
   };
+}
+
+function orderLockFailsClosed(source) {
+  const cleanSource = maskSqlLiterals(stripSqlComments(source), {
+    preserveStrings: true,
+  });
+  const orderLock = findConfirmationLocks(cleanSource).order;
+  return Boolean(
+    orderLock &&
+      /^\s*IF\s+NOT\s+FOUND\s+THEN\s+RAISE\s+EXCEPTION\s+['"]order_not_found['"][^;]*;\s*END\s+IF\s*;/i.test(
+        cleanSource.slice(orderLock.end)
+      )
+  );
 }
 
 function findReclaimReservationTransition(source) {
@@ -123,4 +140,5 @@ export const serializedInventoryConfirmation = {
   confirmationLocksPrecedeReclaim,
   findConfirmationLocks,
   findReclaimReservationTransition,
+  orderLockFailsClosed,
 };

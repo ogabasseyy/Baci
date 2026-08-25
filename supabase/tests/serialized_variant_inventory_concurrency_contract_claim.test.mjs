@@ -1,75 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
+import { serializedInventoryClaim } from './serialized_variant_inventory_concurrency_contract_claim.mjs';
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const { latestFunctionBody } = serializedInventoryContract;
 const { isRequiredConjunct, maskSqlLiterals } = serializedInventorySqlParser;
-
-function hasOnlyUnitIdPredicate(whereClause) {
-  return (
-    whereClause
-      .replace(/(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*v_unit\.id\b/i, '')
-      .replace(/[\s();]/g, '') === ''
-  );
-}
-
-function findEffectiveReserveUpdate(source) {
-  const reserveUnitUpdate =
-    /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([^;]*?)\s+WHERE\s+([^;]*);/gi;
-  const masked = maskSqlLiterals(source, { preserveStrings: true });
-  const counters = [
-    ...masked.matchAll(/v_claimed_count\s*:=\s*v_claimed_count\s*\+\s*1/gi),
-  ];
-  if (counters.length !== 1) return undefined;
-  const [counter] = counters;
-  return [...masked.matchAll(reserveUnitUpdate)].find(
-    (match) =>
-      /\bstatus\s*=\s*'reserved'/i.test(match[1]) &&
-      /\border_id\s*=\s*p_order_id\b/i.test(match[1]) &&
-      /\border_item_id\s*=\s*p_order_item_id\b/i.test(match[1]) &&
-      /\bbranch_id\s*=\s*v_unit_branch_id\b/i.test(match[1]) &&
-      /\breservation_expires_at\s*=\s*CASE\s+WHEN\s+v_is_confirmed_hold\s+THEN\s+NULL\s+ELSE\s+now\(\)\s*\+\s*interval\s+'2 hours'\s+END\b/i.test(
-        match[1]
-      ) &&
-      serializedInventoryControlFlow.dominatesControlFlow(
-        masked,
-        match.index,
-        counter.index
-      )
-  );
-}
-
-function claimedIncrementCount(source) {
-  return (
-    maskSqlLiterals(source).match(
-      /\bv_claimed_count\s*:=\s*v_claimed_count\s*\+\s*1\b/gi
-    ) ?? []
-  ).length;
-}
-
-function strictShortagePrecedesSuccess(source) {
-  const executable = maskSqlLiterals(source, { preserveStrings: true });
-  const shortage =
-    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+(?:\(\s*)?v_reserved_count\s*\+\s*v_claimed_count\s*(?:\s*\))?\s*<\s*v_qty\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]serialized_inventory_unavailable['"]/i.exec(
-      executable
-    );
-  const success = /RETURN\s+v_fulfillment_data\s*;/i.exec(executable);
-  if (!shortage || !success) return false;
-  const unreachableWrapper = /IF\s+false\s+THEN\s*$/i.test(
-    executable.slice(0, shortage.index)
-  );
-  return (
-    !unreachableWrapper &&
-    shortage.index < success.index &&
-    serializedInventoryControlFlow.dominatesControlFlow(
-      executable,
-      shortage.index,
-      shortage.index + shortage[0].indexOf('RAISE')
-    )
-  );
-}
+const {
+  claimedIncrementCount,
+  findEffectiveReserveUpdate,
+  hasOnlyUnitIdPredicate,
+  strictShortagePrecedesSuccess,
+} = serializedInventoryClaim;
 
 test('serialized claims keep counts item-scoped and reserve each selected unit', () => {
   const claim = latestFunctionBody(
@@ -102,6 +45,19 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
   assert.equal(
     findEffectiveReserveUpdate(
       claim.replace(/\s*branch_id\s*=\s*v_unit_branch_id\s*,?/i, '')
+    ),
+    undefined
+  );
+  const reserveStatement =
+    /UPDATE\s+public\.variant_inventory\s+SET\s+status\s*=\s*'reserved',[\s\S]*?WHERE\s+id\s*=\s*v_unit\.id;/i.exec(
+      claim
+    );
+  assert.ok(reserveStatement);
+  assert.equal(
+    findEffectiveReserveUpdate(
+      claim
+        .replace(reserveStatement[0], '')
+        .replace('FOR v_unit IN', `${reserveStatement[0]}\nFOR v_unit IN`)
     ),
     undefined
   );
@@ -242,7 +198,7 @@ test('serialized claims authorize callers and fail strict shortages before succe
       executablePublicClaim
     );
   const delegation =
-    /RETURN\s+private\.claim_variant_inventory_units_for_order_item_internal\s*\(/i.exec(
+    /RETURN\s+private\.claim_variant_inventory_units_for_order_item_internal\s*\(\s*p_merchant_id\s*,\s*p_order_id\s*,\s*p_order_item_id\s*\)\s*;/i.exec(
       executablePublicClaim
     );
   assert.ok(authorization, 'public claims must authorize the merchant');
@@ -254,6 +210,13 @@ test('serialized claims authorize callers and fail strict shortages before succe
       delegation.index
     ),
     true
+  );
+  assert.doesNotMatch(
+    executablePublicClaim.replace(
+      /(RETURN\s+private\.claim_variant_inventory_units_for_order_item_internal[\s\S]*?)p_order_item_id/i,
+      '$1p_order_id'
+    ),
+    /RETURN\s+private\.claim_variant_inventory_units_for_order_item_internal\s*\(\s*p_merchant_id\s*,\s*p_order_id\s*,\s*p_order_item_id\s*\)\s*;/i
   );
   const decoyClaim = maskSqlLiterals(
     publicClaim.replace(
@@ -278,6 +241,15 @@ test('serialized claims authorize callers and fail strict shortages before succe
   assert.equal(
     strictShortagePrecedesSuccess(
       claim.replace(shortage[0], `IF false THEN\n${shortage[0]}\nEND IF;`)
+    ),
+    false
+  );
+  assert.equal(
+    strictShortagePrecedesSuccess(
+      claim.replace(
+        /RAISE\s+EXCEPTION\s+'serialized_inventory_unavailable'[^;]*;/i,
+        (raise) => `CASE WHEN false THEN ${raise} END CASE;`
+      )
     ),
     false
   );

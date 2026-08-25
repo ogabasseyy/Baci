@@ -52,6 +52,23 @@ test('schema-qualified built-in types replace the effective function body', () =
   assert.doesNotMatch(body, /RETURN 'old'/);
 });
 
+test('quoted built-in signatures invalidate the effective function body', () => {
+  const definition =
+    'CREATE FUNCTION private.fixture(uuid) RETURNS void AS $$ BEGIN NULL; END; $$;';
+  for (const invalidator of [
+    'DROP FUNCTION private.fixture(pg_catalog."uuid");',
+    'ALTER FUNCTION private.fixture("uuid") SET SCHEMA public;',
+  ]) {
+    assert.throws(
+      () =>
+        latestFunctionBody('private.fixture(uuid)', [
+          `${definition}\n${invalidator}`,
+        ]),
+      /missing private\.fixture/
+    );
+  }
+});
+
 test('PostgreSQL integer aliases replace the same effective function', () => {
   const body = latestFunctionBody('private.fixture(integer)', [
     "CREATE FUNCTION private.fixture(integer) RETURNS text AS $$ BEGIN RETURN 'old'; END; $$;",

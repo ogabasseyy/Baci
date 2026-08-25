@@ -9,7 +9,6 @@ import { serializedInventorySqlParser } from './serialized_variant_inventory_con
 const { extractIfBranches, latestFunctionBody } = serializedInventoryContract;
 const { hasTargetStatusWhitelist, releaseLockMatches } =
   serializedInventoryReleaseLocks;
-
 function releaseTransition(branch, targetStatus) {
   const searchableBranch = serializedInventorySqlParser.maskSqlLiterals(
     branch,
@@ -54,7 +53,6 @@ function releaseTransition(branch, targetStatus) {
     )
   );
 }
-
 function releaseBranchesMatch(branches) {
   return (
     branches.elsifBranches.length === 0 &&
@@ -121,10 +119,19 @@ test('release serializes on its order before locking reserved inventory', () => 
     authorizationGuard
   );
   assert.ok(orderLock, 'release must lock its parent order');
-  assert.match(
-    release.slice(orderLock.index),
-    /FOR\s+UPDATE(?:\s+OF\s+[a-z_][a-z0-9_]*)?\s*;\s*IF\s+NOT\s+FOUND\s+THEN\s+RAISE\s+EXCEPTION\s+['"]order_not_found['"]/i,
+  assert.equal(
+    serializedInventoryConfirmation.orderLockFailsClosed(release),
+    true,
     'release must fail closed when its scoped parent order does not exist'
+  );
+  assert.equal(
+    serializedInventoryConfirmation.orderLockFailsClosed(
+      release.replace(
+        /IF\s+NOT\s+FOUND\s+THEN\s+RAISE\s+EXCEPTION\s+'order_not_found'[^;]*;\s*END\s+IF\s*;/i,
+        (handler) => `PERFORM 1;\n${handler}`
+      )
+    ),
+    false
   );
   assert.ok(
     orderLock.index < release.indexOf("IF v_target_status = 'available'"),

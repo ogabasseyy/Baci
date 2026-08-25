@@ -55,20 +55,22 @@ function parameterListPattern(argumentTypes) {
   const parameterMode = '(?:(?:INOUT|IN|VARIADIC)\\s+)?';
   return argumentTypes
     .map((type) => {
-      const normalized = type.trim().replace(/\s+/g, ' ');
+      const normalized = canonicalType(type);
       const isArray = /\[\s*\]$/.test(normalized);
       const baseType = isArray
         ? normalized.replace(/\s*\[\s*\]$/, '').trim()
         : normalized;
       const typeAliases = {
-        decimal: '(?:numeric|decimal)',
-        integer: '(?:integer|int4)',
-        int4: '(?:integer|int4)',
-        numeric: '(?:numeric|decimal)',
+        decimal: '(?:numeric|decimal|"numeric"|"decimal")',
+        integer: '(?:integer|int4|"integer"|"int4")',
+        int4: '(?:integer|int4|"integer"|"int4")',
+        numeric: '(?:numeric|decimal|"numeric"|"decimal")',
       };
       const basePattern =
         typeAliases[baseType.toLowerCase()] ??
-        baseType.split(' ').map(escapeRegex).join('\\s+');
+        (/^[a-z_][a-z0-9_]*$/i.test(baseType)
+          ? `(?:${escapeRegex(baseType)}|"${escapeRegex(baseType)}")`
+          : baseType.split(' ').map(escapeRegex).join('\\s+'));
       const qualifiedBasePattern = baseType.includes('.')
         ? basePattern
         : `(?:(?:pg_catalog|"pg_catalog")\\s*\\.\\s*)?${basePattern}`;

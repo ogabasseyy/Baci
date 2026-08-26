@@ -53,6 +53,14 @@ test('private inventory functions remain inaccessible to authenticated callers',
       ),
       true
     );
+    assert.equal(
+      serializedInventoryPrivileges.authenticatedCanExecute(
+        `${migrationSql}
+          GRANT ALL PRIVILEGES ON FUNCTION ${signature} TO PUBLIC;`,
+        signature
+      ),
+      true
+    );
   }
 });
 

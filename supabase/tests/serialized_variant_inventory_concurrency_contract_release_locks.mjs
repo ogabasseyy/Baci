@@ -17,6 +17,20 @@ function releaseLockMatches(source) {
     /\b(?:LIMIT|OFFSET|FETCH|FALSE)\b|\bNOT\s+TRUE\b/i.test(query[1])
   )
     return false;
+  const statusComparisons = [
+    ...query[1].matchAll(
+      /\bvi\s*\.\s*status\s*(=|<>|!=|IS\s+(?:NOT\s+)?DISTINCT\s+FROM)\s*'([^']+)'/gi
+    ),
+  ];
+  if (
+    statusComparisons.some(
+      ([, operator, value]) =>
+        operator !== '=' || value.toLowerCase() !== 'reserved'
+    ) ||
+    /\bNOT\s*\(\s*vi\s*\.\s*status\s*=\s*'reserved'/i.test(query[1])
+  ) {
+    return false;
+  }
   return [
     /vi\s*\.\s*order_id\s*=\s*p_order_id\b/i,
     /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id\b/i,
@@ -54,7 +68,17 @@ function hasTargetStatusWhitelist(source) {
   );
 }
 
+function findReleaseEvent(source, targetStatus) {
+  const eventName =
+    targetStatus === 'available' ? 'reservation_released' : 'returned';
+  return new RegExp(
+    `PERFORM\\s+private\\s*\\.\\s*record_variant_inventory_event\\s*\\(\\s*v_unit\\s*\\.\\s*id\\s*,\\s*p_merchant_id\\s*,\\s*v_unit\\s*\\.\\s*product_id\\s*,\\s*v_unit\\s*\\.\\s*variant_id\\s*,\\s*'${eventName}'\\s*,\\s*'reserved'\\s*,\\s*'${targetStatus}'\\s*,\\s*p_order_id\\s*,\\s*v_unit\\s*\\.\\s*order_item_id\\b[\\s\\S]*?\\);`,
+    'i'
+  ).exec(source);
+}
+
 export const serializedInventoryReleaseLocks = {
+  findReleaseEvent,
   hasTargetStatusWhitelist,
   releaseLockMatches,
 };

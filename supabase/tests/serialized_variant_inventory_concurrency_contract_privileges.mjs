@@ -65,7 +65,7 @@ function authenticatedCanExecute(source, signature) {
   const state = { authenticated: false, exists: false, public: false };
   const executable = maskSqlStringLiterals(source);
   const pattern = new RegExp(
-    `(?:GRANT\\s+EXECUTE|REVOKE\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE))\\s+ON\\s+FUNCTION\\s+${signaturePattern(signature)}[^;]*?\\s+(?:TO|FROM)\\s+([^;]+);`,
+    `(?:GRANT\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE)|REVOKE\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE))\\s+ON\\s+FUNCTION\\s+${signaturePattern(signature)}[^;]*?\\s+(?:TO|FROM)\\s+([^;]+);`,
     'gi'
   );
   const events = serializedInventorySqlParser

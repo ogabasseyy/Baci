@@ -1,4 +1,5 @@
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
+import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -9,6 +10,19 @@ function signaturePattern(signature) {
     .replaceAll('\\.', '\\s*\\.\\s*')
     .replaceAll(',', '\\s*,\\s*')
     .replaceAll(' ', '\\s+');
+}
+
+const maskedSourceCache = new Map();
+
+function maskSqlStringLiterals(source) {
+  const cached = maskedSourceCache.get(source);
+  if (cached !== undefined) return cached;
+  const commentFree = serializedInventorySqlParser.stripSqlComments(source);
+  const masked = commentFree.replace(/'(?:''|\\[\s\S]|[^'])*'/g, (literal) =>
+    literal.replace(/[^\r\n]/g, ' ')
+  );
+  maskedSourceCache.set(source, masked);
+  return masked;
 }
 
 function functionLifecycleEvents(source, signature) {
@@ -49,19 +63,28 @@ function functionLifecycleEvents(source, signature) {
 
 function authenticatedCanExecute(source, signature) {
   const state = { authenticated: false, exists: false, public: false };
+  const executable = maskSqlStringLiterals(source);
   const pattern = new RegExp(
     `(?:GRANT\\s+EXECUTE|REVOKE\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE))\\s+ON\\s+FUNCTION\\s+${signaturePattern(signature)}[^;]*?\\s+(?:TO|FROM)\\s+([^;]+);`,
     'gi'
   );
-  const privileges = [...source.matchAll(pattern)].map((match) => ({
-    index: match.index,
-    kind: 'privilege',
-    match,
-  }));
-  const events = [
-    ...functionLifecycleEvents(source, signature),
-    ...privileges,
-  ].sort((left, right) => left.index - right.index);
+  const events = serializedInventorySqlParser
+    .splitSqlStatements(executable)
+    .flatMap(({ index, text }) => {
+      const lifecycle = functionLifecycleEvents(text, signature).map(
+        (event) => ({ ...event, index: index + event.index })
+      );
+      const leading = text.trimStart();
+      if (!/^(?:GRANT|REVOKE)\b/i.test(leading)) return lifecycle;
+      pattern.lastIndex = 0;
+      const privileges = [...text.matchAll(pattern)].map((match) => ({
+        index: index + match.index,
+        kind: 'privilege',
+        match,
+      }));
+      return [...lifecycle, ...privileges];
+    })
+    .sort((left, right) => left.index - right.index);
   for (const event of events) {
     if (event.kind === 'drop') {
       state.exists = false;

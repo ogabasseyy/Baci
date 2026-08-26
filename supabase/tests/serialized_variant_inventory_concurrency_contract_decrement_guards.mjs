@@ -27,6 +27,25 @@ function hasPositiveQuantityGuard(source) {
   );
 }
 
+function targetMerchantLookup(source, beforeIndex) {
+  const targetParameter = /\bvariant_id_param\b/i.test(source)
+    ? 'variant_id_param'
+    : 'product_id_param';
+  const targetPattern =
+    targetParameter === 'variant_id_param'
+      ? /SELECT\s+[^;]*\bmerchant_id\b[^;]*\bINTO\s+v_merchant_id\b[^;]*\bFROM\s+(?:public\s*\.\s*)?products\b[^;]*\bJOIN\s+(?:public\s*\.\s*)?product_variants\b[^;]*\bWHERE\s+[^;]*\bvariant_id_param\b[^;]*;/i
+      : /SELECT\s+[^;]*\bmerchant_id\b[^;]*\bINTO\s+v_merchant_id\b[^;]*\bFROM\s+(?:public\s*\.\s*)?products\b[^;]*\bWHERE\s+[^;]*\bid\s*=\s*product_id_param\b[^;]*;/i;
+  const assignments = [
+    ...source.matchAll(
+      /SELECT\s+[^;]*\bmerchant_id\b[^;]*\bINTO\s+v_merchant_id\b[^;]*;/gi
+    ),
+  ].filter(({ index }) => index < beforeIndex);
+  const latestAssignment = assignments.at(-1);
+  return latestAssignment && targetPattern.test(latestAssignment[0])
+    ? latestAssignment
+    : null;
+}
+
 function hasMerchantAuthorizationGuard(source) {
   const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
     preserveStrings: true,
@@ -39,9 +58,16 @@ function hasMerchantAuthorizationGuard(source) {
     /(?:SELECT\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s+INTO[\s\S]*?\bFOR\s+UPDATE\b|UPDATE\s+(?:public\s*\.\s*)?(?:products|product_variants)\b)/i.exec(
       executable
     );
+  const merchantLookup = targetMerchantLookup(executable, guard?.index ?? -1);
   return Boolean(
     guard &&
+      merchantLookup &&
       protectedOperation &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        merchantLookup.index,
+        guard.index
+      ) &&
       serializedInventoryControlFlow.dominatesControlFlow(
         executable,
         guard.index,

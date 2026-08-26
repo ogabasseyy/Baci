@@ -18,6 +18,15 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
       true
     );
     assert.equal(
+      serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
+        body.replace(
+          /FROM\s+public\.products\s+AS\s+p/i,
+          'FROM public.merchants AS p'
+        )
+      ),
+      false
+    );
+    assert.equal(
       serializedInventoryDecrementGuards.hasUnlimitedStockReturn(body),
       true
     );
@@ -69,6 +78,21 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
         body
       );
     assert.ok(authorization);
+    const targetParameter = body.includes('variant_id_param')
+      ? 'variant_id_param'
+      : 'product_id_param';
+    assert.equal(
+      serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
+        body.replace(
+          authorization[0],
+          `SELECT m.merchant_id INTO v_merchant_id
+           FROM public.merchants AS m
+           WHERE m.id = ${targetParameter};
+           ${authorization[0]}`
+        )
+      ),
+      false
+    );
     assert.equal(
       serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
         `${body.replace(authorization[0], '')}\n${authorization[0]}`

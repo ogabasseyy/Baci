@@ -26,11 +26,12 @@ test('release serializes on its order before locking reserved inventory', () => 
     release,
     /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
   );
+  const decoyRelease = `PERFORM $decoy$${release}$decoy$;\nIF v_target_status = 'available' THEN\nNULL;\nELSE\nNULL;\nEND IF;`;
   const decoyBranches = extractIfBranches(
-    `PERFORM $decoy$${release}$decoy$;\nIF v_target_status = 'available' THEN\nNULL;\nELSE\nNULL;\nEND IF;`,
+    decoyRelease,
     /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
   );
-  assert.equal(releaseBranchesMatch(decoyBranches), false);
+  assert.equal(releaseBranchesMatch(decoyBranches, decoyRelease), false);
   const executablePublicRelease = serializedInventorySqlParser.maskSqlLiterals(
     publicRelease,
     {
@@ -95,7 +96,23 @@ test('release serializes on its order before locking reserved inventory', () => 
     ),
     true
   );
-  assert.equal(releaseBranchesMatch(branches), true);
+  assert.equal(releaseBranchesMatch(branches, release), true);
+  const reconciliationLoop =
+    /FOR\s+v_item\s+IN\s+SELECT\s+oi\s*\.\s*\*[\s\S]*?END\s+LOOP\s*;/i.exec(
+      release
+    );
+  assert.ok(reconciliationLoop);
+  const withoutReconciliation = release.replace(reconciliationLoop[0], '');
+  assert.equal(
+    releaseBranchesMatch(
+      extractIfBranches(
+        withoutReconciliation,
+        /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/im
+      ),
+      withoutReconciliation
+    ),
+    false
+  );
   assert.match(
     executablePublicRelease,
     /RETURN\s+private\s*\.\s*release_order_inventory_units\s*\(\s*p_merchant_id\s*,\s*p_order_id\s*,\s*p_target_status\s*\)\s*;/i,
@@ -111,15 +128,17 @@ test('release serializes on its order before locking reserved inventory', () => 
     ),
     /RETURN\s+private\s*\.\s*release_order_inventory_units/i
   );
+  const elsifRelease = release.replace(
+    /\s+ELSE\s+/i,
+    "\nELSIF v_target_status = 'returned' THEN\n  NULL;\nELSE\n"
+  );
   assert.equal(
     releaseBranchesMatch(
       extractIfBranches(
-        release.replace(
-          /\s+ELSE\s+/i,
-          "\nELSIF v_target_status = 'returned' THEN\n  NULL;\nELSE\n"
-        ),
+        elsifRelease,
         /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/im
-      )
+      ),
+      elsifRelease
     ),
     false
   );

@@ -123,6 +123,17 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
     ),
     /v_claimed_in_loop\s*:=\s*v_claimed_in_loop\s*\+\s*1\s*;/i
   );
+  const claimedIncrement =
+    /v_claimed_in_loop\s*:=\s*v_claimed_in_loop\s*\+\s*1\s*;/i.exec(confirm);
+  assert.ok(claimedIncrement);
+  const unreachableClaimedIncrement = confirm.replace(
+    claimedIncrement[0],
+    `IF false THEN\n${claimedIncrement[0]}\nEND IF;`
+  );
+  assert.equal(
+    findReclaimReservationTransition(unreachableClaimedIncrement),
+    undefined
+  );
   const neededAssignment =
     /\bv_needed\s*:=\s*v_item\s*\.\s*quantity\s*-\s*v_reserved_count\s*;/i;
   const needed = neededAssignment.exec(confirm);

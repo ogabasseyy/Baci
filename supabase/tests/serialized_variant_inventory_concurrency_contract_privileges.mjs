@@ -12,6 +12,11 @@ function signaturePattern(signature) {
     .replaceAll(' ', '\\s+');
 }
 
+function schemaNameFromSignature(signature) {
+  const match = /^(?:"([^"]+)"|([a-z_][a-z0-9_]*))\s*\./i.exec(signature);
+  return (match?.[1] ?? match?.[2] ?? '').toLowerCase();
+}
+
 const maskedSourceCache = new Map();
 
 function maskSqlStringLiterals(source) {
@@ -68,6 +73,9 @@ function authenticatedCanExecute(source, signature) {
     `(?:GRANT\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE)|REVOKE\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE))\\s+ON\\s+FUNCTION\\s+${signaturePattern(signature)}[^;]*?\\s+(?:TO|FROM)\\s+([^;]+);`,
     'gi'
   );
+  const schemaPattern =
+    /(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+ALL\s+FUNCTIONS\s+IN\s+SCHEMA\s+(?:"([^"]+)"|([a-z_][a-z0-9_]*))\s+(?:TO|FROM)\s+([^;]+);/gi;
+  const targetSchema = schemaNameFromSignature(signature);
   const events = serializedInventorySqlParser
     .splitSqlStatements(executable)
     .flatMap(({ index, text }) => {
@@ -81,8 +89,20 @@ function authenticatedCanExecute(source, signature) {
         index: index + match.index,
         kind: 'privilege',
         match,
+        grantees: match[1],
       }));
-      return [...lifecycle, ...privileges];
+      schemaPattern.lastIndex = 0;
+      const schemaPrivileges = [...text.matchAll(schemaPattern)]
+        .filter(
+          (match) => (match[1] ?? match[2]).toLowerCase() === targetSchema
+        )
+        .map((match) => ({
+          index: index + match.index,
+          kind: 'privilege',
+          match,
+          grantees: match[3],
+        }));
+      return [...lifecycle, ...privileges, ...schemaPrivileges];
     })
     .sort((left, right) => left.index - right.index);
   for (const event of events) {
@@ -98,9 +118,9 @@ function authenticatedCanExecute(source, signature) {
       state.exists = true;
     } else {
       const grant = /^GRANT/i.test(event.match[0]);
-      if (/\bPUBLIC\b/i.test(event.match[1])) state.public = grant;
-      if (/\bauthenticated\b/i.test(event.match[1]))
-        state.authenticated = grant;
+      const grantees = event.grantees ?? event.match[1];
+      if (/\bPUBLIC\b/i.test(grantees)) state.public = grant;
+      if (/\bauthenticated\b/i.test(grantees)) state.authenticated = grant;
     }
   }
   return state.exists && (state.public || state.authenticated);

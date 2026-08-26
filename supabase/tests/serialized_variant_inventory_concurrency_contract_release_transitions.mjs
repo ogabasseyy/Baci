@@ -57,17 +57,86 @@ function releaseTransition(branch, targetStatus) {
   );
 }
 
-function releaseBranchesMatch(branches) {
+function targetDispatchEnd(source) {
+  const dispatch = /\bIF\s+v_target_status\s*=\s*'available'\s+THEN\b/i.exec(
+    source
+  );
+  if (!dispatch) return undefined;
+  const executable = serializedInventorySqlParser.maskSqlLiterals(source);
+  let depth = 0;
+  const tokens = /\bEND\s+IF\b|\bIF\b/gi;
+  for (const token of executable.slice(dispatch.index).matchAll(tokens)) {
+    if (/^IF$/i.test(token[0])) {
+      depth += 1;
+    } else {
+      depth -= 1;
+      if (depth === 0) {
+        return dispatch.index + token.index + token[0].length;
+      }
+    }
+  }
+  return undefined;
+}
+
+function releaseReconciliationMatches(source) {
+  const normalizedSource =
+    serializedInventorySqlParser.stripSqlComments(source);
+  const executable = serializedInventorySqlParser.maskSqlLiterals(
+    normalizedSource,
+    {
+      preserveStrings: true,
+    }
+  );
+  const dispatchEnd = targetDispatchEnd(normalizedSource);
+  if (dispatchEnd === undefined) return false;
+  const afterDispatch = executable.slice(dispatchEnd);
+  const loop =
+    /FOR\s+v_item\s+IN\s+SELECT\s+oi\s*\.\s*\*[\s\S]*?FROM\s+(?:public\s*\.\s*)?order_items\s+oi[\s\S]*?WHERE\s+oi\s*\.\s*order_id\s*=\s*p_order_id[\s\S]*?FOR\s+UPDATE[\s\S]*?LOOP\b([\s\S]*?)END\s+LOOP\s*;/i.exec(
+      afterDispatch
+    );
+  if (!loop) return false;
+  const bodyStart = dispatchEnd + loop.index + loop[0].indexOf(loop[1]);
+  const snapshot =
+    /SELECT\s+jsonb_agg\s*\([\s\S]*?\)\s+INTO\s+v_units_json[\s\S]*?FROM\s+(?:public\s*\.\s*)?variant_inventory\s+vi[\s\S]*?WHERE\s+vi\s*\.\s*order_item_id\s*=\s*v_item\s*\.\s*id\s*;/i.exec(
+      loop[1]
+    );
+  const fulfillment =
+    /UPDATE\s+(?:public\s*\.\s*)?order_items\s+SET\s+fulfillment_data\s*=\s*v_fulfillment_data\s+WHERE\s+id\s*=\s*v_item\s*\.\s*id\s*;/i.exec(
+      loop[1]
+    );
+  const sync =
+    /PERFORM\s+private\s*\.\s*sync_serialized_stock\s*\(\s*p_merchant_id\s*,\s*v_item\s*\.\s*product_id\s*\)\s*;/i.exec(
+      loop[1]
+    );
+  if (!snapshot || !fulfillment || !sync) return false;
+  const indexes = [snapshot, fulfillment, sync].map(
+    (match) => bodyStart + match.index
+  );
   return (
+    serializedInventoryControlFlow.sharesInnermostLoop(
+      executable,
+      ...indexes
+    ) &&
+    indexes.every((index) =>
+      serializedInventoryControlFlow.isReachable(executable, index)
+    )
+  );
+}
+
+function releaseBranchesMatch(branches, source) {
+  return (
+    source !== undefined &&
     branches.elsifBranches.length === 0 &&
     serializedInventoryReleaseLocks.releaseLockMatches(branches.thenBranch) &&
     serializedInventoryReleaseLocks.releaseLockMatches(branches.elseBranch) &&
     releaseTransition(branches.thenBranch, 'available') &&
-    releaseTransition(branches.elseBranch, 'returned')
+    releaseTransition(branches.elseBranch, 'returned') &&
+    releaseReconciliationMatches(source)
   );
 }
 
 export const serializedInventoryReleaseTransitions = {
   releaseBranchesMatch,
+  releaseReconciliationMatches,
   releaseTransition,
 };

@@ -37,3 +37,22 @@ test('release transitions require a scoped lifecycle event', () => {
     false
   );
 });
+
+test('release reconciliation recomputes missing units and deduplicates stock sync', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+
+  assert.match(
+    release,
+    /'missingUnitCount'\s*,\s*GREATEST\(\s*v_item\.quantity\s*-\s*v_reserved_count\s*,\s*0\s*\)/i
+  );
+  assert.doesNotMatch(
+    release,
+    /'missingUnitCount'\s*,\s*COALESCE\(\s*\(\s*v_item\.fulfillment_data/i
+  );
+  assert.match(
+    release,
+    /array_position\(\s*v_synced_product_ids\s*,\s*v_item\.product_id\s*\)\s+IS\s+NULL[\s\S]*?sync_serialized_stock[\s\S]*?array_append\(\s*v_synced_product_ids\s*,\s*v_item\.product_id\s*\)/i
+  );
+});

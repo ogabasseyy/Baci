@@ -16,7 +16,7 @@ function extractIfArms(source, openingPattern) {
   assert.notEqual(opening, null, 'missing target IF branch');
   const tokenSource = serializedInventorySqlParser.maskSqlLiterals(normalized);
   const tokens =
-    /\bEND\s+IF\b|\bEND\s+CASE\b|\bELSIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bELSE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b/gi;
+    /\bEND\s+IF\b|\bEND\s+CASE\b|\bEND\b(?!\s+(?:IF|CASE|LOOP)\b)|\bELSIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bELSE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b/gi;
   let depth = 0;
   let caseDepth = 0;
   let armStart = opening.index + opening[0].length;
@@ -29,6 +29,10 @@ function extractIfArms(source, openingPattern) {
       continue;
     }
     if (/^END\s+CASE\b/i.test(token[0])) {
+      caseDepth = Math.max(0, caseDepth - 1);
+      continue;
+    }
+    if (/^END$/i.test(token[0])) {
       caseDepth = Math.max(0, caseDepth - 1);
       continue;
     }
@@ -64,55 +68,12 @@ function extractIfArms(source, openingPattern) {
 }
 
 function extractIfBranches(source, openingPattern) {
-  const lines = serializedInventorySqlParser
-    .maskSqlLiterals(source, { preserveStrings: true })
-    .split(/\r?\n/);
-  const openingIndex = lines.findIndex((line) => openingPattern.test(line));
-  assert.notEqual(openingIndex, -1, 'missing target IF branch');
-  let depth = 1;
-  let caseDepth = 0;
-  let inElse = false;
-  let currentLines;
-  const thenLines = [];
-  const elseLines = [];
-  const elsifBranches = [];
-  currentLines = thenLines;
-  for (const line of lines.slice(openingIndex + 1)) {
-    const sqlLine = line.replace(/'(?:''|[^'])*'|"(?:""|[^"])*"/g, '');
-    const caseTokens = sqlLine.matchAll(
-      /\bEND\s+CASE\b|\bCASE\b|\bEND\b(?!\s+(?:IF|LOOP|CASE)\b)/gi
-    );
-    for (const token of caseTokens) {
-      if (/^CASE$/i.test(token[0])) {
-        caseDepth += 1;
-      } else if (caseDepth > 0) {
-        caseDepth -= 1;
-      }
-    }
-    if (/^\s*IF\b/i.test(line)) {
-      depth += 1;
-    } else if (/^\s*END\s+IF\b/i.test(line)) {
-      depth -= 1;
-      if (depth === 0) {
-        assert.ok(inElse, 'target IF branch is missing ELSE');
-        return {
-          thenBranch: thenLines.join('\n'),
-          elseBranch: elseLines.join('\n'),
-          elsifBranches: elsifBranches.map((branch) => branch.join('\n')),
-        };
-      }
-    } else if (depth === 1 && caseDepth === 0 && /^\s*ELSIF\b/i.test(line)) {
-      currentLines = [];
-      elsifBranches.push(currentLines);
-      continue;
-    } else if (depth === 1 && caseDepth === 0 && /^\s*ELSE\b/i.test(line)) {
-      inElse = true;
-      currentLines = elseLines;
-      continue;
-    }
-    currentLines.push(line);
-  }
-  assert.fail('unterminated target IF branch');
+  const branches = extractIfArms(source, openingPattern);
+  assert.ok(
+    branches.elseBranch !== undefined,
+    'target IF branch is missing ELSE'
+  );
+  return branches;
 }
 
 export const serializedInventoryBranches = { extractIfArms, extractIfBranches };

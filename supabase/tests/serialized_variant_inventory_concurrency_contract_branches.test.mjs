@@ -69,3 +69,13 @@ test('extracts same-line IF arms without crossing ELSE', () => {
   assert.match(branches.thenBranch, /RAISE EXCEPTION/);
   assert.match(branches.elseBranch, /RETURN/);
 });
+
+test('extracts same-line IF branches without leaving depth open', () => {
+  const branches = extractIfBranches(
+    "IF v_target_status = 'available' THEN IF v_nested THEN NULL; END IF; ELSE NULL; END IF;",
+    targetIf
+  );
+
+  assert.match(branches.thenBranch, /NULL/);
+  assert.match(branches.elseBranch, /NULL/);
+});

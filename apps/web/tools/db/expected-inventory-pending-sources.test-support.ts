@@ -22,6 +22,6 @@ export const EXPECTED_INVENTORY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260825185000_scope_confirmation_reclaims_per_item.sql',
-    sha256: 'b48e1267c12f890c7eb7a51dddaf9aefacd2c635319334303b738707be999f20',
+    sha256: 'ab13510a0a7c14ac2e77d82a553cd3306f2ce0a15ffd0d0cf33304ae599bd91c',
   },
 ] as const;

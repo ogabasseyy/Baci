@@ -24,7 +24,7 @@ const publicFunctions = [
   'public.confirm_order_inventory_reservations(uuid, uuid)',
 ];
 const releaseFunctions = [
-  ['public.release_order_inventory_units(uuid, uuid, text)', 'invoker'],
+  ['public.release_order_inventory_units(uuid, uuid, text)', 'definer'],
   ['private.release_order_inventory_units(uuid, uuid, text)', 'definer'],
 ];
 
@@ -178,5 +178,35 @@ test('release wrapper and delegate remain executable by authenticated callers', 
       ),
       mode
     );
+    assert.equal(
+      serializedInventoryPrivileges.effectiveSecurityMode(
+        [...migrationSources, `ALTER FUNCTION ${signature} SECURITY INVOKER;`],
+        signature
+      ),
+      'invoker'
+    );
+    if (signature.startsWith('public.')) {
+      const releaseSourceIndex = migrationSources.findIndex((source) =>
+        source.includes(
+          'CREATE OR REPLACE FUNCTION public.release_order_inventory_units'
+        )
+      );
+      assert.notEqual(releaseSourceIndex, -1);
+      const nonDelegatingSources = migrationSources.map((source, index) =>
+        index === releaseSourceIndex
+          ? source.replace(
+              /RETURN\s+private\.release_order_inventory_units\(/i,
+              'RETURN jsonb_build_object('
+            )
+          : source
+      );
+      assert.equal(
+        serializedInventoryPrivileges.effectiveSecurityMode(
+          nonDelegatingSources,
+          signature
+        ),
+        'invoker'
+      );
+    }
   }
 });

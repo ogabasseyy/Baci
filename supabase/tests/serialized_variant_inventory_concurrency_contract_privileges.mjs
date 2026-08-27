@@ -190,6 +190,37 @@ function authenticatedCanExecute(source, signature) {
   return state.exists && (state.public || state.authenticated);
 }
 
+function directPrivateDelegation(body) {
+  const opening = /\bAS\s+(\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)/i.exec(body);
+  const functionSource = opening
+    ? body.slice(opening.index + opening[0].length)
+    : body;
+  const executable = serializedInventorySqlParser
+    .maskSqlLiterals(functionSource)
+    .replace(/\s+/g, ' ')
+    .trim();
+  return (
+    /^(?:BEGIN\s+)?RETURN(?:\s+QUERY)?\s+(?:SELECT\s+.+\s+FROM\s+)?private\.[a-z_][a-z0-9_]*\s*\([^;]*\)\s*;\s*(?:END;?)?$/i.test(
+      executable
+    ) ||
+    /^SELECT\s+(?:private\.[a-z_][a-z0-9_]*|.+\s+FROM\s+private\.[a-z_][a-z0-9_]*)[^;]*;$/i.test(
+      executable
+    )
+  );
+}
+
+function dynamicDefinerPromotionSource(source) {
+  if (
+    !/function_definition\.prosecdef\s+IS\s+FALSE/i.test(source) ||
+    !/function_definition\.prosrc\s+LIKE\s+'%private\.%'/i.test(source)
+  ) {
+    return -1;
+  }
+  return (
+    /ALTER\s+FUNCTION\s+%s\s+SECURITY\s+DEFINER/i.exec(source)?.index ?? -1
+  );
+}
+
 function effectiveSecurityMode(sourceOrSources, signature) {
   const sources = Array.isArray(sourceOrSources)
     ? sourceOrSources
@@ -223,10 +254,30 @@ function effectiveSecurityMode(sourceOrSources, signature) {
           (sourceIndex === definitionSourceIndex &&
             match.index > definitionIndex)
       )
-      .map((match) => match[1])
+      .map((match) => ({
+        index: match.index,
+        mode: match[1],
+        sourceIndex,
+      }))
   );
   const latestAlter = alterations.at(-1);
-  return latestAlter?.toLowerCase() ?? createMode?.[1].toLowerCase();
+  const dynamicSourceIndex = normalizedSources.findIndex(
+    (source) => dynamicDefinerPromotionSource(source) >= 0
+  );
+  const dynamicPromotionIndex =
+    dynamicSourceIndex >= 0
+      ? dynamicDefinerPromotionSource(normalizedSources[dynamicSourceIndex])
+      : -1;
+  const dynamicPromotion =
+    schemaNameFromSignature(signature) === 'public' &&
+    directPrivateDelegation(body) &&
+    dynamicSourceIndex > definitionSourceIndex &&
+    (latestAlter === undefined ||
+      dynamicSourceIndex > latestAlter.sourceIndex ||
+      (dynamicSourceIndex === latestAlter.sourceIndex &&
+        dynamicPromotionIndex > latestAlter.index));
+  if (dynamicPromotion) return 'definer';
+  return latestAlter?.mode.toLowerCase() ?? createMode?.[1].toLowerCase();
 }
 
 export const serializedInventoryPrivileges = {

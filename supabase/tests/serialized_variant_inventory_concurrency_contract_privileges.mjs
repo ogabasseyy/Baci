@@ -91,7 +91,7 @@ function splitFunctionPrivilegeTargets(source) {
 function parseFunctionPrivilege(text) {
   const leading = text.trimStart();
   const prefix =
-    /^(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+FUNCTION\s+/i.exec(
+    /^(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+(?:FUNCTION|ROUTINE)\s+/i.exec(
       leading
     );
   if (!prefix) return null;
@@ -129,7 +129,7 @@ function authenticatedCanExecute(source, signature) {
   const state = { authenticated: false, exists: false, public: false };
   const executable = maskSqlStringLiterals(source);
   const schemaPattern =
-    /(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+ALL\s+FUNCTIONS\s+IN\s+SCHEMA\s+(?:"([^"]+)"|([a-z_][a-z0-9_]*))\s+(?:TO|FROM)\s+([^;]+);/gi;
+    /(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+ALL\s+(?:FUNCTIONS|ROUTINES)\s+IN\s+SCHEMA\s+(?:"([^"]+)"|([a-z_][a-z0-9_]*))\s+(?:TO|FROM)\s+([^;]+);/gi;
   const targetSchema = schemaNameFromSignature(signature);
   const events = serializedInventorySqlParser
     .splitSqlStatements(executable)
@@ -239,7 +239,7 @@ function effectiveSecurityMode(sourceOrSources, signature) {
   const definitionIndex =
     normalizedSources[definitionSourceIndex].lastIndexOf(body);
   const alterationPattern = new RegExp(
-    `ALTER\\s+FUNCTION\\s+${signaturePattern(signature)}\\s+SECURITY\\s+(DEFINER|INVOKER)\\s*;`,
+    `ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${signaturePattern(signature)}\\s+SECURITY\\s+(DEFINER|INVOKER)\\s*;`,
     'gi'
   );
   const alterations = normalizedSources.flatMap((source, sourceIndex) =>

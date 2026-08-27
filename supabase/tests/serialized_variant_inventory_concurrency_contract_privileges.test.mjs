@@ -155,6 +155,37 @@ test('later function definitions replace earlier security alterations', () => {
   );
 });
 
+test('recognizes ROUTINE privilege and security syntax', () => {
+  const privateSignature = 'private.fixture(uuid)';
+  const privateSource = `
+    CREATE FUNCTION ${privateSignature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${privateSignature} FROM PUBLIC;
+    GRANT EXECUTE ON ROUTINE ${privateSignature} TO PUBLIC;
+  `;
+  assert.equal(
+    serializedInventoryPrivileges.authenticatedCanExecute(
+      privateSource,
+      privateSignature
+    ),
+    true
+  );
+
+  const publicSignature = 'public.fixture(uuid)';
+  const publicSource = `
+    CREATE FUNCTION ${publicSignature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    ALTER ROUTINE ${publicSignature} SECURITY INVOKER;
+  `;
+  assert.equal(
+    serializedInventoryPrivileges.effectiveSecurityMode(
+      publicSource,
+      publicSignature
+    ),
+    'invoker'
+  );
+});
+
 test('release wrapper and delegate remain executable by authenticated callers', () => {
   for (const [signature, mode] of releaseFunctions) {
     assert.equal(

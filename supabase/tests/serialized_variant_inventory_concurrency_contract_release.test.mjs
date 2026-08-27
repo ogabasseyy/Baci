@@ -197,6 +197,16 @@ test('release serializes on its order before locking reserved inventory', () => 
     false
   );
   assert.equal(
+    hasTargetStatusWhitelist(
+      release.replace(
+        /(IF\s+v_target_status\s+NOT\s+IN[\s\S]*?END\s+IF\s*;)/i,
+        (guard) => `${guard}\n  v_target_status := 'returned';`
+      )
+    ),
+    false,
+    'release must not reassign target status after validating it'
+  );
+  assert.equal(
     releaseTransition(
       "UPDATE variant_inventory SET source = $$status = 'returned'$$ WHERE id = v_unit.id;",
       'returned'

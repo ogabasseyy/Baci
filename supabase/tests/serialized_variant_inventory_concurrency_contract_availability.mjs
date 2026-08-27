@@ -71,7 +71,7 @@ function availableUnitPredicatesMatch(source, variantVariable, branchVariable) {
   const branchMatch = branchPattern?.exec(valueQuery?.where ?? '');
   const branchFirst = branchVariable
     ? new RegExp(
-        `CASE\\s+WHEN\\s+${branchQualifier}branch_id\\s*=\\s*${escapeRegex(branchVariable)}\\b\\s+THEN\\s+0\\s+ELSE\\s+1\\s+END\\s*\\)?\\s+ASC`,
+        `^\\s*(?:\\(\\s*)*CASE\\s+WHEN\\s+${branchQualifier}branch_id\\s*=\\s*${escapeRegex(branchVariable)}\\b\\s+THEN\\s+0\\s+ELSE\\s+1\\s+END(?:\\s*\\))*\\s+ASC(?:\\s*,|\\s*$)`,
         'i'
       ).test(valueQuery?.orderBy ?? '')
     : true;

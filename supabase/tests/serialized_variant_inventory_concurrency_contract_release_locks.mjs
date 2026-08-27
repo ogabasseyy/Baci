@@ -41,9 +41,10 @@ function releaseLockMatches(source) {
 }
 
 function hasTargetStatusWhitelist(source) {
-  const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
-    preserveStrings: true,
-  });
+  const executable = serializedInventorySqlParser.maskSqlLiterals(
+    serializedInventorySqlParser.stripSqlComments(source),
+    { preserveStrings: true }
+  );
   const defaultStatus =
     /\bv_target_status\s+text\s*:=\s*COALESCE\s*\(\s*p_target_status\s*,\s*'available'\s*\)\s*;/i.exec(
       executable
@@ -55,11 +56,19 @@ function hasTargetStatusWhitelist(source) {
   const dispatch = /IF\s+v_target_status\s*=\s*'available'\s+THEN/i.exec(
     executable
   );
+  const guardEnd = guard ? guard.index + guard[0].length : -1;
+  const statusReassignment =
+    guard && dispatch && guardEnd < dispatch.index
+      ? /(?:^|[;\n])\s*v_target_status\s*(?::=|=(?!=))/i.test(
+          executable.slice(guardEnd, dispatch.index)
+        )
+      : true;
   return Boolean(
     defaultStatus &&
       guard &&
       dispatch &&
       defaultStatus.index < guard.index &&
+      !statusReassignment &&
       serializedInventoryControlFlow.dominatesControlFlow(
         executable,
         guard.index,

@@ -145,6 +145,14 @@ test('requires branch eligibility when the selector is order-scoped', () => {
     ),
     false
   );
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      source.replace('ORDER BY CASE', 'ORDER BY unit.created_at, CASE'),
+      'v_variant_id',
+      'v_order_branch_id'
+    ),
+    false
+  );
 });
 
 test('rejects availability clauses supplied only by a nested query', () => {

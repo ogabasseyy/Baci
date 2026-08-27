@@ -34,7 +34,7 @@ DECLARE
   v_actual_variant_id uuid;
 BEGIN
   
-  SELECT * INTO v_order
+  SELECT payment_status, payment_method, branch_id INTO v_order
   FROM public.orders
   WHERE id = p_order_id AND merchant_id = p_merchant_id
   FOR UPDATE;
@@ -238,4 +238,3 @@ BEGIN
 END;
 
 $$;
-

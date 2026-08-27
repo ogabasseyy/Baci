@@ -101,6 +101,16 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
   assert.ok(locks.item);
   assert.ok(selector);
   assert.ok(transition);
+  assert.match(
+    confirm,
+    /SELECT\s+payment_status\s*,\s*payment_method\s*,\s*branch_id\s+INTO\s+v_order\s+FROM\s+public\.orders\s+WHERE\s+id\s*=\s*p_order_id\s+AND\s+merchant_id\s*=\s*p_merchant_id\s+FOR\s+UPDATE/i,
+    'confirmation should lock only the order fields it consumes'
+  );
+  assert.doesNotMatch(
+    confirm,
+    /SELECT\s+\*\s+INTO\s+v_order\s+FROM\s+public\.orders/i,
+    'confirmation should not materialize the entire order row'
+  );
   assert.equal(confirmationLocksPrecedeReclaim(confirm), true);
   assert.equal(
     findReclaimReservationTransition(

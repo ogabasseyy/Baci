@@ -62,8 +62,8 @@ function parameterListPattern(argumentTypes) {
         : normalized;
       const typeAliases = {
         decimal: '(?:numeric|decimal|"numeric"|"decimal")',
-        integer: '(?:integer|int4|"integer"|"int4")',
-        int4: '(?:integer|int4|"integer"|"int4")',
+        integer: '(?:integer|int|int4|"integer"|"int"|"int4")',
+        int4: '(?:integer|int|int4|"integer"|"int"|"int4")',
         numeric: '(?:numeric|decimal|"numeric"|"decimal")',
       };
       const basePattern =
@@ -127,7 +127,10 @@ function canonicalType(type) {
     .replace(/^pg_catalog\s*\.\s*/, '')
     .replace(/\s*\[\s*\]/g, '[]')
     .replace(/\s+/g, ' ');
-  return { decimal: 'numeric', int4: 'integer' }[normalized] ?? normalized;
+  return (
+    { decimal: 'numeric', int: 'integer', int4: 'integer' }[normalized] ??
+    normalized
+  );
 }
 function declarationInputTypes(statement) {
   const declaration =

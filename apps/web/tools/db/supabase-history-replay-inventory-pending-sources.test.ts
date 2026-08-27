@@ -15,6 +15,7 @@ describe('inventory pending replay sources', () => {
       '6e1d8936c5a69ab3c98825e93914a31fa9cf3689bd3984758e956fec1c0b7b7d 20260825173500_authorize_serialized_inventory_claims.sql',
       '0e4c28c67751b4ceb90b75d937fb6a2cc569a325380d75a660e8696622c4b533 20260825180500_authorize_inventory_confirmation.sql',
       'b48e1267c12f890c7eb7a51dddaf9aefacd2c635319334303b738707be999f20 20260825185000_scope_confirmation_reclaims_per_item.sql',
+      '52ae196aa2a25d65d2cc8fc53109d3f3d20832a8221dab54dad6d93862eaf372 20260827120000_harden_serialized_inventory_release_reconciliation.sql',
     ]);
   });
 });

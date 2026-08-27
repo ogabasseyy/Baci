@@ -64,6 +64,14 @@ test('private inventory functions remain inaccessible to authenticated callers',
     assert.equal(
       serializedInventoryPrivileges.authenticatedCanExecute(
         `${migrationSql}
+          GRANT EXECUTE ON FUNCTION private.other(uuid), ${signature} TO PUBLIC;`,
+        signature
+      ),
+      true
+    );
+    assert.equal(
+      serializedInventoryPrivileges.authenticatedCanExecute(
+        `${migrationSql}
           GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA private TO authenticated;`,
         signature
       ),
@@ -114,6 +122,17 @@ test('public inventory wrappers stay executable and security definer', () => {
     assert.equal(
       serializedInventoryPrivileges.effectiveSecurityMode(
         [...migrationSources, `ALTER FUNCTION ${signature} SECURITY INVOKER;`],
+        signature
+      ),
+      'invoker'
+    );
+    assert.equal(
+      serializedInventoryPrivileges.effectiveSecurityMode(
+        [
+          ...migrationSources,
+          `ALTER FUNCTION ${signature} SECURITY INVOKER;
+           SELECT 'ALTER FUNCTION ${signature} SECURITY DEFINER;';`,
+        ],
         signature
       ),
       'invoker'

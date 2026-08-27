@@ -66,13 +66,68 @@ function functionLifecycleEvents(source, signature) {
   return [...creates, ...drops];
 }
 
+function splitFunctionPrivilegeTargets(source) {
+  const targets = [];
+  let start = 0;
+  let depth = 0;
+  let quote;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (quote) {
+      if (char === quote && source[index + 1] === quote) index += 1;
+      else if (char === quote) quote = undefined;
+    } else if (char === "'" || char === '"') quote = char;
+    else if (char === '(') depth += 1;
+    else if (char === ')') depth = Math.max(0, depth - 1);
+    else if (char === ',' && depth === 0) {
+      targets.push(source.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  targets.push(source.slice(start).trim());
+  return targets;
+}
+
+function parseFunctionPrivilege(text) {
+  const leading = text.trimStart();
+  const prefix =
+    /^(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+FUNCTION\s+/i.exec(
+      leading
+    );
+  if (!prefix) return null;
+  let depth = 0;
+  let quote;
+  for (let index = prefix[0].length; index < leading.length; index += 1) {
+    const char = leading[index];
+    if (quote) {
+      if (char === quote && leading[index + 1] === quote) index += 1;
+      else if (char === quote) quote = undefined;
+      continue;
+    }
+    if (char === "'" || char === '"') quote = char;
+    else if (char === '(') depth += 1;
+    else if (char === ')') depth = Math.max(0, depth - 1);
+    else if (depth === 0) {
+      const keyword = /^\s+(?:TO|FROM)\s+/i.exec(leading.slice(index));
+      if (keyword) {
+        return {
+          functionList: leading.slice(prefix[0].length, index).trim(),
+          grantees: leading
+            .slice(index + keyword[0].length)
+            .replace(/;\s*$/, '')
+            .trim(),
+          index: text.length - leading.length,
+          operation: /^GRANT/i.test(prefix[0]) ? 'GRANT' : 'REVOKE',
+        };
+      }
+    }
+  }
+  return null;
+}
+
 function authenticatedCanExecute(source, signature) {
   const state = { authenticated: false, exists: false, public: false };
   const executable = maskSqlStringLiterals(source);
-  const pattern = new RegExp(
-    `(?:GRANT\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE)|REVOKE\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE))\\s+ON\\s+FUNCTION\\s+${signaturePattern(signature)}[^;]*?\\s+(?:TO|FROM)\\s+([^;]+);`,
-    'gi'
-  );
   const schemaPattern =
     /(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+ALL\s+FUNCTIONS\s+IN\s+SCHEMA\s+(?:"([^"]+)"|([a-z_][a-z0-9_]*))\s+(?:TO|FROM)\s+([^;]+);/gi;
   const targetSchema = schemaNameFromSignature(signature);
@@ -84,13 +139,22 @@ function authenticatedCanExecute(source, signature) {
       );
       const leading = text.trimStart();
       if (!/^(?:GRANT|REVOKE)\b/i.test(leading)) return lifecycle;
-      pattern.lastIndex = 0;
-      const privileges = [...text.matchAll(pattern)].map((match) => ({
-        index: index + match.index,
-        kind: 'privilege',
-        match,
-        grantees: match[1],
-      }));
+      const targetPattern = new RegExp(`^${signaturePattern(signature)}$`, 'i');
+      const parsedPrivilege = parseFunctionPrivilege(text);
+      const privileges =
+        parsedPrivilege &&
+        splitFunctionPrivilegeTargets(parsedPrivilege.functionList).some(
+          (target) => targetPattern.test(target)
+        )
+          ? [
+              {
+                index: index + parsedPrivilege.index,
+                kind: 'privilege',
+                match: [parsedPrivilege.operation],
+                grantees: parsedPrivilege.grantees,
+              },
+            ]
+          : [];
       schemaPattern.lastIndex = 0;
       const schemaPrivileges = [...text.matchAll(schemaPattern)]
         .filter(
@@ -130,21 +194,29 @@ function effectiveSecurityMode(sourceOrSources, signature) {
   const sources = Array.isArray(sourceOrSources)
     ? sourceOrSources
     : [sourceOrSources];
+  const normalizedSources = sources.map((source) =>
+    serializedInventorySqlParser.stripSqlComments(source)
+  );
   const body = serializedInventoryContract.latestFunctionBody(
     signature,
-    sources
+    normalizedSources
   );
   const createMode = /\bSECURITY\s+(DEFINER|INVOKER)\b/i.exec(body);
-  const definitionSourceIndex = sources.findLastIndex((source) =>
+  const definitionSourceIndex = normalizedSources.findLastIndex((source) =>
     source.includes(body)
   );
-  const definitionIndex = sources[definitionSourceIndex].lastIndexOf(body);
+  const definitionIndex =
+    normalizedSources[definitionSourceIndex].lastIndexOf(body);
   const alterationPattern = new RegExp(
     `ALTER\\s+FUNCTION\\s+${signaturePattern(signature)}\\s+SECURITY\\s+(DEFINER|INVOKER)\\s*;`,
     'gi'
   );
-  const alterations = sources.flatMap((source, sourceIndex) =>
-    [...source.matchAll(alterationPattern)]
+  const alterations = normalizedSources.flatMap((source, sourceIndex) =>
+    [
+      ...serializedInventorySqlParser
+        .maskSqlLiterals(source)
+        .matchAll(alterationPattern),
+    ]
       .filter(
         (match) =>
           sourceIndex > definitionSourceIndex ||

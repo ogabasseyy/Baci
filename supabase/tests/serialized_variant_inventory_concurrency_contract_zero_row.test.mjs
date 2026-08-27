@@ -37,4 +37,17 @@ test('requires an unconditional exception in the immediate zero-row handler', ()
     END IF;
   `);
   assert.equal(legacyDecrementHasZeroRowHandling(caseGated[0]), false);
+
+  const inverted = legacyDecrementMatches(`
+    UPDATE products
+    SET stock_quantity = stock_quantity - stock_rec.total_quantity
+    WHERE id = product_id AND stock_quantity >= stock_rec.total_quantity;
+    IF NOT FOUND THEN
+      NULL;
+    ELSE
+      RAISE EXCEPTION 'insufficient_stock';
+    END IF;
+  `);
+  assert.equal(inverted.length, 1);
+  assert.equal(legacyDecrementHasZeroRowHandling(inverted[0]), false);
 });

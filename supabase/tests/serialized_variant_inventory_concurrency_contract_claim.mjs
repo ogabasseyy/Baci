@@ -1,4 +1,5 @@
 import { serializedInventoryAvailability } from './serialized_variant_inventory_concurrency_contract_availability.mjs';
+import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
@@ -70,20 +71,6 @@ function hasTopLevelRaise(source) {
   return false;
 }
 
-function ifBody(source, opening) {
-  const start = opening.index + opening[0].length;
-  let depth = 1;
-  for (const token of source
-    .slice(start)
-    .matchAll(/\bEND\s+IF\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b/gi)) {
-    if (/^END\s+IF/i.test(token[0])) {
-      depth -= 1;
-      if (depth === 0) return source.slice(start, start + token.index);
-    } else depth += 1;
-  }
-  return undefined;
-}
-
 function strictShortagePrecedesSuccess(source) {
   const executable = maskSqlLiterals(source, { preserveStrings: true });
   const target =
@@ -97,8 +84,15 @@ function strictShortagePrecedesSuccess(source) {
     !serializedInventoryControlFlow.isReachable(executable, guard.index)
   )
     return false;
-  const body = ifBody(executable, guard);
-  return body !== undefined && hasTopLevelRaise(body);
+  try {
+    const branches = serializedInventoryBranches.extractIfArms(
+      executable,
+      target
+    );
+    return hasTopLevelRaise(branches.thenBranch);
+  } catch {
+    return false;
+  }
 }
 
 export const serializedInventoryClaim = {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 
-const { extractIfBranches } = serializedInventoryBranches;
+const { extractIfArms, extractIfBranches } = serializedInventoryBranches;
 const targetIf = /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i;
 
 test('does not mistake CASE ELSE for the target IF branch', () => {
@@ -58,4 +58,14 @@ test('keeps ELSIF arms out of the available release branch', () => {
 
   assert.doesNotMatch(branches.thenBranch, /lock_available_units/);
   assert.match(branches.elsifBranches[0], /lock_available_units/);
+});
+
+test('extracts same-line IF arms without crossing ELSE', () => {
+  const branches = extractIfArms(
+    "IF v_condition THEN RAISE EXCEPTION 'then'; ELSE RETURN; END IF;",
+    /\bIF\s+v_condition\s+THEN\b/i
+  );
+
+  assert.match(branches.thenBranch, /RAISE EXCEPTION/);
+  assert.match(branches.elseBranch, /RETURN/);
 });

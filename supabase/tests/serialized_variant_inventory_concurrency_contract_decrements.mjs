@@ -1,3 +1,4 @@
+import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 import { hasImmediateUnconditionalException } from './serialized_variant_inventory_concurrency_contract_zero_row.mjs';
@@ -155,6 +156,32 @@ function updateLockTarget(statement, decrement) {
     ? { rowReference, table: normalizedIdentifier(updates[1]) }
     : null;
 }
+
+function tryExtractIfArms(source, openingPattern) {
+  try {
+    return serializedInventoryBranches.extractIfArms(source, openingPattern);
+  } catch {
+    return undefined;
+  }
+}
+
+function hasTopLevelExit(source) {
+  const masked = maskSqlLiterals(source);
+  let depth = 0;
+  let caseDepth = 0;
+  for (const token of masked.matchAll(
+    /\bEND\s+IF\b|\bEND\s+CASE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRAISE\s+EXCEPTION\b|\bRETURN\s*;/gi
+  )) {
+    if (/^END\s+IF/i.test(token[0])) depth = Math.max(0, depth - 1);
+    else if (/^END\s+CASE/i.test(token[0]))
+      caseDepth = Math.max(0, caseDepth - 1);
+    else if (/^IF\b/i.test(token[0])) depth += 1;
+    else if (/^CASE$/i.test(token[0])) caseDepth += 1;
+    else if (depth === 0 && caseDepth === 0) return true;
+  }
+  return false;
+}
+
 function matchingLockedPrecheck(statement, decrement) {
   if (!decrement || decrement.index === undefined) return false;
   const target = updateLockTarget(statement, decrement);
@@ -184,16 +211,28 @@ function matchingLockedPrecheck(statement, decrement) {
     if (!isRequiredConjunct(select[2], rowEquality)) continue;
     const afterLock = prefix.slice(index + text.length);
     const missingRowHandler =
-      /^\s*IF\s+NOT\s+FOUND\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?(?:\bRAISE\s+EXCEPTION\b|\bRETURN\s*;)(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
+      /^\s*IF\s+NOT\s+FOUND\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
         afterLock
       );
+    const missingRowArms = missingRowHandler
+      ? tryExtractIfArms(missingRowHandler[0], /^\s*IF\s+NOT\s+FOUND\s+THEN\b/i)
+      : undefined;
     const shortageStart = missingRowHandler?.[0].length ?? 0;
+    const shortageHandler = new RegExp(
+      `^\\s*IF\\s+current_stock\\s*<\\s*(?:\\(\\s*)*${quantity}\\b[\\s\\)]*\\s+THEN(?:(?!\\bEND\\s+IF\\b)[\\s\\S])*?END\\s+IF\\s*;`,
+      'i'
+    ).exec(afterLock.slice(shortageStart));
+    const shortageArms = shortageHandler
+      ? tryExtractIfArms(
+          shortageHandler[0],
+          /^\s*IF\s+current_stock\s*<\s*(?:\(\s*)*[\s\S]*?\s+THEN\b/i
+        )
+      : undefined;
     if (
-      missingRowHandler &&
-      new RegExp(
-        `^\\s*IF\\s+current_stock\\s*<\\s*(?:\\(\\s*)*${quantity}\\b[\\s\\)]*\\s+THEN(?:(?!\\bEND\\s+IF\\b)[\\s\\S])*?(?:\\bRAISE\\s+EXCEPTION\\b|\\bRETURN\\s*;)`,
-        'i'
-      ).test(afterLock.slice(shortageStart))
+      missingRowArms &&
+      hasTopLevelExit(missingRowArms.thenBranch) &&
+      shortageArms &&
+      hasTopLevelExit(shortageArms.thenBranch)
     ) {
       return true;
     }
@@ -234,9 +273,16 @@ function legacyDecrementHasZeroRowHandling(match) {
   const masked = maskNestedSql(match[2]);
   if (matchingLockedPrecheck(masked, stockDecrementMatch(masked))) return true;
   const remainder = match.input?.slice(match.index + match[0].length) ?? '';
-  return /^\s*(?:ELSE\b(?:(?!\bEND\s+IF\b)[\s\S])*)?END\s+IF\s*;\s*IF\s+NOT\s+FOUND\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?\bRAISE\s+EXCEPTION\b/i.test(
-    remainder
+  const handler =
+    /^\s*(?:ELSE\b(?:(?!\bEND\s+IF\b)[\s\S])*)?END\s+IF\s*;\s*(IF\s+NOT\s+FOUND\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;)/i.exec(
+      remainder
+    );
+  if (!handler) return false;
+  const branches = tryExtractIfArms(
+    handler[1],
+    /^\s*IF\s+NOT\s+FOUND\s+THEN\b/i
   );
+  return branches !== undefined && hasTopLevelExit(branches.thenBranch);
 }
 
 export const serializedInventoryDecrements = {

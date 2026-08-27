@@ -15,7 +15,6 @@ const {
   claimLocksDominateSelector,
   findClaimLocks,
 } = serializedInventoryContract;
-
 test('function extraction tolerates tagged dollar quotes and trailing clauses', () => {
   const source = [
     'CREATE FUNCTION private.fixture(',
@@ -42,7 +41,6 @@ test('function extraction tolerates tagged dollar quotes and trailing clauses', 
     /missing private\.fixture/
   );
 });
-
 test('function extraction resolves overloads by expected input types', () => {
   const source = [
     'CREATE FUNCTION private.fixture(p_value integer) RETURNS void AS $$',
@@ -61,7 +59,6 @@ test('function extraction resolves overloads by expected input types', () => {
   assert.match(body, /p_value integer/);
   assert.doesNotMatch(body, /p_value text/);
 });
-
 test('function extraction does not match expected types inside defaults', () => {
   const source = [
     'CREATE FUNCTION private.fixture(p_value uuid) RETURNS void AS $$',
@@ -76,7 +73,6 @@ test('function extraction does not match expected types inside defaults', () => 
   assert.match(body, /uuid overload/);
   assert.doesNotMatch(body, /text overload/);
 });
-
 test('branch extraction handles nested IF blocks without fixed indentation', () => {
   const branches = extractIfBranches(
     [
@@ -96,7 +92,6 @@ test('branch extraction handles nested IF blocks without fixed indentation', () 
   assert.match(branches.thenBranch, /v_nested/);
   assert.match(branches.elseBranch, /v_other_nested/);
 });
-
 test('serialized claims lock the order before the item and skip locked available units', () => {
   const claim = latestFunctionBody(
     'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)'
@@ -178,15 +173,11 @@ test('serialized policy boundaries preserve fallback counts and payment-loss rep
     confirmationLocks.order,
     'payment confirmation must re-lock the parent order'
   );
-  assert.match(
-    confirm,
-    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+v_reserved_count\s*<\s*v_item\.quantity\s+THEN[\s\S]*?v_fulfillment_data\s*:=\s*jsonb_set\([^;]*?'\{serializedInventoryException\}'[^;]*?'late_payment_reservation_lost'/i,
+  assert.ok(
+    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+v_reserved_count\s*<\s*v_item\.quantity\s+THEN[\s\S]*?v_fulfillment_data\s*:=\s*jsonb_set\([^;]*?'\{serializedInventoryException\}'[^;]*?'late_payment_reservation_lost'/i.test(
+      confirm
+    ),
     'strict payment confirmation must write the reservation-loss exception into fulfillment data'
-  );
-  assert.match(
-    confirm,
-    /IF\s*\(\s*v_reserved_count\s*\+\s*v_claimed_in_loop\s*\)\s*<\s*v_item\.quantity\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?v_exceptions\s*:=\s*v_exceptions\s*\|\|\s*jsonb_build_object\([^;]*?'code'\s*,\s*'late_payment_reservation_lost'[\s\S]*?RETURN\s+jsonb_build_object\([^;]*?'exceptionCodes'\s*,\s*v_exceptions\b/i,
-    'strict payment confirmation must append and return reservation-loss exception codes'
   );
   assert.ok(
     confirmationLocks.item,

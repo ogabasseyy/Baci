@@ -1,3 +1,4 @@
+import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
@@ -5,10 +6,17 @@ function hasPositiveQuantityGuard(source) {
   const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
     preserveStrings: true,
   });
-  const guard =
-    /IF\s+quantity_param\s*<=\s*0\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?\bRETURN\b(?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
-      executable
-    );
+  const guardPattern = /^\s*IF\s+quantity_param\s*<=\s*0\s+THEN\b/im;
+  const guard = guardPattern.exec(executable);
+  let thenBranch;
+  try {
+    thenBranch = guard
+      ? serializedInventoryBranches.extractIfArms(executable, guardPattern)
+          .thenBranch
+      : undefined;
+  } catch {
+    return false;
+  }
   const protectedOperations = [
     ...executable.matchAll(
       /SELECT\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s+INTO[\s\S]*?\bFOR\s+UPDATE\b|UPDATE\s+(?:public\s*\.\s*)?(?:products|product_variants)\b/gi
@@ -16,6 +24,8 @@ function hasPositiveQuantityGuard(source) {
   ];
   return Boolean(
     guard &&
+      thenBranch &&
+      /\bRETURN\b/i.test(thenBranch) &&
       protectedOperations.length > 0 &&
       protectedOperations.every((operation) =>
         serializedInventoryControlFlow.dominatesControlFlow(

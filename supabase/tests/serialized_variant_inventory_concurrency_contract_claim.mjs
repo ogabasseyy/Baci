@@ -55,6 +55,33 @@ function claimedIncrementCount(source) {
   ).length;
 }
 
+function findEffectiveExcessRelease(source) {
+  const executable = maskSqlLiterals(source, { preserveStrings: true });
+  const excessBranch = /\bELSIF\s+v_reserved_count\s*>\s*v_qty\s+THEN\b/i.exec(
+    executable
+  );
+  if (!excessBranch) return undefined;
+  const releaseUpdate =
+    /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([^;]*?)\s+WHERE\s+([^;]*);/gi;
+  return [...executable.matchAll(releaseUpdate)].find((update) => {
+    if (update.index <= excessBranch.index) return false;
+    if (
+      !/\bstatus\s*=\s*'available'/i.test(update[1]) ||
+      !/\border_id\s*=\s*NULL/i.test(update[1]) ||
+      !/\border_item_id\s*=\s*NULL/i.test(update[1]) ||
+      !/\bid\s*=\s*v_unit_id\b/i.test(update[2])
+    ) {
+      return false;
+    }
+    const preceding = executable.slice(excessBranch.index, update.index);
+    return (
+      /\bFOR\s+v_unit_id\s+IN\s*[\s\S]*?\bSELECT\s+id\s+FROM\s+(?:public\s*\.\s*)?variant_inventory\b[\s\S]*?\border_item_id\s*=\s*p_order_item_id\b[\s\S]*?\bstatus\s*=\s*'reserved'[\s\S]*?\bLIMIT\s+v_excess\s+LOOP\b/i.test(
+        preceding
+      ) && serializedInventoryControlFlow.isReachable(executable, update.index)
+    );
+  });
+}
+
 function hasTopLevelRaise(source) {
   let depth = 0;
   let caseDepth = 0;
@@ -97,6 +124,7 @@ function strictShortagePrecedesSuccess(source) {
 
 export const serializedInventoryClaim = {
   claimedIncrementCount,
+  findEffectiveExcessRelease,
   findEffectiveReserveUpdate,
   hasOnlyUnitIdPredicate,
   strictShortagePrecedesSuccess,

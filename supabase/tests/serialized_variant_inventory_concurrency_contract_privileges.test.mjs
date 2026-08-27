@@ -1,19 +1,10 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 import { serializedInventoryPrivileges } from './serialized_variant_inventory_concurrency_contract_privileges.mjs';
 
-const migrationSources = serializedInventoryContract
-  .migrationFileNames()
-  .map((file) =>
-    fs.readFileSync(
-      path.join(serializedInventoryContract.migrationsDir, file),
-      'utf8'
-    )
-  );
-const migrationSql = migrationSources.join('\n');
+const migrationSources = serializedInventoryContract.migrationSources;
+const authSources = (...append) => [...migrationSources, ...append];
 
 const privateFunctions = [
   'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)',
@@ -32,47 +23,49 @@ test('private inventory functions remain inaccessible to authenticated callers',
   for (const signature of privateFunctions) {
     assert.equal(
       serializedInventoryPrivileges.authenticatedCanExecute(
-        migrationSql,
+        migrationSources,
         signature
       ),
       false
     );
     assert.equal(
       serializedInventoryPrivileges.authenticatedCanExecute(
-        `${migrationSql}\nGRANT EXECUTE ON FUNCTION ${signature} TO PUBLIC;`,
+        authSources(`GRANT EXECUTE ON FUNCTION ${signature} TO PUBLIC;`),
         signature
       ),
       true
     );
     assert.equal(
       serializedInventoryPrivileges.authenticatedCanExecute(
-        `${migrationSql}
-          GRANT EXECUTE ON FUNCTION ${signature} TO PUBLIC;
-          SELECT 'REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;';`,
+        authSources(
+          `GRANT EXECUTE ON FUNCTION ${signature} TO PUBLIC;
+          SELECT 'REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;';`
+        ),
         signature
       ),
       true
     );
     assert.equal(
       serializedInventoryPrivileges.authenticatedCanExecute(
-        `${migrationSql}
-          GRANT ALL PRIVILEGES ON FUNCTION ${signature} TO PUBLIC;`,
+        authSources(`GRANT ALL PRIVILEGES ON FUNCTION ${signature} TO PUBLIC;`),
         signature
       ),
       true
     );
     assert.equal(
       serializedInventoryPrivileges.authenticatedCanExecute(
-        `${migrationSql}
-          GRANT EXECUTE ON FUNCTION private.other(uuid), ${signature} TO PUBLIC;`,
+        authSources(
+          `GRANT EXECUTE ON FUNCTION private.other(uuid), ${signature} TO PUBLIC;`
+        ),
         signature
       ),
       true
     );
     assert.equal(
       serializedInventoryPrivileges.authenticatedCanExecute(
-        `${migrationSql}
-          GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA private TO authenticated;`,
+        authSources(
+          'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA private TO authenticated;'
+        ),
         signature
       ),
       true
@@ -82,17 +75,40 @@ test('private inventory functions remain inaccessible to authenticated callers',
 
 test('freshly recreated private functions regain the default PUBLIC grant', () => {
   const signature = privateFunctions[0];
-  const recreated = `${migrationSql}
+  const recreated = authSources(`
     DROP FUNCTION ${signature};
     CREATE FUNCTION private.claim_variant_inventory_units_for_order_item_internal(
       p_merchant_id uuid,
       p_order_id uuid,
       p_order_item_id uuid
     ) RETURNS jsonb LANGUAGE sql SECURITY DEFINER AS $$ SELECT '{}'::jsonb $$;
-  `;
+  `);
   assert.equal(
     serializedInventoryPrivileges.authenticatedCanExecute(recreated, signature),
     true
+  );
+});
+
+test('private function grants inherited through authenticated roles remain detectable', () => {
+  const signature = privateFunctions[0];
+  const inherited = authSources(`
+    GRANT EXECUTE ON FUNCTION ${signature} TO inventory_delegate;
+    GRANT inventory_delegate TO authenticated;
+  `);
+  assert.equal(
+    serializedInventoryPrivileges.authenticatedCanExecute(inherited, signature),
+    true
+  );
+  assert.equal(
+    serializedInventoryPrivileges.authenticatedCanExecute(
+      [
+        ...inherited,
+        `
+        REVOKE inventory_delegate FROM authenticated;`,
+      ],
+      signature
+    ),
+    false
   );
 });
 
@@ -100,14 +116,14 @@ test('public inventory wrappers stay executable and security definer', () => {
   for (const signature of publicFunctions) {
     assert.equal(
       serializedInventoryPrivileges.authenticatedCanExecute(
-        migrationSql,
+        migrationSources,
         signature
       ),
       true
     );
     assert.equal(
       serializedInventoryPrivileges.authenticatedCanExecute(
-        `${migrationSql}\nREVOKE ALL ON FUNCTION ${signature} FROM authenticated;`,
+        authSources(`REVOKE ALL ON FUNCTION ${signature} FROM authenticated;`),
         signature
       ),
       false
@@ -190,14 +206,14 @@ test('release wrapper and delegate remain executable by authenticated callers', 
   for (const [signature, mode] of releaseFunctions) {
     assert.equal(
       serializedInventoryPrivileges.authenticatedCanExecute(
-        migrationSql,
+        migrationSources,
         signature
       ),
       true
     );
     assert.equal(
       serializedInventoryPrivileges.authenticatedCanExecute(
-        `${migrationSql}\nREVOKE ALL ON FUNCTION ${signature} FROM authenticated;`,
+        authSources(`REVOKE ALL ON FUNCTION ${signature} FROM authenticated;`),
         signature
       ),
       false

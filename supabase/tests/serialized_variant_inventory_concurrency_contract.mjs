@@ -262,6 +262,7 @@ const {
   legacyDecrementMatches,
 } = serializedInventoryDecrements;
 export const serializedInventoryContract = {
+  migrationSources,
   migrationsDir,
   migrationFileNames,
   functionBody,

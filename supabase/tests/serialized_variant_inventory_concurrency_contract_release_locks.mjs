@@ -63,12 +63,19 @@ function hasTargetStatusWhitelist(source) {
           executable.slice(guardEnd, dispatch.index)
         )
       : true;
+  const scopeReassignment =
+    guard && dispatch && guardEnd < dispatch.index
+      ? /(?:^|[;\n])\s*p_(?:merchant_id|order_id)\s*(?::=|=(?!=))/i.test(
+          executable.slice(guardEnd, dispatch.index)
+        )
+      : true;
   return Boolean(
     defaultStatus &&
       guard &&
       dispatch &&
       defaultStatus.index < guard.index &&
       !statusReassignment &&
+      !scopeReassignment &&
       serializedInventoryControlFlow.dominatesControlFlow(
         executable,
         guard.index,

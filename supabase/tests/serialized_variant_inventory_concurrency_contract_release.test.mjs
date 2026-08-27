@@ -207,6 +207,17 @@ test('release serializes on its order before locking reserved inventory', () => 
     'release must not reassign target status after validating it'
   );
   assert.equal(
+    hasTargetStatusWhitelist(
+      release.replace(
+        /PERFORM\s+1\s+FROM\s+public\.orders[\s\S]*?FOR\s+UPDATE\s*;/i,
+        (orderLock) =>
+          `${orderLock}\n  p_merchant_id := '00000000-0000-0000-0000-000000000001';\n  p_order_id := '00000000-0000-0000-0000-000000000002';`
+      )
+    ),
+    false,
+    'release must not reassign scoped parameters after locking the order'
+  );
+  assert.equal(
     releaseTransition(
       "UPDATE variant_inventory SET source = $$status = 'returned'$$ WHERE id = v_unit.id;",
       'returned'

@@ -12,6 +12,16 @@ function signaturePattern(signature) {
     .replaceAll(' ', '\\s+');
 }
 
+function identifierPattern(identifier) {
+  return identifier
+    .split('.')
+    .map((part) => {
+      const unquoted = part.replace(/^"|"$/g, '');
+      return `(?:${escapeRegex(unquoted)}|"${escapeRegex(unquoted)}")`;
+    })
+    .join('\\s*\\.\\s*');
+}
+
 function schemaNameFromSignature(signature) {
   const match = /^(?:"([^"]+)"|([a-z_][a-z0-9_]*))\s*\./i.exec(signature);
   return (match?.[1] ?? match?.[2] ?? '').toLowerCase();
@@ -42,11 +52,12 @@ function functionLifecycleEvents(source, signature) {
         `\\s*(?:(?:INOUT|IN|VARIADIC)\\s+)?(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s+)?${signaturePattern(type)}(?:\\s+(?:DEFAULT\\b|=)[^,)]*)?\\s*`
     )
     .join('\\s*,\\s*');
-  const name = signaturePattern(parsed[1]);
+  const name = identifierPattern(parsed[1].trim());
+  const functionReference = `${name}\\s*\\(${parameters}\\)`;
   const creates = [
     ...source.matchAll(
       new RegExp(
-        `CREATE\\s+(OR\\s+REPLACE\\s+)?FUNCTION\\s+${name}\\s*\\(${parameters}\\)`,
+        `CREATE\\s+(OR\\s+REPLACE\\s+)?FUNCTION\\s+${functionReference}`,
         'gi'
       )
     ),
@@ -58,7 +69,7 @@ function functionLifecycleEvents(source, signature) {
   const drops = [
     ...source.matchAll(
       new RegExp(
-        `DROP\\s+FUNCTION(?:\\s+IF\\s+EXISTS)?\\s+${signaturePattern(signature)}[^;]*;`,
+        `DROP\\s+FUNCTION(?:\\s+IF\\s+EXISTS)?\\s+${functionReference}[^;]*;`,
         'gi'
       )
     ),
@@ -115,6 +126,7 @@ function parseFunctionPrivilege(text) {
           grantees: leading
             .slice(index + keyword[0].length)
             .replace(/;\s*$/, '')
+            .replace(/\s+WITH\s+GRANT\s+OPTION\s*$/i, '')
             .trim(),
           index: text.length - leading.length,
           operation: /^GRANT/i.test(prefix[0]) ? 'GRANT' : 'REVOKE',

@@ -5,7 +5,11 @@ import { serializedInventoryConfirmation } from './serialized_variant_inventory_
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 
 const { latestFunctionBody } = serializedInventoryContract;
-const { findConfirmationLocks } = serializedInventoryConfirmation;
+const {
+  findConfirmationLocks,
+  findReclaimReservationTransition,
+  reclaimCounterResetPerItem,
+} = serializedInventoryConfirmation;
 const { dominatesControlFlow, isReachable } = serializedInventoryControlFlow;
 
 const confirmationHoldGuard =
@@ -72,4 +76,32 @@ test('reservation expiry clears remain reachable in both reconciliation branches
     assert.notEqual(unreachableIndex, -1);
     assert.equal(isReachable(unreachable, unreachableIndex), false);
   }
+});
+
+test('reclaim counters stay per-item and reachable', () => {
+  const confirm = latestFunctionBody(
+    'private.confirm_order_inventory_reservations(uuid, uuid)'
+  );
+  assert.equal(reclaimCounterResetPerItem(confirm), true);
+
+  const reset = /v_claimed_in_loop\s*:=\s*0\s*;/i.exec(confirm);
+  const itemLoop = /FOR\s+v_item\s+IN\b/i.exec(confirm);
+  assert.ok(reset);
+  assert.ok(itemLoop);
+  const movedReset = confirm
+    .replace(reset[0], '')
+    .replace(itemLoop[0], `${reset[0]}\n${itemLoop[0]}`);
+  assert.equal(reclaimCounterResetPerItem(movedReset), false);
+
+  const reclaimedIncrement =
+    /v_reclaimed_count\s*:=\s*v_reclaimed_count\s*\+\s*1\s*;/i.exec(confirm);
+  assert.ok(reclaimedIncrement);
+  const unreachableIncrement = confirm.replace(
+    reclaimedIncrement[0],
+    `IF false THEN\n${reclaimedIncrement[0]}\nEND IF;`
+  );
+  assert.equal(
+    findReclaimReservationTransition(unreachableIncrement),
+    undefined
+  );
 });

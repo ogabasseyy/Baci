@@ -181,13 +181,6 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
     ),
     false
   );
-  const confirmedHoldGuard =
-    /IF\s+NOT\s+v_is_confirmed_hold\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]order_not_confirmed_for_inventory_hold['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i;
-  assert.match(confirm, confirmedHoldGuard);
-  assert.doesNotMatch(
-    confirm.replace(confirmedHoldGuard, ''),
-    confirmedHoldGuard
-  );
   const fullyReservedExpiryClear =
     /IF\s+v_reserved_count\s*=\s*v_item\.quantity\s+THEN[\s\S]*?UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL[\s\S]*?WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL\s*;/i;
   const partialExpiryClear =

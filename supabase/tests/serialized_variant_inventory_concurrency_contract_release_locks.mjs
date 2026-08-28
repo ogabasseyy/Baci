@@ -32,6 +32,25 @@ function releaseLockMatches(source) {
   ) {
     return false;
   }
+  const contradictoryScopePredicates = [
+    [
+      /vi\s*\.\s*order_id\s+IS\s+NULL\b/i,
+      /vi\s*\.\s*order_id\s*(?:<>|!=|IS\s+DISTINCT\s+FROM)\s*/i,
+      /vi\s*\.\s*order_id\s*=(?!\s*p_order_id\b)/i,
+    ],
+    [
+      /vi\s*\.\s*merchant_id\s+IS\s+NULL\b/i,
+      /vi\s*\.\s*merchant_id\s*(?:<>|!=|IS\s+DISTINCT\s+FROM)\s*/i,
+      /vi\s*\.\s*merchant_id\s*=(?!\s*p_merchant_id\b)/i,
+    ],
+  ];
+  if (
+    contradictoryScopePredicates.some((predicates) =>
+      predicates.some((predicate) => predicate.test(query[1]))
+    )
+  ) {
+    return false;
+  }
   return [
     /vi\s*\.\s*order_id\s*=\s*p_order_id\b/i,
     /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id\b/i,

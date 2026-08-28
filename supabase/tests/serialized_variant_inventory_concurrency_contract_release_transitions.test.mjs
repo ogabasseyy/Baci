@@ -143,3 +143,19 @@ test('release reconciliation recomputes missing units and deduplicates stock syn
     /array_position\(\s*v_synced_product_ids\s*,\s*v_item\.product_id\s*\)\s+IS\s+NULL[\s\S]*?sync_serialized_stock[\s\S]*?array_append\(\s*v_synced_product_ids\s*,\s*v_item\.product_id\s*\)/i
   );
 });
+
+test('release reconciliation synchronizes products in a deterministic order', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  assert.match(
+    release,
+    /FROM\s+public\.order_items\s+oi[\s\S]*?WHERE\s+oi\.order_id\s*=\s*p_order_id\s+ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.id\s+FOR\s+UPDATE/i
+  );
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseReconciliationMatches(
+      release.replace(/\s+ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.id/i, '')
+    ),
+    false
+  );
+});

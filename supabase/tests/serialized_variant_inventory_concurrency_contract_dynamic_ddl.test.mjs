@@ -37,3 +37,20 @@ $wrapper$;`;
 
   assert.equal(hasDynamicFunctionDdl(source, 'private.fixture(integer)'), true);
 });
+
+test('detects dynamic privilege DDL for protected functions', () => {
+  const source = `DO $wrapper$
+BEGIN
+  EXECUTE 'GRANT EXECUTE ON FUNCTION private.' ||
+    'fixture(integer) TO authenticated';
+END;
+$wrapper$;`;
+
+  assert.equal(
+    serializedInventoryDynamicDdl.hasDynamicPrivilegeDdl(
+      source,
+      'private.fixture(integer)'
+    ),
+    true
+  );
+});

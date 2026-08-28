@@ -96,6 +96,7 @@ BEGIN
     SELECT oi.id, oi.product_id, oi.quantity
     FROM public.order_items oi
     WHERE oi.order_id = p_order_id
+    ORDER BY oi.product_id, oi.id
     FOR UPDATE
   LOOP
     IF array_position(v_released_order_item_ids, v_item.id) IS NULL THEN

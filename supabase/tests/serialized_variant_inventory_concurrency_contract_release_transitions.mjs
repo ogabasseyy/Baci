@@ -97,7 +97,7 @@ function releaseReconciliationMatches(source) {
   if (dispatchEnd === undefined) return false;
   const afterDispatch = executable.slice(dispatchEnd);
   const loop =
-    /FOR\s+v_item\s+IN\s+SELECT\s+(?:oi\s*\.\s*\*|oi\s*\.\s*id\s*,\s*oi\s*\.\s*product_id\s*,\s*oi\s*\.\s*quantity)[\s\S]*?FROM\s+(?:public\s*\.\s*)?order_items\s+oi[\s\S]*?WHERE\s+oi\s*\.\s*order_id\s*=\s*p_order_id[\s\S]*?FOR\s+UPDATE[\s\S]*?LOOP\b([\s\S]*?)END\s+LOOP\s*;/i.exec(
+    /FOR\s+v_item\s+IN\s+SELECT\s+(?:oi\s*\.\s*\*|oi\s*\.\s*id\s*,\s*oi\s*\.\s*product_id\s*,\s*oi\s*\.\s*quantity)[\s\S]*?FROM\s+(?:public\s*\.\s*)?order_items\s+oi[\s\S]*?WHERE\s+oi\s*\.\s*order_id\s*=\s*p_order_id[\s\S]*?ORDER\s+BY\s+oi\s*\.\s*product_id\s*,\s*oi\s*\.\s*id[\s\S]*?FOR\s+UPDATE[\s\S]*?LOOP\b([\s\S]*?)END\s+LOOP\s*;/i.exec(
       afterDispatch
     );
   if (!loop) return false;

@@ -31,9 +31,15 @@ function hasConfirmedHoldEligibility(source, orderPrefix) {
   );
   const assignmentIndex =
     assignment && match.index + match[0].length + assignment.index;
+  const laterAssignment =
+    assignment &&
+    [
+      ...normalized.matchAll(/v_is_confirmed_hold\s*:=\s*(?:true|false)\s*;/gi),
+    ].some((candidate) => candidate.index > assignmentIndex);
   return Boolean(
     /v_is_confirmed_hold\s+boolean\s*:=\s*false\s*;/i.test(normalized) &&
       assignment &&
+      !laterAssignment &&
       serializedInventoryControlFlow.isReachable(normalized, assignmentIndex)
   );
 }
@@ -100,6 +106,20 @@ test('claim and confirmation preserve protected wrapper modes and hold eligibili
             END IF;
           END;
         `,
+        prefix
+      ),
+      false
+    );
+    const confirmedHoldAssignment = /v_is_confirmed_hold\s*:=\s*true\s*;/i.exec(
+      body
+    );
+    assert.ok(confirmedHoldAssignment);
+    assert.equal(
+      hasConfirmedHoldEligibility(
+        body.replace(
+          confirmedHoldAssignment[0],
+          `${confirmedHoldAssignment[0]}\nv_is_confirmed_hold := false;`
+        ),
         prefix
       ),
       false

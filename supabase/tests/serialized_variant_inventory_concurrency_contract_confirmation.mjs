@@ -120,17 +120,24 @@ function findReclaimReservationTransition(source) {
   if (!transition) return undefined;
   const transitionIndex = selector.index + transition.index;
   const claimedCounterIndex = selector.index + claimedCounter.index;
+  const reclaimedCounterIndex = selector.index + counter.index;
   if (
     !serializedInventoryControlFlow.sharesInnermostLoop(
       cleanSource,
       selector.index,
+      transitionIndex,
+      claimedCounterIndex,
+      reclaimedCounterIndex
+    ) ||
+    !serializedInventoryControlFlow.dominatesControlFlow(
+      cleanSource,
       transitionIndex,
       claimedCounterIndex
     ) ||
     !serializedInventoryControlFlow.dominatesControlFlow(
       cleanSource,
       transitionIndex,
-      claimedCounterIndex
+      reclaimedCounterIndex
     )
   ) {
     return undefined;
@@ -161,9 +168,33 @@ function confirmationLocksPrecedeReclaim(source) {
   );
 }
 
+function reclaimCounterResetPerItem(source) {
+  const cleanSource = maskSqlLiterals(stripSqlComments(source), {
+    preserveStrings: true,
+  });
+  const itemLoop = /FOR\s+v_item\s+IN\b/i.exec(cleanSource);
+  const reset = /v_claimed_in_loop\s*:=\s*0\s*;/i.exec(cleanSource);
+  const selector =
+    serializedInventoryAvailability.availableUnitWhereClause(cleanSource);
+  return Boolean(
+    itemLoop &&
+      reset &&
+      selector &&
+      reset.index > itemLoop.index &&
+      reset.index < selector.index &&
+      serializedInventoryControlFlow.isReachable(cleanSource, reset.index) &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        cleanSource,
+        reset.index,
+        selector.index
+      )
+  );
+}
+
 export const serializedInventoryConfirmation = {
   confirmationLocksPrecedeReclaim,
   findConfirmationLocks,
   findReclaimReservationTransition,
   orderLockFailsClosed,
+  reclaimCounterResetPerItem,
 };

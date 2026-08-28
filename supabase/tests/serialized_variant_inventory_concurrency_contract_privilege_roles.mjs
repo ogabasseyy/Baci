@@ -1,15 +1,21 @@
 const roleIdentifier = '(?:"[^"]+"|[a-z_][a-z0-9_]*)';
 const roleMembershipPattern = new RegExp(
-  `^(GRANT|REVOKE)\\s+(${roleIdentifier}(?:\\s*,\\s*${roleIdentifier})*)\\s+(?:TO|FROM)\\s+(${roleIdentifier}(?:\\s*,\\s*${roleIdentifier})*)\\s*;?$`,
+  `^(GRANT|REVOKE)\\s+(${roleIdentifier}(?:\\s*,\\s*${roleIdentifier})*)\\s+(?:TO|FROM)\\s+(${roleIdentifier}(?:\\s*,\\s*${roleIdentifier})*)(?:\\s+WITH\\s+(?:ADMIN|INHERIT|SET)\\s+(?:OPTION|TRUE|FALSE)(?:\\s*,\\s*(?:ADMIN|INHERIT|SET)\\s+(?:OPTION|TRUE|FALSE))*)?\\s*;?$`,
   'i'
 );
 const defaultFunctionPrivilegePattern =
   /ALTER\s+DEFAULT\s+PRIVILEGES(?:\s+FOR\s+(?:ROLE|USER)\s+(?:"[^"]+"|[a-z_][a-z0-9_]*))?(?:\s+IN\s+SCHEMA\s+(?:"([^"]+)"|([a-z_][a-z0-9_]*)))?\s+(GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:ALL\s+)?(?:FUNCTIONS|ROUTINES)\s+(?:TO|FROM)\s+([^;]+);/gi;
+const schemaFunctionPrivilegePattern =
+  /(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+ALL\s+(?:FUNCTIONS|ROUTINES)\s+IN\s+SCHEMA\s+([^;]+?)\s+(TO|FROM)\s+([^;]+);/gi;
 
 function normalizeRoleName(role) {
   return role
     .trim()
     .replace(/^GROUP\s+/i, '')
+    .replace(
+      /\s+WITH\s+(?:ADMIN|INHERIT|SET)\s+(?:OPTION|TRUE|FALSE)(?:\s*,\s*(?:ADMIN|INHERIT|SET)\s+(?:OPTION|TRUE|FALSE))*$/i,
+      ''
+    )
     .replace(/^"|"$/g, '')
     .toLowerCase();
 }
@@ -41,6 +47,23 @@ function parseDefaultFunctionPrivileges(text, targetSchema) {
     }));
 }
 
+function parseSchemaFunctionPrivileges(text, targetSchema) {
+  schemaFunctionPrivilegePattern.lastIndex = 0;
+  return [...text.matchAll(schemaFunctionPrivilegePattern)]
+    .filter((match) =>
+      match[1]
+        .split(',')
+        .map((schema) => schema.trim().replace(/^"|"$/g, '').toLowerCase())
+        .includes(targetSchema)
+    )
+    .map((match) => ({
+      index: match.index,
+      kind: 'privilege',
+      match,
+      grantees: match[3],
+    }));
+}
+
 function canExecuteAs(role, grants, memberships, visited = new Set()) {
   const normalizedRole = normalizeRoleName(role);
   if (grants.get('public') === true || grants.get(normalizedRole) === true) {
@@ -57,5 +80,6 @@ export const serializedInventoryPrivilegeRoles = {
   canExecuteAs,
   normalizeRoleName,
   parseDefaultFunctionPrivileges,
+  parseSchemaFunctionPrivileges,
   parseRoleMembership,
 };

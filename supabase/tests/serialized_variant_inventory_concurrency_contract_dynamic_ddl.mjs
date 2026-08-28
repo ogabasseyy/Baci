@@ -33,6 +33,18 @@ function dynamicDdlPattern(functionSignature) {
   );
 }
 
+function dynamicPrivilegePattern(functionSignature) {
+  const functionName = functionNameFromSignature(functionSignature);
+  const argumentTypes = functionSignature.match(/\(([^()]*)\)\s*$/)?.[1] ?? '';
+  const argumentsPattern = escapeRegex(argumentTypes)
+    .replaceAll(',', '\\s*,\\s*')
+    .replaceAll(' ', '\\s+');
+  return new RegExp(
+    `(?:^|[^A-Za-z0-9_])(?:GRANT|REVOKE)\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE)\\s+ON\\s+(?:FUNCTION|ROUTINE)\\s+${identifierPattern(functionName)}\\s*\\(\\s*${argumentsPattern}\\s*\\)(?=\\s+(?:TO|FROM)\\b)`,
+    'i'
+  );
+}
+
 function extractExecutePayload(source, start) {
   let payload = '';
   let depth = 0;
@@ -101,4 +113,20 @@ function hasDynamicFunctionDdl(source, functionSignature) {
   return false;
 }
 
-export const serializedInventoryDynamicDdl = { hasDynamicFunctionDdl };
+function hasDynamicPrivilegeDdl(source, functionSignature) {
+  const masked = serializedInventorySqlParser.maskSqlLiterals(source);
+  const privilege = dynamicPrivilegePattern(functionSignature);
+  for (const execute of masked.matchAll(/\bEXECUTE\b/gi)) {
+    const payload = extractExecutePayload(
+      source,
+      execute.index + execute[0].length
+    );
+    if (privilege.test(normalizeExecuteExpression(payload))) return true;
+  }
+  return false;
+}
+
+export const serializedInventoryDynamicDdl = {
+  hasDynamicFunctionDdl,
+  hasDynamicPrivilegeDdl,
+};

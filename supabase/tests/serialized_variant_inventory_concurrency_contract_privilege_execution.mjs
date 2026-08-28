@@ -1,3 +1,5 @@
+import { serializedInventoryDynamicDdl } from './serialized_variant_inventory_concurrency_contract_dynamic_ddl.mjs';
+import { serializedInventoryPrivilegeLifecycle } from './serialized_variant_inventory_concurrency_contract_privilege_lifecycle.mjs';
 import { serializedInventoryPrivilegeRoles } from './serialized_variant_inventory_concurrency_contract_privilege_roles.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
@@ -38,43 +40,6 @@ function maskSqlStringLiterals(source) {
   );
   maskedSourceCache.set(source, masked);
   return masked;
-}
-
-function functionLifecycleEvents(source, signature) {
-  const parsed = /^(.*)\(([^()]*)\)$/.exec(signature);
-  if (!parsed) return [];
-  const parameters = parsed[2]
-    .split(',')
-    .map((type) => type.trim())
-    .filter(Boolean)
-    .map(
-      (type) =>
-        `\\s*(?:(?:INOUT|IN|VARIADIC)\\s+)?(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s+)?${signaturePattern(type)}(?:\\s+(?:DEFAULT\\b|=)[^,)]*)?\\s*`
-    )
-    .join('\\s*,\\s*');
-  const name = identifierPattern(parsed[1].trim());
-  const functionReference = `${name}\\s*\\(${parameters}\\)`;
-  const creates = [
-    ...source.matchAll(
-      new RegExp(
-        `CREATE\\s+(OR\\s+REPLACE\\s+)?FUNCTION\\s+${functionReference}`,
-        'gi'
-      )
-    ),
-  ].map((match) => ({
-    index: match.index,
-    kind: 'create',
-    replace: match[1] !== undefined,
-  }));
-  const drops = [
-    ...source.matchAll(
-      new RegExp(
-        `DROP\\s+(?:FUNCTION|ROUTINE)(?:\\s+IF\\s+EXISTS)?\\s+(?:(?!;)[\\s\\S])*?${functionReference}(?=\\s*(?:,|(?:CASCADE|RESTRICT)?;))[^;]*;`,
-        'gi'
-      )
-    ),
-  ].map((match) => ({ index: match.index, kind: 'drop' }));
-  return [...creates, ...drops];
 }
 
 function privilegeTargetPattern(signature) {
@@ -146,6 +111,14 @@ function parseFunctionPrivilege(text) {
 const authenticatedExecutionCache = new Map();
 
 function authenticatedCanExecute(source, signature) {
+  const sources = Array.isArray(source) ? source : [source];
+  if (
+    sources.some((candidate) =>
+      serializedInventoryDynamicDdl.hasDynamicPrivilegeDdl(candidate, signature)
+    )
+  ) {
+    return true;
+  }
   const key = `${Array.isArray(source) ? source.join('\u0001') : source}\u0000${signature}`;
   const cached = authenticatedExecutionCache.get(key);
   if (cached !== undefined) return cached;
@@ -160,21 +133,24 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
     grants: new Map(),
     defaultGrants: new Map(),
     memberships: new Map(),
+    owner: undefined,
   };
   const executableSources = (
     Array.isArray(sourceOrSources) ? sourceOrSources : [sourceOrSources]
   ).map(maskSqlStringLiterals);
-  const schemaPattern =
-    /(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+ALL\s+(?:FUNCTIONS|ROUTINES)\s+IN\s+SCHEMA\s+(?:"([^"]+)"|([a-z_][a-z0-9_]*))\s+(?:TO|FROM)\s+([^;]+);/gi;
   const targetSchema = schemaNameFromSignature(signature);
   const events = executableSources
     .flatMap((executable, sourceIndex) =>
       serializedInventorySqlParser
         .splitSqlStatements(executable)
         .flatMap(({ index, text }) => {
-          const lifecycle = functionLifecycleEvents(text, signature).map(
-            (event) => ({ ...event, index: index + event.index, sourceIndex })
-          );
+          const lifecycle = serializedInventoryPrivilegeLifecycle
+            .functionLifecycleEvents(text, signature)
+            .map((event) => ({
+              ...event,
+              index: index + event.index,
+              sourceIndex,
+            }));
           const leading = text.trimStart();
           const defaults = serializedInventoryPrivilegeRoles
             .parseDefaultFunctionPrivileges(text, targetSchema)
@@ -207,16 +183,11 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
                   },
                 ]
               : [];
-          schemaPattern.lastIndex = 0;
-          const schemaPrivileges = [...text.matchAll(schemaPattern)]
-            .filter(
-              (match) => (match[1] ?? match[2]).toLowerCase() === targetSchema
-            )
-            .map((match) => ({
-              index: index + match.index,
-              kind: 'privilege',
-              match,
-              grantees: match[3],
+          const schemaPrivileges = serializedInventoryPrivilegeRoles
+            .parseSchemaFunctionPrivileges(text, targetSchema)
+            .map((event) => ({
+              ...event,
+              index: index + event.index,
               sourceIndex,
             }));
           return [
@@ -245,6 +216,7 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
     if (event.kind === 'drop') {
       state.exists = false;
       state.grants.clear();
+      state.owner = undefined;
     } else if (event.kind === 'create') {
       if (!event.replace || !state.exists) {
         state.grants.clear();
@@ -254,6 +226,8 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
         }
       }
       state.exists = true;
+    } else if (event.kind === 'owner') {
+      state.owner = event.owner;
     } else if (event.kind === 'default') {
       const grant = event.operation === 'GRANT';
       for (const grantee of splitFunctionPrivilegeTargets(event.grantees)) {
@@ -287,11 +261,17 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
   }
   return (
     state.exists &&
-    serializedInventoryPrivilegeRoles.canExecuteAs(
+    (serializedInventoryPrivilegeRoles.canExecuteAs(
       'authenticated',
       state.grants,
       state.memberships
-    )
+    ) ||
+      (state.owner !== undefined &&
+        serializedInventoryPrivilegeRoles.canExecuteAs(
+          'authenticated',
+          new Map([[state.owner, true]]),
+          state.memberships
+        )))
   );
 }
 

@@ -20,6 +20,24 @@ test('inherits function execution through a granted intermediate role', () => {
   );
 });
 
+test('inherits execution through membership grants with options', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION ${signature} TO inventory_delegate;
+    GRANT inventory_delegate TO authenticated WITH ADMIN OPTION;
+  `;
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
 test('recognizes grant options when computing authenticated execution', () => {
   const signature = 'private.fixture(uuid)';
   const source = `
@@ -67,6 +85,62 @@ test('recognizes quoted function privilege targets', () => {
     GRANT EXECUTE ON FUNCTION "private"."fixture"(uuid) TO authenticated;
   `;
 
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
+test('treats authenticated ownership as execution authority', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    ALTER FUNCTION ${signature} OWNER TO authenticated;
+  `;
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
+test('applies all-functions grants across a comma-separated schema list', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public, private TO authenticated;
+  `;
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
+test('fails closed when privilege DDL is executed dynamically', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    DO $wrapper$
+    BEGIN
+      EXECUTE 'GRANT EXECUTE ON FUNCTION private.' ||
+        'fixture(uuid) TO authenticated';
+    END;
+    $wrapper$;
+  `;
   assert.equal(
     serializedInventoryPrivilegeExecution.authenticatedCanExecute(
       source,

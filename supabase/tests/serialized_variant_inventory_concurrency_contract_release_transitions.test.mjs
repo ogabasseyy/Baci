@@ -92,6 +92,21 @@ test('release preserves fulfillment for items without released units', () => {
   );
 });
 
+test('zero-unit idempotent release preserves existing order fulfillment details', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  assert.match(
+    release,
+    /UPDATE\s+public\.orders\s+SET\s+fulfillment_details\s*=\s*COALESCE\(\s*v_fulfillment_data\s*,\s*fulfillment_details\s*\)\s+WHERE\s+id\s*=\s*p_order_id\s*;/i,
+    'a zero-unit/idempotent release must not replace existing fulfillment details with NULL'
+  );
+  assert.doesNotMatch(
+    release,
+    /UPDATE\s+public\.orders\s+SET\s+fulfillment_details\s*=\s*v_fulfillment_data\s+WHERE\s+id\s*=\s*p_order_id\s*;/i
+  );
+});
+
 test('release authorization raises in the unauthorized branch', () => {
   const release = serializedInventoryContract.latestFunctionBody(
     'private.release_order_inventory_units(uuid, uuid, text)'

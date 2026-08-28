@@ -22,19 +22,27 @@ function findConfirmationLocks(source) {
         `FROM\\s+(?:public\\s*\\.\\s*)?${table}(?:\\s+(?:AS\\s+)?([a-z_][a-z0-9_]*))?[^;]*?WHERE\\s+([\\s\\S]*?)FOR\\s+UPDATE(?!\\s+(?:OF\\s+[a-z_][a-z0-9_]*\\s+)?(?:SKIP\\s+LOCKED|NOWAIT)\\b)(?:\\s+OF\\s+([a-z_][a-z0-9_]*))?(?=\\s*(?:;|LOOP\\b))`,
         'i'
       ).exec(text);
+      const orderBy = query
+        ? /\bORDER\s+BY\s+([\s\S]*)$/i.exec(query[2])
+        : undefined;
+      const where = orderBy
+        ? query[2].slice(0, orderBy.index).trim()
+        : query?.[2];
       if (
         query &&
-        !/\b(?:LIMIT|OFFSET|FETCH)\b/i.test(query[2]) &&
+        !/\b(?:LIMIT|OFFSET|FETCH)\b/i.test(where) &&
         (!query[3] ||
           (query[1] && query[3].toLowerCase() === query[1].toLowerCase())) &&
         predicates(query[1]).every((predicate) =>
-          isRequiredConjunct(query[2], predicate)
+          isRequiredConjunct(where, predicate)
         )
       ) {
         return {
+          alias: query[1],
           end: index + text.length,
           index: index + query.index,
-          where: query[2],
+          orderBy: orderBy?.[1].trim(),
+          where,
         };
       }
     }
@@ -152,6 +160,7 @@ function confirmationLocksPrecedeReclaim(source) {
   return Boolean(
     locks.order &&
       locks.item &&
+      confirmationItemOrderIsDeterministic(locks.item) &&
       selector &&
       serializedInventoryControlFlow.dominatesControlFlow(
         source,
@@ -166,6 +175,17 @@ function confirmationLocksPrecedeReclaim(source) {
       locks.order.index < selector.index &&
       locks.item.index < selector.index
   );
+}
+
+function confirmationItemOrderIsDeterministic(lock) {
+  if (!lock?.orderBy) return false;
+  const qualifier = lock.alias
+    ? `(?:${lock.alias}\\s*\\.\\s*)?`
+    : '(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?';
+  return new RegExp(
+    `^\\s*${qualifier}product_id(?:\\s+(?:ASC|DESC))?\\s*,\\s*${qualifier}id(?:\\s+(?:ASC|DESC))?\\s*$`,
+    'i'
+  ).test(lock.orderBy);
 }
 
 function reclaimCounterResetPerItem(source) {
@@ -192,6 +212,7 @@ function reclaimCounterResetPerItem(source) {
 }
 
 export const serializedInventoryConfirmation = {
+  confirmationItemOrderIsDeterministic,
   confirmationLocksPrecedeReclaim,
   findConfirmationLocks,
   findReclaimReservationTransition,

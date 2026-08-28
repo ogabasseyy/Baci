@@ -24,4 +24,19 @@ export const EXPECTED_INVENTORY_PENDING_SOURCES = [
       'supabase/migrations/20260825185000_scope_confirmation_reclaims_per_item.sql',
     sha256: 'ab13510a0a7c14ac2e77d82a553cd3306f2ce0a15ffd0d0cf33304ae599bd91c',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260828004000_harden_serialized_inventory_release_reconciliation.sql',
+    sha256: '8828e6216602d17d3d3670bbae4c78d38c37411872fb30584c27d7b970355834',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260828005000_preserve_order_fulfillment_on_idempotent_inventory_release.sql',
+    sha256: 'cef378dbd30ab89303d04848d2ad18a76ebdf10ac8b9447ff3aa27861b4d81aa',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260828006000_harden_serialized_inventory_confirmation_order.sql',
+    sha256: 'ecbf92f71656a7ac03a161226f410af3f1832c15f04d41be8b6da216ccd95dfe',
+  },
 ] as const;

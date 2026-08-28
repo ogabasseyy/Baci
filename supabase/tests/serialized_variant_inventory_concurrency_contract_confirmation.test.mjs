@@ -6,6 +6,7 @@ import { serializedInventoryControlFlow } from './serialized_variant_inventory_c
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const {
+  confirmationItemOrderIsDeterministic,
   confirmationLocksPrecedeReclaim,
   findConfirmationLocks,
   findReclaimReservationTransition,
@@ -64,6 +65,28 @@ test('confirmation locks require mandatory tenant and order scopes', () => {
   );
 });
 
+test('confirmation item locks reject inverted product/id ordering', () => {
+  const ordered = `
+    SELECT oi.id FROM order_items oi
+    WHERE oi.order_id = p_order_id
+    ORDER BY oi.product_id, oi.id
+    FOR UPDATE;
+  `;
+  const inverted = ordered.replace(
+    'ORDER BY oi.product_id, oi.id',
+    'ORDER BY oi.id, oi.product_id'
+  );
+
+  assert.equal(
+    confirmationItemOrderIsDeterministic(findConfirmationLocks(ordered).item),
+    true
+  );
+  assert.equal(
+    confirmationItemOrderIsDeterministic(findConfirmationLocks(inverted).item),
+    false
+  );
+});
+
 test('confirmation locks before reclaiming and reserves each counted unit', () => {
   const confirm = serializedInventoryContract.latestFunctionBody(
     'private.confirm_order_inventory_reservations(uuid, uuid)'
@@ -99,6 +122,7 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
   );
   assert.ok(locks.order);
   assert.ok(locks.item);
+  assert.equal(confirmationItemOrderIsDeterministic(locks.item), true);
   assert.ok(selector);
   assert.ok(transition);
   assert.match(

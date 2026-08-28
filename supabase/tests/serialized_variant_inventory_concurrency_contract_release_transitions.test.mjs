@@ -115,7 +115,10 @@ test('release authorization raises in the unauthorized branch', () => {
     serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(release),
     true
   );
-  const guard = /IF\s+auth\.role\(\)[\s\S]*?END\s+IF\s*;/i.exec(release);
+  const guard =
+    /IF\s+COALESCE\(\s*\(\s*SELECT\s+auth\.role\(\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'[\s\S]*?END\s+IF\s*;/i.exec(
+      release
+    );
   assert.ok(guard);
   const inverted = guard[0].replace(
     /THEN([\s\S]*?)END\s+IF\s*;$/i,

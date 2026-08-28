@@ -110,7 +110,7 @@ function hasMerchantAuthorizationGuard(source) {
     { preserveStrings: true }
   );
   const guardPattern =
-    /IF\s+auth\.role\(\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(\s*p_merchant_id\s*\)\s+THEN\b/i;
+    /IF\s+COALESCE\(\s*\(\s*SELECT\s+auth\.role\(\s*\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(\s*p_merchant_id\s*\)\s+THEN\b/i;
   const guard = guardPattern.exec(executable);
   if (!guard) return false;
   try {

@@ -6,7 +6,8 @@ function hasPositiveQuantityGuard(source) {
   const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
     preserveStrings: true,
   });
-  const guardPattern = /^\s*IF\s+quantity_param\s*<=\s*0\s+THEN\b/im;
+  const guardPattern =
+    /^\s*IF\s+quantity_param\s+IS\s+NULL\s+OR\s+quantity_param\s*<=\s*0\s+THEN\b/im;
   const guard = guardPattern.exec(executable);
   let thenBranch;
   try {
@@ -79,7 +80,7 @@ function hasMerchantAuthorizationGuard(source) {
   return Boolean(
     guard &&
       guardArms &&
-      /\bRETURN\b/i.test(guardArms.thenBranch) &&
+      /\bRETURN\s*;/i.test(guardArms.thenBranch) &&
       merchantLookup &&
       protectedOperation &&
       serializedInventoryControlFlow.dominatesControlFlow(

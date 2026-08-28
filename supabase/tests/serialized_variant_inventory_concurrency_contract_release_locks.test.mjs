@@ -1,6 +1,48 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 import { serializedInventoryReleaseLocks } from './serialized_variant_inventory_concurrency_contract_release_locks.mjs';
+
+test('release authorization requires a null-safe auth role guard', () => {
+  const nullSafeGuard = `IF COALESCE((SELECT auth.role()), '') <> 'service_role'
+    AND NOT public.has_merchant_access(p_merchant_id) THEN
+    RAISE EXCEPTION 'forbidden';
+  END IF;`;
+  const rawGuard = nullSafeGuard.replace(
+    /COALESCE\(\(SELECT auth\.role\(\)\), ''\)/,
+    'auth.role()'
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(
+      nullSafeGuard
+    ),
+    true
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(rawGuard),
+    false
+  );
+});
+
+test('release authorization rejects a raw-auth-role mutation', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(release),
+    true
+  );
+  const rawRoleRelease = release.replace(
+    /COALESCE\(\s*\(\s*SELECT\s+auth\.role\(\s*\)\s*\)\s*,\s*''\s*\)/i,
+    'auth.role()'
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(
+      rawRoleRelease
+    ),
+    false
+  );
+});
 
 test('rejects unsatisfiable reserved-unit release selectors', () => {
   assert.equal(

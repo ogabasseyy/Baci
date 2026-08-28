@@ -45,7 +45,7 @@ test('release serializes on its order before locking reserved inventory', () => 
 
   assert.equal(hasTargetStatusWhitelist(release), true);
   const authorizationGuard =
-    /IF\s+auth\.role\(\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(p_merchant_id\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]forbidden['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i;
+    /IF\s+COALESCE\(\s*\(\s*SELECT\s+auth\.role\(\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(p_merchant_id\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]forbidden['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i;
   assert.match(executableRelease, authorizationGuard);
   assert.equal(
     serializedInventoryControlFlow.dominatesControlFlow(

@@ -3,6 +3,9 @@ import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 import { serializedInventoryDecrementGuards } from './serialized_variant_inventory_concurrency_contract_decrement_guards.mjs';
 
+const quantityGuardPattern =
+  /IF\s+quantity_param\s+IS\s+NULL\s+OR\s+quantity_param\s*<=\s*0\s+THEN[\s\S]*?END\s+IF\s*;/i;
+
 test('public decrement RPCs reject nonpositive quantities and unauthorized merchants', () => {
   for (const functionName of [
     'public.decrement_product_stock(uuid, integer)',
@@ -42,18 +45,29 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
     );
     assert.equal(
       serializedInventoryDecrementGuards.hasPositiveQuantityGuard(
-        body.replace(/IF\s+quantity_param\s*<=\s*0[\s\S]*?END\s+IF\s*;/i, '')
+        body.replace(quantityGuardPattern, '')
       ),
       false
     );
-    const quantityGuard =
-      /IF\s+quantity_param\s*<=\s*0\s+THEN[\s\S]*?END\s+IF\s*;/i.exec(body);
+    const quantityGuard = quantityGuardPattern.exec(body);
     assert.ok(quantityGuard);
     assert.equal(
       serializedInventoryDecrementGuards.hasPositiveQuantityGuard(
         body.replace(
           quantityGuard[0],
           quantityGuard[0].replace(/\bRETURN\s*;/i, 'RETURN QUERY SELECT 1;')
+        )
+      ),
+      false
+    );
+    assert.equal(
+      serializedInventoryDecrementGuards.hasPositiveQuantityGuard(
+        body.replace(
+          quantityGuard[0],
+          quantityGuard[0].replace(
+            /quantity_param\s+IS\s+NULL\s+OR\s+/i,
+            ''
+          )
         )
       ),
       false
@@ -96,6 +110,18 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
         body
       );
     assert.ok(authorization);
+    assert.equal(
+      serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
+        body.replace(
+          authorization[0],
+          authorization[0].replace(
+            /\bRETURN\s*;/i,
+            'RETURN QUERY SELECT FALSE, NULL::integer, \'Not authorized\'::text;'
+          )
+        )
+      ),
+      false
+    );
     const targetParameter = body.includes('variant_id_param')
       ? 'variant_id_param'
       : 'product_id_param';

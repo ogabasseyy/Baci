@@ -209,6 +209,29 @@ test('applies default function privileges when a private function is recreated',
   );
 });
 
+test('does not apply default function privileges for another owner', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    ALTER DEFAULT PRIVILEGES FOR ROLE unrelated_owner IN SCHEMA private
+      GRANT EXECUTE ON FUNCTIONS TO authenticated;
+    DROP FUNCTION ${signature};
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+  `;
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    false
+  );
+});
+
 test('tracks quoted function recreation after a drop', () => {
   const signature = 'private.fixture(uuid)';
   const source = `

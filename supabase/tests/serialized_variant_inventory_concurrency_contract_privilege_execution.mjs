@@ -221,7 +221,9 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
       if (!event.replace || !state.exists) {
         state.grants.clear();
         state.grants.set('public', true);
-        for (const [role, grant] of state.defaultGrants) {
+        state.owner ??= 'postgres';
+        const ownerDefaults = state.defaultGrants.get(state.owner) ?? new Map();
+        for (const [role, grant] of ownerDefaults) {
           state.grants.set(role, grant);
         }
       }
@@ -230,12 +232,15 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
       state.owner = event.owner;
     } else if (event.kind === 'default') {
       const grant = event.operation === 'GRANT';
+      const ownerDefaults =
+        state.defaultGrants.get(event.owner) ?? new Map();
       for (const grantee of splitFunctionPrivilegeTargets(event.grantees)) {
-        state.defaultGrants.set(
+        ownerDefaults.set(
           serializedInventoryPrivilegeRoles.normalizeRoleName(grantee),
           grant
         );
       }
+      state.defaultGrants.set(event.owner, ownerDefaults);
     } else if (event.kind === 'membership') {
       for (const member of event.members) {
         const roles = state.memberships.get(member) ?? [];

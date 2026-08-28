@@ -4,7 +4,7 @@ const roleMembershipPattern = new RegExp(
   'i'
 );
 const defaultFunctionPrivilegePattern =
-  /ALTER\s+DEFAULT\s+PRIVILEGES(?:\s+FOR\s+(?:ROLE|USER)\s+(?:"[^"]+"|[a-z_][a-z0-9_]*))?(?:\s+IN\s+SCHEMA\s+(?:"([^"]+)"|([a-z_][a-z0-9_]*)))?\s+(GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:ALL\s+)?(?:FUNCTIONS|ROUTINES)\s+(?:TO|FROM)\s+([^;]+);/gi;
+  /ALTER\s+DEFAULT\s+PRIVILEGES(?:\s+FOR\s+(?:ROLE|USER)\s+((?:"[^"]+"|[a-z_][a-z0-9_]*)))?(?:\s+IN\s+SCHEMA\s+(?:"([^"]+)"|([a-z_][a-z0-9_]*)))?\s+(GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:ALL\s+)?(?:FUNCTIONS|ROUTINES)\s+(?:TO|FROM)\s+([^;]+);/gi;
 const schemaFunctionPrivilegePattern =
   /(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+ALL\s+(?:FUNCTIONS|ROUTINES)\s+IN\s+SCHEMA\s+([^;]+?)\s+(TO|FROM)\s+([^;]+);/gi;
 
@@ -37,13 +37,14 @@ function parseDefaultFunctionPrivileges(text, targetSchema) {
   return [...text.matchAll(defaultFunctionPrivilegePattern)]
     .filter(
       (match) =>
-        (match[1] ?? match[2] ?? targetSchema).toLowerCase() === targetSchema
+        (match[2] ?? match[3] ?? targetSchema).toLowerCase() === targetSchema
     )
     .map((match) => ({
       index: match.index,
       kind: 'default',
-      operation: match[3],
-      grantees: match[4],
+      owner: normalizeRoleName(match[1] ?? 'postgres'),
+      operation: match[4],
+      grantees: match[5],
     }));
 }
 

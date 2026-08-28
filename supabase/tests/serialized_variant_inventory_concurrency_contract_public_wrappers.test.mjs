@@ -23,6 +23,23 @@ const authorizationPattern =
 const authorizationBlockPattern =
   /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\.role\(\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(p_merchant_id\)\s+THEN[\s\S]*?RAISE\s+EXCEPTION\s+['"]forbidden['"][\s\S]*?END\s+IF\s*;/i;
 
+function hasTopLevelException(source) {
+  const masked = serializedInventorySqlParser.maskSqlLiterals(source);
+  let depth = 0;
+  let caseDepth = 0;
+  for (const token of masked.matchAll(
+    /\bEND\s+IF\b|\bEND\s+CASE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRAISE\s+EXCEPTION\b/gi
+  )) {
+    if (/^END\s+IF/i.test(token[0])) depth = Math.max(0, depth - 1);
+    else if (/^END\s+CASE/i.test(token[0]))
+      caseDepth = Math.max(0, caseDepth - 1);
+    else if (/^IF\b/i.test(token[0])) depth += 1;
+    else if (/^CASE$/i.test(token[0])) caseDepth += 1;
+    else if (depth === 0 && caseDepth === 0) return true;
+  }
+  return false;
+}
+
 function publicWrapperPreservesMerchantParameter(source, delegatePattern) {
   const normalizedSource =
     serializedInventorySqlParser.stripSqlComments(source);
@@ -49,9 +66,8 @@ function publicWrapperPreservesMerchantParameter(source, delegatePattern) {
     !authorization ||
     !authorizationOpening ||
     !authorizationArms ||
-    !/\bRAISE\s+EXCEPTION\s+['"]forbidden['"]/i.test(
-      authorizationArms.thenBranch
-    ) ||
+    !hasTopLevelException(authorizationArms.thenBranch) ||
+    !/\bRAISE\s+EXCEPTION\s+['"]forbidden['"]/i.test(authorizationArms.thenBranch) ||
     !delegation
   ) {
     return false;
@@ -118,6 +134,16 @@ test('public inventory wrappers preserve the authorized merchant parameter', () 
       publicWrapperPreservesMerchantParameter(inverted, delegatePattern),
       false,
       `${signature} must reject authorization moved to an ELSE arm`
+    );
+
+    const nestedForbidden = source.replace(
+      /RAISE\s+EXCEPTION\s+['"]forbidden['"][^;]*;/i,
+      (raise) => `IF false THEN\n${raise}\nEND IF;`
+    );
+    assert.equal(
+      publicWrapperPreservesMerchantParameter(nestedForbidden, delegatePattern),
+      false,
+      `${signature} must require a reachable authorization exception`
     );
   }
 });

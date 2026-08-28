@@ -13,6 +13,7 @@ node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_locks.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_branches.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_decrements.test.mjs"
+node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_decrement_null_stock.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_decrement_guards.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_ddl.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_dynamic_ddl.test.mjs"

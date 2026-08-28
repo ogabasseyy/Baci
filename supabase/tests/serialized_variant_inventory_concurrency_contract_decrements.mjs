@@ -1,8 +1,13 @@
-import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
+import { serializedInventoryNullStock } from './serialized_variant_inventory_concurrency_contract_decrement_null_stock.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 import { hasImmediateUnconditionalException } from './serialized_variant_inventory_concurrency_contract_zero_row.mjs';
 
+const {
+  hasTopLevelExit,
+  inspectNullStockHandler,
+  tryExtractIfArms,
+} = serializedInventoryNullStock;
 const {
   isRequiredConjunct,
   maskSqlLiterals,
@@ -157,31 +162,6 @@ function updateLockTarget(statement, decrement) {
     : null;
 }
 
-function tryExtractIfArms(source, openingPattern) {
-  try {
-    return serializedInventoryBranches.extractIfArms(source, openingPattern);
-  } catch {
-    return undefined;
-  }
-}
-
-function hasTopLevelExit(source) {
-  const masked = maskSqlLiterals(source);
-  let depth = 0;
-  let caseDepth = 0;
-  for (const token of masked.matchAll(
-    /\bEND\s+IF\b|\bEND\s+CASE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRAISE\s+EXCEPTION\b|\bRETURN\s*;/gi
-  )) {
-    if (/^END\s+IF/i.test(token[0])) depth = Math.max(0, depth - 1);
-    else if (/^END\s+CASE/i.test(token[0]))
-      caseDepth = Math.max(0, caseDepth - 1);
-    else if (/^IF\b/i.test(token[0])) depth += 1;
-    else if (/^CASE$/i.test(token[0])) caseDepth += 1;
-    else if (depth === 0 && caseDepth === 0) return true;
-  }
-  return false;
-}
-
 function matchingLockedPrecheck(statement, decrement) {
   if (!decrement || decrement.index === undefined) return false;
   const target = updateLockTarget(statement, decrement);
@@ -217,7 +197,12 @@ function matchingLockedPrecheck(statement, decrement) {
     const missingRowArms = missingRowHandler
       ? tryExtractIfArms(missingRowHandler[0], /^\s*IF\s+NOT\s+FOUND\s+THEN\b/i)
       : undefined;
-    const shortageStart = missingRowHandler?.[0].length ?? 0;
+    let shortageStart = missingRowHandler?.[0].length ?? 0;
+    const nullStockHandler = inspectNullStockHandler(afterLock, shortageStart);
+    if (nullStockHandler) {
+      if (!nullStockHandler.valid) continue;
+      shortageStart += nullStockHandler.length;
+    }
     const shortageHandler = new RegExp(
       `^\\s*IF\\s+current_stock\\s*<\\s*(?:\\(\\s*)*${quantity}\\b[\\s\\)]*\\s+THEN(?:(?!\\bEND\\s+IF\\b)[\\s\\S])*?END\\s+IF\\s*;`,
       'i'

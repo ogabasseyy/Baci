@@ -10,12 +10,15 @@ function releaseLockMatches(source) {
     })
   );
   const query =
-    /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+(?:AS\s+)?vi[\s\S]*?WHERE\s+([\s\S]*?)FOR\s+UPDATE\s+OF\s+vi\b(?!\s+(?:OF\b|SKIP\s+LOCKED\b|NOWAIT\b))/i.exec(
+    /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+(?:AS\s+)?vi[\s\S]*?WHERE\s+([\s\S]*?)(?:ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*id\s+)?FOR\s+UPDATE\s+OF\s+vi\b(?!\s+(?:OF\b|SKIP\s+LOCKED\b|NOWAIT\b))/i.exec(
       searchableSource
     );
   if (
     !query ||
-    /\b(?:LIMIT|OFFSET|FETCH|FALSE)\b|\bNOT\s+TRUE\b/i.test(query[1])
+    /\b(?:LIMIT|OFFSET|FETCH|FALSE)\b|\bNOT\s+TRUE\b/i.test(query[1]) ||
+    !/ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi\b/i.test(
+      query[0]
+    )
   )
     return false;
   const statusComparisons = [

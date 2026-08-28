@@ -26,3 +26,14 @@ $wrapper$;`;
     false
   );
 });
+
+test('detects protected DDL assembled from concatenated literals', () => {
+  const source = `DO $wrapper$
+BEGIN
+  EXECUTE 'CREATE OR REPLACE FUNCTION private.' ||
+    'fixture(integer) RETURNS void AS $body$ BEGIN NULL; END; $body$';
+END;
+$wrapper$;`;
+
+  assert.equal(hasDynamicFunctionDdl(source, 'private.fixture(integer)'), true);
+});

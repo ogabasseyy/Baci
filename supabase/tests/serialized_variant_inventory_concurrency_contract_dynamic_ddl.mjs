@@ -80,6 +80,14 @@ function extractExecutePayload(source, start) {
   return payload;
 }
 
+function normalizeExecuteExpression(payload) {
+  return payload
+    .replace(/'((?:''|\\.|[^'])*)'/gs, (_, value) =>
+      value.replaceAll("''", "'")
+    )
+    .replace(/\s*\|\|\s*/g, '');
+}
+
 function hasDynamicFunctionDdl(source, functionSignature) {
   const masked = serializedInventorySqlParser.maskSqlLiterals(source);
   const ddl = dynamicDdlPattern(functionSignature);
@@ -88,7 +96,7 @@ function hasDynamicFunctionDdl(source, functionSignature) {
       source,
       execute.index + execute[0].length
     );
-    if (ddl.test(payload)) return true;
+    if (ddl.test(normalizeExecuteExpression(payload))) return true;
   }
   return false;
 }

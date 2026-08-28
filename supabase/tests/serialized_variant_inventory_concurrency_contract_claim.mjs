@@ -74,9 +74,22 @@ function findEffectiveExcessRelease(source) {
       return false;
     }
     const preceding = executable.slice(excessBranch.index, update.index);
-    return (
-      /\bFOR\s+v_unit_id\s+IN\s*[\s\S]*?\bSELECT\s+id\s+FROM\s+(?:public\s*\.\s*)?variant_inventory\b[\s\S]*?\border_item_id\s*=\s*p_order_item_id\b[\s\S]*?\bstatus\s*=\s*'reserved'[\s\S]*?\bLIMIT\s+v_excess\s+LOOP\b/i.test(
+    const surplusAssignment =
+      /\bv_excess\s*:=\s*v_reserved_count\s*-\s*v_qty\s*;/i.exec(
         preceding
+      );
+    const selector =
+      /\bFOR\s+v_unit_id\s+IN\s*[\s\S]*?\bSELECT\s+id\s+FROM\s+(?:public\s*\.\s*)?variant_inventory\b[\s\S]*?\border_item_id\s*=\s*p_order_item_id\b[\s\S]*?\bstatus\s*=\s*'reserved'[\s\S]*?\bLIMIT\s+v_excess\s+LOOP\b/i.exec(
+        preceding
+      );
+    if (!surplusAssignment || !selector) return false;
+    const assignmentIndex = excessBranch.index + surplusAssignment.index;
+    const selectorIndex = excessBranch.index + selector.index;
+    return (
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        assignmentIndex,
+        selectorIndex
       ) && serializedInventoryControlFlow.isReachable(executable, update.index)
     );
   });

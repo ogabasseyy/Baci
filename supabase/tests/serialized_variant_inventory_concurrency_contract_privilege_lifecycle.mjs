@@ -50,20 +50,22 @@ function functionLifecycleEvents(source, signature) {
   const drops = [
     ...source.matchAll(
       new RegExp(
-        `(?:DROP\\s+(?:FUNCTION|ROUTINE)(?:\\s+IF\\s+EXISTS)?\\s+(?:(?!;)[\\s\\S])*?${functionReference}(?=\\s*(?:,|(?:CASCADE|RESTRICT)?;))[^;]*;|ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${functionReference}\\s+OWNER\\s+TO\\s+("[^"]+"|[a-z_][a-z0-9_]*)\\s*;)`,
+        `(?:DROP\\s+(?:FUNCTION|ROUTINE)(?:\\s+IF\\s+EXISTS)?\\s+(?:(?!;)[\\s\\S])*?${functionReference}(?=\\s*(?:,|(?:CASCADE|RESTRICT)?;))[^;]*;|ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${functionReference}\\s+OWNER\\s+TO\\s+("[^"]+"|[a-z_][a-z0-9_]*)\\s*;|ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${functionReference}\\s+(?:RENAME\\s+TO|SET\\s+SCHEMA)\\s+(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s*;)`,
         'gi'
       )
     ),
-  ].map((match) =>
-    /^ALTER/i.test(match[0])
-      ? {
-          index: match.index,
-          kind: 'owner',
-          owner: serializedInventoryPrivilegeRoles.normalizeRoleName(match[1]),
-        }
-      : { index: match.index, kind: 'drop' }
-  );
-  return [...creates, ...drops];
+  ].map((match) => {
+    if (!/^ALTER/i.test(match[0])) return { index: match.index, kind: 'drop' };
+    if (/OWNER\s+TO/i.test(match[0])) {
+      return {
+        index: match.index,
+        kind: 'owner',
+        owner: serializedInventoryPrivilegeRoles.normalizeRoleName(match[1]),
+      };
+    }
+    return { index: match.index, kind: 'invalidate' };
+  });
+  return [...creates, ...drops].sort((left, right) => left.index - right.index);
 }
 
 export const serializedInventoryPrivilegeLifecycle = {

@@ -213,7 +213,7 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
         left.sourceIndex - right.sourceIndex || left.index - right.index
     );
   for (const event of events) {
-    if (event.kind === 'drop') {
+    if (event.kind === 'drop' || event.kind === 'invalidate') {
       state.exists = false;
       state.grants.clear();
       state.owner = undefined;

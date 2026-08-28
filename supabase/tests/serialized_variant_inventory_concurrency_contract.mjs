@@ -4,6 +4,7 @@ import path from 'node:path';
 import { serializedInventoryAvailability } from './serialized_variant_inventory_concurrency_contract_availability.mjs';
 import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 import { serializedInventoryDecrements } from './serialized_variant_inventory_concurrency_contract_decrements.mjs';
+import { serializedInventoryDynamicDdl } from './serialized_variant_inventory_concurrency_contract_dynamic_ddl.mjs';
 import { serializedInventoryLocks } from './serialized_variant_inventory_concurrency_contract_locks.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
@@ -230,6 +231,13 @@ function latestFunctionBody(functionName, sources = migrationSources) {
   for (const rawSource of sources) {
     if (!namePresence.test(rawSource)) continue;
     const source = stripSqlComments(rawSource);
+    if (
+      serializedInventoryDynamicDdl.hasDynamicFunctionDdl(source, functionName)
+    ) {
+      throw new Error(
+        `dynamic DDL targeting ${functionName} cannot be statically resolved`
+      );
+    }
     const create = latestStatementMatch(
       source,
       new RegExp(

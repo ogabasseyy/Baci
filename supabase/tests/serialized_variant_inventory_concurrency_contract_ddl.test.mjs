@@ -24,6 +24,26 @@ test('function extraction invalidates generic ROUTINE DDL', () => {
   }
 });
 
+test('fails closed on dynamically executed protected function replacements', () => {
+  const source = [
+    'CREATE FUNCTION private.fixture(integer) RETURNS void AS $$',
+    'BEGIN',
+    "  RAISE NOTICE 'old';",
+    'END;',
+    '$$;',
+    'DO $wrapper$',
+    'BEGIN',
+    "  EXECUTE $ddl$CREATE OR REPLACE FUNCTION private.fixture(integer) RETURNS void AS $body$ BEGIN RAISE NOTICE 'new'; END; $body$;$ddl$;",
+    'END;',
+    '$wrapper$;',
+  ].join('\n');
+
+  assert.throws(
+    () => latestFunctionBody('private.fixture(integer)', [source]),
+    /dynamic DDL targeting private\.fixture\(integer\)/
+  );
+});
+
 test('numeric signatures are invalidated through decimal aliases', () => {
   const definition =
     'CREATE FUNCTION private.fixture(numeric) RETURNS void AS $$ BEGIN NULL; END; $$;';

@@ -82,10 +82,11 @@ function findEffectiveExcessRelease(source) {
   });
 }
 
-function hasTopLevelRaise(source) {
+function topLevelRaiseIndex(source) {
+  const searchable = serializedInventorySqlParser.maskSqlLiterals(source);
   let depth = 0;
   let caseDepth = 0;
-  for (const token of source.matchAll(
+  for (const token of searchable.matchAll(
     /\bEND\s+IF\b|\bEND\s+CASE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRAISE\s+EXCEPTION\b/gi
   )) {
     if (/^END\s+IF/i.test(token[0])) depth = Math.max(0, depth - 1);
@@ -93,9 +94,9 @@ function hasTopLevelRaise(source) {
     else if (/^END\s+CASE/i.test(token[0]))
       caseDepth = Math.max(0, caseDepth - 1);
     else if (/^CASE$/i.test(token[0])) caseDepth += 1;
-    else if (depth === 0 && caseDepth === 0) return true;
+    else if (depth === 0 && caseDepth === 0) return token.index;
   }
-  return false;
+  return -1;
 }
 
 function strictShortagePrecedesSuccess(source) {
@@ -116,7 +117,18 @@ function strictShortagePrecedesSuccess(source) {
       executable,
       target
     );
-    return hasTopLevelRaise(branches.thenBranch);
+    const raiseOffset = topLevelRaiseIndex(branches.thenBranch);
+    if (raiseOffset < 0) return false;
+    const branchStart = executable.indexOf(
+      branches.thenBranch,
+      guard.index + guard[0].length
+    );
+    if (branchStart < 0) return false;
+    const raiseIndex = branchStart + raiseOffset;
+    return (
+      raiseIndex < success.index &&
+      serializedInventoryControlFlow.isReachable(executable, raiseIndex)
+    );
   } catch {
     return false;
   }

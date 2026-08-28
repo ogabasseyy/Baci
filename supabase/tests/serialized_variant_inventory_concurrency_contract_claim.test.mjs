@@ -286,6 +286,15 @@ test('serialized claims authorize callers and fail strict shortages before succe
     ),
     false
   );
+  assert.equal(
+    strictShortagePrecedesSuccess(
+      claim.replace(
+        /RAISE\s+EXCEPTION\s+'serialized_inventory_unavailable'[^;]*;/i,
+        (raise) => `RETURN v_fulfillment_data;\n${raise}`
+      )
+    ),
+    false
+  );
   const relocated = `${claim.replace(shortage[0], '')}\n${shortage[0]}`;
   assert.ok(
     relocated.lastIndexOf(shortage[0]) >

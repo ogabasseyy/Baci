@@ -69,7 +69,7 @@ function functionLifecycleEvents(source, signature) {
   const drops = [
     ...source.matchAll(
       new RegExp(
-        `DROP\\s+(?:FUNCTION|ROUTINE)(?:\\s+IF\\s+EXISTS)?\\s+${functionReference}[^;]*;`,
+        `DROP\\s+(?:FUNCTION|ROUTINE)(?:\\s+IF\\s+EXISTS)?\\s+(?:(?!;)[\\s\\S])*?${functionReference}(?=\\s*(?:,|(?:CASCADE|RESTRICT)?;))[^;]*;`,
         'gi'
       )
     ),

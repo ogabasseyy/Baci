@@ -51,6 +51,15 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
     assert.ok(quantityGuard);
     assert.equal(
       serializedInventoryDecrementGuards.hasPositiveQuantityGuard(
+        body.replace(
+          quantityGuard[0],
+          quantityGuard[0].replace(/\bRETURN\s*;/i, 'RETURN QUERY SELECT 1;')
+        )
+      ),
+      false
+    );
+    assert.equal(
+      serializedInventoryDecrementGuards.hasPositiveQuantityGuard(
         `${body.replace(quantityGuard[0], '')}\n${quantityGuard[0]}`
       ),
       false

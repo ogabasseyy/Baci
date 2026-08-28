@@ -98,7 +98,7 @@ test('release serializes on its order before locking reserved inventory', () => 
   );
   assert.equal(releaseBranchesMatch(branches, release), true);
   const reconciliationLoop =
-    /FOR\s+v_item\s+IN\s+SELECT\s+oi\s*\.\s*\*[\s\S]*?END\s+LOOP\s*;/i.exec(
+    /FOR\s+v_item\s+IN\s+SELECT\s+(?:oi\s*\.\s*\*|oi\s*\.\s*id\s*,\s*oi\s*\.\s*product_id\s*,\s*oi\s*\.\s*quantity)[\s\S]*?END\s+LOOP\s*;/i.exec(
       release
     );
   assert.ok(reconciliationLoop);

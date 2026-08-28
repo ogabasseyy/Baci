@@ -25,7 +25,7 @@ function hasPositiveQuantityGuard(source) {
   return Boolean(
     guard &&
       thenBranch &&
-      /\bRETURN\b/i.test(thenBranch) &&
+      /\bRETURN\s*;/i.test(thenBranch) &&
       protectedOperations.length > 0 &&
       protectedOperations.every((operation) =>
         serializedInventoryControlFlow.dominatesControlFlow(

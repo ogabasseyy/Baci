@@ -13,6 +13,22 @@ function signaturePattern(signature) {
     .replaceAll(' ', '\\s+');
 }
 
+function identifierPattern(identifier) {
+  return identifier
+    .split('.')
+    .map((part) => {
+      const unquoted = part.replace(/^"|"$/g, '');
+      return `(?:${escapeRegex(unquoted)}|"${escapeRegex(unquoted)}")`;
+    })
+    .join('\\s*\\.\\s*');
+}
+
+function functionReferencePattern(signature) {
+  const parsed = /^(.*)\(([^()]*)\)$/.exec(signature);
+  if (!parsed) return identifierPattern(signature);
+  return `${identifierPattern(parsed[1].trim())}\\s*\\(\\s*${signaturePattern(parsed[2].trim())}\\s*\\)`;
+}
+
 function schemaNameFromSignature(signature) {
   const match = /^(?:"([^"]+)"|([a-z_][a-z0-9_]*))\s*\./i.exec(signature);
   return (match?.[1] ?? match?.[2] ?? '').toLowerCase();
@@ -74,7 +90,7 @@ function effectiveSecurityMode(sourceOrSources, signature) {
   const definitionIndex =
     normalizedSources[definitionSourceIndex].lastIndexOf(body);
   const alterationPattern = new RegExp(
-    `ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${signaturePattern(signature)}\\s+SECURITY\\s+(DEFINER|INVOKER)\\s*;`,
+    `ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${functionReferencePattern(signature)}\\s+SECURITY\\s+(DEFINER|INVOKER)\\s*;`,
     'gi'
   );
   const alterations = normalizedSources.flatMap((source, sourceIndex) =>

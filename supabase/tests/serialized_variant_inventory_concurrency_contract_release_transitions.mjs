@@ -34,6 +34,12 @@ function releaseTransition(branch, targetStatus) {
       event.index,
       counters[0].index
     ) ||
+    !serializedInventoryControlFlow.sharesInnermostLoop(
+      searchableBranch,
+      update.index,
+      event.index,
+      counters[0].index
+    ) ||
     !new RegExp(`\\bstatus\\s*=\\s*'${targetStatus}'`, 'i').test(update[1])
   ) {
     return false;
@@ -91,7 +97,7 @@ function releaseReconciliationMatches(source) {
   if (dispatchEnd === undefined) return false;
   const afterDispatch = executable.slice(dispatchEnd);
   const loop =
-    /FOR\s+v_item\s+IN\s+SELECT\s+oi\s*\.\s*\*[\s\S]*?FROM\s+(?:public\s*\.\s*)?order_items\s+oi[\s\S]*?WHERE\s+oi\s*\.\s*order_id\s*=\s*p_order_id[\s\S]*?FOR\s+UPDATE[\s\S]*?LOOP\b([\s\S]*?)END\s+LOOP\s*;/i.exec(
+    /FOR\s+v_item\s+IN\s+SELECT\s+(?:oi\s*\.\s*\*|oi\s*\.\s*id\s*,\s*oi\s*\.\s*product_id\s*,\s*oi\s*\.\s*quantity)[\s\S]*?FROM\s+(?:public\s*\.\s*)?order_items\s+oi[\s\S]*?WHERE\s+oi\s*\.\s*order_id\s*=\s*p_order_id[\s\S]*?FOR\s+UPDATE[\s\S]*?LOOP\b([\s\S]*?)END\s+LOOP\s*;/i.exec(
       afterDispatch
     );
   if (!loop) return false;
@@ -108,7 +114,12 @@ function releaseReconciliationMatches(source) {
     /PERFORM\s+private\s*\.\s*sync_serialized_stock\s*\(\s*p_merchant_id\s*,\s*v_item\s*\.\s*product_id\s*\)\s*;/i.exec(
       loop[1]
     );
-  if (!snapshot || !fulfillment || !sync) return false;
+  const preservedFulfillmentGuard =
+    /IF\s+array_position\(\s*v_released_order_item_ids\s*,\s*v_item\s*\.\s*id\s*\)\s+IS\s+NULL\s+THEN\s+CONTINUE\s*;\s*END\s+IF\s*;/i.exec(
+      loop[1]
+    );
+  if (!snapshot || !fulfillment || !sync || !preservedFulfillmentGuard)
+    return false;
   const indexes = [snapshot, fulfillment, sync].map(
     (match) => bodyStart + match.index
   );

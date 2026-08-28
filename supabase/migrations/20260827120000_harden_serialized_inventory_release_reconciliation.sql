@@ -18,6 +18,7 @@ DECLARE
   v_total_items integer;
   v_total_qty integer;
   v_synced_product_ids uuid[] := ARRAY[]::uuid[];
+  v_released_order_item_ids uuid[] := ARRAY[]::uuid[];
 BEGIN
   IF auth.role() <> 'service_role'
      AND NOT public.has_merchant_access(p_merchant_id) THEN
@@ -39,7 +40,7 @@ BEGIN
 
   IF v_target_status = 'available' THEN
     FOR v_unit IN
-      SELECT vi.*, pv.product_id
+      SELECT vi.id, vi.variant_id, vi.order_item_id, vi.branch_id, pv.product_id
       FROM public.variant_inventory vi
       JOIN public.product_variants pv ON vi.variant_id = pv.id
       WHERE vi.order_id = p_order_id AND vi.merchant_id = p_merchant_id AND vi.status = 'reserved'
@@ -61,10 +62,13 @@ BEGIN
       WHERE id = v_unit.id;
 
       v_count := v_count + 1;
+      IF v_unit.order_item_id IS NOT NULL AND array_position(v_released_order_item_ids, v_unit.order_item_id) IS NULL THEN
+        v_released_order_item_ids := array_append(v_released_order_item_ids, v_unit.order_item_id);
+      END IF;
     END LOOP;
   ELSE
     FOR v_unit IN
-      SELECT vi.*, pv.product_id
+      SELECT vi.id, vi.variant_id, vi.order_item_id, vi.branch_id, pv.product_id
       FROM public.variant_inventory vi
       JOIN public.product_variants pv ON vi.variant_id = pv.id
       WHERE vi.order_id = p_order_id AND vi.merchant_id = p_merchant_id AND vi.status = 'reserved'
@@ -82,15 +86,22 @@ BEGIN
       WHERE id = v_unit.id;
 
       v_count := v_count + 1;
+      IF v_unit.order_item_id IS NOT NULL AND array_position(v_released_order_item_ids, v_unit.order_item_id) IS NULL THEN
+        v_released_order_item_ids := array_append(v_released_order_item_ids, v_unit.order_item_id);
+      END IF;
     END LOOP;
   END IF;
 
   FOR v_item IN
-    SELECT oi.*
+    SELECT oi.id, oi.product_id, oi.quantity
     FROM public.order_items oi
     WHERE oi.order_id = p_order_id
     FOR UPDATE
   LOOP
+    IF array_position(v_released_order_item_ids, v_item.id) IS NULL THEN
+      CONTINUE;
+    END IF;
+
     SELECT jsonb_agg(
       jsonb_build_object(
         'inventoryUnitId', vi.id,

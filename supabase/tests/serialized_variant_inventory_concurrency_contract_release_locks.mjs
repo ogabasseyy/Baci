@@ -1,3 +1,4 @@
+import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventoryNestedQueries } from './serialized_variant_inventory_concurrency_contract_nested_queries.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
@@ -84,6 +85,26 @@ function hasTargetStatusWhitelist(source) {
   );
 }
 
+function hasMerchantAuthorizationGuard(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(
+    serializedInventorySqlParser.stripSqlComments(source),
+    { preserveStrings: true }
+  );
+  const guardPattern =
+    /IF\s+auth\.role\(\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(\s*p_merchant_id\s*\)\s+THEN\b/i;
+  const guard = guardPattern.exec(executable);
+  if (!guard) return false;
+  try {
+    const branches = serializedInventoryBranches.extractIfArms(
+      executable,
+      guardPattern
+    );
+    return /RAISE\s+EXCEPTION\s+['"]forbidden['"]/i.test(branches.thenBranch);
+  } catch {
+    return false;
+  }
+}
+
 function findReleaseEvent(source, targetStatus) {
   const eventName =
     targetStatus === 'available' ? 'reservation_released' : 'returned';
@@ -95,6 +116,7 @@ function findReleaseEvent(source, targetStatus) {
 
 export const serializedInventoryReleaseLocks = {
   findReleaseEvent,
+  hasMerchantAuthorizationGuard,
   hasTargetStatusWhitelist,
   releaseLockMatches,
 };

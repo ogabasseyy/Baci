@@ -39,6 +39,25 @@ test('recognizes grant options when computing authenticated execution', () => {
   );
 });
 
+test('recognizes direct grants with GROUP and grant-option syntax', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION ${signature}
+      TO GROUP authenticated WITH GRANT OPTION;
+  `;
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
 test('recognizes quoted function privilege targets', () => {
   const signature = 'private.fixture(uuid)';
   const source = `
@@ -64,6 +83,24 @@ test('invalidates authenticated execution after a DROP ROUTINE', () => {
       LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
     GRANT EXECUTE ON FUNCTION ${signature} TO authenticated;
     DROP ROUTINE ${signature};
+  `;
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    false
+  );
+});
+
+test('invalidates authenticated execution when protected function is later in a DROP list', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    GRANT EXECUTE ON FUNCTION ${signature} TO authenticated;
+    DROP FUNCTION private.other(uuid), ${signature} CASCADE;
   `;
 
   assert.equal(

@@ -200,6 +200,16 @@ test('recognizes ROUTINE privilege and security syntax', () => {
     ),
     'invoker'
   );
+  assert.equal(
+    serializedInventoryPrivileges.effectiveSecurityMode(
+      publicSource.replace(
+        'ALTER ROUTINE public.fixture(uuid) SECURITY INVOKER;',
+        'ALTER FUNCTION "public"."fixture"(uuid) SECURITY INVOKER;'
+      ),
+      publicSignature
+    ),
+    'invoker'
+  );
 });
 
 test('release wrapper and delegate remain executable by authenticated callers', () => {

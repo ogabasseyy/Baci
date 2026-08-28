@@ -7,7 +7,11 @@ const defaultFunctionPrivilegePattern =
   /ALTER\s+DEFAULT\s+PRIVILEGES(?:\s+FOR\s+(?:ROLE|USER)\s+(?:"[^"]+"|[a-z_][a-z0-9_]*))?(?:\s+IN\s+SCHEMA\s+(?:"([^"]+)"|([a-z_][a-z0-9_]*)))?\s+(GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:ALL\s+)?(?:FUNCTIONS|ROUTINES)\s+(?:TO|FROM)\s+([^;]+);/gi;
 
 function normalizeRoleName(role) {
-  return role.trim().replace(/^"|"$/g, '').toLowerCase();
+  return role
+    .trim()
+    .replace(/^GROUP\s+/i, '')
+    .replace(/^"|"$/g, '')
+    .toLowerCase();
 }
 
 function parseRoleMembership(text) {

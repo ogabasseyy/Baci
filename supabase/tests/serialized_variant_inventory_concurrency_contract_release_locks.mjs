@@ -76,6 +76,33 @@ function hasTargetStatusWhitelist(source) {
     /IF\s+v_target_status\s+NOT\s+IN\s*\(\s*'available'\s*,\s*'returned'\s*\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]invalid_target_status['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
       executable
     );
+  let guardBranches;
+  try {
+    guardBranches = guard
+      ? serializedInventoryBranches.extractIfArms(
+          executable,
+          /IF\s+v_target_status\s+NOT\s+IN\s*\(\s*'available'\s*,\s*'returned'\s*\)\s+THEN\b/i
+        )
+      : undefined;
+  } catch {
+    guardBranches = undefined;
+  }
+  const hasTopLevelException = (branch) => {
+    const masked = serializedInventorySqlParser.maskSqlLiterals(branch);
+    let depth = 0;
+    let caseDepth = 0;
+    for (const token of masked.matchAll(
+      /\bEND\s+IF\b|\bEND\s+CASE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRAISE\s+EXCEPTION\b/gi
+    )) {
+      if (/^END\s+IF/i.test(token[0])) depth = Math.max(0, depth - 1);
+      else if (/^END\s+CASE/i.test(token[0]))
+        caseDepth = Math.max(0, caseDepth - 1);
+      else if (/^IF\b/i.test(token[0])) depth += 1;
+      else if (/^CASE$/i.test(token[0])) caseDepth += 1;
+      else if (depth === 0 && caseDepth === 0) return true;
+    }
+    return false;
+  };
   const dispatch = /IF\s+v_target_status\s*=\s*'available'\s+THEN/i.exec(
     executable
   );
@@ -93,8 +120,10 @@ function hasTargetStatusWhitelist(source) {
         )
       : true;
   return Boolean(
-    defaultStatus &&
+      defaultStatus &&
       guard &&
+      guardBranches &&
+      hasTopLevelException(guardBranches.thenBranch) &&
       dispatch &&
       defaultStatus.index < guard.index &&
       !statusReassignment &&

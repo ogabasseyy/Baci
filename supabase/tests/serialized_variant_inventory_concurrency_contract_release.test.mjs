@@ -199,6 +199,16 @@ test('release serializes on its order before locking reserved inventory', () => 
   assert.equal(
     hasTargetStatusWhitelist(
       release.replace(
+        /RAISE\s+EXCEPTION\s+'invalid_target_status'\s+USING\s+ERRCODE\s*=\s*'22023'\s*;/i,
+        (raise) => `IF false THEN\n${raise}\nEND IF;`
+      )
+    ),
+    false,
+    'invalid target status must fail in its immediate guard arm'
+  );
+  assert.equal(
+    hasTargetStatusWhitelist(
+      release.replace(
         /(IF\s+v_target_status\s+NOT\s+IN[\s\S]*?END\s+IF\s*;)/i,
         (guard) => `${guard}\n  v_target_status := 'returned';`
       )

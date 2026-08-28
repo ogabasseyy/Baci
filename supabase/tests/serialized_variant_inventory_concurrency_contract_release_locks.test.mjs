@@ -16,3 +16,21 @@ test('rejects unsatisfiable reserved-unit release selectors', () => {
     false
   );
 });
+
+test('requires release selectors to lock inventory rows only', () => {
+  const selector =
+    "FROM variant_inventory vi JOIN product_variants pv ON vi.variant_id = pv.id WHERE vi.order_id = p_order_id AND vi.merchant_id = p_merchant_id AND vi.status = 'reserved'";
+
+  assert.equal(
+    serializedInventoryReleaseLocks.releaseLockMatches(
+      `${selector} FOR UPDATE`
+    ),
+    false
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.releaseLockMatches(
+      `${selector} FOR UPDATE OF vi`
+    ),
+    true
+  );
+});

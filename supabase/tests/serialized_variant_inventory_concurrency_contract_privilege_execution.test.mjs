@@ -39,6 +39,42 @@ test('recognizes grant options when computing authenticated execution', () => {
   );
 });
 
+test('recognizes quoted function privilege targets', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION "private"."fixture"(uuid) TO authenticated;
+  `;
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
+test('invalidates authenticated execution after a DROP ROUTINE', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    GRANT EXECUTE ON FUNCTION ${signature} TO authenticated;
+    DROP ROUTINE ${signature};
+  `;
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    false
+  );
+});
+
 test('tracks quoted function recreation after a drop', () => {
   const signature = 'private.fixture(uuid)';
   const source = `

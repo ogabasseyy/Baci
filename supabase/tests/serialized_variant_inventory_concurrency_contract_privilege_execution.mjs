@@ -69,12 +69,18 @@ function functionLifecycleEvents(source, signature) {
   const drops = [
     ...source.matchAll(
       new RegExp(
-        `DROP\\s+FUNCTION(?:\\s+IF\\s+EXISTS)?\\s+${functionReference}[^;]*;`,
+        `DROP\\s+(?:FUNCTION|ROUTINE)(?:\\s+IF\\s+EXISTS)?\\s+${functionReference}[^;]*;`,
         'gi'
       )
     ),
   ].map((match) => ({ index: match.index, kind: 'drop' }));
   return [...creates, ...drops];
+}
+
+function privilegeTargetPattern(signature) {
+  const parsed = /^(.*)\(([^()]*)\)$/.exec(signature);
+  if (!parsed) return signaturePattern(signature);
+  return `${identifierPattern(parsed[1].trim())}\\s*\\(\\s*${signaturePattern(parsed[2].trim())}\\s*\\)`;
 }
 
 function splitFunctionPrivilegeTargets(source) {
@@ -173,7 +179,7 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
           const membership =
             serializedInventoryPrivilegeRoles.parseRoleMembership(text);
           const targetPattern = new RegExp(
-            `^${signaturePattern(signature)}$`,
+            `^${privilegeTargetPattern(signature)}$`,
             'i'
           );
           const parsedPrivilege = parseFunctionPrivilege(text);

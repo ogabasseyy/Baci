@@ -43,7 +43,7 @@ BEGIN
       FROM public.variant_inventory vi
       JOIN public.product_variants pv ON vi.variant_id = pv.id
       WHERE vi.order_id = p_order_id AND vi.merchant_id = p_merchant_id AND vi.status = 'reserved'
-      FOR UPDATE
+      FOR UPDATE OF vi
     LOOP
       PERFORM private.record_variant_inventory_event(
         v_unit.id, p_merchant_id, v_unit.product_id, v_unit.variant_id, 'reservation_released',
@@ -68,7 +68,7 @@ BEGIN
       FROM public.variant_inventory vi
       JOIN public.product_variants pv ON vi.variant_id = pv.id
       WHERE vi.order_id = p_order_id AND vi.merchant_id = p_merchant_id AND vi.status = 'reserved'
-      FOR UPDATE
+      FOR UPDATE OF vi
     LOOP
       PERFORM private.record_variant_inventory_event(
         v_unit.id, p_merchant_id, v_unit.product_id, v_unit.variant_id, 'returned',

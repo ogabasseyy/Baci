@@ -172,7 +172,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260827120000_harden_serialized_inventory_release_reconciliation.sql',
-    sha256: '52ae196aa2a25d65d2cc8fc53109d3f3d20832a8221dab54dad6d93862eaf372',
+    sha256: '32dc04e6f4763dc3b8cb793f3151ba312ff7fe19db602fcc70580d2cad07c3a7',
   },
   ...EXPECTED_PENDING_TAIL_SOURCES.late,
   ...EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES,

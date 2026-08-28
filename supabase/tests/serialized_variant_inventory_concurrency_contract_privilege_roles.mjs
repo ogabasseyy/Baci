@@ -3,6 +3,8 @@ const roleMembershipPattern = new RegExp(
   `^(GRANT|REVOKE)\\s+(${roleIdentifier}(?:\\s*,\\s*${roleIdentifier})*)\\s+(?:TO|FROM)\\s+(${roleIdentifier}(?:\\s*,\\s*${roleIdentifier})*)\\s*;?$`,
   'i'
 );
+const defaultFunctionPrivilegePattern =
+  /ALTER\s+DEFAULT\s+PRIVILEGES(?:\s+FOR\s+(?:ROLE|USER)\s+(?:"[^"]+"|[a-z_][a-z0-9_]*))?(?:\s+IN\s+SCHEMA\s+(?:"([^"]+)"|([a-z_][a-z0-9_]*)))?\s+(GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:ALL\s+)?(?:FUNCTIONS|ROUTINES)\s+(?:TO|FROM)\s+([^;]+);/gi;
 
 function normalizeRoleName(role) {
   return role.trim().replace(/^"|"$/g, '').toLowerCase();
@@ -20,6 +22,21 @@ function parseRoleMembership(text) {
   };
 }
 
+function parseDefaultFunctionPrivileges(text, targetSchema) {
+  defaultFunctionPrivilegePattern.lastIndex = 0;
+  return [...text.matchAll(defaultFunctionPrivilegePattern)]
+    .filter(
+      (match) =>
+        (match[1] ?? match[2] ?? targetSchema).toLowerCase() === targetSchema
+    )
+    .map((match) => ({
+      index: match.index,
+      kind: 'default',
+      operation: match[3],
+      grantees: match[4],
+    }));
+}
+
 function canExecuteAs(role, grants, memberships, visited = new Set()) {
   const normalizedRole = normalizeRoleName(role);
   if (grants.get('public') === true || grants.get(normalizedRole) === true) {
@@ -35,5 +52,6 @@ function canExecuteAs(role, grants, memberships, visited = new Set()) {
 export const serializedInventoryPrivilegeRoles = {
   canExecuteAs,
   normalizeRoleName,
+  parseDefaultFunctionPrivileges,
   parseRoleMembership,
 };

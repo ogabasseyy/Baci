@@ -158,6 +158,7 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
   const state = {
     exists: false,
     grants: new Map(),
+    defaultGrants: new Map(),
     memberships: new Map(),
   };
   const executableSources = (
@@ -175,7 +176,15 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
             (event) => ({ ...event, index: index + event.index, sourceIndex })
           );
           const leading = text.trimStart();
-          if (!/^(?:GRANT|REVOKE)\b/i.test(leading)) return lifecycle;
+          const defaults = serializedInventoryPrivilegeRoles
+            .parseDefaultFunctionPrivileges(text, targetSchema)
+            .map((event) => ({
+              ...event,
+              index: index + event.index,
+              sourceIndex,
+            }));
+          if (!/^(?:GRANT|REVOKE)\b/i.test(leading))
+            return [...lifecycle, ...defaults];
           const membership =
             serializedInventoryPrivilegeRoles.parseRoleMembership(text);
           const targetPattern = new RegExp(
@@ -212,6 +221,7 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
             }));
           return [
             ...lifecycle,
+            ...defaults,
             ...privileges,
             ...schemaPrivileges,
             ...(membership
@@ -239,8 +249,19 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
       if (!event.replace || !state.exists) {
         state.grants.clear();
         state.grants.set('public', true);
+        for (const [role, grant] of state.defaultGrants) {
+          state.grants.set(role, grant);
+        }
       }
       state.exists = true;
+    } else if (event.kind === 'default') {
+      const grant = event.operation === 'GRANT';
+      for (const grantee of splitFunctionPrivilegeTargets(event.grantees)) {
+        state.defaultGrants.set(
+          serializedInventoryPrivilegeRoles.normalizeRoleName(grantee),
+          grant
+        );
+      }
     } else if (event.kind === 'membership') {
       for (const member of event.members) {
         const roles = state.memberships.get(member) ?? [];

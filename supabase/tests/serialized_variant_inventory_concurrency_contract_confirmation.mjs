@@ -28,8 +28,29 @@ function findConfirmationLocks(source) {
       const where = orderBy
         ? query[2].slice(0, orderBy.index).trim()
         : query?.[2];
+      const qualifier = query?.[1]
+        ? query[1] + '\\s*\\.\\s*'
+        : '(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?';
+      const contradictoryItemScope =
+        table === 'order_items' &&
+        [
+          new RegExp('\\b' + qualifier + 'order_id\\s+IS\\s+NULL\\b', 'i'),
+          new RegExp(
+            '\\b' +
+              qualifier +
+              'order_id\\s*(?:<>|!=|IS\\s+DISTINCT\\s+FROM)',
+            'i'
+          ),
+          new RegExp(
+            '\\b' +
+              qualifier +
+              'order_id\\s*=\\s*(?!\\(?\\s*p_order_id\\b)\\(?\\s*[^;\\s,)]+',
+            'i'
+          ),
+        ].some((pattern) => pattern.test(where ?? ''));
       if (
         query &&
+        !contradictoryItemScope &&
         !/\b(?:LIMIT|OFFSET|FETCH)\b/i.test(where) &&
         (!query[3] ||
           (query[1] && query[3].toLowerCase() === query[1].toLowerCase())) &&

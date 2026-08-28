@@ -44,6 +44,21 @@ test('release authorization rejects a raw-auth-role mutation', () => {
   );
 });
 
+test('release authorization rejects an unreachable forbidden exception', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  const unreachable = release.replace(
+    /RAISE\s+EXCEPTION\s+['"]forbidden['"][^;]*;/i,
+    (raise) => 'IF false THEN\n' + raise + '\nEND IF;'
+  );
+
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(unreachable),
+    false
+  );
+});
+
 test('rejects unsatisfiable reserved-unit release selectors', () => {
   assert.equal(
     serializedInventoryReleaseLocks.releaseLockMatches(

@@ -1,7 +1,10 @@
 import { serializedInventoryDynamicDdl } from './serialized_variant_inventory_concurrency_contract_dynamic_ddl.mjs';
 import { serializedInventoryPrivilegeLifecycle } from './serialized_variant_inventory_concurrency_contract_privilege_lifecycle.mjs';
+import { serializedInventoryPrivilegeParser } from './serialized_variant_inventory_concurrency_contract_privilege_parser.mjs';
 import { serializedInventoryPrivilegeRoles } from './serialized_variant_inventory_concurrency_contract_privilege_roles.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
+
+const { parseFunctionPrivilege } = serializedInventoryPrivilegeParser;
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -45,7 +48,23 @@ function maskSqlStringLiterals(source) {
 function privilegeTargetPattern(signature) {
   const parsed = /^(.*)\(([^()]*)\)$/.exec(signature);
   if (!parsed) return signaturePattern(signature);
-  return `${identifierPattern(parsed[1].trim())}\\s*\\(\\s*${signaturePattern(parsed[2].trim())}\\s*\\)`;
+  const argumentTypes = parsed[2]
+    .split(',')
+    .map((type) => type.trim())
+    .filter(Boolean)
+    .map((type) => {
+      const unqualified = type.replace(/^pg_catalog\s*\.\s*/i, '');
+      return '(?:(?:pg_catalog\s*\.\s*)?' +
+        signaturePattern(unqualified) +
+        ')';
+    })
+    .join('\\s*,\\s*');
+  return (
+    identifierPattern(parsed[1].trim()) +
+    '\\s*\\(\\s*' +
+    argumentTypes +
+    '\\s*\\)'
+  );
 }
 
 function splitFunctionPrivilegeTargets(source) {
@@ -68,44 +87,6 @@ function splitFunctionPrivilegeTargets(source) {
   }
   targets.push(source.slice(start).trim());
   return targets;
-}
-
-function parseFunctionPrivilege(text) {
-  const leading = text.trimStart();
-  const prefix =
-    /^(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+(?:FUNCTION|ROUTINE)\s+/i.exec(
-      leading
-    );
-  if (!prefix) return null;
-  let depth = 0;
-  let quote;
-  for (let index = prefix[0].length; index < leading.length; index += 1) {
-    const char = leading[index];
-    if (quote) {
-      if (char === quote && leading[index + 1] === quote) index += 1;
-      else if (char === quote) quote = undefined;
-      continue;
-    }
-    if (char === "'" || char === '"') quote = char;
-    else if (char === '(') depth += 1;
-    else if (char === ')') depth = Math.max(0, depth - 1);
-    else if (depth === 0) {
-      const keyword = /^\s+(?:TO|FROM)\s+/i.exec(leading.slice(index));
-      if (keyword) {
-        return {
-          functionList: leading.slice(prefix[0].length, index).trim(),
-          grantees: leading
-            .slice(index + keyword[0].length)
-            .replace(/;\s*$/, '')
-            .replace(/\s+WITH\s+GRANT\s+OPTION\s*$/i, '')
-            .trim(),
-          index: text.length - leading.length,
-          operation: /^GRANT/i.test(prefix[0]) ? 'GRANT' : 'REVOKE',
-        };
-      }
-    }
-  }
-  return null;
 }
 
 const authenticatedExecutionCache = new Map();

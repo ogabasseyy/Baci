@@ -30,6 +30,15 @@ test('confirmation locks require mandatory tenant and order scopes', () => {
   );
   assert.equal(
     findConfirmationLocks(
+      valid.replace(
+        'WHERE oi.order_id = p_order_id FOR UPDATE',
+        'WHERE oi.order_id = p_order_id AND oi.order_id IS NULL FOR UPDATE'
+      )
+    ).item,
+    undefined
+  );
+  assert.equal(
+    findConfirmationLocks(
       valid
         .replace(
           'FROM orders o WHERE',

@@ -123,10 +123,18 @@ function releaseReconciliationMatches(source) {
   const indexes = [snapshot, fulfillment, sync].map(
     (match) => bodyStart + match.index
   );
+  const guardIndex = bodyStart + preservedFulfillmentGuard.index;
   return (
     serializedInventoryControlFlow.sharesInnermostLoop(
       executable,
       ...indexes
+    ) &&
+    indexes.every((index) =>
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        guardIndex,
+        index
+      )
     ) &&
     indexes.every((index) =>
       serializedInventoryControlFlow.isReachable(executable, index)

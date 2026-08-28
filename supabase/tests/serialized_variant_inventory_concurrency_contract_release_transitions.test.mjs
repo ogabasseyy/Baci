@@ -78,6 +78,18 @@ test('release preserves fulfillment for items without released units', () => {
     ),
     false
   );
+  const loop = /FOR\s+v_item\s+IN[\s\S]*?LOOP\b([\s\S]*?)END\s+LOOP\s*;/i.exec(
+    release
+  );
+  assert.ok(loop);
+  const lateGuard = loop[1].replace(guard[0], '') + guard[0];
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseReconciliationMatches(
+      release.replace(loop[1], lateGuard)
+    ),
+    false,
+    'the preservation guard must dominate every reconciliation operation'
+  );
 });
 
 test('release authorization raises in the unauthorized branch', () => {

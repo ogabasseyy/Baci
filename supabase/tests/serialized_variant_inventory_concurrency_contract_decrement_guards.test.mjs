@@ -64,10 +64,7 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
       serializedInventoryDecrementGuards.hasPositiveQuantityGuard(
         body.replace(
           quantityGuard[0],
-          quantityGuard[0].replace(
-            /quantity_param\s+IS\s+NULL\s+OR\s+/i,
-            ''
-          )
+          quantityGuard[0].replace(/quantity_param\s+IS\s+NULL\s+OR\s+/i, '')
         )
       ),
       false
@@ -116,7 +113,7 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
           authorization[0],
           authorization[0].replace(
             /\bRETURN\s*;/i,
-            'RETURN QUERY SELECT FALSE, NULL::integer, \'Not authorized\'::text;'
+            "RETURN QUERY SELECT FALSE, NULL::integer, 'Not authorized'::text;"
           )
         )
       ),
@@ -151,6 +148,19 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
         )
       ),
       false
+    );
+    assert.equal(
+      serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
+        body.replace(
+          authorization[0],
+          authorization[0].replace(
+            /\bRETURN\s*;\s*\n\s*END\s+IF\s*;\s*$/i,
+            'IF false THEN\n  RETURN;\nEND IF;\nEND IF;'
+          )
+        )
+      ),
+      false,
+      'authorization must exit on an unconditional return'
     );
     const invertedAuthorization = authorization[0].replace(
       /\bTHEN\b([\s\S]*?)\bEND\s+IF\s*;$/i,

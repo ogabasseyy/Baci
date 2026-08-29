@@ -34,6 +34,10 @@ docker exec -e PGPASSWORD="$postgres_password" -i "$container" \
   psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1 \
   < "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_fixture.sql"
 
+node "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_fixture_functions.mjs" "$repo_root" |
+  docker exec -e PGPASSWORD="$postgres_password" -i "$container" \
+    psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1
+
 docker exec -e PGPASSWORD="$postgres_password" -i "$container" \
   psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1 \
   < "$repo_root/supabase/migrations/20260828101000_harden_serialized_inventory_release_ordering.sql"

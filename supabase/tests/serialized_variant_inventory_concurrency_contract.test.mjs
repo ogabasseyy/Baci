@@ -15,6 +15,24 @@ const {
   claimLocksDominateSelector,
   findClaimLocks,
 } = serializedInventoryContract;
+const storefrontOrderSignature =
+  'private.create_storefront_order(uuid, text, text, jsonb, text, numeric, numeric, numeric, text, text, text, jsonb, text, text, jsonb, uuid, text, text, uuid, text, numeric, numeric, text, text)';
+const storefrontOrderRenameIndex =
+  serializedInventoryContract.migrationSources.findIndex((source) =>
+    /ALTER\s+FUNCTION\s+private\s*\.\s*create_storefront_order\s*\([\s\S]*?\)\s+RENAME\s+TO\s+create_storefront_order_unchecked\s*;/i.test(
+      source
+    )
+  );
+function effectiveStorefrontOrderBody() {
+  const sources =
+    storefrontOrderRenameIndex < 0
+      ? serializedInventoryContract.migrationSources
+      : serializedInventoryContract.migrationSources.slice(
+          0,
+          storefrontOrderRenameIndex
+        );
+  return latestFunctionBody(storefrontOrderSignature, sources);
+}
 test('function extraction tolerates tagged dollar quotes and trailing clauses', () => {
   const source = [
     'CREATE FUNCTION private.fixture(',
@@ -27,7 +45,6 @@ test('function extraction tolerates tagged dollar quotes and trailing clauses', 
     'END;',
     '$fixture$ LANGUAGE plpgsql;',
   ].join('\r\n');
-
   assert.match(
     functionBody(source, 'private.fixture(integer)'),
     /\r\nBEGIN\r\n\s+RAISE NOTICE 'https:\/\/example\.test\/a--b\/\*literal\*\/;'/
@@ -54,7 +71,6 @@ test('function extraction resolves overloads by expected input types', () => {
     'END;',
     '$$;',
   ].join('\n');
-
   const body = latestFunctionBody('private.fixture(integer)', [source]);
   assert.match(body, /p_value integer/);
   assert.doesNotMatch(body, /p_value text/);
@@ -68,7 +84,6 @@ test('function extraction does not match expected types inside defaults', () => 
     "BEGIN RAISE NOTICE 'text overload'; END;",
     '$$;',
   ].join('\n');
-
   const body = latestFunctionBody('private.fixture(uuid)', [source]);
   assert.match(body, /uuid overload/);
   assert.doesNotMatch(body, /text overload/);
@@ -257,13 +272,13 @@ test('effective legacy stock decrements remain compare-and-set guarded', () => {
   for (const [functionName, expectedDecrements] of [
     ['public.decrement_product_stock(uuid, integer)', 1],
     ['public.decrement_variant_stock(uuid, integer)', 1],
-    [
-      'private.create_storefront_order(uuid, text, text, jsonb, text, numeric, numeric, numeric, text, text, text, jsonb, text, text, jsonb, uuid, text, text, uuid, text, numeric, numeric, text, text)',
-      2,
-    ],
+    [storefrontOrderSignature, 2],
     ['private.transfer_quiz_prize_to_winner_v2(uuid, uuid, uuid)', 2],
   ]) {
-    const body = latestFunctionBody(functionName);
+    const body =
+      functionName === storefrontOrderSignature
+        ? effectiveStorefrontOrderBody()
+        : latestFunctionBody(functionName);
     const decrements = legacyDecrementMatches(body);
     assert.equal(
       decrements.length,

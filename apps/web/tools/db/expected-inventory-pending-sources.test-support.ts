@@ -26,7 +26,7 @@ export const EXPECTED_INVENTORY_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20260828004000_harden_serialized_inventory_release_reconciliation.sql',
+      'supabase/migrations/20260829001000_harden_serialized_inventory_release_reconciliation.sql',
     sha256: '8828e6216602d17d3d3670bbae4c78d38c37411872fb30584c27d7b970355834',
   },
   {
@@ -56,7 +56,7 @@ export const EXPECTED_INVENTORY_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20260828101000_harden_serialized_inventory_release_ordering.sql',
+      'supabase/migrations/20260829002000_harden_serialized_inventory_release_ordering.sql',
     sha256: '21c58d3cf52fb2a17ce62214ab45eb89bac0952716c870c379e523746990f599',
   },
   {

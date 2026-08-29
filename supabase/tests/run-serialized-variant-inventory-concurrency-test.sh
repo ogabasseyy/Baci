@@ -40,7 +40,7 @@ node "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_fixture
 
 docker exec -e PGPASSWORD="$postgres_password" -i "$container" \
   psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1 \
-  < "$repo_root/supabase/migrations/20260828101000_harden_serialized_inventory_release_ordering.sql"
+  < "$repo_root/supabase/migrations/20260829002000_harden_serialized_inventory_release_ordering.sql"
 
 docker exec -e PGPASSWORD="$postgres_password" -i "$container" \
   psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1 \

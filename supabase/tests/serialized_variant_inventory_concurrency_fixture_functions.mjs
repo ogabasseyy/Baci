@@ -13,7 +13,7 @@ const functionDefinitions = [
     'public.claim_variant_inventory_units_for_order_item',
   ],
   [
-    '20260828102000_harden_confirmation_idempotency.sql',
+    '20260829003000_harden_confirmation_reservation_capture.sql',
     'private.confirm_order_inventory_reservations',
   ],
   [

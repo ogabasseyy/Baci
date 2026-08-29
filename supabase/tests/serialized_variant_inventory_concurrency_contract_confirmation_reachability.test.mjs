@@ -15,7 +15,7 @@ const { dominatesControlFlow, isReachable } = serializedInventoryControlFlow;
 const confirmationHoldGuard =
   /IF\s+NOT\s+v_is_confirmed_hold\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]order_not_confirmed_for_inventory_hold['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i;
 const fullyReservedExpiryClear =
-  /IF\s+v_reserved_count\s*=\s*v_item\.quantity\s+THEN[\s\S]*?UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL[\s\S]*?WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL\s*;/i;
+  /IF\s+v_reserved_count\s*=\s*v_item\.quantity\s+THEN[\s\S]*?WITH\s+confirmed_units\s+AS\s*\(\s*UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL[\s\S]*?WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+status\s*=\s*'reserved'\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL\s+RETURNING\s+id\s*\)\s*SELECT[\s\S]*?FROM\s+confirmed_units\s*;/i;
 const partialExpiryClear =
   /ELSE[\s\S]*?UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL[\s\S]*?WHERE\s+order_item_id\s*=\s*v_item\.id\s*;/i;
 

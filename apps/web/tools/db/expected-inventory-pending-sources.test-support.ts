@@ -61,6 +61,11 @@ export const EXPECTED_INVENTORY_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20260829003000_harden_confirmation_reservation_capture.sql',
+    sha256: 'c627503e72ea8c412f5360ad8fa348a1f6c4dbc5a1bb32d8105f48fabeac57ea',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20260828102000_harden_confirmation_idempotency.sql',
     sha256: '55c520f2519aa6400b59e5ece4258cb18a156d134ca982721e281e6dd9956e9a',
   },

@@ -61,9 +61,9 @@ function privilegeTargetPattern(signature) {
     .join('\\s*,\\s*');
   return (
     identifierPattern(parsed[1].trim()) +
-    '\\s*\\(\\s*' +
+    '(?:\\s*\\(\\s*' +
     argumentTypes +
-    '\\s*\\)'
+    '\\s*\\))?'
   );
 }
 

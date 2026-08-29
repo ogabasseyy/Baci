@@ -49,3 +49,23 @@ test('confirmation replay does not re-emit units whose reservation is already du
     'replay must not emit events for every reserved unit'
   );
 });
+
+test('confirmation captures reserved units in a status-guarded atomic update', () => {
+  const confirm = serializedInventoryContract.latestFunctionBody(
+    'private.confirm_order_inventory_reservations(uuid, uuid)'
+  );
+  const fullyReservedBranch =
+    /IF\s+v_reserved_count\s*=\s*v_item\.quantity\s+THEN([\s\S]*?)\bELSE\b/i.exec(
+      confirm
+    );
+  assert.ok(fullyReservedBranch);
+
+  const atomicCapture =
+    /WITH\s+confirmed_units\s+AS\s*\(\s*UPDATE\s+public\.variant_inventory\s+SET[\s\S]*?WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+status\s*=\s*'reserved'\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL\s+RETURNING\s+id\s*\)\s*SELECT[\s\S]*?INTO\s+v_newly_confirmed_unit_ids\s+FROM\s+confirmed_units\s*;/i;
+  assert.match(fullyReservedBranch[1], atomicCapture);
+  assert.doesNotMatch(
+    fullyReservedBranch[1].replace(/AND\s+status\s*=\s*'reserved'\s+/i, ''),
+    atomicCapture,
+    'confirmation must not capture a snapshot without rechecking reserved status'
+  );
+});

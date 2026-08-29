@@ -76,6 +76,24 @@ test('recognizes direct grants with GROUP and grant-option syntax', () => {
   );
 });
 
+test('recognizes direct grants with an omitted function argument list', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION private.fixture TO authenticated;
+  `;
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
 test('recognizes quoted function privilege targets', () => {
   const signature = 'private.fixture(uuid)';
   const source = `

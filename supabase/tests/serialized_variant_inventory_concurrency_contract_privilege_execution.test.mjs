@@ -128,6 +128,24 @@ test('applies all-functions grants across a comma-separated schema list', () => 
   );
 });
 
+test('recognizes schema-wide grants with grant-option syntax', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA private TO authenticated WITH GRANT OPTION;
+  `;
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
 test('fails closed when privilege DDL is executed dynamically', () => {
   const signature = 'private.fixture(uuid)';
   const source = `

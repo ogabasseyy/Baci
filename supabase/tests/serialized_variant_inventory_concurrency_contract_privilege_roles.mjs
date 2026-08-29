@@ -16,6 +16,7 @@ function normalizeRoleName(role) {
       /\s+WITH\s+(?:ADMIN|INHERIT|SET)\s+(?:OPTION|TRUE|FALSE)(?:\s*,\s*(?:ADMIN|INHERIT|SET)\s+(?:OPTION|TRUE|FALSE))*$/i,
       ''
     )
+    .replace(/\s+WITH\s+GRANT\s+OPTION$/i, '')
     .replace(/^"|"$/g, '')
     .toLowerCase();
 }

@@ -72,13 +72,12 @@ describe('remediation Codex canary', () => {
     );
     assert.equal(calls[0].args.includes('--read-only'), true);
     assert.equal(calls[0].args.includes('--json'), true);
-    assert.equal(calls[0].args.includes('--sandbox'), true);
-    assert.equal(calls[0].args.includes('read-only'), true);
-    assert.equal(calls[0].args.includes('workspace-write'), false);
+    assert.equal(calls[0].args.includes('--sandbox'), false);
     assert.equal(
       calls[0].args.includes('--dangerously-bypass-approvals-and-sandbox'),
-      false
+      true
     );
+    assert.equal(calls[0].args.includes('workspace-write'), false);
     assert.equal(calls[0].args.includes('use_legacy_landlock'), false);
     assert.equal(
       calls[0].args.includes('type=bind,src=/repo,dst=/repo,readonly'),

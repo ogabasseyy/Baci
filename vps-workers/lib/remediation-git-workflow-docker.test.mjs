@@ -109,10 +109,7 @@ describe('remediation Docker workflow', () => {
     assert.equal(
       calls.some(
         ([command, ...args]) =>
-          command === 'docker' &&
-          args.includes('--sandbox') &&
-          args.includes('read-only') &&
-          args.includes('--read-only')
+          command === 'docker' && args.includes('--read-only')
       ),
       true
     );

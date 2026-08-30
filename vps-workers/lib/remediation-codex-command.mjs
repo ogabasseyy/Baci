@@ -206,9 +206,9 @@ export function buildRemediationCodexCommand({
     '--json',
     '--ephemeral',
     '--skip-git-repo-check',
-    ...(readOnly
-      ? ['--sandbox', 'read-only']
-      : ['--dangerously-bypass-approvals-and-sandbox']),
+    // Docker is the external read-only boundary; nested bubblewrap cannot
+    // create user namespaces under the VPS host policy.
+    '--dangerously-bypass-approvals-and-sandbox',
     '--ignore-user-config',
     '-C',
     worktreeDir,

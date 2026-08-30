@@ -80,3 +80,23 @@ $wrapper$;`;
     true
   );
 });
+
+test('detects format-built privilege DDL with literal identifiers', () => {
+  const source = `DO $wrapper$
+BEGIN
+  EXECUTE format(
+    'GRANT EXECUTE ON FUNCTION %I.%I(uuid, uuid) TO authenticated',
+    'private',
+    'fixture'
+  );
+END;
+$wrapper$;`;
+
+  assert.equal(
+    serializedInventoryDynamicDdl.hasDynamicPrivilegeDdl(
+      source,
+      'private.fixture(uuid, uuid)'
+    ),
+    true
+  );
+});

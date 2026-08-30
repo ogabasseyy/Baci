@@ -189,11 +189,13 @@ function renderFormatInvocation(payload) {
   let argumentIndex = 1;
   let hasUnknownArguments = false;
   const text = template.replace(
-    /%%|%(?:[1-9][0-9]*\$)?([sIL])/g,
-    (match, specifier) => {
+    /%%|%(?:([1-9][0-9]*)\$)?([sIL])/g,
+    (match, positionalIndex, specifier) => {
       if (match === '%%') return '%';
       const argument = parseSqlLiteral(
-        parsed.argumentsList[argumentIndex++] ?? ''
+        parsed.argumentsList[
+          positionalIndex ? Number(positionalIndex) : argumentIndex++
+        ] ?? ''
       );
       if (argument === null) {
         hasUnknownArguments = true;

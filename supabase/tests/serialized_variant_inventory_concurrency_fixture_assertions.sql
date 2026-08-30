@@ -109,6 +109,12 @@ $$;
 SELECT dblink_disconnect('serialized_cross_release');
 SELECT dblink_disconnect('serialized_cross_sale');
 
+-- The cross-sale/release race intentionally permits either terminal outcome
+-- for its second unit. Remove that fixture-only unit before the independent
+-- confirmation race, which must have exactly one reclaimable candidate.
+DELETE FROM public.variant_inventory
+WHERE id = '00000000-0000-4000-8000-00000000f349'::uuid;
+
 -- Run two claims for the same variant at once. Each caller must reserve a
 -- different available unit while both exact public and private claim paths
 -- execute against PostgreSQL.

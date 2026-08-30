@@ -228,6 +228,19 @@ function normalizedExecutePayload(payload) {
   };
 }
 
+function assignedExecutePayload(source, executeIndex, payload) {
+  const variable = /^\s*([a-z_][a-z0-9_]*)\s*$/i.exec(payload);
+  if (!variable) return null;
+  const assignmentPattern = new RegExp(
+    `\\b${escapeRegex(variable[1])}(?:\\s+[a-z_][a-z0-9_.]*(?:\\s*\\([^;]*\\))?)?\\s*:=\\s*([^;]+)`,
+    'gi'
+  );
+  return (
+    [...source.slice(0, executeIndex).matchAll(assignmentPattern)].pop()?.[1] ??
+    null
+  );
+}
+
 function hasDynamicFunctionDdl(source, functionSignature) {
   const masked = serializedInventorySqlParser.maskSqlLiterals(source);
   const ddl = dynamicDdlPattern(functionSignature);
@@ -238,6 +251,10 @@ function hasDynamicFunctionDdl(source, functionSignature) {
     );
     const normalized = normalizedExecutePayload(payload);
     if (ddl.test(normalized.text)) return true;
+    const assigned = assignedExecutePayload(source, execute.index, payload);
+    if (assigned !== null && ddl.test(normalizeExecuteExpression(assigned))) {
+      return true;
+    }
     if (
       normalized.hasUnknownArguments &&
       dynamicDdlOperationPattern.test(normalized.text)
@@ -258,6 +275,13 @@ function hasDynamicPrivilegeDdl(source, functionSignature) {
     );
     const normalized = normalizedExecutePayload(payload);
     if (privilege.test(normalized.text)) return true;
+    const assigned = assignedExecutePayload(source, execute.index, payload);
+    if (
+      assigned !== null &&
+      privilege.test(normalizeExecuteExpression(assigned))
+    ) {
+      return true;
+    }
     if (
       normalized.hasUnknownArguments &&
       /\b(?:GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:FUNCTION|ROUTINE)\b/i.test(

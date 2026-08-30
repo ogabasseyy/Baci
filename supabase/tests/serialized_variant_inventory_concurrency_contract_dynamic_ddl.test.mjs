@@ -100,3 +100,21 @@ $wrapper$;`;
     true
   );
 });
+
+test('detects protected privilege DDL assigned to an execute variable', () => {
+  const source = `DO $wrapper$
+DECLARE
+  ddl text := 'GRANT EXECUTE ON FUNCTION private.fixture(uuid) TO authenticated';
+BEGIN
+  EXECUTE ddl;
+END;
+$wrapper$;`;
+
+  assert.equal(
+    serializedInventoryDynamicDdl.hasDynamicPrivilegeDdl(
+      source,
+      'private.fixture(uuid)'
+    ),
+    true
+  );
+});

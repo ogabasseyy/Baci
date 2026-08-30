@@ -202,6 +202,24 @@ BEGIN
        + COALESCE((v_result_b->>'reclaimedUnitCount')::integer, 0) <> 1 THEN
     RAISE EXCEPTION 'serialized confirmation race reclaimed duplicate units: %, %', v_result_a, v_result_b;
   END IF;
+  IF COALESCE((v_result_a->>'missingUnitCount')::integer, 0)
+       + COALESCE((v_result_b->>'missingUnitCount')::integer, 0) <> 1 THEN
+    RAISE EXCEPTION 'serialized confirmation race reported invalid missing-unit count: %, %', v_result_a, v_result_b;
+  END IF;
+  IF COALESCE(jsonb_array_length(v_result_a->'exceptionCodes'), 0)
+     + COALESCE(jsonb_array_length(v_result_b->'exceptionCodes'), 0) <> 1
+     OR NOT (
+       COALESCE(
+         (v_result_a->'exceptionCodes') @> '[{"code":"late_payment_reservation_lost"}]'::jsonb,
+         false
+       )
+       OR COALESCE(
+         (v_result_b->'exceptionCodes') @> '[{"code":"late_payment_reservation_lost"}]'::jsonb,
+         false
+       )
+     ) THEN
+    RAISE EXCEPTION 'serialized confirmation race reported invalid payment-loss exceptions: %, %', v_result_a, v_result_b;
+  END IF;
 
   SELECT count(*), count(DISTINCT order_id)
   INTO v_reserved, v_orders

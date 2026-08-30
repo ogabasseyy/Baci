@@ -22,6 +22,13 @@ function pathAt(source, targetIndex) {
     } else if (/^(?:EXCEPTION\s+WHEN|ELSIF|WHEN|ELSE)\b/i.test(token[0])) {
       if (stack.length > 0) stack[stack.length - 1].branch = token.index;
     } else {
+      const normalizedToken = serializedInventorySqlParser
+        .stripSqlComments(token[0])
+        .trim();
+      const zeroIterationLoop =
+        /^(?:WHILE\s+\(*\s*(?:false|NOT\s+true)\s*\)*|FOR\s+[a-z_][a-z0-9_]*\s+IN\s+[\s\S]*\bWHERE\s+\(*\s*false\s*\)*\s*)LOOP$/i.test(
+          normalizedToken
+        );
       stack.push({
         branch: token.index,
         id: token.index,
@@ -33,8 +40,9 @@ function pathAt(source, targetIndex) {
               ? 'block'
               : 'if',
         unreachable:
+          zeroIterationLoop ||
           /^IF\s+(?:\(\s*)*(?:false(?:\s*::\s*(?:pg_catalog\s*\.\s*)?boolean)?|NOT\s+true)(?:\s*\))*\s+THEN$/i.test(
-            serializedInventorySqlParser.stripSqlComments(token[0]).trim()
+            normalizedToken
           ),
       });
     }

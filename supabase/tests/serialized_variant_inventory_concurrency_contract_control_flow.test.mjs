@@ -56,6 +56,26 @@ test('does not let zero-iteration loops dominate later statements', () => {
   );
 });
 
+test('marks FOR queries with an unconditional false filter unreachable', () => {
+  const source =
+    'FOR v_unit IN SELECT NULL WHERE false LOOP\nraise_exception;\nEND LOOP;\nafter;';
+  assert.equal(
+    serializedInventoryControlFlow.isReachable(
+      source,
+      source.indexOf('raise_exception')
+    ),
+    false
+  );
+  assert.equal(
+    serializedInventoryControlFlow.dominatesControlFlow(
+      source,
+      source.indexOf('raise_exception'),
+      source.indexOf('after')
+    ),
+    false
+  );
+});
+
 test('rejects protected operations after an unconditional early return', () => {
   const source = 'RETURN success;\nauthorize;\nlock_row;';
   assert.equal(

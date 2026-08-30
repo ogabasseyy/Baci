@@ -38,6 +38,32 @@ $wrapper$;`;
   assert.equal(hasDynamicFunctionDdl(source, 'private.fixture(integer)'), true);
 });
 
+test('detects protected DDL assembled by format with a literal target', () => {
+  const source = `DO $wrapper$
+BEGIN
+  EXECUTE format(
+    'ALTER FUNCTION %s SET search_path = %L',
+    'private.fixture(integer)',
+    ''
+  );
+END;
+$wrapper$;`;
+
+  assert.equal(hasDynamicFunctionDdl(source, 'private.fixture(integer)'), true);
+});
+
+test('fails closed for format DDL with an unresolved target', () => {
+  const source = `DO $wrapper$
+DECLARE
+  v_target regprocedure;
+BEGIN
+  EXECUTE format('ALTER FUNCTION %s SET search_path = %L', v_target, '');
+END;
+$wrapper$;`;
+
+  assert.equal(hasDynamicFunctionDdl(source, 'private.fixture(integer)'), true);
+});
+
 test('detects dynamic privilege DDL for protected functions', () => {
   const source = `DO $wrapper$
 BEGIN

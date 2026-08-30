@@ -81,6 +81,33 @@ test('partial confirmation clears expiry only for still-reserved units', () => {
   assert.ok(partialBranch);
   assert.match(
     partialBranch[1],
-    /UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL\s*,\s*updated_at\s*=\s*now\(\)\s*WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+status\s*=\s*'reserved'\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL\s*;/i
+    /(?:WITH\s+partially_confirmed_units\s+AS\s*\(\s*)?UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL\s*,\s*updated_at\s*=\s*now\(\)\s*WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+status\s*=\s*'reserved'\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL(?:\s+RETURNING\s+id)?/i
+  );
+});
+
+test('partial confirmation reports every newly durable reserved unit', () => {
+  const confirm = serializedInventoryContract.latestFunctionBody(
+    'private.confirm_order_inventory_reservations(uuid, uuid)'
+  );
+  const partialBranch =
+    /IF\s+v_reserved_count\s*=\s*v_item\.quantity\s+THEN[\s\S]*?\bELSE\b([\s\S]*?)\bv_needed\s*:=/i.exec(
+      confirm
+    );
+  assert.ok(partialBranch);
+  assert.match(
+    partialBranch[1],
+    /WITH\s+partially_confirmed_units\s+AS\s*\(\s*UPDATE\s+public\.variant_inventory\s+SET[\s\S]*?WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+status\s*=\s*'reserved'\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL\s+RETURNING\s+id\s*\)[\s\S]*?INTO\s+v_newly_confirmed_unit_ids\s+FROM\s+partially_confirmed_units\s*;/i
+  );
+  assert.match(
+    partialBranch[1],
+    /WHERE\s+id\s*=\s*ANY\s*\(\s*v_newly_confirmed_unit_ids\s*\)[\s\S]*?hold_confirmed[\s\S]*?v_confirmed_count\s*:=\s*v_confirmed_count\s*\+\s*1\s*;/i
+  );
+  const withoutCapture = partialBranch[1].replace(
+    /WITH\s+partially_confirmed_units\s+AS\s*\([\s\S]*?FROM\s+partially_confirmed_units\s*;\s*FOR\s+v_unit\s+IN[\s\S]*?END\s+LOOP\s*;/i,
+    ''
+  );
+  assert.doesNotMatch(
+    withoutCapture,
+    /partially_confirmed_units|v_newly_confirmed_unit_ids/i
   );
 });

@@ -217,7 +217,7 @@ test('confirmation locks before reclaiming and reserves each counted unit', () =
   const fullyReservedExpiryClear =
     /IF\s+v_reserved_count\s*=\s*v_item\.quantity\s+THEN[\s\S]*?WITH\s+confirmed_units\s+AS\s*\(\s*UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL\s*,\s*updated_at\s*=\s*now\(\)\s*WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+status\s*=\s*'reserved'\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL\s+RETURNING\s+id\s*\)\s*SELECT\s+COALESCE\s*\(\s*array_agg\s*\(\s*id\s+ORDER\s+BY\s+id\s*\)\s*,\s*ARRAY\[\]\s*::uuid\[\]\s*\)\s*INTO\s+v_newly_confirmed_unit_ids\s+FROM\s+confirmed_units\s*;/i;
   const partialExpiryClear =
-    /ELSE[\s\S]*?UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL[\s\S]*?WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+status\s*=\s*'reserved'\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL\s*;/i;
+    /ELSE[\s\S]*?UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL[\s\S]*?WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+status\s*=\s*'reserved'\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL(?:\s+RETURNING\s+id)?/i;
   assert.match(confirm, fullyReservedExpiryClear);
   assert.match(confirm, partialExpiryClear);
   const withoutExistingExpiryClears = confirm

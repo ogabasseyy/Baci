@@ -79,3 +79,79 @@ $$;
 
 SELECT dblink_disconnect('serialized_partial_sale_holder');
 SELECT dblink_disconnect('serialized_partial_confirm_sale');
+
+-- A partial confirmation must make an already-reserved expiring unit durable
+-- before reclaiming the remaining quantity, and report that transition in its
+-- confirmed-unit count rather than silently clearing the expiry.
+INSERT INTO public.products (id, merchant_id, inventory_tracking_policy)
+VALUES (
+  '00000000-0000-4000-8000-00000000f354',
+  '00000000-0000-4000-8000-00000000f301',
+  'serialized_strict'
+);
+INSERT INTO public.product_variants (
+  id, product_id, merchant_id, inventory_tracking_policy
+)
+VALUES (
+  '00000000-0000-4000-8000-00000000f356',
+  '00000000-0000-4000-8000-00000000f354',
+  '00000000-0000-4000-8000-00000000f301',
+  'inherit'
+);
+INSERT INTO public.orders (id, merchant_id, payment_status, payment_method)
+VALUES (
+  '00000000-0000-4000-8000-00000000f352',
+  '00000000-0000-4000-8000-00000000f301',
+  'paid',
+  'card'
+);
+INSERT INTO public.order_items (
+  id, order_id, product_id, variant_id, quantity
+)
+VALUES (
+  '00000000-0000-4000-8000-00000000f35c',
+  '00000000-0000-4000-8000-00000000f352',
+  '00000000-0000-4000-8000-00000000f354',
+  '00000000-0000-4000-8000-00000000f356',
+  2
+);
+INSERT INTO public.variant_inventory (
+  id, variant_id, order_id, order_item_id, merchant_id, status,
+  reservation_expires_at, identifier_type, identifier_value
+)
+VALUES (
+  '00000000-0000-4000-8000-00000000f358',
+  '00000000-0000-4000-8000-00000000f356',
+  '00000000-0000-4000-8000-00000000f352',
+  '00000000-0000-4000-8000-00000000f35c',
+  '00000000-0000-4000-8000-00000000f301',
+  'reserved',
+  clock_timestamp() + interval '1 hour',
+  'serial',
+  'partial-confirm-expiry-unit'
+);
+
+DO $$
+DECLARE
+  v_result jsonb;
+  v_status text;
+  v_expires_at timestamptz;
+BEGIN
+  SELECT public.confirm_order_inventory_reservations(
+    '00000000-0000-4000-8000-00000000f301'::uuid,
+    '00000000-0000-4000-8000-00000000f352'::uuid
+  ) INTO v_result;
+  SELECT status, reservation_expires_at
+  INTO v_status, v_expires_at
+  FROM public.variant_inventory
+  WHERE id = '00000000-0000-4000-8000-00000000f358'::uuid;
+  IF v_status <> 'reserved' OR v_expires_at IS NOT NULL THEN
+    RAISE EXCEPTION 'partial confirmation did not durably confirm expiring unit: %, %', v_status, v_expires_at;
+  END IF;
+  IF COALESCE((v_result->>'confirmedUnitCount')::integer, 0) <> 1
+     OR COALESCE((v_result->>'reclaimedUnitCount')::integer, 0) <> 0
+     OR COALESCE((v_result->>'missingUnitCount')::integer, 0) <> 1 THEN
+    RAISE EXCEPTION 'partial confirmation reported invalid durable-unit result: %', v_result;
+  END IF;
+END;
+$$;

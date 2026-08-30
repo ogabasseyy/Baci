@@ -2,6 +2,12 @@ import { serializedInventoryBranches } from './serialized_variant_inventory_conc
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
+const { isRequiredConjunct } = serializedInventorySqlParser;
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function hasPositiveQuantityGuard(source) {
   const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
     preserveStrings: true,
@@ -42,17 +48,39 @@ function targetMerchantLookup(source, beforeIndex) {
   const targetParameter = /\bvariant_id_param\b/i.test(source)
     ? 'variant_id_param'
     : 'product_id_param';
-  const targetPattern =
-    targetParameter === 'variant_id_param'
-      ? /SELECT\s+[^;]*\bmerchant_id\b[^;]*\bINTO\s+v_merchant_id\b[^;]*\bFROM\s+(?:public\s*\.\s*)?products\b[^;]*\bJOIN\s+(?:public\s*\.\s*)?product_variants\b[^;]*\bWHERE\s+[^;]*\bvariant_id_param\b[^;]*;/i
-      : /SELECT\s+[^;]*\bmerchant_id\b[^;]*\bINTO\s+v_merchant_id\b[^;]*\bFROM\s+(?:public\s*\.\s*)?products\b[^;]*\bWHERE\s+[^;]*\bid\s*=\s*product_id_param\b[^;]*;/i;
   const assignments = [
     ...source.matchAll(
       /SELECT\s+[^;]*\bmerchant_id\b[^;]*\bINTO\s+v_merchant_id\b[^;]*;/gi
     ),
   ].filter(({ index }) => index < beforeIndex);
   const latestAssignment = assignments.at(-1);
-  return latestAssignment && targetPattern.test(latestAssignment[0])
+  if (!latestAssignment) return null;
+  const assignment = latestAssignment[0];
+  if (targetParameter === 'product_id_param') {
+    return /\bFROM\s+(?:public\s*\.\s*)?products\b[^;]*\bWHERE\s+[^;]*\bid\s*=\s*product_id_param\b[^;]*;/i.test(
+      assignment
+    )
+      ? latestAssignment
+      : null;
+  }
+
+  const variantLookup =
+    /\bFROM\s+(?:public\s*\.\s*)?products\b\s+(?:AS\s+)?([a-z_][a-z0-9_]*)\s+JOIN\s+(?:public\s*\.\s*)?product_variants\b\s+(?:AS\s+)?([a-z_][a-z0-9_]*)\s+ON\s+([\s\S]*?)\s+WHERE\s+([\s\S]*?)\s*;/i.exec(
+      assignment
+    );
+  if (!variantLookup) return null;
+  const [, productAlias, variantAlias, joinCondition, whereClause] =
+    variantLookup;
+  const productIdJoin = new RegExp(
+    `(?:${escapeRegex(variantAlias)}\\s*\\.\\s*product_id\\s*=\\s*${escapeRegex(productAlias)}\\s*\\.\\s*id|${escapeRegex(productAlias)}\\s*\\.\\s*id\\s*=\\s*${escapeRegex(variantAlias)}\\s*\\.\\s*product_id)`,
+    'i'
+  );
+  const variantIdFilter = new RegExp(
+    `(?:${escapeRegex(variantAlias)}\\s*\\.\\s*id\\s*=\\s*variant_id_param|variant_id_param\\s*=\\s*${escapeRegex(variantAlias)}\\s*\\.\\s*id)`,
+    'i'
+  );
+  return isRequiredConjunct(joinCondition, productIdJoin) &&
+    isRequiredConjunct(whereClause, variantIdFilter)
     ? latestAssignment
     : null;
 }

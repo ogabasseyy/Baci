@@ -104,8 +104,18 @@ test('rejects contradictory available lifecycle predicates', () => {
   assert.equal(
     serializedInventoryAvailability.availableUnitPredicatesMatch(
       source.replace(
-        "AND unit.status = 'reserved'",
-        "AND unit.status = 'available' AND unit.status = 'reserved'"
+        "AND unit.status <> 'available'",
+        "AND unit.status IS DISTINCT FROM 'available'"
+      ),
+      'v_variant_id'
+    ),
+    false
+  );
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      source.replace(
+        "AND unit.status <> 'available'",
+        "AND unit.status IN ('reserved')"
       ),
       'v_variant_id'
     ),

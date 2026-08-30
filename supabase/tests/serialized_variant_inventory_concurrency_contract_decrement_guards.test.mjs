@@ -122,6 +122,15 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
     const targetParameter = body.includes('variant_id_param')
       ? 'variant_id_param'
       : 'product_id_param';
+    if (targetParameter === 'variant_id_param') {
+      assert.equal(
+        serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
+          body.replace(/ON\s+pv\.product_id\s*=\s*p\.id/i, 'ON true')
+        ),
+        false,
+        'variant authorization must bind the variant to its product'
+      );
+    }
     assert.equal(
       serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
         body.replace(

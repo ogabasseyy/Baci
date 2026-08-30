@@ -42,6 +42,7 @@ test('loads a later migration replacement into the PostgreSQL fixture', () => {
     '20260825180500_authorize_inventory_confirmation.sql',
     '20260829003000_harden_confirmation_reservation_capture.sql',
     '20260830001000_harden_confirmation_partial_reservation_capture.sql',
+    '20260830003000_capture_partial_confirmation_units.sql',
   ];
 
   try {

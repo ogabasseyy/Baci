@@ -1,5 +1,6 @@
 import { existsSync, lstatSync, mkdirSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { buildCodexSandboxArgs } from './remediation-codex-sandbox-args.mjs';
 import { readOnlyDockerSecurityArgs } from './remediation-readonly-seccomp.mjs';
 
 export const REMEDIATION_VERIFY_COMMAND =
@@ -206,19 +207,7 @@ export function buildRemediationCodexCommand({
     '--json',
     '--ephemeral',
     '--skip-git-repo-check',
-    ...(readOnly
-      ? [
-          '--sandbox',
-          'read-only',
-          // Landlock avoids nested bubblewrap user namespaces on this VPS
-          // while retaining Codex's process-level filesystem/network policy.
-          '--enable',
-          'use_legacy_landlock',
-        ]
-      : [
-          // Docker is the external write boundary for implementation runs.
-          '--dangerously-bypass-approvals-and-sandbox',
-        ]),
+    ...buildCodexSandboxArgs({ readOnly }),
     '--ignore-user-config',
     '-C',
     worktreeDir,

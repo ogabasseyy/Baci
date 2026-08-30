@@ -79,7 +79,7 @@ function availableUnitPredicatesMatch(source, variantVariable, branchVariable) {
     ? valueQuery.where.replace(branchMatch[0], 'branch_eligible = true')
     : valueQuery?.where;
   const contradictoryStatus = new RegExp(
-    `(?:${branchQualifier}status\\s*=\\s*'(?!available')[^']+'|${branchQualifier}status\\s*(?:<>|!=|IS\\s+DISTINCT\\s+FROM)\\s*'available'|${branchQualifier}status\\s+NOT\\s+IN\\s*\\([^)]*'available'|${branchQualifier}status\\s+IN\\s*\\((?![^)]*'available')[^)]*\\)|${branchQualifier}status\\s*=\\s*ANY\\s*\\(\\s*(?:ARRAY\\s*)?\\[(?![^]]*'available')[^]]*\\]|NOT\\s*\\(\\s*${branchQualifier}status\\s*=\\s*'available'\\s*\\)|\\(\\s*${branchQualifier}status\\s*=\\s*'available'\\s*\\)\\s+IS\\s+FALSE)`,
+    `(?:${branchQualifier}status\\s*=\\s*'(?!available')[^']+'|${branchQualifier}status\\s*(?:<>|!=|IS\\s+DISTINCT\\s+FROM)\\s*'available'|${branchQualifier}status\\s+NOT\\s+IN\\s*\\([^)]*'available'|${branchQualifier}status\\s+IN\\s*\\((?![^)]*'available')[^)]*\\)|${branchQualifier}status\\s*=\\s*ANY\\s*\\(\\s*(?:ARRAY\\s*)?\\[(?![^\\]]*'available')[^\\]]*\\]\\s*\\)|NOT\\s*\\(\\s*${branchQualifier}status\\s*=\\s*'available'\\s*\\)|\\(\\s*${branchQualifier}status\\s*=\\s*'available'\\s*\\)\\s+IS\\s+FALSE)`,
     'i'
   );
   return (

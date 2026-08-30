@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryPrivilegeExecution } from './serialized_variant_inventory_concurrency_contract_privilege_execution.mjs';
+import './serialized_variant_inventory_concurrency_contract_privilege_execution_recreation.test.mjs';
 
 test('inherits function execution through a granted intermediate role', () => {
   const signature = 'private.fixture(uuid)';
@@ -234,72 +235,6 @@ test('applies default function privileges when a private function is recreated',
     CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
       LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
     REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
-  `;
-
-  assert.equal(
-    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
-      source,
-      signature
-    ),
-    true
-  );
-});
-
-test('applies default function privileges across a comma-separated schema list', () => {
-  const signature = 'private.fixture(uuid)';
-  const source = [
-    'CREATE FUNCTION ' + signature + ' RETURNS void SECURITY DEFINER',
-    'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
-    'REVOKE ALL ON FUNCTION ' + signature + ' FROM PUBLIC;',
-    'ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public, private',
-    'GRANT EXECUTE ON FUNCTIONS TO authenticated;',
-    'DROP FUNCTION ' + signature + ';',
-    'CREATE FUNCTION ' + signature + ' RETURNS void SECURITY DEFINER',
-    'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
-    'REVOKE ALL ON FUNCTION ' + signature + ' FROM PUBLIC;',
-  ].join('\n');
-
-  assert.equal(
-    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
-      source,
-      signature
-    ),
-    true
-  );
-});
-
-test('does not apply default function privileges for another owner', () => {
-  const signature = 'private.fixture(uuid)';
-  const source = `
-    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
-      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
-    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
-    ALTER DEFAULT PRIVILEGES FOR ROLE unrelated_owner IN SCHEMA private
-      GRANT EXECUTE ON FUNCTIONS TO authenticated;
-    DROP FUNCTION ${signature};
-    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
-      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
-    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
-  `;
-
-  assert.equal(
-    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
-      source,
-      signature
-    ),
-    false
-  );
-});
-
-test('tracks quoted function recreation after a drop', () => {
-  const signature = 'private.fixture(uuid)';
-  const source = `
-    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
-      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
-    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
-    DROP FUNCTION ${signature};
-    CREATE FUNCTION "private"."fixture"(uuid) RETURNS void SECURITY DEFINER
-      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
   `;
 
   assert.equal(

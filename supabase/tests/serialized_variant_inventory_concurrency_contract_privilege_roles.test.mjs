@@ -37,3 +37,16 @@ test('parses default function privileges for every schema in a comma-separated l
     },
   ]);
 });
+
+test('parses session role changes for privilege lifecycle analysis', () => {
+  assert.deepEqual(
+    serializedInventoryPrivilegeRoles.parseRoleChange(
+      '  SET ROLE "authenticated";'
+    ),
+    { index: 2, kind: 'role', role: 'authenticated' }
+  );
+  assert.deepEqual(
+    serializedInventoryPrivilegeRoles.parseRoleChange('RESET ROLE;'),
+    { index: 0, kind: 'reset-role' }
+  );
+});

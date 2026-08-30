@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryPrivilegeExecution } from './serialized_variant_inventory_concurrency_contract_privilege_execution.mjs';
-import './serialized_variant_inventory_concurrency_contract_privilege_execution_recreation.test.mjs';
 
 test('inherits function execution through a granted intermediate role', () => {
   const signature = 'private.fixture(uuid)';

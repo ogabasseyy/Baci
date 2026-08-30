@@ -112,6 +112,7 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
     grants: new Map(),
     defaultGrants: new Map(),
     memberships: new Map(),
+    currentRole: 'postgres',
     owner: undefined,
   };
   const executableSources = (
@@ -138,8 +139,19 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
               index: index + event.index,
               sourceIndex,
             }));
+          const roleChange =
+            serializedInventoryPrivilegeRoles.parseRoleChange(text);
+          const roleEvents = roleChange
+            ? [
+                {
+                  ...roleChange,
+                  index: index + roleChange.index,
+                  sourceIndex,
+                },
+              ]
+            : [];
           if (!/^(?:GRANT|REVOKE)\b/i.test(leading))
-            return [...lifecycle, ...defaults];
+            return [...lifecycle, ...defaults, ...roleEvents];
           const membership =
             serializedInventoryPrivilegeRoles.parseRoleMembership(text);
           const targetPattern = new RegExp(
@@ -172,6 +184,7 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
           return [
             ...lifecycle,
             ...defaults,
+            ...roleEvents,
             ...privileges,
             ...schemaPrivileges,
             ...(membership
@@ -192,7 +205,11 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
         left.sourceIndex - right.sourceIndex || left.index - right.index
     );
   for (const event of events) {
-    if (event.kind === 'drop' || event.kind === 'invalidate') {
+    if (event.kind === 'role') {
+      state.currentRole = event.role;
+    } else if (event.kind === 'reset-role') {
+      state.currentRole = 'postgres';
+    } else if (event.kind === 'drop' || event.kind === 'invalidate') {
       state.exists = false;
       state.grants.clear();
       state.owner = undefined;
@@ -200,7 +217,7 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
       if (!event.replace || !state.exists) {
         state.grants.clear();
         state.grants.set('public', true);
-        state.owner ??= 'postgres';
+        state.owner ??= state.currentRole;
         const ownerDefaults = state.defaultGrants.get(state.owner) ?? new Map();
         for (const [role, grant] of ownerDefaults) {
           state.grants.set(role, grant);

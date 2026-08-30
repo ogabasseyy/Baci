@@ -33,6 +33,27 @@ function parseRoleMembership(text) {
   };
 }
 
+function parseRoleChange(text) {
+  const leading = text.trim();
+  const setRole = /^SET\s+ROLE\s+("[^"]+"|[a-z_][a-z0-9_]*)\s*;?$/i.exec(
+    leading
+  );
+  if (setRole) {
+    return {
+      index: text.indexOf(leading),
+      kind: 'role',
+      role: normalizeRoleName(setRole[1]),
+    };
+  }
+  if (/^RESET\s+ROLE\s*;?$/i.test(leading)) {
+    return {
+      index: text.indexOf(leading),
+      kind: 'reset-role',
+    };
+  }
+  return null;
+}
+
 function parseDefaultFunctionPrivileges(text, targetSchema) {
   defaultFunctionPrivilegePattern.lastIndex = 0;
   return [...text.matchAll(defaultFunctionPrivilegePattern)]
@@ -85,6 +106,7 @@ export const serializedInventoryPrivilegeRoles = {
   canExecuteAs,
   normalizeRoleName,
   parseDefaultFunctionPrivileges,
+  parseRoleChange,
   parseSchemaFunctionPrivileges,
   parseRoleMembership,
 };

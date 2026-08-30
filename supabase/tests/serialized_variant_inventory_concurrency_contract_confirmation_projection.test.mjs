@@ -69,3 +69,18 @@ test('confirmation captures reserved units in a status-guarded atomic update', (
     'confirmation must not capture a snapshot without rechecking reserved status'
   );
 });
+
+test('partial confirmation clears expiry only for still-reserved units', () => {
+  const confirm = serializedInventoryContract.latestFunctionBody(
+    'private.confirm_order_inventory_reservations(uuid, uuid)'
+  );
+  const partialBranch =
+    /IF\s+v_reserved_count\s*=\s*v_item\.quantity\s+THEN[\s\S]*?\bELSE\b([\s\S]*?)\bv_needed\s*:=/i.exec(
+      confirm
+    );
+  assert.ok(partialBranch);
+  assert.match(
+    partialBranch[1],
+    /UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL\s*,\s*updated_at\s*=\s*now\(\)\s*WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+status\s*=\s*'reserved'\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL\s*;/i
+  );
+});

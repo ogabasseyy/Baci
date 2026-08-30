@@ -245,6 +245,29 @@ test('applies default function privileges when a private function is recreated',
   );
 });
 
+test('applies default function privileges across a comma-separated schema list', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    'CREATE FUNCTION ' + signature + ' RETURNS void SECURITY DEFINER',
+    'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    'REVOKE ALL ON FUNCTION ' + signature + ' FROM PUBLIC;',
+    'ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public, private',
+    'GRANT EXECUTE ON FUNCTIONS TO authenticated;',
+    'DROP FUNCTION ' + signature + ';',
+    'CREATE FUNCTION ' + signature + ' RETURNS void SECURITY DEFINER',
+    'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    'REVOKE ALL ON FUNCTION ' + signature + ' FROM PUBLIC;',
+  ].join('\n');
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
 test('does not apply default function privileges for another owner', () => {
   const signature = 'private.fixture(uuid)';
   const source = `

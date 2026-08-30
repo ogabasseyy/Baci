@@ -19,3 +19,21 @@ test('resolves inherited function privileges through role membership', () => {
     true
   );
 });
+
+test('parses default function privileges for every schema in a comma-separated list', () => {
+  const privileges =
+    serializedInventoryPrivilegeRoles.parseDefaultFunctionPrivileges(
+      'ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public, private GRANT EXECUTE ON FUNCTIONS TO authenticated;',
+      'private'
+    );
+
+  assert.deepEqual(privileges, [
+    {
+      grantees: 'authenticated',
+      index: 0,
+      kind: 'default',
+      operation: 'GRANT',
+      owner: 'postgres',
+    },
+  ]);
+});

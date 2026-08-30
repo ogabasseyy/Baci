@@ -73,11 +73,14 @@ seccomp/v0.2.3 profile (source:
 for the namespace operations that the sandboxed toolchain may request;
 the outer container still drops all capabilities, enables
 `no-new-privileges`, and keeps the worktree and dependency mounts read-only.
-The inner Codex invocation uses its externally sandboxed mode instead of
-starting bubblewrap, because this VPS does not permit unprivileged user
-namespaces. The outer Docker boundary remains authoritative: only ephemeral
-container tmpfs paths are writable and the container is removed after each
-run. Do not replace this profile with `seccomp=unconfined`.
+The inner read-only Codex invocation forces its legacy Landlock fallback instead
+of starting bubblewrap, because this VPS does not permit unprivileged user
+namespaces. Landlock keeps the read-only command's process-level filesystem and
+network policy (including blocked generated-command egress), while the outer
+Docker boundary remains authoritative: only ephemeral container tmpfs paths
+are writable and the container is removed after each run. Implementation runs
+still use the Docker boundary directly because they need a writable worktree
+and GitHub access. Do not replace this profile with `seccomp=unconfined`.
 
 `jobs/remediation-codex-canary.mjs` is a daily, Docker-only read-only check of
 the Codex toolchain. It shares the global remediation lock and writes its own

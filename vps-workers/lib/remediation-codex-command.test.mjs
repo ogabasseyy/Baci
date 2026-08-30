@@ -139,13 +139,15 @@ describe('remediation Codex command', () => {
 
     assert.equal(result.args.includes('--read-only'), true);
     assert.equal(result.args.includes('--search'), false);
-    assert.equal(result.args.includes('--sandbox'), false);
+    assert.equal(result.args.includes('--sandbox'), true);
+    assert.equal(result.args.includes('read-only'), true);
     assert.equal(
       result.args.includes('--dangerously-bypass-approvals-and-sandbox'),
-      true
+      false
     );
+    assert.equal(result.args.includes('--enable'), true);
+    assert.equal(result.args.includes('use_legacy_landlock'), true);
     assert.equal(result.args.includes('workspace-write'), false);
-    assert.equal(result.args.includes('use_legacy_landlock'), false);
     assert.equal(
       result.args.includes('type=bind,src=/repo,dst=/repo,readonly'),
       true

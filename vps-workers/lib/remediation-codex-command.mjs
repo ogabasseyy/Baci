@@ -206,9 +206,19 @@ export function buildRemediationCodexCommand({
     '--json',
     '--ephemeral',
     '--skip-git-repo-check',
-    // Docker is the external read-only boundary; nested bubblewrap cannot
-    // create user namespaces under the VPS host policy.
-    '--dangerously-bypass-approvals-and-sandbox',
+    ...(readOnly
+      ? [
+          '--sandbox',
+          'read-only',
+          // Landlock avoids nested bubblewrap user namespaces on this VPS
+          // while retaining Codex's process-level filesystem/network policy.
+          '--enable',
+          'use_legacy_landlock',
+        ]
+      : [
+          // Docker is the external write boundary for implementation runs.
+          '--dangerously-bypass-approvals-and-sandbox',
+        ]),
     '--ignore-user-config',
     '-C',
     worktreeDir,

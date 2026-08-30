@@ -54,9 +54,7 @@ function privilegeTargetPattern(signature) {
     .filter(Boolean)
     .map((type) => {
       const unqualified = type.replace(/^pg_catalog\s*\.\s*/i, '');
-      return '(?:(?:pg_catalog\s*\.\s*)?' +
-        signaturePattern(unqualified) +
-        ')';
+      return `(?:(?:pg_catalog\\s*\\.\\s*)?${signaturePattern(unqualified)})`;
     })
     .join('\\s*,\\s*');
   return (
@@ -211,10 +209,13 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
       state.exists = true;
     } else if (event.kind === 'owner') {
       state.owner = event.owner;
+    } else if (event.kind === 'reassign') {
+      if (state.owner !== undefined && event.from.includes(state.owner)) {
+        state.owner = event.owner;
+      }
     } else if (event.kind === 'default') {
       const grant = event.operation === 'GRANT';
-      const ownerDefaults =
-        state.defaultGrants.get(event.owner) ?? new Map();
+      const ownerDefaults = state.defaultGrants.get(event.owner) ?? new Map();
       for (const grantee of splitFunctionPrivilegeTargets(event.grantees)) {
         ownerDefaults.set(
           serializedInventoryPrivilegeRoles.normalizeRoleName(grantee),

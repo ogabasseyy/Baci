@@ -65,7 +65,21 @@ function functionLifecycleEvents(source, signature) {
     }
     return { index: match.index, kind: 'invalidate' };
   });
-  return [...creates, ...drops].sort((left, right) => left.index - right.index);
+  const reassigns = [
+    ...source.matchAll(
+      /REASSIGN\s+OWNED\s+BY\s+((?:"[^"]+"|[a-z_][a-z0-9_]*)(?:\s*,\s*(?:"[^"]+"|[a-z_][a-z0-9_]*))*)\s+TO\s+("[^"]+"|[a-z_][a-z0-9_]*)\s*;/gi
+    ),
+  ].map((match) => ({
+    index: match.index,
+    kind: 'reassign',
+    from: match[1]
+      .split(',')
+      .map((role) => serializedInventoryPrivilegeRoles.normalizeRoleName(role)),
+    owner: serializedInventoryPrivilegeRoles.normalizeRoleName(match[2]),
+  }));
+  return [...creates, ...drops, ...reassigns].sort(
+    (left, right) => left.index - right.index
+  );
 }
 
 export const serializedInventoryPrivilegeLifecycle = {

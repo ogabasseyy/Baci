@@ -3,24 +3,19 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
-const functionDefinitions = [
-  [
-    '20260615181534_serialized_variant_inventory.sql',
-    'private.claim_variant_inventory_units_for_order_item_internal',
-  ],
-  [
-    '20260825173500_authorize_serialized_inventory_claims.sql',
-    'public.claim_variant_inventory_units_for_order_item',
-  ],
-  [
-    '20260829003000_harden_confirmation_reservation_capture.sql',
-    'private.confirm_order_inventory_reservations',
-  ],
-  [
-    '20260825180500_authorize_inventory_confirmation.sql',
-    'public.confirm_order_inventory_reservations',
-  ],
+const functionNames = [
+  'private.claim_variant_inventory_units_for_order_item_internal',
+  'public.claim_variant_inventory_units_for_order_item',
+  'private.confirm_order_inventory_reservations',
+  'public.confirm_order_inventory_reservations',
 ];
+
+function migrationFileNames(migrationsDir) {
+  return fs
+    .readdirSync(migrationsDir)
+    .filter((fileName) => fileName.endsWith('.sql'))
+    .sort();
+}
 
 function identifierPattern(name) {
   return name
@@ -29,13 +24,20 @@ function identifierPattern(name) {
     .join('\\s*\\.\\s*');
 }
 
-function extractFunctionStatement(source, name) {
+function functionMarkerPattern(name) {
+  return new RegExp(
+    `CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${identifierPattern(name)}\\s*\\(`,
+    'i'
+  );
+}
+
+function extractFunctionStatement(source, name, markerIndex) {
   const pattern = new RegExp(
     `CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+${identifierPattern(name)}\\s*\\(`,
     'i'
   );
   const normalized = serializedInventorySqlParser.stripSqlComments(source);
-  const start = normalized.search(pattern);
+  const start = markerIndex ?? normalized.search(pattern);
   if (start < 0) throw new Error(`missing fixture function ${name}`);
   const opening = /\bAS\s+(\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)/i.exec(
     normalized.slice(start)
@@ -53,15 +55,30 @@ function extractFunctionStatement(source, name) {
   return normalized.slice(start, end + 1).trim();
 }
 
+function latestFunctionStatement(repoRoot, name) {
+  const migrationsDir = path.join(repoRoot, 'supabase', 'migrations');
+  let latest;
+  const pattern = functionMarkerPattern(name);
+  for (const fileName of migrationFileNames(migrationsDir)) {
+    const source = serializedInventorySqlParser.stripSqlComments(
+      fs.readFileSync(path.join(migrationsDir, fileName), 'utf8')
+    );
+    for (const {
+      index,
+      text,
+    } of serializedInventorySqlParser.splitSqlStatements(source)) {
+      const leading = text.search(/\S/);
+      if (leading < 0 || !pattern.test(text.slice(leading))) continue;
+      latest = extractFunctionStatement(source, name, index + leading);
+    }
+  }
+  if (!latest) throw new Error(`missing fixture function ${name}`);
+  return latest;
+}
+
 function fixtureFunctionSql(repoRoot) {
-  return functionDefinitions
-    .map(([fileName, name]) => {
-      const source = fs.readFileSync(
-        path.join(repoRoot, 'supabase', 'migrations', fileName),
-        'utf8'
-      );
-      return extractFunctionStatement(source, name);
-    })
+  return functionNames
+    .map((name) => latestFunctionStatement(repoRoot, name))
     .join('\n\n');
 }
 

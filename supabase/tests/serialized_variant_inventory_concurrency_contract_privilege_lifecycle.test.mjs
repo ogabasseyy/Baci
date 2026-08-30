@@ -73,3 +73,45 @@ test('invalidates renamed and moved functions before replacement', () => {
     );
   }
 });
+
+test('tracks REASSIGN OWNED transfers from the current function owner', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    ALTER FUNCTION ${signature} OWNER TO inventory_owner;
+    REASSIGN OWNED BY inventory_owner TO authenticated;
+  `;
+
+  assert.deepEqual(
+    functionLifecycleEvents(source, signature).map(({ kind, owner, from }) => ({
+      kind,
+      ...(owner === undefined ? {} : { owner }),
+      ...(from === undefined ? {} : { from }),
+    })),
+    [
+      { kind: 'create' },
+      { kind: 'owner', owner: 'inventory_owner' },
+      { kind: 'reassign', from: ['inventory_owner'], owner: 'authenticated' },
+    ]
+  );
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+
+  const unrelatedReassign = source.replace(
+    'REASSIGN OWNED BY inventory_owner',
+    'REASSIGN OWNED BY another_owner'
+  );
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      unrelatedReassign,
+      signature
+    ),
+    false
+  );
+});

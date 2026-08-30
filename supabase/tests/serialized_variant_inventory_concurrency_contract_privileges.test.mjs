@@ -212,6 +212,23 @@ test('recognizes ROUTINE privilege and security syntax', () => {
   );
 });
 
+test('recognizes security changes followed by additional ALTER actions', () => {
+  const securitySignature = 'public.fixture(uuid)';
+  const securitySource = [
+    'CREATE FUNCTION ' + securitySignature + ' RETURNS void SECURITY DEFINER',
+    'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    "ALTER ROUTINE " + securitySignature + " SECURITY INVOKER SET search_path = '';",
+  ].join('\n');
+
+  assert.equal(
+    serializedInventoryPrivileges.effectiveSecurityMode(
+      securitySource,
+      securitySignature
+    ),
+    'invoker'
+  );
+});
+
 test('release wrapper and delegate remain executable by authenticated callers', () => {
   for (const [signature, mode] of releaseFunctions) {
     assert.equal(

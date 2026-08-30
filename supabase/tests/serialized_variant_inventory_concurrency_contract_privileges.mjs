@@ -90,7 +90,7 @@ function effectiveSecurityMode(sourceOrSources, signature) {
   const definitionIndex =
     normalizedSources[definitionSourceIndex].lastIndexOf(body);
   const alterationPattern = new RegExp(
-    `ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${functionReferencePattern(signature)}\\s+SECURITY\\s+(DEFINER|INVOKER)\\s*;`,
+    `ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${functionReferencePattern(signature)}\\s+SECURITY\\s+(DEFINER|INVOKER)\\b[^;]*;`,
     'gi'
   );
   const alterations = normalizedSources.flatMap((source, sourceIndex) =>

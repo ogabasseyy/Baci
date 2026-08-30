@@ -59,6 +59,56 @@ $$;
 SELECT dblink_disconnect('serialized_release_a');
 SELECT dblink_disconnect('serialized_release_b');
 
+-- A sale and cancellation can race on the same multi-product order. Both
+-- paths must serialize on the parent order instead of acquiring product rows
+-- in opposing orders and deadlocking through the stock-sync trigger.
+SELECT dblink_connect('serialized_cross_release', :'DATABASE_URL');
+SELECT dblink_connect('serialized_cross_sale', :'DATABASE_URL');
+SELECT dblink_exec('serialized_cross_release', $$SET statement_timeout = '5000ms'$$);
+SELECT dblink_exec('serialized_cross_sale', $$SET statement_timeout = '5000ms'$$);
+SELECT dblink_send_query(
+  'serialized_cross_release',
+  $$SELECT private.try_release(
+      '00000000-0000-4000-8000-00000000f301'::uuid,
+      '00000000-0000-4000-8000-00000000f342'::uuid
+    )$$
+);
+SELECT dblink_send_query(
+  'serialized_cross_sale',
+  $$SELECT public.mark_order_inventory_units_sold(
+      '00000000-0000-4000-8000-00000000f301'::uuid,
+      '00000000-0000-4000-8000-00000000f342'::uuid
+    )$$
+);
+
+DO $$
+DECLARE
+  v_release_result text;
+  v_sale_result jsonb;
+  v_reserved integer;
+BEGIN
+  SELECT result.value INTO v_release_result
+  FROM dblink_get_result('serialized_cross_release') AS result(value text);
+  SELECT result.value::jsonb INTO v_sale_result
+  FROM dblink_get_result('serialized_cross_sale') AS result(value text);
+  IF v_release_result <> 'succeeded'
+     OR COALESCE((v_sale_result->>'success')::boolean, false) IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'serialized sale/release race failed: %, %', v_release_result, v_sale_result;
+  END IF;
+
+  SELECT count(*) INTO v_reserved
+  FROM public.variant_inventory
+  WHERE order_id = '00000000-0000-4000-8000-00000000f342'::uuid
+    AND status = 'reserved';
+  IF v_reserved <> 0 THEN
+    RAISE EXCEPTION 'serialized sale/release race left % reserved units', v_reserved;
+  END IF;
+END;
+$$;
+
+SELECT dblink_disconnect('serialized_cross_release');
+SELECT dblink_disconnect('serialized_cross_sale');
+
 -- Run two claims for the same variant at once. Each caller must reserve a
 -- different available unit while both exact public and private claim paths
 -- execute against PostgreSQL.

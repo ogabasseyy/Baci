@@ -91,6 +91,14 @@ function sectionFor(text, heading) {
   return [first, ...rest].join('\n').trim();
 }
 
+function exactConfidenceValue(value) {
+  const normalized = String(value || '').trim();
+  const formatted = normalized.match(
+    /^(?:\*\*|__|`)(high|medium|low)(?:\*\*|__|`)$/i
+  );
+  return (formatted ? formatted[1] : normalized).toLowerCase();
+}
+
 export function validateCodexResearchResult(stdout) {
   const extracted = extractCodexResearchText(stdout);
   const text = redactCodexOutput(extracted)
@@ -112,7 +120,9 @@ export function validateCodexResearchResult(stdout) {
   }
   if (
     sections.ROOT_CAUSE_CONFIDENCE &&
-    !/^(?:high|medium|low)$/i.test(sections.ROOT_CAUSE_CONFIDENCE.trim())
+    !['high', 'medium', 'low'].includes(
+      exactConfidenceValue(sections.ROOT_CAUSE_CONFIDENCE)
+    )
   ) {
     reasons.push('root-cause confidence must be high, medium, or low');
   }

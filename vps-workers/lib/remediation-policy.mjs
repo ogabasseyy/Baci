@@ -225,7 +225,8 @@ operational or non-code option only when one is plausibly available. Explain
 causal evidence, tradeoffs, and the smallest safe choice.
 
 Your final response must contain these headings with non-empty content:
-RESEARCH_SUMMARY, ROOT_CAUSE_CONFIDENCE (high, medium, or low),
+RESEARCH_SUMMARY, ROOT_CAUSE_CONFIDENCE (write exactly high, medium, or low
+on the same line, without prose),
 OPTIONS_CONSIDERED (at least two options, as bullets, numbered entries, or
 labeled Option A/Option B sections), SELECTED_FIX, VALIDATION_PLAN.
 If no defensible fix is established, say so under SELECTED_FIX and do not edit.

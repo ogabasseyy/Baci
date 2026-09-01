@@ -113,6 +113,17 @@ describe('remediation research gate', () => {
     );
   });
 
+  it('accepts an allowed confidence value with Markdown emphasis', () => {
+    const report = validReport.replace(
+      'ROOT_CAUSE_CONFIDENCE: medium',
+      'ROOT_CAUSE_CONFIDENCE:\n\n**low**'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, true);
+  });
+
   it('accepts labeled option paragraphs as structured alternatives', () => {
     const report = validReport.replace(
       '- smallest code fix\n- operational mitigation',

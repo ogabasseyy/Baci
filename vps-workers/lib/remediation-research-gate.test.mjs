@@ -61,6 +61,18 @@ describe('remediation research gate', () => {
     assert.match(result.reasons.join('\n'), /defensible selected fix/);
   });
 
+  it('rejects a report that qualifies the missing fix with extra wording', () => {
+    const report = validReport.replace(
+      'SELECTED_FIX: smallest code fix',
+      'SELECTED_FIX: no defensible code fix is established; gather more evidence'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, false);
+    assert.match(result.reasons.join('\n'), /defensible selected fix/);
+  });
+
   it('extracts text from Codex content blocks without trusting other events', () => {
     const output = [
       JSON.stringify({

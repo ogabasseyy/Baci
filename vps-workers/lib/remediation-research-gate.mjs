@@ -140,7 +140,7 @@ export function validateCodexResearchResult(stdout) {
   }
   if (
     sections.SELECTED_FIX &&
-    /\b(?:no defensible fix|none|unable to|cannot safely)\b/i.test(
+    /\b(?:no\s+(?:a\s+)?defensible(?:\s+\w+){0,4}\s+fix|none|unable to|cannot safely)\b/i.test(
       sections.SELECTED_FIX
     )
   ) {

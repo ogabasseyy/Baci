@@ -87,6 +87,24 @@ describe('remediation research gate', () => {
     assert.match(result.reasons.join('\n'), /defensible selected fix/);
   });
 
+  it('rejects reverse-order wording that cannot establish a defensible fix', () => {
+    const reports = [
+      'SELECTED_FIX: I cannot establish a defensible fix without production traces.',
+      'SELECTED_FIX: I could not identify a defensible fix from the available evidence.',
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, false);
+      assert.match(result.reasons.join('\n'), /defensible selected fix/);
+    }
+  });
+
   it('extracts text from Codex content blocks without trusting other events', () => {
     const output = [
       JSON.stringify({
@@ -142,12 +160,29 @@ describe('remediation research gate', () => {
   it('accepts an allowed confidence value with Markdown emphasis', () => {
     const report = validReport.replace(
       'ROOT_CAUSE_CONFIDENCE: medium',
-      'ROOT_CAUSE_CONFIDENCE:\n\n**low**'
+      'ROOT_CAUSE_CONFIDENCE: **low**'
     );
 
     const result = validateCodexResearchResult(jsonl(report));
 
     assert.equal(result.accepted, true);
+  });
+
+  it('rejects mismatched Markdown confidence delimiters', () => {
+    for (const confidence of ['**high__', '__medium**', '`low__']) {
+      const report = validReport.replace(
+        'ROOT_CAUSE_CONFIDENCE: medium',
+        `ROOT_CAUSE_CONFIDENCE: ${confidence}`
+      );
+
+      const result = validateCodexResearchResult(jsonl(report));
+
+      assert.equal(result.accepted, false);
+      assert.match(
+        result.reasons.join('\n'),
+        /confidence must be high, medium, or low/
+      );
+    }
   });
 
   it('accepts labeled option paragraphs as structured alternatives', () => {

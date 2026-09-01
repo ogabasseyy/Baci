@@ -93,10 +93,8 @@ function sectionFor(text, heading) {
 
 function exactConfidenceValue(value) {
   const normalized = String(value || '').trim();
-  const formatted = normalized.match(
-    /^(?:\*\*|__|`)(high|medium|low)(?:\*\*|__|`)$/i
-  );
-  return (formatted ? formatted[1] : normalized).toLowerCase();
+  const formatted = normalized.match(/^(\*\*|__|`)(high|medium|low)\1$/i);
+  return (formatted ? formatted[2] : normalized).toLowerCase();
 }
 
 export function validateCodexResearchResult(stdout) {
@@ -140,7 +138,7 @@ export function validateCodexResearchResult(stdout) {
   }
   if (
     sections.SELECTED_FIX &&
-    /\b(?:no\s+(?:a\s+)?defensible(?:\s+\w+){0,4}\s+fix|(?:a\s+)?defensible\s+fix\s+(?:cannot|can't|can not)\s+(?:be\s+)?(?:established|identified|justified|determined)|none|unable to|cannot safely)\b/i.test(
+    /\b(?:no\s+(?:a\s+)?defensible(?:\s+\w+){0,4}\s+fix|(?:a\s+)?defensible\s+fix\s+(?:cannot|can't|can not)\s+(?:be\s+)?(?:established|identified|justified|determined)|(?:cannot|can't|can not|could not|couldn't)\s+(?:\w+\s+){0,6}(?:a\s+)?defensible(?:\s+\w+){0,4}\s+fix|none|unable to|cannot safely)\b/i.test(
       sections.SELECTED_FIX
     )
   ) {

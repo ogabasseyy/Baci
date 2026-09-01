@@ -4,7 +4,12 @@ import { fileURLToPath } from 'node:url';
 const CODEX_SHELL_WRAPPER = fileURLToPath(
   new URL('./remediation-codex-shell-wrapper.mjs', import.meta.url)
 );
-const CODEX_SHELL_PATHS = ['/bin/bash', '/usr/bin/bash', '/bin/sh'];
+const CODEX_SHELL_PATHS = [
+  '/bin/bash',
+  '/usr/bin/bash',
+  '/bin/sh',
+  '/usr/bin/sh',
+];
 
 function bindMount(source, destination, { readonly = false } = {}) {
   return `type=bind,src=${source},dst=${destination}${readonly ? ',readonly' : ''}`;

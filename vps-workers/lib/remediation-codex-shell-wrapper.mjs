@@ -7,6 +7,7 @@ const RESTRICTED_SHELLS = {
   '/bin/bash': '/usr/local/libexec/baci-real-bash',
   '/usr/bin/bash': '/usr/local/libexec/baci-real-bash',
   '/bin/sh': '/usr/local/libexec/baci-real-dash',
+  '/usr/bin/sh': '/usr/local/libexec/baci-real-dash',
 };
 
 function restrictedShell(invokedPath) {
@@ -61,6 +62,7 @@ const invokedAsShell =
   (process.argv[1] === '/bin/bash' ||
     process.argv[1] === '/usr/bin/bash' ||
     process.argv[1] === '/bin/sh' ||
+    process.argv[1] === '/usr/bin/sh' ||
     import.meta.url === pathToFileURL(process.argv[1]).href);
 if (invokedAsShell) {
   process.exit(runCodexShell());

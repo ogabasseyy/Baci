@@ -70,6 +70,24 @@ describe('Codex shell wrapper', () => {
     assert.equal(calls[0][0], '/usr/local/libexec/baci-real-bash');
   });
 
+  it('routes /usr/bin/sh requests through the restricted dash', () => {
+    const calls = [];
+    const status = runCodexShell({
+      args: ['-lc', 'printf restricted'],
+      env: { BACI_CODEX_SHELL_GID: '1001', BACI_CODEX_SHELL_UID: '1001' },
+      getgid: () => 1001,
+      getuid: () => 1001,
+      invokedPath: '/usr/bin/sh',
+      spawn: (...args) => {
+        calls.push(args);
+        return { status: 0 };
+      },
+    });
+
+    assert.equal(status, 0);
+    assert.equal(calls[0][0], '/usr/local/libexec/baci-real-dash');
+  });
+
   it('refuses to run when no restricted identity is supplied', () => {
     const calls = [];
     const status = runCodexShell({

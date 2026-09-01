@@ -34,4 +34,16 @@ describe('remediation container', () => {
     assert.match(dockerignore, /^\.env$/m);
     assert.match(dockerignore, /^\.env\.\*$/m);
   });
+
+  it('preserves a real shell for the read-only wrapper launch', () => {
+    const dockerfile = readFileSync(
+      join(workerRoot, 'Dockerfile.codex-remediator'),
+      'utf8'
+    );
+
+    assert.match(
+      dockerfile,
+      /cp \/bin\/dash \/usr\/local\/libexec\/baci-real-dash/
+    );
+  });
 });

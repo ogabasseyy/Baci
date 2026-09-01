@@ -76,7 +76,7 @@ describe('remediation Codex command', () => {
       '--rm',
       '--name',
       'baci-remediation-worktree',
-      '--cap-drop',
+      '--entrypoint',
     ]);
     assert.equal(result.args.includes('ALL'), true);
     assert.equal(result.args.includes('no-new-privileges'), true);
@@ -154,7 +154,7 @@ describe('remediation Codex command', () => {
     );
     assert.equal(
       result.args.includes(
-        'type=bind,src=/home/worker/.codex/auth.json,dst=/codex-auth/auth.json,readonly'
+        'type=bind,src=/home/worker/.codex/auth.json,dst=/codex-auth/source-auth.json,readonly'
       ),
       true
     );

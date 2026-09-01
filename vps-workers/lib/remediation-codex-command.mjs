@@ -1,5 +1,7 @@
 import { existsSync, lstatSync, mkdirSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { buildCodexDockerRuntimeArgs } from './remediation-codex-docker-args.mjs';
+import { buildCodexDockerRuntime } from './remediation-codex-docker-runtime.mjs';
 import { buildCodexSandboxArgs } from './remediation-codex-sandbox-args.mjs';
 import { readOnlyDockerSecurityArgs } from './remediation-readonly-seccomp.mjs';
 
@@ -24,7 +26,6 @@ function currentContainerIdentity() {
     uid: typeof process.getuid === 'function' ? process.getuid() : 1000,
   };
 }
-
 function ensureRealDirectoryPath(root, destination) {
   const relativePath = relative(root, destination);
   const outsideRoot =
@@ -43,49 +44,6 @@ function ensureRealDirectoryPath(root, destination) {
       mkdirSync(current);
     }
   }
-}
-
-function buildDockerRuntimeArgs({
-  containerName,
-  readOnly = false,
-  repoDir,
-  worktreeDir,
-}) {
-  const { gid, uid } = currentContainerIdentity();
-  return [
-    'run',
-    '--rm',
-    '--name',
-    containerName,
-    '--cap-drop',
-    'ALL',
-    '--security-opt',
-    'no-new-privileges',
-    '--pids-limit',
-    '512',
-    '--cpus',
-    '1',
-    '--memory',
-    '2g',
-    '--memory-swap',
-    '2g',
-    '--tmpfs',
-    '/tmp:rw,nosuid,nodev,size=1g',
-    '--tmpfs',
-    `/codex-home:rw,nosuid,nodev,size=64m,uid=${uid},gid=${gid},mode=700`,
-    '--user',
-    `${uid}:${gid}`,
-    '--env',
-    'HOME=/tmp',
-    '--env',
-    'GIT_OPTIONAL_LOCKS=0',
-    '--mount',
-    bindMount(worktreeDir, worktreeDir, { readonly: readOnly }),
-    '--mount',
-    bindMount(join(repoDir, '.git'), join(repoDir, '.git'), {
-      readonly: true,
-    }),
-  ];
 }
 
 function addDependencyMounts({
@@ -152,22 +110,25 @@ export function buildRemediationCodexCommand({
   }
   const dockerBin = env.DOCKER_BIN || 'docker';
   const containerName = containerNameFor(worktreeDir);
-  const dockerArgs = buildDockerRuntimeArgs({
+  const { gid, uid } = currentContainerIdentity();
+  const runtime = buildCodexDockerRuntime({
+    codexHome,
+    gid,
+    readOnly,
+    uid,
+  });
+  const dockerArgs = buildCodexDockerRuntimeArgs({
     containerName,
     readOnly,
     repoDir,
+    runtime,
     worktreeDir,
   });
   if (readOnly) {
     dockerArgs.push('--read-only', ...readOnlyDockerSecurityArgs(env));
   }
   dockerArgs.push(
-    '--env',
-    'CODEX_HOME=/codex-home',
-    '--mount',
-    bindMount(join(codexHome, 'auth.json'), '/codex-auth/auth.json', {
-      readonly: true,
-    }),
+    ...runtime.authArgs,
     '--mount',
     bindMount(containerCodexBin, '/opt/codex/bin/codex', { readonly: true })
   );
@@ -197,9 +158,8 @@ export function buildRemediationCodexCommand({
     '--workdir',
     worktreeDir,
     image,
-    'sh',
     '-lc',
-    'umask 077; mkdir -p "$CODEX_HOME"; chmod 700 "$CODEX_HOME"; cp /codex-auth/auth.json "$CODEX_HOME/auth.json"; chmod 600 "$CODEX_HOME/auth.json"; exec /opt/codex/bin/codex "$@"',
+    runtime.launchScript,
     'codex',
     ...(enableSearch ? ['--search'] : []),
     ...(readOnly ? [] : ['--enable', 'use_legacy_landlock']),
@@ -245,10 +205,18 @@ export function buildRemediationVerificationCommand({
   } else {
     mkdirSync(pnpmStorePath, { recursive: true });
   }
-  const dockerArgs = buildDockerRuntimeArgs({
+  const { gid, uid } = currentContainerIdentity();
+  const runtime = buildCodexDockerRuntime({
+    codexHome: env.CODEX_HOME || join(env.HOME, '.codex'),
+    gid,
+    readOnly: false,
+    uid,
+  });
+  const dockerArgs = buildCodexDockerRuntimeArgs({
     containerName,
     readOnly: false,
     repoDir,
+    runtime,
     worktreeDir,
   });
   addDependencyMounts({
@@ -280,7 +248,6 @@ export function buildRemediationVerificationCommand({
     '--workdir',
     worktreeDir,
     image,
-    'sh',
     '-lc',
     `${dependencyCopy} && ${verifyCommand}`
   );

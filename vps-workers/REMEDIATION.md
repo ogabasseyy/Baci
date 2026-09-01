@@ -24,9 +24,12 @@ node jobs/sentry-mobile-error-remediator.mjs
 
 Autofix mode is off by default. With `BACI_REMEDIATION_AUTOFIX_ENABLED=1`, the
 worker creates an isolated worktree from the full checkout at `BACI_REPO_DIR`,
-runs Codex in an ephemeral Docker container with all Linux capabilities dropped,
-`no-new-privileges`, a tmpfs home, a read-only auth-file mount, and only the
-temporary worktree writable. The deploy script builds the pinned
+runs Codex in an ephemeral Docker container with `no-new-privileges`, a tmpfs
+home, a read-only auth-file mount, and only the temporary worktree writable.
+Implementation containers drop all Linux capabilities; read-only research adds
+only the narrowly scoped DAC and identity capabilities needed for the parent
+Codex process to read auth and drops generated shells to the worker UID. The
+deploy script builds the pinned
 `Dockerfile.codex-remediator` image and injects its immutable commit tag into
 both remediation cron entries. The worker then inspects changed files, runs
 the immutable lint, typecheck, and test gates without provider secrets in the
@@ -71,8 +74,12 @@ seccomp/v0.2.3 profile (source:
 <https://github.com/moby/profiles/tree/seccomp/v0.2.3/seccomp>) and adds only
 `clone`, `clone3`, `mount`, `umount`, `umount2`, `unshare`, and `pivot_root`
 for the namespace operations that the sandboxed toolchain may request;
-the outer container still drops all capabilities, enables
-`no-new-privileges`, and keeps the worktree and dependency mounts read-only.
+the outer container enables `no-new-privileges` and keeps the worktree and
+dependency mounts read-only; implementation containers additionally drop all
+capabilities, while research uses only the narrowly scoped capabilities needed
+to protect its auth handoff. The generated research shell is replaced with a
+wrapper that drops to the worker UID before running `/bin/sh`, and the copied
+auth file remains root-only inside the container.
 The inner read-only Codex invocation forces its legacy Landlock fallback instead
 of starting bubblewrap, because this VPS does not permit unprivileged user
 namespaces. Landlock keeps the read-only command's process-level filesystem and

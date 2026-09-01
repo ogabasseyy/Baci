@@ -48,6 +48,10 @@ describe('read-only Docker Codex command', () => {
       true
     );
     assert.equal(
+      result.args.some((value) => value.endsWith('dst=/usr/bin/bash,readonly')),
+      true
+    );
+    assert.equal(
       result.args.some((value) => value.endsWith('dst=/bin/sh,readonly')),
       true
     );

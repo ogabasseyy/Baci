@@ -45,5 +45,9 @@ describe('remediation container', () => {
       dockerfile,
       /cp \/bin\/dash \/usr\/local\/libexec\/baci-real-dash/
     );
+    assert.match(
+      dockerfile,
+      /cp \/bin\/bash \/usr\/local\/libexec\/baci-real-bash/
+    );
   });
 });

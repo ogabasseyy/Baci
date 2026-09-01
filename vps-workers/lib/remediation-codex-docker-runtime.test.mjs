@@ -32,7 +32,7 @@ describe('buildCodexDockerRuntime', () => {
     assert.match(runtime.launchScript, /chmod 400/);
     assert.deepEqual(
       runtime.authArgs.filter((value) => value.startsWith('--mount')),
-      ['--mount', '--mount', '--mount']
+      ['--mount', '--mount', '--mount', '--mount']
     );
     assert.ok(
       runtime.authArgs.some((value) =>
@@ -41,6 +41,11 @@ describe('buildCodexDockerRuntime', () => {
     );
     assert.ok(
       runtime.authArgs.some((value) => value.includes('dst=/bin/bash,readonly'))
+    );
+    assert.ok(
+      runtime.authArgs.some((value) =>
+        value.includes('dst=/usr/bin/bash,readonly')
+      )
     );
     assert.ok(
       runtime.authArgs.some((value) => value.includes('dst=/bin/sh,readonly'))

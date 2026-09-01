@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 
 const RESTRICTED_SHELLS = {
   '/bin/bash': '/usr/local/libexec/baci-real-bash',
+  '/usr/bin/bash': '/usr/local/libexec/baci-real-bash',
   '/bin/sh': '/usr/local/libexec/baci-real-dash',
 };
 
@@ -58,6 +59,7 @@ export function runCodexShell({
 const invokedAsShell =
   process.argv[1] &&
   (process.argv[1] === '/bin/bash' ||
+    process.argv[1] === '/usr/bin/bash' ||
     process.argv[1] === '/bin/sh' ||
     import.meta.url === pathToFileURL(process.argv[1]).href);
 if (invokedAsShell) {

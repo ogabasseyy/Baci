@@ -49,6 +49,27 @@ describe('Codex shell wrapper', () => {
     assert.equal(calls[0][0], '/usr/local/libexec/baci-real-bash');
   });
 
+  it('preserves the restricted identity for /usr/bin/bash requests', () => {
+    const calls = [];
+    const status = runCodexShell({
+      args: ['-lc', 'printf "%s" "$(id -u)"'],
+      env: { BACI_CODEX_SHELL_GID: '1001', BACI_CODEX_SHELL_UID: '1001' },
+      getgid: () => 0,
+      getuid: () => 0,
+      invokedPath: '/usr/bin/bash',
+      setgid: () => 0,
+      setgroups: () => undefined,
+      setuid: () => 0,
+      spawn: (...args) => {
+        calls.push(args);
+        return { status: 0 };
+      },
+    });
+
+    assert.equal(status, 0);
+    assert.equal(calls[0][0], '/usr/local/libexec/baci-real-bash');
+  });
+
   it('refuses to run when no restricted identity is supplied', () => {
     const calls = [];
     const status = runCodexShell({

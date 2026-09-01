@@ -12,6 +12,7 @@ RUN apt-get update \
   && corepack prepare pnpm@11.7.0 --activate \
   && chmod -R a+rX "$COREPACK_HOME" \
   && mkdir -p /usr/local/libexec \
+  && cp /bin/bash /usr/local/libexec/baci-real-bash \
   && cp /bin/dash /usr/local/libexec/baci-real-dash
 
 WORKDIR /workspace

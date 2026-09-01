@@ -3,7 +3,14 @@
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-const RESTRICTED_SHELL = '/usr/local/libexec/baci-real-dash';
+const RESTRICTED_SHELLS = {
+  '/bin/bash': '/usr/local/libexec/baci-real-bash',
+  '/bin/sh': '/usr/local/libexec/baci-real-dash',
+};
+
+function restrictedShell(invokedPath) {
+  return RESTRICTED_SHELLS[invokedPath] ?? RESTRICTED_SHELLS['/bin/sh'];
+}
 
 function positiveInteger(value) {
   const parsed = Number(value);
@@ -15,6 +22,7 @@ export function runCodexShell({
   env = process.env,
   getgid = process.getgid,
   getuid = process.getuid,
+  invokedPath = process.argv[1],
   setgid = process.setgid,
   setgroups = process.setgroups,
   setuid = process.setuid,
@@ -39,7 +47,12 @@ export function runCodexShell({
     return 126;
   }
 
-  return spawn(RESTRICTED_SHELL, args, { env, stdio: 'inherit' }).status ?? 1;
+  return (
+    spawn(restrictedShell(invokedPath), args, {
+      env,
+      stdio: 'inherit',
+    }).status ?? 1
+  );
 }
 
 const invokedAsShell =

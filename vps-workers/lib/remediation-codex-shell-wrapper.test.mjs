@@ -11,6 +11,7 @@ describe('Codex shell wrapper', () => {
       env: { BACI_CODEX_SHELL_GID: '1001', BACI_CODEX_SHELL_UID: '1001' },
       getgid: () => 0,
       getuid: () => 0,
+      invokedPath: '/bin/sh',
       setgid: (gid) => identityCalls.push(['gid', gid]),
       setgroups: (groups) => identityCalls.push(['groups', groups]),
       setuid: (uid) => identityCalls.push(['uid', uid]),
@@ -28,6 +29,24 @@ describe('Codex shell wrapper', () => {
     ]);
     assert.equal(calls[0][0], '/usr/local/libexec/baci-real-dash');
     assert.deepEqual(calls[0][1], ['-lc', 'printf restricted']);
+  });
+
+  it('preserves Bash syntax for Bash requests after dropping privileges', () => {
+    const calls = [];
+    const status = runCodexShell({
+      args: ['-lc', '[[ -n "$BASH_VERSION" ]]'],
+      env: { BACI_CODEX_SHELL_GID: '1001', BACI_CODEX_SHELL_UID: '1001' },
+      getgid: () => 1001,
+      getuid: () => 1001,
+      invokedPath: '/bin/bash',
+      spawn: (...args) => {
+        calls.push(args);
+        return { status: 0 };
+      },
+    });
+
+    assert.equal(status, 0);
+    assert.equal(calls[0][0], '/usr/local/libexec/baci-real-bash');
   });
 
   it('refuses to run when no restricted identity is supplied', () => {

@@ -74,7 +74,7 @@ describe('Jumia orders GET', () => {
     mocks.requireMerchantFeatureAccess.mockResolvedValue(null);
   });
 
-  it('uses the integration shop_id to scope cached orders', async () => {
+  it('uses the integration shop and marketplace scope for cached orders', async () => {
     const integrationQuery = {
       eq: vi.fn(),
       maybeSingle: vi.fn().mockResolvedValue({
@@ -85,7 +85,19 @@ describe('Jumia orders GET', () => {
         error: null,
       }),
     };
-    integrationQuery.eq.mockReturnValue(integrationQuery);
+    let integrationEqCalls = 0;
+    integrationQuery.eq.mockImplementation(() => {
+      integrationEqCalls += 1;
+      return integrationEqCalls === 8
+        ? Promise.resolve({
+            data: [
+              { marketplace_key: 'NG-main' },
+              { marketplace_key: 'NG-express' },
+            ],
+            error: null,
+          })
+        : integrationQuery;
+    });
 
     const orderQuery = {
       eq: vi.fn(),
@@ -123,9 +135,6 @@ describe('Jumia orders GET', () => {
       'jumia_shop_id',
       'jumia-shop-123'
     );
-    expect(orderQuery.in).toHaveBeenCalledWith('marketplace_key', [
-      'NG-main',
-      'default',
-    ]);
+    expect(orderQuery.in).toHaveBeenCalledWith('marketplace_key', ['NG-main']);
   });
 });

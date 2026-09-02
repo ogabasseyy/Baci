@@ -56,7 +56,9 @@ export async function handleJumiaSelfAuthorizationConnectRequest(args: {
       let submittedCredentials = body.refreshToken
         ? { clientId: body.clientId, refreshToken: body.refreshToken }
         : undefined;
-      if (body.discoveryId) {
+      // A submitted refresh token is an explicit reauthorization. Do not let
+      // an older recovery ID replace credentials the merchant just entered.
+      if (body.discoveryId && !body.refreshToken) {
         discoveryClaim = await claimJumiaDiscoveryCredentials({
           discoveryId: body.discoveryId,
           merchantId,
@@ -82,7 +84,7 @@ export async function handleJumiaSelfAuthorizationConnectRequest(args: {
       try {
         validated = await validateJumiaSelfAuthorizationForConnect({
           clientKeyHash,
-          discoveryId: body.discoveryId,
+          discoveryId: discoveryClaim ? body.discoveryId : undefined,
           encryptionKey,
           merchantId,
           onCredentialsRotated: async ({ credentialCiphertext }) => {

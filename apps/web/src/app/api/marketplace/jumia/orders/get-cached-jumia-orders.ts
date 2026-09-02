@@ -85,13 +85,9 @@ export async function getCachedJumiaOrders(request: NextRequest) {
       .order('synced_at', { ascending: false })
       .range(offset, offset + limit - 1);
     if (orderScope?.kind === 'ok') {
-      const marketplaceKeys =
-        orderScope.marketplaceKey === 'default'
-          ? ['default']
-          : [orderScope.marketplaceKey, 'default'];
       query = query
         .eq('jumia_shop_id', orderScope.shopId)
-        .in('marketplace_key', marketplaceKeys);
+        .in('marketplace_key', orderScope.cachedMarketplaceKeys);
     }
     if (status) query = query.eq('status', status);
     const { data: orders, error: ordersError } = await query;

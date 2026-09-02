@@ -435,6 +435,44 @@ describe('handleJumiaSelfAuthorizationConnectRequest', () => {
     );
   });
 
+  it('uses fresh credentials when replacing a resumed discovery', async () => {
+    vi.mocked(validateJumiaSelfAuthorization).mockResolvedValue({
+      credentials: {
+        clientId: 'client-1',
+        refreshToken: 'fresh-refresh',
+        accessToken: 'access-1',
+      },
+      accessTokenExpiresAt: '2026-03-27T10:00:00.000Z',
+      refreshTokenExpiresAt: '2026-04-27T10:00:00.000Z',
+      shops: [],
+    });
+    vi.mocked(createJumiaSelfAuthorizationDiscovery).mockResolvedValue(
+      'replacement-discovery'
+    );
+
+    const response = await handleJumiaSelfAuthorizationConnectRequest({
+      body: {
+        connectionType: 'self_authorization',
+        operation: 'discover',
+        clientId: 'client-1',
+        refreshToken: 'fresh-refresh',
+        discoveryId: '00000000-0000-4000-8000-000000000099',
+      },
+      encryptionKey: 'a'.repeat(44),
+      merchantId: '00000000-0000-4000-8000-000000000001',
+      supabase: buildSupabase(),
+    });
+
+    expect(response.status).toBe(200);
+    expect(validateJumiaSelfAuthorization).toHaveBeenCalledWith(
+      { clientId: 'client-1', refreshToken: 'fresh-refresh' },
+      expect.any(Object)
+    );
+    expect(claimJumiaSelfAuthorizationDiscovery).not.toHaveBeenCalled();
+    expect(claimJumiaResumedAuthorization).not.toHaveBeenCalled();
+    expect(createJumiaSelfAuthorizationDiscovery).toHaveBeenCalled();
+  });
+
   it('releases a discovery claim when its credentials cannot be decrypted', async () => {
     vi.mocked(claimJumiaSelfAuthorizationDiscovery).mockResolvedValueOnce({
       claimToken: 'claim-1',

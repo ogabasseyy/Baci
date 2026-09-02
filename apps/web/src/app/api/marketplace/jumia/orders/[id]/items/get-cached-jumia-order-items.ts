@@ -30,17 +30,13 @@ export async function getCachedJumiaOrderItems(args: {
   if (scope.kind === 'database_error') return scope;
   if (scope.kind !== 'ok') return { kind: 'missing' };
 
-  const marketplaceKeys =
-    scope.marketplaceKey === 'default'
-      ? ['default']
-      : [scope.marketplaceKey, 'default'];
   const { data, error } = await args.supabase
     .from('jumia_orders')
     .select('jumia_order_id, jumia_order_number, items')
     .eq('merchant_id', args.merchantId)
     .eq('jumia_order_id', args.orderId)
     .eq('jumia_shop_id', scope.shopId)
-    .in('marketplace_key', marketplaceKeys)
+    .in('marketplace_key', scope.cachedMarketplaceKeys)
     .maybeSingle();
 
   if (error) return { kind: 'database_error', message: error.message };

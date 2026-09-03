@@ -27,7 +27,7 @@ describe('Codex shell wrapper', () => {
       ['gid', 1001],
       ['uid', 1001],
     ]);
-    assert.equal(calls[0][0], '/usr/local/libexec/baci-real-dash');
+    assert.equal(calls[0][0], '/bin/dash');
     assert.deepEqual(calls[0][1], ['-lc', 'printf restricted']);
   });
 
@@ -85,7 +85,67 @@ describe('Codex shell wrapper', () => {
     });
 
     assert.equal(status, 0);
-    assert.equal(calls[0][0], '/usr/local/libexec/baci-real-dash');
+    assert.equal(calls[0][0], '/bin/dash');
+  });
+
+  it('drops privileges for the alternate copied dash path', () => {
+    const calls = [];
+    const identityCalls = [];
+    const status = runCodexShell({
+      args: ['-lc', 'printf restricted'],
+      env: {
+        BACI_CODEX_SHELL_BOOTSTRAP: '1',
+        BACI_CODEX_SHELL_GID: '1001',
+        BACI_CODEX_SHELL_UID: '1001',
+      },
+      getgid: () => 0,
+      getuid: () => 0,
+      invokedPath: '/usr/local/libexec/baci-real-dash',
+      pid: 42,
+      setgid: (gid) => identityCalls.push(['gid', gid]),
+      setgroups: (groups) => identityCalls.push(['groups', groups]),
+      setuid: (uid) => identityCalls.push(['uid', uid]),
+      spawn: (...args) => {
+        calls.push(args);
+        return { status: 0 };
+      },
+    });
+
+    assert.equal(status, 0);
+    assert.deepEqual(identityCalls, [
+      ['groups', []],
+      ['gid', 1001],
+      ['uid', 1001],
+    ]);
+    assert.equal(calls[0][0], '/bin/dash');
+  });
+
+  it('keeps root only for the PID 1 bootstrap invocation', () => {
+    const calls = [];
+    const identityCalls = [];
+    const status = runCodexShell({
+      args: ['-lc', 'exec /opt/codex/bin/codex'],
+      env: {
+        BACI_CODEX_SHELL_BOOTSTRAP: '1',
+        BACI_CODEX_SHELL_GID: '1001',
+        BACI_CODEX_SHELL_UID: '1001',
+      },
+      getgid: () => 0,
+      getuid: () => 0,
+      invokedPath: '/usr/local/libexec/baci-real-dash',
+      pid: 1,
+      setgid: (gid) => identityCalls.push(['gid', gid]),
+      setgroups: (groups) => identityCalls.push(['groups', groups]),
+      setuid: (uid) => identityCalls.push(['uid', uid]),
+      spawn: (...args) => {
+        calls.push(args);
+        return { status: 0 };
+      },
+    });
+
+    assert.equal(status, 0);
+    assert.deepEqual(identityCalls, []);
+    assert.equal(calls[0][0], '/bin/dash');
   });
 
   it('refuses to run when no restricted identity is supplied', () => {

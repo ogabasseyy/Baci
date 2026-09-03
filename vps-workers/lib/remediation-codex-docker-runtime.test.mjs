@@ -32,7 +32,7 @@ describe('buildCodexDockerRuntime', () => {
     assert.match(runtime.launchScript, /chmod 400/);
     assert.deepEqual(
       runtime.authArgs.filter((value) => value.startsWith('--mount')),
-      ['--mount', '--mount', '--mount', '--mount', '--mount']
+      ['--mount', '--mount', '--mount', '--mount', '--mount', '--mount']
     );
     assert.ok(
       runtime.authArgs.some((value) =>
@@ -55,6 +55,13 @@ describe('buildCodexDockerRuntime', () => {
         value.includes('dst=/usr/bin/sh,readonly')
       )
     );
+    assert.ok(
+      runtime.authArgs.some((value) =>
+        value.includes('dst=/usr/local/libexec/baci-real-dash,readonly')
+      )
+    );
+    assert.ok(runtime.authArgs.includes('BACI_CODEX_SHELL_BOOTSTRAP=1'));
+    assert.match(runtime.launchScript, /unset BACI_CODEX_SHELL_BOOTSTRAP/);
   });
 
   it('builds a writable runtime with the supplied worker identity', () => {

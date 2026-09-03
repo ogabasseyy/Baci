@@ -101,6 +101,25 @@ describe('remediation research gate', () => {
     assert.match(result.reasons.join('\n'), /defensible selected fix/);
   });
 
+  it('rejects passive reports that leave the selected fix unavailable', () => {
+    const reports = [
+      'SELECTED_FIX: The defensible fix was not identified from the available evidence.',
+      'SELECTED_FIX: The safe code change has not been established.',
+      'SELECTED_FIX: The selected fix is unavailable without production traces.',
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, false);
+      assert.match(result.reasons.join('\n'), /defensible selected fix/);
+    }
+  });
+
   it('rejects reverse-order wording that cannot establish a defensible fix', () => {
     const reports = [
       'SELECTED_FIX: I cannot establish a defensible fix without production traces.',

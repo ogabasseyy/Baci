@@ -83,7 +83,7 @@ export function buildCodexDockerRuntime({ codexHome, gid, readOnly, uid }) {
       '--user',
       `${containerUid}:${containerGid}`,
     ],
-    launchShell: '/usr/local/libexec/baci-real-dash',
+    launchShell: readOnly ? '/usr/local/libexec/baci-real-dash' : '/bin/sh',
     launchScript: readOnly
       ? 'umask 077; mkdir -p "$CODEX_HOME"; chmod 700 /codex-auth "$CODEX_HOME"; cp /codex-auth/source-auth.json "$CODEX_HOME/auth.json"; chmod 400 "$CODEX_HOME/auth.json"; unset BACI_CODEX_SHELL_BOOTSTRAP; exec /opt/codex/bin/codex "$@"'
       : 'umask 077; mkdir -p "$CODEX_HOME"; chmod 700 "$CODEX_HOME"; cp /codex-auth/auth.json "$CODEX_HOME/auth.json"; chmod 600 "$CODEX_HOME/auth.json"; exec /opt/codex/bin/codex "$@"',

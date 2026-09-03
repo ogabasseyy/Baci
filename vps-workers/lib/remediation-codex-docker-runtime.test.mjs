@@ -88,7 +88,7 @@ describe('buildCodexDockerRuntime', () => {
       '2001:2002',
     ]);
     assert.deepEqual(runtime.capabilityArgs, []);
-    assert.equal(runtime.launchShell, '/usr/local/libexec/baci-real-dash');
+    assert.equal(runtime.launchShell, '/bin/sh');
     assert.match(runtime.launchScript, /auth\.json/);
     assert.match(runtime.launchScript, /chmod 600/);
     assert.ok(runtime.authArgs.includes('--mount'));

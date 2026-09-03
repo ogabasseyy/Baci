@@ -138,7 +138,7 @@ export function validateCodexResearchResult(stdout) {
   }
   if (
     sections.SELECTED_FIX &&
-    /\b(?:no\s+(?:a\s+)?defensible(?:\s+\w+){0,4}\s+fix|(?:a\s+)?defensible\s+fix\s+(?:cannot|can't|can not)\s+(?:be\s+)?(?:established|identified|justified|determined)|(?:cannot|can't|can not|could not|couldn't)\s+(?:\w+\s+){0,6}(?:a\s+)?defensible(?:\s+\w+){0,4}\s+fix|none|unable to|cannot safely)\b/i.test(
+    /\b(?:no\s+(?:a\s+)?defensible(?!(?:\s+\w+){0,4}\s+reason\b)(?:\s+\w+){0,4}\s+fix|(?:a\s+)?defensible\s+fix\s+(?:cannot|can't|can not)\s+(?:be\s+)?(?:established|identified|justified|determined)|(?:cannot|can't|can not|could not|couldn't)\s+(?:\w+\s+){0,6}(?:a\s+)?defensible(?:\s+\w+){0,4}\s+fix|none|unable to|cannot safely)\b/i.test(
       sections.SELECTED_FIX
     )
   ) {

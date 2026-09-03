@@ -105,6 +105,17 @@ describe('remediation research gate', () => {
     }
   });
 
+  it('accepts affirmative wording that rejects rejecting the selected fix', () => {
+    const report = validReport.replace(
+      'SELECTED_FIX: smallest code fix',
+      'SELECTED_FIX: There is no defensible reason to reject this fix; apply the bounded parser change'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, true);
+  });
+
   it('extracts text from Codex content blocks without trusting other events', () => {
     const output = [
       JSON.stringify({

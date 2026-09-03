@@ -32,17 +32,7 @@ describe('buildCodexDockerRuntime', () => {
     assert.match(runtime.launchScript, /chmod 400/);
     assert.deepEqual(
       runtime.authArgs.filter((value) => value.startsWith('--mount')),
-      [
-        '--mount',
-        '--mount',
-        '--mount',
-        '--mount',
-        '--mount',
-        '--mount',
-        '--mount',
-        '--mount',
-        '--mount',
-      ]
+      Array.from({ length: 11 }, () => '--mount')
     );
     assert.ok(
       runtime.authArgs.some((value) =>
@@ -70,6 +60,8 @@ describe('buildCodexDockerRuntime', () => {
       '/usr/bin/dash',
       '/usr/local/libexec/baci-real-bash',
       '/usr/local/libexec/baci-real-dash',
+      '/usr/local/libexec/baci-shell-bash',
+      '/usr/local/libexec/baci-shell-dash',
     ]) {
       assert.ok(
         runtime.authArgs.some((value) =>

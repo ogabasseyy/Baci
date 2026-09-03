@@ -43,19 +43,23 @@ describe('remediation container', () => {
 
     assert.match(
       dockerfile,
-      /cp \/bin\/dash \/usr\/local\/libexec\/baci-real-dash/
+      /cp \/bin\/dash \/usr\/local\/libexec\/baci-raw-dash/
     );
     assert.match(
       dockerfile,
-      /cp \/bin\/bash \/usr\/local\/libexec\/baci-real-bash/
+      /cp \/bin\/bash \/usr\/local\/libexec\/baci-raw-bash/
     );
     assert.match(
       dockerfile,
-      /cp \/bin\/bash \/usr\/local\/libexec\/baci-shell-bash/
+      /touch[\s\\\n]+(?:.*\\\n\s+)*\s+\/usr\/local\/libexec\/baci-shell-bash/
     );
     assert.match(
       dockerfile,
-      /cp \/bin\/dash \/usr\/local\/libexec\/baci-shell-dash/
+      /touch[\s\\\n]+(?:.*\\\n\s+)*\s+\/usr\/local\/libexec\/baci-shell-dash/
+    );
+    assert.doesNotMatch(
+      dockerfile,
+      /cp \/bin\/(?:bash|dash) \/usr\/local\/libexec\/baci-shell-/
     );
   });
 });

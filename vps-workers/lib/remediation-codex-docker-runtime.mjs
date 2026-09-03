@@ -13,6 +13,8 @@ const CODEX_SHELL_PATHS = [
   '/usr/bin/dash',
   '/usr/local/libexec/baci-real-bash',
   '/usr/local/libexec/baci-real-dash',
+  '/usr/local/libexec/baci-shell-bash',
+  '/usr/local/libexec/baci-shell-dash',
 ];
 
 function bindMount(source, destination, { readonly = false } = {}) {

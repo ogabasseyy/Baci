@@ -27,7 +27,7 @@ describe('Codex shell wrapper', () => {
       ['gid', 1001],
       ['uid', 1001],
     ]);
-    assert.equal(calls[0][0], '/usr/local/libexec/baci-shell-dash');
+    assert.equal(calls[0][0], '/usr/local/libexec/baci-raw-dash');
     assert.deepEqual(calls[0][1], ['-lc', 'printf restricted']);
   });
 
@@ -46,7 +46,7 @@ describe('Codex shell wrapper', () => {
     });
 
     assert.equal(status, 0);
-    assert.equal(calls[0][0], '/usr/local/libexec/baci-shell-bash');
+    assert.equal(calls[0][0], '/usr/local/libexec/baci-raw-bash');
   });
 
   it('preserves the restricted identity for /usr/bin/bash requests', () => {
@@ -67,7 +67,7 @@ describe('Codex shell wrapper', () => {
     });
 
     assert.equal(status, 0);
-    assert.equal(calls[0][0], '/usr/local/libexec/baci-shell-bash');
+    assert.equal(calls[0][0], '/usr/local/libexec/baci-raw-bash');
   });
 
   it('routes /usr/bin/sh requests through the restricted dash', () => {
@@ -85,7 +85,7 @@ describe('Codex shell wrapper', () => {
     });
 
     assert.equal(status, 0);
-    assert.equal(calls[0][0], '/usr/local/libexec/baci-shell-dash');
+    assert.equal(calls[0][0], '/usr/local/libexec/baci-raw-dash');
   });
 
   it('drops privileges for the alternate copied dash path', () => {
@@ -117,7 +117,7 @@ describe('Codex shell wrapper', () => {
       ['gid', 1001],
       ['uid', 1001],
     ]);
-    assert.equal(calls[0][0], '/usr/local/libexec/baci-shell-dash');
+    assert.equal(calls[0][0], '/usr/local/libexec/baci-raw-dash');
   });
 
   it('drops privileges when a generated command selects /bin/dash', () => {
@@ -144,7 +144,7 @@ describe('Codex shell wrapper', () => {
       ['gid', 1001],
       ['uid', 1001],
     ]);
-    assert.equal(calls[0][0], '/usr/local/libexec/baci-shell-dash');
+    assert.equal(calls[0][0], '/usr/local/libexec/baci-raw-dash');
   });
 
   it('drops privileges when a generated command selects the copied bash path', () => {
@@ -171,7 +171,7 @@ describe('Codex shell wrapper', () => {
       ['gid', 1001],
       ['uid', 1001],
     ]);
-    assert.equal(calls[0][0], '/usr/local/libexec/baci-shell-bash');
+    assert.equal(calls[0][0], '/usr/local/libexec/baci-raw-bash');
   });
 
   it('keeps root only for the PID 1 bootstrap invocation', () => {
@@ -199,7 +199,38 @@ describe('Codex shell wrapper', () => {
 
     assert.equal(status, 0);
     assert.deepEqual(identityCalls, []);
-    assert.equal(calls[0][0], '/usr/local/libexec/baci-shell-dash');
+    assert.equal(calls[0][0], '/usr/local/libexec/baci-raw-dash');
+  });
+
+  it('drops privileges when a generated command selects a delegated shell path', () => {
+    const calls = [];
+    const identityCalls = [];
+    const status = runCodexShell({
+      args: ['-lc', 'printf restricted'],
+      env: {
+        BACI_CODEX_SHELL_BOOTSTRAP: '1',
+        BACI_CODEX_SHELL_GID: '1001',
+        BACI_CODEX_SHELL_UID: '1001',
+      },
+      getgid: () => 0,
+      getuid: () => 0,
+      invokedPath: '/usr/local/libexec/baci-shell-dash',
+      setgid: (gid) => identityCalls.push(['gid', gid]),
+      setgroups: (groups) => identityCalls.push(['groups', groups]),
+      setuid: (uid) => identityCalls.push(['uid', uid]),
+      spawn: (...args) => {
+        calls.push(args);
+        return { status: 0 };
+      },
+    });
+
+    assert.equal(status, 0);
+    assert.deepEqual(identityCalls, [
+      ['groups', []],
+      ['gid', 1001],
+      ['uid', 1001],
+    ]);
+    assert.equal(calls[0][0], '/usr/local/libexec/baci-raw-dash');
   });
 
   it('refuses to run when no restricted identity is supplied', () => {

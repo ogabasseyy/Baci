@@ -4,14 +4,16 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const RESTRICTED_SHELLS = {
-  '/bin/bash': '/usr/local/libexec/baci-shell-bash',
-  '/usr/bin/bash': '/usr/local/libexec/baci-shell-bash',
-  '/bin/sh': '/usr/local/libexec/baci-shell-dash',
-  '/usr/bin/sh': '/usr/local/libexec/baci-shell-dash',
-  '/bin/dash': '/usr/local/libexec/baci-shell-dash',
-  '/usr/bin/dash': '/usr/local/libexec/baci-shell-dash',
-  '/usr/local/libexec/baci-real-bash': '/usr/local/libexec/baci-shell-bash',
-  '/usr/local/libexec/baci-real-dash': '/usr/local/libexec/baci-shell-dash',
+  '/bin/bash': '/usr/local/libexec/baci-raw-bash',
+  '/usr/bin/bash': '/usr/local/libexec/baci-raw-bash',
+  '/bin/sh': '/usr/local/libexec/baci-raw-dash',
+  '/usr/bin/sh': '/usr/local/libexec/baci-raw-dash',
+  '/bin/dash': '/usr/local/libexec/baci-raw-dash',
+  '/usr/bin/dash': '/usr/local/libexec/baci-raw-dash',
+  '/usr/local/libexec/baci-real-bash': '/usr/local/libexec/baci-raw-bash',
+  '/usr/local/libexec/baci-real-dash': '/usr/local/libexec/baci-raw-dash',
+  '/usr/local/libexec/baci-shell-bash': '/usr/local/libexec/baci-raw-bash',
+  '/usr/local/libexec/baci-shell-dash': '/usr/local/libexec/baci-raw-dash',
 };
 
 // Only the container's PID 1 may use this path for the trusted auth bootstrap.

@@ -77,6 +77,7 @@ function addDependencyMounts({
 
 export function buildRemediationCodexCommand({
   codexBin,
+  containerIdentity,
   env,
   enableSearch = true,
   prompt,
@@ -110,7 +111,7 @@ export function buildRemediationCodexCommand({
   }
   const dockerBin = env.DOCKER_BIN || 'docker';
   const containerName = containerNameFor(worktreeDir);
-  const { gid, uid } = currentContainerIdentity();
+  const { gid, uid } = containerIdentity || currentContainerIdentity();
   const runtime = buildCodexDockerRuntime({
     codexHome,
     gid,
@@ -182,6 +183,7 @@ export function buildRemediationCodexCommand({
 }
 
 export function buildRemediationVerificationCommand({
+  containerIdentity,
   env,
   repoDir,
   worktreeDir,
@@ -205,7 +207,7 @@ export function buildRemediationVerificationCommand({
   } else {
     mkdirSync(pnpmStorePath, { recursive: true });
   }
-  const { gid, uid } = currentContainerIdentity();
+  const { gid, uid } = containerIdentity || currentContainerIdentity();
   const runtime = buildCodexDockerRuntime({
     codexHome: env.CODEX_HOME || join(env.HOME, '.codex'),
     gid,

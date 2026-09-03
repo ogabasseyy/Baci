@@ -138,7 +138,7 @@ export function validateCodexResearchResult(stdout) {
   }
   if (
     sections.SELECTED_FIX &&
-    /\b(?:no\s+(?:a\s+)?defensible(?!(?:\s+\w+){0,4}\s+reason\s+(?:to\s+)?reject\b)(?:\s+\w+){0,4}\s+fix|no\s+safe\s+(?:code\s+)?(?:change|fix)\s+(?:can|could)\s+be\s+(?:established|identified|justified|determined)|(?:a\s+)?defensible\s+fix\s+(?:cannot|can't|can not)\s+(?:be\s+)?(?:established|identified|justified|determined)|(?:cannot|can't|can not|could not|couldn't)\s+(?:\w+\s+){0,6}(?:a\s+)?defensible(?:\s+\w+){0,4}\s+fix|(?:fix(?:es)?|change(?:s)?)(?:\s+\w+){0,4}\s+(?:is|are|was|were|has|have)\s+(?:not\s+(?:(?:be(?:en)?\s+)?(?:identified|established|justified|determined))|unavailable)|none|unable to|cannot safely)\b/i.test(
+    /\b(?:no\s+(?:a\s+)?defensible(?!(?:\s+\w+){0,4}\s+reason\s+(?:to\s+)?reject\b)(?:\s+\w+){0,4}\s+fix|no\s+safe\s+(?:code\s+)?(?:change|fix)\s+(?:can|could)\s+be\s+(?:established|identified|justified|determined)|(?:a\s+)?defensible\s+fix\s+(?:cannot|can't|can not)\s+(?:be\s+)?(?:established|identified|justified|determined)|(?:cannot|can't|can not|could not|couldn't)\s+(?:\w+\s+){0,6}(?:a\s+)?(?:safe|defensible)(?:\s+\w+){0,4}\s+fix|(?:fix(?:es)?|change(?:s)?)(?:\s+\w+){0,4}\s+(?:is|are|was|were|has|have)\s+(?:not\s+(?:(?:be(?:en)?\s+)?(?:identified|established|justified|determined))|unavailable)|none|unable to|cannot safely)\b/i.test(
       sections.SELECTED_FIX
     )
   ) {
@@ -155,6 +155,7 @@ export function validateCodexResearchResult(stdout) {
 export function runRemediationCodexPhase({
   codexBin,
   commandEnv,
+  containerIdentity,
   prompt,
   readOnly,
   repoDir,
@@ -166,6 +167,7 @@ export function runRemediationCodexPhase({
 }) {
   const command = buildRemediationCodexCommand({
     codexBin,
+    containerIdentity,
     env: commandEnv,
     prompt,
     readOnly,
@@ -193,6 +195,7 @@ export function runRemediationCodexPhases({
   candidate,
   commandEnv,
   codexBin,
+  containerIdentity,
   prompt,
   repoDir,
   runner,
@@ -207,6 +210,7 @@ export function runRemediationCodexPhases({
   const researchExecution = runRemediationCodexPhase({
     codexBin,
     commandEnv,
+    containerIdentity,
     prompt: buildCodexResearchPrompt({ candidate }),
     readOnly: true,
     repoDir,
@@ -226,6 +230,7 @@ export function runRemediationCodexPhases({
     implementationExecution: runRemediationCodexPhase({
       codexBin,
       commandEnv,
+      containerIdentity,
       prompt: implementationPrompt,
       readOnly: false,
       repoDir,

@@ -79,7 +79,11 @@ dependency mounts read-only; implementation containers additionally drop all
 capabilities, while research uses only the narrowly scoped capabilities needed
 to protect its auth handoff. The generated research shell is replaced with a
 wrapper that drops to the worker UID before running `/bin/sh`, and the copied
-auth file remains root-only inside the container.
+ source auth mount remains root-only; the bootstrap copies it into the
+ worker-owned Codex tmpfs and then starts Codex through the same unprivileged
+ shell boundary. Raw shell delegates stay in a root-only image directory and
+ are copied to a worker-owned temporary directory for that invocation, so
+ generated commands cannot select the privileged delegates directly.
 The inner read-only Codex invocation forces its legacy Landlock fallback instead
 of starting bubblewrap, because this VPS does not permit unprivileged user
 namespaces. Landlock keeps the read-only command's process-level filesystem and

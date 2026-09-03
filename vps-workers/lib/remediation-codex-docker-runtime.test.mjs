@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import { buildCodexDockerRuntime } from './remediation-codex-docker-runtime.mjs';
 
 describe('buildCodexDockerRuntime', () => {
-  it('builds a root-only read-only runtime with isolated auth and shells', () => {
+  it('builds a read-only bootstrap that hands Codex to the worker identity', () => {
     const runtime = buildCodexDockerRuntime({
       codexHome: '/home/worker/.codex',
       gid: 1001,
@@ -13,7 +13,7 @@ describe('buildCodexDockerRuntime', () => {
 
     assert.deepEqual(runtime.identityArgs, [
       '--tmpfs',
-      '/codex-home:rw,nosuid,nodev,size=64m,uid=0,gid=0,mode=700',
+      '/codex-home:rw,nosuid,nodev,size=64m,uid=1001,gid=1001,mode=700',
       '--user',
       '0:0',
     ]);
@@ -23,13 +23,26 @@ describe('buildCodexDockerRuntime', () => {
       '--cap-add',
       'DAC_READ_SEARCH',
       '--cap-add',
+      'CHOWN',
+      '--cap-add',
       'SETUID',
       '--cap-add',
       'SETGID',
     ]);
     assert.equal(runtime.launchShell, '/usr/local/libexec/baci-real-dash');
     assert.match(runtime.launchScript, /source-auth\.json/);
+    assert.match(
+      runtime.launchScript,
+      /chown "\$BACI_CODEX_SHELL_UID:\$BACI_CODEX_SHELL_GID"/
+    );
     assert.match(runtime.launchScript, /chmod 400/);
+    assert.match(runtime.launchScript, /baci-internal\/bash/);
+    assert.match(runtime.launchScript, /baci-internal\/dash/);
+    assert.match(runtime.launchScript, /BACI_CODEX_RAW_DASH_PATH/);
+    assert.match(
+      runtime.launchScript,
+      /exec \/usr\/local\/libexec\/baci-real-dash -c/
+    );
     assert.deepEqual(
       runtime.authArgs.filter((value) => value.startsWith('--mount')),
       Array.from({ length: 11 }, () => '--mount')

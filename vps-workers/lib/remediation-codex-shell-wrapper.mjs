@@ -4,23 +4,32 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const RESTRICTED_SHELLS = {
-  '/bin/bash': '/usr/local/libexec/baci-raw-bash',
-  '/usr/bin/bash': '/usr/local/libexec/baci-raw-bash',
-  '/bin/sh': '/usr/local/libexec/baci-raw-dash',
-  '/usr/bin/sh': '/usr/local/libexec/baci-raw-dash',
-  '/bin/dash': '/usr/local/libexec/baci-raw-dash',
-  '/usr/bin/dash': '/usr/local/libexec/baci-raw-dash',
-  '/usr/local/libexec/baci-real-bash': '/usr/local/libexec/baci-raw-bash',
-  '/usr/local/libexec/baci-real-dash': '/usr/local/libexec/baci-raw-dash',
-  '/usr/local/libexec/baci-shell-bash': '/usr/local/libexec/baci-raw-bash',
-  '/usr/local/libexec/baci-shell-dash': '/usr/local/libexec/baci-raw-dash',
+  '/bin/bash': 'bash',
+  '/usr/bin/bash': 'bash',
+  '/bin/sh': 'dash',
+  '/usr/bin/sh': 'dash',
+  '/bin/dash': 'dash',
+  '/usr/bin/dash': 'dash',
+  '/usr/local/libexec/baci-real-bash': 'bash',
+  '/usr/local/libexec/baci-real-dash': 'dash',
+  '/usr/local/libexec/baci-shell-bash': 'bash',
+  '/usr/local/libexec/baci-shell-dash': 'dash',
+};
+
+const FALLBACK_RAW_SHELLS = {
+  bash: '/usr/local/libexec/.baci-internal/bash',
+  dash: '/usr/local/libexec/.baci-internal/dash',
 };
 
 // Only the container's PID 1 may use this path for the trusted auth bootstrap.
 const CODEX_LAUNCH_SHELL = '/usr/local/libexec/baci-real-dash';
 
-function restrictedShell(invokedPath) {
-  return RESTRICTED_SHELLS[invokedPath] ?? RESTRICTED_SHELLS['/bin/sh'];
+function restrictedShell(invokedPath, env) {
+  const shell = RESTRICTED_SHELLS[invokedPath] ?? RESTRICTED_SHELLS['/bin/sh'];
+  return (
+    env[`BACI_CODEX_RAW_${shell.toUpperCase()}_PATH`] ||
+    FALLBACK_RAW_SHELLS[shell]
+  );
 }
 
 function positiveInteger(value) {
@@ -64,7 +73,7 @@ export function runCodexShell({
   }
 
   return (
-    spawn(restrictedShell(invokedPath), args, {
+    spawn(restrictedShell(invokedPath, env), args, {
       env,
       stdio: 'inherit',
     }).status ?? 1

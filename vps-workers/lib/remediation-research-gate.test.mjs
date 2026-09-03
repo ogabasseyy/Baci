@@ -138,6 +138,20 @@ describe('remediation research gate', () => {
     }
   });
 
+  it('rejects an explicit conclusion that no safe fix can be determined', () => {
+    const result = validateCodexResearchResult(
+      jsonl(
+        validReport.replace(
+          'SELECTED_FIX: smallest code fix',
+          'SELECTED_FIX: I cannot determine a safe fix from the available evidence; apply the bounded parser change'
+        )
+      )
+    );
+
+    assert.equal(result.accepted, false);
+    assert.match(result.reasons.join('\n'), /defensible selected fix/);
+  });
+
   it('accepts affirmative wording that rejects rejecting the selected fix', () => {
     const report = validReport.replace(
       'SELECTED_FIX: smallest code fix',

@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { buildRemediationCodexCommand } from './remediation-codex-command.mjs';
 
+const testContainerIdentity = { gid: 1001, uid: 1001 };
+
 describe('remediation Codex command', () => {
   it('uses the native workspace sandbox by default', () => {
     const result = buildRemediationCodexCommand({
@@ -124,6 +126,7 @@ describe('remediation Codex command', () => {
   it('builds a read-only Docker canary command from the remediation builder', () => {
     const result = buildRemediationCodexCommand({
       codexBin: '/opt/host/codex',
+      containerIdentity: testContainerIdentity,
       env: {
         BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
         BACI_CODEX_CONTAINER_BIN: '/opt/host/codex-native',
@@ -167,6 +170,7 @@ describe('remediation Codex command', () => {
     try {
       const result = buildRemediationCodexCommand({
         codexBin: '/opt/host/codex',
+        containerIdentity: testContainerIdentity,
         env: {
           BACI_CODEX_CONTAINER_BIN: '/opt/host/codex-native',
           BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
@@ -211,6 +215,7 @@ describe('remediation Codex command', () => {
       mkdirSync(join(resources, 'zsh', 'bin'), { recursive: true });
       const result = buildRemediationCodexCommand({
         codexBin: '/opt/host/codex',
+        containerIdentity: testContainerIdentity,
         env: {
           BACI_CODEX_CONTAINER_BIN: binary,
           BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',

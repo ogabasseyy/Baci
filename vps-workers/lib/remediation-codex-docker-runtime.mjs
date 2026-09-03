@@ -72,6 +72,8 @@ export function buildCodexDockerRuntime({ codexHome, gid, readOnly, uid }) {
           '--cap-add',
           'DAC_READ_SEARCH',
           '--cap-add',
+          'CHOWN',
+          '--cap-add',
           'SETUID',
           '--cap-add',
           'SETGID',
@@ -79,13 +81,13 @@ export function buildCodexDockerRuntime({ codexHome, gid, readOnly, uid }) {
       : [],
     identityArgs: [
       '--tmpfs',
-      `/codex-home:rw,nosuid,nodev,size=64m,uid=${containerUid},gid=${containerGid},mode=700`,
+      `/codex-home:rw,nosuid,nodev,size=64m,uid=${uid},gid=${gid},mode=700`,
       '--user',
       `${containerUid}:${containerGid}`,
     ],
     launchShell: readOnly ? '/usr/local/libexec/baci-real-dash' : '/bin/sh',
     launchScript: readOnly
-      ? 'umask 077; mkdir -p "$CODEX_HOME"; chmod 700 /codex-auth "$CODEX_HOME"; cp /codex-auth/source-auth.json "$CODEX_HOME/auth.json"; chmod 400 "$CODEX_HOME/auth.json"; unset BACI_CODEX_SHELL_BOOTSTRAP; exec /opt/codex/bin/codex "$@"'
+      ? `umask 077; mkdir -p "$CODEX_HOME"; chmod 700 /codex-auth "$CODEX_HOME"; cp /codex-auth/source-auth.json "$CODEX_HOME/auth.json"; chown "$BACI_CODEX_SHELL_UID:$BACI_CODEX_SHELL_GID" "$CODEX_HOME/auth.json"; chmod 400 "$CODEX_HOME/auth.json"; shell_dir="$(mktemp -d /tmp/.baci-shell.XXXXXX)"; chmod 700 "$shell_dir"; cp /usr/local/libexec/.baci-internal/bash "$shell_dir/bash"; cp /usr/local/libexec/.baci-internal/dash "$shell_dir/dash"; chown "$BACI_CODEX_SHELL_UID:$BACI_CODEX_SHELL_GID" "$shell_dir" "$shell_dir/bash" "$shell_dir/dash"; chmod 755 "$shell_dir/bash" "$shell_dir/dash"; export BACI_CODEX_RAW_BASH_PATH="$shell_dir/bash" BACI_CODEX_RAW_DASH_PATH="$shell_dir/dash"; unset BACI_CODEX_SHELL_BOOTSTRAP; exec /usr/local/libexec/baci-real-dash -c 'exec /opt/codex/bin/codex "$@"' -- "$@"`
       : 'umask 077; mkdir -p "$CODEX_HOME"; chmod 700 "$CODEX_HOME"; cp /codex-auth/auth.json "$CODEX_HOME/auth.json"; chmod 600 "$CODEX_HOME/auth.json"; exec /opt/codex/bin/codex "$@"',
   };
 }

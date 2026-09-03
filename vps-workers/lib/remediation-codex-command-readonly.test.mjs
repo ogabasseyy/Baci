@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { buildRemediationCodexCommand } from './remediation-codex-command.mjs';
 
+const testContainerIdentity = { gid: 1001, uid: 1001 };
+
 describe('read-only Docker Codex command', () => {
   it('keeps credentials inaccessible to generated research shells', () => {
     const result = buildRemediationCodexCommand({
       codexBin: '/opt/host/codex',
+      containerIdentity: testContainerIdentity,
       env: {
         BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
         BACI_CODEX_CONTAINER_BIN: '/opt/host/codex-native',
@@ -70,11 +73,11 @@ describe('read-only Docker Codex command', () => {
       true
     );
     assert.equal(
-      result.args.includes(`BACI_CODEX_SHELL_UID=${process.getuid()}`),
+      result.args.includes(`BACI_CODEX_SHELL_UID=${testContainerIdentity.uid}`),
       true
     );
     assert.equal(
-      result.args.includes(`BACI_CODEX_SHELL_GID=${process.getgid()}`),
+      result.args.includes(`BACI_CODEX_SHELL_GID=${testContainerIdentity.gid}`),
       true
     );
     const launchScript = result.args.find((value) =>

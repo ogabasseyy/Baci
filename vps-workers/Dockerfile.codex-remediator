@@ -13,6 +13,8 @@ RUN apt-get update \
   && chmod -R a+rX "$COREPACK_HOME" \
   && mkdir -p /usr/local/libexec \
   && cp /bin/bash /usr/local/libexec/baci-real-bash \
-  && cp /bin/dash /usr/local/libexec/baci-real-dash
+  && cp /bin/dash /usr/local/libexec/baci-real-dash \
+  && cp /bin/bash /usr/local/libexec/baci-shell-bash \
+  && cp /bin/dash /usr/local/libexec/baci-shell-dash
 
 WORKDIR /workspace

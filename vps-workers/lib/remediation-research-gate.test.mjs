@@ -87,6 +87,20 @@ describe('remediation research gate', () => {
     assert.match(result.reasons.join('\n'), /defensible selected fix/);
   });
 
+  it('rejects a report that cannot justify a safe code change', () => {
+    const result = validateCodexResearchResult(
+      jsonl(
+        validReport.replace(
+          'SELECTED_FIX: smallest code fix',
+          'SELECTED_FIX: No safe code change can be justified from the available evidence; collect production traces.'
+        )
+      )
+    );
+
+    assert.equal(result.accepted, false);
+    assert.match(result.reasons.join('\n'), /defensible selected fix/);
+  });
+
   it('rejects reverse-order wording that cannot establish a defensible fix', () => {
     const reports = [
       'SELECTED_FIX: I cannot establish a defensible fix without production traces.',

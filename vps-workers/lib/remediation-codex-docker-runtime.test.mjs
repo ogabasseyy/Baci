@@ -32,7 +32,17 @@ describe('buildCodexDockerRuntime', () => {
     assert.match(runtime.launchScript, /chmod 400/);
     assert.deepEqual(
       runtime.authArgs.filter((value) => value.startsWith('--mount')),
-      ['--mount', '--mount', '--mount', '--mount', '--mount', '--mount']
+      [
+        '--mount',
+        '--mount',
+        '--mount',
+        '--mount',
+        '--mount',
+        '--mount',
+        '--mount',
+        '--mount',
+        '--mount',
+      ]
     );
     assert.ok(
       runtime.authArgs.some((value) =>
@@ -55,11 +65,18 @@ describe('buildCodexDockerRuntime', () => {
         value.includes('dst=/usr/bin/sh,readonly')
       )
     );
-    assert.ok(
-      runtime.authArgs.some((value) =>
-        value.includes('dst=/usr/local/libexec/baci-real-dash,readonly')
-      )
-    );
+    for (const shellPath of [
+      '/bin/dash',
+      '/usr/bin/dash',
+      '/usr/local/libexec/baci-real-bash',
+      '/usr/local/libexec/baci-real-dash',
+    ]) {
+      assert.ok(
+        runtime.authArgs.some((value) =>
+          value.includes(`dst=${shellPath},readonly`)
+        )
+      );
+    }
     assert.ok(runtime.authArgs.includes('BACI_CODEX_SHELL_BOOTSTRAP=1'));
     assert.match(runtime.launchScript, /unset BACI_CODEX_SHELL_BOOTSTRAP/);
   });
@@ -89,5 +106,18 @@ describe('buildCodexDockerRuntime', () => {
       )
     );
     assert.ok(!runtime.authArgs.some((value) => value.includes('/bin/bash')));
+  });
+
+  it('rejects a root worker identity for read-only research', () => {
+    assert.throws(
+      () =>
+        buildCodexDockerRuntime({
+          codexHome: '/home/root/.codex',
+          gid: 0,
+          readOnly: true,
+          uid: 0,
+        }),
+      /requires a non-root worker identity/
+    );
   });
 });

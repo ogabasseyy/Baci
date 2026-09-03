@@ -4,11 +4,14 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const RESTRICTED_SHELLS = {
-  '/bin/bash': '/usr/local/libexec/baci-real-bash',
-  '/usr/bin/bash': '/usr/local/libexec/baci-real-bash',
-  '/bin/sh': '/bin/dash',
-  '/usr/bin/sh': '/bin/dash',
-  '/usr/local/libexec/baci-real-dash': '/bin/dash',
+  '/bin/bash': '/usr/local/libexec/baci-shell-bash',
+  '/usr/bin/bash': '/usr/local/libexec/baci-shell-bash',
+  '/bin/sh': '/usr/local/libexec/baci-shell-dash',
+  '/usr/bin/sh': '/usr/local/libexec/baci-shell-dash',
+  '/bin/dash': '/usr/local/libexec/baci-shell-dash',
+  '/usr/bin/dash': '/usr/local/libexec/baci-shell-dash',
+  '/usr/local/libexec/baci-real-bash': '/usr/local/libexec/baci-shell-bash',
+  '/usr/local/libexec/baci-real-dash': '/usr/local/libexec/baci-shell-dash',
 };
 
 // Only the container's PID 1 may use this path for the trusted auth bootstrap.
@@ -68,11 +71,7 @@ export function runCodexShell({
 
 const invokedAsShell =
   process.argv[1] &&
-  (process.argv[1] === '/bin/bash' ||
-    process.argv[1] === '/usr/bin/bash' ||
-    process.argv[1] === '/bin/sh' ||
-    process.argv[1] === '/usr/bin/sh' ||
-    process.argv[1] === CODEX_LAUNCH_SHELL ||
+  (Object.hasOwn(RESTRICTED_SHELLS, process.argv[1]) ||
     import.meta.url === pathToFileURL(process.argv[1]).href);
 if (invokedAsShell) {
   process.exit(runCodexShell());

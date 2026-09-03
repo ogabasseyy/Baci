@@ -9,6 +9,9 @@ const CODEX_SHELL_PATHS = [
   '/usr/bin/bash',
   '/bin/sh',
   '/usr/bin/sh',
+  '/bin/dash',
+  '/usr/bin/dash',
+  '/usr/local/libexec/baci-real-bash',
   '/usr/local/libexec/baci-real-dash',
 ];
 
@@ -17,6 +20,17 @@ function bindMount(source, destination, { readonly = false } = {}) {
 }
 
 export function buildCodexDockerRuntime({ codexHome, gid, readOnly, uid }) {
+  if (
+    readOnly &&
+    (!Number.isSafeInteger(uid) ||
+      uid <= 0 ||
+      !Number.isSafeInteger(gid) ||
+      gid <= 0)
+  ) {
+    throw new Error(
+      'read-only Codex runtime requires a non-root worker identity'
+    );
+  }
   const containerGid = readOnly ? 0 : gid;
   const containerUid = readOnly ? 0 : uid;
   return {

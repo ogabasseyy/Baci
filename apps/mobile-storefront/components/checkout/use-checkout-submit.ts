@@ -72,6 +72,8 @@ export function useCheckoutSubmit({
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
   return async (address: ShippingAddressInput) => {
     const itemsSnapshot = [...useCartStore.getState().items];
+    const checkoutGenerationSnapshot =
+      useCartStore.getState().checkoutGeneration;
     const groupNegotiationSnapshot =
       useCartStore.getState().cartWideNegotiationActive;
 
@@ -252,7 +254,11 @@ export function useCheckoutSubmit({
     } catch (error) {
       const cartStore = useCartStore.getState();
       if (cartStore.items.length === 0) {
-        cartStore.restoreItems(itemsSnapshot, groupNegotiationSnapshot);
+        cartStore.restoreItems(
+          itemsSnapshot,
+          groupNegotiationSnapshot,
+          checkoutGenerationSnapshot
+        );
       }
       handleCheckoutSubmitError(error, selectedPayment);
     } finally {

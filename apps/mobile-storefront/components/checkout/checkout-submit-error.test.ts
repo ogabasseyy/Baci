@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import { OrderError } from '@/services/orders.errors';
 import type { CartItem } from '@/stores/cart-store.types';
@@ -54,6 +55,7 @@ function normalLine(id: string): CartItem {
 
 describe('handleCheckoutSubmitError', () => {
   beforeEach(() => {
+    jest.mocked(router.push).mockClear();
     mockRemoveItem.mockClear();
     mockCartItems = [];
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
@@ -61,6 +63,27 @@ describe('handleCheckoutSubmitError', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it.each([
+    'CHECKOUT_ORDER_NOT_REUSABLE',
+    'CHECKOUT_IDEMPOTENCY_CONFLICT',
+  ])('directs the customer to the existing order instead of starting again for %s', (code) => {
+    handleCheckoutSubmitError(
+      new OrderError('Refresh checkout and start a new order', code),
+      'paystack'
+    );
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Check your existing order',
+      expect.stringContaining(
+        'Check your orders before starting another purchase'
+      ),
+      expect.any(Array)
+    );
+    const buttons = jest.mocked(Alert.alert).mock.calls.at(-1)?.[2];
+    buttons?.find((button) => button.text === 'View orders')?.onPress?.();
+    expect(router.push).toHaveBeenCalledWith('/orders');
+    expect(mockRemoveItem).not.toHaveBeenCalled();
   });
 
   it('prunes voucher-backed lines when the order rejects an unredeemable voucher', () => {

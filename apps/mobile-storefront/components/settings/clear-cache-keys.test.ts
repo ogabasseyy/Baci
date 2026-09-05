@@ -1,4 +1,11 @@
+import { CHECKOUT_INSTALLATION_STORAGE_KEY } from '@/config/checkout-storage';
 import { getClearableCacheStorageKeys } from './clear-cache-keys';
+
+it('preserves pending checkout recovery identity when clearing cache', () => {
+  expect(
+    getClearableCacheStorageKeys([CHECKOUT_INSTALLATION_STORAGE_KEY])
+  ).not.toContain(CHECKOUT_INSTALLATION_STORAGE_KEY);
+});
 
 describe('getClearableCacheStorageKeys', () => {
   it('keeps cache keys visible from MMKV and legacy storage', () => {

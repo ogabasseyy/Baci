@@ -1,6 +1,8 @@
+import { CHECKOUT_INSTALLATION_STORAGE_KEY } from '@/config/checkout-storage';
 import { QUERY_CACHE_STORAGE_KEY } from '@/lib/query-client';
 
 const CLEAR_CACHE_PRESERVED_KEYS = new Set([
+  CHECKOUT_INSTALLATION_STORAGE_KEY,
   'app-settings-storage',
   'app-theme-storage',
   'auth-storage',

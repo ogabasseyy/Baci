@@ -152,7 +152,7 @@ describe('CheckoutScreen', () => {
     });
   });
 
-  it('reuses the same order idempotency key when mobile BNPL switches providers', async () => {
+  it('delegates BNPL retry identity to the order service when switching providers', async () => {
     mockUseMerchantPaymentSettings.mockReturnValue({
       data: {
         ...mockPaymentSettings,
@@ -195,11 +195,12 @@ describe('CheckoutScreen', () => {
     });
     expect(mockCreateOrder.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
-        idempotency_key: expect.any(String),
         payment_method: 'credit_direct',
       })
     );
-    const firstKey = mockCreateOrder.mock.calls[0]?.[0]?.idempotency_key;
+    expect(mockCreateOrder.mock.calls[0]?.[0]).not.toHaveProperty(
+      'idempotency_key'
+    );
 
     fireEvent.press(
       screen.getByRole('button', { name: 'Edit payment method' })
@@ -214,13 +215,15 @@ describe('CheckoutScreen', () => {
     await waitFor(() => {
       expect(mockCreateOrder).toHaveBeenCalledTimes(2);
     });
-    expect(mockCreateOrder.mock.calls[1]?.[0]?.idempotency_key).toBe(firstKey);
+    expect(mockCreateOrder.mock.calls[1]?.[0]).not.toHaveProperty(
+      'idempotency_key'
+    );
   });
 
   it.each([
     'CHECKOUT_ORDER_NOT_REUSABLE',
     'CHECKOUT_IDEMPOTENCY_CONFLICT',
-  ])('rotates the mobile BNPL idempotency key after %s', async (errorCode) => {
+  ])('does not override the order service retry identity after %s', async (errorCode) => {
     const { OrderError } = jest.requireMock(
       '@/services/orders'
     ) as typeof import('@/services/orders');
@@ -272,19 +275,20 @@ describe('CheckoutScreen', () => {
     });
     expect(mockCreateOrder.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
-        idempotency_key: expect.any(String),
         payment_method: 'credit_direct',
       })
     );
-    const firstKey = mockCreateOrder.mock.calls[0]?.[0]?.idempotency_key;
+    expect(mockCreateOrder.mock.calls[0]?.[0]).not.toHaveProperty(
+      'idempotency_key'
+    );
 
     fireEvent.press(screen.getByRole('button', { name: /Place order for/i }));
 
     await waitFor(() => {
       expect(mockCreateOrder).toHaveBeenCalledTimes(2);
     });
-    expect(mockCreateOrder.mock.calls[1]?.[0]?.idempotency_key).not.toBe(
-      firstKey
+    expect(mockCreateOrder.mock.calls[1]?.[0]).toEqual(
+      mockCreateOrder.mock.calls[0]?.[0]
     );
   });
 

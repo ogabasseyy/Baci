@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { syncStorage } from '../lib/storage';
@@ -14,6 +15,7 @@ import {
   selectCartQuantities,
 } from './cart-store-selectors';
 import type { CartState } from './cart-store-state';
+import { emptyCheckoutCart } from './empty-checkout-cart';
 
 export type { CartItem } from './cart-store.types';
 export { formatPrice, selectCartQuantities };
@@ -31,6 +33,7 @@ export const useCartStore = create<CartState>()(
       items: [],
       isLoading: false,
       lineSequence: 0,
+      checkoutGeneration: 'legacy',
       cartWideNegotiationActive: false,
 
       // Computed values
@@ -71,6 +74,10 @@ export const useCartStore = create<CartState>()(
             isSameCartLine(existingItem, itemToAdd)
           );
 
+          const checkoutGeneration =
+            state.items.length === 0
+              ? Crypto.randomUUID()
+              : state.checkoutGeneration;
           let items: CartItem[];
           let lineSequence = state.lineSequence;
           if (existingIndex >= 0) {
@@ -95,11 +102,12 @@ export const useCartStore = create<CartState>()(
             return {
               items: clearGroupNegotiation(items),
               lineSequence,
+              checkoutGeneration,
               cartWideNegotiationActive: false,
             };
           }
 
-          return { items, lineSequence };
+          return { items, lineSequence, checkoutGeneration };
         });
       },
 
@@ -163,7 +171,7 @@ export const useCartStore = create<CartState>()(
 
       // Clear all items
       clearCart: () => {
-        set({ items: [], lineSequence: 0, cartWideNegotiationActive: false });
+        set(emptyCheckoutCart());
       },
 
       // Get specific item
@@ -241,12 +249,14 @@ export const useCartStore = create<CartState>()(
       // Restore items directly (for rollback without generating new IDs).
       // When a snapshot of the cart-wide flag is provided, restore it too so a
       // rolled-back group deal keeps its lines and active flag in sync.
-      restoreItems: (items, cartWideNegotiationActive) => {
-        set(
-          cartWideNegotiationActive === undefined
-            ? { items }
-            : { items, cartWideNegotiationActive }
-        );
+      restoreItems: (items, cartWideNegotiationActive, checkoutGeneration) => {
+        set({
+          items,
+          ...(cartWideNegotiationActive !== undefined && {
+            cartWideNegotiationActive,
+          }),
+          ...(checkoutGeneration !== undefined && { checkoutGeneration }),
+        });
       },
 
       // Reconcile line prices from live catalog values keyed by cart line id.
@@ -281,6 +291,7 @@ export const useCartStore = create<CartState>()(
       partialize: (state) => ({
         items: state.items,
         lineSequence: state.lineSequence,
+        checkoutGeneration: state.checkoutGeneration,
         cartWideNegotiationActive: state.cartWideNegotiationActive,
       }),
     }

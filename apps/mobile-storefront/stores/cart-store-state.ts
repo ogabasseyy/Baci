@@ -5,6 +5,7 @@ export interface CartState {
   items: CartItem[];
   isLoading: boolean;
   lineSequence: number;
+  checkoutGeneration: string;
   // True while a cart-wide (group) negotiation is applied. Removing or
   // re-pricing an item invalidates the proportional group total, so the group
   // negotiation is reset when the cart composition changes.
@@ -30,7 +31,8 @@ export interface CartState {
   // not leave stale per-line negotiated prices behind an inactive flag.
   restoreItems: (
     items: CartItem[],
-    cartWideNegotiationActive?: boolean
+    cartWideNegotiationActive?: boolean,
+    checkoutGeneration?: string
   ) => void;
   // Reconcile stored prices with the live catalog (keyed by cart line id).
   repriceItems: (priceById: Record<string, number>) => void;

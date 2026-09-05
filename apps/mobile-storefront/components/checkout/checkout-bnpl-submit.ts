@@ -6,12 +6,7 @@ import type {
   DeliveryMethod,
   ShippingQuote,
 } from '@/components/checkout/types';
-import {
-  buildMobileCheckoutOrderFingerprint,
-  clearMobileCheckoutIdempotencyKey,
-  getMobileCheckoutIdempotencyKey,
-  type MobileCheckoutIdempotencyState,
-} from '@/lib/checkout-order-idempotency';
+import type { MobileCheckoutIdempotencyState } from '@/lib/checkout-order-idempotency';
 import {
   buildKlumpBnplRouteParams,
   buildKlumpInitializePayload,
@@ -22,7 +17,7 @@ import type {
   SavingsSelection,
   WalletSelection,
 } from '@/lib/wallet-payment-helpers';
-import { createOrder, OrderError, type OrderResponse } from '@/services/orders';
+import { createOrder, OrderError } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
 import {
   buildCheckoutOrderRequest,
@@ -70,7 +65,6 @@ export async function submitBnplCheckout({
   itemsSnapshot,
   liveSavingsSelection,
   liveWalletSelection,
-  mobileCheckoutIdempotencyRef,
   paymentMethodForOrder,
   paymentSettings,
   selectedPayment,
@@ -110,46 +104,9 @@ export async function submitBnplCheckout({
     shippingProvider: getShippingProvider(),
     snapshot,
   });
-  const mobileCheckoutFingerprint = buildMobileCheckoutOrderFingerprint({
-    customerEmail,
-    customerName,
-    customerPhone,
-    deliveryMethod,
-    discountAmount: 0,
-    discountCode: appliedDiscountCode,
-    items: orderRequest.items,
-    selectedQuoteId: orderRequest.selected_quote_id,
-    shippingAddress: orderRequest.shipping_address,
-    shippingFee: orderRequest.shipping_fee,
-    shippingProvider: orderRequest.shipping_provider,
-    subtotal: orderRequest.subtotal,
-    taxAmount: orderRequest.tax_amount,
-  });
-  const mobileCheckoutIdempotencyKey = getMobileCheckoutIdempotencyKey(
-    mobileCheckoutIdempotencyRef,
-    mobileCheckoutFingerprint
-  );
-
-  let orderResponse: OrderResponse;
-  try {
-    orderResponse = await createOrder({
-      ...orderRequest,
-      idempotency_key: mobileCheckoutIdempotencyKey,
-    });
-  } catch (error) {
-    if (
-      error instanceof OrderError &&
-      (error.code === 'CHECKOUT_ORDER_NOT_REUSABLE' ||
-        error.code === 'CHECKOUT_IDEMPOTENCY_CONFLICT')
-    ) {
-      clearMobileCheckoutIdempotencyKey(
-        mobileCheckoutIdempotencyRef,
-        mobileCheckoutFingerprint
-      );
-    }
-
-    throw error;
-  }
+  // The order service owns durable retry identity across payment methods.
+  // Never rotate it when a completed order rejects reuse.
+  const orderResponse = await createOrder(orderRequest);
 
   if (selectedPayment === 'klump') {
     await initializeKlumpAndRoute({

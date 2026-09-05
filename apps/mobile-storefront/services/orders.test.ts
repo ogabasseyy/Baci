@@ -96,7 +96,14 @@ jest.mock('expo-constants', () => ({
 }));
 
 jest.mock('expo-crypto', () => ({
-  randomUUID: () => 'test-uuid-1234',
+  randomUUID: () => require('node:crypto').randomUUID(),
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  digestStringAsync: async (_algorithm: string, value: string) =>
+    require('node:crypto').createHash('sha256').update(value).digest('hex'),
+}));
+
+jest.mock('@/stores/cart-store', () => ({
+  useCartStore: { getState: () => ({ checkoutGeneration: 'cart-one' }) },
 }));
 
 jest.mock('@/lib/logger', () => ({
@@ -223,6 +230,31 @@ describe('createOrder — variant_attributes', () => {
       wallet: null,
       amountDueToGateway: 720000,
     });
+  });
+
+  it('reuses the order key after returning from an unpaid payment attempt', async () => {
+    const items = [
+      { id: 'buds2', name: 'Samsung Galaxy Buds2', price: 85000, quantity: 1 },
+    ];
+    await createOrderWithItems(items);
+    const firstKey = getLastFetchOptions().headers?.['Idempotency-Key'];
+    expect(firstKey).toBeTruthy();
+    await createOrderWithItems(items);
+    expect(getLastFetchOptions().headers?.['Idempotency-Key']).toBe(firstKey);
+  });
+
+  it('reuses the order key when the first response is lost', async () => {
+    const items = [
+      { id: 'buds2', name: 'Samsung Galaxy Buds2', price: 85000, quantity: 1 },
+    ];
+    mockFetchWithRetry.mockRejectedValueOnce(
+      new Error('Network request failed')
+    );
+    await expect(createOrderWithItems(items)).rejects.toThrow();
+    const firstKey = getLastFetchOptions().headers?.['Idempotency-Key'];
+    expect(firstKey).toBeTruthy();
+    await createOrderWithItems(items);
+    expect(getLastFetchOptions().headers?.['Idempotency-Key']).toBe(firstKey);
   });
 
   it('includes variant_attributes in the API payload', async () => {

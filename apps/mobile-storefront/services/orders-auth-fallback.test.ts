@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 import { AuthRefreshDiscardedError, type Session } from '@supabase/supabase-js';
+import { sessionFixture } from './orders-auth-fallback.test-utils';
 
 const mockGetUser = jest.fn<
   (jwt?: string) => Promise<{
@@ -64,29 +65,6 @@ const orderRequest = {
   subtotal: 100_000,
 };
 
-function sessionFixture(
-  accessToken: string,
-  refreshToken: string,
-  userId = 'user-a'
-): Session {
-  return {
-    access_token: accessToken,
-    expires_at: 1_800_000_000,
-    expires_in: 3_600,
-    refresh_token: refreshToken,
-    token_type: 'bearer',
-    user: {
-      app_metadata: {},
-      aud: 'authenticated',
-      created_at: '2026-08-30T00:00:00Z',
-      id: userId,
-      role: 'authenticated',
-      updated_at: '2026-08-30T00:00:00Z',
-      user_metadata: {},
-    },
-  };
-}
-
 jest.mock('@react-native-community/netinfo', () => ({
   fetch: jest.fn(async () => ({
     isConnected: true,
@@ -103,7 +81,10 @@ jest.mock('expo-constants', () => ({
 }));
 
 jest.mock('expo-crypto', () => ({
-  randomUUID: () => 'test-uuid',
+  randomUUID: () => require('node:crypto').randomUUID(),
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  digestStringAsync: async (_algorithm: string, value: string) =>
+    require('node:crypto').createHash('sha256').update(value).digest('hex'),
 }));
 
 jest.mock('@/lib/logger', () => ({
@@ -223,6 +204,28 @@ describe('createOrder checkout auth fallback', () => {
     expect(mockFetchWithRetry.mock.calls[0]?.[1]?.headers).toMatchObject({
       Authorization: 'Bearer refreshed-token',
     });
+  });
+
+  it('keeps the retry key when user validation recovers after a timeout', async () => {
+    jest.useFakeTimers();
+    const session = sessionFixture('token', 'refresh-token');
+    mockGetSession.mockResolvedValue({ data: { session } });
+    mockRefreshSession.mockResolvedValue({ data: { session }, error: null });
+    const first = createOrder(orderRequest);
+    await jest.advanceTimersByTimeAsync(4_000);
+    await first;
+    const firstKey =
+      mockFetchWithRetry.mock.calls[0]?.[1]?.headers['Idempotency-Key'];
+    expect(firstKey).toBeTruthy();
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'user-a' } },
+      error: null,
+    });
+    await createOrder(orderRequest);
+    expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
+    expect(
+      mockFetchWithRetry.mock.calls[1]?.[1]?.headers['Idempotency-Key']
+    ).toBe(firstKey);
   });
 
   it('uses a same-account session rotated after the checkout session read', async () => {

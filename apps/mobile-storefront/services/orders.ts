@@ -1,8 +1,8 @@
 import NetInfo from '@react-native-community/netinfo';
 import Constants from 'expo-constants';
-import * as Crypto from 'expo-crypto';
 import { DEFAULT_TIMEOUT, fetchWithRetry } from '@/lib/api';
 import { resolveApiBaseUrl } from '@/lib/api-url';
+import { getCheckoutAttemptKey } from '@/lib/checkout-attempt-key';
 import { createLogger } from '@/lib/logger';
 import { offlineQueue } from '@/lib/offline-queue';
 import {
@@ -11,6 +11,7 @@ import {
   supabaseAuthStorageKey,
 } from '@/lib/supabase';
 import { trackEvent } from '@/services/analytics';
+import { useCartStore } from '@/stores/cart-store';
 import {
   mapCreateOrderException,
   OrderError,
@@ -77,6 +78,7 @@ export async function createOrder(
   request: CreateOrderRequest
 ): Promise<OrderResponse> {
   const startTime = Date.now();
+  const checkoutGeneration = useCartStore.getState().checkoutGeneration;
 
   const validationResult = CreateOrderRequestSchema.safeParse(request);
   if (!validationResult.success) {
@@ -130,8 +132,17 @@ export async function createOrder(
   });
 
   try {
+    // Local retry partition only: a getUser timeout must not rotate the key.
+    // The submitted payload and server authorization remain unchanged.
     const idempotencyKey =
-      validatedRequest.idempotency_key ?? Crypto.randomUUID();
+      validatedRequest.idempotency_key ??
+      (await getCheckoutAttemptKey(
+        {
+          ...orderPayload,
+          user_id: storedSession?.user?.id ?? orderPayload.user_id,
+        },
+        checkoutGeneration
+      ));
     log.info('Submitting order request', {
       apiUrl: API_URL,
       itemCount: orderPayload.items.length,
@@ -156,9 +167,8 @@ export async function createOrder(
         body: JSON.stringify(orderPayload),
       },
       {
-        // 2026 Best Practice: Order creation is non-idempotent on the server side
-        // (no Idempotency-Key handling). Retrying creates duplicate orders, so
-        // make a single attempt and let the user retry from the UI on failure.
+        // UI retries reuse the persisted checkout identity. Keep transport retries
+        // bounded here; a lost response must never rotate the order key.
         maxRetries: 0,
         timeout: DEFAULT_TIMEOUT,
       }

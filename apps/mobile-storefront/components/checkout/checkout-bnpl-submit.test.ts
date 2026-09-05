@@ -197,24 +197,16 @@ describe('submitBnplCheckout', () => {
     expect(mockCreateOrder).not.toHaveBeenCalled();
   });
 
-  it('creates non-Klump BNPL orders with the mobile idempotency key before routing', async () => {
+  it('uses the order service retry identity before routing BNPL', async () => {
     const params = createParams();
 
     await submitBnplCheckout(params);
 
-    expect(mockBuildMobileCheckoutOrderFingerprint).toHaveBeenCalledWith(
-      expect.objectContaining({
-        customerEmail: 'ada@example.com',
-        selectedQuoteId: 'quote-1',
-        shippingFee: 1500,
-        subtotal: 20000,
-      })
-    );
     expect(mockCreateOrder).toHaveBeenCalledWith(
-      expect.objectContaining({
-        idempotency_key: 'idempotency-key-1',
-        payment_method: 'credit_direct',
-      })
+      expect.objectContaining({ payment_method: 'credit_direct' })
+    );
+    expect(mockCreateOrder.mock.calls[0][0]).not.toHaveProperty(
+      'idempotency_key'
     );
     expect(params.isOrderInFlight.current).toBe(false);
     expect(params.setIsProcessing).toHaveBeenCalledWith(false);
@@ -232,7 +224,7 @@ describe('submitBnplCheckout', () => {
     });
   });
 
-  it('clears the idempotency key when the server rejects reuse', async () => {
+  it('preserves the existing checkout identity when the server rejects reuse', async () => {
     const conflict = new Error('not reusable') as Error & { code: string };
     conflict.code = 'CHECKOUT_ORDER_NOT_REUSABLE';
     Object.setPrototypeOf(
@@ -243,9 +235,7 @@ describe('submitBnplCheckout', () => {
 
     await expect(submitBnplCheckout(createParams())).rejects.toBe(conflict);
 
-    expect(mockClearMobileCheckoutIdempotencyKey).toHaveBeenCalledWith(
-      expect.objectContaining({ current: null }),
-      'fingerprint-1'
-    );
+    expect(mockClearMobileCheckoutIdempotencyKey).not.toHaveBeenCalled();
+    expect(mockCreateOrder).toHaveBeenCalledTimes(1);
   });
 });

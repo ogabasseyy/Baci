@@ -162,6 +162,23 @@ describe('QuizScreen', () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
+  it('keeps a rejected retry load visible as an alert', async () => {
+    useQuizStore.setState({ status: 'ready', error: 'Initial failure' });
+    jest
+      .mocked(fetchQuizEvents)
+      .mockRejectedValueOnce(new Error('Reload failed'));
+    render(<QuizScreen />);
+    fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Reload failed');
+  });
+  it('does not request authenticated events when retrying signed out', async () => {
+    mockAuthUserId = null;
+    useQuizStore.setState({ status: 'ready', error: 'Initial failure' });
+    render(<QuizScreen />);
+    fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(fetchQuizEvents).not.toHaveBeenCalled();
+  });
   it('keeps the completed attempt result focused instead of reopening the event list', async () => {
     render(<QuizScreen integrityTier="strong" locale="en-US" />);
 

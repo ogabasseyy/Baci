@@ -64,6 +64,7 @@ interface QuizStore extends QuizV2StoreActions {
   setError: (message: string) => void;
   dismissRecovery: () => Promise<void>;
   reset: () => void;
+  showLobby: () => void;
   resetForAccountChange: () => void;
 }
 
@@ -233,6 +234,11 @@ export const useQuizStore = create<QuizStore>((set, get) => {
     resetForAccountChange: () => {
       generation += 1;
       set(initialState);
+    },
+    showLobby: () => {
+      generation += 1;
+      // Keep the attempt and persisted request ID for explicit Resume.
+      set({ status: 'ready', error: null });
     },
   };
 });

@@ -75,6 +75,7 @@ describe('QuizQuestionCard', () => {
 
   it('submits the selected answer when one is chosen', () => {
     const props = renderCard({ selectedOptionId: 'b' });
+    expect(screen.getByLabelText('Selected answer')).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText('Submit answer'));
 

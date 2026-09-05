@@ -27,7 +27,8 @@ export function createQuizV2StoreActions({
   set,
 }: QuizV2StoreAccess): QuizV2StoreActions {
   let lastReconciledAt = 0;
-  let reconciliationInFlight = false;
+  let reconciliationInFlightGeneration: number | null = null;
+  let lastReconciledGeneration: number | null = null;
   let retryInFlightGeneration: number | null = null;
   let startInFlightGeneration: number | null = null;
   let lifecycleEpoch = 0;
@@ -55,6 +56,15 @@ export function createQuizV2StoreActions({
       if (['starting', 'submitting'].includes(get().status))
         return Promise.resolve();
       startInFlightGeneration = generation;
+      set({
+        ...initialQuizV2State,
+        status: 'starting',
+        selectedEventId: context.eventId,
+        attemptIntegrityTier: context.integrityTier,
+        startRequestId: context.startRequestId,
+        recoveryUserId: context.userId,
+        error: null,
+      });
       return (async () => {
         const existing = await loadQuizRecoveryEnvelope(
           context.userId,
@@ -63,15 +73,7 @@ export function createQuizV2StoreActions({
         if (generation !== getGeneration()) return;
         // biome-ignore format: Keep request-id selection compact for module-size guard.
         const startRequestId = resolveQuizStartRequestId(existing, context.startRequestId);
-        set({
-          ...initialQuizV2State,
-          status: 'starting',
-          selectedEventId: context.eventId,
-          attemptIntegrityTier: context.integrityTier,
-          startRequestId,
-          recoveryUserId: context.userId,
-          error: null,
-        });
+        set({ startRequestId });
         try {
           await saveQuizStartRequest(context, generation, startRequestId);
         } catch {
@@ -178,18 +180,22 @@ export function createQuizV2StoreActions({
       }
     },
     reconcileLifecycle: async (reconciler, nowMs = Date.now()) => {
+      const generation = getGeneration();
       if (
-        reconciliationInFlight ||
+        reconciliationInFlightGeneration === generation ||
         get().status !== 'question' ||
         get().lockedOptionId ||
-        (lastReconciledAt > 0 &&
+        (lastReconciledGeneration === generation &&
+          lastReconciledAt > 0 &&
           nowMs - lastReconciledAt < QUIZ_RECONCILIATION_INTERVAL_MS)
       )
         return;
-      reconciliationInFlight = true;
+      reconciliationInFlightGeneration = generation;
       try {
         const response = await reconciler();
+        if (generation !== getGeneration()) return;
         lastReconciledAt = nowMs;
+        lastReconciledGeneration = generation;
         const attempt = get().v2Attempt;
         if (
           response.availability === 'active' &&
@@ -199,7 +205,8 @@ export function createQuizV2StoreActions({
           await apply(response.attempt);
         else if (attempt) await applyRecoveryResponse(response, attempt);
       } finally {
-        reconciliationInFlight = false;
+        if (reconciliationInFlightGeneration === generation)
+          reconciliationInFlightGeneration = null;
       }
     },
     expireActiveEvent,

@@ -21,6 +21,7 @@ interface QuizEventsListProps {
   onEventsUpdated?: (events: QuizEvent[]) => void;
   onRefresh?: () => Promise<void>;
   onStart: (eventId: string, termsAccepted?: true) => void;
+  onResume?: (eventId: string) => void;
   onSignIn?: () => void;
   resumeEventId?: string | null;
   serverNow?: string;
@@ -42,6 +43,7 @@ export function QuizEventsList({
   onEventsUpdated,
   onRefresh,
   onStart,
+  onResume,
   onSignIn,
   resumeEventId,
   serverNow,
@@ -126,7 +128,7 @@ export function QuizEventsList({
           <QuizLobbyEventCard
             event={item}
             isSignedIn={isSignedIn}
-            isResume={resumeEventId === item.id}
+            isResume={Boolean(onResume) && resumeEventId === item.id}
             isStarting={isStarting}
             locale={locale}
             onOpenRules={(requiresAcceptance) =>
@@ -140,13 +142,7 @@ export function QuizEventsList({
               })
             }
             onExpire={onRefresh}
-            onResume={() =>
-              setRules({
-                action: 'start',
-                event: item,
-                requiresAcceptance: true,
-              })
-            }
+            onResume={() => onResume?.(item.id)}
             onSignIn={onSignIn}
             serverNow={item.serverNow ?? serverNow}
             styles={styles}

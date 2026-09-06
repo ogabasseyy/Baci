@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import { recoverActiveQuizAttempt } from '@/services/quiz-attempt-recovery';
 import type { QuizV2Attempt } from '@/services/quiz-types';
 import { useQuizStore } from '@/stores/quiz-store';
+import { attempt } from '@/stores/quiz-store.test-utils';
 import { useQuizLobbyNavigation } from './useQuizLobbyNavigation';
 
 jest.mock('@/lib/get-quiz-device-fingerprint', () => ({
@@ -25,6 +26,44 @@ const active: QuizV2Attempt = {
 afterEach(() => {
   useQuizStore.getState().resetForAccountChange();
   jest.clearAllMocks();
+});
+it('resumes a retained legacy attempt without requesting V2 recovery', async () => {
+  useQuizStore.setState({ status: 'ready', attempt, v2Attempt: null });
+  const { result } = renderHook(() =>
+    useQuizLobbyNavigation({ dismissRecovery: jest.fn(), userId: 'u' })
+  );
+
+  await act(async () => result.current.onResume(attempt.eventId));
+
+  expect(recoverActiveQuizAttempt).not.toHaveBeenCalled();
+  expect(useQuizStore.getState()).toMatchObject({
+    status: 'question',
+    attempt,
+    error: null,
+  });
+});
+it('keeps Resume retryable and exposes the error when recovery rejects', async () => {
+  jest
+    .mocked(recoverActiveQuizAttempt)
+    .mockRejectedValueOnce(new Error('Recovery failed'));
+  useQuizStore.setState({
+    status: 'ready',
+    v2Attempt: active,
+    v2LifecycleStatus: 'in_progress',
+  });
+  const { result } = renderHook(() =>
+    useQuizLobbyNavigation({ dismissRecovery: jest.fn(), userId: 'u' })
+  );
+
+  await act(async () => result.current.onResume('e'));
+
+  expect(recoverActiveQuizAttempt).toHaveBeenCalledTimes(1);
+  expect(useQuizStore.getState()).toMatchObject({
+    status: 'ready',
+    v2Attempt: active,
+    error: 'Recovery failed',
+  });
+  expect(result.current.resumeEventId).toBe('e');
 });
 it('coalesces repeated resume taps while recovery is starting', async () => {
   useQuizStore.setState({

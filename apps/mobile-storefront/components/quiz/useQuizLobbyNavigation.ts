@@ -22,11 +22,19 @@ export function useQuizLobbyNavigation({
   const v2Attempt = useQuizStore((state) => state.v2Attempt);
   const lifecycle = useQuizStore((state) => state.v2LifecycleStatus);
   const attempt = useQuizStore((state) => state.attempt);
+  const pendingStartEventId = useQuizStore((state) =>
+    userId &&
+    state.recoveryUserId === userId &&
+    state.startRequestId &&
+    state.v2LifecycleStatus === 'idle'
+      ? state.selectedEventId
+      : null
+  );
   const resumeEventId =
     v2Attempt?.status === 'in_progress' && lifecycle === 'in_progress'
       ? v2Attempt.eventId
       : !v2Attempt
-        ? (attempt?.eventId ?? null)
+        ? (attempt?.eventId ?? pendingStartEventId)
         : null;
   useQuizBackHandler(
     backHandlerRef,
@@ -46,8 +54,7 @@ export function useQuizLobbyNavigation({
       useQuizStore.setState({ status: 'question', error: null });
       return;
     }
-    const attemptId = state.v2Attempt?.attemptId;
-    if (!attemptId || state.v2Attempt?.eventId !== eventId) return;
+    if (state.v2Attempt && state.v2Attempt.eventId !== eventId) return;
     await state.recoverEvent(
       userId,
       eventId,
@@ -61,14 +68,19 @@ export function useQuizLobbyNavigation({
           deviceFingerprint,
         });
       },
-      (answer, questionId) =>
-        submitQuizAnswerV2({
+      (answer, questionId) => {
+        // Recovery installs the authoritative attempt before resending an answer.
+        const recoveredAttempt = useQuizStore.getState().v2Attempt;
+        if (!recoveredAttempt || recoveredAttempt.eventId !== eventId)
+          throw new Error('Quiz attempt is not available for answer recovery.');
+        return submitQuizAnswerV2({
           answer,
           questionId,
-          attemptId,
+          attemptId: recoveredAttempt.attemptId,
           expectedUserId: userId,
           clientAnsweredAt: new Date().toISOString(),
-        })
+        });
+      }
     );
   };
   return { onResume, resumeEventId };

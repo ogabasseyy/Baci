@@ -84,3 +84,41 @@ it('does not offer a submitted attempt as resumable', () => {
   );
   expect(result.current.resumeEventId).toBeNull();
 });
+
+it('recovers an abandoned start after returning to the lobby without an attempt response', async () => {
+  useQuizStore.setState({
+    status: 'starting',
+    selectedEventId: 'e',
+    startRequestId: 'request',
+    recoveryUserId: 'u',
+  });
+  const ref = { current: null as (() => void) | null };
+  const { result } = renderHook(() =>
+    useQuizLobbyNavigation({
+      backHandlerRef: ref,
+      dismissRecovery: jest.fn(),
+      userId: 'u',
+    })
+  );
+  act(() => ref.current?.());
+  expect(result.current.resumeEventId).toBe('e');
+  await act(async () => result.current.onResume('e'));
+  expect(useQuizStore.getState()).toMatchObject({
+    status: 'result',
+    v2LifecycleStatus: 'pending_results',
+    terminalContext: { attemptId: 'a' },
+  });
+});
+
+it('does not expose another account start request for recovery', () => {
+  useQuizStore.setState({
+    status: 'ready',
+    selectedEventId: 'e',
+    startRequestId: 'request',
+    recoveryUserId: 'other',
+  });
+  const { result } = renderHook(() =>
+    useQuizLobbyNavigation({ dismissRecovery: jest.fn(), userId: 'u' })
+  );
+  expect(result.current.resumeEventId).toBeNull();
+});

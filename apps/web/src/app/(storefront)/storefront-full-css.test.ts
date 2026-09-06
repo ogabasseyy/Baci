@@ -9,6 +9,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const unrelatedZIndex = 987654;
+// Assertions must not provide utility candidates to this scanned test file.
+const expectedSelectors = [
+  ['bg', 'primary'],
+  ['grid', 'cols', '2'],
+  ['sr', 'only'],
+].map((parts) => `.${parts.join('-')}`);
 let temporaryRoot: string;
 let css: string;
 
@@ -37,9 +43,29 @@ describe('storefront full stylesheet source boundary', () => {
     expect(css.includes(`z-index:${unrelatedZIndex}`)).toBe(false);
   });
 
+  it('excludes the utility owned only by the in-repository dashboard preview', () => {
+    expect(css.includes(`.${['border', '14'].join('-')}`)).toBe(false);
+  });
+
   it('still generates shared UI and storefront utilities from explicit sources', () => {
-    for (const selector of ['.bg-primary', '.grid-cols-2', '.sr-only']) {
+    for (const selector of expectedSelectors) {
       expect(css.includes(selector), selector).toBe(true);
+    }
+  });
+
+  it('does not seed the expected utilities when only this test is scanned', async () => {
+    const result = await postcss([
+      tailwind({ base: temporaryRoot, optimize: true }),
+    ]).process(
+      '@import "tailwindcss" source(none);\n' +
+        '@theme { --color-primary: #123456; }\n' +
+        '@source "./storefront-full-css.test.ts";',
+      { from: join(directory, 'assertion-sources.css'), map: false }
+    );
+    // A literal candidate proves that this file was actually scanned.
+    expect(result.css.includes('.flex{display:flex}')).toBe(true);
+    for (const selector of expectedSelectors) {
+      expect(result.css.includes(selector), selector).toBe(false);
     }
   });
 

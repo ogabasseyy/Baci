@@ -95,7 +95,7 @@ export function createQuizV2StoreActions({
           startInFlightGeneration = null;
       });
     },
-    recoverEvent: async (userId, eventId, recoverer, resender) => {
+    recoverEvent: async (userId, eventId, recoverer, resender, snapshot) => {
       if (get().status === 'submitting') return 'retry';
       const retainedRequestId =
         get().recoveryUserId === userId && get().selectedEventId === eventId
@@ -115,7 +115,10 @@ export function createQuizV2StoreActions({
       });
       try {
         const envelope = await loadQuizRecoveryEnvelope(userId, eventId).catch(
-          () => null
+          () =>
+            snapshot?.userId === userId && snapshot.eventId === eventId
+              ? snapshot
+              : null
         );
         const recovered = await recoverer();
         if (generation !== getGeneration()) return 'retry';

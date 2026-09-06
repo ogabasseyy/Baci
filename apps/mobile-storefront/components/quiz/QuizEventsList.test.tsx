@@ -44,6 +44,9 @@ describe('QuizEventsList', () => {
       screen.getByRole('button', { name: 'Recover quiz attempt' })
     );
     expect(onResume).toHaveBeenCalledWith('cancelled');
+    expect(
+      screen.getByRole('button', { name: 'Recover quiz attempt' })
+    ).toHaveStyle({ minHeight: 50 });
     expect(onStart).not.toHaveBeenCalled();
   });
   it('resumes the existing attempt without opening rules or starting another attempt', () => {

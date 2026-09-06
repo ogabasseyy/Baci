@@ -134,7 +134,7 @@ export function QuizEventsList({
                 accessibilityState={{ disabled: isStarting }}
                 disabled={isStarting}
                 onPress={() => onResume(resumeEventId)}
-                style={styles.primaryButtonBox}
+                style={[styles.primaryButtonBox, styles.primaryButton]}
               >
                 <Text style={styles.primaryButtonText}>
                   Recover quiz attempt

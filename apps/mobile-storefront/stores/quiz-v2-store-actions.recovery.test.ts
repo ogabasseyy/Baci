@@ -14,13 +14,16 @@ describe('createQuizV2StoreActions recovery', () => {
   beforeEach(() => resetQuizV2StoreActionMocks());
   afterEach(() => jest.clearAllMocks());
 
-  it('clears the resume marker when the server confirms no attempt exists', async () => {
+  it.each([
+    'none',
+    'unavailable',
+  ] as const)('clears the resume marker for nonrecoverable %s responses', async (availability) => {
     const harness = createHarness();
     harness.set({ startRequestId: 'request' });
     await harness.actions.recoverEvent(
       'user-1',
       'event-1',
-      async () => response({ availability: 'none', attempt: undefined }),
+      async () => response({ availability, attempt: undefined }),
       async () => activeAttempt
     );
     expect(harness.getState()).toMatchObject({

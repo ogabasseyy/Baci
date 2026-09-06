@@ -168,8 +168,11 @@ export function createQuizV2StoreActions({
           recovered.attempt?.serverNow ?? recovered.serverNow;
         set({
           status: cancelled || pending || expiredActive ? 'result' : 'ready',
-          startRequestId:
-            recovered.availability === 'none' ? null : get().startRequestId,
+          startRequestId: ['none', 'unavailable'].includes(
+            recovered.availability
+          )
+            ? null
+            : get().startRequestId,
           v2Attempt: null,
           v2LifecycleStatus: cancelled
             ? 'event_cancelled'
@@ -177,16 +180,14 @@ export function createQuizV2StoreActions({
               ? 'pending_results'
               : 'idle',
           terminalContext:
-            cancelled || pending || expiredActive
-              ? terminalAttemptId
-                ? createQuizTerminalContext(
-                    terminalAttemptId,
-                    eventId,
-                    terminalEventEndsAt,
-                    terminalServerNow,
-                    recovered.submittedAt ?? envelope?.submittedAt ?? null
-                  )
-                : null
+            terminalAttemptId && (cancelled || pending || expiredActive)
+              ? createQuizTerminalContext(
+                  terminalAttemptId,
+                  eventId,
+                  terminalEventEndsAt,
+                  terminalServerNow,
+                  recovered.submittedAt ?? envelope?.submittedAt ?? null
+                )
               : null,
           error: null,
         });

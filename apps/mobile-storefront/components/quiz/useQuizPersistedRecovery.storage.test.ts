@@ -1,7 +1,10 @@
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { recoverActiveQuizAttempt } from '@/services/quiz-attempt-recovery';
 import { submitQuizAnswerV2 } from '@/services/quiz-attempts';
-import type { QuizV2Attempt } from '@/services/quiz-types';
+import type {
+  QuizActiveAttemptResponse,
+  QuizV2Attempt,
+} from '@/services/quiz-types';
 import {
   loadQuizRecoveryEnvelope,
   loadQuizRecoveryEnvelopes,
@@ -27,6 +30,48 @@ jest.mock('@/stores/quiz-recovery-envelope', () => ({
 afterEach(() => {
   useQuizStore.getState().reset();
   jest.clearAllMocks();
+});
+
+it('allows Back during scanned recovery and discards its late server response', async () => {
+  useQuizStore.getState().reset();
+  jest
+    .mocked(loadQuizRecoveryEnvelope)
+    .mockRejectedValue(new Error('storage unavailable'));
+  let finish!: (response: QuizActiveAttemptResponse) => void;
+  const recoverer = jest.fn(
+    () =>
+      new Promise<QuizActiveAttemptResponse>((resolve) => {
+        finish = resolve;
+      })
+  );
+  const recovery = useQuizStore
+    .getState()
+    .recoverEvent('user-1', 'event-1', recoverer, jest.fn(), {
+      attemptId: 'attempt-1',
+      currentQuestionId: 'question-1',
+      eventId: 'event-1',
+      generation: 0,
+      pendingLockedOptionId: null,
+      startRequestId: '11111111-1111-4111-8111-111111111111',
+      userId: 'user-1',
+      version: 1,
+    });
+  await waitFor(() => expect(recoverer).toHaveBeenCalled(), { timeout: 500 });
+  useQuizStore.getState().showLobby();
+  const afterBack = useQuizStore.getState().status;
+  finish({
+    availability: 'pending_results',
+    attemptId: 'attempt-1',
+    eventEndsAt: '2026-09-06T12:05:00Z',
+    serverNow: '2026-09-06T12:00:00Z',
+  });
+  await recovery;
+  expect(afterBack).toBe('ready');
+  expect(useQuizStore.getState()).toMatchObject({
+    status: 'ready',
+    terminalContext: null,
+    startRequestId: '11111111-1111-4111-8111-111111111111',
+  });
 });
 
 it('resends the scanned locked answer when the storage reread fails without an in-memory request ID', async () => {

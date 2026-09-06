@@ -108,17 +108,19 @@ export function createQuizV2StoreActions({
           start.startRequestId === retainedRequestId
       );
       const generation = getGeneration();
+      const scanned =
+        snapshot?.userId === userId && snapshot.eventId === eventId
+          ? snapshot
+          : null;
       set({
         status: 'starting',
         recoveryUserId: userId,
         selectedEventId: eventId,
+        startRequestId: scanned?.startRequestId ?? retainedRequestId,
       });
       try {
         const envelope = await loadQuizRecoveryEnvelope(userId, eventId).catch(
-          () =>
-            snapshot?.userId === userId && snapshot.eventId === eventId
-              ? snapshot
-              : null
+          () => scanned
         );
         const recovered = await recoverer();
         if (generation !== getGeneration()) return 'retry';

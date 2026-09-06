@@ -22,5 +22,6 @@ it('keeps light-mode prize cards readable and closed controls distinguishable', 
   expect(styles.eventCardClosed).not.toHaveProperty('opacity');
   expect(styles.eventCardClosed.backgroundColor).toBe(colors.muted);
   expect(styles.disabledButtonBox.backgroundColor).toBe(colors.card);
+  expect(styles.disabledButtonBox.borderColor).toBe(colors.border);
   expect(styles.disabledButtonBox.borderWidth).toBe(1);
 });

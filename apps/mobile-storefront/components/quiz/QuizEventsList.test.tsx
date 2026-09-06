@@ -27,6 +27,25 @@ const themeColors: QuizThemeColors = {
 };
 
 describe('QuizEventsList', () => {
+  it('keeps a recovery action when the retained event is missing from the refreshed list', () => {
+    const onResume = jest.fn();
+    const onStart = jest.fn();
+    render(
+      <QuizEventsList
+        events={[]}
+        isStarting={false}
+        onResume={onResume}
+        onStart={onStart}
+        resumeEventId="cancelled"
+        styles={createQuizLobbyStyles(themeColors)}
+      />
+    );
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Recover quiz attempt' })
+    );
+    expect(onResume).toHaveBeenCalledWith('cancelled');
+    expect(onStart).not.toHaveBeenCalled();
+  });
   it('resumes the existing attempt without opening rules or starting another attempt', () => {
     const onResume = jest.fn();
     const onStart = jest.fn();

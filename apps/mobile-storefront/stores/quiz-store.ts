@@ -236,6 +236,14 @@ export const useQuizStore = create<QuizStore>((set, get) => {
       set(initialState);
     },
     showLobby: () => {
+      const state = get();
+      // Legacy requests cannot be recovered if their response is discarded.
+      if (
+        !state.v2Attempt &&
+        !state.startRequestId &&
+        (state.status === 'starting' || state.status === 'submitting')
+      )
+        return;
       generation += 1;
       // Keep the attempt and persisted request ID for explicit Resume.
       set({ status: 'ready', error: null });

@@ -121,7 +121,28 @@ export function QuizEventsList({
             ) : null}
           </View>
         }
-        ListHeaderComponent={<QuizMissionHero />}
+        ListHeaderComponent={
+          <>
+            <QuizMissionHero />
+            {isSignedIn &&
+            resumeEventId &&
+            onResume &&
+            !displayEvents.some((event) => event.id === resumeEventId) ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Recover quiz attempt"
+                accessibilityState={{ disabled: isStarting }}
+                disabled={isStarting}
+                onPress={() => onResume(resumeEventId)}
+                style={styles.primaryButtonBox}
+              >
+                <Text style={styles.primaryButtonText}>
+                  Recover quiz attempt
+                </Text>
+              </Pressable>
+            ) : null}
+          </>
+        }
         onRefresh={onRefresh}
         refreshing={false}
         renderItem={({ item }) => (

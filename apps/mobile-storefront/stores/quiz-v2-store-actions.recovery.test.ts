@@ -14,6 +14,39 @@ describe('createQuizV2StoreActions recovery', () => {
   beforeEach(() => resetQuizV2StoreActionMocks());
   afterEach(() => jest.clearAllMocks());
 
+  it('clears the resume marker when the server confirms no attempt exists', async () => {
+    const harness = createHarness();
+    harness.set({ startRequestId: 'request' });
+    await harness.actions.recoverEvent(
+      'user-1',
+      'event-1',
+      async () => response({ availability: 'none', attempt: undefined }),
+      async () => activeAttempt
+    );
+    expect(harness.getState()).toMatchObject({
+      status: 'ready',
+      startRequestId: null,
+    });
+  });
+
+  it('recovers the server attempt even when local storage cannot be read', async () => {
+    const harness = createHarness();
+    mockLoadRecoveryEnvelope.mockRejectedValueOnce(
+      new Error('storage unavailable')
+    );
+    await harness.actions.recoverEvent(
+      'user-1',
+      'event-1',
+      async () => response({}),
+      async () => activeAttempt
+    );
+    expect(harness.getState()).toMatchObject({
+      status: 'question',
+      v2Attempt: activeAttempt,
+      error: null,
+    });
+  });
+
   it('keeps the terminal attempt id returned after a lost start response', async () => {
     mockLoadRecoveryEnvelope.mockResolvedValueOnce(null);
     const harness = createHarness();

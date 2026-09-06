@@ -8,6 +8,15 @@ import { useQuizStore } from './quiz-store';
 
 afterEach(() => useQuizStore.getState().resetForAccountChange());
 
+it.each([
+  'starting',
+  'submitting',
+] as const)('keeps legacy %s requests on their current surface until settled', (status) => {
+  useQuizStore.setState({ status });
+  useQuizStore.getState().showLobby();
+  expect(useQuizStore.getState().status).toBe(status);
+});
+
 it('discards reconciliation that arrives after returning to the lobby', async () => {
   useQuizStore.setState({ status: 'question', lockedOptionId: null });
   let resolve!: (response: QuizActiveAttemptResponse) => void;

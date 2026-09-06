@@ -101,7 +101,9 @@ export function createQuizV2StoreActions({
         selectedEventId: eventId,
       });
       try {
-        const envelope = await loadQuizRecoveryEnvelope(userId, eventId);
+        const envelope = await loadQuizRecoveryEnvelope(userId, eventId).catch(
+          () => null
+        );
         const recovered = await recoverer();
         if (generation !== getGeneration()) return 'retry';
         if (
@@ -144,6 +146,8 @@ export function createQuizV2StoreActions({
           recovered.attempt?.serverNow ?? recovered.serverNow;
         set({
           status: cancelled || pending || expiredActive ? 'result' : 'ready',
+          startRequestId:
+            recovered.availability === 'none' ? null : get().startRequestId,
           v2Attempt: null,
           v2LifecycleStatus: cancelled
             ? 'event_cancelled'

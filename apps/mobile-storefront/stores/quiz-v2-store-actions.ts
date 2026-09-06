@@ -31,6 +31,7 @@ export function createQuizV2StoreActions({
   let lastReconciledGeneration: number | null = null;
   let retryInFlightGeneration: number | null = null;
   let startInFlightGeneration: number | null = null;
+  const pendingStarts = new Map<number, V2StartContext>();
   let lifecycleEpoch = 0;
   // biome-ignore format: Compact dependency bundle keeps this coordinator within the module budget.
   const access = { get, getGeneration, getMessage, set };
@@ -81,6 +82,7 @@ export function createQuizV2StoreActions({
         }
         if (generation !== getGeneration()) return;
         try {
+          pendingStarts.set(generation, { ...context, startRequestId });
           const attempt = await starter(startRequestId);
           if (generation === getGeneration()) await apply(attempt);
         } catch (error) {
@@ -88,12 +90,23 @@ export function createQuizV2StoreActions({
             set({ status: 'ready', error: getMessage(error) });
         }
       })().finally(() => {
+        pendingStarts.delete(generation);
         if (startInFlightGeneration === generation)
           startInFlightGeneration = null;
       });
     },
     recoverEvent: async (userId, eventId, recoverer, resender) => {
       if (get().status === 'submitting') return 'retry';
+      const retainedRequestId =
+        get().recoveryUserId === userId && get().selectedEventId === eventId
+          ? get().startRequestId
+          : null;
+      const startWasPending = [...pendingStarts.values()].some(
+        (start) =>
+          start.userId === userId &&
+          start.eventId === eventId &&
+          start.startRequestId === retainedRequestId
+      );
       const generation = getGeneration();
       set({
         status: 'starting',
@@ -106,13 +119,17 @@ export function createQuizV2StoreActions({
         );
         const recovered = await recoverer();
         if (generation !== getGeneration()) return 'retry';
+        if (recovered.availability === 'none' && startWasPending) {
+          set({ status: 'ready' });
+          return 'retry';
+        }
         if (
           recovered.availability === 'active' &&
           recovered.attempt &&
           isQuizOpenAtServerTime(recovered)
         ) {
           set({
-            startRequestId: envelope?.startRequestId ?? null,
+            startRequestId: envelope?.startRequestId ?? retainedRequestId,
             v2Attempt: recovered.attempt,
           });
           if (

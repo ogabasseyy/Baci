@@ -154,6 +154,12 @@ export const useQuizStore = create<QuizStore>((set, get) => {
   return {
     ...initialState,
     ...v2Actions,
+    startEventV2: (context, starter) => {
+      if (get().status === 'starting' || get().status === 'submitting')
+        return Promise.resolve();
+      set({ attempt: null, selectedOptionId: null, result: null });
+      return v2Actions.startEventV2(context, starter);
+    },
     loadEvents: async (loader) => {
       const currentGeneration = generation;
       set({ status: 'loading', error: null });
@@ -170,6 +176,7 @@ export const useQuizStore = create<QuizStore>((set, get) => {
       if (get().status === 'starting' || get().status === 'submitting') return;
       const currentGeneration = generation;
       set({
+        ...initialQuizV2State,
         status: 'starting',
         attempt: null,
         selectedEventId: eventId,

@@ -45,6 +45,49 @@ describe('createQuizV2StoreActions recovery', () => {
       v2Attempt: activeAttempt,
       error: null,
     });
+    expect(harness.getState().startRequestId).toBe(
+      '11111111-1111-4111-8111-111111111111'
+    );
+  });
+
+  it.each([
+    'user-1',
+    'other-user',
+  ])('scopes unfinished start protection to the recovering account %s', async (userId) => {
+    const harness = createHarness();
+    harness.set({ status: 'ready' });
+    let finish!: (value: QuizV2Attempt) => void;
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const pending = harness.actions.startEventV2(
+      {
+        userId: 'user-1',
+        eventId: 'event-1',
+        integrityTier: 'basic',
+        startRequestId: 'request',
+      },
+      () =>
+        new Promise<QuizV2Attempt>((resolve) => {
+          finish = resolve;
+          started();
+        })
+    );
+    await ready;
+    harness.setGeneration(1);
+    harness.set({ status: 'ready' });
+    await harness.actions.recoverEvent(
+      userId,
+      'event-1',
+      async () => response({ availability: 'none', attempt: undefined }),
+      async () => activeAttempt
+    );
+    expect(harness.getState().startRequestId).toBe(
+      userId === 'user-1' ? 'request' : null
+    );
+    finish(activeAttempt);
+    await pending;
   });
 
   it('keeps the terminal attempt id returned after a lost start response', async () => {

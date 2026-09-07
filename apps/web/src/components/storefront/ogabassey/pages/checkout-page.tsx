@@ -1,6 +1,6 @@
 'use client';
 
-import { CryptoSelectorModal } from './checkout/components/CryptoSelectorModal';
+import { DeferredCryptoSelectorModal as CryptoSelectorModal } from './checkout/components/DeferredCryptoSelectorModal';
 import {
   isAirportDeliveryEligible,
   isPickupEligible,
@@ -59,7 +59,7 @@ import {
 } from '@/hooks/use-persisted-state';
 import { useAuthSafe } from '@/contexts/auth-context';
 import { PhoneInput } from '@/components/ui/phone-input';
-import { CheckoutAuthModal } from '@/components/storefront/checkout-auth-modal';
+import { DeferredCheckoutAuthModal as CheckoutAuthModal } from './checkout/components/DeferredCheckoutAuthModal';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import {
   AddressAutocomplete,
@@ -143,8 +143,8 @@ import { isWalletOrderAutoDebitWebEnabled } from '@/config/wallet-order-auto-deb
 import { isEligibleForWalletFundedBankTransfer } from './checkout/wallet-funded-transfer-eligibility';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
-import { WalletFundedTransferModal } from './checkout/components/WalletFundedTransferModal';
-import { WalletTransferConsentDialog } from './checkout/components/WalletTransferConsentDialog';
+import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
+import { DeferredWalletTransferConsentDialog as WalletTransferConsentDialog } from './checkout/components/DeferredWalletTransferConsentDialog';
 
 /**
  * Discriminated union for checkout item rendering. The `kind` tag is set at
@@ -2827,11 +2827,11 @@ export const CheckoutPage: React.FC = () => {
           </div>
         </div>
       </div>
-      <CheckoutAuthModal
+      {isAuthModalOpen && <CheckoutAuthModal
         isOpen={isAuthModalOpen}
         onOpenChange={setIsAuthModalOpen}
         onSuccess={() => setIsAuthModalOpen(false)}
-      />
+      />}
 
       {/* Crypto Selector Modal */}
       {showCryptoSelector && (

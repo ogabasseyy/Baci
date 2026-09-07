@@ -44,6 +44,7 @@ export function CryptoSelectorModal({
           </div>
           <button
             type="button"
+            aria-label="Close crypto selector"
             onClick={onClose}
             className="size-8 rounded-lg bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
           >

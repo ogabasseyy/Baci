@@ -58,7 +58,7 @@ describe('storefront blog post metadata', () => {
     expect(mockDraftMode).not.toHaveBeenCalled();
   });
 
-  it('bounds long blog post title and description metadata', async () => {
+  it('keeps a descriptive long blog post title complete while preserving its single merchant suffix', async () => {
     mockGetRequestScopedBlogPost.mockResolvedValue({
       ...liveBlogPost,
       post: {
@@ -73,13 +73,52 @@ describe('storefront blog post metadata', () => {
     const metadata = await generateBlogPostMetadata('best-phones-under-500000');
 
     const title = (metadata.title as { absolute: string }).absolute;
-    expect(title.length).toBeLessThanOrEqual(60);
-    expect(title).toContain('Ogabassey');
+    expect(title).toBe(
+      'Best Phones Under 500000 Naira in Nigeria With Camera Battery and Gaming Performance Compared | Ogabassey'
+    );
+    expect(title).not.toContain('...');
     expect(typeof metadata.description).toBe('string');
     if (typeof metadata.description !== 'string') {
       throw new TypeError('metadata.description must be a string');
     }
     expect(metadata.description.length).toBeLessThanOrEqual(160);
+  });
+
+  it('sanitizes a blog SEO title and adds the merchant suffix once', async () => {
+    mockGetRequestScopedBlogPost.mockResolvedValue({
+      ...liveBlogPost,
+      post: {
+        ...liveBlogPost.post,
+        seo_title:
+          '<script>alert(1)</script> Itel Power 80 Review | Ogabassey | Ogabassey',
+      },
+    });
+
+    const metadata = await generateBlogPostMetadata('itel-power-80-review');
+
+    expect(metadata.title).toEqual({
+      absolute: 'alert(1) Itel Power 80 Review | Ogabassey',
+    });
+    expect(metadata.openGraph).toEqual(
+      expect.objectContaining({
+        title: 'alert(1) Itel Power 80 Review | Ogabassey',
+      })
+    );
+  });
+
+  it('falls back safely when blog title values are empty after sanitization', async () => {
+    mockGetRequestScopedBlogPost.mockResolvedValue({
+      ...liveBlogPost,
+      post: {
+        ...liveBlogPost.post,
+        seo_title: '<span> </span>',
+        title: '   ',
+      },
+    });
+
+    const metadata = await generateBlogPostMetadata('empty-title');
+
+    expect(metadata.title).toEqual({ absolute: 'Blog Post | Ogabassey' });
   });
 
   it('uses fallback blog description metadata when source text is empty', async () => {

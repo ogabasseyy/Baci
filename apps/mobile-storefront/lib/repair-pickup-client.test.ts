@@ -3,7 +3,10 @@ import { repairPickupPaymentAttempt } from './repair-pickup-payment-attempt';
 
 jest.mock('./repair-pickup-payment-attempt', () => ({
   repairPickupPaymentAttempt: {
-    get: jest.fn(async () => '14bf2192-16de-442b-bf75-700f4ff2aaca'),
+    get: jest.fn(async () => ({
+      requestId: '14bf2192-16de-442b-bf75-700f4ff2aaca',
+      expectedPickupFee: 3000,
+    })),
     clear: jest.fn(),
   },
 }));
@@ -24,6 +27,30 @@ const data = {
   pickupAddress: '10 Test Road, Osogbo, Osun',
 };
 describe('repairPickupClient', () => {
+  beforeEach(() => jest.clearAllMocks());
+  it('returns resume_invalid even when durable attempt cleanup fails', async () => {
+    const result = { success: false, code: 'resume_invalid', error: 'Expired' };
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => result });
+    jest
+      .mocked(repairPickupPaymentAttempt.clear)
+      .mockRejectedValueOnce(new Error('Storage unavailable'));
+    await expect(
+      repairPickupClient.pay(data, 3000, 'expired')
+    ).resolves.toEqual(result);
+  });
+  it('maps HTML or empty HTTP failures to a safe repair-service message', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      json: async () => {
+        throw new SyntaxError('Unexpected end of JSON input');
+      },
+    });
+    await expect(repairPickupClient.quote(data)).rejects.toThrow(
+      'Could not contact the repair service.'
+    );
+  });
   it('reuses the durable identity after a timed-out payment response', async () => {
     jest.useFakeTimers();
     const fetch = jest
@@ -56,7 +83,10 @@ describe('repairPickupClient', () => {
       );
       await jest.advanceTimersByTimeAsync(30_000);
       await first;
-      await repairPickupClient.pay(data, 3000);
+      await repairPickupClient.pay(data, 4000);
+      expect(JSON.parse(fetch.mock.calls[1][1].body).expectedPickupFee).toBe(
+        3000
+      );
       expect(JSON.parse(fetch.mock.calls[0][1].body).requestId).toBe(
         JSON.parse(fetch.mock.calls[1][1].body).requestId
       );

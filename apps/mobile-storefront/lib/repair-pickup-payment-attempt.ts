@@ -7,29 +7,29 @@ import { repairPickupAttemptSchema } from '@/schemas/repair-pickup-attempt';
 async function key(data: RepairBookingRequest) {
   return `repair-pickup-attempt-${await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify([Constants.expoConfig?.extra?.merchantSlug || 'ogabassey', data]))}`;
 }
-const pending = new Map<string, Promise<string>>();
+type Attempt = {
+  requestId: string;
+  expectedPickupFee: number;
+  resumeToken?: string;
+};
+const pending = new Map<string, Promise<Attempt>>();
+const retired = new Set<string>();
 
 export const repairPickupPaymentAttempt = {
   async get(
     data: RepairBookingRequest,
     expectedPickupFee: number,
     resumeToken?: string
-  ): Promise<string> {
+  ): Promise<Attempt> {
     const storageKey = await key(data);
     const existing = pending.get(storageKey);
     if (existing) return existing;
     const task = (async () => {
-      const raw = await SecureStore.getItemAsync(storageKey);
+      const raw = retired.has(storageKey)
+        ? null
+        : await SecureStore.getItemAsync(storageKey);
       if (raw) {
-        const saved = repairPickupAttemptSchema.parse(JSON.parse(raw));
-        if (
-          saved.expectedPickupFee !== expectedPickupFee ||
-          saved.resumeToken !== resumeToken
-        )
-          throw new Error(
-            'Recover the previous pickup payment before changing its details.'
-          );
-        return saved.requestId;
+        return repairPickupAttemptSchema.parse(JSON.parse(raw));
       }
       const requestId = Crypto.randomUUID();
       // Fail before sending if retry identity cannot be durably saved.
@@ -37,7 +37,8 @@ export const repairPickupPaymentAttempt = {
         storageKey,
         JSON.stringify({ requestId, expectedPickupFee, resumeToken })
       );
-      return requestId;
+      retired.delete(storageKey);
+      return { requestId, expectedPickupFee, resumeToken };
     })();
     pending.set(storageKey, task);
     try {
@@ -47,6 +48,11 @@ export const repairPickupPaymentAttempt = {
     }
   },
   async clear(data: RepairBookingRequest) {
-    await SecureStore.deleteItemAsync(await key(data));
+    const storageKey = await key(data);
+    // A definitive response retires this attempt in memory even if deletion
+    // fails. A replacement must still be written successfully before sending.
+    retired.add(storageKey);
+    await SecureStore.deleteItemAsync(storageKey);
+    retired.delete(storageKey);
   },
 };

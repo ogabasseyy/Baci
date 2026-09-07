@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { repairPickupClient } from '@/lib/repair-pickup-client';
 import { RepairStatusScreen } from './RepairStatusScreen';
 
@@ -11,6 +12,10 @@ jest.mock('@/lib/repair-pickup-client', () => ({
 }));
 
 describe('RepairStatusScreen', () => {
+  it('reserves the bottom system inset around the scrolling status content', () => {
+    const view = render(<RepairStatusScreen />);
+    expect(view.UNSAFE_getByType(SafeAreaView).props.edges).toEqual(['bottom']);
+  });
   beforeEach(() => jest.clearAllMocks());
   it('shows the authenticated-by-ticket-and-email status and waybill', async () => {
     jest.mocked(repairPickupClient.status).mockResolvedValue({

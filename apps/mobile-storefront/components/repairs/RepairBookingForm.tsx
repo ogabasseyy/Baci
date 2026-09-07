@@ -3,7 +3,7 @@ import type {
   RepairQuoteSummary,
 } from '@baci/shared/repairs';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useState } from 'react';
+import { type RefObject, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -36,6 +36,7 @@ interface RepairBookingFormProps {
   /** Field-level errors returned by the server (keyed by request field). */
   fieldErrors: Record<string, string[]> | null;
   onSubmit: (payload: RepairBookingRequest) => void;
+  navigationBackRef?: RefObject<(() => void) | null>;
 }
 
 const INITIAL_STATE: RepairBookingFormState = {
@@ -62,6 +63,7 @@ export function RepairBookingForm({
   serverError,
   fieldErrors,
   onSubmit,
+  navigationBackRef,
 }: RepairBookingFormProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -103,7 +105,11 @@ export function RepairBookingForm({
 
   if (pickup)
     return (
-      <RepairPickupCheckout data={pickup} onBack={() => setPickup(null)} />
+      <RepairPickupCheckout
+        data={pickup}
+        onBack={() => setPickup(null)}
+        navigationBackRef={navigationBackRef}
+      />
     );
 
   return (

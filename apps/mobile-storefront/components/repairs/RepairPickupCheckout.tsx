@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text } from 'react-native';
+import { RepairPickupStatus } from '@/components/repairs/RepairPickupStatus';
 import { repairsCatalogStyles as styles } from '@/components/repairs/repairs-catalog.styles';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useRepairPickupBack } from '@/hooks/use-repair-pickup-back';
 import { openRepairPickupPayment } from '@/lib/open-repair-pickup-payment';
 import type { RepairBookingRequest } from '@/lib/repair-catalog-schemas';
 import { repairPickupClient } from '@/lib/repair-pickup-client';
@@ -11,9 +13,11 @@ import { repairPickupSession } from '@/lib/repair-pickup-session';
 export function RepairPickupCheckout({
   data,
   onBack,
+  navigationBackRef,
 }: {
   data: RepairBookingRequest;
   onBack: () => void;
+  navigationBackRef?: RefObject<(() => void) | null>;
 }) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const [price, setPrice] = useState<number | null>(null);
@@ -30,6 +34,12 @@ export function RepairPickupCheckout({
   const [restoreFailed, setRestoreFailed] = useState(false);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const inFlight = useRef(false);
+  useRepairPickupBack(
+    navigationBackRef,
+    ready && ticket === null,
+    inFlight,
+    onBack
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Explicit retries rerun failed secure-storage recovery.
   useEffect(() => {
@@ -179,28 +189,12 @@ export function RepairPickupCheckout({
           Repair ticket: {ticket}
         </Text>
       )}
-      {tracking ? (
-        <Text selectable style={{ color: colors.text }}>
-          Pickup booked. Waybill: {tracking}
-        </Text>
-      ) : status === 'review' ? (
-        <Text style={{ color: colors.text }}>
-          Pickup needs review. Contact the store with your repair ticket; do not
-          pay again.
-        </Text>
-      ) : status === 'manual_fulfilled' ? (
-        <Text style={{ color: colors.text }}>
-          The store has arranged your pickup.
-        </Text>
-      ) : paid ? (
-        <Text style={{ color: colors.text }}>
-          Payment received. Pickup confirmation is pending.
-        </Text>
-      ) : ticket !== null ? (
-        <Text style={{ color: colors.text }}>
-          Awaiting payment confirmation.
-        </Text>
-      ) : null}
+      <RepairPickupStatus
+        status={status}
+        tracking={tracking}
+        paid={paid}
+        hasTicket={ticket !== null}
+      />
       {status && (
         <Text style={{ color: colors.text }}>
           Pickup status: {status.replaceAll('_', ' ')}

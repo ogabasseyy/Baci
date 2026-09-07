@@ -5,7 +5,7 @@ import type {
 import * as Haptics from 'expo-haptics';
 import { router, Stack } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -63,8 +63,13 @@ export function RepairsCatalogScreen() {
   const booking = useRepairBooking();
 
   const showSuccess = booking.result !== null;
+  const pickupBack = useRef<(() => void) | null>(null);
 
   const goBackOneStep = () => {
+    if (pickupBack.current) {
+      pickupBack.current();
+      return;
+    }
     if (step === 'form') {
       setStep(device ? 'detail' : 'catalog');
       return;
@@ -154,6 +159,7 @@ export function RepairsCatalogScreen() {
           serverError={booking.error}
           fieldErrors={booking.fieldErrors}
           onSubmit={booking.submit}
+          navigationBackRef={pickupBack}
         />
       </>
     );

@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text } from 'react-native';
 import { RepairTextField } from '@/components/repairs/RepairTextField';
 import { repairsCatalogStyles as styles } from '@/components/repairs/repairs-catalog.styles';
+import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { repairPickupClient } from '@/lib/repair-pickup-client';
@@ -42,7 +43,7 @@ export function RepairStatusScreen() {
     }
   }
   return (
-    <>
+    <StorefrontScreenShell>
       <Stack.Screen options={{ title: 'Track repair' }} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -99,6 +100,6 @@ export function RepairStatusScreen() {
           </>
         )}
       </ScrollView>
-    </>
+    </StorefrontScreenShell>
   );
 }

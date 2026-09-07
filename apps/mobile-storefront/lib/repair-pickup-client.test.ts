@@ -16,6 +16,28 @@ const data = {
   pickupAddress: '10 Test Road, Osogbo, Osun',
 };
 describe('repairPickupClient', () => {
+  it('aborts stalled requests and reports a bounded timeout', async () => {
+    jest.useFakeTimers();
+    const original = global.fetch;
+    global.fetch = jest.fn(
+      (_url, options) =>
+        new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () =>
+            reject(new Error('Aborted'))
+          );
+        })
+    );
+    try {
+      const request = repairPickupClient.quote(data);
+      const assertion = expect(request).rejects.toThrow('Request timed out');
+      await jest.advanceTimersByTimeAsync(30_000);
+      await assertion;
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      global.fetch = original;
+      jest.useRealTimers();
+    }
+  });
   const originalFetch = global.fetch;
   afterEach(() => {
     global.fetch = originalFetch;

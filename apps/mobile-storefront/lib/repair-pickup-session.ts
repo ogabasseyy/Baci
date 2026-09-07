@@ -19,6 +19,9 @@ async function key(data: RepairBookingRequest) {
 }
 
 export const repairPickupSession = {
+  async clear(data: RepairBookingRequest) {
+    await SecureStore.deleteItemAsync(await key(data));
+  },
   async load(data: RepairBookingRequest): Promise<RepairPickupSession | null> {
     const value = await SecureStore.getItemAsync(await key(data));
     return value ? repairPickupSchemas.session.parse(JSON.parse(value)) : null;

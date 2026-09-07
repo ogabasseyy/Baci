@@ -11,19 +11,37 @@ const merchant = encodeURIComponent(
 );
 
 async function post(path: string, body: unknown): Promise<unknown> {
-  const response = await fetch(`${origin}/api/storefront/${merchant}/${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const result: unknown = await response.json();
-  if (!response.ok) {
-    const error = repairPickupSchemas.error.safeParse(result);
-    throw new Error(
-      error.success ? error.data.error : 'Could not contact the repair service.'
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const response = await fetch(
+      `${origin}/api/storefront/${merchant}/${path}`,
+      {
+        signal: controller.signal,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }
     );
+    const result: unknown = await response.json();
+    if (!response.ok) {
+      const error = repairPickupSchemas.error.safeParse(result);
+      throw new Error(
+        error.success
+          ? error.data.error
+          : 'Could not contact the repair service.'
+      );
+    }
+    return result;
+  } catch (error) {
+    if (controller.signal.aborted)
+      throw new Error(
+        'Request timed out. Check pickup status before retrying payment.'
+      );
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return result;
 }
 
 export const repairPickupClient = {

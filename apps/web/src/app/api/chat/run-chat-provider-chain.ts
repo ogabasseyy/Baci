@@ -48,6 +48,10 @@ export async function runChatProviderChain({
   let activeProviderName: string | null = null;
   let presentationProviderName: string | null = null;
   let presentationCollector = createChatPresentationEventCollector();
+  let recovery: {
+    events: StorefrontAgentUiEvent[];
+    providerName: string;
+  } | null = null;
   const createToolsForAttempt = (providerName: string) => {
     const collector = createChatPresentationEventCollector();
     presentationCollector = collector;
@@ -74,6 +78,12 @@ export async function runChatProviderChain({
   const deadline = Date.now() + CUSTOMER_CHAT_TIMEOUT_MS;
   const remainingTimeoutMs = () => Math.max(0, deadline - Date.now());
   const onProviderError = (providerName: string, error: unknown) => {
+    // Snapshot only the just-finished attempt. A subsequent empty collector
+    // or a late callback cannot erase or append to this recovery snapshot.
+    if (providerName === presentationProviderName) {
+      const events = presentationCollector.getEvents();
+      if (events.length) recovery = { events, providerName };
+    }
     const errorName =
       error instanceof Error ? error.name.slice(0, 80) : 'UnknownError';
     console.warn(
@@ -96,13 +106,13 @@ export async function runChatProviderChain({
     return events.length > 0 ? { ...providerResult, events } : providerResult;
   };
   const getPresentationOnlyResult = (): AgenticChatProviderResult | null => {
-    const events = presentationCollector.getEvents();
+    const events = recovery?.events ?? [];
     if (events.length === 0 || sideEffectExecuted) return null;
 
     return {
       events,
       providerName:
-        presentationProviderName ?? activeProviderName ?? 'agentic:tool-result',
+        recovery?.providerName ?? activeProviderName ?? 'agentic:tool-result',
       text: PRESENTATION_ONLY_FALLBACK_TEXT,
     };
   };

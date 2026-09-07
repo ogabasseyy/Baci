@@ -16,6 +16,22 @@ const validProduct = {
 };
 
 describe('storefrontAgentUiContract', () => {
+  it.each([
+    [{ condition: 'used', minimumOrderQuantity: 3 }, true],
+    [{ condition: null, minimumOrderQuantity: null }, true],
+    [{ condition: 42 }, false],
+    [{ minimumOrderQuantity: 0 }, false],
+    [{ minimumOrderQuantity: 1.5 }, false],
+  ])('validates product selection metadata %j', (metadata, success) => {
+    expect(
+      storefrontAgentUiContract.eventSchema.safeParse({
+        type: 'present_products',
+        intent: 'discover',
+        title: 'Products',
+        products: [{ ...validProduct, ...metadata }],
+      }).success
+    ).toBe(success);
+  });
   it('accepts a bounded product presentation response', () => {
     const result = storefrontAgentUiContract.responseSchema.safeParse({
       events: [

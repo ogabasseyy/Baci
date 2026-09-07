@@ -21,6 +21,10 @@ const PRICE_FORMATTER = new Intl.NumberFormat('en-NG', {
 });
 
 function needsSelection(product: StorefrontAgentUiProduct): boolean {
+  // The PDP owns condition-aware cart options and minimum-order selection.
+  if (product.condition?.trim() || (product.minimumOrderQuantity ?? 1) > 1) {
+    return true;
+  }
   return requiresProductSelection({
     available_conditions: product.availableConditions,
     has_condition_offers: product.hasConditionOffers,

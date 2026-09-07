@@ -3,6 +3,8 @@ import z from 'zod';
 /** Raw catalog tool result, validated before presentation normalization. */
 export const chatToolProductSchema = z
   .object({
+    condition: z.string().max(120).nullable().optional(),
+    minimum_order_quantity: z.number().int().positive().nullable().optional(),
     available_conditions: z.array(z.string()).nullable().optional(),
     has_condition_offers: z.boolean().nullable().optional(),
     variant_model: z.string().nullable().optional(),

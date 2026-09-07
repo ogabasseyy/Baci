@@ -30,3 +30,13 @@ it('rejects inactive products and malformed stock', () => {
     chatToolProductSchema.safeParse({ ...product, stock: 'two' }).success
   ).toBe(false);
 });
+
+it.each([
+  { condition: 42 },
+  { minimum_order_quantity: 0 },
+  { minimum_order_quantity: 1.5 },
+])('rejects malformed selection metadata %j', (metadata) => {
+  expect(
+    chatToolProductSchema.safeParse({ ...product, ...metadata }).success
+  ).toBe(false);
+});

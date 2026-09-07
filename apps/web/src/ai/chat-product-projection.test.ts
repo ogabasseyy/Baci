@@ -61,6 +61,8 @@ it.each([
   expect(projection.split(',').map((column) => column.trim())).toEqual(
     expect.arrayContaining([
       'stock_quantity',
+      'condition',
+      'minimum_order_quantity',
       'has_condition_offers',
       'variant_model',
       'available_conditions',

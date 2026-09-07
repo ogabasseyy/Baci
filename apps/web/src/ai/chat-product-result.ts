@@ -1,9 +1,12 @@
 import {
   getEffectiveProductStock,
+  getImagePayloadUrl,
   type ProductSelectionRequiredInput,
 } from '@baci/shared/lib';
 
 interface ChatProductRow extends ProductSelectionRequiredInput {
+  condition?: string | null;
+  minimum_order_quantity?: number | null;
   brand: string | null;
   category: string | null;
   description: string | null;
@@ -20,6 +23,8 @@ interface ChatProductRow extends ProductSelectionRequiredInput {
 }
 
 export interface ChatProductResult extends ProductSelectionRequiredInput {
+  condition?: string | null;
+  minimum_order_quantity?: number | null;
   brand: string | null;
   category: string | null;
   description: string | null;
@@ -37,17 +42,11 @@ export interface ChatProductResult extends ProductSelectionRequiredInput {
 function getFirstImageUrl(images: unknown): string | null {
   if (!Array.isArray(images)) return null;
 
-  const firstImage = images[0];
-  if (
-    typeof firstImage !== 'object' ||
-    firstImage === null ||
-    !('url' in firstImage) ||
-    typeof firstImage.url !== 'string'
-  ) {
-    return null;
+  for (const image of images) {
+    const url = getImagePayloadUrl(image);
+    if (url) return url;
   }
-
-  return firstImage.url;
+  return null;
 }
 
 /** Maps the exact public fields a chat card may receive from catalog tools. */
@@ -55,6 +54,12 @@ export function createChatProductResult(
   product: ChatProductRow
 ): ChatProductResult {
   return {
+    ...(product.condition !== undefined
+      ? { condition: product.condition }
+      : {}),
+    ...(product.minimum_order_quantity !== undefined
+      ? { minimum_order_quantity: product.minimum_order_quantity }
+      : {}),
     brand: product.brand,
     category: product.category,
     description: product.description,

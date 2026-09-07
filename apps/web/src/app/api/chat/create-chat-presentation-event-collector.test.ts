@@ -26,11 +26,15 @@ describe('createChatPresentationEventCollector', () => {
       has_condition_offers: true,
       variant_model: 'sku_matrix',
       available_conditions: ['New', 'Used'],
+      condition: 'used',
+      minimum_order_quantity: 3,
     });
     expect(collector.getEvents()[0]?.products[0]).toMatchObject({
       hasConditionOffers: true,
       variantModel: 'sku_matrix',
       availableConditions: ['New', 'Used'],
+      condition: 'used',
+      minimumOrderQuantity: 3,
     });
   });
   it('maps trusted product search results into a bounded UI event', () => {

@@ -239,6 +239,7 @@ import { createOllamaAgenticChatResponse } from '@/lib/ollama-agentic-chat';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { storefrontAgentUiContract } from '@/schemas/storefront-agent-ui-contract';
 import { POST } from './route';
+import { generateRouteChainAttempt } from './route-chain.test-support';
 
 // ---- Helpers ----
 
@@ -309,23 +310,7 @@ describe('POST /api/chat', () => {
     llmStreamError = null;
     llmResponseText = 'LLM response';
     chatProvider = 'auto';
-    generateTextWithChainMock.mockImplementation(
-      async (options: Parameters<typeof generateText>[0]) => {
-        const { chain, ...generationOptions } = options as Parameters<
-          typeof generateText
-        >[0] & {
-          chain?: Array<{ model: Parameters<typeof generateText>[0]['model'] }>;
-        };
-        const result = await generateText({
-          ...generationOptions,
-          model: chain?.[0]?.model ?? 'mock-model',
-        });
-        return {
-          providerName: 'google:gemini-2.5-flash',
-          text: result.text,
-        };
-      }
-    );
+    generateTextWithChainMock.mockImplementation(generateRouteChainAttempt);
   });
 
   it('returns 429 when rate limited', async () => {
@@ -409,9 +394,15 @@ describe('POST /api/chat', () => {
     expect(text).toBe('AI response');
   });
 
-  it('returns trusted product UI events when the widget opts in', async () => {
+  it.each([
+    null,
+    'generation',
+    'stream',
+  ] as const)('returns trusted product UI events with failure: %s', async (failure) => {
     ollamaBaseUrl = 'https://ollama.example.com';
     ollamaResponseText = 'I found one phone.';
+    if (failure === 'generation') ollamaError = new Error('generation failed');
+    if (failure === 'stream') ollamaStreamError = new Error('stream failed');
     ollamaExecutedToolNameBeforeFailure = 'searchProducts';
     ollamaExecutedToolResultBeforeFailure = JSON.stringify({
       products: [
@@ -455,7 +446,9 @@ describe('POST /api/chat', () => {
           type: 'present_products',
         }),
       ],
-      text: 'I found one phone.',
+      text: failure
+        ? 'I found these live catalog options for you.'
+        : 'I found one phone.',
       version: 1,
     });
   });

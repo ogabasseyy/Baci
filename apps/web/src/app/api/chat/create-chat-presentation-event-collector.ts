@@ -68,6 +68,12 @@ function createProduct(
 
   const product = parsed.data;
   const candidate = {
+    ...(product.condition !== undefined
+      ? { condition: product.condition }
+      : {}),
+    ...(product.minimum_order_quantity !== undefined
+      ? { minimumOrderQuantity: product.minimum_order_quantity }
+      : {}),
     ...(product.available_conditions !== undefined
       ? { availableConditions: product.available_conditions }
       : {}),

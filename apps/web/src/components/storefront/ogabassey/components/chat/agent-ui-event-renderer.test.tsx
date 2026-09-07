@@ -73,6 +73,9 @@ describe('AgentUiEventRenderer', () => {
     { hasConditionOffers: true },
     { variantModel: 'sku_matrix' },
     { availableConditions: ['New', 'Used'] },
+    { condition: 'used' },
+    { condition: 'open_box' },
+    { minimumOrderQuantity: 3 },
   ])('requires PDP selection without variants for %j', (metadata) => {
     const base = event();
     render(

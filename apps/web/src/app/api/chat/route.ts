@@ -26,6 +26,7 @@ import { createChatPresentationEventCollector } from '@/app/api/chat/create-chat
 import { negotiateChatAgentUiResponse } from '@/app/api/chat/negotiate-chat-agent-ui-response';
 import { executeAgenticChatToolForOllama } from '@/app/api/chat/ollama-chat-tool-runtime';
 import { ollamaAgenticChatTools } from '@/app/api/chat/ollama-chat-tools';
+import { recoverOllamaChatResponse } from '@/app/api/chat/recover-ollama-chat-response';
 import {
   bufferTextResponse,
   buildChatMessages,
@@ -287,27 +288,13 @@ export async function POST(req: Request) {
             presentationCollector.getEvents()
           );
         } catch (error) {
-          if (isChatAbortError(error, req.signal)) {
-            return createClientClosedRequestResponse();
-          }
-
-          const safeErrorMessage = getSafeChatBackendErrorMessage(error);
-          if (ollamaSideEffectingToolExecuted) {
-            console.warn(
-              '[Agentic Chat] Ollama request failed after executing commerce tools; returning static fallback:',
-              safeErrorMessage
-            );
-            return await negotiateChatAgentUiResponse(
-              req,
-              createStaticChatFallbackResponse(),
-              presentationCollector.getEvents()
-            );
-          }
-
-          console.warn(
-            '[Agentic Chat] Ollama request failed; falling back to Gemini:',
-            safeErrorMessage
+          const recovered = await recoverOllamaChatResponse(
+            req,
+            error,
+            ollamaSideEffectingToolExecuted,
+            presentationCollector.getEvents()
           );
+          if (recovered) return recovered;
         }
       }
     }

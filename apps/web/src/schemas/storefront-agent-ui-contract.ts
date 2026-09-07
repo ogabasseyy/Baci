@@ -10,6 +10,8 @@ const httpImageUrlSchema = z
 
 const productSchema = z
   .object({
+    condition: z.string().max(120).nullable().optional(),
+    minimumOrderQuantity: z.number().int().positive().nullable().optional(),
     availableConditions: z
       .array(z.string().max(120))
       .max(20)

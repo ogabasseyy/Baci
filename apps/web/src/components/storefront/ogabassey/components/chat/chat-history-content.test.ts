@@ -21,6 +21,41 @@ const event: StorefrontAgentUiEvent = {
   })),
 };
 
+it('budgets long assistant text and escaped card references within 10000 characters', () => {
+  const richEvent = {
+    ...event,
+    products: Array.from({ length: 6 }, (_, index) => ({
+      ...event.products[0], id: `product-${index}`, name: '"\\'.repeat(100),
+    })),
+  };
+  const content = chatHistoryContent({
+    role: 'model', text: 'x'.repeat(10_000),
+    uiEvents: [richEvent, richEvent, richEvent],
+  });
+  expect(content.length).toBeLessThanOrEqual(10_000);
+  const references = content.slice(content.indexOf('[[{'));
+  expect(JSON.parse(references)).toHaveLength(3);
+  expect(JSON.parse(references)[0][0]).toEqual({
+    id: 'product-0', name: '"\\'.repeat(100),
+  });
+});
+
+it('bounds a long plain assistant response without card references', () => {
+  expect(chatHistoryContent({ role: 'model', text: 'x'.repeat(100_000) }))
+    .toHaveLength(10_000);
+});
+
+it('drops trailing references when JSON control-character escaping exhausts the budget', () => {
+  const richEvent = { ...event, products: Array.from({ length: 6 }, (_, index) => ({
+    ...event.products[0], id: `id-${index}`, name: `A${'\u0001'.repeat(199)}`,
+  })) };
+  const content = chatHistoryContent({ role: 'model', text: 'Options', uiEvents: [richEvent, richEvent, richEvent] });
+  expect(content.length).toBeLessThanOrEqual(10_000);
+  const groups = JSON.parse(content.slice(content.indexOf('[[{')));
+  expect(groups[0]).toHaveLength(6);
+  expect(groups.flat().length).toBeLessThan(18);
+});
+
 it('preserves ordered references from presentation-only replies', () => {
   const content = chatHistoryContent({
     role: 'model',

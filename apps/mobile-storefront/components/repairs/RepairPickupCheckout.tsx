@@ -134,13 +134,14 @@ export function RepairPickupCheckout({
         url = result.payment.authorizationUrl;
         ticketNumber = result.ticketNumber;
         setPaymentUrl(url);
+        setPrice(result.payment.amount);
       }
       if (result.resumeToken)
         await repairPickupSession
           .save(data, {
             resumeToken: result.resumeToken,
             ticketNumber: result.ticketNumber,
-            price,
+            price: result.success ? result.payment.amount : price,
             paymentUrl: result.success
               ? result.payment.authorizationUrl
               : undefined,
@@ -163,6 +164,12 @@ export function RepairPickupCheckout({
         }
         if (result.quote) setPrice(result.quote.price);
         throw new Error(result.error);
+      }
+      if (result.payment.amount !== price) {
+        setWarning(
+          'Recovered your earlier payment. Review its pickup fee before continuing.'
+        );
+        return;
       }
     }
     // Closing the browser is not payment confirmation; only read server status.

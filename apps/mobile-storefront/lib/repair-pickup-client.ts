@@ -24,7 +24,9 @@ async function post(path: string, body: unknown): Promise<unknown> {
         body: JSON.stringify(body),
       }
     );
-    const result: unknown = await response.json();
+    const result: unknown = await response.json().catch(() => {
+      throw new Error('Could not contact the repair service.');
+    });
     if (!response.ok) {
       const error = repairPickupSchemas.error.safeParse(result);
       throw new Error(
@@ -56,7 +58,7 @@ export const repairPickupClient = {
     expectedPickupFee: number,
     resumeToken?: string
   ) {
-    const requestId = await repairPickupPaymentAttempt.get(
+    const attempt = await repairPickupPaymentAttempt.get(
       data,
       expectedPickupFee,
       resumeToken
@@ -64,15 +66,14 @@ export const repairPickupClient = {
     const result = repairPickupSchemas.payment.parse(
       await post('repairs/pickup', {
         action: 'pay',
-        requestId,
+        ...attempt,
         data,
-        expectedPickupFee,
-        resumeToken,
       })
     );
     // Only a parsed, definitive failure permits a new start. Lost responses
     // retain the same identity, so the server replays rather than reinitializes.
-    if (!result.success) await repairPickupPaymentAttempt.clear(data);
+    if (!result.success)
+      await repairPickupPaymentAttempt.clear(data).catch(() => undefined);
     return result;
   },
   async status(ticketNumber: number, email: string) {

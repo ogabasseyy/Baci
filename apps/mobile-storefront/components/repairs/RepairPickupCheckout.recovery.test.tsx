@@ -40,6 +40,21 @@ const result = {
   },
 };
 describe('pickup recovery regressions', () => {
+  it('shows the original recovered fee and requires confirmation before opening payment when quotes changed', async () => {
+    jest.mocked(repairPickupClient.pay).mockResolvedValue({
+      ...result,
+      payment: { ...result.payment, amount: 3500 },
+    });
+    await show();
+    fireEvent.press(screen.getByRole('button', { name: 'Pay pickup fee' }));
+    await screen.findByText('Pickup fee: NGN 3,500');
+    expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByRole('button', { name: 'Continue payment' }));
+    await waitFor(() =>
+      expect(WebBrowser.openBrowserAsync).toHaveBeenCalledTimes(1)
+    );
+    expect(repairPickupClient.pay).toHaveBeenCalledTimes(1);
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(repairPickupSession.load).mockResolvedValue({

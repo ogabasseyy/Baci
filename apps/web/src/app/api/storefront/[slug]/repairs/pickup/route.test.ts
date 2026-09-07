@@ -45,6 +45,15 @@ const call = (body: unknown) =>
   );
 
 describe('mobile repair pickup', () => {
+  it('rejects separator-padded phones before merchant or carrier access', async () => {
+    const response = await call({
+      action: 'quote',
+      data: { ...data, customerPhone: '0803------' },
+    });
+    expect(response.status).toBe(400);
+    expect(mocks.quote).not.toHaveBeenCalled();
+    expect(mocks.merchant).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.rate.mockResolvedValue(true);

@@ -6,6 +6,7 @@ import {
 } from '@/lib/repairs/pickup-shipment-utils';
 import { quoteRepairPickup } from '@/lib/repairs/quote-repair-pickup';
 import { getRepairCenterAddress } from '@/lib/repairs/repair-center-address';
+import { repairPickupCustomerPhoneError } from '@/lib/repairs/repair-pickup-customer-phone';
 import { resolveRepairsCatalogMerchant } from '@/lib/repairs/repairs-catalog-access';
 import { startRepairPickupPayment } from '@/lib/repairs/start-repair-pickup-payment';
 import { mobileRepairPickupSchema } from '@/schemas/mobile-repair-pickup';
@@ -31,6 +32,11 @@ export async function POST(
       { status: 400 }
     );
   }
+  const phoneError = repairPickupCustomerPhoneError(
+    input.data.data.customerPhone
+  );
+  if (phoneError)
+    return NextResponse.json({ error: phoneError }, { status: 400 });
   if (
     !(await ensureActionRateLimit('mobile-repair-pickup', {
       requests: 10,

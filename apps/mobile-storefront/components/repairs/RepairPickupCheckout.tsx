@@ -1,9 +1,9 @@
-import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text } from 'react-native';
 import { repairsCatalogStyles as styles } from '@/components/repairs/repairs-catalog.styles';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { openRepairPickupPayment } from '@/lib/open-repair-pickup-payment';
 import type { RepairBookingRequest } from '@/lib/repair-catalog-schemas';
 import { repairPickupClient } from '@/lib/repair-pickup-client';
 import { repairPickupSession } from '@/lib/repair-pickup-session';
@@ -22,6 +22,8 @@ export function RepairPickupCheckout({
   const [paymentUrl, setPaymentUrl] = useState<string>();
   const [status, setStatus] = useState<string>();
   const [tracking, setTracking] = useState<string | null>(null);
+  const [terminal, setTerminal] = useState(false);
+  const [warning, setWarning] = useState<string>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
@@ -83,6 +85,9 @@ export function RepairPickupCheckout({
       );
     setStatus(result.repair.pickupPaymentStatus ?? 'pending');
     setTracking(result.repair.trackingNumber);
+    setTerminal(
+      ['completed', 'cancelled', 'rejected'].includes(result.repair.status)
+    );
   }
 
   async function pay() {
@@ -97,6 +102,12 @@ export function RepairPickupCheckout({
       setStatus(current.repair.pickupPaymentStatus ?? 'pending');
       setTracking(current.repair.trackingNumber);
       if (
+        ['completed', 'cancelled', 'rejected'].includes(current.repair.status)
+      ) {
+        setTerminal(true);
+        return;
+      }
+      if (
         current.repair.trackingNumber ||
         (current.repair.pickupPaymentStatus &&
           current.repair.pickupPaymentStatus !== 'awaiting_payment')
@@ -109,37 +120,43 @@ export function RepairPickupCheckout({
       const result = await repairPickupClient.pay(data, price, resumeToken);
       if (result.resumeToken) setResumeToken(result.resumeToken);
       if (result.ticketNumber) setTicket(result.ticketNumber);
+      if (result.success) {
+        url = result.payment.authorizationUrl;
+        ticketNumber = result.ticketNumber;
+        setPaymentUrl(url);
+      }
       if (result.resumeToken)
-        await repairPickupSession.save(data, {
-          resumeToken: result.resumeToken,
-          ticketNumber: result.ticketNumber,
-          price,
-          paymentUrl: result.success
-            ? result.payment.authorizationUrl
-            : undefined,
-        });
+        await repairPickupSession
+          .save(data, {
+            resumeToken: result.resumeToken,
+            ticketNumber: result.ticketNumber,
+            price,
+            paymentUrl: result.success
+              ? result.payment.authorizationUrl
+              : undefined,
+          })
+          .catch(() =>
+            setWarning(
+              'Payment recovery could not be saved. Keep your repair ticket and this screen open.'
+            )
+          );
       if (!result.success) {
+        if (result.code === 'resume_invalid') {
+          setResumeToken(undefined);
+          await repairPickupSession
+            .clear(data)
+            .catch(() =>
+              setWarning(
+                'Recovery storage could not be cleared. Keep this screen open.'
+              )
+            );
+        }
         if (result.quote) setPrice(result.quote.price);
         throw new Error(result.error);
       }
-      url = result.payment.authorizationUrl;
-      ticketNumber = result.ticketNumber;
-      setPaymentUrl(url);
-    }
-    const parsed = new URL(url);
-    if (
-      parsed.protocol !== 'https:' ||
-      parsed.hostname !== 'checkout.paystack.com' ||
-      parsed.username ||
-      parsed.password ||
-      parsed.port
-    ) {
-      throw new Error(
-        'Invalid payment link. Contact support with your ticket.'
-      );
     }
     // Closing the browser is not payment confirmation; only read server status.
-    await WebBrowser.openBrowserAsync(url);
+    await openRepairPickupPayment(url);
     if (ticketNumber) await refresh(ticketNumber);
   }
 
@@ -194,6 +211,22 @@ export function RepairPickupCheckout({
           {error}
         </Text>
       )}
+      {warning && <Text style={{ color: colors.text }}>{warning}</Text>}
+      {terminal && (
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          style={styles.secondaryButton}
+          onPress={() =>
+            run(async () => {
+              await repairPickupSession.clear(data);
+              onBack();
+            })
+          }
+        >
+          <Text style={styles.secondaryButtonText}>Start another repair</Text>
+        </Pressable>
+      )}
       {restoreFailed && (
         <Pressable
           accessibilityRole="button"
@@ -224,7 +257,7 @@ export function RepairPickupCheckout({
         >
           <Text style={styles.primaryButtonText}>Get pickup fee</Text>
         </Pressable>
-      ) : !paid && !tracking ? (
+      ) : !paid && !tracking && !terminal ? (
         <Pressable
           accessibilityRole="button"
           disabled={busy || !ready}

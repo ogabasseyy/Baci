@@ -3,7 +3,7 @@ import type {
   RepairQuoteSummary,
 } from '@baci/shared/repairs';
 import * as Haptics from 'expo-haptics';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useState } from 'react';
 import {
@@ -106,7 +106,19 @@ export function RepairsCatalogScreen() {
 
   const screen = (
     <Stack.Screen
-      options={{ title: showSuccess ? 'Confirmed' : STEP_TITLES[step] }}
+      options={{
+        title: showSuccess ? 'Confirmed' : STEP_TITLES[step],
+        headerRight: () => (
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={12}
+            style={{ minHeight: 44, justifyContent: 'center' }}
+            onPress={() => router.push('/repairs/status')}
+          >
+            <Text style={{ color: BRAND.primary }}>Track repair</Text>
+          </Pressable>
+        ),
+      }}
     />
   );
 

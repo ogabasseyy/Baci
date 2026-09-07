@@ -1,0 +1,58 @@
+import { repairPickupClient } from './repair-pickup-client';
+
+jest.mock('expo-constants', () => ({
+  expoConfig: {
+    extra: { apiUrl: 'https://example.com', merchantSlug: 'test' },
+  },
+}));
+const data = {
+  customerName: 'Test',
+  customerEmail: 'test@example.com',
+  customerPhone: '08012345678',
+  deviceType: 'Smartphone' as const,
+  deviceModel: 'iPhone',
+  issueDescription: 'Broken screen',
+  serviceType: 'pickup' as const,
+  pickupAddress: '10 Test Road, Osogbo, Osun',
+};
+describe('repairPickupClient', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+  it('sends the quote to the configured merchant without merchant identity in the body', async () => {
+    const fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ price: 3000, currency: 'NGN' }),
+    });
+    global.fetch = fetch;
+    await expect(repairPickupClient.quote(data)).resolves.toEqual({
+      price: 3000,
+      currency: 'NGN',
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      'https://example.com/api/storefront/test/repairs/pickup',
+      expect.objectContaining({
+        body: JSON.stringify({ action: 'quote', data }),
+      })
+    );
+  });
+  it('rejects invalid quote amounts', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ price: -1, currency: 'NGN' }),
+    });
+    await expect(repairPickupClient.quote(data)).rejects.toThrow();
+  });
+  it('surfaces provider unavailability without retrying', async () => {
+    const fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: 'Choose drop-off' }),
+    });
+    global.fetch = fetch;
+    await expect(repairPickupClient.quote(data)).rejects.toThrow(
+      'Choose drop-off'
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});

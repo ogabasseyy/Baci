@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { QuizV2StoreActions } from '@/stores/quiz-recovery-envelope';
 import { loadQuizRecoveryEnvelopes } from '@/stores/quiz-recovery-envelope';
 import { useQuizPersistedRecovery } from './useQuizPersistedRecovery';
@@ -19,7 +19,10 @@ jest.mock('@/stores/quiz-recovery-envelope', () => ({
   loadQuizRecoveryEnvelopes: jest.fn(),
 }));
 
-afterEach(() => jest.clearAllMocks());
+afterEach(() => {
+  jest.useRealTimers();
+  jest.clearAllMocks();
+});
 
 it('discards stale envelopes until a later retained attempt is recovered', async () => {
   jest.mocked(loadQuizRecoveryEnvelopes).mockResolvedValue([
@@ -69,6 +72,7 @@ it('discards stale envelopes until a later retained attempt is recovered', async
 });
 
 it('allows one automatic retry after a transient recovery failure', async () => {
+  jest.useFakeTimers();
   jest.mocked(loadQuizRecoveryEnvelopes).mockResolvedValue([
     {
       attemptId: 'attempt-1',
@@ -94,7 +98,12 @@ it('allows one automatic retry after a transient recovery failure', async () => 
     })
   );
 
-  await waitFor(() => expect(recoverEvent).toHaveBeenCalledTimes(2));
+  await act(async () => {});
+  expect(recoverEvent).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(500);
+  });
+  expect(recoverEvent).toHaveBeenCalledTimes(2);
 });
 
 it('continues to a retained terminal attempt after another event fails', async () => {

@@ -8,6 +8,7 @@ import {
 import { createQuizV2AttemptApplier } from './quiz-v2-attempt-applier';
 import { createQuizV2ExpiryAction } from './quiz-v2-expiry-action';
 import { createQuizV2RecoveryResponseApplier } from './quiz-v2-recovery-actions';
+import { getQuizRecoverySnapshot } from './quiz-v2-recovery-snapshot';
 import {
   clearRecoveredQuizAttempt,
   clearTerminalRecovery,
@@ -108,10 +109,8 @@ export function createQuizV2StoreActions({
           start.startRequestId === retainedRequestId
       );
       const generation = getGeneration();
-      const scanned =
-        snapshot?.userId === userId && snapshot.eventId === eventId
-          ? snapshot
-          : null;
+      // biome-ignore format: Keep the extracted snapshot call within the coordinator's module budget.
+      const scanned = getQuizRecoverySnapshot(userId, eventId, snapshot, get(), generation);
       set({
         status: 'starting',
         recoveryUserId: userId,

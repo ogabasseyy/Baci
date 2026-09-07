@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { recoverActiveQuizAttempt } from '@/services/quiz-attempt-recovery';
 import { submitQuizAnswerV2 } from '@/services/quiz-attempts';
 import type {
@@ -10,6 +10,7 @@ import {
   loadQuizRecoveryEnvelopes,
 } from '@/stores/quiz-recovery-envelope';
 import { useQuizStore } from '@/stores/quiz-store';
+import { useQuizLobbyNavigation } from './useQuizLobbyNavigation';
 import { useQuizPersistedRecovery } from './useQuizPersistedRecovery';
 
 jest.mock('@/lib/get-quiz-device-fingerprint', () => ({
@@ -57,7 +58,16 @@ it('allows Back during scanned recovery and discards its late server response', 
       version: 1,
     });
   await waitFor(() => expect(recoverer).toHaveBeenCalled(), { timeout: 500 });
-  useQuizStore.getState().showLobby();
+  const backHandlerRef = { current: null as (() => void) | null };
+  renderHook(() =>
+    useQuizLobbyNavigation({
+      backHandlerRef,
+      dismissRecovery: jest.fn(),
+      userId: 'user-1',
+    })
+  );
+  expect(backHandlerRef.current).not.toBeNull();
+  act(() => backHandlerRef.current?.());
   const afterBack = useQuizStore.getState().status;
   finish({
     availability: 'pending_results',

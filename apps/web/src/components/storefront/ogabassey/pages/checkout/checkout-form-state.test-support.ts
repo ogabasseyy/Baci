@@ -24,6 +24,7 @@ export function useCheckoutFormTestState() {
     values: {
       deliveryCoordinates: null,
       deliveryMethod: 'door',
+      airportType: 'delivery',
       newsletterOptIn: false,
       ...form.values,
       ...updates,

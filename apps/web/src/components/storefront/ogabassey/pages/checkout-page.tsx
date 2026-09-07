@@ -598,6 +598,7 @@ export const CheckoutPage: React.FC = () => {
     newAddressCity,
     deliveryCoordinates,
     deliveryMethod,
+    airportType,
     newsletterOptIn,
     currentStep: rawCurrentStep,
     completedSteps: rawCompletedSteps,
@@ -1048,7 +1049,8 @@ export const CheckoutPage: React.FC = () => {
   const [selectedAddressId, setSelectedAddressId] = useState<number>(0);
   const [isNewAddressMode, setIsNewAddressMode] = useState(true);
   const setDeliveryMethod = (value: DeliveryMethod) => setCheckoutField('deliveryMethod', value);
-  const [airportType, setAirportType] = useState<'delivery' | 'pickup'>('delivery');
+  const setAirportType = (value: 'delivery' | 'pickup') =>
+    setCheckoutField('airportType', value);
 
   // Shipping State
   const [shippingStates, setShippingStates] = useState<string[]>([]);

@@ -1,12 +1,16 @@
 'use client';
 
 import { RefreshCw, WifiOff, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useConfirmedOffline } from './use-confirmed-offline';
 
 export function OfflineNotice() {
   const isOffline = useConfirmedOffline();
   const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!isOffline) setDismissed(false);
+  }, [isOffline]);
 
   if (!isOffline || dismissed) return null;
 

@@ -38,4 +38,23 @@ describe('checkout state across payment navigation', () => {
       newsletterOptIn: false,
     });
   });
+
+  describe('bugfix: airport subtype dropped on refresh', () => {
+    it('restores airport pickup subtype with the airport delivery method', () => {
+      const form = renderHook(() => useCheckoutFormState());
+      act(() =>
+        form.result.current.setValues({
+          deliveryMethod: 'airport',
+          airportType: 'pickup',
+        })
+      );
+      act(() => window.dispatchEvent(new Event('pagehide')));
+      form.unmount();
+      const restored = renderHook(() => useCheckoutFormState());
+      expect(restored.result.current.values).toMatchObject({
+        deliveryMethod: 'airport',
+        airportType: 'pickup',
+      });
+    });
+  });
 });

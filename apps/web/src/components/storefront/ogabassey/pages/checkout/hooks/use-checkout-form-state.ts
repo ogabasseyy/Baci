@@ -15,6 +15,8 @@ const initialValues = {
   completedSteps: { contact: false, delivery: false },
   deliveryCoordinates: null as { latitude: number; longitude: number } | null,
   deliveryMethod: 'door' as DeliveryMethod,
+  // Airport pickup vs doorstep subtype must survive refresh with deliveryMethod.
+  airportType: 'delivery' as 'delivery' | 'pickup',
   newsletterOptIn: false,
 };
 

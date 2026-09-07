@@ -49,6 +49,9 @@ export async function requestCryptoPaymentInitialization({
     throw new Error('Crypto payment details are unavailable. Please choose another payment method.');
   }
   const payment = paymentResult.data;
+  if (payment.crypto_address_pending && !payment.crypto_payment.address) {
+    throw new Error('Your crypto address is still being generated. Please retry shortly.');
+  }
   if (payment.success && payment.crypto_payment) {
     return {
       address: payment.crypto_payment.address,

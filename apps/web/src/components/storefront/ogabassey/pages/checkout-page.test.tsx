@@ -2729,6 +2729,7 @@ describe('CheckoutPage', () => {
   });
 
   it('sends a stable idempotency key when creating an order', async () => {
+    const storageSpy = vi.spyOn(Storage.prototype, 'setItem');
     const scrollSpy = vi
       .spyOn(window, 'scrollTo')
       .mockImplementation(() => undefined);
@@ -2745,6 +2746,8 @@ describe('CheckoutPage', () => {
           quantity: 1,
           image: '',
           slug: 'test-product',
+          variantId: 'variant-blue',
+          variantAttributes: { color: ' Blue ', storage: '128GB' },
         },
       ],
       cartTotal: 5000,
@@ -2828,6 +2831,13 @@ describe('CheckoutPage', () => {
       ).toBeNull();
     });
 
+    const savedAttempt = storageSpy.mock.calls.find(([key]) => key === 'storefront-checkout-pending-order');
+    expect(savedAttempt).toBeDefined();
+    const snapshot = JSON.parse(String(savedAttempt?.[1]));
+    expect(JSON.parse(snapshot.checkoutFingerprint).items[0]).toMatchObject({
+      variantId: 'variant-blue', variantAttributes: { color: 'blue', storage: '128gb' },
+    });
+    storageSpy.mockRestore();
     fetchMock.mockRestore();
     randomUuidSpy.mockRestore();
     scrollSpy.mockRestore();

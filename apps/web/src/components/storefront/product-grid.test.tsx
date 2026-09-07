@@ -154,15 +154,15 @@ vi.mock('./product-card', () => ({
     product: Product;
     basePath?: string;
   }) => (
-    <div data-testid="product-card" data-base-path={basePath}>
+    <a aria-label="Card base path" href={basePath || '/'}>
       {product.name}
-    </div>
+    </a>
   ),
 }));
 
 vi.mock('./quick-view-modal', () => ({
   QuickViewModal: ({ basePath }: { basePath?: string }) => (
-    <div data-testid="quick-view" data-base-path={basePath} />
+    <a href={basePath || '/'}>Quick view base path</a>
   ),
   useQuickView: () => ({
     product: null,
@@ -212,14 +212,12 @@ describe('StorefrontProductGrid', () => {
   ])('passes routing basePath %s to cards and quick view', async (basePath) => {
     mockMerchantState.basePath = basePath;
     render(<StorefrontProductGrid />);
-    expect(await screen.findByTestId('product-card')).toHaveAttribute(
-      'data-base-path',
-      basePath
-    );
-    expect(screen.getByTestId('quick-view')).toHaveAttribute(
-      'data-base-path',
-      basePath
-    );
+    expect(
+      await screen.findByRole('link', { name: 'Card base path' })
+    ).toHaveAttribute('href', basePath || '/');
+    expect(
+      screen.getByRole('link', { name: 'Quick view base path' })
+    ).toHaveAttribute('href', basePath || '/');
   });
 
   it('renders without crashing', async () => {

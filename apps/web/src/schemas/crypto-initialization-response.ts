@@ -1,29 +1,44 @@
 import { z } from 'zod';
 
-export const cryptoInitializationResponseSchema = z.object({
-  success: z.boolean(),
+const cryptoPaymentSchema = z.object({
+  address: z.string(),
+  chain: z.enum(['TRX', 'ETH', 'MATIC', 'AVAXC']),
+  currency: z.enum(['USDT', 'USDC']),
+  amount: z.number().nonnegative(),
+  crypto_amount: z
+    .string()
+    .regex(/^\d+(?:\.\d+)?$/)
+    .refine((value) => Number.isFinite(Number(value)) && Number(value) > 0),
+  confirmation_time: z.string(),
+  payment_id: z.string().optional(),
+  qrcode: z.string().optional(),
+});
+const responseFields = {
+  success: z.literal(true),
   reference: z.string(),
   session_id: z.string().optional(),
-  crypto_payment: z
-    .object({
-      address: z.string().min(1),
-      chain: z.enum(['TRX', 'ETH', 'MATIC', 'AVAXC']),
-      currency: z.enum(['USDT', 'USDC']),
-      amount: z.number().nonnegative(),
-      crypto_amount: z
-        .string()
-        .regex(/^\d+(?:\.\d+)?$/)
-        .refine((value) => Number.isFinite(Number(value)) && Number(value) > 0),
-      confirmation_time: z.string(),
-      payment_id: z.string().optional(),
-      qrcode: z.string().optional(),
-    })
-    .refine(
-      (payment) =>
-        payment.chain === 'TRX'
-          ? /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(payment.address)
-          : /^0x[a-fA-F0-9]{40}$/.test(payment.address),
-      { message: 'Invalid crypto payment address' }
-    )
-    .optional(),
-});
+  crypto_payment: cryptoPaymentSchema,
+};
+
+export const cryptoInitializationResponseSchema = z
+  .discriminatedUnion('crypto_address_pending', [
+    z.object({ ...responseFields, crypto_address_pending: z.literal(true) }),
+    z.object({
+      ...responseFields,
+      crypto_address_pending: z.literal(false).optional(),
+    }),
+  ])
+  .superRefine((response, context) => {
+    const payment = response.crypto_payment;
+    if (response.crypto_address_pending && payment.address === '') return;
+    const validAddress =
+      payment.chain === 'TRX'
+        ? /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(payment.address)
+        : /^0x[a-fA-F0-9]{40}$/.test(payment.address);
+    if (!validAddress)
+      context.addIssue({
+        code: 'custom',
+        path: ['crypto_payment', 'address'],
+        message: 'Invalid crypto payment address',
+      });
+  });

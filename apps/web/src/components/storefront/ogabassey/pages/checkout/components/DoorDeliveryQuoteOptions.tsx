@@ -144,21 +144,21 @@ export function DoorDeliveryQuoteOptions({
           <button
             type="button"
             onClick={onRefreshRates}
-            className="w-full bg-linear-to-r from-amber-50 to-orange-50 border-2 border-dashed border-amber-300 rounded-xl p-5 flex flex-col items-center gap-3 hover:border-amber-400 hover:shadow-md transition-all group cursor-pointer"
+            className="w-full bg-linear-to-r from-store-primary/5 to-store-primary/10 border-2 border-dashed border-store-primary/30 rounded-xl p-5 flex flex-col items-center gap-3 hover:border-store-primary/50 hover:shadow-md transition-all group cursor-pointer"
           >
-            <div className="size-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
+            <div className="size-12 bg-store-primary/10 rounded-full flex items-center justify-center text-store-primary group-hover:scale-110 transition-transform">
               <Truck size={24} />
             </div>
             <div className="text-center">
               <h4 className="text-sm font-bold text-store-background-text">
                 🚚 Oops! Rates took a detour
               </h4>
-              <p className="text-xs text-amber-700 mt-1">
+              <p className="text-xs text-store-primary mt-1">
                 Our delivery partners are a bit slow today. Tap here to try
                 again!
               </p>
             </div>
-            <span className="text-xs font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full group-hover:bg-amber-200 transition-colors">
+            <span className="text-xs font-bold text-store-primary bg-store-primary/10 px-3 py-1 rounded-full group-hover:bg-store-primary/20 transition-colors">
               ↻ Refresh Rates
             </span>
           </button>

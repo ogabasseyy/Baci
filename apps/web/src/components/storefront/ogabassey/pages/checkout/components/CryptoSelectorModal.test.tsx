@@ -55,12 +55,13 @@ describe('CryptoSelectorModal', () => {
 
   it('dims the animated checkout without a backdrop filter while selecting crypto', () => {
     const { container } = render(<CryptoSelectorModal {...defaultProps} />);
-    expect(container.firstElementChild).toHaveClass('bg-black/50');
+    expect(container.firstElementChild).toHaveClass('bg-[var(--store-overlay)]/50');
     expect(container.firstElementChild).not.toHaveClass('backdrop-blur-xs');
   });
 
   it('shows only the chains enabled by checkout for the selected currency', () => {
     render(<CryptoSelectorModal {...defaultProps} supportedChains={['TRX', 'ETH']} />);
+    expect(screen.getByRole('button', { name: 'ETH Ethereum' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'TRX Tron' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /MATIC/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /AVAXC/ })).not.toBeInTheDocument();

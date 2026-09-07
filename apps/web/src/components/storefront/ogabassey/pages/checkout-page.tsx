@@ -1316,6 +1316,7 @@ export const CheckoutPage: React.FC = () => {
     address: newAddressStreet,
     city: newAddressCity,
     state: newAddressState,
+    country: getCountryByCode(merchantCountry)?.name ?? 'Nigeria',
   });
 
   // Trigger provider quotes only for a hydrated, complete delivery address.
@@ -1995,6 +1996,8 @@ export const CheckoutPage: React.FC = () => {
         price: item.price,
         has_assurance: item.has_assurance,
         assurance_fee: item.assurance_fee,
+        variantId: item.variantId,
+        variantAttributes: item.variantAttributes,
       })),
       useWalletCredit: payWithWallet && walletAmountUsed > 0,
       walletAmountUsed,

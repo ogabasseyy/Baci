@@ -17,6 +17,10 @@
 }
 
 @layer base {
+  :root {
+    --store-overlay: #000000;
+  }
+
   body {
     margin: 0;
     background: var(--store-background, #ffffff);

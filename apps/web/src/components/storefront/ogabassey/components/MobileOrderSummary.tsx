@@ -79,7 +79,7 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
                                         sizes="64px"
                                         className="object-contain mix-blend-multiply"
                                     />
-                                    <span className="absolute -top-2 -right-2 size-5 bg-store-background0 text-store-primary-text text-[10px] font-bold rounded-full flex items-center justify-center">
+                                    <span className="absolute -top-2 -right-2 size-5 bg-store-background text-store-primary-text text-[10px] font-bold rounded-full flex items-center justify-center">
                                         {item.quantity}
                                     </span>
                                 </div>

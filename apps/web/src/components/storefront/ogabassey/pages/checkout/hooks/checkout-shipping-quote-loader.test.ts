@@ -63,6 +63,15 @@ function createState() {
 
 describe('loadCheckoutShippingQuotes', () => {
   it.each([
+    { address: 'Ikeja, Lagos, Nigeria', expectedCalls: 0 },
+    { address: '2 Olaide Tomori Street', expectedCalls: 1 },
+  ])('checks a Nigerian street before loading rates: $address', async ({ address, expectedCalls }) => {
+    const state = createState();
+    await loadCheckoutShippingQuotes({ ...receiver, address, city: 'Ikeja', state: 'Lagos', country: 'Nigeria' }, cart, state);
+    expect(global.fetch).toHaveBeenCalledTimes(expectedCalls);
+  });
+
+  it.each([
     '',
     '   ',
     'Port Harcourt, Rivers',

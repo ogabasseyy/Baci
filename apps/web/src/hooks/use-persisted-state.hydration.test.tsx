@@ -2,7 +2,7 @@ import { act } from '@testing-library/react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { usePersistedForm } from './use-persisted-state';
+import { usePersistedForm } from '@/hooks/use-persisted-state';
 
 function ContactForm() {
   const { values } = usePersistedForm('checkout-form', { firstName: '' });

@@ -25,6 +25,11 @@ const input = {
 
 afterEach(() => vi.unstubAllGlobals());
 describe('crypto checkout request', () => {
+  it('keeps pending addresses out of payable instructions with an actionable retry message', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ success: true, reference: 'ref', crypto_address_pending: true, crypto_payment: { address: '', chain: 'TRX', currency: 'USDT', amount: 322500, crypto_amount: '4.44', confirmation_time: '1-3 minutes' } })));
+    await expect(requestCryptoPaymentInitialization(input)).rejects.toThrow('address is still being generated');
+  });
+
   it('handles the observed HTML 502 without a JSON parsing exception', async () => {
     vi.stubGlobal(
       'fetch',

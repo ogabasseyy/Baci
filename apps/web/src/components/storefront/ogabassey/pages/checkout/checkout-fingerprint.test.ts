@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { buildPendingCheckoutFingerprint } from './pending-checkout-order';
+import { describe, expect, it, vi } from 'vitest';
+import { resolvePendingCheckoutOrder, buildPendingCheckoutFingerprint } from './pending-checkout-order';
 
 const checkout = {
   merchantId: 'merchant-1',
@@ -47,5 +47,24 @@ describe('payment abandonment fingerprint', () => {
     expect(
       buildPendingCheckoutFingerprint({ ...checkout, ...change })
     ).not.toBe(buildPendingCheckoutFingerprint(checkout));
+  });
+});
+
+
+describe('variant changes invalidate a pending checkout', () => {
+  it.each([
+    { variantId: 'variant-black', variantAttributes: { color: 'blue' } },
+    { variantId: 'variant-blue', variantAttributes: { color: 'black' } },
+  ])('prevents reuse after variant changes: %j', async (changedVariant) => {
+    const original = buildPendingCheckoutFingerprint({ ...checkout, items: [{ ...checkout.items[0], variantId: 'variant-blue', variantAttributes: { color: 'blue' } }] });
+    const changed = buildPendingCheckoutFingerprint({ ...checkout, items: [{ ...checkout.items[0], ...changedVariant }] });
+    const fetchImpl = vi.fn<typeof fetch>();
+    const result = await resolvePendingCheckoutOrder({
+      pendingOrder: { orderId: 'old-order', trackingToken: 'token', merchantId: checkout.merchantId, customerEmail: checkout.customerEmail, customerPhone: checkout.customerPhone, checkoutFingerprint: original, amountDueToGateway: 185600, createdAt: '2026-09-07T12:00:00Z' },
+      merchantId: checkout.merchantId, customerEmail: checkout.customerEmail, checkoutFingerprint: changed, paymentMethod: 'card', shippingProvider: 'GIGL', fetchImpl,
+    });
+    expect(changed).not.toBe(original);
+    expect(result).toEqual({ reusableOrder: null, clearStoredOrder: true });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

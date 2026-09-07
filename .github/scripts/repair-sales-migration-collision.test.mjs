@@ -11,12 +11,17 @@ const repair = '20260907111036_repair_sales_exclusion_wallet_version_collision';
 const sales = '20260903120000_exclude_repair_pickup_from_merchant_sales';
 const wallet = 'guard_merchant_wallet_paystack_dva_alias';
 
-function run(history, { missingRepair = false, failWrite = false } = {}) {
+function run(history, { missingRepair = false, failWrite = false, relocatedWallet = false } = {}) {
   const temp = mkdtempSync(join(tmpdir(), 'sales-collision-'));
   try {
     mkdirSync(join(temp, 'bin'));
     mkdirSync(join(temp, 'migrations'));
     copyFileSync(join(root, 'supabase/migrations', `${sales}.sql`), join(temp, 'migrations', `${sales}.sql`));
+    if (relocatedWallet) {
+      for (const name of [`20260903120500_${wallet}`, '20260903212000_hmac_wallet_funding_recovery']) {
+        copyFileSync(join(root, 'supabase/migrations', `${name}.sql`), join(temp, 'migrations', `${name}.sql`));
+      }
+    }
     if (!missingRepair) copyFileSync(join(root, 'supabase/migrations', `${repair}.sql`), join(temp, 'migrations', `${repair}.sql`));
     writeFileSync(join(temp, 'migrations/20260904110100_followup.sql'), "SELECT 'followup';\n");
     writeFileSync(join(temp, 'bin/curl'), `#!/bin/bash
@@ -54,6 +59,21 @@ test('repairs the occupied sales version before dependent migrations without rew
   assert.doesNotMatch(writes.join('\n'), /(?:UPDATE|DELETE FROM) supabase_migrations/);
   assert.doesNotMatch(writes.join('\n'), /VALUES \('20260903120000'/);
 });
+
+for (const repaired of [false, true]) {
+  test(`preserves recorded wallet hardening without replaying the relocated SQL (repair completed: ${repaired})`, () => {
+    const history = [
+      { version: '20260903120000', name: wallet },
+      { version: '20260903212000', name: 'hmac_wallet_funding_recovery' },
+      ...(repaired ? [{ version: '20260907111036', name: 'repair_sales_exclusion_wallet_version_collision' }] : []),
+    ];
+    const { error, queries } = run(history, { relocatedWallet: true });
+    assert.equal(error, undefined);
+    assert.equal(queries.length, repaired ? 2 : 3);
+    assert.doesNotMatch(queries.slice(1).join('\n'), /CREATE OR REPLACE FUNCTION public.persist_merchant_wallet_payment_account/);
+    assert.doesNotMatch(queries.slice(1).join('\n'), /VALUES \('20260903120500'/);
+  });
+}
 
 test('does not replay a completed repair', () => {
   const { error, queries } = run([{ version: '20260903120000', name: wallet }, { version: '20260907111036', name: 'repair_sales_exclusion_wallet_version_collision' }]);

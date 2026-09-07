@@ -315,11 +315,14 @@ export function resetDeliveryQuotesForAddressChange({
   setDeliveryMethod,
   setSelectedQuoteId,
   setShippingQuotes,
+  clearDeliveryCoordinates,
 }: {
   setDeliveryMethod: (method: DeliveryMethod) => void;
   setSelectedQuoteId: (quoteId: string) => void;
   setShippingQuotes: (quotes: ShippingQuote[]) => void;
+  clearDeliveryCoordinates?: () => void;
 }) {
+  clearDeliveryCoordinates?.();
   setShippingQuotes([]);
   setSelectedQuoteId('');
   setDeliveryMethod('door');

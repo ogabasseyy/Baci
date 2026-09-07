@@ -37,6 +37,22 @@ describe('payment schedule selection', () => {
       screen.getByRole('radio', { name: /generate invoice/i })
     ).toBeInTheDocument();
   });
+
+  describe('bugfix: stale installments tab after wallet makes installments ineligible', () => {
+    it('resets the parent payment tab to full without clearing a full-payment method', () => {
+      const { setPaymentTab, setPaymentMethod } = renderPanel(
+        'installments',
+        true,
+        false
+      );
+
+      expect(setPaymentTab).toHaveBeenCalledWith('full');
+      expect(setPaymentMethod).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole('radio', { name: /generate invoice/i })
+      ).toBeInTheDocument();
+    });
+  });
   it('offers invoice creation without requiring an online payment gateway', () => {
     const { setPaymentMethod } = renderPanel('full', false);
 

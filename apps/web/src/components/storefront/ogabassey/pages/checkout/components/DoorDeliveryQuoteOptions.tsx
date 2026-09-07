@@ -70,7 +70,7 @@ export function DoorDeliveryQuoteOptions({
                       ) : (
                         <>
                           {quote.carrierName.includes('GIG') && (
-                            <span className="text-[10px] bg-store-background-text text-store-primary-text px-1.5 py-0.5 rounded font-bold">
+                            <span className="text-[10px] bg-store-background-text text-store-background px-1.5 py-0.5 rounded font-bold">
                               GIGL
                             </span>
                           )}

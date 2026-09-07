@@ -194,6 +194,21 @@ describe('checkout shipping quote helpers', () => {
     expect(setDeliveryMethod).toHaveBeenCalledWith('door');
   });
 
+  describe('bugfix: stale autocomplete coordinates after selecting a saved address', () => {
+    it('clears delivery coordinates when resetting quotes for an address change', () => {
+      const clearDeliveryCoordinates = vi.fn();
+
+      resetDeliveryQuotesForAddressChange({
+        setDeliveryMethod: vi.fn(),
+        setSelectedQuoteId: vi.fn(),
+        setShippingQuotes: vi.fn(),
+        clearDeliveryCoordinates,
+      });
+
+      expect(clearDeliveryCoordinates).toHaveBeenCalledOnce();
+    });
+  });
+
   it('detects merchant-configured rate quotes', () => {
     expect(isMerchantQuote(merchantShipQuote)).toBe(true);
     expect(isMerchantQuote(doorQuote)).toBe(false);

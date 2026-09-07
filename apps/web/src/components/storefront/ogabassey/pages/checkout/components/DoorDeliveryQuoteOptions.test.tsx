@@ -53,6 +53,17 @@ describe('DoorDeliveryQuoteOptions', () => {
     fireEvent.click(screen.getByRole('radio'));
     expect(callbacks.onSelectQuote).toHaveBeenCalledWith(quote.id);
   });
+
+  describe('bugfix: GIGL badge contrast under light primary themes', () => {
+    it('pairs the GIGL badge with a matching background foreground token', () => {
+      show([quote]);
+      expect(screen.getByText('GIGL')).toHaveClass(
+        'bg-store-background-text',
+        'text-store-background'
+      );
+      expect(screen.getByText('GIGL')).not.toHaveClass('text-store-primary-text');
+    });
+  });
   it('shows loading without a stale rate', () => {
     show([quote], true);
     expect(screen.getByText('Calculating delivery')).toBeInTheDocument();

@@ -1102,6 +1102,10 @@ export const CheckoutPage: React.FC = () => {
       setDeliveryMethod,
       setSelectedQuoteId,
       setShippingQuotes,
+      // Drop stale autocomplete coordinates so a later saved-address selection
+      // cannot price/route with the previous place's lat/lng.
+      clearDeliveryCoordinates: () =>
+        setCheckoutFields({ deliveryCoordinates: null }),
     });
   };
   const eligibleDeliveryMethod = resolveMerchantDeliveryMethod(

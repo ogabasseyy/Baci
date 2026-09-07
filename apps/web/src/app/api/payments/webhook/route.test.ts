@@ -6844,9 +6844,10 @@ describe('POST /api/payments/webhook', () => {
       })
     );
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      error: 'Paystack assignment failure accepted for review',
+      success: true,
+      handled: 'merchant_wallet_assignment_failure_review',
       code: 'MERCHANT_WALLET_ASSIGNMENT_FAILURE_REVIEW',
     });
   });
@@ -6874,9 +6875,10 @@ describe('POST /api/payments/webhook', () => {
         ),
       })
     );
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      error: 'Paystack assignment accepted for review',
+      success: true,
+      handled: 'merchant_wallet_assignment_review',
       code: 'MERCHANT_WALLET_ASSIGNMENT_REVIEW',
     });
   });

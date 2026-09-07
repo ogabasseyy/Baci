@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from '@typescript/typescript6';
 import { describe, expect, it } from 'vitest';
+import { eventPipelineAuthorityServicePaths } from './event-pipeline-authority-service-paths';
 import { authorityFindings } from './event-pipeline-boundary-manifest';
 
 const modulePath = resolve(
@@ -70,94 +71,7 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/scripts/process-event-deliveries.ts',
     ]);
     expect(manifest.authority.servicePaths).toEqual([
-      [
-        'apps/web/src/app/api/integrations/ads/google/sync/route.ts',
-        'apps/web/src/lib/ads/server-spend-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/meta/sync/route.ts',
-        'apps/web/src/lib/ads/server-spend-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/snapchat/sync/route.ts',
-        'apps/web/src/lib/ads/server-spend-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/tiktok/sync/route.ts',
-        'apps/web/src/lib/ads/server-spend-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/google/accounts/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/google/callback/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/google/disconnect/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/google/sync/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/meta/accounts/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/meta/callback/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/meta/disconnect/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/meta/sync/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/snapchat/accounts/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/snapchat/callback/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/snapchat/disconnect/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/snapchat/sync/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/tiktok/accounts/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/tiktok/callback/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/tiktok/disconnect/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/tiktok/sync/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
-        'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
-      ],
-      [
-        'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
-        'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
-      ],
+      ...eventPipelineAuthorityServicePaths,
     ]);
     expect(manifest.authority.operationalServiceImporters).toEqual([
       'apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts',

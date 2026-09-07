@@ -34,7 +34,8 @@ import { MobileOrderSummary } from '../components/MobileCheckoutComponents';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { resolveMerchantDeliveryMethod } from './checkout/resolve-merchant-delivery-method';
-import { requestCryptoPaymentInitialization } from './checkout/request-crypto-payment-initialization';
+import { buildCheckoutBillingAddress } from './checkout/build-checkout-billing-address';
+import { useCryptoPaymentInitializer } from './checkout/use-crypto-payment-initializer';
 import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
 import { persistPendingCheckoutOrder } from './checkout/persist-pending-checkout-order';
 import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
@@ -466,7 +467,7 @@ interface DvaBillingAddress {
   city: string;
   state?: string;
   country: string;
-  zip_code: string;
+  zip_code?: string;
 }
 
 async function requestDvaInitialization({
@@ -740,7 +741,7 @@ export const CheckoutPage: React.FC = () => {
       city: string;
       state: string;
       country: string;
-      zip_code: string;
+      zip_code?: string;
     };
     items: Array<{ name: string; type: 'physical' | 'digital' }>;
   } | null>(null);
@@ -871,6 +872,7 @@ export const CheckoutPage: React.FC = () => {
   // Initialize crypto payment with selected options. The fetch + throw flow
   // lives in module-scope `requestCryptoPaymentInitialization`; the promise
   // chain replaces try/catch/finally, which would bail React Compiler.
+  const requestCryptoPaymentInitialization = useCryptoPaymentInitializer();
   const initializeCryptoPayment = async () => {
     if (!pendingCryptoOrder || !merchant) return;
 
@@ -2279,13 +2281,7 @@ export const CheckoutPage: React.FC = () => {
         setWalletBalance(walletResult.newBalance);
       }
 
-      const billingAddress = {
-        line1: finalAddress,
-        city: finalCity || 'Lagos',
-        state: finalState || 'Lagos',
-        country: 'NG',
-        zip_code: '100001',
-      };
+      const billingAddress = buildCheckoutBillingAddress(finalAddress, finalCity, finalState, merchantCountry);
 
       // 2. Handle payment based on method
       // Special case: If wallet fully covers the order, no payment gateway needed
@@ -3213,7 +3209,7 @@ export const CheckoutPage: React.FC = () => {
           deliveryCost={resumedOrder ? resumedOrder.shipping_cost : deliveryCost}
           taxAmount={resumedOrder?.tax_amount ?? orderTotals?.taxAmount ?? 0}
           discountAmount={resumedOrder?.discount_amount ?? discountAmount}
-          deliveryMethod={deliveryMethod}
+          deliveryMethod={resumedOrder ? null : deliveryMethod}
           giftWrappingCost={giftWrappingCost}
           walletBalance={walletBalance}
           payWithWallet={payWithWallet}

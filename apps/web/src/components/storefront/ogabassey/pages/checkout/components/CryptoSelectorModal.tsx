@@ -27,11 +27,12 @@ export function CryptoSelectorModal({
   supportedChains,
 }: CryptoSelectorModalProps) {
   const cryptoSelectorId = useId();
+  const titleId = `${cryptoSelectorId}-title`;
   const currencyLabelId = `${cryptoSelectorId}-currency-label`;
   const networkLabelId = `${cryptoSelectorId}-network-label`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--store-overlay)]/50">
+    <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--store-overlay)]/50">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="sticky top-0 bg-linear-to-r from-store-primary to-store-primary/80 p-4 flex items-center justify-between rounded-t-2xl">
@@ -39,7 +40,7 @@ export function CryptoSelectorModal({
             <div className="size-8 bg-white/20 rounded-lg flex items-center justify-center">
               <CreditCard size={16} className="text-white" />
             </div>
-            <h2 className="font-bold text-white">Select Crypto Payment</h2>
+            <h2 id={titleId} className="font-bold text-white">Select Crypto Payment</h2>
           </div>
           <button
             type="button"

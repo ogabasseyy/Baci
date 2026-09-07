@@ -44,6 +44,8 @@ describe('GET /api/storefront/orders/[id] public lookup', () => {
       data: [
         {
           ...mockOrderData,
+          tax_amount: 750,
+          discount_amount: 500,
           items: [
             {
               id: 'item-1',
@@ -66,6 +68,7 @@ describe('GET /api/storefront/orders/[id] public lookup', () => {
 
     expect(response.status).toBe(200);
     expect(data.id).toBe(mockOrderData.id);
+    expect(data).toMatchObject({ tax_amount: 750, discount_amount: 500 });
     expect(data.items[0]).toMatchObject({
       condition: 'used',
       variant_name: 'Used',

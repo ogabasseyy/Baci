@@ -1,5 +1,7 @@
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CartItem } from '@/hooks/cart';
 import { MobileOrderSummary } from './MobileOrderSummary';
@@ -85,4 +87,41 @@ describe('MobileOrderSummary', () => {
       '/phone.png'
     );
   });
+});
+
+const summaryProps = { cartTotal: 1000, deliveryCost: 0, deliveryMethod: null, giftWrappingCost: 0, payWithWallet: false, remainingAmount: 1000, walletAmountUsed: 0, walletBalance: 0 };
+
+it('shows Free for resumed orders with zero shipping', () => {
+  render(<MobileOrderSummary {...summaryProps} cart={[]} />);
+  fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+  expect(screen.getByText('Free')).toBeVisible();
+  expect(screen.queryByText('Calculated at next step')).not.toBeInTheDocument();
+});
+
+it('labels a quiz voucher as Free gift instead of its catalog price', () => {
+  render(<MobileOrderSummary {...summaryProps} cart={[{ ...cartItem, quizAwardId: 'award', quizVoucherToken: 'voucher' }]} />);
+  fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+  expect(screen.getByText('Free gift')).toBeVisible();
+  expect(screen.queryByText('₦120000')).not.toBeInTheDocument();
+});
+
+it.each([false, true])('hydrates legacy items without key warnings, including shared product IDs: %s', async (sharedProduct) => {
+  const { cartItemId: _cartItemId, ...legacyItem } = { ...cartItem, variantId: 'variant-1' };
+  const component = <MobileOrderSummary {...summaryProps} cart={[legacyItem as CartItem, { ...legacyItem, id: sharedProduct ? legacyItem.id : 'product-2', variantId: 'variant-2', name: 'Second phone' } as CartItem]} />;
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const container = document.createElement('div');
+  let root: ReturnType<typeof hydrateRoot> | undefined;
+  try {
+    container.innerHTML = renderToString(component);
+    document.body.append(container);
+    await act(async () => { root = hydrateRoot(container, component); });
+    fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+    expect(screen.getByText('Baci Phone')).toBeVisible();
+    expect(screen.getByText('Second phone')).toBeVisible();
+    expect(errors).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root?.unmount());
+    container.remove();
+    errors.mockRestore();
+  }
 });

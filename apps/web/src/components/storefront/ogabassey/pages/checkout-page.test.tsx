@@ -1499,7 +1499,7 @@ describe('CheckoutPage', () => {
     scrollSpy.mockRestore();
   });
 
-  it('persists the merchant country in shipping_address for a non-NG (IN) order', async () => {
+  it.each(['delivery', 'korapay'])('persists the merchant country for a non-NG order paid with %s and a Nigerian phone', async (method) => {
     const scrollSpy = vi
       .spyOn(window, 'scrollTo')
       .mockImplementation(() => undefined);
@@ -1526,8 +1526,10 @@ describe('CheckoutPage', () => {
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'IN',
+        payout_currency: method === 'korapay' ? 'NGN' : 'INR',
         feature_settings: {
           pay_on_delivery_enabled: true,
+          korapay_enabled: true,
         },
       },
       basePath: '/ogabassey',
@@ -1537,7 +1539,7 @@ describe('CheckoutPage', () => {
         firstName: 'Ada',
         lastName: 'Buyer',
         customerEmail: 'ada@example.com',
-        customerPhone: '+919812345678',
+        customerPhone: '+2348034096325',
         newAddressStreet: '12 Marine Drive',
         newAddressState: 'Maharashtra',
         newAddressCity: 'Mumbai',
@@ -1551,7 +1553,7 @@ describe('CheckoutPage', () => {
 
     const merchantRateQuote = {
       carrierName: 'Standard Delivery',
-      currency: 'INR',
+      currency: method === 'korapay' ? 'NGN' : 'INR',
       displayName: 'Standard Delivery',
       estimatedDays: 0,
       id: 'mrate_1a2b3c4d-0000-4000-8000-00000000000a',
@@ -1573,6 +1575,9 @@ describe('CheckoutPage', () => {
             text: async () => '',
           } as Response;
         }
+        if (url === '/api/payments/initialize') {
+          return Response.json({ success: true, authorization_url: 'https://checkout.paystack.com/test', reference: 'reference' });
+        }
         if (url === '/api/orders') {
           return {
             ok: true,
@@ -1582,7 +1587,7 @@ describe('CheckoutPage', () => {
                 id: 'order-123',
                 order_number: 'ORD-123',
                 tracking_token: 'track-123',
-                currency: 'INR',
+                currency: method === 'korapay' ? 'NGN' : 'INR',
               },
               wallet: null,
             }),
@@ -1607,7 +1612,7 @@ describe('CheckoutPage', () => {
       ).toBe(true);
     });
 
-    fireEvent.click(await screen.findByText(/pay on delivery/i));
+    fireEvent.click(await screen.findByText(method === 'delivery' ? /pay on delivery/i : /^Korapay$/));
     await waitFor(() => {
       const placeOrderButton = screen
         .getAllByRole('button', { name: /place order/i })
@@ -1621,6 +1626,15 @@ describe('CheckoutPage', () => {
         fetchMock.mock.calls.some(([url]) => String(url) === '/api/orders')
       ).toBe(true);
     });
+
+    if (method === 'korapay') {
+      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/payments/initialize')).toBe(true));
+      const initialization = fetchMock.mock.calls.find(([url]) => String(url) === '/api/payments/initialize');
+      const body = JSON.parse(String(initialization?.[1]?.body));
+      expect(body.billing_address.country).toBe('IN');
+      expect(body.billing_address.zip_code).toBeUndefined();
+      expect(body.customer_phone).toBe('+2348034096325');
+    }
 
     const orderBody = JSON.parse(
       String(

@@ -57,7 +57,7 @@ export interface PendingCryptoOrder {
     city: string;
     state: string;
     country: string;
-    zip_code: string;
+    zip_code?: string;
   };
   items: Array<{ name: string; type: 'physical' | 'digital' }>;
   trackingToken?: string;

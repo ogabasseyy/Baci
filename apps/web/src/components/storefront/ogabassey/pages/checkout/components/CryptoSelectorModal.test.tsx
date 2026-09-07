@@ -54,9 +54,9 @@ describe('CryptoSelectorModal', () => {
   });
 
   it('dims the animated checkout without a backdrop filter while selecting crypto', () => {
-    const { container } = render(<CryptoSelectorModal {...defaultProps} />);
-    expect(container.firstElementChild).toHaveClass('bg-[var(--store-overlay)]/50');
-    expect(container.firstElementChild).not.toHaveClass('backdrop-blur-xs');
+    render(<CryptoSelectorModal {...defaultProps} />);
+    expect(screen.getByRole('dialog', { name: 'Select Crypto Payment' })).toHaveClass('bg-[var(--store-overlay)]/50');
+    expect(screen.getByRole('dialog', { name: 'Select Crypto Payment' })).not.toHaveClass('backdrop-blur-xs');
   });
 
   it('shows only the chains enabled by checkout for the selected currency', () => {

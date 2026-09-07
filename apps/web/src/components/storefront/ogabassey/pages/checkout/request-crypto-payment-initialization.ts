@@ -1,3 +1,5 @@
+import type { z } from 'zod';
+import { pollCryptoPaymentAddress } from './poll-crypto-payment-address';
 import type {
   CryptoChain,
   CryptoCurrency,
@@ -7,7 +9,11 @@ import type {
 import { readPaymentResponse } from './read-payment-response';
 import { cryptoInitializationResponseSchema } from '@/schemas/crypto-initialization-response';
 
+export type CryptoInitialization = z.infer<typeof cryptoInitializationResponseSchema>;
+
 interface RequestCryptoPaymentInitializationParams {
+  pendingSession?: CryptoInitialization;
+  onPendingSession?: (session: CryptoInitialization) => void;
   merchantId: string;
   pendingOrder: PendingCryptoOrder;
   chain: CryptoChain;
@@ -17,40 +23,48 @@ interface RequestCryptoPaymentInitializationParams {
 }
 
 export async function requestCryptoPaymentInitialization({
+  pendingSession,
+  onPendingSession,
   merchantId,
   pendingOrder,
   chain,
   currency,
   orderCurrency,
 }: RequestCryptoPaymentInitializationParams): Promise<CryptoPaymentData> {
-  const paymentResponse = await fetch('/api/payments/initialize', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      merchant_id: merchantId,
-      order_id: pendingOrder.orderId,
-      currency: orderCurrency,
-      customer_email: pendingOrder.customerEmail,
-      customer_name: pendingOrder.customerName,
-      customer_phone: pendingOrder.customerPhone,
-      gateway: 'juicyway',
-      billing_address: pendingOrder.billingAddress,
-      items: pendingOrder.items,
-      crypto_chain: chain,
-      crypto_currency: currency,
-    }),
-  });
+  let paymentData: unknown = pendingSession;
+  if (!paymentData) {
+    const paymentResponse = await fetch('/api/payments/initialize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        merchant_id: merchantId,
+        order_id: pendingOrder.orderId,
+        currency: orderCurrency,
+        customer_email: pendingOrder.customerEmail,
+        customer_name: pendingOrder.customerName,
+        customer_phone: pendingOrder.customerPhone,
+        gateway: 'juicyway',
+        billing_address: pendingOrder.billingAddress,
+        items: pendingOrder.items,
+        crypto_chain: chain,
+        crypto_currency: currency,
+      }),
+    });
+
+    paymentData = await readPaymentResponse(paymentResponse);
+  }
 
   const paymentResult = cryptoInitializationResponseSchema.safeParse(
-    await readPaymentResponse(paymentResponse)
+    paymentData
   );
 
   if (!paymentResult.success) {
     throw new Error('Crypto payment details are unavailable. Please choose another payment method.');
   }
-  const payment = paymentResult.data;
+  let payment = paymentResult.data;
   if (payment.crypto_address_pending && !payment.crypto_payment.address) {
-    throw new Error('Your crypto address is still being generated. Please retry shortly.');
+    onPendingSession?.(payment);
+    payment = await pollCryptoPaymentAddress(payment);
   }
   if (payment.success && payment.crypto_payment) {
     return {

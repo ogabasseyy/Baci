@@ -5,6 +5,7 @@ import type React from 'react';
 import { useId, useState } from 'react';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import type { CartItem } from '@/hooks/cart';
+import { isQuizVoucherCartItem } from '@/lib/checkout/cart-entitlement-sanitizer';
 import { useCurrency } from '@/hooks/use-currency';
 import type { DeliveryMethod } from '../pages/checkout/types';
 
@@ -70,7 +71,7 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
                     {/* Items List */}
                     <div className="space-y-4 mb-6 pt-2">
                         {cart.map((item) => (
-                            <div key={item.cartItemId} className="flex gap-3">
+                            <div key={item.cartItemId || (item.variantId ? `${item.id}:${item.variantId}` : item.id)} className="flex gap-3">
                                 <div className="ogabassey-product-card-image-surface relative size-16 bg-store-background rounded-lg border border-store-background-text/10 p-1 shrink-0">
                                     <CdnFormatImage
                                         src={item.image || '/placeholder.png'}
@@ -79,7 +80,7 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
                                         sizes="64px"
                                         className="object-contain mix-blend-multiply"
                                     />
-                                    <span className="absolute -top-2 -right-2 size-5 bg-store-background text-store-primary-text text-[10px] font-bold rounded-full flex items-center justify-center">
+                                    <span className="absolute -top-2 -right-2 size-5 bg-store-primary text-store-primary-text text-[10px] font-bold rounded-full flex items-center justify-center">
                                         {item.quantity}
                                     </span>
                                 </div>
@@ -88,7 +89,7 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
                                         {item.name}
                                     </p>
                                     <p className="text-sm text-store-background-text/60 mt-1">
-                                        {formatCurrencyAuto(item.negotiatedPrice ?? item.price)}
+                                        {isQuizVoucherCartItem(item) ? 'Free gift' : formatCurrencyAuto(item.negotiatedPrice ?? item.price)}
                                     </p>
                                 </div>
                             </div>

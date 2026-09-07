@@ -40,17 +40,20 @@ import { isGo54Configured, registerDomain } from '@/lib/go54';
 import { verifyPayment as verifyKorapayPayment } from '@/lib/korapay';
 import { logger } from '@/lib/logger';
 import { confirmPaystackDvaByOrderAccount } from '@/lib/payments/confirm-paystack-dva-by-order-account';
+import { confirmPaystackMerchantWalletDva } from '@/lib/payments/confirm-paystack-merchant-wallet-dva';
 import { confirmPaystackWalletDvaTopUp } from '@/lib/payments/confirm-paystack-wallet-dva-top-up';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import { isMerchantInvoicePartialBalanceReview } from '@/lib/payments/is-merchant-invoice-partial-balance-review';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import { processWalletFundedOrderPayment } from '@/lib/payments/process-wallet-funded-order-payment';
+import { recordOrderUpdateFailureSettlement } from '@/lib/payments/record-order-update-failure-settlement';
 import { scheduleWalletTopUpCreditNotification } from '@/lib/payments/schedule-wallet-top-up-credit-notification';
-import { extractVerifiedGatewayFeeNgn } from '@/lib/payments/verified-gateway-fee';
 import {
   calculatePlatformFee,
   verifyTransaction as verifyPaystackPayment,
 } from '@/lib/paystack';
+import { handlePaystackMerchantWalletAssignmentFailure } from '@/lib/paystack-merchant-wallet-assignment-failure-webhook';
+import { handlePaystackMerchantWalletAssignmentSuccess } from '@/lib/paystack-merchant-wallet-assignment-success-webhook';
 import { dispatchRepairPickupPayment } from '@/lib/repairs/dispatch-repair-pickup-payment';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createClient } from '@/lib/supabase/server';
@@ -639,6 +642,23 @@ export async function POST(request: NextRequest) {
       event: body.event,
     });
 
+    if (
+      gateway === 'paystack' &&
+      (body.event === 'dedicatedaccount.assign.success' ||
+        body.event === 'dedicatedaccount.assign.failed')
+    ) {
+      if (body.event === 'dedicatedaccount.assign.failed') {
+        return handlePaystackMerchantWalletAssignmentFailure(
+          createServiceClient(),
+          body as unknown as Record<string, unknown>
+        );
+      }
+      return handlePaystackMerchantWalletAssignmentSuccess(
+        createServiceClient(),
+        body as unknown as Record<string, unknown>
+      );
+    }
+
     // Extract reference and check event type based on gateway
     let reference: string;
     let isSuccessEvent = false;
@@ -817,6 +837,28 @@ export async function POST(request: NextRequest) {
       // so the webhook's normal flow flips it to completed and runs
       // side effects via the A1 outbox. Ambiguous matches file a
       // `reconciliation_review` row and return 409.
+      if (!resolvedAgenticTransaction) {
+        const merchantWalletDva = await confirmPaystackMerchantWalletDva({
+          supabase,
+          accountNumber: receiverAccountNumber,
+          gatewayReference: reference,
+          verifiedAmount,
+          paystackResponse: gatewayResponse,
+        });
+        if (merchantWalletDva.kind === 'review') {
+          return NextResponse.json(merchantWalletDva.body, {
+            status: merchantWalletDva.status,
+          });
+        }
+        if (merchantWalletDva.kind === 'match') {
+          return NextResponse.json({
+            success: true,
+            balance: merchantWalletDva.balance,
+            firstCredit: merchantWalletDva.firstCredit,
+          });
+        }
+      }
+
       if (!resolvedAgenticTransaction) {
         const orderAccountResult = await confirmPaystackDvaByOrderAccount({
           supabase,
@@ -2739,38 +2781,38 @@ export async function POST(request: NextRequest) {
         // flip, unlike the historical swallow-to-200 behavior that wedged
         // ORD-260711-00NT-5.
         try {
-          const grossAmount = Number(transaction.amount) || 0;
-          const gatewayFee = extractVerifiedGatewayFeeNgn(
+          const fallbackSettlement = await recordOrderUpdateFailureSettlement({
             gateway,
-            gatewayResponse
-          );
-          const platformFee =
-            Number(transaction.platform_fee) ||
-            calculatePlatformFee(grossAmount * 100).platformFee / 100;
-          const { error: fallbackSettlementError } = await supabase.rpc(
-            'record_merchant_settlement',
-            {
-              p_merchant_id: transaction.merchant_id,
-              p_source_type: 'order',
-              p_source_id: transaction.order_id,
-              p_gateway: gateway,
-              p_gateway_reference: transaction.gateway_reference ?? reference,
-              p_gross_amount: grossAmount,
-              p_gateway_fee: gatewayFee,
-              p_platform_fee: platformFee,
-              p_description: `Order payment via ${gateway} (order update failed)`,
-              p_metadata: {
-                [`${gateway}_reference`]: reference,
-                verified_gateway_fee: gatewayFee,
-                order_update_failed: true,
+            gatewayReference: transaction.gateway_reference,
+            gatewayResponse,
+            grossAmount: Number(transaction.amount) || 0,
+            merchantId: transaction.merchant_id,
+            orderId: transaction.order_id,
+            platformFee: transaction.platform_fee,
+            reference,
+            supabase,
+          });
+          if (fallbackSettlement.kind === 'economics_load_failed') {
+            logger.error({
+              message:
+                'Failed to load order economics for completion-failure settlement fallback',
+              error: fallbackSettlement.error,
+              orderId: transaction.order_id,
+              reference,
+            });
+            return NextResponse.json(
+              {
+                code: 'ORDER_PAYMENT_COMPLETION_FAILED',
+                error: 'Order payment completion failed',
               },
-            }
-          );
-          if (fallbackSettlementError) {
+              { status: 500 }
+            );
+          }
+          if (fallbackSettlement.kind === 'settlement_failed') {
             logger.warn({
               message:
                 'record_merchant_settlement errored on order-update-fail fallback path',
-              error: fallbackSettlementError,
+              error: fallbackSettlement.error,
               orderId: transaction.order_id,
               reference,
             });

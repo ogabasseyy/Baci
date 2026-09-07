@@ -12,6 +12,11 @@ export function createEmptyCustomerInfo(): CustomerInfo {
     id: null,
     name: '',
     phone: '',
+    city: '',
+    state: '',
+    country: '',
+    countryCode: '',
+    postalCode: '',
   };
 }
 
@@ -29,12 +34,20 @@ export function createEmptyDeliveryInfo(): DeliveryInfo {
     name: '',
     phone: '',
     state: '',
+    country: '',
+    countryCode: '',
+    postalCode: '',
   };
 }
 
 export function createEmptyNewCustomerDraft(): NewCustomerDraft {
   return {
     address: '',
+    city: '',
+    state: '',
+    country: '',
+    countryCode: '',
+    postalCode: '',
     companyName: '',
     customerType: 'individual',
     email: '',

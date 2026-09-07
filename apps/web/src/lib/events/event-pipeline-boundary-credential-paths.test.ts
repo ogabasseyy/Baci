@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
+import { eventPipelineShippingCredentialPaths } from './event-pipeline-shipping-credential-paths';
 
 const modulePath = resolve(
   process.cwd(),
@@ -154,6 +155,22 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/env.ts',
       ],
       [
+        'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
+        'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
+        'apps/web/src/lib/supabase/service.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
+        'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+        'apps/web/src/lib/supabase/service.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
         'apps/web/src/app/api/internal/compare-page-status/[identifier]/route.ts',
         'apps/web/src/env.ts',
       ],
@@ -249,6 +266,7 @@ describe('event pipeline credential-path authority', () => {
       ],
       ...eventPipelineJumiaCredentialPaths,
       ...eventPipelineRepairPickupCredentialPaths,
+      ...eventPipelineShippingCredentialPaths,
     ]);
   });
 });

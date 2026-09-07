@@ -52,7 +52,7 @@ describe('event pipeline authority manifest', () => {
     ]);
   });
 
-  it('pins the seven compatibility route receipts and two Task 6 wrappers', async () => {
+  it('pins the eight compatibility route receipts and two Task 6 wrappers', async () => {
     expect(existsSync(modulePath), 'boundary manifest is missing').toBe(true);
     if (!existsSync(modulePath)) return;
     const moduleUrl = pathToFileURL(modulePath).href;
@@ -74,6 +74,8 @@ describe('event pipeline authority manifest', () => {
         'bb3b5ea163f7029bd8a90523ac7944c9e126b2aebc0ce673f82c4e0c48d00161',
       'apps/web/src/app/api/orders/route.ts':
         '5b605dd9d0d34a040400c5d61d8c81401c6b0a8026513f34835b01ceafc13672',
+      'apps/web/src/app/api/payments/juicyway/webhook/route.ts':
+        'a8748056acf57c8fe4aea5b5dbf6a2bbcd1599e7aa57af3130cf95c277e61ef5',
     });
     expect(manifest.trustedWrapperImporters).toEqual([
       'apps/web/src/app/api/analytics/conversion/route.ts',

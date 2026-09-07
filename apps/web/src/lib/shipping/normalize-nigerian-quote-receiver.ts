@@ -37,13 +37,23 @@ export function normalizeNigerianQuoteReceiver<T extends QuoteReceiverLocation>(
     return receiver;
   }
 
+  // Persist explicit Nigeria defaults so blank domestic Admin quote payloads
+  // do not later fail receiver attestation against omitted/blank order fields.
+  const withDomesticCountry: T = {
+    ...receiver,
+    country: country ? receiver.country?.trim() || 'Nigeria' : 'Nigeria',
+    countryCode: countryCode || 'NG',
+  };
+
   const canonicalState =
-    findKnownState(receiver.state ?? '') ??
-    [...(receiver.address ?? '').split(',')]
+    findKnownState(withDomesticCountry.state ?? '') ??
+    [...(withDomesticCountry.address ?? '').split(',')]
       .reverse()
       .map(findKnownState)
       .find((state): state is string => state !== null);
 
-  if (!canonicalState || canonicalState === receiver.state) return receiver;
-  return { ...receiver, state: canonicalState };
+  if (!canonicalState || canonicalState === withDomesticCountry.state) {
+    return withDomesticCountry;
+  }
+  return { ...withDomesticCountry, state: canonicalState };
 }

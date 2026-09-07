@@ -24,6 +24,9 @@ describe('order wallet funding payment queries', () => {
       merchant_id: 'merchant-1',
       payment_status: 'paid',
       shipping_fee: 0,
+      shipping_funding_source: 'merchant_wallet',
+      shipping_platform_retained_amount: '1250.50',
+      shipping_provider: 'GIGL',
       subtotal: 20_000,
       tax_amount: 0,
       tax_basis: null,
@@ -38,9 +41,16 @@ describe('order wallet funding payment queries', () => {
         orderId: 'order-1',
         supabase: asSupabaseClient(supabase.client),
       })
-    ).resolves.toMatchObject({ id: 'order-1' });
+    ).resolves.toMatchObject({
+      id: 'order-1',
+      shipping_funding_source: 'merchant_wallet',
+      shipping_platform_retained_amount: 1250.5,
+      shipping_provider: 'GIGL',
+    });
     expect(orderQuery.select).toHaveBeenCalledWith(
-      expect.stringContaining('order_items')
+      expect.stringContaining(
+        'shipping_provider, shipping_funding_source, shipping_platform_retained_amount'
+      )
     );
     expect(orderQuery.eq).toHaveBeenCalledWith('id', 'order-1');
     expect(orderQuery.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');

@@ -3,6 +3,7 @@ import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
 import { EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-expense-pending-sources';
 import { FOLLOW_UP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-follow-up-pending-sources';
+import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-gigl-wallet-sources';
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
@@ -14,7 +15,6 @@ import { STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-
 const STOREFRONT_PDP_SEMANTIC_PENDING_SOURCES = `a402b932c082f876b44feb1cd98ef4d879641a0a5e075b52a05fb0a9b7df43dc 20260831153000_optimize_storefront_pdp_semantic_reads.sql`;
 const STOREFRONT_SEMANTIC_INDEX_REPAIR_PENDING_SOURCES = `2999879d1a4127e4b703c8cb18a88f276ced6b2512331c1383402fdf36fff76d 20260901123000_repair_storefront_semantic_inventory_indexes.sql`;
 const STOREFRONT_CACHE_CAUSAL_IDENTITY_PENDING_SOURCES = `e87f8b3e8fecf098cc148d4efc75c75f62a96e0b4bdc98cdb904a91157a33c42 20260905183000_share_storefront_cache_invalidation_causal_identity.sql`;
-
 const PIPELINE_SOURCES = `4f31649ba4c9c3d6b5eb4110dbb0d144237502642d61c0606e15a9b1ba39556b 20260712150001_domain_event_pipeline_tables.sql
 3a3018fcd2e0daea0dec918d953e1dadf314ea1f88698e336a72a97da8ddcd1c 20260712150050_eventing_internal_schema.sql
 dcb23009b30f1970359737ccfc1e34f3b63b952a59e6854d1352a98b4fbdc21b 20260712150075_domain_event_idempotency_guard.sql
@@ -269,6 +269,7 @@ const PENDING_SOURCES = [
   ADMIN_PLATFORM_PENDING_SOURCES,
   EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS,
   FOLLOW_UP_PENDING_REPLAY_SOURCE_ROWS,
+  GIGL_WALLET_SHIPPING_PENDING_SOURCES,
   INVENTORY_PENDING_REPLAY_SOURCE_ROWS,
   NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS,
   REPAIR_PICKUP_PENDING_REPLAY_SOURCE_ROWS,

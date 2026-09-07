@@ -3,6 +3,7 @@ import { EXPECTED_CATALOG_CACHE_PENDING_SOURCES } from './expected-catalog-cache
 import { EXPECTED_EXPENSE_PENDING_SOURCES } from './expected-expense-pending-sources.test-support';
 import { EXPECTED_GIGL_TRACKING_HARDENING_PENDING_SOURCES } from './expected-gigl-tracking-hardening-pending-sources.test-support';
 import { EXPECTED_GIGL_TRACKING_PENDING_SOURCES } from './expected-gigl-tracking-pending-sources.test-support';
+import { EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './expected-gigl-wallet-shipping-pending-sources.test-support';
 import { EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES } from './expected-merchant-invoice-pending-sources.test-support';
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
 import { EXPECTED_PAYSTACK_PENDING_SOURCES } from './expected-paystack-pending-sources.test-support';
@@ -248,6 +249,7 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260901123000_repair_storefront_semantic_inventory_indexes.sql',
     sha256: '2999879d1a4127e4b703c8cb18a88f276ced6b2512331c1383402fdf36fff76d',
   },
+  ...EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20260905183000_share_storefront_cache_invalidation_causal_identity.sql',

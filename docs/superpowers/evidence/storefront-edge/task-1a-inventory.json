@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "1273b1e3a491764b0363567bd7ffb675133ae35a",
+  "originMainSha": "2d009f901cce2428fbc791a179ad2b88730c92c6",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
   "routeTreeSha256": "02f802caaa9f7497a71b5b133ad39fe5a779643b6849e20e198c62da139a3b5b",
-  "routingProxyInputSha256": "988f73e4eafef2371dc67f9bbd391976739d8267dec086317aa802e2f939a095",
+  "routingProxyInputSha256": "4bfd8311b8002eb55021e3b11790eee58e4f1f249b9dde52267565bad9088dce",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -492,20 +492,6 @@
       "routePattern": "/api/orders/update-payment-ref",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/orders/update-payment-ref/route.ts"
-    },
-    {
-      "decision": "origin_dynamic",
-      "id": "api-route:orders/[id]/route.ts",
-      "methods": [
-        "GET",
-        "HEAD",
-        "OPTIONS",
-        "PATCH"
-      ],
-      "reason": "exact_storefront_api_route",
-      "routePattern": "/api/orders/{id}",
-      "sourceKind": "api_route",
-      "sourcePath": "apps/web/src/app/api/orders/[id]/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8306,5 +8292,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "cb99a5f7b805ebd129dbe53d3c472241754c11cfcc67184959d99b9dc8888991"
+  "inventorySha256": "1d1d58fa074b0e40d3439310328e1f4dd927b5594d9a63d88d85f62413999b29"
 }

@@ -145,6 +145,16 @@ export function toRichPaidOrder(
     payment_status: 'paid',
     shipping_address: shippingAddress,
     shipping_fee: numberOrDefault(order, 'shipping_fee', 0),
+    shipping_funding_source:
+      order.shipping_funding_source === 'customer_checkout' ||
+      order.shipping_funding_source === 'merchant_wallet'
+        ? order.shipping_funding_source
+        : null,
+    shipping_platform_retained_amount: optionalMoney(
+      order,
+      'shipping_platform_retained_amount'
+    ),
+    shipping_provider: optionalString(order, 'shipping_provider'),
     // Nullable on legacy/imported orders; the old inline email path treated
     // it as 0, and a throw here would wedge the post-commit drain loop.
     subtotal: numberOrDefault(order, 'subtotal', 0),

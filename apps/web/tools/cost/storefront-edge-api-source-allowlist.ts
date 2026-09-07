@@ -21,8 +21,8 @@ const STOREFRONT_API_SOURCE_PATHS = new Set([
   'orders',
   'orders/credit-direct/client-completion',
   'orders/reuse',
+  // Merchant admin order PATCH/GET is not a customer storefront edge surface.
   'orders/update-payment-ref',
-  'orders/[id]',
   'places/autocomplete',
   'places/details',
   'payments/initialize',

@@ -1,5 +1,10 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  giglBookingEconomicsProjection,
+  giglQuoteEconomicsFields,
+  prepaidGiglCustomerCheckoutOrderFields,
+} from './route.test-fixtures';
 
 const mockCheckCsrfProtection = vi.fn();
 const mockCookies = vi.fn();
@@ -50,6 +55,7 @@ function buildSupabaseMock(options: { respectRetainedLock?: boolean } = {}) {
     id: orderId,
     merchant_id: 'merchant-1',
     selected_quote_id: quoteId,
+    ...prepaidGiglCustomerCheckoutOrderFields,
     shipping_status: 'pending',
     shipping_fee: 4500,
     shipping_address: null,
@@ -68,6 +74,7 @@ function buildSupabaseMock(options: { respectRetainedLock?: boolean } = {}) {
     price: 4500,
     currency: 'NGN',
     estimated_days: 2,
+    ...giglQuoteEconomicsFields,
   };
   const savedShipment = {
     id: 'shipment-1',
@@ -82,7 +89,16 @@ function buildSupabaseMock(options: { respectRetainedLock?: boolean } = {}) {
   };
 
   const supabase = {
-    rpc: vi.fn().mockImplementation(() => {
+    rpc: vi.fn().mockImplementation((name: string) => {
+      if (name === 'get_shipping_quote_booking_metadata') {
+        return Promise.resolve({ data: null, error: null });
+      }
+      if (name === 'get_shipping_quote_booking_economics') {
+        return Promise.resolve({
+          data: giglBookingEconomicsProjection,
+          error: null,
+        });
+      }
       claimCount += 1;
       const blockedByRetainedLock = Boolean(
         options.respectRetainedLock && claimCount > 1 && lockHeld
@@ -180,6 +196,25 @@ function buildSupabaseMock(options: { respectRetainedLock?: boolean } = {}) {
               error: null,
             }),
           })),
+        };
+      }
+      if (table === 'merchant_settlements') {
+        const eqSourceId = vi.fn().mockResolvedValue({
+          data: [
+            {
+              metadata: {
+                retained_shipping_amount:
+                  giglBookingEconomicsProjection.shipping_platform_retained_amount,
+              },
+              status: 'completed',
+            },
+          ],
+          error: null,
+        });
+        const eqSourceType = vi.fn(() => ({ eq: eqSourceId }));
+        const eqMerchant = vi.fn(() => ({ eq: eqSourceType }));
+        return {
+          select: vi.fn(() => ({ eq: eqMerchant })),
         };
       }
       throw new Error(`Unexpected table: ${table}`);

@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/gigl-tracking-notifications",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/provision-wallet-funding-recovery-hmac",
+      "schedule": "*/5 * * * *"
     }
   ],
   "functions": {

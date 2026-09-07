@@ -1,5 +1,5 @@
 export const CUSTOMER_ADMIN_COLUMNS =
-  'id, merchant_id, customer_type, company_name, full_name, first_name, last_name, email, phone, address, store_credit, total_orders, total_spent, loyalty_points, created_at, updated_at, last_login_at, deleted_at';
+  'id, merchant_id, customer_type, company_name, full_name, first_name, last_name, email, phone, address, city, state, zip_code, country, country_code, latitude, longitude, store_credit, total_orders, total_spent, loyalty_points, created_at, updated_at, last_login_at, deleted_at';
 
 export type CustomerType = 'individual' | 'company';
 

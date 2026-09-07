@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from '@typescript/typescript6';
 import { describe, expect, it } from 'vitest';
+import { eventPipelineAuthorityServicePaths } from './event-pipeline-authority-service-paths';
 import { authorityFindings } from './event-pipeline-boundary-manifest';
 
 const modulePath = resolve(
@@ -47,10 +48,13 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/app/api/orders/route.ts',
       'apps/web/src/app/api/payments/juicyway/webhook/route.ts',
       'apps/web/src/app/api/platform/events/platform-event-forwarding.ts',
+      'apps/web/src/app/api/shipping/quotes/route.ts',
       'apps/web/src/lib/events/record-platform-order-created-event.ts',
       'apps/web/src/lib/expo-push.ts',
       'apps/web/src/lib/insurance/notify-activate-protection.ts',
       'apps/web/src/lib/repair-notifications.ts',
+      'apps/web/src/lib/shipping/persist-admin-gigl-quote.ts',
+      'apps/web/src/lib/shipping/persist-refreshed-shipping-quote.ts',
     ]);
     expect(manifest.authority.serviceImporters).toEqual([
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',
@@ -61,90 +65,13 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/events/event-pipeline-service-role-test-client.ts',
       'apps/web/src/lib/ads/server-credential-client.ts',
       'apps/web/src/lib/ads/server-spend-client.ts',
+      'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
+      'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
     ]);
     expect(manifest.authority.servicePaths).toEqual([
-      [
-        'apps/web/src/app/api/integrations/ads/google/sync/route.ts',
-        'apps/web/src/lib/ads/server-spend-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/meta/sync/route.ts',
-        'apps/web/src/lib/ads/server-spend-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/snapchat/sync/route.ts',
-        'apps/web/src/lib/ads/server-spend-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/tiktok/sync/route.ts',
-        'apps/web/src/lib/ads/server-spend-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/google/accounts/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/google/callback/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/google/disconnect/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/google/sync/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/meta/accounts/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/meta/callback/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/meta/disconnect/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/meta/sync/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/snapchat/accounts/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/snapchat/callback/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/snapchat/disconnect/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/snapchat/sync/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/tiktok/accounts/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/tiktok/callback/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/tiktok/disconnect/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
-      [
-        'apps/web/src/app/api/integrations/ads/tiktok/sync/route.ts',
-        'apps/web/src/lib/ads/server-credential-client.ts',
-      ],
+      ...eventPipelineAuthorityServicePaths,
     ]);
     expect(manifest.authority.operationalServiceImporters).toEqual([
       'apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts',
@@ -187,6 +114,54 @@ describe('event pipeline authority importer boundary', () => {
         `${route}: service factory requires event-pipeline sentinel`,
         `${route}: privileged route client construction is forbidden`,
       ])
+    );
+  });
+
+  it('allows the wallet funding-recovery HMAC sentinel only in its server helper', () => {
+    const helper =
+      'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts';
+    const allowed = ts.createSourceFile(
+      helper,
+      "import { createServiceClient } from '@/lib/supabase/service'; createServiceClient('wallet-funding-recovery');",
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS
+    );
+    expect(authorityFindings(helper, allowed)).toEqual([]);
+
+    const wrongSentinel = ts.createSourceFile(
+      helper,
+      "import { createServiceClient } from '@/lib/supabase/service'; createServiceClient('event-pipeline');",
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS
+    );
+    expect(authorityFindings(helper, wrongSentinel)).toContain(
+      `${helper}: service factory requires wallet-funding-recovery sentinel`
+    );
+  });
+
+  it('allows the shipping-quote booking-economics sentinel only in its server helper', () => {
+    const helper =
+      'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts';
+    const allowed = ts.createSourceFile(
+      helper,
+      "import { createServiceClient } from '@/lib/supabase/service'; createServiceClient('shipping-quote-booking-economics');",
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS
+    );
+    expect(authorityFindings(helper, allowed)).toEqual([]);
+
+    const wrongSentinel = ts.createSourceFile(
+      helper,
+      "import { createServiceClient } from '@/lib/supabase/service'; createServiceClient('event-pipeline');",
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS
+    );
+    expect(authorityFindings(helper, wrongSentinel)).toContain(
+      `${helper}: service factory requires shipping-quote-booking-economics sentinel`
     );
   });
 

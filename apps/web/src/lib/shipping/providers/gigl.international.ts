@@ -1,3 +1,4 @@
+import { priceGiglQuote } from '../gigl-platform-pricing';
 import type { QuoteRequest, ShippingQuote } from '../types';
 import type { GiglApiClient } from './gigl.auth';
 import {
@@ -117,6 +118,7 @@ export async function getGiglInternationalQuotes(
       const logisticsCompany = rate.LogisticCompany;
       const shipmentMethod = rate.ShipmentMethod;
       const serviceTier = internationalServiceTier(deliveryType);
+      const pricing = priceGiglQuote(rate.GrandTotal);
       return [
         {
           id: io.generateQuoteId(),
@@ -125,7 +127,11 @@ export async function getGiglInternationalQuotes(
           carrierName: 'GIG Logistics',
           displayName: `GIG Logistics - ${serviceTier}`,
           estimatedDays: estimatedDays(rate.EstimatedDeliveryDateAndTime),
-          price: Math.round(rate.GrandTotal),
+          price: pricing.price,
+          providerCost: pricing.providerCost,
+          platformMargin: pricing.platformMargin,
+          marginBasisPoints: pricing.marginBasisPoints,
+          pricingVersion: pricing.pricingVersion,
           currency: 'NGN',
           pickupIncluded: true,
           insuranceIncluded: true,

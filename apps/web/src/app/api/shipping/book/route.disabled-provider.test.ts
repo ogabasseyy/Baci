@@ -1,6 +1,12 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
+import { shippingQuoteEnvTestMock } from '@/lib/shipping/shipping-quote-env.test-mock';
+
+vi.mock('@/env', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/env')>();
+  return { ...actual, ...shippingQuoteEnvTestMock };
+});
 
 const mockCheckCsrfProtection = vi.fn();
 const mockCookies = vi.fn();
@@ -113,9 +119,34 @@ function buildSupabaseMock() {
   };
 
   return {
-    rpc: vi.fn().mockResolvedValue({
-      data: [{ claimed: true, shipment_id: null, tracking_number: null }],
-      error: null,
+    rpc: vi.fn().mockImplementation((fn: string) => {
+      if (fn === 'get_shipping_quote_booking_metadata') {
+        return {
+          data: {
+            serviceType: 'Premium_Express',
+            pricingTier: 'International',
+          },
+          error: null,
+        };
+      }
+      if (fn === 'get_shipping_quote_booking_economics') {
+        return {
+          data: {
+            provider_cost: 3600,
+            platform_margin: 900,
+            platform_margin_bps: 2000,
+            pricing_version: 'gigl_platform_margin_v1',
+            shipping_provider_cost: 3600,
+            shipping_platform_margin: 900,
+            shipping_pricing_version: 'gigl_platform_margin_v1',
+          },
+          error: null,
+        };
+      }
+      return {
+        data: [{ claimed: true, shipment_id: null, tracking_number: null }],
+        error: null,
+      };
     }),
     auth: {
       getUser: vi.fn().mockResolvedValue({

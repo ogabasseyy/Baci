@@ -8,6 +8,12 @@ const serviceRoleClientBrand: unique symbol = Symbol(
 const adsCredentialsClientBrand: unique symbol = Symbol(
   'baci.ads-credentials.service-role-client'
 );
+const walletFundingRecoveryClientBrand: unique symbol = Symbol(
+  'baci.wallet-funding-recovery.service-role-client'
+);
+const shippingQuoteBookingEconomicsClientBrand: unique symbol = Symbol(
+  'baci.shipping-quote-booking-economics.service-role-client'
+);
 const serviceRoleBrandValue: true = true;
 
 export type ServiceRoleClient = SupabaseClient<Database> & {
@@ -27,6 +33,29 @@ export type AdsCredentialServiceClient = SupabaseClient<Database> & {
 };
 
 /**
+ * A service-role client reserved for wallet funding-recovery HMAC provisioning.
+ *
+ * Keep this type distinct from `ServiceRoleClient` so the cron helper cannot be
+ * passed into event-pipeline helpers. Callers must authenticate with
+ * `CRON_SECRET` before constructing it.
+ */
+export type WalletFundingRecoveryServiceClient = SupabaseClient<Database> & {
+  readonly [walletFundingRecoveryClientBrand]: true;
+};
+
+/**
+ * A service-role client reserved for shipping-quote booking economics reads.
+ *
+ * Keep this type distinct from `ServiceRoleClient` so booking helpers cannot be
+ * passed into event-pipeline helpers. Callers must already authenticate the
+ * merchant before constructing it.
+ */
+export type ShippingQuoteBookingEconomicsServiceClient =
+  SupabaseClient<Database> & {
+    readonly [shippingQuoteBookingEconomicsClientBrand]: true;
+  };
+
+/**
  * Creates a Supabase client with service role key for admin operations.
  * This client bypasses RLS policies and should only be used in:
  * - Webhook handlers (no user context)
@@ -41,9 +70,19 @@ export function createServiceClient(
 export function createServiceClient(
   sentinel: 'ads-credentials'
 ): AdsCredentialServiceClient;
+export function createServiceClient(
+  sentinel: 'wallet-funding-recovery'
+): WalletFundingRecoveryServiceClient;
+export function createServiceClient(
+  sentinel: 'shipping-quote-booking-economics'
+): ShippingQuoteBookingEconomicsServiceClient;
 export function createServiceClient(): SupabaseClient;
 export function createServiceClient(
-  sentinel?: 'event-pipeline' | 'ads-credentials'
+  sentinel?:
+    | 'event-pipeline'
+    | 'ads-credentials'
+    | 'wallet-funding-recovery'
+    | 'shipping-quote-booking-economics'
 ) {
   const url = getSupabaseUrl();
   // `SUPABASE_ADS_CREDENTIAL_KEY` is the preferred deployment secret for the
@@ -85,6 +124,16 @@ export function createServiceClient(
   if (sentinel === 'ads-credentials') {
     return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
       [adsCredentialsClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'wallet-funding-recovery') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [walletFundingRecoveryClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'shipping-quote-booking-economics') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [shippingQuoteBookingEconomicsClientBrand]: serviceRoleBrandValue,
     });
   }
   return createClient(url, serviceRoleKey, options);

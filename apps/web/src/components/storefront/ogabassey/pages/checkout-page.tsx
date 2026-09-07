@@ -1,5 +1,7 @@
 'use client';
 
+import { useAirportQuoteRecovery } from './checkout/hooks/use-airport-quote-recovery';
+import { isAirportDeliveryReady } from './checkout/is-airport-delivery-ready';
 import { canShowDeliveryMethods } from './checkout/can-show-delivery-methods';
 
 import { DeferredCryptoSelectorModal as CryptoSelectorModal } from './checkout/components/DeferredCryptoSelectorModal';
@@ -601,6 +603,7 @@ export const CheckoutPage: React.FC = () => {
     deliveryCoordinates,
     deliveryMethod,
     airportType,
+    airportRequiresQuote,
     newsletterOptIn,
     currentStep: rawCurrentStep,
     completedSteps: rawCompletedSteps,
@@ -1159,11 +1162,16 @@ export const CheckoutPage: React.FC = () => {
       return Boolean(selectedQuoteId && selectedQuoteMatchesDeliveryMethod);
     }
     // For airport, a type (pickup/delivery) must be selected
-    if (deliveryMethod === 'airport') return !!airportType;
+    if (deliveryMethod === 'airport') return isAirportDeliveryReady(airportRequiresQuote, selectedQuoteMatchesDeliveryMethod);
     // Pickup is valid as long as the current state is eligible.
     return true;
   })();
   const isDeliveryValid = isHydrated ? rawIsDeliveryValid : false;
+  useAirportQuoteRecovery(
+    isHydrated && deliveryMethod === 'airport' && airportRequiresQuote && !selectedQuoteMatchesDeliveryMethod,
+    currentStep,
+    () => setCheckoutFields({ currentStep: 'delivery', completedSteps: { ...completedSteps, delivery: false } }),
+  );
 
   // Note: newAddressState, newAddressCity, newAddressStreet are now part of checkoutForm (persisted)
 
@@ -1320,7 +1328,7 @@ export const CheckoutPage: React.FC = () => {
   // Trigger provider quotes only for a hydrated, complete delivery address.
   useEffect(() => {
     if (!isHydrated) return;
-    if (deliveryMethod === 'door' || deliveryMethod === 'pickup_station') {
+    if (deliveryMethod === 'door' || deliveryMethod === 'pickup_station' || deliveryMethod === 'airport') {
       if (!merchant?.id) {
         resetQuotesForAddressChange();
         return;
@@ -1739,8 +1747,8 @@ export const CheckoutPage: React.FC = () => {
     }
 
     if (
-      (deliveryMethod === 'door' || deliveryMethod === 'pickup_station') &&
-      !selectedQuoteId
+      ((deliveryMethod === 'door' || deliveryMethod === 'pickup_station') && !selectedQuoteId) ||
+      (deliveryMethod === 'airport' && !isAirportDeliveryReady(airportRequiresQuote, selectedQuoteMatchesDeliveryMethod))
     ) {
       toast({
         title: 'Select Delivery Option',
@@ -1930,8 +1938,8 @@ export const CheckoutPage: React.FC = () => {
     // block in `place-order.ts`. Treat empty string as no quote too —
     // the state hook initializes selectedQuoteId to `''` (line ~573).
     if (
-      (deliveryMethod === 'door' || deliveryMethod === 'pickup_station') &&
-      !selectedQuoteId
+      ((deliveryMethod === 'door' || deliveryMethod === 'pickup_station') && !selectedQuoteId) ||
+      (deliveryMethod === 'airport' && !isAirportDeliveryReady(airportRequiresQuote, selectedQuoteMatchesDeliveryMethod))
     ) {
       toast({
         title: 'Delivery option required',
@@ -3799,6 +3807,7 @@ export const CheckoutPage: React.FC = () => {
                         {deliveryMethod === 'airport' && (
                           <AirportDeliveryOptions
                             airportType={airportType}
+                            requiresProviderQuote={airportRequiresQuote}
                             city={newAddressCity}
                             state={newAddressState}
                             selectedQuoteId={selectedQuoteId}
@@ -3808,9 +3817,13 @@ export const CheckoutPage: React.FC = () => {
                             airDeliveryQuotes={airDeliveryQuotes}
                             onSelectAirportType={(type) => {
                               setAirportType(type);
+                              setCheckoutField('airportRequiresQuote', false);
                               setSelectedQuoteId('');
                             }}
-                            onSelectQuote={setSelectedQuoteId}
+                            onSelectQuote={(id) => {
+                              setCheckoutField('airportRequiresQuote', true);
+                              setSelectedQuoteId(id);
+                            }}
                           />
                         )}
 

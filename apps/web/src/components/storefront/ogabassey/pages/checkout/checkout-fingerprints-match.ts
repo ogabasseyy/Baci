@@ -9,11 +9,16 @@ export function checkoutFingerprintsMatch(
       const parsed: unknown = JSON.parse(value);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
         return value;
-      const { selectedQuoteId: _quote, merchantRateId = null, ...checkout } = parsed as Record<
+      const { selectedQuoteId: _quote, merchantRateId = null, items, ...checkout } = parsed as Record<
         string,
         unknown
       >;
-      return JSON.stringify({ ...checkout, merchantRateId });
+      const normalizedItems = Array.isArray(items) ? items.map((item: unknown) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+        const { variantId, variantAttributes, ...rest } = item as Record<string, unknown>;
+        return { ...rest, variantId: variantId || null, variantAttributes: variantAttributes ?? {} };
+      }) : items;
+      return JSON.stringify({ ...checkout, items: normalizedItems, merchantRateId });
     } catch {
       return value;
     }

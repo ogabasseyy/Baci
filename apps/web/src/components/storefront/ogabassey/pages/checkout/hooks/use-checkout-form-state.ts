@@ -17,6 +17,7 @@ const initialValues = {
   deliveryMethod: 'door' as DeliveryMethod,
   // Airport pickup vs doorstep subtype must survive refresh with deliveryMethod.
   airportType: 'delivery' as 'delivery' | 'pickup',
+  airportRequiresQuote: false,
   newsletterOptIn: false,
 };
 

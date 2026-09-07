@@ -41,3 +41,11 @@ it('preserves non-null merchant rate identities', () => {
   expect(checkoutFingerprintsMatch('{"shippingFee":100}', '{"shippingFee":100,"merchantRateId":"rate-a"}')).toBe(false);
   expect(checkoutFingerprintsMatch('{"merchantRateId":"rate-a"}', '{"merchantRateId":"rate-b"}')).toBe(false);
 });
+
+it('matches missing legacy variant fields to empty non-variant attributes', () => {
+  const legacy = JSON.stringify({items: [{product_id: 'p', price: 100}]});
+  const current = JSON.stringify({items: [{product_id: 'p', price: 100, variantAttributes: {}}]});
+  expect(checkoutFingerprintsMatch(legacy, current)).toBe(true);
+  expect(checkoutFingerprintsMatch(legacy, JSON.stringify({items: [{product_id: 'p', price: 100, variantId: 'new'}]}))).toBe(false);
+  expect(checkoutFingerprintsMatch(legacy, JSON.stringify({items: [{product_id: 'p', price: 100, variantAttributes: {color: 'blue'}}]}))).toBe(false);
+});

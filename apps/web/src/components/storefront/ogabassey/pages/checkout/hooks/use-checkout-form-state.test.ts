@@ -46,6 +46,7 @@ describe('checkout state across payment navigation', () => {
         form.result.current.setValues({
           deliveryMethod: 'airport',
           airportType: 'pickup',
+          airportRequiresQuote: true,
         })
       );
       act(() => window.dispatchEvent(new Event('pagehide')));
@@ -54,6 +55,7 @@ describe('checkout state across payment navigation', () => {
       expect(restored.result.current.values).toMatchObject({
         deliveryMethod: 'airport',
         airportType: 'pickup',
+          airportRequiresQuote: true,
       });
     });
   });

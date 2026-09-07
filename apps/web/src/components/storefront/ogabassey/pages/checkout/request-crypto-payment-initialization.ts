@@ -75,7 +75,7 @@ export async function requestCryptoPaymentInitialization({
   // Preserve a completed POST even if the selector closed while it was in flight.
   onPendingSession?.(payment);
   signal?.throwIfAborted();
-  if (payment.crypto_address_pending && !payment.crypto_payment.address) {
+  if (pendingSession || (payment.crypto_address_pending && !payment.crypto_payment.address)) {
     payment = await pollCryptoPaymentAddress(payment, { signal, onTerminalSession });
   }
   if (payment.success && payment.crypto_payment) {

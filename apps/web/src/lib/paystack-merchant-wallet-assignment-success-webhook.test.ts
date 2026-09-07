@@ -28,9 +28,10 @@ describe('Paystack merchant-wallet assignment success webhook', () => {
     [{ kind: 'ignored' }, 200, { message: 'Event ignored' }],
     [
       { kind: 'review' },
-      409,
+      200,
       {
-        error: 'Paystack assignment accepted for review',
+        success: true,
+        handled: 'merchant_wallet_assignment_review',
         code: 'MERCHANT_WALLET_ASSIGNMENT_REVIEW',
       },
     ],

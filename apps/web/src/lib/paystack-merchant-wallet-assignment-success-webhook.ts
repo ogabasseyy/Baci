@@ -27,11 +27,12 @@ export async function handlePaystackMerchantWalletAssignmentSuccess(
     return NextResponse.json({ message: 'Event ignored' });
   }
   await persistMerchantWalletAssignmentReview(supabase, payload);
-  return NextResponse.json(
-    {
-      error: 'Paystack assignment accepted for review',
-      code: 'MERCHANT_WALLET_ASSIGNMENT_REVIEW',
-    },
-    { status: 409 }
-  );
+  // Acknowledge once review persistence succeeds. Retries cannot resolve an
+  // uncorrelated immutable payload, and non-2xx responses cause Paystack to
+  // redeliver indefinitely (including duplicate NULL-ref review rows).
+  return NextResponse.json({
+    success: true,
+    handled: 'merchant_wallet_assignment_review',
+    code: 'MERCHANT_WALLET_ASSIGNMENT_REVIEW',
+  });
 }

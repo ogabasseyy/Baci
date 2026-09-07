@@ -29,6 +29,7 @@ const WEB_WORKFLOW_FILES = new Set([
   '.github/scripts/blog-smoke-check.mjs',
   '.github/scripts/apply-atomic-migration-group.sh',
   '.github/scripts/apply-pending-migration.sh',
+  '.github/scripts/repair-sales-migration-collision.sh',
   '.github/scripts/apply-pending-migrations.sh',
   '.github/scripts/cloudflare-purge-cache.mjs',
   '.github/scripts/current-main-deploy-guard.mjs',

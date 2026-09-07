@@ -16,6 +16,7 @@ mkdir -p "$fake_bin" "$migrations_dir"
 
 cp "$script_dir/apply-pending-migrations.sh" "$fixture_root/"
 cp "$script_dir/apply-pending-migration.sh" "$fixture_root/"
+cp "$script_dir/repair-sales-migration-collision.sh" "$fixture_root/"
 cp "$script_dir/apply-atomic-migration-group.sh" "$fixture_root/"
 cp "$script_dir/deferred-production-migrations.sh" "$fixture_root/"
 cp "$script_dir/historical-migration-repair-handler.sh" "$fixture_root/"

@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { cryptoChainSchema } from './crypto-chain-schema';
 
 const cryptoPaymentSchema = z.object({
   address: z.string(),
-  chain: z.enum(['TRX', 'ETH', 'MATIC', 'AVAXC']),
+  chain: cryptoChainSchema,
   currency: z.enum(['USDT', 'USDC']),
   amount: z.number().nonnegative(),
   crypto_amount: z

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { cryptoChainSchema } from './crypto-chain-schema';
 
 export const cryptoAddressStatusSchema = z.object({
   success: z.literal(true),
@@ -6,20 +7,7 @@ export const cryptoAddressStatusSchema = z.object({
   crypto_address: z
     .object({
       address: z.string().min(1),
-      chain: z
-        .string()
-        .trim()
-        .toUpperCase()
-        .transform((value) => {
-          const aliases: Record<string, string> = {
-            TRON: 'TRX',
-            ETHEREUM: 'ETH',
-            POLYGON: 'MATIC',
-            AVALANCHE: 'AVAXC',
-          };
-          return aliases[value] ?? value;
-        })
-        .pipe(z.enum(['TRX', 'ETH', 'MATIC', 'AVAXC'])),
+      chain: cryptoChainSchema,
       currency: z.enum(['USDT', 'USDC']),
       qrcode: z.string().optional(),
     })

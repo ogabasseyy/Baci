@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ShippingQuote } from './types';
+import { calculateDeliveryCost } from './calculate-delivery-cost';
+import { isStationPickupQuote } from './is-station-pickup-quote';
 import {
-  calculateDeliveryCost,
   createSelectDeliveryMethod,
   getAirDeliveryQuotes,
   getDeliveryEstimateLabel,
@@ -14,9 +15,8 @@ import {
   getStationPickupQuote,
   getStationPickupQuotes,
   isMerchantQuote,
-  isStationPickupQuote,
   resetDeliveryQuotesForAddressChange,
-} from './utils';
+} from './delivery-quote-utils';
 
 const merchantShipQuote: ShippingQuote = {
   carrierName: 'Standard Delivery',

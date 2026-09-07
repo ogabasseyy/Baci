@@ -18,6 +18,27 @@ describe('crypto initialization response', () => {
       }).success
     ).toBe(true);
   });
+
+  describe('bugfix: provider-native chain aliases rejected on initialize', () => {
+    it('normalizes ethereum/polygon aliases before accepting a payable address', () => {
+      const result = cryptoInitializationResponseSchema.safeParse({
+        success: true,
+        reference: 'ref',
+        crypto_payment: {
+          address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
+          chain: 'ethereum',
+          currency: 'USDC',
+          amount: 100,
+          crypto_amount: '0.10',
+          confirmation_time: '1 minute',
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.crypto_payment.chain).toBe('ETH');
+      }
+    });
+  });
   it('rejects a missing wallet address', () => {
     expect(
       cryptoInitializationResponseSchema.safeParse({

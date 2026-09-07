@@ -1,9 +1,7 @@
 BEGIN;
 
--- Expression index keeps lower(m.slug) lookups index-friendly while preserving
--- case-insensitive matching for any legacy mixed-case stored slugs.
-CREATE INDEX IF NOT EXISTS idx_merchants_slug_lower ON public.merchants ((lower(slug)));
-
+-- Case-insensitive merchant slug lookup. The matching expression index is
+-- created concurrently in a sibling non-transactional migration.
 CREATE OR REPLACE FUNCTION public.get_order_tracking(
   p_merchant_slug TEXT,
   p_order_id UUID DEFAULT NULL,

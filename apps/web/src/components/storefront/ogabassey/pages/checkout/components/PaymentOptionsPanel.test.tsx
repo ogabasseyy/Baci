@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { PaymentTab } from '../types';
 import { PaymentOptionsPanel } from './PaymentOptionsPanel';
@@ -28,7 +28,7 @@ function renderPanel(
 }
 
 describe('payment schedule selection', () => {
-  it('hides unavailable installments and restores full payment choices', () => {
+  it('hides unavailable installments and restores full payment choices', async () => {
     renderPanel('installments', true, false);
     expect(
       screen.queryByRole('button', { name: 'Pay in Installments' })
@@ -39,14 +39,16 @@ describe('payment schedule selection', () => {
   });
 
   describe('bugfix: stale installments tab after wallet makes installments ineligible', () => {
-    it('resets the parent payment tab to full without clearing a full-payment method', () => {
+    it('resets the parent payment tab to full without clearing a full-payment method', async () => {
       const { setPaymentTab, setPaymentMethod } = renderPanel(
         'installments',
         true,
         false
       );
 
-      expect(setPaymentTab).toHaveBeenCalledWith('full');
+      await waitFor(() => {
+        expect(setPaymentTab).toHaveBeenCalledWith('full');
+      });
       expect(setPaymentMethod).not.toHaveBeenCalled();
       expect(
         screen.getByRole('radio', { name: /generate invoice/i })

@@ -1,4 +1,5 @@
 import { FileText, Truck } from 'lucide-react';
+import { useEffect } from 'react';
 import {
   BankTransferLogo,
   CreditDirectLogo,
@@ -41,12 +42,14 @@ export function PaymentOptionsPanel({
   hasInstallmentOptions,
   currency,
 }: PaymentOptionsPanelProps) {
-  if (!hasInstallmentOptions && paymentTab === 'installments') {
-    // Keep parent tab state aligned with the visible full-payment panel so a
-    // later return of installment eligibility cannot jump back while invoice
-    // (or another full method) remains selected.
-    setPaymentTab('full');
-  }
+  useEffect(() => {
+    if (!hasInstallmentOptions && paymentTab === 'installments') {
+      // Keep parent tab state aligned with the visible full-payment panel so a
+      // later return of installment eligibility cannot jump back while invoice
+      // (or another full method) remains selected.
+      setPaymentTab('full');
+    }
+  }, [hasInstallmentOptions, paymentTab, setPaymentTab]);
   const visiblePaymentTab = hasInstallmentOptions ? paymentTab : 'full';
   const selectPaymentTab = (nextTab: PaymentTab) => {
     setPaymentTab(nextTab);

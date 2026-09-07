@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { resolveApiBaseUrl } from '@/lib/api-url';
 import type { RepairBookingRequest } from '@/lib/repair-catalog-schemas';
+import { repairPickupPaymentAttempt } from '@/lib/repair-pickup-payment-attempt';
 import { repairPickupSchemas } from '@/schemas/repair-pickup';
 
 const origin = resolveApiBaseUrl(
@@ -55,14 +56,24 @@ export const repairPickupClient = {
     expectedPickupFee: number,
     resumeToken?: string
   ) {
-    return repairPickupSchemas.payment.parse(
+    const requestId = await repairPickupPaymentAttempt.get(
+      data,
+      expectedPickupFee,
+      resumeToken
+    );
+    const result = repairPickupSchemas.payment.parse(
       await post('repairs/pickup', {
         action: 'pay',
+        requestId,
         data,
         expectedPickupFee,
         resumeToken,
       })
     );
+    // Only a parsed, definitive failure permits a new start. Lost responses
+    // retain the same identity, so the server replays rather than reinitializes.
+    if (!result.success) await repairPickupPaymentAttempt.clear(data);
+    return result;
   },
   async status(ticketNumber: number, email: string) {
     return repairPickupSchemas.status.parse(

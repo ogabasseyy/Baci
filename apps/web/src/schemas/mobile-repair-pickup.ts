@@ -7,6 +7,7 @@ export const mobileRepairPickupSchema = z
     z.object({ action: z.literal('quote'), data: repairBookingSchema }),
     z.object({
       action: z.literal('pay'),
+      requestId: z.uuid(),
       data: repairBookingSchema,
       expectedPickupFee: repairPickupExpectedFeeSchema,
       resumeToken: z.string().min(1).max(4096).optional(),

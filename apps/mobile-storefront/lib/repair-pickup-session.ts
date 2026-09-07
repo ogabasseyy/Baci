@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import type { RepairBookingRequest } from '@/lib/repair-catalog-schemas';
+import { repairPickupPaymentAttempt } from '@/lib/repair-pickup-payment-attempt';
 import {
   type RepairPickupSession,
   repairPickupSchemas,
@@ -20,6 +21,7 @@ async function key(data: RepairBookingRequest) {
 
 export const repairPickupSession = {
   async clear(data: RepairBookingRequest) {
+    await repairPickupPaymentAttempt.clear(data);
     await SecureStore.deleteItemAsync(await key(data));
   },
   async load(data: RepairBookingRequest): Promise<RepairPickupSession | null> {

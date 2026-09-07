@@ -1,4 +1,12 @@
 import { repairPickupClient } from './repair-pickup-client';
+import { repairPickupPaymentAttempt } from './repair-pickup-payment-attempt';
+
+jest.mock('./repair-pickup-payment-attempt', () => ({
+  repairPickupPaymentAttempt: {
+    get: jest.fn(async () => '14bf2192-16de-442b-bf75-700f4ff2aaca'),
+    clear: jest.fn(),
+  },
+}));
 
 jest.mock('expo-constants', () => ({
   expoConfig: {
@@ -16,6 +24,47 @@ const data = {
   pickupAddress: '10 Test Road, Osogbo, Osun',
 };
 describe('repairPickupClient', () => {
+  it('reuses the durable identity after a timed-out payment response', async () => {
+    jest.useFakeTimers();
+    const fetch = jest
+      .fn()
+      .mockImplementationOnce(
+        (_url, options) =>
+          new Promise((_resolve, reject) =>
+            options.signal.addEventListener('abort', () =>
+              reject(new Error('aborted'))
+            )
+          )
+      )
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          ticketNumber: 123,
+          resumeToken: 'token',
+          payment: {
+            amount: 3000,
+            reference: 'ref',
+            authorizationUrl: 'https://checkout.paystack.com/test',
+          },
+        }),
+      });
+    global.fetch = fetch;
+    try {
+      const first = expect(repairPickupClient.pay(data, 3000)).rejects.toThrow(
+        'timed out'
+      );
+      await jest.advanceTimersByTimeAsync(30_000);
+      await first;
+      await repairPickupClient.pay(data, 3000);
+      expect(JSON.parse(fetch.mock.calls[0][1].body).requestId).toBe(
+        JSON.parse(fetch.mock.calls[1][1].body).requestId
+      );
+      expect(repairPickupPaymentAttempt.clear).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
   it('aborts stalled requests and reports a bounded timeout', async () => {
     jest.useFakeTimers();
     const original = global.fetch;

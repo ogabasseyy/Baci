@@ -8,7 +8,7 @@ import { quoteRepairPickup } from '@/lib/repairs/quote-repair-pickup';
 import { getRepairCenterAddress } from '@/lib/repairs/repair-center-address';
 import { repairPickupCustomerPhoneError } from '@/lib/repairs/repair-pickup-customer-phone';
 import { resolveRepairsCatalogMerchant } from '@/lib/repairs/repairs-catalog-access';
-import { startRepairPickupPayment } from '@/lib/repairs/start-repair-pickup-payment';
+import { startMobileRepairPickupPayment } from '@/lib/repairs/start-mobile-repair-pickup-payment';
 import { mobileRepairPickupSchema } from '@/schemas/mobile-repair-pickup';
 import { repairsDevicesRouteParamsSchema } from '@/schemas/repair-catalog';
 
@@ -57,8 +57,11 @@ export async function POST(
       );
     }
     if (input.data.action === 'pay') {
-      const result = await startRepairPickupPayment({
-        ...input.data,
+      const result = await startMobileRepairPickupPayment({
+        data: input.data.data,
+        requestId: input.data.requestId,
+        expectedPickupFee: input.data.expectedPickupFee,
+        resumeToken: input.data.resumeToken,
         merchantId: merchant.merchantId,
         merchantIdentifier: params.data.slug,
       });

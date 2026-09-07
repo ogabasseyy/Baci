@@ -21,8 +21,8 @@ vi.mock('@/lib/repairs/repair-center-address', () => ({
 vi.mock('@/lib/repairs/quote-repair-pickup', () => ({
   quoteRepairPickup: mocks.quote,
 }));
-vi.mock('@/lib/repairs/start-repair-pickup-payment', () => ({
-  startRepairPickupPayment: mocks.pay,
+vi.mock('@/lib/repairs/start-mobile-repair-pickup-payment', () => ({
+  startMobileRepairPickupPayment: mocks.pay,
 }));
 
 const data = {
@@ -83,6 +83,7 @@ describe('mobile repair pickup', () => {
     });
     const response = await call({
       action: 'pay',
+      requestId: '14bf2192-16de-442b-bf75-700f4ff2aaca',
       data,
       expectedPickupFee: 3000,
       merchantId: 'attacker',
@@ -114,6 +115,7 @@ describe('mobile repair pickup', () => {
     mocks.pay.mockResolvedValue(result);
     const response = await call({
       action: 'pay',
+      requestId: '14bf2192-16de-442b-bf75-700f4ff2aaca',
       data,
       expectedPickupFee: 3000,
     });

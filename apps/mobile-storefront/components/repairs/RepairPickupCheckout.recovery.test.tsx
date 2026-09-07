@@ -100,7 +100,16 @@ describe('pickup recovery regressions', () => {
     jest
       .mocked(repairPickupSession.save)
       .mockRejectedValue(new Error('Storage full'));
-    await show();
+    const navigationBackRef = { current: null as (() => void) | null };
+    const back = jest.fn();
+    render(
+      <RepairPickupCheckout
+        data={data}
+        onBack={back}
+        navigationBackRef={navigationBackRef}
+      />
+    );
+    await screen.findByText('Repair ticket: 123');
     fireEvent.press(screen.getByRole('button', { name: 'Pay pickup fee' }));
     await waitFor(() =>
       expect(WebBrowser.openBrowserAsync).toHaveBeenCalledTimes(1)
@@ -108,6 +117,8 @@ describe('pickup recovery regressions', () => {
     await waitFor(() =>
       expect(screen.queryByLabelText('Loading pickup')).toBeNull()
     );
+    navigationBackRef.current?.();
+    expect(back).not.toHaveBeenCalled();
     fireEvent.press(screen.getByRole('button', { name: 'Continue payment' }));
     await waitFor(() =>
       expect(WebBrowser.openBrowserAsync).toHaveBeenCalledTimes(2)

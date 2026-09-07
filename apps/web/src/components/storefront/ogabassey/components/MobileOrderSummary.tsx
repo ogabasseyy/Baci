@@ -70,8 +70,8 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
                 >
                     {/* Items List */}
                     <div className="space-y-4 mb-6 pt-2">
-                        {cart.map((item) => (
-                            <div key={item.cartItemId || (item.variantId ? `${item.id}:${item.variantId}` : item.id)} className="flex gap-3">
+                        {cart.map((item, index) => (
+                            <div key={item.cartItemId || (item.variantId ? `${item.id}:${item.variantId}` : `legacy-${index}:${item.id}`)} className="flex gap-3">
                                 <div className="ogabassey-product-card-image-surface relative size-16 bg-store-background rounded-lg border border-store-background-text/10 p-1 shrink-0">
                                     <CdnFormatImage
                                         src={item.image || '/placeholder.png'}

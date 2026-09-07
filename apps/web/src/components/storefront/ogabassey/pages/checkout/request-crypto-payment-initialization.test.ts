@@ -84,4 +84,27 @@ describe('crypto checkout request', () => {
     await expect(requestCryptoPaymentInitialization(input)).rejects.toThrow('Crypto payment details are unavailable');
   });
 
+  it('rejects a valid address when the chain or currency does not match the selection', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json({
+          success: true,
+          reference: 'ref',
+          crypto_payment: {
+            address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0',
+            amount: 20172100,
+            crypto_amount: '154.60',
+            chain: 'ETH',
+            currency: 'USDC',
+            confirmation_time: '1-3 minutes',
+          },
+        })
+      )
+    );
+    await expect(requestCryptoPaymentInitialization(input)).rejects.toThrow(
+      'Crypto payment network does not match the selected network.'
+    );
+  });
+
 });

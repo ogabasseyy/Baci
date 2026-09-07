@@ -91,4 +91,9 @@ export const EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES = [
       'supabase/migrations/20260907180000_include_tracking_order_tax.sql',
     sha256: '1277d578605564b8adb9598ecc60457795ba5420b0c964f2c3d16d2041f962c5',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260907183000_index_friendly_order_tracking_merchant_slug.sql',
+    sha256: 'a6ddf51d7323da3397b4ad0b3bfdf8bef672bab61484685426249e3453683e57',
+  },
 ];

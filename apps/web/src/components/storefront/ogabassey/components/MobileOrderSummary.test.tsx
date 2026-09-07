@@ -125,3 +125,36 @@ it.each([false, true])('hydrates legacy items without key warnings, including sh
     errors.mockRestore();
   }
 });
+
+describe('bugfix: duplicate keys for legacy non-variant cart lines', () => {
+  it('hydrates two legacy lines that share a product id without React key warnings', async () => {
+    const { cartItemId: _cartItemId, ...legacyItem } = cartItem;
+    const component = (
+      <MobileOrderSummary
+        {...summaryProps}
+        cart={[
+          legacyItem as CartItem,
+          { ...legacyItem, name: 'Second phone', quantity: 1 } as CartItem,
+        ]}
+      />
+    );
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const container = document.createElement('div');
+    let root: ReturnType<typeof hydrateRoot> | undefined;
+    try {
+      container.innerHTML = renderToString(component);
+      document.body.append(container);
+      await act(async () => {
+        root = hydrateRoot(container, component);
+      });
+      fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+      expect(screen.getByText('Baci Phone')).toBeVisible();
+      expect(screen.getByText('Second phone')).toBeVisible();
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root?.unmount());
+      container.remove();
+      errors.mockRestore();
+    }
+  });
+});

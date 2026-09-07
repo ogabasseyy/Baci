@@ -66,6 +66,12 @@ export async function requestCryptoPaymentInitialization({
     throw new Error('Crypto payment details are unavailable. Please choose another payment method.');
   }
   let payment = paymentResult.data;
+  if (
+    payment.crypto_payment.chain !== chain ||
+    payment.crypto_payment.currency !== currency
+  ) {
+    throw new Error('Crypto payment network does not match the selected network.');
+  }
   // Preserve a completed POST even if the selector closed while it was in flight.
   onPendingSession?.(payment);
   signal?.throwIfAborted();

@@ -9,7 +9,7 @@ const REPOSITORY_ROOT = path.resolve(__dirname, '../../../..');
 describe('storefront order pending replay sources', () => {
   it('pins each migration to its checked-in bytes', async () => {
     const rows = STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS.trim().split('\n');
-    expect(rows).toHaveLength(19);
+    expect(rows).toHaveLength(20);
     const filenames = rows.map((row) => row.split(' ')[1]);
     expect(new Set(filenames).size).toBe(filenames.length);
 

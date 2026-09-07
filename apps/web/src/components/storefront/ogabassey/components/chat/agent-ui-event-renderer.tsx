@@ -84,10 +84,10 @@ export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
     return parsed.success ? [parsed.data] : [];
   });
 
-  const handleAddToCart = (product: StorefrontAgentUiProduct) => {
-    if (!canAddProduct(product) || addedProductIds.includes(product.id)) return;
+  const handleAddToCart = (product: StorefrontAgentUiProduct, isAdded: boolean, quantity: number) => {
+    if (!canAddProduct(product) || isAdded || quantity <= 0) return;
 
-    addToCart(createCartProduct(product), requestedQuantity(product));
+    addToCart(createCartProduct(product), quantity);
     setIsCartOpen(true);
   };
 
@@ -114,9 +114,14 @@ export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
                 },
                 merchantContext?.basePath ?? ''
               );
-              const isAdded = addedProductIds.includes(product.id);
+              const isAdded = event.intent !== 'add_to_cart' && addedProductIds.includes(product.id);
+              const cartQuantity = cart.filter((item) => item.id === product.id)
+                .reduce((total, item) => total + item.quantity, 0);
+              const availableProduct = product.manageStock
+                ? { ...product, stock: Math.max(0, (product.stock ?? 0) - cartQuantity) }
+                : product;
               const isOutOfStock =
-                product.manageStock && (product.stock ?? 0) <= 0;
+                availableProduct.manageStock && (availableProduct.stock ?? 0) <= 0;
 
               return (
                 <article
@@ -175,7 +180,7 @@ export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
                       <button
                         className="flex items-center justify-center gap-1 rounded-lg bg-[var(--store-primary)] px-2 py-2 text-xs font-semibold text-[var(--store-primary-foreground)] disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={isAdded || isOutOfStock}
-                        onClick={() => handleAddToCart(product)}
+                        onClick={() => handleAddToCart(product, isAdded, requestedQuantity(availableProduct))}
                         type="button"
                       >
                         {isAdded ? <Check size={14} /> : <ShoppingCart size={14} />}
@@ -183,8 +188,8 @@ export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
                           ? 'Added'
                           : isOutOfStock
                             ? 'Out of stock'
-                            : requestedQuantity(product) > 1
-                              ? `Add ${requestedQuantity(product)} to cart`
+                            : requestedQuantity(availableProduct) > 1
+                              ? `Add ${requestedQuantity(availableProduct)} to cart`
                               : 'Add to cart'}
                       </button>
                     )}

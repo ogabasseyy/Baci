@@ -7,7 +7,7 @@ import { AgentUiEventRenderer } from './agent-ui-event-renderer';
 
 const mocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
-  cart: [] as { id: string }[],
+  cart: [] as { id: string; quantity: number }[],
   setIsCartOpen: vi.fn(),
 }));
 
@@ -69,6 +69,24 @@ function event(
 }
 
 describe('AgentUiEventRenderer', () => {
+  it('caps additional units at remaining stock without changing catalog stock', async () => {
+    mocks.cart = [{ id: 'product-1', quantity: 2 }];
+    render(<AgentUiEventRenderer events={[{ ...event({ quantity: 2, stock: 3 }), intent: 'add_to_cart' }]} />);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Add to cart' }));
+    expect(mocks.addToCart).toHaveBeenCalledWith(expect.objectContaining({ id: 'product-1', stock: 3 }), 1);
+  });
+
+  it('disables additional units when the cart already contains all managed stock', () => {
+    mocks.cart = [{ id: 'product-1', quantity: 3 }];
+    render(<AgentUiEventRenderer events={[{ ...event({ stock: 3 }), intent: 'add_to_cart' }]} />);
+    expect(screen.getByRole('button', { name: 'Out of stock' })).toBeDisabled();
+  });
+  it('allows an explicit add action for a product already in the cart', async () => {
+    mocks.cart = [{ id: 'product-1', quantity: 1 }];
+    render(<AgentUiEventRenderer events={[{ ...event(), intent: 'add_to_cart' }]} />);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Add to cart' }));
+    expect(mocks.addToCart).toHaveBeenCalledWith(expect.objectContaining({ id: 'product-1' }), 1);
+  });
   it.each([
     { hasConditionOffers: true },
     { variantModel: 'sku_matrix' },
@@ -166,7 +184,7 @@ describe('AgentUiEventRenderer', () => {
   });
 
   it('allows re-adding after the live cart removes the product', async () => {
-    mocks.cart = [{ id: 'product-1' }];
+    mocks.cart = [{ id: 'product-1', quantity: 1 }];
     const { rerender } = render(<AgentUiEventRenderer events={[event()]} />);
     expect(screen.getByRole('button', { name: 'Added' })).toBeDisabled();
     mocks.cart = [];

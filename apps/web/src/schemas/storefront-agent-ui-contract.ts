@@ -29,7 +29,7 @@ const productSchema = z
     name: z.string().trim().min(1).max(200),
     price: z.number().finite().nonnegative().max(1_000_000_000_000),
     quantity: z.number().int().min(1).max(99).optional(),
-    slug: z.string().trim().min(1).max(240).nullable(),
+    slug: z.string().trim().min(1).max(255).nullable(),
     stock: z.number().int().nonnegative().nullable(),
   })
   .strict();

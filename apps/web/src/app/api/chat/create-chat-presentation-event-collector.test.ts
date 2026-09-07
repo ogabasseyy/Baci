@@ -19,6 +19,27 @@ function product(index: number) {
 }
 
 describe('createChatPresentationEventCollector', () => {
+  it('preserves a 255-character routing slug', () => {
+    const collector = createChatPresentationEventCollector();
+    const slug = 'a'.repeat(255);
+    collector.capture('getProductDetails', { ...product(1), slug });
+    expect(collector.getEvents()[0]?.products[0]?.slug).toBe(slug);
+  });
+
+  it('retains an add confirmation after discovery fills the event cap', () => {
+    const collector = createChatPresentationEventCollector();
+    for (const index of [1, 2, 3]) {
+      collector.capture('getProductDetails', product(index));
+    }
+    expect(collector.capture('addToCart', product(4), { quantity: 2 })).toBe(
+      true
+    );
+    expect(collector.getEvents()).toHaveLength(3);
+    expect(collector.getEvents()[2]).toMatchObject({
+      intent: 'add_to_cart',
+      products: [{ id: 'product-4', quantity: 2 }],
+    });
+  });
   it('carries canonical selection metadata into the card', () => {
     const collector = createChatPresentationEventCollector();
     collector.capture('getProductDetails', {

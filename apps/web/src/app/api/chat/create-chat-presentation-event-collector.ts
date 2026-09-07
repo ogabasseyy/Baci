@@ -93,7 +93,7 @@ function createProduct(
     name: product.name.trim().slice(0, 200),
     price: product.price,
     ...(quantity ? { quantity } : {}),
-    slug: normalizeNullableText(product.slug, 240),
+    slug: product.slug?.trim() || null,
     stock: product.stock,
   };
   const event = storefrontAgentUiContract.eventSchema.safeParse({
@@ -147,10 +147,7 @@ export function createChatPresentationEventCollector() {
       result: unknown,
       context?: { quantity?: unknown }
     ): boolean {
-      if (
-        events.length >= storefrontAgentUiContract.maxEvents ||
-        !(toolName in presentationByToolName)
-      ) {
+      if (!(toolName in presentationByToolName)) {
         return false;
       }
 
@@ -165,6 +162,15 @@ export function createChatPresentationEventCollector() {
         .map((product) => `${product.id}:${product.quantity ?? ''}`)
         .join(',')}`;
       if (signatures.has(signature)) return false;
+
+      if (events.length >= storefrontAgentUiContract.maxEvents) {
+        if (event.intent !== 'add_to_cart') return false;
+        const discoveryIndex = events.findIndex(
+          (existing) => existing.intent !== 'add_to_cart'
+        );
+        if (discoveryIndex < 0) return false;
+        events.splice(discoveryIndex, 1);
+      }
 
       signatures.add(signature);
       events.push(event);

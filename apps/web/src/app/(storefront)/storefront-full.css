@@ -1,14 +1,35 @@
-@import "./storefront-globals.css";
+@import "./storefront-globals.css" source(none);
 
 /*
-  Tailwind v4's automatic source detection does not reliably see every
-  storefront route/component when this stylesheet is imported from leaf App
-  Router pages. Keep the full storefront stylesheet explicit so homepage-only
-  utilities such as `hidden md:block`, image sizing, and object-fit classes are
-  always emitted without broadening the isolated PDP stylesheet.
+  Disable automatic app-wide scanning: this render-blocking stylesheet must
+  not grow when dashboard pages, tooling, or documentation add utilities.
+  Retain the storefront/template trees and their shared rendering dependencies.
+  Keep helper-owned class constants explicit; do not scan the whole component
+  or library tree. The isolated PDP entrypoints keep their own source lists.
 */
 /* stylelint-disable scss/at-rule-no-unknown -- Tailwind v4 source discovery directives. */
 @source "./";
 @source "../../components/storefront";
 @source "../../components/ui";
+@source "../../components/themed";
+@source "../../templates";
+@source "../../components/address-autocomplete.tsx";
+@source "../../components/app-body.tsx";
+@source "../../components/cart.tsx";
+@source "../../components/logo.tsx";
+@source "../../components/optimized-image.tsx";
+@source "../../components/blog/renderer";
+@source "../../components/blog/table-of-contents.tsx";
+@source "../../components/builder/animated-wrapper.tsx";
+@source "../../components/builder/config.tsx";
+@source "../../components/builder/curated-footer-component.tsx";
+@source "../../components/builder/features-component.tsx";
+@source "../../components/builder/fields/color-picker-field.tsx";
+@source "../../components/builder/fields/image-picker-field.tsx";
+@source "../../components/builder/hero-component.tsx";
+@source "../../components/builder/media-library.tsx";
+@source "../../components/builder/newsletter-component.tsx";
+@source "../../components/repairs/repair-status-timeline.tsx";
+@source "../../hooks/use-loyalty.ts";
+@source "../../lib/repairs/repair-status.ts";
 /* stylelint-enable scss/at-rule-no-unknown */

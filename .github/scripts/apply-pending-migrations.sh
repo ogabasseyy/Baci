@@ -113,6 +113,7 @@ build_register_migration_query() {
 
 . "$script_dir/apply-atomic-migration-group.sh"
 . "$script_dir/apply-pending-migration.sh"
+. "$script_dir/repair-sales-migration-collision.sh"
 
 applied_versions_body="$(jq -n '{query: "SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version"}')"
 applied_versions_response="$(api_query <<<"$applied_versions_body")"
@@ -150,8 +151,20 @@ for file in "${sorted_files[@]}"; do
   fi
 
   recorded_name="$(awk -F '\t' -v version="$version" '$1 == version { print $2; exit }' <<<"$applied_migrations")"
+  # This byte-identical wallet migration was renamed after it had shipped.
+  # Treat the original ledger entry as its authority, without replaying old
+  # function definitions or inserting a fabricated new history row.
+  if [ "$base" = '20260903120500_guard_merchant_wallet_paystack_dva_alias' ] && \
+    [ -z "$recorded_name" ] && \
+    [ "$(awk -F '\t' '$1 == "20260903120000" { print $2; exit }' <<<"$applied_migrations")" = guard_merchant_wallet_paystack_dva_alias ]; then
+    echo "✓ already applied under 20260903120000: $base"
+    skipped_count=$((skipped_count + 1))
+    continue
+  fi
   if [ -n "$recorded_name" ]; then
-    if historical_collision_version_is_known "$version"; then
+    if [ "$version:$recorded_name:$name" = '20260903120000:guard_merchant_wallet_paystack_dva_alias:exclude_repair_pickup_from_merchant_sales' ]; then
+      repair_sales_migration_collision || exit 1
+    elif historical_collision_version_is_known "$version"; then
       if ! historical_collision_name_is_valid "$version" "$recorded_name" || \
         ! historical_collision_name_is_valid "$version" "$name"; then
         echo "::error::Historical collision $version has an unexpected recorded/current name pair: $recorded_name / $name" >&2

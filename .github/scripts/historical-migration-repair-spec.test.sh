@@ -11,6 +11,7 @@ make_applier_fixture() {
   mkdir -p "$directory/migrations"
   cp "$script_dir/apply-pending-migrations.sh" "$directory/"
   cp "$script_dir/apply-pending-migration.sh" "$directory/"
+  cp "$script_dir/repair-sales-migration-collision.sh" "$directory/"
   cp "$script_dir/apply-atomic-migration-group.sh" "$directory/"
   cp "$script_dir/deferred-production-migrations.sh" "$directory/"
   cp "$script_dir/historical-migration-repair-handler.sh" "$directory/"

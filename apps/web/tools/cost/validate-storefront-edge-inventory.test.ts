@@ -81,10 +81,24 @@ describe('validateStorefrontEdgeInventory', () => {
     });
   });
 
-  it('accepts an exact artifact regenerated from the checked-out tree', async () => {
+  it('accepts an exact artifact in a checkout without an origin/main ref', async () => {
     // Arrange
     const { artifact, inputPath, originMainSha, repoRoot } =
       await arrangeInventory();
+    await execFileAsync('git', [
+      '-C',
+      repoRoot,
+      'update-ref',
+      '-d',
+      'refs/remotes/origin/main',
+    ]);
+    const { stdout: refs } = await execFileAsync('git', [
+      '-C',
+      repoRoot,
+      'for-each-ref',
+      'refs/remotes/origin/main',
+    ]);
+    expect(refs).toBe('');
 
     // Act
     const result = await validateStorefrontEdgeInventory({

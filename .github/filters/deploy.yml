@@ -44,6 +44,7 @@ migrations:
   - '.github/workflows/deploy.yml'
   - '.github/scripts/apply-pending-migrations.sh'
   - '.github/scripts/apply-pending-migration.sh'
+  - '.github/scripts/repair-sales-migration-collision.sh'
   - '.github/actions/postdeploy-migrations/**'
   - '.github/scripts/apply-atomic-migration-group.sh'
   - '.github/scripts/deferred-production-migrations.sh'

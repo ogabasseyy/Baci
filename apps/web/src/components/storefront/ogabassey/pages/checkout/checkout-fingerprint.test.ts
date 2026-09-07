@@ -31,6 +31,29 @@ describe('payment abandonment fingerprint', () => {
       })
     ).toBe(buildPendingCheckoutFingerprint(checkout));
   });
+
+  describe('bugfix: merchant-rate identity omitted from fingerprints', () => {
+    it('keeps distinct merchant door rates distinct even at the same fee and null provider', () => {
+      const merchantCheckout = {
+        ...checkout,
+        shippingProvider: null as string | null,
+        shippingFee: 1500,
+      };
+
+      expect(
+        buildPendingCheckoutFingerprint({
+          ...merchantCheckout,
+          selectedQuoteId: 'mrate_9f1b2c3d-0000-4000-8000-000000000001',
+        })
+      ).not.toBe(
+        buildPendingCheckoutFingerprint({
+          ...merchantCheckout,
+          selectedQuoteId: 'mrate_9f1b2c3d-0000-4000-8000-000000000002',
+        })
+      );
+    });
+  });
+
   it.each([
     { shippingFee: 2201 },
     { shippingProvider: 'Topship' },

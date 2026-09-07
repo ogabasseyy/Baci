@@ -1,4 +1,5 @@
 import type { PendingCheckoutFingerprintInput } from './pending-checkout-order';
+import { getMerchantRateId } from './delivery-quote-utils';
 
 function normalizeText(value: string | null | undefined): string {
   return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -34,6 +35,13 @@ export function buildPendingCheckoutFingerprint(
       )
     );
 
+  // Merchant door rates share null provider + often the same fee; their stable
+  // `mrate_<uuid>` selection must distinguish fingerprints. Carrier quote UUIDs
+  // still refresh after gateway navigation and stay omitted.
+  const merchantRateId = input.selectedQuoteId
+    ? getMerchantRateId(input.selectedQuoteId)
+    : null;
+
   return JSON.stringify({
     merchantId: input.merchantId,
     customerEmail: normalizeText(input.customerEmail),
@@ -42,7 +50,7 @@ export function buildPendingCheckoutFingerprint(
     deliveryMethod: input.deliveryMethod,
     shippingFee: input.shippingFee,
     shippingProvider: normalizeText(input.shippingProvider),
-    // Quote UUIDs refresh after gateway navigation; server reuse validates the new quote.
+    merchantRateId,
     shippingAddress: {
       address: normalizeText(input.shippingAddress.address),
       city: normalizeText(input.shippingAddress.city),

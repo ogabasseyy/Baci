@@ -12,8 +12,8 @@ it('retries the existing session after a status failure without another initiali
   vi.stubGlobal('fetch', fetchMock);
   const { result } = renderHook(() => useCryptoPaymentInitializer());
 
-  await expect(result.current(input)).rejects.toThrow('network unavailable');
-  const payment = await result.current(input);
+  await expect(result.current.initialize(input)).rejects.toThrow('network unavailable');
+  const payment = await result.current.initialize(input);
 
   expect(payment).toMatchObject({ ...address, amount: 4.44, sessionId: 'session', paymentId: 'payment' });
   expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
@@ -27,11 +27,80 @@ it('polls a delayed address and shares concurrent initialization requests', asyn
   vi.stubGlobal('fetch', fetchMock);
   const { result } = renderHook(() => useCryptoPaymentInitializer());
 
-  const first = result.current(input);
-  const second = result.current(input);
+  const first = result.current.initialize(input);
+  const second = result.current.initialize(input);
   await vi.advanceTimersByTimeAsync(2000);
 
   expect(second).toBe(first);
   await expect(first).resolves.toMatchObject({ amount: 4.44, address: address.address });
   expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+
+it('ignores a late address after dismissal and reuses its session when reopened', async () => {
+  let resolveStatus!: (response: Response) => void;
+  const onReady = vi.fn();
+  const onError = vi.fn();
+  const fetchMock = vi.fn().mockResolvedValueOnce(Response.json(pending)).mockImplementationOnce(() => new Promise<Response>(resolve => { resolveStatus = resolve; })).mockResolvedValueOnce(Response.json({ success: true, crypto_address: address }));
+  vi.stubGlobal('fetch', fetchMock);
+  const { result } = renderHook(() => useCryptoPaymentInitializer({ onReady, onError }));
+  const first = result.current.initialize(input);
+  const dismissed = expect(first).rejects.toMatchObject({ name: 'AbortError' });
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+  result.current.cancel();
+  resolveStatus(Response.json({ success: true, crypto_address: address }));
+  await dismissed;
+
+  expect(fetchMock.mock.calls[1][1].signal.aborted).toBe(true);
+  expect(onReady).not.toHaveBeenCalled();
+  expect(onError).not.toHaveBeenCalled();
+  await result.current.initialize(input);
+  expect(onReady).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
+});
+
+it('ignores an in-flight address after unmount', async () => {
+  let resolveStatus!: (response: Response) => void;
+  const onReady = vi.fn();
+  const fetchMock = vi.fn().mockResolvedValueOnce(Response.json(pending)).mockImplementationOnce(() => new Promise<Response>(resolve => { resolveStatus = resolve; }));
+  vi.stubGlobal('fetch', fetchMock);
+  const { result, unmount } = renderHook(() => useCryptoPaymentInitializer({ onReady }));
+  const request = result.current.initialize(input);
+  const dismissed = expect(request).rejects.toMatchObject({ name: 'AbortError' });
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+  unmount();
+  resolveStatus(Response.json({ success: true, crypto_address: address }));
+  await dismissed;
+
+  expect(onReady).not.toHaveBeenCalled();
+  expect(fetchMock.mock.calls[1][1].signal.aborted).toBe(true);
+});
+
+it.each(['failed', 'cancelled'])('evicts a %s session so Retry initializes a replacement', async status => {
+  const fetchMock = vi.fn().mockResolvedValueOnce(Response.json(pending)).mockResolvedValueOnce(Response.json({ success: true, status, crypto_address: null })).mockResolvedValueOnce(Response.json({ ...pending, session_id: 'replacement', crypto_address_pending: false, crypto_payment: { ...pending.crypto_payment, ...address } }));
+  vi.stubGlobal('fetch', fetchMock);
+  const { result } = renderHook(() => useCryptoPaymentInitializer());
+
+  await expect(result.current.initialize(input)).rejects.toThrow('session has ended');
+  const replacement = await result.current.initialize(input);
+
+  expect(replacement.sessionId).toBe('replacement');
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(2);
+});
+it('retains IDs when dismissed during initialization and waits before reopening', async () => {
+  let resolveInitialization!: (response: Response) => void;
+  const onReady = vi.fn();
+  const fetchMock = vi.fn().mockImplementationOnce(() => new Promise<Response>(resolve => { resolveInitialization = resolve; })).mockResolvedValueOnce(Response.json({ success: true, crypto_address: address }));
+  vi.stubGlobal('fetch', fetchMock);
+  const { result } = renderHook(() => useCryptoPaymentInitializer({ onReady }));
+  const first = result.current.initialize(input);
+  const dismissed = expect(first).rejects.toMatchObject({ name: 'AbortError' });
+  result.current.cancel();
+  const reopened = result.current.initialize(input);
+  resolveInitialization(Response.json(pending));
+  await dismissed;
+  await expect(reopened).resolves.toMatchObject({ sessionId: 'session' });
+  expect(onReady).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
 });

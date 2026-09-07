@@ -35,3 +35,35 @@ it('turns malformed status responses into a shopper-readable retry error', async
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ success: true })));
   await expect(pollCryptoPaymentAddress(session)).rejects.toThrow('Crypto payment status is unavailable. Retry to check the same payment session.');
 });
+it.each([['ethereum', 'ETH'], ['polygon', 'MATIC']] as const)('accepts provider-native %s for checkout network %s', async (providerChain, chain) => {
+  const paymentSession: CryptoInitialization = { ...session, crypto_payment: { ...session.crypto_payment, chain, currency: 'USDC' } };
+  const address = '0x1234567890123456789012345678901234567890';
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ success: true, status: 'pending', crypto_address: { address, chain: providerChain, currency: 'USDC' } })));
+  const result = await pollCryptoPaymentAddress(paymentSession);
+  expect(result.crypto_payment).toMatchObject({ chain, address, currency: 'USDC' });
+  expect(result.crypto_address_pending).toBe(false);
+});
+it('cancels the delay before the next poll', async () => {
+  vi.useFakeTimers();
+  const controller = new AbortController();
+  const fetchMock = vi.fn().mockImplementation(async () => Response.json({ success: true, status: 'pending', crypto_address: null }));
+  vi.stubGlobal('fetch', fetchMock);
+  const pending = pollCryptoPaymentAddress(session, { signal: controller.signal });
+  const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  await vi.advanceTimersByTimeAsync(0);
+  controller.abort();
+  await rejected;
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+it.each(['failed', 'cancelled'])('stops immediately for terminal status %s', async status => {
+  vi.useFakeTimers();
+  const onTerminalSession = vi.fn();
+  const fetchMock = vi.fn().mockImplementation(async () => Response.json({ success: true, status, crypto_address: null }));
+  vi.stubGlobal('fetch', fetchMock);
+  const rejected = expect(pollCryptoPaymentAddress(session, { onTerminalSession })).rejects.toThrow('session has ended');
+  await vi.advanceTimersByTimeAsync(30000);
+  await rejected;
+  expect(onTerminalSession).toHaveBeenCalledOnce();
+  expect(fetchMock).toHaveBeenCalledOnce();
+});

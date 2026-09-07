@@ -3,8 +3,17 @@ import { cryptoAddressStatusSchema } from '@/schemas/crypto-address-status';
 import { readPaymentResponse } from './read-payment-response';
 import type { CryptoInitialization } from './request-crypto-payment-initialization';
 
+async function waitForNextPoll(signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  await new Promise<void>((resolve, reject) => {
+    const abort = () => { clearTimeout(timer); reject(signal?.reason); };
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, 2000);
+    signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
 /** Address lookup never initializes a replacement payment session. */
-export async function pollCryptoPaymentAddress(session: CryptoInitialization): Promise<CryptoInitialization> {
+export async function pollCryptoPaymentAddress(session: CryptoInitialization, options: { signal?: AbortSignal; onTerminalSession?: () => void } = {}): Promise<CryptoInitialization> {
   if (!session.session_id) {
     throw new Error('Crypto payment session is unavailable. Please contact support.');
   }
@@ -13,13 +22,19 @@ export async function pollCryptoPaymentAddress(session: CryptoInitialization): P
   });
   if (session.crypto_payment.payment_id) query.set('payment_id', session.crypto_payment.payment_id);
   for (let attempt = 0; attempt < 15; attempt++) {
-    if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 2000));
-    const response = await fetch(`/api/payments/status?${query}`);
+    options.signal?.throwIfAborted();
+    if (attempt > 0) await waitForNextPoll(options.signal);
+    const response = await fetch(`/api/payments/status?${query}`, { signal: options.signal });
     const parsedStatus = cryptoAddressStatusSchema.safeParse(await readPaymentResponse(response));
+    options.signal?.throwIfAborted();
     if (!parsedStatus.success) {
       throw new Error('Crypto payment status is unavailable. Retry to check the same payment session.');
     }
     const status = parsedStatus.data;
+    if (['failed', 'cancelled', 'canceled', 'expired'].includes(status.status ?? '')) {
+      options.onTerminalSession?.();
+      throw new Error('This crypto payment session has ended. Retry to create a new payment session.');
+    }
     if (status.crypto_address) {
       const address = status.crypto_address;
       if (address.chain !== session.crypto_payment.chain || address.currency !== session.crypto_payment.currency) {

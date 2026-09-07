@@ -745,7 +745,6 @@ export const CheckoutPage: React.FC = () => {
     };
     items: Array<{ name: string; type: 'physical' | 'digital' }>;
   } | null>(null);
-  const [isInitializingCrypto, setIsInitializingCrypto] = useState(false);
 
   // Mobile app order resume state
   // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
@@ -869,37 +868,26 @@ export const CheckoutPage: React.FC = () => {
     }
   };
 
-  // Initialize crypto payment with selected options. The fetch + throw flow
-  // lives in module-scope `requestCryptoPaymentInitialization`; the promise
-  // chain replaces try/catch/finally, which would bail React Compiler.
-  const requestCryptoPaymentInitialization = useCryptoPaymentInitializer();
+  const cryptoInitializer = useCryptoPaymentInitializer({
+    onReady: (payment) => {
+      setShowCryptoSelector(false);
+      setCryptoPaymentData(payment);
+    },
+    onError: (error) => toast({
+      title: 'Crypto Payment Failed',
+      description: error instanceof Error ? error.message : 'Failed to initialize crypto payment',
+      variant: 'destructive',
+    }),
+  });
   const initializeCryptoPayment = async () => {
     if (!pendingCryptoOrder || !merchant) return;
-
-    setIsInitializingCrypto(true);
-    await requestCryptoPaymentInitialization({
+    await cryptoInitializer.initialize({
       merchantId: merchant.id,
       pendingOrder: pendingCryptoOrder,
       chain: selectedCryptoChain,
       currency: selectedCryptoCurrency,
       orderCurrency: pendingCryptoOrder.orderCurrency,
-    })
-      .then((cryptoPayment) => {
-        setShowCryptoSelector(false);
-        setCryptoPaymentData(cryptoPayment);
-      })
-      .catch((error: unknown) => {
-        console.error('Crypto payment initialization error:', error);
-        toast({
-          title: 'Crypto Payment Failed',
-          description:
-            error instanceof Error ? error.message : 'Failed to initialize crypto payment',
-          variant: 'destructive',
-        });
-      })
-      .finally(() => {
-        setIsInitializingCrypto(false);
-      });
+    }).catch(() => undefined);
   };
 
   // Verify crypto payment status by polling the API
@@ -2847,11 +2835,12 @@ export const CheckoutPage: React.FC = () => {
           selectedCryptoCurrency={selectedCryptoCurrency}
           selectedCryptoChain={selectedCryptoChain}
           supportedChains={cryptoChainSupport[selectedCryptoCurrency]}
-          isInitializingCrypto={isInitializingCrypto}
-          onCurrencyChange={handleCryptoCurrencyChange}
-          onChainChange={setSelectedCryptoChain}
+          isInitializingCrypto={cryptoInitializer.isInitializing}
+          onCurrencyChange={(currency) => { cryptoInitializer.cancel(); handleCryptoCurrencyChange(currency); }}
+          onChainChange={(chain) => { cryptoInitializer.cancel(); setSelectedCryptoChain(chain); }}
           onInitialize={initializeCryptoPayment}
           onClose={() => {
+            cryptoInitializer.cancel();
             setShowCryptoSelector(false);
             setPendingCryptoOrder(null);
             isOrderInFlightRef.current = false;

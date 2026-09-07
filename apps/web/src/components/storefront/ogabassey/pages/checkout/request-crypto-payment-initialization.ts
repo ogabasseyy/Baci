@@ -12,6 +12,8 @@ import { cryptoInitializationResponseSchema } from '@/schemas/crypto-initializat
 export type CryptoInitialization = z.infer<typeof cryptoInitializationResponseSchema>;
 
 interface RequestCryptoPaymentInitializationParams {
+  signal?: AbortSignal;
+  onTerminalSession?: () => void;
   pendingSession?: CryptoInitialization;
   onPendingSession?: (session: CryptoInitialization) => void;
   merchantId: string;
@@ -23,6 +25,8 @@ interface RequestCryptoPaymentInitializationParams {
 }
 
 export async function requestCryptoPaymentInitialization({
+  signal,
+  onTerminalSession,
   pendingSession,
   onPendingSession,
   merchantId,
@@ -62,9 +66,11 @@ export async function requestCryptoPaymentInitialization({
     throw new Error('Crypto payment details are unavailable. Please choose another payment method.');
   }
   let payment = paymentResult.data;
+  // Preserve a completed POST even if the selector closed while it was in flight.
+  onPendingSession?.(payment);
+  signal?.throwIfAborted();
   if (payment.crypto_address_pending && !payment.crypto_payment.address) {
-    onPendingSession?.(payment);
-    payment = await pollCryptoPaymentAddress(payment);
+    payment = await pollCryptoPaymentAddress(payment, { signal, onTerminalSession });
   }
   if (payment.success && payment.crypto_payment) {
     return {

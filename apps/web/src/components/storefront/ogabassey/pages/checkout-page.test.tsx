@@ -44,7 +44,7 @@ vi.mock('@/hooks/use-merchant-client', () => ({
 }));
 
 vi.mock('./checkout/hooks/use-checkout-form-state', async () => {
-  const { useCheckoutFormTestState } = await import('./checkout/checkout-form-test-state');
+  const { useCheckoutFormTestState } = await import('./checkout/checkout-form-state.test-support');
   return { useCheckoutFormState: useCheckoutFormTestState };
 });
 

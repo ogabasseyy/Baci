@@ -1,5 +1,7 @@
 'use client';
 
+import { canShowDeliveryMethods } from './checkout/can-show-delivery-methods';
+
 import { DeferredCryptoSelectorModal as CryptoSelectorModal } from './checkout/components/DeferredCryptoSelectorModal';
 import {
   isAirportDeliveryEligible,
@@ -3634,7 +3636,7 @@ export const CheckoutPage: React.FC = () => {
                     </div>
 
                     {/* STEP 2: Delivery Method Cards - ONLY show AFTER address is detected */}
-                    {isHydrated && (isNewDeliveryAddressReady || (!isNewAddressMode && selectedAddressId)) && (
+                    {canShowDeliveryMethods({ isHydrated, isNewAddressMode, selectedAddressId, city: newAddressCity, state: newAddressState }) && (
                       <>
                         <div className="mt-6 pt-4 border-t border-gray-100">
                           <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">

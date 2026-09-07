@@ -30,3 +30,14 @@ it('retains changed prices and tenant identities as different checkouts', () => 
 it('does not turn malformed fingerprints into equal checkouts', () => {
   expect(checkoutFingerprintsMatch('old', 'new')).toBe(false);
 });
+
+it('matches legacy carrier attempts without a merchant rate against explicit null', () => {
+  const legacy = JSON.stringify({ shippingFee: 3518, selectedQuoteId: 'old', items: [] });
+  const current = JSON.stringify({ shippingFee: 3518, merchantRateId: null, items: [] });
+  expect(checkoutFingerprintsMatch(legacy, current)).toBe(true);
+  expect(checkoutFingerprintsMatch(current, legacy)).toBe(true);
+});
+it('preserves non-null merchant rate identities', () => {
+  expect(checkoutFingerprintsMatch('{"shippingFee":100}', '{"shippingFee":100,"merchantRateId":"rate-a"}')).toBe(false);
+  expect(checkoutFingerprintsMatch('{"merchantRateId":"rate-a"}', '{"merchantRateId":"rate-b"}')).toBe(false);
+});

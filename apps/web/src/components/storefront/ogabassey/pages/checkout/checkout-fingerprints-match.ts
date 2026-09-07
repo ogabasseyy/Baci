@@ -9,11 +9,11 @@ export function checkoutFingerprintsMatch(
       const parsed: unknown = JSON.parse(value);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
         return value;
-      const { selectedQuoteId: _quote, ...checkout } = parsed as Record<
+      const { selectedQuoteId: _quote, merchantRateId = null, ...checkout } = parsed as Record<
         string,
         unknown
       >;
-      return JSON.stringify(checkout);
+      return JSON.stringify({ ...checkout, merchantRateId });
     } catch {
       return value;
     }

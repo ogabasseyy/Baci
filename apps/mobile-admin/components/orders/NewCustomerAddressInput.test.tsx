@@ -584,6 +584,88 @@ describe('NewCustomerAddressInput', () => {
       );
     });
 
+    it('bugfix: enters recovery when Places details omit locality', async () => {
+      const onAddressDetailsPendingChange = vi.fn();
+      const setNewCustomer = vi.fn();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) => {
+          if (url.includes('/details/')) {
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({
+                status: 'OK',
+                result: {
+                  address_components: [
+                    {
+                      long_name: 'Nigeria',
+                      short_name: 'NG',
+                      types: ['country'],
+                    },
+                  ],
+                  geometry: { location: { lat: 6.6, lng: 3.3 } },
+                },
+              }),
+            });
+          }
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              predictions: [
+                {
+                  description: '42 Marina, Lagos',
+                  place_id: 'place-locality-missing',
+                },
+              ],
+            }),
+          });
+        })
+      );
+
+      const view = render(
+        <NewCustomerAddressInput
+          address=""
+          colors={LIGHT_COLORS}
+          googleMapsApiKey="maps-test-key"
+          onAddressDetailsPendingChange={onAddressDetailsPendingChange}
+          selectedCountryCode="NG"
+          setNewCustomer={setNewCustomer}
+        />
+      );
+
+      fireEvent.focus(screen.getByPlaceholderText('Search Address'));
+      fireEvent.change(screen.getByPlaceholderText('Search Address'), {
+        target: { value: '42 Marina' },
+      });
+      view.rerender(
+        <NewCustomerAddressInput
+          address="42 Marina"
+          colors={LIGHT_COLORS}
+          googleMapsApiKey="maps-test-key"
+          onAddressDetailsPendingChange={onAddressDetailsPendingChange}
+          selectedCountryCode="NG"
+          setNewCustomer={setNewCustomer}
+        />
+      );
+
+      await waitFor(() =>
+        expect(screen.getByText('42 Marina, Lagos')).toBeInTheDocument()
+      );
+      fireEvent.click(screen.getByText('42 Marina, Lagos'));
+
+      await waitFor(() =>
+        expect(
+          screen.getByText(
+            'Could not load full address details. Enter city and state to continue.'
+          )
+        ).toBeInTheDocument()
+      );
+      expect(screen.getByPlaceholderText('City')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('State')).toBeInTheDocument();
+      expect(onAddressDetailsPendingChange).toHaveBeenCalledWith(true);
+      expect(onAddressDetailsPendingChange.mock.calls.at(-1)?.[0]).toBe(true);
+    });
+
     it('keeps Save blocked and shows manual locality fields when details are missing', async () => {
       const onAddressDetailsPendingChange = vi.fn();
       const setNewCustomer = vi.fn();

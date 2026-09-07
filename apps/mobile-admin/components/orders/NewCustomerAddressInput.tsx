@@ -148,6 +148,13 @@ export function NewCustomerAddressInput({
           if (selectionSequenceRef.current !== selectionSequence) return;
           if (details) {
             setNewCustomer((previous) => ({ ...previous, ...details }));
+            const missingLocality = !(
+              details.city.trim() && details.state.trim()
+            );
+            if (missingLocality) {
+              beginDetailsRecovery();
+              return;
+            }
             onAddressDetailsPendingChange?.(false);
             return;
           }

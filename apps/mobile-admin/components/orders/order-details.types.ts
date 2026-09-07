@@ -52,6 +52,7 @@ export interface OrderDetailsRecord {
     | string
     | null;
   shipping_fee?: number | null;
+  shipping_funding_source?: 'customer_checkout' | 'merchant_wallet' | null;
   airport_type?: string | null;
   shipping_provider?: string | null;
   shipping_status: ShippingStatus;

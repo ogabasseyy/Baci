@@ -60,8 +60,7 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
     );
     expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
       'merchant-1',
-      'smartphones',
-      'ogabassey'
+      'smartphones'
     );
     expect(mockCacheLife).toHaveBeenCalledWith('products');
     expect(mockCacheTag).toHaveBeenCalledWith(

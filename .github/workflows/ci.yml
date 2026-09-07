@@ -309,6 +309,14 @@ jobs:
           --sql-check supabase/migrations/tests/quiz_runtime_gate_stale_health_v2.sql
           --sql-check supabase/migrations/tests/quiz_score_repair_quiescence_gate_v2.sql
           --sql-check supabase/migrations/tests/public_shipping_sender_projection.sql
+          --sql-check supabase/migrations/tests/repair_pickup_payment_confirmation.sql
+          --sql-check supabase/migrations/tests/repair_pickup_receiver_projection.sql
+          --sql-check supabase/migrations/tests/find_resumable_repair_pickup.sql
+          --sql-check supabase/migrations/tests/claim_repair_pickup_booking_terminal.sql
+          --sql-check supabase/migrations/tests/claim_repair_pickup_booking_manual_fulfilled.sql
+          --sql-check supabase/migrations/tests/normalize_nigerian_repair_pickup_receiver_phone.sql
+          --sql-check supabase/migrations/tests/repair_pickup_receiver_fulfillment.sql
+          --sql-check supabase/migrations/tests/gigl_tracking_orderless_repair_unlink.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

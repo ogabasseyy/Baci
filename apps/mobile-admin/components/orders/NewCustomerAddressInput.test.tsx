@@ -172,7 +172,11 @@ describe('NewCustomerAddressInput', () => {
       );
     });
 
-    expect(screen.getByText('12 Allen Avenue')).toBeInTheDocument();
+    // Wait for the autocomplete response to paint suggestions — fetch being
+    // called is not enough; json() + setState still race on CI.
+    await waitFor(() => {
+      expect(screen.getByText('12 Allen Avenue')).toBeInTheDocument();
+    });
     fireEvent.click(
       screen.getByRole('button', {
         name: 'Use address 12 Allen Avenue, Ikeja, Lagos',
@@ -189,10 +193,12 @@ describe('NewCustomerAddressInput', () => {
     render(
       <NewCustomerAddressInput
         address="12 Allen"
+        city="Lagos"
         colors={LIGHT_COLORS}
         googleMapsApiKey={undefined}
         selectedCountryCode="NG"
         setNewCustomer={setNewCustomer}
+        state="Lagos State"
       />
     );
 
@@ -200,7 +206,80 @@ describe('NewCustomerAddressInput', () => {
     fireEvent.change(input, { target: { value: '14 Bode Thomas' } });
 
     expect(screen.queryByLabelText('Search Address')).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('City')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('State')).toBeInTheDocument();
     expect(setNewCustomer).toHaveBeenCalledTimes(1);
+
+    const updater = setNewCustomer.mock.calls[0][0] as (
+      previous: Record<string, unknown>
+    ) => Record<string, unknown>;
+    expect(
+      updater({
+        address: '12 Allen',
+        city: 'Lagos',
+        state: 'Lagos State',
+        latitude: 6.5,
+        longitude: 3.3,
+      })
+    ).toEqual({
+      address: '14 Bode Thomas',
+      city: 'Lagos',
+      state: 'Lagos State',
+      latitude: undefined,
+      longitude: undefined,
+    });
+  });
+
+  it('clears locality when typing with a Google Maps key', () => {
+    const setNewCustomer = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ predictions: [] }),
+      })
+    );
+
+    render(
+      <NewCustomerAddressInput
+        address="12 Allen"
+        city="Lagos"
+        colors={LIGHT_COLORS}
+        googleMapsApiKey="maps-test-key"
+        selectedCountryCode="NG"
+        setNewCustomer={setNewCustomer}
+        state="Lagos State"
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Search Address'), {
+      target: { value: '14 Bode Thomas' },
+    });
+
+    const updater = setNewCustomer.mock.calls[0][0] as (
+      previous: Record<string, unknown>
+    ) => Record<string, unknown>;
+    expect(
+      updater({
+        address: '12 Allen',
+        city: 'Lagos',
+        state: 'Lagos State',
+        country: 'Nigeria',
+        countryCode: 'NG',
+        postalCode: '100001',
+        latitude: 6.5,
+        longitude: 3.3,
+      })
+    ).toEqual({
+      address: '14 Bode Thomas',
+      city: '',
+      state: '',
+      country: '',
+      countryCode: '',
+      postalCode: '',
+      latitude: undefined,
+      longitude: undefined,
+    });
   });
 
   it('keeps suggestions hidden when a pending lookup resolves after blur', async () => {
@@ -421,5 +500,353 @@ describe('NewCustomerAddressInput', () => {
       expect(screen.queryByText('12 Allen Avenue')).not.toBeInTheDocument()
     );
     warnSpy.mockRestore();
+  });
+
+  describe('bugfix: Save raced ahead of place details', () => {
+    it('reports pending while Google place details are in flight', async () => {
+      let resolveDetails: ((value: unknown) => void) | undefined;
+      const onAddressDetailsPendingChange = vi.fn();
+      const setNewCustomer = vi.fn();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) => {
+          if (url.includes('/details/')) {
+            return new Promise((resolve) => {
+              resolveDetails = resolve;
+            });
+          }
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              predictions: [
+                {
+                  description: '12 Allen Avenue, Ikeja',
+                  place_id: 'place-1',
+                },
+              ],
+            }),
+          });
+        })
+      );
+
+      const view = render(
+        <NewCustomerAddressInput
+          address=""
+          colors={LIGHT_COLORS}
+          googleMapsApiKey="maps-test-key"
+          onAddressDetailsPendingChange={onAddressDetailsPendingChange}
+          selectedCountryCode="NG"
+          setNewCustomer={setNewCustomer}
+        />
+      );
+
+      fireEvent.focus(screen.getByPlaceholderText('Search Address'));
+      fireEvent.change(screen.getByPlaceholderText('Search Address'), {
+        target: { value: '12 Allen' },
+      });
+      view.rerender(
+        <NewCustomerAddressInput
+          address="12 Allen"
+          colors={LIGHT_COLORS}
+          googleMapsApiKey="maps-test-key"
+          onAddressDetailsPendingChange={onAddressDetailsPendingChange}
+          selectedCountryCode="NG"
+          setNewCustomer={setNewCustomer}
+        />
+      );
+
+      await waitFor(() =>
+        expect(screen.getByText('12 Allen Avenue, Ikeja')).toBeInTheDocument()
+      );
+      fireEvent.click(screen.getByText('12 Allen Avenue, Ikeja'));
+
+      expect(onAddressDetailsPendingChange).toHaveBeenCalledWith(true);
+
+      await act(async () => {
+        resolveDetails?.({
+          ok: true,
+          json: async () => ({
+            status: 'OK',
+            result: {
+              address_components: [
+                { long_name: 'Ikeja', types: ['locality'] },
+                { long_name: 'Lagos', types: ['administrative_area_level_1'] },
+                { long_name: 'Nigeria', types: ['country'] },
+              ],
+              geometry: { location: { lat: 6.6, lng: 3.3 } },
+            },
+          }),
+        });
+      });
+
+      await waitFor(() =>
+        expect(onAddressDetailsPendingChange).toHaveBeenCalledWith(false)
+      );
+    });
+
+    it('bugfix: enters recovery when Places details omit locality', async () => {
+      const onAddressDetailsPendingChange = vi.fn();
+      const setNewCustomer = vi.fn();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) => {
+          if (url.includes('/details/')) {
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({
+                status: 'OK',
+                result: {
+                  address_components: [
+                    {
+                      long_name: 'Nigeria',
+                      short_name: 'NG',
+                      types: ['country'],
+                    },
+                  ],
+                  geometry: { location: { lat: 6.6, lng: 3.3 } },
+                },
+              }),
+            });
+          }
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              predictions: [
+                {
+                  description: '42 Marina, Lagos',
+                  place_id: 'place-locality-missing',
+                },
+              ],
+            }),
+          });
+        })
+      );
+
+      const view = render(
+        <NewCustomerAddressInput
+          address=""
+          colors={LIGHT_COLORS}
+          googleMapsApiKey="maps-test-key"
+          onAddressDetailsPendingChange={onAddressDetailsPendingChange}
+          selectedCountryCode="NG"
+          setNewCustomer={setNewCustomer}
+        />
+      );
+
+      fireEvent.focus(screen.getByPlaceholderText('Search Address'));
+      fireEvent.change(screen.getByPlaceholderText('Search Address'), {
+        target: { value: '42 Marina' },
+      });
+      view.rerender(
+        <NewCustomerAddressInput
+          address="42 Marina"
+          colors={LIGHT_COLORS}
+          googleMapsApiKey="maps-test-key"
+          onAddressDetailsPendingChange={onAddressDetailsPendingChange}
+          selectedCountryCode="NG"
+          setNewCustomer={setNewCustomer}
+        />
+      );
+
+      await waitFor(() =>
+        expect(screen.getByText('42 Marina, Lagos')).toBeInTheDocument()
+      );
+      fireEvent.click(screen.getByText('42 Marina, Lagos'));
+
+      await waitFor(() =>
+        expect(
+          screen.getByText(
+            'Could not load full address details. Enter city and state to continue.'
+          )
+        ).toBeInTheDocument()
+      );
+      expect(screen.getByPlaceholderText('City')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('State')).toBeInTheDocument();
+      expect(onAddressDetailsPendingChange).toHaveBeenCalledWith(true);
+      expect(onAddressDetailsPendingChange.mock.calls.at(-1)?.[0]).toBe(true);
+    });
+
+    it('keeps Save blocked and shows manual locality fields when details are missing', async () => {
+      const onAddressDetailsPendingChange = vi.fn();
+      const setNewCustomer = vi.fn();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) => {
+          if (url.includes('/details/')) {
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({ status: 'ZERO_RESULTS', result: null }),
+            });
+          }
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              predictions: [
+                {
+                  description: '12 Allen Avenue, Ikeja',
+                  place_id: 'place-1',
+                },
+              ],
+            }),
+          });
+        })
+      );
+
+      const view = render(
+        <NewCustomerAddressInput
+          address=""
+          colors={LIGHT_COLORS}
+          googleMapsApiKey="maps-test-key"
+          onAddressDetailsPendingChange={onAddressDetailsPendingChange}
+          selectedCountryCode="NG"
+          setNewCustomer={setNewCustomer}
+        />
+      );
+
+      fireEvent.focus(screen.getByPlaceholderText('Search Address'));
+      fireEvent.change(screen.getByPlaceholderText('Search Address'), {
+        target: { value: '12 Allen' },
+      });
+      view.rerender(
+        <NewCustomerAddressInput
+          address="12 Allen"
+          colors={LIGHT_COLORS}
+          googleMapsApiKey="maps-test-key"
+          onAddressDetailsPendingChange={onAddressDetailsPendingChange}
+          selectedCountryCode="NG"
+          setNewCustomer={setNewCustomer}
+        />
+      );
+
+      await waitFor(() =>
+        expect(screen.getByText('12 Allen Avenue, Ikeja')).toBeInTheDocument()
+      );
+      fireEvent.click(screen.getByText('12 Allen Avenue, Ikeja'));
+
+      await waitFor(() =>
+        expect(
+          screen.getByText(
+            'Could not load full address details. Enter city and state to continue.'
+          )
+        ).toBeInTheDocument()
+      );
+      expect(screen.getByPlaceholderText('City')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('State')).toBeInTheDocument();
+      expect(onAddressDetailsPendingChange).toHaveBeenCalledWith(true);
+      expect(onAddressDetailsPendingChange.mock.calls.at(-1)?.[0]).toBe(true);
+
+      view.rerender(
+        <NewCustomerAddressInput
+          address="12 Allen Avenue, Ikeja"
+          city="Ikeja"
+          colors={LIGHT_COLORS}
+          googleMapsApiKey="maps-test-key"
+          onAddressDetailsPendingChange={onAddressDetailsPendingChange}
+          selectedCountryCode="NG"
+          setNewCustomer={setNewCustomer}
+          state="Lagos"
+        />
+      );
+
+      await waitFor(() =>
+        expect(onAddressDetailsPendingChange).toHaveBeenCalledWith(false)
+      );
+    });
+
+    it('keeps locality gate after editing the recovery address field', async () => {
+      const onAddressDetailsPendingChange = vi.fn();
+      const setNewCustomer = vi.fn();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) => {
+          if (url.includes('/details/')) {
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({ status: 'ZERO_RESULTS', result: null }),
+            });
+          }
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              predictions: [
+                {
+                  description: '12 Allen Avenue, Ikeja',
+                  place_id: 'place-1',
+                },
+              ],
+            }),
+          });
+        })
+      );
+
+      const view = render(
+        <NewCustomerAddressInput
+          address=""
+          colors={LIGHT_COLORS}
+          googleMapsApiKey="maps-test-key"
+          onAddressDetailsPendingChange={onAddressDetailsPendingChange}
+          selectedCountryCode="NG"
+          setNewCustomer={setNewCustomer}
+        />
+      );
+
+      fireEvent.focus(screen.getByPlaceholderText('Search Address'));
+      fireEvent.change(screen.getByPlaceholderText('Search Address'), {
+        target: { value: '12 Allen' },
+      });
+      view.rerender(
+        <NewCustomerAddressInput
+          address="12 Allen"
+          colors={LIGHT_COLORS}
+          googleMapsApiKey="maps-test-key"
+          onAddressDetailsPendingChange={onAddressDetailsPendingChange}
+          selectedCountryCode="NG"
+          setNewCustomer={setNewCustomer}
+        />
+      );
+
+      await waitFor(() =>
+        expect(screen.getByText('12 Allen Avenue, Ikeja')).toBeInTheDocument()
+      );
+      fireEvent.click(screen.getByText('12 Allen Avenue, Ikeja'));
+
+      await waitFor(() =>
+        expect(screen.getByPlaceholderText('Enter address')).toBeInTheDocument()
+      );
+      onAddressDetailsPendingChange.mockClear();
+      setNewCustomer.mockClear();
+
+      fireEvent.change(screen.getByPlaceholderText('Enter address'), {
+        target: { value: '12 Allen Avenue, Suite 2' },
+      });
+
+      expect(
+        screen.getByText(
+          'Could not load full address details. Enter city and state to continue.'
+        )
+      ).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('City')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('State')).toBeInTheDocument();
+      expect(onAddressDetailsPendingChange).not.toHaveBeenCalledWith(false);
+
+      const updater = setNewCustomer.mock.calls[0][0] as (
+        previous: Record<string, unknown>
+      ) => Record<string, unknown>;
+      expect(
+        updater({
+          address: '12 Allen Avenue, Ikeja',
+          city: '',
+          state: '',
+          latitude: 6.5,
+          longitude: 3.3,
+        })
+      ).toEqual({
+        address: '12 Allen Avenue, Suite 2',
+        city: '',
+        state: '',
+        latitude: undefined,
+        longitude: undefined,
+      });
+    });
   });
 });

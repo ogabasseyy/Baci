@@ -133,6 +133,26 @@ describe('getCachedCompareCategoryShell', () => {
     expect(hiddenRpcQuery.retry).toHaveBeenCalledWith(false);
   });
 
+  it('bugfix: uses shared Unicode-aware fallback names for legacy compare shells', async () => {
+    const missingCategoryQuery = createCategoryQuery({
+      data: null,
+      error: { code: 'PGRST116' },
+    });
+    const visibleRpcQuery = createCategoryQuery({ data: [], error: null });
+    mockGetPublicSupabaseClient.mockReturnValue({
+      from: vi.fn(() => missingCategoryQuery),
+      rpc: vi.fn(() => visibleRpcQuery),
+    });
+
+    await expect(
+      getCachedCompareCategoryShell('merchant-1', 'électronique')
+    ).resolves.toEqual({
+      fallbackName: 'Électronique',
+      isCollection: false,
+      productScope: { kind: 'legacy', categoryName: 'Électronique' },
+    });
+  });
+
   it('rejects at three seconds when the category transport ignores abort', async () => {
     vi.useFakeTimers();
     const categoryQuery = createCategoryQuery({ data: null, error: null });

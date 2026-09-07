@@ -98,8 +98,7 @@ describe('getCachedCompareCategoryInventory', () => {
 
     const result = await getCachedCompareCategoryInventory(
       'merchant-1',
-      'laptops',
-      'ogabassey'
+      'laptops'
     );
 
     expect(mockGetCachedCategoryPageShellData).toHaveBeenCalledWith(
@@ -175,8 +174,7 @@ describe('getCachedCompareCategoryInventory', () => {
 
     const result = await getCachedCompareCategoryInventory(
       'merchant-1',
-      'retro-consoles',
-      'ogabassey'
+      'retro-consoles'
     );
 
     expect(productsQuery.or).toHaveBeenCalledWith(
@@ -200,8 +198,7 @@ describe('getCachedCompareCategoryInventory', () => {
 
     const result = await getCachedCompareCategoryInventory(
       'merchant-1',
-      'new-arrivals',
-      'ogabassey'
+      'new-arrivals'
     );
 
     expect(result).toEqual({
@@ -223,8 +220,7 @@ describe('getCachedCompareCategoryInventory', () => {
 
     const result = await getCachedCompareCategoryInventory(
       'merchant-1',
-      'hidden',
-      'ogabassey'
+      'hidden'
     );
 
     expect(result).toEqual({
@@ -257,7 +253,7 @@ describe('getCachedCompareCategoryInventory', () => {
       .mockImplementation(() => undefined);
 
     await expect(
-      getCachedCompareCategoryInventory('merchant-1', 'laptops', 'ogabassey')
+      getCachedCompareCategoryInventory('merchant-1', 'laptops')
     ).rejects.toEqual({ message: 'connection reset' });
 
     consoleError.mockRestore();
@@ -270,7 +266,7 @@ describe('getCachedCompareCategoryInventory', () => {
     mockGetPublicSupabaseClient.mockReturnValue({ from });
 
     await expect(
-      getCachedCompareCategoryInventory('merchant-1', 'laptops', 'ogabassey')
+      getCachedCompareCategoryInventory('merchant-1', 'laptops')
     ).rejects.toBe(shellError);
     expect(from).not.toHaveBeenCalled();
   });

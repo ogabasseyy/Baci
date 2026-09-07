@@ -62,8 +62,7 @@ describe('getCachedCompareCategoryInventory cap diagnostics', () => {
 
     const result = await getCachedCompareCategoryInventory(
       'merchant-1',
-      'laptops',
-      'ogabassey'
+      'laptops'
     );
 
     expect(result.products).toHaveLength(600);
@@ -87,11 +86,7 @@ describe('getCachedCompareCategoryInventory cap diagnostics', () => {
       .spyOn(console, 'warn')
       .mockImplementation(() => undefined);
 
-    await getCachedCompareCategoryInventory(
-      'merchant-1',
-      'laptops',
-      'ogabassey'
-    );
+    await getCachedCompareCategoryInventory('merchant-1', 'laptops');
 
     expect(warnSpy).not.toHaveBeenCalledWith(
       'COMPARE_INVENTORY_CAP_HIT',

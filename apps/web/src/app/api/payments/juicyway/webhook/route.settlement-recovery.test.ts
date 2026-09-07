@@ -114,6 +114,16 @@ describe('POST /api/payments/juicyway/webhook — settlement recovery', () => {
       }
       if (table === 'orders') {
         return {
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: {
+              shipping_funding_source: null,
+              shipping_platform_retained_amount: null,
+              shipping_provider: null,
+            },
+            error: null,
+          }),
+          select: vi.fn().mockReturnThis(),
           update: vi.fn(() =>
             updateChain({ data: null, error: { message: 'column missing' } })
           ),
@@ -180,5 +190,56 @@ describe('POST /api/payments/juicyway/webhook — settlement recovery', () => {
       })
     );
     expect(webhookTest.mockAdminSupabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it('routes GIGL customer-checkout settlements through the GIGL wrapper', async () => {
+    mockVerifyWebhookSignature.mockResolvedValue(true);
+    let transactionCallCount = 0;
+    const fromMock = vi.fn((table) => {
+      if (table === 'transactions') {
+        transactionCallCount += 1;
+        return transactionTable(transactionCallCount);
+      }
+      if (table === 'orders') {
+        return {
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: {
+              cancelled_at: null,
+              id: 'order-123',
+              order_number: 'ORD-123',
+              payment_status: 'paid',
+              shipping_funding_source: 'customer_checkout',
+              shipping_platform_retained_amount: 1_500,
+              shipping_provider: 'GIGL',
+              shipping_status: 'processing',
+            },
+            error: null,
+          }),
+          select: vi.fn().mockReturnThis(),
+          update: vi.fn(() => updateChain({ data: null, error: null })),
+        };
+      }
+      return { eq: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis() };
+    });
+    (webhookTest.mockSupabase as Record<string, unknown>).from = fromMock;
+    webhookTest.mockAdminSupabase.rpc.mockResolvedValue({ error: null });
+
+    const response = await webhookTest.postJuicywayWebhook(
+      webhookTest.createWebhookRequest(webhookTest.createSuccessPayload())
+    );
+
+    expect(response.status).toBe(200);
+    expect(webhookTest.mockAdminSupabase.rpc).toHaveBeenCalledWith(
+      'record_merchant_settlement_gigl_v1',
+      expect.objectContaining({
+        p_platform_fee: 150,
+        p_metadata: expect.objectContaining({
+          commerce_platform_fee: 150,
+          retained_shipping_amount: 1_500,
+          juicyway_reference: 'TXN-123456',
+        }),
+      })
+    );
   });
 });

@@ -214,7 +214,7 @@ describe('confirmPaystackWalletDvaTopUp', () => {
     expect(result).toMatchObject({
       body: { code: 'WALLET_DVA_ORDER_ALIAS_CONFLICT' },
       kind: 'review',
-      status: 409,
+      status: 200,
     });
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({

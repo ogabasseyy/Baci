@@ -1,3 +1,4 @@
+import { isValidPhone } from '@baci/shared/lib';
 import { z } from 'zod';
 
 const optionalEmailSchema = z.preprocess(
@@ -21,7 +22,30 @@ export const repairSettingsSchema = z
     state: z.string().trim().max(120),
     country: z.string().trim().max(120),
   })
-  .partial();
+  .partial()
+  .superRefine((value, ctx) => {
+    // Blank phones are allowed when the patch explicitly disables pickup, or
+    // when pickup_enabled is omitted (route merge validation covers the DB).
+    // Non-empty phones are always format-checked. Enabling pickup in the same
+    // patch with an explicit blank/invalid phone is rejected here.
+    if (value.pickup_enabled === false) {
+      return;
+    }
+
+    if (value.contact_phone === undefined) {
+      return;
+    }
+
+    const phoneMustBeValid =
+      value.pickup_enabled === true || value.contact_phone !== '';
+    if (phoneMustBeValid && !isValidPhone(value.contact_phone)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter a valid repair-center phone number.',
+        path: ['contact_phone'],
+      });
+    }
+  });
 
 export type RepairSettingsInput = z.infer<typeof repairSettingsSchema>;
 

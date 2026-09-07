@@ -103,7 +103,11 @@ describe('GiglProvider quote rate IDs', () => {
       provider: 'GIGL',
       serviceTier: 'GoStandard',
       carrierName: 'GIG Logistics',
-      price: 8941,
+      price: 9835.58,
+      providerCost: 8941.43,
+      platformMargin: 894.15,
+      marginBasisPoints: 1000,
+      pricingVersion: 'gigl_platform_margin_v1',
       currency: 'NGN',
       providerRateId: 'GIGL_30_0_1_0_0_4',
     });

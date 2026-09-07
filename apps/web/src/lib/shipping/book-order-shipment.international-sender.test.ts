@@ -1,4 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { shippingQuoteEnvTestMock } from '@/lib/shipping/shipping-quote-env.test-mock';
+import { prepaidGiglCustomerCheckoutPayment } from './book-order-shipment.refresh-fixtures.test-helper';
+
+vi.mock('@/env', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/env')>();
+  return { ...actual, ...shippingQuoteEnvTestMock };
+});
 
 vi.mock('@/lib/shipping', () => ({
   shippingService: {
@@ -58,6 +65,7 @@ function createSupabase(
     shipping_fee: 2500,
     selected_quote_id: 'quote-1',
     shipping_provider: provider,
+    ...(provider === 'GIGL' ? prepaidGiglCustomerCheckoutPayment : {}),
     shipping_address: orderAddress,
     order_items: [
       {
@@ -89,6 +97,14 @@ function createSupabase(
       ? { ...savedQuoteRequest, shipmentType: undefined }
       : savedQuoteRequest,
     provider_metadata: {},
+    ...(provider === 'GIGL'
+      ? {
+          provider_cost: 2000,
+          platform_margin: 500,
+          platform_margin_bps: 2000,
+          pricing_version: 'gigl_platform_margin_v1',
+        }
+      : {}),
   };
   const orders = {
     eq: vi.fn().mockReturnThis(),
@@ -140,7 +156,57 @@ function createSupabase(
         };
       }
       if (table === 'merchants') return { select: vi.fn(() => merchants) };
+      if (table === 'merchant_settlements') {
+        const settlementsChain = {
+          eq: vi.fn().mockReturnThis(),
+          // biome-ignore lint/suspicious/noThenProperty: Supabase query mocks are thenable.
+          then: (
+            onfulfilled: (value: unknown) => unknown,
+            onrejected?: (reason: unknown) => unknown
+          ) =>
+            Promise.resolve({
+              data: [
+                {
+                  metadata: { retained_shipping_amount: 2500 },
+                  status: 'completed',
+                },
+              ],
+              error: null,
+            }).then(onfulfilled, onrejected),
+        };
+        return { select: vi.fn(() => settlementsChain) };
+      }
       throw new Error(`Unexpected table ${table}`);
+    }),
+    rpc: vi.fn().mockImplementation((fn: string) => {
+      if (fn === 'get_shipping_quote_booking_metadata') {
+        return {
+          data:
+            provider === 'TOPSHIP'
+              ? { serviceType: 'Premium_Express', pricingTier: 'International' }
+              : null,
+          error: null,
+        };
+      }
+      if (fn === 'get_shipping_quote_booking_economics') {
+        return {
+          data:
+            provider === 'GIGL'
+              ? {
+                  provider_cost: 1000,
+                  platform_margin: 100,
+                  platform_margin_bps: 400,
+                  pricing_version: 'gigl_platform_margin_v1',
+                  shipping_provider_cost: 1000,
+                  shipping_platform_margin: 100,
+                  shipping_pricing_version: 'gigl_platform_margin_v1',
+                  shipping_platform_retained_amount: 2500,
+                }
+              : null,
+          error: null,
+        };
+      }
+      return { data: null, error: null };
     }),
   } as never;
 }

@@ -63,10 +63,11 @@ function buildSupabaseMock(
     business_name: 'Merchant Store',
     business_address: '1 Merchant Road, Lagos',
     phone: '08012345678',
-  }
+  },
+  upsertError: unknown = null
 ) {
   const shippingQuotesTable = {
-    upsert: vi.fn().mockResolvedValue({ error: null }),
+    upsert: vi.fn().mockResolvedValue({ error: upsertError }),
   };
   const merchantSelect = {
     eq: vi.fn().mockReturnThis(),
@@ -236,6 +237,66 @@ describe('POST /api/shipping/quotes', () => {
     expect(mockGetQuotes).toHaveBeenCalled();
   });
 
+  it('returns controlled 5xx when quote persistence fails', async () => {
+    const supabase = buildSupabaseMock(
+      { id: 'user-1' },
+      null,
+      {
+        business_name: 'Merchant Store',
+        business_address: '1 Merchant Road, Lagos',
+        country: 'NG',
+        payout_currency: 'NGN',
+        phone: '08012345678',
+      },
+      { code: '23514', message: 'economics constraint failed' }
+    );
+    mockCreateAdminClient.mockReturnValue(supabase);
+    mockCreateServerClient.mockResolvedValue(
+      buildSupabaseMock({ id: 'user-1' })
+    );
+    mockGetQuotes.mockResolvedValue({
+      quotes: {
+        featured: [],
+        all: [
+          {
+            id: 'gigl-quote-1',
+            provider: 'GIGL',
+            serviceTier: 'Standard',
+            carrierName: 'GIG Logistics',
+            displayName: 'GIG Logistics',
+            estimatedDays: 2,
+            price: 11000,
+            currency: 'NGN',
+            pickupIncluded: true,
+            insuranceIncluded: true,
+            expiresAt: new Date(Date.now() + 60_000),
+          },
+        ],
+      },
+      sessionId: 'session-1',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const { POST } = await import('./route');
+    const response = await POST(
+      buildQuoteRequest({
+        shipmentType: 'domestic',
+        receiver: {
+          name: 'Ada Buyer',
+          phone: '08011112222',
+          address: '5 Balogun Street',
+          city: 'Ikeja',
+          state: 'Lagos',
+          country: 'Nigeria',
+          countryCode: 'NG',
+        },
+      })
+    );
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: 'Failed to get shipping quotes',
+    });
+  });
+
   it('repairs a postal code supplied as receiver state before carrier quoting', async () => {
     mockCreateAdminClient.mockReturnValue(
       buildSupabaseMock({ id: 'user-1' }, null, {
@@ -270,7 +331,8 @@ describe('POST /api/shipping/quotes', () => {
     expect(mockGetQuotes).toHaveBeenCalledWith(
       expect.objectContaining({
         receiver: expect.objectContaining({ city: 'Ikeja', state: 'Lagos' }),
-      })
+      }),
+      []
     );
   });
 });

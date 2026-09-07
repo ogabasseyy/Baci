@@ -76,7 +76,7 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
       deadLettersPresent: false,
     });
     expect(rpc).toHaveBeenNthCalledWith(1, 'claim_cache_invalidations', {
-      p_batch_size: 2,
+      p_batch_size: 5,
       p_worker_id: expect.stringMatching(/^next-cron-/),
     });
     const finishArgs = rpc.mock.calls[1]?.[1];

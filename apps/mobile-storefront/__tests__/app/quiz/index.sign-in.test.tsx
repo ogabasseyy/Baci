@@ -3,6 +3,9 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
 const mockPush = jest.fn();
+jest.mock('expo-router/react-navigation', () => ({
+  usePreventRemove: jest.fn(),
+}));
 
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },

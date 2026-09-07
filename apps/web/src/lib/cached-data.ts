@@ -9,12 +9,17 @@ import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import { getSupabaseServiceRoleKey, getSupabaseUrl } from '@/env';
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
+import type {
+  CachedCategoryRecord,
+  CachedCategorySeo,
+} from '@/lib/cached-category-page-shell-types';
 import {
   type CachedCategoryPageProductScope,
   categoryPageProductIdCache,
-  type SpecialCollectionSlug,
 } from '@/lib/category-page-product-id-cache';
+import { getCategoryPageShellData } from '@/lib/get-category-page-shell-data';
 import { hydrateAndSanitizePublicProducts } from '@/lib/hydrate-public-products';
+import { isPostgrestNoRowsError } from '@/lib/is-postgrest-no-rows-error';
 import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
 import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { getOrderedBlogPostProductLinks } from '@/lib/ordered-blog-post-product-links';
@@ -44,7 +49,6 @@ import {
   StorefrontReadUnavailableError,
   unwrapStorefrontReadResultForCache,
 } from '@/lib/storefront-read-result';
-import { STOREFRONT_SPECIAL_COLLECTION_SLUGS } from '@/lib/storefront-special-collection-slugs';
 import type { VariantAttributeSource } from '@/lib/storefront-specs/variant-attributes';
 import { createTimeoutComposedFetch } from '@/lib/supabase/compose-fetch-signal';
 import {
@@ -59,6 +63,7 @@ import type {
 import type { MerchantTrustProfileDraft } from '../../../../packages/shared/src/contracts/merchant-trust-profile';
 import { sanitizePublicProduct } from './public-fulfillment-sanitizer';
 
+export { getCachedCategoryPageShellData } from '@/lib/cached-category-page-shell';
 export { getPublicSupabaseClient };
 
 // Supabase/PostgREST `estimated` keeps small public blog counts exact while
@@ -153,64 +158,11 @@ interface PublicStorefrontProductVariant {
   updated_at?: string | null;
 }
 
-interface StorefrontCategoryParentRow {
-  name: string | null;
-  slug: string | null;
-}
-
-interface StorefrontCategoryRow {
-  id: string;
-  name: string | null;
-  slug: string | null;
-  description: string | null;
-  image_url: string | null;
-  is_active: boolean | null;
-  seo_heading: string | null;
-  seo_description: string | null;
-  seo_features: string[] | null;
-  seo_faq: { answer: string; question: string }[] | null;
-  parent: StorefrontCategoryParentRow | null;
-}
-
-interface StorefrontCategorySlugState {
-  is_active: boolean | null;
-}
-
 interface LegacyPriceCompatibleProduct {
   price?: number | string | null;
   compare_at_price?: number | string | null;
   sale_price?: number | null;
   base_price?: number | null;
-}
-
-interface CachedCategoryFaqItem {
-  question: string;
-  answer: string;
-}
-
-interface CachedCategorySeo {
-  description: string;
-  faqs: CachedCategoryFaqItem[];
-  features: string[];
-  heading: string;
-}
-
-interface CachedCategoryRecord {
-  description: string | null;
-  id: string;
-  image_url: string | null;
-  is_active: boolean;
-  name: string;
-  parent:
-    | { name: string; slug: string }
-    | Array<{ name: string; slug: string }>
-    | null;
-  parent_id?: string | null;
-  seo_description: string | null;
-  seo_faq: CachedCategoryFaqItem[] | null;
-  seo_features: string[] | null;
-  seo_heading: string | null;
-  slug: string;
 }
 
 export type CachedCategoryPageData =
@@ -250,20 +202,6 @@ export type CachedCategoryPageData =
       categoryQueryFailed?: boolean;
       seo?: null;
     };
-
-/**
- * PostgREST returns code `PGRST116` when `.single()`/`.maybeSingle()` matches no
- * rows. That is the EXPECTED outcome for an unknown slug, not a failure — used
- * to keep "no rows" from being treated as a transient error in fail-open guards.
- */
-function isPostgrestNoRowsError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    Object.hasOwn(error, 'code') &&
-    Reflect.get(error, 'code') === 'PGRST116'
-  );
-}
 
 function parsePriceValue(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -1571,30 +1509,6 @@ export const getStorefrontCategories = cache(
 
 const CATEGORY_PAGE_PRODUCT_DETAIL_CHUNK_SIZE = 48;
 const CATEGORY_PAGE_PRODUCT_DETAIL_CONCURRENCY = 3;
-const SPECIAL_COLLECTIONS = STOREFRONT_SPECIAL_COLLECTION_SLUGS;
-
-type CachedCategoryPageShellData =
-  | {
-      description: string;
-      fallbackDescription?: string;
-      fallbackName?: string;
-      isCollection: true;
-      isInactiveCategory?: false;
-      name: string;
-      productScope: CachedCategoryPageProductScope;
-      seo: CachedCategorySeo;
-    }
-  | {
-      category: CachedCategoryRecord | null;
-      categoryQueryFailed?: boolean;
-      fallbackDescription: string;
-      fallbackName: string;
-      isCollection: false;
-      isInactiveCategory: boolean;
-      name?: string;
-      productScope: CachedCategoryPageProductScope;
-      seo?: null;
-    };
 
 interface CachedCategoryPageProductsResult {
   productIdsQueryFailed: boolean;
@@ -1656,234 +1570,6 @@ function getCategoryPageProductSelect(isCategoryScoped: boolean) {
     : 'product_categories(categories(name, slug))';
 
   return `${CATEGORY_PAGE_PRODUCT_BASE_SELECT}, ${productCategoriesSelect}`;
-}
-
-function isSpecialCollectionSlug(
-  categorySlug: string
-): categorySlug is SpecialCollectionSlug {
-  return SPECIAL_COLLECTIONS.includes(categorySlug as SpecialCollectionSlug);
-}
-
-function getSpecialCollectionCopy(collectionSlug: SpecialCollectionSlug) {
-  switch (collectionSlug) {
-    case 'new-arrivals':
-      return {
-        description: 'Check out the latest additions to our store.',
-        name: 'New Arrivals',
-      };
-    case 'best-sellers':
-      return {
-        description: 'Our most popular products loved by customers.',
-        name: 'Best Sellers',
-      };
-    case 'on-sale':
-      return {
-        description: 'Great deals and discounts on top products.',
-        name: 'On Sale',
-      };
-    case 'featured':
-      return {
-        description: 'Hand-picked highlights just for you.',
-        name: 'Featured',
-      };
-  }
-}
-
-function getCategoryFallbackName(categorySlug: string): string {
-  let decodedSlug = categorySlug;
-  try {
-    decodedSlug = decodeURIComponent(categorySlug);
-  } catch {
-    // Malformed public paths are rejected earlier; keep this total so an
-    // unexpected caller cannot turn fallback rendering into another error.
-  }
-
-  return decodedSlug
-    .replace(/-/g, ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-/**
- * Category shell/status data (name, description, active product scope, SEO
- * copy) for the category listing page, both compare paths, the price-band page,
- * and the category-scoped semantic inventory.
- *
- * LOCAL 'use cache', NOT 'use cache: remote'. This is the last route-critical
- * remote write on the compare/category path: the compare page model and compare
- * category inventory were already demoted to local (PR #3049) because their
- * Vercel remote-cache SET (RemoteCacheHandler K.set) hangs and never persists
- * under crawler load, and this shell — keyed on an unbounded (high-cardinality)
- * category slug that any bot can synthesize — was still writing remotely inside
- * those now-local callers. Local cache has no write round-trip, so a cold fill
- * costs only the (small) shell query. The shell embeds only rarely-changing
- * category identity (no price/stock), and its 'storefront-page' window
- * (revalidate 300) already bounds cross-instance staleness to ~5min, the same
- * bound #3049 accepted for the compare entries. Tag revalidation on a local
- * entry only evicts the mutating instance; the short window caps the rest.
- */
-export async function getCachedCategoryPageShellData(
-  merchantId: string,
-  categorySlug: string,
-  _storeSlug: string
-): Promise<CachedCategoryPageShellData> {
-  'use cache';
-  cacheLife('storefront-page');
-  cacheTag(
-    'category-page-data',
-    'products',
-    'categories',
-    `products-${merchantId}`,
-    `categories-${merchantId}`
-  );
-
-  if (isSpecialCollectionSlug(categorySlug)) {
-    const collection = getSpecialCollectionCopy(categorySlug);
-
-    return {
-      isCollection: true,
-      name: collection.name,
-      description: collection.description,
-      fallbackName: collection.name,
-      fallbackDescription: collection.description,
-      productScope: { kind: 'collection', collectionSlug: categorySlug },
-      seo: {
-        heading: collection.name,
-        description: collection.description,
-        features: [],
-        faqs: [],
-      },
-    };
-  }
-
-  const supabase = getPublicSupabaseClient();
-
-  const categoryQuery = supabase
-    .from('categories')
-    .select(
-      'id, name, slug, description, image_url, is_active, seo_heading, seo_description, seo_features, seo_faq, parent:parent_id(name, slug)'
-    )
-    .eq('merchant_id', merchantId)
-    .eq('slug', categorySlug)
-    .single() as unknown as Promise<{
-    data: StorefrontCategoryRow | null;
-    error: unknown;
-  }>;
-  const { data: categoryRow, error: categoryError } = await categoryQuery;
-  // `.single()` returns PGRST116 ("no rows") for a genuinely unknown slug — that
-  // is the EXPECTED path for legacy category/brand URLs with no `categories`
-  // row, so it must NOT count as a failure (else the doorway trap never fires).
-  // Any OTHER error is transient (connection/timeout) → fail open downstream.
-  if (categoryError && !isPostgrestNoRowsError(categoryError)) {
-    throw categoryError;
-  }
-  let hiddenCategoryState: StorefrontCategorySlugState | null = null;
-
-  if (!categoryRow) {
-    const { data: categoryStateData, error: categoryStateError } =
-      await supabase.rpc('get_storefront_category_slug_state', {
-        p_merchant_id: merchantId,
-        p_slug: categorySlug,
-      });
-
-    if (categoryStateError) {
-      throw categoryStateError;
-    }
-
-    const stateArray = categoryStateData as
-      | StorefrontCategorySlugState[]
-      | null;
-    hiddenCategoryState =
-      stateArray && stateArray.length > 0 ? stateArray[0] : null;
-  }
-
-  const isInactiveCategory =
-    categoryRow?.is_active === false ||
-    hiddenCategoryState?.is_active === false;
-  const category: CachedCategoryRecord | null =
-    categoryRow && categoryRow.is_active !== false
-      ? ({
-          ...categoryRow,
-          is_active: categoryRow.is_active ?? true,
-        } as CachedCategoryRecord)
-      : null;
-
-  // Fallback: decode the slug to get category name and Title Case it.
-  const categoryName =
-    categoryRow?.name || getCategoryFallbackName(categorySlug);
-
-  const categoryDescription =
-    categoryRow?.description ||
-    `Browse our collection of ${categoryName} products.`;
-
-  let productScope: CachedCategoryPageProductScope = isInactiveCategory
-    ? { kind: 'none' }
-    : { kind: 'legacy', categoryName };
-
-  if (category?.id) {
-    const { data: categoryScope, error: categoryScopeError } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('merchant_id', merchantId)
-      .eq('is_active', true)
-      .or(`id.eq.${category.id},parent_id.eq.${category.id}`);
-
-    if (categoryScopeError) {
-      throw categoryScopeError;
-    }
-
-    const categoryIds = Array.from(
-      new Set(
-        [
-          category.id,
-          ...((categoryScope || []) as Array<{ id?: string | null }>).map(
-            (item) => item.id
-          ),
-        ].filter((id): id is string => typeof id === 'string' && id.length > 0)
-      )
-    );
-
-    productScope = {
-      kind: 'category',
-      categoryId: category.id,
-      categoryIds,
-    };
-  }
-
-  return {
-    isCollection: false,
-    category,
-    fallbackName: categoryName,
-    fallbackDescription: categoryDescription,
-    isInactiveCategory,
-    categoryQueryFailed: false,
-    productScope,
-  };
-}
-
-async function getCategoryPageShellData(
-  merchantId: string,
-  categorySlug: string,
-  storeSlug: string
-): Promise<CachedCategoryPageShellData> {
-  try {
-    return await getCachedCategoryPageShellData(
-      merchantId,
-      categorySlug,
-      storeSlug
-    );
-  } catch (error) {
-    console.error('Category shell query error:', error);
-    const fallbackName = getCategoryFallbackName(categorySlug);
-    return {
-      isCollection: false,
-      category: null,
-      fallbackName,
-      fallbackDescription: `Browse our collection of ${fallbackName} products.`,
-      isInactiveCategory: false,
-      categoryQueryFailed: true,
-      productScope: { kind: 'none' },
-    };
-  }
 }
 
 /**
@@ -2426,15 +2112,11 @@ const getCachedCategoryPageProducts = cache(
 export async function getCachedCategoryPageData(
   merchantId: string,
   categorySlug: string,
-  storeSlug: string,
+  _storeSlug: string,
   productOffset?: number,
   productLimit?: number
 ): Promise<CachedCategoryPageData> {
-  const shell = await getCategoryPageShellData(
-    merchantId,
-    categorySlug,
-    storeSlug
-  );
+  const shell = await getCategoryPageShellData(merchantId, categorySlug);
   const productResult = await getCachedCategoryPageProducts(
     merchantId,
     shell.productScope,

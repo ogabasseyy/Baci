@@ -15,6 +15,7 @@ import { SubscriptionStatusCard } from '@/components/settings/SubscriptionStatus
 import { APP_VERSION_LABEL } from '@/constants/app-info';
 import { RADIUS, SPACING } from '@/constants/theme';
 import { useOnboarding } from '@/context/OnboardingContext';
+import { useAdminTabScrollToTop } from '@/hooks/useAdminTabScrollToTop';
 import { useAuth } from '@/hooks/useAuth';
 import { useExpenseAccess } from '@/hooks/useExpenseAccess';
 import { useMerchant } from '@/hooks/useMerchant';
@@ -26,6 +27,7 @@ import { isBaciPaystackSettlementCountry } from '@/lib/is-baci-paystack-settleme
 import { createMenuSections, type MenuItem } from './menu-sections';
 
 export default function MenuScreen() {
+  const scrollRef = useAdminTabScrollToTop<ScrollView>('menu');
   const { colors, shadows, isDark } = useTheme();
   const { signOut, user } = useAuth();
   const { resetOnboarding } = useOnboarding();
@@ -172,6 +174,7 @@ export default function MenuScreen() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}

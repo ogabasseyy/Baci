@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  createSettledRetentionSelectChain,
+  prepaidGiglCustomerCheckoutPayment,
+} from './book-order-shipment.refresh-fixtures.test-helper';
 
 vi.mock('@/lib/shipping', () => ({
   shippingService: {
@@ -69,6 +73,7 @@ function createSupabase(
     customer_phone: '08000000001',
     selected_quote_id: 'quote-1',
     shipping_provider: 'GIGL',
+    ...prepaidGiglCustomerCheckoutPayment,
     shipping_address: {
       address: 'Receiver Road',
       city: 'Abuja',
@@ -102,6 +107,10 @@ function createSupabase(
       items: [{ name: 'Widget', quantity: 1, weight: 1, value: 5000 }],
     },
     provider_metadata: {},
+    provider_cost: 2000,
+    platform_margin: 500,
+    platform_margin_bps: 2000,
+    pricing_version: 'gigl_platform_margin_v1',
   };
 
   const orderSelect = {
@@ -146,6 +155,9 @@ function createSupabase(
         };
       }
       if (table === 'merchants') return { select: vi.fn(() => merchantSelect) };
+      if (table === 'merchant_settlements') {
+        return { select: vi.fn(() => createSettledRetentionSelectChain()) };
+      }
       throw new Error(`Unexpected table ${table}`);
     }),
   } as never;

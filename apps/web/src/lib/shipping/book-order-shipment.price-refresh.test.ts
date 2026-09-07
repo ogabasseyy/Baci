@@ -1,4 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { shippingQuoteEnvTestMock } from '@/lib/shipping/shipping-quote-env.test-mock';
+import {
+  createSettledRetentionSelectChain,
+  prepaidGiglCustomerCheckoutPayment,
+} from './book-order-shipment.refresh-fixtures.test-helper';
+
+vi.mock('@/env', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/env')>();
+  return { ...actual, ...shippingQuoteEnvTestMock };
+});
 
 vi.mock('@/lib/shipping', () => ({
   shippingService: {
@@ -44,6 +54,7 @@ function createSupabase() {
     shipping_fee: 2500,
     selected_quote_id: 'quote-1',
     shipping_provider: 'GIGL',
+    ...prepaidGiglCustomerCheckoutPayment,
     shipping_address: {
       address: 'Receiver Road',
       city: 'Abuja',
@@ -87,6 +98,10 @@ function createSupabase() {
       items: [{ name: 'Widget', quantity: 1, weight: 1, value: 5000 }],
     },
     provider_metadata: {},
+    provider_cost: 2000,
+    platform_margin: 500,
+    platform_margin_bps: 2000,
+    pricing_version: 'gigl_platform_margin_v1',
   };
   const orderSelect = {
     eq: vi.fn().mockReturnThis(),
@@ -123,6 +138,7 @@ function createSupabase() {
   };
 
   return {
+    rpc: vi.fn().mockResolvedValue({ error: null }),
     from: vi.fn((table: string) => {
       if (table === 'orders') return { select: vi.fn(() => orderSelect) };
       if (table === 'shipping_quotes') {
@@ -141,6 +157,9 @@ function createSupabase() {
             })),
           })),
         };
+      }
+      if (table === 'merchant_settlements') {
+        return { select: vi.fn(() => createSettledRetentionSelectChain()) };
       }
       throw new Error(`Unexpected table ${table}`);
     }),

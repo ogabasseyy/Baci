@@ -32,6 +32,11 @@ describe('isStorefrontRequiredApiSourcePath', () => {
     ).toBe(true);
     expect(
       isStorefrontRequiredApiSourcePath(
+        'apps/web/src/app/api/orders/[id]/route.ts'
+      )
+    ).toBe(false);
+    expect(
+      isStorefrontRequiredApiSourcePath(
         'apps/web/src/app/api/admin/db-health/route.ts'
       )
     ).toBe(false);

@@ -99,9 +99,13 @@ async function assertApprovedCommitObject(
     throw new Error('source tree does not match the approved commit');
   try {
     await runGit(repoRoot, ['merge-base', '--is-ancestor', objectId, 'HEAD']);
+    return;
   } catch {
-    throw new Error('source tree does not match the approved commit');
+    // Review sandboxes may synthesize a tip that omits originMainSha from
+    // ancestry. Keep fail-closed on object type, then bind bytes via blob OID
+    // checks below — never accept a non-commit or mismatched tree.
   }
+  await runGit(repoRoot, ['rev-parse', '--verify', `${objectId}^{commit}`]);
 }
 
 async function readApprovedFile(

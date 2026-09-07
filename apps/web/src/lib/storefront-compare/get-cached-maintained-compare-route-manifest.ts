@@ -31,8 +31,7 @@ export async function getCachedMaintainedCompareRouteManifest(
 
   const inventory = await getCachedCompareCategoryInventory(
     merchantId,
-    categorySlug,
-    storeSlug
+    categorySlug
   );
 
   if (inventory.isCollection) {

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatPhoneForMyCover, formatPhoneToE164 } from '@/lib/phone';
+import {
+  countPhoneDigits,
+  formatPhoneForMyCover,
+  formatPhoneToE164,
+  hasMinimumPhoneDigits,
+} from '@/lib/phone';
 
 // ---------------------------------------------------------------------------
 // These tests describe the phone utility module that will be created as part
@@ -44,5 +49,17 @@ describe('formatPhoneForMyCover()', () => {
 
   it('returns already-correct international number unchanged', () => {
     expect(formatPhoneForMyCover('2348012345678')).toBe('2348012345678');
+  });
+});
+
+describe('countPhoneDigits / hasMinimumPhoneDigits', () => {
+  it('counts digits after stripping separators', () => {
+    expect(countPhoneDigits('0803------')).toBe(4);
+    expect(countPhoneDigits('+234 801 234 5678')).toBe(13);
+  });
+
+  it('bugfix: refuses separator-padded phones that pass length schema', () => {
+    expect(hasMinimumPhoneDigits('0803------')).toBe(false);
+    expect(hasMinimumPhoneDigits('08031234567')).toBe(true);
   });
 });

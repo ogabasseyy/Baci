@@ -83,7 +83,7 @@ describe('GIGL booking validation and timeout regressions', () => {
     const provider = buildBookingHarness();
     const bookingPromise = provider.bookShipment(bookingRequest);
     const bookingAssertion = expect(bookingPromise).rejects.toThrow(
-      'GIGL booking timed out'
+      'GIGL API authentication timed out'
     );
 
     await vi.advanceTimersByTimeAsync(GIGL_BOOKING_TIMEOUT_MS);

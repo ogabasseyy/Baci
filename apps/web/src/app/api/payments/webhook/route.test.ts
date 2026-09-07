@@ -13,6 +13,8 @@ const mockHandlePaystackSavingsWebhookTransaction = vi.hoisted(() => vi.fn());
 const mockProcessMerchantInvoicePartialPayment = vi.hoisted(() => vi.fn());
 const mockProcessWalletFundedOrderPayment = vi.hoisted(() => vi.fn());
 const mockRunPaidOrderSideEffects = vi.hoisted(() => vi.fn());
+const mockPersistMerchantWalletAssignmentEvent = vi.hoisted(() => vi.fn());
+const mockFailMerchantWalletAssignmentEvent = vi.hoisted(() => vi.fn());
 
 // Mock environment variables
 vi.mock('@/env', () => ({
@@ -47,6 +49,13 @@ vi.mock('@/lib/payments/process-merchant-invoice-partial-payment', () => ({
 
 vi.mock('@/lib/payments/run-paid-order-side-effects', () => ({
   runPaidOrderSideEffects: mockRunPaidOrderSideEffects,
+}));
+vi.mock('@/lib/persist-merchant-wallet-assignment-event', () => ({
+  persistMerchantWalletAssignmentEvent:
+    mockPersistMerchantWalletAssignmentEvent,
+}));
+vi.mock('@/lib/merchant-wallet-assignment-events', () => ({
+  failMerchantWalletAssignmentEvent: mockFailMerchantWalletAssignmentEvent,
 }));
 
 vi.mock('@/lib/customer-savings-paystack-webhook', () => ({
@@ -495,6 +504,9 @@ describe('POST /api/payments/webhook', () => {
     });
     mockNotifyWalletCredited.mockResolvedValue({ status: 'sent' });
     mockHandlePaystackSavingsWebhookTransaction.mockResolvedValue(null);
+    mockFailMerchantWalletAssignmentEvent.mockResolvedValue({
+      kind: 'match',
+    });
     mockGetPaystackDvaReceiverAccountNumber.mockReturnValue(null);
     mockMarkAgenticPaystackDvaSessionPaid.mockResolvedValue({
       ok: true,
@@ -6175,8 +6187,15 @@ describe('POST /api/payments/webhook', () => {
         }
 
         // finalizeOrderGatewayPayment fails at the atomic RPC step below,
-        // before ever reading/writing `orders` — no `.from('orders')` mock
-        // needed.
+        // before ever reading/writing `orders` for completion — the fallback
+        // path still loads order economics for GIGL settlement routing.
+        if (table === 'orders') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          } as never;
+        }
         return {
           select: vi.fn().mockReturnThis(),
           insert: vi.fn().mockReturnThis(),
@@ -6231,6 +6250,241 @@ describe('POST /api/payments/webhook', () => {
           p_metadata: expect.objectContaining({
             korapay_reference: 'REF-FB-1',
             order_update_failed: true,
+          }),
+        })
+      );
+    });
+
+    it('does not record settlement when completion-failure fallback economics lookup errors', async () => {
+      const body = {
+        reference: 'REF-FB-ECON-ERR',
+        status: 'success',
+        event: 'charge.success',
+        amount: 1000,
+      };
+      const bodyString = JSON.stringify(body);
+      const signature = createSignature(bodyString, 'test-korapay-secret');
+      const request = createMockRequest(body, {
+        'x-korapay-signature': signature,
+      });
+
+      const { verifyPayment } = await import('@/lib/korapay');
+      vi.mocked(verifyPayment).mockResolvedValue({
+        success: true,
+        data: {
+          status: 'success',
+          amount: 1000,
+          reference: 'REF-FB-ECON-ERR',
+          currency: 'NGN',
+          paid_at: '2026-01-01T00:00:00Z',
+          created_at: '2026-01-01T00:00:00Z',
+          customer: { name: 'Test', email: 'test@example.com' },
+        },
+      });
+
+      let transactionCallCount = 0;
+      vi.mocked(mockServiceClient.from).mockImplementation((table: string) => {
+        if (table === 'transactions') {
+          transactionCallCount++;
+          if (transactionCallCount === 1) {
+            return {
+              select: vi.fn().mockReturnThis(),
+              eq: vi.fn().mockReturnThis(),
+              single: vi.fn().mockResolvedValue({
+                data: {
+                  id: 'txn-fb-econ-err',
+                  merchant_id: 'merchant-fb-econ-err',
+                  order_id: 'order-fb-econ-err',
+                  amount: '1000',
+                  currency: 'NGN',
+                  gateway_reference: 'BAC-FB-ECON-ERR',
+                  status: 'pending',
+                  metadata: {},
+                },
+                error: null,
+              }),
+            } as never;
+          }
+          return {
+            update: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            neq: vi.fn().mockReturnThis(),
+            select: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: { id: 'txn-fb-econ-err' },
+              error: null,
+            }),
+          } as never;
+        }
+
+        if (table === 'orders') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: null,
+              error: { message: 'transient economics lookup failure' },
+            }),
+          } as never;
+        }
+
+        return {
+          select: vi.fn().mockReturnThis(),
+          insert: vi.fn().mockReturnThis(),
+          update: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        } as never;
+      });
+
+      vi.mocked(mockServiceClient.rpc).mockImplementation((name: string) => {
+        if (name === 'complete_order_gateway_payment') {
+          const result = {
+            data: { error_code: 'ORDER_NOT_FOUND' },
+            error: null,
+          };
+          return Object.assign(Promise.resolve(result), {
+            single: () => Promise.resolve(result),
+          }) as never;
+        }
+        const result = { data: null, error: null };
+        return Object.assign(Promise.resolve(result), {
+          single: () => Promise.resolve(result),
+        }) as never;
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data).toEqual({
+        code: 'ORDER_PAYMENT_COMPLETION_FAILED',
+        error: 'Order payment completion failed',
+      });
+      expect(mockServiceClient.rpc).not.toHaveBeenCalledWith(
+        'record_merchant_settlement',
+        expect.anything()
+      );
+      expect(mockServiceClient.rpc).not.toHaveBeenCalledWith(
+        'record_merchant_settlement_gigl_v1',
+        expect.anything()
+      );
+    });
+
+    it('routes completion-failure fallback settlements through the GIGL wrapper for GIGL orders', async () => {
+      const body = {
+        reference: 'REF-FB-GIGL',
+        status: 'success',
+        event: 'charge.success',
+        amount: 1000,
+      };
+      const bodyString = JSON.stringify(body);
+      const signature = createSignature(bodyString, 'test-korapay-secret');
+      const request = createMockRequest(body, {
+        'x-korapay-signature': signature,
+      });
+
+      const { verifyPayment } = await import('@/lib/korapay');
+      vi.mocked(verifyPayment).mockResolvedValue({
+        success: true,
+        data: {
+          status: 'success',
+          amount: 1000,
+          reference: 'REF-FB-GIGL',
+          currency: 'NGN',
+          paid_at: '2026-01-01T00:00:00Z',
+          created_at: '2026-01-01T00:00:00Z',
+          customer: { name: 'Test', email: 'test@example.com' },
+        },
+      });
+
+      let transactionCallCount = 0;
+      vi.mocked(mockServiceClient.from).mockImplementation((table: string) => {
+        if (table === 'transactions') {
+          transactionCallCount++;
+          if (transactionCallCount === 1) {
+            return {
+              select: vi.fn().mockReturnThis(),
+              eq: vi.fn().mockReturnThis(),
+              single: vi.fn().mockResolvedValue({
+                data: {
+                  id: 'txn-fb-gigl',
+                  merchant_id: 'merchant-fb-gigl',
+                  order_id: 'order-fb-gigl',
+                  amount: '1000',
+                  currency: 'NGN',
+                  gateway_reference: 'BAC-FB-GIGL',
+                  status: 'pending',
+                  metadata: {},
+                },
+                error: null,
+              }),
+            } as never;
+          }
+          return {
+            update: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            neq: vi.fn().mockReturnThis(),
+            select: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: { id: 'txn-fb-gigl' },
+              error: null,
+            }),
+          } as never;
+        }
+
+        if (table === 'orders') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                shipping_funding_source: 'customer_checkout',
+                shipping_platform_retained_amount: 250,
+                shipping_provider: 'GIGL',
+              },
+              error: null,
+            }),
+          } as never;
+        }
+
+        return {
+          select: vi.fn().mockReturnThis(),
+          insert: vi.fn().mockReturnThis(),
+          update: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        } as never;
+      });
+
+      vi.mocked(mockServiceClient.rpc).mockImplementation((name: string) => {
+        if (name === 'complete_order_gateway_payment') {
+          const result = {
+            data: { error_code: 'ORDER_NOT_FOUND' },
+            error: null,
+          };
+          return Object.assign(Promise.resolve(result), {
+            single: () => Promise.resolve(result),
+          }) as never;
+        }
+        const result = { data: null, error: null };
+        return Object.assign(Promise.resolve(result), {
+          single: () => Promise.resolve(result),
+        }) as never;
+      });
+
+      const response = await POST(request);
+
+      expect(response.status).toBe(500);
+      expect(mockServiceClient.rpc).toHaveBeenCalledWith(
+        'record_merchant_settlement_gigl_v1',
+        expect.objectContaining({
+          p_gateway_reference: 'BAC-FB-GIGL',
+          p_source_id: 'order-fb-gigl',
+          p_metadata: expect.objectContaining({
+            commerce_platform_fee: expect.any(Number),
+            order_update_failed: true,
+            retained_shipping_amount: 250,
           }),
         })
       );
@@ -6374,6 +6628,286 @@ describe('POST /api/payments/webhook', () => {
         })
       );
     });
+  });
+
+  it('rejects an unsigned dedicated-account assignment before persistence', async () => {
+    const body = {
+      event: 'dedicatedaccount.assign.success',
+      data: {
+        metadata: {
+          source: 'merchant_wallet_funding',
+          request_id: 'r',
+          merchant_id: 'm',
+        },
+        dedicated_account: { account_number: '1234567890', currency: 'NGN' },
+      },
+    };
+    const response = await POST(
+      createMockRequest(body, { 'x-paystack-signature': 'invalid-signature' })
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'Invalid signature' });
+    expect(mockPersistMerchantWalletAssignmentEvent).not.toHaveBeenCalled();
+  });
+
+  it('handles a signed dedicated-account assignment before charge logic', async () => {
+    mockPersistMerchantWalletAssignmentEvent.mockResolvedValue({
+      kind: 'match',
+    });
+    const body = {
+      event: 'dedicatedaccount.assign.success',
+      data: {
+        metadata: {
+          source: 'merchant_wallet_funding',
+          request_id: 'r',
+          merchant_id: 'm',
+        },
+        dedicated_account: { account_number: '1234567890', currency: 'NGN' },
+      },
+    };
+    const response = await POST(
+      createMockRequest(body, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(body),
+          'test-paystack-secret'
+        ),
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      handled: 'merchant_wallet_assignment',
+    });
+    expect(mockPersistMerchantWalletAssignmentEvent).toHaveBeenCalled();
+  });
+
+  it('acknowledges an alias-conflicted assignment after the pending request is failed', async () => {
+    mockPersistMerchantWalletAssignmentEvent.mockResolvedValue({
+      kind: 'conflict',
+    });
+    const body = {
+      event: 'dedicatedaccount.assign.success',
+      data: {
+        metadata: {
+          source: 'merchant_wallet_funding',
+          request_id: 'r',
+          merchant_id: 'm',
+        },
+        dedicated_account: { account_number: '1234567890', currency: 'NGN' },
+      },
+    };
+    const response = await POST(
+      createMockRequest(body, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(body),
+          'test-paystack-secret'
+        ),
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      handled: 'merchant_wallet_alias_conflict',
+    });
+  });
+
+  it('acknowledges an alias-conflicted assignment after the pending request is failed', async () => {
+    mockPersistMerchantWalletAssignmentEvent.mockResolvedValue({
+      kind: 'conflict',
+    });
+    const body = {
+      event: 'dedicatedaccount.assign.success',
+      data: {
+        metadata: {
+          source: 'merchant_wallet_funding',
+          request_id: 'r',
+          merchant_id: 'm',
+        },
+        dedicated_account: { account_number: '1234567890', currency: 'NGN' },
+      },
+    };
+    const response = await POST(
+      createMockRequest(body, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(body),
+          'test-paystack-secret'
+        ),
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      handled: 'merchant_wallet_alias_conflict',
+    });
+  });
+
+  it('acknowledges an alias-conflicted assignment after the pending request is failed', async () => {
+    mockPersistMerchantWalletAssignmentEvent.mockResolvedValue({
+      kind: 'conflict',
+    });
+    const body = {
+      event: 'dedicatedaccount.assign.success',
+      data: {
+        metadata: {
+          source: 'merchant_wallet_funding',
+          request_id: 'r',
+          merchant_id: 'm',
+        },
+        dedicated_account: { account_number: '1234567890', currency: 'NGN' },
+      },
+    };
+    const response = await POST(
+      createMockRequest(body, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(body),
+          'test-paystack-secret'
+        ),
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      handled: 'merchant_wallet_alias_conflict',
+    });
+  });
+
+  it('handles a signed dedicated-account assignment failure by marking the request retryable', async () => {
+    mockFailMerchantWalletAssignmentEvent.mockResolvedValue({
+      kind: 'match',
+    });
+    const body = {
+      event: 'dedicatedaccount.assign.failed',
+      data: {
+        metadata: {
+          source: 'merchant_wallet_funding',
+          request_id: 'r',
+          merchant_id: 'm',
+        },
+      },
+    };
+    const response = await POST(
+      createMockRequest(body, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(body),
+          'test-paystack-secret'
+        ),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      handled: 'merchant_wallet_assignment_failure',
+    });
+    expect(mockFailMerchantWalletAssignmentEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      body
+    );
+    expect(mockPersistMerchantWalletAssignmentEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unsigned dedicated-account assignment failure before transition', async () => {
+    const body = {
+      event: 'dedicatedaccount.assign.failed',
+      data: {
+        metadata: {
+          source: 'merchant_wallet_funding',
+          request_id: 'r',
+          merchant_id: 'm',
+        },
+      },
+    };
+    const response = await POST(
+      createMockRequest(body, { 'x-paystack-signature': 'invalid-signature' })
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'Invalid signature' });
+    expect(mockFailMerchantWalletAssignmentEvent).not.toHaveBeenCalled();
+  });
+
+  it('returns review for a signed uncorrelated assignment failure', async () => {
+    mockFailMerchantWalletAssignmentEvent.mockResolvedValue({
+      kind: 'review',
+    });
+    const body = {
+      event: 'dedicatedaccount.assign.failed',
+      data: { metadata: { source: 'merchant_wallet_funding' } },
+    };
+    const response = await POST(
+      createMockRequest(body, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(body),
+          'test-paystack-secret'
+        ),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      handled: 'merchant_wallet_assignment_failure_review',
+      code: 'MERCHANT_WALLET_ASSIGNMENT_FAILURE_REVIEW',
+    });
+  });
+
+  it('returns review for a signed assignment conflict without entering charge flow', async () => {
+    mockPersistMerchantWalletAssignmentEvent.mockResolvedValue({
+      kind: 'review',
+    });
+    const body = {
+      event: 'dedicatedaccount.assign.success',
+      data: {
+        metadata: {
+          source: 'merchant_wallet_funding',
+          request_id: 'r',
+          merchant_id: 'm',
+        },
+        dedicated_account: { account_number: '1234567890', currency: 'NGN' },
+      },
+    };
+    const response = await POST(
+      createMockRequest(body, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(body),
+          'test-paystack-secret'
+        ),
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      handled: 'merchant_wallet_assignment_review',
+      code: 'MERCHANT_WALLET_ASSIGNMENT_REVIEW',
+    });
+  });
+
+  it('acknowledges a signed assignment with unrelated metadata source', async () => {
+    mockPersistMerchantWalletAssignmentEvent.mockResolvedValue({
+      kind: 'ignored',
+    });
+    const body = {
+      event: 'dedicatedaccount.assign.success',
+      data: {
+        metadata: {
+          source: 'order_dva',
+          request_id: 'r',
+          merchant_id: 'm',
+        },
+        dedicated_account: { account_number: '1234567890', currency: 'NGN' },
+      },
+    };
+    const response = await POST(
+      createMockRequest(body, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(body),
+          'test-paystack-secret'
+        ),
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ message: 'Event ignored' });
   });
 });
 

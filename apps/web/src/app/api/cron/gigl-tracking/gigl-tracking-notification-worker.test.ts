@@ -1,39 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processClaimedGiglTrackingNotifications } from './gigl-tracking-notification-worker';
+import {
+  createGiglTrackingNotificationQuery,
+  createGiglTrackingNotificationSupabase,
+  giglTrackingNotificationTestNotification,
+} from './gigl-tracking-notification-worker.test-support';
 
 const notifyMerchant = vi.hoisted(() => vi.fn());
 const notifyCustomer = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/expo-push', () => ({ notifyCustomer, notifyMerchant }));
 
-const notification = {
-  audience: 'merchant' as const,
-  id: '00000000-0000-4000-8000-000000000001',
-  merchant_id: '00000000-0000-4000-8000-000000000002',
-  notification_kind: 'pickup_en_route',
-  order_id: '00000000-0000-4000-8000-000000000003',
-  tracking_event_id: '00000000-0000-4000-8000-000000000004',
-};
-
-function query(data: unknown, selections: string[] = []) {
-  const builder = {
-    eq: vi.fn(() => builder),
-    maybeSingle: vi.fn().mockResolvedValue({ data, error: null }),
-    select: vi.fn((columns: string) => {
-      selections.push(columns);
-      return builder;
-    }),
-  };
-  return builder;
-}
-
-function supabaseFor(...rows: unknown[]) {
-  const selections: string[] = [];
-  const from = vi
-    .fn()
-    .mockImplementation(() => query(rows.shift() ?? null, selections));
-  const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
-  return { from, rpc, selections };
-}
+const notification = giglTrackingNotificationTestNotification;
 
 describe('processClaimedGiglTrackingNotifications', () => {
   beforeEach(() => {
@@ -41,8 +18,9 @@ describe('processClaimedGiglTrackingNotifications', () => {
     notifyMerchant.mockResolvedValue({ errors: [], failed: 0, sent: 1 });
     notifyCustomer.mockResolvedValue({ errors: [], failed: 0, sent: 1 });
   });
+
   it('notifies the merchant and completes the claimed event', async () => {
-    const supabase = supabaseFor({
+    const supabase = createGiglTrackingNotificationSupabase({
       description: 'Rider assigned',
       raw_status: 'RIDER EN ROUTE FOR PICKUP',
     });
@@ -79,7 +57,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
   });
 
   it('notifies the order customer using merchant-scoped storefront tokens', async () => {
-    const supabase = supabaseFor(
+    const supabase = createGiglTrackingNotificationSupabase(
       { description: 'Delivered', raw_status: 'DELIVERED' },
       { customer_id: '00000000-0000-4000-8000-000000000005' },
       { user_id: '00000000-0000-4000-8000-000000000006' }
@@ -112,7 +90,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
   });
 
   it('skips customer notifications when the order has no customer identity', async () => {
-    const supabase = supabaseFor(
+    const supabase = createGiglTrackingNotificationSupabase(
       { description: 'Delivered', raw_status: 'DELIVERED' },
       { customer_id: null }
     );
@@ -127,17 +105,17 @@ describe('processClaimedGiglTrackingNotifications', () => {
   });
 
   it('retries a transient customer lookup failure before dispatch begins', async () => {
-    const supabase = supabaseFor({
+    const supabase = createGiglTrackingNotificationSupabase({
       description: 'Delivered',
       raw_status: 'DELIVERED',
     });
-    const failingOrderQuery = query(null);
+    const failingOrderQuery = createGiglTrackingNotificationQuery(null);
     failingOrderQuery.maybeSingle.mockResolvedValue({
       data: null,
       error: { message: 'database unavailable' },
     });
     supabase.from.mockReturnValueOnce(
-      query({
+      createGiglTrackingNotificationQuery({
         description: 'Delivered',
         raw_status: 'DELIVERED',
       })
@@ -168,7 +146,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
       failed: 1,
       sent: 1,
     });
-    const supabase = supabaseFor({
+    const supabase = createGiglTrackingNotificationSupabase({
       description: 'Rider assigned',
       raw_status: 'RIDER EN ROUTE FOR PICKUP',
     });
@@ -189,7 +167,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
 
   it('skips a notification when its audience has no active push token', async () => {
     notifyMerchant.mockResolvedValue({ errors: [], failed: 0, sent: 0 });
-    const supabase = supabaseFor({
+    const supabase = createGiglTrackingNotificationSupabase({
       description: 'Rider assigned',
       raw_status: 'RIDER EN ROUTE FOR PICKUP',
     });
@@ -216,7 +194,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
       failed: 0,
       sent: 0,
     });
-    const supabase = supabaseFor({
+    const supabase = createGiglTrackingNotificationSupabase({
       description: 'Rider assigned',
       raw_status: 'RIDER EN ROUTE FOR PICKUP',
     });
@@ -235,7 +213,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
   });
 
   it('marks dispatch only through the provider delivery-start callback', async () => {
-    const supabase = supabaseFor({
+    const supabase = createGiglTrackingNotificationSupabase({
       description: 'Rider assigned',
       raw_status: 'RIDER EN ROUTE FOR PICKUP',
     });
@@ -259,7 +237,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
   });
 
   it('does not overwrite rejection completion when the provider fails afterward', async () => {
-    const supabase = supabaseFor({
+    const supabase = createGiglTrackingNotificationSupabase({
       description: 'Rider assigned',
       raw_status: 'RIDER EN ROUTE FOR PICKUP',
     });

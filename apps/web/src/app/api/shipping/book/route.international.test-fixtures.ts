@@ -1,5 +1,27 @@
 import type { NextRequest } from 'next/server';
 import { expect, vi } from 'vitest';
+import {
+  giglBookingEconomicsProjection,
+  giglQuoteEconomicsFields,
+  prepaidGiglCustomerCheckoutOrderFields,
+} from './route.test-fixtures';
+
+function createSettledRetentionEqChain(
+  retainedAmount = giglBookingEconomicsProjection.shipping_platform_retained_amount
+) {
+  const eqSourceId = vi.fn().mockResolvedValue({
+    data: [
+      {
+        metadata: { retained_shipping_amount: retainedAmount },
+        status: 'completed',
+      },
+    ],
+    error: null,
+  });
+  const eqSourceType = vi.fn(() => ({ eq: eqSourceId }));
+  const eqMerchant = vi.fn(() => ({ eq: eqSourceType }));
+  return { eq: eqMerchant };
+}
 
 export function buildInternationalBookingRequest(): NextRequest {
   return new Request('https://usebaci.com/api/shipping/book', {
@@ -69,6 +91,7 @@ export function buildInternationalSupabaseMock({
         id: '11111111-1111-4111-8111-111111111111',
         merchant_id: 'merchant-1',
         selected_quote_id: selectedQuoteId,
+        ...prepaidGiglCustomerCheckoutOrderFields,
         shipping_status: 'pending',
         shipping_address: {
           address: '999 New Address',
@@ -137,6 +160,7 @@ export function buildInternationalSupabaseMock({
           price: 4500,
           currency: 'NGN',
           estimated_days: 2,
+          ...giglQuoteEconomicsFields,
         },
         error: null,
       });
@@ -144,9 +168,20 @@ export function buildInternationalSupabaseMock({
   };
 
   return {
-    rpc: vi.fn().mockResolvedValue({
-      data: [{ claimed: true, shipment_id: null, tracking_number: null }],
-      error: null,
+    rpc: vi.fn().mockImplementation((fn: string) => {
+      if (fn === 'get_shipping_quote_booking_metadata') {
+        return Promise.resolve({ data: null, error: null });
+      }
+      if (fn === 'get_shipping_quote_booking_economics') {
+        return Promise.resolve({
+          data: giglBookingEconomicsProjection,
+          error: null,
+        });
+      }
+      return Promise.resolve({
+        data: [{ claimed: true, shipment_id: null, tracking_number: null }],
+        error: null,
+      });
     }),
     auth: {
       getUser: vi.fn().mockResolvedValue({
@@ -194,6 +229,11 @@ export function buildInternationalSupabaseMock({
               error: null,
             }),
           })),
+        };
+      }
+      if (table === 'merchant_settlements') {
+        return {
+          select: vi.fn(() => createSettledRetentionEqChain()),
         };
       }
       throw new Error(`Unexpected table: ${table}`);

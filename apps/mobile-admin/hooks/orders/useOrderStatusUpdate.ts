@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { BASE_URL } from '@/lib/api-client';
 import { useMerchant } from '../useMerchant';
 import { createAuthenticatedFetch } from './authenticated-fetch';
+import { OrderStatusUpdateError } from './order-status-update-error';
 import type { OrdersPage } from './order-types';
 import { parseResponsePayload } from './response-utils';
 
@@ -83,7 +84,13 @@ async function updateOrderStatus(
       });
     }
 
-    throw new Error(errorMessage);
+    throw new OrderStatusUpdateError(
+      errorMessage,
+      payload && typeof payload === 'object' && typeof payload.code === 'string'
+        ? payload.code
+        : undefined,
+      payload && typeof payload === 'object' ? payload : undefined
+    );
   }
 
   if (isCancellation) {

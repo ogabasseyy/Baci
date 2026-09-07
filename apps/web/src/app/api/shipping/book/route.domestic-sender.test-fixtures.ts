@@ -1,5 +1,27 @@
 import type { NextRequest } from 'next/server';
 import { expect, vi } from 'vitest';
+import {
+  giglBookingEconomicsProjection,
+  giglQuoteEconomicsFields,
+  prepaidGiglCustomerCheckoutOrderFields,
+} from './route.test-fixtures';
+
+function createSettledRetentionEqChain(
+  retainedAmount = giglBookingEconomicsProjection.shipping_platform_retained_amount
+) {
+  const eqSourceId = vi.fn().mockResolvedValue({
+    data: [
+      {
+        metadata: { retained_shipping_amount: retainedAmount },
+        status: 'completed',
+      },
+    ],
+    error: null,
+  });
+  const eqSourceType = vi.fn(() => ({ eq: eqSourceId }));
+  const eqMerchant = vi.fn(() => ({ eq: eqSourceType }));
+  return { eq: eqMerchant };
+}
 
 export const domesticSenderShipmentInsertPayloads: unknown[] = [];
 
@@ -13,6 +35,7 @@ export function buildDomesticSenderSupabaseMock(
         id: '11111111-1111-4111-8111-111111111111',
         merchant_id: 'merchant-1',
         selected_quote_id: '22222222-2222-4222-8222-222222222222',
+        ...prepaidGiglCustomerCheckoutOrderFields,
         shipping_status: 'pending',
         shipping_address: {
           address: '123 Queen Street West',
@@ -44,6 +67,7 @@ export function buildDomesticSenderSupabaseMock(
     single: vi.fn().mockResolvedValue({
       data: {
         id: '22222222-2222-4222-8222-222222222222',
+        merchant_id: 'merchant-1',
         provider: 'GIGL',
         provider_rate_id: 'gigl:service-centre:5',
         provider_metadata: { stationId: 5 },
@@ -52,6 +76,7 @@ export function buildDomesticSenderSupabaseMock(
         price: 4500,
         currency: 'NGN',
         estimated_days: 2,
+        ...giglQuoteEconomicsFields,
         ...quoteOverrides,
       },
       error: null,
@@ -97,9 +122,20 @@ export function buildDomesticSenderSupabaseMock(
   };
 
   return {
-    rpc: vi.fn().mockResolvedValue({
-      data: [{ claimed: true, shipment_id: null, tracking_number: null }],
-      error: null,
+    rpc: vi.fn().mockImplementation((fn: string) => {
+      if (fn === 'get_shipping_quote_booking_metadata') {
+        return { data: null, error: null };
+      }
+      if (fn === 'get_shipping_quote_booking_economics') {
+        return { data: giglBookingEconomicsProjection, error: null };
+      }
+      if (fn === 'persist_refreshed_order_shipping_quote') {
+        return { error: null };
+      }
+      return {
+        data: [{ claimed: true, shipment_id: null, tracking_number: null }],
+        error: null,
+      };
     }),
     auth: {
       getUser: vi.fn().mockResolvedValue({
@@ -151,6 +187,12 @@ export function buildDomesticSenderSupabaseMock(
         };
       }
 
+      if (table === 'merchant_settlements') {
+        return {
+          select: vi.fn(() => createSettledRetentionEqChain()),
+        };
+      }
+
       throw new Error(`Unexpected table: ${table}`);
     }),
   };
@@ -176,11 +218,12 @@ export function buildDomesticSenderBookingRequest(): NextRequest {
       receiver: {
         name: 'Jane Customer',
         phone: '+2348022222222',
-        address: '2 Customer Road',
-        city: 'Lagos',
-        state: 'Lagos',
-        country: 'Nigeria',
-        countryCode: 'NG',
+        address: '123 Queen Street West',
+        city: 'Toronto',
+        state: 'Ontario',
+        country: 'Canada',
+        countryCode: 'CA',
+        postalCode: 'M5V 3L9',
       },
       items: [
         {
@@ -188,6 +231,10 @@ export function buildDomesticSenderBookingRequest(): NextRequest {
           quantity: 1,
           weight: 1,
           value: 500000,
+          hsCode: '851712',
+          length: 10,
+          width: 8,
+          height: 6,
         },
       ],
     }),

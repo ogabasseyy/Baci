@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type * as TypeScript from '@typescript/typescript6';
 import { describe, expect, it } from 'vitest';
 import { CACHE_LIFE_PROFILES } from '@/config/cache-life-profiles';
+import { getFunctionSourceFrom } from './get-function-source-from';
 
 const require = createRequire(import.meta.url);
 // The classic compiler API used below is gone from typescript@7 (native
@@ -22,20 +23,6 @@ const CACHED_DATA_AST = ts.createSourceFile(
   true,
   ts.ScriptKind.TS
 );
-const CATEGORY_PAGE_PRODUCT_ID_CACHE_SOURCE = readFileSync(
-  join(
-    dirname(fileURLToPath(import.meta.url)),
-    'category-page-product-id-cache.ts'
-  ),
-  'utf8'
-);
-const CATEGORY_PAGE_PRODUCT_ID_CACHE_AST = ts.createSourceFile(
-  'category-page-product-id-cache.ts',
-  CATEGORY_PAGE_PRODUCT_ID_CACHE_SOURCE,
-  ts.ScriptTarget.Latest,
-  true,
-  ts.ScriptKind.TS
-);
 const HYDRATE_PUBLIC_PRODUCTS_SOURCE = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), 'hydrate-public-products.ts'),
   'utf8'
@@ -48,48 +35,11 @@ const HYDRATE_PUBLIC_PRODUCTS_AST = ts.createSourceFile(
   ts.ScriptKind.TS
 );
 
-function getFunctionSourceFrom(
-  functionName: string,
-  source: string,
-  sourceFile: TypeScript.SourceFile
-): string {
-  let match: TypeScript.FunctionDeclaration | undefined;
-
-  function visit(node: TypeScript.Node): void {
-    if (match) return;
-    if (ts.isFunctionDeclaration(node) && node.name?.text === functionName) {
-      match = node;
-      return;
-    }
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
-
-  if (!match) {
-    throw new Error(
-      `Unable to locate ${functionName} in ${sourceFile.fileName}`
-    );
-  }
-
-  return source.slice(match.getStart(sourceFile), match.end);
-}
-
 function getFunctionSource(functionName: string): string {
   return getFunctionSourceFrom(
     functionName,
     CACHED_DATA_SOURCE,
     CACHED_DATA_AST
-  );
-}
-
-function getCategoryPageProductIdCacheFunctionSource(
-  functionName: string
-): string {
-  return getFunctionSourceFrom(
-    functionName,
-    CATEGORY_PAGE_PRODUCT_ID_CACHE_SOURCE,
-    CATEGORY_PAGE_PRODUCT_ID_CACHE_AST
   );
 }
 
@@ -177,25 +127,6 @@ describe('cached-data cache directives', () => {
     }
   });
 
-  it('keeps the route-critical category page shell off the remote cache handler', () => {
-    // The compare page model and compare category inventory were demoted from
-    // 'use cache: remote' to local 'use cache' (PR #3049) because their Vercel
-    // remote-cache SET (RemoteCacheHandler K.set) hangs and never persists under
-    // crawler load. This shell is the LAST route-critical remote write on the
-    // compare/category path — it is nested by the category listing page, both
-    // compare reads, the price-band page, and the category-scoped semantic
-    // inventory — and it is keyed on an unbounded (high-cardinality) category
-    // slug. It therefore belongs on the same local cache: no remote write
-    // round-trip, and its 'storefront-page' window (revalidate 300) already
-    // bounds cross-instance staleness of the rarely-changing shell to ~5min.
-    const source = getFunctionSource('getCachedCategoryPageShellData');
-
-    expect(source).toContain("'use cache';");
-    expect(source).not.toContain("'use cache: remote';");
-    expect(source).toContain("cacheLife('storefront-page');");
-    expect(source).toContain('cacheTag(');
-  });
-
   it('keeps high-cardinality public product reads off the remote cache handler', () => {
     for (const functionName of [
       'getCachedProductLcpHint',
@@ -255,98 +186,6 @@ describe('cached-data cache directives', () => {
     expect(source).toContain("cacheLife('categories');");
     expect(source).toContain('cacheTag(');
     expect(source).toContain('throw error');
-  });
-
-  it('keeps canonical category product IDs on the shared store while legacy IDs stay local', () => {
-    // Demotion REVERTED (Codex PRRT_kwDOQZgfis6QjNxf): the
-    // category-page-data-${id} / products-${id} / categories-${id} tags are
-    // all busted by
-    // revalidateProducts() and revalidateCategories(), so category membership
-    // and counts MUST invalidate on every instance. The deterministic ID cap
-    // stays (each scope branch orders by id last) to bound the cache item.
-    const source = getCategoryPageProductIdCacheFunctionSource(
-      'getCachedCategoryPageProductIds'
-    );
-    expect(source).toContain("'use cache: remote';");
-    expect(source).toContain("cacheLife('storefront-page');");
-    expect(source).toContain('cacheTag(');
-    expect(source).toContain('CATEGORY_PAGE_PRODUCT_ID_CAP');
-    expect(source).toContain('.limit(CATEGORY_PAGE_PRODUCT_ID_CAP)');
-    expect(CATEGORY_PAGE_PRODUCT_ID_CACHE_SOURCE).toContain(
-      'CATEGORY_PAGE_PRODUCT_ID_CAP'
-    );
-    expect(source).toContain('getCategoryPageDataCacheTag(merchantId)');
-
-    const legacySource = getCategoryPageProductIdCacheFunctionSource(
-      'getCachedLegacyCategoryPageProductIds'
-    );
-    expect(legacySource).toContain("'use cache';");
-    expect(legacySource).not.toContain("'use cache: remote';");
-    expect(legacySource).toContain('getCategoryPageDataCacheTag(merchantId)');
-  });
-
-  it('caches the exact count as its OWN entry so a count failure cannot empty the catalog (PR4b review r4)', () => {
-    // Codex PRRT_kwDOQZgfis6QjNxX: folding the supplementary head-count into
-    // the ID-list read meant a failed COUNT threw, the request-local boundary
-    // caught it, and a category with a perfectly good ID window rendered an
-    // EMPTY catalog. Core data must never be discarded because an auxiliary
-    // query failed. The count now owns its own cached entry (a throw persists
-    // NO entry, so the wrong count is never cached and the next request
-    // refills), and the boundary degrades the TOTALS only.
-    const idsSource = getCategoryPageProductIdCacheFunctionSource(
-      'getCachedCategoryPageProductIds'
-    );
-    const countSource = getCategoryPageProductIdCacheFunctionSource(
-      'getCachedCategoryPageProductTotalCount'
-    );
-    const boundarySource = getFunctionSource('getCategoryPageProductIds');
-
-    // The ID list is CORE: it must not carry the count query at all.
-    expect(idsSource).not.toContain("count: 'exact'");
-
-    // The count is SUPPLEMENTARY, separately cached, and shares the ID list's
-    // invalidation contract (so it must also be remote).
-    expect(countSource).toContain("'use cache: remote';");
-    expect(countSource).toContain("count: 'exact'");
-    // No cap-equality gate in front of the count (max-rows clamp trap).
-    expect(countSource).not.toContain('=== CATEGORY_PAGE_PRODUCT_ID_CAP');
-
-    const legacyCountSource = getCategoryPageProductIdCacheFunctionSource(
-      'getCachedLegacyCategoryPageProductTotalCount'
-    );
-    expect(legacyCountSource).toContain("'use cache';");
-    expect(legacyCountSource).not.toContain("'use cache: remote';");
-    expect(legacyCountSource).toContain("count: 'exact'");
-
-    // The boundary keeps the IDs and degrades only the totals on count failure.
-    expect(boundarySource).toContain('totalProductCountExact: false');
-    expect(boundarySource).toContain('totalProductCount: productIds.length');
-  });
-
-  it('keeps pagination truthful past the capped ID list (PR4b review fix)', () => {
-    // The cap bounds the cached ID list, but totalPages must reflect the EXACT
-    // count or valid pages past the cap 404. The exact head-count query must
-    // run UNCONDITIONALLY: PostgREST max-rows (managed default 1,000 — not
-    // overridden in supabase/config.toml) clamps responses BELOW the 2,000
-    // cap, so any "did we hit the cap?" gate silently reports the clamped
-    // length as the total. Windows beyond the cached list are fetched
-    // per-request with the same deterministic ordering, and no-limit
-    // consumers get the FULL ID list assembled per-request.
-    const countSource = getCategoryPageProductIdCacheFunctionSource(
-      'getCachedCategoryPageProductTotalCount'
-    );
-    expect(countSource).toContain("count: 'exact'");
-    const aggregateSource = getFunctionSource(
-      'getCachedCategoryPageProductsUncached'
-    );
-    expect(aggregateSource).toContain('totalProductCount');
-    expect(aggregateSource).toContain(
-      'categoryPageProductIdCache.fetchProductIdWindow'
-    );
-    // Unbounded (no-limit) consumers assemble the complete ID list.
-    expect(aggregateSource).toContain('fetchAllCategoryPageProductIds');
-    // ...but NEVER page toward a total that the count query failed to produce.
-    expect(aggregateSource).toContain('totalProductCountExact');
   });
 
   it('keeps dashboard stats on the shared store and fail-loud (PR4b review r4)', () => {

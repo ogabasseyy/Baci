@@ -68,8 +68,7 @@ export async function resolveComparePageStatus(input: {
 
   const inventory = await getCachedCompareCategoryInventory(
     merchant.id,
-    input.categorySlug,
-    input.merchantSlug
+    input.categorySlug
   );
 
   // Collection routes do not have a compare page. An empty ordinary inventory

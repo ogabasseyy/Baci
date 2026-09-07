@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
 import type { CachedCategoryPageProductScope } from '@/lib/category-page-product-id-cache';
 import { createStorefrontReadDeadline } from '@/lib/create-storefront-read-deadline';
+import { getCategoryFallbackName } from '@/lib/get-category-fallback-name';
 import {
   prepareStorefrontSingleAttemptQuery,
   type StorefrontSingleAttemptQuery,
@@ -45,19 +46,6 @@ function getSpecialCollectionName(categorySlug: string): string {
     default:
       return getCategoryFallbackName(categorySlug);
   }
-}
-
-function getCategoryFallbackName(categorySlug: string): string {
-  let decodedSlug = categorySlug;
-  try {
-    decodedSlug = decodeURIComponent(categorySlug);
-  } catch {
-    // Keep fallback naming total for malformed inputs from internal callers.
-  }
-
-  return decodedSlug
-    .replace(/-/g, ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export async function getCachedCompareCategoryShell(

@@ -73,6 +73,24 @@ describe('normalizeNigerianQuoteReceiver', () => {
     ).toEqual(international);
   });
 
+  it('fills blank domestic country fields with Nigeria/NG before persist', () => {
+    expect(
+      normalizeNigerianQuoteReceiver(
+        {
+          ...receiver,
+          country: '',
+          countryCode: '',
+          state: 'Lagos',
+        },
+        'domestic'
+      )
+    ).toMatchObject({
+      country: 'Nigeria',
+      countryCode: 'NG',
+      state: 'Lagos',
+    });
+  });
+
   it('preserves an unknown domestic location instead of guessing', () => {
     const unknown = {
       ...receiver,

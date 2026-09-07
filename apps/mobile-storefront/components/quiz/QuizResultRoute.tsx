@@ -12,10 +12,15 @@ import type { createQuizStyles } from './QuizScreen.styles';
 import { canPlayAnotherQuizAttempt } from './QuizScreen.utils';
 import { useQuizEventTimer } from './use-quiz-event-timer';
 import { useQuizServerClock } from './use-quiz-server-clock';
+import {
+  type QuizBackHandlerRef,
+  useQuizBackHandler,
+} from './useQuizBackHandler';
 
 type QuizStyles = ReturnType<typeof createQuizStyles>;
 
 interface QuizResultRouteProps {
+  backHandlerRef?: QuizBackHandlerRef;
   dismissRecovery: (eventId: string) => void;
   events: QuizEvent[];
   expectedUserId: string | null;
@@ -29,6 +34,7 @@ interface QuizResultRouteProps {
 }
 
 export function QuizResultRoute({
+  backHandlerRef,
   dismissRecovery,
   events,
   expectedUserId,
@@ -57,6 +63,13 @@ export function QuizResultRoute({
       ? (terminalContext?.eventEndsAt ?? event?.endsAt)
       : terminalContext?.serverNow
   );
+  const returnToLobby = () => {
+    if (lifecycle === 'pending_results' && !canPlayAgain) return;
+    if (terminalContext?.eventId) dismissRecovery(terminalContext.eventId);
+    onReset();
+    onRetryRecovery();
+  };
+  useQuizBackHandler(backHandlerRef, returnToLobby);
   return (
     <QuizResultsPanel
       allowPendingResultsExit={canPlayAgain}
@@ -65,13 +78,7 @@ export function QuizResultRoute({
       expectedUserId={expectedUserId}
       legacyResult={result}
       lifecycle={lifecycle}
-      onReturnToQuizList={() => {
-        if (terminalContext?.eventId) {
-          dismissRecovery(terminalContext.eventId);
-        }
-        onReset();
-        onRetryRecovery();
-      }}
+      onReturnToQuizList={returnToLobby}
       serverNow={terminalContext?.serverNow}
       submittedAt={terminalContext?.submittedAt}
       simulatedPrize={

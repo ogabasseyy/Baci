@@ -20,6 +20,7 @@ export async function resolveBookingQuoteForSender(
   quote: OrderShipmentQuoteRecord,
   provider: ShippingProviderCode,
   options: {
+    orderId: string;
     merchantSender?: ShippingAddress;
     usesStoredInternationalSender: boolean;
     expectedShippingFee?: number | string | null;
@@ -41,7 +42,11 @@ export async function resolveBookingQuoteForSender(
     supabase,
     quote,
     provider,
-    options.merchantSender
+    options.merchantSender,
+    {
+      orderId: options.orderId,
+      expectedShippingFee: options.expectedShippingFee,
+    }
   );
 
   assertQuotePriceMatchesOrderFee(refreshedQuote, options.expectedShippingFee);

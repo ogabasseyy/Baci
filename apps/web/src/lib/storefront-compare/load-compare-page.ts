@@ -675,8 +675,7 @@ async function getCachedComparePageModel(
 
   const inventory = await getCachedCompareCategoryInventory(
     merchant.id,
-    categorySlug,
-    merchantSlug
+    categorySlug
   );
 
   if (inventory.isCollection) {

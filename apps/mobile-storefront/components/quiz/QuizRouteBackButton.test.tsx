@@ -15,19 +15,21 @@ describe('QuizRouteBackButton', () => {
     useQuizStore.getState().reset();
   });
 
-  it('returns a completed result to the SuperQuiz lobby without leaving the route', () => {
+  it('delegates result dismissal without clearing recovery or bypassing its exit policy', () => {
     useQuizStore.setState({ status: 'result' });
-    render(<QuizRouteBackButton color="#ffffff" />);
+    const onBack = jest.fn();
+    render(<QuizRouteBackButton color="#ffffff" onBack={onBack} />);
 
     fireEvent.press(screen.getByRole('button', { name: 'Back to SuperQuiz' }));
 
-    expect(useQuizStore.getState().status).toBe('idle');
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(useQuizStore.getState().status).toBe('result');
     expect(mockRouterBack).not.toHaveBeenCalled();
   });
 
   it('uses normal route navigation when already on the SuperQuiz lobby', () => {
     useQuizStore.setState({ status: 'ready' });
-    render(<QuizRouteBackButton color="#ffffff" />);
+    render(<QuizRouteBackButton color="#ffffff" onBack={mockRouterBack} />);
 
     fireEvent.press(screen.getByRole('button', { name: 'Go back' }));
 

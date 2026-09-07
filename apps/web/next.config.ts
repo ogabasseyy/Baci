@@ -5,6 +5,7 @@ import { builderPreviewRouteHeaders } from './src/config/builder-preview-route-h
 import { CACHE_LIFE_PROFILES } from './src/config/cache-life-profiles';
 import { OGABASSEY_DOCUMENT_LINK_HEADER_VALUE } from './src/config/early-hints-link-header';
 import { applyNextDeploymentIdEnv } from './src/config/next-deployment-id';
+import { IMMUTABLE_NEXT_STATIC_ASSET_HEADERS } from './src/config/next-static-asset-headers';
 import { STATIC_GENERATION_LIMITS } from './src/config/static-generation';
 import {
   STOREFRONT_METADATA_BLOCKING_BOT_USER_AGENT_REGEX,
@@ -664,6 +665,9 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      ...(process.env.NODE_ENV === 'production'
+        ? [IMMUTABLE_NEXT_STATIC_ASSET_HEADERS]
+        : []),
       {
         source: OGABASSEY_GENERIC_DOCUMENT_ROUTE_SOURCE,
         has: [{ type: 'host', value: OGABASSEY_DOCUMENT_HOST_MATCHER }],

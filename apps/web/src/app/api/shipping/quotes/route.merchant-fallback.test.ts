@@ -163,7 +163,8 @@ describe('POST /api/shipping/quotes', () => {
           country: 'Nigeria',
           countryCode: 'NG',
         }),
-      })
+      }),
+      []
     );
   });
 

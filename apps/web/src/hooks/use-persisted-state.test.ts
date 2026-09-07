@@ -33,6 +33,44 @@ describe('usePersistedState', () => {
     );
   });
 
+  it('flushes a pending checkout order before payment navigation', () => {
+    const { result, unmount } = renderHook(() =>
+      usePersistedState('pending-order', '')
+    );
+    act(() => result.current[1]('order-before-redirect'));
+    act(() => window.dispatchEvent(new Event('pagehide')));
+    expect(JSON.parse(sessionStorage.getItem('pending-order') || 'null')).toBe(
+      'order-before-redirect'
+    );
+    unmount();
+    const restored = renderHook(() => usePersistedState('pending-order', ''));
+    expect(restored.result.current[0]).toBe('order-before-redirect');
+  });
+
+  it('flushes unchecked marketing consent on navigation before debounce finishes', () => {
+    const { result, unmount } = renderHook(() =>
+      usePersistedForm('consent', { newsletterOptIn: true })
+    );
+    act(() => result.current.setValue('newsletterOptIn', false));
+    unmount();
+    const restored = renderHook(() =>
+      usePersistedForm('consent', { newsletterOptIn: true })
+    );
+    expect(restored.result.current.values.newsletterOptIn).toBe(false);
+  });
+
+  it('does not resurrect a cleared pending order on unmount or pagehide', () => {
+    const { result, unmount } = renderHook(() =>
+      usePersistedState('pending', '')
+    );
+    act(() => result.current[1]('old-order'));
+    act(() => result.current[2]());
+    act(() => window.dispatchEvent(new Event('pagehide')));
+    unmount();
+    vi.advanceTimersByTime(500);
+    expect(sessionStorage.getItem('pending')).toBeNull();
+  });
+
   it('supports localStorage option', () => {
     localStorage.setItem('test', JSON.stringify('from-local'));
     const { result } = renderHook(() =>

@@ -1,9 +1,9 @@
 'use client';
 
+import { CryptoSelectorModal } from './checkout/components/CryptoSelectorModal';
 import {
   isAirportDeliveryEligible,
   isPickupEligible,
-  resolveEligibleWebStorefrontDeliveryMethod,
 } from '@baci/shared';
 import {
   AlertCircle,
@@ -14,7 +14,6 @@ import {
   Plane,
   ShieldCheck,
   ShoppingBag,
-  Store,
   Truck,
   Check,
   Copy,
@@ -25,6 +24,8 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { SmartQuoteLoader } from '../components/SmartQuoteLoader';
+import { DoorDeliveryQuoteOptions } from './checkout/components/DoorDeliveryQuoteOptions';
+import { isCheckoutDeliveryAddressReady } from './checkout/is-checkout-delivery-address-ready';
 import {
   DiscountCodeInput,
   type DiscountResult,
@@ -32,6 +33,11 @@ import {
 import { MobileOrderSummary } from '../components/MobileCheckoutComponents';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
+import { resolveMerchantDeliveryMethod } from './checkout/resolve-merchant-delivery-method';
+import { requestCryptoPaymentInitialization } from './checkout/request-crypto-payment-initialization';
+import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
+import { persistPendingCheckoutOrder } from './checkout/persist-pending-checkout-order';
+import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
 import { useEffect, useState, useRef } from 'react';
 import { useCart } from '@/hooks/cart';
 import type { CartItem } from '@/hooks/cart';
@@ -48,7 +54,6 @@ import type {
   ResumedOrder,
 } from './checkout/types';
 import {
-  usePersistedForm,
   usePersistedState,
 } from '@/hooks/use-persisted-state';
 import { useAuthSafe } from '@/contexts/auth-context';
@@ -118,7 +123,6 @@ import {
   KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST,
   createSelectDeliveryMethod,
   getAirDeliveryQuotes,
-  getDeliveryEstimateLabel,
   getDoorDeliveryQuotes,
   getForwardableSelectedQuoteId,
   getMerchantRateId,
@@ -291,7 +295,9 @@ async function loadResumedCheckoutOrder({
         id: orderData.id,
         short_id: orderData.short_id,
         subtotal: orderData.subtotal,
-        shipping_cost: orderData.shipping_cost || 0,
+        shipping_cost: orderData.shipping_cost ?? 0,
+        tax_amount: orderData.tax_amount ?? 0,
+        discount_amount: orderData.discount_amount ?? 0,
         total: orderData.total,
         customer_name: orderData.customer_name,
         customer_email: orderData.customer_email,
@@ -443,65 +449,6 @@ async function loadWalletBalance({
   }
 }
 
-interface RequestCryptoPaymentInitializationParams {
-  merchantId: string;
-  pendingOrder: PendingCryptoOrder;
-  chain: CryptoChain;
-  currency: CryptoCurrency;
-  /** Merchant-resolved fiat order currency (server derives from order). */
-  orderCurrency: string;
-}
-
-async function requestCryptoPaymentInitialization({
-  merchantId,
-  pendingOrder,
-  chain,
-  currency,
-  orderCurrency,
-}: RequestCryptoPaymentInitializationParams): Promise<CryptoPaymentData> {
-  const paymentResponse = await fetch('/api/payments/initialize', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      merchant_id: merchantId,
-      order_id: pendingOrder.orderId,
-      currency: orderCurrency,
-      customer_email: pendingOrder.customerEmail,
-      customer_name: pendingOrder.customerName,
-      customer_phone: pendingOrder.customerPhone,
-      gateway: 'juicyway',
-      billing_address: pendingOrder.billingAddress,
-      items: pendingOrder.items,
-      crypto_chain: chain,
-      crypto_currency: currency,
-    }),
-  });
-
-  if (!paymentResponse.ok) {
-    const errorData = await paymentResponse.json();
-    throw new Error(errorData.details || errorData.error || 'Payment initialization failed');
-  }
-
-  const paymentResult = await paymentResponse.json();
-
-  if (paymentResult.success && paymentResult.crypto_payment) {
-    return {
-      address: paymentResult.crypto_payment.address,
-      chain: paymentResult.crypto_payment.chain,
-      currency: paymentResult.crypto_payment.currency,
-      amount: paymentResult.crypto_payment.amount / 100,
-      confirmation_time: paymentResult.crypto_payment.confirmation_time,
-      orderId: pendingOrder.orderId,
-      trackingToken: pendingOrder.trackingToken,
-      reference: paymentResult.reference,
-      sessionId: paymentResult.session_id || '',
-      paymentId: paymentResult.crypto_payment.payment_id || '', // Payment ID for verification
-      qrcode: paymentResult.crypto_payment.qrcode,
-    };
-  }
-
-  throw new Error('Failed to generate crypto payment address');
-}
 
 interface RequestDvaInitializationParams {
   merchantId: string;
@@ -637,17 +584,7 @@ export const CheckoutPage: React.FC = () => {
     setValue: setCheckoutField,
     setValues: setCheckoutFields,
     clear: clearCheckoutSession,
-  } = usePersistedForm('checkout-form', {
-    firstName: '',
-    lastName: '',
-    customerEmail: '',
-    customerPhone: '',
-    newAddressStreet: '',
-    newAddressState: '',
-    newAddressCity: '',
-    currentStep: 'contact' as 'contact' | 'delivery' | 'payment',
-    completedSteps: { contact: false, delivery: false },
-  });
+  } = useCheckoutFormState();
 
   // Destructure for convenience (these are reactive)
   const {
@@ -658,6 +595,9 @@ export const CheckoutPage: React.FC = () => {
     newAddressStreet,
     newAddressState,
     newAddressCity,
+    deliveryCoordinates,
+    deliveryMethod,
+    newsletterOptIn,
     currentStep: rawCurrentStep,
     completedSteps: rawCompletedSteps,
   } = checkoutForm;
@@ -671,7 +611,6 @@ export const CheckoutPage: React.FC = () => {
   const setLastName = (v: string) => setCheckoutField('lastName', v);
   const setCustomerEmail = (v: string) => setCheckoutField('customerEmail', v);
   const setCustomerPhone = (v: string) => setCheckoutField('customerPhone', v);
-  const setNewAddressStreet = (v: string) => setCheckoutField('newAddressStreet', v);
   const setNewAddressState = (v: string) => setCheckoutField('newAddressState', v);
   const setNewAddressCity = (v: string) => setCheckoutField('newAddressCity', v);
   const setCurrentStep = (v: 'contact' | 'delivery' | 'payment') => setCheckoutField('currentStep', v);
@@ -714,7 +653,7 @@ export const CheckoutPage: React.FC = () => {
   // Non-persisted UI state
   const [createAccount, setCreateAccount] = useState(false);
   const [accountPassword, setAccountPassword] = useState('');
-  const [newsletterOptIn, setNewsletterOptIn] = useState(true);
+  const setNewsletterOptIn = (value: boolean) => setCheckoutField('newsletterOptIn', value);
   const [showPasswordInput, setShowPasswordInput] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -832,31 +771,7 @@ export const CheckoutPage: React.FC = () => {
     gatewayParam === 'credpal' || gatewayParam === 'credit_direct'
       ? gatewayParam
       : null;
-  const [resumedOrder, setResumedOrder] = useState<{
-    id: string;
-    short_id: string;
-    subtotal: number;
-    shipping_cost: number;
-    total: number;
-    customer_name: string;
-    customer_email: string;
-    customer_phone: string;
-    tracking_token?: string;
-    shipping_address: {
-      address: string;
-      city: string;
-      state: string;
-      phone: string;
-    };
-    items: Array<{
-      id: string;
-      product_id: string;
-      product_name: string;
-      quantity: number;
-      price: number;
-      image_url?: string;
-    }>;
-  } | null>(null);
+  const [resumedOrder, setResumedOrder] = useState<ResumedOrder | null>(null);
   const [isLoadingResumedOrder, setIsLoadingResumedOrder] = useState(!!resumeOrderId);
   const [resumeOrderError, setResumeOrderError] = useState<string | null>(null);
 
@@ -903,6 +818,10 @@ export const CheckoutPage: React.FC = () => {
   const autoTriggerRef = useRef(false);
   // Double-submit protection: prevents race conditions from rapid clicks
   const isOrderInFlightRef = useRef(false);
+  usePaymentReturnReset(() => {
+    setIsProcessing(false);
+    isOrderInFlightRef.current = false;
+  });
 
   // Storefront customer sign-in state. The `(commerce)` checkout route mounts
   // neither `AuthProvider` nor `CustomerAuthProvider`, so `useAuthSafe()` above
@@ -1138,7 +1057,7 @@ export const CheckoutPage: React.FC = () => {
 
   const [selectedAddressId, setSelectedAddressId] = useState<number>(0);
   const [isNewAddressMode, setIsNewAddressMode] = useState(true);
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('door');
+  const setDeliveryMethod = (value: DeliveryMethod) => setCheckoutField('deliveryMethod', value);
   const [airportType, setAirportType] = useState<'delivery' | 'pickup'>('delivery');
 
   // Shipping State
@@ -1149,10 +1068,6 @@ export const CheckoutPage: React.FC = () => {
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string>('');
   const [resolvedQuoteRequestKey, setResolvedQuoteRequestKey] = useState('');
-  const [deliveryCoordinates, setDeliveryCoordinates] = useState<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
   const quoteRequestSequence = useRef(0);
   const quoteAbortController = useRef<AbortController | null>(null);
   const stationPickupQuote = getStationPickupQuote(shippingQuotes);
@@ -1192,7 +1107,6 @@ export const CheckoutPage: React.FC = () => {
       quoteAbortController,
     );
     setIsLoadingQuotes(false);
-    setDeliveryCoordinates(null);
     setResolvedQuoteRequestKey('');
     resetDeliveryQuotesForAddressChange({
       setDeliveryMethod,
@@ -1200,9 +1114,10 @@ export const CheckoutPage: React.FC = () => {
       setShippingQuotes,
     });
   };
-  const eligibleDeliveryMethod = resolveEligibleWebStorefrontDeliveryMethod(
+  const eligibleDeliveryMethod = resolveMerchantDeliveryMethod(
     deliveryMethod,
     newAddressState,
+    merchant?.slug,
   );
   if (eligibleDeliveryMethod !== deliveryMethod) {
     setDeliveryMethod(eligibleDeliveryMethod);
@@ -1397,8 +1312,15 @@ export const CheckoutPage: React.FC = () => {
         )
       : resetQuotesForAddressChange();
 
-  // Trigger provider quotes after the address and delivery preference are known.
+  const isNewDeliveryAddressReady = isCheckoutDeliveryAddressReady({
+    address: newAddressStreet,
+    city: newAddressCity,
+    state: newAddressState,
+  });
+
+  // Trigger provider quotes only for a hydrated, complete delivery address.
   useEffect(() => {
+    if (!isHydrated) return;
     if (deliveryMethod === 'door' || deliveryMethod === 'pickup_station') {
       if (!merchant?.id) {
         resetQuotesForAddressChange();
@@ -1406,11 +1328,9 @@ export const CheckoutPage: React.FC = () => {
       }
 
       if (isNewAddressMode) {
-        // STRICT: Only fetch if BOTH State AND City are explicitly selected
-        // Do NOT use fallbacks - wait for proper location input
-        if (newAddressState && newAddressCity) {
+        if (isNewDeliveryAddressReady) {
           fetchShippingQuotes(
-            newAddressStreet || `${newAddressCity}, ${newAddressState}`, // Use city+state as fallback address for API
+            newAddressStreet,
             newAddressState,
             newAddressCity,
             customerPhone,
@@ -1420,6 +1340,8 @@ export const CheckoutPage: React.FC = () => {
             deliveryMethod === 'pickup_station' ? 'pickup_station' : 'door',
             false,
           );
+        } else {
+          resetQuotesForAddressChange();
         }
       } else {
         const saved = addresses.find((a) => a.id === selectedAddressId);
@@ -1456,8 +1378,10 @@ export const CheckoutPage: React.FC = () => {
     deliveryMethod,
     selectedAddressId,
     isNewAddressMode,
-    // Trigger on State/City change for new address. 
-    // NOT triggering on newAddressStreet change to avoid excessive API calls while typing.
+    // Manual typing clears the detected location until the debounce settles.
+    isHydrated,
+    isNewDeliveryAddressReady,
+    newAddressStreet,
     newAddressState,
     newAddressCity,
     // Trigger if we switch back to a saved address
@@ -2318,7 +2242,7 @@ export const CheckoutPage: React.FC = () => {
         }
       }
 
-      setPendingCheckoutOrder({
+      const pendingSnapshot: PendingCheckoutOrderSnapshot = {
         orderId: order.id,
         orderNumber: order.order_number,
         trackingToken: order.tracking_token,
@@ -2328,7 +2252,9 @@ export const CheckoutPage: React.FC = () => {
         checkoutFingerprint,
         amountDueToGateway,
         createdAt: new Date().toISOString(),
-      });
+      };
+      persistPendingCheckoutOrder(pendingSnapshot);
+      setPendingCheckoutOrder(pendingSnapshot);
 
       const paymentAmount = amountDueToGateway ?? total;
 
@@ -2918,130 +2844,20 @@ export const CheckoutPage: React.FC = () => {
 
       {/* Crypto Selector Modal */}
       {showCryptoSelector && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="sticky top-0 bg-linear-to-r from-store-primary to-store-primary/80 p-4 flex items-center justify-between rounded-t-2xl">
-              <div className="flex items-center gap-2">
-                <div className="size-8 bg-white/20 rounded-lg flex items-center justify-center">
-                  <CreditCard size={16} className="text-white" />
-                </div>
-                <h2 className="font-bold text-white">Select Crypto Payment</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCryptoSelector(false);
-                  setPendingCryptoOrder(null);
-                  isOrderInFlightRef.current = false;
-                }}
-                className="size-8 rounded-lg bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 space-y-6">
-              {/* Currency Selection */}
-              <div className="space-y-3">
-                <label className="text-sm font-bold text-gray-700">Select Stablecoin</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleCryptoCurrencyChange('USDT')}
-                    className={`p-4 rounded-xl border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-offset-2 ${selectedCryptoCurrency === 'USDT'
-                      ? 'border-store-primary bg-store-primary/5'
-                      : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                  >
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-gray-900">USDT</p>
-                      <p className="text-xs text-gray-500">Tether USD</p>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleCryptoCurrencyChange('USDC')}
-                    className={`p-4 rounded-xl border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-offset-2 ${selectedCryptoCurrency === 'USDC'
-                      ? 'border-store-primary bg-store-primary/5'
-                      : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                  >
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-gray-900">USDC</p>
-                      <p className="text-xs text-gray-500">USD Coin</p>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Network Selection */}
-              <div className="space-y-3">
-                <label className="text-sm font-bold text-gray-700">Select Network</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {cryptoChainSupport[selectedCryptoCurrency].map((chain) => (
-                    <button
-                      key={chain}
-                      type="button"
-                      onClick={() => setSelectedCryptoChain(chain)}
-                      className={`p-4 rounded-xl border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-offset-2 ${selectedCryptoChain === chain
-                        ? 'border-store-primary bg-store-primary/5'
-                        : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                    >
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-gray-900">{chain}</p>
-                        <p className="text-xs text-gray-500">
-                          {chainDisplayNames[chain]?.replace(` (${chain === 'TRX' ? 'TRC-20' : 'ERC-20'})`, '') || chain}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Network Info */}
-              <div className="bg-gray-50 rounded-xl p-4">
-                <div className="flex items-center gap-3">
-                  <Clock size={18} className="text-gray-500" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {selectedCryptoChain === 'TRX' && '1-3 minutes'}
-                      {selectedCryptoChain === 'ETH' && '5-30 minutes'}
-                      {selectedCryptoChain === 'MATIC' && '1-5 minutes'}
-                      {selectedCryptoChain === 'AVAXC' && '1-5 minutes'}
-                    </p>
-                    <p className="text-xs text-gray-500">Expected confirmation time</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Continue Button */}
-              <button
-                type="button"
-                onClick={initializeCryptoPayment}
-                disabled={isInitializingCrypto}
-                className="w-full py-3.5 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors shadow-lg shadow-store-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isInitializingCrypto ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    Generating Address…
-                  </>
-                ) : (
-                  <>
-                    Continue with {selectedCryptoCurrency} on {selectedCryptoChain}
-                  </>
-                )}
-              </button>
-
-              <p className="text-center text-xs text-gray-400">
-                You'll receive a wallet address to send your {selectedCryptoCurrency} payment
-              </p>
-            </div>
-          </div>
-        </div>
+        <CryptoSelectorModal
+          selectedCryptoCurrency={selectedCryptoCurrency}
+          selectedCryptoChain={selectedCryptoChain}
+          supportedChains={cryptoChainSupport[selectedCryptoCurrency]}
+          isInitializingCrypto={isInitializingCrypto}
+          onCurrencyChange={handleCryptoCurrencyChange}
+          onChainChange={setSelectedCryptoChain}
+          onInitialize={initializeCryptoPayment}
+          onClose={() => {
+            setShowCryptoSelector(false);
+            setPendingCryptoOrder(null);
+            isOrderInFlightRef.current = false;
+          }}
+        />
       )}
 
       {/* Crypto Payment Modal */}
@@ -3391,13 +3207,15 @@ export const CheckoutPage: React.FC = () => {
         <MobileOrderSummary
           cart={mobileSummaryCart}
           cartTotal={effectiveCheckoutCartTotal}
-          deliveryCost={deliveryCost || resumedOrder?.shipping_cost || 0}
+          deliveryCost={resumedOrder ? resumedOrder.shipping_cost : deliveryCost}
+          taxAmount={resumedOrder?.tax_amount ?? orderTotals?.taxAmount ?? 0}
+          discountAmount={resumedOrder?.discount_amount ?? discountAmount}
           deliveryMethod={deliveryMethod}
           giftWrappingCost={giftWrappingCost}
           walletBalance={walletBalance}
           payWithWallet={payWithWallet}
           walletAmountUsed={walletAmountUsed}
-          remainingAmount={remainingAmount > 0 ? remainingAmount : resumedOrder?.total || remainingAmount}
+          remainingAmount={resumedOrder?.total ?? remainingAmount}
         />
 
         {/* Hidden in the resumed-order flow: that path charges the persisted
@@ -3756,7 +3574,12 @@ export const CheckoutPage: React.FC = () => {
                             useThemedInput={true}
                             onChange={(val) => {
                               const newVal = typeof val === 'string' ? val : val.target.value;
-                              setNewAddressStreet(newVal);
+                              setCheckoutFields({
+                                newAddressStreet: newVal,
+                                newAddressCity: '',
+                                newAddressState: '',
+                                deliveryCoordinates: null,
+                              });
 
                               // Reset state/city if address is cleared or changed significantly
                               if (!newVal || newVal.length < 10) {
@@ -3788,29 +3611,26 @@ export const CheckoutPage: React.FC = () => {
                             }}
                             onSelect={(place: PlaceDetails) => {
                               clearInferredLocationDebounce();
-                              setNewAddressStreet(place.formattedAddress);
                               resetQuotesForAddressChange();
-                              if (
-                                Number.isFinite(place.location?.latitude) &&
-                                Number.isFinite(place.location?.longitude)
-                              ) {
-                                setDeliveryCoordinates({
-                                  latitude: place.location?.latitude ?? 0,
-                                  longitude: place.location?.longitude ?? 0,
-                                });
-                              }
-                              if (place.state) {
-                                setNewAddressState(place.state);
-                              }
-                              if (place.city) {
-                                setNewAddressCity(place.city);
-                              }
+                              setCheckoutFields({
+                                newAddressStreet: place.formattedAddress,
+                                newAddressState: place.state || '',
+                                newAddressCity: place.city || '',
+                                deliveryCoordinates:
+                                  Number.isFinite(place.location?.latitude) &&
+                                  Number.isFinite(place.location?.longitude)
+                                    ? {
+                                        latitude: place.location?.latitude ?? 0,
+                                        longitude: place.location?.longitude ?? 0,
+                                      }
+                                    : null,
+                              });
                             }}
                             placeholder="Start typing your address..."
                             country={merchantCountry}
                             className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus-visible:ring-0 focus:border-store-primary text-sm text-gray-900 placeholder:text-gray-400"
                           />
-                          {isHydrated && newAddressState && newAddressCity && (
+                          {isHydrated && isNewDeliveryAddressReady && (
                             <p className="text-xs text-green-600 flex items-center gap-1">
                               <Check size={12} /> Detected: {newAddressCity}, {newAddressState}
                             </p>
@@ -3820,7 +3640,7 @@ export const CheckoutPage: React.FC = () => {
                     </div>
 
                     {/* STEP 2: Delivery Method Cards - ONLY show AFTER address is detected */}
-                    {isHydrated && ((newAddressState && newAddressCity) || (!isNewAddressMode && selectedAddressId)) && (
+                    {isHydrated && (isNewDeliveryAddressReady || (!isNewAddressMode && selectedAddressId)) && (
                       <>
                         <div className="mt-6 pt-4 border-t border-gray-100">
                           <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">
@@ -3845,7 +3665,8 @@ export const CheckoutPage: React.FC = () => {
                               }
                               if (
                                 method === 'pickup' &&
-                                (!isPickupEligible(newAddressState) ||
+                                (merchant?.slug !== 'ogabassey' ||
+                                  !isPickupEligible(newAddressState) ||
                                   hasMerchantPickupQuote)
                               ) {
                                 // Hide the hardcoded in-store pickup once the
@@ -3999,131 +3820,30 @@ export const CheckoutPage: React.FC = () => {
 
                         {/* Door Delivery - Quote Selector */}
                         {deliveryMethod === 'door' && (
-                          <div className="mt-6 border-t border-gray-100 pt-4">
-                            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">
-                              Select Delivery Option
-                            </label>
-
-                            {/* Keep the async delivery-options area at a stable
-                                height. Multiple quotes scroll inside the box
-                                instead of growing it after the loader swap. */}
-                            <div className="h-[320px] overflow-y-auto overscroll-contain pr-1">
-                            {isLoadingQuotes ? (
-                              <SmartQuoteLoader />
-                            ) : doorDeliveryQuotes.length > 0 ? (
-                              <div className="space-y-3">
-                                {doorDeliveryQuotes.map((quote) => (
-                                  <label
-                                    key={quote.id}
-                                    className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer hover:border-store-primary/60 transition-all focus-within:ring-2 focus-within:ring-store-primary focus-within:ring-offset-2 ${selectedQuoteId === quote.id
-                                      ? 'border-store-primary bg-store-primary/5 ring-1 ring-store-primary'
-                                      : 'border-gray-100 bg-white'
-                                      }`}
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <input
-                                        type="radio"
-                                        name="shipping_quote"
-                                        checked={selectedQuoteId === quote.id}
-                                        onChange={() => setSelectedQuoteId(quote.id)}
-                                        className="size-4 text-store-primary focus:ring-store-primary border-gray-300"
-                                      />
-                                      <div>
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-sm font-bold text-gray-900">{quote.displayName}</span>
-                                          {isMerchantQuote(quote) ? (
-                                            <span className="inline-flex items-center gap-1 text-[10px] bg-store-primary/10 text-store-primary px-1.5 py-0.5 rounded font-bold">
-                                              <Store size={11} /> Store
-                                            </span>
-                                          ) : (
-                                            <>
-                                              {quote.carrierName.includes('GIG') && <span className="text-[10px] bg-black text-white px-1.5 py-0.5 rounded font-bold">GIGL</span>}
-                                              {quote.carrierName.includes('Topship') && <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold">Best Value</span>}
-                                            </>
-                                          )}
-                                        </div>
-                                        {getDeliveryEstimateLabel(quote) && (
-                                          <p className="text-xs text-gray-500 mt-0.5">
-                                            Est. Delivery: {getDeliveryEstimateLabel(quote)}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <span className="font-bold text-sm text-gray-900">
-                                      {formatAmountInCurrency(quote.price, quote.currency, AUTO_FRACTION_OPTIONS)}
-                                    </span>
-                                  </label>
-                                ))}
-                              </div>
-                            ) : stationPickupQuote ? (
-                              <div className="rounded-xl border border-store-primary/20 bg-store-primary/5 p-5">
-                                <div className="flex items-start gap-3">
-                                  <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-store-primary/10 text-store-primary">
-                                    <Building2 size={22} />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <h4 className="text-sm font-bold text-store-background-text">
-                                      {getPickupStationCopy(stationPickupQuote).doorUnavailableTitle}
-                                    </h4>
-                                    <p className="mt-1 text-xs text-store-background-text/65">
-                                      {getPickupStationCopy(stationPickupQuote).doorUnavailableBody}
-                                    </p>
-                                    <p className="mt-3 text-xs font-medium text-store-background-text">
-                                      {getStationPickupAddressText(stationPickupQuote) ||
-                                        stationPickupQuote.displayName}
-                                    </p>
-                                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                      <span className="text-sm font-bold text-store-background-text">
-                                        {formatAmountInCurrency(stationPickupQuote.price, stationPickupQuote.currency, AUTO_FRACTION_OPTIONS)}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedQuoteId(stationPickupQuote.id);
-                                          setDeliveryMethod('pickup_station');
-                                        }}
-                                        className="inline-flex items-center justify-center rounded-full bg-store-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-store-primary/90"
-                                      >
-                                        {getPickupStationCopy(stationPickupQuote).chooseButtonLabel}
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (newAddressState && newAddressCity) {
-                                    fetchShippingQuotes(
-                                      newAddressStreet || `${newAddressCity}, ${newAddressState}`,
-                                      newAddressState,
-                                      newAddressCity,
-                                      customerPhone,
-                                      firstName,
-                                      lastName,
-                                      customerEmail
-                                    );
-                                  }
-                                }}
-                                className="w-full bg-linear-to-r from-amber-50 to-orange-50 border-2 border-dashed border-amber-300 rounded-xl p-5 flex flex-col items-center gap-3 hover:border-amber-400 hover:shadow-md transition-all group cursor-pointer"
-                              >
-                                <div className="size-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
-                                  <Truck size={24} />
-                                </div>
-                                <div className="text-center">
-                                  <h4 className="text-sm font-bold text-gray-900">🚚 Oops! Rates took a detour</h4>
-                                  <p className="text-xs text-amber-700 mt-1">
-                                    Our delivery partners are a bit slow today. Tap here to try again!
-                                  </p>
-                                </div>
-                                <span className="text-xs font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full group-hover:bg-amber-200 transition-colors">
-                                  ↻ Refresh Rates
-                                </span>
-                              </button>
-                            )}
-                            </div>
-                          </div>
+                          <DoorDeliveryQuoteOptions
+                            isLoadingQuotes={isLoadingQuotes}
+                            doorDeliveryQuotes={doorDeliveryQuotes}
+                            stationPickupQuote={stationPickupQuote}
+                            selectedQuoteId={selectedQuoteId}
+                            onSelectQuote={setSelectedQuoteId}
+                            onSelectStationPickup={(quoteId) => {
+                              setSelectedQuoteId(quoteId);
+                              setDeliveryMethod('pickup_station');
+                            }}
+                            onRefreshRates={() => {
+                              if (isNewDeliveryAddressReady) {
+                                fetchShippingQuotes(
+                                  newAddressStreet,
+                                  newAddressState,
+                                  newAddressCity,
+                                  customerPhone,
+                                  firstName,
+                                  lastName,
+                                  customerEmail,
+                                );
+                              }
+                            }}
+                          />
                         )}
                       </>
                     )}

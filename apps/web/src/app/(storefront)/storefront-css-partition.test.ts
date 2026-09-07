@@ -404,7 +404,7 @@ describe('storefront CSS partitioning', () => {
       '../../components/storefront/ogabassey/pages/cart.tsx',
       '../../components/storefront/ogabassey/components/CartSidebar.tsx',
       '../../components/storefront/ogabassey/pages/checkout-page.tsx',
-      '../../components/storefront/ogabassey/components/MobileCheckoutComponents.tsx',
+      '../../components/storefront/ogabassey/components/MobileOrderSummary.tsx',
       '../../components/storefront/ogabassey/pages/receipts.tsx',
       '../../components/storefront/ogabassey/pages/order-details-item-row.tsx',
       '../../components/storefront/ogabassey/pages/saved.tsx',

@@ -1,8 +1,8 @@
-import { Truck } from 'lucide-react';
+import { FileText, Truck } from 'lucide-react';
 import {
   BankTransferLogo,
-  CredPalLogo,
   CreditDirectLogo,
+  CredPalLogo,
   JuicywayLogo,
   KorapayLogo,
   PaystackLogo,
@@ -41,6 +41,7 @@ export function PaymentOptionsPanel({
   hasInstallmentOptions,
   currency,
 }: PaymentOptionsPanelProps) {
+  const visiblePaymentTab = hasInstallmentOptions ? paymentTab : 'full';
   const selectPaymentTab = (nextTab: PaymentTab) => {
     setPaymentTab(nextTab);
     setPaymentMethod('');
@@ -53,35 +54,51 @@ export function PaymentOptionsPanel({
 
   return (
     <>
-      <div className="flex p-1 bg-gray-100 rounded-xl">
+      <div
+        role="group"
+        aria-label="Payment schedule"
+        className="flex gap-1 rounded-xl border border-store-border bg-store-foreground/5 p-1"
+      >
         <button
           type="button"
           onClick={() => selectPaymentTab('full')}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-bold transition-all ${
-            paymentTab === 'full'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-900'
+          aria-pressed={visiblePaymentTab === 'full'}
+          className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-store-primary ${
+            visiblePaymentTab === 'full'
+              ? 'bg-store-primary text-store-primary-text shadow-sm'
+              : 'text-store-foreground/75 hover:bg-store-foreground/10 hover:text-store-foreground'
           }`}
         >
           Pay in Full
         </button>
-        <button
-          type="button"
-          onClick={() => selectPaymentTab('installments')}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-bold transition-all ${
-            paymentTab === 'installments'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-900'
-          }`}
-        >
-          Pay in Installments
-        </button>
+        {hasInstallmentOptions && (
+          <button
+            type="button"
+            onClick={() => selectPaymentTab('installments')}
+            aria-pressed={visiblePaymentTab === 'installments'}
+            className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-store-primary ${
+              visiblePaymentTab === 'installments'
+                ? 'bg-store-primary text-store-primary-text shadow-sm'
+                : 'text-store-foreground/75 hover:bg-store-foreground/10 hover:text-store-foreground'
+            }`}
+          >
+            Pay in Installments
+          </button>
+        )}
       </div>
 
-      {paymentTab === 'full' && (
+      {visiblePaymentTab === 'full' && (
         <div className="space-y-3 animate-in fade-in">
-          <p className="text-xs text-gray-500">Select a payment gateway:</p>
+          <p className="text-xs text-store-background-text/60">Choose how you'd like to pay:</p>
           <div className="grid grid-cols-1 gap-3">
+            <PaymentOptionCard
+              method="invoice"
+              paymentMethod={paymentMethod}
+              setPaymentMethod={setPaymentMethod}
+              title="Generate Invoice"
+              description="Create an invoice and pay later"
+              icon={<FileText className="size-6 text-store-foreground" />}
+            />
             {paystackCheckoutAvailable && (
               <PaymentOptionCard
                 method="paystack"
@@ -89,7 +106,10 @@ export function PaymentOptionsPanel({
                 setPaymentMethod={setPaymentMethod}
                 title="Paystack"
                 description="Card, Bank Transfer, USSD"
-                badge={{ label: 'Popular', className: 'bg-green-100 text-green-700' }}
+                badge={{
+                  label: 'Popular',
+                  className: 'bg-store-primary/10 text-store-primary',
+                }}
                 icon={<PaystackLogo className="size-6" />}
               />
             )}
@@ -100,7 +120,10 @@ export function PaymentOptionsPanel({
                 setPaymentMethod={setPaymentMethod}
                 title="Bank Transfer"
                 description="Pay to a unique virtual account"
-                badge={{ label: 'Automatic', className: 'bg-blue-100 text-blue-700' }}
+                badge={{
+                  label: 'Automatic',
+                  className: 'bg-store-primary/10 text-store-primary',
+                }}
                 icon={<BankTransferLogo className="size-6" />}
               />
             )}
@@ -116,16 +139,19 @@ export function PaymentOptionsPanel({
             )}
             {featureSettings?.juicyway_enabled === true &&
               ngnOnlyRailsAvailable && (
-              <PaymentOptionCard
-                method="juicyway"
-                paymentMethod={paymentMethod}
-                setPaymentMethod={setPaymentMethod}
-                title="Juicyway"
-                description="USDT, USDC etc"
-                badge={{ label: 'Crypto', className: 'bg-purple-100 text-purple-700' }}
-                icon={<JuicywayLogo className="size-6" />}
-              />
-            )}
+                <PaymentOptionCard
+                  method="juicyway"
+                  paymentMethod={paymentMethod}
+                  setPaymentMethod={setPaymentMethod}
+                  title="Juicyway"
+                  description="USDT, USDC etc"
+                  badge={{
+                    label: 'Crypto',
+                    className: 'bg-store-primary/10 text-store-primary',
+                  }}
+                  icon={<JuicywayLogo className="size-6" />}
+                />
+              )}
             {featureSettings?.pay_on_delivery_enabled === true && (
               <PaymentOptionCard
                 method="pod"
@@ -134,8 +160,8 @@ export function PaymentOptionsPanel({
                 title="Pay on Delivery"
                 description="Pay when you receive your items"
                 icon={
-                  <div className="size-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <Truck size={16} className="text-gray-600" />
+                  <div className="size-8 bg-store-background-text/10 rounded-lg flex items-center justify-center">
+                    <Truck size={16} className="text-store-background-text/70" />
                   </div>
                 }
               />
@@ -144,40 +170,40 @@ export function PaymentOptionsPanel({
         </div>
       )}
 
-      {paymentTab === 'installments' && (
+      {visiblePaymentTab === 'installments' && (
         <div className="space-y-3 animate-in fade-in">
-          <p className="text-xs text-gray-500">Buy Now, Pay Later options:</p>
+          <p className="text-xs text-store-background-text/60">Buy Now, Pay Later options:</p>
           <div className="grid grid-cols-1 gap-3">
             {featureSettings?.credpal_enabled === true &&
               ngnOnlyRailsAvailable && (
-              <PaymentOptionCard
-                method="credpal"
-                paymentMethod={paymentMethod}
-                setPaymentMethod={setPaymentMethod}
-                title="CredPal"
-                description="Pay in 3-6 monthly installments"
-                badge={{
-                  label: 'Salary earners only',
-                  className: 'bg-green-100 text-green-700',
-                }}
-                icon={<CredPalLogo className="size-6" />}
-              />
-            )}
+                <PaymentOptionCard
+                  method="credpal"
+                  paymentMethod={paymentMethod}
+                  setPaymentMethod={setPaymentMethod}
+                  title="CredPal"
+                  description="Pay in 3-6 monthly installments"
+                  badge={{
+                    label: 'Salary earners only',
+                    className: 'bg-store-primary/10 text-store-primary',
+                  }}
+                  icon={<CredPalLogo className="size-6" />}
+                />
+              )}
             {featureSettings?.credit_direct_enabled === true &&
               ngnOnlyRailsAvailable && (
-              <PaymentOptionCard
-                method="credit_direct"
-                paymentMethod={paymentMethod}
-                setPaymentMethod={setPaymentMethod}
-                title="Credit Direct"
-                description="Pay in 3-6 monthly installments"
-                badge={{
-                  label: 'Salary & Business owners',
-                  className: 'bg-purple-100 text-purple-700',
-                }}
-                icon={<CreditDirectLogo className="size-6" />}
-              />
-            )}
+                <PaymentOptionCard
+                  method="credit_direct"
+                  paymentMethod={paymentMethod}
+                  setPaymentMethod={setPaymentMethod}
+                  title="Credit Direct"
+                  description="Pay in 3-6 monthly installments"
+                  badge={{
+                    label: 'Salary & Business owners',
+                    className: 'bg-store-primary/10 text-store-primary',
+                  }}
+                  icon={<CreditDirectLogo className="size-6" />}
+                />
+              )}
             {klumpEligible && (
               <PaymentOptionCard
                 method="klump"
@@ -235,8 +261,8 @@ export function PaymentOptionsPanel({
             />
           )}
           {!hasInstallmentOptions && (
-            <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-              <p className="text-sm text-gray-500">
+            <div className="text-center py-6 bg-store-background rounded-xl border border-dashed border-store-background-text/25">
+              <p className="text-sm text-store-background-text/60">
                 No installment options are currently available.
               </p>
             </div>

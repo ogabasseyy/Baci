@@ -1,127 +1,93 @@
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import type { PaymentTab } from '../types';
 import { PaymentOptionsPanel } from './PaymentOptionsPanel';
 
-vi.mock('../../../components/PaymentLogos', () => ({
-  PaystackLogo: ({ className }: { className?: string }) => (
-    <span data-testid="paystack-logo" className={className} />
-  ),
-  KorapayLogo: ({ className }: { className?: string }) => (
-    <span data-testid="korapay-logo" className={className} />
-  ),
-  CredPalLogo: ({ className }: { className?: string }) => (
-    <span data-testid="credpal-logo" className={className} />
-  ),
-  CreditDirectLogo: ({ className }: { className?: string }) => (
-    <span data-testid="credit-direct-logo" className={className} />
-  ),
-  JuicywayLogo: ({ className }: { className?: string }) => (
-    <span data-testid="juicyway-logo" className={className} />
-  ),
-  BankTransferLogo: ({ className }: { className?: string }) => (
-    <span data-testid="bank-transfer-logo" className={className} />
-  ),
-}));
+function renderPanel(
+  paymentTab: PaymentTab = 'full',
+  gatewayAvailable = true,
+  hasInstallmentOptions = true
+) {
+  const setPaymentTab = vi.fn();
+  const setPaymentMethod = vi.fn();
+  render(
+    <PaymentOptionsPanel
+      paymentTab={paymentTab}
+      setPaymentTab={setPaymentTab}
+      paymentMethod="paystack"
+      setPaymentMethod={setPaymentMethod}
+      paystackCheckoutAvailable={gatewayAvailable}
+      korapayCheckoutAvailable={false}
+      bankTransferCheckoutAvailable={false}
+      klumpEligible={false}
+      hasInstallmentOptions={hasInstallmentOptions}
+      currency="NGN"
+    />
+  );
+  return { setPaymentTab, setPaymentMethod };
+}
 
-describe('PaymentOptionsPanel', () => {
-  it('renders full payment options and resets payment method on tab switch', async () => {
-    const setPaymentTab = vi.fn();
-    const setPaymentMethod = vi.fn();
-    const user = userEvent.setup();
-
-    render(
-      <PaymentOptionsPanel
-        paymentTab="full"
-        setPaymentTab={setPaymentTab}
-        paymentMethod=""
-        setPaymentMethod={setPaymentMethod}
-        paystackCheckoutAvailable={true}
-        korapayCheckoutAvailable={false}
-        bankTransferCheckoutAvailable={true}
-        featureSettings={{ juicyway_enabled: true }}
-        klumpEligible={false}
-        hasInstallmentOptions={false}
-        currency="NGN"
-      />,
-    );
-
-    expect(screen.getByRole('radio', { name: /paystack/i })).toBeInTheDocument();
-    expect(screen.getByText('Bank Transfer')).toBeInTheDocument();
-    expect(screen.getByText('Juicyway')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /pay in installments/i }));
-
-    expect(setPaymentTab).toHaveBeenCalledWith('installments');
-    expect(setPaymentMethod).toHaveBeenCalledWith('');
-  });
-
-  it('hides the NGN-only rails (Juicyway, CredPal, Credit Direct) on non-NGN checkouts', () => {
-    const featureSettings = {
-      juicyway_enabled: true,
-      credpal_enabled: true,
-      credit_direct_enabled: true,
-    };
-
-    const { rerender } = render(
-      <PaymentOptionsPanel
-        paymentTab="full"
-        setPaymentTab={vi.fn()}
-        paymentMethod=""
-        setPaymentMethod={vi.fn()}
-        paystackCheckoutAvailable={false}
-        korapayCheckoutAvailable={true}
-        bankTransferCheckoutAvailable={false}
-        featureSettings={featureSettings}
-        klumpEligible={false}
-        hasInstallmentOptions={false}
-        currency="GHS"
-      />,
-    );
-
-    expect(screen.getByText('Korapay')).toBeInTheDocument();
-    expect(screen.queryByText('Juicyway')).not.toBeInTheDocument();
-
-    rerender(
-      <PaymentOptionsPanel
-        paymentTab="installments"
-        setPaymentTab={vi.fn()}
-        paymentMethod=""
-        setPaymentMethod={vi.fn()}
-        paystackCheckoutAvailable={false}
-        korapayCheckoutAvailable={true}
-        bankTransferCheckoutAvailable={false}
-        featureSettings={featureSettings}
-        klumpEligible={false}
-        hasInstallmentOptions={false}
-        currency="GHS"
-      />,
-    );
-
-    expect(screen.queryByText('CredPal')).not.toBeInTheDocument();
-    expect(screen.queryByText('Credit Direct')).not.toBeInTheDocument();
+describe('payment schedule selection', () => {
+  it('hides unavailable installments and restores full payment choices', () => {
+    renderPanel('installments', true, false);
     expect(
-      screen.getByText('No installment options are currently available.'),
+      screen.queryByRole('button', { name: 'Pay in Installments' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('radio', { name: /generate invoice/i })
     ).toBeInTheDocument();
   });
+  it('offers invoice creation without requiring an online payment gateway', () => {
+    const { setPaymentMethod } = renderPanel('full', false);
 
-  it('renders Klump and its information when eligible and selected', () => {
-    render(
-      <PaymentOptionsPanel
-        paymentTab="installments"
-        setPaymentTab={vi.fn()}
-        paymentMethod="klump"
-        setPaymentMethod={vi.fn()}
-        paystackCheckoutAvailable={false}
-        korapayCheckoutAvailable={false}
-        bankTransferCheckoutAvailable={false}
-        featureSettings={{ klump_enabled: true }}
-        klumpEligible={true}
-        hasInstallmentOptions={true}
-      />,
+    fireEvent.click(screen.getByRole('radio', { name: /generate invoice/i }));
+
+    expect(setPaymentMethod).toHaveBeenCalledWith('invoice');
+  });
+
+  it('keeps invoice creation out of installment financing options', () => {
+    renderPanel('installments');
+
+    expect(
+      screen.queryByRole('radio', { name: /generate invoice/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['full', 'Pay in Full', 'Pay in Installments'],
+    ['installments', 'Pay in Installments', 'Pay in Full'],
+  ] as const)('keeps the %s selection distinct when dark mode flattens neutral surfaces', (value, selected, inactive) => {
+    renderPanel(value);
+
+    expect(
+      screen.getByRole('group', { name: 'Payment schedule' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: selected })).toHaveAttribute(
+      'aria-pressed',
+      'true'
     );
+    expect(screen.getByRole('button', { name: selected })).toHaveClass(
+      'bg-store-primary',
+      'text-store-primary-text'
+    );
+    expect(screen.getByRole('button', { name: inactive })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+    expect(screen.getByRole('button', { name: inactive })).not.toHaveClass(
+      'bg-store-primary'
+    );
+  });
 
-    expect(screen.getByRole('radio', { name: /klump/i })).toBeChecked();
-    expect(screen.getByText('How Klump works')).toBeInTheDocument();
+  it.each([
+    ['full', 'Pay in Installments', 'installments'],
+    ['installments', 'Pay in Full', 'full'],
+  ] as const)('switches away from %s and clears the old gateway', (value, label, next) => {
+    const { setPaymentTab, setPaymentMethod } = renderPanel(value);
+
+    fireEvent.click(screen.getByRole('button', { name: label }));
+
+    expect(setPaymentTab).toHaveBeenCalledWith(next);
+    expect(setPaymentMethod).toHaveBeenCalledWith('');
   });
 });

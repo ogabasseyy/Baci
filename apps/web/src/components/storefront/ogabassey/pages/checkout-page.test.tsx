@@ -33,15 +33,20 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: vi.fn(() => ({
     merchant: {
       id: 'merchant-1',
-      slug: 'test-store',
+      slug: 'ogabassey',
       business_name: 'Test Store',
       vat_registration_status: 'registered',
       vat_rate: 7.5,
       country: 'NG',
     },
-    basePath: '/test-store',
+    basePath: '/ogabassey',
   })),
 }));
+
+vi.mock('./checkout/hooks/use-checkout-form-state', async () => {
+  const { useCheckoutFormTestState } = await import('./checkout/checkout-form-test-state');
+  return { useCheckoutFormState: useCheckoutFormTestState };
+});
 
 vi.mock('@/hooks/use-persisted-state', () => ({
   usePersistedForm: vi.fn(() => ({
@@ -218,7 +223,7 @@ function mockCheckoutSubmissionState() {
   vi.mocked(useMerchantSafe).mockReturnValue({
     merchant: {
       id: 'merchant-1',
-      slug: 'test-store',
+      slug: 'ogabassey',
       business_name: 'Test Store',
       vat_registration_status: 'registered',
       vat_rate: 7.5,
@@ -227,7 +232,7 @@ function mockCheckoutSubmissionState() {
         pay_on_delivery_enabled: true,
       },
     },
-    basePath: '/test-store',
+    basePath: '/ogabassey',
   } as unknown as ReturnType<typeof useMerchantSafe>);
   vi.mocked(usePersistedForm).mockReturnValue({
     values: {
@@ -286,13 +291,13 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedState).mockReturnValue(
       [null, vi.fn(), vi.fn()] as unknown as ReturnType<typeof usePersistedState>
@@ -435,7 +440,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
@@ -444,7 +449,7 @@ describe('CheckoutPage', () => {
           klump_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -494,7 +499,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
@@ -503,7 +508,7 @@ describe('CheckoutPage', () => {
           klump_enabled: false,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -528,7 +533,7 @@ describe('CheckoutPage', () => {
 
     render(<CheckoutPage />);
 
-    fireEvent.click(screen.getByRole('button', { name: /pay in installments/i }));
+    expect(screen.queryByRole('button', { name: /pay in installments/i })).not.toBeInTheDocument();
 
     expect(screen.queryByText('Klump')).not.toBeInTheDocument();
     fetchMock.mockRestore();
@@ -560,7 +565,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
@@ -569,7 +574,7 @@ describe('CheckoutPage', () => {
           klump_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -647,7 +652,7 @@ describe('CheckoutPage', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/storefront/orders/ord-1?merchant_slug=test-store&token=tok-123'
+        '/api/storefront/orders/ord-1?merchant_slug=ogabassey&token=tok-123'
       );
     });
 
@@ -689,7 +694,7 @@ describe('CheckoutPage', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/storefront/orders/ord-1?merchant_slug=test-store&token=tok-123&email=resume%40example.com'
+        '/api/storefront/orders/ord-1?merchant_slug=ogabassey&token=tok-123&email=resume%40example.com'
       );
     });
 
@@ -730,7 +735,7 @@ describe('CheckoutPage', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/storefront/orders/ord-1?merchant_slug=test-store&email=legacy%40example.com'
+        '/api/storefront/orders/ord-1?merchant_slug=ogabassey&email=legacy%40example.com'
       );
     });
 
@@ -746,7 +751,7 @@ describe('CheckoutPage', () => {
         vat_rate: 7.5,
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams({
@@ -825,7 +830,7 @@ describe('CheckoutPage', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/storefront/orders/ord-1?merchant_slug=test-store&token=tok-123'
+        '/api/storefront/orders/ord-1?merchant_slug=ogabassey&token=tok-123'
       );
     });
     expect(openCredPalCheckout).not.toHaveBeenCalled();
@@ -1086,7 +1091,7 @@ describe('CheckoutPage', () => {
         }
       );
       expect(routerPush).toHaveBeenCalledWith(
-        '/test-store/checkout/bnpl?orderId=ord-1&gateway=credit_direct&merchant_slug=test-store&creditDirectCompletion=cd-client-success-1&trackingToken=tok-123&email=ada%40example.com'
+        '/ogabassey/checkout/bnpl?orderId=ord-1&gateway=credit_direct&merchant_slug=ogabassey&creditDirectCompletion=cd-client-success-1&trackingToken=tok-123&email=ada%40example.com'
       );
       expect(
         routerPush.mock.calls.some(([href]) => String(href).includes('/order-success'))
@@ -1126,7 +1131,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
@@ -1135,7 +1140,7 @@ describe('CheckoutPage', () => {
           credit_direct_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -1246,7 +1251,7 @@ describe('CheckoutPage', () => {
         }
       );
       expect(routerPush).toHaveBeenCalledWith(
-        '/test-store/checkout/bnpl?orderId=order-cd&gateway=credit_direct&merchant_slug=test-store&creditDirectCompletion=cd-client-success-2&trackingToken=track-cd&email=ada%40example.com'
+        '/ogabassey/checkout/bnpl?orderId=order-cd&gateway=credit_direct&merchant_slug=ogabassey&creditDirectCompletion=cd-client-success-2&trackingToken=track-cd&email=ada%40example.com'
       );
       expect(
         routerPush.mock.calls.some(([href]) => String(href).includes('/order-success'))
@@ -1279,7 +1284,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
@@ -1290,7 +1295,7 @@ describe('CheckoutPage', () => {
           paystack_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -1374,7 +1379,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'NG',
@@ -1382,7 +1387,7 @@ describe('CheckoutPage', () => {
           pay_on_delivery_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -1517,7 +1522,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'IN',
@@ -1525,7 +1530,7 @@ describe('CheckoutPage', () => {
           pay_on_delivery_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -1660,7 +1665,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'NG',
@@ -1668,7 +1673,7 @@ describe('CheckoutPage', () => {
           pay_on_delivery_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -1807,12 +1812,12 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -1937,12 +1942,12 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -2075,12 +2080,12 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -2211,7 +2216,7 @@ describe('CheckoutPage', () => {
     } as unknown as ReturnType<typeof usePersistedForm>);
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: null,
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
 
     const fetchMock = vi
@@ -2267,13 +2272,13 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
 
     rerender(<CheckoutPage />);
@@ -2563,13 +2568,13 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -2646,13 +2651,13 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -2749,7 +2754,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
@@ -2758,7 +2763,7 @@ describe('CheckoutPage', () => {
           pay_on_delivery_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -3007,19 +3012,13 @@ describe('CheckoutPage', () => {
         target: { value: 'Lekki, Lagos' },
       });
 
-      expect(setValue).toHaveBeenCalledWith(
-        'newAddressStreet',
-        'Lekki, Lagos'
-      );
-      expect(setValue).not.toHaveBeenCalledWith(
-        'newAddressState',
-        expect.any(String)
-      );
-      expect(setValue).not.toHaveBeenCalledWith(
-        'newAddressCity',
-        expect.any(String)
-      );
-      expect(setValues).not.toHaveBeenCalled();
+      expect(setValues).toHaveBeenCalledWith({
+        newAddressStreet: 'Lekki, Lagos',
+        newAddressCity: '',
+        newAddressState: '',
+        deliveryCoordinates: null,
+      });
+      setValues.mockClear();
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(499);
@@ -3342,7 +3341,7 @@ describe('CheckoutPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps delivery quotes in a fixed scroll region so multi-quote loading does not reflow #main-content', async () => {
+  it('does not reserve an empty fixed-height region below delivery quotes', async () => {
     mockCheckoutSubmissionState();
 
     const fetchMock = vi
@@ -3369,7 +3368,7 @@ describe('CheckoutPage', () => {
 
     expect(
       container.querySelector('[class*="h-[320px]"]')
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
 
     fetchMock.mockRestore();
   });
@@ -3394,12 +3393,12 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'IN',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -3476,7 +3475,7 @@ describe('CheckoutPage', () => {
     // the NG /api/shipping/locations fetch starts.
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: undefined,
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -3531,12 +3530,12 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'IN',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     rerender(<CheckoutPage />);
 
@@ -3587,12 +3586,12 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'IN',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {

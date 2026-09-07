@@ -239,14 +239,14 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
     });
   }, [searchParams, merchantId, addToCart, cart, toast, isHydrated]);
 
-  // Show loading state while adding items
-  if (isLoading) {
+  // Wait for persisted items before deciding whether the cart is empty.
+  if (!isHydrated || isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-store-background">
-        <div className="text-center">
+        <div className="text-center" role="status">
           <div className="mx-auto mb-4 size-12 animate-spin rounded-full border-4 border-store-background-text/18 border-t-(--store-primary)" />
           <p className="text-store-background-text/65">
-            Adding items to cart…
+            {isHydrated ? 'Adding items to cart…' : 'Loading your cart…'}
           </p>
         </div>
       </div>

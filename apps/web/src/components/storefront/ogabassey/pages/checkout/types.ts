@@ -64,6 +64,8 @@ export interface PendingCryptoOrder {
 }
 
 export interface ResumedOrder {
+  tax_amount?: number;
+  discount_amount?: number;
   id: string;
   short_id: string;
   subtotal: number;

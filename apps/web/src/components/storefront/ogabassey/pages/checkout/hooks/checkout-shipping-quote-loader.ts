@@ -1,4 +1,5 @@
 import { normalizeShippingQuoteResponse } from '@/lib/shipping/quote-response';
+import { isCheckoutDeliveryAddressReady } from '../is-checkout-delivery-address-ready';
 import type { ShippingQuote } from '../types';
 import { getPreferredDoorQuoteId } from '../utils';
 
@@ -47,7 +48,7 @@ interface QuoteState {
 
 export function invalidatePendingQuoteRequests(
   requestSequence: { current: number },
-  activeAbortController?: { current: AbortController | null },
+  activeAbortController?: { current: AbortController | null }
 ) {
   activeAbortController?.current?.abort();
   if (activeAbortController) activeAbortController.current = null;
@@ -83,16 +84,25 @@ function buildQuoteRequestKey(receiver: QuoteReceiver, cart: QuoteCartItem[]) {
 export async function loadCheckoutShippingQuotes(
   receiver: QuoteReceiver,
   cart: QuoteCartItem[],
-  state: QuoteState,
+  state: QuoteState
 ) {
-  if (!receiver.state || !receiver.city || !receiver.address) return;
+  if (!isCheckoutDeliveryAddressReady(receiver)) {
+    invalidatePendingQuoteRequests(
+      state.requestSequence,
+      state.activeAbortController
+    );
+    clearQuotes(state);
+    state.setIsLoadingQuotes(false);
+    return;
+  }
   const requestKey = buildQuoteRequestKey(receiver, cart);
   if (!state.force && requestKey === state.currentRequestKey) return;
   const requestSequence = invalidatePendingQuoteRequests(
     state.requestSequence,
-    state.activeAbortController,
+    state.activeAbortController
   );
-  const isLatestRequest = () => state.requestSequence.current === requestSequence;
+  const isLatestRequest = () =>
+    state.requestSequence.current === requestSequence;
   const abortController = new AbortController();
   state.activeAbortController.current = abortController;
   let didTimeout = false;
@@ -168,7 +178,8 @@ export async function loadCheckoutShippingQuotes(
       if (isLatestRequest()) clearQuotes(state);
     }
   } catch (error) {
-    const isAbortError = error instanceof DOMException && error.name === 'AbortError';
+    const isAbortError =
+      error instanceof DOMException && error.name === 'AbortError';
     if (abortController.signal.aborted && !isLatestRequest()) return;
     if (didTimeout) {
       console.warn('Shipping quote request timed out');

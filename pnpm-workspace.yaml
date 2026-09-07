@@ -196,8 +196,8 @@ overrides:
   "uuid@>=13 <13.0.1": "13.0.1"
   # Pin transitive Lighthouse/Puppeteer proxy tooling to the current patched release.
   ip-address: "10.3.1"
-  # Keep every workspace package on the reviewed Next.js 16.3.0 release.
-  next: "16.3.0"
+  # Keep every workspace package on the reviewed Next.js 16.3.4 release.
+  next: "16.3.4"
   flatted: "3.4.2"
   lodash: "4.18.1"
   lodash-es: "4.18.1"
@@ -318,5 +318,5 @@ patchedDependencies:
   "react-native-webview@13.16.1": "patches/react-native-webview@13.16.1.patch"
   react-native@0.86.2: patches/react-native@0.86.2.patch
   image-size@1.2.1: patches/image-size@1.2.1.patch
-  "next@16.3.0": "patches/next@16.3.0.patch"
+  "next@16.3.4": "patches/next@16.3.4.patch"
   '@supabase/auth-js@2.108.2': patches/@supabase__auth-js@2.108.2.patch

@@ -53,6 +53,19 @@ describe('CryptoSelectorModal', () => {
     vi.clearAllMocks();
   });
 
+  it('dims the animated checkout without a backdrop filter while selecting crypto', () => {
+    const { container } = render(<CryptoSelectorModal {...defaultProps} />);
+    expect(container.firstElementChild).toHaveClass('bg-black/50');
+    expect(container.firstElementChild).not.toHaveClass('backdrop-blur-xs');
+  });
+
+  it('shows only the chains enabled by checkout for the selected currency', () => {
+    render(<CryptoSelectorModal {...defaultProps} supportedChains={['TRX', 'ETH']} />);
+    expect(screen.getByRole('button', { name: 'TRX Tron' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /MATIC/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /AVAXC/ })).not.toBeInTheDocument();
+  });
+
   describe('Rendering', () => {
     it('renders modal with correct title', () => {
       render(<CryptoSelectorModal {...defaultProps} />);
@@ -106,7 +119,7 @@ describe('CryptoSelectorModal', () => {
       render(<CryptoSelectorModal {...defaultProps} />);
 
       const usdtButton = screen.getByText('USDT').closest('button');
-      expect(usdtButton).toHaveClass('border-red-500');
+      expect(usdtButton).toHaveClass('border-store-primary');
       expect(usdtButton).toHaveClass('bg-store-primary/5');
     });
 
@@ -114,7 +127,7 @@ describe('CryptoSelectorModal', () => {
       render(<CryptoSelectorModal {...defaultProps} />);
 
       const trxButton = screen.getByText('TRX').closest('button');
-      expect(trxButton).toHaveClass('border-red-500');
+      expect(trxButton).toHaveClass('border-store-primary');
       expect(trxButton).toHaveClass('bg-store-primary/5');
     });
 

@@ -13,6 +13,7 @@ interface CryptoSelectorModalProps {
   onChainChange: (chain: CryptoChain) => void;
   onInitialize: () => void;
   onClose: () => void;
+  supportedChains?: CryptoChain[];
 }
 
 export function CryptoSelectorModal({
@@ -23,13 +24,14 @@ export function CryptoSelectorModal({
   onChainChange,
   onInitialize,
   onClose,
+  supportedChains,
 }: CryptoSelectorModalProps) {
   const cryptoSelectorId = useId();
   const currencyLabelId = `${cryptoSelectorId}-currency-label`;
   const networkLabelId = `${cryptoSelectorId}-network-label`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="sticky top-0 bg-linear-to-r from-store-primary to-store-primary/80 p-4 flex items-center justify-between rounded-t-2xl">
@@ -70,7 +72,7 @@ export function CryptoSelectorModal({
                   onClick={() => onCurrencyChange(currency)}
                   className={`p-4 rounded-xl border-2 transition-all ${
                     selectedCryptoCurrency === currency
-                      ? 'border-red-500 bg-store-primary/5'
+                      ? 'border-store-primary bg-store-primary/5'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
@@ -100,14 +102,14 @@ export function CryptoSelectorModal({
               role="group"
               aria-labelledby={networkLabelId}
             >
-              {CRYPTO_CHAIN_SUPPORT[selectedCryptoCurrency].map((chain) => (
+              {(supportedChains ?? CRYPTO_CHAIN_SUPPORT[selectedCryptoCurrency]).map((chain) => (
                 <button
                   key={chain}
                   type="button"
                   onClick={() => onChainChange(chain)}
                   className={`p-4 rounded-xl border-2 transition-all ${
                     selectedCryptoChain === chain
-                      ? 'border-red-500 bg-store-primary/5'
+                      ? 'border-store-primary bg-store-primary/5'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >

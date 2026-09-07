@@ -1,11 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+
+const subscribeToHydration = () => () => undefined;
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 
 /**
  * Custom hook for state that persists to sessionStorage.
  * 2025 best practices:
- * - Lazy initialization from storage (no hydration mismatch)
+ * - Restore storage values after the server hydration snapshot
  * - Debounced writes to avoid performance issues
  * - Proper cleanup and error handling
  * - Type-safe with generics
@@ -21,6 +25,11 @@ export function usePersistedState<T>(
   } = {}
 ): [T, React.Dispatch<React.SetStateAction<T>>, () => void] {
   const { debounceMs = 300, storage = 'session' } = options;
+  const isHydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getClientSnapshot,
+    getServerSnapshot
+  );
 
   // Use lazy initialization to read from storage only once
   const [state, setState] = useState<T>(() => {
@@ -42,29 +51,31 @@ export function usePersistedState<T>(
   // Ref to track the debounce timer
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Track if component is mounted (for cleanup)
-  const mountedRef = useRef(true);
+  // Payment redirects can leave before the debounce timer fires.
+  const flushRef = useRef<(() => void) | null>(null);
+  const clearedRef = useRef(false);
 
   // Persist to storage with debouncing
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    if (clearedRef.current) return;
 
     // Clear any existing timer
     if (timerRef.current) {
       clearTimeout(timerRef.current);
     }
 
-    // Debounce the write
-    timerRef.current = setTimeout(() => {
-      if (!mountedRef.current) return;
-
+    const persist = () => {
       try {
         const storageApi = storage === 'local' ? localStorage : sessionStorage;
         storageApi.setItem(key, JSON.stringify(state));
       } catch {
         // Storage write failed (quota exceeded, private browsing, etc.)
       }
-    }, debounceMs);
+    };
+    flushRef.current = persist;
+    timerRef.current = setTimeout(persist, debounceMs);
 
     return () => {
       if (timerRef.current) {
@@ -75,15 +86,20 @@ export function usePersistedState<T>(
 
   // Cleanup on unmount
   useEffect(() => {
-    mountedRef.current = true;
+    const flush = () => flushRef.current?.();
+    window.addEventListener('pagehide', flush);
     return () => {
-      mountedRef.current = false;
+      window.removeEventListener('pagehide', flush);
+      flush();
     };
   }, []);
 
   // Clear function to remove from storage
   const clear = () => {
     if (typeof window === 'undefined') return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    flushRef.current = null;
+    clearedRef.current = true;
     try {
       const storageApi = storage === 'local' ? localStorage : sessionStorage;
       storageApi.removeItem(key);
@@ -93,7 +109,12 @@ export function usePersistedState<T>(
     setState(initialValue);
   };
 
-  return [state, setState, clear];
+  const updateState: React.Dispatch<React.SetStateAction<T>> = (update) => {
+    clearedRef.current = false;
+    setState(update);
+  };
+
+  return [isHydrated ? state : initialValue, updateState, clear];
 }
 
 /**

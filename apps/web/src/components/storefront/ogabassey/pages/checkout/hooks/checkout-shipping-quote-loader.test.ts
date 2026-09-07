@@ -62,6 +62,18 @@ function createState() {
 }
 
 describe('loadCheckoutShippingQuotes', () => {
+  it.each([
+    '',
+    '   ',
+    'Port Harcourt, Rivers',
+  ])('does not calculate delivery for an unset street (%s)', async (address) => {
+    const state = createState();
+    await loadCheckoutShippingQuotes({ ...receiver, address }, cart, state);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(state.setShippingQuotes).toHaveBeenCalledWith([]);
+    expect(state.setSelectedQuoteId).toHaveBeenCalledWith('');
+  });
+
   beforeEach(() => {
     global.fetch = vi.fn().mockResolvedValue(quoteResponse());
   });
@@ -177,7 +189,10 @@ describe('loadCheckoutShippingQuotes', () => {
   });
 
   it.each([
-    ['non-successful response', () => Promise.resolve(new Response('bad', { status: 503 }))],
+    [
+      'non-successful response',
+      () => Promise.resolve(new Response('bad', { status: 503 })),
+    ],
     ['network failure', () => Promise.reject(new Error('offline'))],
   ])('clears stale quotes after a %s', async (_label, fetchResult) => {
     global.fetch = vi.fn(fetchResult);
@@ -197,7 +212,7 @@ describe('loadCheckoutShippingQuotes', () => {
     await loadCheckoutShippingQuotes({ ...receiver, city: '' }, cart, state);
 
     expect(global.fetch).not.toHaveBeenCalled();
-    expect(state.setIsLoadingQuotes).not.toHaveBeenCalled();
+    expect(state.setIsLoadingQuotes).not.toHaveBeenCalledWith(true);
   });
 
   it('ignores a stale response when a newer request finishes first', async () => {
@@ -218,8 +233,8 @@ describe('loadCheckoutShippingQuotes', () => {
       cart,
       state
     );
-    const firstSignal = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]
-      ?.signal as AbortSignal;
+    const firstSignal = (global.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[1]?.signal as AbortSignal;
     expect(firstSignal.aborted).toBe(true);
 
     resolveSecond(quoteResponse('new-quote'));
@@ -236,14 +251,14 @@ describe('loadCheckoutShippingQuotes', () => {
   it('ignores a response after the caller invalidates pending requests', async () => {
     let resolveRequest: (response: Response) => void = () => undefined;
     global.fetch = vi.fn(
-      () => new Promise<Response>((resolve) => (resolveRequest = resolve)),
+      () => new Promise<Response>((resolve) => (resolveRequest = resolve))
     );
     const state = createState();
     const pendingRequest = loadCheckoutShippingQuotes(receiver, cart, state);
 
     invalidatePendingQuoteRequests(
       state.requestSequence,
-      state.activeAbortController,
+      state.activeAbortController
     );
     resolveRequest(quoteResponse('stale-quote'));
     await pendingRequest;

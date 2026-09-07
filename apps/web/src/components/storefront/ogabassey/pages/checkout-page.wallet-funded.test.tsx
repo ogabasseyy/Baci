@@ -34,7 +34,7 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: vi.fn(() => ({
     merchant: {
       id: 'merchant-1',
-      slug: 'test-store',
+      slug: 'ogabassey',
       business_name: 'Test Store',
       country: 'NG',
       paystack_subaccount_code: 'ACCT_test',
@@ -44,9 +44,14 @@ vi.mock('@/hooks/use-merchant-client', () => ({
         wallet_paystack_dva_enabled: true,
       },
     },
-    basePath: '/test-store',
+    basePath: '/ogabassey',
   })),
 }));
+
+vi.mock('./checkout/hooks/use-checkout-form-state', async () => {
+  const { useCheckoutFormTestState } = await import('./checkout/checkout-form-test-state');
+  return { useCheckoutFormState: useCheckoutFormTestState };
+});
 
 vi.mock('@/hooks/use-persisted-state', () => ({
   usePersistedForm: vi.fn(() => ({

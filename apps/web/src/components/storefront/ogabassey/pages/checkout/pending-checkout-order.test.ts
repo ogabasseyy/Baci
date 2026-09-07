@@ -476,3 +476,16 @@ describe('pending-checkout-order', () => {
     });
   });
 });
+
+describe('abandoned payment validation failures', () => {
+  it.each([400, 403, 409, 429, 500])('retains the existing order when reopening returns %s instead of creating a duplicate', async (status) => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'order-1', payment_status: 'pending', shipping_status: 'pending', total: 12000 }) } as Response)
+      .mockResolvedValueOnce({ ok: false, status } as Response);
+    await expect(resolvePendingCheckoutOrder({
+      pendingOrder: { orderId: 'order-1', trackingToken: 'token', merchantId: 'merchant-1', customerEmail: 'qa@example.com', customerPhone: '+2348034096325', checkoutFingerprint: 'same-checkout', amountDueToGateway: 12000, createdAt: '2026-09-07' },
+      merchantId: 'merchant-1', customerEmail: 'qa@example.com', checkoutFingerprint: 'same-checkout', paymentMethod: 'card', shippingProvider: 'GIGL', selectedQuoteId: 'refreshed-quote', fetchImpl,
+    })).rejects.toThrow('Failed to reopen pending checkout order');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+});

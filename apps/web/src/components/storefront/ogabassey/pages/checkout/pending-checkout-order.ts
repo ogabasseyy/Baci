@@ -1,5 +1,8 @@
 import { fetchWithCsrf } from '@/lib/api-client';
+import { checkoutFingerprintsMatch } from './checkout-fingerprints-match';
 import type { PaymentMethod } from './types';
+
+export { buildPendingCheckoutFingerprint } from './checkout-fingerprint';
 
 export const CHECKOUT_PENDING_ORDER_STORAGE_KEY =
   'storefront-checkout-pending-order';
@@ -105,23 +108,15 @@ function normalizeText(value: string | null | undefined): string {
   return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-function normalizeVariantAttributes(attributes?: Record<string, string>) {
-  if (!attributes) return undefined;
-
-  return Object.fromEntries(
-    Object.entries(attributes)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, value]) => [key, normalizeText(value)])
-  );
-}
-
 /**
  * Normalizes checkout payment methods to the persisted order values used for
  * pending-order reuse. Card-backed gateways (`paystack`, `korapay`) are stored
  * as `card`, methods with distinct downstream handling are persisted as-is, and
  * anything else falls back to `pod` for pay-on-delivery compatibility.
  */
-export function normalizeOrderPaymentMethod(paymentMethod: PaymentMethod): string {
+export function normalizeOrderPaymentMethod(
+  paymentMethod: PaymentMethod
+): string {
   if (paymentMethod === 'paystack' || paymentMethod === 'korapay') {
     return 'card';
   }
@@ -142,50 +137,8 @@ export function normalizeOrderPaymentMethod(paymentMethod: PaymentMethod): strin
   return 'pod';
 }
 
-export function buildPendingCheckoutFingerprint(
-  input: PendingCheckoutFingerprintInput
-): string {
-  const normalizedItems = [...input.items]
-    .map((item) => ({
-      product_id: item.product_id,
-      name: normalizeText(item.name),
-      quantity: item.quantity,
-      price: item.price,
-      variantId: item.variantId || undefined,
-      variantAttributes: normalizeVariantAttributes(item.variantAttributes),
-      has_assurance: Boolean(item.has_assurance),
-      assurance_fee: item.assurance_fee || 0,
-    }))
-    .sort((left, right) =>
-      `${left.product_id}:${left.variantId || ''}:${left.name}`.localeCompare(
-        `${right.product_id}:${right.variantId || ''}:${right.name}`
-      )
-    );
-
-  return JSON.stringify({
-    merchantId: input.merchantId,
-    customerEmail: normalizeText(input.customerEmail),
-    customerName: normalizeText(input.customerName),
-    customerPhone: normalizeText(input.customerPhone),
-    deliveryMethod: input.deliveryMethod,
-    shippingFee: input.shippingFee,
-    shippingProvider: normalizeText(input.shippingProvider),
-    selectedQuoteId: input.selectedQuoteId || null,
-    shippingAddress: {
-      address: normalizeText(input.shippingAddress.address),
-      city: normalizeText(input.shippingAddress.city),
-      state: normalizeText(input.shippingAddress.state),
-      phone: normalizeText(input.shippingAddress.phone),
-    },
-    items: normalizedItems,
-    useWalletCredit: input.useWalletCredit,
-    walletAmountUsed: input.walletAmountUsed,
-    discountCode: normalizeText(input.discountCode) || null,
-  });
-}
-
 function shouldClearStoredOrder(status: number): boolean {
-  return status >= 400 && status < 500;
+  return status === 404;
 }
 
 export async function resolvePendingCheckoutOrder({
@@ -207,8 +160,12 @@ export async function resolvePendingCheckoutOrder({
   if (
     !pendingOrder.trackingToken ||
     pendingOrder.merchantId !== merchantId ||
-    normalizeText(pendingOrder.customerEmail) !== normalizeText(customerEmail) ||
-    pendingOrder.checkoutFingerprint !== checkoutFingerprint
+    normalizeText(pendingOrder.customerEmail) !==
+      normalizeText(customerEmail) ||
+    !checkoutFingerprintsMatch(
+      pendingOrder.checkoutFingerprint,
+      checkoutFingerprint
+    )
   ) {
     return { reusableOrder: null, clearStoredOrder: true };
   }
@@ -284,8 +241,7 @@ export async function resolvePendingCheckoutOrder({
     reusableOrder: {
       order: reusedOrderData.order,
       amountDueToGateway:
-        pendingOrder.amountDueToGateway ??
-        Number(existingOrder.total || 0),
+        pendingOrder.amountDueToGateway ?? Number(existingOrder.total || 0),
     },
     clearStoredOrder: false,
   };

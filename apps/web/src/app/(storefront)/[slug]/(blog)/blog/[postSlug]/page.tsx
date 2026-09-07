@@ -75,6 +75,10 @@ export async function generateMetadata({
       title,
       suffix: merchant.business_name,
       fallback: 'Blog Post',
+      // Google may truncate a title link to device width, but does not impose
+      // a fixed character limit. Keep the full normalized blog title instead
+      // of adding a literal ellipsis before the merchant suffix.
+      maxLength: Number.POSITIVE_INFINITY,
     });
   const description = generateMetaDescription(
     post.seo_description ||

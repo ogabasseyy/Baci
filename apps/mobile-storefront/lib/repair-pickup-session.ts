@@ -25,8 +25,16 @@ export const repairPickupSession = {
     await SecureStore.deleteItemAsync(await key(data));
   },
   async load(data: RepairBookingRequest): Promise<RepairPickupSession | null> {
-    const value = await SecureStore.getItemAsync(await key(data));
-    return value ? repairPickupSchemas.session.parse(JSON.parse(value)) : null;
+    const storageKey = await key(data);
+    const value = await SecureStore.getItemAsync(storageKey);
+    if (!value) return null;
+    try {
+      return repairPickupSchemas.session.parse(JSON.parse(value));
+    } catch {
+      // Reset corrupt UI recovery only; preserve the durable payment attempt.
+      await SecureStore.deleteItemAsync(storageKey);
+      return null;
+    }
   },
   async save(data: RepairBookingRequest, session: RepairPickupSession) {
     await SecureStore.setItemAsync(

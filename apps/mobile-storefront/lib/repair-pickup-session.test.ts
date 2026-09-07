@@ -13,6 +13,7 @@ jest.mock('expo-crypto', () => ({
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(),
   setItemAsync: jest.fn(),
+  deleteItemAsync: jest.fn(),
 }));
 const data = {
   customerName: 'Test',
@@ -38,8 +39,22 @@ describe('repairPickupSession', () => {
     );
     await expect(repairPickupSession.load(data)).resolves.toEqual(saved);
   });
-  it('fails closed on corrupt recovery instead of treating it as a new booking', async () => {
-    jest.mocked(SecureStore.getItemAsync).mockResolvedValue('bad JSON');
-    await expect(repairPickupSession.load(data)).rejects.toThrow();
+  it.each([
+    'bad JSON',
+    JSON.stringify({ resumeToken: 123 }),
+  ])('removes corrupt session %s without clearing the payment attempt', async (value) => {
+    jest.mocked(SecureStore.getItemAsync).mockResolvedValue(value);
+    await expect(repairPickupSession.load(data)).resolves.toBeNull();
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledTimes(1);
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
+      expect.stringMatching(/^repair-pickup-\d+$/)
+    );
+  });
+  it('preserves transient read failures without deleting recovery data', async () => {
+    jest
+      .mocked(SecureStore.getItemAsync)
+      .mockRejectedValue(new Error('Unavailable'));
+    await expect(repairPickupSession.load(data)).rejects.toThrow('Unavailable');
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
   });
 });

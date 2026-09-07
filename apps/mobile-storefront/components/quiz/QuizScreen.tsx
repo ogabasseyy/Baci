@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from '@/hooks/useTheme';
 import { createLogger } from '@/lib/logger';
@@ -9,7 +9,6 @@ import { submitQuizAnswerV2 } from '@/services/quiz-attempts';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQuizStore } from '@/stores/quiz-store';
 import { createQuizV2LifecycleHandlers } from './create-quiz-v2-lifecycle-handlers';
-import { QuizErrorPanel } from './QuizErrorPanel';
 import { QuizEventsList } from './QuizEventsList';
 import { QuizGameplayAdFooter } from './QuizGameplayAdFooter';
 import { QuizGameplayScrollView } from './QuizGameplayScrollView';
@@ -25,6 +24,7 @@ import {
   isQuizRecoveryCurrent,
   shouldShowEventList,
 } from './QuizScreen.utils';
+import { QuizScreenFeedback } from './QuizScreenFeedback';
 import { QuizScreenModals } from './QuizScreenModals';
 import { createQuizAnswerHandlers } from './quiz-answer-handlers';
 import { useQuizMusicState } from './use-quiz-music-state';
@@ -32,11 +32,13 @@ import { useQuizQuestionTimer } from './use-quiz-question-timer';
 import { useQuizResultPolling } from './use-quiz-result-polling';
 import { useQuizAccountChangeReset } from './useQuizAccountChangeReset';
 import { useQuizFinalResultRefresh } from './useQuizFinalResultRefresh';
+import { useQuizLobbyNavigation } from './useQuizLobbyNavigation';
 import { useQuizPersistedRecovery } from './useQuizPersistedRecovery';
 import { useQuizStartFlow } from './useQuizStartFlow';
 
 const log = createLogger('Quiz');
 export function QuizScreen({
+  backHandlerRef,
   integrityTier = 'basic',
   locale,
   onSignIn,
@@ -111,6 +113,11 @@ export function QuizScreen({
       recoverEvent,
       userId: authUserId,
     });
+  const lobbyNavigation = useQuizLobbyNavigation({
+    backHandlerRef,
+    dismissRecovery,
+    userId: authUserId,
+  });
   useQuizResultPolling({
     attemptId: terminalContext?.attemptId ?? null,
     enabled: status === 'result' && v2LifecycleStatus === 'pending_results',
@@ -201,27 +208,16 @@ export function QuizScreen({
     loadEvents(authUserId ? fetchQuizEvents : async () => []);
   return (
     <View style={styles.screen}>
-      {status === 'loading' ? (
-        <View style={styles.container}>
-          <ActivityIndicator accessibilityLabel="Loading quiz events" />
-        </View>
-      ) : null}
-      {error && !dobGate.isGateVisible ? (
-        <QuizErrorPanel
-          description={error}
-          onRetry={() => {
-            void loadEvents(fetchQuizEvents).then(retryRecovery);
-          }}
-          primaryColor={colors.primary}
-          showRetry={status === 'ready' || status === 'error'}
-          styles={styles}
-          title={
-            status === 'question' || status === 'submitting'
-              ? 'We couldn’t continue the quiz'
-              : undefined
-          }
-        />
-      ) : null}
+      <QuizScreenFeedback
+        status={status}
+        error={error}
+        isDobGateVisible={dobGate.isGateVisible}
+        onRetry={() => {
+          void refreshEvents().then(retryRecovery);
+        }}
+        primaryColor={colors.primary}
+        styles={styles}
+      />
       {!error && shouldShowEventList(status) ? (
         <QuizEventsList
           events={events}
@@ -235,7 +231,7 @@ export function QuizScreen({
           }
           onRefresh={refreshEvents}
           onSignIn={onSignIn}
-          resumeEventId={v2Attempt?.eventId}
+          {...lobbyNavigation}
           serverNow={v2Attempt?.serverNow}
           styles={lobbyStyles}
         />
@@ -278,6 +274,7 @@ export function QuizScreen({
       ) : null}
       {status === 'result' ? (
         <QuizResultRoute
+          backHandlerRef={backHandlerRef}
           dismissRecovery={dismissRecovery}
           events={events}
           expectedUserId={useAuthStore.getState().user?.id ?? null}

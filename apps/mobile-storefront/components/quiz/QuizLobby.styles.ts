@@ -35,7 +35,7 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
       textAlign: 'center',
     },
     eventCard: {
-      backgroundColor: '#111315',
+      backgroundColor: colors.card,
       borderColor: colors.border,
       borderRadius: 24,
       borderWidth: 1,
@@ -43,7 +43,7 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
       overflow: 'hidden',
       padding: 18,
     },
-    eventCardClosed: { opacity: 0.82 },
+    eventCardClosed: { backgroundColor: colors.muted },
     eventTopline: {
       alignItems: 'center',
       flexDirection: 'row',
@@ -144,7 +144,9 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
       overflow: 'hidden',
     },
     disabledButtonBox: {
-      backgroundColor: colors.muted,
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderWidth: 1,
       borderRadius: 14,
       overflow: 'hidden',
     },

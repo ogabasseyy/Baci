@@ -15,6 +15,10 @@ import {
 } from '@/services/quiz';
 import { useQuizStore } from '@/stores/quiz-store';
 
+jest.mock('expo-router/react-navigation', () => ({
+  usePreventRemove: jest.fn(),
+}));
+
 jest.mock('react-native-safe-area-context', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');

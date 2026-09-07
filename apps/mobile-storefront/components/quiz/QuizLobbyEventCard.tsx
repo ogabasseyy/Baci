@@ -67,12 +67,15 @@ export function QuizLobbyEventCard({
   const isClosed = ['closed', 'completed', 'cancelled', 'finalizing'].includes(
     effectiveStatus
   );
-  const requiresSignIn = !isSignedIn && (isPlayable || isScheduled);
+  const canAct = isPlayable || isScheduled || isResume;
+  const requiresSignIn = !isSignedIn && canAct;
   const buttonText = requiresSignIn
     ? 'Sign in to play'
-    : isScheduled
-      ? 'Enter waiting room'
-      : getEventStartButtonText(effectiveStatus, isStarting, isResume);
+    : isResume
+      ? getEventStartButtonText('active', isStarting, true)
+      : isScheduled
+        ? 'Enter waiting room'
+        : getEventStartButtonText(effectiveStatus, isStarting);
   const condition = event.prizeProduct?.condition?.replace('_', ' ');
 
   return (
@@ -154,16 +157,14 @@ export function QuizLobbyEventCard({
         </Text>
       </View>
 
-      <View
-        style={isClosed ? styles.disabledButtonBox : styles.primaryButtonBox}
-      >
+      <View style={canAct ? styles.primaryButtonBox : styles.disabledButtonBox}>
         <Pressable
           accessibilityLabel={`${buttonText} ${event.title}`}
           accessibilityRole="button"
           accessibilityState={{
-            disabled: isStarting || (!isPlayable && !isScheduled),
+            disabled: isStarting || !canAct,
           }}
-          disabled={isStarting || (!isPlayable && !isScheduled)}
+          disabled={isStarting || !canAct}
           onPress={
             requiresSignIn
               ? onSignIn
@@ -177,7 +178,7 @@ export function QuizLobbyEventCard({
         >
           <Text
             style={
-              isClosed ? styles.disabledButtonText : styles.primaryButtonText
+              canAct ? styles.primaryButtonText : styles.disabledButtonText
             }
           >
             {buttonText}

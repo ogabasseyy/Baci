@@ -62,8 +62,10 @@ describe('QuizResultRoute', () => {
     const dismissRecovery = jest.fn();
     const onReset = jest.fn();
     const onRetryRecovery = jest.fn();
+    const backHandlerRef = { current: null as (() => void) | null };
     render(
       <QuizResultRoute
+        backHandlerRef={backHandlerRef}
         dismissRecovery={dismissRecovery}
         events={[
           {
@@ -99,7 +101,7 @@ describe('QuizResultRoute', () => {
     );
 
     expect(screen.getByText('true')).toBeTruthy();
-    fireEvent.press(screen.getByRole('button', { name: 'return' }));
+    act(() => backHandlerRef.current?.());
     expect(dismissRecovery).toHaveBeenCalledWith('event-1');
     expect(onReset).toHaveBeenCalledTimes(1);
     expect(onRetryRecovery).toHaveBeenCalledTimes(1);

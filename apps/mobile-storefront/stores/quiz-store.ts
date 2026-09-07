@@ -64,6 +64,7 @@ interface QuizStore extends QuizV2StoreActions {
   setError: (message: string) => void;
   dismissRecovery: () => Promise<void>;
   reset: () => void;
+  showLobby: () => void;
   resetForAccountChange: () => void;
 }
 
@@ -153,6 +154,12 @@ export const useQuizStore = create<QuizStore>((set, get) => {
   return {
     ...initialState,
     ...v2Actions,
+    startEventV2: (context, starter) => {
+      if (get().status === 'starting' || get().status === 'submitting')
+        return Promise.resolve();
+      set({ attempt: null, selectedOptionId: null, result: null });
+      return v2Actions.startEventV2(context, starter);
+    },
     loadEvents: async (loader) => {
       const currentGeneration = generation;
       set({ status: 'loading', error: null });
@@ -169,6 +176,7 @@ export const useQuizStore = create<QuizStore>((set, get) => {
       if (get().status === 'starting' || get().status === 'submitting') return;
       const currentGeneration = generation;
       set({
+        ...initialQuizV2State,
         status: 'starting',
         attempt: null,
         selectedEventId: eventId,
@@ -233,6 +241,19 @@ export const useQuizStore = create<QuizStore>((set, get) => {
     resetForAccountChange: () => {
       generation += 1;
       set(initialState);
+    },
+    showLobby: () => {
+      const state = get();
+      // Legacy requests cannot be recovered if their response is discarded.
+      if (
+        !state.v2Attempt &&
+        !state.startRequestId &&
+        (state.status === 'starting' || state.status === 'submitting')
+      )
+        return;
+      generation += 1;
+      // Keep the attempt and persisted request ID for explicit Resume.
+      set({ status: 'ready', error: null });
     },
   };
 });

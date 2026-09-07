@@ -128,7 +128,13 @@ describe('QuizLobbyEventCard', () => {
     });
   });
 
-  it('resumes without requesting another acceptance gate', () => {
+  it.each([
+    'active',
+    'closed',
+    'finalizing',
+    'completed',
+    'cancelled',
+  ] as const)('recovers a retained %s attempt without requesting another acceptance gate', (status) => {
     const onOpenRules = jest.fn();
     const onResume = jest.fn();
     render(
@@ -139,7 +145,7 @@ describe('QuizLobbyEventCard', () => {
           prizeName: 'Phone',
           questionCount: 5,
           startsAt: null,
-          status: 'active',
+          status,
           title: 'Live quiz',
         }}
         isResume
@@ -156,10 +162,14 @@ describe('QuizLobbyEventCard', () => {
     expect(onResume).toHaveBeenCalledTimes(1);
   });
 
-  it('closes the card immediately when its countdown reaches zero', () => {
+  it.each([
+    false,
+    true,
+  ])('closes entries at zero while retaining recovery access: %s', (isResume) => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-08-09T18:00:00.000Z'));
     const onExpire = jest.fn<() => void>();
+    const onResume = jest.fn();
 
     render(
       <QuizLobbyEventCard
@@ -174,18 +184,20 @@ describe('QuizLobbyEventCard', () => {
           timeZone: 'Africa/Lagos',
           title: 'Expiring quiz',
         }}
-        isResume={false}
+        isResume={isResume}
         isStarting={false}
         onExpire={onExpire}
         onOpenRules={jest.fn()}
-        onResume={jest.fn()}
+        onResume={onResume}
         serverNow="2026-08-09T18:00:00.000Z"
         styles={createQuizLobbyStyles(colors)}
       />
     );
 
     expect(
-      screen.getByRole('button', { name: 'Play for free Expiring quiz' })
+      screen.getByRole('button', {
+        name: `${isResume ? 'Resume quiz' : 'Play for free'} Expiring quiz`,
+      })
     ).toBeTruthy();
 
     act(() => jest.advanceTimersByTime(1000));
@@ -196,9 +208,16 @@ describe('QuizLobbyEventCard', () => {
     expect(screen.queryByText(/^Closes /)).toBeNull();
     expect(screen.getByText(/^Closed /)).toBeTruthy();
     expect(
-      screen.getByRole('button', { name: 'Closed Expiring quiz' }).props
-        .accessibilityState
-    ).toEqual({ disabled: true });
+      screen.getByRole('button', {
+        name: `${isResume ? 'Resume quiz' : 'Closed'} Expiring quiz`,
+      }).props.accessibilityState
+    ).toEqual({ disabled: !isResume });
     expect(onExpire).toHaveBeenCalledTimes(1);
+    fireEvent.press(
+      screen.getByRole('button', {
+        name: `${isResume ? 'Resume quiz' : 'Closed'} Expiring quiz`,
+      })
+    );
+    expect(onResume).toHaveBeenCalledTimes(isResume ? 1 : 0);
   });
 });

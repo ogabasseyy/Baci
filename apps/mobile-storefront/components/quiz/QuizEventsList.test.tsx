@@ -27,6 +27,58 @@ const themeColors: QuizThemeColors = {
 };
 
 describe('QuizEventsList', () => {
+  it('keeps a recovery action when the retained event is missing from the refreshed list', () => {
+    const onResume = jest.fn();
+    const onStart = jest.fn();
+    render(
+      <QuizEventsList
+        events={[]}
+        isStarting={false}
+        onResume={onResume}
+        onStart={onStart}
+        resumeEventId="cancelled"
+        styles={createQuizLobbyStyles(themeColors)}
+      />
+    );
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Recover quiz attempt' })
+    );
+    expect(onResume).toHaveBeenCalledWith('cancelled');
+    expect(
+      screen.getByRole('button', { name: 'Recover quiz attempt' })
+    ).toHaveStyle({ minHeight: 50 });
+    expect(onStart).not.toHaveBeenCalled();
+  });
+  it('resumes the existing attempt without opening rules or starting another attempt', () => {
+    const onResume = jest.fn();
+    const onStart = jest.fn();
+    render(
+      <QuizEventsList
+        events={[
+          {
+            id: 'resume',
+            title: 'Resume me',
+            prizeName: 'Phone',
+            startsAt: null,
+            endsAt: null,
+            status: 'active',
+            questionCount: 5,
+          },
+        ]}
+        isStarting={false}
+        onStart={onStart}
+        onResume={onResume}
+        resumeEventId="resume"
+        styles={createQuizLobbyStyles(themeColors)}
+      />
+    );
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Resume quiz Resume me' })
+    );
+    expect(onResume).toHaveBeenCalledWith('resume');
+    expect(onStart).not.toHaveBeenCalled();
+    expect(screen.queryByRole('header', { name: 'How to play' })).toBeNull();
+  });
   it('refreshes the lobby when the player pulls down', () => {
     const onRefresh = jest.fn<() => Promise<void>>(async () => undefined);
     render(
@@ -69,6 +121,7 @@ describe('QuizEventsList', () => {
         isStarting={false}
         onStart={onStart}
         styles={createQuizLobbyStyles(themeColors)}
+        resumeEventId="event-1"
       />
     );
 
@@ -79,6 +132,7 @@ describe('QuizEventsList', () => {
     expect(screen.getByText(/close the digital divide/i)).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText(/Play for free Open Quiz/i));
+    expect(screen.queryByLabelText(/Resume quiz Open Quiz/i)).toBeNull();
     expect(screen.getByRole('header', { name: 'How to play' })).toBeTruthy();
     fireEvent.press(
       screen.getByRole('checkbox', { name: 'Accept quiz rules and terms' })

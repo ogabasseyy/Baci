@@ -222,7 +222,7 @@ describe('createQuizV2StoreActions terminal expiry', () => {
     await first;
   });
 
-  it('does not write a stale starting state after recovery storage resolves', async () => {
+  it('does not overwrite the new account state after recovery storage resolves', async () => {
     const harness = createHarness();
     let resolveLoad!: (value: null) => void;
     const load = new Promise<null>((resolve) => {
@@ -241,11 +241,19 @@ describe('createQuizV2StoreActions terminal expiry', () => {
       starter
     );
     harness.setGeneration(1);
+    const replacement = {
+      status: 'question' as const,
+      startRequestId: 'new-request',
+      selectedEventId: 'new-event',
+      attemptIntegrityTier: 'basic' as const,
+      recoveryUserId: 'new-user',
+    };
+    harness.set(replacement);
     resolveLoad(null);
     await start;
 
     expect(starter).not.toHaveBeenCalled();
-    expect(harness.getState().status).toBe('question');
+    expect(harness.getState()).toMatchObject(replacement);
   });
 
   it('still submits when recovery storage rejects', async () => {

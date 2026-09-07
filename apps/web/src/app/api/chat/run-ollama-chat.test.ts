@@ -1,19 +1,20 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ generate: vi.fn(), model: vi.fn() }));
+const mocks = vi.hoisted(() => ({ generate: vi.fn(), execute: vi.fn() }));
 vi.mock('@/lib/ollama-agentic-chat', () => ({
   createOllamaAgenticChatResponse: mocks.generate,
-}));
-vi.mock('@/env', () => ({
-  getAiChatModel: mocks.model,
-  getOllamaBasicAuth: () => undefined,
 }));
 
 import { runOllamaChat } from './run-ollama-chat';
 
+const options = {
+  baseUrl: 'https://ollama.example.com',
+  model: 'test-model',
+  executeToolCall: mocks.execute,
+};
+
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.model.mockReturnValue('test-model');
 });
 
 it('returns the buffered successful response', async () => {
@@ -21,8 +22,7 @@ it('returns the buffered successful response', async () => {
   const response = await runOllamaChat(
     new Request('https://example.com'),
     [],
-    'session',
-    'https://ollama.example.com'
+    options
   );
   expect(await response?.text()).toBe('Hello');
 });
@@ -32,22 +32,26 @@ it('returns null to allow cloud fallback when no result was captured', async () 
   const response = await runOllamaChat(
     new Request('https://example.com'),
     [],
-    'session',
-    'https://ollama.example.com'
+    options
   );
   expect(response).toBeNull();
 });
 
-it('does not mask configuration errors as a recoverable backend failure', async () => {
-  mocks.model.mockImplementation(() => {
-    throw new Error('Invalid model');
-  });
-  const response = runOllamaChat(
+it('uses the route-owned tool executor without resolving credentials itself', async () => {
+  const call = {
+    function: { name: 'getProductDetails', arguments: { productId: 'phone' } },
+  };
+  mocks.execute.mockResolvedValue('catalog result');
+  mocks.generate.mockImplementation(
+    async ({ executeToolCall }: Pick<typeof options, 'executeToolCall'>) => {
+      return new Response(await executeToolCall(call));
+    }
+  );
+  const response = await runOllamaChat(
     new Request('https://example.com'),
     [],
-    'session',
-    'https://ollama.example.com'
+    options
   );
-  await expect(response).rejects.toThrow('Invalid model');
-  expect(mocks.generate).not.toHaveBeenCalled();
+  expect(await response?.text()).toBe('catalog result');
+  expect(mocks.execute).toHaveBeenCalledWith(call);
 });

@@ -1,4 +1,5 @@
 import type { StorefrontAgentUiEvent } from '@/schemas/storefront-agent-ui-contract';
+import { acceptsAgentUi } from './accepts-agent-ui';
 import { negotiateChatAgentUiResponse } from './negotiate-chat-agent-ui-response';
 import {
   createClientClosedRequestResponse,
@@ -29,7 +30,7 @@ export async function recoverOllamaChatResponse(
       events
     );
   }
-  if (events.length) {
+  if (events.length && acceptsAgentUi(request)) {
     return await negotiateChatAgentUiResponse(
       request,
       new Response('I found these live catalog options for you.', {

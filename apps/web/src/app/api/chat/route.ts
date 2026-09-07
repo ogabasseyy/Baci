@@ -23,6 +23,7 @@ import { headers } from 'next/headers';
 import z from 'zod';
 import { checkRateLimit } from '@/ai/provider';
 import { negotiateChatAgentUiResponse } from '@/app/api/chat/negotiate-chat-agent-ui-response';
+import { executeAgenticChatToolForOllama } from '@/app/api/chat/ollama-chat-tool-runtime';
 import {
   bufferTextResponse,
   buildChatMessages,
@@ -35,11 +36,13 @@ import {
 import { runChatProviderChain } from '@/app/api/chat/run-chat-provider-chain';
 import { runOllamaChat } from '@/app/api/chat/run-ollama-chat';
 import {
+  getAiChatModel,
   getAiChatProvider,
   getLlmChatModel,
   getLlmServerBearer,
   getLlmServerUrl,
   getOllamaBaseUrl,
+  getOllamaBasicAuth,
 } from '@/env';
 import { createLlmChatResponse } from '@/lib/llm-chat';
 import { sanitizeHtml } from '@/lib/sanitize';
@@ -171,12 +174,17 @@ export async function POST(req: Request) {
     if (!triedLlmServer && shouldTryOllama) {
       const ollamaBaseUrl = getOllamaBaseUrl();
       if (ollamaBaseUrl) {
-        const response = await runOllamaChat(
-          req,
-          sanitizedMessages,
-          sessionId,
-          ollamaBaseUrl
-        );
+        const response = await runOllamaChat(req, sanitizedMessages, {
+          baseUrl: ollamaBaseUrl,
+          model: getAiChatModel(),
+          basicAuth: getOllamaBasicAuth(),
+          executeToolCall: (call) =>
+            executeAgenticChatToolForOllama(
+              call.function.name,
+              call.function.arguments,
+              sessionId
+            ),
+        });
         if (response) return response;
       }
     }

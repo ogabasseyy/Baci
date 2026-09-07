@@ -33,6 +33,18 @@ const request = () =>
     headers: { accept: storefrontAgentUiContract.mediaType },
   });
 
+it.each([
+  null,
+  `${storefrontAgentUiContract.mediaType}; q=0, text/plain`,
+])('allows cloud fallback when cards cannot be rendered: %s', async (accept) => {
+  const req = new Request('https://example.com/api/chat', {
+    headers: accept ? { accept } : {},
+  });
+  expect(
+    await recoverOllamaChatResponse(req, new Error('failed'), false, events)
+  ).toBeNull();
+});
+
 it('returns trusted read-only cards after generation failure', async () => {
   const response = await recoverOllamaChatResponse(
     request(),

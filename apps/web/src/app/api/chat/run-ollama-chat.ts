@@ -1,9 +1,7 @@
-import { getAiChatModel, getOllamaBasicAuth } from '@/env';
 import { createOllamaAgenticChatResponse } from '@/lib/ollama-agentic-chat';
 import type { OllamaToolCall } from '@/lib/ollama-chat';
 import { createChatPresentationEventCollector } from './create-chat-presentation-event-collector';
 import { negotiateChatAgentUiResponse } from './negotiate-chat-agent-ui-response';
-import { executeAgenticChatToolForOllama } from './ollama-chat-tool-runtime';
 import { ollamaAgenticChatTools } from './ollama-chat-tools';
 import { recoverOllamaChatResponse } from './recover-ollama-chat-response';
 import {
@@ -69,20 +67,22 @@ function createRepeatedSideEffectToolResult(toolName: string): string {
 export async function runOllamaChat(
   req: Request,
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
-  sessionId: string,
-  ollamaBaseUrl: string
+  options: {
+    baseUrl: string;
+    model: string;
+    basicAuth?: string;
+    executeToolCall: (call: OllamaToolCall) => Promise<string>;
+  }
 ): Promise<Response | null> {
   const presentationCollector = createChatPresentationEventCollector();
-  const chatModel = getAiChatModel();
-  const basicAuth = getOllamaBasicAuth();
   let ollamaSideEffectingToolExecuted = false;
   const sideEffectingOllamaToolsWithEffects = new Set<string>();
   try {
     const ollamaResponse = await createOllamaAgenticChatResponse({
-      baseUrl: ollamaBaseUrl,
-      model: chatModel,
-      basicAuth,
-      messages: buildChatMessages(messages, chatModel, {
+      baseUrl: options.baseUrl,
+      model: options.model,
+      basicAuth: options.basicAuth,
+      messages: buildChatMessages(messages, options.model, {
         toolsEnabled: true,
       }),
       tools: ollamaAgenticChatTools,
@@ -95,11 +95,7 @@ export async function runOllamaChat(
           return createRepeatedSideEffectToolResult(toolName);
         }
 
-        const result = await executeAgenticChatToolForOllama(
-          call.function.name,
-          call.function.arguments,
-          sessionId
-        );
+        const result = await options.executeToolCall(call);
 
         if (
           isSideEffectingOllamaToolCall(call) &&

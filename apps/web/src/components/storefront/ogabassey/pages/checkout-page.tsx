@@ -1098,7 +1098,9 @@ export const CheckoutPage: React.FC = () => {
     setSelectedQuoteId,
     shippingQuotes,
   });
-  const resetQuotesForAddressChange = () => {
+  const resetQuotesForAddressChange = (options?: {
+    preserveDeliveryMethod?: boolean;
+  }) => {
     invalidatePendingQuoteRequests(
       quoteRequestSequence,
       quoteAbortController,
@@ -1113,6 +1115,7 @@ export const CheckoutPage: React.FC = () => {
       // cannot price/route with the previous place's lat/lng.
       clearDeliveryCoordinates: () =>
         setCheckoutFields({ deliveryCoordinates: null }),
+      preserveDeliveryMethod: options?.preserveDeliveryMethod,
     });
   };
   const eligibleDeliveryMethod = resolveMerchantDeliveryMethod(
@@ -1348,7 +1351,12 @@ export const CheckoutPage: React.FC = () => {
             false,
           );
         } else {
-          resetQuotesForAddressChange();
+          // City/state alone can expose airport/store pickup; clearing unavailable
+          // door quotes must not force those methods back to door.
+          resetQuotesForAddressChange({
+            preserveDeliveryMethod:
+              deliveryMethod === 'airport' || deliveryMethod === 'pickup',
+          });
         }
       } else {
         const saved = addresses.find((a) => a.id === selectedAddressId);

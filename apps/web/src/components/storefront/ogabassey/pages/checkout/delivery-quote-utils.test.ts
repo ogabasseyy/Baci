@@ -194,6 +194,21 @@ describe('checkout shipping quote helpers', () => {
     expect(setDeliveryMethod).toHaveBeenCalledWith('door');
   });
 
+  describe('bugfix: airport selection reset without a street address', () => {
+    it('clears quotes without forcing door when preserveDeliveryMethod is set', () => {
+      const setDeliveryMethod = vi.fn();
+
+      resetDeliveryQuotesForAddressChange({
+        setDeliveryMethod,
+        setSelectedQuoteId: vi.fn(),
+        setShippingQuotes: vi.fn(),
+        preserveDeliveryMethod: true,
+      });
+
+      expect(setDeliveryMethod).not.toHaveBeenCalled();
+    });
+  });
+
   describe('bugfix: stale autocomplete coordinates after selecting a saved address', () => {
     it('clears delivery coordinates when resetting quotes for an address change', () => {
       const clearDeliveryCoordinates = vi.fn();

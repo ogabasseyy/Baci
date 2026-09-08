@@ -71,6 +71,23 @@ describe('usePersistedState', () => {
     expect(sessionStorage.getItem('pending')).toBeNull();
   });
 
+  it('bugfix: pagehide after setState flushes the new snapshot, not a stale null', () => {
+    const { result } = renderHook(() =>
+      usePersistedState<string | null>('pending-order', null)
+    );
+    // Simulate the checkout path: sync storage write, then React setter, then
+    // immediate navigation before the debounce effect rebinds flushRef.
+    const snapshot = { orderId: 'order-1' };
+    sessionStorage.setItem('pending-order', JSON.stringify(snapshot));
+    act(() => {
+      result.current[1](JSON.stringify(snapshot));
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    expect(JSON.parse(sessionStorage.getItem('pending-order') || 'null')).toBe(
+      JSON.stringify(snapshot)
+    );
+  });
+
   it('supports localStorage option', () => {
     localStorage.setItem('test', JSON.stringify('from-local'));
     const { result } = renderHook(() =>

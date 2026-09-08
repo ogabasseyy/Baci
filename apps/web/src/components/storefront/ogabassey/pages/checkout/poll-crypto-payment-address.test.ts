@@ -32,8 +32,17 @@ it('merges a delayed address and QR code while preserving the session and conver
   expect(result).toMatchObject({ session_id: 'session', crypto_address_pending: false, crypto_payment: { ...address, crypto_amount: '4.44' } });
 });
 it('turns malformed status responses into a shopper-readable retry error', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ success: true })));
-  await expect(pollCryptoPaymentAddress(session)).rejects.toThrow('Crypto payment status is unavailable. Retry to check the same payment session.');
+  // success-only payloads are schema-valid after optional address/status fields;
+  // force a schema failure with a non-object crypto_address value.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      Response.json({ success: true, crypto_address: 'not-an-object' }),
+    ),
+  );
+  await expect(pollCryptoPaymentAddress(session)).rejects.toThrow(
+    'Crypto payment status is unavailable. Retry to check the same payment session.',
+  );
 });
 it.each([['ethereum', 'ETH'], ['polygon', 'MATIC']] as const)('accepts provider-native %s for checkout network %s', async (providerChain, chain) => {
   const paymentSession: CryptoInitialization = { ...session, crypto_payment: { ...session.crypto_payment, chain, currency: 'USDC' } };

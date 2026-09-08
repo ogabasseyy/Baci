@@ -129,6 +129,7 @@ export async function loadCheckoutShippingQuotes(
   const requestReceiver = { ...receiver, address: addressForRequest };
   const requestKey = buildQuoteRequestKey(requestReceiver, cart);
   if (!state.force && requestKey === state.currentRequestKey) return;
+  const requestKeyChanged = requestKey !== state.currentRequestKey;
   const requestSequence = invalidatePendingQuoteRequests(
     state.requestSequence,
     state.activeAbortController
@@ -142,6 +143,14 @@ export async function loadCheckoutShippingQuotes(
     didTimeout = true;
     abortController.abort();
   }, CHECKOUT_QUOTE_TIMEOUT_MS);
+
+  // Drop the prior selection as soon as cart/address economics change so
+  // checkout cannot submit a stale quote while the replacement fetch is in
+  // flight. Preferred IDs stay on `state` for post-response restoration.
+  if (requestKeyChanged) {
+    state.setSelectedQuoteId('');
+    state.setSelectedProviderRateId?.('');
+  }
 
   state.setIsLoadingQuotes(true);
 

@@ -54,6 +54,25 @@ export function usePersistedState<T>(
   // Payment redirects can leave before the debounce timer fires.
   const flushRef = useRef<(() => void) | null>(null);
   const clearedRef = useRef(false);
+  // Keep the latest intended value outside React's render schedule so pagehide
+  // cannot flush a stale closure over a newer snapshot (e.g. pending order).
+  const latestValueRef = useRef(state);
+
+  const writeValue = (value: T) => {
+    try {
+      const storageApi = storage === 'local' ? localStorage : sessionStorage;
+      storageApi.setItem(key, JSON.stringify(value));
+    } catch {
+      // Storage write failed (quota exceeded, private browsing, etc.)
+    }
+  };
+
+  const armFlush = () => {
+    flushRef.current = () => {
+      if (clearedRef.current) return;
+      writeValue(latestValueRef.current);
+    };
+  };
 
   // Persist to storage with debouncing
   useEffect(() => {
@@ -61,28 +80,25 @@ export function usePersistedState<T>(
 
     if (clearedRef.current) return;
 
+    latestValueRef.current = state;
+
     // Clear any existing timer
     if (timerRef.current) {
       clearTimeout(timerRef.current);
     }
 
-    const persist = () => {
-      try {
-        const storageApi = storage === 'local' ? localStorage : sessionStorage;
-        storageApi.setItem(key, JSON.stringify(state));
-      } catch {
-        // Storage write failed (quota exceeded, private browsing, etc.)
-      }
-    };
-    flushRef.current = persist;
-    timerRef.current = setTimeout(persist, debounceMs);
+    armFlush();
+    timerRef.current = setTimeout(() => {
+      if (clearedRef.current) return;
+      writeValue(latestValueRef.current);
+    }, debounceMs);
 
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
     };
-  }, [state, key, debounceMs, storage]);
+  }, [state, debounceMs, writeValue, armFlush]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -100,6 +116,7 @@ export function usePersistedState<T>(
     if (timerRef.current) clearTimeout(timerRef.current);
     flushRef.current = null;
     clearedRef.current = true;
+    latestValueRef.current = initialValue;
     try {
       const storageApi = storage === 'local' ? localStorage : sessionStorage;
       storageApi.removeItem(key);
@@ -111,7 +128,18 @@ export function usePersistedState<T>(
 
   const updateState: React.Dispatch<React.SetStateAction<T>> = (update) => {
     clearedRef.current = false;
-    setState(update);
+    const previous = latestValueRef.current;
+    const next =
+      typeof update === 'function'
+        ? (update as (value: T) => T)(previous)
+        : update;
+    latestValueRef.current = next;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    armFlush();
+    setState(next);
   };
 
   return [isHydrated ? state : initialValue, updateState, clear];

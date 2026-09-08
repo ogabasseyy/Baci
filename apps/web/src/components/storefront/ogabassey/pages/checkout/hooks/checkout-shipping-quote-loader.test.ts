@@ -477,6 +477,36 @@ describe('loadCheckoutShippingQuotes', () => {
     await pendingRequest;
 
     expect(state.setShippingQuotes).not.toHaveBeenCalled();
-    expect(state.setSelectedQuoteId).not.toHaveBeenCalled();
+    // Selection may clear when the request starts; it must not restore from a
+    // response that arrived after invalidation.
+    expect(state.setSelectedQuoteId).not.toHaveBeenCalledWith('stale-quote');
+  });
+
+  it('bugfix: clears selected quote as soon as the request key changes', async () => {
+    let resolveRequest: (response: Response) => void = () => undefined;
+    global.fetch = vi.fn(
+      () => new Promise<Response>((resolve) => (resolveRequest = resolve))
+    );
+    const state = {
+      ...createState(),
+      setSelectedProviderRateId: vi.fn(),
+    };
+    state.setSelectedQuoteId.mockClear();
+
+    const pending = loadCheckoutShippingQuotes(
+      receiver,
+      [{ ...cart[0], quantity: 2 }],
+      {
+        ...state,
+        currentRequestKey: JSON.stringify({ prior: true }),
+        preferredSelectedQuoteId: 'old-quote',
+      }
+    );
+
+    expect(state.setSelectedQuoteId).toHaveBeenCalledWith('');
+    expect(state.setSelectedProviderRateId).toHaveBeenCalledWith('');
+
+    resolveRequest(quoteResponse('new-quote'));
+    await pending;
   });
 });

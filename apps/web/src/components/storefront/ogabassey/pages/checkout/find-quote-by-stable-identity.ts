@@ -1,4 +1,4 @@
-import type { ShippingQuote } from '../types';
+import type { ShippingQuote } from './types';
 
 /**
  * Match a previously chosen shipping service after quote IDs are regenerated.

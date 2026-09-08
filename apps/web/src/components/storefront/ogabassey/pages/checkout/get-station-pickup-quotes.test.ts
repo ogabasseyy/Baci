@@ -5,7 +5,7 @@ import {
   secondStationQuote,
   stationGoFasterQuote,
   stationQuote,
-} from './delivery-quote-test-fixtures';
+} from './delivery-quote-test-fixtures.test-support';
 import { getStationPickupQuotes } from './get-station-pickup-quotes';
 
 describe('getStationPickupQuotes', () => {

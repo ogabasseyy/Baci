@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stationQuote } from './delivery-quote-test-fixtures';
+import { stationQuote } from './delivery-quote-test-fixtures.test-support';
 import { getStationPickupAddressText } from './get-station-pickup-address-text';
 
 describe('getStationPickupAddressText', () => {

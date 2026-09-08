@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { doorQuote } from './delivery-quote-test-fixtures';
+import { doorQuote } from './delivery-quote-test-fixtures.test-support';
 import { getDoorDeliveryQuotes, getPreferredDoorQuoteId } from './delivery-quote-utils';
 
 describe('delivery-quote-utils barrel', () => {

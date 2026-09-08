@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { doorQuote, stationQuote } from './delivery-quote-test-fixtures';
+import { doorQuote, stationQuote } from './delivery-quote-test-fixtures.test-support';
 import { createSelectDeliveryMethod } from './create-select-delivery-method';
 
 describe('createSelectDeliveryMethod', () => {

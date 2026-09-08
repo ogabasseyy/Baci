@@ -5,7 +5,7 @@ import {
   secondStationQuote,
   stationGoFasterQuote,
   stationQuote,
-} from './delivery-quote-test-fixtures';
+} from './delivery-quote-test-fixtures.test-support';
 import { getSelectedQuoteIdForDeliveryMethod } from './get-selected-quote-id-for-delivery-method';
 
 describe('getSelectedQuoteIdForDeliveryMethod', () => {

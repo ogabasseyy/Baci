@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { doorQuote, merchantShipQuote } from './delivery-quote-test-fixtures';
+import { doorQuote, merchantShipQuote } from './delivery-quote-test-fixtures.test-support';
 import { getDeliveryEstimateLabel } from './get-delivery-estimate-label';
 
 describe('getDeliveryEstimateLabel', () => {

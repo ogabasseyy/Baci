@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { merchantPickupQuote, stationQuote } from './delivery-quote-test-fixtures';
+import { merchantPickupQuote, stationQuote } from './delivery-quote-test-fixtures.test-support';
 import { getPickupStationCopy } from './get-pickup-station-copy';
 
 describe('getPickupStationCopy', () => {

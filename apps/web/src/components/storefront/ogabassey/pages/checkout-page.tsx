@@ -1354,8 +1354,8 @@ export const CheckoutPage: React.FC = () => {
           // City/state alone can expose airport/store pickup; clearing unavailable
           // door quotes must not force those methods back to door.
           resetQuotesForAddressChange({
-            preserveDeliveryMethod:
-              deliveryMethod === 'airport' || deliveryMethod === 'pickup',
+            // Inside this quote effect, method is door/pickup_station/airport.
+            preserveDeliveryMethod: deliveryMethod === 'airport',
           });
         }
       } else {

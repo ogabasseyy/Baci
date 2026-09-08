@@ -20,6 +20,42 @@ it.each([
   'search',
   'details',
   'recommendations',
+] as const)('%s fails safely on a resolved Supabase error', async (tool) => {
+  const failure = { data: null, error: new Error('Database unavailable') };
+  const query = Object.assign(Promise.resolve(failure), {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    single: vi.fn().mockResolvedValue(failure),
+    maybeSingle: vi.fn().mockResolvedValue(failure),
+  });
+  const from = vi.fn(() => query);
+  mocks.createClient.mockReturnValue({ from });
+  const result =
+    tool === 'search'
+      ? await handleSearchProducts({ query: '' })
+      : tool === 'details'
+        ? await handleGetProductDetails({ productId: 'phone' })
+        : await handleGetRecommendations({
+            productId: 'phone',
+            type: 'accessories',
+          });
+  expect(from).toHaveBeenCalledWith('products');
+  expect(query.select).toHaveBeenCalled();
+  expect(result).toEqual(
+    tool === 'search'
+      ? { products: [], total: 0 }
+      : tool === 'details'
+        ? null
+        : []
+  );
+});
+
+it.each([
+  'search',
+  'details',
+  'recommendations',
 ] as const)('%s requests canonical inventory and selection fields from the database', async (tool) => {
   const row = {
     id: 'phone',

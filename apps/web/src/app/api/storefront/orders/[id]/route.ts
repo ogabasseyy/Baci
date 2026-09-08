@@ -258,6 +258,7 @@ export async function GET(
         subtotal: order.subtotal,
         tax_amount: order.tax_amount ?? 0,
         discount_amount: order.discount_amount ?? 0,
+        gift_wrapping_fee: order.gift_wrapping_fee ?? 0,
         shipping_cost: order.shipping_cost ?? order.shipping_fee ?? 0,
         total: order.total,
         customer_name: order.customer_name,

@@ -58,6 +58,7 @@ import type {
   PendingCryptoOrder,
   ResumedOrder,
 } from './checkout/types';
+import { mapApiOrderToResumedOrder } from './checkout/map-api-order-to-resumed-order';
 import {
   usePersistedState,
 } from '@/hooks/use-persisted-state';
@@ -296,37 +297,19 @@ async function loadResumedCheckoutOrder({
     );
     if (res.ok) {
       const orderData = await res.json();
-      setResumedOrder({
-        id: orderData.id,
-        short_id: orderData.short_id,
-        subtotal: orderData.subtotal,
-        shipping_cost: orderData.shipping_cost ?? 0,
-        tax_amount: orderData.tax_amount ?? 0,
-        discount_amount: orderData.discount_amount ?? 0,
-        total: orderData.total,
-        customer_name: orderData.customer_name,
-        customer_email: orderData.customer_email,
-        customer_phone: orderData.customer_phone,
-        tracking_token: orderData.tracking_token,
-        shipping_address: orderData.shipping_address || {
-          address: '',
-          city: '',
-          state: '',
-          phone: '',
-        },
-        items: orderData.items || [],
-      });
+      const resumed = mapApiOrderToResumedOrder(orderData);
+      setResumedOrder(resumed);
 
       // Pre-fill form with order data
-      const [first, ...rest] = (orderData.customer_name || '').split(' ');
+      const [first, ...rest] = (resumed.customer_name || '').split(' ');
       setCheckoutFields({
         firstName: first || '',
         lastName: rest.join(' ') || '',
-        customerEmail: orderData.customer_email || '',
-        customerPhone: orderData.customer_phone || '',
-        newAddressStreet: orderData.shipping_address?.address || '',
-        newAddressState: orderData.shipping_address?.state || '',
-        newAddressCity: orderData.shipping_address?.city || '',
+        customerEmail: resumed.customer_email || '',
+        customerPhone: resumed.customer_phone || '',
+        newAddressStreet: resumed.shipping_address?.address || '',
+        newAddressState: resumed.shipping_address?.state || '',
+        newAddressCity: resumed.shipping_address?.city || '',
         // Skip directly to payment step for resumed orders
         currentStep: 'payment',
         completedSteps: { contact: true, delivery: true },
@@ -1044,8 +1027,10 @@ export const CheckoutPage: React.FC = () => {
     };
   }, []);
 
-  // Retrieve gift data if passed from cart
-  const giftWrappingCost = Number(searchParams.get('giftWrappingCost')) || 0;
+  // Prefer the persisted fee on resume (deep-link URLs omit giftWrappingCost).
+  const giftWrappingCost =
+    resumedOrder?.gift_wrapping_fee ??
+    (Number(searchParams.get('giftWrappingCost')) || 0);
 
   // Saved Addresses (Future integration: Fetch from API)
   const [addresses, _setAddresses] = useState<SavedAddress[]>([]); // Empty for now, forcing new address

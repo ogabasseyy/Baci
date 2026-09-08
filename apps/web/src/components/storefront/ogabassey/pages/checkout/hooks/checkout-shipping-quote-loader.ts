@@ -1,5 +1,6 @@
 import { normalizeShippingQuoteResponse } from '@/lib/shipping/quote-response';
 import { isCheckoutDeliveryAddressReady } from '../is-checkout-delivery-address-ready';
+import { shouldFetchCheckoutShippingQuotes } from '../should-fetch-checkout-shipping-quotes';
 import type { ShippingQuote } from '../types';
 import { getPreferredDoorQuoteId } from '../utils';
 
@@ -86,7 +87,16 @@ export async function loadCheckoutShippingQuotes(
   cart: QuoteCartItem[],
   state: QuoteState
 ) {
-  if (!isCheckoutDeliveryAddressReady(receiver)) {
+  const hasCityState = Boolean(receiver.city.trim() && receiver.state.trim());
+  const mayFetch = shouldFetchCheckoutShippingQuotes({
+    deliveryMethod:
+      receiver.deliveryPreference === 'pickup_station'
+        ? 'pickup_station'
+        : 'door',
+    isStreetReady: isCheckoutDeliveryAddressReady(receiver),
+    hasCityState,
+  });
+  if (!mayFetch) {
     invalidatePendingQuoteRequests(
       state.requestSequence,
       state.activeAbortController
@@ -95,7 +105,14 @@ export async function loadCheckoutShippingQuotes(
     state.setIsLoadingQuotes(false);
     return;
   }
-  const requestKey = buildQuoteRequestKey(receiver, cart);
+  // Pickup quotes may run without a street; the quotes schema still needs a
+  // nonempty address string, so fall back to city/state for that preference.
+  const addressForRequest =
+    receiver.deliveryPreference === 'pickup_station' && !receiver.address.trim()
+      ? [receiver.city.trim(), receiver.state.trim()].filter(Boolean).join(', ')
+      : receiver.address;
+  const requestReceiver = { ...receiver, address: addressForRequest };
+  const requestKey = buildQuoteRequestKey(requestReceiver, cart);
   if (!state.force && requestKey === state.currentRequestKey) return;
   const requestSequence = invalidatePendingQuoteRequests(
     state.requestSequence,
@@ -122,25 +139,26 @@ export async function loadCheckoutShippingQuotes(
         'x-baci-client': 'web-storefront',
       },
       body: JSON.stringify({
-        deliveryPreference: receiver.deliveryPreference,
-        merchantId: receiver.merchantId || undefined,
+        deliveryPreference: requestReceiver.deliveryPreference,
+        merchantId: requestReceiver.merchantId || undefined,
         receiver: {
           name:
-            `${receiver.fName} ${receiver.lName}`.trim() || 'Valued Customer',
-          email: receiver.email || 'guest@example.com',
-          phone: receiver.phone || '',
-          address: receiver.address,
-          city: receiver.city,
-          state: receiver.state,
+            `${requestReceiver.fName} ${requestReceiver.lName}`.trim() ||
+            'Valued Customer',
+          email: requestReceiver.email || 'guest@example.com',
+          phone: requestReceiver.phone || '',
+          address: requestReceiver.address,
+          city: requestReceiver.city,
+          state: requestReceiver.state,
           // Country is derived from the merchant (not hardcoded Nigeria) so a
           // non-NG merchant quotes against its own country-aware zones/rates.
-          country: receiver.country,
-          countryCode: receiver.countryCode,
-          ...(Number.isFinite(receiver.latitude) &&
-          Number.isFinite(receiver.longitude)
+          country: requestReceiver.country,
+          countryCode: requestReceiver.countryCode,
+          ...(Number.isFinite(requestReceiver.latitude) &&
+          Number.isFinite(requestReceiver.longitude)
             ? {
-                latitude: receiver.latitude,
-                longitude: receiver.longitude,
+                latitude: requestReceiver.latitude,
+                longitude: requestReceiver.longitude,
               }
             : {}),
         },
@@ -153,7 +171,7 @@ export async function loadCheckoutShippingQuotes(
         // Catalog subtotal lets the route evaluate merchant free-over /
         // price-tier rate conditions at quote time (advisory; order creation
         // re-derives the fee server-side).
-        cart_subtotal: receiver.cartSubtotal,
+        cart_subtotal: requestReceiver.cartSubtotal,
         // Opt-in: this client can thread a merchant rate's synthetic
         // `mrate_<uuid>` id back as `shipping_rate_id`, so the route may return
         // (otherwise gated) merchant-configured rates.
@@ -169,7 +187,7 @@ export async function loadCheckoutShippingQuotes(
       state.setShippingQuotes(quotes);
       state.setResolvedQuoteRequestKey(requestKey);
       const preferredQuoteId =
-        receiver.deliveryPreference === 'pickup_station'
+        requestReceiver.deliveryPreference === 'pickup_station'
           ? quotes.find((quote) => quote.isStationPickup)?.id
           : getPreferredDoorQuoteId(quotes);
       if (preferredQuoteId) state.setSelectedQuoteId(String(preferredQuoteId));

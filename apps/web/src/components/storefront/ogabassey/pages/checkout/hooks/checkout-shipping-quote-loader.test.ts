@@ -83,6 +83,31 @@ describe('loadCheckoutShippingQuotes', () => {
     expect(state.setSelectedQuoteId).toHaveBeenCalledWith('');
   });
 
+  describe('bugfix: allow streetless pickup quotes through the loader', () => {
+    it('fetches pickup_station quotes with city/state when street is empty', async () => {
+      const state = createState();
+      await loadCheckoutShippingQuotes(
+        {
+          ...receiver,
+          address: '',
+          city: 'Ikeja',
+          state: 'Lagos',
+          deliveryPreference: 'pickup_station',
+        },
+        cart,
+        state,
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(
+        String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body),
+      );
+      expect(body.deliveryPreference).toBe('pickup_station');
+      expect(body.receiver.address).toBe('Ikeja, Lagos');
+      expect(body.receiver.city).toBe('Ikeja');
+      expect(body.receiver.state).toBe('Lagos');
+    });
+  });
+
   beforeEach(() => {
     global.fetch = vi.fn().mockResolvedValue(quoteResponse());
   });

@@ -30,6 +30,7 @@ import {
 import { SmartQuoteLoader } from '../components/SmartQuoteLoader';
 import { DoorDeliveryQuoteOptions } from './checkout/components/DoorDeliveryQuoteOptions';
 import { isCheckoutDeliveryAddressReady } from './checkout/is-checkout-delivery-address-ready';
+import { shouldFetchCheckoutShippingQuotes } from './checkout/should-fetch-checkout-shipping-quotes';
 import {
   DiscountCodeInput,
   type DiscountResult,
@@ -1323,7 +1324,16 @@ export const CheckoutPage: React.FC = () => {
       }
 
       if (isNewAddressMode) {
-        if (isNewDeliveryAddressReady) {
+        const hasCityState = Boolean(
+          newAddressCity.trim() && newAddressState.trim(),
+        );
+        if (
+          shouldFetchCheckoutShippingQuotes({
+            deliveryMethod,
+            isStreetReady: isNewDeliveryAddressReady,
+            hasCityState,
+          })
+        ) {
           fetchShippingQuotes(
             newAddressStreet,
             newAddressState,
@@ -1340,7 +1350,9 @@ export const CheckoutPage: React.FC = () => {
           // door quotes must not force those methods back to door.
           resetQuotesForAddressChange({
             // Inside this quote effect, method is door/pickup_station/airport.
-            preserveDeliveryMethod: deliveryMethod === 'airport',
+            preserveDeliveryMethod:
+              deliveryMethod === 'airport' ||
+              deliveryMethod === 'pickup_station',
           });
         }
       } else {

@@ -94,7 +94,8 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
             </span>
           </nav>
 
-          <CompareHubIntro merchantName={storefrontName} />
+          {/* Keep the initial and resumed intro identical to prevent reflow. */}
+          <CompareHubIntro />
 
           {sections.length === 0 ? (
             <section className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">

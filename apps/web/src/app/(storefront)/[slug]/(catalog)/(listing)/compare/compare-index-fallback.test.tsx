@@ -13,6 +13,9 @@ describe('CompareIndexFallback', () => {
       screen.getByRole('heading', { name: 'Compare products' })
     ).toBeInTheDocument();
     expect(
+      screen.getByRole('navigation', { name: 'Breadcrumb' })
+    ).toHaveTextContent('Home / Compare products');
+    expect(
       screen.queryByRole('status', { name: 'Loading product listing' })
     ).not.toBeInTheDocument();
   });

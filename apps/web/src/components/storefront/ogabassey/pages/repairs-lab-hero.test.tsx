@@ -35,5 +35,10 @@ describe('RepairsLabHero', () => {
 
     expect(screen.getByText(/every device repaired is one less in a landfill/i)).toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    // Inert placeholders occupy the same flex slots as the eventual links.
+    for (const label of ['Book a Repair', 'Trade-in Instead']) {
+      expect(screen.getByText(label)).toHaveClass('invisible');
+      expect(screen.getByText(label)).toHaveAttribute('aria-hidden', 'true');
+    }
   });
 });

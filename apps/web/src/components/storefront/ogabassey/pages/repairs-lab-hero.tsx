@@ -7,6 +7,18 @@ interface RepairsLabHeroProps {
   swapHref?: string;
 }
 
+function ActionSlot({ href, label, className }: {
+  href?: string;
+  label: string;
+  className: string;
+}) {
+  return href ? (
+    <Link href={asRoute(href)} className={className}>{label}</Link>
+  ) : (
+    <span aria-hidden="true" className={`${className} invisible`}>{label}</span>
+  );
+}
+
 export function RepairsLabHero({ repairHref, swapHref }: RepairsLabHeroProps) {
   return (
     <>
@@ -36,26 +48,18 @@ export function RepairsLabHero({ repairHref, swapHref }: RepairsLabHeroProps) {
             Every device repaired is one less in a landfill. Our certified
             technicians use genuine parts to give your gadget a second life.
           </p>
-          {repairHref || swapHref ? (
             <div className="flex flex-wrap gap-4">
-              {repairHref ? (
-                <Link
-                  href={asRoute(repairHref)}
+                <ActionSlot
+                  href={repairHref}
+                  label="Book a Repair"
                   className="bg-store-primary text-store-primary-text font-bold py-3.5 px-8 rounded-xl hover:bg-store-primary/90 transition-colors shadow-lg active:scale-95 shadow-store-primary/20"
-                >
-                  Book a Repair
-                </Link>
-              ) : null}
-              {swapHref ? (
-                <Link
-                  href={asRoute(swapHref)}
+                />
+                <ActionSlot
+                  href={swapHref}
+                  label="Trade-in Instead"
                   className="bg-store-background/10 text-store-background border border-store-background/20 font-bold py-3.5 px-8 rounded-xl hover:bg-store-background/20 transition-colors active:scale-95 backdrop-blur-xs"
-                >
-                  Trade-in Instead
-                </Link>
-              ) : null}
+                />
             </div>
-          ) : null}
         </div>
 
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_1px_1px,var(--store-background)_1px,transparent_0)] bg-[length:18px_18px]" />

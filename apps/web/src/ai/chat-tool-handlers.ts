@@ -6,6 +6,11 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { CHAT_PRODUCT_PROJECTION } from '@/ai/chat-product-projection';
+import {
+  type ChatProductResult,
+  createChatProductResult,
+} from '@/ai/chat-product-result';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import { sanitizeSearchQuery } from '@/lib/sanitize-core';
 import { searchStorefrontProducts } from '@/lib/storefront-search';
@@ -38,18 +43,6 @@ function createChatToolSupabaseClient(
 // SEARCH PRODUCTS
 // ============================================
 
-interface ProductSearchResult {
-  id: string;
-  name: string;
-  price: number;
-  description: string | null;
-  brand: string | null;
-  category: string | null;
-  image_url: string | null;
-  stock: number | null;
-  status: string;
-}
-
 function buildChatSearchText(params: SearchProductsParams): string {
   return [params.query, params.category]
     .filter((value): value is string => Boolean(value?.trim()))
@@ -72,7 +65,7 @@ function orderProductsByRankedIds<T extends { id: string }>(
 
 export async function handleSearchProducts(
   params: SearchProductsParams
-): Promise<{ products: ProductSearchResult[]; total: number }> {
+): Promise<{ products: ChatProductResult[]; total: number }> {
   const supabase = createChatToolSupabaseClient();
   const searchText = buildChatSearchText(params);
   let ranked: Awaited<ReturnType<typeof searchStorefrontProducts>> | null =
@@ -99,9 +92,7 @@ export async function handleSearchProducts(
 
   let query = supabase
     .from('products')
-    .select(
-      'id, name, price, description, brand, category, images, stock, status'
-    )
+    .select(CHAT_PRODUCT_PROJECTION)
     .eq('merchant_id', OGABASSEY_MERCHANT_ID)
     .eq('status', 'active')
     .order('price', { ascending: false })
@@ -129,18 +120,7 @@ export async function handleSearchProducts(
     return { products: [], total: 0 };
   }
 
-  const mappedProducts = (data || []).map((p) => ({
-    id: p.id,
-    name: p.name,
-    price: p.price,
-    description: p.description,
-    brand: p.brand,
-    category: p.category,
-    image_url:
-      Array.isArray(p.images) && p.images[0]?.url ? p.images[0].url : null,
-    stock: p.stock,
-    status: p.status,
-  }));
+  const mappedProducts = (data || []).map(createChatProductResult);
   const products = ranked
     ? orderProductsByRankedIds(mappedProducts, ranked.productIds)
     : mappedProducts;
@@ -154,15 +134,13 @@ export async function handleSearchProducts(
 
 export async function handleGetProductDetails(
   params: GetProductDetailsParams
-): Promise<ProductSearchResult | null> {
+): Promise<ChatProductResult | null> {
   const supabase = createChatToolSupabaseClient();
 
   try {
     const { data, error } = await supabase
       .from('products')
-      .select(
-        'id, name, price, description, brand, category, images, stock, status'
-      )
+      .select(CHAT_PRODUCT_PROJECTION)
       .eq('id', params.productId)
       .eq('merchant_id', OGABASSEY_MERCHANT_ID)
       .eq('status', 'active')
@@ -175,20 +153,7 @@ export async function handleGetProductDetails(
       return null;
     }
 
-    return {
-      id: data.id,
-      name: data.name,
-      price: data.price,
-      description: data.description,
-      brand: data.brand,
-      category: data.category,
-      image_url:
-        Array.isArray(data.images) && data.images[0]?.url
-          ? data.images[0].url
-          : null,
-      stock: data.stock,
-      status: data.status,
-    };
+    return createChatProductResult(data);
   } catch (err) {
     console.error('[Chat Tools] Product detail error:', err);
     return null;
@@ -384,7 +349,7 @@ export async function handleCheckPaymentStatus(
 
 export async function handleGetRecommendations(
   params: GetRecommendationsParams
-): Promise<ProductSearchResult[]> {
+): Promise<ChatProductResult[]> {
   const supabase = createChatToolSupabaseClient();
 
   try {
@@ -405,9 +370,7 @@ export async function handleGetRecommendations(
 
     let query = supabase
       .from('products')
-      .select(
-        'id, name, price, description, brand, category, images, stock, status'
-      )
+      .select(CHAT_PRODUCT_PROJECTION)
       .eq('merchant_id', OGABASSEY_MERCHANT_ID)
       .eq('status', 'active')
       .neq('id', params.productId)
@@ -443,18 +406,7 @@ export async function handleGetRecommendations(
       return [];
     }
 
-    return (data || []).map((p) => ({
-      id: p.id,
-      name: p.name,
-      price: p.price,
-      description: p.description,
-      brand: p.brand,
-      category: p.category,
-      image_url:
-        Array.isArray(p.images) && p.images[0]?.url ? p.images[0].url : null,
-      stock: p.stock,
-      status: p.status,
-    }));
+    return (data || []).map(createChatProductResult);
   } catch (err) {
     console.error('[Chat Tools] Recommendations error:', err);
     return [];
@@ -480,7 +432,7 @@ function getComplementaryCategories(category: string | null): string[] {
 
 export function handleAddToCart(
   params: AddToCartParams
-): Promise<ProductSearchResult | null> {
+): Promise<ChatProductResult | null> {
   // Just return the product details - actual cart management happens on frontend
   return handleGetProductDetails({ productId: params.productId });
 }

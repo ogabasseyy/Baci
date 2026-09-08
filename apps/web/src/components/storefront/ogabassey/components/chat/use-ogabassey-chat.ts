@@ -8,8 +8,7 @@ import {
 } from '@/components/storefront/santa-chat/types';
 import type { ChatMessage, SantaCartAction } from './types';
 import { PROACTIVE_MESSAGES } from './types';
-
-const OGABASSEY_CHAT_SESSION_STORAGE_KEY = 'ogabassey_chat_session_id';
+import { requestOgabasseyChatReply } from './request-ogabassey-chat-reply';
 
 interface UseOgabasseyChat {
   isOpen: boolean;
@@ -24,82 +23,6 @@ interface UseOgabasseyChat {
   handleSend: (messageText: string) => Promise<void>;
   handleSubmit: (e: React.FormEvent) => void;
   handleAddSantaWishToCart: (messageIndex: number, actionIndex?: number) => void;
-}
-
-function createChatSessionId(): string {
-  if (globalThis.crypto?.randomUUID) {
-    return `og_chat_${globalThis.crypto.randomUUID()}`;
-  }
-
-  return `og_chat_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-}
-
-function getOrCreateChatSessionId(): string {
-  if (typeof window === 'undefined') {
-    return createChatSessionId();
-  }
-
-  const storedSessionId = window.localStorage.getItem(
-    OGABASSEY_CHAT_SESSION_STORAGE_KEY
-  );
-  if (storedSessionId) {
-    return storedSessionId;
-  }
-
-  const sessionId = createChatSessionId();
-  window.localStorage.setItem(OGABASSEY_CHAT_SESSION_STORAGE_KEY, sessionId);
-  return sessionId;
-}
-
-// Module-scope helper so the try/finally + throw statements stay outside the
-// hook body (React Compiler cannot lower those constructs in components/hooks).
-async function requestChatReply(
-  isSanta: boolean,
-  history: ChatMessage[],
-  messageText: string
-): Promise<string> {
-  const endpoint = isSanta ? '/api/chat/santa' : '/api/chat';
-  const requestBody = {
-    ...(!isSanta ? { sessionId: getOrCreateChatSessionId() } : {}),
-    messages: [
-      ...history.map((m) => ({
-        role: m.role === 'model' ? 'assistant' : 'user',
-        content: m.text,
-      })),
-      { role: 'user', content: messageText },
-    ],
-  };
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    throw new Error('Chat service unavailable');
-  }
-
-  // Parse streaming text response
-  const reader = response.body?.getReader();
-  const decoder = new TextDecoder();
-  let aiResponseText = '';
-
-  try {
-    if (reader) {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        aiResponseText += decoder.decode(value, { stream: true });
-      }
-      // Flush any remaining multi-byte characters held in the decoder buffer
-      aiResponseText += decoder.decode();
-    }
-  } finally {
-    reader?.cancel();
-  }
-
-  return aiResponseText;
 }
 
 export function useOgabasseyChat({ isSanta }: { isSanta: boolean }): UseOgabasseyChat {
@@ -165,12 +88,16 @@ export function useOgabasseyChat({ isSanta }: { isSanta: boolean }): UseOgabasse
     setIsLoading(true);
 
     try {
-      const aiResponseText = await requestChatReply(isSanta, history, messageText);
+      const aiReply = await requestOgabasseyChatReply(
+        isSanta,
+        history,
+        messageText
+      );
 
       // Check if Santa granted wishes (parse every ACTION directive).
       let santaActions: SantaCartAction[] | undefined;
       if (isSanta) {
-        const parsedActions = parseSantaActions(aiResponseText);
+        const parsedActions = parseSantaActions(aiReply.text);
         if (parsedActions.length > 0) {
           santaActions = parsedActions.map((action) => ({
             productName: action.productName,
@@ -181,9 +108,17 @@ export function useOgabasseyChat({ isSanta }: { isSanta: boolean }): UseOgabasse
       }
 
       // Clean the response text by removing Santa action directives for display.
-      const displayText = stripSantaActions(aiResponseText);
+      const displayText = stripSantaActions(aiReply.text);
 
-      setMessages((prev) => [...prev, { role: 'model', text: displayText, santaActions }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'model',
+          text: displayText,
+          santaActions,
+          ...(aiReply.events.length > 0 ? { uiEvents: aiReply.events } : {}),
+        },
+      ]);
     } catch (error) {
       console.error('Chat error:', error);
       setMessages((prev) => [

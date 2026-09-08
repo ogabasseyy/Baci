@@ -30,18 +30,28 @@ function provider(name: string): TextProvider {
 }
 
 let markSideEffect: ((toolName: string) => void) | undefined;
+let reportToolResult: ((toolName: string, result: unknown) => void) | undefined;
 
 describe('runChatProviderChain', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetProviderCooldowns();
     markSideEffect = undefined;
+    reportToolResult = undefined;
     mocks.createTools.mockImplementation(
       (
         _sessionId: string,
-        options: { onSideEffect?: (toolName: string) => void } = {}
+        options: {
+          onSideEffect?: (toolName: string) => void;
+          onToolResult?: (
+            toolName: string,
+            result: unknown,
+            context?: { quantity?: number }
+          ) => void;
+        } = {}
       ) => {
         markSideEffect = options.onSideEffect;
+        reportToolResult = options.onToolResult;
         return {};
       }
     );
@@ -79,6 +89,52 @@ describe('runChatProviderChain', () => {
       { id: 'google:gemini-2.5-flash' },
       { id: 'google:gemini-2.5-flash-lite' },
     ]);
+  });
+
+  it.each([
+    false,
+    true,
+  ])('isolates failed-attempt cards when the successful provider emits cards: %s', async (withCards) => {
+    const product = (id: string) => ({
+      brand: null,
+      category: null,
+      description: null,
+      has_variants: false,
+      id,
+      image_url: null,
+      manage_stock: false,
+      name: id,
+      price: 10,
+      slug: null,
+      status: 'active',
+      stock: null,
+    });
+    let failedReport: typeof reportToolResult;
+    vi.mocked(generateText).mockImplementation((async (options: {
+      model: { id: string };
+    }) => {
+      if (options.model.id === 'google:gemini-2.5-flash') {
+        failedReport = reportToolResult;
+        for (const id of ['failed-1', 'failed-2', 'failed-3']) {
+          reportToolResult?.('getProductDetails', product(id));
+        }
+        throw new Error('failed after tool');
+      }
+      // A late result from the failed attempt must not affect the active one.
+      failedReport?.('getProductDetails', product('late'));
+      if (withCards)
+        reportToolResult?.('getProductDetails', product('successful'));
+      return { text: 'Successful response' };
+    }) as unknown as typeof generateText);
+    const result = await runChatProviderChain({
+      abortSignal: new AbortController().signal,
+      messages: [{ role: 'user', content: 'Show phones' }],
+      sessionId: 'session-1',
+    });
+    expect(
+      result.events?.flatMap((event) => event.products.map(({ id }) => id)) ??
+        []
+    ).toEqual(withCards ? ['successful'] : []);
   });
 
   it('uses a configured reliable provider without tools when both Gemini pools fail', async () => {
@@ -144,5 +200,93 @@ describe('runChatProviderChain', () => {
       'provider chain walk stopped after google:gemini-2.5-flash failed'
     );
     expect(vi.mocked(generateText)).toHaveBeenCalledOnce();
+  });
+
+  it('returns validated product events collected from a successful tool call', async () => {
+    vi.mocked(generateText).mockImplementation((() => {
+      reportToolResult?.('searchProducts', {
+        products: [
+          {
+            brand: 'Apple',
+            category: 'Smartphones',
+            description: 'Current catalog product',
+            has_variants: false,
+            id: 'product-1',
+            image_url: 'https://cdn.example.com/iphone.jpg',
+            manage_stock: true,
+            name: 'iPhone 16',
+            price: 1_200_000,
+            slug: 'iphone-16',
+            status: 'active',
+            stock: 3,
+          },
+        ],
+        total: 1,
+      });
+      return Promise.resolve({ text: 'I found one phone.' });
+    }) as unknown as typeof generateText);
+
+    const result = await runChatProviderChain({
+      abortSignal: new AbortController().signal,
+      messages: [{ content: 'Show me phones', role: 'user' }],
+      sessionId: 'session-1',
+    });
+
+    expect(result).toEqual({
+      events: [
+        expect.objectContaining({
+          intent: 'discover',
+          products: [
+            expect.objectContaining({
+              id: 'product-1',
+              name: 'iPhone 16',
+            }),
+          ],
+          type: 'present_products',
+        }),
+      ],
+      providerName: 'google:gemini-2.5-flash',
+      text: 'I found one phone.',
+    });
+  });
+
+  it.each([
+    false,
+    true,
+  ])('uses successful tool UI with recovery provider %s when the provider returns no final text', async (withRecovery) => {
+    mocks.getTextProviderChain.mockReturnValue([
+      provider('google:gemini-2.5-flash'),
+      ...(withRecovery ? [provider('groq:recovery')] : []),
+    ]);
+    vi.mocked(generateText).mockImplementation((() => {
+      reportToolResult?.('getProductDetails', {
+        brand: 'Apple',
+        category: 'Smartphones',
+        description: null,
+        has_variants: false,
+        id: 'product-1',
+        image_url: null,
+        manage_stock: false,
+        name: 'iPhone 16',
+        price: 1_200_000,
+        slug: 'iphone-16',
+        status: 'active',
+        stock: null,
+      });
+      return Promise.resolve({ text: '   ' });
+    }) as unknown as typeof generateText);
+
+    const result = await runChatProviderChain({
+      abortSignal: new AbortController().signal,
+      messages: [{ content: 'Tell me about this phone', role: 'user' }],
+      sessionId: 'session-1',
+    });
+
+    expect(result.text).toBe(
+      'I found these live catalog options for you.\niPhone 16'
+    );
+    expect(result.events).toHaveLength(1);
+    expect(result.providerName).toBe('google:gemini-2.5-flash');
+    expect(generateText).toHaveBeenCalledTimes(1);
   });
 });

@@ -15,7 +15,9 @@ export function mapApiOrderToResumedOrder(
     id: String(orderData.id ?? ''),
     short_id: String(orderData.short_id ?? ''),
     subtotal: Number(orderData.subtotal) || 0,
-    shipping_cost: Number(orderData.shipping_cost) || 0,
+    // Authenticated order detail selects `shipping_fee`; public tracking exposes `shipping_cost`.
+    shipping_cost:
+      Number(orderData.shipping_cost ?? orderData.shipping_fee) || 0,
     tax_amount: Number(orderData.tax_amount) || 0,
     discount_amount: Number(orderData.discount_amount) || 0,
     gift_wrapping_fee: Number(orderData.gift_wrapping_fee) || 0,

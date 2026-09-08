@@ -34,3 +34,33 @@ describe('bugfix: restore gift-wrapping fees in resumed summaries', () => {
     ).toBe(resumed.total);
   });
 });
+
+describe('bugfix: authenticated resume only exposes shipping_fee', () => {
+  it('falls back to shipping_fee when shipping_cost is absent', () => {
+    const resumed = mapApiOrderToResumedOrder({
+      id: 'order-2',
+      short_id: 'ORD-2',
+      subtotal: 10000,
+      shipping_fee: 2500,
+      tax_amount: 0,
+      discount_amount: 0,
+      gift_wrapping_fee: 0,
+      total: 12500,
+      customer_name: 'Ada Lovelace',
+      customer_email: 'ada@example.com',
+      customer_phone: '+2348000000000',
+      shipping_address: {
+        address: '1 Bridge St',
+        city: 'Lagos',
+        state: 'Lagos',
+        phone: '+2348000000000',
+      },
+      items: [],
+    });
+
+    expect(resumed.shipping_cost).toBe(2500);
+    expect(
+      resumed.subtotal + resumed.shipping_cost,
+    ).toBe(resumed.total);
+  });
+});

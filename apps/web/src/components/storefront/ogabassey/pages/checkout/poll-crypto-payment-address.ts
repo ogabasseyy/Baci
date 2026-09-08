@@ -31,6 +31,11 @@ export async function pollCryptoPaymentAddress(session: CryptoInitialization, op
       throw new Error('Crypto payment status is unavailable. Retry to check the same payment session.');
     }
     const status = parsedStatus.data;
+    // Paid sessions can still include the deposit address; never present them as payable.
+    if (['succeeded', 'confirmed', 'success'].includes(status.status ?? '')) {
+      options.onTerminalSession?.();
+      throw new Error('This crypto payment has already been completed.');
+    }
     if (['failed', 'cancelled', 'canceled', 'expired'].includes(status.status ?? '')) {
       options.onTerminalSession?.();
       throw new Error('This crypto payment session has ended. Retry to create a new payment session.');

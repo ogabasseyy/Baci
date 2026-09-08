@@ -67,3 +67,20 @@ it.each(['failed', 'cancelled'])('stops immediately for terminal status %s', asy
   expect(onTerminalSession).toHaveBeenCalledOnce();
   expect(fetchMock).toHaveBeenCalledOnce();
 });
+it('bugfix: does not return a payable address when status is already succeeded', async () => {
+  const onTerminalSession = vi.fn();
+  const address = {
+    address: 'TJRabPrwbZy45sbavfcjinPJC18kjpRTv8',
+    chain: 'TRX',
+    currency: 'USDT',
+  };
+  const fetchMock = vi.fn().mockResolvedValue(
+    Response.json({ success: true, status: 'succeeded', crypto_address: address }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(
+    pollCryptoPaymentAddress(session, { onTerminalSession }),
+  ).rejects.toThrow('already been completed');
+  expect(onTerminalSession).toHaveBeenCalledOnce();
+  expect(fetchMock).toHaveBeenCalledOnce();
+});

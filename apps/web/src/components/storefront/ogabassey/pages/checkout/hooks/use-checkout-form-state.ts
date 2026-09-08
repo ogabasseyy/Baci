@@ -20,6 +20,8 @@ const initialValues = {
   airportRequiresQuote: false,
   // Persist the chosen door/pickup service across refresh on the payment step.
   selectedQuoteId: '',
+  // Carrier quote UUIDs rotate on every fetch; providerRateId is the stable key.
+  selectedProviderRateId: '',
   newsletterOptIn: false,
 };
 

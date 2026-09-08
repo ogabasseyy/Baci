@@ -1,4 +1,5 @@
 import { normalizeShippingQuoteResponse } from '@/lib/shipping/quote-response';
+import { findQuoteByStableIdentity } from '../find-quote-by-stable-identity';
 import { isCheckoutDeliveryAddressReady } from '../is-checkout-delivery-address-ready';
 import { shouldFetchCheckoutShippingQuotes } from '../should-fetch-checkout-shipping-quotes';
 import type { ShippingQuote } from '../types';
@@ -42,10 +43,13 @@ interface QuoteState {
   force: boolean;
   /** Previously chosen quote to restore after reload when still present. */
   preferredSelectedQuoteId?: string;
+  /** Stable carrier rate id used when quote UUIDs rotate on refresh. */
+  preferredProviderRateId?: string;
   requestSequence: { current: number };
   setIsLoadingQuotes: (loading: boolean) => void;
   setResolvedQuoteRequestKey: (key: string) => void;
   setSelectedQuoteId: (id: string) => void;
+  setSelectedProviderRateId?: (providerRateId: string) => void;
   setShippingQuotes: (quotes: ShippingQuote[]) => void;
 }
 
@@ -187,19 +191,27 @@ export async function loadCheckoutShippingQuotes(
       const { quotes } = normalizeShippingQuoteResponse(data);
       state.setShippingQuotes(quotes);
       state.setResolvedQuoteRequestKey(requestKey);
-      const preferredStillValid =
-        Boolean(state.preferredSelectedQuoteId) &&
-        quotes.some(
-          (quote) =>
-            String(quote.id) === String(state.preferredSelectedQuoteId),
-        );
-      const preferredQuoteId = preferredStillValid
-        ? state.preferredSelectedQuoteId
+      const preferredQuote = findQuoteByStableIdentity(quotes, {
+        quoteId: state.preferredSelectedQuoteId,
+        providerRateId: state.preferredProviderRateId,
+      });
+      const preferredQuoteId = preferredQuote
+        ? preferredQuote.id
         : requestReceiver.deliveryPreference === 'pickup_station'
           ? quotes.find((quote) => quote.isStationPickup)?.id
           : getPreferredDoorQuoteId(quotes);
-      if (preferredQuoteId) state.setSelectedQuoteId(String(preferredQuoteId));
-      else state.setSelectedQuoteId('');
+      if (preferredQuoteId) {
+        state.setSelectedQuoteId(String(preferredQuoteId));
+        const selected =
+          preferredQuote ??
+          quotes.find((quote) => String(quote.id) === String(preferredQuoteId));
+        state.setSelectedProviderRateId?.(
+          selected?.providerRateId?.trim() || '',
+        );
+      } else {
+        state.setSelectedQuoteId('');
+        state.setSelectedProviderRateId?.('');
+      }
     } else {
       console.warn('Failed to fetch quotes:', await response.text());
       if (isLatestRequest()) clearQuotes(state);
@@ -229,4 +241,5 @@ function clearQuotes(state: QuoteState) {
   state.setShippingQuotes([]);
   state.setResolvedQuoteRequestKey('');
   state.setSelectedQuoteId('');
+  state.setSelectedProviderRateId?.('');
 }

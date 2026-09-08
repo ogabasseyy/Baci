@@ -152,6 +152,56 @@ describe('loadCheckoutShippingQuotes', () => {
       await loadCheckoutShippingQuotes(receiver, cart, state);
       expect(state.setSelectedQuoteId).toHaveBeenCalledWith('door-quote-2');
     });
+
+    it('restores a carrier choice by providerRateId when quote UUIDs rotate', async () => {
+      const setSelectedProviderRateId = vi.fn();
+      const state = {
+        ...createState(),
+        preferredSelectedQuoteId: 'stale-uuid',
+        preferredProviderRateId: 'GIGL_30_1',
+        setSelectedProviderRateId,
+      };
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            quotes: {
+              all: [
+                {
+                  carrierName: 'GIG Logistics',
+                  currency: 'NGN',
+                  displayName: 'Standard',
+                  estimatedDays: 3,
+                  id: 'fresh-uuid-1',
+                  insuranceIncluded: true,
+                  pickupIncluded: true,
+                  price: 2000,
+                  provider: 'GIGL',
+                  providerRateId: 'GIGL_30_0',
+                  serviceTier: 'Standard',
+                },
+                {
+                  carrierName: 'GIG Logistics',
+                  currency: 'NGN',
+                  displayName: 'Express',
+                  estimatedDays: 1,
+                  id: 'fresh-uuid-2',
+                  insuranceIncluded: true,
+                  pickupIncluded: true,
+                  price: 4000,
+                  provider: 'GIGL',
+                  providerRateId: 'GIGL_30_1',
+                  serviceTier: 'Express',
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+      await loadCheckoutShippingQuotes(receiver, cart, state);
+      expect(state.setSelectedQuoteId).toHaveBeenCalledWith('fresh-uuid-2');
+      expect(setSelectedProviderRateId).toHaveBeenCalledWith('GIGL_30_1');
+    });
   });
 
   beforeEach(() => {

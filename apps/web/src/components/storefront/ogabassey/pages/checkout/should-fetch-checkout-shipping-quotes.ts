@@ -17,3 +17,26 @@ export function shouldFetchCheckoutShippingQuotes(input: {
   }
   return false;
 }
+
+/**
+ * Discover merchant/station pickup rates from city/state before the shopper
+ * leaves the default `door` method (Lagos hides `pickup_station` until a quote
+ * exists).
+ */
+export function shouldDiscoverCheckoutPickupQuotes(input: {
+  isStreetReady: boolean;
+  hasCityState: boolean;
+}): boolean {
+  return input.hasCityState && !input.isStreetReady;
+}
+
+/** Prefer pickup discovery when the street is incomplete. */
+export function checkoutShippingQuoteDeliveryPreference(input: {
+  deliveryMethod: DeliveryMethod;
+  isStreetReady: boolean;
+}): 'door' | 'pickup_station' {
+  if (input.deliveryMethod === 'pickup_station' || !input.isStreetReady) {
+    return 'pickup_station';
+  }
+  return 'door';
+}

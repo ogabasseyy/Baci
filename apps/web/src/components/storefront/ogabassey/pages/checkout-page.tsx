@@ -30,7 +30,11 @@ import {
 import { SmartQuoteLoader } from '../components/SmartQuoteLoader';
 import { DoorDeliveryQuoteOptions } from './checkout/components/DoorDeliveryQuoteOptions';
 import { isCheckoutDeliveryAddressReady } from './checkout/is-checkout-delivery-address-ready';
-import { shouldFetchCheckoutShippingQuotes } from './checkout/should-fetch-checkout-shipping-quotes';
+import {
+  checkoutShippingQuoteDeliveryPreference,
+  shouldDiscoverCheckoutPickupQuotes,
+  shouldFetchCheckoutShippingQuotes,
+} from './checkout/should-fetch-checkout-shipping-quotes';
 import {
   DiscountCodeInput,
   type DiscountResult,
@@ -589,6 +593,7 @@ export const CheckoutPage: React.FC = () => {
     airportType,
     airportRequiresQuote,
     selectedQuoteId: persistedSelectedQuoteId,
+    selectedProviderRateId: persistedSelectedProviderRateId,
     newsletterOptIn,
     currentStep: rawCurrentStep,
     completedSteps: rawCompletedSteps,
@@ -1051,8 +1056,17 @@ export const CheckoutPage: React.FC = () => {
   const [shippingQuotes, setShippingQuotes] = useState<ShippingQuote[]>([]);
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
   const selectedQuoteId = persistedSelectedQuoteId || '';
-  const setSelectedQuoteId = (id: string) =>
+  const selectedProviderRateId = persistedSelectedProviderRateId || '';
+  const setSelectedQuoteId = (id: string) => {
     setCheckoutField('selectedQuoteId', id);
+    const matched = shippingQuotes.find(
+      (quote) => String(quote.id) === String(id),
+    );
+    setCheckoutField(
+      'selectedProviderRateId',
+      matched?.providerRateId?.trim() || '',
+    );
+  };
   const [resolvedQuoteRequestKey, setResolvedQuoteRequestKey] = useState('');
   const quoteRequestSequence = useRef(0);
   const quoteAbortController = useRef<AbortController | null>(null);
@@ -1302,10 +1316,13 @@ export const CheckoutPage: React.FC = () => {
             currentRequestKey: resolvedQuoteRequestKey,
             force,
             preferredSelectedQuoteId: selectedQuoteId || undefined,
+            preferredProviderRateId: selectedProviderRateId || undefined,
             requestSequence: quoteRequestSequence,
             setResolvedQuoteRequestKey,
             setIsLoadingQuotes,
             setSelectedQuoteId,
+            setSelectedProviderRateId: (providerRateId: string) =>
+              setCheckoutField('selectedProviderRateId', providerRateId),
             setShippingQuotes,
           },
         )
@@ -1336,6 +1353,10 @@ export const CheckoutPage: React.FC = () => {
             deliveryMethod,
             isStreetReady: isNewDeliveryAddressReady,
             hasCityState,
+          }) ||
+          shouldDiscoverCheckoutPickupQuotes({
+            isStreetReady: isNewDeliveryAddressReady,
+            hasCityState,
           })
         ) {
           fetchShippingQuotes(
@@ -1346,7 +1367,10 @@ export const CheckoutPage: React.FC = () => {
             firstName,
             lastName,
             customerEmail,
-            deliveryMethod === 'pickup_station' ? 'pickup_station' : 'door',
+            checkoutShippingQuoteDeliveryPreference({
+              deliveryMethod,
+              isStreetReady: isNewDeliveryAddressReady,
+            }),
             false,
           );
         } else {

@@ -61,12 +61,13 @@ describe('checkout state across payment navigation', () => {
   });
 
   describe('bugfix: restore the chosen shipping service after refresh', () => {
-    it('restores selectedQuoteId with delivery method after navigation', () => {
+    it('restores selectedQuoteId and providerRateId with delivery method after navigation', () => {
       const form = renderHook(() => useCheckoutFormState());
       act(() =>
         form.result.current.setValues({
           deliveryMethod: 'door',
           selectedQuoteId: 'door-quote-2',
+          selectedProviderRateId: 'GIGL_30_1',
           currentStep: 'payment',
         })
       );
@@ -76,6 +77,7 @@ describe('checkout state across payment navigation', () => {
       expect(restored.result.current.values).toMatchObject({
         deliveryMethod: 'door',
         selectedQuoteId: 'door-quote-2',
+        selectedProviderRateId: 'GIGL_30_1',
         currentStep: 'payment',
       });
     });

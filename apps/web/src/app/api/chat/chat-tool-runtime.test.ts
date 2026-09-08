@@ -18,6 +18,25 @@ vi.mock('@/ai/chat-order-cancellation', () => ({
 import { createAiSdkAgenticChatTools } from '@/app/api/chat/chat-tool-runtime';
 
 describe('chat tool runtime', () => {
+  it.each([
+    'searchProducts',
+    'addToCart',
+  ] as const)('propagates %s rejection without reporting a product result', async (name) => {
+    const error = new Error('Catalog unavailable');
+    const onToolResult = vi.fn();
+    const tools = createAiSdkAgenticChatTools('session-1', { onToolResult });
+    const handler =
+      name === 'searchProducts'
+        ? mocks.handleSearchProducts
+        : mocks.handleAddToCart;
+    handler.mockRejectedValueOnce(error);
+    const execution =
+      name === 'searchProducts'
+        ? tools.searchProducts.execute({ query: 'iPhone' })
+        : tools.addToCart.execute({ productId: 'p1', quantity: 2 });
+    await expect(execution).rejects.toBe(error);
+    expect(onToolResult).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.handleSearchProducts.mockResolvedValue({

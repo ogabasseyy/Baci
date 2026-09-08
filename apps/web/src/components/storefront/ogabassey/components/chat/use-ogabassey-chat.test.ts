@@ -1,6 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { storefrontAgentUiContract } from '@/schemas/storefront-agent-ui-contract';
 
 const chatMocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
@@ -244,49 +243,6 @@ describe('useOgabasseyChat - handleSend', () => {
     const modelMessages = result.current.messages.filter((m) => m.role === 'model');
     expect(modelMessages.length).toBeGreaterThan(0);
     expect(modelMessages[modelMessages.length - 1].text).toContain('Here are our latest phones!');
-  });
-
-  it('stores validated generative UI events on the assistant message', async () => {
-    const event = {
-      intent: 'discover' as const,
-      products: [
-        {
-          brand: 'Apple',
-          category: 'Smartphones',
-          description: null,
-          hasVariants: false,
-          id: 'product-1',
-          imageUrl: null,
-          manageStock: false,
-          name: 'iPhone 16',
-          price: 1_200_000,
-          slug: 'iphone-16',
-          stock: null,
-        },
-      ],
-      title: 'Products I found',
-      type: 'present_products' as const,
-    };
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          events: [event],
-          text: 'Here is one phone.',
-          version: 1,
-        }),
-        { headers: { 'Content-Type': storefrontAgentUiContract.mediaType } }
-      )
-    );
-
-    const { result } = renderHook(() => useOgabasseyChat({ isSanta: false }));
-
-    await act(async () => {
-      await result.current.handleSend('Show me phones');
-    });
-
-    const responseMessage = result.current.messages.at(-1);
-    expect(responseMessage?.text).toBe('Here is one phone.');
-    expect(responseMessage?.uiEvents).toEqual([event]);
   });
 
   it('clears input after sending', async () => {

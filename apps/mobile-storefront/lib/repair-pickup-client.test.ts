@@ -28,6 +28,20 @@ const data = {
 };
 describe('repairPickupClient', () => {
   beforeEach(() => jest.clearAllMocks());
+  it('retains the durable request after an uncertain provider initialization', async () => {
+    const result = {
+      success: false,
+      code: 'payment_initialization_unknown',
+      error: 'Check ticket',
+      ticketNumber: 123,
+      resumeToken: 'token',
+    };
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => result });
+    await expect(repairPickupClient.pay(data, 3000)).resolves.toEqual(result);
+    expect(repairPickupPaymentAttempt.clear).not.toHaveBeenCalled();
+  });
   it('returns resume_invalid even when durable attempt cleanup fails', async () => {
     const result = { success: false, code: 'resume_invalid', error: 'Expired' };
     global.fetch = jest

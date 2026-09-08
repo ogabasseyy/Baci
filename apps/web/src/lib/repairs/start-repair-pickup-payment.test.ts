@@ -165,9 +165,9 @@ describe('startRepairPickupPayment', () => {
 
     expect(result).toMatchObject({
       success: false,
-      code: 'payment_initialization_failed',
+      code: 'payment_initialization_unknown',
       error:
-        'Your repair request was saved, but payment could not start. Use your ticket to retry shortly.',
+        'Payment initialization is being reconciled. Keep this repair ticket and check its status; do not start another payment.',
       id: repairId,
       ticketNumber: 42,
     });

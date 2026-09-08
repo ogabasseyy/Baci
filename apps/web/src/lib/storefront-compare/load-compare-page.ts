@@ -10,6 +10,7 @@ import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { generateSlug } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
+import { hasMaintainedProductCompareRoute } from '@/lib/storefront-compare/has-maintained-product-compare-route';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
 import type {
   BuildCommercialGuideLinksContext,
@@ -50,7 +51,6 @@ import {
   type CompareCategoryInventoryProduct,
   getCachedCompareCategoryInventory,
 } from './get-cached-compare-category-inventory';
-import { getCachedMaintainedCompareRouteManifest } from './get-cached-maintained-compare-route-manifest';
 
 interface CompareBreadcrumbItem {
   name: string;
@@ -705,27 +705,16 @@ async function getCachedComparePageModel(
   const rightProduct = normalizedProducts.find(
     (product) => product.slug === parsed.rightKey
   );
-  const curatedCompareSlugs = buildCuratedCompareSlugSet({
-    storeUrl,
-    categorySlug: args.categorySlug,
-    categoryName,
-    products: normalizedProducts,
-  });
-  const isCuratedCanonicalSlug = isCuratedCompareSlug(
-    parsed.canonicalSlug,
-    curatedCompareSlugs
-  );
   if (leftProduct && rightProduct) {
-    const maintainedRouteManifest = new Set(
-      await getCachedMaintainedCompareRouteManifest(
-        merchant.id,
-        args.categorySlug,
-        args.merchantSlug,
-        storeUrl
-      )
-    );
+    const isMaintainedRoute = await hasMaintainedProductCompareRoute({
+      merchantId: merchant.id,
+      merchantSlug: args.merchantSlug,
+      categorySlug: args.categorySlug,
+      comparisonSlug: parsed.canonicalSlug,
+      storeUrl,
+    });
 
-    if (!maintainedRouteManifest.has(parsed.canonicalSlug)) {
+    if (!isMaintainedRoute) {
       logCompareRouteMiss({
         ...args,
         canonicalSlug: parsed.canonicalSlug,
@@ -902,6 +891,17 @@ async function getCachedComparePageModel(
       },
     };
   }
+
+  const curatedCompareSlugs = buildCuratedCompareSlugSet({
+    storeUrl,
+    categorySlug: args.categorySlug,
+    categoryName,
+    products: normalizedProducts,
+  });
+  const isCuratedCanonicalSlug = isCuratedCompareSlug(
+    parsed.canonicalSlug,
+    curatedCompareSlugs
+  );
 
   const brandCandidate = buildBrandCompareCandidate({
     categorySlug: args.categorySlug,

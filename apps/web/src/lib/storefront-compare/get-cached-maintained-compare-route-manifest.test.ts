@@ -73,9 +73,28 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
     );
   });
 
-  it('keeps comparison slugs out of the cached loader API and loader wiring', () => {
-    // Vitest does not execute Next's Cache Components transform, so assert the
-    // source contract that defines its cache key and the consumer wiring.
+  it('propagates an inventory read failure instead of returning a cacheable empty manifest', async () => {
+    // Any cached manifest must only receive a complete approval set. Converting
+    // an infrastructure error to [] would persist a false "unapproved" answer.
+    mockGetCachedCompareCategoryInventory.mockRejectedValueOnce(
+      new Error('inventory unavailable')
+    );
+
+    await expect(
+      getCachedMaintainedCompareRouteManifest(
+        'merchant-1',
+        'smartphones',
+        'ogabassey',
+        'https://ogabassey.com'
+      )
+    ).rejects.toThrow('inventory unavailable');
+  });
+
+  it('keeps the manifest local until its inventory has cross-instance authority', () => {
+    // The inventory dependency is a process-local `use cache` entry. Making
+    // this parent remote could publish a new shared manifest from another
+    // instance's stale inventory after an invalidation, so retain the local
+    // directive until a durable inventory revision is part of this cache path.
     const manifestSource = readFileSync(
       'src/lib/storefront-compare/get-cached-maintained-compare-route-manifest.ts',
       'utf8'
@@ -84,10 +103,21 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
       'src/lib/storefront-compare/load-compare-page.ts',
       'utf8'
     );
+    const approvalHelperSource = readFileSync(
+      'src/lib/storefront-compare/has-maintained-product-compare-route.ts',
+      'utf8'
+    );
 
     expect(manifestSource).toContain("'use cache';");
+    expect(manifestSource).not.toContain("'use cache: remote';");
     expect(manifestSource).not.toContain('comparisonSlug');
-    expect(loaderSource).toContain('getCachedMaintainedCompareRouteManifest(');
+    expect(loaderSource).toContain('hasMaintainedProductCompareRoute(');
     expect(loaderSource).not.toContain('getMaintainedCompareRouteManifest(');
+    expect(approvalHelperSource).toContain(
+      'getCachedMaintainedCompareRouteManifest('
+    );
+    expect(approvalHelperSource).not.toContain(
+      'getMaintainedCompareRouteManifest('
+    );
   });
 });

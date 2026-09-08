@@ -36,6 +36,8 @@ const WEB_WORKFLOW_FILES = new Set([
   '.github/scripts/deploy-with-retry.sh',
   '.github/scripts/deferred-production-migrations.sh',
   '.github/scripts/pending-postdeploy-migrations.sh',
+  '.github/scripts/assert-vercel-pulled-sensitive-env.mjs',
+  '.github/scripts/assert-vercel-pulled-sensitive-env.test.mjs',
   '.github/scripts/inject-prebuilt-env-secret.mjs',
   '.github/scripts/merge-static-union.sh',
   '.github/scripts/merge-static-union.test.sh',

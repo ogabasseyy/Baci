@@ -1,14 +1,5 @@
-import { ImeiCheckerHero } from '@/components/storefront/ogabassey/pages/imei-checker-hero';
+import { ImeiCheckFallback } from './imei-check-fallback';
 
 export default function ImeiCheckLoading() {
-  return (
-    <div
-      role="status"
-      aria-label="Loading IMEI checker"
-      aria-live="polite"
-      className="px-4 pt-12"
-    >
-      <ImeiCheckerHero />
-    </div>
-  );
+  return <ImeiCheckFallback />;
 }

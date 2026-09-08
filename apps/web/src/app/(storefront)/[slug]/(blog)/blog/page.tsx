@@ -16,8 +16,11 @@ import { BlogPageContent, type BlogPageProps } from './blog-page-content';
 //   the generic `Ogabassey` title seen for Googlebot. Non-static tenants render
 //   dynamically, so their metadata may read searchParams to keep query-specific
 //   noindex/self-canonical variants (search/pagination/category).
-// - The listing hero only awaits params + the cached published listing, so it
-//   can paint the LCP featured image outside the searchParams Suspense slot.
+// - The listing hero is a sibling of the searchParams Suspense slot, not inside
+//   its own boundary: a null-fallback Suspense still emits a PPR hole, so the
+//   featured image stayed hidden until $RC and PSI measured ~7s render delay.
+//   generateStaticParams plus the cached listing let that hero prerender into
+//   the visible #main-content shell.
 // - The remaining listing content still reads searchParams behind Suspense so
 //   pagination/search keep working, including on the static tenant.
 
@@ -41,9 +44,7 @@ export async function generateMetadata({
 export default function BlogPage({ params, searchParams }: BlogPageProps) {
   return (
     <>
-      <Suspense fallback={null}>
-        <BlogListingStaticHero params={params} />
-      </Suspense>
+      <BlogListingStaticHero params={params} />
       <Suspense
         fallback={<BlogListingFallback includeFeaturedSkeleton={false} />}
       >

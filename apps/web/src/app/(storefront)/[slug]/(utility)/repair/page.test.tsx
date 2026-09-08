@@ -52,13 +52,18 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
-const { default: RepairPage, generateMetadata } = await import('./page');
+const {
+  default: RepairPage,
+  generateMetadata,
+  generateStaticParams,
+} = await import('./page');
+const { RepairPageContent } = await import('./repair-page-content');
 
 function callRepairPage(
   slug: string,
   searchParams: Record<string, string> = {}
 ) {
-  return RepairPage({
+  return RepairPageContent({
     params: Promise.resolve({ slug }),
     searchParams: Promise.resolve(searchParams),
   });
@@ -81,6 +86,27 @@ describe('RepairPage', () => {
     mockRepairBookingWizard.mockClear();
     mockGetRepairDeviceDetailBySlug.mockReset();
     mockGetRepairDeviceDetailBySlug.mockResolvedValue(deviceDetail);
+  });
+
+  it('prerenders both OgaBassey host identifiers so the booking LCP can land in the static shell', () => {
+    expect(generateStaticParams()).toEqual([
+      { slug: 'ogabassey.com' },
+      { slug: 'ogabassey' },
+    ]);
+  });
+
+  it('paints the booking LCP copy without waiting for merchant params', () => {
+    render(
+      <RepairPage
+        params={new Promise(() => undefined)}
+        searchParams={new Promise(() => undefined)}
+      />
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Before you book a repair' })
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Repair booking wizard')).not.toBeInTheDocument();
   });
 
   it('renders crawler-visible repair guidance before the booking wizard', async () => {

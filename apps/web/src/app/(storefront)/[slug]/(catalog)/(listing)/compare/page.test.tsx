@@ -100,7 +100,9 @@ const categories = [
   },
 ] satisfies CachedCategories;
 
-const { default: CompareIndexPage } = await import('./page');
+const { default: CompareIndexPage, generateStaticParams } = await import(
+  './page'
+);
 
 describe('compare index page runtime', () => {
   beforeEach(() => {
@@ -118,6 +120,13 @@ describe('compare index page runtime', () => {
     ));
     mockConnection.mockReset();
     mockNotFound.mockClear();
+  });
+
+  it('prerenders both OgaBassey host identifiers so the hub intro can land in the static shell', () => {
+    expect(generateStaticParams()).toEqual([
+      { slug: 'ogabassey.com' },
+      { slug: 'ogabassey' },
+    ]);
   });
 
   it('paints the compare hub heading while compare content is pending', () => {

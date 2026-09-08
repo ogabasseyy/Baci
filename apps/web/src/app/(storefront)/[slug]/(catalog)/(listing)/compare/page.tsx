@@ -16,6 +16,7 @@ import { buildStoreUrl } from '@/lib/store-url';
 import { canonicalizeCategorySlug } from '@/lib/storefront-canonical-url';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import { isValidMerchantIdentifier } from '@/lib/validation';
+import { getOgabasseyStaticParams } from '../../../ogabassey-static-params';
 import CategoryPageRoute, {
   generateMetadata as generateCategoryMetadata,
 } from '../[category]/page';
@@ -29,6 +30,11 @@ interface CompareIndexPageProps {
 }
 
 const COMPARE_CATEGORY_SLUG = 'compare';
+
+export function generateStaticParams(): Array<{ slug: string }> {
+  return getOgabasseyStaticParams();
+}
+
 const COMPARE_HUB_IGNORED_SEARCH_PARAM_KEYS = new Set([
   STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM,
 ]);

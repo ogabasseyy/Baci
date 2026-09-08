@@ -70,7 +70,6 @@ const runtimeRouteManifest = [
   '(customer)/delete-account/page.tsx',
   '(customer)/receipts/layout.tsx',
   '(customer)/receipts/page.tsx',
-  '(utility)/loading.tsx',
   '(utility)/imei-check/page.tsx',
   '(utility)/imei-check/loading.tsx',
   '(utility)/member-status/page.tsx',
@@ -79,6 +78,7 @@ const runtimeRouteManifest = [
   '(utility)/repairs/page.tsx',
   '(utility)/repairs/loading.tsx',
   '(utility)/reviews/page.tsx',
+  '(utility)/reviews/loading.tsx',
   '(utility)/swap/page.tsx',
 ];
 
@@ -129,9 +129,10 @@ const legacyRouteManifest = [
   'swap/page.tsx',
 ];
 
-// Nested /compare, /repairs, and /imei-check loading shells are covered by
-// colocated loading tests. This list stays on parent lazy-module boundaries
-// that settle under `act()` without importing connection()-bound page graphs.
+// Nested /compare, /repair, /repairs, and /imei-check loading shells are
+// covered by colocated loading tests. This list stays on parent lazy-module
+// boundaries that settle under `act()` without importing connection()-bound
+// page graphs.
 const firstPaintOwnershipManifest = [
   {
     routePath: '/blog/post-slug',
@@ -197,16 +198,9 @@ const firstPaintOwnershipManifest = [
     renderStrategy: 'lazy-module',
   },
   {
-    routePath: '/repair',
-    pagePath: '(utility)/repair/page.tsx',
-    loadingPath: '(utility)/loading.tsx',
-    label: 'Loading utility page',
-    renderStrategy: 'lazy-module',
-  },
-  {
     routePath: '/reviews',
     pagePath: '(utility)/reviews/page.tsx',
-    loadingPath: '(utility)/loading.tsx',
+    loadingPath: '(utility)/reviews/loading.tsx',
     label: 'Loading utility page',
     renderStrategy: 'lazy-module',
   },
@@ -232,6 +226,15 @@ describe('storefront route groups', () => {
     expect(
       existsSync(resolve(slugDirectory, 'storefront-layout-fallback.test.tsx'))
     ).toBe(false);
+  });
+
+  it('keeps utility LCP routes outside a route-family loading boundary', () => {
+    // A group-level (utility)/loading.tsx becomes the visible PPR fallback for
+    // /repair, /imei-check, and /repairs, hiding their leaf LCP copy until $RC.
+    // Leaf loading.tsx files own first paint, matching /compare.
+    expect(existsSync(resolve(slugDirectory, '(utility)/loading.tsx'))).toBe(
+      false
+    );
   });
 
   it('keeps root blog listing outside a route-family loading boundary', () => {

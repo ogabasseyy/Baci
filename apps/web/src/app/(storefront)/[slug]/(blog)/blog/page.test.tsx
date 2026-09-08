@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { isValidElement, Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildListingResult,
@@ -42,6 +43,31 @@ describe('blog page shell', () => {
     expect(generateStaticParams()).toContainEqual({ slug: 'ogabassey.com' });
   });
 
+  it('keeps the listing hero outside Suspense so PPR cannot hide it behind a null fallback', () => {
+    const ui = BlogPage({
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
+      searchParams: Promise.resolve({}),
+    });
+
+    expect(isValidElement<{ children?: unknown }>(ui)).toBe(true);
+    if (!isValidElement<{ children?: unknown }>(ui)) {
+      return;
+    }
+
+    const children = Array.isArray(ui.props.children)
+      ? ui.props.children
+      : [ui.props.children];
+
+    expect(isValidElement(children[0])).toBe(true);
+    expect(isValidElement(children[1])).toBe(true);
+    if (!isValidElement(children[0]) || !isValidElement(children[1])) {
+      return;
+    }
+
+    expect(children[0].type).not.toBe(Suspense);
+    expect(children[1].type).toBe(Suspense);
+  });
+
   it('renders the static OgaBassey listing content and forwards its request search params', async () => {
     const requestSearchParams = Promise.resolve({ search: 'iphone' });
 
@@ -52,8 +78,8 @@ describe('blog page shell', () => {
       })
     );
 
-    // Static tenant content renders (behind Suspense, streamed to crawlers) and
-    // keeps the request searchParams so search/pagination work on ogabassey.com.
+    // Static tenant hero is a sibling of the listing Suspense slot so PPR can
+    // prerender the featured image into the visible shell instead of a hole.
     expect(screen.getByText('Static listing hero')).toBeInTheDocument();
     expect(screen.getByText('Blog page content')).toBeInTheDocument();
     expect(mockBlogPageContent).toHaveBeenCalledWith(

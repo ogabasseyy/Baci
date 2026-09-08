@@ -24,12 +24,34 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
-const { default: ImeiCheckPage, metadata } = await import('./page');
+const {
+  default: ImeiCheckPage,
+  generateStaticParams,
+  metadata,
+} = await import('./page');
+const { ImeiCheckPageContent } = await import('./imei-check-page-content');
 
 describe('ImeiCheckPage', () => {
   beforeEach(() => {
     vi.mocked(getCachedMerchant).mockReset();
     notFound.mockClear();
+  });
+
+  it('prerenders both OgaBassey host identifiers so the IMEI hero can land in the static shell', () => {
+    expect(generateStaticParams()).toEqual([
+      { slug: 'ogabassey.com' },
+      { slug: 'ogabassey' },
+    ]);
+  });
+
+  it('paints the IMEI hero without waiting for merchant params', () => {
+    render(<ImeiCheckPage params={new Promise(() => undefined)} />);
+
+    expect(
+      screen.getByRole('heading', { name: /Don't Get Scammed/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText('Verify First.')).toBeInTheDocument();
+    expect(screen.queryByText('IMEI checker UI')).not.toBeInTheDocument();
   });
 
   it('renders IMEI UI with crawler-visible verification guidance', async () => {
@@ -39,7 +61,7 @@ describe('ImeiCheckPage', () => {
     } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
 
     render(
-      await ImeiCheckPage({
+      await ImeiCheckPageContent({
         params: Promise.resolve({ slug: 'ogabassey' }),
       })
     );
@@ -70,7 +92,7 @@ describe('ImeiCheckPage', () => {
     } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
 
     await expect(
-      ImeiCheckPage({ params: Promise.resolve({ slug: 'demo-store' }) })
+      ImeiCheckPageContent({ params: Promise.resolve({ slug: 'demo-store' }) })
     ).rejects.toThrow('NEXT_NOT_FOUND');
   });
 });

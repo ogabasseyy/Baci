@@ -40,6 +40,8 @@ interface QuoteState {
   activeAbortController: { current: AbortController | null };
   currentRequestKey: string;
   force: boolean;
+  /** Previously chosen quote to restore after reload when still present. */
+  preferredSelectedQuoteId?: string;
   requestSequence: { current: number };
   setIsLoadingQuotes: (loading: boolean) => void;
   setResolvedQuoteRequestKey: (key: string) => void;
@@ -129,7 +131,6 @@ export async function loadCheckoutShippingQuotes(
   }, CHECKOUT_QUOTE_TIMEOUT_MS);
 
   state.setIsLoadingQuotes(true);
-  state.setSelectedQuoteId('');
 
   try {
     const response = await fetch('/api/shipping/quotes', {
@@ -186,11 +187,19 @@ export async function loadCheckoutShippingQuotes(
       const { quotes } = normalizeShippingQuoteResponse(data);
       state.setShippingQuotes(quotes);
       state.setResolvedQuoteRequestKey(requestKey);
-      const preferredQuoteId =
-        requestReceiver.deliveryPreference === 'pickup_station'
+      const preferredStillValid =
+        Boolean(state.preferredSelectedQuoteId) &&
+        quotes.some(
+          (quote) =>
+            String(quote.id) === String(state.preferredSelectedQuoteId),
+        );
+      const preferredQuoteId = preferredStillValid
+        ? state.preferredSelectedQuoteId
+        : requestReceiver.deliveryPreference === 'pickup_station'
           ? quotes.find((quote) => quote.isStationPickup)?.id
           : getPreferredDoorQuoteId(quotes);
       if (preferredQuoteId) state.setSelectedQuoteId(String(preferredQuoteId));
+      else state.setSelectedQuoteId('');
     } else {
       console.warn('Failed to fetch quotes:', await response.text());
       if (isLatestRequest()) clearQuotes(state);

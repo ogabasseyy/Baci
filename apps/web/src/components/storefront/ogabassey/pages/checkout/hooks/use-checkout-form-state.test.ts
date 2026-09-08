@@ -59,4 +59,25 @@ describe('checkout state across payment navigation', () => {
       });
     });
   });
+
+  describe('bugfix: restore the chosen shipping service after refresh', () => {
+    it('restores selectedQuoteId with delivery method after navigation', () => {
+      const form = renderHook(() => useCheckoutFormState());
+      act(() =>
+        form.result.current.setValues({
+          deliveryMethod: 'door',
+          selectedQuoteId: 'door-quote-2',
+          currentStep: 'payment',
+        })
+      );
+      act(() => window.dispatchEvent(new Event('pagehide')));
+      form.unmount();
+      const restored = renderHook(() => useCheckoutFormState());
+      expect(restored.result.current.values).toMatchObject({
+        deliveryMethod: 'door',
+        selectedQuoteId: 'door-quote-2',
+        currentStep: 'payment',
+      });
+    });
+  });
 });

@@ -108,6 +108,52 @@ describe('loadCheckoutShippingQuotes', () => {
     });
   });
 
+  describe('bugfix: restore the chosen shipping service after refresh', () => {
+    it('keeps a previously selected door quote when it is still in the response', async () => {
+      const state = {
+        ...createState(),
+        preferredSelectedQuoteId: 'door-quote-2',
+      };
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            quotes: {
+              all: [
+                {
+                  carrierName: 'GIG Logistics',
+                  currency: 'NGN',
+                  displayName: 'Standard',
+                  estimatedDays: 3,
+                  id: 'door-quote-1',
+                  insuranceIncluded: true,
+                  pickupIncluded: true,
+                  price: 2000,
+                  provider: 'GIGL',
+                  serviceTier: 'Standard',
+                },
+                {
+                  carrierName: 'GIG Logistics',
+                  currency: 'NGN',
+                  displayName: 'Express',
+                  estimatedDays: 1,
+                  id: 'door-quote-2',
+                  insuranceIncluded: true,
+                  pickupIncluded: true,
+                  price: 4000,
+                  provider: 'GIGL',
+                  serviceTier: 'Express',
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+      await loadCheckoutShippingQuotes(receiver, cart, state);
+      expect(state.setSelectedQuoteId).toHaveBeenCalledWith('door-quote-2');
+    });
+  });
+
   beforeEach(() => {
     global.fetch = vi.fn().mockResolvedValue(quoteResponse());
   });
@@ -298,7 +344,6 @@ describe('loadCheckoutShippingQuotes', () => {
     await pendingRequest;
 
     expect(state.setShippingQuotes).not.toHaveBeenCalled();
-    expect(state.setSelectedQuoteId).toHaveBeenCalledTimes(1);
-    expect(state.setSelectedQuoteId).toHaveBeenCalledWith('');
+    expect(state.setSelectedQuoteId).not.toHaveBeenCalled();
   });
 });

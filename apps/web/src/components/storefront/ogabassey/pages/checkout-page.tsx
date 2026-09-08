@@ -588,6 +588,7 @@ export const CheckoutPage: React.FC = () => {
     deliveryMethod,
     airportType,
     airportRequiresQuote,
+    selectedQuoteId: persistedSelectedQuoteId,
     newsletterOptIn,
     currentStep: rawCurrentStep,
     completedSteps: rawCompletedSteps,
@@ -1049,7 +1050,9 @@ export const CheckoutPage: React.FC = () => {
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
   const [shippingQuotes, setShippingQuotes] = useState<ShippingQuote[]>([]);
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
-  const [selectedQuoteId, setSelectedQuoteId] = useState<string>('');
+  const selectedQuoteId = persistedSelectedQuoteId || '';
+  const setSelectedQuoteId = (id: string) =>
+    setCheckoutField('selectedQuoteId', id);
   const [resolvedQuoteRequestKey, setResolvedQuoteRequestKey] = useState('');
   const quoteRequestSequence = useRef(0);
   const quoteAbortController = useRef<AbortController | null>(null);
@@ -1298,6 +1301,7 @@ export const CheckoutPage: React.FC = () => {
             activeAbortController: quoteAbortController,
             currentRequestKey: resolvedQuoteRequestKey,
             force,
+            preferredSelectedQuoteId: selectedQuoteId || undefined,
             requestSequence: quoteRequestSequence,
             setResolvedQuoteRequestKey,
             setIsLoadingQuotes,
@@ -2013,6 +2017,7 @@ export const CheckoutPage: React.FC = () => {
       useWalletCredit: payWithWallet && walletAmountUsed > 0,
       walletAmountUsed,
       discountCode: appliedDiscount?.code ?? null,
+      giftWrappingCost,
     });
 
     try {

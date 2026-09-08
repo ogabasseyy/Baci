@@ -42,6 +42,9 @@ export interface PendingCheckoutFingerprintInput {
   // Applied discount code identity: changing/removing it must produce a
   // different fingerprint so a reused pending order can't drop the discount.
   discountCode?: string | null;
+  // Gift wrapping fee: toggling wrapping must not reuse a prior pending order
+  // with a different amountDueToGateway / wrapping choice.
+  giftWrappingCost?: number;
 }
 
 export interface PendingCheckoutOrderSnapshot {

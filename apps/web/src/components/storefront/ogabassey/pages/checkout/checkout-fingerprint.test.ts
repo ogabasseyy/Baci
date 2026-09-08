@@ -66,13 +66,24 @@ describe('payment abandonment fingerprint', () => {
     },
     { items: [{ ...checkout.items[0], quantity: 2 }] },
     { discountCode: 'SAVE' },
+    { giftWrappingCost: 10000 },
   ])('keeps actual checkout changes distinct: %o', (change) => {
     expect(
       buildPendingCheckoutFingerprint({ ...checkout, ...change })
     ).not.toBe(buildPendingCheckoutFingerprint(checkout));
   });
-});
 
+  describe('bugfix: gift wrapping omitted from fingerprints', () => {
+    it('keeps gift-wrapped and unwrapped checkouts distinct at the same cart total otherwise', () => {
+      expect(
+        buildPendingCheckoutFingerprint({
+          ...checkout,
+          giftWrappingCost: 10000,
+        })
+      ).not.toBe(buildPendingCheckoutFingerprint({ ...checkout, giftWrappingCost: 0 }));
+    });
+  });
+});
 
 describe('variant changes invalidate a pending checkout', () => {
   it.each([

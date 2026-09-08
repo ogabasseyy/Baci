@@ -61,5 +61,6 @@ export function buildPendingCheckoutFingerprint(
     useWalletCredit: input.useWalletCredit,
     walletAmountUsed: input.walletAmountUsed,
     discountCode: normalizeText(input.discountCode) || null,
+    giftWrappingCost: input.giftWrappingCost || 0,
   });
 }

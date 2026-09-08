@@ -18,6 +18,8 @@ const initialValues = {
   // Airport pickup vs doorstep subtype must survive refresh with deliveryMethod.
   airportType: 'delivery' as 'delivery' | 'pickup',
   airportRequiresQuote: false,
+  // Persist the chosen door/pickup service across refresh on the payment step.
+  selectedQuoteId: '',
   newsletterOptIn: false,
 };
 

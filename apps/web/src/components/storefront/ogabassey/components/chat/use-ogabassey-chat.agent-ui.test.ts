@@ -31,6 +31,24 @@ describe('useOgabasseyChat - agent UI', () => {
     window.localStorage.clear();
     global.fetch = vi.fn();
   });
+  it('appends a fallback assistant message and clears loading when fetch rejects', async () => {
+    // Arrange
+    vi.mocked(global.fetch).mockRejectedValueOnce(new Error('Network failure'));
+    const { result } = renderHook(() => useOgabasseyChat({ isSanta: false }));
+
+    // Act
+    await act(async () => {
+      await result.current.handleSend('Show me phones');
+    });
+
+    // Assert
+    expect(result.current.messages.at(-1)).toMatchObject({
+      role: 'model',
+      text: "I'm having trouble connecting right now. Please try again later.",
+    });
+    expect(result.current.isLoading).toBe(false);
+  });
+
   it('stores validated generative UI events on the assistant message', async () => {
     const event = {
       intent: 'discover' as const,
@@ -73,5 +91,4 @@ describe('useOgabasseyChat - agent UI', () => {
     expect(responseMessage?.text).toBe('Here is one phone.');
     expect(responseMessage?.uiEvents).toEqual([event]);
   });
-
 });

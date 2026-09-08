@@ -17,6 +17,9 @@ export type StartRepairPickupPaymentResult =
       id?: string;
       ticketNumber?: number;
       resumeToken?: string;
+      reference?: string;
+      amountKobo?: number;
+      currency?: string;
       quote?: { formattedPrice: string; price: number };
     };
 
@@ -26,4 +29,7 @@ export interface StartRepairPickupPaymentInput {
   merchantId: string;
   merchantIdentifier: string;
   resumeToken?: string | null;
+  onPaymentInitializationStarted?: (
+    result: StartRepairPickupPaymentResult
+  ) => Promise<void>;
 }

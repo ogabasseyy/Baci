@@ -313,6 +313,7 @@ jobs:
           --sql-check supabase/migrations/tests/repair_pickup_receiver_projection.sql
           --sql-check supabase/migrations/tests/find_resumable_repair_pickup.sql
           --sql-check supabase/migrations/tests/mobile_repair_pickup_payment_receipts.sql
+          --sql-check supabase/migrations/tests/mobile_repair_pickup_claim_lease.sql
           --sql-check supabase/migrations/tests/claim_repair_pickup_booking_terminal.sql
           --sql-check supabase/migrations/tests/claim_repair_pickup_booking_manual_fulfilled.sql
           --sql-check supabase/migrations/tests/normalize_nigerian_repair_pickup_receiver_phone.sql

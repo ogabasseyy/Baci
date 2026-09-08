@@ -72,7 +72,7 @@ export const repairPickupClient = {
     );
     // Only a parsed, definitive failure permits a new start. Lost responses
     // retain the same identity, so the server replays rather than reinitializes.
-    if (!result.success)
+    if (!result.success && result.code !== 'payment_initialization_unknown')
       await repairPickupPaymentAttempt.clear(data).catch(() => undefined);
     return result;
   },

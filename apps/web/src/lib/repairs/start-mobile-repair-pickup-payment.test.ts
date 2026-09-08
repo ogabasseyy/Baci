@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ rpc: vi.fn(), start: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  rpc: vi.fn(),
+  start: vi.fn(),
+  verify: vi.fn(),
+}));
+vi.mock('@/lib/paystack', () => ({ verifyTransaction: mocks.verify }));
 vi.mock('@/lib/repairs/repair-pickup-receiver-client', () => ({
   createRepairPickupReceiverClient: () => ({ rpc: mocks.rpc }),
 }));
@@ -30,9 +35,41 @@ const result = {
 };
 describe('mobile pickup payment receipt', () => {
   beforeEach(() => vi.clearAllMocks());
+  it('reconciles the saved reference after a crash following initialization without starting again', async () => {
+    const unknown = {
+      success: false,
+      code: 'payment_initialization_unknown',
+      error: 'unknown',
+      id: 'repair',
+      ticketNumber: 123,
+      resumeToken: 'token',
+      reference: 'ref',
+      amountKobo: 300000,
+      currency: 'NGN',
+    };
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { state: 'claimed' } })
+      .mockResolvedValueOnce({ data: true })
+      .mockResolvedValueOnce({ data: { state: 'unknown', result: unknown } })
+      .mockResolvedValueOnce({ data: { state: 'unknown', result: unknown } });
+    mocks.start.mockImplementationOnce(
+      async ({ onPaymentInitializationStarted }) => {
+        await onPaymentInitializationStarted(unknown);
+        throw new Error('process lost');
+      }
+    );
+    mocks.verify.mockResolvedValue({ success: false });
+    await expect(startMobileRepairPickupPayment(input)).rejects.toThrow(
+      'process lost'
+    );
+    expect(await startMobileRepairPickupPayment(input)).toEqual(unknown);
+    expect(mocks.verify).toHaveBeenCalledWith('ref');
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+  });
   it('replays the completed start after the first HTTP response was lost without another provider start', async () => {
     mocks.rpc
       .mockResolvedValueOnce({ data: { state: 'claimed' } })
+      .mockResolvedValueOnce({ data: true })
       .mockResolvedValueOnce({ data: { state: 'complete', result } })
       .mockResolvedValueOnce({ data: { state: 'complete', result } });
     mocks.start.mockResolvedValue(result);
@@ -53,9 +90,18 @@ describe('mobile pickup payment receipt', () => {
     await expect(startMobileRepairPickupPayment(input)).rejects.toThrow();
     expect(mocks.start).not.toHaveBeenCalled();
   });
+  it('does not start payment when another worker reclaimed the expired claim', async () => {
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { state: 'claimed' } })
+      .mockResolvedValueOnce({ error: { message: 'claim ownership changed' } });
+    mocks.start.mockResolvedValue(result);
+    await expect(startMobileRepairPickupPayment(input)).rejects.toThrow();
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
   it('keeps an interrupted completion unknown rather than initializing again', async () => {
     mocks.rpc
       .mockResolvedValueOnce({ data: { state: 'claimed' } })
+      .mockResolvedValueOnce({ data: true })
       .mockResolvedValueOnce({ error: { message: 'offline' } })
       .mockResolvedValueOnce({ data: { state: 'pending' } });
     mocks.start.mockResolvedValue(result);

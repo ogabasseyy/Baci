@@ -1,9 +1,9 @@
 import { customAlphabet } from 'nanoid';
 import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
-import { initializeTransaction } from '@/lib/paystack';
 import { bindRepairPickupPendingPaymentReference } from '@/lib/repairs/bind-repair-pickup-pending-payment-reference';
 import { createRepairBooking } from '@/lib/repairs/create-repair-core';
 import { findResumablePickupRepair } from '@/lib/repairs/find-resumable-repair-pickup';
+import { initializeRepairPickupPayment } from '@/lib/repairs/initialize-repair-pickup-payment';
 import { markRepairPickupAwaitingPayment } from '@/lib/repairs/mark-repair-pickup-awaiting-payment';
 import {
   buildPickupItems,
@@ -38,6 +38,7 @@ export async function startRepairPickupPayment({
   merchantId,
   merchantIdentifier,
   resumeToken,
+  onPaymentInitializationStarted,
 }: StartRepairPickupPaymentInput): Promise<StartRepairPickupPaymentResult> {
   const allowed = await ensureActionRateLimit('repair-pickup-payment', {
     requests: 5,
@@ -253,36 +254,20 @@ export async function startRepairPickupPayment({
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
   const callbackUrl = `${protocol}://${merchant.slug}.${rootDomain}/repair/status?ticket=${repair.ticketNumber}`;
 
-  try {
-    const payment = await initializeTransaction({
+  return initializeRepairPickupPayment(
+    {
       amount: amountKobo,
       callback_url: callbackUrl,
       channels: ['card', 'bank', 'ussd', 'bank_transfer'],
       email: parsed.data.customerEmail,
       metadata,
       reference,
-    });
-    return {
-      success: true,
+    },
+    {
       id: repair.id,
       ticketNumber: repair.ticketNumber,
       resumeToken: nextResumeToken,
-      payment: {
-        amount: quote.price,
-        authorizationUrl: payment.authorization_url,
-        reference,
-      },
-    };
-  } catch (error) {
-    console.error('Repair pickup payment initialization failed:', error);
-    return {
-      success: false,
-      code: 'payment_initialization_failed',
-      error:
-        'Your repair request was saved, but payment could not start. Use your ticket to retry shortly.',
-      id: repair.id,
-      ticketNumber: repair.ticketNumber,
-      resumeToken: nextResumeToken,
-    };
-  }
+    },
+    onPaymentInitializationStarted
+  );
 }

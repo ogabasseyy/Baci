@@ -14,7 +14,7 @@ function buildSentryExpoConfiguration(env, { required }) {
     .filter(([, value]) => !value)
     .map(([name]) => name);
 
-  if (missing.length > 0) {
+  if (missing.length > 0 && (required || !dsn)) {
     const detail = `Missing Sentry configuration: ${missing.join(', ')}.`;
     if (required) {
       throw new Error(
@@ -36,7 +36,14 @@ function buildSentryExpoConfiguration(env, { required }) {
       {
         experimental_android: {
           enableAndroidGradlePlugin: true,
+          ...(!authToken
+            ? {
+                autoUploadNativeSymbols: false,
+                autoUploadProguardMapping: false,
+              }
+            : {}),
         },
+        ...(!authToken ? { disableAutoUpload: true } : {}),
         organization,
         project,
         url: optionalValue(env.SENTRY_URL) || 'https://sentry.io/',
@@ -50,7 +57,8 @@ function buildSentryExpoConfiguration(env, { required }) {
           enableNativeCrashHandling: true,
           enableTombstone: true,
           environment:
-            optionalValue(env.EXPO_PUBLIC_SENTRY_ENVIRONMENT) || 'production',
+            optionalValue(env.EXPO_PUBLIC_SENTRY_ENVIRONMENT) ||
+            (required ? 'production' : 'development'),
           sendDefaultPii: false,
         },
       },

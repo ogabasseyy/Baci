@@ -263,3 +263,47 @@ index 400860cc17abfc0d2ef5a9a9a6dfe1170f6f2c79..ece2ff6c035f054c674dab9532469c88
 +        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
    }
  }
+diff --git a/ReactCommon/react/renderer/uimanager/UIManager.cpp b/ReactCommon/react/renderer/uimanager/UIManager.cpp
+--- a/ReactCommon/react/renderer/uimanager/UIManager.cpp
++++ b/ReactCommon/react/renderer/uimanager/UIManager.cpp
+@@ -538,24 +538,4 @@
+-    // Obtain a pointer to the root node. The flag-gated path uses
+-    // getCurrentRevision() which keeps the root alive via shared_ptr for
+-    // the entire traversal, fixing a use-after-free race condition.
+-    RootShadowNode::Shared rootShadowNodeHolder;
+-    const RootShadowNode* rootShadowNode = nullptr;
+-    if (ReactNativeFeatureFlags::fixFindShadowNodeByTagRaceCondition()) {
+-      rootShadowNodeHolder = shadowTree.getCurrentRevision().rootShadowNode;
+-      rootShadowNode = rootShadowNodeHolder.get();
+-    } else {
+-      // TODO(T257154369): Remove after flag rollout.
+-      // The public interface of `ShadowTree` discourages accessing a stored
+-      // pointer to a root node because of the possible data race.
+-      // To work around this, we ask for a commit and immediately cancel it
+-      // returning `nullptr` instead of a new shadow tree.
+-      // We don't want to add a way to access a stored pointer to a root
+-      // node because this `findShadowNodeByTag` is deprecated. It is only
+-      // added to make migration to the new architecture easier.
+-      shadowTree.tryCommit(
+-          [&](const RootShadowNode& oldRootShadowNode) {
+-            rootShadowNode = &oldRootShadowNode;
+-            return nullptr;
+-          },
+-          {/* default commit options */});
+-    }
++    // Keep shared ownership for the entire traversal: a concurrent commit
++    // can retire the root after a cancelled tryCommit releases its lock.
++    const auto rootShadowNode =
++        shadowTree.getCurrentRevision().rootShadowNode;
+diff --git a/ReactCommon/react/renderer/uimanager/tests/FindShadowNodeByTagTest.cpp b/ReactCommon/react/renderer/uimanager/tests/FindShadowNodeByTagTest.cpp
+--- a/ReactCommon/react/renderer/uimanager/tests/FindShadowNodeByTagTest.cpp
++++ b/ReactCommon/react/renderer/uimanager/tests/FindShadowNodeByTagTest.cpp
+@@ -24,6 +24,7 @@
+     : public ReactNativeFeatureFlagsDefaults {
+  public:
+   bool fixFindShadowNodeByTagRaceCondition() override {
+-    return true;
++    // Exercise the production default: the ownership fix must not rely on opt-in.
++    return false;
+   }
+ };

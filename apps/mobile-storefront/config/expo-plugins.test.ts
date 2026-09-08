@@ -3,6 +3,42 @@ import type { ExpoConfig } from 'expo/config';
 import { createExpoPlugins } from './expo-plugins';
 
 describe('createExpoPlugins', () => {
+  it('builds iOS Expo consumers from source to prevent the build575 JSI ABI mismatch', () => {
+    const plugins = createExpoPlugins({
+      facebookSdkPlugin: null,
+      sentryPlugin: null,
+      tiktokBusinessPlugin: null,
+    });
+    const buildProperties = plugins.find(
+      (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-build-properties'
+    );
+
+    expect(buildProperties).toEqual([
+      'expo-build-properties',
+      expect.objectContaining({
+        ios: expect.objectContaining({ usePrecompiledModules: false }),
+      }),
+    ]);
+  });
+
+  it('builds Android React Native from source so the native focus fix reaches the APK', () => {
+    const plugins = createExpoPlugins({
+      facebookSdkPlugin: null,
+      sentryPlugin: null,
+      tiktokBusinessPlugin: null,
+    });
+    const buildProperties = plugins.find(
+      (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-build-properties'
+    );
+
+    expect(buildProperties).toEqual([
+      'expo-build-properties',
+      expect.objectContaining({
+        android: expect.objectContaining({ buildReactNativeFromSource: true }),
+      }),
+    ]);
+  });
+
   it('configures minification, resource shrinking, and class repackaging for Android release builds', () => {
     const plugins = createExpoPlugins({
       facebookSdkPlugin: null,

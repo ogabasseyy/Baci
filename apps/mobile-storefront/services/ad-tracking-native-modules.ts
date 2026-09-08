@@ -1,4 +1,6 @@
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { loadFacebookTrackingModules } from './load-facebook-tracking-modules';
 import type { TikTokEventData } from './tiktok-event-data';
 
 export interface FBSettingsLike {
@@ -64,14 +66,21 @@ export async function loadAdTrackingNativeModules(): Promise<AdTrackingNativeMod
 
   try {
     const [fb, tt] = await Promise.all([
-      import('react-native-fbsdk-next'),
+      Constants.expoConfig?.extra?.facebookAppId &&
+      Constants.expoConfig?.extra?.facebookClientToken
+        ? loadFacebookTrackingModules(
+            Constants.expoConfig.extra.facebookAppId,
+            Constants.expoConfig.extra.facebookClientToken
+          )
+        : Promise.resolve(null),
       import('@baci/tiktok-business'),
     ]);
 
-    modules.FBSettings = fb.Settings as unknown as FBSettingsLike;
-    modules.AppEventsLogger =
-      fb.AppEventsLogger as unknown as AppEventsLoggerLike;
-    modules.AEMReporterIOS = fb.AEMReporterIOS as unknown as AEMReporterIOSLike;
+    if (fb) {
+      modules.FBSettings = fb[0].default as unknown as FBSettingsLike;
+      modules.AppEventsLogger = fb[1].default as unknown as AppEventsLoggerLike;
+      modules.AEMReporterIOS = fb[2].default as unknown as AEMReporterIOSLike;
+    }
     modules.TikTokBusiness = (tt.default ||
       tt) as unknown as TikTokBusinessLike;
   } catch (error) {

@@ -32,6 +32,8 @@ permissions:
 
 env:
   BACI_MOBILE_BUILD_PLATFORM: ios
+  # Compile Expo consumers against the same resolved JSI headers and library.
+  EXPO_USE_PRECOMPILED_MODULES: '0'
   NODE_VERSION: '24'
   RUBY_VERSION: '3.4'
   XCODE_VERSION: '26.2'
@@ -91,6 +93,11 @@ jobs:
           PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: 'true'
           PUPPETEER_SKIP_CHROME_HEADLESS_SHELL_DOWNLOAD: 'true'
         run: pnpm install --frozen-lockfile
+
+      # This regression targets the pinned Xcode 26.x ownership diagnostics.
+      # Reevaluate the compatibility patch before upgrading to Xcode 27.
+      - name: Verify Swift RuntimeScheduler compatibility
+        run: node --test .github/scripts/ios-runtime-scheduler.test.mjs
 
       - name: Expose PostHog CLI to Xcode
         working-directory: ${{ env.WORKING_DIR }}

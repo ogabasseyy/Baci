@@ -202,6 +202,48 @@ describe('loadCheckoutShippingQuotes', () => {
       expect(state.setSelectedQuoteId).toHaveBeenCalledWith('fresh-uuid-2');
       expect(setSelectedProviderRateId).toHaveBeenCalledWith('GIGL_30_1');
     });
+
+    it('clears selection and asks for delivery reselection when the restored service vanishes', async () => {
+      const onPreferredQuoteMissing = vi.fn();
+      const setSelectedProviderRateId = vi.fn();
+      const state = {
+        ...createState(),
+        preferredSelectedQuoteId: 'gone-uuid',
+        preferredProviderRateId: 'GONE_RATE',
+        setSelectedProviderRateId,
+        onPreferredQuoteMissing,
+      };
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            quotes: {
+              all: [
+                {
+                  carrierName: 'GIG Logistics',
+                  currency: 'NGN',
+                  displayName: 'Standard',
+                  estimatedDays: 3,
+                  id: 'door-quote-1',
+                  insuranceIncluded: true,
+                  pickupIncluded: true,
+                  price: 2000,
+                  provider: 'GIGL',
+                  providerRateId: 'GIGL_30_0',
+                  serviceTier: 'Standard',
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+
+      await loadCheckoutShippingQuotes(receiver, cart, state);
+
+      expect(state.setSelectedQuoteId).toHaveBeenCalledWith('');
+      expect(setSelectedProviderRateId).toHaveBeenCalledWith('');
+      expect(onPreferredQuoteMissing).toHaveBeenCalledTimes(1);
+    });
   });
 
   beforeEach(() => {

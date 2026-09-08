@@ -14,7 +14,7 @@ export function CheckoutDeferredModalLoadingFallback({
     >
       <span
         role="status"
-        className="rounded-xl bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-lg"
+        className="rounded-xl bg-[var(--store-background,#ffffff)] px-4 py-3 text-sm font-medium text-[var(--store-background-text,#111827)] shadow-lg"
       >
         {label}
       </span>

@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { cryptoAddressStatusSchema } from './crypto-address-status';
 
 it.each([
@@ -11,9 +11,15 @@ it.each([
   });
   expect(result.success).toBe(true);
 });
-it('rejects a missing status address field', () => {
-  const result = cryptoAddressStatusSchema.safeParse({ success: true });
-  expect(result.success).toBe(false);
+describe('bugfix: accept terminal status responses without an address', () => {
+  it('parses success payloads that omit crypto_address entirely', () => {
+    const result = cryptoAddressStatusSchema.safeParse({
+      success: true,
+      status: 'expired',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.crypto_address).toBeUndefined();
+  });
 });
 it.each([
   ['ethereum', 'ETH'],

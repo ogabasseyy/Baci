@@ -13,6 +13,9 @@ describe('bugfix: block checkout while a deferred dialog chunk loads', () => {
     expect(dialog).toHaveAttribute('aria-busy', 'true');
     expect(dialog.className).toContain('fixed');
     expect(dialog.className).toContain('inset-0');
-    expect(screen.getByRole('status')).toHaveTextContent('Loading dialog…');
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('Loading dialog…');
+    expect(status.className).toContain('bg-[var(--store-background');
+    expect(status.className).toContain('text-[var(--store-background-text');
   });
 });

@@ -51,6 +51,8 @@ interface QuoteState {
   setSelectedQuoteId: (id: string) => void;
   setSelectedProviderRateId?: (providerRateId: string) => void;
   setShippingQuotes: (quotes: ShippingQuote[]) => void;
+  /** Called when a restored preference no longer matches any returned quote. */
+  onPreferredQuoteMissing?: () => void;
 }
 
 export function invalidatePendingQuoteRequests(
@@ -195,22 +197,38 @@ export async function loadCheckoutShippingQuotes(
         quoteId: state.preferredSelectedQuoteId,
         providerRateId: state.preferredProviderRateId,
       });
-      const preferredQuoteId = preferredQuote
-        ? preferredQuote.id
-        : requestReceiver.deliveryPreference === 'pickup_station'
-          ? quotes.find((quote) => quote.isStationPickup)?.id
-          : getPreferredDoorQuoteId(quotes);
-      if (preferredQuoteId) {
-        state.setSelectedQuoteId(String(preferredQuoteId));
-        const selected =
-          preferredQuote ??
-          quotes.find((quote) => String(quote.id) === String(preferredQuoteId));
+      const wantedRestore = Boolean(
+        state.preferredSelectedQuoteId?.trim() ||
+          state.preferredProviderRateId?.trim()
+      );
+      if (preferredQuote) {
+        state.setSelectedQuoteId(String(preferredQuote.id));
         state.setSelectedProviderRateId?.(
-          selected?.providerRateId?.trim() || '',
+          preferredQuote.providerRateId?.trim() || ''
         );
-      } else {
+      } else if (wantedRestore) {
+        // Persisted checkout may already be on payment; do not silently swap
+        // carriers/fees — clear selection and force delivery reselection.
         state.setSelectedQuoteId('');
         state.setSelectedProviderRateId?.('');
+        state.onPreferredQuoteMissing?.();
+      } else {
+        const preferredQuoteId =
+          requestReceiver.deliveryPreference === 'pickup_station'
+            ? quotes.find((quote) => quote.isStationPickup)?.id
+            : getPreferredDoorQuoteId(quotes);
+        if (preferredQuoteId) {
+          state.setSelectedQuoteId(String(preferredQuoteId));
+          const selected = quotes.find(
+            (quote) => String(quote.id) === String(preferredQuoteId)
+          );
+          state.setSelectedProviderRateId?.(
+            selected?.providerRateId?.trim() || ''
+          );
+        } else {
+          state.setSelectedQuoteId('');
+          state.setSelectedProviderRateId?.('');
+        }
       }
     } else {
       console.warn('Failed to fetch quotes:', await response.text());

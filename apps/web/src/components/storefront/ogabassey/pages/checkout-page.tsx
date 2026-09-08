@@ -1324,6 +1324,7 @@ export const CheckoutPage: React.FC = () => {
             setSelectedProviderRateId: (providerRateId: string) =>
               setCheckoutField('selectedProviderRateId', providerRateId),
             setShippingQuotes,
+            onPreferredQuoteMissing: () => setCurrentStep('delivery'),
           },
         )
       : resetQuotesForAddressChange();

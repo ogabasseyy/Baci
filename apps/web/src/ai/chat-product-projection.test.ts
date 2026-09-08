@@ -4,6 +4,12 @@ const mocks = vi.hoisted(() => ({ createClient: vi.fn() }));
 vi.mock('@/lib/agentic/scoped-supabase', () => ({
   createAgenticScopedSupabaseClient: mocks.createClient,
 }));
+vi.mock('@/ai/chat-catalog-context', () => ({
+  getChatCatalogContext: async () => ({
+    supabase: mocks.createClient(),
+    merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+  }),
+}));
 vi.mock('@/lib/storefront-search', () => ({
   searchStorefrontProducts: vi.fn(),
 }));
@@ -32,24 +38,22 @@ it.each([
   });
   const from = vi.fn(() => query);
   mocks.createClient.mockReturnValue({ from });
+  if (tool === 'search') {
+    await expect(handleSearchProducts({ query: '' })).rejects.toThrow(
+      'Catalog search temporarily unavailable'
+    );
+    return;
+  }
   const result =
-    tool === 'search'
-      ? await handleSearchProducts({ query: '' })
-      : tool === 'details'
-        ? await handleGetProductDetails({ productId: 'phone' })
-        : await handleGetRecommendations({
-            productId: 'phone',
-            type: 'accessories',
-          });
+    tool === 'details'
+      ? await handleGetProductDetails({ productId: 'phone' })
+      : await handleGetRecommendations({
+          productId: 'phone',
+          type: 'accessories',
+        });
   expect(from).toHaveBeenCalledWith('products');
   expect(query.select).toHaveBeenCalled();
-  expect(result).toEqual(
-    tool === 'search'
-      ? { products: [], total: 0 }
-      : tool === 'details'
-        ? null
-        : []
-  );
+  expect(result).toEqual(tool === 'details' ? null : []);
 });
 
 it.each([

@@ -1,13 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { CryptoSelectorModalLoadingFallback } from './CryptoSelectorModalLoadingFallback';
+import { CheckoutDeferredModalLoadingFallback } from './CheckoutDeferredModalLoadingFallback';
 
-describe('bugfix: block checkout while the crypto dialog chunk loads', () => {
+describe('bugfix: block checkout while a deferred dialog chunk loads', () => {
   it('renders a modal-shaped blocking fallback instead of an inline status', () => {
-    render(<CryptoSelectorModalLoadingFallback />);
+    render(<CheckoutDeferredModalLoadingFallback />);
 
     const dialog = screen.getByRole('dialog', {
-      name: 'Loading crypto payment selector',
+      name: 'Loading checkout dialog',
     });
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(dialog).toHaveAttribute('aria-busy', 'true');

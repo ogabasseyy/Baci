@@ -1,7 +1,7 @@
 'use client';
 
 import { type ComponentProps, lazy, Suspense } from 'react';
-import { CryptoSelectorModalLoadingFallback } from './CryptoSelectorModalLoadingFallback';
+import { CheckoutDeferredModalLoadingFallback } from './CheckoutDeferredModalLoadingFallback';
 
 const LazyModal = lazy(() =>
   import('./CryptoSelectorModal').then((module) => ({ default: module.CryptoSelectorModal }))
@@ -9,7 +9,7 @@ const LazyModal = lazy(() =>
 
 export function DeferredCryptoSelectorModal(props: ComponentProps<typeof LazyModal>) {
   return (
-    <Suspense fallback={<CryptoSelectorModalLoadingFallback />}>
+    <Suspense fallback={<CheckoutDeferredModalLoadingFallback />}>
       <LazyModal {...props} />
     </Suspense>
   );

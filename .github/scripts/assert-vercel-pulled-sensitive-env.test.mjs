@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import YAML from 'yaml';
 
 const SCRIPT = fileURLToPath(
   new URL('./assert-vercel-pulled-sensitive-env.mjs', import.meta.url),
@@ -77,4 +78,20 @@ test('production prebuilt deploy checks key presence after pull and before build
     workflow.slice(readinessStepStart, buildStart),
     /not its runtime value/,
   );
+});
+
+test('guard-only edits trigger production deployment and the deployment-script CI gate', () => {
+  // Arrange
+  const deploy = YAML.parse(readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8'));
+  const ci = YAML.parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8'));
+  const guardPaths = [
+    '.github/scripts/assert-vercel-pulled-sensitive-env.mjs',
+    '.github/scripts/assert-vercel-pulled-sensitive-env.test.mjs',
+  ];
+
+  // Act / Assert: neither a guard implementation nor its regression can be skipped.
+  for (const path of guardPaths) {
+    assert.ok(deploy.web.includes(path), `${path} must trigger the web deployment`);
+    assert.ok(ci.deploy_scripts.includes(path), `${path} must trigger deployment-script tests`);
+  }
 });

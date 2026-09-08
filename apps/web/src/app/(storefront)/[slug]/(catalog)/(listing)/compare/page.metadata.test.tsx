@@ -158,7 +158,9 @@ describe('compare index metadata', () => {
       params: Promise.resolve({ slug: 'ogabassey' }),
     });
 
-    expect(metadata.title).toBe('Compare products | Ogabassey');
+    expect(metadata.title).toEqual({
+      absolute: 'Compare products | Ogabassey',
+    });
     expect(metadata.alternates).toMatchObject({
       canonical: 'https://ogabassey.com/compare',
     });
@@ -263,7 +265,9 @@ describe('compare index metadata', () => {
       params: Promise.resolve({ slug: 'ogabassey' }),
     });
 
-    expect(metadata.title).toBe('Compare products | Ogabassey');
+    expect(metadata.title).toEqual({
+      absolute: 'Compare products | Ogabassey',
+    });
     expect(mockGenerateCategoryMetadata).not.toHaveBeenCalled();
     expect(getCachedCategoryPageData).toHaveBeenCalled();
   });

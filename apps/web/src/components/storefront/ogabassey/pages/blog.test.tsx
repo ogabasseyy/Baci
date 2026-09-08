@@ -286,4 +286,20 @@ describe('OgabasseyV2Blog', () => {
 
     expect(screen.getByText('Mar 28, 2026')).toBeInTheDocument();
   });
+
+  it('omits the featured story when the listing hero is painted outside this component', () => {
+    render(
+      <OgabasseyV2Blog
+        hideFeaturedStory
+        posts={mockPosts}
+        storeSlug="/test-store"
+      />
+    );
+
+    expect(
+      screen.queryByRole('link', { name: /featured post/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('The Ogabassey Blog')).toBeInTheDocument();
+    expect(screen.getByText('Regular Post')).toBeInTheDocument();
+  });
 });

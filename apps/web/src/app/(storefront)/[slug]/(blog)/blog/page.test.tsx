@@ -12,6 +12,10 @@ const mockBlogPageContent = vi.hoisted(() =>
   vi.fn((_props: unknown) => <div>Blog page content</div>)
 );
 
+vi.mock('./blog-listing-static-hero', () => ({
+  BlogListingStaticHero: () => <div>Static listing hero</div>,
+}));
+
 vi.mock('./blog-page-content', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./blog-page-content')>();
 
@@ -50,9 +54,13 @@ describe('blog page shell', () => {
 
     // Static tenant content renders (behind Suspense, streamed to crawlers) and
     // keeps the request searchParams so search/pagination work on ogabassey.com.
+    expect(screen.getByText('Static listing hero')).toBeInTheDocument();
     expect(screen.getByText('Blog page content')).toBeInTheDocument();
     expect(mockBlogPageContent).toHaveBeenCalledWith(
-      expect.objectContaining({ searchParams: requestSearchParams })
+      expect.objectContaining({
+        hideFeaturedStory: true,
+        searchParams: requestSearchParams,
+      })
     );
   });
 
@@ -109,6 +117,7 @@ describe('blog page shell', () => {
       })
     );
 
+    expect(screen.getByText('Static listing hero')).toBeInTheDocument();
     expect(
       screen.getByRole('status', { name: 'Loading blog posts' })
     ).toBeInTheDocument();
@@ -127,7 +136,10 @@ describe('blog page shell', () => {
     // Non-static tenants render dynamically behind Suspense; the request
     // searchParams must reach the content so page/search/category still drive it.
     expect(mockBlogPageContent).toHaveBeenCalledWith(
-      expect.objectContaining({ searchParams: requestSearchParams })
+      expect.objectContaining({
+        hideFeaturedStory: true,
+        searchParams: requestSearchParams,
+      })
     );
   });
 });

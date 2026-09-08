@@ -40,6 +40,7 @@ import { TemplateBlogRenderer } from './template-blog-renderer';
 
 export interface BlogPageProps {
   categoryOverride?: string;
+  hideFeaturedStory?: boolean;
   isCleanCategoryRoute?: boolean;
   itemListSchemaUrl?: string;
   params: Promise<{ slug: string }>;
@@ -106,6 +107,7 @@ function appendPreservedBlogCategoryRedirectParams(
 
 export async function BlogPageContent({
   categoryOverride,
+  hideFeaturedStory = false,
   isCleanCategoryRoute = false,
   itemListSchemaUrl,
   params,
@@ -371,6 +373,7 @@ export async function BlogPageContent({
               categoryGuide={categoryGuide}
               category={category}
               searchQuery={effectiveSearchQuery}
+              hideFeaturedStory={hideFeaturedStory}
             />
             <BlogListingPagination
               storeBasePath={basePath}

@@ -19,6 +19,14 @@ export const COMPARE_INDEX_LINKS_PER_CATEGORY_LIMIT =
   COMPARE_GRAPH_INDEXABLE_CATEGORY_LINK_LIMIT;
 export const COMPARE_INDEX_TOTAL_LINK_LIMIT = 800;
 
+// Visible /compare hub only. The 800-link discovery cap is for sitemap/graph
+// builders; putting that many Next links in the document was a 689KB HTML
+// payload with ~4.8s LCP element-render delay in mobile PSI.
+export const COMPARE_HUB_PAGE_CATEGORY_LIMIT = 8;
+export const COMPARE_HUB_PAGE_LINKS_PER_CATEGORY_LIMIT = 4;
+export const COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT = 5;
+export const COMPARE_HUB_PAGE_TOTAL_LINK_LIMIT = 24;
+
 interface CompareIndexCategory {
   is_active?: boolean | null;
   name?: string | null;

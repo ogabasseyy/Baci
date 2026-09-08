@@ -120,10 +120,10 @@ describe('compare index page runtime', () => {
     mockNotFound.mockClear();
   });
 
-  it('defers compare index first paint to the route loader while content is pending', () => {
+  it('paints the compare hub heading while compare content is pending', () => {
     mockComparePageContent.mockImplementation(() => {
       throw new Promise(() => {
-        // Keep content suspended behind the catalog loader.
+        // Keep content suspended behind the compare-hub LCP intro.
       });
     });
 
@@ -134,8 +134,11 @@ describe('compare index page runtime', () => {
     );
 
     expect(
-      screen.getByRole('status', { name: 'Loading product listing' })
+      screen.getByRole('heading', { name: 'Compare products' })
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('status', { name: 'Loading product listing' })
+    ).not.toBeInTheDocument();
     expect(screen.queryByText('Compare index content')).not.toBeInTheDocument();
   });
 });

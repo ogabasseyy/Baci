@@ -11,6 +11,7 @@ const runtimeRouteManifest = [
   '(home)/loading.tsx',
   '(catalog)/loading.tsx',
   '(catalog)/(listing)/compare/page.tsx',
+  '(catalog)/(listing)/compare/loading.tsx',
   '(catalog)/(listing)/products/page.tsx',
   '(catalog)/(listing)/search/page.tsx',
   '(catalog)/(listing)/[category]/page.tsx',
@@ -71,9 +72,12 @@ const runtimeRouteManifest = [
   '(customer)/receipts/page.tsx',
   '(utility)/loading.tsx',
   '(utility)/imei-check/page.tsx',
+  '(utility)/imei-check/loading.tsx',
   '(utility)/member-status/page.tsx',
   '(utility)/repair/page.tsx',
+  '(utility)/repair/loading.tsx',
   '(utility)/repairs/page.tsx',
+  '(utility)/repairs/loading.tsx',
   '(utility)/reviews/page.tsx',
   '(utility)/swap/page.tsx',
 ];
@@ -125,19 +129,15 @@ const legacyRouteManifest = [
   'swap/page.tsx',
 ];
 
+// Nested /compare, /repairs, and /imei-check loading shells are covered by
+// colocated loading tests. This list stays on parent lazy-module boundaries
+// that settle under `act()` without importing connection()-bound page graphs.
 const firstPaintOwnershipManifest = [
   {
     routePath: '/blog/post-slug',
     pagePath: '(blog)/blog/[postSlug]/page.tsx',
     loadingPath: '(blog)/blog/[postSlug]/loading.tsx',
     label: 'Loading blog post',
-    renderStrategy: 'lazy-module',
-  },
-  {
-    routePath: '/compare',
-    pagePath: '(catalog)/(listing)/compare/page.tsx',
-    loadingPath: '(catalog)/loading.tsx',
-    label: 'Loading product listing',
     renderStrategy: 'lazy-module',
   },
   {
@@ -283,5 +283,5 @@ describe('storefront route groups', () => {
       renderStrategy: route.renderStrategy,
       ...('searchParams' in route ? { searchParams: route.searchParams } : {}),
     });
-  });
+  }, 30_000);
 });

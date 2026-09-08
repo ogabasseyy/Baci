@@ -59,6 +59,10 @@ describe('ImeiCheckPage', () => {
     expect(metadata.description).toContain('device identity');
   });
 
+  it('uses an absolute title so the platform suffix cannot leak onto the storefront', () => {
+    expect(metadata.title).toEqual({ absolute: 'IMEI Check' });
+  });
+
   it('throws notFound for non-ogabassey templates', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({
       template_id: 'default',

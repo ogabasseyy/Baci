@@ -33,6 +33,7 @@ interface MockTemplateBlogRendererProps {
   BlogComponent?: React.ComponentType<{
     categories?: Array<{ name: string; slug: string }>;
     category?: string;
+    hideFeaturedStory?: boolean;
     posts?: MockDefaultBlogUiProps['posts'];
     searchQuery?: string;
     storeSlug?: string;
@@ -42,6 +43,7 @@ interface MockTemplateBlogRendererProps {
   categories?: Array<{ name: string; slug: string }>;
   categoryGuide?: React.ReactNode;
   category?: string;
+  hideFeaturedStory?: boolean;
   itemListSchema?: MockDefaultBlogUiProps['itemListSchema'];
   searchQuery?: string;
 }

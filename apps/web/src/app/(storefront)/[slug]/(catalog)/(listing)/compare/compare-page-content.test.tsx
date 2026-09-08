@@ -320,4 +320,27 @@ describe('ComparePageContent', () => {
 
     expect(mockNotFound).toHaveBeenCalledTimes(1);
   });
+
+  it('caps visible compare hub product scans instead of dumping the discovery graph into HTML', async () => {
+    const { COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT } = await import(
+      './compare-index-discovery'
+    );
+
+    render(
+      await ComparePageContent({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+
+    expect(getCachedCategoryPageData).toHaveBeenCalledWith(
+      merchant.id,
+      'laptops',
+      merchant.slug,
+      0,
+      COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT
+    );
+    expect(
+      screen.getAllByRole('link', { name: /Compare / }).length
+    ).toBeLessThanOrEqual(4);
+  });
 });

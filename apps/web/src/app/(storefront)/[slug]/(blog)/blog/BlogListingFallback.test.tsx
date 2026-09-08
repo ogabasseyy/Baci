@@ -11,4 +11,15 @@ describe('BlogListingFallback', () => {
     ).toBeInTheDocument();
     expect(container.firstChild).toHaveClass('min-h-screen', 'bg-background');
   });
+
+  it('omits the featured-story skeleton when the listing hero is painted separately', () => {
+    const { container } = render(
+      <BlogListingFallback includeFeaturedSkeleton={false} />
+    );
+
+    expect(
+      screen.getByRole('status', { name: 'Loading blog posts' })
+    ).toBeInTheDocument();
+    expect(container.querySelector('.rounded-4xl')).not.toBeInTheDocument();
+  });
 });

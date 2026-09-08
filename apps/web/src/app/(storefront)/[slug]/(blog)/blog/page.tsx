@@ -6,6 +6,7 @@ import {
   OGABASSEY_BLOG_STATIC_TENANTS,
 } from './blog-category-routing';
 import { buildBlogListingMetadata } from './blog-listing-metadata';
+import { BlogListingStaticHero } from './blog-listing-static-hero';
 import { BlogPageContent, type BlogPageProps } from './blog-page-content';
 
 // Cache Components invariant for this route:
@@ -15,11 +16,10 @@ import { BlogPageContent, type BlogPageProps } from './blog-page-content';
 //   the generic `Ogabassey` title seen for Googlebot. Non-static tenants render
 //   dynamically, so their metadata may read searchParams to keep query-specific
 //   noindex/self-canonical variants (search/pagination/category).
-// - The listing content reads params and searchParams, so it renders behind
-//   Suspense for all tenants. The Suspense fallback is the prerenderable static
-//   shell (fixing "did not produce a static shell"), while tenant-specific
-//   page/search/category content streams — so pagination/search keep working,
-//   including on the static tenant.
+// - The listing hero only awaits params + the cached published listing, so it
+//   can paint the LCP featured image outside the searchParams Suspense slot.
+// - The remaining listing content still reads searchParams behind Suspense so
+//   pagination/search keep working, including on the static tenant.
 
 export function generateStaticParams(): Array<{ slug: string }> {
   return OGABASSEY_BLOG_STATIC_TENANTS.map((slug) => ({ slug }));
@@ -40,8 +40,19 @@ export async function generateMetadata({
 
 export default function BlogPage({ params, searchParams }: BlogPageProps) {
   return (
-    <Suspense fallback={<BlogListingFallback />}>
-      <BlogPageContent params={params} searchParams={searchParams} />
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <BlogListingStaticHero params={params} />
+      </Suspense>
+      <Suspense
+        fallback={<BlogListingFallback includeFeaturedSkeleton={false} />}
+      >
+        <BlogPageContent
+          hideFeaturedStory
+          params={params}
+          searchParams={searchParams}
+        />
+      </Suspense>
+    </>
   );
 }

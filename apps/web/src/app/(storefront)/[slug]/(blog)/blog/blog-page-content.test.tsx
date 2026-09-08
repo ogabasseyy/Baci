@@ -76,6 +76,7 @@ function renderTemplateRendererProbe() {
         <BlogComponent
           categories={props.categories}
           category={props.category}
+          hideFeaturedStory={props.hideFeaturedStory}
           posts={props.blogPosts}
           searchQuery={props.searchQuery}
           storeSlug={props.basePath}

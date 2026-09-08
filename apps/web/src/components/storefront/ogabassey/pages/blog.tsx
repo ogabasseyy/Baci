@@ -98,6 +98,7 @@ export function OgabasseyV2Blog({
   categories: propCategories,
   searchQuery,
   category,
+  hideFeaturedStory = false,
 }: OgabasseyBlogProps) {
   const basePath = storeSlug || merchantSlug || '';
   const activeCategory = category || 'All';
@@ -144,7 +145,10 @@ export function OgabasseyV2Blog({
   return (
     <div className="min-h-screen bg-gray-50 pt-4 pb-20">
       <div className="mx-auto max-w-[1400px] px-4 pt-8 md:px-6 md:pt-12">
-        {!isSearching && activeCategory === 'All' && featuredPost && (
+        {!hideFeaturedStory &&
+          !isSearching &&
+          activeCategory === 'All' &&
+          featuredPost && (
           <BlogFeaturedStory
             basePath={basePath}
             featuredPost={featuredPost}

@@ -13,16 +13,17 @@ import { generateBreadcrumbSchema } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
 import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { isValidMerchantIdentifier } from '@/lib/validation';
-import { buildCompareIndexSections } from './compare-index-discovery';
+import { CompareHubIntro } from './compare-hub-intro';
+import {
+  buildCompareIndexSections,
+  COMPARE_HUB_PAGE_CATEGORY_LIMIT,
+  COMPARE_HUB_PAGE_LINKS_PER_CATEGORY_LIMIT,
+  COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT,
+  COMPARE_HUB_PAGE_TOTAL_LINK_LIMIT,
+} from './compare-index-discovery';
 
 interface ComparePageContentProps {
   params: Promise<{ slug: string }>;
-}
-
-function buildCompareIndexDescription(merchantName: string | null | undefined) {
-  const storefrontName = merchantName?.trim() || 'this store';
-
-  return `Browse ${storefrontName} product comparison pages by category and open side-by-side guides for eligible products.`;
 }
 
 export async function ComparePageContent({ params }: ComparePageContentProps) {
@@ -45,9 +46,9 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
   const storeUrl = buildStoreUrl(merchant);
   const pathPrefix = getStorefrontPathPrefix(headersList, merchant);
   const storefrontName = merchant.business_name?.trim();
-  const compareIndexDescription = buildCompareIndexDescription(storefrontName);
   const sections = await buildCompareIndexSections({
     categories,
+    categoryLimit: COMPARE_HUB_PAGE_CATEGORY_LIMIT,
     getCategoryPageData: (categorySlug, productOffset, productLimit) =>
       getCachedCategoryPageData(
         merchant.id,
@@ -56,8 +57,11 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
         productOffset,
         productLimit
       ),
+    linksPerCategoryLimit: COMPARE_HUB_PAGE_LINKS_PER_CATEGORY_LIMIT,
     pathPrefix,
+    productLimit: COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT,
     storeUrl,
+    totalLinkLimit: COMPARE_HUB_PAGE_TOTAL_LINK_LIMIT,
   });
   const canonicalUrl = `${storeUrl}/compare`;
   const breadcrumbSchema: JsonLdData<BreadcrumbList> = generateBreadcrumbSchema(
@@ -90,14 +94,7 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
             </span>
           </nav>
 
-          <div className="mt-6 max-w-3xl space-y-3">
-            <h1 className="text-3xl font-bold text-store-background-text md:text-4xl">
-              Compare products
-            </h1>
-            <p className="text-sm leading-6 text-store-background-text/65 md:text-base">
-              {compareIndexDescription}
-            </p>
-          </div>
+          <CompareHubIntro merchantName={storefrontName} />
 
           {sections.length === 0 ? (
             <section className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">

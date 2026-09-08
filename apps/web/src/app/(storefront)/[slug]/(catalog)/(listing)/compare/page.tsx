@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
-import { CatalogListingLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM } from '@/config/storefront-metadata-cache-bots';
 import {
   getCachedCategoryPageData,
@@ -15,11 +14,13 @@ import {
 } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
 import { canonicalizeCategorySlug } from '@/lib/storefront-canonical-url';
+import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import { isValidMerchantIdentifier } from '@/lib/validation';
 import CategoryPageRoute, {
   generateMetadata as generateCategoryMetadata,
 } from '../[category]/page';
 import { buildCompareIndexSections } from './compare-index-discovery';
+import { CompareIndexFallback } from './compare-index-fallback';
 import { ComparePageContent } from './compare-page-content';
 
 interface CompareIndexPageProps {
@@ -131,7 +132,11 @@ export async function generateMetadata({
   });
   const hasCompareSections = sections.length > 0;
   const hasQueryParams = await hasCompareHubSearchParams(searchParams);
-  const title = `Compare products | ${merchant.business_name}`;
+  const { metadataTitle: title, title: compareTitle } =
+    buildStorefrontMetadataTitle({
+      title: `Compare products | ${merchant.business_name}`,
+      fallback: 'Compare products',
+    });
   const description = generateMetaDescription(
     `Compare ${merchant.business_name} products by category, specs, pricing, condition, warranty, and buying fit.`,
     160,
@@ -152,7 +157,7 @@ export async function generateMetadata({
         ? getIndexableRobotsMetadata()
         : { index: false, follow: true },
     openGraph: {
-      title,
+      title: compareTitle,
       description,
       url: `${storeUrl}/compare`,
       type: 'website',
@@ -160,7 +165,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary',
-      title,
+      title: compareTitle,
       description,
     },
   };
@@ -195,7 +200,7 @@ async function CompareIndexRuntime(props: CompareIndexPageProps) {
 
 export default function CompareIndexPage(props: CompareIndexPageProps) {
   return (
-    <Suspense fallback={<CatalogListingLoading />}>
+    <Suspense fallback={<CompareIndexFallback />}>
       <CompareIndexRuntime {...props} />
     </Suspense>
   );

@@ -5,13 +5,17 @@ import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
+import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
 
 export const metadata: Metadata = {
-  title: 'IMEI Check',
+  title: buildStorefrontMetadataTitle({
+    title: 'IMEI Check',
+    fallback: 'IMEI Check',
+  }).metadataTitle,
   description:
     'Check phone IMEI status, review verification requirements, and confirm device identity before buying, swapping, repairing or reselling a phone.',
 };

@@ -1,6 +1,12 @@
 import { Skeleton } from '@/components/ui/skeleton';
 
-export function BlogListingFallback() {
+interface BlogListingFallbackProps {
+  includeFeaturedSkeleton?: boolean;
+}
+
+export function BlogListingFallback({
+  includeFeaturedSkeleton = true,
+}: BlogListingFallbackProps) {
   return (
     <div
       role="status"
@@ -9,17 +15,19 @@ export function BlogListingFallback() {
       className="block min-h-screen bg-background pb-20 pt-4"
     >
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 pt-8 md:pt-12">
-        <div className="mb-12 overflow-hidden rounded-4xl border border-border bg-card p-6 shadow-sm md:p-8">
-          <Skeleton
-            className="h-[320px] w-full rounded-3xl bg-muted md:h-[420px]"
-            shimmer
-          />
-          <div className="mt-8 space-y-4">
-            <Skeleton className="h-4 w-28 bg-muted" shimmer />
-            <Skeleton className="h-10 w-full max-w-3xl bg-muted" shimmer />
-            <Skeleton className="h-5 w-full max-w-2xl bg-muted" shimmer />
+        {includeFeaturedSkeleton ? (
+          <div className="mb-12 overflow-hidden rounded-4xl border border-border bg-card p-6 shadow-sm md:p-8">
+            <Skeleton
+              className="h-[320px] w-full rounded-3xl bg-muted md:h-[420px]"
+              shimmer
+            />
+            <div className="mt-8 space-y-4">
+              <Skeleton className="h-4 w-28 bg-muted" shimmer />
+              <Skeleton className="h-10 w-full max-w-3xl bg-muted" shimmer />
+              <Skeleton className="h-5 w-full max-w-2xl bg-muted" shimmer />
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <div className="mb-10 flex gap-3 overflow-x-auto pb-2">
           {Array.from({ length: 6 }).map((_, index) => (

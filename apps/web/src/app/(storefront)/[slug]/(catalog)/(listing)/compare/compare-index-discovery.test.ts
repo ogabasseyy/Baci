@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   buildCompareIndexSections,
+  COMPARE_HUB_PAGE_TOTAL_LINK_LIMIT,
   COMPARE_INDEX_CATEGORY_DISCOVERY_LIMIT,
   COMPARE_INDEX_CATEGORY_SCAN_LIMIT,
   COMPARE_INDEX_DISCOVERY_CONCURRENCY,
   COMPARE_INDEX_PRODUCTS_PER_CATEGORY_LIMIT,
+  COMPARE_INDEX_TOTAL_LINK_LIMIT,
 } = await import('./compare-index-discovery');
 
 function makeProduct(index: number) {
@@ -33,6 +35,13 @@ function makeProducts(count = 2) {
 describe('compare index discovery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('keeps the visible compare hub far below the 800-link discovery budget', () => {
+    expect(COMPARE_HUB_PAGE_TOTAL_LINK_LIMIT).toBeLessThanOrEqual(24);
+    expect(COMPARE_HUB_PAGE_TOTAL_LINK_LIMIT).toBeLessThan(
+      COMPARE_INDEX_TOTAL_LINK_LIMIT
+    );
   });
 
   it('bounds scanned category discovery and concurrent category data loads', async () => {

@@ -75,11 +75,20 @@ interface AgentUiEventRendererProps {
   events: StorefrontAgentUiEvent[];
 }
 
+// The message owns this immutable events array beyond the chat window's mount.
+// Weak keys preserve confirmations while the message lives, without retaining
+// discarded conversations or sharing fulfillment between distinct messages.
+const confirmationTargetsByEvents = new WeakMap<
+  StorefrontAgentUiEvent[], Record<string, number>
+>();
+
 /** Trusted component registry for temporary storefront-agent presentation. */
 export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
   const { addToCart, cart, setIsCartOpen } = useCart();
   const merchantContext = useMerchantSafe();
-  const [confirmationTargets, setConfirmationTargets] = useState<Record<string, number>>({});
+  const [confirmationTargets, setConfirmationTargets] = useState<Record<string, number>>(
+    () => confirmationTargetsByEvents.get(events) ?? {}
+  );
   const addedProductIds = cart.map((item) => item.id);
   const validatedEvents = events.flatMap((event) => {
     const parsed = storefrontAgentUiContract.eventSchema.safeParse(event);
@@ -91,9 +100,12 @@ export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
 
     addToCart(createCartProduct(product), quantity);
     if (confirmation) {
-      setConfirmationTargets((targets) => ({
+      const targets = confirmationTargetsByEvents.get(events) ?? {};
+      const nextTargets = {
         ...targets, [confirmation.key]: targets[confirmation.key] ?? confirmation.current + quantity,
-      }));
+      };
+      confirmationTargetsByEvents.set(events, nextTargets);
+      setConfirmationTargets(nextTargets);
     }
     setIsCartOpen(true);
   };

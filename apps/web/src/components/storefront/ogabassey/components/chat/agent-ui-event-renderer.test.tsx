@@ -69,6 +69,15 @@ function event(
 }
 
 describe('AgentUiEventRenderer', () => {
+  it('preserves fulfilled confirmations when the chat closes and reopens', async () => {
+    const events = [{ ...event({ manageStock: false }), intent: 'add_to_cart' as const }];
+    const first = render(<AgentUiEventRenderer events={events} />);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Add to cart' }));
+    mocks.cart = [{ id: 'product-1', quantity: 1 }];
+    first.unmount();
+    render(<AgentUiEventRenderer events={events} />);
+    expect(screen.getByRole('button', { name: 'Added' })).toBeDisabled();
+  });
   it('fulfills an add confirmation once and allows restoring its removed delta', async () => {
     mocks.cart = [{ id: 'product-1', quantity: 1 }];
     const events = [{ ...event({ quantity: 2, manageStock: false }), intent: 'add_to_cart' as const }];

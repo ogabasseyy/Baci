@@ -19,6 +19,7 @@ type AirportType = 'delivery' | 'pickup';
 
 interface AirportDeliveryOptionsProps {
   airportType: AirportType;
+  requiresProviderQuote?: boolean;
   city: string;
   state: string;
   selectedQuoteId: string;
@@ -30,6 +31,7 @@ interface AirportDeliveryOptionsProps {
 
 export function AirportDeliveryOptions({
   airportType,
+  requiresProviderQuote = false,
   city,
   state,
   selectedQuoteId,
@@ -38,7 +40,7 @@ export function AirportDeliveryOptions({
   onSelectAirportType,
   onSelectQuote,
 }: AirportDeliveryOptionsProps) {
-  const localAirportTypeSelected = !selectedQuoteMatchesDeliveryMethod;
+  const localAirportTypeSelected = !requiresProviderQuote && !selectedQuoteMatchesDeliveryMethod;
 
   return (
     <div className="mt-4 space-y-3 animate-in fade-in">

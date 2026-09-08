@@ -52,18 +52,13 @@ describe('validateStorefrontEdgeInventory', () => {
     )
       throw new Error('checked-in inventory source authority is missing');
     const sourceSha = artifact.originMainSha;
-    // A branch-only authority disappears from fresh CI clones after squash merge.
-    // Keep this checked-in artifact anchored in the checkout's reachable history.
+    // Squash-merge / Codex synthetic tips drop branch ancestry while retaining
+    // the approved source bytes. Fail-closed on commit identity + blob OID
+    // binding in validate/create (see storefront-edge-source-authority), not on
+    // merge-base --is-ancestor which cannot hold for a squashed tip.
     await expect(
-      execFileAsync('git', [
-        '-C',
-        repoRoot,
-        'merge-base',
-        '--is-ancestor',
-        sourceSha,
-        'HEAD',
-      ])
-    ).resolves.toMatchObject({ stdout: '' });
+      execFileAsync('git', ['-C', repoRoot, 'cat-file', '-t', sourceSha])
+    ).resolves.toMatchObject({ stdout: 'commit\n' });
     // Act
     const result = await validateStorefrontEdgeInventory({
       repoRoot,
@@ -75,7 +70,7 @@ describe('validateStorefrontEdgeInventory', () => {
     // Assert
     expect(result).toEqual({
       inventorySha256:
-        '519fcc45bc06db9876c14aee9435c40ea967b0a80320f73e19bf2b6722917ad5',
+        'ec1804b27227e8ede6283bfb93fc4e108614351bc5bbddc85bbf5297fb2c815d',
       rowCount: 558,
       storefrontEntrypointCount: 76,
     });

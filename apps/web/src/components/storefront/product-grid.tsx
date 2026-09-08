@@ -15,8 +15,8 @@ import { apiGet } from '@/lib/api-client';
 import { sortCategories } from '@/lib/category-sorting';
 import { getSampleProductsForBusinessType, type Product } from '@/lib/products';
 import { DidYouMeanBanner } from './did-you-mean-banner';
-import { StorefrontProductCard } from './product-card';
 import { ProductGridHeading } from './product-grid-heading';
+import { ProductGridItems } from './product-grid-items';
 import { QuickViewModal, useQuickView } from './quick-view-modal';
 
 interface StorefrontProductGridProps {
@@ -25,26 +25,6 @@ interface StorefrontProductGridProps {
   limit?: number;
   showFilters?: boolean;
 }
-
-// Static Tailwind class mappings to ensure classes are included in the build
-const GRID_COLUMN_CLASSES: Record<number, string> = {
-  2: 'lg:grid-cols-2',
-  3: 'lg:grid-cols-3',
-  4: 'lg:grid-cols-4',
-  5: 'lg:grid-cols-5',
-  6: 'lg:grid-cols-6',
-};
-
-const STAGGER_CLASSES = [
-  'stagger-1',
-  'stagger-2',
-  'stagger-3',
-  'stagger-4',
-  'stagger-5',
-  'stagger-6',
-  'stagger-7',
-  'stagger-8',
-];
 
 /** Latest server search response, keyed by the query that produced it. */
 interface ServerSearchSnapshot {
@@ -486,30 +466,15 @@ export function StorefrontProductGrid({
             columns={columns as 2 | 3 | 4 | 5 | 6}
           />
         ) : searchResults.length > 0 ? (
-          <div
-            className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${GRID_COLUMN_CLASSES[columns] || GRID_COLUMN_CLASSES[4]} gap-6`}
-          >
-            {searchResults.map((product, index) => {
-              const cartItem = cartItemsMap.get(product.id);
-              // Stagger animation class (1-8, then loops)
-              const staggerClass =
-                STAGGER_CLASSES[index % STAGGER_CLASSES.length];
-
-              return (
-                <StorefrontProductCard
-                  key={product.id}
-                  product={product}
-                  cartItem={cartItem}
-                  staggerClass={staggerClass}
-                  onAddToCart={handleAddToCart}
-                  onUpdateQuantity={updateQuantity}
-                  onQuickView={openQuickView}
-                  merchantSlug={merchant?.slug}
-                  priority={index < 4}
-                />
-              );
-            })}
-          </div>
+          <ProductGridItems
+            products={searchResults}
+            columns={columns}
+            cartItemsMap={cartItemsMap}
+            basePath={merchantContext?.basePath ?? ''}
+            onAddToCart={handleAddToCart}
+            onUpdateQuantity={updateQuantity}
+            onQuickView={openQuickView}
+          />
         ) : (
           <div className="text-center text-muted-foreground py-16">
             <h3 className="text-xl font-semibold">No products found</h3>
@@ -530,6 +495,7 @@ export function StorefrontProductGrid({
         isOpen={isQuickViewOpen}
         onClose={closeQuickView}
         merchantSlug={merchant?.slug}
+        basePath={merchantContext?.basePath ?? ''}
       />
     </section>
   );

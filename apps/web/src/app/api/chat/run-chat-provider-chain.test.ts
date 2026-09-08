@@ -282,7 +282,9 @@ describe('runChatProviderChain', () => {
       sessionId: 'session-1',
     });
 
-    expect(result.text).toBe('I found these live catalog options for you.');
+    expect(result.text).toBe(
+      'I found these live catalog options for you.\niPhone 16'
+    );
     expect(result.events).toHaveLength(1);
     expect(result.providerName).toBe('google:gemini-2.5-flash');
     expect(generateText).toHaveBeenCalledTimes(1);

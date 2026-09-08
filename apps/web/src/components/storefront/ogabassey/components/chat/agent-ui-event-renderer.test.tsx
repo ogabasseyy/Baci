@@ -69,6 +69,20 @@ function event(
 }
 
 describe('AgentUiEventRenderer', () => {
+  it('fulfills an add confirmation once and allows restoring its removed delta', async () => {
+    mocks.cart = [{ id: 'product-1', quantity: 1 }];
+    const events = [{ ...event({ quantity: 2, manageStock: false }), intent: 'add_to_cart' as const }];
+    const { rerender } = render(<AgentUiEventRenderer events={events} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add 2 to cart' }));
+    mocks.cart = [{ id: 'product-1', quantity: 3 }];
+    rerender(<AgentUiEventRenderer events={events} />);
+    expect(screen.getByRole('button', { name: 'Added' })).toBeDisabled();
+    mocks.cart = [{ id: 'product-1', quantity: 2 }];
+    rerender(<AgentUiEventRenderer events={events} />);
+    await user.click(screen.getByRole('button', { name: 'Add to cart' }));
+    expect(mocks.addToCart).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'product-1' }), 1);
+  });
   it('caps additional units at remaining stock without changing catalog stock', async () => {
     mocks.cart = [{ id: 'product-1', quantity: 2 }];
     render(<AgentUiEventRenderer events={[{ ...event({ quantity: 2, stock: 3 }), intent: 'add_to_cart' }]} />);

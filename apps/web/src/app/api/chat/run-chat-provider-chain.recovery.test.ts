@@ -15,6 +15,8 @@ vi.mock('./chat-tool-runtime', () => ({
   createAiSdkAgenticChatTools: mocks.createTools,
 }));
 
+import { storefrontAgentUiContract } from '@/schemas/storefront-agent-ui-contract';
+import { negotiateChatAgentUiResponse } from './negotiate-chat-agent-ui-response';
 import { runChatProviderChain } from './run-chat-provider-chain';
 
 const product = (id: string) => ({
@@ -33,6 +35,29 @@ const product = (id: string) => ({
 });
 type Report = (name: string, result: unknown) => void;
 let report: Report;
+it.each([
+  null,
+  `${storefrontAgentUiContract.mediaType};q=0`,
+])('preserves product names in legacy recovery with Accept %s', async (accept) => {
+  mocks.generateText.mockImplementation(async () => {
+    report('getProductDetails', product('iPhone 16'));
+    throw new Error('Generation failed');
+  });
+  const result = await runChatProviderChain({
+    abortSignal: new AbortController().signal,
+    messages: [{ role: 'user', content: 'Show phones' }],
+    sessionId: 'session',
+  });
+  const headers = new Headers();
+  if (accept) headers.set('Accept', accept);
+  const response = await negotiateChatAgentUiResponse(
+    new Request('https://example.com/api/chat', { headers }),
+    new Response(result.text),
+    result.events
+  );
+  expect(response.headers.get('content-type')).toContain('text/plain');
+  expect(await response.text()).toContain('iPhone 16');
+});
 beforeEach(() => {
   vi.resetAllMocks();
   resetProviderCooldowns();
@@ -82,5 +107,6 @@ it.each([
     secondHasCards ? 'google:second' : 'google:first'
   );
   expect(result.text).not.toContain('cannot check inventory');
+  expect(result.text).toContain(secondHasCards ? 'second' : 'first');
   expect(mocks.generateText).toHaveBeenCalledTimes(2);
 });

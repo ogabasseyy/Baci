@@ -113,7 +113,9 @@ export async function runChatProviderChain({
       events,
       providerName:
         recovery?.providerName ?? activeProviderName ?? 'agentic:tool-result',
-      text: PRESENTATION_ONLY_FALLBACK_TEXT,
+      text: `${PRESENTATION_ONLY_FALLBACK_TEXT}\n${events
+        .flatMap((event) => event.products.map((product) => product.name))
+        .join('\n')}`,
     };
   };
 

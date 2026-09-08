@@ -3,6 +3,7 @@
 import { requiresProductSelection } from '@baci/shared/lib';
 import { Check, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/merchant';
@@ -78,16 +79,22 @@ interface AgentUiEventRendererProps {
 export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
   const { addToCart, cart, setIsCartOpen } = useCart();
   const merchantContext = useMerchantSafe();
+  const [confirmationTargets, setConfirmationTargets] = useState<Record<string, number>>({});
   const addedProductIds = cart.map((item) => item.id);
   const validatedEvents = events.flatMap((event) => {
     const parsed = storefrontAgentUiContract.eventSchema.safeParse(event);
     return parsed.success ? [parsed.data] : [];
   });
 
-  const handleAddToCart = (product: StorefrontAgentUiProduct, isAdded: boolean, quantity: number) => {
+  const handleAddToCart = (product: StorefrontAgentUiProduct, isAdded: boolean, quantity: number, confirmation?: { key: string; current: number }) => {
     if (!canAddProduct(product) || isAdded || quantity <= 0) return;
 
     addToCart(createCartProduct(product), quantity);
+    if (confirmation) {
+      setConfirmationTargets((targets) => ({
+        ...targets, [confirmation.key]: targets[confirmation.key] ?? confirmation.current + quantity,
+      }));
+    }
     setIsCartOpen(true);
   };
 
@@ -114,12 +121,20 @@ export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
                 },
                 merchantContext?.basePath ?? ''
               );
-              const isAdded = event.intent !== 'add_to_cart' && addedProductIds.includes(product.id);
               const cartQuantity = cart.filter((item) => item.id === product.id)
                 .reduce((total, item) => total + item.quantity, 0);
+              const confirmationKey = `${eventIndex}:${product.id}:${product.quantity ?? 1}`;
+              const target = confirmationTargets[confirmationKey];
+              const isConfirmation = event.intent === 'add_to_cart';
+              const isAdded = isConfirmation
+                ? target !== undefined && cartQuantity >= target
+                : addedProductIds.includes(product.id);
+              const outstandingQuantity = isConfirmation && target !== undefined
+                ? Math.min(product.quantity ?? 1, Math.max(0, target - cartQuantity))
+                : product.quantity;
               const availableProduct = product.manageStock
-                ? { ...product, stock: Math.max(0, (product.stock ?? 0) - cartQuantity) }
-                : product;
+                ? { ...product, quantity: outstandingQuantity, stock: Math.max(0, (product.stock ?? 0) - cartQuantity) }
+                : { ...product, quantity: outstandingQuantity };
               const isOutOfStock =
                 availableProduct.manageStock && (availableProduct.stock ?? 0) <= 0;
 
@@ -180,7 +195,7 @@ export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
                       <button
                         className="flex items-center justify-center gap-1 rounded-lg bg-[var(--store-primary)] px-2 py-2 text-xs font-semibold text-[var(--store-primary-foreground)] disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={isAdded || isOutOfStock}
-                        onClick={() => handleAddToCart(product, isAdded, requestedQuantity(availableProduct))}
+                        onClick={() => handleAddToCart(product, isAdded, requestedQuantity(availableProduct), isConfirmation ? { key: confirmationKey, current: cartQuantity } : undefined)}
                         type="button"
                       >
                         {isAdded ? <Check size={14} /> : <ShoppingCart size={14} />}

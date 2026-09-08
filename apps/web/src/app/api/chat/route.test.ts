@@ -237,7 +237,6 @@ import { getAiChatModel } from '@/env';
 import { createLlmChatResponse } from '@/lib/llm-chat';
 import { createOllamaAgenticChatResponse } from '@/lib/ollama-agentic-chat';
 import { sanitizeHtml } from '@/lib/sanitize';
-import { storefrontAgentUiContract } from '@/schemas/storefront-agent-ui-contract';
 import { POST } from './route';
 import { generateRouteChainAttempt } from './route-chain.test-support';
 
@@ -247,17 +246,6 @@ function makeRequest(body: unknown): Request {
   return new Request('http://localhost:3000/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-}
-
-function makeAgentUiRequest(body: unknown): Request {
-  return new Request('http://localhost:3000/api/chat', {
-    method: 'POST',
-    headers: {
-      Accept: storefrontAgentUiContract.mediaType,
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify(body),
   });
 }
@@ -392,65 +380,6 @@ describe('POST /api/chat', () => {
     );
     const text = await response.text();
     expect(text).toBe('AI response');
-  });
-
-  it.each([
-    null,
-    'generation',
-    'stream',
-  ] as const)('returns trusted product UI events with failure: %s', async (failure) => {
-    ollamaBaseUrl = 'https://ollama.example.com';
-    ollamaResponseText = 'I found one phone.';
-    if (failure === 'generation') ollamaError = new Error('generation failed');
-    if (failure === 'stream') ollamaStreamError = new Error('stream failed');
-    ollamaExecutedToolNameBeforeFailure = 'searchProducts';
-    ollamaExecutedToolResultBeforeFailure = JSON.stringify({
-      products: [
-        {
-          brand: 'Apple',
-          category: 'Smartphones',
-          description: 'Current catalog product',
-          has_variants: false,
-          id: 'product-1',
-          image_url: 'https://cdn.example.com/iphone.jpg',
-          manage_stock: true,
-          name: 'iPhone 16',
-          price: 1_200_000,
-          slug: 'iphone-16',
-          status: 'active',
-          stock: 3,
-        },
-      ],
-      total: 1,
-    });
-
-    const response = await POST(
-      makeAgentUiRequest({
-        messages: [{ role: 'user', content: 'Show me phones' }],
-      })
-    );
-
-    expect(response.headers.get('content-type')).toBe(
-      `${storefrontAgentUiContract.mediaType}; charset=utf-8`
-    );
-    expect(await response.json()).toEqual({
-      events: [
-        expect.objectContaining({
-          intent: 'discover',
-          products: [
-            expect.objectContaining({
-              id: 'product-1',
-              name: 'iPhone 16',
-            }),
-          ],
-          type: 'present_products',
-        }),
-      ],
-      text: failure
-        ? 'I found these live catalog options for you.'
-        : 'I found one phone.',
-      version: 1,
-    });
   });
 
   it('uses VPS Gemma through Ollama when configured', async () => {

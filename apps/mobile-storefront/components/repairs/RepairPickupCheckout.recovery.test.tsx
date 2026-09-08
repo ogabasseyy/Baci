@@ -80,6 +80,47 @@ describe('pickup recovery regressions', () => {
     await screen.findByText('Repair ticket: 123');
   }
   it.each([
+    'paid',
+    'booked',
+    'review',
+    'manual_fulfilled',
+  ] as const)('allows native back after the server confirms pickup state %s', async (pickupPaymentStatus) => {
+    const back = jest.fn();
+    const navigationBackRef = { current: null as (() => void) | null };
+    jest.mocked(repairPickupClient.status).mockResolvedValue({
+      found: true,
+      repair: {
+        ticketNumber: 123,
+        status: 'pending',
+        pickupPaymentStatus,
+        trackingNumber: null,
+      },
+    });
+    render(
+      <RepairPickupCheckout
+        data={data}
+        onBack={back}
+        navigationBackRef={navigationBackRef}
+      />
+    );
+    await screen.findByText('Repair ticket: 123');
+    navigationBackRef.current?.();
+    expect(back).not.toHaveBeenCalled();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Refresh pickup status' })
+    );
+    await screen.findByText(
+      `Pickup status: ${pickupPaymentStatus.replaceAll('_', ' ')}`
+    );
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Loading pickup')).toBeNull()
+    );
+    navigationBackRef.current?.();
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(repairPickupSession.clear).not.toHaveBeenCalled();
+    expect(repairPickupClient.pay).not.toHaveBeenCalled();
+  });
+  it.each([
     false,
     true,
   ])('clears expired in-memory recovery even when storage cleanup fails: %s', async (cleanupFails) => {

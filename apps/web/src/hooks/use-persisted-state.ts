@@ -87,18 +87,19 @@ export function usePersistedState<T>(
       clearTimeout(timerRef.current);
     }
 
-    armFlush();
-    timerRef.current = setTimeout(() => {
+    const persist = () => {
       if (clearedRef.current) return;
       writeValue(latestValueRef.current);
-    }, debounceMs);
+    };
+    flushRef.current = persist;
+    timerRef.current = setTimeout(persist, debounceMs);
 
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
     };
-  }, [state, debounceMs, writeValue, armFlush]);
+  }, [state, debounceMs, writeValue]);
 
   // Cleanup on unmount
   useEffect(() => {

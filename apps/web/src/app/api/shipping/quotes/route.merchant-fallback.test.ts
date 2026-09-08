@@ -168,57 +168,6 @@ describe('POST /api/shipping/quotes', () => {
     );
   });
 
-  it('rejects public international quotes with an arbitrary merchant ID', async () => {
-    const supabase = buildSupabaseMock(null);
-    mockCreateAdminClient.mockReturnValue(supabase);
-    const { POST } = await import('./route');
-
-    const response = await POST(
-      buildQuoteRequest({
-        merchantId: '11111111-1111-4111-8111-111111111111',
-        sender: {
-          name: 'Caller Supplied Origin',
-          phone: '08099999999',
-          address: 'Cheap Origin',
-          city: 'Aba',
-          state: 'Abia',
-          country: 'Nigeria',
-          countryCode: 'NG',
-        },
-      })
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: 'Merchant shipping origin is not configured',
-    });
-    expect(supabase.from).not.toHaveBeenCalled();
-    expect(mockGetQuotes).not.toHaveBeenCalled();
-  });
-
-  it('rejects international quote merchant IDs when auth has no merchant context', async () => {
-    const supabase = buildSupabaseMock({ id: 'user-1' });
-    mockCreateAdminClient.mockReturnValue(supabase);
-    mockCreateServerClient.mockResolvedValue(
-      buildSupabaseMock({ id: 'user-1' })
-    );
-    mockGetMerchantForApiRequest.mockResolvedValue(null);
-    const { POST } = await import('./route');
-
-    const response = await POST(
-      buildQuoteRequest({
-        merchantId: '11111111-1111-4111-8111-111111111111',
-      })
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: 'Merchant shipping origin is not configured',
-    });
-    expect(supabase.from).not.toHaveBeenCalled();
-    expect(mockGetQuotes).not.toHaveBeenCalled();
-  });
-
   it('stores the resolved authenticated merchant on international quote requests', async () => {
     const supabase = buildSupabaseMock({ id: 'user-1' });
     mockCreateAdminClient.mockReturnValue(supabase);

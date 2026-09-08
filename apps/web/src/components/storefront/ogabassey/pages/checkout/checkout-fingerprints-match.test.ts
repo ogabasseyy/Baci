@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { checkoutFingerprintsMatch } from './checkout-fingerprints-match';
 
 it('recovers a pending order saved before quote UUIDs were removed from fingerprints', () => {
@@ -48,4 +48,31 @@ it('matches missing legacy variant fields to empty non-variant attributes', () =
   expect(checkoutFingerprintsMatch(legacy, current)).toBe(true);
   expect(checkoutFingerprintsMatch(legacy, JSON.stringify({items: [{product_id: 'p', price: 100, variantId: 'new'}]}))).toBe(false);
   expect(checkoutFingerprintsMatch(legacy, JSON.stringify({items: [{product_id: 'p', price: 100, variantAttributes: {color: 'blue'}}]}))).toBe(false);
+});
+
+describe('bugfix: normalize missing gift-wrap fields in legacy fingerprints', () => {
+  it('matches a legacy snapshot without giftWrappingCost to an explicit zero fee', () => {
+    const legacy = JSON.stringify({
+      merchantId: 'merchant',
+      shippingFee: 3518,
+      items: [],
+    });
+    const current = JSON.stringify({
+      merchantId: 'merchant',
+      shippingFee: 3518,
+      giftWrappingCost: 0,
+      items: [],
+    });
+    expect(checkoutFingerprintsMatch(legacy, current)).toBe(true);
+    expect(checkoutFingerprintsMatch(current, legacy)).toBe(true);
+  });
+
+  it('preserves a nonzero gift wrapping fee as a distinct checkout', () => {
+    expect(
+      checkoutFingerprintsMatch(
+        JSON.stringify({ shippingFee: 100 }),
+        JSON.stringify({ shippingFee: 100, giftWrappingCost: 500 }),
+      ),
+    ).toBe(false);
+  });
 });

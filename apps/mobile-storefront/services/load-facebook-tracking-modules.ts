@@ -10,7 +10,10 @@ export async function loadFacebookTrackingModules(
   );
   settings.setAppID(appId);
   settings.setClientToken(clientToken);
+  // initializeSDK is a void bridge call; await a Promise method on the same
+  // FBSettings queue so native init finishes before dependents load.
   settings.initializeSDK();
+  await settings.getAdvertiserTrackingEnabled();
   const [events, aem] = await Promise.all([
     import('react-native-fbsdk-next/src/FBAppEventsLogger'),
     import('react-native-fbsdk-next/src/FBAEMReporter'),

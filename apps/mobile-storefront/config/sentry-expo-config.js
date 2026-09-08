@@ -30,20 +30,24 @@ function buildSentryExpoConfiguration(env, { required }) {
     return { plugin: null };
   }
 
+  // Uploads need token + org + project together; a partial set still breaks
+  // generated iOS/Android Sentry upload tasks on local native builds.
+  const canUploadSymbols = Boolean(authToken && organization && project);
+
   return {
     plugin: [
       '@sentry/react-native/expo',
       {
         experimental_android: {
           enableAndroidGradlePlugin: true,
-          ...(!authToken
+          ...(!canUploadSymbols
             ? {
                 autoUploadNativeSymbols: false,
                 autoUploadProguardMapping: false,
               }
             : {}),
         },
-        ...(!authToken ? { disableAutoUpload: true } : {}),
+        ...(!canUploadSymbols ? { disableAutoUpload: true } : {}),
         organization,
         project,
         url: optionalValue(env.SENTRY_URL) || 'https://sentry.io/',

@@ -4,14 +4,20 @@ let mockInitialized = false;
 let mockImportError: Error | null = null;
 const mockSetAppID = jest.fn();
 const mockSetClientToken = jest.fn();
+const mockGetAdvertiserTrackingEnabled = jest.fn(async () => {
+  mockInitialized = true;
+  return true;
+});
 jest.mock('react-native-fbsdk-next/src/FBSettings', () => ({
   __esModule: true,
   default: {
     setAppID: mockSetAppID,
     setClientToken: mockSetClientToken,
     initializeSDK: () => {
-      mockInitialized = true;
+      // Void bridge methods only enqueue native work; completion is signaled by
+      // the subsequent Promise method on the same FBSettings queue.
     },
+    getAdvertiserTrackingEnabled: mockGetAdvertiserTrackingEnabled,
   },
 }));
 jest.mock('react-native-fbsdk-next/src/FBAppEventsLogger', () => {
@@ -43,7 +49,38 @@ it('initializes Facebook before importing the native event logger', async () => 
   // Assert
   expect(mockSetAppID).toHaveBeenCalledWith('app-id');
   expect(mockSetClientToken).toHaveBeenCalledWith('client-token');
+  expect(mockGetAdvertiserTrackingEnabled).toHaveBeenCalled();
   expect(modules[1].default.logEvent).toBeDefined();
+});
+
+it('bugfix: waits for FBSettings queue drain before loading dependents', async () => {
+  let resolveDrain: ((value: boolean) => void) | undefined;
+  mockGetAdvertiserTrackingEnabled.mockImplementationOnce(
+    () =>
+      new Promise<boolean>((resolve) => {
+        resolveDrain = resolve;
+      })
+  );
+  const { loadFacebookTrackingModules } = await import(
+    './load-facebook-tracking-modules'
+  );
+
+  let settled = false;
+  const loading = loadFacebookTrackingModules('app-id', 'client-token').then(
+    (modules) => {
+      settled = true;
+      return modules;
+    }
+  );
+
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  expect(mockInitialized).toBe(false);
+
+  resolveDrain?.(true);
+  await loading;
+  expect(settled).toBe(true);
+  expect(mockInitialized).toBe(true);
 });
 
 it('rejects when a dependent native module cannot load', async () => {

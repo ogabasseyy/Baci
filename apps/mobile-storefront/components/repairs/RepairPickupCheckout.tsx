@@ -5,6 +5,7 @@ import { repairsCatalogStyles as styles } from '@/components/repairs/repairs-cat
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useRepairPickupBack } from '@/hooks/use-repair-pickup-back';
+import { isRepairPickupPaymentConfirmed } from '@/lib/is-repair-pickup-payment-confirmed';
 import { openRepairPickupPayment } from '@/lib/open-repair-pickup-payment';
 import type { RepairBookingRequest } from '@/lib/repair-catalog-schemas';
 import { repairPickupClient } from '@/lib/repair-pickup-client';
@@ -36,7 +37,7 @@ export function RepairPickupCheckout({
   const inFlight = useRef(false);
   useRepairPickupBack(
     navigationBackRef,
-    ready && ticket === null,
+    ready && (ticket === null || isRepairPickupPaymentConfirmed(status)),
     inFlight,
     onBack
   );

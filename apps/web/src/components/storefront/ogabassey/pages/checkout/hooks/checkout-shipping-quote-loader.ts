@@ -53,6 +53,13 @@ interface QuoteState {
   setShippingQuotes: (quotes: ShippingQuote[]) => void;
   /** Called when a restored preference no longer matches any returned quote. */
   onPreferredQuoteMissing?: () => void;
+  /**
+   * When true, a missing preferred quote clears selection instead of applying
+   * the initial-load default (resume/payment restore). Method switches leave
+   * this false so an incompatible prior ID does not wipe the new method's
+   * first station/door choice.
+   */
+  requirePreferredQuoteMatch?: boolean;
 }
 
 export function invalidatePendingQuoteRequests(
@@ -206,7 +213,7 @@ export async function loadCheckoutShippingQuotes(
         state.setSelectedProviderRateId?.(
           preferredQuote.providerRateId?.trim() || ''
         );
-      } else if (wantedRestore) {
+      } else if (wantedRestore && state.requirePreferredQuoteMatch) {
         // Persisted checkout may already be on payment; do not silently swap
         // carriers/fees — clear selection and force delivery reselection.
         state.setSelectedQuoteId('');

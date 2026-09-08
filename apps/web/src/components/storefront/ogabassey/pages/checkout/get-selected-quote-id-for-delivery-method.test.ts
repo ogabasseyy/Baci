@@ -34,4 +34,12 @@ describe('getSelectedQuoteIdForDeliveryMethod', () => {
       'station-1',
     );
   });
+
+  describe('bugfix: ignore prior-method quote IDs when switching delivery modes', () => {
+    it('does not carry a door quote id into pickup when no station quotes exist yet', () => {
+      expect(
+        getSelectedQuoteIdForDeliveryMethod('pickup_station', 'door-1', [doorQuote]),
+      ).toBe('');
+    });
+  });
 });

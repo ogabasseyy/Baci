@@ -18,7 +18,7 @@ export function getSelectedQuoteIdForDeliveryMethod(
     );
     return selectedQuote && isStationPickupQuote(selectedQuote)
       ? selectedQuoteId
-      : (getStationPickupQuote(shippingQuotes)?.id ?? selectedQuoteId);
+      : (getStationPickupQuote(shippingQuotes)?.id ?? '');
   }
 
   if (deliveryMethod === 'door') {

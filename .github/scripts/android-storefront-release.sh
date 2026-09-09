@@ -61,7 +61,9 @@ case "$operation" in
     echo "ANDROID_STOREFRONT_KEYSTORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
     ;;
   build)
-    GRADLE_ARGS="app:bundleRelease -x lint -x lintVitalAnalyzeRelease -x test --configure-on-demand --build-cache --max-workers=2 --no-daemon --stacktrace"
+    # Production Play bundles only need the 64-bit ABI. Avoid compiling
+    # emulator/x86 native variants on the persistent runner.
+    GRADLE_ARGS="app:bundleRelease -PreactNativeArchitectures=arm64-v8a -x lint -x lintVitalAnalyzeRelease -x test --configure-on-demand --build-cache --max-workers=2 --no-daemon --stacktrace"
     # shellcheck disable=SC2086
     ./gradlew $GRADLE_ARGS
     ;;

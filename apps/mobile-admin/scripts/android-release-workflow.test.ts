@@ -40,6 +40,7 @@ describe('Android admin release workflow', () => {
       workflow,
       'Verify Android release recommendations'
     );
+    const build = getWorkflowStep(workflow, 'Build Android App Bundle');
 
     expect(verificationStep).toBeGreaterThan(-1);
     expect(buildStep).toBeGreaterThan(-1);
@@ -62,6 +63,7 @@ describe('Android admin release workflow', () => {
       '--mapping apps/mobile-admin/android/app/build/outputs/mapping/release/mapping.txt'
     );
     expect(verification).toContain('--bundletool "${BUNDLETOOL_JAR}"');
+    expect(build).toContain('-PreactNativeArchitectures=arm64-v8a');
   });
 
   it('runs when its own release configuration changes', async () => {

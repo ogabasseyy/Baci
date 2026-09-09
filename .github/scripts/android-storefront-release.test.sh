@@ -39,5 +39,6 @@ if bash "$script" unknown >"$fixture_root/unknown-log" 2>&1; then
   exit 1
 fi
 grep -q 'Unknown Android storefront release operation' "$fixture_root/unknown-log"
+grep -q 'app:bundleRelease -PreactNativeArchitectures=arm64-v8a' "$script"
 
 echo 'Android storefront release script checks passed'

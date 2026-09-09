@@ -306,6 +306,7 @@ overrides:
 patchedDependencies:
   "@react-native-community/datetimepicker@9.1.0": "patches/@react-native-community/datetimepicker@9.1.0.patch"
   "@react-native-google-signin/google-signin@16.1.2": "patches/@react-native-google-signin/google-signin@16.1.2.patch"
+  expo-modules-jsi@57.0.5: "patches/expo-modules-jsi@57.0.5.patch"
   "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch"
   "metro-runtime@0.84.4": "patches/metro-runtime@0.84.4.patch"
   "metro@0.84.4": "patches/metro@0.84.4.patch"

@@ -170,10 +170,14 @@ jobs:
       - name: Cache CocoaPods
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: apps/mobile-storefront/ios/Pods
-          key: ${{ runner.os }}-storefront-pods-${{ hashFiles('apps/mobile-storefront/ios/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-storefront-pods-
+          # Cache only CocoaPods downloads, never the generated Pods tree.
+          # The latter contains local podspec snapshots and becomes invalid
+          # whenever React Native or Expo changes, which caused the release
+          # job to reject React-Core-prebuilt after prebuild.
+          path: |
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods/repos
+          key: ${{ runner.os }}-storefront-cocoapods-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile-storefront/ios/Podfile') }}
 
       - name: Install CocoaPods
         working-directory: ${{ env.WORKING_DIR }}/ios

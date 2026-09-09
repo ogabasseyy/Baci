@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from '@jest/globals';
 
-// Patch-integrity guard for the Expo Modules JSI Date guard.
+// Patch-integrity guards for the Expo Modules JSI native sources.
 //
 // Xcode 26.2 (the CI macos-26 image) cannot resolve `abs` in this module's
 // Date guard: C++ interop pulls the C stdlib `abs` overloads into scope next
@@ -46,6 +46,22 @@ describe('bugfix: expo-modules-jsi Xcode 26.2 abs-ambiguity archive failure', ()
     expect(source).not.toMatch(/\babs\s*\(/);
   });
 
+  it('keeps RuntimeScheduler constructors compatible with Swift 6 C++ interop', () => {
+    const runtimeSchedulerPath = join(
+      jsiRoot,
+      'apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h'
+    );
+    expect(existsSync(runtimeSchedulerPath)).toBe(true);
+    const source = readFileSync(runtimeSchedulerPath, 'utf8');
+
+    expect(source).not.toMatch(
+      /SWIFT_RETURNS_RETAINED RuntimeScheduler(?:\(|\s)/
+    );
+    expect(source).toContain(
+      '} SWIFT_SHARED_REFERENCE(retainRuntimeScheduler, releaseRuntimeScheduler);'
+    );
+  });
+
   it('keeps the storefront React Native 0.86.2 platform patch registered', () => {
     const workspaceConfig = readFileSync(
       join(__dirname, '../../pnpm-workspace.yaml'),
@@ -81,5 +97,19 @@ describe('bugfix: expo-modules-jsi Xcode 26.2 abs-ambiguity archive failure', ()
     expect(readFileSync(reactNativePatchPath, 'utf8')).toContain(
       'StatusBarModule.kt'
     );
+
+    const expoJsiPatchHash = lockfile.match(
+      /^ {2}expo-modules-jsi@57\.0\.5: ([a-f0-9]{64})$/m
+    )?.[1];
+    expect(workspaceConfig).toContain(
+      'expo-modules-jsi@57.0.5: "patches/expo-modules-jsi@57.0.5.patch"'
+    );
+    expect(expoJsiPatchHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(lockfile).toContain(
+      `expo-modules-jsi: 57.0.5(patch_hash=${expoJsiPatchHash})`
+    );
+    expect(
+      existsSync(join(__dirname, '../../patches/expo-modules-jsi@57.0.5.patch'))
+    ).toBe(true);
   });
 });

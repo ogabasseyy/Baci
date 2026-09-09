@@ -190,6 +190,11 @@ jobs:
       # Bumping the pin requires re-checking that the new CLI's bundled
       # esbuild version is still on the allow list.
       - run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=production
+      - name: Ensure wallet recovery HMAC Production configuration exists
+        # `vercel pull` omits undefined keys and writes blank placeholders for
+        # defined sensitive values. Create the missing Production key once, then
+        # record the blank placeholder. Never logs the generated runtime value.
+        run: node .github/scripts/ensure-vercel-sensitive-env.mjs MERCHANT_WALLET_FUNDING_RECOVERY_HMAC_SECRET .vercel/.env.production.local .github/scripts/run-pinned-vercel.sh
       - name: Verify wallet recovery HMAC Production configuration is present
         # Sensitive Vercel values are intentionally blank in the pulled dotenv
         # file. This proves the Production key is defined, not its runtime value.

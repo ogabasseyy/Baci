@@ -48,11 +48,6 @@ function normalizeHost(value: string | null): string {
   return (value ?? '').split(':')[0]?.trim().toLowerCase() ?? '';
 }
 
-function isBodyOnlyStorefrontClient(request: HeaderReader): boolean {
-  const client = normalizeHeader(request.headers.get('x-baci-client'));
-  return client === 'mobile-storefront' || client === 'web-storefront';
-}
-
 function isTrustedStorefrontHeader(request: HeaderReader): boolean {
   const host = normalizeHost(request.headers.get('host'));
   const slug = normalizeHeader(request.headers.get('x-merchant-slug'));
@@ -215,12 +210,9 @@ export async function resolveQuoteMerchantContext({
     storefrontMerchantId ?? permittedAuthenticatedMerchantId ?? data.merchantId;
   const trustedSenderMerchantId =
     storefrontMerchantId ?? permittedAuthenticatedMerchantId;
-  const bodyOnlyMerchantId =
-    !trustedSenderMerchantId &&
-    merchantId &&
-    isBodyOnlyStorefrontClient(request)
-      ? merchantId
-      : undefined;
+  // Older mobile clients omit x-baci-client. This public projection is safe
+  // without that advisory header; the body ID never grants private-table access.
+  const bodyOnlyMerchantId = !trustedSenderMerchantId ? merchantId : undefined;
   let senderInfo =
     data.shipmentType === 'international' ? undefined : data.sender;
   let merchantCountry: string | null | undefined;

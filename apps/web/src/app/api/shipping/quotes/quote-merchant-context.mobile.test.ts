@@ -28,6 +28,8 @@ describe('body-only storefront quote context', () => {
   });
 
   it.each([
+    '',
+    'legacy-mobile',
     'mobile-storefront',
     'web-storefront',
   ] as const)('resolves the configured merchant origin for %s instead of defaulting to Lagos', async (client) => {
@@ -81,7 +83,10 @@ describe('body-only storefront quote context', () => {
     });
   });
 
-  it('ignores a caller-supplied sender for a body-only merchant quote', async () => {
+  it.each([
+    '',
+    'mobile-storefront',
+  ])('ignores a caller-supplied sender for a body-only merchant quote with client %s', async (client) => {
     const rpc = vi.fn().mockResolvedValue({
       data: {
         business_name: 'Abuja Store',
@@ -115,7 +120,7 @@ describe('body-only storefront quote context', () => {
       },
       request: createRequest({
         host: 'usebaci.com',
-        'x-baci-client': 'mobile-storefront',
+        'x-baci-client': client,
       }),
       supabase: {
         auth: {
@@ -140,7 +145,10 @@ describe('body-only storefront quote context', () => {
     });
   });
 
-  it('fails closed when the body-only merchant has no published origin', async () => {
+  it.each([
+    '',
+    'mobile-storefront',
+  ])('fails closed when the body-only merchant has no published origin with client %s', async (client) => {
     mockCreateServerClient.mockResolvedValue({
       auth: {
         getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
@@ -153,7 +161,7 @@ describe('body-only storefront quote context', () => {
         data: { merchantId: 'merchant-missing', shipmentType: 'domestic' },
         request: createRequest({
           host: 'usebaci.com',
-          'x-baci-client': 'mobile-storefront',
+          'x-baci-client': client,
         }),
         supabase: {
           auth: {
@@ -169,7 +177,10 @@ describe('body-only storefront quote context', () => {
     });
   });
 
-  it('propagates a published non-Nigerian country for carrier suppression', async () => {
+  it.each([
+    '',
+    'mobile-storefront',
+  ])('propagates a published non-Nigerian country for carrier suppression with client %s', async (client) => {
     mockCreateServerClient.mockResolvedValue({
       auth: {
         getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
@@ -194,7 +205,7 @@ describe('body-only storefront quote context', () => {
         },
         request: createRequest({
           host: 'usebaci.com',
-          'x-baci-client': 'mobile-storefront',
+          'x-baci-client': client,
         }),
         supabase: {
           auth: {

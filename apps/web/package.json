@@ -27,6 +27,7 @@
     "perf:ogabassey-critical-path": "node tools/perf/measure-ogabassey-critical-path.mjs",
     "perf:ogabassey-cache-probe": "node tools/perf/measure-ogabassey-cache-hit-rate.mjs",
     "perf:ogabassey-css-budget": "node tools/perf/assert-ogabassey-css-budget.mjs",
+    "perf:ogabassey-cwv": "node tools/perf/measure-ogabassey-cwv.mjs",
     "perf:ogabassey-pdp-lcp": "node tools/perf/measure-ogabassey-pdp-lcp.mjs",
     "cost:storefront-origin-budget": "tsx tools/cost/storefront-origin-budget.ts",
     "db:replay:capture-ledger": "tsx tools/db/capture-supabase-history-ledger.ts",

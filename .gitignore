@@ -208,3 +208,6 @@ orphaned_images_sample/
 # Play Store / Google service-account private keys (rotate if ever committed)
 **/play-store-service-account.json
 **/*service-account*.json
+
+# Generated OgaBassey CWV audit artifacts
+/output/audits/ogabassey-cwv-*/

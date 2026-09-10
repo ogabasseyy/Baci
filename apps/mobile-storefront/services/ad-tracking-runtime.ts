@@ -12,10 +12,10 @@ import {
   getIsTikTokInitialized,
   getIsTrackingAllowed,
   IS_TIKTOK_BUSINESS_CONFIGURED,
+  initializeTikTokBusinessIfNeeded,
   loadNativeModules,
   adTrackingLog as log,
   setIsInitialized,
-  setIsTikTokInitialized,
   setIsTrackingAllowed,
 } from './ad-tracking-state';
 import { toTikTokEventData } from './tiktok-event-data';
@@ -116,18 +116,7 @@ async function initializeAuthorizedAdTracking(): Promise<boolean> {
     modules.TikTokBusiness &&
     !getIsTikTokInitialized()
   ) {
-    try {
-      const initialized = await modules.TikTokBusiness.initialize?.();
-      setIsTikTokInitialized(
-        Boolean(initialized || modules.TikTokBusiness.isInitialized?.())
-      );
-      if (getIsTikTokInitialized()) {
-        log.info('TikTok SDK initialized (backup)');
-      }
-    } catch (error) {
-      setIsTikTokInitialized(false);
-      log.warn('TikTok SDK initialization failed:', error);
-    }
+    await initializeTikTokBusinessIfNeeded(modules.TikTokBusiness);
   }
 
   return true;

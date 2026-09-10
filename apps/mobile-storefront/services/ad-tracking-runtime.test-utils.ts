@@ -54,7 +54,13 @@ export type MockNativeModules = {
 };
 
 export const mockLoadAdTrackingNativeModules =
-  jest.fn<() => Promise<MockNativeModules>>();
+  jest.fn<
+    (options?: {
+      onTikTokReady?: (
+        tikTok: MockTikTokBusiness | null
+      ) => void | Promise<void>;
+    }) => Promise<MockNativeModules>
+  >();
 
 let mockPlatformOS: 'ios' | 'android' | 'web' = 'ios';
 let mockExpoConfigExtra: Record<string, unknown> = {};

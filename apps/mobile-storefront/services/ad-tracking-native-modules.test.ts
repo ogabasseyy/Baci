@@ -115,7 +115,14 @@ describe('loadAdTrackingNativeModules', () => {
       const { loadAdTrackingNativeModules } = await import(
         './ad-tracking-native-modules'
       );
-      const onTikTokReady = jest.fn();
+      const onTikTokReady =
+        jest.fn<
+          (
+            tikTok:
+              | import('./ad-tracking-native-modules').TikTokBusinessLike
+              | null
+          ) => void
+        >();
       const loading = loadAdTrackingNativeModules({ onTikTokReady });
 
       await initializeStarted;
@@ -127,6 +134,28 @@ describe('loadAdTrackingNativeModules', () => {
       const modules = await loading;
       expect(modules.FBSettings).not.toBeNull();
       expect(modules.TikTokBusiness?.trackEvent).toBe(mockTikTokTrackEvent);
+    });
+
+    it('resolves with TikTokBusiness null when @baci/tiktok-business import rejects', async () => {
+      jest.doMock('@baci/tiktok-business', () => {
+        throw new Error('TikTok native module missing');
+      });
+
+      const { loadAdTrackingNativeModules } = await import(
+        './ad-tracking-native-modules'
+      );
+      const onTikTokReady =
+        jest.fn<
+          (
+            tikTok:
+              | import('./ad-tracking-native-modules').TikTokBusinessLike
+              | null
+          ) => void
+        >();
+      const modules = await loadAdTrackingNativeModules({ onTikTokReady });
+
+      expect(modules.TikTokBusiness).toBeNull();
+      expect(onTikTokReady).toHaveBeenCalledWith(null);
     });
   });
 });

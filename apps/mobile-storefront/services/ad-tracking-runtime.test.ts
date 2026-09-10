@@ -302,4 +302,34 @@ describe('ad-tracking runtime initialization', () => {
       []
     );
   });
+
+  it('initializes TikTok via onTikTokReady before Facebook native module load finishes', async () => {
+    const initializeTikTok = jest.fn(async () => true);
+    mockGetTrackingPermissionStatus.mockResolvedValue({ status: 'granted' });
+    setMockExpoConfigExtra({
+      apiUrl: 'https://api.test',
+      facebookAppId: 'fb-test',
+      facebookClientToken: 'client-test',
+      tiktokBusiness: { isConfigured: true },
+    });
+
+    mockLoadAdTrackingNativeModules.mockImplementation(async (options) => {
+      const modules = createNativeModules({
+        FBSettings: {
+          initializeSDK: jest.fn(),
+          setAdvertiserTrackingEnabled:
+            jest.fn<(enabled: boolean) => boolean>(),
+        },
+        TikTokBusiness: { initialize: initializeTikTok },
+      });
+      await options?.onTikTokReady?.(modules.TikTokBusiness);
+      expect(initializeTikTok).toHaveBeenCalledTimes(1);
+      return modules;
+    });
+
+    const { initAdTracking } = await import('./ad-tracking-runtime');
+    await initAdTracking();
+
+    expect(initializeTikTok).toHaveBeenCalledTimes(1);
+  });
 });

@@ -13,10 +13,36 @@ const patchPath = join(root, 'patches/expo-modules-jsi@57.0.5.patch');
 test('committed expo-modules-jsi patch drops SWIFT_RETURNS_RETAINED on RuntimeScheduler ctors', () => {
   const patch = readFileSync(patchPath, 'utf8');
   assert.match(patch, /RuntimeScheduler\.h/);
+
+  const annotatedCtorRemovals =
+    patch.match(/-\s*SWIFT_RETURNS_RETAINED\s+RuntimeScheduler\(/g) ?? [];
+  assert.equal(
+    annotatedCtorRemovals.length,
+    2,
+    'both annotated RuntimeScheduler constructors must be removed',
+  );
   assert.match(
     patch,
-    /-\s*(?:SWIFT_RETURNS_RETAINED\s+)?RuntimeScheduler\(/,
+    /-\s*SWIFT_RETURNS_RETAINED\s+RuntimeScheduler\(void \*scheduler, ScheduleFn fn\)/,
   );
+  assert.match(
+    patch,
+    /-\s*SWIFT_RETURNS_RETAINED\s+RuntimeScheduler\(\)\s*\{\}/,
+  );
+
+  const unannotatedCtorAdditions =
+    patch.match(/^\+\s*RuntimeScheduler\(/gm) ?? [];
+  assert.equal(
+    unannotatedCtorAdditions.length,
+    2,
+    'both unannotated RuntimeScheduler constructors must be added',
+  );
+  assert.match(
+    patch,
+    /^\+\s*RuntimeScheduler\(void \*scheduler, ScheduleFn fn\)/m,
+  );
+  assert.match(patch, /^\+\s*RuntimeScheduler\(\)\s*\{\}/m);
+
   assert.doesNotMatch(
     patch,
     /\+\s*SWIFT_RETURNS_RETAINED\s+RuntimeScheduler\(/,

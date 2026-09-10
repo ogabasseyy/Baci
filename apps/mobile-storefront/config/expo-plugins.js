@@ -53,10 +53,10 @@ function createExpoPlugins({
       'expo-build-properties',
       {
         android: {
-          // From-source ReactAndroid is owned by android/settings.gradle
-          // (includeBuild + dependencySubstitution). Do not also set
-          // buildReactNativeFromSource here — expo-build-properties would
-          // append a second includeBuild on incremental prebuild.
+          // From-source ReactAndroid is owned by ./withReactNativeFromSource.js
+          // (idempotent settings.gradle includeBuild). Do not also set
+          // buildReactNativeFromSource — expo-build-properties appends without
+          // deduping; the custom plugin survives clean and incremental prebuild.
           compileSdkVersion: 36,
           targetSdkVersion: 36,
           buildToolsVersion: '36.0.0',
@@ -88,6 +88,7 @@ function createExpoPlugins({
     './config/withAdaptiveAndroidManifest.js',
     './config/withAndroidSystemBars.js',
     './config/withAndroidGradleFixes.js',
+    './config/withReactNativeFromSource.js',
     ...(sentryPlugin ? [sentryPlugin] : []),
     [
       'posthog-react-native/expo',

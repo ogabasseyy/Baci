@@ -35,17 +35,38 @@ let cachedMerchantId: string | null = null;
 let cachedUserData: AdTrackingUserProperties & { userId?: string } = {};
 
 export async function loadNativeModules(): Promise<void> {
-  // Assign TikTok before awaiting Facebook initializeSDK so a stalled FB
-  // barrier cannot leave TikTokBusiness null after the 4s startup deadline.
+  // Assign and initialize TikTok before awaiting Facebook initializeSDK so a
+  // stalled FB barrier cannot leave TikTok uninitialized after the 4s deadline.
   const modules = await loadAdTrackingNativeModules({
-    onTikTokReady: (tikTok) => {
+    onTikTokReady: async (tikTok) => {
       TikTokBusiness = tikTok;
+      await initializeTikTokBusinessIfNeeded(tikTok);
     },
   });
   FBSettings = modules.FBSettings;
   AppEventsLogger = modules.AppEventsLogger;
   AEMReporterIOS = modules.AEMReporterIOS;
   TikTokBusiness = modules.TikTokBusiness;
+}
+
+/** Initializes TikTok when configured; safe to call before Facebook finishes. */
+export async function initializeTikTokBusinessIfNeeded(
+  tikTok: TikTokBusinessLike | null = TikTokBusiness
+): Promise<void> {
+  if (!IS_TIKTOK_BUSINESS_CONFIGURED || !tikTok || getIsTikTokInitialized()) {
+    return;
+  }
+
+  try {
+    const initialized = await tikTok.initialize?.();
+    setIsTikTokInitialized(Boolean(initialized || tikTok.isInitialized?.()));
+    if (getIsTikTokInitialized()) {
+      adTrackingLog.info('TikTok SDK initialized');
+    }
+  } catch (error) {
+    setIsTikTokInitialized(false);
+    adTrackingLog.warn('TikTok SDK initialization failed:', error);
+  }
 }
 
 export function getAdTrackingModules() {

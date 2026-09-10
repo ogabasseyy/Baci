@@ -40,4 +40,4 @@ jobs:
         uses: ./.github/actions/pnpm-install-cached
 
       - name: Verify Swift RuntimeScheduler compatibility
-        run: node --test .github/scripts/ios-runtime-scheduler.test.mjs
+        run: pnpm exec node --test .github/scripts/ios-runtime-scheduler.test.mjs

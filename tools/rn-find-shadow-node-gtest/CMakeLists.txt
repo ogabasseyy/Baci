@@ -43,13 +43,16 @@ elseif(NOT BACI_RN_GTEST_SANITIZER STREQUAL "")
   message(FATAL_ERROR "Unsupported BACI_RN_GTEST_SANITIZER=${BACI_RN_GTEST_SANITIZER}")
 endif()
 
-# Host GCC (Ubuntu CI) differs from Android NDK include/Werror defaults.
+# Host GCC (Ubuntu CI) differs from Android NDK / Clang include+Werror defaults.
 if(NOT APPLE)
   add_compile_options(
     -Wno-error=class-memaccess
     -Wno-class-memaccess
     -Wno-error=maybe-uninitialized
     -Wno-maybe-uninitialized
+    # RN uses Clang-only diagnostics (e.g. -Wglobal-constructors) in #pragma GCC.
+    -Wno-error=pragmas
+    -Wno-pragmas
   )
   # AnsiParser.h uses uint8_t without <cstdint>; NDK headers pull it transitively.
   add_compile_options(

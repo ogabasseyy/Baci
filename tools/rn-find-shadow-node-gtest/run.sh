@@ -109,6 +109,11 @@ fi
 
 echo "== gtest FindShadowNodeByTagTest.* =="
 set +e
+# Folly ends up in both the static harness graph and shared libjsi.so; ASAN's
+# ODR check aborts on that host-only duplicate. Keep other ASAN checks on.
+if [[ -n "${BACI_RN_GTEST_SANITIZER:-}" ]]; then
+  export ASAN_OPTIONS="${ASAN_OPTIONS:+${ASAN_OPTIONS}:}detect_odr_violation=0"
+fi
 "$BIN" --gtest_filter='FindShadowNodeByTagTest.*'
 STATUS=$?
 set -e

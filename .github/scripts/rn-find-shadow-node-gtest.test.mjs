@@ -89,6 +89,7 @@ test('run.sh targets the node_modules suite and gtest filter', () => {
   assert.match(body, /Exercise the production default/);
   assert.match(body, /getCurrentRevision\(\)\.rootShadowNode/);
   assert.match(body, /clang\+\+/);
+  assert.match(body, /detect_odr_violation=0/);
 });
 
 test('bootstrap keeps RN glog config.h namespace macros (no config.h.in overwrite)', () => {

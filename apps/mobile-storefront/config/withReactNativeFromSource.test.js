@@ -1,8 +1,22 @@
+const path = require('node:path');
 const {
-  ensureReactNativeFromSourceSettings,
-} = require('./withReactNativeFromSource');
+  resolveConfigPluginFunction,
+} = require('@expo/config-plugins/build/utils/plugin-resolver');
+const withReactNativeFromSource = require('./withReactNativeFromSource');
 
-describe('ensureReactNativeFromSourceSettings', () => {
+const { ensureReactNativeFromSourceSettings } = withReactNativeFromSource;
+const projectRoot = path.resolve(__dirname, '..');
+
+describe('withReactNativeFromSource', () => {
+  it('exports a callable config plugin that Expo can load', () => {
+    expect(typeof withReactNativeFromSource).toBe('function');
+    const loaded = resolveConfigPluginFunction(
+      projectRoot,
+      './config/withReactNativeFromSource.js'
+    );
+    expect(loaded).toBe(withReactNativeFromSource);
+  });
+
   it('adds exactly one includeBuild for clean-prebuild-like settings.gradle', () => {
     const clean = `include ':app'\nincludeBuild(expoAutolinking.reactNativeGradlePlugin)\n`;
     const ensured = ensureReactNativeFromSourceSettings(clean);

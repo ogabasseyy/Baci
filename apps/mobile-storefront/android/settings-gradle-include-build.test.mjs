@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ensureReactNativeFromSourceSettings } from '../config/withReactNativeFromSource.js';
+import withReactNativeFromSource from '../config/withReactNativeFromSource.js';
 
+const { ensureReactNativeFromSourceSettings } = withReactNativeFromSource;
 const root = dirname(fileURLToPath(import.meta.url));
 const settingsGradle = readFileSync(join(root, 'settings.gradle'), 'utf8');
 

@@ -56,7 +56,7 @@ export interface AdTrackingNativeModules {
 }
 
 export type LoadAdTrackingNativeModulesOptions = {
-  /** Fired as soon as TikTok is loaded, before Facebook initializeSDK awaits. */
+  /** Fired when TikTok is loaded; may run concurrently with Facebook initializeSDK. */
   onTikTokReady?: (tikTok: TikTokBusinessLike | null) => void | Promise<void>;
 };
 
@@ -84,10 +84,17 @@ export async function loadAdTrackingNativeModules(
   };
   if (Platform.OS === 'web') return modules;
 
-  // Assign TikTok before awaiting Facebook so a stalled initializeSDK cannot
-  // leave TikTokBusiness null after the 4s startup deadline resumes UI.
+  // Load TikTok first, then run its ready callback concurrently with Facebook
+  // so a stalled TikTok initialize cannot leave FBSettings null.
   modules.TikTokBusiness = await loadTikTokBusinessModule();
-  await options.onTikTokReady?.(modules.TikTokBusiness);
+  const tikTokReady = Promise.resolve(
+    options.onTikTokReady?.(modules.TikTokBusiness)
+  ).catch((error: unknown) => {
+    console.debug(
+      '[AdTracking] TikTok onTikTokReady ignored or failed:',
+      error
+    );
+  });
 
   try {
     if (
@@ -109,5 +116,6 @@ export async function loadAdTrackingNativeModules(
     );
   }
 
+  await tikTokReady;
   return modules;
 }

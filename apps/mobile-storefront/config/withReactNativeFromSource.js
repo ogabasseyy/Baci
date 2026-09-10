@@ -61,8 +61,8 @@ function withReactNativeFromSource(config) {
   });
 }
 
-module.exports = {
-  ensureReactNativeFromSourceSettings,
-  stripReactNativeIncludeBuilds,
-  withReactNativeFromSource,
-};
+// Expo's plugin loader requires module.exports to be the config-plugin function.
+module.exports = withReactNativeFromSource;
+module.exports.ensureReactNativeFromSourceSettings =
+  ensureReactNativeFromSourceSettings;
+module.exports.stripReactNativeIncludeBuilds = stripReactNativeIncludeBuilds;

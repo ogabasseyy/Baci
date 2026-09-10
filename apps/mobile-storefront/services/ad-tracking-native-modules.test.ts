@@ -136,6 +136,42 @@ describe('loadAdTrackingNativeModules', () => {
       expect(modules.TikTokBusiness?.trackEvent).toBe(mockTikTokTrackEvent);
     });
 
+    it('still loads Facebook when onTikTokReady stalls', async () => {
+      mockExtra.facebookAppId = 'test-app-id';
+      mockExtra.facebookClientToken = 'test-client-token';
+      let resolveTikTokReady: (() => void) | undefined;
+      let notifyTikTokReadyStarted: (() => void) | undefined;
+      const tikTokReadyStarted = new Promise<void>((resolve) => {
+        notifyTikTokReadyStarted = resolve;
+      });
+      const onTikTokReady = jest.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveTikTokReady = resolve;
+            notifyTikTokReadyStarted?.();
+          })
+      );
+
+      const { loadAdTrackingNativeModules } = await import(
+        './ad-tracking-native-modules'
+      );
+      const loading = loadAdTrackingNativeModules({ onTikTokReady });
+
+      await tikTokReadyStarted;
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockInitializeSDK).toHaveBeenCalled();
+      expect(onTikTokReady).toHaveBeenCalledWith(
+        expect.objectContaining({ trackEvent: mockTikTokTrackEvent })
+      );
+
+      resolveTikTokReady?.();
+      const modules = await loading;
+      expect(modules.FBSettings).not.toBeNull();
+      expect(modules.TikTokBusiness?.trackEvent).toBe(mockTikTokTrackEvent);
+    });
+
     it('resolves with TikTokBusiness null when @baci/tiktok-business import rejects', async () => {
       jest.doMock('@baci/tiktok-business', () => {
         throw new Error('TikTok native module missing');

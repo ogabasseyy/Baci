@@ -35,8 +35,8 @@ let cachedMerchantId: string | null = null;
 let cachedUserData: AdTrackingUserProperties & { userId?: string } = {};
 
 export async function loadNativeModules(): Promise<void> {
-  // Assign and initialize TikTok before awaiting Facebook initializeSDK so a
-  // stalled FB barrier cannot leave TikTok uninitialized after the 4s deadline.
+  // Assign TikTok early and initialize it concurrently with Facebook load so
+  // either provider stalling cannot block the other after the 4s deadline.
   const modules = await loadAdTrackingNativeModules({
     onTikTokReady: async (tikTok) => {
       TikTokBusiness = tikTok;

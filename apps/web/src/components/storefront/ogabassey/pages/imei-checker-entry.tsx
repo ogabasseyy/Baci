@@ -93,7 +93,7 @@ export const OgabasseyImeiEntry = ({
   // page load and remounting after "Check Another Device" resets `result`
   // (see imei-results.tsx, which unmounts and drops focus in the process).
   useEffect(() => {
-    rootRef.current?.focus();
+    rootRef.current?.focus({ preventScroll: true });
   }, []);
 
   return (

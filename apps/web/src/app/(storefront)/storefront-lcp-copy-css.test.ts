@@ -24,6 +24,9 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
       'body:has([data-blog-listing-filtered]) [data-blog-lcp-hero]'
     );
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      'body:has([data-blog-live-featured]) [data-blog-lcp-hero]'
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'body:has([data-blog-lcp-hero]) [data-blog-featured-skeleton]'
     );
     expect(STOREFRONT_LCP_COPY_CSS).toContain(

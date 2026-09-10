@@ -18,6 +18,7 @@ import {
   postsPayload,
   resetBlogPageContentMocks,
 } from './blog-page-content.test-utils';
+import { ogabasseyBlogLcpSnapshot } from './ogabassey-blog-lcp-snapshot';
 
 const { BlogPageContent } = await import('./blog-page-content');
 
@@ -180,7 +181,18 @@ describe('BlogPageContent', () => {
     );
   });
 
-  it('does not preload a featured listing image when committed-text LCP hides the story', async () => {
+  it('does not preload a featured listing image when the live story matches the committed snapshot', async () => {
+    mockGetCachedBlogListing.mockResolvedValueOnce(
+      buildListingResult({
+        posts: [
+          {
+            ...postsPayload[0],
+            slug: ogabasseyBlogLcpSnapshot.featuredPost.slug,
+          },
+        ],
+      })
+    );
+
     render(
       await BlogPageContent({
         hideFeaturedStory: true,
@@ -190,6 +202,19 @@ describe('BlogPageContent', () => {
     );
 
     expect(mockPreloadBlogListingFeaturedImage).not.toHaveBeenCalled();
+  });
+
+  it('preloads the live featured image when the committed snapshot is stale', async () => {
+    render(
+      await BlogPageContent({
+        hideFeaturedStory: true,
+        params: Promise.resolve({ slug: 'ogabassey' }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+
+    expect(mockPreloadBlogListingFeaturedImage).toHaveBeenCalled();
+    expect(document.querySelector('[data-blog-live-featured]')).toBeTruthy();
   });
 
   it('preloads the same first listing image used by the OgaBassey hero story', async () => {

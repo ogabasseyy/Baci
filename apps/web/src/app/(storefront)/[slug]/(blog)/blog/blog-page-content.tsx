@@ -36,6 +36,11 @@ import {
   toSingleBlogSearchParam,
 } from './blog-search-params';
 import { DefaultBlogUi } from './default-blog-ui';
+import { ogabasseyBlogLcpSnapshot } from './ogabassey-blog-lcp-snapshot';
+import {
+  shouldHideCommittedBlogSnapshot,
+  shouldHideLiveBlogFeaturedStory,
+} from './should-hide-live-blog-featured-story';
 import { TemplateBlogRenderer } from './template-blog-renderer';
 
 export interface BlogPageProps {
@@ -136,6 +141,21 @@ export async function BlogPageContent({
     notFound();
   }
   const { merchant, posts, categories, totalPosts, searchQuery } = data;
+  const liveFeaturedSlug = posts[0]?.slug;
+  const snapshotSlug = ogabasseyBlogLcpSnapshot.featuredPost.slug;
+  const hideLiveFeatured = shouldHideLiveBlogFeaturedStory({
+    liveFeaturedSlug,
+    preferSnapshot: hideFeaturedStory,
+    snapshotSlug,
+  });
+  const hideCommittedSnapshot = shouldHideCommittedBlogSnapshot({
+    liveFeaturedSlug,
+    preferSnapshot: hideFeaturedStory,
+    snapshotSlug,
+  });
+  const committedSnapshotMarker = hideCommittedSnapshot ? (
+    <div data-blog-live-featured="" hidden />
+  ) : null;
   const effectiveSearchQuery = searchQuery ?? search;
   const totalPages = Math.max(
     1,
@@ -223,7 +243,7 @@ export async function BlogPageContent({
       reading_time_minutes: post.reading_time_minutes,
     })),
   });
-  if (!hideFeaturedStory) {
+  if (!hideLiveFeatured) {
     preloadOgabasseyRootBlogListingHeroImage({
       category,
       posts,
@@ -360,6 +380,7 @@ export async function BlogPageContent({
       if (templateBlogUi) {
         return (
           <>
+            {committedSnapshotMarker}
             {paginationHeadLinks}
             <TemplateBlogRenderer
               blogSchema={blogSchema}
@@ -375,7 +396,7 @@ export async function BlogPageContent({
               categoryGuide={categoryGuide}
               category={category}
               searchQuery={effectiveSearchQuery}
-              hideFeaturedStory={hideFeaturedStory}
+              hideFeaturedStory={hideLiveFeatured}
             />
             <BlogListingPagination
               storeBasePath={basePath}
@@ -398,6 +419,7 @@ export async function BlogPageContent({
   }
   return (
     <>
+      {committedSnapshotMarker}
       {paginationHeadLinks}
       <DefaultBlogUi
         blogSchema={blogSchema}

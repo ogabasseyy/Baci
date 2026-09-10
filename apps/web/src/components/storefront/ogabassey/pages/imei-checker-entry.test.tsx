@@ -164,4 +164,12 @@ describe('OgabasseyImeiEntry', () => {
       screen.queryByRole('heading', { name: /Don't Get Scammed/i })
     ).not.toBeInTheDocument();
   });
+
+  it('focuses the checker without scrolling past the committed hero', () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    renderEntry({ omitHero: true });
+
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    focus.mockRestore();
+  });
 });

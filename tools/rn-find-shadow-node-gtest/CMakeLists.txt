@@ -224,7 +224,9 @@ endif()
 target_compile_reactnative_options(find_shadow_node_by_tag_test PRIVATE)
 
 # Each RN CMakeLists re-includes react-native-flags.cmake and restores -Werror.
-# Walk the full target graph after configure and demote host-GCC Werror last.
+# Walk the full target graph after configure and demote host Werror last.
+# Use plain (non-genex) -Wno-error so it sorts after RN's plain -Werror flags;
+# CMake can place $<COMPILE_LANGUAGE:...> options before non-genex -Werror.
 if(NOT APPLE)
   function(baci_host_demote_werror_recursive dir)
     get_property(_targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
@@ -234,13 +236,18 @@ if(NOT APPLE)
         continue()
       endif()
       target_compile_options(${_target} PRIVATE
-        $<$<COMPILE_LANGUAGE:CXX>:-Wno-error>
-        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-Wno-class-memaccess>
-        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-Wno-maybe-uninitialized>
-        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-Wno-changes-meaning>
-        $<$<COMPILE_LANGUAGE:CXX>:-Wno-unknown-pragmas>
-        $<$<COMPILE_LANGUAGE:CXX>:-Wno-pragmas>
+        -Wno-error
+        -Wno-deprecated-declarations
+        -Wno-unknown-pragmas
+        -Wno-pragmas
       )
+      if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(${_target} PRIVATE
+          -Wno-class-memaccess
+          -Wno-maybe-uninitialized
+          -Wno-changes-meaning
+        )
+      endif()
     endforeach()
     get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
     foreach(_subdir ${_subdirs})

@@ -43,11 +43,16 @@ elseif(NOT BACI_RN_GTEST_SANITIZER STREQUAL "")
   message(FATAL_ERROR "Unsupported BACI_RN_GTEST_SANITIZER=${BACI_RN_GTEST_SANITIZER}")
 endif()
 
-# Host GCC (Ubuntu CI) cannot honor the NDK/Clang -Werror surface on RN sources
-# (#pragma mark, Clang-only diagnostic pragmas, Folly memcpy, missing cstdint, …).
+include(${REACT_COMMON_DIR}/cmake-utils/react-native-flags.cmake)
+include(${REACT_COMMON_DIR}/cmake-utils/internal/react-native-platform-selector.cmake)
+
+# Host GCC cannot honor NDK/Clang -Werror on upstream RN (pragma mark, subobject-linkage, …).
+# target_compile_reactnative_options re-applies ${reactnative_FLAGS} after directory flags,
+# so strip -Werror from the shared list rather than fighting per-target order.
 if(NOT APPLE)
-  add_compile_options(-Wno-error)
-  add_compile_options(
+  list(REMOVE_ITEM reactnative_FLAGS -Werror)
+  list(APPEND reactnative_FLAGS
+    -Wno-error
     -Wno-class-memaccess
     -Wno-maybe-uninitialized
     -Wno-unknown-pragmas
@@ -59,9 +64,6 @@ if(NOT APPLE)
     "$<$<COMPILE_LANGUAGE:CXX>:cstdint>"
   )
 endif()
-
-include(${REACT_COMMON_DIR}/cmake-utils/react-native-flags.cmake)
-include(${REACT_COMMON_DIR}/cmake-utils/internal/react-native-platform-selector.cmake)
 
 add_library(log INTERFACE)
 

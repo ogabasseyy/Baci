@@ -73,9 +73,12 @@ add_react_third_party_ndk_subdir(fast_float)
 add_react_third_party_ndk_subdir(fmt)
 add_react_third_party_ndk_subdir(folly)
 # Ubuntu GCC 13+: Folly F14MapFallback memcpy must not fail consumers (jsi, etc.).
-target_compile_options(folly_runtime PUBLIC
-  -Wno-error=class-memaccess
-  -Wno-class-memaccess)
+# Clang rejects -Wclass-memaccess as an unknown warning option under -Werror.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  target_compile_options(folly_runtime PUBLIC
+    -Wno-error=class-memaccess
+    -Wno-class-memaccess)
+endif()
 
 add_library(glog_init OBJECT
   ${REACT_ANDROID_DIR}/src/main/jni/first-party/fbgloginit/glog_init.cpp)
@@ -232,11 +235,11 @@ if(NOT APPLE)
       endif()
       target_compile_options(${_target} PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:-Wno-error>
-        $<$<COMPILE_LANGUAGE:CXX>:-Wno-class-memaccess>
-        $<$<COMPILE_LANGUAGE:CXX>:-Wno-maybe-uninitialized>
+        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-Wno-class-memaccess>
+        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-Wno-maybe-uninitialized>
+        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-Wno-changes-meaning>
         $<$<COMPILE_LANGUAGE:CXX>:-Wno-unknown-pragmas>
         $<$<COMPILE_LANGUAGE:CXX>:-Wno-pragmas>
-        $<$<COMPILE_LANGUAGE:CXX>:-Wno-changes-meaning>
       )
     endforeach()
     get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)

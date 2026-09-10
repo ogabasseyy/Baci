@@ -150,11 +150,9 @@ set(folly_runtime_SRC
 add_library(folly_runtime STATIC ${folly_runtime_SRC})
 target_compile_options(folly_runtime PRIVATE
   -fexceptions -fno-omit-frame-pointer -frtti -Wno-sign-compare ${folly_FLAGS})
-# PUBLIC so consumers that include Folly headers (e.g. jsi) inherit the demotion.
-target_compile_options(folly_runtime PUBLIC
-  ${folly_FLAGS}
-  -Wno-error=class-memaccess
-  -Wno-class-memaccess)
+# Host-GCC class-memaccess demotion is applied from the parent CMakeLists
+# (GNU-only); Clang rejects -Wclass-memaccess as an unknown -Werror option.
+target_compile_options(folly_runtime PUBLIC ${folly_FLAGS})
 target_include_directories(folly_runtime PUBLIC .)
 target_link_libraries(folly_runtime glog double-conversion boost fmt fast_float)
 if(NOT APPLE)

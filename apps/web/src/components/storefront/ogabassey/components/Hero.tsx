@@ -8,7 +8,8 @@ import { OgabasseyEmptyMobileHero } from './ogabassey-empty-mobile-hero';
 
 interface HeroProps {
   /** Skip the mobile product carousel when the static parent already committed
-   *  a brand-text LCP hero. Desktop grid is unchanged. */
+   *  a brand-text LCP hero. Desktop grid is unchanged. The homepage H1 stays
+   *  so desktop still has an accessibility-tree heading. */
   omitMobileCarousel?: boolean;
   /** Launch products (pinned A27/Power 80, then newest), pre-selected upstream.
    *  Drives both the mobile carousel and the desktop grid; each card deep-links
@@ -49,12 +50,10 @@ export const Hero: React.FC<HeroProps> = ({
 }) => {
   return (
     <div className="w-full bg-store-background relative">
-      {omitMobileCarousel ? null : (
-        <h1 className="sr-only">
-          OgaBassey - Buy Phones, Laptops, Gaming Consoles & More. Pay Later in
-          Nigeria
-        </h1>
-      )}
+      <h1 className="sr-only">
+        OgaBassey - Buy Phones, Laptops, Gaming Consoles & More. Pay Later in
+        Nigeria
+      </h1>
 
       {omitMobileCarousel ? null : (
         <div

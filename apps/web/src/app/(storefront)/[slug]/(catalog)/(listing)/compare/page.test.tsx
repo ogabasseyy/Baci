@@ -146,6 +146,16 @@ describe('compare index page runtime', () => {
       screen.getByRole('heading', { name: 'Compare products' })
     ).toBeInTheDocument();
     expect(
+      screen.getByRole('navigation', { name: 'Breadcrumb' })
+    ).toHaveTextContent('Home / Compare products');
+    const main = screen.getByRole('main');
+    expect(main).toContainElement(
+      screen.getByRole('navigation', { name: 'Breadcrumb' })
+    );
+    expect(main).toContainElement(
+      screen.getByRole('heading', { name: 'Compare products' })
+    );
+    expect(
       screen.queryByRole('status', { name: 'Loading product listing' })
     ).not.toBeInTheDocument();
     expect(screen.queryByText('Compare index content')).not.toBeInTheDocument();

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { asRoute, joinRouteBasePath } from '@/lib/routes';
 import { BlogFeaturedStoryFrame } from './blog-featured-story-frame';
 import { ogabasseyBlogLcpSnapshot } from './ogabassey-blog-lcp-snapshot';
 
@@ -19,20 +21,24 @@ export function BlogListingOgabasseyLcpHero() {
     return <BlogFeaturedStoryFrame />;
   }
 
-  const { featuredPost, publishedDateLabel } = ogabasseyBlogLcpSnapshot;
+  const { basePath, featuredPost, publishedDateLabel } =
+    ogabasseyBlogLcpSnapshot;
 
   return (
-    <div className="ogabassey-blog-lcp-hero">
+    <Link
+      className="ogabassey-blog-lcp-hero"
+      href={asRoute(joinRouteBasePath(basePath, `/blog/${featuredPost.slug}`))}
+    >
       <div className="ogabassey-blog-lcp-hero__inner">
         <div className="ogabassey-blog-lcp-hero__frame">
           <div className="ogabassey-blog-featured-story__media" />
           <div className="ogabassey-blog-lcp-hero__copy">
-            <h1
+            <h2
               className="ogabassey-blog-featured-story__title"
               data-cwv-lcp-copy="blog"
             >
               {featuredPost.title}
-            </h1>
+            </h2>
             {featuredPost.excerpt ? (
               <p className="ogabassey-blog-featured-story__description">
                 {featuredPost.excerpt}
@@ -47,6 +53,6 @@ export function BlogListingOgabasseyLcpHero() {
           </div>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }

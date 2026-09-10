@@ -12,6 +12,16 @@ export const OGABASSEY_HOME_LCP_CRITICAL_CSS = `
 footer[aria-label="Semantic storefront footer"] {
   min-height: 1100px;
 }
+@media (min-width: 768px) {
+  footer[aria-label="Semantic storefront footer"] {
+    min-height: 910px;
+  }
+}
+@media (min-width: 1024px) {
+  footer[aria-label="Semantic storefront footer"] {
+    min-height: 770px;
+  }
+}
 .ogabassey-home-lcp-root {
   background: var(--store-background, #ffffff);
   position: relative;

@@ -1,6 +1,22 @@
 import { render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OgabasseyBlogLcpSnapshot } from './load-ogabassey-blog-lcp-snapshot';
+
+vi.mock('next/link', () => ({
+  default: ({
+    children,
+    href,
+    ...props
+  }: {
+    children: ReactNode;
+    href: string;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
 
 const SNAPSHOT: OgabasseyBlogLcpSnapshot = {
   basePath: 'https://ogabassey.com',
@@ -42,8 +58,14 @@ describe('BlogListingOgabasseyLcpHero', () => {
     render(<BlogListingOgabasseyLcpHero />);
 
     expect(
-      screen.getByRole('heading', { name: 'Featured listing post' })
+      screen.getByRole('heading', { level: 2, name: 'Featured listing post' })
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /featured listing post/i })
+    ).toHaveAttribute(
+      'href',
+      'https://ogabassey.com/blog/featured-listing-post'
+    );
     expect(screen.getByText('Hero excerpt')).toHaveClass(
       'ogabassey-blog-featured-story__description'
     );

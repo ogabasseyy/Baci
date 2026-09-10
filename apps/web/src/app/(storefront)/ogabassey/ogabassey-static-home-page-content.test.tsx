@@ -114,7 +114,7 @@ describe('OgabasseyStaticHomePageContent', () => {
     ).toHaveAttribute('data-shell-merchant-id', 'merchant-1');
     expect(
       screen.getByRole('region', { name: /dynamic home content/i })
-    ).toHaveAttribute('data-omit-mobile-carousel', 'true');
+    ).toHaveAttribute('data-omit-mobile-carousel', 'false');
     expect(
       document.querySelector('[data-ogabassey-home-lcp-shell="true"]')
     ).toBeInTheDocument();
@@ -255,10 +255,10 @@ describe('OgabasseyStaticHomePageContent', () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole('region', { name: /dynamic home content/i })
-    ).toHaveAttribute('data-omit-mobile-carousel', 'true');
+    ).toHaveAttribute('data-omit-mobile-carousel', 'false');
   });
 
-  it('omits the mobile carousel when the parent committed LCP even without a cached hero image', async () => {
+  it('keeps the mobile carousel when the parent committed LCP even without a cached hero image', async () => {
     mockResolveHeroShell.mockResolvedValue({
       status: 'published',
       merchantId: 'merchant-1',
@@ -274,6 +274,6 @@ describe('OgabasseyStaticHomePageContent', () => {
 
     expect(
       screen.getByRole('region', { name: /dynamic home content/i })
-    ).toHaveAttribute('data-omit-mobile-carousel', 'true');
+    ).toHaveAttribute('data-omit-mobile-carousel', 'false');
   });
 });

@@ -83,6 +83,9 @@ describe('Hero', () => {
     render(<Hero omitMobileCarousel slides={SLIDES} />);
 
     expect(
+      screen.getByRole('heading', { level: 1, name: /buy phones/i })
+    ).toBeInTheDocument();
+    expect(
       screen.queryByRole('region', { name: 'Featured launch product carousel' })
     ).not.toBeInTheDocument();
     expect(
@@ -90,9 +93,6 @@ describe('Hero', () => {
     ).toBeInTheDocument();
     expect(
       document.querySelector('[data-ogabassey-mobile-hero-bg-extension]')
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { level: 1, name: /buy phones/i })
     ).not.toBeInTheDocument();
   });
 

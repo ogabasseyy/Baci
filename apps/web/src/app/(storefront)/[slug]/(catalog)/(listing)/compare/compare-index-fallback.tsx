@@ -1,12 +1,27 @@
 import { CompareHubIntro } from './compare-hub-intro';
 
 interface CompareIndexFallbackProps {
+  hideChrome?: boolean;
   hideIntro?: boolean;
 }
 
 export function CompareIndexFallback({
+  hideChrome = false,
   hideIntro = false,
 }: CompareIndexFallbackProps) {
+  if (hideChrome) {
+    return (
+      <div
+        role="status"
+        aria-label="Loading compare products"
+        aria-live="polite"
+        className="sr-only"
+      >
+        Loading compare products
+      </div>
+    );
+  }
+
   return (
     <div
       role="status"

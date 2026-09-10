@@ -79,9 +79,12 @@ html, body {
   the Tailwind chunk arrives and restyles LCP.
 */
 .ogabassey-blog-lcp-hero {
+  color: inherit;
+  display: block;
   min-height: 100svh;
   background: var(--color-gray-50, #f9fafb);
   padding: 2rem 1rem 0;
+  text-decoration: none;
 }
 
 .ogabassey-blog-lcp-hero__inner {

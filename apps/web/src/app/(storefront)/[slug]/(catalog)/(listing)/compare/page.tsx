@@ -208,11 +208,22 @@ async function CompareIndexRuntime(props: CompareIndexPageProps) {
 
 export default function CompareIndexPage(props: CompareIndexPageProps) {
   return (
-    <>
-      <CompareHubIntro />
-      <Suspense fallback={<CompareIndexFallback hideIntro />}>
-        <CompareIndexRuntime {...props} />
-      </Suspense>
-    </>
+    <main className="min-h-screen bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20 pt-6">
+      <div className="mx-auto max-w-[1400px] px-4 md:px-6">
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center gap-2 text-sm text-store-background-text/55"
+        >
+          <span>Home</span> <span aria-hidden="true">/</span>{' '}
+          <span className="font-medium text-store-background-text">
+            Compare products
+          </span>
+        </nav>
+        <CompareHubIntro />
+        <Suspense fallback={<CompareIndexFallback hideChrome />}>
+          <CompareIndexRuntime {...props} />
+        </Suspense>
+      </div>
+    </main>
   );
 }

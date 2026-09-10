@@ -296,10 +296,13 @@ describe('OgabasseyV2Blog', () => {
       />
     );
 
+    expect(screen.queryByText('Featured Story')).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('link', { name: /featured post/i })
-    ).not.toBeInTheDocument();
-    expect(screen.getByText('The Ogabassey Blog')).toBeInTheDocument();
+      screen.getByRole('heading', { level: 1, name: 'The Ogabassey Blog' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /featured post/i })
+    ).toBeInTheDocument();
     expect(screen.getByText('Regular Post')).toBeInTheDocument();
   });
 });

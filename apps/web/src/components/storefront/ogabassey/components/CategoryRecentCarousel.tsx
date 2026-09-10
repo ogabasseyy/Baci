@@ -117,8 +117,8 @@ export function CategoryRecentCarousel({
             fill
             sizes="(max-width: 768px) 100vw, 1400px"
             className="object-cover"
-            loading="lazy"
-            fetchPriority="low"
+            loading="eager"
+            fetchPriority="high"
           />
         </div>
       </section>

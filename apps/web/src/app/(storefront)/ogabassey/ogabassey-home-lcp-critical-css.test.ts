@@ -22,6 +22,14 @@ describe('OGABASSEY_HOME_LCP_CRITICAL_CSS', () => {
       'footer[aria-label="Semantic storefront footer"]'
     );
     expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain('min-height: 1100px');
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
+      '@media (min-width: 768px)'
+    );
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain('min-height: 910px');
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
+      '@media (min-width: 1024px)'
+    );
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain('min-height: 770px');
   });
 
   it('sizes committed LCP copy without Tailwind utilities', () => {

@@ -9,6 +9,7 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       '.ogabassey-blog-lcp-hero__frame'
     );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain('text-decoration: none');
     expect(STOREFRONT_LCP_COPY_CSS).toContain('font-size: 1.875rem !important');
     expect(STOREFRONT_LCP_COPY_CSS).toContain('[data-cwv-lcp-support]');
   });

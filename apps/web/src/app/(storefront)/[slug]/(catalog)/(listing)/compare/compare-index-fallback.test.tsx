@@ -20,6 +20,20 @@ describe('CompareIndexFallback', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('omits the hub chrome when the parent already committed the compare shell', () => {
+    render(<CompareIndexFallback hideChrome />);
+
+    expect(
+      screen.getByRole('status', { name: 'Loading compare products' })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Compare products' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('navigation', { name: 'Breadcrumb' })
+    ).not.toBeInTheDocument();
+  });
+
   it('omits the hub intro when the parent already committed LCP copy', () => {
     render(<CompareIndexFallback hideIntro />);
 
@@ -29,5 +43,8 @@ describe('CompareIndexFallback', () => {
     expect(
       screen.queryByRole('heading', { name: 'Compare products' })
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('navigation', { name: 'Breadcrumb' })
+    ).toBeInTheDocument();
   });
 });

@@ -76,6 +76,75 @@ export async function ComparePageContent({
     ]
   );
 
+  const sectionsBody =
+    sections.length === 0 ? (
+      <section className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
+        <h2 className="text-xl font-semibold text-store-background-text">
+          {queryFailed
+            ? 'Product comparisons temporarily unavailable'
+            : 'No product comparisons available'}
+        </h2>
+        <p className="mt-2 text-sm text-store-background-text/55">
+          {queryFailed
+            ? 'Please try again shortly while category navigation recovers.'
+            : 'Comparison pages will appear here once enough product details are available.'}
+        </p>
+      </section>
+    ) : (
+      <div className="mt-10 space-y-8">
+        {sections.map((section) => (
+          <section
+            key={section.categorySlug}
+            aria-labelledby={`${section.categorySlug}-compare-links`}
+            className="rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-sm md:p-6"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2
+                  id={`${section.categorySlug}-compare-links`}
+                  className="text-xl font-semibold text-store-background-text"
+                >
+                  {section.categoryName}
+                </h2>
+                <p className="mt-1 text-sm text-store-background-text/55">
+                  {section.links.length} comparison paths
+                </p>
+              </div>
+              <Link
+                href={asRoute(`${pathPrefix}/${section.categorySlug}`)}
+                prefetch={false}
+                className="text-sm font-semibold text-store-primary underline-offset-4 hover:underline"
+              >
+                Shop {section.categoryName}
+              </Link>
+            </div>
+            <ul className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {section.links.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={asRoute(link.href)}
+                    prefetch={false}
+                    className="text-sm font-medium text-store-primary underline-offset-4 hover:underline"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    );
+
+  if (omitIntro) {
+    return (
+      <>
+        <JsonLd data={breadcrumbSchema} />
+        {sectionsBody}
+      </>
+    );
+  }
+
   return (
     <>
       <JsonLd data={breadcrumbSchema} />
@@ -99,67 +168,9 @@ export async function ComparePageContent({
             </span>
           </nav>
 
-          {/* Keep the initial and resumed intro identical to prevent reflow. */}
-          {omitIntro ? null : <CompareHubIntro />}
+          <CompareHubIntro />
 
-          {sections.length === 0 ? (
-            <section className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
-              <h2 className="text-xl font-semibold text-store-background-text">
-                {queryFailed
-                  ? 'Product comparisons temporarily unavailable'
-                  : 'No product comparisons available'}
-              </h2>
-              <p className="mt-2 text-sm text-store-background-text/55">
-                {queryFailed
-                  ? 'Please try again shortly while category navigation recovers.'
-                  : 'Comparison pages will appear here once enough product details are available.'}
-              </p>
-            </section>
-          ) : (
-            <div className="mt-10 space-y-8">
-              {sections.map((section) => (
-                <section
-                  key={section.categorySlug}
-                  aria-labelledby={`${section.categorySlug}-compare-links`}
-                  className="rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-sm md:p-6"
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                      <h2
-                        id={`${section.categorySlug}-compare-links`}
-                        className="text-xl font-semibold text-store-background-text"
-                      >
-                        {section.categoryName}
-                      </h2>
-                      <p className="mt-1 text-sm text-store-background-text/55">
-                        {section.links.length} comparison paths
-                      </p>
-                    </div>
-                    <Link
-                      href={asRoute(`${pathPrefix}/${section.categorySlug}`)}
-                      prefetch={false}
-                      className="text-sm font-semibold text-store-primary underline-offset-4 hover:underline"
-                    >
-                      Shop {section.categoryName}
-                    </Link>
-                  </div>
-                  <ul className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {section.links.map((link) => (
-                      <li key={link.href}>
-                        <Link
-                          href={asRoute(link.href)}
-                          prefetch={false}
-                          className="text-sm font-medium text-store-primary underline-offset-4 hover:underline"
-                        >
-                          {link.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
-          )}
+          {sectionsBody}
         </div>
       </main>
     </>

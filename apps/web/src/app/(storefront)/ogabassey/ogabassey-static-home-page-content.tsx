@@ -45,8 +45,9 @@ export async function OgabasseyStaticHomePageContent({
   // turn them into shopping UI after it confirms the current publication
   // state. The committed mobile hero is a Suspense sibling (blog listing
   // pattern): text LCP in the static shell, no CDN preload racing CSS. The
-  // streamed Hero omits its mobile carousel so a later product title cannot
-  // steal LCP. Brand copy only — no product names, prices, links, or controls.
+  // streamed Hero keeps the mobile carousel below that 100svh shell so launch
+  // products remain shoppable without occupying the first paint. Brand copy
+  // only in the committed slot — no product names, prices, links, or controls.
   const heroShell = await resolveOgabasseyHomeHeroShell();
   const shellSlides =
     heroShell?.status === 'published' ? heroShell.slides : null;
@@ -70,7 +71,6 @@ export async function OgabasseyStaticHomePageContent({
           <p className="ogabassey-home-unique-copy">{OGABASSEY_DESCRIPTION}</p>
           <Suspense fallback={null}>
             <OgabasseyHomePageContent
-              omitMobileCarousel
               pathPrefix={pathPrefix}
               shellMerchantId={shellMerchantId}
               shellSlides={shellSlides}
@@ -80,9 +80,6 @@ export async function OgabasseyStaticHomePageContent({
       ) : (
         <Suspense fallback={null}>
           <OgabasseyHomePageContent
-            omitMobileCarousel={
-              omitCommittedHero || Boolean(committedMobileLcpUrl)
-            }
             pathPrefix={pathPrefix}
             shellMerchantId={shellMerchantId}
             shellSlides={shellSlides}

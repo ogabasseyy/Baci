@@ -258,10 +258,10 @@ describe('CategoryRecentCarousel image handling', () => {
       'src',
       'https://cdn.ogabassey.com/category-smartphones.avif'
     );
-    expect(banner).toHaveAttribute('loading', 'lazy');
+    expect(banner).toHaveAttribute('loading', 'eager');
     expect(
       banner.getAttribute('fetchPriority') ?? banner.getAttribute('fetchpriority')
-    ).toBe('low');
+    ).toBe('high');
   });
 
   it('ignores a placeholder category image in the fallback', () => {

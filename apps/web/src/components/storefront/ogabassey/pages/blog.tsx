@@ -210,7 +210,12 @@ export function OgabasseyV2Blog({
 
         <div className="mb-12 grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
           {filteredPosts
-            .filter((post) => post.id !== featuredPost?.id || activeCategory !== 'All')
+            .filter(
+              (post) =>
+                hideFeaturedStory ||
+                post.id !== featuredPost?.id ||
+                activeCategory !== 'All'
+            )
             .map((post) => (
               <Link key={post.id} href={asRoute(blogHref(basePath, `/${post.slug}`))} className="block h-full">
                 <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">

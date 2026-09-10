@@ -14,5 +14,11 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
     );
     expect(STOREFRONT_LCP_COPY_CSS).toContain('font-size: 1.875rem !important');
     expect(STOREFRONT_LCP_COPY_CSS).toContain('[data-cwv-lcp-support]');
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      'body:has([data-blog-listing-filtered]) [data-blog-lcp-hero]'
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      'body:has([data-imei-result]) [data-imei-lcp-hero]'
+    );
   });
 });

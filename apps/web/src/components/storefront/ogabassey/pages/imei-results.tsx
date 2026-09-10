@@ -49,6 +49,7 @@ export function OgabasseyImeiResults({
   return (
     <div
       className="mx-auto mb-16 max-w-2xl animate-in slide-in-from-bottom-8 duration-700 outline-none"
+      data-imei-result=""
       ref={rootRef}
       tabIndex={-1}
     >

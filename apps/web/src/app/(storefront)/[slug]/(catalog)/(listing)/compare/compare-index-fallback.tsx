@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { asRoute } from '@/lib/routes';
 import { CompareHubIntro } from './compare-hub-intro';
 
 interface CompareIndexFallbackProps {
@@ -34,7 +36,14 @@ export function CompareIndexFallback({
           aria-label="Breadcrumb"
           className="flex items-center gap-2 text-sm text-store-background-text/55"
         >
-          <span>Home</span> <span aria-hidden="true">/</span>{' '}
+          <Link
+            className="transition-colors hover:text-store-primary"
+            href={asRoute('..')}
+            prefetch={false}
+          >
+            Home
+          </Link>{' '}
+          <span aria-hidden="true">/</span>{' '}
           <span className="font-medium text-store-background-text">
             Compare products
           </span>

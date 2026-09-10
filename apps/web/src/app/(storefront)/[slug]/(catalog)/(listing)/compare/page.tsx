@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
@@ -9,6 +10,7 @@ import {
   getRequestScopedMerchant,
   getStorefrontCategories,
 } from '@/lib/cached-data';
+import { asRoute } from '@/lib/routes';
 import {
   generateMetaDescription,
   getIndexableRobotsMetadata,
@@ -214,7 +216,14 @@ export default function CompareIndexPage(props: CompareIndexPageProps) {
           aria-label="Breadcrumb"
           className="flex items-center gap-2 text-sm text-store-background-text/55"
         >
-          <span>Home</span> <span aria-hidden="true">/</span>{' '}
+          <Link
+            className="transition-colors hover:text-store-primary"
+            href={asRoute('..')}
+            prefetch={false}
+          >
+            Home
+          </Link>{' '}
+          <span aria-hidden="true">/</span>{' '}
           <span className="font-medium text-store-background-text">
             Compare products
           </span>

@@ -120,6 +120,12 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(lcpCopyCss).toContain('[data-cwv-lcp-copy="imei"]');
     expect(lcpCopyCss).toContain('[data-cwv-lcp-copy="repairs"]');
     expect(lcpCopyCss).toContain('.sr-only');
+    expect(lcpCopyCss).toContain(
+      'body:has([data-blog-listing-filtered]) [data-blog-lcp-hero]'
+    );
+    expect(lcpCopyCss).toContain(
+      'body:has([data-imei-result]) [data-imei-lcp-hero]'
+    );
   });
 
   it('keeps blog post renderer CSS off the listing stylesheet', () => {
@@ -233,6 +239,26 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(layout).toContain('StorefrontLcpCopyStyle');
     expect(layout).not.toMatch(/store-not-published/);
     expect(layout).toMatch(/unpublished-storefront/);
+  });
+
+  it('restores storefront-core.css on commerce, content, customer, and PDP layouts', () => {
+    const commerceLayout = readStorefrontFile('[slug]/(commerce)/layout.tsx');
+    const contentLayout = readStorefrontFile('[slug]/(content)/layout.tsx');
+    const customerLayout = readStorefrontFile('[slug]/(customer)/layout.tsx');
+    const pdpLayout = readStorefrontFile('[slug]/(catalog)/(pdp)/layout.tsx');
+
+    expect(commerceLayout).toMatch(
+      /import\s+['"]@\/app\/\(storefront\)\/storefront-core\.css['"]/
+    );
+    expect(contentLayout).toMatch(
+      /import\s+['"]@\/app\/\(storefront\)\/storefront-core\.css['"]/
+    );
+    expect(customerLayout).toMatch(
+      /import\s+['"]@\/app\/\(storefront\)\/storefront-core\.css['"]/
+    );
+    expect(pdpLayout).toMatch(
+      /import\s+['"]@\/app\/\(storefront\)\/storefront-core\.css['"]/
+    );
   });
 
   it('keeps unpublished-store and homepage critical CSS off the render-blocking graph', () => {

@@ -89,7 +89,7 @@ describe('BlogList', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps listing card images off the Slow-4G LCP path', () => {
+  it('keeps later listing card images off the Slow-4G LCP path', () => {
     render(
       <BlogList
         initialPosts={[
@@ -108,14 +108,14 @@ describe('BlogList', () => {
 
     const images = screen.getAllByRole('img');
     expect(images).toHaveLength(2);
-    for (const image of images) {
-      expect(image).not.toHaveAttribute('data-preload');
-      expect(image).toHaveAttribute('data-loading', 'lazy');
-      expect(image).toHaveAttribute('data-fetch-priority', 'low');
-    }
+    expect(images[0]).toHaveAttribute('data-loading', 'eager');
+    expect(images[0]).toHaveAttribute('data-fetch-priority', 'high');
+    expect(images[1]).not.toHaveAttribute('data-preload');
+    expect(images[1]).toHaveAttribute('data-loading', 'lazy');
+    expect(images[1]).toHaveAttribute('data-fetch-priority', 'low');
   });
 
-  it('does not preload a later image-bearing card when earlier cards have no image', () => {
+  it('treats the first usable card image as the listing LCP image', () => {
     render(
       <BlogList
         initialPosts={[
@@ -142,9 +142,8 @@ describe('BlogList', () => {
     );
 
     const image = screen.getByRole('img', { name: 'Image post hero' });
-    expect(image).not.toHaveAttribute('data-preload');
-    expect(image).toHaveAttribute('data-loading', 'lazy');
-    expect(image).toHaveAttribute('data-fetch-priority', 'low');
+    expect(image).toHaveAttribute('data-loading', 'eager');
+    expect(image).toHaveAttribute('data-fetch-priority', 'high');
   });
 
   it('renders crawlable pagination controls instead of auto-fetching with IntersectionObserver', () => {

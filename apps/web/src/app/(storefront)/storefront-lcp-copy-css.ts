@@ -163,4 +163,17 @@ html, body {
   white-space: nowrap !important;
   width: 1px !important;
 }
+
+/*
+  Filtered blog listings and completed IMEI reports emit these markers after
+  resume. Keep the hide rules on the first-paint sheet so they do not wait on
+  StorefrontBlogStyleLoader / first input.
+*/
+body:has([data-blog-listing-filtered]) [data-blog-lcp-hero] {
+  display: none;
+}
+
+body:has([data-imei-result]) [data-imei-lcp-hero] {
+  display: none;
+}
 `;

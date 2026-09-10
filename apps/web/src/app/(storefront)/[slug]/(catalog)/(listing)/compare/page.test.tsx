@@ -1,10 +1,28 @@
 import { render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getCachedCategories,
   getRequestScopedMerchant,
 } from '@/lib/cached-data';
+
+vi.mock('next/link', () => ({
+  default: ({
+    children,
+    href,
+    prefetch: _prefetch,
+    ...props
+  }: {
+    children: ReactNode;
+    href: string;
+    prefetch?: boolean;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
 
 type CategoryPageProps = {
   params: Promise<{ category: string; slug: string }>;
@@ -148,6 +166,10 @@ describe('compare index page runtime', () => {
     expect(
       screen.getByRole('navigation', { name: 'Breadcrumb' })
     ).toHaveTextContent('Home / Compare products');
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
+      'href',
+      '..'
+    );
     const main = screen.getByRole('main');
     expect(main).toContainElement(
       screen.getByRole('navigation', { name: 'Breadcrumb' })

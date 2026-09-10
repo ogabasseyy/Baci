@@ -26,5 +26,6 @@ describe('ImeiCheckerHero', () => {
     ).not.toMatch(/₦|NGN 500,000/);
     expect(document.querySelector('[data-cwv-lcp-support]')).toBeInTheDocument();
     expect(document.querySelector('[data-cwv-lcp-fold]')).toBeInTheDocument();
+    expect(document.querySelector('[data-imei-lcp-hero]')).toBeInTheDocument();
   });
 });

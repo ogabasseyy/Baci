@@ -71,4 +71,23 @@ test('bootstrap keeps RN glog config.h namespace macros (no config.h.in overwrit
   assert.match(body, /_START_GOOGLE_NAMESPACE_/);
   assert.match(body, /Never process config\.h\.in/);
   assert.match(body, /src\/glog\//);
+  assert.match(body, /glog-\$\{glog_version\}|glog-\{glog_version\}/);
+  assert.match(body, /download requires a non-optional sha256/);
+  assert.match(body, /boost_\$\{BOOST_VERSION\}/);
+  // Guard CMakeLists.txt is copied after export, not before config edits.
+  const cmakeCopy = body.indexOf(
+    'cp "$JNI_3P/glog/CMakeLists.txt" "$NDK/glog/CMakeLists.txt"',
+  );
+  const exportOk = body.indexOf('glog exported ok');
+  assert.ok(cmakeCopy > exportOk, 'glog CMakeLists.txt must be copied after export');
+});
+
+test('workflow pins immutable checkout SHA without persisted credentials', () => {
+  const body = readFileSync(workflow, 'utf8');
+  assert.match(
+    body,
+    /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/,
+  );
+  assert.match(body, /persist-credentials:\s*false/);
+  assert.doesNotMatch(body, /actions\/checkout@v4\b/);
 });

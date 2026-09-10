@@ -18,17 +18,56 @@ FOLLY_VERSION="2024.11.18.00"
 GLOG_VERSION="0.3.5"
 GTEST_VERSION="1.15.2"
 
+# SHA-256 digests for the pinned archive versions above (fail closed on mismatch).
+BOOST_SHA256="85acabcc5a86ef2f32f4a67242aa6f4bccab63d85fe6a077e9010aabb3900850"
+DOUBLE_CONVERSION_SHA256="6b850acd8e88515764472c52973277744a945f9a769a93968efc42efef64d67a"
+FAST_FLOAT_SHA256="f312f2dc34c61e665f4b132c0307d6f70ad9420185fa831911bc24408acf625d"
+FMT_SHA256="ea7de4299689e12b6dddd392f9896f08fb0777ac7168897a244a6d6085043fea"
+FOLLY_SHA256="b2c6879ba8ba625218d1ab9eefcc1611a9003d05bc2cb1a38f3bae21892e5167"
+GLOG_SHA256="7580e408a2c0b5a89ca214739978ce6ff480b5e7d8d7698a2aa92fadc484d1e0"
+GTEST_SHA256="7b42b4d6ed48810c5362c265a17faebe90dc2373c885e5216439d37927f02926"
+
 mkdir -p "$DOWNLOADS" "$NDK"
+
+sha256_of() {
+  openssl dgst -sha256 "$1" | awk '{print $NF}'
+}
+
+verify_sha256() {
+  local file="$1"
+  local expected="$2"
+  local actual
+  actual="$(sha256_of "$file")"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "error: sha256 mismatch for $(basename "$file")" >&2
+    echo "  expected: $expected" >&2
+    echo "  actual:   $actual" >&2
+    return 1
+  fi
+}
 
 download() {
   local url="$1"
   local dest="$2"
+  local sha256="${3:-}"
+  if [[ -z "$sha256" ]]; then
+    echo "error: download requires a non-optional sha256 digest" >&2
+    exit 1
+  fi
   if [[ -f "$dest" ]]; then
-    echo "cached: $(basename "$dest")"
-    return 0
+    if verify_sha256 "$dest" "$sha256"; then
+      echo "cached: $(basename "$dest")"
+      return 0
+    fi
+    echo "cached archive failed digest check; re-downloading $(basename "$dest")"
+    rm -f "$dest"
   fi
   echo "download: $url"
   curl -fsSL --retry 5 --retry-delay 2 --connect-timeout 30 -o "$dest.partial" "$url"
+  if ! verify_sha256 "$dest.partial" "$sha256"; then
+    rm -f "$dest.partial"
+    exit 1
+  fi
   mv "$dest.partial" "$dest"
 }
 
@@ -65,13 +104,14 @@ EOF
     # Ubuntu CI without libboost-dev: download headers-only extract.
     download \
       "https://archives.boost.io/release/${BOOST_VERSION//_/.}/source/boost_${BOOST_VERSION}.tar.gz" \
-      "$DOWNLOADS/boost_${BOOST_VERSION}.tar.gz"
+      "$DOWNLOADS/boost_${BOOST_VERSION}.tar.gz" \
+      "$BOOST_SHA256"
     tar -xzf "$DOWNLOADS/boost_${BOOST_VERSION}.tar.gz" -C "$NDK/boost" \
       "boost_${BOOST_VERSION}/boost"
-    cat >"$NDK/boost/CMakeLists.txt" <<'EOF'
+    cat >"$NDK/boost/CMakeLists.txt" <<EOF
 cmake_minimum_required(VERSION 3.13)
 add_library(boost INTERFACE)
-target_include_directories(boost INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/boost_1_83_0)
+target_include_directories(boost INTERFACE \${CMAKE_CURRENT_SOURCE_DIR}/boost_${BOOST_VERSION})
 EOF
   fi
 fi
@@ -80,7 +120,8 @@ fi
 if [[ ! -f "$NDK/double-conversion/CMakeLists.txt" ]]; then
   download \
     "https://github.com/google/double-conversion/archive/v${DOUBLE_CONVERSION_VERSION}.tar.gz" \
-    "$DOWNLOADS/double-conversion-${DOUBLE_CONVERSION_VERSION}.tar.gz"
+    "$DOWNLOADS/double-conversion-${DOUBLE_CONVERSION_VERSION}.tar.gz" \
+    "$DOUBLE_CONVERSION_SHA256"
   rm -rf "$NDK/double-conversion" "$WORK/tmp-dc"
   mkdir -p "$WORK/tmp-dc" "$NDK/double-conversion/double-conversion"
   tar -xzf "$DOWNLOADS/double-conversion-${DOUBLE_CONVERSION_VERSION}.tar.gz" -C "$WORK/tmp-dc"
@@ -94,7 +135,8 @@ fi
 if [[ ! -f "$NDK/fast_float/CMakeLists.txt" ]]; then
   download \
     "https://github.com/fastfloat/fast_float/archive/v${FAST_FLOAT_VERSION}.tar.gz" \
-    "$DOWNLOADS/fast_float-${FAST_FLOAT_VERSION}.tar.gz"
+    "$DOWNLOADS/fast_float-${FAST_FLOAT_VERSION}.tar.gz" \
+    "$FAST_FLOAT_SHA256"
   rm -rf "$NDK/fast_float" "$WORK/tmp-ff"
   mkdir -p "$WORK/tmp-ff" "$NDK/fast_float"
   tar -xzf "$DOWNLOADS/fast_float-${FAST_FLOAT_VERSION}.tar.gz" -C "$WORK/tmp-ff"
@@ -107,7 +149,8 @@ fi
 if [[ ! -f "$NDK/fmt/CMakeLists.txt" ]]; then
   download \
     "https://github.com/fmtlib/fmt/archive/${FMT_VERSION}.tar.gz" \
-    "$DOWNLOADS/fmt-${FMT_VERSION}.tar.gz"
+    "$DOWNLOADS/fmt-${FMT_VERSION}.tar.gz" \
+    "$FMT_SHA256"
   rm -rf "$NDK/fmt" "$WORK/tmp-fmt"
   mkdir -p "$WORK/tmp-fmt" "$NDK/fmt"
   tar -xzf "$DOWNLOADS/fmt-${FMT_VERSION}.tar.gz" -C "$WORK/tmp-fmt"
@@ -121,7 +164,8 @@ fi
 if [[ ! -d "$NDK/folly/folly" ]]; then
   download \
     "https://github.com/facebook/folly/archive/v${FOLLY_VERSION}.tar.gz" \
-    "$DOWNLOADS/folly-${FOLLY_VERSION}.tar.gz"
+    "$DOWNLOADS/folly-${FOLLY_VERSION}.tar.gz" \
+    "$FOLLY_SHA256"
   rm -rf "$NDK/folly" "$WORK/tmp-folly"
   mkdir -p "$WORK/tmp-folly" "$NDK/folly"
   tar -xzf "$DOWNLOADS/folly-${FOLLY_VERSION}.tar.gz" -C "$WORK/tmp-folly"
@@ -160,7 +204,8 @@ set(folly_runtime_SRC
   folly/system/AtFork.cpp folly/system/ThreadId.cpp)
 add_library(folly_runtime STATIC ${folly_runtime_SRC})
 target_compile_options(folly_runtime PRIVATE
-  -fexceptions -fno-omit-frame-pointer -frtti -Wno-sign-compare ${folly_FLAGS})
+  -fexceptions -fno-omit-frame-pointer -frtti -Wno-sign-compare
+  -Wno-error=class-memaccess -Wno-class-memaccess ${folly_FLAGS})
 target_compile_options(folly_runtime PUBLIC ${folly_FLAGS})
 target_include_directories(folly_runtime PUBLIC .)
 target_link_libraries(folly_runtime glog double-conversion boost fmt fast_float)
@@ -171,15 +216,16 @@ endif()
 EOF
 
 # --- glog (PrepareGlogTask-equivalent token replace) ---
+# Guard file (CMakeLists.txt) is written last so a partial tree is retried.
 if [[ ! -f "$NDK/glog/CMakeLists.txt" ]]; then
   download \
     "https://github.com/google/glog/archive/v${GLOG_VERSION}.tar.gz" \
-    "$DOWNLOADS/glog-${GLOG_VERSION}.tar.gz"
+    "$DOWNLOADS/glog-${GLOG_VERSION}.tar.gz" \
+    "$GLOG_SHA256"
   rm -rf "$NDK/glog" "$WORK/tmp-glog"
   mkdir -p "$WORK/tmp-glog" "$NDK/glog"
   tar -xzf "$DOWNLOADS/glog-${GLOG_VERSION}.tar.gz" -C "$WORK/tmp-glog"
   cp -R "$WORK/tmp-glog/glog-${GLOG_VERSION}" "$NDK/glog/glog-${GLOG_VERSION}"
-  cp "$JNI_3P/glog/CMakeLists.txt" "$NDK/glog/CMakeLists.txt"
   cp "$JNI_3P/glog/config.h" "$NDK/glog/config.h"
   # Source files `#include "config.h"` resolve relative to src/ first.
   cp "$JNI_3P/glog/config.h" "$NDK/glog/glog-${GLOG_VERSION}/src/config.h"
@@ -190,9 +236,10 @@ if [[ ! -f "$NDK/glog/CMakeLists.txt" ]]; then
       "$NDK/glog/config.h"
     rm -f "$NDK/glog/glog-${GLOG_VERSION}/src/config.h.bak" "$NDK/glog/config.h.bak"
   fi
-  python3 - <<'PY' "$NDK/glog"
+  python3 - <<'PY' "$NDK/glog" "$GLOG_VERSION"
 import pathlib, sys
 root = pathlib.Path(sys.argv[1])
+glog_version = sys.argv[2]
 tokens = {
     "ac_cv_have_unistd_h": "1",
     "ac_cv_have_stdint_h": "1",
@@ -224,7 +271,10 @@ for path in sorted(root.rglob("*.h.in")):
     out = path.parent / path.name[:-3]
     out.write_text(text)
 # Fail closed: RN config.h must keep the namespace macros.
-for config_path in (root / "config.h", root / "glog-0.3.5" / "src" / "config.h"):
+for config_path in (
+    root / "config.h",
+    root / f"glog-{glog_version}" / "src" / "config.h",
+):
     text = config_path.read_text()
     if "_START_GOOGLE_NAMESPACE_" not in text or "_END_GOOGLE_NAMESPACE_" not in text:
         raise SystemExit(f"glog config missing namespace macros: {config_path}")
@@ -240,6 +290,8 @@ for name in ("stl_logging.h", "logging.h", "raw_logging.h", "vlog_is_on.h", "log
     (exported / name).write_text(preferred[0].read_text())
 print("glog exported ok")
 PY
+  # Write the guard file only after config edits + export succeed.
+  cp "$JNI_3P/glog/CMakeLists.txt" "$NDK/glog/CMakeLists.txt"
   rm -rf "$WORK/tmp-glog"
 fi
 
@@ -247,7 +299,8 @@ fi
 if [[ ! -f "$GTEST_DIR/CMakeLists.txt" ]]; then
   download \
     "https://github.com/google/googletest/archive/refs/tags/v${GTEST_VERSION}.tar.gz" \
-    "$DOWNLOADS/googletest-${GTEST_VERSION}.tar.gz"
+    "$DOWNLOADS/googletest-${GTEST_VERSION}.tar.gz" \
+    "$GTEST_SHA256"
   rm -rf "$GTEST_DIR" "$WORK/tmp-gtest"
   mkdir -p "$WORK/tmp-gtest"
   tar -xzf "$DOWNLOADS/googletest-${GTEST_VERSION}.tar.gz" -C "$WORK/tmp-gtest"

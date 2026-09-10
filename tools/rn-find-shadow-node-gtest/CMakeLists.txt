@@ -46,19 +46,8 @@ endif()
 include(${REACT_COMMON_DIR}/cmake-utils/react-native-flags.cmake)
 include(${REACT_COMMON_DIR}/cmake-utils/internal/react-native-platform-selector.cmake)
 
-# Host GCC cannot honor NDK/Clang -Werror on upstream RN (pragma mark, subobject-linkage, …).
-# target_compile_reactnative_options re-applies ${reactnative_FLAGS} after directory flags,
-# so strip -Werror from the shared list rather than fighting per-target order.
+# AnsiParser.h uses uint8_t without <cstdint>; NDK headers pull it transitively.
 if(NOT APPLE)
-  list(REMOVE_ITEM reactnative_FLAGS -Werror)
-  list(APPEND reactnative_FLAGS
-    -Wno-error
-    -Wno-class-memaccess
-    -Wno-maybe-uninitialized
-    -Wno-unknown-pragmas
-    -Wno-pragmas
-  )
-  # AnsiParser.h uses uint8_t without <cstdint>; NDK headers pull it transitively.
   add_compile_options(
     "$<$<COMPILE_LANGUAGE:CXX>:-include>"
     "$<$<COMPILE_LANGUAGE:CXX>:cstdint>"
@@ -230,3 +219,29 @@ else()
 endif()
 
 target_compile_reactnative_options(find_shadow_node_by_tag_test PRIVATE)
+
+# Each RN CMakeLists re-includes react-native-flags.cmake and restores -Werror.
+# Walk the full target graph after configure and demote host-GCC Werror last.
+if(NOT APPLE)
+  function(baci_host_demote_werror_recursive dir)
+    get_property(_targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(_target ${_targets})
+      get_target_property(_type ${_target} TYPE)
+      if(_type STREQUAL "INTERFACE_LIBRARY")
+        continue()
+      endif()
+      target_compile_options(${_target} PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-Wno-error>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wno-class-memaccess>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wno-maybe-uninitialized>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wno-unknown-pragmas>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wno-pragmas>
+      )
+    endforeach()
+    get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+    foreach(_subdir ${_subdirs})
+      baci_host_demote_werror_recursive("${_subdir}")
+    endforeach()
+  endfunction()
+  baci_host_demote_werror_recursive("${CMAKE_CURRENT_SOURCE_DIR}")
+endif()

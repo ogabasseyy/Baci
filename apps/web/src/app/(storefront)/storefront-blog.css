@@ -134,11 +134,14 @@
 }
 
 .ogabassey-blog-lcp-hero__frame {
+  border-radius: 2rem;
+  color: inherit;
+  display: block;
   height: 400px;
   margin-bottom: 3rem;
   overflow: hidden;
   position: relative;
-  border-radius: 2rem;
+  text-decoration: none;
 }
 
 .ogabassey-blog-lcp-hero__copy {

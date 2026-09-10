@@ -12,6 +12,8 @@ import { resolveMerchantContextIdentifier } from '@/lib/storefront-route-identif
 import { OgabasseyHomeDynamicContent } from './ogabassey-home-dynamic-content';
 
 interface OgabasseyHomePageContentProps {
+  /** Skip Hero's H1 when a parent already committed the document title. */
+  omitDocumentHeading?: boolean;
   /** When the static parent already painted a committed mobile text LCP, skip
    *  the request-scoped mobile carousel so a later product title cannot steal
    *  Slow-4G LCP. Desktop grid still streams after the publication guard. */
@@ -42,6 +44,7 @@ export function resolveOgabasseyHomePathPrefix(
  * PDP links.
  */
 export async function OgabasseyHomePageContent({
+  omitDocumentHeading = false,
   omitMobileCarousel = false,
   pathPrefix,
   shellMerchantId,
@@ -79,10 +82,11 @@ export async function OgabasseyHomePageContent({
     <>
       {requestMerchantShellSlides ? (
         <Hero
+          omitDocumentHeading={omitDocumentHeading}
           omitMobileCarousel={omitMobileCarousel}
           slides={requestMerchantShellSlides}
         />
-      ) : (
+      ) : omitDocumentHeading ? null : (
         <h1 className="sr-only">{OGABASSEY_TITLE}</h1>
       )}
       <Suspense fallback={null}>

@@ -85,16 +85,19 @@ vi.mock('@/components/storefront/store-not-published', () => ({
 
 vi.mock('@/components/storefront/ogabassey/components/Hero', () => ({
   Hero: ({
+    omitDocumentHeading,
     omitMobileCarousel,
     slides,
   }: {
+    omitDocumentHeading?: boolean;
     omitMobileCarousel?: boolean;
     slides: unknown[];
   }) => {
-    mockHeroRender({ omitMobileCarousel, slides });
+    mockHeroRender({ omitDocumentHeading, omitMobileCarousel, slides });
     return (
       <section
         aria-label="Product hero"
+        data-omit-document-heading={omitDocumentHeading ? 'true' : 'false'}
         data-omit-mobile-carousel={omitMobileCarousel ? 'true' : 'false'}
         data-slide-count={slides.length}
       />
@@ -162,6 +165,41 @@ describe('OgabasseyHomePageContent', () => {
         slides: [SHELL_SLIDE],
       })
     );
+  });
+
+  it('threads omitDocumentHeading into the publication-gated Hero', async () => {
+    const result = await OgabasseyHomePageContent({
+      omitDocumentHeading: true,
+      pathPrefix: '/ogabassey',
+      shellMerchantId: 'merchant-1',
+      shellSlides: [SHELL_SLIDE],
+    });
+
+    render(result as ReactElement);
+
+    expect(
+      screen.getByRole('region', { name: /product hero/i })
+    ).toHaveAttribute('data-omit-document-heading', 'true');
+    expect(mockHeroRender).toHaveBeenCalledWith(
+      expect.objectContaining({
+        omitDocumentHeading: true,
+        slides: [SHELL_SLIDE],
+      })
+    );
+  });
+
+  it('does not restore the H1 when the parent already committed the document heading', async () => {
+    const result = await OgabasseyHomePageContent({
+      omitDocumentHeading: true,
+      pathPrefix: '/ogabassey',
+      shellMerchantId: null,
+      shellSlides: null,
+    });
+
+    render(result as ReactElement);
+
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(mockHeroRender).not.toHaveBeenCalled();
   });
 
   it('renders one Hero with request-bound content after the publication guard', async () => {

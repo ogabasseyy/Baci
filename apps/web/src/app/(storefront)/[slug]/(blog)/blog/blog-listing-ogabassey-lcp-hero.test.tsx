@@ -57,14 +57,20 @@ describe('BlogListingOgabasseyLcpHero', () => {
   it('paints the snapshot title as LCP text without a CDN image', () => {
     render(<BlogListingOgabasseyLcpHero />);
 
-    expect(
-      screen.getByRole('heading', { level: 2, name: 'Featured listing post' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: /featured listing post/i })
-    ).toHaveAttribute(
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+    const featuredLink = screen.getByRole('link', {
+      name: /featured listing post/i,
+    });
+    expect(featuredLink).toHaveAttribute(
       'href',
       'https://ogabassey.com/blog/featured-listing-post'
+    );
+    expect(featuredLink).toHaveClass('ogabassey-blog-lcp-hero__frame');
+    expect(document.querySelector('.ogabassey-blog-lcp-hero')?.tagName).toBe(
+      'DIV'
+    );
+    expect(featuredLink.closest('.ogabassey-blog-lcp-hero')).toBe(
+      document.querySelector('.ogabassey-blog-lcp-hero')
     );
     expect(screen.getByText('Hero excerpt')).toHaveClass(
       'ogabassey-blog-featured-story__description'

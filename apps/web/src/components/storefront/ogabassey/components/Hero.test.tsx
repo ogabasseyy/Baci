@@ -79,6 +79,20 @@ describe('Hero', () => {
     ).toBeInTheDocument();
   });
 
+  it('omits the document heading when the parent already committed one', () => {
+    render(
+      <Hero omitDocumentHeading omitMobileCarousel slides={SLIDES} />
+    );
+
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('region', { name: 'Featured launch product carousel' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Featured products' })
+    ).toBeInTheDocument();
+  });
+
   it('omits the mobile carousel when a committed text LCP already owns the slot', () => {
     render(<Hero omitMobileCarousel slides={SLIDES} />);
 

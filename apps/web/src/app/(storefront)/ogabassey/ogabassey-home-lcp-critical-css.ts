@@ -8,6 +8,7 @@ export const OGABASSEY_HOME_LCP_CRITICAL_CSS = `
 @media (max-width: 767px) {
   [data-ogabassey-home-lcp-shell] { min-height: 100svh; }
   [data-ogabassey-desktop-hero] { display: none !important; }
+  .ogabassey-home-lcp-desktop-title { display: none !important; }
 }
 footer[aria-label="Semantic storefront footer"] {
   min-height: 1100px;
@@ -76,6 +77,18 @@ footer[aria-label="Semantic storefront footer"] {
   line-height: 1.05;
   overflow: hidden;
   -webkit-box-orient: vertical;
+}
+.ogabassey-home-lcp-desktop-title {
+  border: 0 !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  height: 1px !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  position: absolute !important;
+  white-space: nowrap !important;
+  width: 1px !important;
 }
 .ogabassey-home-committed-lcp {
   color: color-mix(in srgb, var(--store-secondary-text, #111827) 80%, transparent);

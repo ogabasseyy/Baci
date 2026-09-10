@@ -46,6 +46,11 @@ export function OgabasseyPublicationSafeHeroFallback({
             ) : null}
           </div>
         </div>
+        {heroImageUrl ? (
+          <h1 className="ogabassey-home-lcp-desktop-title">
+            {OGABASSEY_TITLE}
+          </h1>
+        ) : null}
       </div>
     </div>
   );

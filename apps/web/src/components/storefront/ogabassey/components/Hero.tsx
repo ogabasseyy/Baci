@@ -7,9 +7,10 @@ import type { LaunchProductSlide } from './LaunchCarousel';
 import { OgabasseyEmptyMobileHero } from './ogabassey-empty-mobile-hero';
 
 interface HeroProps {
+  /** Skip the document H1 when a parent already committed one. */
+  omitDocumentHeading?: boolean;
   /** Skip the mobile product carousel when the static parent already committed
-   *  a brand-text LCP hero. Desktop grid is unchanged. The homepage H1 stays
-   *  so desktop still has an accessibility-tree heading. */
+   *  a brand-text LCP hero. Desktop grid is unchanged. */
   omitMobileCarousel?: boolean;
   /** Launch products (pinned A27/Power 80, then newest), pre-selected upstream.
    *  Drives both the mobile carousel and the desktop grid; each card deep-links
@@ -45,15 +46,18 @@ function HeroEmptyGeometry() {
 }
 
 export const Hero: React.FC<HeroProps> = ({
+  omitDocumentHeading = false,
   omitMobileCarousel = false,
   slides,
 }) => {
   return (
     <div className="w-full bg-store-background relative">
-      <h1 className="sr-only">
-        OgaBassey - Buy Phones, Laptops, Gaming Consoles & More. Pay Later in
-        Nigeria
-      </h1>
+      {omitDocumentHeading ? null : (
+        <h1 className="sr-only">
+          OgaBassey - Buy Phones, Laptops, Gaming Consoles & More. Pay Later in
+          Nigeria
+        </h1>
+      )}
 
       {omitMobileCarousel ? null : (
         <div

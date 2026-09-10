@@ -14,7 +14,9 @@ import { ogabasseyBlogLcpSnapshot } from './ogabassey-blog-lcp-snapshot';
  * `CdnFormatImage` picture or that later image becomes LCP again.
  *
  * Geometry lives in storefront-blog.css semantic selectors so LCP size does
- * not wait on Tailwind `text-3xl` / `text-lg` utilities.
+ * not wait on Tailwind `text-3xl` / `text-lg` utilities. The 100svh shell is
+ * not a link — only the 400px frame is — and the snapshot title stays a
+ * paragraph so it cannot precede the streamed page H1.
  */
 export function BlogListingOgabasseyLcpHero() {
   if (!ogabasseyBlogLcpSnapshot) {
@@ -25,20 +27,22 @@ export function BlogListingOgabasseyLcpHero() {
     ogabasseyBlogLcpSnapshot;
 
   return (
-    <Link
-      className="ogabassey-blog-lcp-hero"
-      href={asRoute(joinRouteBasePath(basePath, `/blog/${featuredPost.slug}`))}
-    >
+    <div className="ogabassey-blog-lcp-hero">
       <div className="ogabassey-blog-lcp-hero__inner">
-        <div className="ogabassey-blog-lcp-hero__frame">
+        <Link
+          className="ogabassey-blog-lcp-hero__frame"
+          href={asRoute(
+            joinRouteBasePath(basePath, `/blog/${featuredPost.slug}`)
+          )}
+        >
           <div className="ogabassey-blog-featured-story__media" />
           <div className="ogabassey-blog-lcp-hero__copy">
-            <h2
+            <p
               className="ogabassey-blog-featured-story__title"
               data-cwv-lcp-copy="blog"
             >
               {featuredPost.title}
-            </h2>
+            </p>
             {featuredPost.excerpt ? (
               <p className="ogabassey-blog-featured-story__description">
                 {featuredPost.excerpt}
@@ -51,8 +55,8 @@ export function BlogListingOgabasseyLcpHero() {
               {publishedDateLabel}
             </time>
           </div>
-        </div>
+        </Link>
       </div>
-    </Link>
+    </div>
   );
 }

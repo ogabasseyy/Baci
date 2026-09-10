@@ -36,9 +36,15 @@ describe('OgabasseyPublicationSafeHeroFallback', () => {
       )
     ).not.toBeInTheDocument();
 
-    const title = container.querySelector('h1');
-    expect(title).toHaveClass('ogabassey-home-lcp-title');
+    const title = container.querySelector('.ogabassey-home-lcp-title');
+    expect(title?.tagName).toBe('H1');
     expect(title).toHaveTextContent(OGABASSEY_TITLE);
+    expect(
+      container.querySelector('.ogabassey-home-lcp-desktop-title')
+    ).toHaveTextContent(OGABASSEY_TITLE);
+    expect(container.querySelector('style')?.textContent).toContain(
+      '.ogabassey-home-lcp-desktop-title { display: none !important; }'
+    );
     expect(
       container.querySelector(
         '[data-ogabassey-publication-safe-hero-fallback="true"]'

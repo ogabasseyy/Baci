@@ -71,6 +71,7 @@ export async function OgabasseyStaticHomePageContent({
           <p className="ogabassey-home-unique-copy">{OGABASSEY_DESCRIPTION}</p>
           <Suspense fallback={null}>
             <OgabasseyHomePageContent
+              omitDocumentHeading
               pathPrefix={pathPrefix}
               shellMerchantId={shellMerchantId}
               shellSlides={shellSlides}
@@ -80,6 +81,7 @@ export async function OgabasseyStaticHomePageContent({
       ) : (
         <Suspense fallback={null}>
           <OgabasseyHomePageContent
+            omitDocumentHeading={omitCommittedHero}
             pathPrefix={pathPrefix}
             shellMerchantId={shellMerchantId}
             shellSlides={shellSlides}

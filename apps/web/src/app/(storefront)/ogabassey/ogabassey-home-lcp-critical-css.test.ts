@@ -11,6 +11,18 @@ describe('OGABASSEY_HOME_LCP_CRITICAL_CSS', () => {
     );
   });
 
+  it('clips a desktop-only document title without waiting on Tailwind .sr-only', () => {
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
+      '.ogabassey-home-lcp-desktop-title'
+    );
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
+      'clip-path: inset(50%) !important'
+    );
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
+      '.ogabassey-home-lcp-desktop-title { display: none !important; }'
+    );
+  });
+
   it('keeps the mobile LCP shell one viewport tall so the footer stays below the fold', () => {
     expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
       '[data-ogabassey-home-lcp-shell] { min-height: 100svh; }'

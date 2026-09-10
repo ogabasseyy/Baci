@@ -45,6 +45,8 @@ interface PageProps {
     category: string;
   }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+  /** Demote when a parent route already committed the page H1. */
+  titleHeading?: 'h1' | 'h2';
 }
 function renderCategoryNotFoundContent({
   slug,
@@ -99,7 +101,11 @@ function toCollectionSchemaProduct(
   };
 }
 
-export async function CategoryPageContent({ params, searchParams }: PageProps) {
+export async function CategoryPageContent({
+  params,
+  searchParams,
+  titleHeading = 'h1',
+}: PageProps) {
   const { slug, category } = await params;
   const { page } = await searchParams;
   const merchant = await getMerchantByIdentifier(slug);
@@ -272,6 +278,7 @@ export async function CategoryPageContent({ params, searchParams }: PageProps) {
           }
           itemsPerPage={STOREFRONT_PRODUCTS_PER_PAGE}
           products={categoryPageProducts}
+          titleHeading={titleHeading}
           totalProductCount={
             productsArePrePaginated
               ? (data.productCount ?? productSlots.length)

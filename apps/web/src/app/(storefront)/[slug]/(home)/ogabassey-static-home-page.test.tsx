@@ -25,8 +25,10 @@ vi.mock('@/app/(storefront)/storefront-home-critical.css', () => {
 vi.mock(
   '@/app/(storefront)/ogabassey/ogabassey-static-home-page-content',
   () => ({
-    OgabasseyStaticHomePageContent: ({ pathPrefix }: { pathPrefix: string }) =>
-      mockOgabasseyStaticHomePageContent({ pathPrefix }),
+    OgabasseyStaticHomePageContent: (props: {
+      omitCommittedHero?: boolean;
+      pathPrefix: string;
+    }) => mockOgabasseyStaticHomePageContent(props),
   })
 );
 
@@ -39,8 +41,8 @@ const { OgabasseyStaticHomePage } = await import(
 );
 
 describe('OgabasseyStaticHomePage', () => {
-  it('owns the OgaBassey homepage critical stylesheet', () => {
-    expect(mockCriticalHomeCssImport).toHaveBeenCalledOnce();
+  it('does not statically import homepage critical CSS onto first paint', () => {
+    expect(mockCriticalHomeCssImport).not.toHaveBeenCalled();
   });
 
   it('renders the static resource hints and path-prefixed home shell', () => {
@@ -48,6 +50,7 @@ describe('OgabasseyStaticHomePage', () => {
 
     expect(mockOgabasseyStaticResourceHints).toHaveBeenCalledOnce();
     expect(mockOgabasseyStaticHomePageContent).toHaveBeenCalledWith({
+      omitCommittedHero: true,
       pathPrefix: '/ogabassey',
     });
     expect(

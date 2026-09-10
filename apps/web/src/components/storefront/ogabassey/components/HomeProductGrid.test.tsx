@@ -193,7 +193,7 @@ describe('HomeProductGrid', () => {
     ).toHaveAttribute('href', '/ogabassey/products');
   });
 
-  it('defers image loading for cards after the first mobile row', () => {
+  it('defers every home feed image so High product photos cannot steal mobile LCP', () => {
     render(
       <HomeProductGrid
         storeSlug="test-store"
@@ -203,18 +203,9 @@ describe('HomeProductGrid', () => {
       />
     );
 
-    expect(screen.getAllByRole('article')[0]).toHaveAttribute(
-      'data-defer-image-loading',
-      'false'
-    );
-    expect(screen.getAllByRole('article')[1]).toHaveAttribute(
-      'data-defer-image-loading',
-      'false'
-    );
-    expect(screen.getAllByRole('article')[2]).toHaveAttribute(
-      'data-defer-image-loading',
-      'true'
-    );
+    for (const card of screen.getAllByRole('article')) {
+      expect(card).toHaveAttribute('data-defer-image-loading', 'true');
+    }
   });
 
   it('mounts the inline grid ad slot and delegates space reservation to it', () => {

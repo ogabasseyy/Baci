@@ -19,4 +19,15 @@ describe('CompareIndexFallback', () => {
       screen.queryByRole('status', { name: 'Loading product listing' })
     ).not.toBeInTheDocument();
   });
+
+  it('omits the hub intro when the parent already committed LCP copy', () => {
+    render(<CompareIndexFallback hideIntro />);
+
+    expect(
+      screen.getByRole('status', { name: 'Loading compare products' })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Compare products' })
+    ).not.toBeInTheDocument();
+  });
 });

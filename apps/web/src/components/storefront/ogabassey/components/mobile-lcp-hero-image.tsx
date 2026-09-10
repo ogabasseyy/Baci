@@ -58,7 +58,7 @@ export function MobileLcpHeroImage({
   const avifSrcSet = buildOgabasseyAvifSrcSet(productSrcSet);
 
   return (
-    <picture className="block h-full w-full">
+    <picture className="block max-h-20 max-w-20">
       {avifSrcSet ? (
         <source
           media={MOBILE_HERO_SOURCE_MEDIA}
@@ -77,7 +77,7 @@ export function MobileLcpHeroImage({
         alt={alt}
         fetchPriority={shouldPrioritizeImage ? 'high' : undefined}
         src={TRANSPARENT_PIXEL_SRC}
-        className={`h-full w-full ${
+        className={`max-h-20 max-w-20 ${
           imageFit === 'contain' ? 'object-contain object-right' : 'object-cover'
         }`}
       />

@@ -75,4 +75,15 @@ describe('CategoryPageToolbar', () => {
       screen.queryByRole('button', { name: /filters/i })
     ).not.toBeInTheDocument();
   });
+
+  it('demotes the heading when a parent route already owns the page H1', () => {
+    renderToolbar({ titleHeading: 'h2' });
+
+    expect(
+      screen.getByRole('heading', { name: 'Smartphones', level: 2 })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Smartphones', level: 1 })
+    ).not.toBeInTheDocument();
+  });
 });

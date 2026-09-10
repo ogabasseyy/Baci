@@ -11,7 +11,14 @@ describe('CompareHubIntro', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Browse Ogabassey product comparison pages by category/)
+    ).not.toHaveClass('sr-only');
+    expect(
+      document.querySelector('[data-cwv-lcp-support]')
     ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-cwv-lcp-copy="compare"]')
+    ).toHaveTextContent('Compare products');
+    expect(document.querySelector('[data-cwv-lcp-fold]')).toBeInTheDocument();
   });
 
   it('falls back to generic store copy when the merchant name is missing', () => {

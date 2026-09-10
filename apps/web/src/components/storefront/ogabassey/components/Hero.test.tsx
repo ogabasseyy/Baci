@@ -9,14 +9,21 @@ const mockEmptyMobileHero = vi.hoisted(() => vi.fn());
 vi.mock('./hero-mobile-carousel', () => ({
   HeroMobileCarousel: (props: Record<string, unknown>) => {
     mockMobileCarousel(props);
-    return <div data-testid="mobile-carousel" />;
+    return (
+      <div
+        role="region"
+        aria-label="Featured launch product carousel"
+      />
+    );
   },
 }));
 
 vi.mock('./hero-desktop-grid', () => ({
   HeroDesktopGrid: (props: Record<string, unknown>) => {
     mockDesktopGrid(props);
-    return <div data-testid="desktop-grid" />;
+    return (
+      <section aria-label="Featured products" data-ogabassey-desktop-hero="true" />
+    );
   },
 }));
 
@@ -72,6 +79,23 @@ describe('Hero', () => {
     ).toBeInTheDocument();
   });
 
+  it('omits the mobile carousel when a committed text LCP already owns the slot', () => {
+    render(<Hero omitMobileCarousel slides={SLIDES} />);
+
+    expect(
+      screen.queryByRole('region', { name: 'Featured launch product carousel' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Featured products' })
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-ogabassey-mobile-hero-bg-extension]')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { level: 1, name: /buy phones/i })
+    ).not.toBeInTheDocument();
+  });
+
   it('threads the launch slides to both the mobile carousel and the desktop grid', () => {
     render(<Hero slides={SLIDES} />);
 
@@ -83,12 +107,15 @@ describe('Hero', () => {
     );
   });
 
-
   it('preserves hero geometry when launch slides are empty', () => {
     const { container } = render(<Hero slides={[]} />);
 
-    expect(mockMobileCarousel).not.toHaveBeenCalled();
-    expect(mockDesktopGrid).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('region', { name: 'Featured launch product carousel' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('region', { name: 'Featured products' })
+    ).not.toBeInTheDocument();
     expect(
       container.querySelector('[data-ogabassey-empty-mobile-hero="true"]')
     ).toContainElement(screen.getByTestId('empty-mobile-hero'));

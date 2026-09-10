@@ -11,6 +11,7 @@ import { useOptionalCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { OgabasseyImeiEntry } from './imei-checker-entry';
 import { performImeiCheck } from './imei-checker-request';
+import { OgabasseyImeiCheckerShell } from './imei-checker-shell';
 import type {
   ImeiRequestIdentity,
   ImeiResult,
@@ -75,7 +76,17 @@ async function fetchDeviceSuggestions(
   }
 }
 
-export const OgabasseyImeiChecker: React.FC = () => {
+interface OgabasseyImeiCheckerProps {
+  /** Set when the parent already committed the IMEI LCP hero. */
+  omitHero?: boolean;
+  /** Set when the parent already owns the page chrome around this island. */
+  omitShell?: boolean;
+}
+
+export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
+  omitHero = false,
+  omitShell = false,
+}) => {
   const customerAuth = useOptionalCustomerAuth();
   const merchantSlug = useMerchantSafe()?.merchant?.slug;
   const {
@@ -237,9 +248,8 @@ export const OgabasseyImeiChecker: React.FC = () => {
     setIsLoading(false);
   };
 
-  return (
-    <div className="min-h-screen bg-linear-to-b from-gray-50 to-white pb-24 md:pb-12 pt-4 md:pt-8 flex flex-col">
-      <div className="max-w-[1400px] mx-auto px-4 md:px-6 w-full flex-1">
+  const body = (
+    <>
         {!result && (
           <OgabasseyImeiEntry
             brand={brand}
@@ -253,6 +263,7 @@ export const OgabasseyImeiChecker: React.FC = () => {
             isLoading={isLoading}
             isPending={pendingLookup.pending !== null}
             needsWalletFunding={needsWalletFunding}
+            omitHero={omitHero}
             onCheck={handleCheck}
             onDeviceQueryChange={(value) => {
               setDeviceQuery(value);
@@ -291,7 +302,12 @@ export const OgabasseyImeiChecker: React.FC = () => {
           lookupId={resultLookupId}
           result={result}
         />
-      </div>
-    </div>
+    </>
+  );
+
+  return (
+    <OgabasseyImeiCheckerShell omitShell={omitShell}>
+      {body}
+    </OgabasseyImeiCheckerShell>
   );
 };

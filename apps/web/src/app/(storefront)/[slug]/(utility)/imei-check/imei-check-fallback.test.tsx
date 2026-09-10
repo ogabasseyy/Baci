@@ -23,7 +23,17 @@ describe('ImeiCheckFallback', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Verify First.')).toBeInTheDocument();
     expect(
-      screen.getByText(/One quick check can save you from losing/)
+      screen.getByText(/stolen, iCloud locked, or refurbished/)
     ).toBeInTheDocument();
+  });
+
+  it('omits the IMEI hero when the parent already committed it', () => {
+    render(<ImeiCheckFallback hideHero />);
+
+    const status = screen.getByRole('status', { name: 'Loading IMEI checker' });
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(
+      screen.queryByRole('heading', { name: /Don't Get Scammed/i })
+    ).not.toBeInTheDocument();
   });
 });

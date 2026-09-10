@@ -28,6 +28,9 @@ vi.mock('@/components/storefront/ogabassey/pages/ad-unit', () => ({
 vi.mock('./blog-listing-static-hero', () => ({
   BlogListingStaticHero: vi.fn(() => <article>Root featured story</article>),
 }));
+vi.mock('./blog-listing-ogabassey-lcp-hero', () => ({
+  BlogListingOgabasseyLcpHero: () => <article>Root featured story</article>,
+}));
 vi.mock('./blog-page-content', () => ({
   BlogPageContent: ({ hideFeaturedStory }: BlogPageProps) => (
     <OgabasseyV2Blog
@@ -72,7 +75,7 @@ async function resolveServerSlots(node: ReactNode): Promise<ReactNode> {
 }
 
 describe('BlogListingRequestContent request state regression', () => {
-  it('renders the external hero only on the unfiltered static root', async () => {
+  it('renders the committed snapshot hero only on the unfiltered static root', async () => {
     render(
       await resolveServerSlots(
         BlogPage({
@@ -88,9 +91,12 @@ describe('BlogListingRequestContent request state regression', () => {
     expect(
       screen.getByRole('heading', { name: 'Page two second post' })
     ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-blog-listing-filtered]')
+    ).not.toBeInTheDocument();
   });
 
-  it('retains the template story when the external hero is unavailable', async () => {
+  it('still hides the template story when the cached hero is unused', async () => {
     vi.mocked(BlogListingStaticHero).mockResolvedValueOnce(null);
     render(
       await resolveServerSlots(
@@ -100,10 +106,10 @@ describe('BlogListingRequestContent request state regression', () => {
         })
       )
     );
-    expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
+    expect(screen.getByText('Root featured story')).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Page two first post' })
-    ).toBeInTheDocument();
+      screen.queryByRole('heading', { name: 'Page two first post' })
+    ).not.toBeInTheDocument();
   });
 
   it('keeps the first result on page two instead of replacing it with page one', async () => {
@@ -116,7 +122,10 @@ describe('BlogListingRequestContent request state regression', () => {
       )
     );
 
-    expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
+    expect(screen.getByText('Root featured story')).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-blog-listing-filtered]')
+    ).not.toBeNull();
     expect(
       screen.getByRole('heading', { name: 'Page two first post' })
     ).toBeInTheDocument();
@@ -129,7 +138,7 @@ describe('BlogListingRequestContent request state regression', () => {
     { search: 'iphone' },
     { category: 'News' },
     { page: '1' },
-  ])('does not inject an unfiltered root hero into query %j', async (query) => {
+  ])('keeps the committed snapshot hero on query %j and marks the listing filtered', async (query) => {
     render(
       await resolveServerSlots(
         BlogPage({
@@ -138,7 +147,10 @@ describe('BlogListingRequestContent request state regression', () => {
         })
       )
     );
-    expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
+    expect(screen.getByText('Root featured story')).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-blog-listing-filtered]')
+    ).not.toBeNull();
   });
 
   it('retains a non-static merchant template story', async () => {

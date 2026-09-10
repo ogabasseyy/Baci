@@ -20,8 +20,11 @@ import {
 } from '@/lib/validation';
 import { repairBookingSearchParamsSchema } from '@/schemas/repair-actions';
 import { RepairBookingLcpIntro } from './repair-booking-lcp-intro';
+import { RepairBookingPrepSection } from './repair-booking-prep-section';
 
 export interface RepairPageContentProps {
+  /** Set when the parent already committed the booking LCP intro. */
+  omitIntro?: boolean;
   params: Promise<{
     slug: string;
   }>;
@@ -98,6 +101,7 @@ export function canUseRepairBooking(
 }
 
 export async function RepairPageContent({
+  omitIntro = false,
   params,
   searchParams,
 }: RepairPageContentProps) {
@@ -119,20 +123,35 @@ export async function RepairPageContent({
     await searchParams
   );
 
-  return (
-    <div className="container mx-auto py-12 px-4">
-      <JsonLd data={breadcrumbSchema} />
-      <div className="max-w-3xl mx-auto">
-        <RepairBookingLcpIntro />
+  const wizard = (
+    <>
+      <div className="overflow-hidden rounded-xl border border-store-border bg-store-background-text/5 shadow-sm">
+        <RepairBookingWizard
+          merchantId={merchant.id}
+          merchantSlug={slug}
+          merchantName={merchant.business_name}
+          preselection={preselection}
+        />
+      </div>
+      <RepairBookingPrepSection />
+    </>
+  );
 
-        <div className="bg-store-background-text/5 border border-store-border rounded-xl shadow-sm overflow-hidden">
-          <RepairBookingWizard
-            merchantId={merchant.id}
-            merchantSlug={slug}
-            merchantName={merchant.business_name}
-            preselection={preselection}
-          />
-        </div>
+  if (omitIntro) {
+    return (
+      <>
+        <JsonLd data={breadcrumbSchema} />
+        {wizard}
+      </>
+    );
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-12">
+      <JsonLd data={breadcrumbSchema} />
+      <div className="mx-auto max-w-3xl">
+        <RepairBookingLcpIntro />
+        {wizard}
       </div>
     </div>
   );

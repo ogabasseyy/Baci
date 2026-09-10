@@ -1,5 +1,15 @@
 @import "./storefront-ogabassey-dark-mode.css";
 
+/* Deferred with this sheet so first-paint CSS has no woff2 url() for Lantern. */
+@font-face {
+  font-family: "Inter Naira";
+  src: url("/fonts/inter-naira.woff2") format("woff2");
+  font-display: optional;
+  font-style: normal;
+  font-weight: 100 900;
+  unicode-range: U+20A6;
+}
+
 @theme inline {
   --color-store-primary: var(--store-primary, #2a2c6e);
   --color-store-primary-text: var(--store-primary-text, #ffffff);

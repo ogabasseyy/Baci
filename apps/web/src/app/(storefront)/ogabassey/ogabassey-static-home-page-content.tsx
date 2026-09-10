@@ -6,7 +6,6 @@ import {
   OGABASSEY_SOCIAL_IMAGE_URL,
   OGABASSEY_TITLE,
 } from '@/config/ogabassey';
-import { preloadOgabasseyHomeHeroResources } from './ogabassey-home-hero-resource-hints';
 import { resolveOgabasseyHomeHeroShell } from './ogabassey-home-hero-shell-data';
 import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
 import { OgabasseyHomeStyleLoader } from './ogabassey-home-style-loader';
@@ -16,6 +15,8 @@ interface OgabasseyStaticHomePageContentProps {
   /** Static per-route prefix for request-streamed storefront links: '' for the
    *  apex domain and '/ogabassey' for the path route. */
   pathPrefix: string;
+  /** Set when the parent page already committed the brand-text LCP sibling. */
+  omitCommittedHero?: boolean;
 }
 
 const ogabasseyStaticHomepageSchema = {
@@ -36,46 +37,58 @@ const ogabasseyStaticHomepageSchema = {
 } as const;
 
 export async function OgabasseyStaticHomePageContent({
+  omitCommittedHero = false,
   pathPrefix,
 }: OgabasseyStaticHomePageContentProps) {
   // Cached-only lookup (never request APIs — those stay in the dynamic
   // subtree). Slides are inert data here: only the request-scoped subtree may
   // turn them into shopping UI after it confirms the current publication
-  // state. The slide-0 preload intentionally stays early for LCP discovery. In
-  // the narrow stale-shell window it can disclose/fetch the formerly public
-  // image URL, but it cannot render product UI or expose PDP navigation; the
-  // visible surface is tenant- and publication-gated below.
+  // state. The committed mobile hero is a Suspense sibling (blog listing
+  // pattern): text LCP in the static shell, no CDN preload racing CSS. The
+  // streamed Hero omits its mobile carousel so a later product title cannot
+  // steal LCP. Brand copy only — no product names, prices, links, or controls.
   const heroShell = await resolveOgabasseyHomeHeroShell();
   const shellSlides =
     heroShell?.status === 'published' ? heroShell.slides : null;
   const shellMerchantId =
     heroShell?.status === 'published' ? heroShell.merchantId : null;
-  if (shellSlides?.[0]) {
-    preloadOgabasseyHomeHeroResources(shellSlides[0].imageUrl);
-  }
+  const committedMobileLcpUrl = shellSlides?.[0]?.imageUrl ?? null;
+  const paintCommittedHero =
+    Boolean(committedMobileLcpUrl) && !omitCommittedHero;
 
   return (
     <>
       <JsonLd data={ogabasseyStaticHomepageSchema} />
       <OgabasseyHomeStyleLoader />
-      {/* The fallback reserves the critical viewport without emitting product
-          copy, images, links or controls. The sole shopping Hero is rendered
-          only after the request-scoped publication guard succeeds. */}
-      <Suspense
-        fallback={
-          shellSlides ? (
+      {paintCommittedHero && committedMobileLcpUrl ? (
+        <>
+          <div data-ogabassey-home-lcp-shell="true">
             <OgabasseyPublicationSafeHeroFallback
-              hasCarouselControls={shellSlides.length > 1}
+              heroImageUrl={committedMobileLcpUrl}
             />
-          ) : null
-        }
-      >
-        <OgabasseyHomePageContent
-          pathPrefix={pathPrefix}
-          shellMerchantId={shellMerchantId}
-          shellSlides={shellSlides}
-        />
-      </Suspense>
+          </div>
+          <p className="ogabassey-home-unique-copy">{OGABASSEY_DESCRIPTION}</p>
+          <Suspense fallback={null}>
+            <OgabasseyHomePageContent
+              omitMobileCarousel
+              pathPrefix={pathPrefix}
+              shellMerchantId={shellMerchantId}
+              shellSlides={shellSlides}
+            />
+          </Suspense>
+        </>
+      ) : (
+        <Suspense fallback={null}>
+          <OgabasseyHomePageContent
+            omitMobileCarousel={
+              omitCommittedHero || Boolean(committedMobileLcpUrl)
+            }
+            pathPrefix={pathPrefix}
+            shellMerchantId={shellMerchantId}
+            shellSlides={shellSlides}
+          />
+        </Suspense>
+      )}
     </>
   );
 }

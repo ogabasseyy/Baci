@@ -1,21 +1,24 @@
 'use client';
 
 import { useEffect } from 'react';
+import { loadStylesheetAfterFirstInput } from '@/app/(storefront)/load-stylesheet-after-first-input';
 
 function loadOgabasseyHomeStyles() {
-  return import('@/app/(storefront)/storefront-home.css');
+  return Promise.all([
+    import('@/app/(storefront)/storefront-core.css'),
+    import('@/app/(storefront)/storefront-home.css'),
+  ]);
 }
 
 export function OgabasseyHomeStyleLoader() {
-  useEffect(() => {
-    loadOgabasseyHomeStyles().catch((error: unknown) => {
-      console.error(
-        new Error('Failed to load OgaBassey homepage stylesheet', {
-          cause: error,
-        })
-      );
-    });
-  }, []);
+  useEffect(
+    () =>
+      loadStylesheetAfterFirstInput(
+        loadOgabasseyHomeStyles,
+        'Failed to load OgaBassey homepage stylesheet'
+      ),
+    []
+  );
 
   return null;
 }

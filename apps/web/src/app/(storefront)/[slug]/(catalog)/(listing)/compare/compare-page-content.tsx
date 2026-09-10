@@ -24,9 +24,14 @@ import {
 
 interface ComparePageContentProps {
   params: Promise<{ slug: string }>;
+  /** Set when the parent already committed the hub LCP intro. */
+  omitIntro?: boolean;
 }
 
-export async function ComparePageContent({ params }: ComparePageContentProps) {
+export async function ComparePageContent({
+  omitIntro = false,
+  params,
+}: ComparePageContentProps) {
   const { slug } = await params;
 
   if (!isValidMerchantIdentifier(slug)) {
@@ -95,7 +100,7 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
           </nav>
 
           {/* Keep the initial and resumed intro identical to prevent reflow. */}
-          <CompareHubIntro />
+          {omitIntro ? null : <CompareHubIntro />}
 
           {sections.length === 0 ? (
             <section className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">

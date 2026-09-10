@@ -13,13 +13,21 @@ describe('BlogListingFallback', () => {
   });
 
   it('omits the featured-story skeleton when the listing hero is painted separately', () => {
-    const { container } = render(
-      <BlogListingFallback includeFeaturedSkeleton={false} />
-    );
+    render(<BlogListingFallback includeFeaturedSkeleton={false} />);
 
     expect(
       screen.getByRole('status', { name: 'Loading blog posts' })
     ).toBeInTheDocument();
-    expect(container.querySelector('.rounded-4xl')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('region', { name: 'Loading featured story' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('exposes the featured-story skeleton through an accessible name', () => {
+    render(<BlogListingFallback />);
+
+    expect(
+      screen.getByRole('region', { name: 'Loading featured story' })
+    ).toBeInTheDocument();
   });
 });

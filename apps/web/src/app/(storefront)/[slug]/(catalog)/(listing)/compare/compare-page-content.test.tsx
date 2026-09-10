@@ -228,6 +228,19 @@ describe('ComparePageContent', () => {
     ).toBeInTheDocument();
   });
 
+  it('omits the hub intro when the parent already committed LCP copy', async () => {
+    render(
+      await ComparePageContent({
+        omitIntro: true,
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+
+    expect(
+      screen.queryByRole('heading', { name: 'Compare products' })
+    ).not.toBeInTheDocument();
+  });
+
   it('calls notFound for invalid storefront identifiers', async () => {
     await expect(
       ComparePageContent({

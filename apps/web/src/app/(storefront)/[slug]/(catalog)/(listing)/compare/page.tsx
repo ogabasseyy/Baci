@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
+import { getOgabasseyStaticParams } from '@/app/(storefront)/[slug]/ogabassey-static-params';
 import { STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM } from '@/config/storefront-metadata-cache-bots';
 import {
   getCachedCategoryPageData,
@@ -16,10 +17,10 @@ import { buildStoreUrl } from '@/lib/store-url';
 import { canonicalizeCategorySlug } from '@/lib/storefront-canonical-url';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import { isValidMerchantIdentifier } from '@/lib/validation';
-import { getOgabasseyStaticParams } from '../../../ogabassey-static-params';
 import CategoryPageRoute, {
   generateMetadata as generateCategoryMetadata,
 } from '../[category]/page';
+import { CompareHubIntro } from './compare-hub-intro';
 import { buildCompareIndexSections } from './compare-index-discovery';
 import { CompareIndexFallback } from './compare-index-fallback';
 import { ComparePageContent } from './compare-page-content';
@@ -195,19 +196,23 @@ async function CompareIndexRuntime(props: CompareIndexPageProps) {
     if (!queryFailed && hasActiveCompareCategory(categories)) {
       return (
         <CategoryPageRoute
+          titleHeading="h2"
           {...buildCompareCategoryPageProps(slug, props.searchParams)}
         />
       );
     }
   }
 
-  return <ComparePageContent {...props} />;
+  return <ComparePageContent omitIntro {...props} />;
 }
 
 export default function CompareIndexPage(props: CompareIndexPageProps) {
   return (
-    <Suspense fallback={<CompareIndexFallback />}>
-      <CompareIndexRuntime {...props} />
-    </Suspense>
+    <>
+      <CompareHubIntro />
+      <Suspense fallback={<CompareIndexFallback hideIntro />}>
+        <CompareIndexRuntime {...props} />
+      </Suspense>
+    </>
   );
 }

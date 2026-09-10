@@ -1,13 +1,12 @@
 import type { Metadata, Viewport } from 'next';
-import '@/app/(storefront)/storefront-core.css';
 import { notFound } from 'next/navigation';
 import type React from 'react';
 import { Suspense } from 'react';
 import { ShellChromeLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
+import { StorefrontLcpCopyStyle } from '@/app/(storefront)/storefront-lcp-copy-style';
 import { AdAttributionCapture } from '@/components/storefront/ad-attribution-capture';
 import { DeferredPageViewTracker } from '@/components/storefront/deferred-page-view-tracker';
 import { OgabasseyStorefrontLayout } from '@/components/storefront/ogabassey/storefront-layout';
-import { StoreNotPublished } from '@/components/storefront/store-not-published';
 import {
   DEFAULT_STOREFRONT_APPEARANCE,
   getStorefrontAppearanceClasses,
@@ -15,6 +14,7 @@ import {
   type StorefrontAppearance,
 } from '@/components/storefront/storefront-appearance';
 import { StorefrontThemeProvider } from '@/components/storefront/storefront-theme-provider';
+import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-storefront';
 import { WebMcpStorefrontTools } from '@/components/storefront/webmcp-storefront-tools';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { StorefrontCartProvider } from '@/hooks/cart/storefront-cart-provider';
@@ -314,6 +314,8 @@ export async function StorefrontLayoutContent(props: {
 
   const isDevelopment = process.env.NODE_ENV === 'development';
   if (!shellSnapshotBase.merchant.is_published && !isDevelopment) {
+    const StoreNotPublished = await loadUnpublishedStorefront();
+
     return (
       <StorefrontThemeFrame appearance={appearance}>
         <StoreNotPublished
@@ -360,6 +362,7 @@ export default function StorefrontLayout(props: {
 
   return (
     <>
+      <StorefrontLcpCopyStyle />
       {/*
         Early ad-click attribution capture (PR-ATTR). Kept OUTSIDE the Suspense
         boundary so it lands in the PPR static shell / first-flush HTML for every

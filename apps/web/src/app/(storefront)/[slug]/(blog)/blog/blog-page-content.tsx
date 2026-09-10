@@ -223,12 +223,14 @@ export async function BlogPageContent({
       reading_time_minutes: post.reading_time_minutes,
     })),
   });
-  preloadOgabasseyRootBlogListingHeroImage({
-    category,
-    posts,
-    searchQuery: effectiveSearchQuery,
-    templateId: merchant.template_id,
-  });
+  if (!hideFeaturedStory) {
+    preloadOgabasseyRootBlogListingHeroImage({
+      category,
+      posts,
+      searchQuery: effectiveSearchQuery,
+      templateId: merchant.template_id,
+    });
+  }
   const blogSchema = {
     '@context': 'https://schema.org',
     '@type': 'Blog',

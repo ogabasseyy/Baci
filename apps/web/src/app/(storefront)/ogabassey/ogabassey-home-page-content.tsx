@@ -4,7 +4,7 @@ import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { Hero } from '@/components/storefront/ogabassey/components/Hero';
 import type { LaunchProductSlide } from '@/components/storefront/ogabassey/components/LaunchCarousel';
-import { StoreNotPublished } from '@/components/storefront/store-not-published';
+import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-storefront';
 import { OGABASSEY_TITLE } from '@/config/ogabassey';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
@@ -12,6 +12,10 @@ import { resolveMerchantContextIdentifier } from '@/lib/storefront-route-identif
 import { OgabasseyHomeDynamicContent } from './ogabassey-home-dynamic-content';
 
 interface OgabasseyHomePageContentProps {
+  /** When the static parent already painted a committed mobile text LCP, skip
+   *  the request-scoped mobile carousel so a later product title cannot steal
+   *  Slow-4G LCP. Desktop grid still streams after the publication guard. */
+  omitMobileCarousel?: boolean;
   /** Static per-route path prefix supplied by the parent. */
   pathPrefix: string;
   /** Cached shell data is safe to prepare before request resolution, but must
@@ -33,10 +37,12 @@ export function resolveOgabasseyHomePathPrefix(
 
 /**
  * Request-scoped publication boundary for the homepage shopping surface. The
- * static parent may prepare and preload slide data, but this component is the
- * sole owner of the visible Hero and its PDP links.
+ * static parent may prepare slide data and paint the committed mobile text LCP,
+ * but this component is the sole owner of the desktop Hero, utility panel, and
+ * PDP links.
  */
 export async function OgabasseyHomePageContent({
+  omitMobileCarousel = false,
   pathPrefix,
   shellMerchantId,
   shellSlides,
@@ -58,6 +64,8 @@ export async function OgabasseyHomePageContent({
 
   const isDevelopment = process.env.NODE_ENV === 'development';
   if (!merchant.is_published && !isDevelopment) {
+    const StoreNotPublished = await loadUnpublishedStorefront();
+
     return <StoreNotPublished businessName={merchant.business_name} />;
   }
 
@@ -70,7 +78,10 @@ export async function OgabasseyHomePageContent({
   return (
     <>
       {requestMerchantShellSlides ? (
-        <Hero slides={requestMerchantShellSlides} />
+        <Hero
+          omitMobileCarousel={omitMobileCarousel}
+          slides={requestMerchantShellSlides}
+        />
       ) : (
         <h1 className="sr-only">{OGABASSEY_TITLE}</h1>
       )}

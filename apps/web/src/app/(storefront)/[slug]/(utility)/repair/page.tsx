@@ -4,6 +4,7 @@ import { buildStoreUrl } from '@/lib/store-url';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import { getOgabasseyStaticParams } from '../../ogabassey-static-params';
 import { RepairBookingFallback } from './repair-booking-fallback';
+import { RepairBookingLcpIntro } from './repair-booking-lcp-intro';
 import {
   canUseRepairBooking,
   getRepairMerchant,
@@ -43,8 +44,13 @@ export async function generateMetadata({
 
 export default function RepairPage(props: RepairPageContentProps) {
   return (
-    <Suspense fallback={<RepairBookingFallback />}>
-      <RepairPageContent {...props} />
-    </Suspense>
+    <div className="container mx-auto px-4 py-12">
+      <div className="mx-auto max-w-3xl">
+        <RepairBookingLcpIntro />
+        <Suspense fallback={<RepairBookingFallback hideIntro />}>
+          <RepairPageContent omitIntro {...props} />
+        </Suspense>
+      </div>
+    </div>
   );
 }

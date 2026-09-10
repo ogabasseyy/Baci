@@ -8,7 +8,15 @@
   or library tree. The isolated PDP entrypoints keep their own source lists.
 */
 /* stylelint-disable scss/at-rule-no-unknown -- Tailwind v4 source discovery directives. */
-@source "./";
+@source not "./**/*.test.ts";
+@source not "./**/*.test.tsx";
+@source not "../../**/*.test.ts";
+@source not "../../**/*.test.tsx";
+@source "./[slug]/(utility)";
+@source "./[slug]/(commerce)";
+@source "./[slug]/(content)";
+@source "./[slug]/(customer)";
+@source "./[slug]/(catalog)";
 @source "../../components/storefront";
 @source "../../components/ui";
 @source "../../components/themed";

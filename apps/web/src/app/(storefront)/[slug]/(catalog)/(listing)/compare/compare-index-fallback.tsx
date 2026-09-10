@@ -1,6 +1,12 @@
 import { CompareHubIntro } from './compare-hub-intro';
 
-export function CompareIndexFallback() {
+interface CompareIndexFallbackProps {
+  hideIntro?: boolean;
+}
+
+export function CompareIndexFallback({
+  hideIntro = false,
+}: CompareIndexFallbackProps) {
   return (
     <div
       role="status"
@@ -18,7 +24,7 @@ export function CompareIndexFallback() {
             Compare products
           </span>
         </nav>
-        <CompareHubIntro />
+        {hideIntro ? null : <CompareHubIntro />}
       </div>
     </div>
   );

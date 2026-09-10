@@ -1,60 +1,13 @@
-@import "tailwindcss" source(none);
-/*
-  Register the store color tokens in the render-blocking critical CSS so
-  above-the-fold store-token surfaces (the product hero cards, utility panel)
-  emit with their literal hex fallbacks and paint correctly on the first frame.
-  Without this, `store-*` colors are only registered in the deferred
-  storefront-home.css, so the critical CSS cannot generate `.bg-store-secondary`
-  et al. and the hero first-paints unstyled with the dark shell showing through.
-*/
-@import "./storefront-theme-tokens.css";
-
-/* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
-@config "../../../tailwind.storefront-home.config.mjs";
-
 /*
   OgaBassey homepage critical CSS.
 
-  Keep this layout-owned entrypoint limited to the static PPR shell and the
-  above-fold Hero plus the first viewport-visible product grid structure. The
-  complete homepage utility surface belongs to storefront-home.css, imported by
-  the page shell, so deeper below-fold ads, overlays, and commerce widgets do
-  not sit on the layout render-blocking path.
+  Do not import the Tailwind entrypoint here. That compiled a 30KB+
+  utilities chunk on top of storefront-full.css and pinned Slow-4G LCP above
+  the 2.5s Good bar. The committed LCP node is brand title + description,
+  styled by OGABASSEY_HOME_LCP_CRITICAL_CSS. Streamed Hero/carousel/desktop
+  grid utilities live in deferred storefront-home.css. Featured-product
+  geometry below is handwritten so the PPR shell does not need Tailwind.
 */
-/* stylelint-disable scss/at-rule-no-unknown -- Tailwind v4 source discovery directives. */
-@source "./ogabassey/ogabassey-static-home-page-content.tsx";
-@source "./ogabassey/ogabassey-publication-safe-hero-fallback.tsx";
-@source "../../components/storefront/ogabassey/components/Hero.tsx";
-@source "../../components/storefront/ogabassey/components/hero-mobile-carousel.tsx";
-/* Shared geometry class constants consumed by the publication-safe fallback
-   and request-gated carousel. Classes that exist only here must stay
-   discoverable or built CSS silently drops them. */
-@source "../../components/storefront/ogabassey/components/hero-mobile-geometry.ts";
-@source "../../components/storefront/ogabassey/components/carousel-progress-fill.tsx";
-@source "../../components/storefront/ogabassey/components/carousel-play-toggle.tsx";
-@source "../../components/storefront/ogabassey/components/hero-desktop-grid.tsx";
-@source "../../components/storefront/ogabassey/components/hero-utility-panel.tsx";
-@source "../../components/storefront/ogabassey/components/mobile-lcp-hero-image.tsx";
-@source "../../components/storefront/ogabassey/components/ogabassey-empty-mobile-hero.tsx";
-@source "../../components/storefront/ogabassey/pages/home.tsx";
-/*
-  PSI's mobile trace exposes the homepage strip plus the top edge of Featured
-  Products in the initial viewport. Keep that geometry in semantic selectors
-  below instead of sourcing the full product grid/card Tailwind surface on the
-  render-blocking path. The complete product-card utility surface is deferred
-  through storefront-home.css.
-
-  hero-desktop-grid.tsx is sourced above: Hero.tsx renders it directly in the
-  final streamed above-fold server output (it is no longer client-deferred), so
-  its grid / card utilities must be in this critical entrypoint or desktop users
-  first-paint the launch hero unstyled before the deferred homepage stylesheet
-  loads.
-
-  ogabassey-empty-mobile-hero.tsx is the baked mobile geometry used by the
-  request-gated Hero for a published empty launch feed. Its light card
-  backgrounds must stay critical so that state paints styled when streamed.
-*/
-/* stylelint-enable scss/at-rule-no-unknown */
 
 @layer components {
   .ogabassey-home-products {

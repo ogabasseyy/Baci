@@ -16,7 +16,10 @@ export function BlogListingFallback({
     >
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 pt-8 md:pt-12">
         {includeFeaturedSkeleton ? (
-          <div className="mb-12 overflow-hidden rounded-4xl border border-border bg-card p-6 shadow-sm md:p-8">
+          <section
+            aria-label="Loading featured story"
+            className="mb-12 overflow-hidden rounded-4xl border border-border bg-card p-6 shadow-sm md:p-8"
+          >
             <Skeleton
               className="h-[320px] w-full rounded-3xl bg-muted md:h-[420px]"
               shimmer
@@ -26,7 +29,7 @@ export function BlogListingFallback({
               <Skeleton className="h-10 w-full max-w-3xl bg-muted" shimmer />
               <Skeleton className="h-5 w-full max-w-2xl bg-muted" shimmer />
             </div>
-          </div>
+          </section>
         ) : null}
 
         <div className="mb-10 flex gap-3 overflow-x-auto pb-2">

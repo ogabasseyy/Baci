@@ -15,7 +15,7 @@ describe('IMEI check loading', () => {
       screen.getByRole('heading', { name: /Don't Get Scammed/i })
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/One quick check can save you from losing/)
+      screen.getByText(/stolen, iCloud locked, or refurbished/)
     ).toBeInTheDocument();
   });
 });

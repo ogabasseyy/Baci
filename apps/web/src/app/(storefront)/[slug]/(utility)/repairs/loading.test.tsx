@@ -17,5 +17,8 @@ describe('repairs loading', () => {
     expect(
       screen.getByText(/every device repaired is one less in a landfill/i)
     ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-cwv-lcp-support]')?.textContent
+    ).not.toMatch(/certified technicians/i);
   });
 });

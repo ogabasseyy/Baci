@@ -2,21 +2,11 @@ import { render, screen } from '@testing-library/react';
 import * as ReactDOM from 'react-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockRootDynamicBody, mockInter, mockLocalFont } = vi.hoisted(() => ({
+const { mockRootDynamicBody } = vi.hoisted(() => ({
   mockRootDynamicBody: vi.fn((props?: Record<string, never>) => {
     void props;
     return <div data-testid="root-dynamic-body" />;
   }),
-  mockInter: vi.fn(() => ({ variable: 'font-inter' })),
-  mockLocalFont: vi.fn(() => ({ variable: 'font-naira' })),
-}));
-
-vi.mock('next/font/google', () => ({
-  Inter: mockInter,
-}));
-
-vi.mock('next/font/local', () => ({
-  default: mockLocalFont,
 }));
 
 vi.mock('@/app/root-dynamic-body', () => ({
@@ -28,6 +18,26 @@ vi.mock('@/components/ui/toaster', () => ({
 }));
 
 import RootLayout from '@/app/layout';
+
+function getRootDocumentCss() {
+  const rooted =
+    document.querySelector('style[href="root-document"]') ??
+    document.head.querySelector('style[href="root-document"]');
+  if (rooted) {
+    return rooted.textContent ?? '';
+  }
+
+  // jsdom does not always persist React 19's style href/precedence onto the node.
+  const css = Array.from(document.querySelectorAll('style'))
+    .map((node) => node.textContent ?? '')
+    .find(
+      (text) =>
+        text.includes('Inter Fallback') && text.includes('.baci-skip-link')
+    );
+
+  expect(css).toBeTruthy();
+  return css ?? '';
+}
 
 const prefetchDNSSpy = vi
   .spyOn(ReactDOM, 'prefetchDNS')
@@ -53,29 +63,31 @@ describe('RootLayout', () => {
     expect(mockRootDynamicBody.mock.calls[0]?.[0]).toEqual({});
   });
 
-  it('loads Inter with display:swap and WITHOUT preload to free the LCP network window', () => {
-    // A preloaded body font competes with the LCP hero image on cold mobile; swap
-    // still renders immediately via next/font's metric-compatible fallback.
-    expect(mockInter).toHaveBeenCalledWith(
-      expect.objectContaining({ display: 'swap', preload: false })
-    );
-  });
-
-  it('keeps the naira subset preloaded and display:optional (CLS-proof price glyph)', () => {
-    expect(mockLocalFont).toHaveBeenCalledWith(
-      expect.objectContaining({ display: 'optional', preload: true })
-    );
-  });
-
-  it('applies the Inter and naira-subset font variables to the body', () => {
+  it('does not emit a naira webfont url on first-paint document CSS', () => {
     render(
       <RootLayout>
         <main>Main content</main>
       </RootLayout>
     );
 
-    expect(document.body.className).toContain('font-inter');
-    expect(document.body.className).toContain('font-naira');
+    const css = getRootDocumentCss();
+    expect(css).toContain('Inter Fallback');
+    expect(css).not.toMatch(/url\([^)]+\.woff2\)/);
+    expect(document.body.className).not.toContain('font-inter');
+    expect(document.body.className).not.toContain('font-naira');
+  });
+
+  it('inlines first-paint document CSS instead of a skip-link stylesheet', () => {
+    render(
+      <RootLayout>
+        <main>Main content</main>
+      </RootLayout>
+    );
+
+    const css = getRootDocumentCss();
+    expect(css).toContain('.baci-skip-link');
+    expect(css).toContain('Inter Fallback');
+    expect(document.querySelector('link[rel="stylesheet"]')).toBeNull();
   });
 
   it('keeps the page shell visible when root dynamic providers suspend', () => {

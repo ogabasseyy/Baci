@@ -1,0 +1,21 @@
+@import "tailwindcss" source(none);
+@import "./storefront-foundation.css";
+
+/* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
+@config "../../../tailwind.storefront-blog.config.mjs";
+
+/*
+  Blog post CSS. Keep renderer / embed / shadcn surfaces off the listing
+  render-blocking path; the listing layout loads storefront-blog.css only.
+*/
+/* stylelint-disable scss/at-rule-no-unknown -- Tailwind v4 source discovery directives. */
+@source not "./**/*.test.ts";
+@source not "./**/*.test.tsx";
+@source "./[slug]/(blog)/blog/[postSlug]";
+@source "../../components/blog/renderer";
+@source "../../components/blog/product-embed.tsx";
+@source "../../components/blog/table-of-contents.tsx";
+@source "../../components/ui/badge.tsx";
+@source "../../components/ui/button.tsx";
+@source "../../components/ui/card.tsx";
+/* stylelint-enable scss/at-rule-no-unknown */

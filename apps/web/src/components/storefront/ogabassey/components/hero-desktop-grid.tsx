@@ -30,18 +30,20 @@ const SIDE_IMAGE_SOURCE_MEDIA = '(min-width: 768px)';
 const SIDE_IMAGE_SIZES = '(min-width: 1024px) 160px, (min-width: 768px) 25vw, 1px';
 const HERO_IMAGE_QUALITY = 70;
 
-/** Media-scoped, eager, high-priority desktop LCP image. On mobile no `<source>`
- *  matches, so the `<img>` falls back to a transparent pixel (zero network). */
+/** Media-scoped desktop hero image. On mobile no `<source>` matches, so the
+ *  `<img>` falls back to a transparent pixel (zero network). Keep fetch
+ *  priority low so Chrome does not start the desktop sources as High during
+ *  the mobile LCP window. */
 function HeroBigImage({ alt, src }: { alt: string; src: string }) {
   const {
     props: { sizes, src: imgSrc, srcSet, ...imgProps },
   } = getImageProps({
     alt,
-    decoding: 'sync',
-    fetchPriority: 'high',
+    decoding: 'async',
+    fetchPriority: 'low',
     height: BIG_IMAGE_HEIGHT,
     loader: ogabasseyFallbackImageLoader,
-    loading: 'eager',
+    loading: 'lazy',
     quality: HERO_IMAGE_QUALITY,
     sizes: BIG_IMAGE_SIZES,
     src,
@@ -197,7 +199,12 @@ export function HeroDesktopGrid({ slides }: HeroDesktopGridProps) {
   }
 
   return (
-    <div className="hidden md:grid grid-cols-1 lg:grid-cols-5 gap-4 h-auto lg:h-[540px] order-2">
+    <div
+      className="hidden md:grid grid-cols-1 lg:grid-cols-5 gap-4 h-auto lg:h-[540px] order-2"
+      aria-label="Featured products"
+      data-ogabassey-desktop-hero="true"
+      role="region"
+    >
       <HeroBigCard hasSideCards={sideCards.length > 0} slide={big} />
 
       {sideCards.length > 0 ? (

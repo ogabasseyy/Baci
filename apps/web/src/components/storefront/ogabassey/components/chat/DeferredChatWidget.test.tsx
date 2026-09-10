@@ -2,6 +2,10 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/app/(storefront)/storefront-chat-style-loader', () => ({
+  StorefrontChatStyleLoader: () => null,
+}));
+
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/ogabassey'),
 }));

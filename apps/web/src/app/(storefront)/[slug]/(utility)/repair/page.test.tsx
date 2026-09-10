@@ -104,12 +104,15 @@ describe('RepairPage', () => {
     );
 
     expect(
-      screen.getByRole('heading', { name: 'Before you book a repair' })
+      screen.getByRole('heading', { name: 'Book a Repair Service' })
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Before you book a repair' })
+    ).not.toBeInTheDocument();
     expect(screen.queryByText('Repair booking wizard')).not.toBeInTheDocument();
   });
 
-  it('renders crawler-visible repair guidance before the booking wizard', async () => {
+  it('renders crawler-visible repair guidance below the booking wizard', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({
       id: 'merchant-1',
       business_name: 'Ogabassey',

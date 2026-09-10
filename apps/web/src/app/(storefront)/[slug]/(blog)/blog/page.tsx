@@ -5,6 +5,7 @@ import {
   isOgabasseyBlogStaticTenant,
   OGABASSEY_BLOG_STATIC_TENANTS,
 } from './blog-category-routing';
+import { BlogListingCommittedLcpHero } from './blog-listing-committed-lcp-hero';
 import { buildBlogListingMetadata } from './blog-listing-metadata';
 import { BlogListingRequestContent } from './blog-listing-request-content';
 import type { BlogPageProps } from './blog-page-content';
@@ -16,9 +17,14 @@ import type { BlogPageProps } from './blog-page-content';
 //   the generic `Ogabassey` title seen for Googlebot. Non-static tenants render
 //   dynamically, so their metadata may read searchParams to keep query-specific
 //   noindex/self-canonical variants (search/pagination/category).
-// - Hero selection must resolve searchParams with the listing. Otherwise page
-//   two repeats page one's hero and loses its own first story. This request
-//   boundary preserves correctness; it is not a proven static-shell LCP win.
+// - Do not await searchParams in this page. The page returns Suspense
+//   boundaries immediately so the parent PPR shell can commit.
+// - The LCP `<img>` is a sibling of the listing Suspense, not that boundary's
+//   fallback and not inside its own Suspense. A `fallback={null}` boundary
+//   postponed the snapshot hero into a hidden resume slot (`data-blog-lcp-hero`
+//   hidden) even though loading.tsx still painted a featured `<img>`.
+// - The committed hero awaits `params` only. Do not await getCachedBlogListing
+//   there — `'use cache'` in this slot postpones the image into a hidden hole.
 
 export function generateStaticParams(): Array<{ slug: string }> {
   return OGABASSEY_BLOG_STATIC_TENANTS.map((slug) => ({ slug }));
@@ -39,8 +45,16 @@ export async function generateMetadata({
 
 export default function BlogPage({ params, searchParams }: BlogPageProps) {
   return (
-    <Suspense fallback={<BlogListingFallback />}>
-      <BlogListingRequestContent params={params} searchParams={searchParams} />
-    </Suspense>
+    <>
+      <BlogListingCommittedLcpHero params={params} />
+      <Suspense
+        fallback={<BlogListingFallback includeFeaturedSkeleton={false} />}
+      >
+        <BlogListingRequestContent
+          params={params}
+          searchParams={searchParams}
+        />
+      </Suspense>
+    </>
   );
 }

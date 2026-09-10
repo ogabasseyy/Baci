@@ -75,6 +75,7 @@ describe('ImeiCheckPage', () => {
     expect(
       screen.getByText(/network status, carrier locks/i)
     ).toBeInTheDocument();
+    expect(screen.getByText(/NGN 500,000/)).toBeInTheDocument();
   });
 
   it('uses a verification-focused meta description', () => {

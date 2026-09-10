@@ -15,6 +15,9 @@ describe('compare page content helpers', () => {
     expect(buildCompareIndexDescription(null)).toBe(
       'Browse this store product comparison pages by category and open side-by-side guides for eligible products.'
     );
+    expect(buildCompareIndexDescription('   ')).toBe(
+      'Browse this store product comparison pages by category and open side-by-side guides for eligible products.'
+    );
   });
 
   it('keeps platform paths scoped to the merchant slug without double-prefixing development URLs', () => {

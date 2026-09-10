@@ -214,7 +214,7 @@ export function HomeProductGrid({
                 <HomeProductGridCard
                   basePath={basePath}
                   product={product}
-                  deferImageLoading={index >= 2}
+                  deferImageLoading
                 />
               ) : (
                 <InteractiveCard
@@ -233,7 +233,7 @@ export function HomeProductGrid({
                   deferInteractiveChrome={deferInteractiveChrome}
                   interactiveChromeTimeoutMs={deferInteractiveChrome ? 0 : undefined}
                   interactiveChromeActivateOnIdle={!deferInteractiveChrome}
-                  deferImageLoading={index >= 2}
+                  deferImageLoading
                 />
               )}
 

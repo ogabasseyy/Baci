@@ -101,8 +101,14 @@ const SLIDES: LaunchProductSlide[] = [
 
 describe('HeroDesktopGrid', () => {
   it('renders the first launch product as the big hero with its price, CTA and PDP deep-link', () => {
-    render(<HeroDesktopGrid slides={SLIDES} />);
+    const { container } = render(<HeroDesktopGrid slides={SLIDES} />);
 
+    expect(
+      container.querySelector('[data-ogabassey-desktop-hero="true"]')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Featured products' })
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Samsung Galaxy A27 5G' })
     ).toBeInTheDocument();
@@ -118,7 +124,7 @@ describe('HeroDesktopGrid', () => {
     expect(bigLink).toHaveAttribute('data-prefetch', 'false');
   });
 
-  it('serves the big hero image as a desktop-scoped eager LCP picture with an explicit AVIF tier', () => {
+  it('serves the big hero image as a desktop-scoped lazy picture with an explicit AVIF tier', () => {
     const { container } = render(<HeroDesktopGrid slides={SLIDES} />);
 
     const bigPicture = container.querySelector('picture');
@@ -140,8 +146,8 @@ describe('HeroDesktopGrid', () => {
     expect(container.innerHTML).not.toContain('format=auto');
 
     const img = container.querySelector('picture img');
-    expect(img).toHaveAttribute('loading', 'eager');
-    expect(img).toHaveAttribute('fetchpriority', 'high');
+    expect(img).toHaveAttribute('loading', 'lazy');
+    expect(img).toHaveAttribute('fetchpriority', 'low');
   });
 
   it('serves external desktop images with only the fallback source when no AVIF tier exists', () => {
@@ -164,8 +170,8 @@ describe('HeroDesktopGrid', () => {
     );
 
     const img = container.querySelector('picture img');
-    expect(img).toHaveAttribute('loading', 'eager');
-    expect(img).toHaveAttribute('fetchpriority', 'high');
+    expect(img).toHaveAttribute('loading', 'lazy');
+    expect(img).toHaveAttribute('fetchpriority', 'low');
     expect(container.innerHTML).not.toContain('format=avif');
   });
 

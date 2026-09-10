@@ -26,6 +26,7 @@ const runtimeRouteManifest = [
   '(catalog)/(pdp)/[category]/[productSlug]/page.tsx',
   '(catalog)/(pdp)/[category]/[productSlug]/loading.tsx',
   '(blog)/blog/page.tsx',
+  '(blog)/blog/loading.tsx',
   '(blog)/blog/[postSlug]/page.tsx',
   '(blog)/blog/[postSlug]/loading.tsx',
   '(content)/loading.tsx',
@@ -238,11 +239,14 @@ describe('storefront route groups', () => {
   });
 
   it('keeps root blog listing outside a route-family loading boundary', () => {
-    // The root blog listing owns crawlable article anchors in raw HTML for
-    // monitored SEO checks. Non-static merchants use an inline page Suspense
-    // boundary instead of a broad route-group loading.tsx shell.
+    // A group-level (blog)/loading.tsx would replace crawlable listing HTML
+    // with a family skeleton. The leaf (blog)/blog/loading.tsx owns first
+    // paint for /blog the same way compare/IMEI leaf loading files do.
     expect(existsSync(resolve(slugDirectory, '(blog)/loading.tsx'))).toBe(
       false
+    );
+    expect(existsSync(resolve(slugDirectory, '(blog)/blog/loading.tsx'))).toBe(
+      true
     );
   });
 

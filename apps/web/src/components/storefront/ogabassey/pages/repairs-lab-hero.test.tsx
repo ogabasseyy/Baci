@@ -10,7 +10,7 @@ vi.mock('next/link', () => ({
 }));
 
 describe('RepairsLabHero', () => {
-  it('paints the Repair Lab heading and landfill LCP paragraph', () => {
+  it('paints the Repair Lab heading and a visible short supporting line', () => {
     render(
       <RepairsLabHero repairHref="/repair" swapHref="/swap" />
     );
@@ -19,8 +19,24 @@ describe('RepairsLabHero', () => {
       screen.getByRole('heading', { name: 'Repair Lab' })
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/every device repaired is one less in a landfill/i)
-    ).toBeInTheDocument();
+      screen.getByText(/extend the life of your devices/i)
+    ).not.toHaveClass('sr-only');
+    expect(
+      screen.getByText(/certified technicians use genuine parts/i)
+    ).not.toHaveClass('sr-only');
+    const support = document.querySelector('[data-cwv-lcp-support]');
+    expect(support).toHaveTextContent(
+      'Every device repaired is one less in a landfill.'
+    );
+    expect(support?.textContent).not.toMatch(/certified technicians/i);
+    expect(support?.textContent).not.toMatch(/extend the life/i);
+    const fold = document.querySelector('[data-cwv-lcp-fold]');
+    expect(fold).toBeInTheDocument();
+    expect(fold?.textContent).not.toMatch(/extend the life/i);
+    expect(fold?.textContent).not.toMatch(/certified technicians/i);
+    expect(
+      document.querySelector('[data-cwv-lcp-copy="repairs"]')
+    ).toHaveTextContent(/Don't Ditch It/);
     expect(screen.getByRole('link', { name: /book a repair/i })).toHaveAttribute(
       'href',
       '/repair'

@@ -35,6 +35,8 @@ interface OgabasseyImeiEntryProps {
   isLoading: boolean;
   isPending: boolean;
   needsWalletFunding: boolean;
+  /** Set when the parent already committed the IMEI LCP hero. */
+  omitHero?: boolean;
   onCheck: (event: React.FormEvent) => void;
   onDeviceQueryChange: (value: string) => void;
   onDeviceSearchFocus: () => void;
@@ -65,6 +67,7 @@ export const OgabasseyImeiEntry = ({
   isLoading,
   isPending,
   needsWalletFunding,
+  omitHero = false,
   onCheck,
   onDeviceQueryChange,
   onDeviceSearchFocus,
@@ -95,7 +98,7 @@ export const OgabasseyImeiEntry = ({
 
   return (
     <div className="outline-none" ref={rootRef} tabIndex={-1}>
-      <ImeiCheckerHero />
+      {omitHero ? null : <ImeiCheckerHero />}
 
       <ImeiCheckerDeviceSearch
         deviceQuery={deviceQuery}

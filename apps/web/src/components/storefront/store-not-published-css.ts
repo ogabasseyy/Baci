@@ -1,4 +1,9 @@
-.page {
+/**
+ * Upcoming-store notice CSS. Keep this a TS string so Next does not emit a
+ * render-blocking CSS-module chunk on published storefront HTML.
+ */
+export const STORE_NOT_PUBLISHED_CSS = `
+.unpublished-store {
   --notice-ink: var(--store-background-text, #111827);
   --notice-paper: var(--store-background, #fffdf8);
   --notice-brand: var(--store-primary, #2a2c6e);
@@ -9,8 +14,7 @@
       transparent 1px
     ),
     linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--notice-ink) 5%, transparent) 1px,
+      90deg, color-mix(in srgb, var(--notice-ink) 5%, transparent) 1px,
       transparent 1px
     ),
     var(--notice-paper);
@@ -24,8 +28,7 @@
   padding: clamp(1rem, 4vw, 3rem);
   position: relative;
 }
-
-.glow {
+.unpublished-store__glow {
   background: var(--notice-brand);
   border-radius: 999px;
   filter: blur(110px);
@@ -36,9 +39,8 @@
   top: -14rem;
   width: min(55vw, 34rem);
 }
-
-.notice {
-  animation: notice-arrive 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.unpublished-store__notice {
+  animation: unpublished-store-notice-arrive 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
   backdrop-filter: blur(18px);
   background: color-mix(in srgb, var(--notice-paper) 88%, transparent);
   border: 1px solid color-mix(in srgb, var(--notice-ink) 15%, transparent);
@@ -47,8 +49,7 @@
   position: relative;
   width: 100%;
 }
-
-.notice::before {
+.unpublished-store__notice::before {
   background: var(--notice-brand);
   content: "";
   height: 4px;
@@ -57,21 +58,17 @@
   right: -1px;
   top: -1px;
 }
-
-.header,
-.footer {
+.unpublished-store__header,
+.unpublished-store__footer {
   align-items: center;
   display: flex;
   justify-content: space-between;
   padding: clamp(1.25rem, 3vw, 2rem);
 }
-
-.header {
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--notice-ink) 12%, transparent);
+.unpublished-store__header {
+  border-bottom: 1px solid color-mix(in srgb, var(--notice-ink) 12%, transparent);
 }
-
-.monogram {
+.unpublished-store__monogram {
   align-items: center;
   aspect-ratio: 1;
   background: var(--notice-ink);
@@ -82,8 +79,7 @@
   justify-content: center;
   width: 2.75rem;
 }
-
-.status {
+.unpublished-store__status {
   align-items: center;
   display: flex;
   font-size: 0.7rem;
@@ -92,21 +88,18 @@
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
-
-.statusDot {
-  animation: status-pulse 2.2s ease-in-out infinite;
+.unpublished-store__status-dot {
+  animation: unpublished-store-status-pulse 2.2s ease-in-out infinite;
   background: var(--notice-brand);
   border-radius: 999px;
   height: 0.5rem;
   width: 0.5rem;
 }
-
-.content {
+.unpublished-store__content {
   max-width: 53rem;
   padding: clamp(3.5rem, 9vw, 8rem) clamp(1.25rem, 7vw, 6rem);
 }
-
-.eyebrow {
+.unpublished-store__eyebrow {
   align-items: center;
   color: var(--notice-brand);
   display: flex;
@@ -117,8 +110,7 @@
   margin-bottom: 1.35rem;
   text-transform: uppercase;
 }
-
-.title {
+.unpublished-store__title {
   font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(3.25rem, 9vw, 7.5rem);
   font-weight: 400;
@@ -127,89 +119,67 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
-
-.message {
+.unpublished-store__message {
   color: color-mix(in srgb, var(--notice-ink) 68%, transparent);
   font-size: clamp(1rem, 2vw, 1.18rem);
   line-height: 1.75;
   margin: 2rem 0 0;
   max-width: 38rem;
 }
-
-.footer {
+.unpublished-store__footer {
   border-top: 1px solid color-mix(in srgb, var(--notice-ink) 12%, transparent);
   gap: 1rem;
 }
-
-.storeMark,
-.ownerLink {
+.unpublished-store__store-mark,
+.unpublished-store__owner-link {
   align-items: center;
   display: flex;
   gap: 0.55rem;
 }
-
-.storeMark {
+.unpublished-store__store-mark {
   color: color-mix(in srgb, var(--notice-ink) 62%, transparent);
   font-size: 0.82rem;
 }
-
-.ownerLink {
+.unpublished-store__owner-link {
   color: var(--notice-ink);
   font-size: 0.82rem;
   font-weight: 700;
-  text-decoration-color: color-mix(
-    in srgb,
-    var(--notice-brand) 45%,
-    transparent
-  );
+  text-decoration-color: color-mix(in srgb, var(--notice-brand) 45%, transparent);
   text-underline-offset: 0.35rem;
 }
-
-.ownerLink:hover {
+.unpublished-store__owner-link:hover {
   color: var(--notice-brand);
 }
-
-.signature {
+.unpublished-store__signature {
   color: color-mix(in srgb, var(--notice-ink) 50%, transparent);
   font-size: 0.68rem;
   letter-spacing: 0.12em;
   margin-top: 1.25rem;
   text-transform: uppercase;
 }
-
-@keyframes notice-arrive {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes unpublished-store-notice-arrive {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
-@keyframes status-pulse {
+@keyframes unpublished-store-status-pulse {
   50% {
-    box-shadow: 0 0 0 6px
-      color-mix(in srgb, var(--notice-brand) 12%, transparent);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--notice-brand) 12%, transparent);
   }
 }
-
 @media (max-width: 40rem) {
-  .footer {
+  .unpublished-store__footer {
     align-items: flex-start;
     flex-direction: column;
   }
-
-  .content {
+  .unpublished-store__content {
     padding-bottom: 4.5rem;
     padding-top: 4.5rem;
   }
 }
-
 @media (prefers-reduced-motion: reduce) {
-  .notice,
-  .statusDot {
+  .unpublished-store__notice,
+  .unpublished-store__status-dot {
     animation: none;
   }
 }
+`;

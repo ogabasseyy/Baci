@@ -13,5 +13,11 @@ describe('RepairsLabFallback', () => {
     expect(
       screen.getByText(/Every device repaired is one less in a landfill/i)
     ).toBeInTheDocument();
+    const support = document.querySelector('[data-cwv-lcp-support]');
+    const fold = document.querySelector('[data-cwv-lcp-fold]');
+    expect(support).toBeInTheDocument();
+    expect(fold).toBeInTheDocument();
+    expect(support).not.toHaveTextContent(/certified technicians/i);
+    expect(fold).not.toHaveTextContent(/extend the life/i);
   });
 });

@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import { ImeiCheckerHero } from '@/components/storefront/ogabassey/pages/imei-checker-hero';
+import { OgabasseyImeiCheckerShell } from '@/components/storefront/ogabassey/pages/imei-checker-shell';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import { getOgabasseyStaticParams } from '../../ogabassey-static-params';
 import { ImeiCheckFallback } from './imei-check-fallback';
@@ -24,8 +26,11 @@ export default function ImeiCheckPage({
   params: Promise<{ slug: string }>;
 }) {
   return (
-    <Suspense fallback={<ImeiCheckFallback />}>
-      <ImeiCheckPageContent params={params} />
-    </Suspense>
+    <OgabasseyImeiCheckerShell>
+      <ImeiCheckerHero />
+      <Suspense fallback={<ImeiCheckFallback hideHero />}>
+        <ImeiCheckPageContent params={params} />
+      </Suspense>
+    </OgabasseyImeiCheckerShell>
   );
 }

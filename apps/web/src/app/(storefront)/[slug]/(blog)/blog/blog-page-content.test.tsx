@@ -180,6 +180,18 @@ describe('BlogPageContent', () => {
     );
   });
 
+  it('does not preload a featured listing image when committed-text LCP hides the story', async () => {
+    render(
+      await BlogPageContent({
+        hideFeaturedStory: true,
+        params: Promise.resolve({ slug: 'ogabassey' }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+
+    expect(mockPreloadBlogListingFeaturedImage).not.toHaveBeenCalled();
+  });
+
   it('preloads the same first listing image used by the OgaBassey hero story', async () => {
     const firstPost = {
       ...postsPayload[0],

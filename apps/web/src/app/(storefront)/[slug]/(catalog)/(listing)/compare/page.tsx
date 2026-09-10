@@ -180,7 +180,7 @@ export async function generateMetadata({
   };
 }
 
-async function CompareIndexRuntime(props: CompareIndexPageProps) {
+export async function CompareIndexRuntime(props: CompareIndexPageProps) {
   await connection();
   const { slug } = await props.params;
 
@@ -197,10 +197,12 @@ async function CompareIndexRuntime(props: CompareIndexPageProps) {
 
     if (!queryFailed && hasActiveCompareCategory(categories)) {
       return (
-        <CategoryPageRoute
-          titleHeading="h2"
-          {...buildCompareCategoryPageProps(slug, props.searchParams)}
-        />
+        <div data-compare-category-page="">
+          <CategoryPageRoute
+            titleHeading="h2"
+            {...buildCompareCategoryPageProps(slug, props.searchParams)}
+          />
+        </div>
       );
     }
   }
@@ -212,23 +214,25 @@ export default function CompareIndexPage(props: CompareIndexPageProps) {
   return (
     <main className="min-h-screen bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20 pt-6">
       <div className="mx-auto max-w-[1400px] px-4 md:px-6">
-        <nav
-          aria-label="Breadcrumb"
-          className="flex items-center gap-2 text-sm text-store-background-text/55"
-        >
-          <Link
-            className="transition-colors hover:text-store-primary"
-            href={asRoute('..')}
-            prefetch={false}
+        <div data-compare-hub-chrome="">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center gap-2 text-sm text-store-background-text/55"
           >
-            Home
-          </Link>{' '}
-          <span aria-hidden="true">/</span>{' '}
-          <span className="font-medium text-store-background-text">
-            Compare products
-          </span>
-        </nav>
-        <CompareHubIntro />
+            <Link
+              className="transition-colors hover:text-store-primary"
+              href={asRoute('.')}
+              prefetch={false}
+            >
+              Home
+            </Link>{' '}
+            <span aria-hidden="true">/</span>{' '}
+            <span className="font-medium text-store-background-text">
+              Compare products
+            </span>
+          </nav>
+          <CompareHubIntro />
+        </div>
         <Suspense fallback={<CompareIndexFallback hideChrome />}>
           <CompareIndexRuntime {...props} />
         </Suspense>

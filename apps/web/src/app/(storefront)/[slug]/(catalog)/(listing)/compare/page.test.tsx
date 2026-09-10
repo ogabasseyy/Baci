@@ -118,9 +118,11 @@ const categories = [
   },
 ] satisfies CachedCategories;
 
-const { default: CompareIndexPage, generateStaticParams } = await import(
-  './page'
-);
+const {
+  CompareIndexRuntime,
+  default: CompareIndexPage,
+  generateStaticParams,
+} = await import('./page');
 
 describe('compare index page runtime', () => {
   beforeEach(() => {
@@ -137,6 +139,7 @@ describe('compare index page runtime', () => {
       <div>Compare category content</div>
     ));
     mockConnection.mockReset();
+    mockConnection.mockResolvedValue(undefined);
     mockNotFound.mockClear();
   });
 
@@ -168,7 +171,7 @@ describe('compare index page runtime', () => {
     ).toHaveTextContent('Home / Compare products');
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
       'href',
-      '..'
+      '.'
     );
     const main = screen.getByRole('main');
     expect(main).toContainElement(
@@ -181,5 +184,47 @@ describe('compare index page runtime', () => {
       screen.queryByRole('status', { name: 'Loading product listing' })
     ).not.toBeInTheDocument();
     expect(screen.queryByText('Compare index content')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-compare-hub-chrome]')).not.toBeNull();
+  });
+
+  it('keeps Home on the storefront origin for slug-prefixed compare URLs', () => {
+    expect(new URL('.', 'https://baci.app/ogabassey/compare').pathname).toBe(
+      '/ogabassey/'
+    );
+    expect(new URL('..', 'https://baci.app/ogabassey/compare').pathname).toBe(
+      '/'
+    );
+  });
+
+  it('marks a real compare category so first-paint CSS can hide the hub shell', async () => {
+    vi.mocked(getCachedCategories).mockResolvedValue([
+      {
+        ...categories[0],
+        name: 'Compare',
+        slug: 'compare',
+      },
+    ]);
+
+    render(
+      await CompareIndexRuntime({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+
+    expect(screen.getByText('Compare category content')).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-compare-category-page]')
+    ).not.toBeNull();
+  });
+
+  it('does not mark the hub as a category page when compare is not a category', async () => {
+    render(
+      await CompareIndexRuntime({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+
+    expect(screen.getByText('Compare index content')).toBeInTheDocument();
+    expect(document.querySelector('[data-compare-category-page]')).toBeNull();
   });
 });

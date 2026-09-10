@@ -35,7 +35,7 @@ describe('CompareIndexFallback', () => {
     ).toHaveTextContent('Home / Compare products');
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
       'href',
-      '..'
+      '.'
     );
     expect(
       screen.queryByRole('status', { name: 'Loading product listing' })
@@ -70,7 +70,7 @@ describe('CompareIndexFallback', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
       'href',
-      '..'
+      '.'
     );
   });
 });

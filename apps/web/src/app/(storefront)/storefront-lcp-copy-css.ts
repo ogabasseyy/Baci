@@ -165,15 +165,20 @@ html, body {
 }
 
 /*
-  Filtered blog listings and completed IMEI reports emit these markers after
-  resume. Keep the hide rules on the first-paint sheet so they do not wait on
-  StorefrontBlogStyleLoader / first input.
+  Filtered blog listings, completed IMEI reports, and a real compare
+  category page emit these markers after resume. Keep the hide rules on the
+  first-paint sheet so they do not wait on StorefrontBlogStyleLoader / first
+  input.
 */
 body:has([data-blog-listing-filtered]) [data-blog-lcp-hero] {
   display: none;
 }
 
 body:has([data-imei-result]) [data-imei-lcp-hero] {
+  display: none;
+}
+
+body:has([data-compare-category-page]) [data-compare-hub-chrome] {
   display: none;
 }
 `;

@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/font/google', () => ({
   Inter: () => ({
@@ -11,6 +11,11 @@ vi.mock('next/font/google', () => ({
 const { AppSansFont } = await import('./app-sans-font');
 
 describe('AppSansFont', () => {
+  afterEach(() => {
+    cleanup();
+    document.body.className = '';
+  });
+
   it('applies the Inter CSS variable to non-storefront app chrome', () => {
     render(
       <AppSansFont>
@@ -22,5 +27,6 @@ describe('AppSansFont', () => {
       'font-sans',
       'font-sans-inter'
     );
+    expect(document.body).toHaveClass('font-sans', 'font-sans-inter');
   });
 });

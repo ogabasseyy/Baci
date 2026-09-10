@@ -128,6 +128,9 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(lcpCopyCss).toContain(
       'body:has([data-imei-result]) [data-imei-lcp-hero]'
     );
+    expect(lcpCopyCss).toContain(
+      'body:has([data-compare-category-page]) [data-compare-hub-chrome]'
+    );
   });
 
   it('keeps blog post renderer CSS off the listing stylesheet', () => {

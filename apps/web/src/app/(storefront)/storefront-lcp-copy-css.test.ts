@@ -20,5 +20,8 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'body:has([data-imei-result]) [data-imei-lcp-hero]'
     );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      'body:has([data-compare-category-page]) [data-compare-hub-chrome]'
+    );
   });
 });

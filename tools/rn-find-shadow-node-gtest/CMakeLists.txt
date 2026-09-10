@@ -64,8 +64,10 @@ add_react_third_party_ndk_subdir(double-conversion)
 add_react_third_party_ndk_subdir(fast_float)
 add_react_third_party_ndk_subdir(fmt)
 add_react_third_party_ndk_subdir(folly)
-# Ubuntu GCC 13+ promotes Folly F14MapFallback memcpy to -Werror=class-memaccess.
-target_compile_options(folly_runtime PRIVATE -Wno-error=class-memaccess -Wno-class-memaccess)
+# Ubuntu GCC 13+: Folly F14MapFallback memcpy must not fail consumers (jsi, etc.).
+target_compile_options(folly_runtime PUBLIC
+  -Wno-error=class-memaccess
+  -Wno-class-memaccess)
 
 add_library(glog_init OBJECT
   ${REACT_ANDROID_DIR}/src/main/jni/first-party/fbgloginit/glog_init.cpp)

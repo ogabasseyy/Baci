@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       asan:
-        description: 'Also rebuild under AddressSanitizer (second job matrix entry is always on for PRs)'
+        description: 'Also rebuild under AddressSanitizer'
         type: boolean
         default: true
 
@@ -30,16 +30,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  matrix:
+    name: Resolve sanitizer matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      include: ${{ steps.resolve.outputs.include }}
+    steps:
+      - name: Resolve matrix
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ASAN_INPUT: ${{ inputs.asan }}
+        run: |
+          set -euo pipefail
+          # PRs and pushes always run plain + ASAN. Manual dispatch honors inputs.asan.
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$ASAN_INPUT" != "true" ]]; then
+            include='[{"sanitizer":""}]'
+          else
+            include='[{"sanitizer":""},{"sanitizer":"address"}]'
+          fi
+          echo "include=$include" >> "$GITHUB_OUTPUT"
+
   find-shadow-node-gtest:
     name: Compile + run FindShadowNodeByTagTest (${{ matrix.sanitizer || 'plain' }})
+    needs: matrix
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - sanitizer: ''
-          - sanitizer: address
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -50,7 +71,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build g++ python3 curl ca-certificates libboost-dev
+            cmake ninja-build g++ python3 curl ca-certificates libboost-dev openssl
 
       - name: Install JS deps (applies patches/react-native@*)
         uses: ./.github/actions/pnpm-install-cached
@@ -63,5 +84,6 @@ jobs:
           BACI_RN_GTEST_SANITIZER: ${{ matrix.sanitizer }}
         run: |
           chmod +x tools/rn-find-shadow-node-gtest/run.sh \
-                   tools/rn-find-shadow-node-gtest/bootstrap-native-deps.sh
+                   tools/rn-find-shadow-node-gtest/bootstrap-native-deps.sh \
+                   tools/rn-find-shadow-node-gtest/bootstrap-download.sh
           ./tools/rn-find-shadow-node-gtest/run.sh

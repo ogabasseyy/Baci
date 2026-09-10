@@ -10,6 +10,11 @@ on:
       - 'package.json'
       - 'pnpm-workspace.yaml'
       - '.npmrc'
+      # pnpm patches ship native code (Fabric/UIManager ownership fix); a patch
+      # or lockfile-only change must still trigger an Android release build when
+      # buildReactNativeFromSource compiles ReactAndroid from repository sources.
+      - 'patches/**'
+      - 'pnpm-lock.yaml'
     tags:
       # Tag pushes bypass the paths filter above (GitHub Actions behaviour).
       - "v*-storefront"

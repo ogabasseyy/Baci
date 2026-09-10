@@ -170,6 +170,7 @@ vi.mock('./category-page-content-helpers', () => ({
     mockNormalizeCategoryPageProducts(...args),
   resolveCategoryPageName: (...args: unknown[]) =>
     mockResolveCategoryPageName(...args),
+  toCollectionSchemaProduct: (product: unknown) => product,
 }));
 
 const { CategoryPageContent } = await import('./category-page-content');

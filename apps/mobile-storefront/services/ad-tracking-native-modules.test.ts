@@ -24,7 +24,7 @@ jest.mock('react-native-fbsdk-next/src/FBSettings', () => {
       setAppID: jest.fn(),
       setClientToken: jest.fn(),
       // Patched native bridge resolves after fullyInitialize on Android too.
-      initializeSDK: (...args: unknown[]) => mockInitializeSDK(...args),
+      initializeSDK: () => mockInitializeSDK(),
     },
   };
 });

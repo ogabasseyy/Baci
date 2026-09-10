@@ -304,7 +304,6 @@ overrides:
   "@babel/core": "7.29.6"
 
 patchedDependencies:
-  expo-modules-jsi@57.0.5: patches/expo-modules-jsi@57.0.5.patch
   "@react-native-community/datetimepicker@9.1.0": "patches/@react-native-community/datetimepicker@9.1.0.patch"
   "@react-native-google-signin/google-signin@16.1.2": "patches/@react-native-google-signin/google-signin@16.1.2.patch"
   "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch"
@@ -319,6 +318,12 @@ patchedDependencies:
   "react-native-webview@13.16.1": "patches/react-native-webview@13.16.1.patch"
   react-native@0.86.2: patches/react-native@0.86.2.patch
   "react-native-fbsdk-next@13.4.3": "patches/react-native-fbsdk-next@13.4.3.patch"
+  # Xcode 26.2 / Swift 6.2 rejects SWIFT_RETURNS_RETAINED on RuntimeScheduler
+  # constructors in expo-modules-jsi@57.0.5: the class's SWIFT_SHARED_REFERENCE
+  # is declared at the closing brace, so the constructors fail the iOS archive.
+  # Drop the constructor annotations (57.0.4 did without them). Re-key this
+  # patch if the lockfile moves off 57.0.5.
+  "expo-modules-jsi@57.0.5": "patches/expo-modules-jsi@57.0.5.patch"
   image-size@1.2.1: patches/image-size@1.2.1.patch
   "next@16.3.4": "patches/next@16.3.4.patch"
   '@supabase/auth-js@2.108.2': patches/@supabase__auth-js@2.108.2.patch

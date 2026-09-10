@@ -363,6 +363,7 @@ jobs:
           .github/scripts/deploy-with-retry.test.mjs
           .github/scripts/run-pinned-vercel.test.mjs
           .github/scripts/assert-vercel-pulled-sensitive-env.test.mjs
+          .github/scripts/ensure-vercel-sensitive-env.test.mjs
           .github/scripts/inject-prebuilt-env-secret.jwk.test.mjs
           .github/scripts/inject-prebuilt-env-secret.test.mjs
           .github/scripts/sync-cloudflare-vercel-production-env.test.mjs

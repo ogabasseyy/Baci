@@ -99,6 +99,9 @@ jobs:
       - name: Verify Swift RuntimeScheduler compatibility
         run: node --test .github/scripts/ios-runtime-scheduler.test.mjs
 
+      - name: Verify Podfile precompiled-modules precedence
+        run: node --test apps/mobile-storefront/ios/podfile-precompiled-modules-precedence.test.mjs
+
       - name: Expose PostHog CLI to Xcode
         working-directory: ${{ env.WORKING_DIR }}
         run: bash "${{ github.workspace }}/.github/scripts/ios-storefront-release.sh" expose-posthog-cli

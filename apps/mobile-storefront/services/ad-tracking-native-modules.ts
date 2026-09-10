@@ -4,7 +4,7 @@ import { loadFacebookTrackingModules } from './load-facebook-tracking-modules';
 import type { TikTokEventData } from './tiktok-event-data';
 
 export interface FBSettingsLike {
-  initializeSDK: () => void;
+  initializeSDK: () => void | Promise<boolean>;
   setAdvertiserTrackingEnabled: (enabled: boolean) => void;
 }
 
@@ -77,9 +77,9 @@ export async function loadAdTrackingNativeModules(): Promise<AdTrackingNativeMod
     ]);
 
     if (fb) {
-      modules.FBSettings = fb[0].default as unknown as FBSettingsLike;
-      modules.AppEventsLogger = fb[1].default as unknown as AppEventsLoggerLike;
-      modules.AEMReporterIOS = fb[2].default as unknown as AEMReporterIOSLike;
+      modules.FBSettings = fb.settings as FBSettingsLike;
+      modules.AppEventsLogger = fb.events as AppEventsLoggerLike;
+      modules.AEMReporterIOS = fb.aem as AEMReporterIOSLike;
     }
     modules.TikTokBusiness = (tt.default ||
       tt) as unknown as TikTokBusinessLike;

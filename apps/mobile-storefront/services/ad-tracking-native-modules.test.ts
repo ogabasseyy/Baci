@@ -22,7 +22,8 @@ jest.mock('react-native-fbsdk-next/src/FBSettings', () => {
     default: {
       setAppID: jest.fn(),
       setClientToken: jest.fn(),
-      initializeSDK: jest.fn(),
+      // Patched native bridge resolves after fullyInitialize on Android too.
+      initializeSDK: jest.fn(async () => true),
     },
   };
 });
@@ -48,33 +49,29 @@ describe('loadAdTrackingNativeModules', () => {
   });
 
   it('does not import an unconfigured Facebook SDK on Android', async () => {
-    // Arrange
     const { loadAdTrackingNativeModules } = await import(
       './ad-tracking-native-modules'
     );
 
-    // Act
     const modules = await loadAdTrackingNativeModules();
 
-    // Assert
     expect(mockFacebookImport).not.toHaveBeenCalled();
     expect(modules.FBSettings).toBeNull();
     expect(modules.TikTokBusiness?.trackEvent).toBe(mockTikTokTrackEvent);
   });
 
   it('loads tracking without evaluating the uninitialized login module when configured', async () => {
-    // Arrange
     mockExtra.facebookAppId = 'test-app-id';
     mockExtra.facebookClientToken = 'test-client-token';
     const { loadAdTrackingNativeModules } = await import(
       './ad-tracking-native-modules'
     );
 
-    // Act
     const modules = await loadAdTrackingNativeModules();
 
-    // Assert
     expect(mockFacebookImport).toHaveBeenCalledTimes(1);
     expect(modules.FBSettings).not.toBeNull();
+    expect(modules.AppEventsLogger).not.toBeNull();
+    expect(modules.AEMReporterIOS).not.toBeNull();
   });
 });

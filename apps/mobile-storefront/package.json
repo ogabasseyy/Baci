@@ -20,7 +20,7 @@
     "check:route-size": "node ./scripts/check-route-size.mjs",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand && node --test ios/podfile-precompiled-modules-precedence.test.mjs"
   },
   "dependencies": {
     "@baci/shared": "workspace:*",
@@ -84,7 +84,7 @@
     "react-hook-form": "^7.79.0",
     "react-native": "0.86.2",
     "react-native-css-interop": "^0.2.5",
-    "react-native-fbsdk-next": "^13.4.3",
+    "react-native-fbsdk-next": "13.4.3",
     "react-native-google-mobile-ads": "16.3.4",
     "react-native-gesture-handler": "~3.0.1",
     "react-native-google-places-autocomplete": "^2.6.4",

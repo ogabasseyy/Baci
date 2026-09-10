@@ -43,6 +43,21 @@ elseif(NOT BACI_RN_GTEST_SANITIZER STREQUAL "")
   message(FATAL_ERROR "Unsupported BACI_RN_GTEST_SANITIZER=${BACI_RN_GTEST_SANITIZER}")
 endif()
 
+# Host GCC (Ubuntu CI) differs from Android NDK include/Werror defaults.
+if(NOT APPLE)
+  add_compile_options(
+    -Wno-error=class-memaccess
+    -Wno-class-memaccess
+    -Wno-error=maybe-uninitialized
+    -Wno-maybe-uninitialized
+  )
+  # AnsiParser.h uses uint8_t without <cstdint>; NDK headers pull it transitively.
+  add_compile_options(
+    "$<$<COMPILE_LANGUAGE:CXX>:-include>"
+    "$<$<COMPILE_LANGUAGE:CXX>:cstdint>"
+  )
+endif()
+
 include(${REACT_COMMON_DIR}/cmake-utils/react-native-flags.cmake)
 include(${REACT_COMMON_DIR}/cmake-utils/internal/react-native-platform-selector.cmake)
 

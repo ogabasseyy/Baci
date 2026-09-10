@@ -218,7 +218,7 @@ if(APPLE)
   target_link_libraries(find_shadow_node_by_tag_test PRIVATE "-framework Foundation")
 else()
   find_package(Threads REQUIRED)
-  target_link_libraries(find_shadow_node_by_tag_test PRIVATE Threads::Threads dl)
+  target_link_libraries(find_shadow_node_by_tag_test PRIVATE Threads::Threads dl atomic)
 endif()
 
 target_compile_reactnative_options(find_shadow_node_by_tag_test PRIVATE)

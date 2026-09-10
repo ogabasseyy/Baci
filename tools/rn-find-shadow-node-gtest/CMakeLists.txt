@@ -236,6 +236,7 @@ if(NOT APPLE)
         $<$<COMPILE_LANGUAGE:CXX>:-Wno-maybe-uninitialized>
         $<$<COMPILE_LANGUAGE:CXX>:-Wno-unknown-pragmas>
         $<$<COMPILE_LANGUAGE:CXX>:-Wno-pragmas>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wno-changes-meaning>
       )
     endforeach()
     get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)

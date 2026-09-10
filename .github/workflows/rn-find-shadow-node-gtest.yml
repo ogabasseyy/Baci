@@ -71,13 +71,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build g++ python3 curl ca-certificates libboost-dev openssl
+            cmake ninja-build clang g++ python3 curl ca-certificates libboost-dev openssl
 
       - name: Install JS deps (applies patches/react-native@*)
         uses: ./.github/actions/pnpm-install-cached
 
       - name: Fail-closed patch contract
-        run: node --test .github/scripts/rn-find-shadow-node-gtest.test.mjs
+        run: |
+          node --test \
+            .github/scripts/rn-find-shadow-node-gtest.test.mjs \
+            tools/rn-find-shadow-node-gtest/apply-suite-flag-off.test.mjs
 
       - name: Compile and execute real FindShadowNodeByTagTest.cpp
         env:

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -13,6 +14,10 @@ const bootstrapDownload = join(
   'tools/rn-find-shadow-node-gtest/bootstrap-download.sh',
 );
 const workflow = join(root, '.github/workflows/rn-find-shadow-node-gtest.yml');
+const applySuiteFlagOff = join(
+  root,
+  'tools/rn-find-shadow-node-gtest/apply-suite-flag-off.py',
+);
 const patch = join(root, 'patches/react-native@0.86.2.patch');
 const rnTest = join(
   root,
@@ -28,6 +33,7 @@ test('gtest harness and workflow exist', () => {
   assert.equal(existsSync(cmake), true);
   assert.equal(existsSync(bootstrap), true);
   assert.equal(existsSync(bootstrapDownload), true);
+  assert.equal(existsSync(applySuiteFlagOff), true);
   assert.equal(existsSync(workflow), true);
   assert.equal(existsSync(patch), true);
 });
@@ -51,24 +57,38 @@ test('CMakeLists compiles the real node_modules suite path', () => {
   assert.match(body, /add_executable\(find_shadow_node_by_tag_test/);
 });
 
-test('installed react-native carries the flag-disabled ownership suite', () => {
+test('package patch stays ≤300 lines and owns UIManager; suite flag-off is applied by harness', () => {
+  const patchBody = readFileSync(patch, 'utf8');
+  assert.ok(
+    patchBody.split(/\r?\n/).length <= 300,
+    'patches/react-native@0.86.2.patch must stay at or under 300 lines',
+  );
+  assert.match(patchBody, /getCurrentRevision\(\)\.rootShadowNode/);
+  assert.doesNotMatch(patchBody, /FindShadowNodeByTagTest\.cpp/);
   assert.equal(existsSync(rnTest), true, 'pnpm install must materialize react-native');
   assert.equal(existsSync(uiManager), true);
-  const suite = readFileSync(rnTest, 'utf8');
   const impl = readFileSync(uiManager, 'utf8');
+  assert.match(impl, /getCurrentRevision\(\)\.rootShadowNode/);
+  assert.doesNotMatch(impl, /fixFindShadowNodeByTagRaceCondition\(\)/);
+
+  const applied = spawnSync('python3', [applySuiteFlagOff, rnTest], {
+    encoding: 'utf8',
+  });
+  assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+  const suite = readFileSync(rnTest, 'utf8');
   assert.match(suite, /Exercise the production default/);
   assert.match(suite, /return false;/);
   assert.match(suite, /ConcurrentFindAndCommitStress/);
-  assert.match(impl, /getCurrentRevision\(\)\.rootShadowNode/);
-  assert.doesNotMatch(impl, /fixFindShadowNodeByTagRaceCondition\(\)/);
 });
 
 test('run.sh targets the node_modules suite and gtest filter', () => {
   const body = readFileSync(runSh, 'utf8');
   assert.match(body, /FindShadowNodeByTagTest\.cpp/);
+  assert.match(body, /apply-suite-flag-off\.py/);
   assert.match(body, /--gtest_filter='FindShadowNodeByTagTest\.\*'/);
   assert.match(body, /Exercise the production default/);
   assert.match(body, /getCurrentRevision\(\)\.rootShadowNode/);
+  assert.match(body, /clang\+\+/);
 });
 
 test('bootstrap keeps RN glog config.h namespace macros (no config.h.in overwrite)', () => {

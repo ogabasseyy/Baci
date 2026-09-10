@@ -295,15 +295,3 @@ diff --git a/ReactCommon/react/renderer/uimanager/UIManager.cpp b/ReactCommon/re
 +    // can retire the root after a cancelled tryCommit releases its lock.
 +    const auto rootShadowNode =
 +        shadowTree.getCurrentRevision().rootShadowNode;
-diff --git a/ReactCommon/react/renderer/uimanager/tests/FindShadowNodeByTagTest.cpp b/ReactCommon/react/renderer/uimanager/tests/FindShadowNodeByTagTest.cpp
---- a/ReactCommon/react/renderer/uimanager/tests/FindShadowNodeByTagTest.cpp
-+++ b/ReactCommon/react/renderer/uimanager/tests/FindShadowNodeByTagTest.cpp
-@@ -24,6 +24,7 @@
-     : public ReactNativeFeatureFlagsDefaults {
-  public:
-   bool fixFindShadowNodeByTagRaceCondition() override {
--    return true;
-+    // Exercise the production default: the ownership fix must not rely on opt-in.
-+    return false;
-   }
- };

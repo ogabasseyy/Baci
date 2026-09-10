@@ -38,6 +38,8 @@ mobile_storefront:
   - '.github/scripts/android-storefront-release.test.sh'
   - '.github/scripts/ios-storefront-release.sh'
   - '.github/scripts/ios-storefront-release.test.sh'
+  - '.github/scripts/verify-ios-expo-jsi-symbols.mjs'
+  - '.github/scripts/verify-ios-expo-jsi-symbols.test.mjs'
   - '.github/workflows/android-storefront-release.yml'
   - '.github/workflows/ios-storefront-release.yml'
   - 'packages/shared/**'

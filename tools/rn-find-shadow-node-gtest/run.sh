@@ -28,8 +28,10 @@ if grep -q 'fixFindShadowNodeByTagRaceCondition()' "$UIMANAGER_SRC"; then
   echo "error: UIManager.cpp still gates ownership on the feature flag" >&2
   exit 1
 fi
+# Suite flag-off stays out of the package patch (300-line cap); apply here.
+python3 "$TOOL_DIR/apply-suite-flag-off.py" "$TEST_SRC"
 if ! grep -q 'Exercise the production default' "$TEST_SRC"; then
-  echo "error: FindShadowNodeByTagTest.cpp is not the flag-disabled patched suite" >&2
+  echo "error: FindShadowNodeByTagTest.cpp is not the flag-disabled suite" >&2
   exit 1
 fi
 if ! grep -q 'return false;' "$TEST_SRC"; then
@@ -40,7 +42,7 @@ if ! grep -q 'ConcurrentFindAndCommitStress' "$TEST_SRC"; then
   echo "error: FindShadowNodeByTagTest.cpp is missing ConcurrentFindAndCommitStress" >&2
   exit 1
 fi
-echo "ok: patched suite + UIManager ownership fix present"
+echo "ok: UIManager ownership fix + flag-off suite present"
 
 SANITIZER_CMAKE_ARG=()
 if [[ -n "${BACI_RN_GTEST_SANITIZER:-}" ]]; then
@@ -78,6 +80,10 @@ CMAKE_CONFIG=(
   -DREACT_NATIVE_DIR="$RN_DIR"
   -DBACI_RN_GTEST_WORK="$WORK"
 )
+# Prefer Clang on Linux: closer to NDK and avoids host-GCC -Wchanges-meaning on RN headers.
+if [[ "$(uname -s)" == "Linux" ]] && command -v clang++ >/dev/null 2>&1; then
+  CMAKE_CONFIG+=(-DCMAKE_C_COMPILER="${CC:-clang}" -DCMAKE_CXX_COMPILER="${CXX:-clang++}")
+fi
 if [[ ${#SANITIZER_CMAKE_ARG[@]} -gt 0 ]]; then
   CMAKE_CONFIG+=("${SANITIZER_CMAKE_ARG[@]}")
 fi

@@ -53,6 +53,10 @@ describe('storefront full stylesheet source boundary', () => {
     }
   });
 
+  it('emits utilities that exist only on shared [slug] modules outside route groups', () => {
+    expect(css).toContain('min-height:40vh');
+  });
+
   it('does not seed the expected utilities when only this test is scanned', async () => {
     const result = await postcss([
       tailwind({ base: temporaryRoot, optimize: true }),

@@ -24,7 +24,11 @@ export const COMPARE_INDEX_TOTAL_LINK_LIMIT = 800;
 // payload with ~4.8s LCP element-render delay in mobile PSI.
 export const COMPARE_HUB_PAGE_CATEGORY_LIMIT = 8;
 export const COMPARE_HUB_PAGE_LINKS_PER_CATEGORY_LIMIT = 4;
-export const COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT = 5;
+// Discovery window for the visible hub. Keep this aligned with sitemap/
+// metadata scans so a category whose first few products lack key specs can
+// still surface later pairs. Emitted HTML stays capped by the link limits.
+export const COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT =
+  COMPARE_INDEX_PRODUCTS_PER_CATEGORY_LIMIT;
 export const COMPARE_HUB_PAGE_TOTAL_LINK_LIMIT = 24;
 
 interface CompareIndexCategory {

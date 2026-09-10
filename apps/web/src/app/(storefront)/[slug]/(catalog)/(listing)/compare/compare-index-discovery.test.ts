@@ -235,6 +235,47 @@ describe('compare index discovery', () => {
     );
   });
 
+  it('discovers hub compare links from later products when the first few lack key specs', async () => {
+    const products = [
+      ...makeProducts(5).map((product) => ({
+        ...product,
+        product_key_specs: {},
+      })),
+      makeProduct(5),
+      makeProduct(6),
+    ];
+
+    const truncated = await buildCompareIndexSections({
+      categories: [{ name: 'Laptops', slug: 'laptops' }],
+      getCategoryPageData: vi.fn(async () => ({
+        isCollection: false,
+        isInactiveCategory: false,
+        products,
+      })),
+      linksPerCategoryLimit: 4,
+      productLimit: 5,
+      storeUrl: 'https://store.test',
+      totalLinkLimit: 24,
+    });
+    const discovered = await buildCompareIndexSections({
+      categories: [{ name: 'Laptops', slug: 'laptops' }],
+      getCategoryPageData: vi.fn(async () => ({
+        isCollection: false,
+        isInactiveCategory: false,
+        products,
+      })),
+      linksPerCategoryLimit: 4,
+      productLimit: COMPARE_INDEX_PRODUCTS_PER_CATEGORY_LIMIT,
+      storeUrl: 'https://store.test',
+      totalLinkLimit: 24,
+    });
+
+    expect(truncated).toEqual([]);
+    expect(discovered).toHaveLength(1);
+    expect(discovered[0]?.links.length).toBeGreaterThan(0);
+    expect(discovered[0]?.links.length).toBeLessThanOrEqual(4);
+  });
+
   it('enforces the configured product cap even when category data returns extra rows', async () => {
     const sections = await buildCompareIndexSections({
       categories: [{ name: 'Category A', slug: 'category-a' }],

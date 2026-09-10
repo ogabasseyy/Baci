@@ -77,6 +77,8 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(fullCss).not.toMatch(/@source\s+["']\.\/["']/);
     expect(fullCss).not.toMatch(/@source\s+["'][^"']*\(home\)/);
     expect(fullCss).not.toMatch(/@source\s+["'][^"']*\(blog\)/);
+    expect(fullCss).not.toMatch(/@source\s+["']\.\/\[slug\]["']/);
+    expect(fullCss).toMatch(/@source\s+["']\.\/\[slug\]\/\*\.tsx["']/);
     expect(fullCss).toMatch(/@source\s+["']\.\/\[slug\]\/\(utility\)["']/);
     expect(fullCss).toMatch(/@source\s+["']\.\/\[slug\]\/\(catalog\)["']/);
   });

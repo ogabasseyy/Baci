@@ -263,7 +263,7 @@ describe('ComparePageContent', () => {
     expect(mockNotFound).toHaveBeenCalledTimes(1);
   });
 
-  it('caps visible compare hub product scans instead of dumping the discovery graph into HTML', async () => {
+  it('scans the full hub discovery window while still capping emitted compare links', async () => {
     const { COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT } = await import(
       './compare-index-discovery'
     );
@@ -281,6 +281,7 @@ describe('ComparePageContent', () => {
       0,
       COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT
     );
+    expect(COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT).toBeGreaterThan(5);
     expect(
       screen.getAllByRole('link', { name: /Compare / }).length
     ).toBeLessThanOrEqual(4);

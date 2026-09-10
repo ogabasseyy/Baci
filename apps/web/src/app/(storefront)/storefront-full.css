@@ -17,6 +17,11 @@
 @source "./[slug]/(content)";
 @source "./[slug]/(customer)";
 @source "./[slug]/(catalog)";
+/* Shared modules live directly under [slug], not inside a route group.
+   Tailwind scans sources as plain text and does not follow imports, so
+   `./[slug]/*.tsx` is required. Do not register `./[slug]` itself — that
+   recursively includes (home)/(blog) and re-grows this sheet. */
+@source "./[slug]/*.tsx";
 @source "../../components/storefront";
 @source "../../components/ui";
 @source "../../components/themed";

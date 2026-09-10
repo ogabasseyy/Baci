@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 const mockFacebookImport = jest.fn();
+const mockInitializeSDK = jest.fn(async () => true);
 const mockTikTokTrackEvent = jest.fn();
 const mockExtra: Record<string, unknown> = {};
 
@@ -23,7 +24,7 @@ jest.mock('react-native-fbsdk-next/src/FBSettings', () => {
       setAppID: jest.fn(),
       setClientToken: jest.fn(),
       // Patched native bridge resolves after fullyInitialize on Android too.
-      initializeSDK: jest.fn(async () => true),
+      initializeSDK: (...args: unknown[]) => mockInitializeSDK(...args),
     },
   };
 });
@@ -44,6 +45,8 @@ describe('loadAdTrackingNativeModules', () => {
   beforeEach(() => {
     jest.resetModules();
     mockFacebookImport.mockClear();
+    mockInitializeSDK.mockReset();
+    mockInitializeSDK.mockImplementation(async () => true);
     delete mockExtra.facebookAppId;
     delete mockExtra.facebookClientToken;
   });
@@ -73,5 +76,57 @@ describe('loadAdTrackingNativeModules', () => {
     expect(modules.FBSettings).not.toBeNull();
     expect(modules.AppEventsLogger).not.toBeNull();
     expect(modules.AEMReporterIOS).not.toBeNull();
+    expect(modules.TikTokBusiness?.trackEvent).toBe(mockTikTokTrackEvent);
+  });
+
+  describe('bugfix: TikTok coupled to Facebook initializeSDK', () => {
+    it('still assigns TikTokBusiness when Facebook initializeSDK rejects', async () => {
+      mockExtra.facebookAppId = 'test-app-id';
+      mockExtra.facebookClientToken = 'test-client-token';
+      mockInitializeSDK.mockImplementation(async () => {
+        throw new Error('initializeSDK stalled');
+      });
+
+      const { loadAdTrackingNativeModules } = await import(
+        './ad-tracking-native-modules'
+      );
+      const modules = await loadAdTrackingNativeModules();
+
+      expect(modules.FBSettings).toBeNull();
+      expect(modules.TikTokBusiness?.trackEvent).toBe(mockTikTokTrackEvent);
+    });
+
+    it('fires onTikTokReady before a hung Facebook initializeSDK resolves', async () => {
+      mockExtra.facebookAppId = 'test-app-id';
+      mockExtra.facebookClientToken = 'test-client-token';
+      let resolveInitialize: ((value: boolean) => void) | undefined;
+      let notifyInitializeStarted: (() => void) | undefined;
+      const initializeStarted = new Promise<void>((resolve) => {
+        notifyInitializeStarted = resolve;
+      });
+      mockInitializeSDK.mockImplementation(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolveInitialize = resolve;
+            notifyInitializeStarted?.();
+          })
+      );
+
+      const { loadAdTrackingNativeModules } = await import(
+        './ad-tracking-native-modules'
+      );
+      const onTikTokReady = jest.fn();
+      const loading = loadAdTrackingNativeModules({ onTikTokReady });
+
+      await initializeStarted;
+      expect(onTikTokReady).toHaveBeenCalledWith(
+        expect.objectContaining({ trackEvent: mockTikTokTrackEvent })
+      );
+
+      resolveInitialize?.(true);
+      const modules = await loading;
+      expect(modules.FBSettings).not.toBeNull();
+      expect(modules.TikTokBusiness?.trackEvent).toBe(mockTikTokTrackEvent);
+    });
   });
 });

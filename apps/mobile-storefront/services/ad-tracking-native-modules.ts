@@ -55,7 +55,27 @@ export interface AdTrackingNativeModules {
   TikTokBusiness: TikTokBusinessLike | null;
 }
 
-export async function loadAdTrackingNativeModules(): Promise<AdTrackingNativeModules> {
+export type LoadAdTrackingNativeModulesOptions = {
+  /** Fired as soon as TikTok is loaded, before Facebook initializeSDK awaits. */
+  onTikTokReady?: (tikTok: TikTokBusinessLike | null) => void;
+};
+
+async function loadTikTokBusinessModule(): Promise<TikTokBusinessLike | null> {
+  try {
+    const tt = await import('@baci/tiktok-business');
+    return (tt.default || tt) as unknown as TikTokBusinessLike;
+  } catch (error) {
+    console.debug(
+      '[AdTracking] TikTok native module ignored or failed to load:',
+      error
+    );
+    return null;
+  }
+}
+
+export async function loadAdTrackingNativeModules(
+  options: LoadAdTrackingNativeModulesOptions = {}
+): Promise<AdTrackingNativeModules> {
   const modules: AdTrackingNativeModules = {
     FBSettings: null,
     AppEventsLogger: null,
@@ -64,28 +84,27 @@ export async function loadAdTrackingNativeModules(): Promise<AdTrackingNativeMod
   };
   if (Platform.OS === 'web') return modules;
 
+  // Assign TikTok before awaiting Facebook so a stalled initializeSDK cannot
+  // leave TikTokBusiness null after the 4s startup deadline resumes UI.
+  modules.TikTokBusiness = await loadTikTokBusinessModule();
+  options.onTikTokReady?.(modules.TikTokBusiness);
+
   try {
-    const [fb, tt] = await Promise.all([
+    if (
       Constants.expoConfig?.extra?.facebookAppId &&
       Constants.expoConfig?.extra?.facebookClientToken
-        ? loadFacebookTrackingModules(
-            Constants.expoConfig.extra.facebookAppId,
-            Constants.expoConfig.extra.facebookClientToken
-          )
-        : Promise.resolve(null),
-      import('@baci/tiktok-business'),
-    ]);
-
-    if (fb) {
+    ) {
+      const fb = await loadFacebookTrackingModules(
+        Constants.expoConfig.extra.facebookAppId,
+        Constants.expoConfig.extra.facebookClientToken
+      );
       modules.FBSettings = fb.settings as FBSettingsLike;
       modules.AppEventsLogger = fb.events as AppEventsLoggerLike;
       modules.AEMReporterIOS = fb.aem as AEMReporterIOSLike;
     }
-    modules.TikTokBusiness = (tt.default ||
-      tt) as unknown as TikTokBusinessLike;
   } catch (error) {
     console.debug(
-      '[AdTracking] Native modules ignored or failed to load:',
+      '[AdTracking] Facebook native modules ignored or failed to load:',
       error
     );
   }

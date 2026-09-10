@@ -21,22 +21,22 @@ describe('createExpoPlugins', () => {
     ]);
   });
 
-  it('builds Android React Native from source so the native focus fix reaches the APK', () => {
+  it('does not set buildReactNativeFromSource (settings.gradle owns from-source includeBuild)', () => {
     const plugins = createExpoPlugins({
       facebookSdkPlugin: null,
       sentryPlugin: null,
       tiktokBusinessPlugin: null,
     });
-    const buildProperties = plugins.find(
-      (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-build-properties'
+    const buildPropertiesPlugin = plugins.find(
+      (plugin): plugin is [string, Record<string, unknown>] =>
+        Array.isArray(plugin) && plugin[0] === 'expo-build-properties'
     );
+    const android = buildPropertiesPlugin?.[1]?.android as
+      | Record<string, unknown>
+      | undefined;
 
-    expect(buildProperties).toEqual([
-      'expo-build-properties',
-      expect.objectContaining({
-        android: expect.objectContaining({ buildReactNativeFromSource: true }),
-      }),
-    ]);
+    expect(android).toBeDefined();
+    expect(android).not.toHaveProperty('buildReactNativeFromSource');
   });
 
   it('configures minification, resource shrinking, and class repackaging for Android release builds', () => {

@@ -20,7 +20,7 @@
     "check:route-size": "node ./scripts/check-route-size.mjs",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
-    "test": "jest --runInBand && node --test ios/podfile-precompiled-modules-precedence.test.mjs"
+    "test": "jest --runInBand && node --test ios/podfile-precompiled-modules-precedence.test.mjs android/settings-gradle-include-build.test.mjs"
   },
   "dependencies": {
     "@baci/shared": "workspace:*",

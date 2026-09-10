@@ -53,9 +53,10 @@ function createExpoPlugins({
       'expo-build-properties',
       {
         android: {
-          // The Fabric focus ownership patch must be compiled into ReactAndroid.
-          // Maven's prebuilt library does not include repository C++ patches.
-          buildReactNativeFromSource: true,
+          // From-source ReactAndroid is owned by android/settings.gradle
+          // (includeBuild + dependencySubstitution). Do not also set
+          // buildReactNativeFromSource here — expo-build-properties would
+          // append a second includeBuild on incremental prebuild.
           compileSdkVersion: 36,
           targetSdkVersion: 36,
           buildToolsVersion: '36.0.0',

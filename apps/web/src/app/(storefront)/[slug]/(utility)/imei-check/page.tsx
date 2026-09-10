@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
-import { ImeiCheckerHero } from '@/components/storefront/ogabassey/pages/imei-checker-hero';
 import { OgabasseyImeiCheckerShell } from '@/components/storefront/ogabassey/pages/imei-checker-shell';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import {
@@ -14,6 +13,7 @@ import {
   isValidMerchantIdentifier,
 } from '@/lib/validation';
 import { getOgabasseyStaticParams } from '../../ogabassey-static-params';
+import { ImeiCheckCommittedHero } from './imei-check-committed-hero';
 import { ImeiCheckFallback } from './imei-check-fallback';
 import { ImeiCheckPageContent } from './imei-check-page-content';
 
@@ -64,7 +64,7 @@ export default function ImeiCheckPage({
 }) {
   return (
     <OgabasseyImeiCheckerShell>
-      <ImeiCheckerHero />
+      <ImeiCheckCommittedHero params={params} />
       <Suspense fallback={<ImeiCheckFallback hideHero />}>
         <ImeiCheckResolvedContent params={params} />
       </Suspense>

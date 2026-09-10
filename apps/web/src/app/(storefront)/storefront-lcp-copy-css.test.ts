@@ -13,9 +13,18 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
       /\.ogabassey-blog-lcp-hero__frame\s*\{[^}]*text-decoration: none/
     );
     expect(STOREFRONT_LCP_COPY_CSS).toContain('font-size: 1.875rem !important');
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      'html:has([data-storefront-shell])'
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      'html:has([data-storefront-shell]) body'
+    );
     expect(STOREFRONT_LCP_COPY_CSS).toContain('[data-cwv-lcp-support]');
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'body:has([data-blog-listing-filtered]) [data-blog-lcp-hero]'
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      'body:has([data-blog-lcp-hero]) [data-blog-featured-skeleton]'
     );
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'body:has([data-imei-result]) [data-imei-lcp-hero]'

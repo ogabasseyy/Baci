@@ -37,7 +37,7 @@ describe('blog page shell', () => {
     expect(then).not.toHaveBeenCalled();
   });
 
-  it('bugfix: pending searchParams paint the featured hero instead of the 420px skeleton', async () => {
+  it('bugfix: pending searchParams paint the featured hero while the listing fallback still reserves space', async () => {
     const { unmount } = render(<BlogListingFallback />);
     expect(
       screen.getByRole('region', { name: 'Loading featured story' })
@@ -66,7 +66,24 @@ describe('blog page shell', () => {
 
     expect(screen.getByText('Root featured story')).toBeInTheDocument();
     expect(
-      screen.queryByRole('region', { name: 'Loading featured story' })
-    ).not.toBeInTheDocument();
+      screen.getByRole('region', { name: 'Loading featured story' })
+    ).toBeInTheDocument();
+  });
+
+  it('reserves featured-story space when the committed hero is not emitted', async () => {
+    const params = Promise.resolve({ slug: 'other-store' });
+    const committedHero = await BlogListingCommittedLcpHero({ params });
+    expect(committedHero).toBeNull();
+
+    const ui = BlogPage({
+      params,
+      searchParams: Promise.resolve({}),
+    });
+    const listingBoundary = ui.props.children[1];
+    render(listingBoundary.props.fallback);
+
+    expect(
+      screen.getByRole('region', { name: 'Loading featured story' })
+    ).toBeInTheDocument();
   });
 });

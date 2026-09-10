@@ -25,20 +25,33 @@ export function loadStylesheetAfterFirstInput(
     return loadStylesheetAfterWindowLoad(load, errorMessage);
   }
 
+  let cancelled = false;
   let loaded = false;
   const media =
     typeof window.matchMedia === 'function'
       ? window.matchMedia(DESKTOP_VIEWPORT_QUERY)
       : null;
 
+  const arm = () => {
+    for (const eventName of FIRST_INPUT_EVENTS) {
+      window.addEventListener(eventName, run, { once: true, passive: true });
+    }
+    media?.addEventListener('change', onDesktop);
+  };
+
   const run = () => {
-    if (loaded) {
+    if (loaded || cancelled) {
       return;
     }
     loaded = true;
     stop();
     load().catch((error: unknown) => {
       console.error(new Error(errorMessage, { cause: error }));
+      if (cancelled) {
+        return;
+      }
+      loaded = false;
+      arm();
     });
   };
 
@@ -48,11 +61,6 @@ export function loadStylesheetAfterFirstInput(
     }
   };
 
-  for (const eventName of FIRST_INPUT_EVENTS) {
-    window.addEventListener(eventName, run, { once: true, passive: true });
-  }
-  media?.addEventListener('change', onDesktop);
-
   function stop() {
     for (const eventName of FIRST_INPUT_EVENTS) {
       window.removeEventListener(eventName, run);
@@ -60,5 +68,10 @@ export function loadStylesheetAfterFirstInput(
     media?.removeEventListener('change', onDesktop);
   }
 
-  return stop;
+  arm();
+
+  return () => {
+    cancelled = true;
+    stop();
+  };
 }

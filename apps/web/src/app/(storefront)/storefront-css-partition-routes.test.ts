@@ -112,7 +112,7 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(slugLayout).toContain('StorefrontLcpCopyStyle');
     expect(lcpCopyCss).toContain('Inter Fallback');
     expect(lcpCopyCss).toContain('!important');
-    expect(lcpCopyCss).toContain('html, body');
+    expect(lcpCopyCss).toContain('html:has([data-storefront-shell])');
     expect(lcpCopyCss).toContain('[data-cwv-lcp-fold]');
     expect(lcpCopyCss).toContain('.ogabassey-blog-lcp-hero__frame');
     expect(lcpCopyCss).toContain('[data-cwv-lcp-copy="home"]');
@@ -124,6 +124,9 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(lcpCopyCss).toContain('.sr-only');
     expect(lcpCopyCss).toContain(
       'body:has([data-blog-listing-filtered]) [data-blog-lcp-hero]'
+    );
+    expect(lcpCopyCss).toContain(
+      'body:has([data-blog-lcp-hero]) [data-blog-featured-skeleton]'
     );
     expect(lcpCopyCss).toContain(
       'body:has([data-imei-result]) [data-imei-lcp-hero]'

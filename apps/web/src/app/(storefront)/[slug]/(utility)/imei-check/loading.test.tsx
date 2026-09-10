@@ -8,14 +8,17 @@ describe('IMEI check loading', () => {
     await expectLoadingModuleRenders(import.meta.url, 'Loading IMEI checker');
   });
 
-  it('paints the IMEI hero LCP copy in the visible loading shell', () => {
+  it('keeps the loading shell tenant-neutral without branded IMEI copy', () => {
     render(<ImeiCheckLoading />);
 
     expect(
-      screen.getByRole('heading', { name: /Don't Get Scammed/i })
+      screen.getByRole('status', { name: 'Loading IMEI checker' })
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/stolen, iCloud locked, or refurbished/)
-    ).toBeInTheDocument();
+      screen.queryByRole('heading', { name: /Don't Get Scammed/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Trusted by 10,000+ Buyers')
+    ).not.toBeInTheDocument();
   });
 });

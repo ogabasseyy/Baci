@@ -11,7 +11,8 @@ export const STOREFRONT_LCP_COPY_CSS = `
   those nodes already use, so later sheets do not restyle the LCP element.
 */
 
-html, body {
+html:has([data-storefront-shell]),
+html:has([data-storefront-shell]) body {
   font-family: "Inter Fallback", Arial, Helvetica, sans-serif !important;
 }
 
@@ -171,6 +172,10 @@ html, body {
   input.
 */
 body:has([data-blog-listing-filtered]) [data-blog-lcp-hero] {
+  display: none;
+}
+
+body:has([data-blog-lcp-hero]) [data-blog-featured-skeleton] {
   display: none;
 }
 

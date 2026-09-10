@@ -70,4 +70,28 @@ describe('loadStylesheetAfterFirstInput', () => {
     expect(load).toHaveBeenCalledOnce();
     stop();
   });
+
+  it('re-arms the first-input loader after a failed stylesheet import', async () => {
+    stubMatchMedia(false);
+    const load = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('chunk missing'))
+      .mockResolvedValueOnce({});
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const stop = loadStylesheetAfterFirstInput(load, 'failed');
+
+    window.dispatchEvent(new Event('pointerdown'));
+    expect(load).toHaveBeenCalledOnce();
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(consoleError).toHaveBeenCalledOnce();
+    window.dispatchEvent(new Event('pointerdown'));
+    expect(load).toHaveBeenCalledTimes(2);
+    stop();
+  });
 });

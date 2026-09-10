@@ -215,6 +215,9 @@ describe('compare index page runtime', () => {
     expect(
       document.querySelector('[data-compare-category-page]')
     ).not.toBeNull();
+    expect(
+      mockCategoryPageRoute.mock.calls[0]?.[0].titleHeading
+    ).toBeUndefined();
   });
 
   it('does not mark the hub as a category page when compare is not a category', async () => {

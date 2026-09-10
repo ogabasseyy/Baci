@@ -281,7 +281,10 @@ function StorefrontPprStaticShell({
     getStorefrontAppearanceClasses(appearance).join(' ');
 
   return (
-    <div className={`storefront-ppr-static-shell ${appearanceClassName}`}>
+    <div
+      className={`storefront-ppr-static-shell ${appearanceClassName}`}
+      data-storefront-shell=""
+    >
       <Suspense fallback={null}>
         <div className="storefront-ppr-static-shell__content">{children}</div>
       </Suspense>

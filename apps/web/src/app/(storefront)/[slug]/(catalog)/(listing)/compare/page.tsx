@@ -199,7 +199,6 @@ export async function CompareIndexRuntime(props: CompareIndexPageProps) {
       return (
         <div data-compare-category-page="">
           <CategoryPageRoute
-            titleHeading="h2"
             {...buildCompareCategoryPageProps(slug, props.searchParams)}
           />
         </div>

@@ -19,6 +19,7 @@ export function BlogListingFallback({
           <section
             aria-label="Loading featured story"
             className="mb-12 overflow-hidden rounded-4xl border border-border bg-card p-6 shadow-sm md:p-8"
+            data-blog-featured-skeleton=""
           >
             <Skeleton
               className="h-[320px] w-full rounded-3xl bg-muted md:h-[420px]"

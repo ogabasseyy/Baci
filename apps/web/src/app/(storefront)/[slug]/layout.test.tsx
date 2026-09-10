@@ -350,6 +350,7 @@ describe('storefront layout', () => {
       '.storefront-ppr-static-shell'
     );
     expect(staticShell).toBeTruthy();
+    expect(staticShell).toHaveAttribute('data-storefront-shell', '');
     expect(staticShell).toHaveClass('storefront-theme-scope');
     expect(staticShell).toHaveClass('storefront-variant-default');
     expect(staticShell).toHaveClass('storefront-light');

@@ -69,9 +69,7 @@ export default function BlogPage({ params, searchParams }: BlogPageProps) {
   return (
     <>
       <BlogListingCommittedLcpHero params={params} />
-      <Suspense
-        fallback={<BlogListingFallback includeFeaturedSkeleton={false} />}
-      >
+      <Suspense fallback={<BlogListingFallback />}>
         <BlogListingResolved params={params} searchParams={searchParams} />
       </Suspense>
     </>

@@ -44,16 +44,17 @@ describe('ImeiCheckPage', () => {
     ]);
   });
 
-  it('paints the IMEI hero without waiting for merchant params', () => {
-    render(<ImeiCheckPage params={new Promise(() => undefined)} />);
+  it('does not await params in the page — the committed hero does', () => {
+    const then = vi.fn(() => {
+      throw new Error('params read outside boundary');
+    });
+    const params = { then } as unknown as Promise<{ slug: string }>;
+    const ui = ImeiCheckPage({ params });
 
-    expect(
-      screen.getByRole('heading', { name: /Don't Get Scammed/i })
-    ).toBeInTheDocument();
-    expect(screen.getByText('Verify First.')).toBeInTheDocument();
+    expect(ui.props.children[0].props.params).toBe(params);
+    expect(then).not.toHaveBeenCalled();
     expect(screen.queryByText('IMEI checker UI')).not.toBeInTheDocument();
   });
-
   it('renders IMEI UI with crawler-visible verification guidance', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({
       template_id: 'ogabassey',

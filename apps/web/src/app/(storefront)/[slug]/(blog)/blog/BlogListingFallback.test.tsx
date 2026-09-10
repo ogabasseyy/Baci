@@ -29,5 +29,8 @@ describe('BlogListingFallback', () => {
     expect(
       screen.getByRole('region', { name: 'Loading featured story' })
     ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-blog-featured-skeleton]')
+    ).not.toBeNull();
   });
 });

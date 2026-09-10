@@ -12,7 +12,7 @@ interface AppSansFontProps {
   children: ReactNode;
 }
 
-/** Load Inter on dashboard/auth/admin/builder/checkout without putting a webfont on the storefront LCP path. */
+/** Load Inter on dashboard/auth/admin/builder/checkout/landing without putting a webfont on the storefront LCP path. */
 export function AppSansFont({ children }: AppSansFontProps) {
   return <div className={`${appSans.variable} font-sans`}>{children}</div>;
 }

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { AppSansFont } from '@/app/app-sans-font';
 import '@/app/globals.css';
 import AppBody from '@/components/app-body';
 import { FAQItem } from '@/components/landing/faq-item';
@@ -609,8 +610,10 @@ export default async function HomePage() {
   const metrics = await getLandingMetrics();
 
   return (
-    <AppBody showPlatformAnalytics>
-      <BaciLandingPage metrics={metrics} />
-    </AppBody>
+    <AppSansFont>
+      <AppBody showPlatformAnalytics>
+        <BaciLandingPage metrics={metrics} />
+      </AppBody>
+    </AppSansFont>
   );
 }

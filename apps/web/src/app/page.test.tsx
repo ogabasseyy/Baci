@@ -1,3 +1,7 @@
+// @vitest-environment node
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { safeJsonLdStringify } from '@/lib/sanitize-json-ld';
 import {
@@ -98,5 +102,19 @@ describe('PlatformSchemas JSON-LD output', () => {
   it('does not contain SoftwareApplication or MobileApplication', () => {
     expect(serialized).not.toContain('SoftwareApplication');
     expect(serialized).not.toContain('MobileApplication');
+  });
+});
+
+describe('Baci landing page font', () => {
+  it('wraps the public landing page with AppSansFont instead of the storefront Arial fallback', () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'page.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain(
+      "import { AppSansFont } from '@/app/app-sans-font'"
+    );
+    expect(source).toMatch(/<AppSansFont>\s*<AppBody showPlatformAnalytics>/);
   });
 });

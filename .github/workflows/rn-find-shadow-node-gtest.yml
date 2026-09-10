@@ -1,0 +1,65 @@
+name: RN FindShadowNodeByTag gtest
+
+on:
+  pull_request:
+    paths:
+      - 'patches/react-native@*'
+      - 'tools/rn-find-shadow-node-gtest/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/rn-find-shadow-node-gtest.yml'
+      - '.github/scripts/rn-find-shadow-node-gtest.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - 'patches/react-native@*'
+      - 'tools/rn-find-shadow-node-gtest/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/rn-find-shadow-node-gtest.yml'
+      - '.github/scripts/rn-find-shadow-node-gtest.test.mjs'
+  workflow_dispatch:
+    inputs:
+      asan:
+        description: 'Also rebuild under AddressSanitizer (second job matrix entry is always on for PRs)'
+        type: boolean
+        default: true
+
+concurrency:
+  group: rn-find-shadow-node-gtest-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  find-shadow-node-gtest:
+    name: Compile + run FindShadowNodeByTagTest (${{ matrix.sanitizer || 'plain' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sanitizer: ''
+          - sanitizer: address
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install host build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ python3 curl ca-certificates libboost-dev
+
+      - name: Install JS deps (applies patches/react-native@*)
+        uses: ./.github/actions/pnpm-install-cached
+
+      - name: Fail-closed patch contract
+        run: node --test .github/scripts/rn-find-shadow-node-gtest.test.mjs
+
+      - name: Compile and execute real FindShadowNodeByTagTest.cpp
+        env:
+          BACI_RN_GTEST_SANITIZER: ${{ matrix.sanitizer }}
+        run: |
+          chmod +x tools/rn-find-shadow-node-gtest/run.sh \
+                   tools/rn-find-shadow-node-gtest/bootstrap-native-deps.sh
+          ./tools/rn-find-shadow-node-gtest/run.sh

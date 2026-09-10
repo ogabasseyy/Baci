@@ -35,5 +35,8 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'body:has([data-compare-category-page]) [data-compare-hub-chrome]'
     );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain('@media (min-width: 768px)');
+    expect(STOREFRONT_LCP_COPY_CSS).toContain('font-size: 3rem !important');
+    expect(STOREFRONT_LCP_COPY_CSS).toContain('font-size: 3.75rem !important');
   });
 });

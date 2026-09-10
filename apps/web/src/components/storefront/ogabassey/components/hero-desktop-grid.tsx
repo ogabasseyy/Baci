@@ -31,19 +31,18 @@ const SIDE_IMAGE_SIZES = '(min-width: 1024px) 160px, (min-width: 768px) 25vw, 1p
 const HERO_IMAGE_QUALITY = 70;
 
 /** Media-scoped desktop hero image. On mobile no `<source>` matches, so the
- *  `<img>` falls back to a transparent pixel (zero network). Keep fetch
- *  priority low so Chrome does not start the desktop sources as High during
- *  the mobile LCP window. */
+ *  `<img>` falls back to a transparent pixel (zero network). Desktop keeps
+ *  eager/high so this above-the-fold grid can still be the desktop LCP. */
 function HeroBigImage({ alt, src }: { alt: string; src: string }) {
   const {
     props: { sizes, src: imgSrc, srcSet, ...imgProps },
   } = getImageProps({
     alt,
     decoding: 'async',
-    fetchPriority: 'low',
+    fetchPriority: 'high',
     height: BIG_IMAGE_HEIGHT,
     loader: ogabasseyFallbackImageLoader,
-    loading: 'lazy',
+    loading: 'eager',
     quality: HERO_IMAGE_QUALITY,
     sizes: BIG_IMAGE_SIZES,
     src,

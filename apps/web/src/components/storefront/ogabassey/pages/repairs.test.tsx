@@ -113,13 +113,15 @@ describe('OgabasseyV2Repairs', () => {
   });
 
   it('omits the branded lab hero when omitHero is set', () => {
-    render(<OgabasseyV2Repairs omitHero />);
+    const { container } = render(<OgabasseyV2Repairs omitHero />);
 
     expect(
       screen.queryByRole('heading', { name: /repair lab/i })
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/don't ditch it/i)).not.toBeInTheDocument();
     expect(screen.getByText('Screen Renewal')).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass('pt-0');
+    expect(container.firstElementChild).not.toHaveClass('pt-4');
   });
 
   it('renders the device picker (with its own empty state) when groups is an empty array', () => {

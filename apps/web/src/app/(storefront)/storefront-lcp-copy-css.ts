@@ -66,6 +66,31 @@ html:has([data-storefront-shell]) body {
   margin: 0 0 1rem !important;
 }
 
+@media (min-width: 768px) {
+  [data-cwv-lcp-copy="blog"],
+  .ogabassey-blog-featured-story__title {
+    font-size: 3rem !important;
+  }
+
+  [data-cwv-lcp-copy="compare"] {
+    font-size: 2.25rem !important;
+    line-height: 2.5rem !important;
+  }
+
+  [data-cwv-lcp-copy="imei"],
+  [data-cwv-lcp-copy="repairs"] {
+    font-size: 3rem !important;
+    line-height: 1 !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  [data-cwv-lcp-copy="blog"],
+  .ogabassey-blog-featured-story__title {
+    font-size: 3.75rem !important;
+  }
+}
+
 [data-cwv-lcp-support] {
   font-family: "Inter Fallback", Arial, Helvetica, sans-serif !important;
   font-size: 0.875rem !important;

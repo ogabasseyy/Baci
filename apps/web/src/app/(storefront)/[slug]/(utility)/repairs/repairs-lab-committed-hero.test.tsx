@@ -15,7 +15,7 @@ vi.mock('@/lib/routes', () => ({
 
 describe('RepairsLabCommittedHero', () => {
   it('paints branded lab copy for the monitored tenant without a merchant lookup', async () => {
-    render(
+    const { container } = render(
       await RepairsLabCommittedHero({
         params: Promise.resolve({ slug: 'ogabassey' }),
       })
@@ -25,6 +25,11 @@ describe('RepairsLabCommittedHero', () => {
       screen.getByRole('heading', { name: 'Repair Lab' })
     ).toBeInTheDocument();
     expect(screen.getByText(/Don't Ditch It/i)).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass(
+      'min-h-screen',
+      'bg-store-secondary'
+    );
+    expect(container.innerHTML).toContain('max-w-[1400px]');
   });
 
   it('keeps repair and trade-in actions as links on the slug-prefixed route', async () => {

@@ -19,9 +19,13 @@ export async function RepairsLabCommittedHero({
   const basePath = isDomainIdentifier(slug) ? '' : `/${slug}`;
 
   return (
-    <RepairsLabHero
-      repairHref={`${basePath}/repair`}
-      swapHref={`${basePath}/swap`}
-    />
+    <div className="min-h-screen bg-store-secondary pb-24 pt-4 text-store-background-text md:pb-12 md:pt-8">
+      <div className="mx-auto w-full max-w-[1400px] px-4 md:px-6">
+        <RepairsLabHero
+          repairHref={`${basePath}/repair`}
+          swapHref={`${basePath}/swap`}
+        />
+      </div>
+    </div>
   );
 }

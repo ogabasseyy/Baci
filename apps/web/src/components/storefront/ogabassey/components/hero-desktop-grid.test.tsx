@@ -124,7 +124,7 @@ describe('HeroDesktopGrid', () => {
     expect(bigLink).toHaveAttribute('data-prefetch', 'false');
   });
 
-  it('serves the big hero image as a desktop-scoped lazy picture with an explicit AVIF tier', () => {
+  it('serves the big hero image as a desktop-scoped eager picture with an explicit AVIF tier', () => {
     const { container } = render(<HeroDesktopGrid slides={SLIDES} />);
 
     const bigPicture = container.querySelector('picture');
@@ -146,8 +146,8 @@ describe('HeroDesktopGrid', () => {
     expect(container.innerHTML).not.toContain('format=auto');
 
     const img = container.querySelector('picture img');
-    expect(img).toHaveAttribute('loading', 'lazy');
-    expect(img).toHaveAttribute('fetchpriority', 'low');
+    expect(img).toHaveAttribute('loading', 'eager');
+    expect(img).toHaveAttribute('fetchpriority', 'high');
   });
 
   it('serves external desktop images with only the fallback source when no AVIF tier exists', () => {
@@ -170,8 +170,8 @@ describe('HeroDesktopGrid', () => {
     );
 
     const img = container.querySelector('picture img');
-    expect(img).toHaveAttribute('loading', 'lazy');
-    expect(img).toHaveAttribute('fetchpriority', 'low');
+    expect(img).toHaveAttribute('loading', 'eager');
+    expect(img).toHaveAttribute('fetchpriority', 'high');
     expect(container.innerHTML).not.toContain('format=avif');
   });
 

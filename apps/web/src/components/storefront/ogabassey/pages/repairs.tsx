@@ -82,7 +82,11 @@ export function OgabasseyV2Repairs({
   const swapLink = asRoute(`${normalizedBasePath}/swap`);
 
   return (
-    <div className="min-h-screen bg-store-secondary pb-24 md:pb-12 pt-4 md:pt-8 flex flex-col text-store-background-text">
+    <div
+      className={`min-h-screen bg-store-secondary pb-24 md:pb-12 flex flex-col text-store-background-text ${
+        omitHero ? 'pt-0' : 'pt-4 md:pt-8'
+      }`}
+    >
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 w-full flex-1 flex flex-col">
         {omitHero ? null : (
           <RepairsLabHero repairHref={repairLink} swapHref={swapLink} />

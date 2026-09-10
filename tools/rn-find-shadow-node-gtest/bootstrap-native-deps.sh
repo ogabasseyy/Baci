@@ -210,12 +210,24 @@ tokens = {
     "ac_cv___attribute___noreturn": "__attribute__ ((noreturn))",
     "ac_cv___attribute___printf_4_5": "__attribute__((__format__ (__printf__, 4, 5)))",
 }
-for path in root.rglob("*.h.in"):
+# Only substitute public glog headers. Never process config.h.in — that
+# overwrites React Native's Android-prepared config.h and drops
+# _START_GOOGLE_NAMESPACE_ / _END_GOOGLE_NAMESPACE_ (they are #undef there,
+# not @token@ placeholders), which breaks host Linux builds in CI.
+for path in sorted(root.rglob("*.h.in")):
+    rel = path.as_posix()
+    if path.name == "config.h.in" or "/src/glog/" not in rel:
+        continue
     text = path.read_text()
     for key, value in tokens.items():
         text = text.replace("@%s@" % key, value)
     out = path.parent / path.name[:-3]
     out.write_text(text)
+# Fail closed: RN config.h must keep the namespace macros.
+for config_path in (root / "config.h", root / "glog-0.3.5" / "src" / "config.h"):
+    text = config_path.read_text()
+    if "_START_GOOGLE_NAMESPACE_" not in text or "_END_GOOGLE_NAMESPACE_" not in text:
+        raise SystemExit(f"glog config missing namespace macros: {config_path}")
 exported = root / "exported" / "glog"
 exported.mkdir(parents=True, exist_ok=True)
 for name in ("stl_logging.h", "logging.h", "raw_logging.h", "vlog_is_on.h", "log_severity.h"):

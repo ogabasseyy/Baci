@@ -52,8 +52,10 @@ describe('bugfix: hoisted native peer versions', () => {
       join(workspaceRoot, 'pnpm-lock.yaml'),
       'utf8'
     );
+    // pnpm may emit either `  pkg@ver(...):` or the long-key form
+    // `  ? pkg@ver(...)\n  : dependencies:` — both are a single snapshot.
     const mmkvSnapshots = lockfile.match(
-      /^ {2}react-native-mmkv@4\.3\.1\(.+\):$/gm
+      /^ {2}(?:\? )?react-native-mmkv@4\.3\.1\(.+$/gm
     );
 
     expect(mmkvSnapshots).toHaveLength(1);

@@ -64,3 +64,11 @@ test('run.sh targets the node_modules suite and gtest filter', () => {
   assert.match(body, /Exercise the production default/);
   assert.match(body, /getCurrentRevision\(\)\.rootShadowNode/);
 });
+
+test('bootstrap keeps RN glog config.h namespace macros (no config.h.in overwrite)', () => {
+  const body = readFileSync(bootstrap, 'utf8');
+  assert.match(body, /config\.h\.in/);
+  assert.match(body, /_START_GOOGLE_NAMESPACE_/);
+  assert.match(body, /Never process config\.h\.in/);
+  assert.match(body, /src\/glog\//);
+});

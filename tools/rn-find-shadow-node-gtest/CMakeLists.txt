@@ -57,6 +57,8 @@ function(add_react_common_subdir relative_path)
 endfunction()
 
 add_react_third_party_ndk_subdir(glog)
+# Host GCC treats ignored write() as -Werror; Android NDK builds do not.
+target_compile_options(glog PRIVATE -Wno-error=unused-result)
 add_react_third_party_ndk_subdir(boost)
 add_react_third_party_ndk_subdir(double-conversion)
 add_react_third_party_ndk_subdir(fast_float)

@@ -40,6 +40,8 @@ mobile_storefront:
   - '.github/scripts/ios-storefront-release.test.sh'
   - '.github/scripts/verify-ios-expo-jsi-symbols.mjs'
   - '.github/scripts/verify-ios-expo-jsi-symbols.test.mjs'
+  - '.github/scripts/ios-runtime-scheduler.test.mjs'
+  - '.github/workflows/ios-runtime-scheduler-pr.yml'
   - '.github/workflows/android-storefront-release.yml'
   - '.github/workflows/ios-storefront-release.yml'
   - 'packages/shared/**'

@@ -348,6 +348,8 @@ jobs:
         run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs
       - name: Verify Expo JSI symbol regression fixtures
         run: node --test .github/scripts/verify-ios-expo-jsi-symbols.test.mjs
+      - name: Verify RuntimeScheduler patch contract
+        run: node --test .github/scripts/ios-runtime-scheduler.test.mjs
       - name: Run storefront origin cost-contract tests
         if: needs.changes.outputs.web == 'true'
         run: >-

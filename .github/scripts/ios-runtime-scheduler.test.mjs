@@ -8,6 +8,20 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const relativeHeader = 'apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h';
+const patchPath = join(root, 'patches/expo-modules-jsi@57.0.5.patch');
+
+test('committed expo-modules-jsi patch drops SWIFT_RETURNS_RETAINED on RuntimeScheduler ctors', () => {
+  const patch = readFileSync(patchPath, 'utf8');
+  assert.match(patch, /RuntimeScheduler\.h/);
+  assert.match(
+    patch,
+    /-\s*(?:SWIFT_RETURNS_RETAINED\s+)?RuntimeScheduler\(/,
+  );
+  assert.doesNotMatch(
+    patch,
+    /\+\s*SWIFT_RETURNS_RETAINED\s+RuntimeScheduler\(/,
+  );
+});
 
 // Run with Xcode 26.x, matching the release compiler generation. Xcode 27
 // introduced different foreign-reference ownership diagnostics: reevaluate the

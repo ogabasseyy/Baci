@@ -4,7 +4,12 @@ import { getCachedMerchant } from '@/lib/cached-data';
 import { ImeiCheckPageContent } from './imei-check-page-content';
 
 vi.mock('@/components/storefront/ogabassey/pages/imei-checker', () => ({
-  OgabasseyImeiChecker: () => <div>IMEI checker UI</div>,
+  OgabasseyImeiChecker: ({ omitHero }: { omitHero?: boolean }) => (
+    <div>
+      {omitHero ? null : <h1>Don't Get Scammed.</h1>}
+      <div>IMEI checker UI</div>
+    </div>
+  ),
 }));
 
 vi.mock('@/lib/cached-data', () => ({
@@ -40,6 +45,17 @@ describe('ImeiCheckPageContent', () => {
       screen.getByRole('heading', {
         name: 'What to confirm before running an IMEI check',
       })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: /Don't Get Scammed/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('restores branded IMEI copy when omitHero is false', () => {
+    render(<ImeiCheckPageContent omitHero={false} />);
+
+    expect(
+      screen.getByRole('heading', { name: /Don't Get Scammed/i })
     ).toBeInTheDocument();
   });
 

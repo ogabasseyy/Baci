@@ -8,17 +8,15 @@ describe('repairs loading', () => {
     await expectLoadingModuleRenders(import.meta.url, 'Loading repair lab');
   });
 
-  it('paints the repairs LCP copy in the visible loading shell', () => {
+  it('keeps the shared loading shell tenant-neutral', () => {
     render(<RepairsLoading />);
 
     expect(
-      screen.getByRole('heading', { name: 'Repair Lab' })
-    ).toBeInTheDocument();
+      screen.queryByRole('heading', { name: 'Repair Lab' })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Don't Ditch It/i)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/every device repaired is one less in a landfill/i)
-    ).toBeInTheDocument();
-    expect(
-      document.querySelector('[data-cwv-lcp-support]')?.textContent
-    ).not.toMatch(/certified technicians/i);
+      screen.getByRole('status', { name: 'Loading repair lab' })
+    ).toHaveClass('sr-only');
   });
 });

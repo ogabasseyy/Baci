@@ -12,7 +12,10 @@ import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
-import { getOgabasseyStaticParams } from '../../ogabassey-static-params';
+import {
+  getOgabasseyStaticParams,
+  isOgabasseyStaticTenant,
+} from '../../ogabassey-static-params';
 import { ImeiCheckCommittedHero } from './imei-check-committed-hero';
 import { ImeiCheckFallback } from './imei-check-fallback';
 import { ImeiCheckPageContent } from './imei-check-page-content';
@@ -54,7 +57,7 @@ export async function ImeiCheckResolvedContent({
     notFound();
   }
 
-  return <ImeiCheckPageContent />;
+  return <ImeiCheckPageContent omitHero={isOgabasseyStaticTenant(slug)} />;
 }
 
 export default function ImeiCheckPage({

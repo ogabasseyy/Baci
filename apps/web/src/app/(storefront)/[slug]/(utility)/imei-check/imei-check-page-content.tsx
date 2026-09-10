@@ -1,9 +1,13 @@
 import { OgabasseyImeiChecker } from '@/components/storefront/ogabassey/pages/imei-checker';
 
-export function ImeiCheckPageContent() {
+export function ImeiCheckPageContent({
+  omitHero = true,
+}: {
+  omitHero?: boolean;
+}) {
   return (
     <>
-      <OgabasseyImeiChecker omitHero omitShell />
+      <OgabasseyImeiChecker omitHero={omitHero} omitShell />
       <section className="pb-20">
         <div className="rounded-2xl border border-store-border bg-store-background-text/5 p-6 shadow-sm md:p-8">
           <h2 className="text-xl font-bold text-store-background-text">

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/headers', () => ({
@@ -42,18 +42,17 @@ describe('RepairsPage static params', () => {
     ]);
   });
 
-  it('paints the repair lab LCP copy without waiting for merchant params', () => {
-    render(<RepairsPage params={new Promise(() => undefined)} />);
+  it('does not await params in the page — the committed hero does', () => {
+    const then = vi.fn(() => {
+      throw new Error('params read outside boundary');
+    });
+    const params = { then } as unknown as Promise<{ slug: string }>;
+    const ui = RepairsPage({ params });
 
+    expect(ui.props.children[0].props.params).toBe(params);
+    expect(then).not.toHaveBeenCalled();
     expect(
-      screen.getByRole('heading', { name: 'Repair Lab' })
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Don't Ditch It/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/Every device repaired is one less in a landfill/i)
-    ).toBeInTheDocument();
-    expect(
-      document.querySelector('[data-cwv-lcp-support]')?.textContent
-    ).not.toMatch(/certified technicians/i);
+      screen.queryByRole('heading', { name: 'Repair Lab' })
+    ).not.toBeInTheDocument();
   });
 });

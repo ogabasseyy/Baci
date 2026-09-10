@@ -1,5 +1,72 @@
-import { describe, expect, it } from 'vitest';
-import { shouldRenderRepairsPage } from './repairs-page-content';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import type { CachedMerchant } from '@/lib/cached-data';
+import {
+  RepairsPageContent,
+  shouldRenderRepairsPage,
+} from './repairs-page-content';
+
+vi.mock('next/headers', () => ({
+  headers: vi.fn(async () => ({
+    get: () => null,
+  })),
+}));
+
+vi.mock('@/components/seo/json-ld', () => ({
+  JsonLd: () => null,
+}));
+
+vi.mock('@/components/storefront/ogabassey/pages/repairs', () => ({
+  OgabasseyV2Repairs: ({ omitHero }: { omitHero?: boolean }) => (
+    <div
+      data-testid="ogabassey-repairs"
+      data-omit-hero={String(Boolean(omitHero))}
+    />
+  ),
+}));
+
+vi.mock('@/lib/store-url', () => ({
+  buildStoreUrl: () => 'https://ogabassey.com',
+}));
+
+const merchant = {
+  id: 'merchant-1',
+  business_name: 'OgaBassey',
+  slug: 'ogabassey',
+  template_id: 'ogabassey',
+} as CachedMerchant;
+
+describe('RepairsPageContent', () => {
+  it('omits the branded lab hero for the monitored tenant after the committed shell paints', async () => {
+    render(
+      await RepairsPageContent({
+        merchant,
+        omitHero: true,
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+
+    expect(screen.getByTestId('ogabassey-repairs')).toHaveAttribute(
+      'data-omit-hero',
+      'true'
+    );
+  });
+
+  it('keeps the branded lab hero for other OgaBassey-template stores', async () => {
+    render(
+      await RepairsPageContent({
+        merchant: { ...merchant, slug: 'other-store' },
+        omitHero: false,
+        params: Promise.resolve({ slug: 'other-store' }),
+      })
+    );
+
+    expect(screen.getByTestId('ogabassey-repairs')).toHaveAttribute(
+      'data-omit-hero',
+      'false'
+    );
+  });
+});
 
 describe('shouldRenderRepairsPage', () => {
   it('renders the Ogabassey repair lab even when the catalogue flag is off', () => {

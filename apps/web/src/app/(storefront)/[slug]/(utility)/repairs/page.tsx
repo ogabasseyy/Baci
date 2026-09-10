@@ -12,7 +12,11 @@ import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
-import { getOgabasseyStaticParams } from '../../ogabassey-static-params';
+import {
+  getOgabasseyStaticParams,
+  isOgabasseyStaticTenant,
+} from '../../ogabassey-static-params';
+import { RepairsLabCommittedHero } from './repairs-lab-committed-hero';
 import { RepairsLabFallback } from './repairs-lab-fallback';
 import {
   isCatalogEnabledForMerchant,
@@ -77,13 +81,23 @@ async function RepairsPageResolved(props: RepairsPageRouteProps) {
       })
     : undefined;
 
-  return <RepairsPageContent groups={groups} merchant={merchant} {...props} />;
+  return (
+    <RepairsPageContent
+      groups={groups}
+      merchant={merchant}
+      omitHero={isOgabasseyStaticTenant(slug)}
+      {...props}
+    />
+  );
 }
 
 export default function RepairsPage(props: RepairsPageRouteProps) {
   return (
-    <Suspense fallback={<RepairsLabFallback />}>
-      <RepairsPageResolved {...props} />
-    </Suspense>
+    <>
+      <RepairsLabCommittedHero params={props.params} />
+      <Suspense fallback={<RepairsLabFallback hideHero />}>
+        <RepairsPageResolved {...props} />
+      </Suspense>
+    </>
   );
 }

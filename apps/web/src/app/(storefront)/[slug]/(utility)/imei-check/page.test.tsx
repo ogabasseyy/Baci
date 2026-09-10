@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCachedMerchant } from '@/lib/cached-data';
 
 vi.mock('@/components/storefront/ogabassey/pages/imei-checker', () => ({
-  OgabasseyImeiChecker: () => <div>IMEI checker UI</div>,
+  OgabasseyImeiChecker: ({ omitHero }: { omitHero?: boolean }) => (
+    <div>
+      {omitHero ? null : <h1>Don't Get Scammed.</h1>}
+      <div>IMEI checker UI</div>
+    </div>
+  ),
 }));
 
 vi.mock('@/lib/cached-data', () => ({
@@ -77,6 +82,24 @@ describe('ImeiCheckPage', () => {
       screen.getByText(/network status, carrier locks/i)
     ).toBeInTheDocument();
     expect(screen.getByText(/NGN 500,000/)).toBeInTheDocument();
+  });
+
+  it('restores branded IMEI copy for other OgaBassey-template stores', async () => {
+    vi.mocked(getCachedMerchant).mockResolvedValue({
+      template_id: 'ogabassey',
+      slug: 'other-ogabassey-store',
+    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+
+    render(
+      await ImeiCheckResolvedContent({
+        params: Promise.resolve({ slug: 'other-ogabassey-store' }),
+      })
+    );
+
+    expect(
+      screen.getByRole('heading', { name: /Don't Get Scammed/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText('IMEI checker UI')).toBeInTheDocument();
   });
 
   it('uses a verification-focused meta description', () => {

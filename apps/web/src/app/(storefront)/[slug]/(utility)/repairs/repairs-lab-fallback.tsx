@@ -1,6 +1,25 @@
 import { RepairsLabHero } from '@/components/storefront/ogabassey/pages/repairs-lab-hero';
 
-export function RepairsLabFallback() {
+interface RepairsLabFallbackProps {
+  hideHero?: boolean;
+}
+
+export function RepairsLabFallback({
+  hideHero = true,
+}: RepairsLabFallbackProps) {
+  if (hideHero) {
+    return (
+      <div
+        role="status"
+        aria-label="Loading repair lab"
+        aria-live="polite"
+        className="sr-only"
+      >
+        Loading repair lab
+      </div>
+    );
+  }
+
   return (
     <div
       role="status"

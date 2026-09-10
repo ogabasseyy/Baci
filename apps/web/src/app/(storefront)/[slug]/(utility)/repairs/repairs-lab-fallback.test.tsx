@@ -4,7 +4,7 @@ import { RepairsLabFallback } from './repairs-lab-fallback';
 
 describe('RepairsLabFallback', () => {
   it('paints the repair lab LCP copy in the visible page shell', () => {
-    render(<RepairsLabFallback />);
+    render(<RepairsLabFallback hideHero={false} />);
 
     expect(
       screen.getByRole('heading', { name: 'Repair Lab' })
@@ -19,5 +19,17 @@ describe('RepairsLabFallback', () => {
     expect(fold).toBeInTheDocument();
     expect(support).not.toHaveTextContent(/certified technicians/i);
     expect(fold).not.toHaveTextContent(/extend the life/i);
+  });
+
+  it('hides branded lab copy when hideHero is set', () => {
+    render(<RepairsLabFallback hideHero />);
+
+    expect(
+      screen.queryByRole('heading', { name: 'Repair Lab' })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Don't Ditch It/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('status', { name: 'Loading repair lab' })
+    ).toHaveClass('sr-only');
   });
 });

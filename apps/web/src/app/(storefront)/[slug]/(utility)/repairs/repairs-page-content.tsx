@@ -17,6 +17,7 @@ export interface RepairsPageRouteProps {
 export interface RepairsPageContentProps extends RepairsPageRouteProps {
   groups?: RepairDeviceBrandGroup[];
   merchant: CachedMerchant;
+  omitHero?: boolean;
 }
 
 function isOgabasseyMerchant(merchant: CachedMerchant): boolean {
@@ -54,6 +55,7 @@ function getRepairsBasePath(
 export async function RepairsPageContent({
   groups,
   merchant,
+  omitHero = false,
 }: RepairsPageContentProps) {
   const baseUrl = buildStoreUrl(merchant);
   const canonicalUrl = `${baseUrl}/repairs`;
@@ -76,7 +78,11 @@ export async function RepairsPageContent({
       <JsonLd data={breadcrumbSchema} />
       {repairsIndexSchema && <JsonLd data={repairsIndexSchema} />}
       {isOgabasseyMerchant(merchant) ? (
-        <OgabasseyV2Repairs basePath={basePath} groups={groups} />
+        <OgabasseyV2Repairs
+          basePath={basePath}
+          groups={groups}
+          omitHero={omitHero}
+        />
       ) : (
         <GenericRepairsPage
           basePath={basePath}

@@ -25,6 +25,7 @@ import { RepairsRecyclingSection } from './repairs-recycling-section';
 interface OgabasseyV2RepairsProps {
   basePath?: string;
   storeSlug?: string;
+  omitHero?: boolean;
   /**
    * Catalogue device groups. `undefined` means the repairs catalogue flag is
    * off for this merchant — keep today's static services grid so nothing
@@ -37,6 +38,7 @@ interface OgabasseyV2RepairsProps {
 export function OgabasseyV2Repairs({
   basePath,
   groups,
+  omitHero = false,
   storeSlug,
 }: OgabasseyV2RepairsProps) {
   useEffect(() => {
@@ -82,7 +84,9 @@ export function OgabasseyV2Repairs({
   return (
     <div className="min-h-screen bg-store-secondary pb-24 md:pb-12 pt-4 md:pt-8 flex flex-col text-store-background-text">
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 w-full flex-1 flex flex-col">
-        <RepairsLabHero repairHref={repairLink} swapHref={swapLink} />
+        {omitHero ? null : (
+          <RepairsLabHero repairHref={repairLink} swapHref={swapLink} />
+        )}
 
         {/* The Repair Impact */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">

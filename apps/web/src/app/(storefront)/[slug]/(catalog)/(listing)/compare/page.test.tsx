@@ -27,6 +27,7 @@ vi.mock('next/link', () => ({
 type CategoryPageProps = {
   params: Promise<{ category: string; slug: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+  titleHeading?: 'h1' | 'h2';
 };
 
 const { mockCategoryPageRoute, mockComparePageContent } = vi.hoisted(() => ({

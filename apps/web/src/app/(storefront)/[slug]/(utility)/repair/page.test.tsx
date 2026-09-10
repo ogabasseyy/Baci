@@ -56,14 +56,14 @@ const {
   default: RepairPage,
   generateMetadata,
   generateStaticParams,
+  RepairPageResolved,
 } = await import('./page');
-const { RepairPageContent } = await import('./repair-page-content');
 
 function callRepairPage(
   slug: string,
   searchParams: Record<string, string> = {}
 ) {
-  return RepairPageContent({
+  return RepairPageResolved({
     params: Promise.resolve({ slug }),
     searchParams: Promise.resolve(searchParams),
   });

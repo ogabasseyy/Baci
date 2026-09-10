@@ -11,7 +11,6 @@ import {
   getMerchantByIdentifier,
 } from '@/lib/cached-data';
 import type { RawDbProduct } from '@/lib/normalize-product';
-import type { Product as SeoProduct } from '@/lib/products';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
   generateBreadcrumbSchema,
@@ -33,7 +32,7 @@ import {
   isCategoryPageProductSlot,
   normalizeCategoryPageProducts,
   resolveCategoryPageName,
-  type StorefrontCategoryProduct,
+  toCollectionSchemaProduct,
 } from './category-page-content-helpers';
 import { CategoryPageCrawlSummary } from './category-page-crawl-summary';
 import { CategoryPageDeferredCompareLinks } from './category-page-deferred-compare-links';
@@ -64,41 +63,6 @@ function renderCategoryNotFoundContent({
       title={title}
     />
   );
-}
-
-function toCollectionSchemaProduct(
-  product: StorefrontCategoryProduct
-): SeoProduct {
-  return {
-    id: String(product.id),
-    name: product.name,
-    description: product.description,
-    status: 'active',
-    price: product.rawPrice,
-    manage_stock: true,
-    stock: product.stock ?? 0,
-    image: product.image,
-    imageLarge: product.image,
-    imageHint: '',
-    brand: product.brand ?? '',
-    gtin: '',
-    mpn: '',
-    category: product.category,
-    category_slug: product.category_slug,
-    slug: product.slug,
-    // Case-insensitive comparison: DB values can be 'Refurbished' /
-    // 'refurbished' / 'REFURBISHED'. Normalising here prevents refurbished
-    // products from silently falling through to the `'new'` default.
-    condition: (() => {
-      const normalized = product.condition?.toLowerCase();
-      if (normalized === 'used') return 'used';
-      if (normalized === 'open box' || normalized === 'open_box')
-        return 'open_box';
-      if (normalized === 'refurbished') return 'refurbished';
-      return 'new';
-    })(),
-    product_key_specs: product.product_key_specs ?? undefined,
-  };
 }
 
 export async function CategoryPageContent({

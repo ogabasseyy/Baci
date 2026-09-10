@@ -1,6 +1,6 @@
 import { getBlogListingImageSrc } from '@/components/storefront/ogabassey/pages/blog-listing-image-src';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
-import { getCachedBlogListing } from '@/lib/cached-data';
+import type { getCachedBlogListing } from '@/lib/cached-data';
 import { buildStoreUrl } from '@/lib/store-url';
 import { BlogListingFeaturedHeroView } from './blog-listing-featured-hero-view';
 import { buildBlogListingFeaturedStory } from './blog-listing-featured-story';
@@ -9,16 +9,9 @@ import {
   preloadOgabasseyRootBlogListingHeroImage,
 } from './blog-listing-hero-image-preload';
 
-interface BlogListingStaticHeroProps {
-  params: Promise<{ slug: string }>;
-}
+type BlogListing = Awaited<ReturnType<typeof getCachedBlogListing>>;
 
-export async function BlogListingStaticHero({
-  params,
-}: BlogListingStaticHeroProps) {
-  const { slug } = await params;
-  const data = await getCachedBlogListing(slug);
-
+export function BlogListingStaticHero({ data }: { data: BlogListing }) {
   if (!data || data.merchant.template_id !== OGABASSEY_TEMPLATE_ID) {
     return null;
   }

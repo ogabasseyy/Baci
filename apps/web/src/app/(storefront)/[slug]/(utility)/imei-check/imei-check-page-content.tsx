@@ -1,39 +1,6 @@
-import { notFound } from 'next/navigation';
 import { OgabasseyImeiChecker } from '@/components/storefront/ogabassey/pages/imei-checker';
-import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
-import {
-  getCachedMerchant,
-  getCachedMerchantByDomain,
-} from '@/lib/cached-data';
-import {
-  isDomainIdentifier,
-  isValidMerchantIdentifier,
-} from '@/lib/validation';
 
-export async function ImeiCheckPageContent({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const { slug } = await params;
-
-  if (!isValidMerchantIdentifier(slug)) {
-    notFound();
-  }
-
-  const lookupKey = slug.toLowerCase();
-  const merchant = isDomainIdentifier(slug)
-    ? await getCachedMerchantByDomain(lookupKey)
-    : await getCachedMerchant(lookupKey);
-
-  if (!merchant) {
-    notFound();
-  }
-
-  if (merchant.template_id !== OGABASSEY_TEMPLATE_ID) {
-    notFound();
-  }
-
+export function ImeiCheckPageContent() {
   return (
     <>
       <OgabasseyImeiChecker omitHero omitShell />

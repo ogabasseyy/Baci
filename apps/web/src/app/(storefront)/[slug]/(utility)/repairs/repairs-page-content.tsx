@@ -1,37 +1,22 @@
+import type { RepairDeviceBrandGroup } from '@baci/shared/repairs';
 import { headers } from 'next/headers';
-import { notFound } from 'next/navigation';
 import { JsonLd } from '@/components/seo/json-ld';
 import { OgabasseyV2Repairs } from '@/components/storefront/ogabassey/pages/repairs';
 import { GenericRepairsPage } from '@/components/storefront/repairs/GenericRepairsPage';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
-import {
-  type CachedMerchant,
-  getCachedMerchant,
-  getCachedMerchantByDomain,
-} from '@/lib/cached-data';
-import { getRepairDevicesForMerchant } from '@/lib/repairs/repairs-catalog-data';
+import type { CachedMerchant } from '@/lib/cached-data';
 import { isRepairsCatalogEnabled } from '@/lib/repairs/repairs-feature';
 import { generateBreadcrumbSchema } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
 import { buildRepairsIndexSchema } from '@/lib/storefront-repairs/repairs-schema';
-import {
-  isDomainIdentifier,
-  isValidMerchantIdentifier,
-} from '@/lib/validation';
 
-export interface RepairsPageContentProps {
+export interface RepairsPageRouteProps {
   params: Promise<{ slug: string }>;
 }
 
-export async function getRepairsMerchant(slug: string) {
-  if (!isValidMerchantIdentifier(slug)) {
-    return null;
-  }
-
-  const lookupKey = slug.toLowerCase();
-  return isDomainIdentifier(slug)
-    ? await getCachedMerchantByDomain(lookupKey)
-    : await getCachedMerchant(lookupKey);
+export interface RepairsPageContentProps extends RepairsPageRouteProps {
+  groups?: RepairDeviceBrandGroup[];
+  merchant: CachedMerchant;
 }
 
 function isOgabasseyMerchant(merchant: CachedMerchant): boolean {
@@ -66,18 +51,10 @@ function getRepairsBasePath(
   return servedAtDomainRoot ? '' : `/${merchant.slug}`;
 }
 
-export async function RepairsPageContent({ params }: RepairsPageContentProps) {
-  const { slug } = await params;
-  const merchant = await getRepairsMerchant(slug);
-
-  if (!merchant) {
-    notFound();
-  }
-
-  if (!shouldRenderRepairsPage(merchant)) {
-    notFound();
-  }
-
+export async function RepairsPageContent({
+  groups,
+  merchant,
+}: RepairsPageContentProps) {
   const baseUrl = buildStoreUrl(merchant);
   const canonicalUrl = `${baseUrl}/repairs`;
   const breadcrumbSchema = generateBreadcrumbSchema([
@@ -85,13 +62,6 @@ export async function RepairsPageContent({ params }: RepairsPageContentProps) {
     { name: 'Repairs', url: canonicalUrl },
   ]);
   const basePath = getRepairsBasePath(await headers(), merchant);
-  const catalogEnabled = isCatalogEnabledForMerchant(merchant);
-  const groups = catalogEnabled
-    ? await getRepairDevicesForMerchant(merchant.id).catch((error) => {
-        console.error('Error loading repair devices for storefront:', error);
-        return [];
-      })
-    : undefined;
   const repairsIndexSchema = groups?.length
     ? buildRepairsIndexSchema({
         groups,

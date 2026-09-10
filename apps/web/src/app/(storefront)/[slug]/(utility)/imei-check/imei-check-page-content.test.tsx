@@ -1,5 +1,7 @@
+import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCachedMerchant } from '@/lib/cached-data';
+import { ImeiCheckPageContent } from './imei-check-page-content';
 
 vi.mock('@/components/storefront/ogabassey/pages/imei-checker', () => ({
   OgabasseyImeiChecker: () => <div>IMEI checker UI</div>,
@@ -23,7 +25,7 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
-const { ImeiCheckPageContent } = await import('./imei-check-page-content');
+const { ImeiCheckResolvedContent } = await import('./page');
 
 describe('ImeiCheckPageContent', () => {
   beforeEach(() => {
@@ -31,11 +33,21 @@ describe('ImeiCheckPageContent', () => {
     notFound.mockClear();
   });
 
+  it('renders crawler-visible verification guidance', () => {
+    render(<ImeiCheckPageContent />);
+
+    expect(
+      screen.getByRole('heading', {
+        name: 'What to confirm before running an IMEI check',
+      })
+    ).toBeInTheDocument();
+  });
+
   it('throws notFound when the merchant is missing', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue(null);
 
     await expect(
-      ImeiCheckPageContent({ params: Promise.resolve({ slug: 'missing' }) })
+      ImeiCheckResolvedContent({ params: Promise.resolve({ slug: 'missing' }) })
     ).rejects.toThrow('NEXT_NOT_FOUND');
   });
 });

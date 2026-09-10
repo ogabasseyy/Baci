@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react';
 import { Children, cloneElement, isValidElement, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { OgabasseyV2Blog } from '@/components/storefront/ogabassey/pages/blog';
-import { BlogListingStaticHero } from './blog-listing-static-hero';
 import type { BlogPageProps } from './blog-page-content';
 import BlogPage from './page';
 
@@ -24,9 +23,6 @@ vi.mock('next/image', () => ({
 }));
 vi.mock('@/components/storefront/ogabassey/pages/ad-unit', () => ({
   AdUnit: () => null,
-}));
-vi.mock('./blog-listing-static-hero', () => ({
-  BlogListingStaticHero: vi.fn(() => <article>Root featured story</article>),
 }));
 vi.mock('./blog-listing-ogabassey-lcp-hero', () => ({
   BlogListingOgabasseyLcpHero: () => <article>Root featured story</article>,
@@ -96,8 +92,7 @@ describe('BlogListingRequestContent request state regression', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('still hides the template story when the cached hero is unused', async () => {
-    vi.mocked(BlogListingStaticHero).mockResolvedValueOnce(null);
+  it('still hides the template story when the listing hero is unused', async () => {
     render(
       await resolveServerSlots(
         BlogPage({

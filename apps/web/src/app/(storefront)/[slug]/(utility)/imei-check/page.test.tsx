@@ -27,9 +27,9 @@ vi.mock('next/navigation', () => ({
 const {
   default: ImeiCheckPage,
   generateStaticParams,
+  ImeiCheckResolvedContent,
   metadata,
 } = await import('./page');
-const { ImeiCheckPageContent } = await import('./imei-check-page-content');
 
 describe('ImeiCheckPage', () => {
   beforeEach(() => {
@@ -61,7 +61,7 @@ describe('ImeiCheckPage', () => {
     } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
 
     render(
-      await ImeiCheckPageContent({
+      await ImeiCheckResolvedContent({
         params: Promise.resolve({ slug: 'ogabassey' }),
       })
     );
@@ -93,7 +93,9 @@ describe('ImeiCheckPage', () => {
     } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
 
     await expect(
-      ImeiCheckPageContent({ params: Promise.resolve({ slug: 'demo-store' }) })
+      ImeiCheckResolvedContent({
+        params: Promise.resolve({ slug: 'demo-store' }),
+      })
     ).rejects.toThrow('NEXT_NOT_FOUND');
   });
 });

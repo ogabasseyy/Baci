@@ -3,9 +3,8 @@ import { Fragment, Suspense } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { BlogListingFallback } from './BlogListingFallback';
 import { BlogListingCommittedLcpHero } from './blog-listing-committed-lcp-hero';
-import { BlogListingRequestContent } from './blog-listing-request-content';
 import './blog-page-content.test-utils';
-import BlogPage, { generateStaticParams } from './page';
+import BlogPage, { BlogListingResolved, generateStaticParams } from './page';
 
 vi.mock('./blog-listing-ogabassey-lcp-hero', () => ({
   BlogListingOgabasseyLcpHero: () => <article>Root featured story</article>,
@@ -31,7 +30,7 @@ describe('blog page shell', () => {
     expect(hero.type).toBe(BlogListingCommittedLcpHero);
     expect(listingBoundary.type).toBe(Suspense);
     expect(listingBoundary.props.fallback.type).toBe(BlogListingFallback);
-    expect(listingBoundary.props.children.type).toBe(BlogListingRequestContent);
+    expect(listingBoundary.props.children.type).toBe(BlogListingResolved);
     expect(listingBoundary.props.children.props.searchParams).toBe(
       searchParams
     );
@@ -51,7 +50,7 @@ describe('blog page shell', () => {
     const ui = BlogPage({ params, searchParams });
     const [hero, listingBoundary] = ui.props.children;
     expect(hero.type).toBe(BlogListingCommittedLcpHero);
-    expect(listingBoundary.props.children.type).toBe(BlogListingRequestContent);
+    expect(listingBoundary.props.children.type).toBe(BlogListingResolved);
     expect(listingBoundary.props.children.props.searchParams).toBe(
       searchParams
     );

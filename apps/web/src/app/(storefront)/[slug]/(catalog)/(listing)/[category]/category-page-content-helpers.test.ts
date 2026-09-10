@@ -7,6 +7,8 @@ import {
   hasMaintainedCategoryCompareHubLink,
   isCategoryPageProductSlot,
   normalizeCategoryPageProducts,
+  type StorefrontCategoryProduct,
+  toCollectionSchemaProduct,
 } from './category-page-content-helpers';
 
 type CategoryPageData = Awaited<ReturnType<typeof getCachedCategoryPageData>>;
@@ -301,5 +303,25 @@ describe('hasMaintainedCategoryCompareHubLink', () => {
         'smartphones'
       )
     ).toBe(false);
+  });
+});
+
+describe('toCollectionSchemaProduct', () => {
+  it('maps refurbished casing variants to the refurbished schema condition', () => {
+    expect(
+      toCollectionSchemaProduct({
+        id: 'refurb',
+        name: 'Refurb Phone',
+        description: 'Restored',
+        price: '₦1,000',
+        rawPrice: 1000,
+        stock: 1,
+        image: '/phone.png',
+        category: 'phones',
+        category_slug: 'phones',
+        slug: 'refurb-phone',
+        condition: 'REFURBISHED',
+      } as unknown as StorefrontCategoryProduct).condition
+    ).toBe('refurbished');
   });
 });

@@ -15,7 +15,9 @@ describe('repair loading', () => {
       screen.getByRole('heading', { name: 'Book a Repair Service' })
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/For phones, laptops, tablets, consoles and accessories/)
+      screen.getByText(
+        /Have a broken device\? Describe the model, visible damage and fault/
+      )
     ).toBeInTheDocument();
   });
 });

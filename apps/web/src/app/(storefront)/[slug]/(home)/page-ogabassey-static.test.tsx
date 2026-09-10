@@ -127,7 +127,7 @@ describe('OgaBassey dynamic homepage routing', () => {
         pathPrefix: '/ogabassey',
       });
     });
-    expect(mockCriticalHomeCssImport).toHaveBeenCalledOnce();
+    expect(mockCriticalHomeCssImport).not.toHaveBeenCalled();
     expect(mockFullStorefrontCssImport).not.toHaveBeenCalled();
     expect(mockOgabasseyStaticResourceHints).toHaveBeenCalledOnce();
     expect(

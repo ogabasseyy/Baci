@@ -1,13 +1,17 @@
 import type { ReactNode } from 'react';
 import { isOgabasseyBlogStaticTenant } from './blog-category-routing';
-import { BlogPageContent, type BlogPageProps } from './blog-page-content';
+import type { BlogSearchParamValue } from './blog-search-params';
 import { isUnfilteredOgabasseyBlogListing } from './is-unfiltered-ogabassey-blog-listing';
 
-interface BlogListingQueryContentProps extends BlogPageProps {
+interface BlogListingQueryContentProps {
+  children: ReactNode;
   hero: ReactNode;
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, BlogSearchParamValue>>;
 }
 
 export async function BlogListingQueryContent({
+  children,
   hero,
   params,
   searchParams,
@@ -22,11 +26,7 @@ export async function BlogListingQueryContent({
         <div data-blog-listing-filtered="" hidden />
       ) : null}
       {showHero ? hero : null}
-      <BlogPageContent
-        params={params}
-        searchParams={searchParams}
-        hideFeaturedStory={unfiltered}
-      />
+      {children}
     </>
   );
 }

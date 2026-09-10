@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { useOptionalCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { OgabasseyImeiEntry } from './imei-checker-entry';
+import { createImeiIdempotencyKey } from './imei-checker-idempotency-key';
 import { performImeiCheck } from './imei-checker-request';
 import { OgabasseyImeiCheckerShell } from './imei-checker-shell';
 import type {
@@ -20,32 +21,6 @@ import type {
 import { OgabasseyImeiResults } from './imei-results';
 import { useImeiPendingLookup } from './use-imei-pending-lookup';
 import { useImeiTierSelection } from './use-imei-tier-selection';
-
-const createFallbackUuid = () => {
-  const bytes = new Uint8Array(16);
-  globalThis.crypto.getRandomValues(bytes);
-
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-
-  const hex = Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, '0')
-  ).join('');
-
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-};
-
-const createIdempotencyKey = () => {
-  if (globalThis.crypto?.randomUUID) {
-    return globalThis.crypto.randomUUID();
-  }
-
-  if (!globalThis.crypto?.getRandomValues) {
-    throw new Error('Secure crypto unavailable');
-  }
-
-  return createFallbackUuid();
-};
 
 /**
  * Module-scope fetch keeps the try/finally clause out of the component body
@@ -199,7 +174,7 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
     try {
       idempotencyKey = existingIdentityMatches
         ? requestIdentity.key
-        : createIdempotencyKey();
+        : createImeiIdempotencyKey();
     } catch (err) {
       console.error('IMEI check failed:', err);
       setError('Network error. Please check your connection and try again.');

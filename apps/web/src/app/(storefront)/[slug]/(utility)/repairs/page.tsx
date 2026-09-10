@@ -1,13 +1,23 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
+import {
+  getCachedMerchant,
+  getCachedMerchantByDomain,
+} from '@/lib/cached-data';
+import { getRepairDevicesForMerchant } from '@/lib/repairs/repairs-catalog-data';
 import { buildStoreUrl } from '@/lib/store-url';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
+import {
+  isDomainIdentifier,
+  isValidMerchantIdentifier,
+} from '@/lib/validation';
 import { getOgabasseyStaticParams } from '../../ogabassey-static-params';
 import { RepairsLabFallback } from './repairs-lab-fallback';
 import {
-  getRepairsMerchant,
+  isCatalogEnabledForMerchant,
   RepairsPageContent,
-  type RepairsPageContentProps,
+  type RepairsPageRouteProps,
   shouldRenderRepairsPage,
 } from './repairs-page-content';
 
@@ -15,9 +25,20 @@ export function generateStaticParams(): Array<{ slug: string }> {
   return getOgabasseyStaticParams();
 }
 
+export async function getRepairsMerchant(slug: string) {
+  if (!isValidMerchantIdentifier(slug)) {
+    return null;
+  }
+
+  const lookupKey = slug.toLowerCase();
+  return isDomainIdentifier(slug)
+    ? await getCachedMerchantByDomain(lookupKey)
+    : await getCachedMerchant(lookupKey);
+}
+
 export async function generateMetadata({
   params,
-}: RepairsPageContentProps): Promise<Metadata> {
+}: RepairsPageRouteProps): Promise<Metadata> {
   const { slug } = await params;
   const merchant = await getRepairsMerchant(slug);
 
@@ -41,10 +62,28 @@ export async function generateMetadata({
   };
 }
 
-export default function RepairsPage(props: RepairsPageContentProps) {
+async function RepairsPageResolved(props: RepairsPageRouteProps) {
+  const { slug } = await props.params;
+  const merchant = await getRepairsMerchant(slug);
+
+  if (!merchant || !shouldRenderRepairsPage(merchant)) {
+    notFound();
+  }
+
+  const groups = isCatalogEnabledForMerchant(merchant)
+    ? await getRepairDevicesForMerchant(merchant.id).catch((error) => {
+        console.error('Error loading repair devices for storefront:', error);
+        return [];
+      })
+    : undefined;
+
+  return <RepairsPageContent groups={groups} merchant={merchant} {...props} />;
+}
+
+export default function RepairsPage(props: RepairsPageRouteProps) {
   return (
     <Suspense fallback={<RepairsLabFallback />}>
-      <RepairsPageContent {...props} />
+      <RepairsPageResolved {...props} />
     </Suspense>
   );
 }

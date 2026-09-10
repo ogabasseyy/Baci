@@ -7,8 +7,9 @@ import {
 } from './blog-category-routing';
 import { BlogListingCommittedLcpHero } from './blog-listing-committed-lcp-hero';
 import { buildBlogListingMetadata } from './blog-listing-metadata';
-import { BlogListingRequestContent } from './blog-listing-request-content';
-import type { BlogPageProps } from './blog-page-content';
+import { BlogListingQueryContent } from './blog-listing-query-content';
+import { BlogPageContent, type BlogPageProps } from './blog-page-content';
+import { isUnfilteredOgabasseyBlogListing } from './is-unfiltered-ogabassey-blog-listing';
 
 // Cache Components invariant for this route:
 // - generateMetadata must be request-searchParams-free for the STATIC tenant so
@@ -43,6 +44,27 @@ export async function generateMetadata({
   return buildBlogListingMetadata({ slug, searchParams: await searchParams });
 }
 
+export async function BlogListingResolved({
+  params,
+  searchParams,
+}: BlogPageProps) {
+  const [{ slug }, query] = await Promise.all([params, searchParams]);
+
+  return (
+    <BlogListingQueryContent
+      hero={null}
+      params={Promise.resolve({ slug })}
+      searchParams={Promise.resolve(query)}
+    >
+      <BlogPageContent
+        hideFeaturedStory={isUnfilteredOgabasseyBlogListing(slug, query)}
+        params={params}
+        searchParams={searchParams}
+      />
+    </BlogListingQueryContent>
+  );
+}
+
 export default function BlogPage({ params, searchParams }: BlogPageProps) {
   return (
     <>
@@ -50,10 +72,7 @@ export default function BlogPage({ params, searchParams }: BlogPageProps) {
       <Suspense
         fallback={<BlogListingFallback includeFeaturedSkeleton={false} />}
       >
-        <BlogListingRequestContent
-          params={params}
-          searchParams={searchParams}
-        />
+        <BlogListingResolved params={params} searchParams={searchParams} />
       </Suspense>
     </>
   );

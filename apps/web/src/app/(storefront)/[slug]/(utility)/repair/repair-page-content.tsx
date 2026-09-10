@@ -5,83 +5,25 @@ import {
   RepairBookingWizard,
 } from '@/components/storefront/RepairBookingWizard';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
-import {
-  type CachedMerchant,
-  getCachedMerchant,
-  getCachedMerchantByDomain,
-} from '@/lib/cached-data';
-import { getRepairDeviceDetailBySlug } from '@/lib/repairs/repairs-catalog-data';
+import type { CachedMerchant } from '@/lib/cached-data';
 import { isRepairsCatalogEnabled } from '@/lib/repairs/repairs-feature';
 import { generateBreadcrumbSchema } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
-import {
-  isDomainIdentifier,
-  isValidMerchantIdentifier,
-} from '@/lib/validation';
-import { repairBookingSearchParamsSchema } from '@/schemas/repair-actions';
 import { RepairBookingLcpIntro } from './repair-booking-lcp-intro';
 import { RepairBookingPrepSection } from './repair-booking-prep-section';
 
-export interface RepairPageContentProps {
-  /** Set when the parent already committed the booking LCP intro. */
-  omitIntro?: boolean;
+export interface RepairPageRouteProps {
   params: Promise<{
     slug: string;
   }>;
   searchParams: Promise<{ device?: string; quote?: string }>;
 }
 
-export async function getRepairMerchant(slug: string) {
-  if (!isValidMerchantIdentifier(slug)) {
-    return null;
-  }
-
-  const lookupKey = slug.toLowerCase();
-  return isDomainIdentifier(slug)
-    ? await getCachedMerchantByDomain(lookupKey)
-    : await getCachedMerchant(lookupKey);
-}
-
-async function resolveBookingPreselection(
-  merchant: CachedMerchant,
-  searchParams: { device?: string; quote?: string }
-): Promise<RepairBookingPreselection | undefined> {
-  if (
-    !isRepairsCatalogEnabled({
-      businessType: merchant.business_type,
-      repairsCatalogEnabled: merchant.feature_settings?.repairs_catalog_enabled,
-    })
-  ) {
-    return undefined;
-  }
-
-  const parsedParams = repairBookingSearchParamsSchema.safeParse(searchParams);
-  if (!parsedParams.success || !parsedParams.data.device) {
-    return undefined;
-  }
-
-  const detail = await getRepairDeviceDetailBySlug(
-    merchant.id,
-    parsedParams.data.device
-  );
-  if (!detail) {
-    return undefined;
-  }
-
-  const matchedQuote = parsedParams.data.quote
-    ? detail.quotes.find((quote) => quote.id === parsedParams.data.quote)
-    : undefined;
-
-  return {
-    deviceId: detail.device.id,
-    deviceLabel: `${detail.device.brand} ${detail.device.model}`.trim(),
-    deviceSlug: detail.device.slug,
-    deviceType: detail.device.deviceType,
-    isFromPrice: matchedQuote?.isFromPrice,
-    quoteId: matchedQuote?.id,
-    quoteLabel: matchedQuote?.serviceTypeName,
-    quotePrice: matchedQuote?.price,
-  };
+export interface RepairPageContentProps extends RepairPageRouteProps {
+  merchant: CachedMerchant | null;
+  /** Set when the parent already committed the booking LCP intro. */
+  omitIntro?: boolean;
+  preselection?: RepairBookingPreselection;
 }
 
 export function canUseRepairBooking(
@@ -101,12 +43,12 @@ export function canUseRepairBooking(
 }
 
 export async function RepairPageContent({
+  merchant,
   omitIntro = false,
   params,
-  searchParams,
+  preselection,
 }: RepairPageContentProps) {
   const { slug } = await params;
-  const merchant = await getRepairMerchant(slug);
 
   if (!canUseRepairBooking(merchant)) {
     notFound();
@@ -118,10 +60,6 @@ export async function RepairPageContent({
     { name: merchant.business_name || 'Home', url: baseUrl },
     { name: 'Book a Repair', url: canonicalUrl },
   ]);
-  const preselection = await resolveBookingPreselection(
-    merchant,
-    await searchParams
-  );
 
   const wizard = (
     <>

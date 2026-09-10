@@ -61,4 +61,23 @@ describe('loadStylesheetAfterWindowLoad', () => {
     );
     expect((loggedError as Error).cause).toBe(error);
   });
+
+  it('re-arms a retry trigger after a failed stylesheet import', async () => {
+    const error = new Error('chunk missing');
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const load = vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce({});
+
+    const stop = loadStylesheetAfterWindowLoad(load, 'failed');
+    expect(load).toHaveBeenCalledOnce();
+
+    await vi.waitFor(() => {
+      expect(consoleError).toHaveBeenCalledOnce();
+    });
+
+    window.dispatchEvent(new Event('pointerdown'));
+    expect(load).toHaveBeenCalledTimes(2);
+    stop();
+  });
 });

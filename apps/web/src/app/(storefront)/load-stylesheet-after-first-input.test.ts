@@ -94,4 +94,26 @@ describe('loadStylesheetAfterFirstInput', () => {
     expect(load).toHaveBeenCalledTimes(2);
     stop();
   });
+
+  it('re-arms desktop stylesheet loading after a failed window-load import', async () => {
+    stubMatchMedia(true);
+    const load = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('chunk missing'))
+      .mockResolvedValueOnce({});
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const stop = loadStylesheetAfterFirstInput(load, 'failed');
+    expect(load).toHaveBeenCalledOnce();
+
+    await vi.waitFor(() => {
+      expect(consoleError).toHaveBeenCalledOnce();
+    });
+
+    window.dispatchEvent(new Event('pointerdown'));
+    expect(load).toHaveBeenCalledTimes(2);
+    stop();
+  });
 });

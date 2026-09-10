@@ -1,4 +1,5 @@
 import { RepairsLabHero } from '@/components/storefront/ogabassey/pages/repairs-lab-hero';
+import { isDomainIdentifier } from '@/lib/validation';
 import { isOgabasseyStaticTenant } from '../../ogabassey-static-params';
 
 /**
@@ -15,5 +16,12 @@ export async function RepairsLabCommittedHero({
     return null;
   }
 
-  return <RepairsLabHero />;
+  const basePath = isDomainIdentifier(slug) ? '' : `/${slug}`;
+
+  return (
+    <RepairsLabHero
+      repairHref={`${basePath}/repair`}
+      swapHref={`${basePath}/swap`}
+    />
+  );
 }

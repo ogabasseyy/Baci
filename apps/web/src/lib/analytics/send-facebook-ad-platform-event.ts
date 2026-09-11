@@ -127,6 +127,11 @@ export async function sendFacebookAdPlatformEvent(
   ) {
     return { success: false, error: `unmapped_event: ${eventName}` };
   }
+  const catalogItems = contents
+    .map((item) => ({ ...item, id: item.id.trim() }))
+    .filter((item) => item.id);
+  const catalogIds = catalogItems.map((item) => item.id);
+  const firstCatalogItem = catalogItems[0];
   return await sendFacebookCAPIEvent(
     pixel,
     token,
@@ -134,25 +139,24 @@ export async function sendFacebookAdPlatformEvent(
     userData,
     eventName === 'Search'
       ? {
-          contentIds: contents.map((item) => item.id),
+          contentIds: catalogIds,
           currency,
           searchString: event.custom_data.search_string,
           contentType: 'product_group',
           value,
         }
       : {
-          ...(contents.some((item) => item.id?.trim())
+          ...(firstCatalogItem
             ? {
-                contentIds: contents
-                  .filter((item) => item.id?.trim())
-                  .map((item) => item.id.trim()),
+                contentIds: catalogIds,
                 contentName:
-                  event.custom_data.content_name || first?.name || first?.id,
+                  event.custom_data.content_name ||
+                  firstCatalogItem.name ||
+                  firstCatalogItem.id,
               }
             : {}),
           contentType:
-            eventName === 'AddToWishlist' &&
-            contents.some((item) => item.id?.trim())
+            eventName === 'AddToWishlist' && firstCatalogItem
               ? 'product_group'
               : event.custom_data.content_type,
           currency,

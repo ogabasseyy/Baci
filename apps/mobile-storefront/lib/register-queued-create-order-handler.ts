@@ -11,4 +11,12 @@ export function registerQueuedCreateOrderHandler(): void {
       useAuthStore.getState().user?.id
     )
   );
+  let previousUserId = useAuthStore.getState().user?.id;
+  useAuthStore.subscribe((state) => {
+    const currentId = state.user?.id;
+    if (currentId && currentId !== previousUserId) {
+      offlineQueue.processPending();
+    }
+    previousUserId = currentId;
+  });
 }

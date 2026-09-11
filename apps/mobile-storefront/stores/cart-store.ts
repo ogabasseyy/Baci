@@ -111,7 +111,7 @@ export const useCartStore = create<CartState>()(
         const state = get();
         const items = state.items.filter((item) => item.id !== id);
         if (items.length === 0) {
-          set(await rotateEmptyCheckoutCart());
+          await rotateEmptyCheckoutCart(set);
           return;
         }
         if (state.cartWideNegotiationActive) {
@@ -129,7 +129,7 @@ export const useCartStore = create<CartState>()(
         if (quantity <= 0) {
           const items = state.items.filter((item) => item.id !== id);
           if (items.length === 0) {
-            set(await rotateEmptyCheckoutCart());
+            await rotateEmptyCheckoutCart(set);
             return;
           }
           if (state.cartWideNegotiationActive) {
@@ -162,7 +162,7 @@ export const useCartStore = create<CartState>()(
       },
 
       clearCart: async () => {
-        set(await rotateEmptyCheckoutCart());
+        await rotateEmptyCheckoutCart(set);
       },
 
       getItem: (productId, variantId) => {

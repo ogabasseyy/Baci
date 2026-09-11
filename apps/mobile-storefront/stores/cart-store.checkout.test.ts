@@ -69,6 +69,24 @@ it('changes the purchase identity after clearing and buying the identical item',
   expect(useCartStore.getState().checkoutGeneration).not.toBe(first);
 });
 
+it('keeps a replacement item when last-item persist is still in flight', async () => {
+  let releasePersist!: () => void;
+  (persistCheckoutGeneration as jest.Mock).mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        releasePersist = () => resolve();
+      })
+  );
+  useCartStore.getState().addItem(item);
+  const { items } = useCartStore.getState();
+  const removing = useCartStore.getState().removeItem(items[0].id);
+  useCartStore.getState().addItem(item);
+  expect(useCartStore.getState().items).toHaveLength(1);
+  releasePersist();
+  await removing;
+  expect(useCartStore.getState().items).toHaveLength(1);
+});
+
 it('changes identity when the shopper removes the last item and starts over', async () => {
   useCartStore.getState().addItem(item);
   const { items, checkoutGeneration } = useCartStore.getState();

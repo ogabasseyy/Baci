@@ -59,6 +59,11 @@ export const mockLoadAdTrackingNativeModules =
       onTikTokReady?: (
         tikTok: MockTikTokBusiness | null
       ) => void | Promise<void>;
+      onFacebookReady?: (facebook: {
+        FBSettings: MockFBSettings | null;
+        AppEventsLogger: MockAppEventsLogger | null;
+        AEMReporterIOS: MockAEMReporterIOS | null;
+      }) => void | Promise<void>;
     }) => Promise<MockNativeModules>
   >();
 

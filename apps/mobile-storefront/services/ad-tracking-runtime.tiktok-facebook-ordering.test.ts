@@ -30,6 +30,11 @@ describe('ad-tracking runtime TikTok/Facebook ordering', () => {
         TikTokBusiness: { initialize: initializeTikTok },
       });
       await options?.onTikTokReady?.(modules.TikTokBusiness);
+      await options?.onFacebookReady?.({
+        FBSettings: modules.FBSettings,
+        AppEventsLogger: modules.AppEventsLogger,
+        AEMReporterIOS: modules.AEMReporterIOS,
+      });
       expect(initializeTikTok).toHaveBeenCalledTimes(1);
       return modules;
     });

@@ -35,12 +35,17 @@ let cachedMerchantId: string | null = null;
 let cachedUserData: AdTrackingUserProperties & { userId?: string } = {};
 
 export async function loadNativeModules(): Promise<void> {
-  // Assign TikTok early and initialize it concurrently with Facebook load so
-  // either provider stalling cannot block the other after the 4s deadline.
+  // Publish each provider as soon as it is ready so a stall in the other
+  // cannot leave its modules null after the 4s startup deadline.
   const modules = await loadAdTrackingNativeModules({
     onTikTokReady: async (tikTok) => {
       TikTokBusiness = tikTok;
       await initializeTikTokBusinessIfNeeded(tikTok);
+    },
+    onFacebookReady: (facebook) => {
+      FBSettings = facebook.FBSettings;
+      AppEventsLogger = facebook.AppEventsLogger;
+      AEMReporterIOS = facebook.AEMReporterIOS;
     },
   });
   FBSettings = modules.FBSettings;

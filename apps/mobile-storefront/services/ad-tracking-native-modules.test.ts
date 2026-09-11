@@ -144,6 +144,10 @@ describe('loadAdTrackingNativeModules', () => {
       const tikTokReadyStarted = new Promise<void>((resolve) => {
         notifyTikTokReadyStarted = resolve;
       });
+      let notifyFacebookReady: (() => void) | undefined;
+      const facebookReady = new Promise<void>((resolve) => {
+        notifyFacebookReady = resolve;
+      });
       const onTikTokReady = jest.fn(
         () =>
           new Promise<void>((resolve) => {
@@ -151,20 +155,33 @@ describe('loadAdTrackingNativeModules', () => {
             notifyTikTokReadyStarted?.();
           })
       );
+      const onFacebookReadyMock = jest.fn();
+      let facebookEventLogged = false;
 
       const { loadAdTrackingNativeModules } = await import(
         './ad-tracking-native-modules'
       );
-      const loading = loadAdTrackingNativeModules({ onTikTokReady });
+      const loading = loadAdTrackingNativeModules({
+        onTikTokReady,
+        onFacebookReady: (facebook) => {
+          onFacebookReadyMock(facebook);
+          facebook.AppEventsLogger?.logEvent?.('ViewContent');
+          facebookEventLogged = true;
+          notifyFacebookReady?.();
+        },
+      });
 
       await tikTokReadyStarted;
-      await Promise.resolve();
-      await Promise.resolve();
+      await facebookReady;
 
-      expect(mockInitializeSDK).toHaveBeenCalled();
-      expect(onTikTokReady).toHaveBeenCalledWith(
-        expect.objectContaining({ trackEvent: mockTikTokTrackEvent })
+      expect(onFacebookReadyMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          FBSettings: expect.anything(),
+          AppEventsLogger: expect.anything(),
+        })
       );
+      expect(facebookEventLogged).toBe(true);
+      expect(mockInitializeSDK).toHaveBeenCalled();
 
       resolveTikTokReady?.();
       const modules = await loading;

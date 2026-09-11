@@ -55,9 +55,16 @@ export interface AdTrackingNativeModules {
   TikTokBusiness: TikTokBusinessLike | null;
 }
 
+export type FacebookNativeModules = Pick<
+  AdTrackingNativeModules,
+  'FBSettings' | 'AppEventsLogger' | 'AEMReporterIOS'
+>;
+
 export type LoadAdTrackingNativeModulesOptions = {
   /** Fired when TikTok is loaded; may run concurrently with Facebook initializeSDK. */
   onTikTokReady?: (tikTok: TikTokBusinessLike | null) => void | Promise<void>;
+  /** Fired when Facebook modules load, before awaiting TikTok readiness. */
+  onFacebookReady?: (facebook: FacebookNativeModules) => void | Promise<void>;
 };
 
 async function loadTikTokBusinessModule(): Promise<TikTokBusinessLike | null> {
@@ -108,6 +115,11 @@ export async function loadAdTrackingNativeModules(
       modules.FBSettings = fb.settings as FBSettingsLike;
       modules.AppEventsLogger = fb.events as AppEventsLoggerLike;
       modules.AEMReporterIOS = fb.aem as AEMReporterIOSLike;
+      await options.onFacebookReady?.({
+        FBSettings: modules.FBSettings,
+        AppEventsLogger: modules.AppEventsLogger,
+        AEMReporterIOS: modules.AEMReporterIOS,
+      });
     }
   } catch (error) {
     console.debug(

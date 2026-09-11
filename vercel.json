@@ -19,15 +19,11 @@
     }
   ],
   "functions": {
-    "src/app/api/ai-jobs/worker/route.ts": { "memory": 1024 },
-    "src/app/api/ai/grade-device/route.ts": { "memory": 1024 },
-    "src/app/api/feed/google-merchant/route.ts": { "memory": 512 },
-    "src/app/api/orders/[id]/invoice/route.ts": { "memory": 256 },
-    "src/app/api/storefront/account/orders/[id]/invoice/route.ts": {
-      "memory": 256
-    },
-    "src/app/api/storefront/account/orders/[id]/receipt/route.ts": {
-      "memory": 256
-    }
+    "src/app/api/ai-jobs/worker/route.ts": {},
+    "src/app/api/ai/grade-device/route.ts": {},
+    "src/app/api/feed/google-merchant/route.ts": {},
+    "src/app/api/orders/[id]/invoice/route.ts": {},
+    "src/app/api/storefront/account/orders/[id]/invoice/route.ts": {},
+    "src/app/api/storefront/account/orders/[id]/receipt/route.ts": {}
   }
 }

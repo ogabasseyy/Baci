@@ -180,6 +180,40 @@ test('gates Vercel deployment configuration in deploy and CI filters', () => {
   }
 });
 
+test('keeps Vercel function routes while leaving Fluid memory to supported sources', () => {
+  const config = JSON.parse(
+    readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8')
+  );
+  const functions = config.functions ?? {};
+  const expectedRoutes = [
+    'src/app/api/ai-jobs/worker/route.ts',
+    'src/app/api/ai/grade-device/route.ts',
+    'src/app/api/feed/google-merchant/route.ts',
+    'src/app/api/orders/[id]/invoice/route.ts',
+    'src/app/api/storefront/account/orders/[id]/invoice/route.ts',
+    'src/app/api/storefront/account/orders/[id]/receipt/route.ts',
+  ];
+
+  assert.deepEqual(Object.keys(functions), expectedRoutes);
+  for (const [route, options] of Object.entries(functions)) {
+    assert.equal(
+      Object.hasOwn(options, 'memory'),
+      false,
+      `${route} must not configure memory in vercel.json`
+    );
+  }
+
+  assert.deepEqual(config.regions, ['dub1']);
+  assert.deepEqual(config.crons, [
+    { path: '/api/cron/web-vitals-health', schedule: '0 4 * * *' },
+    { path: '/api/cron/gigl-tracking', schedule: '*/5 * * * *' },
+    {
+      path: '/api/cron/gigl-tracking-notifications',
+      schedule: '*/10 * * * *',
+    },
+  ]);
+});
+
 test('fails closed on malformed identity and GitHub API responses', async () => {
   await assert.rejects(
     verifyCurrentMainDeployment({

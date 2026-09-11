@@ -10,6 +10,16 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable \
   && corepack prepare pnpm@11.7.0 --activate \
-  && chmod -R a+rX "$COREPACK_HOME"
+  && chmod -R a+rX "$COREPACK_HOME" \
+  && mkdir -p /usr/local/libexec \
+  && mkdir -m 700 /usr/local/libexec/.baci-internal \
+  && cp /bin/bash /usr/local/libexec/.baci-internal/bash \
+  && cp /bin/dash /usr/local/libexec/.baci-internal/dash \
+  && chmod 700 /usr/local/libexec/.baci-internal/bash /usr/local/libexec/.baci-internal/dash \
+  && touch \
+    /usr/local/libexec/baci-real-bash \
+    /usr/local/libexec/baci-real-dash \
+    /usr/local/libexec/baci-shell-bash \
+    /usr/local/libexec/baci-shell-dash
 
 WORKDIR /workspace

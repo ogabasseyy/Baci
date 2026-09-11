@@ -62,6 +62,7 @@ function sanitizeRunId(value) {
 }
 export function runRemediationAutofix({
   candidate,
+  containerIdentity,
   env = process.env,
   prompt,
   runner = defaultRunner,
@@ -176,6 +177,7 @@ export function runRemediationAutofix({
       candidate,
       codexBin,
       commandEnv,
+      containerIdentity,
       prompt,
       repoDir,
       runner,
@@ -231,6 +233,7 @@ export function runRemediationAutofix({
       };
     }
     const verificationCommand = buildRemediationVerificationCommand({
+      containerIdentity,
       env: commandEnv,
       repoDir,
       worktreeDir,

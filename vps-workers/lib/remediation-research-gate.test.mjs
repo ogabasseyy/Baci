@@ -61,6 +61,108 @@ describe('remediation research gate', () => {
     assert.match(result.reasons.join('\n'), /defensible selected fix/);
   });
 
+  it('rejects a report that qualifies the missing fix with extra wording', () => {
+    const report = validReport.replace(
+      'SELECTED_FIX: smallest code fix',
+      'SELECTED_FIX: no defensible code fix is established; gather more evidence'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, false);
+    assert.match(result.reasons.join('\n'), /defensible selected fix/);
+  });
+
+  it('rejects a report that says a defensible fix cannot be established', () => {
+    const result = validateCodexResearchResult(
+      jsonl(
+        validReport.replace(
+          'SELECTED_FIX: smallest code fix',
+          'SELECTED_FIX: A defensible fix cannot be established without production traces.'
+        )
+      )
+    );
+
+    assert.equal(result.accepted, false);
+    assert.match(result.reasons.join('\n'), /defensible selected fix/);
+  });
+
+  it('rejects a report that cannot justify a safe code change', () => {
+    const result = validateCodexResearchResult(
+      jsonl(
+        validReport.replace(
+          'SELECTED_FIX: smallest code fix',
+          'SELECTED_FIX: No safe code change can be justified from the available evidence; collect production traces.'
+        )
+      )
+    );
+
+    assert.equal(result.accepted, false);
+    assert.match(result.reasons.join('\n'), /defensible selected fix/);
+  });
+
+  it('rejects passive reports that leave the selected fix unavailable', () => {
+    const reports = [
+      'SELECTED_FIX: The defensible fix was not identified from the available evidence.',
+      'SELECTED_FIX: The safe code change has not been established.',
+      'SELECTED_FIX: The selected fix is unavailable without production traces.',
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, false);
+      assert.match(result.reasons.join('\n'), /defensible selected fix/);
+    }
+  });
+
+  it('rejects reverse-order wording that cannot establish a defensible fix', () => {
+    const reports = [
+      'SELECTED_FIX: I cannot establish a defensible fix without production traces.',
+      'SELECTED_FIX: I could not identify a defensible fix from the available evidence.',
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, false);
+      assert.match(result.reasons.join('\n'), /defensible selected fix/);
+    }
+  });
+
+  it('rejects an explicit conclusion that no safe fix can be determined', () => {
+    const result = validateCodexResearchResult(
+      jsonl(
+        validReport.replace(
+          'SELECTED_FIX: smallest code fix',
+          'SELECTED_FIX: I cannot determine a safe fix from the available evidence; apply the bounded parser change'
+        )
+      )
+    );
+
+    assert.equal(result.accepted, false);
+    assert.match(result.reasons.join('\n'), /defensible selected fix/);
+  });
+
+  it('accepts affirmative wording that rejects rejecting the selected fix', () => {
+    const report = validReport.replace(
+      'SELECTED_FIX: smallest code fix',
+      'SELECTED_FIX: There is no defensible reason to reject this fix; apply the bounded parser change'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, true);
+  });
+
   it('extracts text from Codex content blocks without trusting other events', () => {
     const output = [
       JSON.stringify({
@@ -111,6 +213,34 @@ describe('remediation research gate', () => {
       validateCodexResearchResult(jsonl(oneOption)).reasons.join('\n'),
       /at least two plausible options/
     );
+  });
+
+  it('accepts an allowed confidence value with Markdown emphasis', () => {
+    const report = validReport.replace(
+      'ROOT_CAUSE_CONFIDENCE: medium',
+      'ROOT_CAUSE_CONFIDENCE: **low**'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, true);
+  });
+
+  it('rejects mismatched Markdown confidence delimiters', () => {
+    for (const confidence of ['**high__', '__medium**', '`low__']) {
+      const report = validReport.replace(
+        'ROOT_CAUSE_CONFIDENCE: medium',
+        `ROOT_CAUSE_CONFIDENCE: ${confidence}`
+      );
+
+      const result = validateCodexResearchResult(jsonl(report));
+
+      assert.equal(result.accepted, false);
+      assert.match(
+        result.reasons.join('\n'),
+        /confidence must be high, medium, or low/
+      );
+    }
   });
 
   it('accepts labeled option paragraphs as structured alternatives', () => {

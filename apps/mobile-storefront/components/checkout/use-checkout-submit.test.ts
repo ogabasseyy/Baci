@@ -22,7 +22,13 @@ const mockValidateCheckoutSubmission =
     typeof import('./checkout-submit-validation').validateCheckoutSubmission
   >();
 const mockRepriceItems = jest.fn();
-const mockRestoreItems = jest.fn();
+const mockRestoreItems = jest.fn<
+  (
+    items: CartItem[],
+    cartWideNegotiationActive?: boolean,
+    checkoutGeneration?: string
+  ) => Promise<void>
+>(async () => undefined);
 const mockUseMerchant = jest.fn() as jest.MockedFunction<
   () => { data: { id: string } | null }
 >;

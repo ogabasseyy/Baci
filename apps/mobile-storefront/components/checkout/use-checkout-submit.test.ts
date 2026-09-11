@@ -294,6 +294,9 @@ describe('useCheckoutSubmit', () => {
 
     // Standard path taken (createOrder called); BNPL flow NOT taken.
     expect(mockCreateOrder).toHaveBeenCalled();
+    expect(mockCreateOrder).toHaveBeenCalledWith(expect.anything(), {
+      checkoutGeneration: 'gen-1',
+    });
     expect(mockSubmitBnplCheckout).not.toHaveBeenCalled();
   });
 

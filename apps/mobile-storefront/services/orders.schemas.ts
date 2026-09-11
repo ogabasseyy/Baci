@@ -123,6 +123,11 @@ export const OrderResponseSchema = z.object({
     .nullable()
     .optional(),
   amountDueToGateway: z.number(),
+  idempotency: z
+    .object({
+      replayed: z.literal(true),
+    })
+    .optional(),
 });
 
 export type CreateOrderRequest = z.infer<typeof CreateOrderRequestSchema>;

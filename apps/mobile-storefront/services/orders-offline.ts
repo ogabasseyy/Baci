@@ -16,16 +16,20 @@ async function checkNetwork(): Promise<boolean> {
   return state.isConnected === true && state.isInternetReachable !== false;
 }
 
-function enqueueCreateOrder(request: CreateOrderRequest) {
+function enqueueCreateOrder(
+  request: CreateOrderRequest,
+  checkoutGeneration: string
+) {
   return offlineQueue.enqueue(
     'create_order',
-    wrapQueuedCreateOrder(request, useCartStore.getState().checkoutGeneration)
+    wrapQueuedCreateOrder(request, checkoutGeneration)
   );
 }
 
 export async function createOrderWithOfflineSupport(
   request: CreateOrderRequest
 ): Promise<{ order: OrderResponse | null; queued: boolean; queueId?: string }> {
+  const checkoutGeneration = useCartStore.getState().checkoutGeneration;
   const validationResult = CreateOrderRequestSchema.safeParse(request);
   if (!validationResult.success) {
     const errorMessage = validationResult.error.issues
@@ -42,14 +46,14 @@ export async function createOrderWithOfflineSupport(
 
   if (isOnline) {
     try {
-      const order = await createOrder(request);
+      const order = await createOrder(request, { checkoutGeneration });
       return { order, queued: false };
     } catch (error) {
       // Only queue errors where the server definitely did NOT receive the request.
       // TIMEOUT_ERROR has unknown outcome — the order may have been created server-side,
       // so queuing it for replay risks creating a duplicate order.
       if (error instanceof OrderError && error.code === 'NETWORK_ERROR') {
-        const queueId = await enqueueCreateOrder(request);
+        const queueId = await enqueueCreateOrder(request, checkoutGeneration);
         trackEvent('order_queued_after_failure', {
           queueId,
           errorCode: error.code,
@@ -60,7 +64,7 @@ export async function createOrderWithOfflineSupport(
     }
   }
 
-  const queueId = await enqueueCreateOrder(request);
+  const queueId = await enqueueCreateOrder(request, checkoutGeneration);
 
   trackEvent('order_queued_offline', {
     queueId,

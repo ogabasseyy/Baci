@@ -5,7 +5,10 @@ import type { CreateOrderRequest } from './orders.schemas';
 type CreateOrderResult = { order: { id: string } };
 
 const mockCreateOrder = jest.fn<
-  (request: CreateOrderRequest) => Promise<CreateOrderResult>
+  (
+    request: CreateOrderRequest,
+    options?: { checkoutGeneration?: string }
+  ) => Promise<CreateOrderResult>
 >(async () => ({ order: { id: 'order-1' } }));
 const mockEnqueue = jest.fn<
   (type: string, payload: unknown) => Promise<string>
@@ -25,8 +28,12 @@ jest.mock('@/lib/offline-queue', () => ({
   offlineQueue: { enqueue: mockEnqueue },
 }));
 
+let mockCheckoutGeneration = 'cart-one';
+
 jest.mock('@/stores/cart-store', () => ({
-  useCartStore: { getState: () => ({ checkoutGeneration: 'cart-one' }) },
+  useCartStore: {
+    getState: () => ({ checkoutGeneration: mockCheckoutGeneration }),
+  },
 }));
 
 jest.mock('@react-native-community/netinfo', () => ({
@@ -58,6 +65,7 @@ const baseRequest: CreateOrderRequest = {
 describe('createOrderWithOfflineSupport', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCheckoutGeneration = 'cart-one';
     mockNetInfoFetch.mockResolvedValue({
       isConnected: true,
       isInternetReachable: true,
@@ -81,6 +89,26 @@ describe('createOrderWithOfflineSupport', () => {
     mockCreateOrder.mockRejectedValueOnce(
       new OrderError('offline', 'NETWORK_ERROR')
     );
+
+    const result = await createOrderWithOfflineSupport(baseRequest);
+
+    expect(result.queued).toBe(true);
+    expect(mockCreateOrder).toHaveBeenCalledWith(baseRequest, {
+      checkoutGeneration: 'cart-one',
+    });
+    expect(mockEnqueue).toHaveBeenCalledWith('create_order', {
+      checkoutGeneration: 'cart-one',
+      request: baseRequest,
+    });
+  });
+
+  it('keeps the snapshot when the cart generation changes during the request', async () => {
+    const { createOrderWithOfflineSupport } =
+      require('./orders-offline') as typeof import('./orders-offline');
+    mockCreateOrder.mockImplementation(async () => {
+      mockCheckoutGeneration = 'cart-two';
+      throw new OrderError('offline', 'NETWORK_ERROR');
+    });
 
     const result = await createOrderWithOfflineSupport(baseRequest);
 

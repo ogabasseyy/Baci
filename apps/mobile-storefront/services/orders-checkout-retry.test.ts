@@ -96,6 +96,7 @@ jest.mock('@/lib/supabase', () => ({
 jest.mock('@/lib/api', () => ({
   fetchWithRetry: jest.fn(async () => ({
     ok: true,
+    headers: { get: () => null },
     json: async () => ({
       amountDueToGateway: 5000,
       order: {
@@ -147,6 +148,40 @@ describe('bugfix: checkout retries keep the originating auth partition', () => {
     expect(mockGetCheckoutAttemptKey).toHaveBeenCalledWith(
       expect.objectContaining({ user_id: 'guest' }),
       'queued-cart'
+    );
+  });
+
+  it('does not emit order_created when the server replays the same checkout', async () => {
+    const { fetchWithRetry } = require('@/lib/api') as {
+      fetchWithRetry: ReturnType<typeof jest.fn>;
+    };
+    const { trackEvent } = require('@/services/analytics') as {
+      trackEvent: ReturnType<typeof jest.fn>;
+    };
+    fetchWithRetry.mockResolvedValueOnce({
+      ok: true,
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === 'x-idempotency-replayed' ? 'true' : null,
+      },
+      json: async () => ({
+        amountDueToGateway: 5000,
+        order: {
+          created_at: '2026-09-10T00:00:00Z',
+          id: 'order-1',
+          order_number: 'ORD-1',
+          payment_status: 'pending',
+          shipping_status: 'pending',
+          total: 5000,
+        },
+        wallet: null,
+      }),
+    });
+    const { createOrder } = require('./orders') as typeof import('./orders');
+    await createOrder(request);
+    expect(trackEvent).not.toHaveBeenCalledWith(
+      'order_created',
+      expect.anything()
     );
   });
 });

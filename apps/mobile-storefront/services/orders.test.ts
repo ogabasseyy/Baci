@@ -35,6 +35,7 @@ type MockFetchResponse = {
   ok: boolean;
   status: number;
   json: () => Promise<unknown>;
+  headers: { get: (name: string) => string | null };
 };
 
 type MockFetchOptions = {
@@ -46,6 +47,7 @@ const mockFetchResponse: MockFetchResponse = {
   ok: true,
   status: 200,
   json: mockFetchJson,
+  headers: { get: () => null },
 };
 interface RetryOptions {
   maxRetries?: number;

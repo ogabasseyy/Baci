@@ -189,18 +189,25 @@ export async function createOrder(
     }
 
     const normalizedOrderResponse = await parseOrderResponse(response, log);
+    const replayed =
+      response.headers.get('x-idempotency-replayed') === 'true' ||
+      normalizedOrderResponse.idempotency?.replayed === true;
 
-    trackEvent('order_created', {
-      orderId: normalizedOrderResponse.order.id,
-      orderNumber: normalizedOrderResponse.order.order_number ?? 'N/A',
-      total: normalizedOrderResponse.order.total,
-      itemCount: request.items.length,
-      paymentMethod: request.payment_method,
-      duration_ms: Date.now() - startTime,
-      source: 'mobile_app',
-    });
+    if (!replayed) {
+      trackEvent('order_created', {
+        orderId: normalizedOrderResponse.order.id,
+        orderNumber: normalizedOrderResponse.order.order_number ?? 'N/A',
+        total: normalizedOrderResponse.order.total,
+        itemCount: request.items.length,
+        paymentMethod: request.payment_method,
+        duration_ms: Date.now() - startTime,
+        source: 'mobile_app',
+      });
+    }
 
-    return normalizedOrderResponse;
+    return replayed
+      ? { ...normalizedOrderResponse, idempotency: { replayed: true } }
+      : normalizedOrderResponse;
   } catch (error) {
     throw mapCreateOrderException(error, startTime);
   }

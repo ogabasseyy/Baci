@@ -44,6 +44,7 @@ interface SubmitBnplCheckoutParams {
   itemsSnapshot: CartItem[];
   liveSavingsSelection: SavingsSelection | undefined;
   liveWalletSelection: WalletSelection | undefined;
+  checkoutGeneration: string;
   mobileCheckoutIdempotencyRef: MutableRefObject<MobileCheckoutIdempotencyState | null>;
   paymentMethodForOrder: string;
   paymentSettings: Parameters<typeof getKlumpDisabledReason>[0];
@@ -65,6 +66,7 @@ export async function submitBnplCheckout({
   itemsSnapshot,
   liveSavingsSelection,
   liveWalletSelection,
+  checkoutGeneration,
   paymentMethodForOrder,
   paymentSettings,
   selectedPayment,
@@ -106,7 +108,9 @@ export async function submitBnplCheckout({
   });
   // The order service owns durable retry identity across payment methods.
   // Never rotate it when a completed order rejects reuse.
-  const orderResponse = await createOrder(orderRequest);
+  const orderResponse = await createOrder(orderRequest, {
+    checkoutGeneration,
+  });
 
   if (selectedPayment === 'klump') {
     await initializeKlumpAndRoute({

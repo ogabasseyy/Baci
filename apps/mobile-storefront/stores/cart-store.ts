@@ -81,6 +81,9 @@ export const useCartStore = create<CartState>()(
             state.items.length === 0
               ? Crypto.randomUUID()
               : state.checkoutGeneration;
+          if (state.items.length === 0) {
+            void persistCheckoutGeneration(checkoutGeneration);
+          }
           let items: CartItem[];
           let lineSequence = state.lineSequence;
           if (existingIndex >= 0) {
@@ -171,7 +174,9 @@ export const useCartStore = create<CartState>()(
       },
 
       clearCart: () => {
-        set(emptyCheckoutCart());
+        const next = emptyCheckoutCart();
+        void persistCheckoutGeneration(next.checkoutGeneration);
+        set(next);
       },
 
       getItem: (productId, variantId) => {
@@ -280,13 +285,9 @@ export const useCartStore = create<CartState>()(
         checkoutGeneration: state.checkoutGeneration,
         cartWideNegotiationActive: state.cartWideNegotiationActive,
       }),
-      onRehydrateStorage: () => (state) => {
-        if (state?.checkoutGeneration !== 'legacy') return;
+      onRehydrateStorage: () => () => {
         void readPersistedCheckoutGeneration().then((persisted) => {
-          if (
-            persisted &&
-            useCartStore.getState().checkoutGeneration === 'legacy'
-          ) {
+          if (persisted) {
             useCartStore.setState({ checkoutGeneration: persisted });
           }
         });

@@ -24,14 +24,55 @@ async function loadInstallationId(): Promise<string> {
   return id;
 }
 
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize);
+function itemSortValue(item: unknown, key: string): string | number | boolean {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return '';
+  const value = (item as Record<string, unknown>)[key];
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') return JSON.stringify(value);
+  return '';
+}
+
+function compareCheckoutAttemptItems(left: unknown, right: unknown): number {
+  const keys = [
+    'product_id',
+    'variant_id',
+    'variant_name',
+    'condition',
+    'quantity',
+    'price',
+    'assurance_fee',
+    'has_assurance',
+    'variant_attributes',
+  ] as const;
+  for (const key of keys) {
+    const a = itemSortValue(left, key);
+    const b = itemSortValue(right, key);
+    if (typeof a === 'number' && typeof b === 'number' && a !== b) {
+      return a - b;
+    }
+    if (typeof a === 'boolean' && typeof b === 'boolean' && a !== b) {
+      return a ? 1 : -1;
+    }
+    const compared = String(a).localeCompare(String(b));
+    if (compared !== 0) return compared;
+  }
+  return 0;
+}
+
+function canonicalize(value: unknown, parentKey?: string): unknown {
+  if (Array.isArray(value)) {
+    const items = value.map((item) => canonicalize(item));
+    return parentKey === 'items'
+      ? [...items].sort(compareCheckoutAttemptItems)
+      : items;
+  }
   if (value !== null && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value)
         .filter(([, item]) => item !== undefined)
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([key, item]) => [key, canonicalize(item)])
+        .map(([key, item]) => [key, canonicalize(item, key)])
     );
   }
   return value;

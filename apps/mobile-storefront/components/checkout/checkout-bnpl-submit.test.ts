@@ -60,7 +60,7 @@ jest.mock('@/lib/klump-checkout', () => ({
 }));
 
 jest.mock('@/services/orders', () => ({
-  createOrder: (params: unknown) => mockCreateOrder(params),
+  createOrder: (...params: unknown[]) => mockCreateOrder(...params),
   OrderError: class OrderError extends Error {
     code: string;
 
@@ -126,6 +126,7 @@ function createParams() {
     itemsSnapshot,
     liveSavingsSelection: undefined,
     liveWalletSelection: undefined,
+    checkoutGeneration: 'gen-1',
     mobileCheckoutIdempotencyRef: { current: null },
     paymentMethodForOrder: 'credit_direct',
     paymentSettings: {},
@@ -203,7 +204,8 @@ describe('submitBnplCheckout', () => {
     await submitBnplCheckout(params);
 
     expect(mockCreateOrder).toHaveBeenCalledWith(
-      expect.objectContaining({ payment_method: 'credit_direct' })
+      expect.objectContaining({ payment_method: 'credit_direct' }),
+      { checkoutGeneration: 'gen-1' }
     );
     expect(mockCreateOrder.mock.calls[0][0]).not.toHaveProperty(
       'idempotency_key'

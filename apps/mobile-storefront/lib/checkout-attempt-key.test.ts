@@ -66,13 +66,19 @@ it('recovers the awaited generation after a restart with stale cart storage', as
   );
   jest.resetModules();
   expect(
-    await loadKeyGenerator().getCheckoutAttemptKey(payload, 'legacy')
+    await loadKeyGenerator().getCheckoutAttemptKey(
+      payload,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    )
   ).toBe(first);
 });
 
 it('allows an intentional identical purchase in a new cart lifecycle', async () => {
   const { getCheckoutAttemptKey } = loadKeyGenerator();
   const first = await getCheckoutAttemptKey(payload, 'cart-one');
+  const { persistCheckoutGeneration } =
+    require('./checkout-attempt-identity') as typeof import('./checkout-attempt-identity');
+  await persistCheckoutGeneration('cart-two');
   expect(await getCheckoutAttemptKey(payload, 'cart-two')).not.toBe(first);
 });
 
@@ -151,6 +157,21 @@ it('resumes the same pending order when changing payment gateways', async () => 
   expect(
     await getCheckoutAttemptKey(
       { ...payload, payment_method: 'korapay', payment_status: 'pending' },
+      'cart-one'
+    )
+  ).toBe(first);
+});
+
+it('resumes the same pending order when cart line order changes', async () => {
+  const { getCheckoutAttemptKey } = loadKeyGenerator();
+  const items = [
+    { product_id: 'buds2', price: 85000, quantity: 1 },
+    { product_id: 'case', price: 5000, quantity: 1 },
+  ];
+  const first = await getCheckoutAttemptKey({ ...payload, items }, 'cart-one');
+  expect(
+    await getCheckoutAttemptKey(
+      { ...payload, items: [...items].reverse() },
       'cart-one'
     )
   ).toBe(first);

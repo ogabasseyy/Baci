@@ -42,15 +42,14 @@ export async function readPersistedCheckoutGeneration(): Promise<
   return existing;
 }
 
-/** Recover the awaited generation when cart-storage still has the default. */
+/** Recover the awaited generation even when cart-storage still has an older UUID. */
 export async function resolveCheckoutGeneration(
   cartGeneration: string
 ): Promise<string> {
   const persisted = await readPersistedCheckoutGeneration();
-  const generation =
-    persisted && cartGeneration === 'legacy' ? persisted : cartGeneration;
-  await persistCheckoutGeneration(generation);
-  return generation;
+  if (persisted) return persisted;
+  await persistCheckoutGeneration(cartGeneration);
+  return cartGeneration;
 }
 
 export async function resolveCheckoutAuthPartition(

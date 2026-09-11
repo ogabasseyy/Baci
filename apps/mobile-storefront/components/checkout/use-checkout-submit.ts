@@ -173,6 +173,7 @@ export function useCheckoutSubmit({
           itemsSnapshot,
           liveSavingsSelection,
           liveWalletSelection,
+          checkoutGeneration: checkoutGenerationSnapshot,
           mobileCheckoutIdempotencyRef,
           paymentMethodForOrder,
           paymentSettings,
@@ -184,44 +185,49 @@ export function useCheckoutSubmit({
         return;
       }
 
-      const orderResponse = await createOrder({
-        ...buildCheckoutOrderRequest({
-          address,
-          customerEmail,
-          customerName,
-          customerPhone,
-          deliveryMethod,
-          discountCode: appliedDiscountCode,
-          itemsSnapshot,
-          paymentMethodForOrder,
-          selectedQuote,
-          shippingProvider: getShippingProvider(),
-          snapshot,
-        }),
-        ...(appliedDiscountCode
-          ? {}
-          : buildSavingsOrderFields(liveSavingsSelection)),
-        ...buildWalletOrderFields(liveWalletSelection),
-      });
+      const orderResponse = await createOrder(
+        {
+          ...buildCheckoutOrderRequest({
+            address,
+            customerEmail,
+            customerName,
+            customerPhone,
+            deliveryMethod,
+            discountCode: appliedDiscountCode,
+            itemsSnapshot,
+            paymentMethodForOrder,
+            selectedQuote,
+            shippingProvider: getShippingProvider(),
+            snapshot,
+          }),
+          ...(appliedDiscountCode
+            ? {}
+            : buildSavingsOrderFields(liveSavingsSelection)),
+          ...buildWalletOrderFields(liveWalletSelection),
+        },
+        { checkoutGeneration: checkoutGenerationSnapshot }
+      );
       const { order } = orderResponse;
       const orderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
 
-      void trackCheckoutRoutePurchaseCompleted({
-        customerEmail,
-        customerPhone,
-        items: itemsSnapshot,
-        orderId: order.id,
-        orderNumber,
-        paymentMethod: completedPaymentMethod,
-        shipping: snapshot.deliveryFee,
-        subtotal: snapshot.subtotal,
-        tax: snapshot.taxAmount,
-        total: order.total,
-        userId: user?.id ?? undefined,
-      });
+      if (!orderResponse.idempotency?.replayed) {
+        void trackCheckoutRoutePurchaseCompleted({
+          customerEmail,
+          customerPhone,
+          items: itemsSnapshot,
+          orderId: order.id,
+          orderNumber,
+          paymentMethod: completedPaymentMethod,
+          shipping: snapshot.deliveryFee,
+          subtotal: snapshot.subtotal,
+          tax: snapshot.taxAmount,
+          total: order.total,
+          userId: user?.id ?? undefined,
+        });
+      }
 
       await finalizeCheckoutPayment({
         clearCart,

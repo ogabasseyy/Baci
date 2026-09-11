@@ -49,6 +49,29 @@ const input = {
   ],
 };
 describe('buildVariantFeedItems', () => {
+  it('uses one canonical colour for conflicting aliases and protects routing parameters', () => {
+    const xml = buildVariantFeedItems({
+      ...input,
+      variants: [
+        {
+          id: 'alias',
+          condition: 'new',
+          attributes: {
+            Colour: 'Blue',
+            color: 'White',
+            variantId: 'wrong',
+            condition: 'used',
+          },
+        },
+      ],
+    });
+    expect(xml).toContain('white.jpg');
+    expect(xml).toContain('<g:color>White</g:color>');
+    expect(xml).not.toContain('Blue');
+    expect(xml).toContain('variantId=alias');
+    expect(xml).not.toContain('variantId=wrong');
+    expect(xml).toContain('condition=new');
+  });
   it.each([
     'Color',
     'colour',
@@ -86,12 +109,15 @@ describe('buildVariantFeedItems', () => {
     expect(xml).toContain(`condition=${condition}`);
     expect(xml).toContain('<g:condition>refurbished</g:condition>');
   });
-  it('does not substitute a generic image for a color_hex variant', () => {
+  it.each([
+    'color_hex',
+    'Color_Hex',
+  ])('does not substitute a generic image for a %s variant', (key) => {
     expect(
       buildVariantFeedItems({
         ...input,
         variants: [
-          { id: 'hex', condition: 'new', attributes: { color_hex: '#fff' } },
+          { id: 'hex', condition: 'new', attributes: { [key]: '#fff' } },
         ],
         manifest: input.manifest.map((entry) => ({
           ...entry,

@@ -27,14 +27,35 @@ interface VariantFeedInput {
 
 const text = (value: unknown) =>
   typeof value === 'string' ? value.trim() : '';
-const color = (variant: FeedVariant) => {
-  const attributes = Object.fromEntries(
-    Object.entries(variant.attributes || {}).map(([key, value]) => [
-      key.trim().toLowerCase(),
-      value,
-    ])
+const canonicalAttributes = (variant: FeedVariant): Record<string, string> => {
+  const entries = Object.entries(variant.attributes || {});
+  const normalized = Object.fromEntries(
+    entries.map(([key, value]) => [key.trim().toLowerCase(), text(value)])
   );
-  const name = text(attributes.color || attributes.colour).toLowerCase();
+  const name = normalized.color || normalized.colour;
+  return {
+    ...Object.fromEntries(
+      entries
+        .filter(
+          ([key, value]) =>
+            text(value) &&
+            ![
+              'color',
+              'colour',
+              'color_hex',
+              'variantid',
+              'condition',
+            ].includes(key.trim().toLowerCase())
+        )
+        .map(([key, value]) => [key, text(value)])
+    ),
+    ...(name ? { color: name } : {}),
+    ...(normalized.color_hex ? { color_hex: normalized.color_hex } : {}),
+  };
+};
+const color = (variant: FeedVariant) => {
+  const attributes = canonicalAttributes(variant);
+  const name = text(attributes.color).toLowerCase();
   const hex = text(attributes.color_hex).toLowerCase();
   return name ? `color:${name}` : hex ? `color_hex:${hex}` : '';
 };
@@ -67,11 +88,7 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
       const image = resolveGmcPrimaryImage(entries);
       if (!image) return '';
 
-      const attributes = Object.fromEntries(
-        Object.entries(variant.attributes || {})
-          .filter(([, value]) => text(value))
-          .map(([key, value]) => [key, text(value)])
-      );
+      const attributes = canonicalAttributes(variant);
       const url = new URL(productUrl);
       url.searchParams.set('variantId', variant.id);
       url.searchParams.set(

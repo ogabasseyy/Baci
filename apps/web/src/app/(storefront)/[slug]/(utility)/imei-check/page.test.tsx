@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
-import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ImeiCheckerHero } from '@/components/storefront/ogabassey/pages/imei-checker-hero';
 import { getCachedMerchant } from '@/lib/cached-data';
@@ -54,17 +53,14 @@ describe('ImeiCheckPage', () => {
     ]);
   });
 
-  it('does not await params in the page — the committed hero does', () => {
+  it('paints IMEI LCP copy without awaiting params', () => {
     const then = vi.fn(() => {
       throw new Error('params read outside boundary');
     });
     const params = { then } as unknown as Promise<{ slug: string }>;
     const ui = ImeiCheckPage({ params });
-    const [heroBoundary] = ui.props.children;
 
-    expect(heroBoundary.type).toBe(Suspense);
-    expect(heroBoundary.props.fallback.type).toBe(ImeiCheckerHero);
-    expect(heroBoundary.props.children.props.params).toBe(params);
+    expect(ui.props.children[0].type).toBe(ImeiCheckerHero);
     expect(then).not.toHaveBeenCalled();
     expect(screen.queryByText('IMEI checker UI')).not.toBeInTheDocument();
   });
@@ -92,7 +88,7 @@ describe('ImeiCheckPage', () => {
     expect(screen.getByText(/NGN 500,000/)).toBeInTheDocument();
   });
 
-  it('restores branded IMEI copy for other OgaBassey-template stores', async () => {
+  it('omits in-content IMEI copy because the page already committed the LCP hero', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({
       template_id: 'ogabassey',
       slug: 'other-ogabassey-store',
@@ -105,8 +101,8 @@ describe('ImeiCheckPage', () => {
     );
 
     expect(
-      screen.getByRole('heading', { name: /Don't Get Scammed/i })
-    ).toBeInTheDocument();
+      screen.queryByRole('heading', { name: /Don't Get Scammed/i })
+    ).not.toBeInTheDocument();
     expect(screen.getByText('IMEI checker UI')).toBeInTheDocument();
   });
 

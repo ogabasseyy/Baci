@@ -13,11 +13,7 @@ import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
-import {
-  getOgabasseyStaticParams,
-  isOgabasseyStaticTenant,
-} from '../../ogabassey-static-params';
-import { ImeiCheckCommittedHero } from './imei-check-committed-hero';
+import { getOgabasseyStaticParams } from '../../ogabassey-static-params';
 import { ImeiCheckFallback } from './imei-check-fallback';
 
 export const metadata: Metadata = {
@@ -59,7 +55,7 @@ export async function ImeiCheckResolvedContent({
 
   const { ImeiCheckPageContent } = await import('./imei-check-page-content');
 
-  return <ImeiCheckPageContent omitHero={isOgabasseyStaticTenant(slug)} />;
+  return <ImeiCheckPageContent omitHero />;
 }
 
 export default function ImeiCheckPage({
@@ -69,9 +65,7 @@ export default function ImeiCheckPage({
 }) {
   return (
     <OgabasseyImeiCheckerShell>
-      <Suspense fallback={<ImeiCheckerHero />}>
-        <ImeiCheckCommittedHero params={params} />
-      </Suspense>
+      <ImeiCheckerHero />
       <Suspense fallback={<ImeiCheckFallback hideHero />}>
         <ImeiCheckResolvedContent params={params} />
       </Suspense>

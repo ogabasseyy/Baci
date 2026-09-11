@@ -9,9 +9,12 @@ describe('ImeiCheckerHero', () => {
     expect(screen.getByText('Trusted by 10,000+ Buyers')).toBeTruthy();
     expect(screen.getByText("Don't Get Scammed.")).toBeTruthy();
     expect(screen.getByText('Verify First.')).toBeInTheDocument();
+    expect(document.querySelector('[data-cwv-lcp-copy="imei"]')).toHaveClass(
+      'text-gray-900'
+    );
     expect(
       document.querySelector('[data-cwv-lcp-copy="imei"]')
-    ).toHaveTextContent("Don't Get Scammed.");
+    ).not.toHaveClass('tracking-tight');
     expect(
       document.querySelector('[data-cwv-lcp-copy="imei"]')?.textContent
     ).not.toMatch(/Verify First/);

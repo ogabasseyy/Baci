@@ -197,17 +197,12 @@ export async function CompareIndexRuntime(props: CompareIndexPageProps) {
     );
 
     if (!queryFailed && hasActiveCompareCategory(categories)) {
-      const { StorefrontEagerFullCssLayout } = await import(
-        '@/app/(storefront)/storefront-eager-full-css-layout'
-      );
       return (
-        <StorefrontEagerFullCssLayout>
-          <div data-compare-category-page="">
-            <CategoryPageRoute
-              {...buildCompareCategoryPageProps(slug, props.searchParams)}
-            />
-          </div>
-        </StorefrontEagerFullCssLayout>
+        <div data-compare-category-page="">
+          <CategoryPageRoute
+            {...buildCompareCategoryPageProps(slug, props.searchParams)}
+          />
+        </div>
       );
     }
   }

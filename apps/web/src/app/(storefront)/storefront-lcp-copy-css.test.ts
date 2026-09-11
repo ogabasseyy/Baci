@@ -63,6 +63,7 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
       'body:has([data-compare-category-page]) [data-compare-hub-chrome]'
     );
     expect(STOREFRONT_LCP_COPY_CSS).toContain('[data-cwv-lcp-copy="imei"]');
+    expect(STOREFRONT_LCP_COPY_CSS).not.toContain('letter-spacing: -0.025em');
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'var(--store-background-text, #111827)'
     );

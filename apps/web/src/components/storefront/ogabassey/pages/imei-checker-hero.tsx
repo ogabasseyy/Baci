@@ -15,7 +15,7 @@ export function ImeiCheckerHero() {
         data-cwv-lcp-fold=""
       >
         <h1
-          className="mb-3 text-3xl font-extrabold tracking-tight text-gray-900 md:text-5xl"
+          className="mb-3 text-3xl font-extrabold text-gray-900 md:text-5xl"
           data-cwv-lcp-copy="imei"
         >
           Don't Get Scammed.

@@ -117,10 +117,7 @@ describe('storefront CSS partitioning (route sheets)', () => {
     const comparePage = readStorefrontFile(
       '[slug]/(catalog)/(listing)/compare/page.tsx'
     );
-    expect(comparePage).not.toMatch(/^import \{ StorefrontEagerFullCssLayout/m);
-    expect(comparePage).toMatch(
-      /await import\(\s*['"]@\/app\/\(storefront\)\/storefront-eager-full-css-layout['"]/
-    );
+    expect(comparePage).not.toContain('storefront-eager-full-css-layout');
   });
 
   it('locks committed LCP copy to the Inter fallback face without a render-blocking CSS file', () => {

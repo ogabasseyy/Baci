@@ -72,7 +72,6 @@ html:has([data-storefront-shell]) *::after {
   color: var(--store-background-text, #111827) !important;
   font-size: 1.875rem !important;
   font-weight: 800 !important;
-  letter-spacing: -0.025em !important;
   line-height: 2.25rem !important;
   margin: 0 0 1rem !important;
   text-align: center;

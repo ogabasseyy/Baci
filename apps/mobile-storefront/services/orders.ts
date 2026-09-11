@@ -3,6 +3,7 @@ import Constants from 'expo-constants';
 import { DEFAULT_TIMEOUT, fetchWithRetry } from '@/lib/api';
 import { resolveApiBaseUrl } from '@/lib/api-url';
 import { assertQueuedCreateOrderSendOwner } from '@/lib/assert-queued-create-order-send-owner';
+import { applyCheckoutCreditSnapshot } from '@/lib/checkout-attempt-credit-snapshot';
 import { getCheckoutAttemptKey } from '@/lib/checkout-attempt-key';
 import { createLogger } from '@/lib/logger';
 import { resolveCheckoutAuthPartition } from '@/lib/resolve-checkout-auth-partition';
@@ -137,11 +138,14 @@ export async function createOrder(
       ? await validateCheckoutUser(session.access_token)
       : { data: { user: null }, error: null };
 
-  const orderPayload = buildOrderPayload({
-    merchantId: MERCHANT_ID,
-    request: validatedRequest,
-    ...(!authError && user?.id && { userId: user.id }),
-  });
+  const orderPayload = await applyCheckoutCreditSnapshot(
+    buildOrderPayload({
+      merchantId: MERCHANT_ID,
+      request: validatedRequest,
+      ...(!authError && user?.id && { userId: user.id }),
+    }),
+    checkoutGeneration
+  );
 
   try {
     // Local retry partition only: a getUser timeout must not rotate the key.

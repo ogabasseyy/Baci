@@ -1,5 +1,9 @@
 import { useCartStore } from './cart-store';
 
+jest.mock('@/lib/checkout-attempt-identity', () => ({
+  persistCheckoutGeneration: jest.fn(async () => undefined),
+  readPersistedCheckoutGeneration: jest.fn(async () => null),
+}));
 jest.mock('../lib/storage', () => ({
   syncStorage: {
     getItem: jest.fn(() => null),
@@ -59,10 +63,10 @@ it('changes identity when the shopper removes the last item and starts over', ()
   );
 });
 
-it('starts a new retry identity when the shopper confirms a replacement checkout', () => {
+it('starts a new retry identity when the shopper confirms a replacement checkout', async () => {
   useCartStore.getState().addItem(item);
   const first = useCartStore.getState().checkoutGeneration;
-  useCartStore.getState().advanceCheckoutGeneration();
+  await useCartStore.getState().advanceCheckoutGeneration();
   expect(useCartStore.getState().checkoutGeneration).not.toBe(first);
 });
 

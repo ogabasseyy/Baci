@@ -59,6 +59,17 @@ it('uses one durable identity for concurrent checkout calls', async () => {
   ).toHaveLength(1);
 });
 
+it('recovers the awaited generation after a restart with stale cart storage', async () => {
+  const first = await loadKeyGenerator().getCheckoutAttemptKey(
+    payload,
+    'cart-one'
+  );
+  jest.resetModules();
+  expect(
+    await loadKeyGenerator().getCheckoutAttemptKey(payload, 'legacy')
+  ).toBe(first);
+});
+
 it('allows an intentional identical purchase in a new cart lifecycle', async () => {
   const { getCheckoutAttemptKey } = loadKeyGenerator();
   const first = await getCheckoutAttemptKey(payload, 'cart-one');

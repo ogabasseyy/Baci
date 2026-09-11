@@ -1,6 +1,10 @@
 import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import {
+  persistCheckoutGeneration,
+  readPersistedCheckoutGeneration,
+} from '@/lib/checkout-attempt-identity';
 import { syncStorage } from '../lib/storage';
 import {
   createCartLineId,
@@ -69,7 +73,6 @@ export const useCartStore = create<CartState>()(
               ? { ...item, quantity: 1 }
               : item;
 
-          // Check if item already exists (same product + variant + options)
           const existingIndex = state.items.findIndex((existingItem) =>
             isSameCartLine(existingItem, itemToAdd)
           );
@@ -111,7 +114,6 @@ export const useCartStore = create<CartState>()(
         });
       },
 
-      // Remove item from cart
       removeItem: (id) => {
         set((state) => {
           const items = state.items.filter((item) => item.id !== id);
@@ -129,7 +131,6 @@ export const useCartStore = create<CartState>()(
         });
       },
 
-      // Update item quantity
       updateQuantity: (id, quantity) => {
         set((state) => {
           if (quantity <= 0) {
@@ -169,12 +170,10 @@ export const useCartStore = create<CartState>()(
         });
       },
 
-      // Clear all items
       clearCart: () => {
         set(emptyCheckoutCart());
       },
 
-      // Get specific item
       getItem: (productId, variantId) => {
         return get().items.find(
           (item) =>
@@ -182,10 +181,6 @@ export const useCartStore = create<CartState>()(
         );
       },
 
-      // Apply negotiated price to item (matches web feature parity).
-      // This is an individual-line negotiation, so the group flag is cleared —
-      // and if a cart-wide deal was active, the other lines' proportional group
-      // prices are cleared first so only the freshly negotiated line keeps one.
       applyNegotiatedPrice: (id, negotiatedPrice) => {
         set((state) => {
           const base = state.cartWideNegotiationActive
@@ -206,7 +201,6 @@ export const useCartStore = create<CartState>()(
         });
       },
 
-      // Apply negotiation to the whole cart (matches web behavior)
       applyCartWideNegotiation: (newTotal) => {
         const { items } = get();
         const currentTotal = items.reduce((sum, item) => {
@@ -230,7 +224,6 @@ export const useCartStore = create<CartState>()(
         }));
       },
 
-      // Clear negotiated price from item
       clearNegotiatedPrice: (id) => {
         set((state) => ({
           items: state.items.map((item) =>
@@ -246,8 +239,10 @@ export const useCartStore = create<CartState>()(
         }));
       },
 
-      advanceCheckoutGeneration: () => {
-        set({ checkoutGeneration: Crypto.randomUUID() });
+      advanceCheckoutGeneration: async () => {
+        const checkoutGeneration = Crypto.randomUUID();
+        await persistCheckoutGeneration(checkoutGeneration);
+        set({ checkoutGeneration });
       },
       restoreItems: (items, cartWideNegotiationActive, checkoutGeneration) => {
         set({
@@ -259,19 +254,10 @@ export const useCartStore = create<CartState>()(
         });
       },
 
-      // Reconcile line prices from live catalog values keyed by cart line id.
-      // When a base price actually changes, any prior negotiation was made
-      // against a stale basis and would be rejected at checkout, so it is
-      // cleared — the shopper re-negotiates against the current price.
-      // Reconcile line prices from live catalog values (see applyReprice):
-      // honors the ±₦1 tolerance and resets any active cart-wide group deal.
       repriceItems: (priceById) => {
         set((state) => applyReprice(state, priceById));
       },
 
-      // Toggle device assurance for item
-      // Only stores a boolean flag; the actual fee is computed at checkout
-      // using the item's current effective price (negotiatedPrice ?? price).
       toggleAssurance: (id) => {
         set((state) => ({
           items: state.items.map((item) =>
@@ -294,6 +280,17 @@ export const useCartStore = create<CartState>()(
         checkoutGeneration: state.checkoutGeneration,
         cartWideNegotiationActive: state.cartWideNegotiationActive,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.checkoutGeneration !== 'legacy') return;
+        void readPersistedCheckoutGeneration().then((persisted) => {
+          if (
+            persisted &&
+            useCartStore.getState().checkoutGeneration === 'legacy'
+          ) {
+            useCartStore.setState({ checkoutGeneration: persisted });
+          }
+        });
+      },
     }
   )
 );

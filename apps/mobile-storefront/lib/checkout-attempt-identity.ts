@@ -33,6 +33,26 @@ export async function persistCheckoutGeneration(
   );
 }
 
+export async function readPersistedCheckoutGeneration(): Promise<
+  string | null
+> {
+  const existing = await AsyncStorage.getItem(CHECKOUT_GENERATION_STORAGE_KEY);
+  if (existing === null) return null;
+  assertNonEmpty(existing, 'generation');
+  return existing;
+}
+
+/** Recover the awaited generation when cart-storage still has the default. */
+export async function resolveCheckoutGeneration(
+  cartGeneration: string
+): Promise<string> {
+  const persisted = await readPersistedCheckoutGeneration();
+  const generation =
+    persisted && cartGeneration === 'legacy' ? persisted : cartGeneration;
+  await persistCheckoutGeneration(generation);
+  return generation;
+}
+
 export async function resolveCheckoutAuthPartition(
   checkoutGeneration: string,
   currentUserId: string | undefined

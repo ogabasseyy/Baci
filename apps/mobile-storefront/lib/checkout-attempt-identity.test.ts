@@ -1,6 +1,8 @@
 import {
   persistCheckoutGeneration,
+  readPersistedCheckoutGeneration,
   resolveCheckoutAuthPartition,
+  resolveCheckoutGeneration,
 } from './checkout-attempt-identity';
 
 const storage = new Map<string, string>();
@@ -31,6 +33,19 @@ describe('bugfix: checkout retry identity is durable before the order request', 
     );
     await persistCheckoutGeneration(generation);
     expect(storage.get('checkout-generation-v1')).toBe(generation);
+  });
+
+  it('recovers the awaited generation when cart storage still has the default', async () => {
+    await persistCheckoutGeneration(generation);
+    await expect(resolveCheckoutGeneration('legacy')).resolves.toBe(generation);
+    await expect(readPersistedCheckoutGeneration()).resolves.toBe(generation);
+  });
+
+  it('keeps a later cart lifecycle when the shopper already moved on', async () => {
+    await persistCheckoutGeneration(generation);
+    const next = 'b3c1c0d4-4e2a-4f5b-9c8d-1a2b3c4d5e6f';
+    await expect(resolveCheckoutGeneration(next)).resolves.toBe(next);
+    await expect(readPersistedCheckoutGeneration()).resolves.toBe(next);
   });
 
   it('keeps the originating guest partition after a later sign-in', async () => {

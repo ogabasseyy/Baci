@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { CHECKOUT_INSTALLATION_STORAGE_KEY } from '@/config/checkout-storage';
-import { persistCheckoutGeneration } from '@/lib/checkout-attempt-identity';
+import { resolveCheckoutGeneration } from '@/lib/checkout-attempt-identity';
 
 let installationPromise: Promise<string> | undefined;
 
@@ -47,7 +47,7 @@ export async function getCheckoutAttemptKey(
     throw error;
   });
   const installationId = await installationPromise;
-  await persistCheckoutGeneration(checkoutGeneration);
+  const generation = await resolveCheckoutGeneration(checkoutGeneration);
   // The server intentionally excludes the selected gateway from its checkout
   // hash so switching payment methods resumes the same pending order.
   const recoveryPayload = Object.fromEntries(
@@ -63,7 +63,7 @@ export async function getCheckoutAttemptKey(
     JSON.stringify(
       canonicalize({
         installationId,
-        checkoutGeneration,
+        checkoutGeneration: generation,
         payload: recoveryPayload,
       })
     )

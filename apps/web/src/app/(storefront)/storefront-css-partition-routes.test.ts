@@ -182,12 +182,22 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(homeCriticalCss).not.toMatch(
       /@source\s+["'][^"']*ProductRatingRow\.tsx/
     );
+    expect(homeCriticalCss).toMatch(
+      /@import\s+['"]\.\/storefront-home-critical-product-card\.css['"];?/
+    );
+    expect(homeCriticalCss.split('\n').length).toBeLessThanOrEqual(300);
     expect(homeCriticalCss).toMatch(/\.ogabassey-home-products\b/);
     expect(homeCriticalCss).toMatch(/\.ogabassey-home-products__grid\b/);
     expect(homeCriticalCss).toMatch(/\.ogabassey-home-products__empty\b/);
-    expect(homeCriticalCss).toMatch(/\.ogabassey-home-product-card\b/);
-    expect(homeCriticalCss).toMatch(/\.ogabassey-home-product-card__media\b/);
-    expect(homeCriticalCss).toMatch(
+    expect(homeCriticalCss).not.toMatch(/\.ogabassey-home-product-card\b/);
+
+    const productCardCss = readStorefrontFile(
+      'storefront-home-critical-product-card.css'
+    );
+    expect(productCardCss.split('\n').length).toBeLessThanOrEqual(300);
+    expect(productCardCss).toMatch(/\.ogabassey-home-product-card\b/);
+    expect(productCardCss).toMatch(/\.ogabassey-home-product-card__media\b/);
+    expect(productCardCss).toMatch(
       /\.ogabassey-home-product-card__condition--open-box\b/
     );
     expect(homeCriticalCss).not.toMatch(/animation:\s*pulse/);

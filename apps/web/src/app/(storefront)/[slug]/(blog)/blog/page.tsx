@@ -20,11 +20,12 @@ import { isUnfilteredOgabasseyBlogListing } from './is-unfiltered-ogabassey-blog
 //   noindex/self-canonical variants (search/pagination/category).
 // - Do not await searchParams in this page. The page returns Suspense
 //   boundaries immediately so the parent PPR shell can commit.
-// - The LCP `<img>` is a sibling of the listing Suspense, not that boundary's
-//   fallback and not inside its own Suspense. A `fallback={null}` boundary
-//   postponed the snapshot hero into a hidden resume slot (`data-blog-lcp-hero`
-//   hidden) even though loading.tsx still painted a featured `<img>`.
-// - The committed hero awaits `params` only. Do not await getCachedBlogListing
+// - The LCP snapshot lives in the searchParams-gated slot's fallback, not the
+//   listing fallback and not `fallback={null}`. Awaiting searchParams in that
+//   slot would postpone the hero out of the static shell. Filtered requests
+//   resolve the slot to a marker so the 100svh snapshot does not stay mounted
+//   until listing data arrives.
+// - The fallback hero awaits `params` only. Do not await getCachedBlogListing
 //   there — `'use cache'` in this slot postpones the image into a hidden hole.
 
 export function generateStaticParams(): Array<{ slug: string }> {
@@ -65,10 +66,34 @@ export async function BlogListingResolved({
   );
 }
 
+export async function BlogListingUnfilteredCommittedHero({
+  params,
+  searchParams,
+}: Pick<BlogPageProps, 'params' | 'searchParams'>) {
+  const [{ slug }, query] = await Promise.all([params, searchParams]);
+
+  if (isUnfilteredOgabasseyBlogListing(slug, query)) {
+    return BlogListingCommittedLcpHero({
+      params: Promise.resolve({ slug }),
+    });
+  }
+
+  if (isOgabasseyBlogStaticTenant(slug)) {
+    return <div data-blog-listing-filtered="" hidden />;
+  }
+
+  return null;
+}
+
 export default function BlogPage({ params, searchParams }: BlogPageProps) {
   return (
     <>
-      <BlogListingCommittedLcpHero params={params} />
+      <Suspense fallback={<BlogListingCommittedLcpHero params={params} />}>
+        <BlogListingUnfilteredCommittedHero
+          params={params}
+          searchParams={searchParams}
+        />
+      </Suspense>
       <Suspense fallback={<BlogListingFallback />}>
         <BlogListingResolved params={params} searchParams={searchParams} />
       </Suspense>

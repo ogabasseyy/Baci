@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { BlogListingFallback } from './BlogListingFallback';
 import { BlogListingCommittedLcpHero } from './blog-listing-committed-lcp-hero';
 import './blog-page-content.test-utils';
-import BlogPage, { BlogListingResolved, generateStaticParams } from './page';
+import BlogPage, {
+  BlogListingResolved,
+  BlogListingUnfilteredCommittedHero,
+  generateStaticParams,
+} from './page';
 
 vi.mock('./blog-listing-ogabassey-lcp-hero', () => ({
   BlogListingOgabasseyLcpHero: () => <article>Root featured story</article>,
@@ -26,8 +30,13 @@ describe('blog page shell', () => {
     const searchParams = { then } as unknown as Promise<Record<string, never>>;
     const ui = BlogPage({ params, searchParams });
     expect(ui.type).toBe(Fragment);
-    const [hero, listingBoundary] = ui.props.children;
-    expect(hero.type).toBe(BlogListingCommittedLcpHero);
+    const [heroBoundary, listingBoundary] = ui.props.children;
+    expect(heroBoundary.type).toBe(Suspense);
+    expect(heroBoundary.props.fallback.type).toBe(BlogListingCommittedLcpHero);
+    expect(heroBoundary.props.children.type).toBe(
+      BlogListingUnfilteredCommittedHero
+    );
+    expect(heroBoundary.props.children.props.searchParams).toBe(searchParams);
     expect(listingBoundary.type).toBe(Suspense);
     expect(listingBoundary.props.fallback.type).toBe(BlogListingFallback);
     expect(listingBoundary.props.children.type).toBe(BlogListingResolved);
@@ -48,8 +57,8 @@ describe('blog page shell', () => {
     const params = Promise.resolve({ slug: 'ogabassey.com' });
     const searchParams = new Promise<Record<string, never>>(() => {});
     const ui = BlogPage({ params, searchParams });
-    const [hero, listingBoundary] = ui.props.children;
-    expect(hero.type).toBe(BlogListingCommittedLcpHero);
+    const [heroBoundary, listingBoundary] = ui.props.children;
+    expect(heroBoundary.props.fallback.type).toBe(BlogListingCommittedLcpHero);
     expect(listingBoundary.props.children.type).toBe(BlogListingResolved);
     expect(listingBoundary.props.children.props.searchParams).toBe(
       searchParams

@@ -118,7 +118,7 @@ describe('BlogListingRequestContent request state regression', () => {
       )
     );
 
-    expect(screen.getByText('Root featured story')).toBeInTheDocument();
+    expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
     expect(
       document.querySelector('[data-blog-listing-filtered]')
     ).not.toBeNull();
@@ -134,7 +134,7 @@ describe('BlogListingRequestContent request state regression', () => {
     { search: 'iphone' },
     { category: 'News' },
     { page: '1' },
-  ])('keeps the committed snapshot hero on query %j and marks the listing filtered', async (query) => {
+  ])('omits the committed snapshot hero on query %j and marks the listing filtered', async (query) => {
     render(
       await resolveServerSlots(
         BlogPage({
@@ -143,7 +143,7 @@ describe('BlogListingRequestContent request state regression', () => {
         })
       )
     );
-    expect(screen.getByText('Root featured story')).toBeInTheDocument();
+    expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
     expect(
       document.querySelector('[data-blog-listing-filtered]')
     ).not.toBeNull();

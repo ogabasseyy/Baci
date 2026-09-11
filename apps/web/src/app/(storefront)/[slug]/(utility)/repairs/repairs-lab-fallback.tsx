@@ -13,7 +13,7 @@ export function RepairsLabFallback({
         role="status"
         aria-label="Loading repair lab"
         aria-live="polite"
-        className="sr-only"
+        className="px-4 py-8 text-sm text-store-background-text"
       >
         Loading repair lab
       </div>

@@ -21,21 +21,26 @@ describe('useAdTracking', () => {
     'trackPurchase',
   ] as const)('matches purchase product IDs to catalog groups with %s', (method) => {
     const fbq = vi.fn();
-    window.fbq = fbq;
-    const { result } = renderHook(() => useAdTracking());
-    act(() => {
-      result.current[method](891000, 'NGN', ['phone']);
-    });
-    expect(fbq).toHaveBeenCalledWith(
-      'track',
-      'Purchase',
-      expect.objectContaining({
-        content_ids: ['phone'],
-        content_type: 'product_group',
-      }),
-      expect.any(Object)
-    );
-    delete window.fbq;
+    const original = Object.getOwnPropertyDescriptor(window, 'fbq');
+    try {
+      window.fbq = fbq;
+      const { result } = renderHook(() => useAdTracking());
+      act(() => {
+        result.current[method](891000, 'NGN', ['phone']);
+      });
+      expect(fbq).toHaveBeenCalledWith(
+        'track',
+        'Purchase',
+        expect.objectContaining({
+          content_ids: ['phone'],
+          content_type: 'product_group',
+        }),
+        expect.any(Object)
+      );
+    } finally {
+      if (original) Object.defineProperty(window, 'fbq', original);
+      else delete window.fbq;
+    }
   });
   beforeEach(() => {
     vi.clearAllMocks();

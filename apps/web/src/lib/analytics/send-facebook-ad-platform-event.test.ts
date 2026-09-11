@@ -21,6 +21,54 @@ import { sendFacebookAdPlatformEvent } from './send-facebook-ad-platform-event';
 
 describe('sendFacebookAdPlatformEvent', () => {
   beforeEach(() => vi.clearAllMocks());
+  it.each([
+    'product',
+    'product_group',
+  ] as const)('preserves %s registration metadata without inventing catalog IDs', async (contentType) => {
+    const config = {
+      facebook_capi_token: 'token',
+      facebook_pixel_id: 'pixel',
+      ga4_api_secret: null,
+      google_analytics_id: null,
+      offline_conversions_enabled: true,
+      snapchat_capi_token: null,
+      snapchat_pixel_id: null,
+      tiktok_access_token: null,
+      tiktok_pixel_id: null,
+    };
+    const event = {
+      custom_data: { content_type: contentType, content_name: 'Registration' },
+      event_id: 'registration',
+      event_type: 'customer_registered',
+      merchant_id: 'merchant',
+      source: 'server' as const,
+      user_data: {},
+    };
+    await sendFacebookAdPlatformEvent(config, event, 'CompleteRegistration');
+    expect(mocks.generic.mock.calls.at(-1)?.[4]).toEqual({
+      contentType,
+      currency: 'NGN',
+      value: 0,
+    });
+    await sendFacebookAdPlatformEvent(
+      config,
+      {
+        ...event,
+        custom_data: {
+          ...event.custom_data,
+          contents: [
+            { id: ' phone ', quantity: 1 },
+            { id: '   ', quantity: 1 },
+          ],
+        },
+      },
+      'AddToWishlist'
+    );
+    expect(mocks.generic.mock.calls.at(-1)?.[4]).toMatchObject({
+      contentType,
+      contentIds: ['phone'],
+    });
+  });
 
   it('passes enhanced matching, LDU, and persisted occurrence time', async () => {
     mocks.purchase.mockResolvedValue({ success: true });

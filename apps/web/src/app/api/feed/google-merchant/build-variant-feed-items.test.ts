@@ -49,6 +49,43 @@ const input = {
   ],
 };
 describe('buildVariantFeedItems', () => {
+  it.each([
+    'Color',
+    'colour',
+    'Colour',
+  ])('matches %s to a same-colour sibling instead of a family image', (key) => {
+    const xml = buildVariantFeedItems({
+      ...input,
+      variants: [
+        { id: 'alias', condition: 'new', attributes: { [key]: 'White' } },
+      ],
+    });
+    expect(xml).toContain('<g:id>alias</g:id>');
+    expect(xml).toContain('white.jpg');
+    expect(
+      buildVariantFeedItems({
+        ...input,
+        variants: [
+          { id: 'alias', condition: 'new', attributes: { [key]: 'Blue' } },
+        ],
+        manifest: input.manifest.map((entry) => ({
+          ...entry,
+          variant_id: null,
+        })),
+      })
+    ).toBe('');
+  });
+  it.each([
+    'open_box',
+    'refurbished',
+  ] as const)('preserves %s in the landing URL', (condition) => {
+    const xml = buildVariantFeedItems({
+      ...input,
+      variants: [{ ...input.variants[0], condition }],
+    });
+    expect(xml).toContain(`condition=${condition}`);
+    expect(xml).toContain('<g:condition>refurbished</g:condition>');
+  });
   it('does not substitute a generic image for a color_hex variant', () => {
     expect(
       buildVariantFeedItems({

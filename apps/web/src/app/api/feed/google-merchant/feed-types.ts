@@ -14,7 +14,7 @@ export interface FeedProduct {
   stock: number;
   stock_quantity?: number;
   manage_stock?: boolean | null;
-  condition?: 'new' | 'used' | 'refurbished' | 'open_box' | 'uk_used';
+  condition?: 'new' | 'used' | 'refurbished' | 'open_box' | 'uk_used' | null;
   condition_detail?: string;
   variant_model?: 'legacy' | 'sku_matrix';
   google_product_category?: string;

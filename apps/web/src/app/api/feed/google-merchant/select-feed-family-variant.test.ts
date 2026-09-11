@@ -1,6 +1,38 @@
 import { expect, it } from 'vitest';
 import { selectFeedFamilyVariant } from './select-feed-family-variant';
 
+it('ranks valid in-stock candidates ahead of sold-out candidates after excluding invalid prices', () => {
+  const product = {
+    id: 'p',
+    name: 'Phone',
+    description: '',
+    price: 10,
+    stock: 0,
+    manage_stock: true,
+  };
+  const variants = [
+    {
+      id: 'invalid',
+      condition: 'new' as const,
+      price_override: 0,
+      stock_quantity: 1,
+    },
+    {
+      id: 'sold-out',
+      condition: 'new' as const,
+      price_override: 20,
+      stock_quantity: 0,
+    },
+    {
+      id: 'available',
+      condition: 'new' as const,
+      price_override: 30,
+      stock_quantity: 1,
+    },
+  ];
+  expect(selectFeedFamilyVariant(product, variants)?.id).toBe('available');
+});
+
 it.each([
   -1,
   0,

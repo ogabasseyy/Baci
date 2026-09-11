@@ -16,15 +16,15 @@ export function selectFeedFamilyVariant(
       attributes: normalizeFeedVariantStringAttributes(variant.attributes),
     })),
   });
-  return (
-    selection?.variant ??
-    variants.find((variant) => {
-      const price = variant.price_override ?? variant.price ?? product.price;
-      return (
-        Boolean(variant.id && toGoogleListingCondition(variant.condition)) &&
-        Number.isFinite(price) &&
-        price > 0
-      );
-    })
-  );
+  const isFeedValid = (variant: FeedVariant) => {
+    const price = variant.price_override ?? variant.price ?? product.price;
+    return (
+      Boolean(variant.id && toGoogleListingCondition(variant.condition)) &&
+      Number.isFinite(price) &&
+      price > 0
+    );
+  };
+  return selection && isFeedValid(selection.variant)
+    ? selection.variant
+    : variants.find(isFeedValid);
 }

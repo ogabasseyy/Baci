@@ -16,6 +16,27 @@ import {
 import { useAdTracking } from './use-ad-tracking';
 
 describe('useAdTracking', () => {
+  it.each([
+    'trackFacebookPurchase',
+    'trackPurchase',
+  ] as const)('matches purchase product IDs to catalog groups with %s', (method) => {
+    const fbq = vi.fn();
+    window.fbq = fbq;
+    const { result } = renderHook(() => useAdTracking());
+    act(() => {
+      result.current[method](891000, 'NGN', ['phone']);
+    });
+    expect(fbq).toHaveBeenCalledWith(
+      'track',
+      'Purchase',
+      expect.objectContaining({
+        content_ids: ['phone'],
+        content_type: 'product_group',
+      }),
+      expect.any(Object)
+    );
+    delete window.fbq;
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     // Re-establish the default cookie snapshot each test — mockReturnValue set

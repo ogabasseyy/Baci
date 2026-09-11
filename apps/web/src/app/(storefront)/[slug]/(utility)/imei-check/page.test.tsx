@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
+import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ImeiCheckerHero } from '@/components/storefront/ogabassey/pages/imei-checker-hero';
 import { getCachedMerchant } from '@/lib/cached-data';
 
 vi.mock('@/components/storefront/ogabassey/pages/imei-checker', () => ({
@@ -58,8 +60,11 @@ describe('ImeiCheckPage', () => {
     });
     const params = { then } as unknown as Promise<{ slug: string }>;
     const ui = ImeiCheckPage({ params });
+    const [heroBoundary] = ui.props.children;
 
-    expect(ui.props.children[0].props.params).toBe(params);
+    expect(heroBoundary.type).toBe(Suspense);
+    expect(heroBoundary.props.fallback.type).toBe(ImeiCheckerHero);
+    expect(heroBoundary.props.children.props.params).toBe(params);
     expect(then).not.toHaveBeenCalled();
     expect(screen.queryByText('IMEI checker UI')).not.toBeInTheDocument();
   });

@@ -8,17 +8,15 @@ describe('IMEI check loading', () => {
     await expectLoadingModuleRenders(import.meta.url, 'Loading IMEI checker');
   });
 
-  it('keeps the loading shell tenant-neutral without branded IMEI copy', () => {
+  it('paints branded IMEI LCP copy in the visible loading shell', () => {
     render(<ImeiCheckLoading />);
 
     expect(
       screen.getByRole('status', { name: 'Loading IMEI checker' })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('heading', { name: /Don't Get Scammed/i })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText('Trusted by 10,000+ Buyers')
-    ).not.toBeInTheDocument();
+      screen.getByRole('heading', { name: /Don't Get Scammed/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText('Trusted by 10,000+ Buyers')).toBeInTheDocument();
   });
 });

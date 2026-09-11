@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockStorefrontPageContent } = vi.hoisted(() => ({
@@ -18,10 +17,8 @@ vi.mock('../storefront-page-content', () => ({
     mockStorefrontPageContent(props),
 }));
 
-vi.mock('@/app/(storefront)/storefront-eager-full-css-layout', () => ({
-  StorefrontEagerFullCssLayout: ({ children }: { children: ReactNode }) => (
-    <>{children}</>
-  ),
+vi.mock('@/app/(storefront)/storefront-full-style-loader', () => ({
+  StorefrontFullStyleLoader: () => null,
 }));
 
 const { GenericStorefrontHomePage } = await import(
@@ -33,7 +30,7 @@ describe('GenericStorefrontHomePage', () => {
     mockStorefrontPageContent.mockClear();
   });
 
-  it('eagerly styles generic homepages without putting the sheet on the OgaBassey graph', () => {
+  it('defers storefront CSS instead of eagerly importing the 331KB sheet', () => {
     const source = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -42,8 +39,8 @@ describe('GenericStorefrontHomePage', () => {
       'utf8'
     );
 
-    expect(source).toContain('StorefrontEagerFullCssLayout');
-    expect(source).not.toContain('StorefrontFullStyleLoader');
+    expect(source).toContain('StorefrontFullStyleLoader');
+    expect(source).not.toContain('StorefrontEagerFullCssLayout');
 
     render(
       <GenericStorefrontHomePage

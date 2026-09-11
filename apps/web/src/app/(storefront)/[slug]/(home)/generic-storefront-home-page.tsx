@@ -1,4 +1,4 @@
-import { StorefrontEagerFullCssLayout } from '@/app/(storefront)/storefront-eager-full-css-layout';
+import { StorefrontFullStyleLoader } from '@/app/(storefront)/storefront-full-style-loader';
 import { StorefrontPageContent } from '../storefront-page-content';
 
 export function GenericStorefrontHomePage({
@@ -7,8 +7,9 @@ export function GenericStorefrontHomePage({
   params: Promise<{ slug: string }>;
 }) {
   return (
-    <StorefrontEagerFullCssLayout>
+    <>
+      <StorefrontFullStyleLoader />
       <StorefrontPageContent params={params} />
-    </StorefrontEagerFullCssLayout>
+    </>
   );
 }

@@ -215,4 +215,54 @@ body:has([data-imei-result]) [data-imei-lcp-hero] {
 body:has([data-compare-category-page]) [data-compare-hub-chrome] {
   display: none;
 }
+
+/*
+  PPR static-shell hide/positioning. storefront-core.css is deferred until
+  first input on tuned mobile routes, so without these rules the resume
+  sibling (ShellChromeLoading) stays in flow as "Loading storefront chrome".
+  Keep the same selectors as storefront-core.css; do not eagerly import that
+  329KB sheet on tuned routes.
+*/
+.storefront-ppr-static-shell,
+.storefront-ppr-static-shell__content {
+  display: contents;
+}
+
+.storefront-ppr-static-shell__content ~ .storefront-ppr-static-shell__fallback {
+  display: none;
+}
+
+@supports selector(:has(*)) {
+  .storefront-ppr-static-shell {
+    display: block;
+    min-height: 100vh;
+    position: relative;
+  }
+
+  .storefront-ppr-static-shell__content {
+    display: contents;
+  }
+
+  .storefront-ppr-static-shell > .storefront-ppr-static-shell__fallback {
+    inset: 0 auto auto 0;
+    pointer-events: none;
+    position: absolute;
+    width: 100%;
+    z-index: 1;
+  }
+
+  .storefront-ppr-static-shell__content
+    ~ .storefront-ppr-static-shell__fallback {
+    display: block;
+  }
+
+  .storefront-ppr-static-shell__content:has(
+      .ogabassey-storefront-shell,
+      #main-content,
+      main
+    )
+    ~ .storefront-ppr-static-shell__fallback {
+    display: none;
+  }
+}
 `;

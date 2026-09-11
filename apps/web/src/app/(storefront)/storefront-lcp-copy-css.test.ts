@@ -38,5 +38,14 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain('@media (min-width: 768px)');
     expect(STOREFRONT_LCP_COPY_CSS).toContain('font-size: 3rem !important');
     expect(STOREFRONT_LCP_COPY_CSS).toContain('font-size: 3.75rem !important');
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      '.storefront-ppr-static-shell__content ~ .storefront-ppr-static-shell__fallback'
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      '.storefront-ppr-static-shell > .storefront-ppr-static-shell__fallback'
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      '.storefront-ppr-static-shell__content:has('
+    );
   });
 });

@@ -28,7 +28,7 @@ describe('blog StorefrontBlogCssLayout', () => {
     expect(unstable_instant).toBe(false);
   });
 
-  it('keeps the blog stylesheet off a mobile LCP path until the first input for static tenants', async () => {
+  it('keeps the unfiltered static listing off a mobile LCP path until the first input', async () => {
     window.matchMedia = vi.fn().mockImplementation(() => ({
       matches: false,
       addEventListener: vi.fn(),

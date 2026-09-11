@@ -11,6 +11,20 @@ function isDesktopViewport(): boolean {
 }
 
 /**
+ * Sticky user activation survives a tap that happened before this module's
+ * useEffect listeners existed (JS still downloading, or hydration not armed).
+ * Those events are not replayed to a later `window` listener.
+ * @see https://developer.mozilla.org/en-US/docs/Web/API/UserActivation/hasBeenActive
+ */
+function hasStickyUserActivation(): boolean {
+  try {
+    return navigator.userActivation?.hasBeenActive === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Keep Tailwind chunks off the Slow-4G LCP path. Lighthouse mobile never
  * taps or types, so the sheet stays unloaded in lab. Do not listen for
  * `scroll` — Lighthouse full-page screenshots dispatch it and would put the
@@ -69,6 +83,9 @@ export function loadStylesheetAfterFirstInput(
   }
 
   arm();
+  if (hasStickyUserActivation()) {
+    run();
+  }
 
   return () => {
     cancelled = true;

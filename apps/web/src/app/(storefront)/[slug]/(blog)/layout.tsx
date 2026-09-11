@@ -7,6 +7,12 @@ import { isOgabasseyStaticTenant } from '../ogabassey-static-params';
 // "Loading storefront chrome" instead of the featured LCP image.
 export const unstable_instant = false;
 
+// Next.js layouts do not receive searchParams and do not rerender on query
+// navigation (https://nextjs.org/docs/app/api-reference/file-conventions/layout).
+// Static OgaBassey tenants therefore defer CSS here only for the unfiltered
+// first page. Filtered listing variants (`?search=`, `?category=`, `?page=`)
+// eager-import StorefrontEagerBlogCssLayout from BlogListingQueryContent,
+// which already awaits the page searchParams inside Suspense.
 export default async function StorefrontBlogCssLayout({
   children,
   params,

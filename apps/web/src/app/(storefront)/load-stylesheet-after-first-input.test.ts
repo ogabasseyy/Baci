@@ -35,6 +35,7 @@ describe('loadStylesheetAfterFirstInput', () => {
       configurable: true,
       value: 'complete',
     });
+    Reflect.deleteProperty(navigator, 'userActivation');
   });
 
   it('loads after window load on a desktop viewport', () => {
@@ -55,6 +56,20 @@ describe('loadStylesheetAfterFirstInput', () => {
 
     expect(load).not.toHaveBeenCalled();
     window.dispatchEvent(new Event('pointerdown'));
+    expect(load).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('loads on a mobile viewport when sticky user activation already happened', () => {
+    stubMatchMedia(false);
+    Object.defineProperty(navigator, 'userActivation', {
+      configurable: true,
+      value: { hasBeenActive: true, isActive: false },
+    });
+    const load = vi.fn(() => Promise.resolve({}));
+
+    const stop = loadStylesheetAfterFirstInput(load, 'failed');
+
     expect(load).toHaveBeenCalledOnce();
     stop();
   });

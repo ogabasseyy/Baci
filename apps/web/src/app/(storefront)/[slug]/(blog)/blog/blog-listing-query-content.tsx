@@ -19,14 +19,26 @@ export async function BlogListingQueryContent({
   const [{ slug }, query] = await Promise.all([params, searchParams]);
   const unfiltered = isUnfilteredOgabasseyBlogListing(slug, query);
   const showHero = hero !== null && unfiltered;
+  const filteredStaticListing =
+    isOgabasseyBlogStaticTenant(slug) && !unfiltered;
 
-  return (
+  const listing = (
     <>
-      {isOgabasseyBlogStaticTenant(slug) && !unfiltered ? (
+      {filteredStaticListing ? (
         <div data-blog-listing-filtered="" hidden />
       ) : null}
       {showHero ? hero : null}
       {children}
     </>
   );
+
+  if (!filteredStaticListing) {
+    return listing;
+  }
+
+  const { StorefrontEagerBlogCssLayout } = await import(
+    '@/app/(storefront)/storefront-eager-blog-css-layout'
+  );
+
+  return <StorefrontEagerBlogCssLayout>{listing}</StorefrontEagerBlogCssLayout>;
 }

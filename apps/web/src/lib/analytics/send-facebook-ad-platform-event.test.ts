@@ -1,4 +1,6 @@
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildLegacyAdPlatformFanoutEvent } from '@/app/api/events/build-legacy-ad-platform-fanout-event';
 
 const mocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
@@ -21,6 +23,90 @@ import { sendFacebookAdPlatformEvent } from './send-facebook-ad-platform-event';
 
 describe('sendFacebookAdPlatformEvent', () => {
   beforeEach(() => vi.clearAllMocks());
+  it.each([
+    'product',
+    'product_group',
+  ] as const)('preserves %s registration metadata without inventing catalog IDs', async (contentType) => {
+    const config = {
+      facebook_capi_token: 'token',
+      facebook_pixel_id: 'pixel',
+      ga4_api_secret: null,
+      google_analytics_id: null,
+      offline_conversions_enabled: true,
+      snapchat_capi_token: null,
+      snapchat_pixel_id: null,
+      tiktok_access_token: null,
+      tiktok_pixel_id: null,
+    };
+    const event = {
+      custom_data: { content_type: contentType, content_name: 'Registration' },
+      event_id: 'registration',
+      event_type: 'customer_registered',
+      merchant_id: 'merchant',
+      source: 'server' as const,
+      user_data: {},
+    };
+    await sendFacebookAdPlatformEvent(config, event, 'CompleteRegistration');
+    expect(mocks.generic.mock.calls.at(-1)?.[4]).toEqual({
+      contentType,
+      currency: 'NGN',
+      value: 0,
+    });
+    await sendFacebookAdPlatformEvent(
+      config,
+      {
+        ...event,
+        custom_data: {
+          ...event.custom_data,
+          contents: [
+            { id: ' phone ', quantity: 1 },
+            { id: '   ', quantity: 1 },
+          ],
+        },
+      },
+      'AddPaymentInfo'
+    );
+    expect(mocks.generic.mock.calls.at(-1)?.[4]).toMatchObject({
+      contentType,
+      contentIds: ['phone'],
+    });
+  });
+
+  it('matches legacy wishlist parent IDs to catalog groups', async () => {
+    const event = buildLegacyAdPlatformFanoutEvent({
+      eventId: 'wishlist',
+      eventType: 'add_to_wishlist',
+      input: {
+        event_type: 'add_to_wishlist',
+        merchant_id: 'merchant',
+        product_id: 'parent-phone',
+        product_name: 'Phone',
+        product_price: 100,
+        source: 'web',
+      },
+      request: new NextRequest('https://shop.example.com/api/events'),
+      resolvedMerchantId: 'merchant',
+    });
+    await sendFacebookAdPlatformEvent(
+      {
+        facebook_capi_token: 'token',
+        facebook_pixel_id: 'pixel',
+        ga4_api_secret: null,
+        google_analytics_id: null,
+        offline_conversions_enabled: true,
+        snapchat_capi_token: null,
+        snapchat_pixel_id: null,
+        tiktok_access_token: null,
+        tiktok_pixel_id: null,
+      },
+      event,
+      'AddToWishlist'
+    );
+    expect(mocks.generic.mock.calls.at(-1)?.[4]).toMatchObject({
+      contentType: 'product_group',
+      contentIds: ['parent-phone'],
+    });
+  });
 
   it('passes enhanced matching, LDU, and persisted occurrence time', async () => {
     mocks.purchase.mockResolvedValue({ success: true });

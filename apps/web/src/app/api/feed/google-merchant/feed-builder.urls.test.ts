@@ -20,6 +20,7 @@ describe('generateGoogleMerchantFeed canonical URLs', () => {
       [
         {
           id: 'prod-1',
+          condition: 'refurbished',
           name: 'iPhone XR',
           description: 'Refurbished iPhone XR',
           slug: 'iphone-xr',
@@ -53,6 +54,7 @@ describe('generateGoogleMerchantFeed canonical URLs', () => {
       [
         {
           id: 'prod-2',
+          condition: 'new',
           name: 'Generic Widget',
           description: 'A widget without category',
           slug: 'generic-widget',
@@ -83,6 +85,7 @@ describe('generateGoogleMerchantFeed canonical URLs', () => {
       [
         {
           id: 'prod-3',
+          condition: 'new',
           name: 'Nintendo eShop Card',
           description: 'Gift card',
           slug: 'nintendo-e-shop-card',
@@ -117,6 +120,7 @@ describe('generateGoogleMerchantFeed canonical URLs', () => {
       [
         {
           id: 'prod-4',
+          condition: 'new',
           name: 'Watch Pro GPS',
           description: 'Smart watch with GPS',
           slug: 'watch pro + gps',

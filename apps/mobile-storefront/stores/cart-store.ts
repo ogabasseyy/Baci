@@ -17,7 +17,8 @@ import {
   selectCartQuantities,
 } from './cart-store-selectors';
 import type { CartState } from './cart-store-state';
-import { emptyCheckoutCart } from './empty-checkout-cart';
+import { partializeCartStore } from './partialize-cart-store';
+import { rotateEmptyCheckoutCart } from './rotate-empty-checkout-cart';
 
 export type { CartItem } from './cart-store.types';
 export { formatPrice, selectCartQuantities };
@@ -26,12 +27,6 @@ export function resetCartLineSequence() {
   if (useCartStore.getState().items.length === 0) {
     useCartStore.setState({ lineSequence: 0 });
   }
-}
-
-function rotateEmptyCheckoutCart() {
-  const next = emptyCheckoutCart();
-  void persistCheckoutGeneration(next.checkoutGeneration);
-  return next;
 }
 
 export const useCartStore = create<CartState>()(
@@ -49,12 +44,8 @@ export const useCartStore = create<CartState>()(
 
       subtotal: () => {
         return get().items.reduce((total, item) => {
-          // Use negotiated price if available (matches web behavior)
           const effectivePrice = item.negotiatedPrice ?? item.price;
-          const itemTotal = effectivePrice * item.quantity;
-          // Assurance is calculated separately in UI/checkout layer
-          // DO NOT include assurance here to avoid double-counting
-          return total + itemTotal;
+          return total + effectivePrice * item.quantity;
         }, 0);
       },
 
@@ -116,68 +107,62 @@ export const useCartStore = create<CartState>()(
         });
       },
 
-      removeItem: (id) => {
-        set((state) => {
+      removeItem: async (id) => {
+        const state = get();
+        const items = state.items.filter((item) => item.id !== id);
+        if (items.length === 0) {
+          set(await rotateEmptyCheckoutCart());
+          return;
+        }
+        if (state.cartWideNegotiationActive) {
+          set({
+            items: clearGroupNegotiation(items),
+            cartWideNegotiationActive: false,
+          });
+          return;
+        }
+        set({ items });
+      },
+
+      updateQuantity: async (id, quantity) => {
+        const state = get();
+        if (quantity <= 0) {
           const items = state.items.filter((item) => item.id !== id);
           if (items.length === 0) {
-            return rotateEmptyCheckoutCart();
+            set(await rotateEmptyCheckoutCart());
+            return;
           }
-
           if (state.cartWideNegotiationActive) {
-            return {
+            set({
               items: clearGroupNegotiation(items),
               cartWideNegotiationActive: false,
-            };
+            });
+            return;
           }
+          set({ items });
+          return;
+        }
 
-          return { items };
+        const items = state.items.map((item) => {
+          if (item.id !== id) return item;
+          const newQuantity = item.max_quantity
+            ? Math.min(quantity, item.max_quantity)
+            : quantity;
+          return { ...item, quantity: newQuantity };
         });
-      },
 
-      updateQuantity: (id, quantity) => {
-        set((state) => {
-          if (quantity <= 0) {
-            const items = state.items.filter((item) => item.id !== id);
-            if (items.length === 0) {
-              return rotateEmptyCheckoutCart();
-            }
-            if (state.cartWideNegotiationActive) {
-              return {
-                items: clearGroupNegotiation(items),
-                cartWideNegotiationActive: false,
-              };
-            }
-            return { items };
-          }
-
-          const items = state.items.map((item) => {
-            if (item.id !== id) return item;
-
-            // Respect max quantity if set
-            const newQuantity = item.max_quantity
-              ? Math.min(quantity, item.max_quantity)
-              : quantity;
-
-            return { ...item, quantity: newQuantity };
+        if (state.cartWideNegotiationActive) {
+          set({
+            items: clearGroupNegotiation(items),
+            cartWideNegotiationActive: false,
           });
-
-          // A quantity change alters the cart total, so an active cart-wide
-          // negotiation (one agreed total distributed across lines) no longer
-          // holds — reset it instead of applying the old per-unit deal to the
-          // new quantity.
-          if (state.cartWideNegotiationActive) {
-            return {
-              items: clearGroupNegotiation(items),
-              cartWideNegotiationActive: false,
-            };
-          }
-
-          return { items };
-        });
+          return;
+        }
+        set({ items });
       },
 
-      clearCart: () => {
-        set(rotateEmptyCheckoutCart());
+      clearCart: async () => {
+        set(await rotateEmptyCheckoutCart());
       },
 
       getItem: (productId, variantId) => {
@@ -287,12 +272,7 @@ export const useCartStore = create<CartState>()(
     {
       name: 'cart-storage',
       storage: createJSONStorage(() => syncStorage),
-      partialize: (state) => ({
-        items: state.items,
-        lineSequence: state.lineSequence,
-        checkoutGeneration: state.checkoutGeneration,
-        cartWideNegotiationActive: state.cartWideNegotiationActive,
-      }),
+      partialize: partializeCartStore,
       onRehydrateStorage: () => () => {
         void readPersistedCheckoutGeneration().then((persisted) => {
           if (persisted) {

@@ -426,7 +426,7 @@ describe('cart-store', () => {
     expect(item.negotiationStatus).toBe('accepted');
   });
 
-  it('resets the group negotiation when an item is removed', () => {
+  it('resets the group negotiation when an item is removed', async () => {
     const { addItem } = useCartStore.getState();
     addItem({
       product_id: 'p1',
@@ -452,7 +452,7 @@ describe('cart-store', () => {
     ).toBe(true);
 
     const removeId = useCartStore.getState().items[0].id;
-    useCartStore.getState().removeItem(removeId);
+    await useCartStore.getState().removeItem(removeId);
 
     const items = useCartStore.getState().items;
     expect(items).toHaveLength(1);
@@ -461,7 +461,7 @@ describe('cart-store', () => {
     expect(items[0].negotiationStatus).toBeUndefined();
   });
 
-  it('resets the group negotiation when a line quantity changes', () => {
+  it('resets the group negotiation when a line quantity changes', async () => {
     const { addItem } = useCartStore.getState();
     addItem({
       product_id: 'p1',
@@ -484,7 +484,7 @@ describe('cart-store', () => {
     // Incrementing a line changes the cart total, so the distributed group deal
     // must reset rather than apply the old negotiated unit price to new units.
     const targetId = useCartStore.getState().items[0].id;
-    useCartStore.getState().updateQuantity(targetId, 3);
+    await useCartStore.getState().updateQuantity(targetId, 3);
 
     const items = useCartStore.getState().items;
     expect(useCartStore.getState().cartWideNegotiationActive).toBe(false);
@@ -563,7 +563,7 @@ describe('cart-store', () => {
     expect(items.find((item) => item.id === itemB.id)?.price).toBe(200000);
   });
 
-  it('keeps an individual negotiation on the remaining item when another is removed', () => {
+  it('keeps an individual negotiation on the remaining item when another is removed', async () => {
     const { addItem } = useCartStore.getState();
     addItem({
       product_id: 'p1',
@@ -584,7 +584,7 @@ describe('cart-store', () => {
     useCartStore.getState().applyNegotiatedPrice(itemB.id, 195000);
     expect(useCartStore.getState().cartWideNegotiationActive).toBe(false);
 
-    useCartStore.getState().removeItem(itemA.id);
+    await useCartStore.getState().removeItem(itemA.id);
 
     const remaining = useCartStore.getState().items;
     expect(remaining).toHaveLength(1);
@@ -606,7 +606,7 @@ describe('cart-store', () => {
     expect(useCartStore.getState().cartWideNegotiationActive).toBe(true);
 
     // Simulate a checkout that cleared the cart then failed and rolled back.
-    useCartStore.getState().clearCart();
+    await useCartStore.getState().clearCart();
     expect(useCartStore.getState().cartWideNegotiationActive).toBe(false);
 
     await useCartStore.getState().restoreItems(snapshot, true);

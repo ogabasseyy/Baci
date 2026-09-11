@@ -37,6 +37,19 @@ export async function resolveCheckoutAuthPartition(
     ) {
       const userId = (parsed as { userId: string }).userId;
       assertAuthPartition(userId);
+      const incoming = currentUserId ?? GUEST_AUTH_PARTITION;
+      if (
+        userId !== GUEST_AUTH_PARTITION &&
+        incoming !== GUEST_AUTH_PARTITION &&
+        incoming !== userId
+      ) {
+        assertAuthPartition(incoming);
+        await AsyncStorage.setItem(
+          CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
+          JSON.stringify({ generation: checkoutGeneration, userId: incoming })
+        );
+        return incoming;
+      }
       return userId;
     }
   }

@@ -18,9 +18,9 @@ export interface CartState {
 
   // Actions
   addItem: (item: Omit<CartItem, 'id'>) => void;
-  removeItem: (id: string) => void;
-  updateQuantity: (id: string, quantity: number) => void;
-  clearCart: () => void;
+  removeItem: (id: string) => Promise<void>;
+  updateQuantity: (id: string, quantity: number) => Promise<void>;
+  clearCart: () => Promise<void>;
   advanceCheckoutGeneration: () => Promise<void>;
   getItem: (productId: string, variantId?: string) => CartItem | undefined;
   // Negotiation actions (matches web feature parity)

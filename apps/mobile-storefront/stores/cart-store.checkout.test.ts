@@ -36,9 +36,9 @@ const item = {
   quantity: 1,
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   persistedGeneration.value = null;
-  useCartStore.getState().clearCart();
+  await useCartStore.getState().clearCart();
 });
 
 it('persists the purchase generation with the cart for checkout remounts', () => {
@@ -53,10 +53,10 @@ it('persists the purchase generation with the cart for checkout remounts', () =>
   );
 });
 
-it('changes the purchase identity after clearing and buying the identical item', () => {
+it('changes the purchase identity after clearing and buying the identical item', async () => {
   useCartStore.getState().addItem(item);
   const first = useCartStore.getState().checkoutGeneration;
-  useCartStore.getState().clearCart();
+  await useCartStore.getState().clearCart();
   expect(useCartStore.getState()).toEqual(
     expect.objectContaining({
       items: [],
@@ -69,10 +69,10 @@ it('changes the purchase identity after clearing and buying the identical item',
   expect(useCartStore.getState().checkoutGeneration).not.toBe(first);
 });
 
-it('changes identity when the shopper removes the last item and starts over', () => {
+it('changes identity when the shopper removes the last item and starts over', async () => {
   useCartStore.getState().addItem(item);
   const { items, checkoutGeneration } = useCartStore.getState();
-  useCartStore.getState().removeItem(items[0].id);
+  await useCartStore.getState().removeItem(items[0].id);
   useCartStore.getState().addItem(item);
   expect(useCartStore.getState().checkoutGeneration).not.toBe(
     checkoutGeneration
@@ -101,7 +101,7 @@ it('starts a new retry identity when the shopper confirms a replacement checkout
 it('restores the original retry identity when checkout fails after clearing the cart', async () => {
   useCartStore.getState().addItem(item);
   const { items, checkoutGeneration } = useCartStore.getState();
-  useCartStore.getState().clearCart();
+  await useCartStore.getState().clearCart();
   await useCartStore.getState().restoreItems(items, false, checkoutGeneration);
   expect(useCartStore.getState().checkoutGeneration).toBe(checkoutGeneration);
   expect(useCartStore.getState().items).toEqual(items);
@@ -113,4 +113,17 @@ it('restores the original retry identity when checkout fails after clearing the 
     useCartStore.setState({ checkoutGeneration: recovered });
   }
   expect(useCartStore.getState().checkoutGeneration).toBe(checkoutGeneration);
+});
+
+it('does not keep a stale recovery generation after clearing the cart', async () => {
+  useCartStore.getState().addItem(item);
+  const first = useCartStore.getState().checkoutGeneration;
+  persistedGeneration.value = first;
+  await useCartStore.getState().clearCart();
+  const recovered = await readPersistedCheckoutGeneration();
+  if (recovered) {
+    useCartStore.setState({ checkoutGeneration: recovered });
+  }
+  expect(recovered).not.toBe(first);
+  expect(useCartStore.getState().checkoutGeneration).not.toBe(first);
 });

@@ -1,9 +1,38 @@
+import { readdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { readStorefrontFile } from './storefront-css-partition-read';
+import {
+  readStorefrontCoreCss,
+  readStorefrontFile,
+} from './storefront-css-partition-read';
+
+const storefrontDir = dirname(fileURLToPath(import.meta.url));
 
 describe('storefront CSS partitioning (core chrome sheets)', () => {
+  it('keeps the edited storefront core entry and imported sheets under 300 lines', () => {
+    const entry = readStorefrontFile('storefront-core.css');
+    const coreSheets = readdirSync(storefrontDir).filter(
+      (fileName) =>
+        fileName === 'storefront-core.css' ||
+        (fileName.startsWith('storefront-core-') && fileName.endsWith('.css'))
+    );
+
+    expect(entry).toMatch(/@import\s+['"]\.\/storefront-core-theme\.css['"];?/);
+    expect(entry).toMatch(
+      /@import\s+['"]\.\/storefront-core-unlayered\.css['"];?/
+    );
+    expect(coreSheets.length).toBeGreaterThan(1);
+
+    for (const fileName of coreSheets) {
+      expect(
+        readStorefrontFile(fileName).split('\n').length
+      ).toBeLessThanOrEqual(300);
+    }
+  });
+
   it('keeps deferred assistant launcher selectors out of the PPR shell critical stylesheet', () => {
-    const coreCss = readStorefrontFile('storefront-core.css');
+    const coreCss = readStorefrontCoreCss();
 
     expect(coreCss).toMatch(/\.storefront-shell-loading/);
     expect(coreCss).toMatch(/\.storefront-ppr-static-shell/);
@@ -13,7 +42,7 @@ describe('storefront CSS partitioning (core chrome sheets)', () => {
   });
 
   it('keeps category hub discovery card styles in the shared storefront core stylesheet', () => {
-    const coreCss = readStorefrontFile('storefront-core.css');
+    const coreCss = readStorefrontCoreCss();
 
     expect(coreCss).toMatch(/\.ogabassey-category-hub-card(?!-)\b/);
     expect(coreCss).toMatch(/\.ogabassey-category-hub-card-grid\b/);
@@ -26,7 +55,7 @@ describe('storefront CSS partitioning (core chrome sheets)', () => {
   });
 
   it('keeps the cart empty-state styles in the shared storefront core stylesheet', () => {
-    const coreCss = readStorefrontFile('storefront-core.css');
+    const coreCss = readStorefrontCoreCss();
 
     expect(coreCss).toMatch(/\.ogabassey-cart-empty-state\b/);
     expect(coreCss).toMatch(
@@ -41,7 +70,7 @@ describe('storefront CSS partitioning (core chrome sheets)', () => {
   });
 
   it('keeps OgaBassey footer contrast styles in the shared core stylesheet', () => {
-    const coreCss = readStorefrontFile('storefront-core.css');
+    const coreCss = readStorefrontCoreCss();
 
     expect(coreCss).toMatch(/\.ogabassey-footer\b/);
     expect(coreCss).toMatch(

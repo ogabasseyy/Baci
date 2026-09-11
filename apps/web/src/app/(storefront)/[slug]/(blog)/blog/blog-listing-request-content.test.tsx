@@ -71,7 +71,7 @@ async function resolveServerSlots(node: ReactNode): Promise<ReactNode> {
 }
 
 describe('BlogListingRequestContent request state regression', () => {
-  it('renders the committed snapshot hero only on the unfiltered static root', async () => {
+  it('keeps the committed snapshot hero on the unfiltered static root', async () => {
     render(
       await resolveServerSlots(
         BlogPage({
@@ -118,7 +118,7 @@ describe('BlogListingRequestContent request state regression', () => {
       )
     );
 
-    expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
+    expect(screen.getByText('Root featured story')).toBeInTheDocument();
     expect(
       document.querySelector('[data-blog-listing-filtered]')
     ).not.toBeNull();
@@ -134,7 +134,7 @@ describe('BlogListingRequestContent request state regression', () => {
     { search: 'iphone' },
     { category: 'News' },
     { page: '1' },
-  ])('omits the committed snapshot hero on query %j and marks the listing filtered', async (query) => {
+  ])('keeps the snapshot in the tree on query %j and marks the listing filtered', async (query) => {
     render(
       await resolveServerSlots(
         BlogPage({
@@ -143,7 +143,7 @@ describe('BlogListingRequestContent request state regression', () => {
         })
       )
     );
-    expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
+    expect(screen.getByText('Root featured story')).toBeInTheDocument();
     expect(
       document.querySelector('[data-blog-listing-filtered]')
     ).not.toBeNull();

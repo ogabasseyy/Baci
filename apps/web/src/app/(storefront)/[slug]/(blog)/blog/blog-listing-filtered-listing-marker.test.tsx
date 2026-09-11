@@ -5,18 +5,18 @@ vi.mock('./blog-listing-ogabassey-lcp-hero', () => ({
   BlogListingOgabasseyLcpHero: () => <article>Root featured story</article>,
 }));
 
-const { BlogListingUnfilteredCommittedHero } = await import('./page');
+const { BlogListingFilteredListingMarker } = await import('./page');
 
-describe('BlogListingUnfilteredCommittedHero', () => {
-  it('renders the snapshot hero for the unfiltered static root', async () => {
+describe('BlogListingFilteredListingMarker', () => {
+  it('stays empty for the unfiltered static root so the sibling snapshot can own LCP', async () => {
     render(
-      await BlogListingUnfilteredCommittedHero({
+      await BlogListingFilteredListingMarker({
         params: Promise.resolve({ slug: 'ogabassey.com' }),
         searchParams: Promise.resolve({}),
       })
     );
 
-    expect(screen.getByText('Root featured story')).toBeInTheDocument();
+    expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
     expect(
       document.querySelector('[data-blog-listing-filtered]')
     ).not.toBeInTheDocument();
@@ -26,9 +26,9 @@ describe('BlogListingUnfilteredCommittedHero', () => {
     { search: 'iphone' },
     { page: '2' },
     { category: 'News' },
-  ])('omits the snapshot hero and marks filtered query %j', async (query) => {
+  ])('marks filtered query %j so first-paint CSS can hide the snapshot', async (query) => {
     render(
-      await BlogListingUnfilteredCommittedHero({
+      await BlogListingFilteredListingMarker({
         params: Promise.resolve({ slug: 'ogabassey.com' }),
         searchParams: Promise.resolve(query),
       })
@@ -40,15 +40,14 @@ describe('BlogListingUnfilteredCommittedHero', () => {
     ).not.toBeNull();
   });
 
-  it('does not emit the OgaBassey snapshot for other merchants', async () => {
+  it('does not mark other merchants as filtered OgaBassey listings', async () => {
     render(
-      await BlogListingUnfilteredCommittedHero({
+      await BlogListingFilteredListingMarker({
         params: Promise.resolve({ slug: 'another-ogabassey-template-store' }),
-        searchParams: Promise.resolve({}),
+        searchParams: Promise.resolve({ search: 'iphone' }),
       })
     );
 
-    expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
     expect(
       document.querySelector('[data-blog-listing-filtered]')
     ).not.toBeInTheDocument();

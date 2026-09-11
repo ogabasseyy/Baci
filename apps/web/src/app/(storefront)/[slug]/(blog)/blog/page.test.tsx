@@ -5,8 +5,8 @@ import { BlogListingFallback } from './BlogListingFallback';
 import { BlogListingCommittedLcpHero } from './blog-listing-committed-lcp-hero';
 import './blog-page-content.test-utils';
 import BlogPage, {
+  BlogListingFilteredListingMarker,
   BlogListingResolved,
-  BlogListingUnfilteredCommittedHero,
   generateStaticParams,
 } from './page';
 
@@ -30,13 +30,15 @@ describe('blog page shell', () => {
     const searchParams = { then } as unknown as Promise<Record<string, never>>;
     const ui = BlogPage({ params, searchParams });
     expect(ui.type).toBe(Fragment);
-    const [heroBoundary, listingBoundary] = ui.props.children;
-    expect(heroBoundary.type).toBe(Suspense);
-    expect(heroBoundary.props.fallback.type).toBe(BlogListingCommittedLcpHero);
-    expect(heroBoundary.props.children.type).toBe(
-      BlogListingUnfilteredCommittedHero
+    const [hero, markerBoundary, listingBoundary] = ui.props.children;
+    expect(hero.type).toBe(BlogListingCommittedLcpHero);
+    expect(hero.props.params).toBe(params);
+    expect(markerBoundary.type).toBe(Suspense);
+    expect(markerBoundary.props.fallback).toBeNull();
+    expect(markerBoundary.props.children.type).toBe(
+      BlogListingFilteredListingMarker
     );
-    expect(heroBoundary.props.children.props.searchParams).toBe(searchParams);
+    expect(markerBoundary.props.children.props.searchParams).toBe(searchParams);
     expect(listingBoundary.type).toBe(Suspense);
     expect(listingBoundary.props.fallback.type).toBe(BlogListingFallback);
     expect(listingBoundary.props.children.type).toBe(BlogListingResolved);
@@ -57,8 +59,9 @@ describe('blog page shell', () => {
     const params = Promise.resolve({ slug: 'ogabassey.com' });
     const searchParams = new Promise<Record<string, never>>(() => {});
     const ui = BlogPage({ params, searchParams });
-    const [heroBoundary, listingBoundary] = ui.props.children;
-    expect(heroBoundary.props.fallback.type).toBe(BlogListingCommittedLcpHero);
+    const [hero, markerBoundary, listingBoundary] = ui.props.children;
+    expect(hero.type).toBe(BlogListingCommittedLcpHero);
+    expect(markerBoundary.props.fallback).toBeNull();
     expect(listingBoundary.props.children.type).toBe(BlogListingResolved);
     expect(listingBoundary.props.children.props.searchParams).toBe(
       searchParams
@@ -88,7 +91,7 @@ describe('blog page shell', () => {
       params,
       searchParams: Promise.resolve({}),
     });
-    const listingBoundary = ui.props.children[1];
+    const listingBoundary = ui.props.children[2];
     render(listingBoundary.props.fallback);
 
     expect(

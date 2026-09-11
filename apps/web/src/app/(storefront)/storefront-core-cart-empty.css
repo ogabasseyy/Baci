@@ -1,0 +1,242 @@
+/* Cart empty-state, ad slots, and chrome loading placeholder. */
+
+@layer components {
+  .ogabassey-cart-empty-state {
+    align-items: center;
+    background: color-mix(in srgb, var(--ogabassey-surface) 92%, transparent);
+    border: 1px solid var(--ogabassey-border);
+    border-radius: 2rem;
+    box-shadow: 0 24px 70px
+      color-mix(in srgb, var(--ogabassey-surface-text) 10%, transparent);
+    color: var(--ogabassey-surface-text);
+    display: flex;
+    flex-direction: column;
+    margin: clamp(2rem, 8vh, 5rem) auto 0;
+    max-width: 42rem;
+    padding: clamp(2rem, 4vw, 3rem);
+    text-align: center;
+    width: min(100%, 42rem);
+  }
+
+  .ogabassey-cart-empty-state__visual {
+    align-items: center;
+    background: color-mix(
+      in srgb,
+      var(--ogabassey-brand) 12%,
+      var(--ogabassey-surface)
+    );
+    border: 1px solid
+      color-mix(in srgb, var(--ogabassey-brand) 34%, transparent);
+    border-radius: 999px;
+    color: var(--ogabassey-brand);
+    display: flex;
+    height: clamp(6rem, 16vw, 8rem);
+    justify-content: center;
+    position: relative;
+    width: clamp(6rem, 16vw, 8rem);
+  }
+
+  .ogabassey-cart-empty-state__visual-dot {
+    background: var(--ogabassey-brand);
+    border: 3px solid var(--ogabassey-surface);
+    border-radius: 999px;
+    height: 1.125rem;
+    position: absolute;
+    right: 1.25rem;
+    top: 1.125rem;
+    width: 1.125rem;
+  }
+
+  .ogabassey-cart-empty-state__visual-line {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--ogabassey-brand) 58%, transparent),
+      transparent
+    );
+    bottom: 1.35rem;
+    height: 2px;
+    position: absolute;
+    width: 45%;
+  }
+
+  .ogabassey-cart-empty-state__eyebrow {
+    color: var(--ogabassey-brand);
+    font-size: 0.75rem;
+    font-weight: 850;
+    letter-spacing: 0.16em;
+    margin: 1.5rem 0 0;
+    text-transform: uppercase;
+  }
+
+  .ogabassey-cart-empty-state h2 {
+    color: var(--ogabassey-surface-text);
+    font-size: clamp(1.75rem, 4vw, 2.5rem);
+    font-weight: 850;
+    line-height: 1.05;
+    margin: 0.75rem 0 0;
+  }
+
+  .ogabassey-cart-empty-state__description {
+    color: var(--ogabassey-surface-text-muted);
+    font-size: 1rem;
+    line-height: 1.7;
+    margin: 1rem 0 0;
+    max-width: 32rem;
+  }
+
+  .ogabassey-cart-empty-state__actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+    margin-top: 1.75rem;
+  }
+
+  .ogabassey-cart-empty-state__primary-action,
+  .ogabassey-cart-empty-state__secondary-action {
+    align-items: center;
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: 0.9375rem;
+    font-weight: 800;
+    justify-content: center;
+    min-height: 3rem;
+    padding: 0.85rem 1.35rem;
+    text-decoration: none;
+    transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease,
+      color 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .ogabassey-cart-empty-state__primary-action {
+    background: var(--ogabassey-brand);
+    color: var(--ogabassey-brand-text);
+    gap: 0.5rem;
+  }
+
+  .ogabassey-cart-empty-state__secondary-action {
+    border: 1px solid var(--ogabassey-border);
+    color: var(--ogabassey-surface-text);
+  }
+
+  .ogabassey-cart-empty-state__primary-action:hover,
+  .ogabassey-cart-empty-state__secondary-action:hover {
+    transform: translateY(-1px);
+  }
+
+  .ogabassey-cart-empty-state__secondary-action:hover {
+    border-color: color-mix(
+      in srgb,
+      var(--ogabassey-brand) 45%,
+      var(--ogabassey-border)
+    );
+    color: var(--ogabassey-brand);
+  }
+
+  .ogabassey-cart-empty-state__primary-action:focus-visible,
+  .ogabassey-cart-empty-state__secondary-action:focus-visible {
+    outline: 3px solid
+      color-mix(in srgb, var(--ogabassey-brand) 35%, transparent);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .storefront-variant-ogabassey.storefront-mode-system
+      :is(
+        .ogabassey-category-hub-card__link,
+        .ogabassey-category-hub-card-grid__eyebrow,
+        .ogabassey-cart-empty-state__eyebrow,
+        .ogabassey-cart-empty-state__secondary-action:hover
+      ) {
+      color: var(--storefront-dark-accent, var(--store-primary, #d62027));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .ogabassey-cart-empty-state {
+      border-radius: 1.5rem;
+      margin-top: 1.25rem;
+      padding: 1.5rem;
+    }
+
+    .ogabassey-cart-empty-state__actions {
+      align-items: stretch;
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .ogabassey-cart-empty-state__primary-action,
+    .ogabassey-cart-empty-state__secondary-action {
+      width: 100%;
+    }
+  }
+  .ogabassey-ad-slot {
+    flex: 0 0 auto;
+    height: var(--ad-slot-h);
+    max-width: 100%;
+    min-width: min(100%, var(--ad-slot-w));
+    width: min(100%, var(--ad-slot-w));
+  }
+
+  @media (min-width: 768px) {
+    .ogabassey-ad-slot {
+      height: var(--ad-slot-h-lg);
+      min-width: min(100%, var(--ad-slot-w-lg));
+      width: min(100%, var(--ad-slot-w-lg));
+    }
+  }
+
+  .storefront-shell-loading {
+    box-sizing: border-box;
+    padding: 0.75rem 1rem;
+    width: 100%;
+  }
+
+  .storefront-shell-loading__bar {
+    animation: storefront-shell-loading-shimmer 1.5s ease-in-out infinite;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--store-primary, #2a2c6e) 10%, transparent) 0%,
+      color-mix(in srgb, var(--store-primary, #2a2c6e) 18%, transparent) 50%,
+      color-mix(in srgb, var(--store-primary, #2a2c6e) 10%, transparent) 100%
+    );
+    background-size: 200% 100%;
+    border-radius: 9999px;
+    height: 2.5rem;
+    width: 100%;
+  }
+
+  @media (min-width: 640px) {
+    .storefront-shell-loading {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .storefront-shell-loading {
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .storefront-shell-loading__bar {
+      animation: none;
+    }
+  }
+}
+
+@keyframes storefront-shell-loading-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}

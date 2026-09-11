@@ -1,0 +1,242 @@
+/* Primary navbar chrome and search field geometry. */
+
+@layer components {
+  .ogabassey-navbar {
+    box-shadow: 0 10px 22px
+      color-mix(in srgb, var(--ogabassey-surface-text) 18%, transparent);
+    position: sticky;
+    top: 0;
+    transform: translateY(-100%);
+    transition: transform 0.2s ease-out;
+    will-change: transform;
+    z-index: 50;
+  }
+
+  .ogabassey-navbar[data-visible="true"] {
+    transform: translateY(0);
+  }
+
+  .ogabassey-navbar__top {
+    background: var(--ogabassey-chrome-background);
+    color: var(--ogabassey-chrome-text);
+    /* Keep autocomplete suggestions visible above the secondary nav. */
+    overflow: visible;
+    position: relative;
+    z-index: 20;
+  }
+
+  .ogabassey-navbar__inner {
+    margin: 0 auto;
+    max-width: 1400px;
+    position: relative;
+    z-index: 10;
+  }
+
+  .ogabassey-navbar__primary-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    justify-content: space-between;
+    padding: 0.75rem 1rem 1.25rem;
+  }
+
+  .ogabassey-navbar__brand-row {
+    align-items: center;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    min-height: 3rem;
+    width: 100%;
+  }
+
+  .ogabassey-navbar__brand-group {
+    align-items: center;
+    display: flex;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  .ogabassey-navbar__menu-button {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: var(--ogabassey-shell-text);
+    cursor: pointer;
+    display: flex;
+    flex: 0 0 auto;
+    height: 2.75rem;
+    justify-content: center;
+    padding: 0;
+    width: 2.75rem;
+  }
+
+  .ogabassey-navbar__menu-button svg {
+    height: 1.5rem;
+    width: 1.5rem;
+  }
+
+  .ogabassey-navbar__logo-link {
+    align-items: center;
+    color: var(--ogabassey-shell-text);
+    cursor: pointer;
+    display: flex;
+    min-width: 0;
+    text-decoration: none;
+  }
+
+  .ogabassey-navbar__logo-link:active {
+    opacity: 0.8;
+  }
+
+  .ogabassey-navbar__logo {
+    height: 2.25rem;
+    max-width: min(72vw, 18rem);
+    width: auto;
+  }
+
+  .ogabassey-navbar__search-wrap {
+    position: relative;
+    width: 100%;
+    /* Sit above the secondary nav while preserving normal document flow. */
+    z-index: 30;
+  }
+
+  .ogabassey-navbar-search {
+    display: block;
+    position: relative;
+    width: 100%;
+  }
+
+  .ogabassey-navbar-search .ogabassey-navbar-search__input,
+  .ogabassey-navbar-search input {
+    background: var(--ogabassey-surface);
+    border: 0;
+    border-radius: 0.875rem;
+    box-sizing: border-box;
+    color: var(--store-foreground, var(--ogabassey-surface-text));
+    display: block;
+    font-size: 0.9375rem;
+    height: 2.75rem;
+    outline: 0;
+    padding: 0 1rem 0 2.75rem;
+    width: 100%;
+  }
+
+  .ogabassey-navbar-search__input::placeholder,
+  .ogabassey-navbar-search input::placeholder {
+    color: color-mix(
+      in srgb,
+      var(--store-foreground, var(--ogabassey-surface-text)) 60%,
+      transparent
+    );
+    opacity: 1;
+  }
+
+  .ogabassey-navbar-search__input:focus,
+  .ogabassey-navbar-search input:focus {
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--ogabassey-brand) 28%, transparent);
+  }
+
+  /* Shared by the non-hydrated fallback form AND the hydrated
+     SearchAutocomplete icon. Geometry is DUAL-SOURCED: it lives here (core CSS,
+     loaded on every storefront route) for `source(none)` route stylesheets like
+     storefront-pdp.css that do not @source the component, AND as matching
+     Tailwind utilities on the component for contexts that source it but do not
+     load core CSS (the platform template-preview). Centering uses the CSS
+     `translate` property (not `transform`) so it shares the property name with
+     the component's `-translate-y-1/2`, collapsing to one declaration where both
+     apply (e.g. the home route, which @sources this file) instead of stacking
+     into a double offset. z-index sits above the input's focus-visible z-10 so
+     the glass is never covered. */
+  .ogabassey-navbar-search__icon {
+    /* Idle colour + focus tint are UNLAYERED further down so they outrank the
+       component's `text-muted-foreground` no-core fallback (a utilities-layer
+       class that would otherwise beat @layer components). Only geometry is
+       layered here. */
+    height: 1.25rem;
+    left: 1rem;
+    pointer-events: none;
+    position: absolute;
+    top: 50%;
+    translate: 0 -50%;
+    transition: color 0.15s ease;
+    width: 1.25rem;
+    z-index: 20;
+  }
+
+  /* NOTE: two sets of rules for these elements live UNLAYERED further down
+     (next to the navbar input geometry) rather than here, because each competes
+     with a Tailwind utility that sits in the utilities layer and outranks
+     `@layer components` regardless of specificity: (a) the icon idle colour +
+     focus tint vs the `text-muted-foreground` no-core fallback, and (b) the
+     autocomplete input's left/right padding vs the shared shadcn Input's `px-3`.
+     See that block for details. */
+
+  /* Hide the native WebKit search ✕ — the component renders its own clear
+     button — route-independently, for the same `source(none)` reason. */
+  .ogabassey-navbar-search__field input::-webkit-search-cancel-button {
+    appearance: none;
+  }
+
+  /* The clear (✕) button's geometry is DUAL-SOURCED like the icon: here (core
+     CSS) for `source(none)` storefront routes that do not @source the component,
+     and as matching Tailwind utilities on the component for contexts that source
+     it without loading core CSS (the platform template-preview). Centering uses
+     the `translate` property so it never stacks with the component's
+     `-translate-y-1/2`. z-index:20 keeps it above the input, which gains
+     `focus-visible:relative; z-index:10` from the shadcn Input. */
+  .ogabassey-navbar-search__field .ogabassey-navbar-search__clear {
+    position: absolute;
+    right: 0.25rem;
+    top: 50%;
+    translate: 0 -50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 2rem;
+    width: 2rem;
+    z-index: 20;
+  }
+
+  .ogabassey-navbar__desktop-actions {
+    display: none;
+  }
+
+  .ogabassey-navbar__icon-link {
+    align-items: center;
+    color: color-mix(in srgb, var(--ogabassey-shell-text) 80%, transparent);
+    display: flex;
+    justify-content: center;
+    position: relative;
+    text-decoration: none;
+    transition: color 0.2s ease;
+  }
+
+  .ogabassey-navbar__icon-link:hover {
+    color: var(--ogabassey-shell-text);
+  }
+
+  .ogabassey-navbar__cart-badge {
+    align-items: center;
+    background: var(--ogabassey-brand);
+    border: 1px solid var(--ogabassey-surface-text);
+    border-radius: 999px;
+    color: var(--ogabassey-brand-text);
+    display: flex;
+    font-size: 0.625rem;
+    font-weight: 800;
+    height: 1rem;
+    justify-content: center;
+    min-width: 1rem;
+    position: absolute;
+    right: -0.375rem;
+    top: -0.375rem;
+    transform: scale(0);
+    transition: transform 0.2s ease;
+  }
+
+  .ogabassey-navbar__cart-badge[data-visible="true"] {
+    transform: scale(1);
+  }
+}

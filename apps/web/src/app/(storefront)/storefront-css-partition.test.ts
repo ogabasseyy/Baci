@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { OGABASSEY_DARK_TOKENS } from '@/components/storefront/ogabassey/dark-mode-tokens';
 import {
+  readStorefrontCoreCss,
   readStorefrontDarkModeCss,
   readStorefrontFile,
 } from './storefront-css-partition-read';
 
 describe('storefront CSS partitioning', () => {
   it('keeps PDP-only selectors out of the shared storefront core stylesheet', () => {
-    const coreCss = readStorefrontFile('storefront-core.css');
+    const coreCss = readStorefrontCoreCss();
 
     expect(coreCss).not.toMatch(/data-ogabassey-pdp/);
     expect(coreCss).not.toMatch(/\.ogabassey-pdp-/);
@@ -33,7 +34,7 @@ describe('storefront CSS partitioning', () => {
   });
 
   it('loads the OgaBassey dark-mode token layer from storefront core', () => {
-    const coreCss = readStorefrontFile('storefront-core.css');
+    const coreCss = readStorefrontCoreCss();
     const darkModeEntryCss = readStorefrontFile(
       'storefront-ogabassey-dark-mode.css'
     );
@@ -66,7 +67,7 @@ describe('storefront CSS partitioning', () => {
   });
 
   it('keeps the OgaBassey header and footer on the same chrome background tokens', () => {
-    const coreCss = readStorefrontFile('storefront-core.css');
+    const coreCss = readStorefrontCoreCss();
     const normalizedCoreCss = coreCss.replace(/\s+/g, ' ');
 
     expect(coreCss).toContain(

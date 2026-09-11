@@ -20,13 +20,13 @@ import { isUnfilteredOgabasseyBlogListing } from './is-unfiltered-ogabassey-blog
 //   noindex/self-canonical variants (search/pagination/category).
 // - Do not await searchParams in this page. The page returns Suspense
 //   boundaries immediately so the parent PPR shell can commit.
-// - The LCP snapshot lives in the searchParams-gated slot's fallback, not the
-//   listing fallback and not `fallback={null}`. Awaiting searchParams in that
-//   slot would postpone the hero out of the static shell. Filtered requests
-//   resolve the slot to a marker so the 100svh snapshot does not stay mounted
-//   until listing data arrives.
-// - The fallback hero awaits `params` only. Do not await getCachedBlogListing
-//   there — `'use cache'` in this slot postpones the image into a hidden hole.
+// - The snapshot hero is a sibling of the listing boundary and awaits `params`
+//   only. Wrapping it in a searchParams Suspense remounts the LCP node on the
+//   unfiltered `/blog` resume and pushed Slow-4G lab LCP above 2.5s.
+// - Filtered requests cannot be known in the static shell. Stream a marker as
+//   soon as searchParams resolve so first-paint CSS can hide the 100svh
+//   snapshot without waiting for listing data. Do not await getCachedBlogListing
+//   in the hero — `'use cache'` in that slot postpones the image into a hole.
 
 export function generateStaticParams(): Array<{ slug: string }> {
   return OGABASSEY_BLOG_STATIC_TENANTS.map((slug) => ({ slug }));
@@ -66,19 +66,16 @@ export async function BlogListingResolved({
   );
 }
 
-export async function BlogListingUnfilteredCommittedHero({
+export async function BlogListingFilteredListingMarker({
   params,
   searchParams,
 }: Pick<BlogPageProps, 'params' | 'searchParams'>) {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
 
-  if (isUnfilteredOgabasseyBlogListing(slug, query)) {
-    return BlogListingCommittedLcpHero({
-      params: Promise.resolve({ slug }),
-    });
-  }
-
-  if (isOgabasseyBlogStaticTenant(slug)) {
+  if (
+    isOgabasseyBlogStaticTenant(slug) &&
+    !isUnfilteredOgabasseyBlogListing(slug, query)
+  ) {
     return <div data-blog-listing-filtered="" hidden />;
   }
 
@@ -88,8 +85,9 @@ export async function BlogListingUnfilteredCommittedHero({
 export default function BlogPage({ params, searchParams }: BlogPageProps) {
   return (
     <>
-      <Suspense fallback={<BlogListingCommittedLcpHero params={params} />}>
-        <BlogListingUnfilteredCommittedHero
+      <BlogListingCommittedLcpHero params={params} />
+      <Suspense fallback={null}>
+        <BlogListingFilteredListingMarker
           params={params}
           searchParams={searchParams}
         />

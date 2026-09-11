@@ -1,13 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readStorefrontCoreCss } from './storefront-css-partition-read';
 
-const cssPath = join(
-  dirname(fileURLToPath(import.meta.url)),
-  'storefront-core.css'
-);
-const storefrontCoreCss = readFileSync(cssPath, 'utf8');
+const storefrontCoreCss = readStorefrontCoreCss();
 
 /**
  * Returns the first concrete rule body for a selector in this stylesheet.

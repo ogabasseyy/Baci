@@ -214,7 +214,7 @@ export function useCheckoutSubmit({
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
 
-      if (claimCheckoutPurchaseTracking(order.id)) {
+      if (await claimCheckoutPurchaseTracking(order.id)) {
         void trackCheckoutRoutePurchaseCompleted({
           customerEmail,
           customerPhone,

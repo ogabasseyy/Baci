@@ -1,0 +1,11 @@
+name: Verify iOS native patch contracts
+description: Run Expo JSI symbol and RuntimeScheduler patch contract node tests.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: >-
+        pnpm exec node --test
+        .github/scripts/verify-ios-expo-jsi-symbols.test.mjs
+        .github/scripts/ios-runtime-scheduler.test.mjs

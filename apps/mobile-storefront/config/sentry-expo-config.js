@@ -14,7 +14,7 @@ function buildSentryExpoConfiguration(env, { required }) {
     .filter(([, value]) => !value)
     .map(([name]) => name);
 
-  if (missing.length > 0) {
+  if (missing.length > 0 && (required || !dsn)) {
     const detail = `Missing Sentry configuration: ${missing.join(', ')}.`;
     if (required) {
       throw new Error(
@@ -30,13 +30,24 @@ function buildSentryExpoConfiguration(env, { required }) {
     return { plugin: null };
   }
 
+  // Uploads need token + org + project together; a partial set still breaks
+  // generated iOS/Android Sentry upload tasks on local native builds.
+  const canUploadSymbols = Boolean(authToken && organization && project);
+
   return {
     plugin: [
       '@sentry/react-native/expo',
       {
         experimental_android: {
           enableAndroidGradlePlugin: true,
+          ...(!canUploadSymbols
+            ? {
+                autoUploadNativeSymbols: false,
+                autoUploadProguardMapping: false,
+              }
+            : {}),
         },
+        ...(!canUploadSymbols ? { disableAutoUpload: true } : {}),
         organization,
         project,
         url: optionalValue(env.SENTRY_URL) || 'https://sentry.io/',
@@ -50,7 +61,8 @@ function buildSentryExpoConfiguration(env, { required }) {
           enableNativeCrashHandling: true,
           enableTombstone: true,
           environment:
-            optionalValue(env.EXPO_PUBLIC_SENTRY_ENVIRONMENT) || 'production',
+            optionalValue(env.EXPO_PUBLIC_SENTRY_ENVIRONMENT) ||
+            (required ? 'production' : 'development'),
           sendDefaultPii: false,
         },
       },

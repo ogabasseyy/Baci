@@ -27,17 +27,11 @@ minimumReleaseAgeExclude:
   - nanoid@3.3.17 || 5.1.16
   - dompurify@3.4.13
   - js-yaml@4.3.1
-# Refuse packages whose trust signals (provenance, signatures) weaken between
-# updates. trustLockfile keeps already-locked entries installable — the current
-# lockfile carries upstream trust downgrades (e.g. undici-types@6.21.0,
-# uuid@13.0.1 shipped without the provenance their earlier releases had) that
-# would otherwise fail every install; new resolutions are still enforced.
+# Refuse trust-signal downgrades; trustLockfile keeps already-locked entries installable.
 trustPolicy: no-downgrade
 trustLockfile: true
 trustPolicyExclude:
-  # Existing direct dependencies already locked before this security-only
-  # override update. pnpm 11.7 re-checks trust history while refreshing the
-  # lockfile; keep the exceptions exact so future updates remain protected.
+  # Exact exceptions for deps locked before the trustPolicy override refresh.
   - '@react-native-firebase/app@23.8.8'
   - 'react-lite-youtube-embed@3.5.1'
   - 'ua-parser-js@0.7.41 || 1.0.41'
@@ -49,16 +43,11 @@ trustPolicyExclude:
   - 'undici-types@6.21.0'
   - 'semver@6.3.1'
   - 'uuid@13.0.1'
-  # Added during the Phase-1 dependency sweep — @copilotkit/runtime@1.60.1 pulls
-  # several @ag-ui/* packages manually published by the org's listed maintainers
-  # (_mme = founder Markus Ecker, copilotkit = org account; repo ag-ui-protocol/ag-ui),
-  # lacking the CI ("GitHub Actions") provenance their siblings carry. No publisher
-  # swap; verified safe. (CI-published @ag-ui/* like core/client/encoder are unaffected.)
+  # CopilotKit @ag-ui/* packages lack CI provenance; verified publisher, not a swap.
   - '@ag-ui/langgraph@0.0.41'
   - '@ag-ui/a2ui-toolkit@0.0.3'
   - '@ag-ui/mcp-apps-middleware@0.0.3'
   - '@ag-ui/mcp-middleware@0.0.1'
-
 # Workspace linkers & hoisting configurations for React Native/Expo in pnpm v11
 nodeLinker: hoisted
 shamefullyHoist: true
@@ -67,19 +56,14 @@ publicHoistPattern:
   - "*react-native*"
 networkTimeout: 1000000
 strictDepBuilds: true
-# Codex/local hooks run pnpm without a TTY. If pnpm decides the hoisted
-# node_modules layout must be rebuilt, it cannot prompt for confirmation and
-# aborts before Biome/Jest/Vitest run. Keep the prompt non-interactive.
+# Non-interactive: Codex/hooks have no TTY for hoisted node_modules rebuild prompts.
 confirmModulesPurge: false
 
 packages:
   - "apps/*"
   - "packages/*"
   - "apps/web/mcp-server/widgets"
-
-# High-performance build script approvals for pnpm v11 (replaces legacy onlyBuiltDependencies)
-# Must be configured as a YAML mapping of package matchers to booleans
-# (e.g. package matcher strings/globs as keys mapped to true/false values)
+# pnpm v11 allowBuilds (replaces onlyBuiltDependencies): package matcher -> boolean
 allowBuilds:
   "@firebase/util": true
   "@posthog/cli": true
@@ -96,11 +80,7 @@ allowBuilds:
   workerd: true
 
 overrides:
-  # --- Patched-dependency version locks ---
-  # Each of these has a version-specific entry in `patchedDependencies` (an Android/native
-  # gradle or runtime fix). The patch only applies to its exact version, so a `pnpm up`
-  # that bumped it within range would orphan the patch and risk the native build. Pin to
-  # the patched version; to bump one, refresh its patch in the same change.
+  # Pin patched native deps to the exact package.json pnpm patch versions.
   react-native-purchases: "10.4.2"
   "@react-native-google-signin/google-signin": "16.1.2"
   lottie-react-native: "7.3.8"
@@ -113,12 +93,12 @@ overrides:
   # --- Security / dedupe overrides ---
   # Pin to 6.1.6 to mitigate GHSA-737v-mqg7-c878 / CVE-2026-35209: replace the vulnerable transitive deep-merge helper.
   defu: "6.1.6"
-  # Pin to 0.8.13 to mitigate GHSA-f6ww-3ggp-fr8h, GHSA-2v35-w6hq-6mfw, GHSA-j759-j44w-7fr8, and GHSA-x6wf-f3px-wcqx: keep Expo plist tooling on the patched 0.8.x line.
+  # Pin @xmldom/xmldom 0.8.13 for Expo plist GHSA cluster.
   "@xmldom/xmldom": "0.8.13"
   follow-redirects: "^1.16.0"
-  # Dedupe to the current React 19 type release. Without a single override, pnpm hoists one copy at the root and nested copies under React Native consumers, causing TS2769 `two different types with this name` errors on ref props.
+  # Dedupe @types/react to avoid TS2769 dual-type errors under hoisted RN consumers.
   "@types/react": "19.2.17"
-  # Dedupe to a single version. Two transitive consumers (@firebase/database-compat 2.1.0 vs 2.1.1) pull in @firebase/util 1.13.0 and 1.14.0 simultaneously; under node-linker=hoisted the second copy goes into nested node_modules/@firebase/database-types/node_modules/ and pnpm 10.28 races its own extraction there, failing with ENOENT on the temp-file rename. Reproduced in storefront Android runs 25457441264 and the 2026-05-01 466a00fc86 run.
+  # Dedupe @firebase/util (hoisted ENOENT race with dual database-compat consumers).
   "@firebase/util": "1.14.0"
   # Dedupe with @firebase/util — same reason.
   "@firebase/database-types": "1.0.17"
@@ -127,18 +107,16 @@ overrides:
   smol-toml: ">=1.6.1"
   picomatch: ">=4.0.4"
   yaml: ">=2.8.3"
-  # Pin to the patched esbuild 0.28 line for local dev-server path hardening and binary integrity fixes.
+  # Pin esbuild 0.28 for path hardening / binary integrity.
   esbuild: "^0.28.1"
   # Pin to 0.35.3 to mitigate GHSA-f88m-g3jw-g9cj and retain the corrected TypeScript export map.
   sharp: "0.35.3"
   prismjs: "^1.30.0"
-  # Pin to 6.15.2 to mitigate GHSA-q8mj-m7cp-5q26 in qs.stringify comma-format array handling.
+  # Pin qs for GHSA-q8mj-m7cp-5q26 (comma-format arrays).
   qs: "6.15.2"
   markdown-it: "14.2.0"
   "@modelcontextprotocol/sdk": "^1.25.2"
-  # SDK 57 alignment (0.10.1 carries the bundle-mode stability fixes paired with
-  # reanimated 4.5.1; see #2960). Keep in lockstep with the reanimated pin below
-  # when bumping Expo SDK.
+  # SDK 57 worklets 0.10.1; keep lockstep with react-native-reanimated (#2960).
   react-native-worklets: "0.10.1"
   # Pin to 4.12.34 to include the current security fixes while preserving Hono 4 compatibility.
   hono: "4.12.34"
@@ -150,14 +128,14 @@ overrides:
   dompurify: "3.4.13"
   # Pin to patched 7.x without forcing a cross-major Undici 8 upgrade.
   undici: "7.29.0"
-  # Pin to the current patched 2.x release for GHSA-rpr9-rxv7-x643 / CVE-2026-44990: prevent xmp raw-text passthrough from rehydrating attacker-controlled markup after sanitization.
+  # Pin sanitize-html for GHSA-rpr9-rxv7-x643 / CVE-2026-44990 (xmp passthrough).
   sanitize-html: "2.17.5"
   # Pin to 7.6.5 to close GHSA-j3f2-48v5-ccww / CVE-2026-59877 and prior 7.x CVEs while preserving the protobufjs 7 major.
   protobufjs: "7.6.5"
-  # Pin to 1.1.1 to close GHSA-mm78-2hpw-9j97 (overlong UTF-8 decoding allows mis-encoded sequences through). 1.1.0 is the vulnerable transitive that the legacy protobufjs 6.x consumers still drag in; 1.1.1 is the patched release.
+  # Pin @protobufjs/utf8 for GHSA-mm78-2hpw-9j97 (legacy protobufjs 6 transitive).
   "@protobufjs/utf8": "1.1.1"
   rollup: "^4.59.0"
-  # Pin to 5.3.1 to mitigate GHSA-rpmf-866q-6p89 / CVE-2026-44240 (unbounded multiline control-response buffering DoS) and the prior GHSA-rp42-5vxx-qpwr, both via transitive Lighthouse tooling.
+  # Pin basic-ftp for GHSA-rpmf-866q-6p89 / CVE-2026-44240 (Lighthouse transitive).
   basic-ftp: "5.3.1"
   # Pin legacy AJV 6 consumers to 6.14.0 to mitigate GHSA-2g4f-4pwh-qvx6 without forcing AJV 8 into older consumers.
   "ajv@<6.14.0": "6.14.0"
@@ -175,7 +153,7 @@ overrides:
   tar: "^7.5.8"
   # Pin to the current patched 5.x release for GHSA-gh4j-gqv2-49f6 in XMLBuilder comment/CDATA serialization while keeping transitive feed and storage XML tooling on the patched major.
   fast-xml-parser: "5.9.0"
-  # Pin to 1.2.0 to mitigate two Dependabot alerts on the version that fast-xml-parser 5.x pulls in transitively: the high-severity attribute-quote bypass (alert #162, fixed 1.1.7) and the medium-severity comment-regex bypass (alert #161, fixed 1.1.6). 1.2.0 is the latest published. fast-xml-parser declares fast-xml-builder ^1.1.5 so this override stays inside its accepted semver range. Exact pin matches the convention for CVE-motivated overrides in this file.
+  # Pin fast-xml-builder for Dependabot #161/#162 (compatible with fast-xml-parser ^1.1.5).
   fast-xml-builder: "1.2.0"
   # AJV 8.x has no fast-uri peer constraint, so this exact patched pin is compatible.
   fast-uri: "3.1.5"
@@ -185,7 +163,7 @@ overrides:
   tinyrainbow: "3.1.0"
   # Pin to the current patched 8.x release.
   postcss: "8.5.23"
-  # Preserve the existing legacy uuid guard for pre-7 consumers while keeping Expo xcode@3.0.1 on its CommonJS-compatible uuid@11.1.1 resolution (preventing ESM require crashes).
+  # Legacy uuid@<7 + Expo xcode CJS uuid@11.1.1 (avoid ESM require crashes).
   "uuid@<7": "11.1.1"
   # Pin older uuid consumers to 11.1.1 to mitigate GHSA-w5hq-g745-h8pq while staying on a CommonJS-compatible patched release.
   "uuid@>=7 <11.1.1": "11.1.1"
@@ -206,9 +184,7 @@ overrides:
   react-native-reanimated: "4.5.1"
   react-native-svg: "15.15.5"
   express-rate-limit: "8.2.2"
-  # Keep the editor ecosystem on one current TipTap 3.x instance. Novel and Puck depend
-  # on older TipTap ranges, but the web editor imports current TipTap extensions;
-  # with hoisted installs, mixed TipTap minors create incompatible types.
+  # TipTap 3.x single instance for Novel/Puck + web editor (avoid mixed minors under hoist).
   "@tiptap/core": "3.26.1"
   "@tiptap/pm": "3.26.1"
   "@tiptap/react": "3.26.1"
@@ -257,9 +233,9 @@ overrides:
   "@tiptap/extension-typography": "3.26.1"
   "@tiptap/extension-underline": "3.26.1"
   "@tiptap/extension-youtube": "3.26.1"
-  # Pin to 1.16.0 to mitigate the GHSA-w9j2-pvgh-6h63 / GHSA-pmwg-cvhr-8vh7 / GHSA-6chq-wfr3-2hj9 advisory cluster affecting axios versions before 1.15.1.
+  # Pin axios 1.16.0 for the pre-1.15.1 advisory cluster.
   axios: "1.16.0"
-  # Pin to 0.6.0 to mitigate GHSA-3644-q5cj-c5c7: keep CopilotKit/LangChain prompt-pull behavior on the patched JS trust-boundary release without a broad CopilotKit upgrade.
+  # Pin langsmith for GHSA-3644-q5cj-c5c7 without a broad CopilotKit upgrade.
   langsmith: "0.6.0"
   "@modelcontextprotocol/sdk>ajv": "^8.18.0"
   "expo-build-properties>ajv": "^8.18.0"
@@ -272,14 +248,14 @@ overrides:
   path-to-regexp: ">=8.4.0"
   # Mermaid arrives transitively via streamdown; keep it on the current patched 11.x line.
   mermaid: "^11.16.1"
-  # Pin vulnerable gRPC consumers to their patched minor releases for CVE-2026-48068 and CVE-2026-48069 while respecting transitive semver bounds.
+  # gRPC patched minors for CVE-2026-48068 / CVE-2026-48069 within semver bounds.
   "@grpc/grpc-js@>=1.9.0 <1.9.16": "1.9.16"
   "@grpc/grpc-js@>=1.10.0 <1.10.12": "1.10.12"
   "@grpc/grpc-js@>=1.11.0 <1.11.4": "1.11.4"
   "@grpc/grpc-js@>=1.12.0 <1.12.7": "1.12.7"
   "@grpc/grpc-js@>=1.13.0 <1.13.5": "1.13.5"
   "@grpc/grpc-js@>=1.14.0 <1.14.4": "1.14.4"
-  # google-gax declares a broad ^1.10.x range; keep it on the latest patched 1.14.x line instead of the 1.10.x patched floor.
+  # google-gax: prefer patched grpc-js 1.14.x over the 1.10.x floor.
   "google-gax>@grpc/grpc-js": "1.14.4"
   # Pin to 1.9.0 to mitigate GHSA-395f-4hp3-45gv / CVE-2026-9277.
   shell-quote: "1.9.0"
@@ -292,17 +268,15 @@ overrides:
   "form-data@>=4 <4.0.6": "4.0.6"
   # Pin to 4.3.1 to mitigate GHSA-5p4m-2wfm-xmqj and prior js-yaml advisories.
   js-yaml: "4.3.1"
-  # Preserve Nano ID's CommonJS-compatible 3.x line for legacy consumers while
-  # moving every vulnerable line to its advisory-specific patched floor.
+  # Nano ID: keep CJS 3.x for legacy consumers; pin other lines to advisory floors.
   "nanoid@<3.3.17": "3.3.17"
   "nanoid@>=4 <5.1.16": "5.1.16"
-  # Pin OpenTelemetry packages to the current 2.8 line to satisfy the core advisory while keeping @vercel/otel on its documented >=2 peer range.
+  # OpenTelemetry 2.8 line (core advisory; @vercel/otel >=2 peer).
   "@opentelemetry/core": "2.8.0"
   "@opentelemetry/resources": "2.8.0"
   "@opentelemetry/sdk-trace-base": "2.8.0"
   # Pin Babel 7 to the patched sourcemap handling release for GHSA-4x5r-pxfx-6jf8 / CVE-2026-49356.
   "@babel/core": "7.29.6"
-
 patchedDependencies:
   "@react-native-community/datetimepicker@9.1.0": "patches/@react-native-community/datetimepicker@9.1.0.patch"
   "@react-native-google-signin/google-signin@16.1.2": "patches/@react-native-google-signin/google-signin@16.1.2.patch"
@@ -317,11 +291,8 @@ patchedDependencies:
   "react-native-safe-area-context@5.8.0": "patches/react-native-safe-area-context@5.8.0.patch"
   "react-native-webview@13.16.1": "patches/react-native-webview@13.16.1.patch"
   react-native@0.86.2: patches/react-native@0.86.2.patch
-  # Xcode 26.2 / Swift 6.2 rejects SWIFT_RETURNS_RETAINED on RuntimeScheduler
-  # constructors in expo-modules-jsi@57.0.5: the class's SWIFT_SHARED_REFERENCE
-  # is declared at the closing brace, so the constructors fail the iOS archive.
-  # Drop the constructor annotations (57.0.4 did without them). Re-key this
-  # patch if the lockfile moves off 57.0.5.
+  "react-native-fbsdk-next@13.4.3": "patches/react-native-fbsdk-next@13.4.3.patch"
+  # expo-modules-jsi@57.0.5: drop SWIFT_RETURNS_RETAINED on RuntimeScheduler (Xcode 26.2).
   "expo-modules-jsi@57.0.5": "patches/expo-modules-jsi@57.0.5.patch"
   image-size@1.2.1: patches/image-size@1.2.1.patch
   "next@16.3.4": "patches/next@16.3.4.patch"

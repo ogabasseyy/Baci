@@ -1,0 +1,92 @@
+name: RN FindShadowNodeByTag gtest
+
+on:
+  pull_request:
+    paths:
+      - 'patches/react-native@*'
+      - 'tools/rn-find-shadow-node-gtest/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/rn-find-shadow-node-gtest.yml'
+      - '.github/scripts/rn-find-shadow-node-gtest.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - 'patches/react-native@*'
+      - 'tools/rn-find-shadow-node-gtest/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/rn-find-shadow-node-gtest.yml'
+      - '.github/scripts/rn-find-shadow-node-gtest.test.mjs'
+  workflow_dispatch:
+    inputs:
+      asan:
+        description: 'Also rebuild under AddressSanitizer'
+        type: boolean
+        default: true
+
+concurrency:
+  group: rn-find-shadow-node-gtest-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    name: Resolve sanitizer matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      include: ${{ steps.resolve.outputs.include }}
+    steps:
+      - name: Resolve matrix
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ASAN_INPUT: ${{ inputs.asan }}
+        run: |
+          set -euo pipefail
+          # PRs and pushes always run plain + ASAN. Manual dispatch honors inputs.asan.
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$ASAN_INPUT" != "true" ]]; then
+            include='[{"sanitizer":""}]'
+          else
+            include='[{"sanitizer":""},{"sanitizer":"address"}]'
+          fi
+          echo "include=$include" >> "$GITHUB_OUTPUT"
+
+  find-shadow-node-gtest:
+    name: Compile + run FindShadowNodeByTagTest (${{ matrix.sanitizer || 'plain' }})
+    needs: matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install host build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build clang g++ python3 curl ca-certificates libboost-dev openssl
+
+      - name: Install JS deps (applies patches/react-native@*)
+        uses: ./.github/actions/pnpm-install-cached
+
+      - name: Fail-closed patch contract
+        run: |
+          node --test \
+            .github/scripts/rn-find-shadow-node-gtest.test.mjs \
+            tools/rn-find-shadow-node-gtest/apply-suite-flag-off.test.mjs
+
+      - name: Compile and execute real FindShadowNodeByTagTest.cpp
+        env:
+          BACI_RN_GTEST_SANITIZER: ${{ matrix.sanitizer }}
+        run: |
+          chmod +x tools/rn-find-shadow-node-gtest/run.sh \
+                   tools/rn-find-shadow-node-gtest/bootstrap-native-deps.sh \
+                   tools/rn-find-shadow-node-gtest/bootstrap-download.sh
+          ./tools/rn-find-shadow-node-gtest/run.sh

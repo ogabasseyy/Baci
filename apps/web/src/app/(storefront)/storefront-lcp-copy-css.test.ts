@@ -79,5 +79,11 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       '.storefront-ppr-static-shell__content:has('
     );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      'var(--store-background, #f9fafb)'
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).not.toContain(
+      'var(--color-gray-50, #f9fafb)'
+    );
   });
 });

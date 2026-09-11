@@ -124,7 +124,7 @@ html:has([data-storefront-shell]) *::after {
 */
 .ogabassey-blog-lcp-hero {
   min-height: 100svh;
-  background: var(--color-gray-50, #f9fafb);
+  background: var(--store-background, #f9fafb);
   padding: 2rem 1rem 0;
 }
 

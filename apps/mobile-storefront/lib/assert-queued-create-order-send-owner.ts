@@ -36,6 +36,18 @@ export function assertQueuedCreateOrderSendOwner(
     throw new Error(QUEUED_CREATE_ORDER_SESSION_TIMEOUT_MESSAGE);
   }
 
+  const authenticatedOwner = expectedOwner !== '' && expectedOwner !== 'guest';
+  if (authenticatedOwner && !resolvedUserIds.includes(expectedOwner)) {
+    if (input.storageUserId === expectedOwner) {
+      throw new Error(
+        'Queued checkout session is not authorized for this account'
+      );
+    }
+    throw new DeferredOfflineMutationError(
+      'Queued checkout belongs to a different account'
+    );
+  }
+
   if (queuedCreateOrderOwnerMismatch(expectedOwner, input.storageUserId)) {
     throw new DeferredOfflineMutationError(
       'Queued checkout belongs to a different account'

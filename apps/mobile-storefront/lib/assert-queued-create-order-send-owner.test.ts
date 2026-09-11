@@ -33,6 +33,23 @@ it('rejects an authenticated queue after the session is cleared', () => {
   ).toThrow(DeferredOfflineMutationError);
 });
 
+it('does not send an authenticated queue when storage still matches but auth did not resolve', () => {
+  expect(() =>
+    assertQueuedCreateOrderSendOwner(accountA, {
+      resolvedUserIds: [],
+      storageUserId: accountA,
+    })
+  ).toThrow('Queued checkout session is not authorized for this account');
+  try {
+    assertQueuedCreateOrderSendOwner(accountA, {
+      resolvedUserIds: [],
+      storageUserId: accountA,
+    });
+  } catch (error) {
+    expect(error).not.toBeInstanceOf(DeferredOfflineMutationError);
+  }
+});
+
 it('does not defer forever when the final storage read times out after owner A resolved', () => {
   expect(() =>
     assertQueuedCreateOrderSendOwner(accountA, {

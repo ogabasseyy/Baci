@@ -3,6 +3,8 @@ import { CHECKOUT_AUTH_PARTITION_STORAGE_KEY } from '@/config/checkout-storage';
 
 const GUEST_AUTH_PARTITION = 'guest';
 
+let partitionGate: Promise<void> = Promise.resolve();
+
 function assertAuthPartition(value: string): void {
   if (value === GUEST_AUTH_PARTITION) return;
   if (!/^[0-9a-f-]{36}$/i.test(value)) {
@@ -47,9 +49,10 @@ function parsePartitionMap(existing: string | null): Record<string, string> {
   return map;
 }
 
-export async function resolveCheckoutAuthPartition(
+async function resolveCheckoutAuthPartitionUnlocked(
   checkoutGeneration: string,
-  currentUserId: string | undefined
+  currentUserId: string | undefined,
+  sessionReadInconclusive: boolean
 ): Promise<string> {
   const existing = await AsyncStorage.getItem(
     CHECKOUT_AUTH_PARTITION_STORAGE_KEY
@@ -57,6 +60,14 @@ export async function resolveCheckoutAuthPartition(
   const partitions = parsePartitionMap(existing);
   const stored = partitions[checkoutGeneration];
   const incoming = currentUserId ?? GUEST_AUTH_PARTITION;
+
+  if (sessionReadInconclusive) {
+    if (stored !== undefined) {
+      assertAuthPartition(stored);
+      return stored;
+    }
+    throw new Error('Checkout session read timed out');
+  }
 
   if (stored !== undefined) {
     assertAuthPartition(stored);
@@ -79,4 +90,27 @@ export async function resolveCheckoutAuthPartition(
     JSON.stringify(partitions)
   );
   return incoming;
+}
+
+export async function resolveCheckoutAuthPartition(
+  checkoutGeneration: string,
+  currentUserId: string | undefined,
+  options?: { sessionReadInconclusive?: boolean }
+): Promise<string> {
+  let release!: () => void;
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const previous = partitionGate;
+  partitionGate = next;
+  await previous;
+  try {
+    return await resolveCheckoutAuthPartitionUnlocked(
+      checkoutGeneration,
+      currentUserId,
+      options?.sessionReadInconclusive === true
+    );
+  } finally {
+    release();
+  }
 }

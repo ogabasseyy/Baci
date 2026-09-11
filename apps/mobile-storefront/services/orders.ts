@@ -114,10 +114,11 @@ export async function createOrder(
 
   // 3. Auth is optional because the storefront supports guest checkout.
   // When a valid session exists, forward it so the server can link the order.
-  const storedSession = await getCheckoutStoredSession(
+  const initialSession = await readCheckoutStoredSession(
     supabaseAuthStorage,
     supabaseAuthStorageKey
   );
+  const storedSession = initialSession.session;
   // A persisted token can still be accepted by Auth while the Data API no
   // longer has a compatible signing key for it. Refresh before the money/order
   // boundary so PostgREST receives a token minted by the active signing key.
@@ -147,7 +148,8 @@ export async function createOrder(
     // The submitted payload and server authorization remain unchanged.
     const authPartition = await resolveCheckoutAuthPartition(
       checkoutGeneration,
-      storedSession?.user?.id
+      storedSession?.user?.id,
+      { sessionReadInconclusive: initialSession.timedOut }
     );
     const idempotencyKey =
       validatedRequest.idempotency_key ??

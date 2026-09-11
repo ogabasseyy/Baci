@@ -64,4 +64,31 @@ describe('bugfix: checkout retry identity keeps the originating auth partition',
       resolveCheckoutAuthPartition(liveGeneration, guestThenUser)
     ).resolves.toBe('guest');
   });
+
+  it('keeps the stored partition when the session read is inconclusive', async () => {
+    const accountA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    await expect(
+      resolveCheckoutAuthPartition(generation, accountA)
+    ).resolves.toBe(accountA);
+    await expect(
+      resolveCheckoutAuthPartition(generation, undefined, {
+        sessionReadInconclusive: true,
+      })
+    ).resolves.toBe(accountA);
+  });
+
+  it('preserves both generations when live and queued resolves overlap', async () => {
+    const liveGeneration = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const queuedGeneration = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    await Promise.all([
+      resolveCheckoutAuthPartition(liveGeneration, undefined),
+      resolveCheckoutAuthPartition(queuedGeneration, guestThenUser),
+    ]);
+    await expect(
+      resolveCheckoutAuthPartition(liveGeneration, guestThenUser)
+    ).resolves.toBe('guest');
+    await expect(
+      resolveCheckoutAuthPartition(queuedGeneration, guestThenUser)
+    ).resolves.toBe(guestThenUser);
+  });
 });

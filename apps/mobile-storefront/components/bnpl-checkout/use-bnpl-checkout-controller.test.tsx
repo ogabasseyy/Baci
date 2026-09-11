@@ -103,7 +103,7 @@ describe('useBNPLCheckoutController', () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
-  it('handles trusted app-host SPA success navigation messages from the WebView', () => {
+  it('handles trusted app-host SPA success navigation messages from the WebView', async () => {
     jest.useFakeTimers();
     mockRouteParams = {
       gateway: 'credit_direct',
@@ -113,7 +113,7 @@ describe('useBNPLCheckoutController', () => {
     };
     const { result } = renderControllerHook();
 
-    act(() => {
+    await act(async () => {
       result.current.handleWebViewMessage({
         nativeEvent: {
           data: JSON.stringify({
@@ -167,7 +167,7 @@ describe('useBNPLCheckoutController', () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 
-  it('trusts configured merchant domains for SPA success navigation messages', () => {
+  it('trusts configured merchant domains for SPA success navigation messages', async () => {
     jest.useFakeTimers();
     mockRouteParams = {
       gateway: 'credit_direct',
@@ -177,7 +177,7 @@ describe('useBNPLCheckoutController', () => {
     };
     const { result } = renderControllerHook('ogabassey.com');
 
-    act(() => {
+    await act(async () => {
       result.current.handleWebViewMessage({
         nativeEvent: {
           data: JSON.stringify({

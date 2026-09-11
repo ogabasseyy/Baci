@@ -228,7 +228,8 @@ describe('CheckoutScreen', () => {
           savings_amount: 150000,
           savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
           use_savings_credit: true,
-        })
+        }),
+        expect.anything()
       );
     });
   });
@@ -416,7 +417,8 @@ describe('CheckoutScreen', () => {
         savings_amount: 470000,
         savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
         use_savings_credit: true,
-      })
+      }),
+      expect.anything()
     );
     expect(getPaymentInitializeCalls()).toHaveLength(0);
   });

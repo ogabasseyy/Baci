@@ -315,11 +315,11 @@ describe('usePaymentGatewayController', () => {
     expect(mockWaitForVtuConfirmation).not.toHaveBeenCalled();
   });
 
-  it('clears the cart and navigates after order payment completion', () => {
+  it('clears the cart and navigates after order payment completion', async () => {
     jest.useFakeTimers();
     const { result } = renderHook(() => usePaymentGatewayController());
 
-    act(() => {
+    await act(async () => {
       result.current.handleNavigationChange(
         navigation('https://usebaci.com/checkout/success?trxref=ref-123')
       );
@@ -343,7 +343,7 @@ describe('usePaymentGatewayController', () => {
     });
   });
 
-  it('preserves tracking token when routing completed order payments', () => {
+  it('preserves tracking token when routing completed order payments', async () => {
     jest.useFakeTimers();
     mockSearchParams = {
       ...orderParams,
@@ -351,7 +351,7 @@ describe('usePaymentGatewayController', () => {
     };
     const { result } = renderHook(() => usePaymentGatewayController());
 
-    act(() => {
+    await act(async () => {
       result.current.handleNavigationChange(
         navigation('https://usebaci.com/checkout/success?trxref=ref-123')
       );
@@ -389,7 +389,7 @@ describe('usePaymentGatewayController', () => {
     alertSpy.mockRestore();
   });
 
-  it('uses an empty order id when delayed order navigation has no orderId', () => {
+  it('uses an empty order id when delayed order navigation has no orderId', async () => {
     jest.useFakeTimers();
     mockSearchParams = {
       ...orderParams,
@@ -398,7 +398,7 @@ describe('usePaymentGatewayController', () => {
     };
     const { result } = renderHook(() => usePaymentGatewayController());
 
-    act(() => {
+    await act(async () => {
       result.current.handleNavigationChange(
         navigation('https://usebaci.com/checkout/success?trxref=ref-123')
       );

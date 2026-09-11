@@ -14,6 +14,7 @@ import {
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
+import { resolveOfferFeedImages } from '@/lib/resolve-offer-feed-images';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';
 import { escapeXml } from '@/lib/xml-utils';
 import { buildFeedDescription } from './build-feed-description';
@@ -132,13 +133,7 @@ function getConditionedVariants(product: FeedProduct) {
   );
 }
 
-/**
- * Generate Google Merchant Center XML feed.
- *
- * Images are resolved exclusively from the prevalidated manifest.
- * Products without a verified primary image are excluded entirely.
- * This function performs zero network calls.
- */
+/** Generate XML using only prevalidated images; performs no network calls. */
 export function generateGoogleMerchantFeed(
   products: FeedProduct[],
   merchant: FeedMerchant,
@@ -198,33 +193,32 @@ export function generateGoogleMerchantFeed(
         );
         return selection ? rows.get(selection.id) : '';
       }
-      if (!productLevelImages) return null;
-
-      const baseItem = toGoogleListingCondition(product.condition)
-        ? buildBaseItemXml({
-            additionalImagesXml: productLevelImages.additionalImagesXml,
-            availability:
-              getFeedStockCount(product) > 0 ? 'in_stock' : 'out_of_stock',
-            brandName: effectiveBrand,
-            compareAtPrice: product.compare_at_price,
-            condition: toGmcCondition(product.condition),
-            colorXml,
-            currency,
-            description,
-            googleProductCategory: product.google_product_category,
-            gtin: product.gtin,
-            id: product.id,
-            imageUrl: productLevelImages.primaryImageUrl,
-            mpn: product.mpn,
-            price: product.price,
-            productDetailsXml,
-            productType,
-            shippingWeight,
-            stockCount: getFeedStockCount(product),
-            title: product.name,
-            url: productUrl,
-          })
-        : '';
+      const baseItem =
+        productLevelImages && toGoogleListingCondition(product.condition)
+          ? buildBaseItemXml({
+              additionalImagesXml: productLevelImages.additionalImagesXml,
+              availability:
+                getFeedStockCount(product) > 0 ? 'in_stock' : 'out_of_stock',
+              brandName: effectiveBrand,
+              compareAtPrice: product.compare_at_price,
+              condition: toGmcCondition(product.condition),
+              colorXml,
+              currency,
+              description,
+              googleProductCategory: product.google_product_category,
+              gtin: product.gtin,
+              id: product.id,
+              imageUrl: productLevelImages.primaryImageUrl,
+              mpn: product.mpn,
+              price: product.price,
+              productDetailsXml,
+              productType,
+              shippingWeight,
+              stockCount: getFeedStockCount(product),
+              title: product.name,
+              url: productUrl,
+            })
+          : '';
 
       if (!product.offers || product.offers.length === 0) {
         return baseItem;
@@ -239,6 +233,11 @@ export function generateGoogleMerchantFeed(
             toGoogleListingCondition(offer.condition)
         )
         .map((offer) => {
+          const offerImages = resolveOfferFeedImages(
+            offer.images,
+            manifestEntries
+          );
+          if (!offerImages) return '';
           const offerStock = getFeedStockCount(product, offer);
           const offerAvailability =
             offerStock > 0 ? 'in_stock' : 'out_of_stock';
@@ -250,8 +249,8 @@ export function generateGoogleMerchantFeed(
             `        <g:description>${escapeXml(description)}</g:description>`,
             `        <g:link>${escapeXml(`${productUrl}?condition=${offer.condition}`)}</g:link>`,
             `        <g:canonical_link>${escapeXml(productUrl)}</g:canonical_link>`,
-            `        <g:image_link>${escapeXml(productLevelImages.primaryImageUrl)}</g:image_link>`,
-            productLevelImages.additionalImagesXml,
+            `        <g:image_link>${escapeXml(offerImages.imageUrl)}</g:image_link>`,
+            offerImages.additionalImagesXml,
             `        <g:availability>${offerAvailability}</g:availability>`,
             `        <g:quantity>${offerStock}</g:quantity>`,
             `        <g:price>${offer.price.toFixed(2)} ${currency}</g:price>`,

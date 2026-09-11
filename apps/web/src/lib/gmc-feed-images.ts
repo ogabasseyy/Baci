@@ -14,6 +14,7 @@ const GMC_ADDITIONAL_IMAGES_MAX = 10;
  * but those are only used by the offline backfill job and never reach this type.
  */
 export interface FeedImageManifestEntry {
+  source_url?: string | null;
   variant_id?: string | null;
   verified_url: string | null;
   verified_format: string | null;

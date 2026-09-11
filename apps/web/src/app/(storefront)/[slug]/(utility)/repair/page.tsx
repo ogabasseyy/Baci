@@ -18,11 +18,7 @@ import { repairBookingSearchParamsSchema } from '@/schemas/repair-actions';
 import { getOgabasseyStaticParams } from '../../ogabassey-static-params';
 import { RepairBookingFallback } from './repair-booking-fallback';
 import { RepairBookingLcpIntro } from './repair-booking-lcp-intro';
-import {
-  canUseRepairBooking,
-  RepairPageContent,
-  type RepairPageRouteProps,
-} from './repair-page-content';
+import type { RepairPageRouteProps } from './repair-page-content';
 
 export function generateStaticParams(): Array<{ slug: string }> {
   return getOgabasseyStaticParams();
@@ -86,6 +82,7 @@ export async function generateMetadata({
 }: RepairPageRouteProps): Promise<Metadata> {
   const { slug } = await params;
   const merchant = await getRepairMerchant(slug);
+  const { canUseRepairBooking } = await import('./repair-page-content');
 
   if (!canUseRepairBooking(merchant)) {
     return {
@@ -110,6 +107,9 @@ export async function generateMetadata({
 export async function RepairPageResolved(props: RepairPageRouteProps) {
   const { slug } = await props.params;
   const merchant = await getRepairMerchant(slug);
+  const { canUseRepairBooking, RepairPageContent } = await import(
+    './repair-page-content'
+  );
   const preselection = canUseRepairBooking(merchant)
     ? await resolveBookingPreselection(merchant, await props.searchParams)
     : undefined;

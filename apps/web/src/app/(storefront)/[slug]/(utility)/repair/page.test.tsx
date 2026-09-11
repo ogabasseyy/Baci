@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -313,5 +316,17 @@ describe('RepairPage', () => {
 
     expect(metadata.title).toBe('Store Not Found');
     expect(getCachedMerchant).not.toHaveBeenCalled();
+  });
+
+  it('keeps the booking wizard off the route module graph', () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'page.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain("await import('./repair-page-content')");
+    expect(source).not.toMatch(
+      /import\s+\{[^}]*RepairPageContent[^}]*\}\s+from\s+['"]\.\/repair-page-content['"]/
+    );
   });
 });

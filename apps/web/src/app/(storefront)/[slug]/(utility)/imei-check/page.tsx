@@ -18,7 +18,6 @@ import {
 } from '../../ogabassey-static-params';
 import { ImeiCheckCommittedHero } from './imei-check-committed-hero';
 import { ImeiCheckFallback } from './imei-check-fallback';
-import { ImeiCheckPageContent } from './imei-check-page-content';
 
 export const metadata: Metadata = {
   title: buildStorefrontMetadataTitle({
@@ -56,6 +55,8 @@ export async function ImeiCheckResolvedContent({
   if (merchant.template_id !== OGABASSEY_TEMPLATE_ID) {
     notFound();
   }
+
+  const { ImeiCheckPageContent } = await import('./imei-check-page-content');
 
   return <ImeiCheckPageContent omitHero={isOgabasseyStaticTenant(slug)} />;
 }

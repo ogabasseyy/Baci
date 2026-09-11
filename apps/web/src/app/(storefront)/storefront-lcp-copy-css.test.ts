@@ -14,6 +14,10 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
     );
     expect(STOREFRONT_LCP_COPY_CSS).toContain('font-size: 1.875rem !important');
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      'letter-spacing: normal !important'
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain('color: #111827 !important');
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'html:has([data-storefront-shell])'
     );
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
@@ -49,7 +53,10 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'body:has([data-compare-category-page]) [data-compare-hub-chrome]'
     );
-    expect(STOREFRONT_LCP_COPY_CSS).toContain('@media (min-width: 768px)');
+    expect(STOREFRONT_LCP_COPY_CSS).toContain('[data-cwv-lcp-copy="imei"]');
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      'var(--store-background-text, #111827)'
+    );
     expect(STOREFRONT_LCP_COPY_CSS).toContain('font-size: 3rem !important');
     expect(STOREFRONT_LCP_COPY_CSS).toContain('font-size: 3.75rem !important');
     expect(STOREFRONT_LCP_COPY_CSS).toContain(

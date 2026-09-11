@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCachedMerchant } from '@/lib/cached-data';
@@ -121,5 +124,17 @@ describe('ImeiCheckPage', () => {
         params: Promise.resolve({ slug: 'demo-store' }),
       })
     ).rejects.toThrow('NEXT_NOT_FOUND');
+  });
+
+  it('keeps the IMEI checker UI off the route module graph', () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'page.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain("await import('./imei-check-page-content')");
+    expect(source).not.toMatch(
+      /import\s+\{[^}]*ImeiCheckPageContent[^}]*\}\s+from\s+['"]\.\/imei-check-page-content['"]/
+    );
   });
 });

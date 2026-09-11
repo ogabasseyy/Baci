@@ -34,6 +34,13 @@ html:has([data-storefront-shell]) *::after {
 
 [data-cwv-lcp-copy] {
   font-family: "Inter Fallback", Arial, Helvetica, sans-serif !important;
+  letter-spacing: normal !important;
+}
+
+[data-cwv-lcp-copy="compare"],
+[data-cwv-lcp-copy="repair"],
+[data-cwv-lcp-copy="imei"] {
+  color: #111827 !important;
 }
 
 [data-cwv-lcp-copy="home"] {
@@ -58,17 +65,22 @@ html:has([data-storefront-shell]) *::after {
 }
 
 [data-cwv-lcp-copy="repair"] {
+  color: var(--store-background-text, #111827) !important;
   font-size: 1.875rem !important;
   font-weight: 700 !important;
   line-height: 2.25rem !important;
   margin: 0 0 1rem !important;
+  text-align: center;
 }
 
 [data-cwv-lcp-copy="imei"] {
+  color: var(--store-background-text, #111827) !important;
   font-size: 1.875rem !important;
   font-weight: 800 !important;
+  letter-spacing: -0.025em !important;
   line-height: 2.25rem !important;
   margin: 0 0 1rem !important;
+  text-align: center;
 }
 
 [data-cwv-lcp-copy="repairs"] {

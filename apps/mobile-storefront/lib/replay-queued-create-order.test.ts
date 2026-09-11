@@ -46,3 +46,18 @@ it('does not replay an authenticated queue under a different account', async () 
   ).rejects.toThrow('Queued checkout belongs to a different account');
   expect(createOrder).not.toHaveBeenCalled();
 });
+
+it('does not replay an authenticated queue after sign-out', async () => {
+  const createOrder = jest.fn();
+  await expect(
+    replayQueuedCreateOrder(
+      createOrder,
+      wrapQueuedCreateOrder(
+        request,
+        'cart-one',
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+      )
+    )
+  ).rejects.toThrow('Queued checkout belongs to a different account');
+  expect(createOrder).not.toHaveBeenCalled();
+});

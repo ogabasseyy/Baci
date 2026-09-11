@@ -10,9 +10,5 @@ export function queuedCreateOrderOwnerMismatch(
 ): boolean {
   const owner = queuedPartition || GUEST_AUTH_PARTITION;
   const current = currentUserId ?? GUEST_AUTH_PARTITION;
-  return (
-    isAuthenticatedPartition(owner) &&
-    isAuthenticatedPartition(current) &&
-    owner !== current
-  );
+  return isAuthenticatedPartition(owner) && owner !== current;
 }

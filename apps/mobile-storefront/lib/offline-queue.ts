@@ -1,5 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import * as Crypto from 'expo-crypto';
+import { DeferredOfflineMutationError } from './deferred-offline-mutation-error';
 import { createLogger } from './logger';
 import type {
   MutationType,
@@ -173,6 +174,14 @@ class OfflineQueueManager {
         await this.remove(mutation.id);
         log.info(`Successfully processed: ${mutation.id}`);
       } catch (error) {
+        if (error instanceof DeferredOfflineMutationError) {
+          log.info(
+            `Deferring ${mutation.id} until the originating account returns`
+          );
+          await this.persistQueue();
+          break;
+        }
+
         mutation.retryCount++;
         mutation.lastError =
           error instanceof Error ? error.message : 'Unknown error';

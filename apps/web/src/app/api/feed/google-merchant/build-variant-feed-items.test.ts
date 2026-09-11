@@ -49,6 +49,23 @@ const input = {
   ],
 };
 describe('buildVariantFeedItems', () => {
+  it.each([
+    'variant_id',
+    'variant-id',
+    ' Variant ID ',
+  ])('excludes reserved %s aliases from SKU links', (key) => {
+    const xml = buildVariantFeedItems({
+      ...input,
+      variants: [
+        {
+          ...input.variants[0],
+          attributes: { color: 'White', [key]: 'wrong-sku' },
+        },
+      ],
+    });
+    expect(xml).toContain('variantId=white-new');
+    expect(xml).not.toContain('wrong-sku');
+  });
   it('uses one canonical colour for conflicting aliases and protects routing parameters', () => {
     const xml = buildVariantFeedItems({
       ...input,

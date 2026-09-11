@@ -36,6 +36,7 @@ export interface FeedProduct {
 }
 
 export interface FeedOffer {
+  images?: unknown;
   id: string;
   condition: 'new' | 'used' | 'refurbished' | 'open_box' | 'uk_used';
   price: number;

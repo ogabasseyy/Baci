@@ -44,8 +44,14 @@ const canonicalAttributes = (variant: FeedVariant): Record<string, string> => {
               'colour',
               'color_hex',
               'variantid',
+              'variant_id',
               'condition',
-            ].includes(key.trim().toLowerCase())
+            ].includes(
+              key
+                .trim()
+                .toLowerCase()
+                .replace(/[\s-]+/g, '_')
+            )
         )
         .map(([key, value]) => [key, text(value)])
     ),

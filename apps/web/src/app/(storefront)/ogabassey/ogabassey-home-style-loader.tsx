@@ -65,7 +65,7 @@ export function OgabasseyHomeStyleLoader() {
       window.matchMedia('(min-width: 768px)').matches
     ) {
       let cancelled = false;
-      let stopRetry = () => undefined;
+      let stopRetry: () => void = () => undefined;
       void loadOgabasseyHomeStyles().catch((error: unknown) => {
         console.error(new Error(HOME_STYLESHEET_ERROR, { cause: error }));
         if (!cancelled) {

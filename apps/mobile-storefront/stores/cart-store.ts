@@ -240,9 +240,6 @@ export const useCartStore = create<CartState>()(
         cartWideNegotiationActive,
         checkoutGeneration
       ) => {
-        if (checkoutGeneration !== undefined) {
-          await persistCheckoutGeneration(checkoutGeneration);
-        }
         set({
           items,
           ...(cartWideNegotiationActive !== undefined && {
@@ -250,6 +247,9 @@ export const useCartStore = create<CartState>()(
           }),
           ...(checkoutGeneration !== undefined && { checkoutGeneration }),
         });
+        if (checkoutGeneration !== undefined) {
+          await persistCheckoutGeneration(checkoutGeneration);
+        }
       },
 
       repriceItems: (priceById) => {

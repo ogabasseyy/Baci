@@ -27,6 +27,7 @@ import {
 } from './orders.schemas';
 import { resolveCheckoutAuth } from './orders-auth';
 import { getCheckoutStoredSession } from './orders-session';
+import { readCheckoutStoredSession } from './read-checkout-stored-session';
 
 export { OrderError } from './orders.errors';
 export type {
@@ -164,15 +165,15 @@ export async function createOrder(
             }
           : undefined
       ));
-    const sendSession = await getCheckoutStoredSession(
+    const sendSession = await readCheckoutStoredSession(
       supabaseAuthStorage,
       supabaseAuthStorageKey
     );
-    assertQueuedCreateOrderSendOwner(options?.expectedOwner, [
-      user?.id,
-      session?.user?.id,
-      sendSession?.user?.id,
-    ]);
+    assertQueuedCreateOrderSendOwner(options?.expectedOwner, {
+      resolvedUserIds: [user?.id, session?.user?.id],
+      storageReadInconclusive: sendSession.timedOut,
+      storageUserId: sendSession.session?.user?.id,
+    });
 
     log.info('Submitting order request', {
       apiUrl: API_URL,

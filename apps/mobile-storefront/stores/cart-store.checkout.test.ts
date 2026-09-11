@@ -87,6 +87,29 @@ it('keeps a replacement item when last-item persist is still in flight', async (
   expect(useCartStore.getState().items).toHaveLength(1);
 });
 
+it('keeps a replacement item when checkout restore persist is still in flight', async () => {
+  useCartStore.getState().addItem(item);
+  const snapshot = useCartStore.getState().items;
+  const snapshotGeneration = useCartStore.getState().checkoutGeneration;
+  await useCartStore.getState().clearCart();
+  let releasePersist!: () => void;
+  (persistCheckoutGeneration as jest.Mock).mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        releasePersist = () => resolve();
+      })
+  );
+  const restoring = useCartStore
+    .getState()
+    .restoreItems(snapshot, false, snapshotGeneration);
+  useCartStore.getState().addItem(item);
+  const duringRestore = useCartStore.getState().items;
+  expect(duringRestore).toHaveLength(1);
+  releasePersist();
+  await restoring;
+  expect(useCartStore.getState().items).toEqual(duringRestore);
+});
+
 it('changes identity when the shopper removes the last item and starts over', async () => {
   useCartStore.getState().addItem(item);
   const { items, checkoutGeneration } = useCartStore.getState();

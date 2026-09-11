@@ -82,8 +82,8 @@ describe('BlogListingRequestContent request state regression', () => {
     );
     expect(screen.getByText('Root featured story')).toBeInTheDocument();
     expect(
-      screen.queryByRole('heading', { name: 'Page two first post' })
-    ).not.toBeInTheDocument();
+      screen.getByRole('heading', { name: 'Page two first post' })
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Page two second post' })
     ).toBeInTheDocument();
@@ -102,9 +102,10 @@ describe('BlogListingRequestContent request state regression', () => {
       )
     );
     expect(screen.getByText('Root featured story')).toBeInTheDocument();
+    expect(screen.queryByText('Featured Story')).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('heading', { name: 'Page two first post' })
-    ).not.toBeInTheDocument();
+      screen.getByRole('heading', { name: 'Page two first post' })
+    ).toBeInTheDocument();
   });
 
   it('keeps the first result on page two instead of replacing it with page one', async () => {

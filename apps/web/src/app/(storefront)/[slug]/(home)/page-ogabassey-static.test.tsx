@@ -97,12 +97,7 @@ describe('OgaBassey dynamic homepage routing', () => {
     expect(mockFullStorefrontCssImport).not.toHaveBeenCalled();
   });
 
-  it('renders other storefronts through the shared page content path with deferred full storefront CSS', async () => {
-    window.matchMedia = vi.fn().mockImplementation(() => ({
-      matches: false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    }));
+  it('renders other storefronts through the shared page content path with eager full storefront CSS', async () => {
     await renderStorefrontPage('another-shop');
 
     expect(mockCriticalHomeCssImport).not.toHaveBeenCalled();
@@ -111,11 +106,7 @@ describe('OgaBassey dynamic homepage routing', () => {
         screen.getByText('Shared storefront page content')
       ).toBeInTheDocument();
     });
-    expect(mockFullStorefrontCssImport).not.toHaveBeenCalled();
-    window.dispatchEvent(new Event('pointerdown'));
-    await waitFor(() => {
-      expect(mockFullStorefrontCssImport).toHaveBeenCalledOnce();
-    });
+    expect(mockFullStorefrontCssImport).toHaveBeenCalledOnce();
   });
 
   it('renders the path homepage with the OgaBassey static shell', async () => {

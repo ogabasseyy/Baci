@@ -21,14 +21,16 @@ describe('blog listing request fallback', () => {
     });
     const [, listingBoundary] = ui.props.children;
 
-    const { container } = render(
+    render(
       <Suspense fallback={listingBoundary.props.fallback}>
         {listingBoundary.props.children}
       </Suspense>
     );
 
     expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
-    expect(container.innerHTML).not.toContain('md:h-[420px]');
+    expect(
+      screen.getByRole('region', { name: 'Loading featured story' })
+    ).toBeInTheDocument();
   });
 
   it('keeps a skeleton-only searchParams fallback for other merchants', () => {
@@ -38,13 +40,15 @@ describe('blog listing request fallback', () => {
     });
     const [, listingBoundary] = ui.props.children;
 
-    const { container } = render(
+    render(
       <Suspense fallback={listingBoundary.props.fallback}>
         {listingBoundary.props.children}
       </Suspense>
     );
 
     expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
-    expect(container.innerHTML).not.toContain('md:h-[420px]');
+    expect(
+      screen.getByRole('region', { name: 'Loading featured story' })
+    ).toBeInTheDocument();
   });
 });

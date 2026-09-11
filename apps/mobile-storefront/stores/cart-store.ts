@@ -246,9 +246,9 @@ export const useCartStore = create<CartState>()(
         }));
       },
 
-      // Restore items directly (for rollback without generating new IDs).
-      // When a snapshot of the cart-wide flag is provided, restore it too so a
-      // rolled-back group deal keeps its lines and active flag in sync.
+      advanceCheckoutGeneration: () => {
+        set({ checkoutGeneration: Crypto.randomUUID() });
+      },
       restoreItems: (items, cartWideNegotiationActive, checkoutGeneration) => {
         set({
           items,

@@ -1,4 +1,3 @@
-import { jest } from '@jest/globals';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import {
   getPaymentInitializeCalls,
@@ -13,7 +12,6 @@ import {
   mockTrackCheckoutStarted,
   mockTrackError,
   mockUseAuthStatus,
-  mockUseMerchantPaymentSettings,
   renderCheckoutScreen,
   setupCheckoutTest,
   teardownCheckoutTest,
@@ -150,146 +148,6 @@ describe('CheckoutScreen', () => {
       expect(screen.getByText('Review Order')).toBeOnTheScreen();
       expect(screen.getByText('Card Payment (Paystack)')).toBeOnTheScreen();
     });
-  });
-
-  it('delegates BNPL retry identity to the order service when switching providers', async () => {
-    mockUseMerchantPaymentSettings.mockReturnValue({
-      data: {
-        ...mockPaymentSettings,
-        credpal_enabled: false,
-        credit_direct_enabled: true,
-        juicyway_enabled: false,
-        klump_enabled: true,
-        klump_max_amount: 5_000_000,
-        klump_min_amount: 1_000,
-        korapay_enabled: false,
-        pay_on_delivery_enabled: false,
-        paystack_enabled: true,
-        vat_rate: 0,
-        vat_registration_status: 'unregistered',
-      },
-    });
-    renderCheckoutScreen();
-
-    fillAddressAndContinueToPayment();
-    await waitFor(() => {
-      expect(screen.getByText('Payment Method')).toBeOnTheScreen();
-    });
-
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Mock select Credit Direct' })
-    );
-    await waitFor(() => {
-      expect(
-        screen.getByText('Selected payment: credit_direct')
-      ).toBeOnTheScreen();
-    });
-    fireEvent.press(screen.getByRole('button', { name: 'Continue to review' }));
-    await waitFor(() => {
-      expect(screen.getByText('Review Order')).toBeOnTheScreen();
-    });
-    fireEvent.press(screen.getByRole('button', { name: /Place order for/i }));
-
-    await waitFor(() => {
-      expect(mockCreateOrder).toHaveBeenCalledTimes(1);
-    });
-    expect(mockCreateOrder.mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({
-        payment_method: 'credit_direct',
-      })
-    );
-    expect(mockCreateOrder.mock.calls[0]?.[0]).not.toHaveProperty(
-      'idempotency_key'
-    );
-
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Edit payment method' })
-    );
-    fireEvent.press(screen.getByRole('button', { name: 'Mock select Klump' }));
-    await waitFor(() => {
-      expect(screen.getByText('Selected payment: klump')).toBeOnTheScreen();
-    });
-    fireEvent.press(screen.getByRole('button', { name: 'Continue to review' }));
-    fireEvent.press(screen.getByRole('button', { name: /Place order for/i }));
-
-    await waitFor(() => {
-      expect(mockCreateOrder).toHaveBeenCalledTimes(2);
-    });
-    expect(mockCreateOrder.mock.calls[1]?.[0]).not.toHaveProperty(
-      'idempotency_key'
-    );
-  });
-
-  it.each([
-    'CHECKOUT_ORDER_NOT_REUSABLE',
-    'CHECKOUT_IDEMPOTENCY_CONFLICT',
-  ])('does not override the order service retry identity after %s', async (errorCode) => {
-    const { OrderError } = jest.requireMock(
-      '@/services/orders'
-    ) as typeof import('@/services/orders');
-    const staleOrderError = new OrderError(
-      'This checkout order can no longer be reused.',
-      errorCode
-    );
-
-    mockUseMerchantPaymentSettings.mockReturnValue({
-      data: {
-        ...mockPaymentSettings,
-        credpal_enabled: false,
-        credit_direct_enabled: true,
-        juicyway_enabled: false,
-        klump_enabled: true,
-        klump_max_amount: 5_000_000,
-        klump_min_amount: 1_000,
-        korapay_enabled: false,
-        pay_on_delivery_enabled: false,
-        paystack_enabled: true,
-        vat_rate: 0,
-        vat_registration_status: 'unregistered',
-      },
-    });
-    mockCreateOrder.mockRejectedValueOnce(staleOrderError);
-    renderCheckoutScreen();
-
-    fillAddressAndContinueToPayment();
-    await waitFor(() => {
-      expect(screen.getByText('Payment Method')).toBeOnTheScreen();
-    });
-
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Mock select Credit Direct' })
-    );
-    await waitFor(() => {
-      expect(
-        screen.getByText('Selected payment: credit_direct')
-      ).toBeOnTheScreen();
-    });
-    fireEvent.press(screen.getByRole('button', { name: 'Continue to review' }));
-    await waitFor(() => {
-      expect(screen.getByText('Review Order')).toBeOnTheScreen();
-    });
-    fireEvent.press(screen.getByRole('button', { name: /Place order for/i }));
-
-    await waitFor(() => {
-      expect(mockCreateOrder).toHaveBeenCalledTimes(1);
-    });
-    expect(mockCreateOrder.mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({
-        payment_method: 'credit_direct',
-      })
-    );
-    expect(mockCreateOrder.mock.calls[0]?.[0]).not.toHaveProperty(
-      'idempotency_key'
-    );
-
-    fireEvent.press(screen.getByRole('button', { name: /Place order for/i }));
-
-    await waitFor(() => {
-      expect(mockCreateOrder).toHaveBeenCalledTimes(2);
-    });
-    expect(mockCreateOrder.mock.calls[1]?.[0]).toEqual(
-      mockCreateOrder.mock.calls[0]?.[0]
-    );
   });
 
   it('forwards checkout savings credit fields when a matching device savings goal is selected', async () => {

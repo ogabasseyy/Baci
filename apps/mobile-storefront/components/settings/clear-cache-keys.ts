@@ -1,7 +1,13 @@
-import { CHECKOUT_INSTALLATION_STORAGE_KEY } from '@/config/checkout-storage';
+import {
+  CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
+  CHECKOUT_GENERATION_STORAGE_KEY,
+  CHECKOUT_INSTALLATION_STORAGE_KEY,
+} from '@/config/checkout-storage';
 import { QUERY_CACHE_STORAGE_KEY } from '@/lib/query-client';
 
 const CLEAR_CACHE_PRESERVED_KEYS = new Set([
+  CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
+  CHECKOUT_GENERATION_STORAGE_KEY,
   CHECKOUT_INSTALLATION_STORAGE_KEY,
   'app-settings-storage',
   'app-theme-storage',

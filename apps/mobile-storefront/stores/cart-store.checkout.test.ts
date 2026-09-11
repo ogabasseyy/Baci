@@ -59,6 +59,13 @@ it('changes identity when the shopper removes the last item and starts over', ()
   );
 });
 
+it('starts a new retry identity when the shopper confirms a replacement checkout', () => {
+  useCartStore.getState().addItem(item);
+  const first = useCartStore.getState().checkoutGeneration;
+  useCartStore.getState().advanceCheckoutGeneration();
+  expect(useCartStore.getState().checkoutGeneration).not.toBe(first);
+});
+
 it('restores the original retry identity when checkout fails after clearing the cart', () => {
   useCartStore.getState().addItem(item);
   const { items, checkoutGeneration } = useCartStore.getState();

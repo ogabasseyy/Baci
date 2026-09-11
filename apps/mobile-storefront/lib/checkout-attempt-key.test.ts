@@ -54,7 +54,9 @@ it('uses one durable identity for concurrent checkout calls', async () => {
     getCheckoutAttemptKey(payload, 'cart-one'),
   ]);
   expect(first).toBe(second);
-  expect(setItem).toHaveBeenCalledTimes(1);
+  expect(
+    setItem.mock.calls.filter(([key]) => key === 'checkout-installation-id-v1')
+  ).toHaveLength(1);
 });
 
 it('allows an intentional identical purchase in a new cart lifecycle', async () => {
@@ -97,6 +99,18 @@ it('fails closed on read failures instead of replacing an unknown prior identity
     loadKeyGenerator().getCheckoutAttemptKey(payload, 'cart-one')
   ).rejects.toThrow('storage unavailable');
   expect(setItem).not.toHaveBeenCalled();
+});
+
+it('does not return a key until the generation write succeeds', async () => {
+  storage.set(
+    'checkout-installation-id-v1',
+    '46ed63d7-5f10-49f0-9456-9ff571bec43f'
+  );
+  setItem.mockRejectedValueOnce(new Error('disk full'));
+  const { getCheckoutAttemptKey } = loadKeyGenerator();
+  await expect(getCheckoutAttemptKey(payload, 'cart-one')).rejects.toThrow(
+    'disk full'
+  );
 });
 
 it('does not return a key until it is durable and permits retry after a failed write', async () => {

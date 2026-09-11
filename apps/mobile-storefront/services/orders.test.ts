@@ -1119,6 +1119,7 @@ describe('createOrderWithOfflineSupport — offline queue contract', () => {
     subtotal: 5000,
     shipping_fee: 500,
     payment_method: 'pay_on_delivery' as const,
+    source: 'mobile_app',
     shipping_address: {
       firstName: 'Test',
       lastName: 'Buyer',
@@ -1165,10 +1166,10 @@ describe('createOrderWithOfflineSupport — offline queue contract', () => {
 
     expect(result.queued).toBe(true);
     const { offlineQueue } = require('@/lib/offline-queue');
-    expect(offlineQueue.enqueue).toHaveBeenCalledWith(
-      'create_order',
-      baseRequest
-    );
+    expect(offlineQueue.enqueue).toHaveBeenCalledWith('create_order', {
+      checkoutGeneration: 'cart-one',
+      request: baseRequest,
+    });
   });
 
   it('re-throws TIMEOUT_ERROR without queuing to avoid duplicate orders', async () => {

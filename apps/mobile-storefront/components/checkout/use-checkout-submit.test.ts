@@ -201,6 +201,8 @@ describe('useCheckoutSubmit', () => {
     mockUseMerchant.mockReturnValue({ data: { id: 'merchant-1' } });
     mockedUseCartStore.getState = () => ({
       items: cartItems,
+      checkoutGeneration: 'gen-1',
+      cartWideNegotiationActive: false,
       repriceItems: mockRepriceItems,
       restoreItems: mockRestoreItems,
     });
@@ -500,5 +502,24 @@ describe('useCheckoutSubmit', () => {
     expect(mockCreateOrder).not.toHaveBeenCalled();
     expect(setIsProcessing).not.toHaveBeenCalled();
     expect(params.isOrderInFlight.current).toBe(false);
+  });
+
+  it('restores the pre-submit checkout generation when order creation fails after the cart is cleared', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    mockCreateOrder.mockImplementation(async () => {
+      cartItems = [];
+      throw new Error('payment init failed');
+    });
+    const params = createParams();
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockRestoreItems).toHaveBeenCalledWith([cartItem], false, 'gen-1');
   });
 });

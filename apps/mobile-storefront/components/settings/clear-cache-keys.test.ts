@@ -1,10 +1,24 @@
-import { CHECKOUT_INSTALLATION_STORAGE_KEY } from '@/config/checkout-storage';
+import {
+  CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
+  CHECKOUT_GENERATION_STORAGE_KEY,
+  CHECKOUT_INSTALLATION_STORAGE_KEY,
+} from '@/config/checkout-storage';
 import { getClearableCacheStorageKeys } from './clear-cache-keys';
 
 it('preserves pending checkout recovery identity when clearing cache', () => {
   expect(
-    getClearableCacheStorageKeys([CHECKOUT_INSTALLATION_STORAGE_KEY])
-  ).not.toContain(CHECKOUT_INSTALLATION_STORAGE_KEY);
+    getClearableCacheStorageKeys([
+      CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
+      CHECKOUT_GENERATION_STORAGE_KEY,
+      CHECKOUT_INSTALLATION_STORAGE_KEY,
+    ])
+  ).not.toEqual(
+    expect.arrayContaining([
+      CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
+      CHECKOUT_GENERATION_STORAGE_KEY,
+      CHECKOUT_INSTALLATION_STORAGE_KEY,
+    ])
+  );
 });
 
 describe('getClearableCacheStorageKeys', () => {

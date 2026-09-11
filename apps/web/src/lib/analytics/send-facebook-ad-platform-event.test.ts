@@ -1,4 +1,6 @@
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildLegacyAdPlatformFanoutEvent } from '@/app/api/events/build-legacy-ad-platform-fanout-event';
 
 const mocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
@@ -62,11 +64,47 @@ describe('sendFacebookAdPlatformEvent', () => {
           ],
         },
       },
-      'AddToWishlist'
+      'AddPaymentInfo'
     );
     expect(mocks.generic.mock.calls.at(-1)?.[4]).toMatchObject({
       contentType,
       contentIds: ['phone'],
+    });
+  });
+
+  it('matches legacy wishlist parent IDs to catalog groups', async () => {
+    const event = buildLegacyAdPlatformFanoutEvent({
+      eventId: 'wishlist',
+      eventType: 'add_to_wishlist',
+      input: {
+        event_type: 'add_to_wishlist',
+        merchant_id: 'merchant',
+        product_id: 'parent-phone',
+        product_name: 'Phone',
+        product_price: 100,
+        source: 'web',
+      },
+      request: new NextRequest('https://shop.example.com/api/events'),
+      resolvedMerchantId: 'merchant',
+    });
+    await sendFacebookAdPlatformEvent(
+      {
+        facebook_capi_token: 'token',
+        facebook_pixel_id: 'pixel',
+        ga4_api_secret: null,
+        google_analytics_id: null,
+        offline_conversions_enabled: true,
+        snapchat_capi_token: null,
+        snapchat_pixel_id: null,
+        tiktok_access_token: null,
+        tiktok_pixel_id: null,
+      },
+      event,
+      'AddToWishlist'
+    );
+    expect(mocks.generic.mock.calls.at(-1)?.[4]).toMatchObject({
+      contentType: 'product_group',
+      contentIds: ['parent-phone'],
     });
   });
 

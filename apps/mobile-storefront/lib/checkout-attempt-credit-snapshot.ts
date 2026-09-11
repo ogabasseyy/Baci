@@ -95,10 +95,9 @@ function extractCheckoutCreditSnapshot(
   return snapshot;
 }
 
-export async function applyCheckoutCreditSnapshot(
-  payload: Record<string, unknown>,
-  checkoutGeneration: string
-): Promise<Record<string, unknown>> {
+export async function applyCheckoutCreditSnapshot<
+  T extends Record<string, unknown>,
+>(payload: T, checkoutGeneration: string): Promise<T> {
   assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
   const existing = await AsyncStorage.getItem(
     CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY

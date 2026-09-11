@@ -16,7 +16,10 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'letter-spacing: normal !important'
     );
-    expect(STOREFRONT_LCP_COPY_CSS).toContain('color: #111827 !important');
+    expect(STOREFRONT_LCP_COPY_CSS).not.toContain('color: #111827 !important');
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      'var(--store-background-text, #111827)'
+    );
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'html:has([data-storefront-shell])'
     );

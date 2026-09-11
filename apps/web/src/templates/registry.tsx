@@ -20,7 +20,11 @@ import type { ComponentType, ReactNode } from 'react';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import type { MerchantData } from '@/hooks/use-merchant';
 import type { Product } from '@/lib/products';
-import type { V2ThemeMode } from '@/components/storefront/ogabassey/providers/v2-theme-context';
+import type { TemplateBlogPageProps } from './template-blog-types';
+import type { TemplatePageProps } from './template-page-props';
+
+export type { BlogPostData, TemplateBlogPageProps } from './template-blog-types';
+export type { TemplatePageProps } from './template-page-props';
 
 /**
  * Template status - controls visibility and access
@@ -89,55 +93,6 @@ export interface TemplateComponents {
   DeleteAccount?: ComponentType<TemplatePageProps>;
   /** Blog listing page (optional, uses default if not provided) */
   Blog?: ComponentType<TemplateBlogPageProps>;
-}
-
-/**
- * Props for blog page components
- */
-export interface TemplateBlogPageProps extends TemplatePageProps {
-  posts?: BlogPostData[];
-
-  categories?: { name: string; slug: string }[];
-  /** Current category query if filtering by category */
-  category?: string;
-  /** Current search query if filtering by search */
-  searchQuery?: string;
-  /** Set when the listing hero/LCP image is rendered outside this component. */
-  hideFeaturedStory?: boolean;
-}
-
-/**
- * Blog post data structure for template components
- */
-export interface BlogPostData {
-  id: string | number;
-  title: string;
-  excerpt: string;
-  category: string;
-  author_name: string;
-  published_at: string;
-  featured_image_url: string;
-  reading_time_minutes: number;
-  slug: string;
-  featured?: boolean;
-}
-
-/**
- * Props passed to template page components
- */
-export interface TemplatePageProps {
-  /** Store slug for routing */
-  storeSlug?: string;
-  /** Merchant data (real or mock) */
-  merchant?: MerchantData;
-  /** Products (real or mock) */
-  products?: Product[];
-  /** Whether this is a preview mode */
-  isPreview?: boolean;
-  /** Initial theme for SSR consistency (Phase 1: Cookie-Based Theme) */
-  initialTheme?: V2ThemeMode;
-  /** Categories loaded from DB */
-  categories?: { name: string; slug: string }[];
 }
 
 /**

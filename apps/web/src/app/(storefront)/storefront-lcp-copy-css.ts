@@ -37,11 +37,6 @@ html:has([data-storefront-shell]) *::after {
   letter-spacing: normal !important;
 }
 
-[data-cwv-lcp-copy="repair"],
-[data-cwv-lcp-copy="imei"] {
-  color: #111827 !important;
-}
-
 [data-cwv-lcp-copy="home"] {
   font-size: 1.65rem !important;
   font-weight: 800 !important;

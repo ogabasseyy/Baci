@@ -54,6 +54,7 @@ interface HomeProductGridProps {
 }
 
 const PRODUCTS_PER_PAGE = 20;
+const SERVER_RENDERED_HOME_PRODUCT_IMAGES = 2;
 const NO_PARTICLES: ProductGridParticle[] = [];
 
 const loadDefaultInteractionBindingsModule = () =>
@@ -214,7 +215,9 @@ export function HomeProductGrid({
                 <HomeProductGridCard
                   basePath={basePath}
                   product={product}
-                  deferImageLoading
+                  deferImageLoading={
+                    index >= SERVER_RENDERED_HOME_PRODUCT_IMAGES
+                  }
                 />
               ) : (
                 <InteractiveCard
@@ -233,7 +236,9 @@ export function HomeProductGrid({
                   deferInteractiveChrome={deferInteractiveChrome}
                   interactiveChromeTimeoutMs={deferInteractiveChrome ? 0 : undefined}
                   interactiveChromeActivateOnIdle={!deferInteractiveChrome}
-                  deferImageLoading
+                  deferImageLoading={
+                    index >= SERVER_RENDERED_HOME_PRODUCT_IMAGES
+                  }
                 />
               )}
 

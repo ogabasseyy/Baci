@@ -17,22 +17,24 @@ import { useAdTracking } from './use-ad-tracking';
 
 describe('useAdTracking', () => {
   it.each([
-    'trackFacebookPurchase',
-    'trackPurchase',
-  ] as const)('matches purchase product IDs to catalog groups with %s', (method) => {
+    ['trackFacebookPurchase', ['phone']],
+    ['trackPurchase', ['phone']],
+    ['trackFacebookPurchase', []],
+    ['trackPurchase', []],
+  ] as const)('matches purchase product IDs to catalog groups with %s and %j', (method, ids) => {
     const fbq = vi.fn();
     const original = Object.getOwnPropertyDescriptor(window, 'fbq');
     try {
       window.fbq = fbq;
       const { result } = renderHook(() => useAdTracking());
       act(() => {
-        result.current[method](891000, 'NGN', ['phone']);
+        result.current[method](891000, 'NGN', [...ids]);
       });
       expect(fbq).toHaveBeenCalledWith(
         'track',
         'Purchase',
         expect.objectContaining({
-          content_ids: ['phone'],
+          content_ids: [...ids],
           content_type: 'product_group',
         }),
         expect.any(Object)

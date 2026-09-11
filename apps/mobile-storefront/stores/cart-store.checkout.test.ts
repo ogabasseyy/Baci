@@ -110,6 +110,21 @@ it('keeps a replacement item when checkout restore persist is still in flight', 
   expect(useCartStore.getState().items).toEqual(duringRestore);
 });
 
+it('keeps restored items when generation persist rejects', async () => {
+  useCartStore.getState().addItem(item);
+  const snapshot = useCartStore.getState().items;
+  const snapshotGeneration = useCartStore.getState().checkoutGeneration;
+  await useCartStore.getState().clearCart();
+  (persistCheckoutGeneration as jest.Mock).mockRejectedValueOnce(
+    new Error('disk full')
+  );
+  await expect(
+    useCartStore.getState().restoreItems(snapshot, false, snapshotGeneration)
+  ).resolves.toBeUndefined();
+  expect(useCartStore.getState().items).toEqual(snapshot);
+  expect(useCartStore.getState().checkoutGeneration).toBe(snapshotGeneration);
+});
+
 it('changes identity when the shopper removes the last item and starts over', async () => {
   useCartStore.getState().addItem(item);
   const { items, checkoutGeneration } = useCartStore.getState();

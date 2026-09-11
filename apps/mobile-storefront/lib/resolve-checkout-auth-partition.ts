@@ -12,6 +12,41 @@ function assertAuthPartition(value: string): void {
   }
 }
 
+function parsePartitionMap(existing: string | null): Record<string, string> {
+  if (existing === null) {
+    return {};
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(existing);
+  } catch {
+    throw new Error(
+      'Checkout recovery data is invalid. Please contact support.'
+    );
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(
+      'Checkout recovery data is invalid. Please contact support.'
+    );
+  }
+  const record = parsed as Record<string, unknown>;
+  if (
+    typeof record.generation === 'string' &&
+    typeof record.userId === 'string'
+  ) {
+    assertAuthPartition(record.userId);
+    return { [record.generation]: record.userId };
+  }
+  const map: Record<string, string> = {};
+  for (const [generation, userId] of Object.entries(record)) {
+    if (typeof userId === 'string') {
+      assertAuthPartition(userId);
+      map[generation] = userId;
+    }
+  }
+  return map;
+}
+
 export async function resolveCheckoutAuthPartition(
   checkoutGeneration: string,
   currentUserId: string | undefined
@@ -19,42 +54,29 @@ export async function resolveCheckoutAuthPartition(
   const existing = await AsyncStorage.getItem(
     CHECKOUT_AUTH_PARTITION_STORAGE_KEY
   );
-  if (existing !== null) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(existing);
-    } catch {
-      throw new Error(
-        'Checkout recovery data is invalid. Please contact support.'
+  const partitions = parsePartitionMap(existing);
+  const stored = partitions[checkoutGeneration];
+  const incoming = currentUserId ?? GUEST_AUTH_PARTITION;
+
+  if (stored !== undefined) {
+    assertAuthPartition(stored);
+    if (stored !== GUEST_AUTH_PARTITION && incoming !== stored) {
+      assertAuthPartition(incoming);
+      partitions[checkoutGeneration] = incoming;
+      await AsyncStorage.setItem(
+        CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
+        JSON.stringify(partitions)
       );
+      return incoming;
     }
-    if (
-      parsed !== null &&
-      typeof parsed === 'object' &&
-      !Array.isArray(parsed) &&
-      (parsed as { generation?: unknown }).generation === checkoutGeneration &&
-      typeof (parsed as { userId?: unknown }).userId === 'string'
-    ) {
-      const userId = (parsed as { userId: string }).userId;
-      assertAuthPartition(userId);
-      const incoming = currentUserId ?? GUEST_AUTH_PARTITION;
-      if (userId !== GUEST_AUTH_PARTITION && incoming !== userId) {
-        assertAuthPartition(incoming);
-        await AsyncStorage.setItem(
-          CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
-          JSON.stringify({ generation: checkoutGeneration, userId: incoming })
-        );
-        return incoming;
-      }
-      return userId;
-    }
+    return stored;
   }
 
-  const userId = currentUserId ?? GUEST_AUTH_PARTITION;
-  assertAuthPartition(userId);
+  assertAuthPartition(incoming);
+  partitions[checkoutGeneration] = incoming;
   await AsyncStorage.setItem(
     CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
-    JSON.stringify({ generation: checkoutGeneration, userId })
+    JSON.stringify(partitions)
   );
-  return userId;
+  return incoming;
 }

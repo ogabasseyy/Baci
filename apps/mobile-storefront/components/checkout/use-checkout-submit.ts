@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import { useMerchant } from '@/hooks/use-merchant';
+import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import {
   buildSavingsOrderFields,
@@ -213,7 +214,7 @@ export function useCheckoutSubmit({
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
 
-      if (!orderResponse.idempotency?.replayed) {
+      if (claimCheckoutPurchaseTracking(order.id)) {
         void trackCheckoutRoutePurchaseCompleted({
           customerEmail,
           customerPhone,
@@ -260,11 +261,16 @@ export function useCheckoutSubmit({
     } catch (error) {
       const cartStore = useCartStore.getState();
       if (cartStore.items.length === 0) {
-        await cartStore.restoreItems(
-          itemsSnapshot,
-          groupNegotiationSnapshot,
-          checkoutGenerationSnapshot
-        );
+        try {
+          await cartStore.restoreItems(
+            itemsSnapshot,
+            groupNegotiationSnapshot,
+            checkoutGenerationSnapshot
+          );
+        } catch {
+          // In-memory restore already applied; persist failures must not hide
+          // the original checkout error.
+        }
       }
       handleCheckoutSubmitError(error, selectedPayment);
     } finally {

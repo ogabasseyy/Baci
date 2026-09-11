@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { createLogger } from '@/lib/logger';
 import { persistCheckoutGeneration } from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
 import { applyPersistedCheckoutGeneration } from './apply-persisted-checkout-generation';
@@ -22,6 +23,8 @@ import { rotateEmptyCheckoutCart } from './rotate-empty-checkout-cart';
 
 export type { CartItem } from './cart-store.types';
 export { formatPrice, selectCartQuantities };
+
+const log = createLogger('CartStore');
 
 export function resetCartLineSequence() {
   if (useCartStore.getState().items.length === 0) {
@@ -248,7 +251,11 @@ export const useCartStore = create<CartState>()(
           ...(checkoutGeneration !== undefined && { checkoutGeneration }),
         });
         if (checkoutGeneration !== undefined) {
-          await persistCheckoutGeneration(checkoutGeneration);
+          try {
+            await persistCheckoutGeneration(checkoutGeneration);
+          } catch (error) {
+            log.error('Failed to persist restored checkout generation:', error);
+          }
         }
       },
 

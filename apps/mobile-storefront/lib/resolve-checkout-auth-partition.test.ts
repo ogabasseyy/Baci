@@ -50,4 +50,18 @@ describe('bugfix: checkout retry identity keeps the originating auth partition',
       resolveCheckoutAuthPartition(generation, undefined)
     ).resolves.toBe('guest');
   });
+
+  it('keeps the live generation partition when a queued generation replays', async () => {
+    const liveGeneration = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const queuedGeneration = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    await expect(
+      resolveCheckoutAuthPartition(liveGeneration, undefined)
+    ).resolves.toBe('guest');
+    await expect(
+      resolveCheckoutAuthPartition(queuedGeneration, guestThenUser)
+    ).resolves.toBe(guestThenUser);
+    await expect(
+      resolveCheckoutAuthPartition(liveGeneration, guestThenUser)
+    ).resolves.toBe('guest');
+  });
 });

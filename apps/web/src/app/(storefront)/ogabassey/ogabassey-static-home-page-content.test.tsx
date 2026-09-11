@@ -1,6 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS } from '@/components/storefront/ogabassey/components/hero-mobile-geometry';
+import {
+  OGABASSEY_DESCRIPTION,
+  OGABASSEY_HOME_LCP_SUPPORT,
+} from '@/config/ogabassey';
 
 vi.mock('@/components/seo/json-ld', () => ({
   JsonLd: () => <script type="application/ld+json" />,
@@ -11,21 +14,27 @@ vi.mock('./ogabassey-home-style-loader', () => ({
 const mockDynamicContentSuspends = vi.hoisted(() => ({ value: false }));
 vi.mock('./ogabassey-home-page-content', () => ({
   OgabasseyHomePageContent: ({
+    omitDocumentHeading,
+    omitMobileCarousel,
     pathPrefix,
     shellMerchantId,
     shellSlides,
   }: {
+    omitDocumentHeading?: boolean;
+    omitMobileCarousel?: boolean;
     pathPrefix: string;
     shellMerchantId: string | null;
     shellSlides: unknown[] | null;
   }) => {
     if (mockDynamicContentSuspends.value) {
-      // Suspend forever so the Suspense fallback actually renders.
+      // Suspend forever so only the committed sibling remains visible.
       throw new Promise(() => undefined);
     }
     return (
       <section
         aria-label="Dynamic home content"
+        data-omit-document-heading={omitDocumentHeading ? 'true' : 'false'}
+        data-omit-mobile-carousel={omitMobileCarousel ? 'true' : 'false'}
         data-prefix={pathPrefix}
         data-shell-merchant-id={shellMerchantId ?? 'none'}
         data-shell-slide-count={shellSlides?.length ?? 'none'}
@@ -44,6 +53,17 @@ const mockPreloadHeroResources = vi.hoisted(() => vi.fn());
 vi.mock('./ogabassey-home-hero-resource-hints', () => ({
   preloadOgabasseyHomeHeroResources: (...args: unknown[]) =>
     mockPreloadHeroResources(...args),
+}));
+
+vi.mock('next/image', () => ({
+  getImageProps: ({ src, alt }: { alt: string; src: string }) => ({
+    props: {
+      alt,
+      src,
+      srcSet: `${src} 640w`,
+      sizes: '40vw',
+    },
+  }),
 }));
 
 const mockCriticalHero = vi.hoisted(() => vi.fn());
@@ -95,6 +115,21 @@ describe('OgabasseyStaticHomePageContent', () => {
     expect(
       screen.getByRole('region', { name: /dynamic home content/i })
     ).toHaveAttribute('data-shell-merchant-id', 'merchant-1');
+    expect(
+      screen.getByRole('region', { name: /dynamic home content/i })
+    ).toHaveAttribute('data-omit-mobile-carousel', 'false');
+    expect(
+      screen.getByRole('region', { name: /dynamic home content/i })
+    ).toHaveAttribute('data-omit-document-heading', 'true');
+    expect(
+      document.querySelector('[data-ogabassey-home-lcp-shell="true"]')
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector(
+        '[data-ogabassey-publication-safe-hero-fallback="true"]'
+      )
+    ).toBeInTheDocument();
+    expect(mockPreloadHeroResources).not.toHaveBeenCalled();
     expect(mockCriticalHero).not.toHaveBeenCalled();
     expect(mockResolveHeroShell).toHaveBeenCalledWith();
   });
@@ -115,6 +150,9 @@ describe('OgabasseyStaticHomePageContent', () => {
     expect(
       screen.getByRole('region', { name: /dynamic home content/i })
     ).toHaveAttribute('data-shell-slide-count', '0');
+    expect(
+      screen.getByRole('region', { name: /dynamic home content/i })
+    ).toHaveAttribute('data-omit-document-heading', 'false');
     expect(mockPreloadHeroResources).not.toHaveBeenCalled();
   });
 
@@ -126,10 +164,10 @@ describe('OgabasseyStaticHomePageContent', () => {
     ).toHaveAttribute('data-prefix', '');
   });
 
-  it('preloads the slide-0 hero image when cached shell slides resolve', async () => {
+  it('does not preload the slide-0 hero image because committed LCP is text', async () => {
     render(await OgabasseyStaticHomePageContent({ pathPrefix: '' }));
 
-    expect(mockPreloadHeroResources).toHaveBeenCalledWith(SHELL_SLIDE.imageUrl);
+    expect(mockPreloadHeroResources).not.toHaveBeenCalled();
   });
 
   it('shows only publication-safe geometry while the publication owner suspends', async () => {
@@ -145,12 +183,31 @@ describe('OgabasseyStaticHomePageContent', () => {
         '[data-ogabassey-publication-safe-hero-fallback="true"]'
       )
     ).toBeInTheDocument();
-    expect(document.querySelector('a, button, img')).not.toBeInTheDocument();
+    expect(document.querySelector('a, button')).not.toBeInTheDocument();
+    expect(document.querySelector('img, picture')).not.toBeInTheDocument();
+    expect(
+      document.querySelector(
+        '[data-ogabassey-publication-safe-hero-fallback="true"]'
+      )?.textContent
+    ).toContain('OgaBassey');
+    expect(
+      document.querySelector('[data-ogabassey-committed-lcp-copy="true"]')
+        ?.textContent
+    ).toBe(OGABASSEY_HOME_LCP_SUPPORT);
+    expect(
+      document.querySelector('.ogabassey-home-unique-copy')?.textContent
+    ).toBe(OGABASSEY_DESCRIPTION);
     expect(
       document.querySelector(
         '[data-ogabassey-publication-safe-utility-fallback="true"]'
       )
-    ).toHaveClass(HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS);
+    ).not.toBeInTheDocument();
+    expect(
+      document.querySelector('[data-ogabassey-home-lcp-shell="true"]')
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-ogabassey-home-lcp-spacer="true"]')
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('region', { name: /dynamic home content/i })
     ).not.toBeInTheDocument();
@@ -187,5 +244,51 @@ describe('OgabasseyStaticHomePageContent', () => {
     expect(
       screen.getByRole('region', { name: /dynamic home content/i })
     ).toHaveAttribute('data-shell-slide-count', 'none');
+  });
+
+  it('omits the publication-safe fallback when the page already committed LCP copy', async () => {
+    render(
+      await OgabasseyStaticHomePageContent({
+        omitCommittedHero: true,
+        pathPrefix: '',
+      })
+    );
+
+    expect(
+      document.querySelector(
+        '[data-ogabassey-publication-safe-hero-fallback="true"]'
+      )
+    ).not.toBeInTheDocument();
+    expect(
+      document.querySelector('[data-ogabassey-home-lcp-shell="true"]')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: /dynamic home content/i })
+    ).toHaveAttribute('data-omit-mobile-carousel', 'false');
+    expect(
+      screen.getByRole('region', { name: /dynamic home content/i })
+    ).toHaveAttribute('data-omit-document-heading', 'true');
+  });
+
+  it('keeps the mobile carousel when the parent committed LCP even without a cached hero image', async () => {
+    mockResolveHeroShell.mockResolvedValue({
+      status: 'published',
+      merchantId: 'merchant-1',
+      slides: [],
+    });
+
+    render(
+      await OgabasseyStaticHomePageContent({
+        omitCommittedHero: true,
+        pathPrefix: '',
+      })
+    );
+
+    expect(
+      screen.getByRole('region', { name: /dynamic home content/i })
+    ).toHaveAttribute('data-omit-mobile-carousel', 'false');
+    expect(
+      screen.getByRole('region', { name: /dynamic home content/i })
+    ).toHaveAttribute('data-omit-document-heading', 'true');
   });
 });

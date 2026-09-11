@@ -164,6 +164,29 @@ describe('readStorefrontEdgeSourceAuthority', () => {
     ]);
   });
 
+  it('ignores colocated test-utils files in the route tree', async () => {
+    const repoRoot = await mkdtemp(join(tmpdir(), 'edge-authority-utils-'));
+    temporaryRoots.push(repoRoot);
+    const originMainSha = await createStorefrontEdgeInventoryFixture(repoRoot);
+    await writeFile(
+      join(
+        repoRoot,
+        'apps/web/src/app/(storefront)/[slug]/layout.test-utils.tsx'
+      ),
+      'export const unused = true;\n'
+    );
+
+    await expect(
+      readStorefrontEdgeSourceAuthority({
+        apiRoot,
+        originMainSha,
+        repoRoot,
+        routeRoots,
+        routingInputPaths: STOREFRONT_EDGE_INVENTORY_POLICY.routingInputPaths,
+      })
+    ).resolves.toMatchObject({ routeSources: expect.any(Array) });
+  });
+
   it('rejects changed routing-input bytes', async () => {
     // Arrange
     const repoRoot = await mkdtemp(join(tmpdir(), 'edge-authority-drift-'));

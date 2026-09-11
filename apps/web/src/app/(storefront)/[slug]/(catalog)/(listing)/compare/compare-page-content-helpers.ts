@@ -2,6 +2,14 @@ import { normalizeProduct, type RawDbProduct } from '@/lib/normalize-product';
 import { canonicalizeCategorySlug } from '@/lib/storefront-canonical-url';
 import { resolveStorefrontPathHref } from '@/lib/storefront-path-prefix';
 
+export function buildCompareIndexDescription(
+  merchantName: string | null | undefined
+) {
+  const storefrontName = merchantName?.trim() || 'this store';
+
+  return `Browse ${storefrontName} product comparison pages by category and open side-by-side guides for eligible products.`;
+}
+
 export interface CompareIndexSection {
   categoryName: string;
   categorySlug: string;

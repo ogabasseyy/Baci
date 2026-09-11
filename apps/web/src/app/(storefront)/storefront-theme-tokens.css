@@ -14,11 +14,10 @@
   colors on the very first frame even before the per-merchant `--store-*`
   variables (applied late, on a wrapper element) resolve.
 
-  IMPORTANT: this file is imported by BOTH the render-blocking home critical CSS
-  (storefront-home-critical.css) and the deferred/shared storefront entrypoints
-  (storefront-foundation.css). The critical import is what prevents the hero /
-  above-the-fold cards from first-painting unstyled (dark shell showing through)
-  on cold/slow loads. Keep it tiny and token-only.
+  IMPORTANT: this file is imported by the deferred/shared storefront entrypoints
+  (storefront-foundation.css). Homepage LCP copy is handwritten in
+  OGABASSEY_HOME_LCP_CRITICAL_CSS so the render-blocking critical sheet does
+  not need Tailwind `bg-store-*` utilities. Keep this file tiny and token-only.
 */
 @theme inline {
   --color-store-primary: var(--store-primary, #2a2c6e);

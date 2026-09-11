@@ -1,5 +1,5 @@
-import '@/app/(storefront)/storefront-full.css';
 import type { ReactNode } from 'react';
+import { StorefrontFullStyleLoader } from '@/app/(storefront)/storefront-full-style-loader';
 
 // The shared [slug] layout resolves custom-domain routing with request headers
 // before child listing routes render. Next.js 16 validates route entries
@@ -14,5 +14,10 @@ export default function StorefrontFullCssLayout({
 }: {
   children: ReactNode;
 }) {
-  return children;
+  return (
+    <>
+      <StorefrontFullStyleLoader />
+      {children}
+    </>
+  );
 }

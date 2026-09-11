@@ -81,6 +81,15 @@ describe('OgabasseyV2Repairs', () => {
     expect(screen.queryByTestId('device-picker')).not.toBeInTheDocument();
   });
 
+  it('does not reset window scroll when streamed repairs content mounts', () => {
+    const scrollTo = vi.fn();
+    window.scrollTo = scrollTo;
+
+    render(<OgabasseyV2Repairs omitHero />);
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
   it('renders the catalogue-driven device picker instead of the static services when groups are provided', () => {
     const groups = [
       {
@@ -110,6 +119,18 @@ describe('OgabasseyV2Repairs', () => {
         notListedHref: '/ogabassey/repair',
       })
     );
+  });
+
+  it('omits the branded lab hero when omitHero is set', () => {
+    const { container } = render(<OgabasseyV2Repairs omitHero />);
+
+    expect(
+      screen.queryByRole('heading', { name: /repair lab/i })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/don't ditch it/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Screen Renewal')).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass('pt-0');
+    expect(container.firstElementChild).not.toHaveClass('pt-4');
   });
 
   it('renders the device picker (with its own empty state) when groups is an empty array', () => {

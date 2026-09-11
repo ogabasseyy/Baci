@@ -73,6 +73,8 @@
 
 .ogabassey-blog-featured-story__media {
   background: var(--ogabassey-blog-featured-scrim, rgb(17 24 39));
+  inset: 0;
+  position: absolute;
 }
 
 .ogabassey-blog-featured-story__scrim {
@@ -120,6 +122,99 @@
   border-color: var(--ogabassey-blog-featured-text, #ffffff);
 }
 
+.ogabassey-blog-lcp-hero {
+  background: var(--store-background, #f9fafb);
+  padding: 2rem 1rem 0;
+}
+
+.ogabassey-blog-lcp-hero__inner {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 1400px;
+}
+
+.ogabassey-blog-lcp-hero__frame {
+  border-radius: 2rem;
+  color: inherit;
+  display: block;
+  height: 400px;
+  margin-bottom: 3rem;
+  overflow: hidden;
+  position: relative;
+  text-decoration: none;
+}
+
+.ogabassey-blog-lcp-hero__copy {
+  bottom: 0;
+  left: 0;
+  padding: 2rem;
+  position: absolute;
+  width: 100%;
+}
+
+.ogabassey-blog-featured-story__title {
+  display: -webkit-box;
+  font-size: 1.875rem;
+  font-weight: 900;
+  -webkit-line-clamp: 3;
+  line-height: 1;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.ogabassey-blog-featured-story__description {
+  display: -webkit-box;
+  font-size: 1.125rem;
+  -webkit-line-clamp: 4;
+  line-height: 1.625;
+  margin-bottom: 1.5rem;
+  max-width: 42rem;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.ogabassey-blog-featured-story__date {
+  font-size: 0.875rem;
+}
+
+@media (min-width: 768px) {
+  .ogabassey-blog-lcp-hero {
+    padding: 3rem 1.5rem 0;
+  }
+
+  .ogabassey-blog-lcp-hero__frame {
+    height: 500px;
+  }
+
+  .ogabassey-blog-lcp-hero__copy {
+    padding: 3rem;
+    width: 75%;
+  }
+
+  .ogabassey-blog-featured-story__title {
+    font-size: 3rem;
+  }
+
+  .ogabassey-blog-featured-story__description {
+    font-size: 1.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .ogabassey-blog-lcp-hero__copy {
+    width: 66.666667%;
+  }
+
+  .ogabassey-blog-featured-story__title {
+    font-size: 3.75rem;
+  }
+}
+
+body:has([data-blog-listing-filtered]) [data-blog-lcp-hero] {
+  display: none;
+}
+
 /* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
 @config "../../../tailwind.storefront-blog.config.mjs";
 
@@ -131,6 +226,9 @@
   while the listing itself needs only blog, nav shell, ad, and small UI surfaces.
 */
 /* stylelint-disable scss/at-rule-no-unknown -- Tailwind v4 source discovery directives. */
+@source not "./**/*.test.ts";
+@source not "./**/*.test.tsx";
+@source not "./[slug]/(blog)/blog/[postSlug]";
 @source "./[slug]/(blog)";
 @source "../../components/storefront/ogabassey/pages/blog.tsx";
 @source "../../components/storefront/ogabassey/pages/blog-featured-story.tsx";
@@ -139,10 +237,6 @@
 @source "../../components/storefront/ogabassey/seo/informational-cluster-index.tsx";
 @source "../../components/storefront/ogabassey/components/AdUnit.tsx";
 @source "../../components/storefront/ogabassey/components/ad-slot-shell.tsx";
-@source "../../components/blog/renderer";
-@source "../../components/blog/product-embed.tsx";
-@source "../../components/blog/table-of-contents.tsx";
 @source "../../components/ui/badge.tsx";
-@source "../../components/ui/button.tsx";
 @source "../../components/ui/card.tsx";
 /* stylelint-enable scss/at-rule-no-unknown */

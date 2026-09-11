@@ -1,0 +1,288 @@
+/**
+ * Committed LCP copy CSS. Keep this a TS string so Next does not emit a
+ * render-blocking stylesheet request on Slow-4G (the former .css import
+ * cost ~300ms wasted). Inject via StorefrontLcpCopyStyle.
+ */
+export const STOREFRONT_LCP_COPY_CSS = `
+/*
+  Lock committed LCP copy to the Inter fallback face so Slow-4G LCP does not
+  wait on the 48KB latin Inter file (font-display:swap still made the webfont
+  LCP-critical while body used --font-sans). Sizes match the Tailwind utilities
+  those nodes already use, so later sheets do not restyle the LCP element.
+*/
+
+html:has([data-storefront-shell]) body {
+  margin: 0;
+}
+
+@layer base {
+  html:has([data-storefront-shell]) p {
+    margin: 0;
+  }
+}
+
+html:has([data-storefront-shell]),
+html:has([data-storefront-shell]) *,
+html:has([data-storefront-shell]) *::before,
+html:has([data-storefront-shell]) *::after {
+  box-sizing: border-box;
+}
+
+[data-cwv-lcp-fold] {
+  min-height: 100svh;
+}
+
+[data-cwv-lcp-copy] {
+  font-family: "Inter Fallback", Arial, Helvetica, sans-serif !important;
+  letter-spacing: normal !important;
+}
+
+[data-cwv-lcp-copy="home"] {
+  font-size: 1.65rem !important;
+  font-weight: 800 !important;
+  line-height: 1.05 !important;
+  margin: 0 !important;
+}
+
+[data-cwv-lcp-copy="blog"] {
+  font-size: 1.875rem !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  margin: 0 0 1rem !important;
+}
+
+[data-cwv-lcp-copy="compare"] {
+  color: var(--store-background-text, #111827) !important;
+  font-size: 1.875rem !important;
+  font-weight: 700 !important;
+  line-height: 2.25rem !important;
+  margin: 0 !important;
+}
+
+[data-cwv-lcp-copy="repair"] {
+  color: var(--store-background-text, #111827) !important;
+  font-size: 1.875rem !important;
+  font-weight: 700 !important;
+  line-height: 2.25rem !important;
+  margin: 0 0 1rem !important;
+  text-align: center;
+}
+
+[data-cwv-lcp-copy="imei"] {
+  color: var(--store-background-text, #111827) !important;
+  font-size: 1.875rem !important;
+  font-weight: 800 !important;
+  line-height: 2.25rem !important;
+  margin: 0 0 1rem !important;
+  text-align: center;
+}
+
+[data-cwv-lcp-copy="repairs"] {
+  font-size: 1.875rem !important;
+  font-weight: 800 !important;
+  line-height: 2.25rem !important;
+  margin: 0 0 1rem !important;
+}
+
+@media (min-width: 768px) {
+  [data-cwv-lcp-copy="blog"],
+  .ogabassey-blog-featured-story__title {
+    font-size: 3rem !important;
+  }
+
+  [data-cwv-lcp-copy="compare"] {
+    font-size: 2.25rem !important;
+    line-height: 2.5rem !important;
+  }
+
+  [data-cwv-lcp-copy="imei"],
+  [data-cwv-lcp-copy="repairs"] {
+    font-size: 3rem !important;
+    line-height: 1 !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  [data-cwv-lcp-copy="blog"],
+  .ogabassey-blog-featured-story__title {
+    font-size: 3.75rem !important;
+  }
+}
+
+[data-cwv-lcp-support] {
+  font-family: "Inter Fallback", Arial, Helvetica, sans-serif !important;
+  font-size: 0.875rem !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+  max-width: 36rem;
+}
+
+/*
+  Blog listing LCP frame. storefront-blog.css is deferred so this geometry must
+  live on the shared render-blocking sheet or the 400px frame collapses until
+  the Tailwind chunk arrives and restyles LCP.
+*/
+.ogabassey-blog-lcp-hero {
+  min-height: 100svh;
+  background: var(--store-background, #f9fafb);
+  padding: 2rem 1rem 0;
+}
+
+.ogabassey-blog-lcp-hero__inner {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 1400px;
+}
+
+.ogabassey-blog-lcp-hero__frame {
+  border-radius: 2rem;
+  color: inherit;
+  display: block;
+  height: 400px;
+  margin-bottom: 3rem;
+  overflow: hidden;
+  position: relative;
+  text-decoration: none;
+}
+
+.ogabassey-blog-lcp-hero__copy {
+  bottom: 0;
+  left: 0;
+  padding: 2rem;
+  position: absolute;
+  width: 100%;
+}
+
+.ogabassey-blog-featured-story__media {
+  background: var(--ogabassey-blog-featured-scrim, rgb(17 24 39));
+  inset: 0;
+  position: absolute;
+}
+
+.ogabassey-blog-featured-story__title,
+.ogabassey-blog-featured-story__description,
+.ogabassey-blog-featured-story__date {
+  color: var(--ogabassey-blog-featured-text, #ffffff);
+  text-shadow: 0 2px 18px rgb(0 0 0 / 45%);
+}
+
+.ogabassey-blog-featured-story__title {
+  display: -webkit-box;
+  font-size: 1.875rem;
+  font-weight: 900;
+  -webkit-line-clamp: 3;
+  line-height: 1;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.ogabassey-blog-featured-story__description {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  max-width: 42rem;
+  opacity: 0.82;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.ogabassey-blog-featured-story__date {
+  font-size: 0.875rem;
+  opacity: 0.82;
+}
+
+/*
+  storefront-core.css (and Tailwind .sr-only) is deferred until first input.
+  Without this, streamed headings like Hero's h1.sr-only stay in normal flow
+  and steal Slow-4G LCP from committed copy. Scope to h1 so utilities such as
+  sr-only sm:not-sr-only can still unhide breadcrumb labels after the full
+  sheet loads.
+*/
+h1.sr-only {
+  border-width: 0 !important;
+  clip-path: inset(50%) !important;
+  height: 1px !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  position: absolute !important;
+  white-space: nowrap !important;
+  width: 1px !important;
+}
+
+/*
+  Filtered blog listings, completed IMEI reports, and a real compare
+  category page emit these markers after resume. Keep the hide rules on the
+  first-paint sheet so they do not wait on StorefrontBlogStyleLoader / first
+  input.
+*/
+body:has([data-blog-listing-filtered]) [data-blog-lcp-hero] {
+  display: none;
+}
+
+body:has([data-blog-lcp-hero]) [data-blog-featured-skeleton] {
+  display: none;
+}
+
+body:has([data-imei-result]) [data-imei-lcp-hero] {
+  display: none;
+}
+
+body:has([data-compare-category-page]) [data-compare-hub-chrome] {
+  display: none;
+}
+
+body:has([data-compare-hub-intro-resolved]) [data-compare-hub-intro-pending] {
+  display: none;
+}
+
+/*
+  PPR static-shell hide/positioning. storefront-core.css is deferred until
+  first input on tuned mobile routes, so without these rules the resume
+  sibling (ShellChromeLoading) stays in flow as "Loading storefront chrome".
+  Keep the same selectors as storefront-core.css; do not eagerly import that
+  329KB sheet on tuned routes.
+*/
+.storefront-ppr-static-shell,
+.storefront-ppr-static-shell__content {
+  display: contents;
+}
+
+.storefront-ppr-static-shell__content ~ .storefront-ppr-static-shell__fallback {
+  display: none;
+}
+
+@supports selector(:has(*)) {
+  .storefront-ppr-static-shell {
+    display: block;
+    min-height: 100vh;
+    position: relative;
+  }
+
+  .storefront-ppr-static-shell__content {
+    display: contents;
+  }
+
+  .storefront-ppr-static-shell > .storefront-ppr-static-shell__fallback {
+    inset: 0 auto auto 0;
+    pointer-events: none;
+    position: absolute;
+    width: 100%;
+    z-index: 1;
+  }
+
+  .storefront-ppr-static-shell__content
+    ~ .storefront-ppr-static-shell__fallback {
+    display: block;
+  }
+
+  .storefront-ppr-static-shell__content:has(
+      .ogabassey-storefront-shell,
+      #main-content,
+      main
+    )
+    ~ .storefront-ppr-static-shell__fallback {
+    display: none;
+  }
+}
+`;

@@ -1,4 +1,3 @@
-import '@/app/(storefront)/storefront-home-critical.css';
 import { OgabasseyStaticHomePageContent } from '@/app/(storefront)/ogabassey/ogabassey-static-home-page-content';
 import { OgabasseyStaticResourceHints } from '@/app/(storefront)/ogabassey/ogabassey-static-resource-hints';
 
@@ -10,7 +9,10 @@ export function OgabasseyStaticHomePage({
   return (
     <>
       <OgabasseyStaticResourceHints />
-      <OgabasseyStaticHomePageContent pathPrefix={pathPrefix} />
+      <OgabasseyStaticHomePageContent
+        omitCommittedHero
+        pathPrefix={pathPrefix}
+      />
     </>
   );
 }

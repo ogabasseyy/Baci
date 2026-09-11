@@ -4,7 +4,9 @@ import { StoreNotPublished } from './store-not-published';
 
 describe('StoreNotPublished', () => {
   it('presents the merchant as an intentional upcoming storefront', () => {
-    render(<StoreNotPublished businessName="Ada & Co." />);
+    const { container } = render(
+      <StoreNotPublished businessName="Ada & Co." />
+    );
 
     expect(
       screen.getByRole('heading', { level: 1, name: 'Ada & Co.' })
@@ -13,6 +15,9 @@ describe('StoreNotPublished', () => {
     expect(
       screen.getByText(/curating something worth the wait/i)
     ).toBeInTheDocument();
+    expect(container.querySelector('style')?.textContent).toContain(
+      '.unpublished-store'
+    );
   });
 
   it('provides store owners with a clear dashboard action', () => {

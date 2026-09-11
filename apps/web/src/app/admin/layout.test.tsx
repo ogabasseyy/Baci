@@ -14,6 +14,10 @@ vi.mock('next/navigation', () => ({
   redirect: (path: string) => mockRedirect(path),
 }));
 
+vi.mock('@/app/app-sans-font', () => ({
+  AppSansFont: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
 vi.mock('@/components/csrf-initializer', () => ({
   CsrfInitializer: () => <div data-testid="csrf-initializer" />,
 }));

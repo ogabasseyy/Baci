@@ -1,80 +1,91 @@
 import { render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockHomeCssImport = vi.hoisted(() => {
-  const state = {
-    error: undefined as Error | undefined,
-    load: vi.fn(),
-  };
-
-  return {
-    factory: () => {
-      state.load();
-      if (state.error) {
-        throw state.error;
+const { mockLoadOgabasseyHomeStyles, mockLoadStylesheetAfterFirstInput } =
+  vi.hoisted(() => ({
+    mockLoadOgabasseyHomeStyles: vi.fn(() => Promise.resolve({})),
+    mockLoadStylesheetAfterFirstInput: vi.fn(
+      (_load: () => Promise<unknown>, _errorMessage: string) => {
+        return () => undefined;
       }
-      return {};
-    },
-    state,
-  };
-});
+    ),
+  }));
 
-vi.mock('@/app/(storefront)/storefront-home.css', mockHomeCssImport.factory);
+vi.mock('./load-ogabassey-home-styles', () => ({
+  loadOgabasseyHomeStyles: () => mockLoadOgabasseyHomeStyles(),
+}));
+vi.mock('@/app/(storefront)/load-stylesheet-after-first-input', () => ({
+  loadStylesheetAfterFirstInput: (
+    load: () => Promise<unknown>,
+    errorMessage: string
+  ) => mockLoadStylesheetAfterFirstInput(load, errorMessage),
+}));
 
 import { OgabasseyHomeStyleLoader } from './ogabassey-home-style-loader';
 
+function stubMatchMedia(matches: boolean) {
+  const media = {
+    matches,
+    media: '(min-width: 768px)',
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  };
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => media),
+  });
+}
+
 describe('OgabasseyHomeStyleLoader', () => {
   beforeEach(() => {
-    mockHomeCssImport.state.error = undefined;
-    mockHomeCssImport.state.load.mockClear();
+    mockLoadOgabasseyHomeStyles.mockReset();
+    mockLoadOgabasseyHomeStyles.mockResolvedValue({});
+    mockLoadStylesheetAfterFirstInput.mockClear();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('renders no visible content while loading the default non-critical stylesheet after hydration', async () => {
-    const { container } = render(<OgabasseyHomeStyleLoader />);
+  it('does not load homepage CSS on a mobile viewport until the first input', () => {
+    stubMatchMedia(false);
+    render(<OgabasseyHomeStyleLoader />);
 
-    expect(container).toBeEmptyDOMElement();
-
-    await waitFor(() => {
-      expect(mockHomeCssImport.state.load).toHaveBeenCalledOnce();
-    });
+    expect(mockLoadOgabasseyHomeStyles).not.toHaveBeenCalled();
+    expect(mockLoadStylesheetAfterFirstInput).toHaveBeenCalledOnce();
   });
 
-  it('logs stylesheet load failures with context', async () => {
-    const error = new Error('css failed');
+  it('starts homepage CSS on desktop during effect instead of waiting for window load', async () => {
+    stubMatchMedia(true);
+    render(<OgabasseyHomeStyleLoader />);
+
+    await waitFor(() => {
+      expect(mockLoadOgabasseyHomeStyles).toHaveBeenCalledOnce();
+    });
+    expect(mockLoadStylesheetAfterFirstInput).not.toHaveBeenCalled();
+  });
+
+  it('re-arms desktop homepage CSS after a failed immediate import', async () => {
+    stubMatchMedia(true);
+    mockLoadOgabasseyHomeStyles
+      .mockRejectedValueOnce(new Error('chunk missing'))
+      .mockResolvedValueOnce({});
     const consoleError = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
 
-    mockHomeCssImport.state.error = error;
-    vi.resetModules();
-    vi.doMock(
-      '@/app/(storefront)/storefront-home.css',
-      mockHomeCssImport.factory
-    );
-
-    const { OgabasseyHomeStyleLoader: ThrowingStyleLoader } = await import(
-      './ogabassey-home-style-loader'
-    );
-
-    render(<ThrowingStyleLoader />);
+    render(<OgabasseyHomeStyleLoader />);
 
     await waitFor(() => {
       expect(consoleError).toHaveBeenCalledOnce();
     });
+    expect(mockLoadOgabasseyHomeStyles).toHaveBeenCalledOnce();
 
-    const [loggedError] = consoleError.mock.calls[0] ?? [];
-    expect(loggedError).toBeInstanceOf(Error);
-    const contextualError = loggedError as Error & {
-      cause?: Error & { cause?: unknown };
-    };
-    expect(contextualError.message).toBe(
-      'Failed to load OgaBassey homepage stylesheet'
-    );
-    expect(contextualError.cause).toBeInstanceOf(Error);
-    expect(contextualError.cause?.cause).toBe(error);
+    window.dispatchEvent(new Event('pointerdown'));
+    await waitFor(() => {
+      expect(mockLoadOgabasseyHomeStyles).toHaveBeenCalledTimes(2);
+    });
+    expect(mockLoadStylesheetAfterFirstInput).not.toHaveBeenCalled();
   });
 });

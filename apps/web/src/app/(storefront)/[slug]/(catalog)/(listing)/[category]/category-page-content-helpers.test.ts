@@ -4,7 +4,6 @@ import type { RawDbProduct } from '@/lib/normalize-product';
 import {
   buildCategoryPageHubModel,
   getCategoryPageProductSlots,
-  hasMaintainedCategoryCompareHubLink,
   isCategoryPageProductSlot,
   normalizeCategoryPageProducts,
 } from './category-page-content-helpers';
@@ -267,39 +266,5 @@ describe('buildCategoryPageHubModel', () => {
         label: 'Compare Alpha with Beta',
       },
     ]);
-  });
-});
-
-describe('hasMaintainedCategoryCompareHubLink', () => {
-  it('detects category compare hub links across absolute and prefixed hrefs', () => {
-    expect(
-      hasMaintainedCategoryCompareHubLink(
-        [
-          {
-            href: 'https://ogabassey.com/smartphones/compare',
-            label: 'View all smartphones comparisons',
-          },
-          {
-            href: '/ogabassey/laptops/compare',
-            label: 'View laptop comparisons',
-          },
-        ],
-        'laptops'
-      )
-    ).toBe(true);
-  });
-
-  it('ignores product comparison links that are not the maintained hub', () => {
-    expect(
-      hasMaintainedCategoryCompareHubLink(
-        [
-          {
-            href: '/smartphones/compare/google-pixel-8-vs-xiaomi-13t',
-            label: 'Compare Google Pixel 8 with Xiaomi 13T',
-          },
-        ],
-        'smartphones'
-      )
-    ).toBe(false);
   });
 });

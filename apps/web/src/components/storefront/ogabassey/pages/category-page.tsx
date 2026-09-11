@@ -36,6 +36,8 @@ export interface CategorySEOProps {
   currentPage?: number;
   itemsPerPage?: number;
   productsArePrePaginated?: boolean;
+  /** Demote when a parent route already committed the page H1. */
+  titleHeading?: 'h1' | 'h2';
   totalProductCount?: number;
 }
 
@@ -46,6 +48,7 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
   currentPage = 1,
   itemsPerPage = STOREFRONT_PRODUCTS_PER_PAGE,
   productsArePrePaginated = false,
+  titleHeading = 'h1',
   totalProductCount,
 }) => {
   const params = useParams();
@@ -236,6 +239,7 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
         basePath={basePath}
         displayTitle={displayTitle}
         paginationProductCount={paginationProductCount}
+        titleHeading={titleHeading}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
         canUseClientFilters={canUseClientFilters}

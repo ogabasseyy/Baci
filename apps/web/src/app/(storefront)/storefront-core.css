@@ -1,4 +1,6 @@
 @import "./storefront-ogabassey-dark-mode.css";
+/* Deferred with this sheet so first-paint CSS has no woff2 url() for Lantern. */
+@import "../inter-naira-font.css";
 
 @theme inline {
   --color-store-primary: var(--store-primary, #2a2c6e);

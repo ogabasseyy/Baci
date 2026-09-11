@@ -1,25 +1,31 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
-import { CatalogListingLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
+import { getOgabasseyStaticParams } from '@/app/(storefront)/[slug]/ogabassey-static-params';
 import { STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM } from '@/config/storefront-metadata-cache-bots';
 import {
   getCachedCategoryPageData,
   getRequestScopedMerchant,
   getStorefrontCategories,
 } from '@/lib/cached-data';
+import { asRoute } from '@/lib/routes';
 import {
   generateMetaDescription,
   getIndexableRobotsMetadata,
 } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
 import { canonicalizeCategorySlug } from '@/lib/storefront-canonical-url';
+import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import { isValidMerchantIdentifier } from '@/lib/validation';
 import CategoryPageRoute, {
   generateMetadata as generateCategoryMetadata,
 } from '../[category]/page';
+import { CompareHubIntro } from './compare-hub-intro';
+import { CompareHubIntroDescription } from './compare-hub-intro-description';
 import { buildCompareIndexSections } from './compare-index-discovery';
+import { CompareIndexFallback } from './compare-index-fallback';
 import { ComparePageContent } from './compare-page-content';
 
 interface CompareIndexPageProps {
@@ -28,6 +34,11 @@ interface CompareIndexPageProps {
 }
 
 const COMPARE_CATEGORY_SLUG = 'compare';
+
+export function generateStaticParams(): Array<{ slug: string }> {
+  return getOgabasseyStaticParams();
+}
+
 const COMPARE_HUB_IGNORED_SEARCH_PARAM_KEYS = new Set([
   STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM,
 ]);
@@ -131,7 +142,11 @@ export async function generateMetadata({
   });
   const hasCompareSections = sections.length > 0;
   const hasQueryParams = await hasCompareHubSearchParams(searchParams);
-  const title = `Compare products | ${merchant.business_name}`;
+  const { metadataTitle: title, title: compareTitle } =
+    buildStorefrontMetadataTitle({
+      title: `Compare products | ${merchant.business_name}`,
+      fallback: 'Compare products',
+    });
   const description = generateMetaDescription(
     `Compare ${merchant.business_name} products by category, specs, pricing, condition, warranty, and buying fit.`,
     160,
@@ -152,7 +167,7 @@ export async function generateMetadata({
         ? getIndexableRobotsMetadata()
         : { index: false, follow: true },
     openGraph: {
-      title,
+      title: compareTitle,
       description,
       url: `${storeUrl}/compare`,
       type: 'website',
@@ -160,13 +175,13 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary',
-      title,
+      title: compareTitle,
       description,
     },
   };
 }
 
-async function CompareIndexRuntime(props: CompareIndexPageProps) {
+export async function CompareIndexRuntime(props: CompareIndexPageProps) {
   await connection();
   const { slug } = await props.params;
 
@@ -183,20 +198,85 @@ async function CompareIndexRuntime(props: CompareIndexPageProps) {
 
     if (!queryFailed && hasActiveCompareCategory(categories)) {
       return (
-        <CategoryPageRoute
-          {...buildCompareCategoryPageProps(slug, props.searchParams)}
-        />
+        <div data-compare-category-page="">
+          <CategoryPageRoute
+            {...buildCompareCategoryPageProps(slug, props.searchParams)}
+          />
+        </div>
       );
     }
   }
 
-  return <ComparePageContent {...props} />;
+  return (
+    <div className="bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20">
+      <div className="mx-auto max-w-[1400px] px-4 md:px-6">
+        <ComparePageContent omitIntro {...props} />
+      </div>
+    </div>
+  );
+}
+
+const COMPARE_HUB_SHELL_CLASS =
+  'min-h-screen bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20 pt-6';
+
+async function CompareHubResolvedIntro({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  if (!isValidMerchantIdentifier(slug)) {
+    return null;
+  }
+
+  const merchant = await getRequestScopedMerchant(slug);
+  const merchantName = merchant?.business_name?.trim();
+  if (!merchantName) {
+    return null;
+  }
+
+  return <CompareHubIntroDescription merchantName={merchantName} />;
 }
 
 export default function CompareIndexPage(props: CompareIndexPageProps) {
   return (
-    <Suspense fallback={<CatalogListingLoading />}>
-      <CompareIndexRuntime {...props} />
-    </Suspense>
+    <>
+      <main className={COMPARE_HUB_SHELL_CLASS} data-compare-hub-chrome="">
+        <div className="mx-auto max-w-[1400px] px-4 md:px-6">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center gap-2 text-sm text-store-background-text/55"
+          >
+            <Link
+              className="transition-colors hover:text-store-primary"
+              href={asRoute('.')}
+              prefetch={false}
+            >
+              Home
+            </Link>{' '}
+            <span aria-hidden="true">/</span>{' '}
+            <span className="font-medium text-store-background-text">
+              Compare products
+            </span>
+          </nav>
+          <CompareHubIntro
+            description={
+              <Suspense fallback={null}>
+                <CompareHubResolvedIntro params={props.params} />
+              </Suspense>
+            }
+          />
+        </div>
+      </main>
+      <Suspense
+        fallback={
+          <div className="mx-auto max-w-[1400px] px-4 md:px-6">
+            <CompareIndexFallback hideChrome />
+          </div>
+        }
+      >
+        <CompareIndexRuntime {...props} />
+      </Suspense>
+    </>
   );
 }

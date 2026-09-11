@@ -84,10 +84,23 @@ vi.mock('@/components/storefront/store-not-published', () => ({
 }));
 
 vi.mock('@/components/storefront/ogabassey/components/Hero', () => ({
-  Hero: ({ slides }: { slides: unknown[] }) => {
-    mockHeroRender(slides);
+  Hero: ({
+    omitDocumentHeading,
+    omitMobileCarousel,
+    slides,
+  }: {
+    omitDocumentHeading?: boolean;
+    omitMobileCarousel?: boolean;
+    slides: unknown[];
+  }) => {
+    mockHeroRender({ omitDocumentHeading, omitMobileCarousel, slides });
     return (
-      <section aria-label="Product hero" data-slide-count={slides.length} />
+      <section
+        aria-label="Product hero"
+        data-omit-document-heading={omitDocumentHeading ? 'true' : 'false'}
+        data-omit-mobile-carousel={omitMobileCarousel ? 'true' : 'false'}
+        data-slide-count={slides.length}
+      />
     );
   },
 }));
@@ -131,61 +144,6 @@ describe('OgabasseyHomePageContent', () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue(
       mockPublishedMerchant
     );
-  });
-
-  it('renders one Hero with request-bound content after the publication guard', async () => {
-    const result = await OgabasseyHomePageContent({
-      pathPrefix: '/ogabassey',
-      shellMerchantId: 'merchant-1',
-      shellSlides: [SHELL_SLIDE],
-    });
-
-    render(result as ReactElement);
-
-    expect(
-      screen.getByRole('region', { name: /product hero/i })
-    ).toHaveAttribute('data-slide-count', '1');
-    expect(
-      screen.getByRole('region', { name: /dynamic home content/i })
-    ).toHaveTextContent('/ogabassey');
-    expect(getRequestScopedMerchant).toHaveBeenCalledWith('ogabassey');
-  });
-
-  it('restores the H1 after the publication guard when the cached Hero degraded', async () => {
-    const result = await OgabasseyHomePageContent({
-      pathPrefix: '/ogabassey',
-      shellMerchantId: null,
-      shellSlides: null,
-    });
-
-    render(result as ReactElement);
-
-    expect(
-      screen.getByRole('heading', {
-        level: 1,
-        name: 'OgaBassey - Official Online Store',
-      })
-    ).toBeInTheDocument();
-  });
-
-  it('keeps the publication-gated Hero when below-fold content suspends', async () => {
-    mockDynamicContentShouldSuspend.mockReturnValue(true);
-
-    const result = await OgabasseyHomePageContent({
-      pathPrefix: '/ogabassey',
-      shellMerchantId: 'merchant-1',
-      shellSlides: [SHELL_SLIDE],
-    });
-
-    render(result as ReactElement);
-
-    expect(
-      screen.getByRole('region', { name: /product hero/i })
-    ).toHaveAttribute('data-slide-count', '1');
-    expect(
-      screen.queryByRole('region', { name: /dynamic home content/i })
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
   });
 
   it('resolves the homepage merchant from custom-domain request context', async () => {

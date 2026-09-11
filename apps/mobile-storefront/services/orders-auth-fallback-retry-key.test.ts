@@ -1,9 +1,8 @@
 import { jest } from '@jest/globals';
-import { AuthRefreshDiscardedError, type Session } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 import { sessionFixture } from './orders-auth-fallback.test-utils';
 
 const userAId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-const userBId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 const mockGetUser = jest.fn<
   (jwt?: string) => Promise<{
@@ -162,7 +161,7 @@ jest.mock('./read-checkout-stored-session', () => ({
 const { createOrder } =
   jest.requireActual<typeof import('./orders')>('./orders');
 
-describe('createOrder checkout auth fallback', () => {
+describe('createOrder checkout retry key after validation timeout', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetUser.mockImplementation(() => new Promise<never>(() => undefined));
@@ -176,122 +175,25 @@ describe('createOrder checkout auth fallback', () => {
     jest.useRealTimers();
   });
 
-  it('reaches the order request without queuing getUser behind a timed-out refresh', async () => {
+  it('keeps the retry key when user validation recovers after a timeout', async () => {
     jest.useFakeTimers();
-    mockGetSession.mockResolvedValue({
-      data: {
-        session: sessionFixture('stored-token', 'refresh-token'),
-      },
-    });
-
-    const firstResult = createOrder(orderRequest);
-    await jest.advanceTimersByTimeAsync(9_000);
-
-    await expect(firstResult).resolves.toMatchObject({
-      order: { id: 'order-1' },
-    });
-
-    const secondResult = createOrder(orderRequest);
-    await jest.advanceTimersByTimeAsync(9_000);
-    await expect(secondResult).resolves.toMatchObject({
-      order: { id: 'order-1' },
-    });
-
-    expect(mockGetUser).not.toHaveBeenCalled();
-    expect(mockRefreshSession).toHaveBeenCalledTimes(2);
-    expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
-    const firstRequestHeaders = mockFetchWithRetry.mock.calls[0]?.[1]?.headers;
-    expect(firstRequestHeaders).not.toHaveProperty('Authorization');
-    const secondRequestHeaders = mockFetchWithRetry.mock.calls[1]?.[1]?.headers;
-    expect(secondRequestHeaders).not.toHaveProperty('Authorization');
-  });
-
-  it('reaches the order request when refreshed-token user validation never settles', async () => {
-    jest.useFakeTimers();
-    const refreshedSession = sessionFixture(
-      'refreshed-token',
-      'refreshed-refresh-token'
-    );
-    mockGetSession.mockResolvedValue({
-      data: { session: sessionFixture('stored-token', 'refresh-token') },
-    });
-    mockRefreshSession.mockResolvedValue({
-      data: { session: refreshedSession },
-      error: null,
-    });
-
-    const result = createOrder(orderRequest);
+    const session = sessionFixture('token', 'refresh-token');
+    mockGetSession.mockResolvedValue({ data: { session } });
+    mockRefreshSession.mockResolvedValue({ data: { session }, error: null });
+    const first = createOrder(orderRequest);
     await jest.advanceTimersByTimeAsync(4_000);
-
-    await expect(result).resolves.toMatchObject({
-      order: { id: 'order-1' },
-    });
-    expect(mockGetUser).toHaveBeenCalledWith('refreshed-token');
-    expect(mockFetchWithRetry.mock.calls[0]?.[1]?.headers).toMatchObject({
-      Authorization: 'Bearer refreshed-token',
-    });
-  });
-
-  it('uses a same-account session rotated after the checkout session read', async () => {
-    const capturedSession = sessionFixture(
-      'captured-token',
-      'captured-refresh-token'
-    );
-    const rotatedSession = sessionFixture(
-      'rotated-token',
-      'rotated-refresh-token'
-    );
-    mockGetSession
-      .mockResolvedValueOnce({ data: { session: capturedSession } })
-      .mockResolvedValueOnce({ data: { session: rotatedSession } });
-    mockRefreshSession.mockResolvedValue({
-      data: { session: null },
-      error: new AuthRefreshDiscardedError(),
-    });
+    await first;
+    const firstKey =
+      mockFetchWithRetry.mock.calls[0]?.[1]?.headers['Idempotency-Key'];
+    expect(firstKey).toBeTruthy();
     mockGetUser.mockResolvedValue({
       data: { user: { id: userAId } },
       error: null,
     });
-
-    await expect(createOrder(orderRequest)).resolves.toMatchObject({
-      order: { id: 'order-1' },
-    });
-
-    expect(mockFetchWithRetry.mock.calls[0]?.[1]?.headers).toMatchObject({
-      Authorization: 'Bearer rotated-token',
-    });
-    expect(mockGetUser).toHaveBeenCalledWith('rotated-token');
-  });
-
-  it('validates the captured checkout bearer when auth storage switches accounts', async () => {
-    const accountASession = sessionFixture(
-      'account-a-token',
-      'account-a-refresh-token',
-      userAId
-    );
-    mockGetSession.mockResolvedValue({ data: { session: accountASession } });
-    mockRefreshSession.mockResolvedValue({
-      data: { session: accountASession },
-      error: null,
-    });
-    mockGetUser.mockImplementation(async (jwt) => ({
-      data: { user: { id: jwt ? userAId : userBId } },
-      error: null,
-    }));
-
-    await expect(createOrder(orderRequest)).resolves.toMatchObject({
-      order: { id: 'order-1' },
-    });
-
-    expect(mockGetUser).toHaveBeenCalledWith('account-a-token');
-    expect(mockFetchWithRetry.mock.calls[0]?.[1]?.headers).toMatchObject({
-      Authorization: 'Bearer account-a-token',
-    });
+    await createOrder(orderRequest);
+    expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
     expect(
-      JSON.parse(mockFetchWithRetry.mock.calls[0]?.[1]?.body ?? '{}') as Record<
-        string,
-        unknown
-      >
-    ).toMatchObject({ user_id: userAId });
+      mockFetchWithRetry.mock.calls[1]?.[1]?.headers['Idempotency-Key']
+    ).toBe(firstKey);
   });
 });

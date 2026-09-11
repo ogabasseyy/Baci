@@ -11,10 +11,17 @@ export function parseQueuedCreateOrder(payload: unknown): QueuedCreateOrder {
     (payload as QueuedCreateOrder).request !== null &&
     typeof (payload as QueuedCreateOrder).request === 'object'
   ) {
-    return payload as QueuedCreateOrder;
+    const queued = payload as QueuedCreateOrder;
+    return {
+      authPartition:
+        typeof queued.authPartition === 'string' ? queued.authPartition : '',
+      checkoutGeneration: queued.checkoutGeneration,
+      request: queued.request,
+    };
   }
 
   return {
+    authPartition: '',
     checkoutGeneration: '',
     request: payload as CreateOrderRequest,
   };

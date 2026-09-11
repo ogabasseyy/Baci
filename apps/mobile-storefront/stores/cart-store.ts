@@ -2,8 +2,8 @@ import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { persistCheckoutGeneration } from '@/lib/persist-checkout-generation';
-import { readPersistedCheckoutGeneration } from '@/lib/read-persisted-checkout-generation';
 import { syncStorage } from '../lib/storage';
+import { applyPersistedCheckoutGeneration } from './apply-persisted-checkout-generation';
 import {
   createCartLineId,
   isSameCartLine,
@@ -274,10 +274,8 @@ export const useCartStore = create<CartState>()(
       storage: createJSONStorage(() => syncStorage),
       partialize: partializeCartStore,
       onRehydrateStorage: () => () => {
-        void readPersistedCheckoutGeneration().then((persisted) => {
-          if (persisted) {
-            useCartStore.setState({ checkoutGeneration: persisted });
-          }
+        void applyPersistedCheckoutGeneration((checkoutGeneration) => {
+          useCartStore.setState({ checkoutGeneration });
         });
       },
     }

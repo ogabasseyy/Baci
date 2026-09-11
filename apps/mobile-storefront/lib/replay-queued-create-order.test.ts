@@ -23,10 +23,26 @@ it('replays a wrapped mutation with its originating generation and skip persist'
   const createOrder = jest.fn();
   replayQueuedCreateOrder(
     createOrder,
-    wrapQueuedCreateOrder(request, 'cart-one')
+    wrapQueuedCreateOrder(request, 'cart-one', 'guest')
   );
   expect(createOrder).toHaveBeenCalledWith(request, {
     checkoutGeneration: 'cart-one',
     queuedReplay: true,
   });
+});
+
+it('does not replay an authenticated queue under a different account', async () => {
+  const createOrder = jest.fn();
+  await expect(
+    replayQueuedCreateOrder(
+      createOrder,
+      wrapQueuedCreateOrder(
+        request,
+        'cart-one',
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+      ),
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    )
+  ).rejects.toThrow('Queued checkout belongs to a different account');
+  expect(createOrder).not.toHaveBeenCalled();
 });

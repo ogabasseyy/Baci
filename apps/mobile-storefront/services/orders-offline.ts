@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { offlineQueue } from '@/lib/offline-queue';
 import { wrapQueuedCreateOrder } from '@/lib/wrap-queued-create-order';
 import { trackEvent } from '@/services/analytics';
+import { useAuthStore } from '@/stores/auth-store';
 import { useCartStore } from '@/stores/cart-store';
 import { createOrder } from './orders';
 import { OrderError } from './orders.errors';
@@ -18,11 +19,12 @@ async function checkNetwork(): Promise<boolean> {
 
 function enqueueCreateOrder(
   request: CreateOrderRequest,
-  checkoutGeneration: string
+  checkoutGeneration: string,
+  authPartition: string
 ) {
   return offlineQueue.enqueue(
     'create_order',
-    wrapQueuedCreateOrder(request, checkoutGeneration)
+    wrapQueuedCreateOrder(request, checkoutGeneration, authPartition)
   );
 }
 
@@ -30,6 +32,7 @@ export async function createOrderWithOfflineSupport(
   request: CreateOrderRequest
 ): Promise<{ order: OrderResponse | null; queued: boolean; queueId?: string }> {
   const checkoutGeneration = useCartStore.getState().checkoutGeneration;
+  const authPartition = useAuthStore.getState().user?.id ?? 'guest';
   const validationResult = CreateOrderRequestSchema.safeParse(request);
   if (!validationResult.success) {
     const errorMessage = validationResult.error.issues
@@ -53,7 +56,11 @@ export async function createOrderWithOfflineSupport(
       // TIMEOUT_ERROR has unknown outcome — the order may have been created server-side,
       // so queuing it for replay risks creating a duplicate order.
       if (error instanceof OrderError && error.code === 'NETWORK_ERROR') {
-        const queueId = await enqueueCreateOrder(request, checkoutGeneration);
+        const queueId = await enqueueCreateOrder(
+          request,
+          checkoutGeneration,
+          authPartition
+        );
         trackEvent('order_queued_after_failure', {
           queueId,
           errorCode: error.code,
@@ -64,7 +71,11 @@ export async function createOrderWithOfflineSupport(
     }
   }
 
-  const queueId = await enqueueCreateOrder(request, checkoutGeneration);
+  const queueId = await enqueueCreateOrder(
+    request,
+    checkoutGeneration,
+    authPartition
+  );
 
   trackEvent('order_queued_offline', {
     queueId,

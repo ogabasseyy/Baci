@@ -151,7 +151,11 @@ describe('bugfix: checkout retries keep the originating auth partition', () => {
     expect(mockGetCheckoutAttemptKey).toHaveBeenCalledWith(
       expect.objectContaining({ user_id: 'guest' }),
       'queued-cart',
-      { frozen: true, persistFrozen: true }
+      {
+        frozen: true,
+        persistFrozen: true,
+        liveGeneration: 'cart-one',
+      }
     );
   });
 
@@ -164,7 +168,7 @@ describe('bugfix: checkout retries keep the originating auth partition', () => {
     expect(mockGetCheckoutAttemptKey).toHaveBeenCalledWith(
       expect.objectContaining({ user_id: 'guest' }),
       'queued-cart',
-      { frozen: true, persistFrozen: false }
+      { frozen: true, persistFrozen: false, liveGeneration: 'cart-one' }
     );
   });
 

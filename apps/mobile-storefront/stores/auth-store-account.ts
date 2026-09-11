@@ -18,8 +18,19 @@ import { useSavedStore } from './saved-store';
 
 const log = createLogger('AuthStore');
 
-function clearUserStores() {
-  void useCartStore.getState().clearCart();
+async function clearUserStores() {
+  try {
+    await useCartStore.getState().clearCart();
+  } catch (error) {
+    log.error('Failed to persist empty cart during account teardown:', error);
+    if (typeof useCartStore.setState === 'function') {
+      useCartStore.setState({
+        items: [],
+        lineSequence: 0,
+        cartWideNegotiationActive: false,
+      });
+    }
+  }
   useSavedStore.getState().clearSaved();
   useComparisonStore.getState().clearComparison();
   useQuizStore.getState().reset();
@@ -36,7 +47,7 @@ export function createAccountActions(set: AuthStoreSet, get: AuthStoreGet) {
         if (signOutError || !get()._authSubscription) {
           clearQueryCachePreservingObservers(queryClient);
         }
-        clearUserStores();
+        await clearUserStores();
         set({
           user: null,
           session: null,
@@ -75,7 +86,7 @@ export function createAccountActions(set: AuthStoreSet, get: AuthStoreGet) {
         if (localSignOutError || !get()._authSubscription) {
           clearQueryCachePreservingObservers(queryClient);
         }
-        clearUserStores();
+        await clearUserStores();
         set({
           user: null,
           session: null,

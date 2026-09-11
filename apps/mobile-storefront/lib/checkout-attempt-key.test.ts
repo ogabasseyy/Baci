@@ -87,6 +87,20 @@ it('uses a frozen queued generation after the live cart has moved on', async () 
   await expect(readPersistedCheckoutGeneration()).resolves.toBe('cart-two');
 });
 
+it('does not persist a frozen snapshot once the live cart has moved on', async () => {
+  const { getCheckoutAttemptKey } = loadKeyGenerator();
+  const first = await getCheckoutAttemptKey(payload, 'cart-one');
+  await getCheckoutAttemptKey(payload, 'cart-two', {
+    frozen: true,
+    persistFrozen: true,
+    liveGeneration: 'cart-one',
+  });
+  jest.resetModules();
+  expect(
+    await loadKeyGenerator().getCheckoutAttemptKey(payload, 'stale-cart')
+  ).toBe(first);
+});
+
 it('persists an active frozen generation before returning a key', async () => {
   const { getCheckoutAttemptKey } = loadKeyGenerator();
   await getCheckoutAttemptKey(payload, 'cart-one');

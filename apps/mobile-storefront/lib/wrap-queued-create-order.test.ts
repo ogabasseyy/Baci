@@ -19,7 +19,8 @@ const request = {
 } as CreateOrderRequest;
 
 it('stores the originating generation with the queued request', () => {
-  expect(wrapQueuedCreateOrder(request, 'cart-one')).toEqual({
+  expect(wrapQueuedCreateOrder(request, 'cart-one', 'guest')).toEqual({
+    authPartition: 'guest',
     checkoutGeneration: 'cart-one',
     request,
   });

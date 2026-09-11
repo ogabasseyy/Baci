@@ -20,6 +20,7 @@ const request = {
 
 it('treats a legacy queued request as the order body without inventing a generation', () => {
   expect(parseQueuedCreateOrder(request)).toEqual({
+    authPartition: '',
     checkoutGeneration: '',
     request,
   });

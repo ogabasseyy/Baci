@@ -159,7 +159,11 @@ export default function RootLayout() {
       await offlineQueue.initialize();
       recordCrashBreadcrumb('root_layout:offline_queue_initialized');
       offlineQueue.registerHandler('create_order', (orderData) =>
-        replayQueuedCreateOrder(createOrder, orderData)
+        replayQueuedCreateOrder(
+          createOrder,
+          orderData,
+          useAuthStore.getState().user?.id
+        )
       );
       recordCrashBreadcrumb('root_layout:initialize_complete');
     };

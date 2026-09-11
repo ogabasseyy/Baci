@@ -29,10 +29,17 @@ jest.mock('@/lib/offline-queue', () => ({
 }));
 
 let mockCheckoutGeneration = 'cart-one';
+let mockAuthUserId: string | undefined;
 
 jest.mock('@/stores/cart-store', () => ({
   useCartStore: {
     getState: () => ({ checkoutGeneration: mockCheckoutGeneration }),
+  },
+}));
+
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({ user: mockAuthUserId ? { id: mockAuthUserId } : null }),
   },
 }));
 
@@ -66,6 +73,7 @@ describe('createOrderWithOfflineSupport', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCheckoutGeneration = 'cart-one';
+    mockAuthUserId = undefined;
     mockNetInfoFetch.mockResolvedValue({
       isConnected: true,
       isInternetReachable: true,
@@ -97,6 +105,7 @@ describe('createOrderWithOfflineSupport', () => {
       checkoutGeneration: 'cart-one',
     });
     expect(mockEnqueue).toHaveBeenCalledWith('create_order', {
+      authPartition: 'guest',
       checkoutGeneration: 'cart-one',
       request: baseRequest,
     });
@@ -114,6 +123,7 @@ describe('createOrderWithOfflineSupport', () => {
 
     expect(result.queued).toBe(true);
     expect(mockEnqueue).toHaveBeenCalledWith('create_order', {
+      authPartition: 'guest',
       checkoutGeneration: 'cart-one',
       request: baseRequest,
     });
@@ -132,5 +142,22 @@ describe('createOrderWithOfflineSupport', () => {
       code: 'TIMEOUT_ERROR',
     });
     expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  it('stores the originating account when queueing an authenticated checkout', async () => {
+    mockAuthUserId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const { createOrderWithOfflineSupport } =
+      require('./orders-offline') as typeof import('./orders-offline');
+    mockCreateOrder.mockRejectedValueOnce(
+      new OrderError('offline', 'NETWORK_ERROR')
+    );
+
+    await createOrderWithOfflineSupport(baseRequest);
+
+    expect(mockEnqueue).toHaveBeenCalledWith('create_order', {
+      authPartition: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      checkoutGeneration: 'cart-one',
+      request: baseRequest,
+    });
   });
 });

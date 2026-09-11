@@ -158,6 +158,7 @@ export async function createOrder(
           ? {
               frozen: true,
               persistFrozen: options?.queuedReplay !== true,
+              liveGeneration: useCartStore.getState().checkoutGeneration,
             }
           : undefined
       ));

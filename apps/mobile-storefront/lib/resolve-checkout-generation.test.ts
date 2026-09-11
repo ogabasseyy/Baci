@@ -56,4 +56,16 @@ describe('bugfix: recover durable generations without clobbering frozen retries'
       queuedGeneration
     );
   });
+
+  it('does not persist a frozen snapshot once the live cart has moved on', async () => {
+    await persistCheckoutGeneration(generation);
+    await expect(
+      resolveCheckoutGeneration(queuedGeneration, {
+        frozen: true,
+        persistFrozen: true,
+        liveGeneration: generation,
+      })
+    ).resolves.toBe(queuedGeneration);
+    await expect(readPersistedCheckoutGeneration()).resolves.toBe(generation);
+  });
 });

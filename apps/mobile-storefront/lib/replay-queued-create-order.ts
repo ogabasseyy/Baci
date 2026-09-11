@@ -1,4 +1,5 @@
 import { parseQueuedCreateOrder } from '@/lib/parse-queued-create-order';
+import { queuedCreateOrderOwnerMismatch } from '@/lib/queued-create-order-owner';
 import type { CreateOrderRequest } from '@/services/orders.schemas';
 
 export function replayQueuedCreateOrder(
@@ -6,9 +7,15 @@ export function replayQueuedCreateOrder(
     request: CreateOrderRequest,
     options?: { checkoutGeneration?: string; queuedReplay?: boolean }
   ) => Promise<unknown>,
-  payload: unknown
+  payload: unknown,
+  currentUserId?: string
 ) {
   const queued = parseQueuedCreateOrder(payload);
+  if (queuedCreateOrderOwnerMismatch(queued.authPartition, currentUserId)) {
+    return Promise.reject(
+      new Error('Queued checkout belongs to a different account')
+    );
+  }
   return createOrder(
     queued.request,
     queued.checkoutGeneration

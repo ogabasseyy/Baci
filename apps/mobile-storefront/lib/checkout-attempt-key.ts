@@ -12,6 +12,7 @@ let installationPromise: Promise<string> | undefined;
 export type CheckoutAttemptKeyOptions = {
   frozen?: boolean;
   persistFrozen?: boolean;
+  liveGeneration?: string;
 };
 
 async function loadInstallationId(): Promise<string> {
@@ -116,6 +117,7 @@ export async function getCheckoutAttemptKey(
   const generation = await resolveCheckoutGeneration(checkoutGeneration, {
     frozen: options?.frozen,
     persistFrozen: options?.persistFrozen,
+    liveGeneration: options?.liveGeneration,
   });
   // The server intentionally excludes the selected gateway from its checkout
   // hash so switching payment methods resumes the same pending order.

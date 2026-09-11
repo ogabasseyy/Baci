@@ -1,4 +1,5 @@
 import {
+  CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY,
   CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
   CHECKOUT_GENERATION_STORAGE_KEY,
   CHECKOUT_INSTALLATION_STORAGE_KEY,
@@ -8,12 +9,14 @@ import { getClearableCacheStorageKeys } from './clear-cache-keys';
 it('preserves pending checkout recovery identity when clearing cache', () => {
   expect(
     getClearableCacheStorageKeys([
+      CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY,
       CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
       CHECKOUT_GENERATION_STORAGE_KEY,
       CHECKOUT_INSTALLATION_STORAGE_KEY,
     ])
   ).not.toEqual(
     expect.arrayContaining([
+      CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY,
       CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
       CHECKOUT_GENERATION_STORAGE_KEY,
       CHECKOUT_INSTALLATION_STORAGE_KEY,

@@ -1,5 +1,6 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 import { cache } from 'react';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import { createStorefrontPublicReadFetch } from './storefront-public-read-fetch';
@@ -147,6 +148,7 @@ export const getStorefrontNavigationCategories = cache(
     try {
       return await getCachedNavigationCategories(merchantId);
     } catch (error) {
+      unstable_rethrow(error);
       console.error('Navigation categories query failed outside cache:', {
         merchantId,
         error,

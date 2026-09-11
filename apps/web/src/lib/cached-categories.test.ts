@@ -10,8 +10,23 @@ const builder = { eq: mockEq, is: mockIs, order: mockOrder };
 const mockSelect = vi.fn(() => builder);
 const mockFrom = vi.fn(() => ({ select: mockSelect }));
 const mockCreateClient = vi.fn((..._args: unknown[]) => ({ from: mockFrom }));
+const { mockUnstableRethrow } = vi.hoisted(() => ({
+  mockUnstableRethrow: vi.fn((error: unknown) => {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'digest' in error &&
+      error.digest === 'HANGING_PROMISE_REJECTION'
+    ) {
+      throw error;
+    }
+  }),
+}));
 
 vi.mock('next/cache', () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
+vi.mock('next/navigation', () => ({
+  unstable_rethrow: (error: unknown) => mockUnstableRethrow(error),
+}));
 vi.mock('@/env', () => ({
   getSupabaseUrl: vi.fn(() => 'https://test.supabase.co'),
   getSupabaseAnonKey: vi.fn(() => 'test-anon-key'),
@@ -158,6 +173,25 @@ describe('getStorefrontNavigationCategories (request-local fail-open boundary)',
     expect(consoleSpy).toHaveBeenCalledWith(
       'Navigation categories query failed outside cache:',
       expect.objectContaining({ merchantId: 'merchant-1' })
+    );
+  });
+
+  it('rethrows a prerender interruption instead of logging it as a navigation query failure', async () => {
+    const consoleSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const interruption = {
+      digest: 'HANGING_PROMISE_REJECTION',
+      message: 'use cache called after prerender ended',
+    };
+    mockOrder.mockRejectedValueOnce(interruption);
+
+    await expect(getStorefrontNavigationCategories('merchant-1')).rejects.toBe(
+      interruption
+    );
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      'Navigation categories query failed outside cache:',
+      expect.anything()
     );
   });
 });

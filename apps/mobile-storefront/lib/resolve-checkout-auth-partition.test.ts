@@ -40,4 +40,14 @@ describe('bugfix: checkout retry identity keeps the originating auth partition',
       resolveCheckoutAuthPartition(generation, accountB)
     ).resolves.toBe(accountB);
   });
+
+  it('rotates the partition when the authenticated session is lost', async () => {
+    const accountA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    await expect(
+      resolveCheckoutAuthPartition(generation, accountA)
+    ).resolves.toBe(accountA);
+    await expect(
+      resolveCheckoutAuthPartition(generation, undefined)
+    ).resolves.toBe('guest');
+  });
 });

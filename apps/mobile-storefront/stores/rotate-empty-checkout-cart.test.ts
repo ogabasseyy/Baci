@@ -29,3 +29,14 @@ it('applies the empty cart before persisting the new purchase identity', async (
   expect(rotated.checkoutGeneration).not.toBe(first.checkoutGeneration);
   expect(rotated.items).toEqual([]);
 });
+
+it('still applies the empty cart when generation persist rejects', async () => {
+  mockPersist.mockRejectedValueOnce(new Error('disk full'));
+  const applied: ReturnType<typeof emptyCheckoutCart>[] = [];
+  await expect(
+    rotateEmptyCheckoutCart((next) => {
+      applied.push(next);
+    })
+  ).resolves.toEqual(applied[0]);
+  expect(applied[0]?.items).toEqual([]);
+});

@@ -81,4 +81,35 @@ describe('bugfix: owner-mismatched queued checkouts stay durable', () => {
       JSON.parse(offlineQueue.getState().queue[0]?.payload ?? '{}')
     ).toEqual({ owner: 'A' });
   });
+
+  it('reruns the drain when processPending arrives during an in-flight pass', async () => {
+    const { offlineQueue } =
+      require('./offline-queue') as typeof import('./offline-queue');
+    offlineQueue.destroy();
+    mockStorage.clear();
+    await offlineQueue.initialize();
+    let attempts = 0;
+    let release!: () => void;
+    offlineQueue.registerHandler('create_order', async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        throw new DeferredOfflineMutationError(
+          'Queued checkout belongs to a different account'
+        );
+      }
+    });
+
+    await offlineQueue.enqueue('create_order', { owner: 'A' });
+    await waitFor(() => {
+      expect(attempts).toBe(1);
+    });
+    offlineQueue.processPending();
+    release();
+    await waitFor(() => {
+      expect(attempts).toBe(2);
+    });
+  });
 });

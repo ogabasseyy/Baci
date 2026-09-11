@@ -31,6 +31,7 @@ class OfflineQueueManager {
   private initPromise: Promise<void> | null = null;
   private failedMutations: QueuedMutation[] = [];
   private errorCallback: ((mutation: QueuedMutation) => void) | null = null;
+  private drainRequested = false;
 
   async initialize(): Promise<void> {
     if (this.initPromise) {
@@ -96,6 +97,10 @@ class OfflineQueueManager {
   }
 
   processPending(): void {
+    if (this.state.isProcessing) {
+      this.drainRequested = true;
+      return;
+    }
     void this.processQueue();
   }
 
@@ -237,6 +242,11 @@ class OfflineQueueManager {
     this.state.lastSyncAt = Date.now();
     await this.persistQueue();
     this.notifyListeners();
+
+    if (this.drainRequested) {
+      this.drainRequested = false;
+      void this.processQueue();
+    }
   }
 
   private async loadQueue(): Promise<void> {

@@ -141,10 +141,16 @@ export async function sendFacebookAdPlatformEvent(
           value,
         }
       : {
-          contentIds: contents.map((item) => item.id),
-          contentName:
-            event.custom_data.content_name || first?.name || first?.id,
-          contentType: 'product_group',
+          ...(contents.some((item) => item.id?.trim())
+            ? {
+                contentIds: contents
+                  .filter((item) => item.id?.trim())
+                  .map((item) => item.id.trim()),
+                contentName:
+                  event.custom_data.content_name || first?.name || first?.id,
+              }
+            : {}),
+          contentType: event.custom_data.content_type,
           currency,
           value,
         },

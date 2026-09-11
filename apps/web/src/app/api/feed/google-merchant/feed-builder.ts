@@ -7,10 +7,7 @@ import { normalizeFeedVariantStringAttributes } from './normalize-feed-variant-s
  * All image URLs come exclusively from the `product_feed_images` manifest.
  */
 
-import {
-  resolveDefaultVariantSelection,
-  toGoogleListingCondition,
-} from '@baci/shared/lib';
+import { toGoogleListingCondition } from '@baci/shared/lib';
 import type { FeedImageManifestEntry } from '@/lib/gmc-feed-images';
 import {
   resolveGmcAdditionalImages,
@@ -26,7 +23,6 @@ import {
 } from './build-product-detail-xml';
 import { buildVariantFeedItems } from './build-variant-feed-items';
 import { getFeedStockCount } from './feed-stock';
-
 import type {
   FeedDefaultVariant,
   FeedMerchant,
@@ -34,6 +30,7 @@ import type {
   FeedVariant,
   ImageManifestMap,
 } from './feed-types';
+import { selectFeedFamilyVariant } from './select-feed-family-variant';
 
 export type {
   FeedMerchant,
@@ -131,7 +128,7 @@ function toGmcCondition(condition?: string | null) {
 
 function getConditionedVariants(product: FeedProduct) {
   return (product.variants || []).filter((variant) =>
-    Boolean(variant.condition)
+    Boolean(toGoogleListingCondition(variant.condition))
   );
 }
 
@@ -179,17 +176,14 @@ export function generateGoogleMerchantFeed(
         const variants = getConditionedVariants(product);
         const selection =
           merchant.gmc_variants_enabled === false
-            ? resolveDefaultVariantSelection({
-                ...product,
-                variants: variants.map(toFeedDefaultVariant),
-              })
+            ? selectFeedFamilyVariant(product, variants)
             : null;
         return buildVariantFeedItems({
           product,
           variants:
             merchant.gmc_variants_enabled === false
               ? selection
-                ? [selection.variant]
+                ? [selection]
                 : []
               : variants,
           manifest: manifestEntries,
@@ -200,32 +194,33 @@ export function generateGoogleMerchantFeed(
           familyRow: merchant.gmc_variants_enabled === false,
         });
       }
-      if (!productLevelImages || !toGoogleListingCondition(product.condition))
-        return null;
+      if (!productLevelImages) return null;
 
-      const baseItem = buildBaseItemXml({
-        additionalImagesXml: productLevelImages.additionalImagesXml,
-        availability:
-          getFeedStockCount(product) > 0 ? 'in_stock' : 'out_of_stock',
-        brandName: effectiveBrand,
-        compareAtPrice: product.compare_at_price,
-        condition: toGmcCondition(product.condition),
-        colorXml,
-        currency,
-        description,
-        googleProductCategory: product.google_product_category,
-        gtin: product.gtin,
-        id: product.id,
-        imageUrl: productLevelImages.primaryImageUrl,
-        mpn: product.mpn,
-        price: product.price,
-        productDetailsXml,
-        productType,
-        shippingWeight,
-        stockCount: getFeedStockCount(product),
-        title: product.name,
-        url: productUrl,
-      });
+      const baseItem = toGoogleListingCondition(product.condition)
+        ? buildBaseItemXml({
+            additionalImagesXml: productLevelImages.additionalImagesXml,
+            availability:
+              getFeedStockCount(product) > 0 ? 'in_stock' : 'out_of_stock',
+            brandName: effectiveBrand,
+            compareAtPrice: product.compare_at_price,
+            condition: toGmcCondition(product.condition),
+            colorXml,
+            currency,
+            description,
+            googleProductCategory: product.google_product_category,
+            gtin: product.gtin,
+            id: product.id,
+            imageUrl: productLevelImages.primaryImageUrl,
+            mpn: product.mpn,
+            price: product.price,
+            productDetailsXml,
+            productType,
+            shippingWeight,
+            stockCount: getFeedStockCount(product),
+            title: product.name,
+            url: productUrl,
+          })
+        : '';
 
       if (!product.offers || product.offers.length === 0) {
         return baseItem;

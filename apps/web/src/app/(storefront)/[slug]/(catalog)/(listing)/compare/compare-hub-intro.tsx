@@ -1,10 +1,15 @@
+import type { ReactNode } from 'react';
 import { buildCompareIndexDescription } from './compare-page-content-helpers';
 
 interface CompareHubIntroProps {
+  description?: ReactNode;
   merchantName?: string | null;
 }
 
-export function CompareHubIntro({ merchantName }: CompareHubIntroProps) {
+export function CompareHubIntro({
+  description,
+  merchantName,
+}: CompareHubIntroProps) {
   return (
     <div className="mt-6 max-w-3xl space-y-3" data-cwv-lcp-fold="">
       <h1
@@ -15,10 +20,14 @@ export function CompareHubIntro({ merchantName }: CompareHubIntroProps) {
       </h1>
       <p
         className="text-sm text-store-background-text/70"
+        data-compare-hub-intro-pending={
+          description || !merchantName ? '' : undefined
+        }
         data-cwv-lcp-support=""
       >
         {buildCompareIndexDescription(merchantName)}
       </p>
+      {description}
     </div>
   );
 }

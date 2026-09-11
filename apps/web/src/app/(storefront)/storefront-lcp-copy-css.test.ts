@@ -19,6 +19,16 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'html:has([data-storefront-shell]) body'
     );
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /html:has\(\[data-storefront-shell\]\) body \{[^}]*margin: 0/
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /html:has\(\[data-storefront-shell\]\) p \{[^}]*margin: 0/
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain('box-sizing: border-box');
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      'body:has([data-compare-hub-intro-resolved]) [data-compare-hub-intro-pending]'
+    );
     expect(STOREFRONT_LCP_COPY_CSS).toContain('[data-cwv-lcp-support]');
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'body:has([data-blog-listing-filtered]) [data-blog-lcp-hero]'

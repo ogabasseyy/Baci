@@ -191,6 +191,17 @@ describe('compare index page runtime', () => {
     expect(document.querySelector('[data-compare-hub-chrome]')).not.toBeNull();
   });
 
+  it('streams the merchant name into the committed compare hub intro', () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'page.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain('<CompareHubIntro');
+    expect(source).toContain('<CompareHubIntroDescription');
+    expect(source).toContain('omitIntro');
+  });
+
   it('keeps Home on the storefront origin for slug-prefixed compare URLs', () => {
     expect(new URL('.', 'https://baci.app/ogabassey/compare').pathname).toBe(
       '/ogabassey/'

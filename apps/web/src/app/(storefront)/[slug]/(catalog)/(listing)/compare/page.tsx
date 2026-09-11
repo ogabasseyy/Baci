@@ -23,6 +23,7 @@ import CategoryPageRoute, {
   generateMetadata as generateCategoryMetadata,
 } from '../[category]/page';
 import { CompareHubIntro } from './compare-hub-intro';
+import { CompareHubIntroDescription } from './compare-hub-intro-description';
 import { buildCompareIndexSections } from './compare-index-discovery';
 import { CompareIndexFallback } from './compare-index-fallback';
 import { ComparePageContent } from './compare-page-content';
@@ -239,7 +240,13 @@ export default function CompareIndexPage(props: CompareIndexPageProps) {
               Compare products
             </span>
           </nav>
-          <CompareHubIntro />
+          <CompareHubIntro
+            description={
+              <Suspense fallback={null}>
+                <CompareHubIntroDescription params={props.params} />
+              </Suspense>
+            }
+          />
         </div>
       </main>
       <Suspense

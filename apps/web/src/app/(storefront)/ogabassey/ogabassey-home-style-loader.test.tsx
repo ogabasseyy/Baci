@@ -1,5 +1,5 @@
 import { render, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockLoadOgabasseyHomeStyles, mockLoadStylesheetAfterFirstInput } =
   vi.hoisted(() => ({
@@ -39,8 +39,13 @@ function stubMatchMedia(matches: boolean) {
 
 describe('OgabasseyHomeStyleLoader', () => {
   beforeEach(() => {
-    mockLoadOgabasseyHomeStyles.mockClear();
+    mockLoadOgabasseyHomeStyles.mockReset();
+    mockLoadOgabasseyHomeStyles.mockResolvedValue({});
     mockLoadStylesheetAfterFirstInput.mockClear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('does not load homepage CSS on a mobile viewport until the first input', () => {
@@ -57,6 +62,29 @@ describe('OgabasseyHomeStyleLoader', () => {
 
     await waitFor(() => {
       expect(mockLoadOgabasseyHomeStyles).toHaveBeenCalledOnce();
+    });
+    expect(mockLoadStylesheetAfterFirstInput).not.toHaveBeenCalled();
+  });
+
+  it('re-arms desktop homepage CSS after a failed immediate import', async () => {
+    stubMatchMedia(true);
+    mockLoadOgabasseyHomeStyles
+      .mockRejectedValueOnce(new Error('chunk missing'))
+      .mockResolvedValueOnce({});
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    render(<OgabasseyHomeStyleLoader />);
+
+    await waitFor(() => {
+      expect(consoleError).toHaveBeenCalledOnce();
+    });
+    expect(mockLoadOgabasseyHomeStyles).toHaveBeenCalledOnce();
+
+    window.dispatchEvent(new Event('pointerdown'));
+    await waitFor(() => {
+      expect(mockLoadOgabasseyHomeStyles).toHaveBeenCalledTimes(2);
     });
     expect(mockLoadStylesheetAfterFirstInput).not.toHaveBeenCalled();
   });

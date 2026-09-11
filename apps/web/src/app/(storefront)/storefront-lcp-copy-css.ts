@@ -16,6 +16,21 @@ html:has([data-storefront-shell]) body {
   font-family: "Inter Fallback", Arial, Helvetica, sans-serif !important;
 }
 
+html:has([data-storefront-shell]) body {
+  margin: 0;
+}
+
+html:has([data-storefront-shell]) p {
+  margin: 0;
+}
+
+html:has([data-storefront-shell]),
+html:has([data-storefront-shell]) *,
+html:has([data-storefront-shell]) *::before,
+html:has([data-storefront-shell]) *::after {
+  box-sizing: border-box;
+}
+
 [data-cwv-lcp-fold] {
   min-height: 100svh;
 }
@@ -96,6 +111,7 @@ html:has([data-storefront-shell]) body {
   font-size: 0.875rem !important;
   font-weight: 400 !important;
   line-height: 1.5 !important;
+  margin: 0 !important;
   max-width: 36rem;
 }
 
@@ -213,6 +229,10 @@ body:has([data-imei-result]) [data-imei-lcp-hero] {
 }
 
 body:has([data-compare-category-page]) [data-compare-hub-chrome] {
+  display: none;
+}
+
+body:has([data-compare-hub-intro-resolved]) [data-compare-hub-intro-pending] {
   display: none;
 }
 

@@ -194,9 +194,11 @@ html:has([data-storefront-shell]) *::after {
 /*
   storefront-core.css (and Tailwind .sr-only) is deferred until first input.
   Without this, streamed headings like Hero's h1.sr-only stay in normal flow
-  and steal Slow-4G LCP from committed copy.
+  and steal Slow-4G LCP from committed copy. Scope to h1 so utilities such as
+  sr-only sm:not-sr-only can still unhide breadcrumb labels after the full
+  sheet loads.
 */
-.sr-only {
+h1.sr-only {
   border-width: 0 !important;
   clip-path: inset(50%) !important;
   height: 1px !important;

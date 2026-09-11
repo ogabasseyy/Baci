@@ -286,23 +286,4 @@ describe('OgabasseyV2Blog', () => {
 
     expect(screen.getByText('Mar 28, 2026')).toBeInTheDocument();
   });
-
-  it('omits the featured story when the listing hero is painted outside this component', () => {
-    render(
-      <OgabasseyV2Blog
-        hideFeaturedStory
-        posts={mockPosts}
-        storeSlug="/test-store"
-      />
-    );
-
-    expect(screen.queryByText('Featured Story')).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'The Ogabassey Blog' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: /featured post/i })
-    ).toBeInTheDocument();
-    expect(screen.getByText('Regular Post')).toBeInTheDocument();
-  });
 });

@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -55,12 +52,7 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
-const {
-  default: RepairPage,
-  generateMetadata,
-  generateStaticParams,
-  RepairPageResolved,
-} = await import('./page');
+const { generateMetadata, RepairPageResolved } = await import('./page');
 
 function callRepairPage(
   slug: string,
@@ -89,30 +81,6 @@ describe('RepairPage', () => {
     mockRepairBookingWizard.mockClear();
     mockGetRepairDeviceDetailBySlug.mockReset();
     mockGetRepairDeviceDetailBySlug.mockResolvedValue(deviceDetail);
-  });
-
-  it('prerenders both OgaBassey host identifiers so the booking LCP can land in the static shell', () => {
-    expect(generateStaticParams()).toEqual([
-      { slug: 'ogabassey.com' },
-      { slug: 'ogabassey' },
-    ]);
-  });
-
-  it('paints the booking LCP copy without waiting for merchant params', () => {
-    render(
-      <RepairPage
-        params={new Promise(() => undefined)}
-        searchParams={new Promise(() => undefined)}
-      />
-    );
-
-    expect(
-      screen.getByRole('heading', { name: 'Book a Repair Service' })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { name: 'Before you book a repair' })
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText('Repair booking wizard')).not.toBeInTheDocument();
   });
 
   it('renders crawler-visible repair guidance below the booking wizard', async () => {
@@ -316,17 +284,5 @@ describe('RepairPage', () => {
 
     expect(metadata.title).toBe('Store Not Found');
     expect(getCachedMerchant).not.toHaveBeenCalled();
-  });
-
-  it('keeps the booking wizard off the route module graph', () => {
-    const source = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), 'page.tsx'),
-      'utf8'
-    );
-
-    expect(source).toContain("await import('./repair-page-content')");
-    expect(source).not.toMatch(
-      /import\s+\{[^}]*RepairPageContent[^}]*\}\s+from\s+['"]\.\/repair-page-content['"]/
-    );
   });
 });

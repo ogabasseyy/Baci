@@ -4,7 +4,8 @@ import { STOREFRONT_LCP_COPY_CSS } from './storefront-lcp-copy-css';
 describe('STOREFRONT_LCP_COPY_CSS', () => {
   it('locks fallback fonts and first-paint sr-only clipping', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain('Inter Fallback');
-    expect(STOREFRONT_LCP_COPY_CSS).toContain('.sr-only');
+    expect(STOREFRONT_LCP_COPY_CSS).toContain('h1.sr-only');
+    expect(STOREFRONT_LCP_COPY_CSS).not.toMatch(/(?:^|\n)\.sr-only \{/);
     expect(STOREFRONT_LCP_COPY_CSS).toContain('!important');
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       '.ogabassey-blog-lcp-hero__frame'

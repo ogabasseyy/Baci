@@ -15,8 +15,8 @@ describe('repairs loading', () => {
       screen.queryByRole('heading', { name: 'Repair Lab' })
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/Don't Ditch It/i)).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('status', { name: 'Loading repair lab' })
-    ).toHaveClass('sr-only');
+    const status = screen.getByRole('status', { name: 'Loading repair lab' });
+    expect(status).not.toHaveClass('sr-only');
+    expect(status).toHaveTextContent('Loading repair lab');
   });
 });

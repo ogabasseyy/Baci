@@ -225,4 +225,38 @@ describe('ad-tracking runtime initialization', () => {
       nativeBridgeError
     );
   });
+
+  describe('bugfix: Facebook ATT blocked when TikTok import rejects', () => {
+    it('enables Facebook advertiser tracking when TikTok is configured but unavailable', async () => {
+      const setAdvertiserTrackingEnabled =
+        jest.fn<(enabled: boolean) => boolean>();
+      const initializeSDK = jest.fn<() => void>();
+      mockGetTrackingPermissionStatus.mockResolvedValue({ status: 'granted' });
+      setMockExpoConfigExtra({
+        apiUrl: 'https://api.test',
+        facebookAppId: 'fb-test',
+        facebookClientToken: 'client-test',
+        tiktokBusiness: { isConfigured: true },
+      });
+      mockLoadAdTrackingNativeModules.mockResolvedValue(
+        createNativeModules({
+          FBSettings: {
+            initializeSDK,
+            setAdvertiserTrackingEnabled,
+          },
+          TikTokBusiness: null,
+        })
+      );
+
+      const { initAdTracking } = await import('./ad-tracking-runtime');
+
+      await initAdTracking();
+
+      expect(setAdvertiserTrackingEnabled).toHaveBeenCalledWith(true);
+      expect(initializeSDK).toHaveBeenCalledTimes(1);
+      expect(mockWarn).not.toHaveBeenCalledWith(
+        'Authorized ad SDK modules unavailable after load'
+      );
+    });
+  });
 });

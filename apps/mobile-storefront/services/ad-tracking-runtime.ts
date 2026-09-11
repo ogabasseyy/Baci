@@ -5,6 +5,10 @@ import {
   requestTrackingPermissionStatus,
 } from '@/lib/tracking-transparency';
 import {
+  hasRequiredAuthorizedAdTrackingModules,
+  isFacebookTrackingConfigured,
+} from './ad-tracking-authorized-modules';
+import {
   FB_APP_ID,
   FB_CLIENT_TOKEN,
   getAdTrackingModules,
@@ -67,24 +71,13 @@ export function generateEventIdSync(): string {
   return `${timestamp}_${random}`;
 }
 
-function hasRequiredAuthorizedAdTrackingModules(
-  modules: ReturnType<typeof getAdTrackingModules>
-): boolean {
-  if (FB_APP_ID && FB_CLIENT_TOKEN && !modules.FBSettings) {
-    return false;
-  }
-  if (IS_TIKTOK_BUSINESS_CONFIGURED && !modules.TikTokBusiness) {
-    return false;
-  }
-  return true;
-}
-
 async function initializeAuthorizedAdTracking(): Promise<boolean> {
   let modules = getAdTrackingModules();
-  if (
-    Platform.OS !== 'web' &&
-    (!modules.FBSettings || !modules.TikTokBusiness)
-  ) {
+  const needsFacebookLoad =
+    isFacebookTrackingConfigured() && !modules.FBSettings;
+  const needsTikTokLoad =
+    IS_TIKTOK_BUSINESS_CONFIGURED && !modules.TikTokBusiness;
+  if (Platform.OS !== 'web' && (needsFacebookLoad || needsTikTokLoad)) {
     await loadNativeModules();
     modules = getAdTrackingModules();
   }

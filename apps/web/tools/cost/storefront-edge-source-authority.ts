@@ -26,7 +26,9 @@ function isIncludedRouteSource(sourcePath: string) {
   return (
     (/\.(?:css|ts|tsx|js|jsx)$/.test(sourcePath) ||
       isStorefrontStaticMetadataFile(fileName)) &&
-    !/\.(?:spec|test)\.(?:ts|tsx|js|jsx)$/.test(sourcePath)
+    !/\.(?:spec|test)(?:-[a-z]+)*(?:\.[a-z]+)*\.(?:ts|tsx|js|jsx)$/.test(
+      sourcePath
+    )
   );
 }
 

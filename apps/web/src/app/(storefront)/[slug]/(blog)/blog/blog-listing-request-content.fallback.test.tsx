@@ -19,7 +19,7 @@ describe('blog listing request fallback', () => {
       params: Promise.resolve({ slug: 'ogabassey.com' }),
       searchParams: new Promise(() => {}),
     });
-    const [, listingBoundary] = ui.props.children;
+    const [, , listingBoundary] = ui.props.children;
 
     render(
       <Suspense fallback={listingBoundary.props.fallback}>
@@ -38,7 +38,7 @@ describe('blog listing request fallback', () => {
       params: Promise.resolve({ slug: 'another-ogabassey-template-store' }),
       searchParams: new Promise(() => {}),
     });
-    const [, listingBoundary] = ui.props.children;
+    const [, , listingBoundary] = ui.props.children;
 
     render(
       <Suspense fallback={listingBoundary.props.fallback}>

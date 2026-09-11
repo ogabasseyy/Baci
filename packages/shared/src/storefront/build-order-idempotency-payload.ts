@@ -43,6 +43,13 @@ export type OrderIdempotencyPayloadInput = {
   wallet_amount?: number;
 };
 
+function compareCodePoints(left: string, right: string): number {
+  if (left === right) {
+    return 0;
+  }
+  return left < right ? -1 : 1;
+}
+
 function normalizeText(value: string | null | undefined) {
   return (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
@@ -61,7 +68,7 @@ function normalizeAttributes(
   return Object.fromEntries(
     Object.entries(attributes)
       .map(([key, value]) => [normalizeText(key), normalizeText(value)])
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareCodePoints(left, right))
   );
 }
 
@@ -72,7 +79,7 @@ function stableStringify(value: unknown): string {
 
   if (value && typeof value === 'object') {
     return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareCodePoints(left, right))
       .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
       .join(',')}}`;
   }
@@ -96,24 +103,34 @@ function normalizeItems(items: readonly IdempotencyItem[]) {
       variant_name: normalizeText(item.variant_name ?? item.variantName),
     }))
     .sort((left, right) => {
-      const productComparison = left.product_id.localeCompare(right.product_id);
+      const productComparison = compareCodePoints(
+        left.product_id,
+        right.product_id
+      );
       if (productComparison !== 0) {
         return productComparison;
       }
 
-      const variantComparison = left.variant_id.localeCompare(right.variant_id);
+      const variantComparison = compareCodePoints(
+        left.variant_id,
+        right.variant_id
+      );
       if (variantComparison !== 0) {
         return variantComparison;
       }
 
-      const variantNameComparison = left.variant_name.localeCompare(
+      const variantNameComparison = compareCodePoints(
+        left.variant_name,
         right.variant_name
       );
       if (variantNameComparison !== 0) {
         return variantNameComparison;
       }
 
-      const conditionComparison = left.condition.localeCompare(right.condition);
+      const conditionComparison = compareCodePoints(
+        left.condition,
+        right.condition
+      );
       if (conditionComparison !== 0) {
         return conditionComparison;
       }
@@ -134,7 +151,8 @@ function normalizeItems(items: readonly IdempotencyItem[]) {
         return left.has_assurance ? 1 : -1;
       }
 
-      return stableStringify(left.variant_attributes).localeCompare(
+      return compareCodePoints(
+        stableStringify(left.variant_attributes),
         stableStringify(right.variant_attributes)
       );
     });

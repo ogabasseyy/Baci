@@ -1,6 +1,7 @@
 import { clearPersistedCheckoutGeneration } from '@/lib/clear-persisted-checkout-generation';
 import { createLogger } from '@/lib/logger';
 import { persistCheckoutGeneration } from '@/lib/persist-checkout-generation';
+import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 import { emptyCheckoutCart } from './empty-checkout-cart';
 
 const log = createLogger('CartStore');
@@ -11,11 +12,13 @@ export async function rotateEmptyCheckoutCart(
   const next = emptyCheckoutCart();
   apply(next);
   try {
-    await persistCheckoutGeneration(next.checkoutGeneration);
+    await withCheckoutStorageTimeout(
+      persistCheckoutGeneration(next.checkoutGeneration)
+    );
   } catch (error) {
     log.error('Failed to persist empty-cart checkout generation:', error);
     try {
-      await clearPersistedCheckoutGeneration();
+      await withCheckoutStorageTimeout(clearPersistedCheckoutGeneration());
     } catch (clearError) {
       log.error(
         'Failed to clear stale checkout generation after persist rejection:',

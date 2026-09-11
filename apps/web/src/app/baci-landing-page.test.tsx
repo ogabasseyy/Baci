@@ -12,8 +12,10 @@ describe('BaciLandingPage', () => {
 
     expect(source).toContain("from './baci-landing-features'");
     expect(source).toContain("from './baci-landing-faqs'");
+    expect(source).toContain("from './baci-landing-platform-schemas'");
     expect(source).toContain('<BaciLandingFeatures />');
     expect(source).toContain('<BaciLandingFaqs />');
+    expect(source).toContain('<PlatformSchemas />');
     expect(source.split('\n').length).toBeLessThanOrEqual(300);
   });
 });

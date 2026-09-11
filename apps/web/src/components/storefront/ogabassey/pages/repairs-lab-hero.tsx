@@ -1,22 +1,9 @@
 import { Sparkles, Wrench } from 'lucide-react';
-import Link from 'next/link';
-import { asRoute } from '@/lib/routes';
+import { RepairsLabHeroActionSlot } from './repairs-lab-hero-action-slot';
 
 interface RepairsLabHeroProps {
   repairHref?: string;
   swapHref?: string;
-}
-
-function ActionSlot({ href, label, className }: {
-  href?: string;
-  label: string;
-  className: string;
-}) {
-  return href ? (
-    <Link href={asRoute(href)} className={className}>{label}</Link>
-  ) : (
-    <span aria-hidden="true" className={`${className} invisible`}>{label}</span>
-  );
 }
 
 export function RepairsLabHero({ repairHref, swapHref }: RepairsLabHeroProps) {
@@ -51,12 +38,12 @@ export function RepairsLabHero({ repairHref, swapHref }: RepairsLabHeroProps) {
               Every device repaired is one less in a landfill.
             </p>
             <div className="flex flex-wrap gap-4">
-              <ActionSlot
+              <RepairsLabHeroActionSlot
                 href={repairHref}
                 label="Book a Repair"
                 className="rounded-xl bg-store-primary px-8 py-3.5 font-bold text-store-primary-text shadow-lg shadow-store-primary/20 transition-colors hover:bg-store-primary/90 active:scale-95"
               />
-              <ActionSlot
+              <RepairsLabHeroActionSlot
                 href={swapHref}
                 label="Trade-in Instead"
                 className="rounded-xl border border-store-background/20 bg-store-background/10 px-8 py-3.5 font-bold text-store-background backdrop-blur-xs transition-colors hover:bg-store-background/20 active:scale-95"

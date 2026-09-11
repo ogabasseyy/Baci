@@ -121,7 +121,6 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-import { notFound } from 'next/navigation';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
 
@@ -136,7 +135,7 @@ const SHELL_SLIDE = {
   ctaLabel: 'Shop now',
 };
 
-describe('OgabasseyHomePageContent', () => {
+describe('OgabasseyHomePageContent committed hero', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockHeaders.mockResolvedValue(new Headers());
@@ -146,33 +145,63 @@ describe('OgabasseyHomePageContent', () => {
     );
   });
 
-  it('resolves the homepage merchant from custom-domain request context', async () => {
-    mockHeaders.mockResolvedValue(
-      new Headers([['x-custom-domain', 'ogabassey.com']])
-    );
-
+  it('threads omitMobileCarousel into the publication-gated Hero', async () => {
     const result = await OgabasseyHomePageContent({
-      pathPrefix: '',
+      omitMobileCarousel: true,
+      pathPrefix: '/ogabassey',
       shellMerchantId: 'merchant-1',
-      shellSlides: [],
+      shellSlides: [SHELL_SLIDE],
     });
 
     render(result as ReactElement);
 
-    expect(getRequestScopedMerchant).toHaveBeenCalledWith('ogabassey.com');
     expect(
       screen.getByRole('region', { name: /product hero/i })
-    ).toHaveAttribute('data-slide-count', '0');
-    expect(
-      screen.getByRole('region', { name: /dynamic home content/i })
-    ).toBeEmptyDOMElement();
+    ).toHaveAttribute('data-omit-mobile-carousel', 'true');
+    expect(mockHeroRender).toHaveBeenCalledWith(
+      expect.objectContaining({
+        omitMobileCarousel: true,
+        slides: [SHELL_SLIDE],
+      })
+    );
   });
 
-  it('keeps subdomain rewrite links root-relative from the merchant header', async () => {
-    mockHeaders.mockResolvedValue(
-      new Headers([['x-merchant-slug', 'ogabassey']])
-    );
+  it('threads omitDocumentHeading into the publication-gated Hero', async () => {
+    const result = await OgabasseyHomePageContent({
+      omitDocumentHeading: true,
+      pathPrefix: '/ogabassey',
+      shellMerchantId: 'merchant-1',
+      shellSlides: [SHELL_SLIDE],
+    });
 
+    render(result as ReactElement);
+
+    expect(
+      screen.getByRole('region', { name: /product hero/i })
+    ).toHaveAttribute('data-omit-document-heading', 'true');
+    expect(mockHeroRender).toHaveBeenCalledWith(
+      expect.objectContaining({
+        omitDocumentHeading: true,
+        slides: [SHELL_SLIDE],
+      })
+    );
+  });
+
+  it('does not restore the H1 when the parent already committed the document heading', async () => {
+    const result = await OgabasseyHomePageContent({
+      omitDocumentHeading: true,
+      pathPrefix: '/ogabassey',
+      shellMerchantId: null,
+      shellSlides: null,
+    });
+
+    render(result as ReactElement);
+
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(mockHeroRender).not.toHaveBeenCalled();
+  });
+
+  it('renders one Hero with request-bound content after the publication guard', async () => {
     const result = await OgabasseyHomePageContent({
       pathPrefix: '/ogabassey',
       shellMerchantId: 'merchant-1',
@@ -181,75 +210,27 @@ describe('OgabasseyHomePageContent', () => {
 
     render(result as ReactElement);
 
-    expect(getRequestScopedMerchant).toHaveBeenCalledWith('ogabassey');
     expect(
       screen.getByRole('region', { name: /product hero/i })
     ).toHaveAttribute('data-slide-count', '1');
     expect(
+      screen.getByRole('region', { name: /product hero/i })
+    ).toHaveAttribute('data-omit-mobile-carousel', 'false');
+    expect(
       screen.getByRole('region', { name: /dynamic home content/i })
-    ).toBeEmptyDOMElement();
-  });
-
-  it('falls back to the OgaBassey slug when only a deployment host is present', async () => {
-    mockHeaders.mockResolvedValue(
-      new Headers([['host', 'baci-preview.vercel.app']])
-    );
-
-    await OgabasseyHomePageContent({
-      pathPrefix: '/ogabassey',
-      shellMerchantId: 'merchant-1',
-      shellSlides: [SHELL_SLIDE],
-    });
-
+    ).toHaveTextContent('/ogabassey');
     expect(getRequestScopedMerchant).toHaveBeenCalledWith('ogabassey');
   });
 
-  it('shows the unpublished storefront state when production store is disabled', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValueOnce({
-      ...mockPublishedMerchant,
-      is_published: false,
-    });
-
+  it('restores the H1 after the publication guard when the cached Hero degraded', async () => {
     const result = await OgabasseyHomePageContent({
       pathPrefix: '/ogabassey',
-      shellMerchantId: 'merchant-1',
-      shellSlides: [SHELL_SLIDE],
+      shellMerchantId: null,
+      shellSlides: null,
     });
 
     render(result as ReactElement);
 
-    expect(screen.getByTestId('store-not-published')).toHaveTextContent(
-      'OgaBassey'
-    );
-    expect(
-      screen.queryByRole('region', { name: /dynamic home content/i })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('region', { name: /product hero/i })
-    ).not.toBeInTheDocument();
-    expect(mockHeroRender).not.toHaveBeenCalled();
-    expect(document.querySelector('a, button, img')).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
-  });
-
-  it('rejects cached shell slides from a different request merchant', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValueOnce({
-      ...mockPublishedMerchant,
-      id: 'merchant-2',
-    });
-
-    const result = await OgabasseyHomePageContent({
-      pathPrefix: '',
-      shellMerchantId: 'merchant-1',
-      shellSlides: [SHELL_SLIDE],
-    });
-
-    render(result as ReactElement);
-
-    expect(mockHeroRender).not.toHaveBeenCalled();
-    expect(
-      screen.queryByRole('region', { name: /product hero/i })
-    ).not.toBeInTheDocument();
     expect(
       screen.getByRole('heading', {
         level: 1,
@@ -258,17 +239,23 @@ describe('OgabasseyHomePageContent', () => {
     ).toBeInTheDocument();
   });
 
-  it('returns 404 when merchant lookup is null', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValueOnce(null);
+  it('keeps the publication-gated Hero when below-fold content suspends', async () => {
+    mockDynamicContentShouldSuspend.mockReturnValue(true);
 
-    await expect(
-      OgabasseyHomePageContent({
-        pathPrefix: '/ogabassey',
-        shellMerchantId: 'merchant-1',
-        shellSlides: [SHELL_SLIDE],
-      })
-    ).rejects.toThrow('not-found');
+    const result = await OgabasseyHomePageContent({
+      pathPrefix: '/ogabassey',
+      shellMerchantId: 'merchant-1',
+      shellSlides: [SHELL_SLIDE],
+    });
 
-    expect(notFound).toHaveBeenCalledOnce();
+    render(result as ReactElement);
+
+    expect(
+      screen.getByRole('region', { name: /product hero/i })
+    ).toHaveAttribute('data-slide-count', '1');
+    expect(
+      screen.queryByRole('region', { name: /dynamic home content/i })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
   });
 });

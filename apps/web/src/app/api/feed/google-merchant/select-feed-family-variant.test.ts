@@ -1,6 +1,31 @@
 import { expect, it } from 'vitest';
 import { selectFeedFamilyVariant } from './select-feed-family-variant';
 
+it.each([
+  -1,
+  0,
+  Number.NaN,
+  Number.POSITIVE_INFINITY,
+])('skips an in-stock preferred SKU with invalid price %s', (price) => {
+  const product = {
+    id: 'p',
+    name: 'Phone',
+    description: '',
+    price: 10,
+    stock: 0,
+    manage_stock: true,
+  };
+  const valid = {
+    id: 'valid',
+    condition: 'new' as const,
+    price_override: 20,
+    stock_quantity: 1,
+  };
+  const invalid = { ...valid, id: 'invalid', price_override: price };
+  expect(selectFeedFamilyVariant(product, [invalid, valid])?.id).toBe('valid');
+  expect(selectFeedFamilyVariant(product, [invalid])).toBeUndefined();
+});
+
 it('falls back to a valid sold-out SKU but never a zero price', () => {
   const product = {
     id: 'p',

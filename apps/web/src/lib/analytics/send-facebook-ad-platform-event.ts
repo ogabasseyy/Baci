@@ -150,7 +150,11 @@ export async function sendFacebookAdPlatformEvent(
                   event.custom_data.content_name || first?.name || first?.id,
               }
             : {}),
-          contentType: event.custom_data.content_type,
+          contentType:
+            eventName === 'AddToWishlist' &&
+            contents.some((item) => item.id?.trim())
+              ? 'product_group'
+              : event.custom_data.content_type,
           currency,
           value,
         },

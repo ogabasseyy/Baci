@@ -6,6 +6,7 @@ import {
 } from '@/lib/gmc-feed-images';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
+import { resolveOfferFeedImages } from '@/lib/resolve-offer-feed-images';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';
 import { escapeXml } from '@/lib/xml-utils';
 import { buildVariantFeedItems } from '../google-merchant/build-variant-feed-items';
@@ -203,9 +204,6 @@ export function generateFacebookCatalogFeed(
         });
       }
       const primaryImageUrl = resolveGmcPrimaryImage(manifestEntries);
-      if (!primaryImageUrl) {
-        return null;
-      }
 
       const additionalImagesXml = resolveGmcAdditionalImages(manifestEntries)
         .map(
@@ -226,7 +224,7 @@ export function generateFacebookCatalogFeed(
         googleProductCategory: product.google_product_category,
         gtin: product.gtin,
         id: product.id,
-        imageUrl: primaryImageUrl,
+        imageUrl: primaryImageUrl || '',
         link: productUrl,
         mpn: product.mpn,
         price: product.price,
@@ -234,6 +232,7 @@ export function generateFacebookCatalogFeed(
         title: product.name,
       };
       const base =
+        primaryImageUrl &&
         toGoogleListingCondition(product.condition) &&
         Number.isFinite(product.price) &&
         product.price > 0
@@ -248,10 +247,16 @@ export function generateFacebookCatalogFeed(
             offer.price > 0
         )
         .map((offer) => {
+          const offerImages = resolveOfferFeedImages(
+            offer.images,
+            manifestEntries
+          );
+          if (!offerImages) return '';
           const url = new URL(productUrl);
           url.searchParams.set('condition', offer.condition);
           return buildItemXml({
             ...baseArgs,
+            ...offerImages,
             id: offer.id,
             groupId: product.id,
             price: offer.price,

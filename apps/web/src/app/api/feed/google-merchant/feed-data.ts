@@ -8,13 +8,13 @@ import type {
   ImageManifestMap,
 } from './feed-builder';
 import { FEED_PRODUCTS_SELECT } from './feed-query';
+import { fetchActiveFeedOffers } from './fetch-active-feed-offers';
 
 const FEED_PRODUCTS_PAGE_SIZE = 1000;
 const FEED_IMAGE_MANIFEST_PAGE_SIZE = 1000;
 // get_feed_product_variants accepts at most 10k product IDs.
 const MAX_FEED_PRODUCTS = 10_000;
 // Keep PostgREST `in(...)` URL filters under common proxy limits.
-const FEED_PRODUCT_OFFERS_BATCH_SIZE = 250;
 const FEED_IMAGE_MANIFEST_PRODUCT_BATCH_SIZE = 250;
 export const FEED_PRODUCT_VARIANTS_BATCH_SIZE = 50;
 export const FEED_IMAGE_MANIFEST_MAX_CONCURRENT_BATCHES = 4;
@@ -30,7 +30,7 @@ export interface GoogleMerchantFeedData {
   imageManifest: ImageManifestMap;
 }
 
-const GOOGLE_MERCHANT_FEED_DATA_CACHE_VERSION = 'variant-feed-data-v5';
+const GOOGLE_MERCHANT_FEED_DATA_CACHE_VERSION = 'variant-feed-data-v6';
 
 interface RawFeedProductRow extends Omit<FeedProduct, 'categories'> {
   categories?:
@@ -49,6 +49,7 @@ interface FeedProductCursor {
 }
 
 type ManifestRow = {
+  source_url?: string | null;
   product_id: string;
   variant_id?: string | null;
   verified_url: string | null;
@@ -216,14 +217,6 @@ interface FeedVariantRow {
   stock_quantity?: number | null;
 }
 
-interface FeedOfferRow {
-  condition: FeedOffer['condition'];
-  id: string;
-  price: number | string;
-  product_id: string;
-  stock_quantity: number | null;
-}
-
 function normalizeFeedVariantPrice(
   value: number | string | null | undefined
 ): number | null {
@@ -237,41 +230,6 @@ function normalizeFeedVariantPrice(
   }
 
   return null;
-}
-
-async function fetchActiveFeedOffers(
-  supabase: SupabaseClient,
-  productIds: string[]
-): Promise<FeedOfferRow[]> {
-  const offerRows: FeedOfferRow[] = [];
-
-  for (
-    let batchStart = 0;
-    batchStart < productIds.length;
-    batchStart += FEED_PRODUCT_OFFERS_BATCH_SIZE
-  ) {
-    const batchProductIds = productIds.slice(
-      batchStart,
-      batchStart + FEED_PRODUCT_OFFERS_BATCH_SIZE
-    );
-
-    const { data, error } = await supabase
-      .from('product_offers')
-      .select('id, product_id, condition, price, stock_quantity')
-      .in('product_id', batchProductIds)
-      .eq('status', 'active');
-
-    if (error) {
-      console.error('DB_OFFERS_ERROR:', { batchStart, error });
-      throw new Error('Failed to fetch product offers');
-    }
-
-    if (data && data.length > 0) {
-      offerRows.push(...(data as FeedOfferRow[]));
-    }
-  }
-
-  return offerRows;
 }
 
 async function fetchFeedVariants(
@@ -359,7 +317,7 @@ async function fetchVerifiedImageManifestRows(
           const { data, error } = await supabase
             .from('product_feed_images')
             .select(
-              'product_id, variant_id, verified_url, verified_format, status, is_primary, position'
+              'product_id, variant_id, source_url, verified_url, verified_format, status, is_primary, position'
             )
             .eq('merchant_id', merchantId)
             .eq('status', 'verified')
@@ -489,6 +447,7 @@ export async function getGoogleMerchantFeedData(
       imageManifest[row.product_id] = [];
     }
     imageManifest[row.product_id].push({
+      source_url: row.source_url,
       variant_id: row.variant_id ?? null,
       verified_url: row.verified_url,
       verified_format: row.verified_format,
@@ -532,12 +491,13 @@ export async function getGoogleMerchantFeedData(
 
     if (offerRows.length > 0) {
       const offersByProduct = new Map<string, FeedOffer[]>();
-      for (const row of offerRows as FeedOfferRow[]) {
+      for (const row of offerRows) {
         const pid = row.product_id as string;
         if (!offersByProduct.has(pid)) {
           offersByProduct.set(pid, []);
         }
         offersByProduct.get(pid)?.push({
+          images: row.images,
           id: row.id as string,
           condition: row.condition as FeedOffer['condition'],
           price: Number(row.price),

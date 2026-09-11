@@ -22,7 +22,8 @@ const mockBuildMobileCheckoutOrderFingerprint =
   jest.fn<(params: unknown) => string>();
 const mockClearMobileCheckoutIdempotencyKey =
   jest.fn<(...params: unknown[]) => void>();
-const mockCreateOrder = jest.fn<(params: unknown) => Promise<OrderResponse>>();
+const mockCreateOrder =
+  jest.fn<(request: unknown, options?: unknown) => Promise<OrderResponse>>();
 const mockGetKlumpDisabledReason =
   jest.fn<(...params: unknown[]) => string | undefined>();
 const mockGetMobileCheckoutIdempotencyKey =
@@ -60,7 +61,8 @@ jest.mock('@/lib/klump-checkout', () => ({
 }));
 
 jest.mock('@/services/orders', () => ({
-  createOrder: (...params: unknown[]) => mockCreateOrder(...params),
+  createOrder: (request: unknown, options?: unknown) =>
+    mockCreateOrder(request, options),
   OrderError: class OrderError extends Error {
     code: string;
 

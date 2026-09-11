@@ -6,7 +6,11 @@ import type { CreateOrderRequest } from '@/services/orders.schemas';
 export function replayQueuedCreateOrder(
   createOrder: (
     request: CreateOrderRequest,
-    options?: { checkoutGeneration?: string; queuedReplay?: boolean }
+    options?: {
+      checkoutGeneration?: string;
+      expectedOwner?: string;
+      queuedReplay?: boolean;
+    }
   ) => Promise<unknown>,
   payload: unknown,
   currentUserId?: string
@@ -19,13 +23,11 @@ export function replayQueuedCreateOrder(
       )
     );
   }
-  return createOrder(
-    queued.request,
-    queued.checkoutGeneration
-      ? {
-          checkoutGeneration: queued.checkoutGeneration,
-          queuedReplay: true,
-        }
-      : undefined
-  );
+  return createOrder(queued.request, {
+    expectedOwner: queued.authPartition,
+    queuedReplay: true,
+    ...(queued.checkoutGeneration
+      ? { checkoutGeneration: queued.checkoutGeneration }
+      : {}),
+  });
 }

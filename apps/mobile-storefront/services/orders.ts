@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import Constants from 'expo-constants';
 import { DEFAULT_TIMEOUT, fetchWithRetry } from '@/lib/api';
 import { resolveApiBaseUrl } from '@/lib/api-url';
+import { assertQueuedCreateOrderSendOwner } from '@/lib/assert-queued-create-order-send-owner';
 import { getCheckoutAttemptKey } from '@/lib/checkout-attempt-key';
 import { createLogger } from '@/lib/logger';
 import { resolveCheckoutAuthPartition } from '@/lib/resolve-checkout-auth-partition';
@@ -76,6 +77,7 @@ async function checkNetwork(): Promise<boolean> {
 
 export type CreateOrderOptions = {
   checkoutGeneration?: string;
+  expectedOwner?: string;
   queuedReplay?: boolean;
 };
 
@@ -162,6 +164,16 @@ export async function createOrder(
             }
           : undefined
       ));
+    const sendSession = await getCheckoutStoredSession(
+      supabaseAuthStorage,
+      supabaseAuthStorageKey
+    );
+    assertQueuedCreateOrderSendOwner(options?.expectedOwner, [
+      user?.id,
+      session?.user?.id,
+      sendSession?.user?.id,
+    ]);
+
     log.info('Submitting order request', {
       apiUrl: API_URL,
       itemCount: orderPayload.items.length,

@@ -27,6 +27,7 @@ it('replays a wrapped mutation with its originating generation and skip persist'
   );
   expect(createOrder).toHaveBeenCalledWith(request, {
     checkoutGeneration: 'cart-one',
+    expectedOwner: 'guest',
     queuedReplay: true,
   });
 });

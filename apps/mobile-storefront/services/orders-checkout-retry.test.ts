@@ -143,6 +143,10 @@ describe('bugfix: checkout retries keep the originating auth partition', () => {
     jest.clearAllMocks();
     mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
     mockGetSession.mockResolvedValue({ data: { session: null } });
+    const { supabaseAuthStorage } = require('@/lib/supabase') as {
+      supabaseAuthStorage: { getItem: (key: string) => Promise<string | null> };
+    };
+    supabaseAuthStorage.getItem = async () => null;
   });
 
   it('reuses the queued generation instead of the cart generation at replay', async () => {
@@ -204,5 +208,35 @@ describe('bugfix: checkout retries keep the originating auth partition', () => {
       'order_created',
       expect.anything()
     );
+  });
+
+  it('does not send a queued order after the session switches accounts', async () => {
+    const accountA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const accountB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const sessionFor = (userId: string) =>
+      JSON.stringify({
+        access_token: 'token',
+        refresh_token: 'refresh',
+        user: { id: userId },
+      });
+    const { supabaseAuthStorage } = require('@/lib/supabase') as {
+      supabaseAuthStorage: { getItem: (key: string) => Promise<string | null> };
+    };
+    const getItem = jest
+      .fn<(key: string) => Promise<string | null>>()
+      .mockResolvedValueOnce(sessionFor(accountA))
+      .mockResolvedValueOnce(sessionFor(accountB));
+    supabaseAuthStorage.getItem = getItem;
+    const { fetchWithRetry } = require('@/lib/api') as {
+      fetchWithRetry: ReturnType<typeof jest.fn>;
+    };
+    const { createOrder } = require('./orders') as typeof import('./orders');
+    const { DeferredOfflineMutationError } =
+      require('@/lib/deferred-offline-mutation-error') as typeof import('@/lib/deferred-offline-mutation-error');
+
+    await expect(
+      createOrder(request, { expectedOwner: accountA, queuedReplay: true })
+    ).rejects.toThrow(DeferredOfflineMutationError);
+    expect(fetchWithRetry).not.toHaveBeenCalled();
   });
 });

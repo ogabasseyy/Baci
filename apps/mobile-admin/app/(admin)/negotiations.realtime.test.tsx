@@ -14,7 +14,11 @@ const mocks = vi.hoisted(() => ({
   invalidateQueries: vi.fn(),
   removeChannel: vi.fn().mockResolvedValue('ok'),
   nextId: 0,
+  focused: true,
+  useQuery: vi.fn(),
 }));
+
+vi.mock('expo-router', () => ({ useIsFocused: () => mocks.focused }));
 
 vi.mock('expo-crypto', () => ({
   randomUUID: () => `subscription-${++mocks.nextId}`,
@@ -49,7 +53,7 @@ vi.mock('@tanstack/react-query', () => {
   const client = { invalidateQueries: mocks.invalidateQueries };
   return {
     useQueryClient: () => client,
-    useQuery: () => ({ data: [], isLoading: true, refetch: vi.fn() }),
+    useQuery: mocks.useQuery,
     useMutation: () => ({ isPending: false }),
   };
 });
@@ -84,6 +88,12 @@ vi.mock('@/lib/supabase', () => ({
 
 beforeEach(() => {
   mocks.channels.clear();
+  mocks.focused = true;
+  mocks.useQuery.mockReturnValue({
+    data: [],
+    isLoading: true,
+    refetch: vi.fn(),
+  });
   mocks.merchantId = 'merchant-1';
   vi.clearAllMocks();
 });
@@ -152,6 +162,39 @@ describe('negotiation notification realtime lifecycle', () => {
     expect(mocks.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['negotiation_requests', 'merchant-2'],
     });
+  });
+
+  it('releases the subscription on blur and ignores late events while still mounted', () => {
+    const view = render(<NegotiationsScreen />);
+    const channel = [...mocks.channels.values()][0];
+    mocks.focused = false;
+    view.rerender(<NegotiationsScreen />);
+    expect(mocks.removeChannel).toHaveBeenCalledExactlyOnceWith(channel);
+    mocks.invalidateQueries.mockClear();
+    channel.on.mock.calls[0][2]();
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+  });
+
+  it('subscribes with a fresh channel and refreshes missed updates on refocus', () => {
+    const view = render(<NegotiationsScreen />);
+    mocks.focused = false;
+    view.rerender(<NegotiationsScreen />);
+    mocks.invalidateQueries.mockClear();
+    mocks.focused = true;
+    view.rerender(<NegotiationsScreen />);
+    expect(mocks.channels.size).toBe(2);
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['negotiation_requests', 'merchant-1'],
+    });
+  });
+
+  it('does not subscribe when mounted without focus', () => {
+    mocks.focused = false;
+    render(<NegotiationsScreen />);
+    expect(mocks.channels.size).toBe(0);
+    expect(mocks.useQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false })
+    );
   });
 
   it('does not subscribe without a merchant', () => {

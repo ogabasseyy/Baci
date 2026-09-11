@@ -3,6 +3,7 @@ import { FlashList } from '@shopify/flash-list';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { randomUUID } from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
+import { useIsFocused } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -66,6 +67,7 @@ async function loadNegotiationRequests(
 }
 
 export default function NegotiationsScreen() {
+  const isFocused = useIsFocused();
   const { merchant, isLoading: isMerchantLoading } = useMerchant();
   const { colors } = useTheme();
   const queryClient = useQueryClient();
@@ -84,9 +86,9 @@ export default function NegotiationsScreen() {
       if (!merchant?.id) throw new Error('Merchant not found');
       return loadNegotiationRequests(merchant.id);
     },
-    enabled: !!merchant?.id,
+    enabled: isFocused && !!merchant?.id,
     staleTime: 1000 * 60 * 5, // 5 minutes
-    // The realtime channel only replays inserts while this screen is mounted, so
+    // Realtime updates are only received while this screen is focused, so
     // always refetch on (re)mount to surface negotiations submitted while the
     // queue was backgrounded/unmounted — cached rows still render instantly.
     refetchOnMount: 'always',
@@ -165,7 +167,12 @@ export default function NegotiationsScreen() {
   // Realtime updates subscription
   useEffect(() => {
     const merchantId = merchant?.id;
-    if (!merchantId) return;
+    if (!merchantId || !isFocused) return;
+    let active = true;
+    // Refresh changes missed while this screen was hidden in the stack.
+    queryClient.invalidateQueries({
+      queryKey: ['negotiation_requests', merchantId],
+    });
 
     // Supabase Realtime supports Postgres change filters; scope by merchant to
     // avoid refetching every connected merchant on unrelated inserts.
@@ -182,6 +189,7 @@ export default function NegotiationsScreen() {
           filter: `merchant_id=eq.${merchantId}`,
         },
         () => {
+          if (!active) return;
           queryClient.invalidateQueries({
             queryKey: ['negotiation_requests', merchantId],
           });
@@ -190,9 +198,10 @@ export default function NegotiationsScreen() {
       .subscribe();
 
     return () => {
+      active = false;
       supabase.removeChannel(channel);
     };
-  }, [merchant?.id, queryClient]);
+  }, [isFocused, merchant?.id, queryClient]);
 
   const loading = isMerchantLoading || (!!merchant?.id && isRequestsLoading);
   const actionLoadingId = updateStatusMutation.isPending

@@ -1,3 +1,5 @@
+vi.mock('expo-router', () => ({ useIsFocused: () => true }));
+
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';

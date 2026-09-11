@@ -187,6 +187,8 @@ vi.mock('@/lib/supabase', () => ({
   },
 }));
 
+vi.mock('expo-crypto', () => import('node:crypto'));
+
 vi.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Error: 'error', Success: 'success' },
   notificationAsync: (...args: unknown[]) => mocks.notificationAsync(...args),

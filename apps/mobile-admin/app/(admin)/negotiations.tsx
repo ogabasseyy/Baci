@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { FlashList } from '@shopify/flash-list';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { randomUUID } from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import {
@@ -168,8 +169,10 @@ export default function NegotiationsScreen() {
 
     // Supabase Realtime supports Postgres change filters; scope by merchant to
     // avoid refetching every connected merchant on unrelated inserts.
+    // Each effect owns a fresh channel: notification navigation can mount this
+    // screen twice, and removal of a previous subscription is asynchronous.
     const channel = supabase
-      .channel(`negotiation_updates:${merchantId}`)
+      .channel(`negotiation_updates:${merchantId}:${randomUUID()}`)
       .on(
         'postgres_changes',
         {

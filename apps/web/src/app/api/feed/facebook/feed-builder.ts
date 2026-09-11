@@ -1,8 +1,4 @@
-import {
-  type ProductWithDefaultVariantLike,
-  resolveDefaultVariantSelection,
-  toGoogleListingCondition,
-} from '@baci/shared/lib';
+import { toGoogleListingCondition } from '@baci/shared/lib';
 import { buildFeedDescription } from '@/app/api/feed/google-merchant/build-feed-description';
 import {
   resolveGmcAdditionalImages,
@@ -12,16 +8,18 @@ import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';
 import { escapeXml } from '@/lib/xml-utils';
+import { buildVariantFeedItems } from '../google-merchant/build-variant-feed-items';
 import type {
   FeedMerchant,
   FeedProduct,
-  FeedVariant,
   ImageManifestMap,
 } from '../google-merchant/feed-builder';
-import { toFeedDefaultVariant } from '../google-merchant/feed-builder';
 
-const UNLIMITED_STOCK_QUANTITY = 9999;
-const FACEBOOK_TITLE_MAX_LENGTH = 150;
+import {
+  FEED_TITLE_MAX_LENGTH as FACEBOOK_TITLE_MAX_LENGTH,
+  UNLIMITED_STOCK_QUANTITY,
+} from '../google-merchant/feed-constants';
+
 const VALID_FACEBOOK_CONDITIONS = new Set([
   'new',
   'used',
@@ -51,7 +49,7 @@ function isValidFeedProduct(product: FeedProduct): boolean {
     return false;
   }
 
-  if (product.price > 0) {
+  if (Number.isFinite(product.price) && product.price > 0) {
     return true;
   }
 
@@ -73,19 +71,6 @@ function getProductStockCount(product: FeedProduct): number {
   return getEffectiveStock(product);
 }
 
-function getVariantStockCount(
-  manageStock: boolean | null | undefined,
-  variant: FeedVariant
-): number {
-  if (isUnmanagedStock(manageStock)) {
-    return UNLIMITED_STOCK_QUANTITY;
-  }
-
-  return typeof variant.stock_quantity === 'number'
-    ? Math.max(0, variant.stock_quantity)
-    : 0;
-}
-
 function toFacebookCondition(condition?: string | null) {
   const normalized = toGoogleListingCondition(condition);
   return normalized && VALID_FACEBOOK_CONDITIONS.has(normalized)
@@ -104,42 +89,6 @@ function getSkuMatrixFallbackEligibleVariants(product: FeedProduct) {
       variant.price_override ?? variant.price ?? product.price;
     return Boolean(variant.id && variant.condition && effectivePrice > 0);
   });
-}
-
-function resolveSkuMatrixFallback(product: FeedProduct) {
-  const eligibleVariants = getSkuMatrixFallbackEligibleVariants(product);
-
-  if (eligibleVariants.length === 0) {
-    return null;
-  }
-
-  const defaultSelection = resolveDefaultVariantSelection({
-    price: product.price,
-    compare_at_price: product.compare_at_price,
-    condition: product.condition,
-    manage_stock: product.manage_stock,
-    variants: eligibleVariants.map((variant) =>
-      toFeedDefaultVariant({
-        ...variant,
-        price_override: variant.price_override ?? variant.price,
-      })
-    ),
-  } satisfies ProductWithDefaultVariantLike<
-    ReturnType<typeof toFeedDefaultVariant>
-  >);
-
-  if (!defaultSelection) {
-    return null;
-  }
-
-  return {
-    availability:
-      getVariantStockCount(product.manage_stock, defaultSelection.variant) > 0
-        ? 'in stock'
-        : 'out of stock',
-    condition: toFacebookCondition(defaultSelection.condition),
-    price: defaultSelection.price,
-  };
 }
 
 function buildPriceLines(args: {
@@ -181,6 +130,7 @@ function buildItemXml(args: {
 }) {
   const lines = [
     `        <g:id>${escapeXml(args.id)}</g:id>`,
+    `        <g:item_group_id>${escapeXml(args.id)}</g:item_group_id>`,
     `        <g:title>${escapeXml(truncate(args.title, FACEBOOK_TITLE_MAX_LENGTH))}</g:title>`,
     `        <g:description>${escapeXml(args.description)}</g:description>`,
     `        <g:availability>${args.availability}</g:availability>`,
@@ -229,6 +179,18 @@ export function generateFacebookCatalogFeed(
       }
 
       const manifestEntries = imageManifest[product.id] || [];
+      if (product.variant_model === 'sku_matrix') {
+        return buildVariantFeedItems({
+          product,
+          variants: product.variants || [],
+          manifest: manifestEntries,
+          productUrl,
+          currency,
+          brand: product.brand || brandName,
+          platform: 'facebook',
+        });
+      }
+      if (!toGoogleListingCondition(product.condition)) return null;
       const primaryImageUrl = resolveGmcPrimaryImage(manifestEntries);
       if (!primaryImageUrl) {
         return null;
@@ -240,21 +202,14 @@ export function generateFacebookCatalogFeed(
             `        <g:additional_image_link>${escapeXml(url)}</g:additional_image_link>`
         )
         .join('\n');
-      const fallback =
-        product.variant_model === 'sku_matrix'
-          ? resolveSkuMatrixFallback(product)
-          : null;
       const stockCount = getProductStockCount(product);
 
       return buildItemXml({
         additionalImagesXml,
-        availability:
-          fallback?.availability ||
-          (stockCount > 0 ? 'in stock' : 'out of stock'),
+        availability: stockCount > 0 ? 'in stock' : 'out of stock',
         brandName: product.brand || brandName,
         compareAtPrice: product.compare_at_price,
-        condition:
-          fallback?.condition || toFacebookCondition(product.condition),
+        condition: toFacebookCondition(product.condition),
         currency,
         description: buildFeedDescription(product),
         googleProductCategory: product.google_product_category,
@@ -263,7 +218,7 @@ export function generateFacebookCatalogFeed(
         imageUrl: primaryImageUrl,
         link: productUrl,
         mpn: product.mpn,
-        price: fallback?.price || product.price,
+        price: product.price,
         productType: getProductType(product),
         title: product.name,
       });

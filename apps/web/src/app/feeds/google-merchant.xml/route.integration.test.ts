@@ -81,6 +81,7 @@ beforeEach(() => {
           slug: 'smartwatches',
         },
         price: 30_600,
+        condition: 'new',
         // Baci storefront feeds treat unmanaged stock as unlimited inventory.
         stock: 0,
         stock_quantity: 0,

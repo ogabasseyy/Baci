@@ -1,0 +1,2 @@
+export const UNLIMITED_STOCK_QUANTITY = 9999;
+export const FEED_TITLE_MAX_LENGTH = 150;

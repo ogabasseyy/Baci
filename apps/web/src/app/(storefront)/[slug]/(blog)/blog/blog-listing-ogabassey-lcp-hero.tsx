@@ -17,6 +17,10 @@ import { ogabasseyBlogLcpSnapshot } from './ogabassey-blog-lcp-snapshot';
  * not wait on Tailwind `text-3xl` / `text-lg` utilities. The 100svh shell is
  * not a link — only the 400px frame is — and the snapshot title stays a
  * paragraph so it cannot precede the streamed page H1.
+ *
+ * Do not paint the snapshot excerpt here. Catalog naira in that sentence sits
+ * in the first viewport, and the extra block grows the LCP text cluster on
+ * Slow-4G. Title plus date is enough unique copy for the committed frame.
  */
 export function BlogListingOgabasseyLcpHero() {
   if (!ogabasseyBlogLcpSnapshot) {
@@ -43,11 +47,6 @@ export function BlogListingOgabasseyLcpHero() {
             >
               {featuredPost.title}
             </p>
-            {featuredPost.excerpt ? (
-              <p className="ogabassey-blog-featured-story__description">
-                {featuredPost.excerpt}
-              </p>
-            ) : null}
             <time
               className="ogabassey-blog-featured-story__date"
               dateTime={featuredPost.published_at}

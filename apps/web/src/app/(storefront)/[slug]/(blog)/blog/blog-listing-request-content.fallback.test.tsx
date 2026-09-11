@@ -29,11 +29,11 @@ describe('blog listing request fallback', () => {
 
     expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
     expect(
-      screen.getByRole('region', { name: 'Loading featured story' })
+      screen.getByRole('status', { name: 'Loading blog posts' })
     ).toBeInTheDocument();
   });
 
-  it('keeps a skeleton-only searchParams fallback for other merchants', () => {
+  it('keeps a visible searchParams loading status for other merchants', () => {
     const ui = BlogPage({
       params: Promise.resolve({ slug: 'another-ogabassey-template-store' }),
       searchParams: new Promise(() => {}),
@@ -48,7 +48,7 @@ describe('blog listing request fallback', () => {
 
     expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
     expect(
-      screen.getByRole('region', { name: 'Loading featured story' })
+      screen.getByRole('status', { name: 'Loading blog posts' })
     ).toBeInTheDocument();
   });
 });

@@ -48,10 +48,13 @@ describe('blog page shell', () => {
     expect(then).not.toHaveBeenCalled();
   });
 
-  it('bugfix: pending searchParams paint the featured hero while the listing fallback still reserves space', async () => {
+  it('bugfix: pending searchParams paint the featured hero without a second listing skeleton', async () => {
     const { unmount } = render(<BlogListingFallback />);
     expect(
-      screen.getByRole('region', { name: 'Loading featured story' })
+      screen.queryByRole('region', { name: 'Loading featured story' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('status', { name: 'Loading blog posts' })
     ).toBeInTheDocument();
     expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
     unmount();
@@ -78,11 +81,14 @@ describe('blog page shell', () => {
 
     expect(screen.getByText('Root featured story')).toBeInTheDocument();
     expect(
-      screen.getByRole('region', { name: 'Loading featured story' })
+      screen.queryByRole('region', { name: 'Loading featured story' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('status', { name: 'Loading blog posts' })
     ).toBeInTheDocument();
   });
 
-  it('reserves featured-story space when the committed hero is not emitted', async () => {
+  it('keeps a visible listing status when the committed hero is not emitted', async () => {
     const params = Promise.resolve({ slug: 'other-store' });
     const committedHero = await BlogListingCommittedLcpHero({ params });
     expect(committedHero).toBeNull();
@@ -95,7 +101,10 @@ describe('blog page shell', () => {
     render(listingBoundary.props.fallback);
 
     expect(
-      screen.getByRole('region', { name: 'Loading featured story' })
+      screen.getByRole('status', { name: 'Loading blog posts' })
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('region', { name: 'Loading featured story' })
+    ).not.toBeInTheDocument();
   });
 });

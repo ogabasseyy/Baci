@@ -72,10 +72,7 @@ describe('BlogListingOgabasseyLcpHero', () => {
     expect(featuredLink.closest('.ogabassey-blog-lcp-hero')).toBe(
       document.querySelector('.ogabassey-blog-lcp-hero')
     );
-    expect(screen.getByText('Hero excerpt')).toHaveClass(
-      'ogabassey-blog-featured-story__description'
-    );
-    expect(screen.getByText('Hero excerpt')).not.toHaveClass('sr-only');
+    expect(screen.queryByText('Hero excerpt')).not.toBeInTheDocument();
     expect(
       document.querySelector('[data-cwv-lcp-copy="blog"]')
     ).toHaveTextContent('Featured listing post');

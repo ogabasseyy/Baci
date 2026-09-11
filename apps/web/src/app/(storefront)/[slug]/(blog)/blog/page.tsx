@@ -27,6 +27,9 @@ import { isUnfilteredOgabasseyBlogListing } from './is-unfiltered-ogabassey-blog
 //   soon as searchParams resolve so first-paint CSS can hide the 100svh
 //   snapshot without waiting for listing data. Do not await getCachedBlogListing
 //   in the hero — `'use cache'` in that slot postpones the image into a hole.
+// - The listing Suspense fallback must stay a short status line. A min-h-screen
+//   skeleton grid in this slot ships on the unfiltered `/blog` first HTML under
+//   the 100svh snapshot and inflated Slow-4G FCP/LCP.
 
 export function generateStaticParams(): Array<{ slug: string }> {
   return OGABASSEY_BLOG_STATIC_TENANTS.map((slug) => ({ slug }));

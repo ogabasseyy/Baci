@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import {
-  readStorefrontCoreCss,
-  readStorefrontFile,
-} from './storefront-css-partition-read';
+import { readStorefrontFile } from './storefront-css-partition-read';
 
 describe('storefront CSS partitioning (dark utilities)', () => {
   it('covers darkened OgaBassey tinted panels without changing light category links', () => {
-    const coreCss = readStorefrontCoreCss();
+    const coreCss = readStorefrontFile('storefront-core.css');
     const utilityCss = readStorefrontFile(
       'storefront-ogabassey-dark-mode-utilities.css'
     );

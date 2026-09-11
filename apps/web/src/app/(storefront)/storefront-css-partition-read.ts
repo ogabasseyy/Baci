@@ -16,20 +16,6 @@ export function readStorefrontFile(fileName: string): string {
   return readFileSync(filePath, 'utf8');
 }
 
-const CORE_SHEET_IMPORT =
-  /@import\s+['"](\.\/storefront-core-[^'"]+\.css)['"]\s*;?/g;
-
-export function readStorefrontCoreCss(): string {
-  return inlineStorefrontCoreImports(readStorefrontFile('storefront-core.css'));
-}
-
-function inlineStorefrontCoreImports(source: string): string {
-  return source.replace(CORE_SHEET_IMPORT, (_match, spec: string) => {
-    const nested = readStorefrontFile(spec.slice(2));
-    return `/* inlined ${spec} */\n${inlineStorefrontCoreImports(nested)}\n`;
-  });
-}
-
 export function readStorefrontDarkModeCss(): string {
   return [
     readStorefrontFile('storefront-ogabassey-dark-mode.css'),

@@ -111,8 +111,16 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(utilityLayout).not.toContain('storefront-eager-full-css-layout');
     expect(blogLayout).not.toContain('storefront-eager-blog-css-layout');
     expect(blogListingQuery).not.toContain('storefront-eager-blog-css-layout');
-    expect(genericHome).toContain('storefront-eager-full-css-layout');
-    expect(genericHome).not.toContain('StorefrontFullStyleLoader');
+    expect(genericHome).not.toContain('storefront-eager-full-css-layout');
+    expect(genericHome).toContain('StorefrontFullStyleLoader');
+
+    const comparePage = readStorefrontFile(
+      '[slug]/(catalog)/(listing)/compare/page.tsx'
+    );
+    expect(comparePage).not.toMatch(/^import \{ StorefrontEagerFullCssLayout/m);
+    expect(comparePage).toMatch(
+      /await import\(\s*['"]@\/app\/\(storefront\)\/storefront-eager-full-css-layout['"]/
+    );
   });
 
   it('locks committed LCP copy to the Inter fallback face without a render-blocking CSS file', () => {
@@ -314,5 +322,8 @@ describe('storefront CSS partitioning (route sheets)', () => {
       /import\s+['"]@\/app\/\(storefront\)\/storefront-chat\.css['"]/
     );
     expect(deferredChat).toMatch(/StorefrontChatStyleLoader/);
+
+    const chatLoader = readStorefrontFile('storefront-chat-style-loader.tsx');
+    expect(chatLoader).not.toContain('loadStylesheetAfterFirstInput');
   });
 });

@@ -37,7 +37,6 @@ html:has([data-storefront-shell]) *::after {
   letter-spacing: normal !important;
 }
 
-[data-cwv-lcp-copy="compare"],
 [data-cwv-lcp-copy="repair"],
 [data-cwv-lcp-copy="imei"] {
   color: #111827 !important;
@@ -58,6 +57,7 @@ html:has([data-storefront-shell]) *::after {
 }
 
 [data-cwv-lcp-copy="compare"] {
+  color: var(--store-background-text, #111827) !important;
   font-size: 1.875rem !important;
   font-weight: 700 !important;
   line-height: 2.25rem !important;
@@ -120,7 +120,6 @@ html:has([data-storefront-shell]) *::after {
   font-size: 0.875rem !important;
   font-weight: 400 !important;
   line-height: 1.5 !important;
-  margin: 0 !important;
   max-width: 36rem;
 }
 

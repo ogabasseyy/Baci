@@ -2,7 +2,7 @@
    url() or the "Inter Naira" family name in ROOT_DOCUMENT_CSS made Lantern
    treat the face as text-critical. */
 :root {
-  --font-naira: "Inter Naira", "Inter Fallback";
+  --font-naira: "Inter Naira";
 }
 
 @font-face {

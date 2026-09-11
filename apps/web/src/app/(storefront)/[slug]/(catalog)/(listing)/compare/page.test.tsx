@@ -84,6 +84,12 @@ vi.mock('./compare-page-content', () => ({
   ComparePageContent: (props: unknown) => mockComparePageContent(props),
 }));
 
+vi.mock('@/app/(storefront)/storefront-eager-full-css-layout', () => ({
+  StorefrontEagerFullCssLayout: ({ children }: { children: ReactNode }) => (
+    <div data-testid="eager-full-css">{children}</div>
+  ),
+}));
+
 type RequestScopedMerchant = NonNullable<
   Awaited<ReturnType<typeof getRequestScopedMerchant>>
 >;
@@ -230,6 +236,9 @@ describe('compare index page runtime', () => {
     expect(
       document.querySelector('[data-compare-category-page]')
     ).not.toBeNull();
+    expect(screen.getByTestId('eager-full-css')).toContainElement(
+      screen.getByText('Compare category content')
+    );
     expect(
       mockCategoryPageRoute.mock.calls[0]?.[0].titleHeading
     ).toBeUndefined();
@@ -277,5 +286,6 @@ describe('compare index page runtime', () => {
 
     expect(screen.getByText('Compare index content')).toBeInTheDocument();
     expect(document.querySelector('[data-compare-category-page]')).toBeNull();
+    expect(screen.queryByTestId('eager-full-css')).not.toBeInTheDocument();
   });
 });

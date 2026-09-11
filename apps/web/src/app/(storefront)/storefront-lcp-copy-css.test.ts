@@ -38,6 +38,12 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
       'body:has([data-compare-hub-intro-resolved]) [data-compare-hub-intro-pending]'
     );
     expect(STOREFRONT_LCP_COPY_CSS).toContain('[data-cwv-lcp-support]');
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /\[data-cwv-lcp-copy="compare"\]\s*\{[^}]*color: var\(--store-background-text, #111827\) !important/
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).not.toMatch(
+      /\[data-cwv-lcp-support\]\s*\{[^}]*margin:\s*0\s*!important/
+    );
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'body:has([data-blog-listing-filtered]) [data-blog-lcp-hero]'
     );

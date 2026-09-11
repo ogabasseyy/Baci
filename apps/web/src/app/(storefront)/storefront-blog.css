@@ -237,4 +237,6 @@ body:has([data-blog-listing-filtered]) [data-blog-lcp-hero] {
 @source "../../components/storefront/ogabassey/seo/informational-cluster-index.tsx";
 @source "../../components/storefront/ogabassey/components/AdUnit.tsx";
 @source "../../components/storefront/ogabassey/components/ad-slot-shell.tsx";
+@source "../../components/ui/badge.tsx";
+@source "../../components/ui/card.tsx";
 /* stylelint-enable scss/at-rule-no-unknown */

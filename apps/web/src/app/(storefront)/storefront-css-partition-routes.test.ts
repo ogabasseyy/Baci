@@ -142,6 +142,12 @@ describe('storefront CSS partitioning (route sheets)', () => {
 
     expect(blogCss).not.toMatch(/components\/blog\/renderer/);
     expect(blogCss).toMatch(/ogabassey-blog-lcp-hero/);
+    expect(blogCss).toMatch(
+      /@source\s+["'][^"']*components\/ui\/badge\.tsx["']/
+    );
+    expect(blogCss).toMatch(
+      /@source\s+["'][^"']*components\/ui\/card\.tsx["']/
+    );
     expect(blogPostCss).toMatch(/components\/blog\/renderer/);
     expect(blogPostCss).toMatch(/@source\s+["'][^"']*blog\/\[postSlug\]["']/);
   });

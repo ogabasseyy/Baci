@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockFullStorefrontCssImport, mockLoadStylesheetAfterWindowLoad } =
@@ -24,6 +25,12 @@ vi.mock('@/app/(storefront)/load-stylesheet-after-window-load', () => ({
   ) => mockLoadStylesheetAfterWindowLoad(load, errorMessage),
 }));
 
+vi.mock('@/app/(storefront)/storefront-eager-full-css-layout', () => ({
+  StorefrontEagerFullCssLayout: ({ children }: { children: ReactNode }) => (
+    <div data-testid="eager-full-css">{children}</div>
+  ),
+}));
+
 import StorefrontFullCssLayout, { unstable_instant } from './layout';
 
 function stubMatchMedia(matches: boolean) {
@@ -45,15 +52,17 @@ describe('utility StorefrontFullCssLayout', () => {
     expect(unstable_instant).toBe(false);
   });
 
-  it('keeps the full storefront stylesheet off a mobile LCP path until the first input', async () => {
+  it('keeps the full storefront stylesheet off a mobile LCP path until the first input for static tenants', async () => {
     expect(mockFullStorefrontCssImport).not.toHaveBeenCalled();
 
     render(
-      <StorefrontFullCssLayout>
-        <main>Utility content</main>
-      </StorefrontFullCssLayout>
+      await StorefrontFullCssLayout({
+        children: <main>Utility content</main>,
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
     );
 
+    expect(screen.queryByTestId('eager-full-css')).not.toBeInTheDocument();
     expect(mockFullStorefrontCssImport).not.toHaveBeenCalled();
     expect(mockLoadStylesheetAfterWindowLoad).not.toHaveBeenCalled();
     window.dispatchEvent(new Event('pointerdown'));
@@ -63,23 +72,37 @@ describe('utility StorefrontFullCssLayout', () => {
     });
   });
 
-  it('starts the full storefront stylesheet on desktop during render', () => {
+  it('starts the full storefront stylesheet on desktop during render for static tenants', async () => {
     stubMatchMedia(true);
 
     render(
-      <StorefrontFullCssLayout>
-        <main>Utility content</main>
-      </StorefrontFullCssLayout>
+      await StorefrontFullCssLayout({
+        children: <main>Utility content</main>,
+        params: Promise.resolve({ slug: 'ogabassey.com' }),
+      })
     );
 
     expect(mockLoadStylesheetAfterWindowLoad).toHaveBeenCalledOnce();
   });
 
-  it('passes children through the storefront full-css route group', () => {
+  it('eagerly styles utility routes for non-static tenants', async () => {
     render(
-      <StorefrontFullCssLayout>
-        <main>Utility content</main>
-      </StorefrontFullCssLayout>
+      await StorefrontFullCssLayout({
+        children: <main>Other utility</main>,
+        params: Promise.resolve({ slug: 'other-shop' }),
+      })
+    );
+
+    expect(screen.getByTestId('eager-full-css')).toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveTextContent('Other utility');
+  });
+
+  it('passes children through the storefront full-css route group', async () => {
+    render(
+      await StorefrontFullCssLayout({
+        children: <main>Utility content</main>,
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
     );
 
     expect(screen.getByRole('main')).toHaveTextContent('Utility content');

@@ -1,12 +1,19 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const mockNairaCssImport = vi.fn();
+
 vi.mock('next/font/google', () => ({
   Inter: () => ({
     className: 'inter-class',
     variable: 'font-sans-inter',
   }),
 }));
+
+vi.mock('@/app/inter-naira-font.css', () => {
+  mockNairaCssImport();
+  return {};
+});
 
 const { AppSansFont } = await import('./app-sans-font');
 
@@ -25,8 +32,17 @@ describe('AppSansFont', () => {
 
     expect(screen.getByText('Dashboard copy').parentElement).toHaveClass(
       'font-sans',
-      'font-sans-inter'
+      'font-sans-inter',
+      'font-naira'
     );
-    expect(document.body).toHaveClass('font-sans', 'font-sans-inter');
+    expect(document.body).toHaveClass(
+      'font-sans',
+      'font-sans-inter',
+      'font-naira'
+    );
+  });
+
+  it('loads the naira face from the app font scope instead of first-paint CSS', () => {
+    expect(mockNairaCssImport).toHaveBeenCalled();
   });
 });

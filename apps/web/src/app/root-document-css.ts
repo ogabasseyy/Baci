@@ -2,8 +2,8 @@
  * First-paint document CSS that must not become a render-blocking stylesheet.
  * next/font Inter @font-face (even display:optional) stayed in a linked sheet
  * and Lantern still modeled a ~3s text LCP. Keep Inter Fallback + skip-link here.
- * Do not put a woff2 `url()` in this string — Lantern treats it as LCP-critical
- * even when unicode-range does not match the heading and Chrome never fetches it.
+ * Do not put a woff2 `url()` or the "Inter Naira" family name in this string —
+ * Lantern treats either as text-critical even when Chrome never fetches the face.
  */
 export const ROOT_DOCUMENT_CSS = `
 @font-face {
@@ -17,11 +17,12 @@ export const ROOT_DOCUMENT_CSS = `
 
 :root {
   --font-sans: "Inter Fallback", Arial, Helvetica, sans-serif;
-  --font-naira: "Inter Naira", "Inter Fallback";
 }
 
-html, body {
-  font-family: "Inter Fallback", Arial, Helvetica, sans-serif;
+@layer base {
+  html, body {
+    font-family: "Inter Fallback", Arial, Helvetica, sans-serif;
+  }
 }
 
 .baci-skip-link {

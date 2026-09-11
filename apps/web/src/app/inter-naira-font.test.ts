@@ -11,6 +11,7 @@ const css = readFileSync(
 describe('inter-naira-font.css', () => {
   it('declares the unicode-range naira face without putting it on first-paint CSS', () => {
     expect(css).toContain('font-family: "Inter Naira"');
+    expect(css).toContain('--font-naira:');
     expect(css).toContain('url("/fonts/inter-naira.woff2")');
     expect(css).toContain('unicode-range: U+20A6');
     expect(css).toContain('.font-naira');

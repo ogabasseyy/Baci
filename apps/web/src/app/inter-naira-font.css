@@ -1,5 +1,10 @@
 /* Metric-compatible ₦ subset. Keep this off first-paint LCP sheets — a woff2
-   url() in ROOT_DOCUMENT_CSS made Lantern treat the face as text-critical. */
+   url() or the "Inter Naira" family name in ROOT_DOCUMENT_CSS made Lantern
+   treat the face as text-critical. */
+:root {
+  --font-naira: "Inter Naira", "Inter Fallback";
+}
+
 @font-face {
   font-family: "Inter Naira";
   src: url("/fonts/inter-naira.woff2") format("woff2");

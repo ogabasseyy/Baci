@@ -6,6 +6,9 @@ describe('ROOT_DOCUMENT_CSS', () => {
     expect(ROOT_DOCUMENT_CSS).toContain('font-family: "Inter Fallback"');
     expect(ROOT_DOCUMENT_CSS).toContain('src: local(Arial)');
     expect(ROOT_DOCUMENT_CSS).toContain('--font-sans:');
+    expect(ROOT_DOCUMENT_CSS).toContain('@layer base');
+    expect(ROOT_DOCUMENT_CSS).not.toContain('Inter Naira');
+    expect(ROOT_DOCUMENT_CSS).not.toContain('--font-naira');
     expect(ROOT_DOCUMENT_CSS).not.toMatch(/font-display:\s*swap/);
     expect(ROOT_DOCUMENT_CSS).not.toMatch(/url\([^)]+\.woff2\)/);
   });

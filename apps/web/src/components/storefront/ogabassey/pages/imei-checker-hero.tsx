@@ -9,8 +9,11 @@ const TRUST_ROW_ITEMS = [
 /** Static hero/trust-pill copy block. Verbatim from the original entry.tsx — preserved for SEO/conversion. */
 export function ImeiCheckerHero() {
   return (
-    <>
-      <div className="mx-auto mb-8 max-w-3xl text-center" data-cwv-lcp-fold="" data-imei-lcp-hero="">
+    <div data-imei-lcp-hero="">
+      <div
+        className="mx-auto mb-8 max-w-3xl text-center"
+        data-cwv-lcp-fold=""
+      >
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[var(--store-primary)]/10 bg-[var(--store-primary)]/5 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-[var(--store-primary)]">
           <ShieldCheck size={14} />
           Trusted by 10,000+ Buyers
@@ -41,6 +44,6 @@ export function ImeiCheckerHero() {
           ))}
         </div>
       </div>
-    </>
+    </div>
   );
 }

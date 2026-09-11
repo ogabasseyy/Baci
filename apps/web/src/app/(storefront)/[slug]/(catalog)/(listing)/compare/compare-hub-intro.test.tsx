@@ -19,6 +19,9 @@ describe('CompareHubIntro', () => {
       document.querySelector('[data-cwv-lcp-copy="compare"]')
     ).toHaveTextContent('Compare products');
     expect(document.querySelector('[data-cwv-lcp-fold]')).toBeInTheDocument();
+    expect(document.querySelector('[data-cwv-lcp-fold]')).not.toContainElement(
+      screen.getByText(/Browse Ogabassey product comparison pages by category/)
+    );
   });
 
   it('marks generic copy as pending when a streamed description will replace it', () => {

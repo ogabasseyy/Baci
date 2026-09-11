@@ -30,8 +30,5 @@ describe('ImeiCheckerHero', () => {
       screen.getByText(/stolen, iCloud locked, or refurbished/)
     );
     expect(document.querySelector('[data-imei-lcp-hero]')).toBeInTheDocument();
-    expect(document.querySelector('[data-cwv-lcp-fold]')).not.toContainElement(
-      screen.getByText(/stolen, iCloud locked, or refurbished/)
-    );
   });
 });

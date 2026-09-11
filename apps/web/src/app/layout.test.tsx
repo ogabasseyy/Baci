@@ -72,6 +72,7 @@ describe('RootLayout', () => {
 
     const css = getRootDocumentCss();
     expect(css).toContain('Inter Fallback');
+    expect(css).not.toContain('Inter Naira');
     expect(css).not.toMatch(/url\([^)]+\.woff2\)/);
     expect(document.body.className).not.toContain('font-inter');
     expect(document.body.className).not.toContain('font-naira');

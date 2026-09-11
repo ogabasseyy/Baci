@@ -86,8 +86,11 @@ describe('feed variant integrity', () => {
     );
     expect(xml).not.toContain('<item>');
   });
-  it('keeps valid legacy offers when the parent condition is absent', () => {
-    const xml = generateGoogleMerchantFeed(
+  it.each([
+    ['Google', generateGoogleMerchantFeed],
+    ['Facebook', generateFacebookCatalogFeed],
+  ] as const)('%s keeps valid legacy offers when the parent condition is absent', (_label, build) => {
+    const xml = build(
       [
         {
           ...product,

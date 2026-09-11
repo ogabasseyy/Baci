@@ -14,11 +14,11 @@ import type {
   FeedProduct,
   ImageManifestMap,
 } from '../google-merchant/feed-builder';
-
 import {
   FEED_TITLE_MAX_LENGTH as FACEBOOK_TITLE_MAX_LENGTH,
   UNLIMITED_STOCK_QUANTITY,
 } from '../google-merchant/feed-constants';
+import { getFeedStockCount } from '../google-merchant/feed-stock';
 
 const VALID_FACEBOOK_CONDITIONS = new Set([
   'new',
@@ -52,6 +52,17 @@ function isValidFeedProduct(product: FeedProduct): boolean {
   if (Number.isFinite(product.price) && product.price > 0) {
     return true;
   }
+  if (
+    product.variant_model !== 'sku_matrix' &&
+    product.offers?.some(
+      (offer) =>
+        offer.id &&
+        toGoogleListingCondition(offer.condition) &&
+        Number.isFinite(offer.price) &&
+        offer.price > 0
+    )
+  )
+    return true;
 
   return (
     product.variant_model === 'sku_matrix' &&
@@ -120,6 +131,7 @@ function buildItemXml(args: {
   description: string;
   googleProductCategory?: string;
   id: string;
+  groupId?: string;
   imageUrl: string;
   link: string;
   mpn?: string;
@@ -130,7 +142,7 @@ function buildItemXml(args: {
 }) {
   const lines = [
     `        <g:id>${escapeXml(args.id)}</g:id>`,
-    `        <g:item_group_id>${escapeXml(args.id)}</g:item_group_id>`,
+    `        <g:item_group_id>${escapeXml(args.groupId || args.id)}</g:item_group_id>`,
     `        <g:title>${escapeXml(truncate(args.title, FACEBOOK_TITLE_MAX_LENGTH))}</g:title>`,
     `        <g:description>${escapeXml(args.description)}</g:description>`,
     `        <g:availability>${args.availability}</g:availability>`,
@@ -190,7 +202,6 @@ export function generateFacebookCatalogFeed(
           platform: 'facebook',
         });
       }
-      if (!toGoogleListingCondition(product.condition)) return null;
       const primaryImageUrl = resolveGmcPrimaryImage(manifestEntries);
       if (!primaryImageUrl) {
         return null;
@@ -204,7 +215,7 @@ export function generateFacebookCatalogFeed(
         .join('\n');
       const stockCount = getProductStockCount(product);
 
-      return buildItemXml({
+      const baseArgs = {
         additionalImagesXml,
         availability: stockCount > 0 ? 'in stock' : 'out of stock',
         brandName: product.brand || brandName,
@@ -221,7 +232,39 @@ export function generateFacebookCatalogFeed(
         price: product.price,
         productType: getProductType(product),
         title: product.name,
-      });
+      };
+      const base =
+        toGoogleListingCondition(product.condition) &&
+        Number.isFinite(product.price) &&
+        product.price > 0
+          ? buildItemXml(baseArgs)
+          : '';
+      const offers = (product.offers || [])
+        .filter(
+          (offer) =>
+            offer.id &&
+            toGoogleListingCondition(offer.condition) &&
+            Number.isFinite(offer.price) &&
+            offer.price > 0
+        )
+        .map((offer) => {
+          const url = new URL(productUrl);
+          url.searchParams.set('condition', offer.condition);
+          return buildItemXml({
+            ...baseArgs,
+            id: offer.id,
+            groupId: product.id,
+            price: offer.price,
+            compareAtPrice: undefined,
+            condition: toFacebookCondition(offer.condition),
+            availability:
+              getFeedStockCount(product, offer) > 0
+                ? 'in stock'
+                : 'out of stock',
+            link: url.toString(),
+          });
+        });
+      return [base, ...offers].filter(Boolean).join('\n');
     })
     .filter(Boolean)
     .join('\n');

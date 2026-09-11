@@ -28,8 +28,14 @@ interface VariantFeedInput {
 const text = (value: unknown) =>
   typeof value === 'string' ? value.trim() : '';
 const color = (variant: FeedVariant) => {
-  const name = text(variant.attributes?.color).toLowerCase();
-  const hex = text(variant.attributes?.color_hex).toLowerCase();
+  const attributes = Object.fromEntries(
+    Object.entries(variant.attributes || {}).map(([key, value]) => [
+      key.trim().toLowerCase(),
+      value,
+    ])
+  );
+  const name = text(attributes.color || attributes.colour).toLowerCase();
+  const hex = text(attributes.color_hex).toLowerCase();
   return name ? `color:${name}` : hex ? `color_hex:${hex}` : '';
 };
 
@@ -70,7 +76,7 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
       url.searchParams.set('variantId', variant.id);
       url.searchParams.set(
         'condition',
-        condition === 'refurbished' ? 'open_box' : condition
+        variant.condition === 'open_box' ? 'open_box' : condition
       );
       for (const key of Object.keys(attributes)
         .filter((key) => !['gtin', 'mpn'].includes(key))
@@ -100,11 +106,13 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
         ...[...titleKeys, ...remainingKeys]
           .map((key) => attributes[key])
           .filter(Boolean),
-        condition === 'refurbished'
+        variant.condition === 'open_box'
           ? 'Open Box'
-          : condition === 'used'
-            ? 'Used'
-            : 'New',
+          : condition === 'refurbished'
+            ? 'Refurbished'
+            : condition === 'used'
+              ? 'Used'
+              : 'New',
       ].join(' - ');
       const maxTitle = FEED_TITLE_MAX_LENGTH;
       const boundedTitle =

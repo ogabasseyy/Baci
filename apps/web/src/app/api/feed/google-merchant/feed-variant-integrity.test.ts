@@ -46,9 +46,9 @@ const images = {
 
 describe('feed variant integrity', () => {
   it.each([
-    generateGoogleMerchantFeed,
-    generateFacebookCatalogFeed,
-  ])('does not label a legacy product with a blank condition as new', (build) => {
+    ['Google', generateGoogleMerchantFeed],
+    ['Facebook', generateFacebookCatalogFeed],
+  ] as const)('%s does not label a legacy product with a blank condition as new', (_label, build) => {
     const xml = build(
       [{ ...product, variant_model: 'legacy', condition: undefined }],
       merchant,
@@ -56,6 +56,57 @@ describe('feed variant integrity', () => {
       { phone: [{ ...images.phone[0], variant_id: null }] }
     );
     expect(xml).not.toContain('<item>');
+  });
+  it('keeps valid legacy offers when the parent condition is absent', () => {
+    const xml = generateGoogleMerchantFeed(
+      [
+        {
+          ...product,
+          variant_model: 'legacy',
+          condition: null,
+          offers: [
+            {
+              id: 'offer-new',
+              condition: 'new',
+              price: 500,
+              stock_quantity: 2,
+            },
+          ],
+        },
+      ],
+      merchant,
+      'https://example.com',
+      { phone: [{ ...images.phone[0], variant_id: null }] }
+    );
+    expect(xml).toContain('<g:id>offer-new</g:id>');
+    expect(xml).not.toContain('<g:id>phone</g:id>');
+  });
+  it.each([
+    0, 100,
+  ])('retains only positive-priced out-of-stock family rows (price %s)', (price) => {
+    const xml = generateGoogleMerchantFeed(
+      [
+        {
+          ...product,
+          manage_stock: true,
+          variants: [
+            {
+              ...product.variants?.[0],
+              id: 'used',
+              stock_quantity: 0,
+              price_override: price,
+            },
+          ],
+        },
+      ],
+      { ...merchant, gmc_variants_enabled: false },
+      'https://example.com',
+      images
+    );
+    if (price > 0) {
+      expect(xml).toContain('<g:availability>out_of_stock</g:availability>');
+      expect(xml).toContain('variantId=used');
+    } else expect(xml).not.toContain('<item>');
   });
   it('does not borrow a parent discount or identifiers for a SKU', () => {
     const xml = generateGoogleMerchantFeed(

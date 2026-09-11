@@ -206,14 +206,23 @@ export async function CompareIndexRuntime(props: CompareIndexPageProps) {
     }
   }
 
-  return <ComparePageContent omitIntro {...props} />;
+  return (
+    <div className="bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20">
+      <div className="mx-auto max-w-[1400px] px-4 md:px-6">
+        <ComparePageContent omitIntro {...props} />
+      </div>
+    </div>
+  );
 }
+
+const COMPARE_HUB_SHELL_CLASS =
+  'min-h-screen bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20 pt-6';
 
 export default function CompareIndexPage(props: CompareIndexPageProps) {
   return (
-    <main className="min-h-screen bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20 pt-6">
-      <div className="mx-auto max-w-[1400px] px-4 md:px-6">
-        <div data-compare-hub-chrome="">
+    <>
+      <main className={COMPARE_HUB_SHELL_CLASS} data-compare-hub-chrome="">
+        <div className="mx-auto max-w-[1400px] px-4 md:px-6">
           <nav
             aria-label="Breadcrumb"
             className="flex items-center gap-2 text-sm text-store-background-text/55"
@@ -232,10 +241,16 @@ export default function CompareIndexPage(props: CompareIndexPageProps) {
           </nav>
           <CompareHubIntro />
         </div>
-        <Suspense fallback={<CompareIndexFallback hideChrome />}>
-          <CompareIndexRuntime {...props} />
-        </Suspense>
-      </div>
-    </main>
+      </main>
+      <Suspense
+        fallback={
+          <div className="mx-auto max-w-[1400px] px-4 md:px-6">
+            <CompareIndexFallback hideChrome />
+          </div>
+        }
+      >
+        <CompareIndexRuntime {...props} />
+      </Suspense>
+    </>
   );
 }

@@ -16,7 +16,6 @@ import {
   Zap,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect } from 'react';
 import { RepairDevicePicker } from '@/components/storefront/repairs/RepairDevicePicker';
 import { asRoute } from '@/lib/routes';
 import { RepairsLabHero } from './repairs-lab-hero';
@@ -41,10 +40,6 @@ export function OgabasseyV2Repairs({
   omitHero = false,
   storeSlug,
 }: OgabasseyV2RepairsProps) {
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
-
   const services = [
     {
       title: 'Screen Renewal',

@@ -81,6 +81,15 @@ describe('OgabasseyV2Repairs', () => {
     expect(screen.queryByTestId('device-picker')).not.toBeInTheDocument();
   });
 
+  it('does not reset window scroll when streamed repairs content mounts', () => {
+    const scrollTo = vi.fn();
+    window.scrollTo = scrollTo;
+
+    render(<OgabasseyV2Repairs omitHero />);
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
   it('renders the catalogue-driven device picker instead of the static services when groups are provided', () => {
     const groups = [
       {

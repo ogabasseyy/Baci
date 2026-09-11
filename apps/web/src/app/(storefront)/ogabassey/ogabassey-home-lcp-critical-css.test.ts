@@ -9,6 +9,12 @@ describe('OGABASSEY_HOME_LCP_CRITICAL_CSS', () => {
     expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
       '@media (max-width: 767px)'
     );
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
+      '[data-ogabassey-mobile-hero]'
+    );
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
+      '[data-ogabassey-desktop-hero],\n  [data-ogabassey-empty-desktop-hero] {\n    display: grid !important;'
+    );
   });
 
   it('clips a desktop-only document title without waiting on Tailwind .sr-only', () => {

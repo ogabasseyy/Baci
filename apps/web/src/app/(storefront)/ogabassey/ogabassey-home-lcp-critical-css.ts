@@ -17,10 +17,28 @@ footer[aria-label="Semantic storefront footer"] {
   footer[aria-label="Semantic storefront footer"] {
     min-height: 910px;
   }
+  [data-ogabassey-mobile-hero],
+  [data-ogabassey-empty-mobile-hero],
+  [data-ogabassey-mobile-hero-bg-extension] {
+    display: none !important;
+  }
+  [data-ogabassey-desktop-hero],
+  [data-ogabassey-empty-desktop-hero] {
+    display: grid !important;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    order: 2;
+  }
 }
 @media (min-width: 1024px) {
   footer[aria-label="Semantic storefront footer"] {
     min-height: 770px;
+  }
+  [data-ogabassey-desktop-hero],
+  [data-ogabassey-empty-desktop-hero] {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    height: 540px;
   }
 }
 .ogabassey-home-lcp-root {

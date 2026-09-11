@@ -1,44 +1,24 @@
 import { render, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const {
-  mockCoreCssImport,
-  mockHomeCssImport,
-  mockLoadStylesheetAfterWindowLoad,
-} = vi.hoisted(() => {
-  const createImportMock = () => {
-    const state = {
-      load: vi.fn(),
-    };
-
-    return {
-      factory: () => {
-        state.load();
-        return {};
-      },
-      state,
-    };
-  };
-
-  return {
-    mockCoreCssImport: createImportMock(),
-    mockHomeCssImport: createImportMock(),
-    mockLoadStylesheetAfterWindowLoad: vi.fn(
-      (load: () => Promise<unknown>, _errorMessage: string) => {
-        void load();
+const { mockLoadOgabasseyHomeStyles, mockLoadStylesheetAfterFirstInput } =
+  vi.hoisted(() => ({
+    mockLoadOgabasseyHomeStyles: vi.fn(() => Promise.resolve({})),
+    mockLoadStylesheetAfterFirstInput: vi.fn(
+      (_load: () => Promise<unknown>, _errorMessage: string) => {
         return () => undefined;
       }
     ),
-  };
-});
+  }));
 
-vi.mock('@/app/(storefront)/storefront-core.css', mockCoreCssImport.factory);
-vi.mock('@/app/(storefront)/storefront-home.css', mockHomeCssImport.factory);
-vi.mock('@/app/(storefront)/load-stylesheet-after-window-load', () => ({
-  loadStylesheetAfterWindowLoad: (
+vi.mock('./load-ogabassey-home-styles', () => ({
+  loadOgabasseyHomeStyles: () => mockLoadOgabasseyHomeStyles(),
+}));
+vi.mock('@/app/(storefront)/load-stylesheet-after-first-input', () => ({
+  loadStylesheetAfterFirstInput: (
     load: () => Promise<unknown>,
     errorMessage: string
-  ) => mockLoadStylesheetAfterWindowLoad(load, errorMessage),
+  ) => mockLoadStylesheetAfterFirstInput(load, errorMessage),
 }));
 
 import { OgabasseyHomeStyleLoader } from './ogabassey-home-style-loader';
@@ -59,34 +39,25 @@ function stubMatchMedia(matches: boolean) {
 
 describe('OgabasseyHomeStyleLoader', () => {
   beforeEach(() => {
-    mockCoreCssImport.state.load.mockClear();
-    mockHomeCssImport.state.load.mockClear();
-    mockLoadStylesheetAfterWindowLoad.mockClear();
+    mockLoadOgabasseyHomeStyles.mockClear();
+    mockLoadStylesheetAfterFirstInput.mockClear();
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('does not load homepage CSS on a mobile viewport until the first input', async () => {
+  it('does not load homepage CSS on a mobile viewport until the first input', () => {
     stubMatchMedia(false);
     render(<OgabasseyHomeStyleLoader />);
 
-    expect(mockCoreCssImport.state.load).not.toHaveBeenCalled();
-    expect(mockHomeCssImport.state.load).not.toHaveBeenCalled();
-    expect(mockLoadStylesheetAfterWindowLoad).not.toHaveBeenCalled();
-    window.dispatchEvent(new Event('pointerdown'));
-
-    await waitFor(() => {
-      expect(mockCoreCssImport.state.load).toHaveBeenCalledOnce();
-      expect(mockHomeCssImport.state.load).toHaveBeenCalledOnce();
-    });
+    expect(mockLoadOgabasseyHomeStyles).not.toHaveBeenCalled();
+    expect(mockLoadStylesheetAfterFirstInput).toHaveBeenCalledOnce();
   });
 
-  it('starts homepage CSS on desktop during render', () => {
+  it('starts homepage CSS on desktop during effect instead of waiting for window load', async () => {
     stubMatchMedia(true);
     render(<OgabasseyHomeStyleLoader />);
 
-    expect(mockLoadStylesheetAfterWindowLoad).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(mockLoadOgabasseyHomeStyles).toHaveBeenCalledOnce();
+    });
+    expect(mockLoadStylesheetAfterFirstInput).not.toHaveBeenCalled();
   });
 });

@@ -105,16 +105,15 @@ describe('PlatformSchemas JSON-LD output', () => {
   });
 });
 
-describe('Baci landing page font', () => {
-  it('wraps the public landing page with AppSansFont instead of the storefront Arial fallback', () => {
+describe('Baci landing page route', () => {
+  it('keeps page.tsx as metadata and re-exports the split landing route', () => {
     const source = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), 'page.tsx'),
       'utf8'
     );
 
-    expect(source).toContain(
-      "import { AppSansFont } from '@/app/app-sans-font'"
-    );
-    expect(source).toMatch(/<AppSansFont>\s*<AppBody showPlatformAnalytics>/);
+    expect(source).toContain("export { default } from './landing-page-route'");
+    expect(source).not.toContain('AppSansFont');
+    expect(source.split('\n').length).toBeLessThanOrEqual(300);
   });
 });

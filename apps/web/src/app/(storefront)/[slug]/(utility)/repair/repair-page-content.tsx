@@ -63,6 +63,7 @@ export async function RepairPageContent({
 
   const wizard = (
     <>
+      <RepairBookingPrepSection />
       <div className="overflow-hidden rounded-xl border border-store-border bg-store-background-text/5 shadow-sm">
         <RepairBookingWizard
           merchantId={merchant.id}
@@ -71,7 +72,6 @@ export async function RepairPageContent({
           preselection={preselection}
         />
       </div>
-      <RepairBookingPrepSection />
     </>
   );
 

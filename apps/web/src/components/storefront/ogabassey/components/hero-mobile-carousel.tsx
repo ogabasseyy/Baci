@@ -112,7 +112,10 @@ export function HeroMobileCarousel({ slides }: HeroMobileCarouselProps) {
   }
 
   return (
-    <div className={HERO_MOBILE_WRAPPER_CLASSES}>
+    <div
+      className={HERO_MOBILE_WRAPPER_CLASSES}
+      data-ogabassey-mobile-hero="true"
+    >
       {/** biome-ignore lint/a11y/noStaticElementInteractions: swipe gestures augment the dot/link controls; keyboard users use the buttons below. */}
       <div
         aria-label="Featured launch product carousel"

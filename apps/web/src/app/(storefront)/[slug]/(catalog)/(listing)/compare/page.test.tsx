@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { Suspense } from 'react';
@@ -219,6 +222,39 @@ describe('compare index page runtime', () => {
     expect(
       mockCategoryPageRoute.mock.calls[0]?.[0].titleHeading
     ).toBeUndefined();
+  });
+
+  it('renders a compare category outside the hub max-width container', async () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'page.tsx'),
+      'utf8'
+    );
+    const hubChrome = source.indexOf('data-compare-hub-chrome');
+    const hubMainClose = source.indexOf('</main>', hubChrome);
+    const runtime = source.indexOf('<CompareIndexRuntime');
+
+    expect(hubChrome).toBeGreaterThan(-1);
+    expect(runtime).toBeGreaterThan(hubMainClose);
+
+    vi.mocked(getCachedCategories).mockResolvedValue([
+      {
+        ...categories[0],
+        name: 'Compare',
+        slug: 'compare',
+      },
+    ]);
+
+    render(
+      await CompareIndexRuntime({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+
+    const category = screen.getByText('Compare category content');
+    expect(category.closest('.max-w-\\[1400px\\]')).toBeNull();
+    expect(
+      document.querySelector('[data-compare-category-page]')
+    ).not.toBeNull();
   });
 
   it('does not mark the hub as a category page when compare is not a category', async () => {

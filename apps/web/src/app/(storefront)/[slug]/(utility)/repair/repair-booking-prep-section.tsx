@@ -1,6 +1,6 @@
 export function RepairBookingPrepSection() {
   return (
-    <section className="mt-10 space-y-3 text-left">
+    <section className="mb-10 space-y-3 text-left">
       <h2 className="text-xl font-semibold text-store-background-text">
         Before you book a repair
       </h2>

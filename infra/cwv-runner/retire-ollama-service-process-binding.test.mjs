@@ -19,7 +19,7 @@ test('exempts only the reviewed service process when argv is duplicated', async 
     );
     const { stdout } = await execFileAsync('sh', [
       '-c',
-      `. "$1"; init_temp_root; trap cleanup_temp EXIT; APPROVED_OLLAMA_PID=41; APPROVED_OLLAMA_PROCESS_IDENTITY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; deps='[]'; consumer_counts='[]'; consumer_evidence='[]'; record_consumers running-processes "$2"; printf '%s\n' "$consumer_counts"`,
+      `RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; init_temp_root; trap cleanup_temp EXIT; APPROVED_OLLAMA_PID=41; APPROVED_OLLAMA_PROCESS_IDENTITY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; deps='[]'; consumer_counts='[]'; consumer_evidence='[]'; record_consumers running-processes "$2"; printf '%s\n' "$consumer_counts"`,
       'retire-ollama-service-process-binding-test',
       script.pathname,
       processes,
@@ -54,7 +54,7 @@ test('refuses a replaced loaded unit before stop or disable mutates it', async (
     await assert.rejects(
       execFileAsync('sh', [
         '-c',
-        `. "$1"; init_temp_root; trap cleanup_temp EXIT; RECEIPT=$2; CURRENT=$3; MUTATIONS=$5
+        `RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; init_temp_root; trap cleanup_temp EXIT; RECEIPT=$2; CURRENT=$3; MUTATIONS=$5
 collect() { cp "$CURRENT" "$1"; }
 systemctl() { case "$1" in stop|disable) printf '%s\n' "$*" >>"$MUTATIONS";; is-active|is-enabled) return 1;; *) return 64;; esac; }
 revalidate_before disable_unit

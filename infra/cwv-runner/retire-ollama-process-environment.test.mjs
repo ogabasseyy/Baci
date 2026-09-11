@@ -63,7 +63,7 @@ test('classifies a generic live process whose lifetime-bound environment referen
       'sh',
       [
         '-c',
-        '. "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; [ "$(id -u):$(id -g)" = "$RETIRE_OLLAMA_EXPECT_TEST_ID" ] || exit 79; init_temp_root; trap cleanup_temp EXIT; deps="[]"; consumer_counts=$(jq -cn \'[{surface:"running-processes",matchCount:0}]\'); consumer_evidence="[]"; record_running_process_environments "$2"; printf "%s\\n%s\\n%s\\n" "$consumer_counts" "$consumer_evidence" "$deps"',
+        'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; [ "$(id -u):$(id -g)" = "$RETIRE_OLLAMA_EXPECT_TEST_ID" ] || exit 79; init_temp_root; trap cleanup_temp EXIT; deps="[]"; consumer_counts=$(jq -cn \'[{surface:"running-processes",matchCount:0}]\'); consumer_evidence="[]"; record_running_process_environments "$2"; printf "%s\\n%s\\n%s\\n" "$consumer_counts" "$consumer_evidence" "$deps"',
         'retire-ollama-process-environment-test',
         script.pathname,
         processes,
@@ -111,7 +111,7 @@ test('fails closed when a saved generic process lacks lifetime evidence', async 
         'sh',
         [
           '-c',
-          '. "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; init_temp_root; trap cleanup_temp EXIT; deps="[]"; consumer_counts=$(jq -cn \'[{surface:"running-processes",matchCount:0}]\'); consumer_evidence="[]"; record_running_process_environments "$2"',
+          'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; init_temp_root; trap cleanup_temp EXIT; deps="[]"; consumer_counts=$(jq -cn \'[{surface:"running-processes",matchCount:0}]\'); consumer_evidence="[]"; record_running_process_environments "$2"',
           'retire-ollama-process-environment-test',
           script.pathname,
           processes,

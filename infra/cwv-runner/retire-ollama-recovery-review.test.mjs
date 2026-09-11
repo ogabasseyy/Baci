@@ -35,7 +35,15 @@ function shellAt(pathname, command, args = [], env = {}, options = {}) {
       pathname,
       ...args,
     ],
-    { env: { ...process.env, ...env }, ...options }
+    {
+      env: {
+        ...process.env,
+        RETIRE_OLLAMA_TEST_BIN: '/sbin',
+        RETIRE_OLLAMA_TEST_FSTYPE: 'apfs',
+        ...env,
+      },
+      ...options,
+    }
   );
 }
 
@@ -61,8 +69,7 @@ async function receiptBin() {
   );
   await writeFile(
     join(directory, 'readlink'),
-    '#!/bin/sh\nif [ "$1" = -f ]; then [ "$2" = -- ] && p=$3 || p=$2; printf "%s\\n" "$' +
-      '{RETIRE_OLLAMA_TEST_REALPATH:-$p}"; else exec /usr/bin/readlink "$@"; fi\n'
+    `#!/bin/sh\nif [ "$1" = -f ]; then [ "$2" = -- ] && p=$3 || p=$2; printf "%s\\n" "\${RETIRE_OLLAMA_TEST_REALPATH:-$p}"; else exec /usr/bin/readlink "$@"; fi\n`
   );
   await writeFile(
     join(directory, 'stat'),
@@ -86,19 +93,29 @@ test('derives the source identity from the sealed SHA directory', async () => {
       'retire-ollama-recovery.sh',
       'retire-ollama-recovery-receipts.sh',
       'retire-ollama-consumers.sh',
+      'retire-ollama-container-mounts.sh',
+      'retire-ollama-running-container.sh',
+      'retire-ollama-running-container-validation.sh',
+      'retire-ollama-running-archive.sh',
       'retire-ollama-consumer-closure.sh',
       'retire-ollama-process-files.sh',
       'retire-ollama-cron-inventory.sh',
       'retire-ollama-at-quiescence.sh',
+      'retire-ollama-temp-root.sh',
+      'retire-ollama-image-filesystem.pl',
+      'retire-ollama-projector-auth.sh',
     ]) {
       await copyFile(new URL(`./${name}`, import.meta.url), join(sealed, name));
     }
     const { stdout } = await shellAt(
       join(sealed, 'retire-ollama.sh'),
-      'init_temp_root; trap cleanup_temp EXIT; recovery_source_digests; printf "%s:%s:%s:%s\\n" "$RECOVERY_SOURCE_SHA" "$RECOVERY_CONSUMER_CLOSURE_SHA" "$RECOVERY_CRON_INVENTORY_SHA" "$RECOVERY_AT_QUIESCENCE_SHA"'
+      'init_temp_root; trap cleanup_temp EXIT; recovery_source_digests; printf "%s:%s:%s:%s:%s:%s:%s\\n" "$RECOVERY_SOURCE_SHA" "$RECOVERY_RUNNING_ARCHIVE_SHA" "$RECOVERY_CONSUMER_CLOSURE_SHA" "$RECOVERY_CRON_INVENTORY_SHA" "$RECOVERY_AT_QUIESCENCE_SHA" "$RECOVERY_IMAGE_FILESYSTEM_SHA" "$RECOVERY_PROJECTOR_AUTH_SHA"'
     );
     assert.deepEqual(stdout.trim().split(':'), [
       sourceSha,
+      await sha256(
+        new URL('./retire-ollama-running-archive.sh', import.meta.url)
+      ),
       await sha256(
         new URL('./retire-ollama-consumer-closure.sh', import.meta.url)
       ),
@@ -107,6 +124,12 @@ test('derives the source identity from the sealed SHA directory', async () => {
       ),
       await sha256(
         new URL('./retire-ollama-at-quiescence.sh', import.meta.url)
+      ),
+      await sha256(
+        new URL('./retire-ollama-image-filesystem.pl', import.meta.url)
+      ),
+      await sha256(
+        new URL('./retire-ollama-projector-auth.sh', import.meta.url)
       ),
     ]);
   } finally {

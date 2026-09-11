@@ -22,7 +22,7 @@ test('keeps compound process consumers while exempting only the reviewed Ollama 
     await writeFile(processes, `${approved}\n${compound}\n`);
     const { stdout } = await execFileAsync('sh', [
       '-c',
-      '. "$1"; init_temp_root; trap cleanup_temp EXIT; APPROVED_OLLAMA_PID=42; APPROVED_OLLAMA_PROCESS_IDENTITY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; deps="[]"; consumer_counts="[]"; consumer_evidence="[]"; record_consumers running-processes "$2"; printf "%s\\n%s\\n" "$consumer_counts" "$consumer_evidence"',
+      'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; init_temp_root; trap cleanup_temp EXIT; APPROVED_OLLAMA_PID=42; APPROVED_OLLAMA_PROCESS_IDENTITY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; deps="[]"; consumer_counts="[]"; consumer_evidence="[]"; record_consumers running-processes "$2"; printf "%s\\n%s\\n" "$consumer_counts" "$consumer_evidence"',
       'retire-ollama-process-consumers-test',
       script.pathname,
       processes,
@@ -52,7 +52,7 @@ test('classifies an uppercase Ollama marker in a foreign running process', async
     await writeFile(processes, `${foreign}\n`);
     const { stdout } = await execFileAsync('sh', [
       '-c',
-      '. "$1"; init_temp_root; trap cleanup_temp EXIT; deps="[]"; consumer_counts="[]"; consumer_evidence="[]"; record_consumers running-processes "$2"; printf "%s\\n%s\\n" "$consumer_counts" "$consumer_evidence"',
+      'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; init_temp_root; trap cleanup_temp EXIT; deps="[]"; consumer_counts="[]"; consumer_evidence="[]"; record_consumers running-processes "$2"; printf "%s\\n%s\\n" "$consumer_counts" "$consumer_evidence"',
       'retire-ollama-uppercase-process-test',
       script.pathname,
       processes,
@@ -82,7 +82,7 @@ test('uses untruncated ps args so a long compound process remains a consumer', a
     'sh',
     [
       '-c',
-      '. "$1"; init_temp_root; trap cleanup_temp EXIT; ps() { if [ "$1" = -ww ]; then printf "%s\\n" "$COMPOUND"; else printf "%s\\n" "$APPROVED"; fi; }; records="[]"; deps="[]"; consumer_counts="[]"; consumer_evidence="[]"; record_scan running-processes ps -ww -eo pid,ppid,user,args; printf "%s\\n%s\\n" "$consumer_counts" "$consumer_evidence"',
+      'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; init_temp_root; trap cleanup_temp EXIT; ps() { if [ "$1" = -ww ]; then printf "%s\\n" "$COMPOUND"; else printf "%s\\n" "$APPROVED"; fi; }; records="[]"; deps="[]"; consumer_counts="[]"; consumer_evidence="[]"; record_scan running-processes ps -ww -eo pid,ppid,user,args; printf "%s\\n%s\\n" "$consumer_counts" "$consumer_evidence"',
       'retire-ollama-process-consumers-test',
       script.pathname,
     ],

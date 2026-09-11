@@ -16,6 +16,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
 const unprivileged = process.getuid?.() === 0 ? { gid: 65534, uid: 65534 } : {};
+const containerId = '0123456789abcdef'.repeat(4);
 const prelude =
   'sha256sum() { /usr/bin/shasum -a 256 "$@"; }; stat() { printf "1:2:81a4:10:501:20:644\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
 
@@ -77,12 +78,12 @@ test('accepts source-less Docker tmpfs mounts but rejects a tmpfs carrying host 
         join(bin, 'docker'),
         `#!/bin/sh
 case "$*" in
-  *' ps -a '*) printf 'generic-api\\n' ;;
-  *'inspect -f {{.Name}} generic-api') printf '/generic-api\\n' ;;
-  *'inspect -f {{json .State.Running}} generic-api') printf 'false\\n' ;;
-  *' cp generic-api:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;;
-  *'inspect -f {{.Id}} '* ) printf 'generic-api /generic-api /bin/true [] [] [] '; cat '${mounts}'; printf ' {} {} {} [] "bridge"\\n' ;;
-  *'inspect -f {{json .Mounts}} generic-api') cat '${mounts}' ;;
+  *' ps -a '*) printf '${containerId}\\n' ;;
+  *'inspect -f {{.Name}} ${containerId}') printf '/generic-api\\n' ;;
+  *'inspect -f {{json .State.Running}} ${containerId}') printf 'false\\n' ;;
+  *' cp ${containerId}:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;;
+  *'inspect -f {{.Id}} '* ) printf '${containerId} /generic-api /bin/true [] [] [] '; cat '${mounts}'; printf ' {} {} {} [] "bridge"\\n' ;;
+  *'inspect -f {{json .Mounts}} ${containerId}') cat '${mounts}' ;;
 esac
 `
       ),
@@ -99,7 +100,10 @@ esac
         ],
         {
           ...unprivileged,
-          env: { ...process.env, RETIRE_OLLAMA_TEST_BIN: bin },
+          env: {
+            ...process.env,
+            RETIRE_OLLAMA_TEST_BIN: bin,
+          },
         }
       );
     assert.equal((await scan()).stdout, '');
@@ -254,12 +258,12 @@ test('finds a stopped generic container whose only Ollama endpoint is a label', 
       join(bin, 'docker'),
       `#!/bin/sh
 case "$*" in
-  *' ps -a '*) printf 'generic-api\\n' ;;
-  *'inspect -f {{.Name}} generic-api') printf '/generic-api\\n' ;;
-  *'inspect -f {{json .State.Running}} generic-api') printf 'false\\n' ;;
-  *' cp generic-api:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;;
-  *'inspect -f {{.Id}} '*) printf 'generic-api /generic-api /bin/true [] [] {"traefik.http.services.api.loadbalancer.server.url":"http://127.0.0.1:11434"} null [] {} {} {} [] "bridge"\\n' ;;
-  *'inspect -f {{json .Mounts}} generic-api') printf '[]\\n' ;;
+  *' ps -a '*) printf '${containerId}\\n' ;;
+  *'inspect -f {{.Name}} ${containerId}') printf '/generic-api\\n' ;;
+  *'inspect -f {{json .State.Running}} ${containerId}') printf 'false\\n' ;;
+  *' cp ${containerId}:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;;
+  *'inspect -f {{.Id}} '*) printf '${containerId} /generic-api /bin/true [] [] {"traefik.http.services.api.loadbalancer.server.url":"http://127.0.0.1:11434"} null [] {} {} {} [] "bridge"\\n' ;;
+  *'inspect -f {{json .Mounts}} ${containerId}') printf '[]\\n' ;;
 esac
 `
     );
@@ -274,7 +278,10 @@ esac
       ],
       {
         ...unprivileged,
-        env: { ...process.env, RETIRE_OLLAMA_TEST_BIN: bin },
+        env: {
+          ...process.env,
+          RETIRE_OLLAMA_TEST_BIN: bin,
+        },
       }
     );
     assert.match(stdout, /traefik.*11434/);

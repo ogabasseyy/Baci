@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
 const prelude =
-  'sha256sum() { /usr/bin/shasum -a 256 "$@"; }; stat() { printf "1:2:81a4:10:0:0:600\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
+  'RETIRE_OLLAMA_TEST_BIN=/usr/bin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; sha256sum() { /usr/bin/shasum -a 256 "$@"; }; stat() { printf "1:2:81a4:10:0:0:600\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
 
 test('fails closed before accepting a flow-style Compose services map', async () => {
   const directory = await realpath(
@@ -211,7 +211,7 @@ test('rejects an unsupported systemd bind recursion mode', async () => {
   await assert.rejects(
     execFileAsync('sh', [
       '-c',
-      `. "$1"; SCRIPT_DIR=$(dirname "$1"); load_consumer_scanners; init_temp_root; trap cleanup_temp EXIT; systemd_bind_path_targets '/srv/config:/etc/config:recursive'`,
+      `RETIRE_OLLAMA_TEST_BIN=/usr/bin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; SCRIPT_DIR=$(dirname "$1"); load_consumer_scanners; init_temp_root; trap cleanup_temp EXIT; systemd_bind_path_targets '/srv/config:/etc/config:recursive'`,
       'retire-ollama-bind-recursion-mode-test',
       script.pathname,
     ]),

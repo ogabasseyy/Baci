@@ -8,6 +8,8 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
+const containerId =
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const unprivileged = process.getuid?.() === 0 ? { gid: 65534, uid: 65534 } : {};
 const prelude =
   'sha256sum() { /usr/bin/shasum -a 256 "$@"; }; stat() { printf "1:2:81a4:10:501:20:644\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
@@ -21,20 +23,20 @@ async function withDocker(networkMode, callback, { changing = false } = {}) {
     join(bin, 'docker'),
     `#!/bin/sh
 case "$*" in
-  *' ps -a '*) printf 'generic-api\\n' ;;
-  *'inspect -f {{.Name}} generic-api') printf '/generic-api\\n' ;;
-  *'inspect -f {{json .State.Running}} generic-api') printf 'false\\n' ;;
-  *' cp generic-api:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;;
-  *'inspect -f {{json .Mounts}} generic-api') printf '[]\\n' ;;
-  *'inspect -f {{.Id}} '*'.HostConfig.NetworkMode'*' generic-api')
+  *' ps -a '*) printf '${containerId}\\n' ;;
+  *'inspect -f {{.Name}} ${containerId}') printf '/generic-api\\n' ;;
+  *'inspect -f {{json .State.Running}} ${containerId}') printf 'false\\n' ;;
+  *' cp ${containerId}:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;;
+  *'inspect -f {{json .Mounts}} ${containerId}') printf '[]\\n' ;;
+  *'inspect -f {{.Id}} '*'.HostConfig.NetworkMode'*' ${containerId}')
     mode='${networkMode}'
     if [ '${changing ? '1' : '0'}' = 1 ]; then
       count=0; [ ! -f '${calls}' ] || count=$(cat '${calls}'); count=$((count + 1)); printf '%s\\n' "$count" >'${calls}'
       [ $((count % 2)) -eq 1 ] || mode=bridge
     fi
-    printf 'generic-api /generic-api /bin/true [] [] {} null [] {} {} {} [] "%s"\\n' "$mode" ;;
-  *'inspect -f {{.Id}} '*' generic-api')
-    printf 'generic-api /generic-api /bin/true [] [] {} null [] {} {} {} []\\n' ;;
+    printf '${containerId} /generic-api /bin/true [] [] {} null [] {} {} {} [] "%s"\\n' "$mode" ;;
+  *'inspect -f {{.Id}} '*' ${containerId}')
+    printf '${containerId} /generic-api /bin/true [] [] {} null [] {} {} {} []\\n' ;;
   *) exit 64 ;;
 esac
 `
@@ -60,7 +62,13 @@ function scanContainers(bin) {
       'retire-ollama-container-network-mode-test',
       script.pathname,
     ],
-    { ...unprivileged, env: { ...process.env, RETIRE_OLLAMA_TEST_BIN: bin } }
+    {
+      ...unprivileged,
+      env: {
+        ...process.env,
+        RETIRE_OLLAMA_TEST_BIN: bin,
+      },
+    }
   );
 }
 

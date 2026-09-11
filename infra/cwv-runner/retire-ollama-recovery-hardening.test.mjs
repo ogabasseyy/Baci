@@ -40,7 +40,15 @@ async function shell(command, args = [], env = {}) {
       script.pathname,
       ...args,
     ],
-    { env: { ...process.env, RETIRE_OLLAMA_PROC_ROOT: procRoot, ...env } }
+    {
+      env: {
+        ...process.env,
+        RETIRE_OLLAMA_PROC_ROOT: procRoot,
+        RETIRE_OLLAMA_TEST_BIN: '/sbin',
+        RETIRE_OLLAMA_TEST_FSTYPE: 'apfs',
+        ...env,
+      },
+    }
   ).finally(() => rm(procRoot, { recursive: true, force: true }));
 }
 

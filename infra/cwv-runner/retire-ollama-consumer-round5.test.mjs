@@ -8,8 +8,10 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
+const containerId =
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const prelude =
-  'stat() { printf "1:2:81a4:10:501:20:644\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
+  'RETIRE_OLLAMA_TEST_BIN=/usr/bin; sha256sum() { /usr/bin/shasum -a 256 "$@"; }; stat() { printf "1:2:81a4:10:501:20:644\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
 
 async function directory(prefix) {
   return realpath(await mkdtemp(join(tmpdir(), prefix)));
@@ -198,14 +200,14 @@ test('joins continued static EnvironmentFile directives', async () => {
 test('records health checks and every runtime execution phase', async () => {
   const root = await directory('baci-runtime-phases-');
   try {
-    const command = `${prelude}docker() { case "$*" in *' ps -a '*) printf 'generic-api\\n';; *'inspect -f {{.Name}} generic-api') printf '/generic-api\\n';; *'inspect -f {{json .State.Running}} generic-api') printf 'false\\n';; *' cp generic-api:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination";; *'inspect -f {{.Id}} '*) case "$*" in *'.Config.Healthcheck'*) printf 'generic-api /generic-api /bin/true [] [] {"Test":["CMD-SHELL","curl http://127.0.0.1:11434"]} [] {} {} {} [] "bridge"\\n';; *) printf 'generic-api /generic-api /bin/true [] [] [] {} {} {} [] "bridge"\\n';; esac;; *'inspect -f {{json .Mounts}} generic-api') printf '[]\\n';; esac; }; systemctl() { case "$1" in list-units) printf 'transient.service loaded inactive dead transient\\n';; show) for property in RootDirectory RootImage Environment EnvironmentFiles LoadCredential LoadCredentialEncrypted StandardInput ExecCondition ExecStartPre ExecStart ExecStartPost ExecReload ExecStop ExecStopPost; do case " $* " in *" --property=$property "*) :;; *) return 2;; esac; done; printf 'RootDirectory=\\nRootImage=\\nEnvironment=\\nEnvironmentFiles=\\nLoadCredential=\\nLoadCredentialEncrypted=\\nStandardInput=null\\nExecCondition={}\\nExecStartPre={ path=/usr/bin/curl ; argv[]=/usr/bin/curl http://127.0.0.1:11434 ; }\\nExecStart={}\\nExecStartPost={}\\nExecReload={}\\nExecStop={}\\nExecStopPost={}\\n';; esac; }; . "$1"; SCRIPT_DIR=$(dirname "$1"); init_temp_root; trap cleanup_temp EXIT; CANONICAL_DOCKER_SOCKET=/tmp/docker.sock; scan_container_rows all; scan_systemd_runtime_consumers`;
+    const command = `${prelude}docker() { case "$*" in *' ps -a '*) printf '${containerId}\\n';; *'inspect -f {{.Name}} ${containerId}') printf '/generic-api\\n';; *'inspect -f {{json .State.Running}} ${containerId}') printf 'false\\n';; *' cp ${containerId}:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination";; *'inspect -f {{.Id}} '*) case "$*" in *'Healthcheck'*) printf '${containerId} /generic-api /bin/true [] [] {"Test":["CMD-SHELL","curl http://127.0.0.1:11434"]} [] {} {} {} [] "bridge"\\n';; *) printf '${containerId} /generic-api /bin/true [] [] [] {} {} {} [] "bridge"\\n';; esac;; *'inspect -f {{json .Mounts}} ${containerId}') printf '[]\\n';; esac; }; systemctl() { case "$1" in list-units) printf 'transient.service loaded inactive dead transient\\n';; show) for property in RootDirectory RootImage Environment EnvironmentFiles LoadCredential LoadCredentialEncrypted StandardInput ExecCondition ExecStartPre ExecStart ExecStartPost ExecReload ExecStop ExecStopPost; do case " $* " in *" --property=$property "*) :;; *) return 2;; esac; done; printf 'RootDirectory=\\nRootImage=\\nEnvironment=\\nEnvironmentFiles=\\nLoadCredential=\\nLoadCredentialEncrypted=\\nStandardInput=null\\nExecCondition={}\\nExecStartPre={ path=/usr/bin/curl ; argv[]=/usr/bin/curl http://127.0.0.1:11434 ; }\\nExecStart={}\\nExecStartPost={}\\nExecReload={}\\nExecStop={}\\nExecStopPost={}\\n';; esac; }; . "$1"; SCRIPT_DIR=$(dirname "$1"); init_temp_root; trap cleanup_temp EXIT; CANONICAL_DOCKER_SOCKET=/tmp/docker.sock; scan_container_rows all; scan_systemd_runtime_consumers`;
     const { stdout } = await execFileAsync('sh', [
       '-c',
       command,
       'retire-ollama-health-phase-test',
       script.pathname,
     ]);
-    assert.match(stdout, /^generic-api .*11434/m);
+    assert.match(stdout, new RegExp(`^${containerId} .*11434`, 'm'));
     assert.match(stdout, /^transient\.service:/m);
   } finally {
     await rm(root, { recursive: true, force: true });

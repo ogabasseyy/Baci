@@ -8,7 +8,10 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
+const containerId =
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const prelude = `
+RETIRE_OLLAMA_TEST_BIN=/usr/bin
 sha256sum() { /usr/bin/shasum -a 256 "$@"; }
 stat() {
   for last do :; done
@@ -180,7 +183,7 @@ test('binds a stopped container file-valued environment assignment', async () =>
   try {
     const { stdout } = await execFileAsync('sh', [
       '-c',
-      `${prelude}docker() { case "$*" in *' ps -a '*) printf 'generic-api\\n' ;; *'inspect -f {{.Name}} generic-api') printf '/generic-api\\n' ;; *'inspect -f {{json .State.Running}} generic-api') printf 'false\\n' ;; *'inspect -f {{json .Config.Env}} generic-api') printf '["PATH=/usr/bin:/bin","HOME=/root","CONFIG=/etc/application.conf"]\\n' ;; *'inspect -f {{json .Config.WorkingDir}} generic-api') printf '""\\n' ;; *'inspect -f {{json .Args}} generic-api') printf '[]\\n' ;; *'inspect -f {{json .Mounts}} generic-api') printf '[]\\n' ;; *'inspect -f {{.Id}} '*) printf 'generic-api /generic-api /usr/bin/application-worker [] ["PATH=/usr/bin:/bin","HOME=/root","CONFIG=/etc/application.conf"] "" {} null [] {} {} {} [] "bridge"\\n' ;; *' cp generic-api:/usr/bin/application-worker '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;; *' cp generic-api:/root '*) for destination do :; done; mkdir "$destination" ;; *' cp generic-api:/etc/application.conf '*) for destination do :; done; printf 'endpoint=http://127.0.0.1:11434\\n' >"$destination" ;; *) return 2 ;; esac; }; . "$1"; SCRIPT_DIR=$(dirname "$1"); RETIRE_OLLAMA_TMPDIR="$2"; init_temp_root; trap cleanup_temp EXIT; CANONICAL_DOCKER_SOCKET=/run/docker.sock; CONTAINER=ollama-loopback; scan_container_rows all`,
+      `${prelude}docker() { case "$*" in *' ps -a '*) printf '${containerId}\\n' ;; *'inspect -f {{.Name}} ${containerId}') printf '/generic-api\\n' ;; *'inspect -f {{json .State.Running}} ${containerId}') printf 'false\\n' ;; *'inspect -f {{json .Config.Env}} ${containerId}') printf '["PATH=/usr/bin:/bin","HOME=/root","CONFIG=/etc/application.conf"]\\n' ;; *'inspect -f {{json .Config.WorkingDir}} ${containerId}') printf '""\\n' ;; *'inspect -f {{json .Args}} ${containerId}') printf '[]\\n' ;; *'inspect -f {{json .Mounts}} ${containerId}') printf '[]\\n' ;; *'inspect -f {{.Id}} '*) printf '${containerId} /generic-api /usr/bin/application-worker [] ["PATH=/usr/bin:/bin","HOME=/root","CONFIG=/etc/application.conf"] "" {} null [] {} {} {} [] "bridge"\\n' ;; *' cp ${containerId}:/usr/bin/application-worker '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;; *' cp ${containerId}:/root '*) for destination do :; done; mkdir "$destination" ;; *' cp ${containerId}:/etc/application.conf '*) for destination do :; done; printf 'endpoint=http://127.0.0.1:11434\\n' >"$destination" ;; *) return 2 ;; esac; }; . "$1"; SCRIPT_DIR=$(dirname "$1"); RETIRE_OLLAMA_TMPDIR="$2"; init_temp_root; trap cleanup_temp EXIT; CANONICAL_DOCKER_SOCKET=/run/docker.sock; CONTAINER=ollama-loopback; scan_container_rows all`,
       'retire-ollama-container-environment-path-test',
       script.pathname,
       directory,
@@ -188,7 +191,7 @@ test('binds a stopped container file-valued environment assignment', async () =>
 
     assert.match(
       stdout,
-      /container-argument:generic-api:\/etc\/application\.conf/
+      new RegExp(`container-argument:${containerId}:/etc/application\\.conf`)
     );
   } finally {
     await rm(directory, { force: true, recursive: true });

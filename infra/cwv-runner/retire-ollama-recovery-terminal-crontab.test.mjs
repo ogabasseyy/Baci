@@ -25,7 +25,7 @@ test('terminal recovery revalidates the reviewed bassey crontab without losing i
 
     const { stdout } = await execFileAsync('sh', [
       '-c',
-      `. "$1"
+      `RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"
 SCRIPT_DIR=$(dirname "$1")
 . "$SCRIPT_DIR/retire-ollama-recovery.sh"
 . "$SCRIPT_DIR/retire-ollama-cron-inventory.sh"

@@ -9,6 +9,7 @@ import {
   readdir,
   readFile,
   rm,
+  stat,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -17,6 +18,9 @@ import test from 'node:test';
 import { promisify } from 'node:util';
 
 const root = new URL('.', import.meta.url); const script = new URL('./retire-ollama.sh', root); const execFileAsync = promisify(execFile);
+test('keeps the sealed Task 8 scan entrypoint directly executable', async () => {
+  assert.equal((await stat(script)).mode & 0o777, 0o755);
+});
 test('keeps the scan finite when nginx is not installed', async () => {
   const source = await readFile(new URL('./retire-ollama-consumers.sh', root), 'utf8');
   assert.match(
@@ -77,14 +81,23 @@ test('fails closed before any destructive preparation when a receipt publication
       ['id', 'stat'].map((name) => chmod(join(bin, name), 0o755))
     );
     await assert.rejects(
-      execFileAsync('sh', [script.pathname, '--apply'], {
-        env: {
-          ...process.env,
-          RETIRE_OLLAMA_INVENTORY: inventory,
-          RETIRE_OLLAMA_RECEIPT_DIR: receiptDir,
-          RETIRE_OLLAMA_TEST_BIN: bin,
-        },
-      }),
+      execFileAsync(
+        'sh',
+        [
+          '-c',
+          '. "$1"; init_temp_root() { :; }; cleanup_temp() { :; }; retirement_helpers() { :; }; main --apply',
+          `${script.pathname}.source`,
+          script.pathname,
+        ],
+        {
+          env: {
+            ...process.env,
+            RETIRE_OLLAMA_INVENTORY: inventory,
+            RETIRE_OLLAMA_RECEIPT_DIR: receiptDir,
+            RETIRE_OLLAMA_TEST_BIN: bin,
+          },
+        }
+      ),
       (error) =>
         error.code === 65 && /partial receipt publication/.test(error.stderr)
     );
@@ -114,12 +127,19 @@ test('publishes every receipt with a durable pending-file rename protocol', asyn
     assert.ok(source.includes(target));
   assert.match(
     source,
-    /publish_pending "\$receipt_pending" "\$RECEIPT"[\s\S]*publish_pending "\$sha_pending" "\$RECEIPT_SHA"/
+    /publish_pending "\$sha_pending" "\$RECEIPT_SHA"[\s\S]*publish_pending "\$receipt_pending" "\$RECEIPT"/
   );
-  assert.match(
-    source,
-    /fsync_file "\$pending"; fsync_dir "\$RECEIPT_DIR"; mv -f "\$pending" "\$target"[\s\S]*fsync_dir "\$RECEIPT_DIR"/
-  );
+  const publication = source.match(/publish_pending\(\) \{([\s\S]*?)\n\}/)?.[1];
+  assert.ok(publication, 'publish_pending body must be present');
+  const targetGuard = publication.indexOf("[ ! -e \"$target\" ] && [ ! -L \"$target\" ] || die 'receipt publication race'");
+  const stateGuard = publication.indexOf('case "$target_state" in absent)');
+  const noOverwrite = publication.indexOf("/usr/bin/perl -e 'exit(link($ARGV[0],$ARGV[1]) ? 0 : 1)'");
+  const rename = publication.indexOf('mv -T "$pending" "$target"');
+  const postGuard = publication.indexOf("[ -f \"$target\" ] && [ ! -L \"$target\" ] || die 'receipt publication target unsafe'");
+  assert.ok(targetGuard >= 0 && stateGuard >= 0 && noOverwrite > stateGuard, 'absent target must use no-overwrite publication');
+  assert.ok(rename > noOverwrite, 'existing target replacement must remain explicit');
+  assert.ok(postGuard > rename, 'renamed target must be checked after publication');
+  assert.doesNotMatch(publication, /mv -f "\$pending"/);
 });
 
 // biome-ignore format: a narrow shell harness keeps this behavioral contract below the modularity ceiling.

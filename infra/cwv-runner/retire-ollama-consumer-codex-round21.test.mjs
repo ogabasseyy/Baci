@@ -8,8 +8,10 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
+const containerId =
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const prelude =
-  'sha256sum() { /usr/bin/shasum -a 256 "$@"; }; stat() { printf "1:2:81a4:10:0:0:600\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
+  'RETIRE_OLLAMA_TEST_BIN=/usr/bin; sha256sum() { /usr/bin/shasum -a 256 "$@"; }; stat() { printf "1:2:81a4:10:0:0:600\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
 
 test('binds a stopped container healthcheck executable closure', async () => {
   const directory = await realpath(
@@ -18,14 +20,16 @@ test('binds a stopped container healthcheck executable closure', async () => {
   try {
     const { stdout } = await execFileAsync('sh', [
       '-c',
-      `${prelude}docker() { case "$*" in *' ps -a '*) printf 'generic-api\\n' ;; *'inspect -f {{.Name}} generic-api') printf '/generic-api\\n' ;; *'inspect -f {{json .State.Running}} generic-api') printf 'false\\n' ;; *'inspect -f {{json .Config.Healthcheck}} generic-api') printf '{"Test":["CMD","/opt/application-healthcheck"]}\\n' ;; *'inspect -f {{.Id}} '*) printf 'generic-api /generic-api /bin/true [] [] {} {"Test":["CMD","/opt/application-healthcheck"]} [] {} {} {} [] "bridge"\\n' ;; *'inspect -f {{json .Mounts}} generic-api') printf '[]\\n' ;; *' cp generic-api:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;; *' cp generic-api:/opt/application-healthcheck '*) for destination do :; done; printf '#!/bin/sh\\ncurl http://127.0.0.1:11434\\n' >"$destination" ;; *) return 2 ;; esac; }; . "$1"; SCRIPT_DIR=$(dirname "$1"); RETIRE_OLLAMA_TMPDIR="$2"; init_temp_root; trap cleanup_temp EXIT; CANONICAL_DOCKER_SOCKET=/run/docker.sock; CONTAINER=ollama-loopback; scan_container_rows all`,
+      `${prelude}docker() { case "$*" in *' ps -a '*) printf '${containerId}\\n' ;; *'inspect -f {{.Name}} ${containerId}') printf '/generic-api\\n' ;; *'inspect -f {{json .State.Running}} ${containerId}') printf 'false\\n' ;; *'inspect -f {{json .Config.Healthcheck}} ${containerId}') printf '{"Test":["CMD","/opt/application-healthcheck"]}\\n' ;; *'inspect -f {{.Id}} '*) printf '${containerId} /generic-api /bin/true [] [] {} {"Test":["CMD","/opt/application-healthcheck"]} [] {} {} {} [] "bridge"\\n' ;; *'inspect -f {{json .Mounts}} ${containerId}') printf '[]\\n' ;; *' cp ${containerId}:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;; *' cp ${containerId}:/opt/application-healthcheck '*) for destination do :; done; printf '#!/bin/sh\\ncurl http://127.0.0.1:11434\\n' >"$destination" ;; *) return 2 ;; esac; }; . "$1"; SCRIPT_DIR=$(dirname "$1"); RETIRE_OLLAMA_TMPDIR="$2"; init_temp_root; trap cleanup_temp EXIT; CANONICAL_DOCKER_SOCKET=/run/docker.sock; CONTAINER=ollama-loopback; scan_container_rows all`,
       'retire-ollama-container-healthcheck-closure-test',
       script.pathname,
       directory,
     ]);
     assert.match(
       stdout,
-      /container-argument:generic-api:\/opt\/application-healthcheck/
+      new RegExp(
+        `container-argument:${containerId}:/opt/application-healthcheck`
+      )
     );
   } finally {
     await rm(directory, { force: true, recursive: true });

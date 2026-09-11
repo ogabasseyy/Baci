@@ -37,7 +37,11 @@ function recoveryShell(command, args = []) {
     ],
     {
       ...unprivileged,
-      env: { ...process.env, RETIRE_OLLAMA_TEST_BIN: '/usr/bin' },
+      env: {
+        ...process.env,
+        RETIRE_OLLAMA_TEST_BIN: '/usr/bin',
+        RETIRE_OLLAMA_TEST_FSTYPE: 'apfs',
+      },
     }
   );
 }

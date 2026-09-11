@@ -20,8 +20,8 @@ const sourceSha = 'c'.repeat(40);
 const childCredentials =
   process.getuid?.() === 0 ? { gid: 65534, uid: 65534 } : {};
 const childIdentity = `${childCredentials.uid ?? process.getuid?.()}:${childCredentials.gid ?? process.getgid?.()}`;
-
 function shell(command, args = [], env = {}, options = {}) {
+  const { env: optionEnv = {}, ...execOptions } = options;
   return execFileAsync(
     'sh',
     [
@@ -31,10 +31,18 @@ function shell(command, args = [], env = {}, options = {}) {
       script.pathname,
       ...args,
     ],
-    { env: { ...process.env, ...env }, ...options }
+    {
+      ...execOptions,
+      env: {
+        ...process.env,
+        RETIRE_OLLAMA_TEST_BIN: '/sbin',
+        RETIRE_OLLAMA_TEST_FSTYPE: 'apfs',
+        ...optionEnv,
+        ...env,
+      },
+    }
   );
 }
-
 function fixtureShell(command, args = [], env = {}) {
   return shell(
     `[ "$(id -u):$(id -g)" = "$RETIRE_OLLAMA_EXPECT_TEST_ID" ] || exit 79; ${command}`,

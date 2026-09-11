@@ -26,7 +26,14 @@ function shell(command, args = [], env = {}) {
       script.pathname,
       ...args,
     ],
-    { env: { ...process.env, ...env } }
+    {
+      env: {
+        ...process.env,
+        RETIRE_OLLAMA_TEST_BIN: '/sbin',
+        RETIRE_OLLAMA_TEST_FSTYPE: 'apfs',
+        ...env,
+      },
+    }
   );
 }
 

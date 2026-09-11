@@ -90,6 +90,16 @@ test('uses a rollback-armed, post-activation immutable Task 7 probe contract', (
   assert.doesNotMatch(source, /\/bin\/sh -c/);
 });
 
+test('revalidates the fixed Task 7 manifest and archive before dispatcher use', () => {
+  const binding = source.match(/verify_source_binding\(\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(binding);
+  assert.match(binding, /source-manifest\.json/);
+  assert.match(binding, /source\.tar/);
+  assert.match(binding, /provenance\.manifestSha256/);
+  assert.match(binding, /provenance\.sourceArchiveSha256/);
+  for (const field of ['schemaVersion', 'prNumber', 'reviewedHeadSha', 'baseSha']) assert.match(binding, new RegExp(`sourceBinding\\.${field}`));
+});
+
 test('binds the exact Task 9 root controller exchange and release acknowledgement', () => {
   assert.match(source, /readonly VPS_SSH="\$SCRIPT_DIR\/vps-ssh\.sh"/);
   for (const mode of ['begin', 'rearm', 'admit', 'release', 'abort']) assert.match(source, new RegExp(`exact-run-controller\\.sh --${mode} \\$campaign_id`));

@@ -15,8 +15,8 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
-
-function shell(command, env = {}, args = []) {
+async function shell(command, env = {}, args = []) {
+  const bin = await testBin();
   return execFileAsync(
     'sh',
     [
@@ -26,8 +26,15 @@ function shell(command, env = {}, args = []) {
       script.pathname,
       ...args,
     ],
-    { env: { ...process.env, ...env } }
-  );
+    {
+      env: {
+        ...process.env,
+        RETIRE_OLLAMA_TEST_BIN: bin,
+        RETIRE_OLLAMA_TEST_FSTYPE: 'apfs',
+        ...env,
+      },
+    }
+  ).finally(() => rm(bin, { recursive: true, force: true }));
 }
 
 test('rejects a root recovery helper outside the sealed source root', async () => {
@@ -39,7 +46,6 @@ test('rejects a root recovery helper outside the sealed source root', async () =
     (error) => error.code === 1
   );
 });
-
 test('refuses a systemd scan when its record accumulator is malformed', async () => {
   await assert.rejects(
     shell(
@@ -51,7 +57,6 @@ test('refuses a systemd scan when its record accumulator is malformed', async ()
       )
   );
 });
-
 test('excludes Ollama serve cron jobs from recovery consumer evidence', async () => {
   const { stdout } = await shell(
     'RECOVERY_RECORDS="[]"; deps="[]"; consumer_counts="[]"; consumer_evidence="[]"; init_temp_root; trap cleanup_temp EXIT; approved="0 * * * * /usr/bin/ollama serve"; OLLAMA_CRON_ONE=$(hash_text "$approved"); cron=$(temp_path); printf "%s\\n%s\\n" "$approved" "0 * * * * /usr/bin/other" >"$cron"; recovery_surface current-crontab cat "$cron"; printf "%s\\n%s\\n" "$consumer_counts" "$consumer_evidence"'
@@ -60,7 +65,6 @@ test('excludes Ollama serve cron jobs from recovery consumer evidence', async ()
   assert.deepEqual(counts, [{ surface: 'current-crontab', matchCount: 0 }]);
   assert.deepEqual(evidence, []);
 });
-
 test('rejects Ollama subcommand prefixes without a token boundary', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'baci-ollama-recovery-argv-'));
   const procRoot = join(directory, 'proc');
@@ -97,7 +101,6 @@ test('rejects Ollama subcommand prefixes without a token boundary', async () => 
     await rm(directory, { recursive: true, force: true });
   }
 });
-
 test('rejects a loopback listener whose argv omits Ollama and the port', async () => {
   const directory = await mkdtemp(
     join(tmpdir(), 'baci-ollama-recovery-socket-')
@@ -136,7 +139,6 @@ test('rejects a loopback listener whose argv omits Ollama and the port', async (
     await rm(directory, { recursive: true, force: true });
   }
 });
-
 test('binds a reviewed listener socket inode to its process evidence', async () => {
   const directory = await mkdtemp(
     join(tmpdir(), 'baci-ollama-recovery-socket-bound-')

@@ -55,6 +55,7 @@ test('refuses an EnvironmentFile changed after capture before evidence parsing',
           env: {
             ...process.env,
             RETIRE_OLLAMA_TEST_BIN: bin,
+            RETIRE_OLLAMA_TEST_FSTYPE: 'apfs',
             RETIRE_OLLAMA_MUTATION_FLAG: mutationFlag,
             RETIRE_OLLAMA_MUTATION_TARGET: environment,
           },
@@ -78,13 +79,23 @@ test('refuses a present non-regular EnvironmentFile without a captured snapshot'
   try {
     await mkdir(environment);
     await assert.rejects(
-      execFileAsync('sh', [
-        '-c',
-        '. "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; recovery_record_path() { RECOVERY_REFERENCE_SNAPSHOT=""; }; init_temp_root; trap cleanup_temp EXIT; recovery_record_environment "$2" 1',
-        'recovery-reference-type-test',
-        script.pathname,
-        environment,
-      ]),
+      execFileAsync(
+        'sh',
+        [
+          '-c',
+          '. "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; recovery_record_path() { RECOVERY_REFERENCE_SNAPSHOT=""; }; init_temp_root; trap cleanup_temp EXIT; recovery_record_environment "$2" 1',
+          'recovery-reference-type-test',
+          script.pathname,
+          environment,
+        ],
+        {
+          env: {
+            ...process.env,
+            RETIRE_OLLAMA_TEST_BIN: '/sbin',
+            RETIRE_OLLAMA_TEST_FSTYPE: 'apfs',
+          },
+        }
+      ),
       (error) =>
         error.code === 65 &&
         /unsafe recovery EnvironmentFile/.test(error.stderr)
@@ -141,6 +152,7 @@ test('refuses a replacement after the live-content revalidation', async () => {
           env: {
             ...process.env,
             RETIRE_OLLAMA_TEST_BIN: bin,
+            RETIRE_OLLAMA_TEST_FSTYPE: 'apfs',
             RETIRE_OLLAMA_MUTATION_FLAG: mutationFlag,
             RETIRE_OLLAMA_MUTATION_TARGET: environment,
           },

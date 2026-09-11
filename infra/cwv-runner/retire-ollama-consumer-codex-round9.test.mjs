@@ -16,6 +16,8 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
+const containerId =
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const unprivileged = process.getuid?.() === 0 ? { gid: 65534, uid: 65534 } : {};
 const prelude =
   'sha256sum() { /usr/bin/shasum -a 256 "$@"; }; stat() { if [ "$1" = -c ] && [ "$2" = %F ]; then [ -d "$3" ] && printf "directory\\n" || printf "regular file\\n"; else printf "1:2:81a4:10:501:20:644\\n"; fi; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
@@ -33,7 +35,10 @@ function scanCompose(root, bin) {
     bin
       ? {
           ...unprivileged,
-          env: { ...process.env, RETIRE_OLLAMA_TEST_BIN: bin },
+          env: {
+            ...process.env,
+            RETIRE_OLLAMA_TEST_BIN: bin,
+          },
         }
       : undefined
   );
@@ -131,13 +136,13 @@ test('finds a stopped generic container whose only dependency is a legacy link',
       join(bin, 'docker'),
       `#!/bin/sh
 case "$*" in
-  *' ps -a '*) printf 'generic-api\\n' ;;
-  *'inspect -f {{.Name}} generic-api') printf '/generic-api\\n' ;;
-  *'inspect -f {{json .State.Running}} generic-api') printf 'false\\n' ;;
-  *' cp generic-api:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;;
-  *'inspect -f {{json .Mounts}} generic-api') printf '[]\\n' ;;
-  *'inspect -f {{.Id}} '*'.HostConfig.Links'*' generic-api') printf 'generic-api /generic-api /bin/true [] [] {} null [] {} {} {} ["/ollama-loopback:ollama"] "bridge"\\n' ;;
-  *'inspect -f {{.Id}} '*' generic-api') printf 'generic-api /generic-api /bin/true [] [] {} null [] {} {} {} [] "bridge"\\n' ;;
+  *' ps -a '*) printf '${containerId}\\n' ;;
+  *'inspect -f {{.Name}} ${containerId}') printf '/generic-api\\n' ;;
+  *'inspect -f {{json .State.Running}} ${containerId}') printf 'false\\n' ;;
+  *' cp ${containerId}:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;;
+  *'inspect -f {{json .Mounts}} ${containerId}') printf '[]\\n' ;;
+  *'inspect -f {{.Id}} '*'.HostConfig.Links'*' ${containerId}') printf '${containerId} /generic-api /bin/true [] [] {} null [] {} {} {} ["/ollama-loopback:ollama"] "bridge"\\n' ;;
+  *'inspect -f {{.Id}} '*' ${containerId}') printf '${containerId} /generic-api /bin/true [] [] {} null [] {} {} {} [] "bridge"\\n' ;;
   *) exit 64 ;;
 esac
 `
@@ -157,7 +162,10 @@ esac
       ],
       {
         ...unprivileged,
-        env: { ...process.env, RETIRE_OLLAMA_TEST_BIN: bin },
+        env: {
+          ...process.env,
+          RETIRE_OLLAMA_TEST_BIN: bin,
+        },
       }
     );
     assert.match(stdout, /ollama-loopback:ollama/);

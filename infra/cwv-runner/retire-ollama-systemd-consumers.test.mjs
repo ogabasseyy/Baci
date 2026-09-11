@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -19,6 +21,20 @@ const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
 const emptyPasswdInventory =
   'getent() { [ "$#" -eq 1 ] && [ "$1" = passwd ] || return 2; return 0; };';
+const hashTool = ['/usr/bin/sha256sum', '/usr/bin/shasum'].find((path) => {
+  return existsSync(path);
+});
+assert.ok(hashTool, 'a system SHA-256 tool is required for this fixture');
+const hashArgs = hashTool.endsWith('shasum') ? ' -a 256' : '';
+const testBin = await mkdtemp(join(tmpdir(), 'baci-systemd-consumer-bin-'));
+await writeFile(
+  join(testBin, 'sha256sum'),
+  `#!/bin/sh\nexec ${hashTool}${hashArgs} "$@"\n`
+);
+await chmod(join(testBin, 'sha256sum'), 0o755);
+process.env.RETIRE_OLLAMA_TEST_BIN = testBin;
+process.env.RETIRE_OLLAMA_TEST_FSTYPE = 'apfs';
+test.after(() => rm(testBin, { recursive: true, force: true }));
 
 function assertFingerprint(fields, offset, expectedPath) {
   assert.equal(fields[offset], expectedPath);

@@ -19,7 +19,15 @@ function shell(command, args = [], options = {}) {
       script.pathname,
       ...args,
     ],
-    options
+    {
+      ...options,
+      env: {
+        ...process.env,
+        RETIRE_OLLAMA_TEST_BIN: '/sbin',
+        RETIRE_OLLAMA_TEST_FSTYPE: 'apfs',
+        ...(options.env ?? {}),
+      },
+    }
   );
 }
 
@@ -109,10 +117,10 @@ test('syncs the receipt directory after removing an accepted pending digest', as
   ]);
   try {
     const { stdout } = await shell(
-      `expected=$2; recovery_reconcile_publish_temporaries() { :; }; recovery_validate_json() { :; }; recovery_pair_digest() { :; }; recovery_read_digest() { printf '%064d\\n' 0; }; recovery_no_pending() { :; }; synced=0; fsync_dir() { [ "$1" = "$expected" ] && [ ! -e "$expected/recovery-scan.json.sha256.pending" ] || return 1; synced=$((synced + 1)); }; recovery_reconcile_pair "$expected"; printf 'synced:%s\\n' "$synced"`,
+      `expected=$2; recovery_reconcile_publish_temporaries() { :; }; recovery_validate_json() { :; }; recovery_pair_digest() { :; }; recovery_read_digest() { printf '%064d\\n' 0; }; recovery_no_pending() { :; }; synced=0; fsync_dir() { [ "$1" = "$expected" ] || return 1; synced=$((synced + 1)); if [ "$synced" -eq 1 ]; then [ -e "$expected/recovery-scan.json.sha256.pending" ]; else [ ! -e "$expected/recovery-scan.json.sha256.pending" ]; fi; }; recovery_reconcile_pair "$expected"; printf 'synced:%s\\n' "$synced"`,
       [directory]
     );
-    assert.equal(stdout, 'synced:1\n');
+    assert.equal(stdout, 'synced:2\n');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -200,6 +208,67 @@ test('refuses JSON publication when the pending JSON and digest cannot be proven
         /JSON pending drift/.test(error.stderr) &&
         !error.stdout.includes('published')
     );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('keeps pending evidence when target fsync fails during publication', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'baci-recovery-fsync-file-'));
+  const pending = join(directory, 'pending');
+  const target = join(directory, 'target');
+  await writeFile(pending, '{}');
+  await chmod(pending, 0o600);
+  try {
+    const { stdout } = await shell(
+      `recovery_safe_receipt_file() { :; }; recovery_safe_receipt_ancestry() { :; }; fsync_file() { return 1; }; fsync_dir() { :; }; if recovery_publish_link "$2" "$3"; then printf published; else printf refused; fi; [ -e "$2" ] && [ -e "$3" ] && printf :retained`,
+      [pending, target]
+    );
+    assert.equal(stdout, 'refused:retained');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('keeps pending evidence when directory fsync fails before publication cleanup', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'baci-recovery-fsync-dir-'));
+  const pending = join(directory, 'pending');
+  const target = join(directory, 'target');
+  await writeFile(pending, '{}');
+  await chmod(pending, 0o600);
+  try {
+    const { stdout } = await shell(
+      `recovery_safe_receipt_file() { :; }; recovery_safe_receipt_ancestry() { :; }; fsync_file() { :; }; fsync_dir() { return 1; }; if recovery_publish_link "$2" "$3"; then printf published; else printf refused; fi; [ -e "$2" ] && [ -e "$3" ] && printf :retained`,
+      [pending, target]
+    );
+    assert.equal(stdout, 'refused:retained');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('keeps accepted pending digest when reconciliation fsync fails', async () => {
+  const directory = await mkdtemp(
+    join(tmpdir(), 'baci-recovery-reconcile-fsync-')
+  );
+  const json = join(directory, 'recovery-scan.json');
+  const digest = `${json}.sha256`;
+  const digestPending = `${digest}.pending`;
+  await Promise.all([
+    writeFile(json, '{}'),
+    writeFile(digest, 'a'.repeat(64)),
+    writeFile(digestPending, 'a'.repeat(64)),
+  ]);
+  try {
+    await assert.rejects(
+      shell(
+        `recovery_reconcile_publish_temporaries() { :; }; recovery_validate_json() { :; }; recovery_pair_digest() { :; }; recovery_read_digest() { printf '%064d\\n' 0; }; recovery_no_pending() { :; }; fsync_dir() { return 1; }; recovery_reconcile_pair "$2"`,
+        [directory]
+      ),
+      (error) =>
+        error.code === 78 && /pending digest cleanup failed/.test(error.stderr)
+    );
+    assert.equal(await readFile(digestPending, 'utf8'), 'a'.repeat(64));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

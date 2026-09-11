@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
 
 const harness = [
-  '. "$1"',
+  'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"',
   'SCRIPT_DIR=$(dirname "$1")',
   'init_temp_root',
   'trap cleanup_temp EXIT',

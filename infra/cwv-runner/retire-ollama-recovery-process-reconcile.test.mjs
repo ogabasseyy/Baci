@@ -87,7 +87,7 @@ function shell(procRoot, scratch, command, args = []) {
     'sh',
     [
       '-c',
-      `. "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; [ "$(id -u):$(id -g)" = "$RETIRE_OLLAMA_EXPECT_TEST_ID" ] || exit 79; ${command}`,
+      `RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; [ "$(id -u):$(id -g)" = "$RETIRE_OLLAMA_EXPECT_TEST_ID" ] || exit 79; ${command}`,
       'retire-ollama-recovery-process-reconcile-test',
       script.pathname,
       ...args,
@@ -121,7 +121,7 @@ test('omits a ps collector that vanished after the saved process scan', async ()
     const { stdout } = await shell(
       fixture.procRoot,
       fixture.scratch,
-      'id() { printf "0\\n"; }; recovery_socket_snapshot() { RECOVERY_SOCKET_SNAPSHOT_SHA=none; RECOVERY_LISTENING_SOCKETS="[]"; }; recovery_process_identity() { printf "container-cgroup container-ns\\n"; }; recovery_process_executable() { printf "{\\"uid\\":\\"1000\\",\\"startTime\\":\\"99\\"}\\n"; }; init_temp_root; trap cleanup_temp EXIT; recovery_process_snapshot 41 container-cgroup container-ns "$3" "$2"',
+      'id() { printf "0\\n"; }; recovery_socket_snapshot() { RECOVERY_SOCKET_SNAPSHOT_SHA=none; RECOVERY_LISTENING_SOCKETS="[]"; }; recovery_process_identity() { printf "container-cgroup container-ns\\n"; }; recovery_process_executable() { printf "{\\"uid\\":\\"1000\\",\\"startTime\\":\\"99\\"}\\n"; }; RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_process_snapshot 41 container-cgroup container-ns "$3" "$2"',
       [processes, ports]
     );
     const snapshot = JSON.parse(stdout);
@@ -192,9 +192,9 @@ test('refuses a still-present process whose environment is unavailable', async (
 
 test('reconciles disappearance before each post-environment evidence boundary', async () => {
   const boundaries = [
-    'init_temp_root; trap cleanup_temp EXIT; recovery_process_lifetime_marker() { /bin/rm -rf -- "$RECOVERY_PROC_ROOT/42"; return 1; }; recovery_process_environment_evidence 42',
-    'init_temp_root; trap cleanup_temp EXIT; temp_path() { /bin/rm -rf -- "$RECOVERY_PROC_ROOT/42"; printf "%s/matches" "$RETIRE_OLLAMA_TMPDIR"; }; recovery_process_lifetime_marker() { printf marker; }; recovery_process_environment_evidence 42',
-    'init_temp_root; trap cleanup_temp EXIT; recovery_process_lifetime_marker() { marker="$RETIRE_OLLAMA_TMPDIR/marker"; if [ -e "$marker" ]; then /bin/rm -rf -- "$RECOVERY_PROC_ROOT/42"; return 1; fi; : >"$marker"; printf marker; }; recovery_process_environment_evidence 42',
+    'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_process_lifetime_marker() { /bin/rm -rf -- "$RECOVERY_PROC_ROOT/42"; return 1; }; recovery_process_environment_evidence 42',
+    'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; temp_path() { /bin/rm -rf -- "$RECOVERY_PROC_ROOT/42"; printf "%s/matches" "$RETIRE_OLLAMA_TMPDIR"; }; recovery_process_lifetime_marker() { printf marker; }; recovery_process_environment_evidence 42',
+    'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_process_lifetime_marker() { marker="$RETIRE_OLLAMA_TMPDIR/marker"; if [ -e "$marker" ]; then /bin/rm -rf -- "$RECOVERY_PROC_ROOT/42"; return 1; fi; : >"$marker"; printf marker; }; recovery_process_environment_evidence 42',
   ];
   for (const command of boundaries) {
     const fixture = await createFixture();
@@ -264,7 +264,7 @@ test('refuses failed lifetime, environment, dependency, ancestry, and process-en
         'scanner ancestry args digest failed',
       ],
       [
-        'init_temp_root; trap cleanup_temp EXIT; recovery_socket_snapshot() { RECOVERY_SOCKET_SNAPSHOT_SHA=none; RECOVERY_LISTENING_SOCKETS="[]"; }; recovery_process_identity() { printf "container-cgroup container-ns\\n"; }; recovery_process_executable() { printf "{\\"uid\\":\\"1000\\",\\"startTime\\":\\"99\\"}\\n"; }; hash_text() { case "$1" in "/usr/bin/ollama serve") return 1;; *) printf aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;; esac; }; recovery_process_snapshot 41 container-cgroup container-ns "$3" "$2"',
+        'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_socket_snapshot() { RECOVERY_SOCKET_SNAPSHOT_SHA=none; RECOVERY_LISTENING_SOCKETS="[]"; }; recovery_process_identity() { printf "container-cgroup container-ns\\n"; }; recovery_process_executable() { printf "{\\"uid\\":\\"1000\\",\\"startTime\\":\\"99\\"}\\n"; }; hash_text() { case "$1" in "/usr/bin/ollama serve") return 1;; *) printf aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;; esac; }; recovery_process_snapshot 41 container-cgroup container-ns "$3" "$2"',
         'process args digest failed',
       ],
     ]) {
@@ -288,7 +288,7 @@ test('refuses a failed executable identity digest before process serialization',
       shell(
         fixture.procRoot,
         fixture.scratch,
-        'init_temp_root; trap cleanup_temp EXIT; readlink() { case "$1" in --|-f) printf "/opt/ollama\\n";; *) return 1;; esac; }; stat() { printf "1:2:1000:1000:755\\n"; }; hash_text() { return 1; }; recovery_process_executable 41 /bin/ollama ollama'
+        'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; readlink() { case "$1" in --|-f) printf "/opt/ollama\\n";; *) return 1;; esac; }; stat() { printf "1:2:1000:1000:755\\n"; }; hash_text() { return 1; }; recovery_process_executable 41 /bin/ollama ollama'
       ),
       (error) =>
         error.code === 78 &&

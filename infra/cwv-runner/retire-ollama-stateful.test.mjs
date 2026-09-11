@@ -18,7 +18,10 @@ const script = new URL('./retire-ollama.sh', root);
 const execFileAsync = promisify(execFile);
 const unprivilegedExecution =
   process.getuid?.() === 0 ? { gid: 65534, uid: 65534 } : {};
-
+const fixtureId = (index) => String(index + 1).padStart(64, '0');
+test('keeps generated container IDs unique beyond four fixture rows', () => {
+  assert.notEqual(fixtureId(3), fixtureId(4));
+});
 async function exposeFixture(directory, writable = false) {
   if (process.getuid?.() === 0)
     await chmod(directory, writable ? 0o777 : 0o755);
@@ -27,14 +30,18 @@ async function exposeFixture(directory, writable = false) {
 async function scannedContainers(rows) {
   const dir = await mkdtemp(join(tmpdir(), 'baci-ollama-container-scan-'));
   const bin = join(dir, 'bin');
+  const normalizedRows = rows.map((row, index) => {
+    const id = fixtureId(index);
+    return { ...row, id, detail: row.detail.replace(/^[^ ]+/, id) };
+  });
   try {
     await mkdir(bin);
     const docker = join(bin, 'docker');
     await writeFile(
       docker,
-      `#!/bin/sh\ncase "$*" in *' ps '*) printf '%s\\n' '${rows
+      `#!/bin/sh\ncase "$*" in *' ps '*) printf '%s\\n' '${normalizedRows
         .map(({ id }) => id)
-        .join(' ')}' | tr ' ' '\\n';; *inspect*) case "$*" in ${rows
+        .join(' ')}' | tr ' ' '\\n';; *inspect*) case "$*" in ${normalizedRows
         // biome-ignore format: compact Docker fixture case table.
         .map(
         ({ id, name, detail, mounts = '[]' }) =>
@@ -55,7 +62,10 @@ async function scannedContainers(rows) {
       ],
       {
         ...unprivilegedExecution,
-        env: { ...process.env, RETIRE_OLLAMA_TEST_BIN: bin },
+        env: {
+          ...process.env,
+          RETIRE_OLLAMA_TEST_BIN: bin,
+        },
       }
     );
     return stdout.trim();
@@ -84,7 +94,6 @@ const records = (systemdDefinitions, changingSuffix) => [
   { class: 'container-config', sha256: `config-${changingSuffix}` },
   { class: 'model-store-identity', treeSha256: 'model-before-delete' },
 ];
-
 async function sameDeleteModelsView(baseline, current) {
   const dir = await mkdtemp(join(tmpdir(), 'baci-ollama-stateful-'));
   const before = join(dir, 'before.json');
@@ -200,7 +209,7 @@ test('ignores an unrelated container that disappears during inspect', async () =
     await mkdir(bin);
     await writeFile(
       join(bin, 'docker'),
-      '#!/bin/sh\ncase "$*" in *\' ps \'*) if [ ! -e "$RETIRE_OLLAMA_TEST_STATE" ]; then : >"$RETIRE_OLLAMA_TEST_STATE"; printf "gone\\nkept\\n"; else printf "kept\\n"; fi;; *\'{{.Id}}\'*kept) printf "kept /kept /bin/true [] [] \\"\\" {} null [] {} {} {} [] \\"bridge\\"\\n";; *\'{{.Name}}\'*kept) printf "/kept\\n";; *\'{{json .Mounts}}\'*kept) printf "[]\\n";; *\'{{json .State.Running}}\'*kept) printf "false\\n";; *\' cp \'*kept:\'/bin/true \'*) destination=$5; printf "#!/bin/sh\\nexit 0\\n" >"$destination";; *\' inspect \'*gone) exit 1;; esac\n'
+      '#!/bin/sh\ncase "$*" in *\' ps \'*) if [ ! -e "$RETIRE_OLLAMA_TEST_STATE" ]; then : >"$RETIRE_OLLAMA_TEST_STATE"; printf "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\n"; else printf "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\n"; fi;; *\'{{.Id}}\'*bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb) printf "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb /kept /bin/true [] [] \\"\\" {} null [] {} {} {} [] \\"bridge\\"\\n";; *\'{{.Name}}\'*bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb) printf "/kept\\n";; *\'{{json .Mounts}}\'*bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb) printf "[]\\n";; *\'{{json .State.Running}}\'*bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb) printf "false\\n";; *\' cp \'*bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:\'/bin/true \'*) destination=$5; printf "#!/bin/sh\\nexit 0\\n" >"$destination";; *\' inspect \'*aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa) exit 1;; esac\n'
     );
     await execFileAsync('chmod', ['0755', join(bin, 'docker')]);
     await exposeFixture(dir, true);
@@ -234,7 +243,7 @@ test('preserves a persistent Docker inspect failure after inventory retry', asyn
     await mkdir(bin);
     await writeFile(
       join(bin, 'docker'),
-      '#!/bin/sh\ncase "$*" in *\' ps \'*) printf "gone\\n";; *\' inspect \'*) exit 42;; esac\n'
+      '#!/bin/sh\ncase "$*" in *\' ps \'*) printf "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\\n";; *\' inspect \'*) exit 42;; esac\n'
     );
     await execFileAsync('chmod', ['0755', join(bin, 'docker')]);
     await exposeFixture(dir);
@@ -249,7 +258,10 @@ test('preserves a persistent Docker inspect failure after inventory retry', asyn
         ],
         {
           ...unprivilegedExecution,
-          env: { ...process.env, RETIRE_OLLAMA_TEST_BIN: bin },
+          env: {
+            ...process.env,
+            RETIRE_OLLAMA_TEST_BIN: bin,
+          },
         }
       ),
       (error) => error.code === 42 || error.status === 42

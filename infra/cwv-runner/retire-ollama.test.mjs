@@ -230,7 +230,7 @@ test('accepts only the reviewed Ubuntu Docker socket alias and pins its identity
   assert.match(source, /docker socket identity changed/);
   assert.match(
     source,
-    /assert_docker_socket; record_scan container-definitions/
+    /docker_socket_scan_begin; record_scan container-definitions[\s\S]*docker_socket_scan_end; record_docker_socket/
   );
   assert.doesNotMatch(source, /record_path docker-socket "\$SOCKET"/);
 });
@@ -252,7 +252,7 @@ test('keeps the configured Docker socket alias immutable across every apply reva
   );
   assert.match(
     source,
-    /assert_docker_socket; record_scan container-definitions/
+    /docker_socket_scan_begin; record_scan container-definitions[\s\S]*docker_socket_scan_end; record_docker_socket/
   );
   assert.match(source, /--host "unix:\/\/\$CANONICAL_DOCKER_SOCKET"/);
 });

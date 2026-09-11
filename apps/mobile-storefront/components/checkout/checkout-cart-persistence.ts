@@ -1,8 +1,10 @@
 import { asyncStorage as AsyncStorage } from '@/lib/storage';
 import { useCartStore } from '@/stores/cart-store';
 
-export async function clearAndPersistCheckoutCart(clearCart: () => void) {
-  clearCart();
+export async function clearAndPersistCheckoutCart(
+  clearCart: () => void | Promise<void>
+) {
+  await clearCart();
   const persistOpts = useCartStore.persist.getOptions();
   const partialize = persistOpts.partialize ?? ((state: unknown) => state);
   const persistedState = partialize(useCartStore.getState());

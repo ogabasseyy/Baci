@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { Alert } from 'react-native';
 import CryptoPaymentScreen from '@/app/crypto-payment';
@@ -66,21 +71,23 @@ describe('CryptoPaymentScreen', () => {
     };
   });
 
-  it('clears the cart and routes completed payment to order success', () => {
+  it('clears the cart and routes completed payment to order success', async () => {
     render(<CryptoPaymentScreen />);
 
     fireEvent.press(
       screen.getByRole('button', { name: "I've Sent the Payment" })
     );
 
-    expect(mockClearCart).toHaveBeenCalledTimes(1);
-    expect(mockReplace).toHaveBeenCalledWith({
-      pathname: '/order-success',
-      params: {
-        orderId: 'order-123',
-        orderNumber: 'ORD-123',
-        paymentMethod: 'juicyway',
-      },
+    await waitFor(() => {
+      expect(mockClearCart).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: '/order-success',
+        params: {
+          orderId: 'order-123',
+          orderNumber: 'ORD-123',
+          paymentMethod: 'juicyway',
+        },
+      });
     });
   });
 

@@ -22,7 +22,13 @@ const mockValidateCheckoutSubmission =
     typeof import('./checkout-submit-validation').validateCheckoutSubmission
   >();
 const mockRepriceItems = jest.fn();
-const mockRestoreItems = jest.fn();
+const mockRestoreItems = jest.fn<
+  (
+    items: CartItem[],
+    cartWideNegotiationActive?: boolean,
+    checkoutGeneration?: string
+  ) => Promise<void>
+>(async () => undefined);
 const mockUseMerchant = jest.fn() as jest.MockedFunction<
   () => { data: { id: string } | null }
 >;
@@ -159,7 +165,7 @@ function createParams(
     accountPassword: '',
     appliedDiscountCode: null,
     availablePaymentMethods: ['paystack'],
-    clearCart: jest.fn(),
+    clearCart: jest.fn<() => void | Promise<void>>(),
     currentShippingQuoteContextKey: 'door:Lagos:Ikeja',
     customer: null,
     deliveryFee: 1500,
@@ -201,6 +207,8 @@ describe('useCheckoutSubmit', () => {
     mockUseMerchant.mockReturnValue({ data: { id: 'merchant-1' } });
     mockedUseCartStore.getState = () => ({
       items: cartItems,
+      checkoutGeneration: 'gen-1',
+      cartWideNegotiationActive: false,
       repriceItems: mockRepriceItems,
       restoreItems: mockRestoreItems,
     });
@@ -292,6 +300,9 @@ describe('useCheckoutSubmit', () => {
 
     // Standard path taken (createOrder called); BNPL flow NOT taken.
     expect(mockCreateOrder).toHaveBeenCalled();
+    expect(mockCreateOrder).toHaveBeenCalledWith(expect.anything(), {
+      checkoutGeneration: 'gen-1',
+    });
     expect(mockSubmitBnplCheckout).not.toHaveBeenCalled();
   });
 

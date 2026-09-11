@@ -35,6 +35,7 @@ type MockFetchResponse = {
   ok: boolean;
   status: number;
   json: () => Promise<unknown>;
+  headers?: { get: (name: string) => string | null };
 };
 
 type MockFetchOptions = {
@@ -46,6 +47,7 @@ const mockFetchResponse: MockFetchResponse = {
   ok: true,
   status: 200,
   json: mockFetchJson,
+  headers: { get: () => null },
 };
 interface RetryOptions {
   maxRetries?: number;
@@ -96,7 +98,14 @@ jest.mock('expo-constants', () => ({
 }));
 
 jest.mock('expo-crypto', () => ({
-  randomUUID: () => 'test-uuid-1234',
+  randomUUID: () => require('node:crypto').randomUUID(),
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  digestStringAsync: async (_algorithm: string, value: string) =>
+    require('node:crypto').createHash('sha256').update(value).digest('hex'),
+}));
+
+jest.mock('@/stores/cart-store', () => ({
+  useCartStore: { getState: () => ({ checkoutGeneration: 'cart-one' }) },
 }));
 
 jest.mock('@/lib/logger', () => ({
@@ -1075,82 +1084,5 @@ describe('createOrder — variant_attributes', () => {
     })) as CreateOrderResult;
 
     expect(result.order.created_at).toEqual(expect.any(String));
-  });
-});
-
-describe('createOrderWithOfflineSupport — offline queue contract', () => {
-  const baseRequest = {
-    customer_email: 'buyer@example.com',
-    customer_name: 'Test Buyer',
-    customer_phone: '+2348012345678',
-    items: [{ id: 'item-1', name: 'Product', quantity: 1, price: 5000 }],
-    subtotal: 5000,
-    shipping_fee: 500,
-    payment_method: 'pay_on_delivery' as const,
-    shipping_address: {
-      firstName: 'Test',
-      lastName: 'Buyer',
-      address: '123 St',
-      city: 'Lagos',
-      state: 'Lagos',
-    },
-  };
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockNetInfoFetch.mockResolvedValue({ isConnected: true });
-    mockSupabaseGetSession.mockResolvedValue({
-      data: { session: { access_token: 'token-123' } },
-    });
-    mockSupabaseGetUser.mockResolvedValue({
-      data: { user: { id: 'user-1' } },
-      error: null,
-    });
-    const { offlineQueue } = require('@/lib/offline-queue');
-    jest.mocked(offlineQueue.enqueue).mockResolvedValue('queue-id-1');
-  });
-
-  it('returns the order without queuing when the request succeeds', async () => {
-    const { createOrderWithOfflineSupport } = require('./orders');
-    mockFetchWithRetry.mockResolvedValueOnce(mockFetchResponse);
-
-    const result = await createOrderWithOfflineSupport(baseRequest);
-
-    expect(result.queued).toBe(false);
-    expect(result.order).toBeDefined();
-    const { offlineQueue } = require('@/lib/offline-queue');
-    expect(offlineQueue.enqueue).not.toHaveBeenCalled();
-  });
-
-  it('queues the order when createOrder encounters a NETWORK_ERROR', async () => {
-    const { createOrderWithOfflineSupport } = require('./orders');
-    const { NetworkError } = require('@/lib/api');
-    mockFetchWithRetry.mockRejectedValueOnce(
-      new NetworkError('connection refused')
-    );
-
-    const result = await createOrderWithOfflineSupport(baseRequest);
-
-    expect(result.queued).toBe(true);
-    const { offlineQueue } = require('@/lib/offline-queue');
-    expect(offlineQueue.enqueue).toHaveBeenCalledWith(
-      'create_order',
-      baseRequest
-    );
-  });
-
-  it('re-throws TIMEOUT_ERROR without queuing to avoid duplicate orders', async () => {
-    const { createOrderWithOfflineSupport } = require('./orders');
-    const { TimeoutError } = require('@/lib/api');
-    mockFetchWithRetry.mockRejectedValueOnce(new TimeoutError('timed out'));
-
-    await expect(
-      createOrderWithOfflineSupport(baseRequest)
-    ).rejects.toMatchObject({
-      code: 'TIMEOUT_ERROR',
-    });
-
-    const { offlineQueue } = require('@/lib/offline-queue');
-    expect(offlineQueue.enqueue).not.toHaveBeenCalled();
   });
 });

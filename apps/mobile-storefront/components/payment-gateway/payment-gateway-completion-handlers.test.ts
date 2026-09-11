@@ -52,7 +52,7 @@ function createInput(
     refs,
     input: {
       amount: 5000,
-      clearCart: jest.fn(),
+      clearCart: jest.fn<() => void | Promise<void>>(),
       clearPendingLoadTimeout: jest.fn(),
       customerIdentifier: '08012345678',
       gateway: 'paystack' as const,
@@ -80,14 +80,14 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     jest.clearAllMocks();
   });
 
-  it('completes an order payment, clears the cart, and navigates to success', () => {
+  it('completes an order payment, clears the cart, and navigates to success', async () => {
     // Arrange
     const { input, refs } = createInput();
     const { beginPaymentCompletion } =
       createPaymentGatewayCompletionHandlers(input);
 
     // Act
-    beginPaymentCompletion();
+    await beginPaymentCompletion();
 
     // Assert
     expect(refs.paymentCompletionStartedRef.current).toBe(true);

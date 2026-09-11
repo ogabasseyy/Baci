@@ -22,7 +22,8 @@ const mockBuildMobileCheckoutOrderFingerprint =
   jest.fn<(params: unknown) => string>();
 const mockClearMobileCheckoutIdempotencyKey =
   jest.fn<(...params: unknown[]) => void>();
-const mockCreateOrder = jest.fn<(params: unknown) => Promise<OrderResponse>>();
+const mockCreateOrder =
+  jest.fn<(request: unknown, options?: unknown) => Promise<OrderResponse>>();
 const mockGetKlumpDisabledReason =
   jest.fn<(...params: unknown[]) => string | undefined>();
 const mockGetMobileCheckoutIdempotencyKey =
@@ -60,7 +61,8 @@ jest.mock('@/lib/klump-checkout', () => ({
 }));
 
 jest.mock('@/services/orders', () => ({
-  createOrder: (params: unknown) => mockCreateOrder(params),
+  createOrder: (request: unknown, options?: unknown) =>
+    mockCreateOrder(request, options),
   OrderError: class OrderError extends Error {
     code: string;
 
@@ -126,6 +128,7 @@ function createParams() {
     itemsSnapshot,
     liveSavingsSelection: undefined,
     liveWalletSelection: undefined,
+    checkoutGeneration: 'gen-1',
     mobileCheckoutIdempotencyRef: { current: null },
     paymentMethodForOrder: 'credit_direct',
     paymentSettings: {},
@@ -197,24 +200,17 @@ describe('submitBnplCheckout', () => {
     expect(mockCreateOrder).not.toHaveBeenCalled();
   });
 
-  it('creates non-Klump BNPL orders with the mobile idempotency key before routing', async () => {
+  it('uses the order service retry identity before routing BNPL', async () => {
     const params = createParams();
 
     await submitBnplCheckout(params);
 
-    expect(mockBuildMobileCheckoutOrderFingerprint).toHaveBeenCalledWith(
-      expect.objectContaining({
-        customerEmail: 'ada@example.com',
-        selectedQuoteId: 'quote-1',
-        shippingFee: 1500,
-        subtotal: 20000,
-      })
-    );
     expect(mockCreateOrder).toHaveBeenCalledWith(
-      expect.objectContaining({
-        idempotency_key: 'idempotency-key-1',
-        payment_method: 'credit_direct',
-      })
+      expect.objectContaining({ payment_method: 'credit_direct' }),
+      { checkoutGeneration: 'gen-1' }
+    );
+    expect(mockCreateOrder.mock.calls[0][0]).not.toHaveProperty(
+      'idempotency_key'
     );
     expect(params.isOrderInFlight.current).toBe(false);
     expect(params.setIsProcessing).toHaveBeenCalledWith(false);
@@ -232,7 +228,7 @@ describe('submitBnplCheckout', () => {
     });
   });
 
-  it('clears the idempotency key when the server rejects reuse', async () => {
+  it('preserves the existing checkout identity when the server rejects reuse', async () => {
     const conflict = new Error('not reusable') as Error & { code: string };
     conflict.code = 'CHECKOUT_ORDER_NOT_REUSABLE';
     Object.setPrototypeOf(
@@ -243,9 +239,7 @@ describe('submitBnplCheckout', () => {
 
     await expect(submitBnplCheckout(createParams())).rejects.toBe(conflict);
 
-    expect(mockClearMobileCheckoutIdempotencyKey).toHaveBeenCalledWith(
-      expect.objectContaining({ current: null }),
-      'fingerprint-1'
-    );
+    expect(mockClearMobileCheckoutIdempotencyKey).not.toHaveBeenCalled();
+    expect(mockCreateOrder).toHaveBeenCalledTimes(1);
   });
 });

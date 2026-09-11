@@ -67,8 +67,8 @@ export function CheckoutCryptoPaymentModal({
     );
   };
 
-  const completePayment = () => {
-    clearCart();
+  const completePayment = async () => {
+    await clearCart();
     const { orderId, orderNumber, trackingToken } = cryptoPayment;
     onClosePayment();
     router.replace({

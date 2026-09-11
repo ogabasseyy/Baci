@@ -203,7 +203,14 @@ platform :ios do
       submit_for_review: true,
       automatic_release: true,
       force: true,
-      reject_if_possible: true,
+      # NO reject_if_possible: cancellation is owned solely by
+      # app_store_version_slot_ready? above, which withdraws a live review ONLY
+      # under the explicit IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT opt-in (after
+      # verifying a replacement build exists). deliver's own reject_if_possible is
+      # a second, unguarded cancellation path that fires regardless of that opt-in
+      # -- it silently withdrew build 2.1.527 from App Review when 2.1.528 shipped.
+      # Without it the worst case is a red build (recoverable), never a cancelled
+      # Apple review.
       precheck_include_in_app_purchases: false,
       # IDFA: the storefront uses the advertiser identifier for ad-attribution
       # (Facebook/TikTok/Snapchat/Google conversion + install tracking via the

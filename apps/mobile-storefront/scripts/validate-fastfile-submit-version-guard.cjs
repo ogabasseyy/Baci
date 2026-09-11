@@ -92,6 +92,17 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
     failures.push('Fastfile: submit lane is missing set_changelog');
   }
 
+  // deliver's own reject_if_possible is a SECOND, unguarded cancellation path:
+  // it withdraws whatever is in App Review regardless of the
+  // IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT opt-in that
+  // app_store_version_slot_ready? enforces. It silently cancelled build 2.1.527's
+  // review when 2.1.528 shipped. Cancellation must be owned solely by the guard.
+  if (submitLane.includes('reject_if_possible')) {
+    failures.push(
+      'Fastfile: submit lane must not pass reject_if_possible — cancellation is owned solely by app_store_version_slot_ready? (opt-in via IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT); deliver reject_if_possible is an unguarded second path that withdraws live App Reviews'
+    );
+  }
+
   const cancellationGate =
     /def\s+review_cancellation_allowed\?[\s\S]*?IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT/;
   if (!cancellationGate.test(activeSlot)) {

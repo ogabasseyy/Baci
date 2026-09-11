@@ -63,6 +63,9 @@ const VALID_FASTFILE = `import("asc_version_slot.rb")
 
 lane :submit do
   api_key = asc_api_key
+  deliver_opts = {
+    submit_for_review: true
+  }
 
   unless app_store_version_slot_ready?(app_version: app_version, build_number: build_number)
     next
@@ -265,6 +268,28 @@ describe('bugfix: cancelling review could strand the app with nothing under revi
 
     expect(validateFastfileSubmitVersionGuard(VALID_FASTFILE, unscoped)).toContain(
       'asc_version_slot.rb: ensure_replacement_build_exists! must scope the lookup to the requested app version'
+    );
+  });
+});
+
+describe('bugfix: reject_if_possible silently withdrew a live App Review', () => {
+  it('rejects a submit lane whose deliver passes reject_if_possible', () => {
+    // deliver's own reject_if_possible cancels whatever is in App Review,
+    // bypassing the opt-in guard — it withdrew build 2.1.527 when 2.1.528 shipped.
+    const withRejectIfPossible = VALID_FASTFILE.replace(
+      `  deliver_opts = {
+    submit_for_review: true
+  }`,
+      `  deliver_opts = {
+    reject_if_possible: true,
+    submit_for_review: true
+  }`
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(withRejectIfPossible, VALID_SLOT)
+    ).toContain(
+      'Fastfile: submit lane must not pass reject_if_possible — cancellation is owned solely by app_store_version_slot_ready? (opt-in via IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT); deliver reject_if_possible is an unguarded second path that withdraws live App Reviews'
     );
   });
 });

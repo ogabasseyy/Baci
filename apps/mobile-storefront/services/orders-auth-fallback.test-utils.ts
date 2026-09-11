@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 export function sessionFixture(
   accessToken: string,
   refreshToken: string,
-  userId = 'user-a'
+  userId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 ): Session {
   return {
     access_token: accessToken,

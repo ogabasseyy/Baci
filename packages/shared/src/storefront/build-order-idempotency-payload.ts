@@ -14,7 +14,7 @@ type IdempotencyItem = {
   variantName?: string;
 };
 
-export type CheckoutIdempotencyPayloadInput = {
+export type OrderIdempotencyPayloadInput = {
   airport_type?: string | null;
   customer_email: string;
   customer_name: string;
@@ -25,6 +25,7 @@ export type CheckoutIdempotencyPayloadInput = {
   gift_wrapping_fee?: number;
   items: readonly IdempotencyItem[];
   merchant_id: string;
+  payment_method?: string | null;
   savings_amount?: number | null;
   savings_goal_id?: string | null;
   selected_quote_id?: string | null;
@@ -96,35 +97,55 @@ function normalizeItems(items: readonly IdempotencyItem[]) {
     }))
     .sort((left, right) => {
       const productComparison = left.product_id.localeCompare(right.product_id);
-      if (productComparison !== 0) return productComparison;
+      if (productComparison !== 0) {
+        return productComparison;
+      }
+
       const variantComparison = left.variant_id.localeCompare(right.variant_id);
-      if (variantComparison !== 0) return variantComparison;
+      if (variantComparison !== 0) {
+        return variantComparison;
+      }
+
       const variantNameComparison = left.variant_name.localeCompare(
         right.variant_name
       );
-      if (variantNameComparison !== 0) return variantNameComparison;
+      if (variantNameComparison !== 0) {
+        return variantNameComparison;
+      }
+
       const conditionComparison = left.condition.localeCompare(right.condition);
-      if (conditionComparison !== 0) return conditionComparison;
-      if (left.quantity !== right.quantity)
+      if (conditionComparison !== 0) {
+        return conditionComparison;
+      }
+
+      if (left.quantity !== right.quantity) {
         return left.quantity - right.quantity;
-      if (left.price !== right.price) return left.price - right.price;
+      }
+
+      if (left.price !== right.price) {
+        return left.price - right.price;
+      }
+
       if (left.assurance_fee !== right.assurance_fee) {
         return left.assurance_fee - right.assurance_fee;
       }
+
       if (left.has_assurance !== right.has_assurance) {
         return left.has_assurance ? 1 : -1;
       }
+
       return stableStringify(left.variant_attributes).localeCompare(
         stableStringify(right.variant_attributes)
       );
     });
 }
 
-/** Matches apps/web/src/lib/checkout/order-idempotency.ts#buildOrderIdempotencyPayload. */
-export function buildCheckoutIdempotencyPayload(
-  input: CheckoutIdempotencyPayloadInput
+export function buildOrderIdempotencyPayload(
+  input: OrderIdempotencyPayloadInput
 ) {
   return {
+    // JSON.stringify preserves insertion order, so keep hash-significant keys
+    // alphabetical to prevent accidental changes during maintenance.
     airport_type: normalizeText(input.airport_type) || undefined,
     customer_email: normalizeText(input.customer_email),
     customer_name: normalizeText(input.customer_name),
@@ -145,6 +166,11 @@ export function buildCheckoutIdempotencyPayload(
     },
     shipping_fee: normalizeNumber(input.shipping_fee),
     shipping_provider: normalizeText(input.shipping_provider),
+    // Merchant-rate orders null shipping_provider/selected_quote_id, so the rate
+    // id is the only distinguishing field between two same-priced merchant rates
+    // (e.g. two same-fee pickup locations). Omit it when empty (undefined, so
+    // JSON.stringify drops the key entirely) to keep the hash byte-identical for
+    // carrier-quote, pickup/airport, and mobile checkouts that never send it.
     shipping_rate_id: normalizeText(input.shipping_rate_id) || undefined,
     tax_amount: normalizeNumber(input.tax_amount),
     use_savings_credit: Boolean(input.use_savings_credit),

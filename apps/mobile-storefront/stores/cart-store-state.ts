@@ -34,7 +34,7 @@ export interface CartState {
     items: CartItem[],
     cartWideNegotiationActive?: boolean,
     checkoutGeneration?: string
-  ) => void;
+  ) => Promise<void>;
   // Reconcile stored prices with the live catalog (keyed by cart line id).
   repriceItems: (priceById: Record<string, number>) => void;
   // Device assurance actions

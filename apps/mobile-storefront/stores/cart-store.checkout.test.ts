@@ -1,10 +1,16 @@
 import { useCartStore } from './cart-store';
 
+const persistedGeneration = { value: null as string | null };
+
 jest.mock('@/lib/persist-checkout-generation', () => ({
-  persistCheckoutGeneration: jest.fn(async () => undefined),
+  persistCheckoutGeneration: jest.fn(async (generation: string) => {
+    persistedGeneration.value = generation;
+  }),
 }));
 jest.mock('@/lib/read-persisted-checkout-generation', () => ({
-  readPersistedCheckoutGeneration: jest.fn(async () => null),
+  readPersistedCheckoutGeneration: jest.fn(
+    async () => persistedGeneration.value
+  ),
 }));
 jest.mock('../lib/storage', () => ({
   syncStorage: {
@@ -17,6 +23,11 @@ jest.mock('expo-crypto', () => ({
   randomUUID: () => require('node:crypto').randomUUID(),
 }));
 
+const { persistCheckoutGeneration } =
+  require('@/lib/persist-checkout-generation') as typeof import('@/lib/persist-checkout-generation');
+const { readPersistedCheckoutGeneration } =
+  require('@/lib/read-persisted-checkout-generation') as typeof import('@/lib/read-persisted-checkout-generation');
+
 const item = {
   product_id: 'buds2',
   slug: 'buds2',
@@ -25,7 +36,10 @@ const item = {
   quantity: 1,
 };
 
-beforeEach(() => useCartStore.getState().clearCart());
+beforeEach(() => {
+  persistedGeneration.value = null;
+  useCartStore.getState().clearCart();
+});
 
 it('persists the purchase generation with the cart for checkout remounts', () => {
   useCartStore.getState().addItem(item);
@@ -84,11 +98,19 @@ it('starts a new retry identity when the shopper confirms a replacement checkout
   expect(useCartStore.getState().checkoutGeneration).not.toBe(first);
 });
 
-it('restores the original retry identity when checkout fails after clearing the cart', () => {
+it('restores the original retry identity when checkout fails after clearing the cart', async () => {
   useCartStore.getState().addItem(item);
   const { items, checkoutGeneration } = useCartStore.getState();
   useCartStore.getState().clearCart();
-  useCartStore.getState().restoreItems(items, false, checkoutGeneration);
+  await useCartStore.getState().restoreItems(items, false, checkoutGeneration);
   expect(useCartStore.getState().checkoutGeneration).toBe(checkoutGeneration);
   expect(useCartStore.getState().items).toEqual(items);
+  expect(persistCheckoutGeneration).toHaveBeenCalledWith(checkoutGeneration);
+
+  useCartStore.setState({ checkoutGeneration: 'stale-after-restart' });
+  const recovered = await readPersistedCheckoutGeneration();
+  if (recovered) {
+    useCartStore.setState({ checkoutGeneration: recovered });
+  }
+  expect(useCartStore.getState().checkoutGeneration).toBe(checkoutGeneration);
 });

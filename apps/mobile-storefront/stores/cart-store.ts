@@ -250,7 +250,14 @@ export const useCartStore = create<CartState>()(
         await persistCheckoutGeneration(checkoutGeneration);
         set({ checkoutGeneration });
       },
-      restoreItems: (items, cartWideNegotiationActive, checkoutGeneration) => {
+      restoreItems: async (
+        items,
+        cartWideNegotiationActive,
+        checkoutGeneration
+      ) => {
+        if (checkoutGeneration !== undefined) {
+          await persistCheckoutGeneration(checkoutGeneration);
+        }
         set({
           items,
           ...(cartWideNegotiationActive !== undefined && {

@@ -2,6 +2,9 @@ import { jest } from '@jest/globals';
 import { AuthRefreshDiscardedError, type Session } from '@supabase/supabase-js';
 import { sessionFixture } from './orders-auth-fallback.test-utils';
 
+const userAId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const userBId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
 const mockGetUser = jest.fn<
   (jwt?: string) => Promise<{
     data: { user: { id: string } | null };
@@ -23,6 +26,9 @@ const mockFetchWithRetry = jest.fn<
     options: unknown
   ) => Promise<unknown>
 >(async () => ({
+  headers: {
+    get: () => null,
+  },
   json: async () => ({
     amountDueToGateway: 102_000,
     order: {
@@ -64,6 +70,22 @@ const orderRequest = {
   source: 'mobile' as const,
   subtotal: 100_000,
 };
+
+jest.mock('@/stores/cart-store', () => ({
+  useCartStore: {
+    getState: () => ({ checkoutGeneration: 'cart-one' }),
+  },
+}));
+
+jest.mock('@react-native-async-storage/async-storage', () => {
+  const storage = new Map<string, string>();
+  return {
+    getItem: async (key: string) => storage.get(key) ?? null,
+    setItem: async (key: string, value: string) => {
+      storage.set(key, value);
+    },
+  };
+});
 
 jest.mock('@react-native-community/netinfo', () => ({
   fetch: jest.fn(async () => ({
@@ -218,7 +240,7 @@ describe('createOrder checkout auth fallback', () => {
       mockFetchWithRetry.mock.calls[0]?.[1]?.headers['Idempotency-Key'];
     expect(firstKey).toBeTruthy();
     mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-a' } },
+      data: { user: { id: userAId } },
       error: null,
     });
     await createOrder(orderRequest);
@@ -245,7 +267,7 @@ describe('createOrder checkout auth fallback', () => {
       error: new AuthRefreshDiscardedError(),
     });
     mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-a' } },
+      data: { user: { id: userAId } },
       error: null,
     });
 
@@ -263,7 +285,7 @@ describe('createOrder checkout auth fallback', () => {
     const accountASession = sessionFixture(
       'account-a-token',
       'account-a-refresh-token',
-      'user-a'
+      userAId
     );
     mockGetSession.mockResolvedValue({ data: { session: accountASession } });
     mockRefreshSession.mockResolvedValue({
@@ -271,7 +293,7 @@ describe('createOrder checkout auth fallback', () => {
       error: null,
     });
     mockGetUser.mockImplementation(async (jwt) => ({
-      data: { user: { id: jwt ? 'user-a' : 'user-b' } },
+      data: { user: { id: jwt ? userAId : userBId } },
       error: null,
     }));
 
@@ -288,6 +310,6 @@ describe('createOrder checkout auth fallback', () => {
         string,
         unknown
       >
-    ).toMatchObject({ user_id: 'user-a' });
+    ).toMatchObject({ user_id: userAId });
   });
 });

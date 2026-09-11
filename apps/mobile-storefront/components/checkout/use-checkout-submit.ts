@@ -260,7 +260,7 @@ export function useCheckoutSubmit({
     } catch (error) {
       const cartStore = useCartStore.getState();
       if (cartStore.items.length === 0) {
-        cartStore.restoreItems(
+        await cartStore.restoreItems(
           itemsSnapshot,
           groupNegotiationSnapshot,
           checkoutGenerationSnapshot

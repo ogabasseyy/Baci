@@ -7,6 +7,15 @@ jest.mock('../lib/storage', () => ({
     removeItem: jest.fn(),
   },
 }));
+jest.mock('expo-crypto', () => ({
+  randomUUID: () => require('node:crypto').randomUUID(),
+}));
+jest.mock('@/lib/persist-checkout-generation', () => ({
+  persistCheckoutGeneration: jest.fn(async () => undefined),
+}));
+jest.mock('@/lib/read-persisted-checkout-generation', () => ({
+  readPersistedCheckoutGeneration: jest.fn(async () => null),
+}));
 
 import { resetCartLineSequence, useCartStore } from './cart-store';
 
@@ -20,6 +29,7 @@ describe('cart-store', () => {
       items: [],
       isLoading: false,
       lineSequence: 0,
+      checkoutGeneration: 'legacy',
       cartWideNegotiationActive: false,
     });
     jest.clearAllMocks();
@@ -582,7 +592,7 @@ describe('cart-store', () => {
     expect(remaining[0].negotiationStatus).toBe('accepted');
   });
 
-  it('restores the cart-wide negotiation flag alongside items on rollback', () => {
+  it('restores the cart-wide negotiation flag alongside items on rollback', async () => {
     const { addItem } = useCartStore.getState();
     addItem({
       product_id: 'p1',
@@ -599,16 +609,16 @@ describe('cart-store', () => {
     useCartStore.getState().clearCart();
     expect(useCartStore.getState().cartWideNegotiationActive).toBe(false);
 
-    useCartStore.getState().restoreItems(snapshot, true);
+    await useCartStore.getState().restoreItems(snapshot, true);
 
     expect(useCartStore.getState().items).toHaveLength(1);
     expect(useCartStore.getState().cartWideNegotiationActive).toBe(true);
   });
 
-  it('leaves the cart-wide flag untouched when restoreItems omits it', () => {
+  it('leaves the cart-wide flag untouched when restoreItems omits it', async () => {
     useCartStore.setState({ cartWideNegotiationActive: true });
 
-    useCartStore.getState().restoreItems([]);
+    await useCartStore.getState().restoreItems([]);
 
     expect(useCartStore.getState().cartWideNegotiationActive).toBe(true);
   });

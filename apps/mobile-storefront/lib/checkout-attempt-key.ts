@@ -1,10 +1,10 @@
+import {
+  buildOrderIdempotencyPayload,
+  type OrderIdempotencyPayloadInput,
+} from '@baci/shared';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { CHECKOUT_INSTALLATION_STORAGE_KEY } from '@/config/checkout-storage';
-import {
-  buildCheckoutIdempotencyPayload,
-  type CheckoutIdempotencyPayloadInput,
-} from '@/lib/build-checkout-idempotency-payload';
 import { resolveCheckoutGeneration } from '@/lib/resolve-checkout-generation';
 
 let installationPromise: Promise<string> | undefined;
@@ -47,7 +47,7 @@ function asBool(value: unknown): boolean | undefined {
 
 function toCheckoutIdempotencyInput(
   payload: Record<string, unknown>
-): CheckoutIdempotencyPayloadInput {
+): OrderIdempotencyPayloadInput {
   const shipping = payload.shipping_address;
   const shippingRecord =
     shipping && typeof shipping === 'object' && !Array.isArray(shipping)
@@ -64,7 +64,7 @@ function toCheckoutIdempotencyInput(
     discount_code: asString(payload.discount_code) || null,
     gift_wrapping_fee: asNumber(payload.gift_wrapping_fee),
     items: Array.isArray(payload.items)
-      ? (payload.items as CheckoutIdempotencyPayloadInput['items'])
+      ? (payload.items as OrderIdempotencyPayloadInput['items'])
       : [],
     merchant_id: asString(payload.merchant_id),
     savings_amount: asNumber(payload.savings_amount) ?? null,
@@ -133,7 +133,7 @@ export async function getCheckoutAttemptKey(
         authPartition: recoveryPayload.user_id,
         checkoutGeneration: generation,
         installationId,
-        payload: buildCheckoutIdempotencyPayload(
+        payload: buildOrderIdempotencyPayload(
           toCheckoutIdempotencyInput(recoveryPayload)
         ),
       })

@@ -151,7 +151,20 @@ describe('bugfix: checkout retries keep the originating auth partition', () => {
     expect(mockGetCheckoutAttemptKey).toHaveBeenCalledWith(
       expect.objectContaining({ user_id: 'guest' }),
       'queued-cart',
-      { frozen: true }
+      { frozen: true, persistFrozen: true }
+    );
+  });
+
+  it('does not persist a queued replay generation over the live cart', async () => {
+    const { createOrder } = require('./orders') as typeof import('./orders');
+    await createOrder(request, {
+      checkoutGeneration: 'queued-cart',
+      queuedReplay: true,
+    });
+    expect(mockGetCheckoutAttemptKey).toHaveBeenCalledWith(
+      expect.objectContaining({ user_id: 'guest' }),
+      'queued-cart',
+      { frozen: true, persistFrozen: false }
     );
   });
 

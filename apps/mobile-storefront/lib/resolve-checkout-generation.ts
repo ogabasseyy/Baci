@@ -3,6 +3,7 @@ import { readPersistedCheckoutGeneration } from '@/lib/read-persisted-checkout-g
 
 export type ResolveCheckoutGenerationOptions = {
   frozen?: boolean;
+  persistFrozen?: boolean;
 };
 
 export async function resolveCheckoutGeneration(
@@ -10,6 +11,9 @@ export async function resolveCheckoutGeneration(
   options?: ResolveCheckoutGenerationOptions
 ): Promise<string> {
   if (options?.frozen) {
+    if (options.persistFrozen) {
+      await persistCheckoutGeneration(cartGeneration);
+    }
     return cartGeneration;
   }
   const persisted = await readPersistedCheckoutGeneration();

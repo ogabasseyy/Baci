@@ -82,6 +82,49 @@ it('uses a frozen queued generation after the live cart has moved on', async () 
   expect(
     await getCheckoutAttemptKey(payload, 'cart-one', { frozen: true })
   ).toBe(first);
+  const { readPersistedCheckoutGeneration } =
+    require('./read-persisted-checkout-generation') as typeof import('./read-persisted-checkout-generation');
+  await expect(readPersistedCheckoutGeneration()).resolves.toBe('cart-two');
+});
+
+it('persists an active frozen generation before returning a key', async () => {
+  const { getCheckoutAttemptKey } = loadKeyGenerator();
+  await getCheckoutAttemptKey(payload, 'cart-one');
+  const second = await getCheckoutAttemptKey(payload, 'cart-two', {
+    frozen: true,
+    persistFrozen: true,
+  });
+  jest.resetModules();
+  expect(
+    await loadKeyGenerator().getCheckoutAttemptKey(payload, 'stale-cart')
+  ).toBe(second);
+});
+
+it('resumes the same pending order when email casing or notes change', async () => {
+  const { getCheckoutAttemptKey } = loadKeyGenerator();
+  const withAddress = {
+    ...payload,
+    shipping_address: {
+      address: '15 Marina Road',
+      city: 'Lagos',
+      notes: 'leave at the gate',
+      state: 'Lagos',
+    },
+  };
+  const first = await getCheckoutAttemptKey(withAddress, 'cart-one');
+  expect(
+    await getCheckoutAttemptKey(
+      {
+        ...withAddress,
+        customer_email: 'Buyer@Example.com',
+        shipping_address: {
+          ...withAddress.shipping_address,
+          notes: '  leave  at  the  gate  ',
+        },
+      },
+      'cart-one'
+    )
+  ).toBe(first);
 });
 
 it('allows an intentional identical purchase in a new cart lifecycle', async () => {
@@ -139,6 +182,21 @@ it('does not return a key until the generation write succeeds', async () => {
   await expect(getCheckoutAttemptKey(payload, 'cart-one')).rejects.toThrow(
     'disk full'
   );
+});
+
+it('does not return a key until an active frozen generation write succeeds', async () => {
+  storage.set(
+    'checkout-installation-id-v1',
+    '46ed63d7-5f10-49f0-9456-9ff571bec43f'
+  );
+  setItem.mockRejectedValueOnce(new Error('disk full'));
+  const { getCheckoutAttemptKey } = loadKeyGenerator();
+  await expect(
+    getCheckoutAttemptKey(payload, 'cart-one', {
+      frozen: true,
+      persistFrozen: true,
+    })
+  ).rejects.toThrow('disk full');
 });
 
 it('does not return a key until it is durable and permits retry after a failed write', async () => {

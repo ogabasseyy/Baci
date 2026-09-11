@@ -76,6 +76,7 @@ async function checkNetwork(): Promise<boolean> {
 
 export type CreateOrderOptions = {
   checkoutGeneration?: string;
+  queuedReplay?: boolean;
 };
 
 export async function createOrder(
@@ -153,7 +154,12 @@ export async function createOrder(
           user_id: authPartition,
         },
         checkoutGeneration,
-        frozenCheckoutGeneration ? { frozen: true } : undefined
+        frozenCheckoutGeneration
+          ? {
+              frozen: true,
+              persistFrozen: options?.queuedReplay !== true,
+            }
+          : undefined
       ));
     log.info('Submitting order request', {
       apiUrl: API_URL,

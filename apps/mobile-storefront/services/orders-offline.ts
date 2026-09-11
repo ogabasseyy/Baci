@@ -1,6 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import { offlineQueue } from '@/lib/offline-queue';
-import { wrapQueuedCreateOrder } from '@/lib/queued-create-order';
+import { wrapQueuedCreateOrder } from '@/lib/wrap-queued-create-order';
 import { trackEvent } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 import { createOrder } from './orders';

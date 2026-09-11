@@ -20,7 +20,7 @@ import {
   recordCrashBreadcrumb,
 } from '@/lib/crash-diagnostics';
 import { offlineQueue } from '@/lib/offline-queue';
-import { replayQueuedCreateOrder } from '@/lib/queued-create-order';
+import { replayQueuedCreateOrder } from '@/lib/replay-queued-create-order';
 import { prefetchStartupStorefrontData } from '@/lib/startup-storefront-prefetch';
 import { DEFAULT_SYNC_STORAGE_KEYS, initializeStorage } from '@/lib/storage';
 import { initAnalytics } from '@/services/analytics';

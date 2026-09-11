@@ -43,4 +43,17 @@ describe('bugfix: recover durable generations without clobbering frozen retries'
     ).resolves.toBe(queuedGeneration);
     await expect(readPersistedCheckoutGeneration()).resolves.toBe(generation);
   });
+
+  it('awaits persist of an active frozen generation before returning it', async () => {
+    await persistCheckoutGeneration(generation);
+    await expect(
+      resolveCheckoutGeneration(queuedGeneration, {
+        frozen: true,
+        persistFrozen: true,
+      })
+    ).resolves.toBe(queuedGeneration);
+    await expect(readPersistedCheckoutGeneration()).resolves.toBe(
+      queuedGeneration
+    );
+  });
 });

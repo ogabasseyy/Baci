@@ -1,9 +1,6 @@
 import type { CreateOrderRequest } from '@/services/orders.schemas';
-import {
-  parseQueuedCreateOrder,
-  replayQueuedCreateOrder,
-  wrapQueuedCreateOrder,
-} from './queued-create-order';
+import { replayQueuedCreateOrder } from './replay-queued-create-order';
+import { wrapQueuedCreateOrder } from './wrap-queued-create-order';
 
 const request = {
   customer_email: 'buyer@example.com',
@@ -22,14 +19,7 @@ const request = {
   subtotal: 1000,
 } as CreateOrderRequest;
 
-it('stores the originating generation with the queued request', () => {
-  expect(wrapQueuedCreateOrder(request, 'cart-one')).toEqual({
-    checkoutGeneration: 'cart-one',
-    request,
-  });
-});
-
-it('replays a wrapped mutation with its originating generation', () => {
+it('replays a wrapped mutation with its originating generation and skip persist', () => {
   const createOrder = jest.fn();
   replayQueuedCreateOrder(
     createOrder,
@@ -37,12 +27,6 @@ it('replays a wrapped mutation with its originating generation', () => {
   );
   expect(createOrder).toHaveBeenCalledWith(request, {
     checkoutGeneration: 'cart-one',
-  });
-});
-
-it('treats a legacy queued request as the order body without inventing a generation', () => {
-  expect(parseQueuedCreateOrder(request)).toEqual({
-    checkoutGeneration: '',
-    request,
+    queuedReplay: true,
   });
 });

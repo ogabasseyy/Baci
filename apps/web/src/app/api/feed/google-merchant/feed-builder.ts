@@ -174,25 +174,29 @@ export function generateGoogleMerchantFeed(
       const productType = getProductType(product);
       if (product.variant_model === 'sku_matrix') {
         const variants = getConditionedVariants(product);
-        const selection =
-          merchant.gmc_variants_enabled === false
-            ? selectFeedFamilyVariant(product, variants)
-            : null;
-        return buildVariantFeedItems({
+        const input = {
           product,
-          variants:
-            merchant.gmc_variants_enabled === false
-              ? selection
-                ? [selection]
-                : []
-              : variants,
+          variants,
           manifest: manifestEntries,
           productUrl,
           currency,
           brand: effectiveBrand,
-          platform: 'google',
+          platform: 'google' as const,
           familyRow: merchant.gmc_variants_enabled === false,
-        });
+        };
+        if (!input.familyRow) return buildVariantFeedItems(input);
+        // Rank only renderable SKUs; preserve the verified colour-image rule.
+        const rows = new Map(
+          variants.map((variant) => [
+            variant.id,
+            buildVariantFeedItems({ ...input, variants: [variant] }),
+          ])
+        );
+        const selection = selectFeedFamilyVariant(
+          product,
+          variants.filter((variant) => Boolean(rows.get(variant.id)))
+        );
+        return selection ? rows.get(selection.id) : '';
       }
       if (!productLevelImages) return null;
 

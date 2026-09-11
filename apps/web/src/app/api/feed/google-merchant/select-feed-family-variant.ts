@@ -9,13 +9,6 @@ export function selectFeedFamilyVariant(
   product: FeedProduct,
   variants: FeedVariant[]
 ): FeedVariant | undefined {
-  const selection = resolveDefaultVariantSelection({
-    ...product,
-    variants: variants.map((variant) => ({
-      ...variant,
-      attributes: normalizeFeedVariantStringAttributes(variant.attributes),
-    })),
-  });
   const isFeedValid = (variant: FeedVariant) => {
     const price = variant.price_override ?? variant.price ?? product.price;
     return (
@@ -24,7 +17,13 @@ export function selectFeedFamilyVariant(
       price > 0
     );
   };
-  return selection && isFeedValid(selection.variant)
-    ? selection.variant
-    : variants.find(isFeedValid);
+  const candidates = variants.filter(isFeedValid);
+  const selection = resolveDefaultVariantSelection({
+    ...product,
+    variants: candidates.map((variant) => ({
+      ...variant,
+      attributes: normalizeFeedVariantStringAttributes(variant.attributes),
+    })),
+  });
+  return selection?.variant ?? candidates[0];
 }

@@ -45,6 +45,35 @@ const images = {
 };
 
 describe('feed variant integrity', () => {
+  it('keeps a family when the preferred colour has no image but another SKU does', () => {
+    const xml = generateGoogleMerchantFeed(
+      [
+        {
+          ...product,
+          variants: [
+            {
+              id: 'unpictured',
+              condition: 'new',
+              price_override: 10,
+              attributes: { color: 'Blue' },
+            },
+            {
+              id: 'used',
+              condition: 'new',
+              price_override: 20,
+              attributes: { color: 'White' },
+            },
+          ],
+        },
+      ],
+      { ...merchant, gmc_variants_enabled: false },
+      'https://example.com',
+      images
+    );
+    expect(xml).toContain('variantId=used');
+    expect(xml).toContain('white.jpg');
+    expect(xml).not.toContain('variantId=unpictured');
+  });
   it.each([
     ['Google', generateGoogleMerchantFeed],
     ['Facebook', generateFacebookCatalogFeed],

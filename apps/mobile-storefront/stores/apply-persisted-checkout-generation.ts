@@ -4,13 +4,24 @@ import { readPersistedCheckoutGeneration } from '@/lib/read-persisted-checkout-g
 const log = createLogger('CartStore');
 
 export async function applyPersistedCheckoutGeneration(
-  setCheckoutGeneration: (generation: string) => void
+  setCheckoutGeneration: (generation: string) => void,
+  liveIdentity?: {
+    generationWhenReadBegan: string;
+    getLiveGeneration: () => string;
+  }
 ): Promise<void> {
   try {
     const persisted = await readPersistedCheckoutGeneration();
-    if (persisted) {
-      setCheckoutGeneration(persisted);
+    if (!persisted) {
+      return;
     }
+    if (
+      liveIdentity &&
+      liveIdentity.getLiveGeneration() !== liveIdentity.generationWhenReadBegan
+    ) {
+      return;
+    }
+    setCheckoutGeneration(persisted);
   } catch (error) {
     log.error('Failed to rehydrate checkout generation:', error);
   }

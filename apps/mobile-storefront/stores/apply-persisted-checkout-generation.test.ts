@@ -21,4 +21,30 @@ describe('bugfix: checkout-generation rehydration failures', () => {
     ).resolves.toBeUndefined();
     expect(setCheckoutGeneration).not.toHaveBeenCalled();
   });
+
+  it('does not restore a stale generation after the live cart identity changes', async () => {
+    let liveGeneration = 'generation-a';
+    let resolveRead!: (value: string | null) => void;
+    mockRead.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRead = resolve;
+        })
+    );
+    const setCheckoutGeneration = jest.fn<(generation: string) => void>();
+
+    const applyPromise = applyPersistedCheckoutGeneration(
+      setCheckoutGeneration,
+      {
+        generationWhenReadBegan: 'generation-a',
+        getLiveGeneration: () => liveGeneration,
+      }
+    );
+    liveGeneration = 'generation-b';
+    resolveRead('generation-a');
+    await applyPromise;
+
+    expect(setCheckoutGeneration).not.toHaveBeenCalled();
+    expect(liveGeneration).toBe('generation-b');
+  });
 });

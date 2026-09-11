@@ -2,7 +2,10 @@ import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { createLogger } from '@/lib/logger';
-import { persistCheckoutGeneration } from '@/lib/persist-checkout-generation';
+import {
+  persistCheckoutGeneration,
+  persistCheckoutGenerationDetached,
+} from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
 import { applyPersistedCheckoutGeneration } from './apply-persisted-checkout-generation';
 import {
@@ -79,7 +82,7 @@ export const useCartStore = create<CartState>()(
                 : state.checkoutGeneration
               : state.checkoutGeneration;
           if (state.items.length === 0) {
-            void persistCheckoutGeneration(checkoutGeneration);
+            persistCheckoutGenerationDetached(checkoutGeneration);
           }
           let items: CartItem[];
           let lineSequence = state.lineSequence;
@@ -280,10 +283,17 @@ export const useCartStore = create<CartState>()(
       name: 'cart-storage',
       storage: createJSONStorage(() => syncStorage),
       partialize: partializeCartStore,
-      onRehydrateStorage: () => () => {
-        void applyPersistedCheckoutGeneration((checkoutGeneration) => {
-          useCartStore.setState({ checkoutGeneration });
-        });
+      onRehydrateStorage: () => (state) => {
+        const generationWhenReadBegan = state?.checkoutGeneration ?? 'legacy';
+        void applyPersistedCheckoutGeneration(
+          (checkoutGeneration) => {
+            useCartStore.setState({ checkoutGeneration });
+          },
+          {
+            generationWhenReadBegan,
+            getLiveGeneration: () => useCartStore.getState().checkoutGeneration,
+          }
+        );
       },
     }
   )

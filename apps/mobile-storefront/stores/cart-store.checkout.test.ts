@@ -6,6 +6,9 @@ jest.mock('@/lib/persist-checkout-generation', () => ({
   persistCheckoutGeneration: jest.fn(async (generation: string) => {
     persistedGeneration.value = generation;
   }),
+  persistCheckoutGenerationDetached: jest.fn((generation: string) => {
+    persistedGeneration.value = generation;
+  }),
 }));
 jest.mock('@/lib/read-persisted-checkout-generation', () => ({
   readPersistedCheckoutGeneration: jest.fn(

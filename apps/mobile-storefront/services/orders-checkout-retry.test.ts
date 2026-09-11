@@ -11,7 +11,11 @@ type MockAuthSessionResponse = {
 };
 
 const mockGetCheckoutAttemptKey = jest.fn<
-  (payload: Record<string, unknown>, generation: string) => Promise<string>
+  (
+    payload: Record<string, unknown>,
+    generation: string,
+    options?: { frozen?: boolean }
+  ) => Promise<string>
 >(async (payload, generation) => `${generation}:${String(payload.user_id)}`);
 
 const mockGetUser = jest.fn<() => Promise<MockAuthUserResponse>>(async () => ({
@@ -28,8 +32,7 @@ jest.mock('@/lib/checkout-attempt-key', () => ({
   getCheckoutAttemptKey: mockGetCheckoutAttemptKey,
 }));
 
-jest.mock('@/lib/checkout-attempt-identity', () => ({
-  persistCheckoutGeneration: jest.fn(async () => undefined),
+jest.mock('@/lib/resolve-checkout-auth-partition', () => ({
   resolveCheckoutAuthPartition: jest.fn(
     async (_generation: string, currentUserId: string | undefined) =>
       currentUserId ?? 'guest'
@@ -147,7 +150,8 @@ describe('bugfix: checkout retries keep the originating auth partition', () => {
     await createOrder(request, { checkoutGeneration: 'queued-cart' });
     expect(mockGetCheckoutAttemptKey).toHaveBeenCalledWith(
       expect.objectContaining({ user_id: 'guest' }),
-      'queued-cart'
+      'queued-cart',
+      { frozen: true }
     );
   });
 

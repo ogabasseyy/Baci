@@ -1,18 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
-  CHECKOUT_GENERATION_STORAGE_KEY,
-} from '@/config/checkout-storage';
+import { CHECKOUT_AUTH_PARTITION_STORAGE_KEY } from '@/config/checkout-storage';
 
 const GUEST_AUTH_PARTITION = 'guest';
-
-function assertNonEmpty(value: string, label: string): void {
-  if (value.trim().length === 0) {
-    throw new Error(
-      `Checkout recovery ${label} is invalid. Please contact support.`
-    );
-  }
-}
 
 function assertAuthPartition(value: string): void {
   if (value === GUEST_AUTH_PARTITION) return;
@@ -21,35 +10,6 @@ function assertAuthPartition(value: string): void {
       'Checkout recovery auth partition is invalid. Please contact support.'
     );
   }
-}
-
-export async function persistCheckoutGeneration(
-  checkoutGeneration: string
-): Promise<void> {
-  assertNonEmpty(checkoutGeneration, 'generation');
-  await AsyncStorage.setItem(
-    CHECKOUT_GENERATION_STORAGE_KEY,
-    checkoutGeneration
-  );
-}
-
-export async function readPersistedCheckoutGeneration(): Promise<
-  string | null
-> {
-  const existing = await AsyncStorage.getItem(CHECKOUT_GENERATION_STORAGE_KEY);
-  if (existing === null) return null;
-  assertNonEmpty(existing, 'generation');
-  return existing;
-}
-
-/** Recover the awaited generation even when cart-storage still has an older UUID. */
-export async function resolveCheckoutGeneration(
-  cartGeneration: string
-): Promise<string> {
-  const persisted = await readPersistedCheckoutGeneration();
-  if (persisted) return persisted;
-  await persistCheckoutGeneration(cartGeneration);
-  return cartGeneration;
 }
 
 export async function resolveCheckoutAuthPartition(

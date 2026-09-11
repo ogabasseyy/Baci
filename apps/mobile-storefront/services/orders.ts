@@ -2,9 +2,9 @@ import NetInfo from '@react-native-community/netinfo';
 import Constants from 'expo-constants';
 import { DEFAULT_TIMEOUT, fetchWithRetry } from '@/lib/api';
 import { resolveApiBaseUrl } from '@/lib/api-url';
-import { resolveCheckoutAuthPartition } from '@/lib/checkout-attempt-identity';
 import { getCheckoutAttemptKey } from '@/lib/checkout-attempt-key';
 import { createLogger } from '@/lib/logger';
+import { resolveCheckoutAuthPartition } from '@/lib/resolve-checkout-auth-partition';
 import {
   supabase,
   supabaseAuthStorage,
@@ -83,8 +83,9 @@ export async function createOrder(
   options?: CreateOrderOptions
 ): Promise<OrderResponse> {
   const startTime = Date.now();
+  const frozenCheckoutGeneration = options?.checkoutGeneration;
   const checkoutGeneration =
-    options?.checkoutGeneration || useCartStore.getState().checkoutGeneration;
+    frozenCheckoutGeneration || useCartStore.getState().checkoutGeneration;
 
   const validationResult = CreateOrderRequestSchema.safeParse(request);
   if (!validationResult.success) {
@@ -151,7 +152,8 @@ export async function createOrder(
           ...orderPayload,
           user_id: authPartition,
         },
-        checkoutGeneration
+        checkoutGeneration,
+        frozenCheckoutGeneration ? { frozen: true } : undefined
       ));
     log.info('Submitting order request', {
       apiUrl: API_URL,

@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { CHECKOUT_INSTALLATION_STORAGE_KEY } from '@/config/checkout-storage';
-import { resolveCheckoutGeneration } from '@/lib/checkout-attempt-identity';
+import { resolveCheckoutGeneration } from '@/lib/resolve-checkout-generation';
 
 let installationPromise: Promise<string> | undefined;
 
@@ -81,14 +81,18 @@ function canonicalize(value: unknown, parentKey?: string): unknown {
 /** Same cart lifecycle and exact request resume the same server-owned order. */
 export async function getCheckoutAttemptKey(
   payload: Record<string, unknown>,
-  checkoutGeneration: string
+  checkoutGeneration: string,
+  options?: { frozen?: boolean }
 ): Promise<string> {
   installationPromise ??= loadInstallationId().catch((error: unknown) => {
     installationPromise = undefined;
     throw error;
   });
   const installationId = await installationPromise;
-  const generation = await resolveCheckoutGeneration(checkoutGeneration);
+  const generation = await resolveCheckoutGeneration(
+    checkoutGeneration,
+    options?.frozen ? { frozen: true } : undefined
+  );
   // The server intentionally excludes the selected gateway from its checkout
   // hash so switching payment methods resumes the same pending order.
   const recoveryPayload = Object.fromEntries(

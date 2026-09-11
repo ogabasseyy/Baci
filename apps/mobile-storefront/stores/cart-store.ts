@@ -1,10 +1,8 @@
 import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import {
-  persistCheckoutGeneration,
-  readPersistedCheckoutGeneration,
-} from '@/lib/checkout-attempt-identity';
+import { persistCheckoutGeneration } from '@/lib/persist-checkout-generation';
+import { readPersistedCheckoutGeneration } from '@/lib/read-persisted-checkout-generation';
 import { syncStorage } from '../lib/storage';
 import {
   createCartLineId,
@@ -30,17 +28,21 @@ export function resetCartLineSequence() {
   }
 }
 
+function rotateEmptyCheckoutCart() {
+  const next = emptyCheckoutCart();
+  void persistCheckoutGeneration(next.checkoutGeneration);
+  return next;
+}
+
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
-      // Initial state
       items: [],
       isLoading: false,
       lineSequence: 0,
       checkoutGeneration: 'legacy',
       cartWideNegotiationActive: false,
 
-      // Computed values
       itemCount: () => {
         return get().items.reduce((total, item) => total + item.quantity, 0);
       },
@@ -65,7 +67,6 @@ export const useCartStore = create<CartState>()(
         }, 0);
       },
 
-      // Add item to cart
       addItem: (item) => {
         set((state) => {
           const itemToAdd =
@@ -79,7 +80,9 @@ export const useCartStore = create<CartState>()(
 
           const checkoutGeneration =
             state.items.length === 0
-              ? Crypto.randomUUID()
+              ? state.checkoutGeneration === 'legacy'
+                ? Crypto.randomUUID()
+                : state.checkoutGeneration
               : state.checkoutGeneration;
           if (state.items.length === 0) {
             void persistCheckoutGeneration(checkoutGeneration);
@@ -87,7 +90,6 @@ export const useCartStore = create<CartState>()(
           let items: CartItem[];
           let lineSequence = state.lineSequence;
           if (existingIndex >= 0) {
-            // Refresh cart metadata from the latest add while preserving cart-only state.
             items = [...state.items];
             items[existingIndex] = mergeExistingCartItem(
               items[existingIndex],
@@ -101,9 +103,6 @@ export const useCartStore = create<CartState>()(
             ];
           }
 
-          // Adding or merging a line changes the cart composition, so an active
-          // cart-wide negotiation no longer represents the agreed total — reset
-          // it (and the newly added units never inherit a stale group share).
           if (state.cartWideNegotiationActive) {
             return {
               items: clearGroupNegotiation(items),
@@ -120,9 +119,10 @@ export const useCartStore = create<CartState>()(
       removeItem: (id) => {
         set((state) => {
           const items = state.items.filter((item) => item.id !== id);
+          if (items.length === 0) {
+            return rotateEmptyCheckoutCart();
+          }
 
-          // Removing a line breaks any cart-wide negotiated total, so reset the
-          // group deal and revert remaining lines to catalog price.
           if (state.cartWideNegotiationActive) {
             return {
               items: clearGroupNegotiation(items),
@@ -138,6 +138,9 @@ export const useCartStore = create<CartState>()(
         set((state) => {
           if (quantity <= 0) {
             const items = state.items.filter((item) => item.id !== id);
+            if (items.length === 0) {
+              return rotateEmptyCheckoutCart();
+            }
             if (state.cartWideNegotiationActive) {
               return {
                 items: clearGroupNegotiation(items),
@@ -174,9 +177,7 @@ export const useCartStore = create<CartState>()(
       },
 
       clearCart: () => {
-        const next = emptyCheckoutCart();
-        void persistCheckoutGeneration(next.checkoutGeneration);
-        set(next);
+        set(rotateEmptyCheckoutCart());
       },
 
       getItem: (productId, variantId) => {

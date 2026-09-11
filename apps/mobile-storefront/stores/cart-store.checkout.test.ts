@@ -1,7 +1,9 @@
 import { useCartStore } from './cart-store';
 
-jest.mock('@/lib/checkout-attempt-identity', () => ({
+jest.mock('@/lib/persist-checkout-generation', () => ({
   persistCheckoutGeneration: jest.fn(async () => undefined),
+}));
+jest.mock('@/lib/read-persisted-checkout-generation', () => ({
   readPersistedCheckoutGeneration: jest.fn(async () => null),
 }));
 jest.mock('../lib/storage', () => ({
@@ -60,6 +62,18 @@ it('changes identity when the shopper removes the last item and starts over', ()
   useCartStore.getState().addItem(item);
   expect(useCartStore.getState().checkoutGeneration).not.toBe(
     checkoutGeneration
+  );
+});
+
+it('keeps recovered generation when rebuilding an empty cart after a lost response', () => {
+  useCartStore.setState({
+    items: [],
+    checkoutGeneration: '46ed63d7-5f10-49f0-9456-9ff571bec43f',
+    lineSequence: 0,
+  });
+  useCartStore.getState().addItem(item);
+  expect(useCartStore.getState().checkoutGeneration).toBe(
+    '46ed63d7-5f10-49f0-9456-9ff571bec43f'
   );
 });
 

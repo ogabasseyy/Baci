@@ -73,11 +73,22 @@ it('recovers the awaited generation after a restart with stale cart storage', as
   ).toBe(first);
 });
 
+it('uses a frozen queued generation after the live cart has moved on', async () => {
+  const { getCheckoutAttemptKey } = loadKeyGenerator();
+  const first = await getCheckoutAttemptKey(payload, 'cart-one');
+  const { persistCheckoutGeneration } =
+    require('./persist-checkout-generation') as typeof import('./persist-checkout-generation');
+  await persistCheckoutGeneration('cart-two');
+  expect(
+    await getCheckoutAttemptKey(payload, 'cart-one', { frozen: true })
+  ).toBe(first);
+});
+
 it('allows an intentional identical purchase in a new cart lifecycle', async () => {
   const { getCheckoutAttemptKey } = loadKeyGenerator();
   const first = await getCheckoutAttemptKey(payload, 'cart-one');
   const { persistCheckoutGeneration } =
-    require('./checkout-attempt-identity') as typeof import('./checkout-attempt-identity');
+    require('./persist-checkout-generation') as typeof import('./persist-checkout-generation');
   await persistCheckoutGeneration('cart-two');
   expect(await getCheckoutAttemptKey(payload, 'cart-two')).not.toBe(first);
 });

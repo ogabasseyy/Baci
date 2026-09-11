@@ -33,4 +33,10 @@ export const metadata: Metadata = {
   },
 };
 
-export { default } from './landing-page-route';
+import { getLandingMetrics } from './actions';
+import LandingPageRoute from './landing-page-route';
+
+export default async function HomePage() {
+  const metrics = await getLandingMetrics();
+  return <LandingPageRoute metrics={metrics} />;
+}

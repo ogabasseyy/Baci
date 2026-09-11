@@ -22,7 +22,7 @@ export async function BlogListingQueryContent({
   const filteredStaticListing =
     isOgabasseyBlogStaticTenant(slug) && !unfiltered;
 
-  const listing = (
+  return (
     <>
       {filteredStaticListing ? (
         <div data-blog-listing-filtered="" hidden />
@@ -31,14 +31,4 @@ export async function BlogListingQueryContent({
       {children}
     </>
   );
-
-  if (!filteredStaticListing) {
-    return listing;
-  }
-
-  const { StorefrontEagerBlogCssLayout } = await import(
-    '@/app/(storefront)/storefront-eager-blog-css-layout'
-  );
-
-  return <StorefrontEagerBlogCssLayout>{listing}</StorefrontEagerBlogCssLayout>;
 }

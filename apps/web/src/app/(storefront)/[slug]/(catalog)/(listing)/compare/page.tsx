@@ -219,6 +219,25 @@ export async function CompareIndexRuntime(props: CompareIndexPageProps) {
 const COMPARE_HUB_SHELL_CLASS =
   'min-h-screen bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20 pt-6';
 
+async function CompareHubResolvedIntro({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  if (!isValidMerchantIdentifier(slug)) {
+    return null;
+  }
+
+  const merchant = await getRequestScopedMerchant(slug);
+  const merchantName = merchant?.business_name?.trim();
+  if (!merchantName) {
+    return null;
+  }
+
+  return <CompareHubIntroDescription merchantName={merchantName} />;
+}
+
 export default function CompareIndexPage(props: CompareIndexPageProps) {
   return (
     <>
@@ -243,7 +262,7 @@ export default function CompareIndexPage(props: CompareIndexPageProps) {
           <CompareHubIntro
             description={
               <Suspense fallback={null}>
-                <CompareHubIntroDescription params={props.params} />
+                <CompareHubResolvedIntro params={props.params} />
               </Suspense>
             }
           />

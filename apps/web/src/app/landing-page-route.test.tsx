@@ -13,6 +13,7 @@ describe('landing-page-route', () => {
     expect(source).toContain(
       "import { AppSansFont } from '@/app/app-sans-font'"
     );
+    expect(source).not.toContain("from './actions'");
     expect(source).toMatch(/<AppSansFont>\s*<AppBody showPlatformAnalytics>/);
   });
 });

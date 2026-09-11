@@ -1,27 +1,26 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockBlogCssImport } = vi.hoisted(() => ({
   mockBlogCssImport: vi.fn(),
 }));
 
+vi.mock('@/app/(storefront)/storefront-core.css', () => ({}));
 vi.mock('@/app/(storefront)/storefront-blog.css', () => {
   mockBlogCssImport();
   return {};
 });
-
-vi.mock('@/app/(storefront)/storefront-eager-blog-css-layout', () => ({
-  StorefrontEagerBlogCssLayout: ({ children }: { children: ReactNode }) => (
-    <div data-testid="eager-blog-css">{children}</div>
-  ),
-}));
 
 import StorefrontBlogCssLayout, { unstable_instant } from './layout';
 
 describe('blog StorefrontBlogCssLayout', () => {
   beforeEach(() => {
     mockBlogCssImport.mockClear();
+    window.matchMedia = vi.fn().mockImplementation(() => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
   });
 
   it('opts blog routes out of instant static-shell validation', () => {
@@ -29,21 +28,14 @@ describe('blog StorefrontBlogCssLayout', () => {
   });
 
   it('keeps the unfiltered static listing off a mobile LCP path until the first input', async () => {
-    window.matchMedia = vi.fn().mockImplementation(() => ({
-      matches: false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    }));
     expect(mockBlogCssImport).not.toHaveBeenCalled();
 
     render(
-      await StorefrontBlogCssLayout({
-        children: <main>Blog content</main>,
-        params: Promise.resolve({ slug: 'ogabassey' }),
-      })
+      <StorefrontBlogCssLayout>
+        <main>Blog content</main>
+      </StorefrontBlogCssLayout>
     );
 
-    expect(screen.queryByTestId('eager-blog-css')).not.toBeInTheDocument();
     expect(mockBlogCssImport).not.toHaveBeenCalled();
     window.dispatchEvent(new Event('pointerdown'));
 
@@ -52,24 +44,23 @@ describe('blog StorefrontBlogCssLayout', () => {
     });
   });
 
-  it('eagerly styles blog listings for non-static tenants', async () => {
+  it('defers blog CSS for non-static tenants too', () => {
     render(
-      await StorefrontBlogCssLayout({
-        children: <main>Other blog</main>,
-        params: Promise.resolve({ slug: 'other-shop' }),
-      })
+      <StorefrontBlogCssLayout>
+        <main>Other blog</main>
+      </StorefrontBlogCssLayout>
     );
 
-    expect(screen.getByTestId('eager-blog-css')).toBeInTheDocument();
+    expect(screen.queryByTestId('eager-blog-css')).not.toBeInTheDocument();
     expect(screen.getByRole('main')).toHaveTextContent('Other blog');
+    expect(mockBlogCssImport).not.toHaveBeenCalled();
   });
 
-  it('passes children through the blog css route group', async () => {
+  it('passes children through the blog css route group', () => {
     render(
-      await StorefrontBlogCssLayout({
-        children: <main>Blog content</main>,
-        params: Promise.resolve({ slug: 'ogabassey' }),
-      })
+      <StorefrontBlogCssLayout>
+        <main>Blog content</main>
+      </StorefrontBlogCssLayout>
     );
 
     expect(screen.getByRole('main')).toHaveTextContent('Blog content');

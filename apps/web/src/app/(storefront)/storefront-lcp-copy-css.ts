@@ -11,17 +11,14 @@ export const STOREFRONT_LCP_COPY_CSS = `
   those nodes already use, so later sheets do not restyle the LCP element.
 */
 
-html:has([data-storefront-shell]),
-html:has([data-storefront-shell]) body {
-  font-family: "Inter Fallback", Arial, Helvetica, sans-serif !important;
-}
-
 html:has([data-storefront-shell]) body {
   margin: 0;
 }
 
-html:has([data-storefront-shell]) p {
-  margin: 0;
+@layer base {
+  html:has([data-storefront-shell]) p {
+    margin: 0;
+  }
 }
 
 html:has([data-storefront-shell]),
@@ -213,10 +210,6 @@ html:has([data-storefront-shell]) *::after {
   input.
 */
 body:has([data-blog-listing-filtered]) [data-blog-lcp-hero] {
-  display: none;
-}
-
-body:has([data-blog-live-featured]) [data-blog-lcp-hero] {
   display: none;
 }
 

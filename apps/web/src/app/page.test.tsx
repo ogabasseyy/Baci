@@ -106,13 +106,14 @@ describe('PlatformSchemas JSON-LD output', () => {
 });
 
 describe('Baci landing page route', () => {
-  it('keeps page.tsx as metadata and re-exports the split landing route', () => {
+  it('keeps page.tsx as metadata and fetches landing metrics for the split route', () => {
     const source = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), 'page.tsx'),
       'utf8'
     );
 
-    expect(source).toContain("export { default } from './landing-page-route'");
+    expect(source).toContain("import { getLandingMetrics } from './actions'");
+    expect(source).toContain('<LandingPageRoute');
     expect(source).not.toContain('AppSansFont');
     expect(source.split('\n').length).toBeLessThanOrEqual(300);
   });

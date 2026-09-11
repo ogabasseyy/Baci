@@ -19,9 +19,13 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'html:has([data-storefront-shell]) body'
     );
+    expect(STOREFRONT_LCP_COPY_CSS).not.toMatch(
+      /html:has\(\[data-storefront-shell\]\)(?:\s*,\s*html:has\(\[data-storefront-shell\]\) body)?\s*\{[^}]*font-family:[^}]*!important/
+    );
     expect(STOREFRONT_LCP_COPY_CSS).toMatch(
       /html:has\(\[data-storefront-shell\]\) body \{[^}]*margin: 0/
     );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain('@layer base');
     expect(STOREFRONT_LCP_COPY_CSS).toMatch(
       /html:has\(\[data-storefront-shell\]\) p \{[^}]*margin: 0/
     );
@@ -33,7 +37,7 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'body:has([data-blog-listing-filtered]) [data-blog-lcp-hero]'
     );
-    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+    expect(STOREFRONT_LCP_COPY_CSS).not.toContain(
       'body:has([data-blog-live-featured]) [data-blog-lcp-hero]'
     );
     expect(STOREFRONT_LCP_COPY_CSS).toContain(

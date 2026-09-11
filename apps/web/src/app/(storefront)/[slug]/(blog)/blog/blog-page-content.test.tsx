@@ -204,7 +204,7 @@ describe('BlogPageContent', () => {
     expect(mockPreloadBlogListingFeaturedImage).not.toHaveBeenCalled();
   });
 
-  it('preloads the live featured image when the committed snapshot is stale', async () => {
+  it('does not preload a live featured image when the snapshot hero is committed', async () => {
     render(
       await BlogPageContent({
         hideFeaturedStory: true,
@@ -213,8 +213,8 @@ describe('BlogPageContent', () => {
       })
     );
 
-    expect(mockPreloadBlogListingFeaturedImage).toHaveBeenCalled();
-    expect(document.querySelector('[data-blog-live-featured]')).toBeTruthy();
+    expect(mockPreloadBlogListingFeaturedImage).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-blog-live-featured]')).toBeNull();
   });
 
   it('preloads the same first listing image used by the OgaBassey hero story', async () => {

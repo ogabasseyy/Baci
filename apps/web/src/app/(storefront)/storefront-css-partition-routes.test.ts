@@ -89,6 +89,12 @@ describe('storefront CSS partitioning (route sheets)', () => {
     );
     const utilityLayout = readStorefrontFile('[slug]/(utility)/layout.tsx');
     const blogLayout = readStorefrontFile('[slug]/(blog)/layout.tsx');
+    const blogListingQuery = readStorefrontFile(
+      '[slug]/(blog)/blog/blog-listing-query-content.tsx'
+    );
+    const genericHome = readStorefrontFile(
+      '[slug]/(home)/generic-storefront-home-page.tsx'
+    );
 
     expect(listingLayout).not.toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-full\.css['"]/
@@ -102,6 +108,11 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(listingLayout).toContain('StorefrontFullStyleLoader');
     expect(utilityLayout).toContain('StorefrontFullStyleLoader');
     expect(blogLayout).toContain('StorefrontBlogStyleLoader');
+    expect(utilityLayout).not.toContain('storefront-eager-full-css-layout');
+    expect(blogLayout).not.toContain('storefront-eager-blog-css-layout');
+    expect(blogListingQuery).not.toContain('storefront-eager-blog-css-layout');
+    expect(genericHome).not.toContain('storefront-eager-full-css-layout');
+    expect(genericHome).toContain('StorefrontFullStyleLoader');
   });
 
   it('locks committed LCP copy to the Inter fallback face without a render-blocking CSS file', () => {

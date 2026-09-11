@@ -1,27 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getRequestScopedMerchant } from '@/lib/cached-data';
+import { describe, expect, it } from 'vitest';
 import { CompareHubIntroDescription } from './compare-hub-intro-description';
 
-vi.mock('@/lib/cached-data', () => ({
-  getRequestScopedMerchant: vi.fn(),
-}));
-
 describe('CompareHubIntroDescription', () => {
-  beforeEach(() => {
-    vi.mocked(getRequestScopedMerchant).mockReset();
-  });
-
-  it('streams the merchant-specific compare intro copy', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
-      business_name: 'Ogabassey',
-    } as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
-
-    render(
-      await CompareHubIntroDescription({
-        params: Promise.resolve({ slug: 'ogabassey' }),
-      })
-    );
+  it('streams the merchant-specific compare intro copy', () => {
+    render(<CompareHubIntroDescription merchantName="Ogabassey" />);
 
     expect(
       screen.getByText(/Browse Ogabassey product comparison pages by category/)
@@ -31,24 +17,16 @@ describe('CompareHubIntroDescription', () => {
     ).not.toBeNull();
   });
 
-  it('renders nothing when the merchant name is missing', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
-      business_name: '  ',
-    } as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
+  it('keeps the resolved copy off the cached-data import graph', () => {
+    const source = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        'compare-hub-intro-description.tsx'
+      ),
+      'utf8'
+    );
 
-    const ui = await CompareHubIntroDescription({
-      params: Promise.resolve({ slug: 'ogabassey' }),
-    });
-
-    expect(ui).toBeNull();
-  });
-
-  it('renders nothing for an invalid merchant identifier', async () => {
-    const ui = await CompareHubIntroDescription({
-      params: Promise.resolve({ slug: 'not a store' }),
-    });
-
-    expect(ui).toBeNull();
-    expect(getRequestScopedMerchant).not.toHaveBeenCalled();
+    expect(source).not.toContain('cached-data');
+    expect(source).not.toContain('getRequestScopedMerchant');
   });
 });

@@ -1,13 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('@/app/(storefront)/storefront-eager-blog-css-layout', () => ({
-  StorefrontEagerBlogCssLayout: ({ children }: { children: ReactNode }) => (
-    <div data-testid="eager-blog-css">{children}</div>
-  ),
-}));
-
+import { describe, expect, it } from 'vitest';
 import { BlogListingQueryContent } from './blog-listing-query-content';
 
 describe('BlogListingQueryContent', () => {
@@ -44,7 +36,7 @@ describe('BlogListingQueryContent', () => {
     expect(screen.queryByTestId('eager-blog-css')).not.toBeInTheDocument();
   });
 
-  it('hides the committed snapshot hero on paginated results', async () => {
+  it('hides the committed snapshot hero on paginated results without eager CSS', async () => {
     render(
       await BlogListingQueryContent({
         children: <p>template featured</p>,
@@ -59,10 +51,10 @@ describe('BlogListingQueryContent', () => {
     expect(
       document.querySelector('[data-blog-listing-filtered]')
     ).not.toBeNull();
-    expect(screen.getByTestId('eager-blog-css')).toBeInTheDocument();
+    expect(screen.queryByTestId('eager-blog-css')).not.toBeInTheDocument();
   });
 
-  it('eagerly styles filtered search listings for static tenants', async () => {
+  it('marks filtered search listings without importing the eager blog sheet', async () => {
     render(
       await BlogListingQueryContent({
         children: <p>search results</p>,
@@ -72,12 +64,12 @@ describe('BlogListingQueryContent', () => {
       })
     );
 
-    expect(screen.getByTestId('eager-blog-css')).toBeInTheDocument();
+    expect(screen.queryByTestId('eager-blog-css')).not.toBeInTheDocument();
     expect(screen.getByText('search results')).toBeInTheDocument();
     expect(screen.queryByText('Root featured story')).not.toBeInTheDocument();
   });
 
-  it('eagerly styles filtered category listings for static tenants', async () => {
+  it('marks filtered category listings without importing the eager blog sheet', async () => {
     render(
       await BlogListingQueryContent({
         children: <p>category results</p>,
@@ -87,7 +79,7 @@ describe('BlogListingQueryContent', () => {
       })
     );
 
-    expect(screen.getByTestId('eager-blog-css')).toBeInTheDocument();
+    expect(screen.queryByTestId('eager-blog-css')).not.toBeInTheDocument();
     expect(screen.getByText('category results')).toBeInTheDocument();
   });
 });

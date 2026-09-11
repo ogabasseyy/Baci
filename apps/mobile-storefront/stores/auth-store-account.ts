@@ -19,7 +19,7 @@ import { useSavedStore } from './saved-store';
 const log = createLogger('AuthStore');
 
 function clearUserStores() {
-  useCartStore.getState().clearCart();
+  void useCartStore.getState().clearCart();
   useSavedStore.getState().clearSaved();
   useComparisonStore.getState().clearComparison();
   useQuizStore.getState().reset();

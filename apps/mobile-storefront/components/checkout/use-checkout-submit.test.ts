@@ -159,7 +159,7 @@ function createParams(
     accountPassword: '',
     appliedDiscountCode: null,
     availablePaymentMethods: ['paystack'],
-    clearCart: jest.fn(),
+    clearCart: jest.fn<() => void | Promise<void>>(),
     currentShippingQuoteContextKey: 'door:Lagos:Ikeja',
     customer: null,
     deliveryFee: 1500,

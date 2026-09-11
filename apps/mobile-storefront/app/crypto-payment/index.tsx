@@ -103,8 +103,8 @@ export default function CryptoPaymentScreen() {
     }
   };
 
-  const handleDone = () => {
-    clearCart();
+  const handleDone = async () => {
+    await clearCart();
     router.replace({
       pathname: '/order-success',
       params: {

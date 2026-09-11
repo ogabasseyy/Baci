@@ -9,7 +9,7 @@ import {
 import type { OrderResponse } from '@/services/orders';
 
 const mockClearAndPersistCheckoutCart =
-  jest.fn<(clearCart: () => void) => Promise<void>>();
+  jest.fn<(clearCart: () => void | Promise<void>) => Promise<void>>();
 const mockFetch =
   jest.fn<
     (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
@@ -38,7 +38,7 @@ jest.mock('@/services/orders', () => ({
 }));
 
 jest.mock('./checkout-cart-persistence', () => ({
-  clearAndPersistCheckoutCart: (clearCart: () => void) =>
+  clearAndPersistCheckoutCart: (clearCart: () => void | Promise<void>) =>
     mockClearAndPersistCheckoutCart(clearCart),
 }));
 
@@ -118,8 +118,8 @@ describe('finalizeCheckoutPayment', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockClearAndPersistCheckoutCart.mockImplementation((clearCart) => {
-      clearCart();
+    mockClearAndPersistCheckoutCart.mockImplementation(async (clearCart) => {
+      await clearCart();
       return Promise.resolve();
     });
     mockFetch.mockReset();
@@ -127,7 +127,7 @@ describe('finalizeCheckoutPayment', () => {
   });
 
   it('routes fully paid store-credit orders directly to order success', async () => {
-    const clearCart = jest.fn();
+    const clearCart = jest.fn<() => void | Promise<void>>();
     const setIsProcessing = jest.fn();
     const runPostOrderSideEffects = jest.fn();
     const isOrderInFlight = { current: true };
@@ -176,7 +176,7 @@ describe('finalizeCheckoutPayment', () => {
     // A quiz prize (voucher) order is pre-reserved and comes back paid with
     // nothing due and no wallet/savings usage. Even with an online method
     // selected, it must go straight to success, not the ₦0 gateway.
-    const clearCart = jest.fn();
+    const clearCart = jest.fn<() => void | Promise<void>>();
     const setIsProcessing = jest.fn();
     const runPostOrderSideEffects = jest.fn();
     const isOrderInFlight = { current: true };
@@ -235,7 +235,7 @@ describe('finalizeCheckoutPayment', () => {
     } as Response);
 
     await finalizeCheckoutPayment({
-      clearCart: jest.fn(),
+      clearCart: jest.fn<() => void | Promise<void>>(),
       customerEmail: 'ada@example.com',
       customerName: 'Ada Customer',
       customerPhone: '08012345678',
@@ -286,7 +286,7 @@ describe('finalizeCheckoutPayment', () => {
     mockStartWalletFundedBankTransferCheckout.mockResolvedValue(true);
 
     await finalizeCheckoutPayment({
-      clearCart: jest.fn(),
+      clearCart: jest.fn<() => void | Promise<void>>(),
       customerEmail: 'ada@example.com',
       customerName: 'Ada Customer',
       customerPhone: '08012345678',
@@ -329,7 +329,7 @@ describe('finalizeCheckoutPayment', () => {
     } as Response);
 
     await finalizeCheckoutPayment({
-      clearCart: jest.fn(),
+      clearCart: jest.fn<() => void | Promise<void>>(),
       customerEmail: 'ada@example.com',
       customerName: 'Ada Customer',
       customerPhone: '08012345678',

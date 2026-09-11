@@ -29,7 +29,7 @@ export interface UseCheckoutSubmitParams {
   accountPassword: string;
   appliedDiscountCode?: string | null;
   availablePaymentMethods: PaymentMethodType[];
-  clearCart: () => void;
+  clearCart: () => void | Promise<void>;
   currentShippingQuoteContextKey: string;
   customer: CheckoutCustomer | null | undefined;
   deliveryFee: number;

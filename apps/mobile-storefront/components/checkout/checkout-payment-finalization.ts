@@ -22,7 +22,7 @@ import {
 const PAYMENT_INIT_TIMEOUT_MS = 10_000;
 
 interface FinalizeCheckoutPaymentParams {
-  clearCart: () => void;
+  clearCart: () => void | Promise<void>;
   customerEmail: string;
   customerName: string;
   customerPhone: string;

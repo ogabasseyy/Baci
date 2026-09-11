@@ -5,12 +5,13 @@ jest.mock('expo-router', () => ({
   router: { replace: (...args: unknown[]) => mockRouterReplace(...args) },
 }));
 
-const mockClearAndPersistCheckoutCart = jest.fn((clearCart: () => void) => {
-  clearCart();
-  return Promise.resolve();
-});
+const mockClearAndPersistCheckoutCart = jest.fn(
+  async (clearCart: () => void | Promise<void>) => {
+    await clearCart();
+  }
+);
 jest.mock('./checkout-cart-persistence', () => ({
-  clearAndPersistCheckoutCart: (clearCart: () => void) =>
+  clearAndPersistCheckoutCart: (clearCart: () => void | Promise<void>) =>
     mockClearAndPersistCheckoutCart(clearCart),
 }));
 

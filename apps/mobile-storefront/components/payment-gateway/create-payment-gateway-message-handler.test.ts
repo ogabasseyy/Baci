@@ -17,7 +17,7 @@ function createHandler(
   > = {}
 ) {
   const copiedGatewayTextRef = { current: null as string | null };
-  const clearCart = jest.fn();
+  const clearCart = jest.fn<() => void | Promise<void>>();
   const confirmVtuPaymentSuccess =
     jest.fn<
       (input: {
@@ -63,7 +63,7 @@ function sendMessage(
   handler: ReturnType<typeof createPaymentGatewayMessageHandler>,
   data: unknown
 ) {
-  handler({ nativeEvent: { data: JSON.stringify(data) } });
+  return handler({ nativeEvent: { data: JSON.stringify(data) } });
 }
 
 describe('createPaymentGatewayMessageHandler', () => {
@@ -135,7 +135,7 @@ describe('createPaymentGatewayMessageHandler', () => {
     );
   });
 
-  it('routes crypto success with sanitized fallback params', () => {
+  it('routes crypto success with sanitized fallback params', async () => {
     const {
       clearCart,
       handler,
@@ -144,7 +144,7 @@ describe('createPaymentGatewayMessageHandler', () => {
       setSuccessStatus,
     } = createHandler();
 
-    sendMessage(handler, { type: 'crypto_success' });
+    await sendMessage(handler, { type: 'crypto_success' });
 
     expect(markPaymentCompletionStarted).toHaveBeenCalledTimes(1);
     expect(setSuccessStatus).toHaveBeenCalledTimes(1);
@@ -166,12 +166,12 @@ describe('createPaymentGatewayMessageHandler', () => {
     });
   });
 
-  it('preserves tracking token when routing order crypto success', () => {
+  it('preserves tracking token when routing order crypto success', async () => {
     const { handler, scheduleDelayedNavigation } = createHandler({
       trackingToken: ' track-token-123 ',
     });
 
-    sendMessage(handler, { type: 'crypto_success' });
+    await sendMessage(handler, { type: 'crypto_success' });
 
     const scheduledNavigation = scheduleDelayedNavigation.mock.calls[0]?.[0];
     scheduledNavigation?.();
@@ -188,12 +188,12 @@ describe('createPaymentGatewayMessageHandler', () => {
     });
   });
 
-  it('omits whitespace-only tracking token when routing order crypto success', () => {
+  it('omits whitespace-only tracking token when routing order crypto success', async () => {
     const { handler, scheduleDelayedNavigation } = createHandler({
       trackingToken: '   ',
     });
 
-    sendMessage(handler, { type: 'crypto_success' });
+    await sendMessage(handler, { type: 'crypto_success' });
 
     const scheduledNavigation = scheduleDelayedNavigation.mock.calls[0]?.[0];
     scheduledNavigation?.();
@@ -265,7 +265,7 @@ describe('createPaymentGatewayMessageHandler', () => {
     });
   });
 
-  it('does not mark VTU crypto success as confirmed before backend confirmation', () => {
+  it('does not mark VTU crypto success as confirmed before backend confirmation', async () => {
     const {
       clearCart,
       confirmVtuPaymentSuccess,
@@ -293,7 +293,7 @@ describe('createPaymentGatewayMessageHandler', () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 
-  it('does not route VTU crypto success without required route context', () => {
+  it('does not route VTU crypto success without required route context', async () => {
     const consoleErrorSpy = jest
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
@@ -312,7 +312,7 @@ describe('createPaymentGatewayMessageHandler', () => {
     });
 
     try {
-      sendMessage(handler, { type: 'crypto_success' });
+      await sendMessage(handler, { type: 'crypto_success' });
 
       expect(markPaymentCompletionStarted).not.toHaveBeenCalled();
       expect(confirmVtuPaymentSuccess).not.toHaveBeenCalled();
@@ -372,16 +372,16 @@ describe('createPaymentGatewayMessageHandler', () => {
     }
   });
 
-  it('does not swallow handler errors after a valid message is parsed', () => {
+  it('does not swallow handler errors after a valid message is parsed', async () => {
     const { handler, setSuccessStatus } = createHandler();
     const failure = new Error('status failed');
     setSuccessStatus.mockImplementationOnce(() => {
       throw failure;
     });
 
-    expect(() => sendMessage(handler, { type: 'crypto_success' })).toThrow(
-      failure
-    );
+    await expect(
+      sendMessage(handler, { type: 'crypto_success' })
+    ).rejects.toThrow(failure);
   });
 
   it('ignores invalid JSON and non-record messages', () => {

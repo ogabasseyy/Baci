@@ -111,8 +111,8 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(utilityLayout).not.toContain('storefront-eager-full-css-layout');
     expect(blogLayout).not.toContain('storefront-eager-blog-css-layout');
     expect(blogListingQuery).not.toContain('storefront-eager-blog-css-layout');
-    expect(genericHome).not.toContain('storefront-eager-full-css-layout');
-    expect(genericHome).toContain('StorefrontFullStyleLoader');
+    expect(genericHome).toContain('storefront-eager-full-css-layout');
+    expect(genericHome).not.toContain('StorefrontFullStyleLoader');
   });
 
   it('locks committed LCP copy to the Inter fallback face without a render-blocking CSS file', () => {

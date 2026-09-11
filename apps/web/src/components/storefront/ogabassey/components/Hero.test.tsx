@@ -110,6 +110,17 @@ describe('Hero', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('demotes the first mobile image when a parent already committed text LCP', () => {
+    render(<Hero omitDocumentHeading slides={SLIDES} />);
+
+    expect(mockMobileCarousel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prioritizeFirstImage: false,
+        slides: SLIDES,
+      })
+    );
+  });
+
   it('threads the launch slides to both the mobile carousel and the desktop grid', () => {
     render(<Hero slides={SLIDES} />);
 

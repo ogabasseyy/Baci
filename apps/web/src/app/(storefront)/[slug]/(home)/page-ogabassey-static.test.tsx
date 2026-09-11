@@ -97,16 +97,16 @@ describe('OgaBassey dynamic homepage routing', () => {
     expect(mockFullStorefrontCssImport).not.toHaveBeenCalled();
   });
 
-  it('renders other storefronts through the shared page content path without eager full storefront CSS', async () => {
+  it('renders other storefronts through the shared page content path with eager full storefront CSS', async () => {
     await renderStorefrontPage('another-shop');
 
     expect(mockCriticalHomeCssImport).not.toHaveBeenCalled();
-    expect(mockFullStorefrontCssImport).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(
         screen.getByText('Shared storefront page content')
       ).toBeInTheDocument();
     });
+    expect(mockFullStorefrontCssImport).toHaveBeenCalledOnce();
   });
 
   it('renders the path homepage with the OgaBassey static shell', async () => {

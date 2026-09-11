@@ -12,6 +12,9 @@ interface HeroProps {
   /** Skip the mobile product carousel when the static parent already committed
    *  a brand-text LCP hero. Desktop grid is unchanged. */
   omitMobileCarousel?: boolean;
+  /** Eager/high-priority first mobile image. Defaults off when the parent
+   *  already committed a text LCP so the below-fold carousel cannot steal it. */
+  prioritizeMobileHeroImage?: boolean;
   /** Launch products (pinned A27/Power 80, then newest), pre-selected upstream.
    *  Drives both the mobile carousel and the desktop grid; each card deep-links
    *  to its PDP. Server-rendered so the links are crawlable; the first image of
@@ -48,8 +51,12 @@ function HeroEmptyGeometry() {
 export const Hero: React.FC<HeroProps> = ({
   omitDocumentHeading = false,
   omitMobileCarousel = false,
+  prioritizeMobileHeroImage,
   slides,
 }) => {
+  const shouldPrioritizeMobileHeroImage =
+    prioritizeMobileHeroImage ?? !omitDocumentHeading;
+
   return (
     <div className="w-full bg-store-background relative">
       {omitDocumentHeading ? null : (
@@ -74,7 +81,10 @@ export const Hero: React.FC<HeroProps> = ({
         {slides.length > 0 ? (
           <>
             {omitMobileCarousel ? null : (
-              <HeroMobileCarousel slides={slides} />
+              <HeroMobileCarousel
+                prioritizeFirstImage={shouldPrioritizeMobileHeroImage}
+                slides={slides}
+              />
             )}
             <HeroDesktopGrid slides={slides} />
           </>

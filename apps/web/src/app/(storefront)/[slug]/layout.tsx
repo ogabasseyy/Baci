@@ -1,34 +1,27 @@
 import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import type React from 'react';
-import { Suspense } from 'react';
 import { ShellChromeLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { StorefrontLcpCopyStyle } from '@/app/(storefront)/storefront-lcp-copy-style';
 import { AdAttributionCapture } from '@/components/storefront/ad-attribution-capture';
-import { DeferredPageViewTracker } from '@/components/storefront/deferred-page-view-tracker';
-import { OgabasseyStorefrontLayout } from '@/components/storefront/ogabassey/storefront-layout';
 import {
   DEFAULT_STOREFRONT_APPEARANCE,
-  getStorefrontAppearanceClasses,
   resolveStorefrontAppearance,
   type StorefrontAppearance,
 } from '@/components/storefront/storefront-appearance';
-import { StorefrontThemeProvider } from '@/components/storefront/storefront-theme-provider';
 import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-storefront';
-import { WebMcpStorefrontTools } from '@/components/storefront/webmcp-storefront-tools';
-import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
-import { StorefrontCartProvider } from '@/hooks/cart/storefront-cart-provider';
-import { StorefrontMerchantProvider } from '@/hooks/merchant/storefront-merchant-provider';
-import type { MerchantData } from '@/hooks/merchant/types';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { buildStoreUrl } from '@/lib/store-url';
 import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-banner-metadata';
 import { isValidMerchantIdentifier } from '@/lib/validation';
 import { getStorefrontSeoDescription } from './seo-helpers';
+import { StorefrontPprStaticShell } from './storefront-ppr-static-shell';
+import { StorefrontShellFrame } from './storefront-shell-frame';
 import {
   getStorefrontShellSnapshot,
   getStorefrontShellSnapshotBase,
 } from './storefront-shell-snapshot';
+import { StorefrontThemeFrame } from './storefront-theme-frame';
 
 // Run storefront SSR next to the Supabase primary (AWS eu-west-1 / Dublin) so
 // every render's DB round-trips stay intra-region. Neither `vercel.json`
@@ -50,48 +43,6 @@ const STORE_NOT_FOUND_METADATA: Metadata = {
   // not bleed onto not-found pages served on third-party custom domains.
   verification: {},
 };
-
-/**
- * Renders the appropriate layout wrapper based on the merchant's template.
- * Currently supports 'ogabassey' template with persistent layout.
- */
-function StorefrontLayoutRenderer({
-  merchant,
-  preloadHeroLcpImages,
-  routingMode,
-  children,
-}: {
-  merchant: MerchantData;
-  preloadHeroLcpImages: boolean;
-  routingMode: 'domain' | 'path';
-  children: React.ReactNode;
-}) {
-  // Theme is handled client-side by V2ThemeProvider (reads cookie on mount).
-  // Trade-off: removing server-side theme detection (cookies()) enables PPR static shells
-  // but may cause a single-frame flash when seasonal themes (e.g., santa in December)
-  // differ from the 'standard' default. SnowEffect uses fixed inset-0 pointer-events-none,
-  // so there is zero CLS impact. The flash is imperceptible in practice.
-  // hideNavigation resolves inside `OgabasseyLayoutChrome` (a client
-  // component) via `usePathname()`, so route-based hide state stays
-  // reactive across client-side routing. The `hideNavigation` prop on
-  // this layout is kept as an override-only escape hatch.
-  const templateId = merchant.template_id;
-
-  if (templateId === OGABASSEY_TEMPLATE_ID) {
-    return (
-      <OgabasseyStorefrontLayout
-        merchant={merchant}
-        preloadHeroLcpImages={preloadHeroLcpImages}
-        routingMode={routingMode}
-      >
-        {children}
-      </OgabasseyStorefrontLayout>
-    );
-  }
-
-  // Default / other templates: No global layout wrapper (layout handled per page)
-  return <>{children}</>;
-}
 
 export async function generateMetadata({
   params,
@@ -199,102 +150,6 @@ export function generateViewport(): Viewport {
     width: 'device-width',
     initialScale: 1,
   };
-}
-
-function StorefrontShellFrame({
-  children,
-  preloadHeroLcpImages,
-  shellSnapshot,
-}: {
-  children: React.ReactNode;
-  preloadHeroLcpImages: boolean;
-  shellSnapshot: Awaited<ReturnType<typeof getStorefrontShellSnapshot>>;
-}) {
-  if (!shellSnapshot) {
-    notFound();
-  }
-
-  const { merchant, routingMode } = shellSnapshot;
-  const merchantSlug = merchant.slug || '';
-
-  return (
-    <StorefrontMerchantProvider
-      slug={merchantSlug}
-      shellSnapshot={shellSnapshot}
-    >
-      <StorefrontCartProvider
-        enableSmartCartPro
-        merchantSlug={merchantSlug}
-        deferValidationUntilIdle
-      >
-        <WebMcpStorefrontTools
-          merchantId={merchant.id}
-          merchantSlug={merchantSlug}
-        />
-        <DeferredPageViewTracker merchantId={merchant.id} />
-        {/*
-          Global Layout Wrapper logic:
-          - Keeps layout persistent across route changes (seamless navigation)
-          - Prevents header flashing/re-rendering
-        */}
-        <StorefrontLayoutRenderer
-          merchant={merchant}
-          preloadHeroLcpImages={preloadHeroLcpImages}
-          routingMode={routingMode}
-        >
-          {children}
-        </StorefrontLayoutRenderer>
-      </StorefrontCartProvider>
-    </StorefrontMerchantProvider>
-  );
-}
-
-function StorefrontThemeFrame({
-  appearance,
-  children,
-  scopeDocument = true,
-}: {
-  appearance: StorefrontAppearance;
-  children: React.ReactNode;
-  scopeDocument?: boolean;
-}) {
-  return (
-    <StorefrontThemeProvider
-      appearance={appearance}
-      scopeDocument={scopeDocument}
-    >
-      {children}
-    </StorefrontThemeProvider>
-  );
-}
-
-function StorefrontPprStaticShell({
-  children,
-  loadingFallback,
-  appearance,
-}: {
-  children: React.ReactNode;
-  loadingFallback: React.ReactNode;
-  appearance: StorefrontAppearance;
-}) {
-  const appearanceClassName =
-    getStorefrontAppearanceClasses(appearance).join(' ');
-
-  return (
-    <div
-      className={`storefront-ppr-static-shell ${appearanceClassName}`}
-      data-storefront-shell=""
-    >
-      <Suspense fallback={null}>
-        <div className="storefront-ppr-static-shell__content">{children}</div>
-      </Suspense>
-      {loadingFallback ? (
-        <div className="storefront-ppr-static-shell__fallback">
-          {loadingFallback}
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 export async function StorefrontLayoutContent(props: {

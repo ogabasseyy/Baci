@@ -137,13 +137,14 @@ export async function sendFacebookAdPlatformEvent(
           contentIds: contents.map((item) => item.id),
           currency,
           searchString: event.custom_data.search_string,
+          contentType: 'product_group',
           value,
         }
       : {
           contentIds: contents.map((item) => item.id),
           contentName:
             event.custom_data.content_name || first?.name || first?.id,
-          contentType: event.custom_data.content_type || 'product',
+          contentType: 'product_group',
           currency,
           value,
         },

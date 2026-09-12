@@ -53,7 +53,8 @@ BEGIN
   SET
     invoice_issue_date_generated = CASE WHEN invoice_issue_date IS NULL THEN true ELSE invoice_issue_date_generated END,
     tax_point_date_generated = CASE WHEN tax_point_date IS NULL THEN true ELSE tax_point_date_generated END
-  WHERE id = NEW.order_id;
+  WHERE id = NEW.order_id
+    AND (invoice_issue_date IS NULL OR tax_point_date IS NULL);
   RETURN NEW;
 END;
 $$;
@@ -88,7 +89,21 @@ BEGIN
     END
   WHERE id = NEW.order_id
     AND transaction_date IS NOT NULL
-    AND public.manual_order_timezone(merchant_id) IS NOT NULL;
+    AND public.manual_order_timezone(merchant_id) IS NOT NULL
+    AND (
+      (
+        invoice_issue_date_generated IS TRUE
+        AND invoice_issue_date IS DISTINCT FROM (
+          transaction_date AT TIME ZONE public.manual_order_timezone(merchant_id)
+        )::date
+      )
+      OR (
+        tax_point_date_generated IS TRUE
+        AND tax_point_date IS DISTINCT FROM (
+          transaction_date AT TIME ZONE public.manual_order_timezone(merchant_id)
+        )::date
+      )
+    );
 
   RETURN NEW;
 END;
@@ -111,7 +126,8 @@ DECLARE
   v_time_zone text := public.manual_order_timezone(NEW.merchant_id);
 BEGIN
   IF NEW.transaction_date IS NULL
-     OR NEW.transaction_date IS NOT DISTINCT FROM OLD.transaction_date THEN
+     OR NEW.transaction_date IS NOT DISTINCT FROM OLD.transaction_date
+     OR v_time_zone IS NULL THEN
     RETURN NEW;
   END IF;
 

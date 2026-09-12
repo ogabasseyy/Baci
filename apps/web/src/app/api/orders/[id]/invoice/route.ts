@@ -28,6 +28,7 @@ import {
   generatePeppolInvoiceXml,
   PEPPOL_BIS_BILLING_COMPLIANCE_NOTE,
 } from '@/lib/peppol-ubl-invoice';
+import { normalizeReceiptDocumentDate } from '@/lib/receipt-pdf-formatters';
 import {
   generateReceiptBlob,
   resolveReceiptLogoDataUri,
@@ -531,7 +532,7 @@ export async function GET(
       issue_date: order.invoice_issue_date
         ? new Date(order.invoice_issue_date)
         : order.transaction_date
-          ? new Date(order.transaction_date)
+          ? normalizeReceiptDocumentDate(order.transaction_date)
           : new Date(order.created_at),
       tax_point_date: order.tax_point_date
         ? new Date(order.tax_point_date)

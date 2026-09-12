@@ -446,6 +446,28 @@ describe('generateReceiptBlob', () => {
     expect(pdfText).toContain('75,000.00');
   });
 
+  it('uses the manual transaction date when no document date override is supplied', () => {
+    const pdfText = getPdfText(
+      {
+        ...baseOrder,
+        created_at: '2026-09-12T10:00:00.000Z',
+        transaction_date: '2026-03-04T23:30:00.000Z',
+        items: [
+          {
+            product_name: 'MacBook Pro',
+            quantity: 1,
+            price: 150000,
+          },
+        ],
+        transactions: [],
+      },
+      baseMerchant
+    );
+
+    expect(pdfText).toContain('5 Mar 2026');
+    expect(pdfText).not.toContain('12 Sep 2026');
+  });
+
   it('handles invalid receipt dates without failing', () => {
     const blob = generateReceiptBlob(
       {

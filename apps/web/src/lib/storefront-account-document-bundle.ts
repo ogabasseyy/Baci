@@ -20,6 +20,7 @@ import type {
   TaxSubtotal,
 } from '@/lib/invoice-generator';
 import { deriveTaxSubtotalsFromInvoiceItems } from '@/lib/invoice-tax-subtotals';
+import { normalizeReceiptDocumentDate } from '@/lib/receipt-pdf-formatters';
 import type {
   StorefrontAccountDocumentCustomerRow,
   StorefrontAccountDocumentItemRow,
@@ -393,7 +394,11 @@ export function buildStorefrontAccountDocumentBundle({
   const invoiceData: InvoiceData = {
     invoice_number: order.order_number,
     invoice_type_code: order.invoice_type_code || '380',
-    issue_date: new Date(order.invoice_issue_date || order.created_at),
+    issue_date: order.invoice_issue_date
+      ? new Date(order.invoice_issue_date)
+      : order.transaction_date
+        ? normalizeReceiptDocumentDate(order.transaction_date)
+        : new Date(order.created_at),
     tax_point_date: order.tax_point_date
       ? new Date(order.tax_point_date)
       : undefined,

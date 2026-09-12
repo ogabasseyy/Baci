@@ -80,6 +80,10 @@ export function useReceipts(userId: string | undefined) {
             )
             .eq('customers.user_id', userId)
             .eq('merchant_id', activeMerchantId)
+            .order('transaction_date', {
+              ascending: false,
+              nullsFirst: false,
+            })
             .order('created_at', { ascending: false }),
         { maxRetries: 3 }
       );

@@ -65,6 +65,7 @@ export function buildReceiptOrder(input: BuildReceiptOrderInput): ReceiptOrder {
   return {
     order_number: input.order.order_number,
     created_at: input.order.created_at,
+    transaction_date: input.order.transaction_date ?? null,
     currency: input.currency,
     total: input.total,
     subtotal: input.subtotal,

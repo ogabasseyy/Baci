@@ -86,4 +86,29 @@ export const EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES = [
       'supabase/migrations/20260828190000_restore_storefront_order_delivery_metadata_enforcement.sql',
     sha256: '07f3127bd92fb004ef1eaa7f9558d9c5b2d73c6320512fd919ce37559b1c64f2',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260907180000_include_tracking_order_tax.sql',
+    sha256: '1277d578605564b8adb9598ecc60457795ba5420b0c964f2c3d16d2041f962c5',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260907183000_index_friendly_order_tracking_merchant_slug.sql',
+    sha256: 'a6ddf51d7323da3397b4ad0b3bfdf8bef672bab61484685426249e3453683e57',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260907184500_order_tracking_slug_lower_expression_index.sql',
+    sha256: '1ea9ceb953aadba4049107122c502c8e9052ef75171422be2c299d5c15ad6aff',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260907184600_merchants_slug_lower_expression_index_concurrently.sql',
+    sha256: 'b5234690f9a4cca058c92a28917358ffa7ff61ec1289701960599d7617d46f2f',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260908010000_include_tracking_order_gift_wrapping_fee.sql',
+    sha256: 'ff0193f3652343e26e35a84a5a00188d90e26bf4bf95c7c016c35388adf81d5c',
+  },
 ];

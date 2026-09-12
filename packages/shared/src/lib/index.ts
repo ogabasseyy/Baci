@@ -1,4 +1,5 @@
 export * from './cac-registration';
+export * from './commerce-variant-axis';
 export * from './dedupe-by-id';
 export * from './delivery-metadata';
 export * from './derive-category-slug';

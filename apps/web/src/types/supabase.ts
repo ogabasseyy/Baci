@@ -13165,6 +13165,41 @@ export type Database = {
           },
         ];
       };
+      repair_pickup_pending_payment_references: {
+        Row: {
+          consumed_at: string | null;
+          created_at: string;
+          id: string;
+          merchant_id: string;
+          reference: string;
+          repair_id: string;
+        };
+        Insert: {
+          consumed_at?: string | null;
+          created_at?: string;
+          id?: string;
+          merchant_id: string;
+          reference: string;
+          repair_id: string;
+        };
+        Update: {
+          consumed_at?: string | null;
+          created_at?: string;
+          id?: string;
+          merchant_id?: string;
+          reference?: string;
+          repair_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'repair_pickup_pending_payment_references_repair_fk';
+            columns: ['repair_id', 'merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'repairs';
+            referencedColumns: ['id', 'merchant_id'];
+          },
+        ];
+      };
       repair_pickup_quotes: {
         Row: {
           carrier_name: string | null;
@@ -13413,6 +13448,12 @@ export type Database = {
           pickup_address: string | null;
           pickup_booking_lock_token: string | null;
           pickup_booking_started_at: string | null;
+          pickup_currency: string | null;
+          pickup_fee: number | null;
+          pickup_paid_at: string | null;
+          pickup_payment_pending_reference: string | null;
+          pickup_payment_reference: string | null;
+          pickup_payment_status: string | null;
           preferred_date: string | null;
           quote_id: string | null;
           quoted_price: number | null;
@@ -13439,6 +13480,12 @@ export type Database = {
           pickup_address?: string | null;
           pickup_booking_lock_token?: string | null;
           pickup_booking_started_at?: string | null;
+          pickup_currency?: string | null;
+          pickup_fee?: number | null;
+          pickup_paid_at?: string | null;
+          pickup_payment_pending_reference?: string | null;
+          pickup_payment_reference?: string | null;
+          pickup_payment_status?: string | null;
           preferred_date?: string | null;
           quote_id?: string | null;
           quoted_price?: number | null;
@@ -13465,6 +13512,12 @@ export type Database = {
           pickup_address?: string | null;
           pickup_booking_lock_token?: string | null;
           pickup_booking_started_at?: string | null;
+          pickup_currency?: string | null;
+          pickup_fee?: number | null;
+          pickup_paid_at?: string | null;
+          pickup_payment_pending_reference?: string | null;
+          pickup_payment_reference?: string | null;
+          pickup_payment_status?: string | null;
           preferred_date?: string | null;
           quote_id?: string | null;
           quoted_price?: number | null;
@@ -14065,7 +14118,7 @@ export type Database = {
           manual_terminal_override_at: string | null;
           next_poll_at: string | null;
           notification_events_not_before: string | null;
-          order_id: string;
+          order_id: string | null;
           provider: string;
           shipment_id: string;
           started_at: string;
@@ -14090,7 +14143,7 @@ export type Database = {
           manual_terminal_override_at?: string | null;
           next_poll_at?: string | null;
           notification_events_not_before?: string | null;
-          order_id: string;
+          order_id?: string | null;
           provider: string;
           shipment_id: string;
           started_at?: string;
@@ -14115,7 +14168,7 @@ export type Database = {
           manual_terminal_override_at?: string | null;
           next_poll_at?: string | null;
           notification_events_not_before?: string | null;
-          order_id?: string;
+          order_id?: string | null;
           provider?: string;
           shipment_id?: string;
           started_at?: string;
@@ -14160,7 +14213,7 @@ export type Database = {
           merchant_id: string;
           next_attempt_at: string;
           notification_kind: string;
-          order_id: string;
+          order_id: string | null;
           sent_at: string | null;
           shipment_id: string;
           skip_reason: string | null;
@@ -14183,7 +14236,7 @@ export type Database = {
           merchant_id: string;
           next_attempt_at?: string;
           notification_kind: string;
-          order_id: string;
+          order_id?: string | null;
           sent_at?: string | null;
           shipment_id: string;
           skip_reason?: string | null;
@@ -14206,7 +14259,7 @@ export type Database = {
           merchant_id?: string;
           next_attempt_at?: string;
           notification_kind?: string;
-          order_id?: string;
+          order_id?: string | null;
           sent_at?: string | null;
           shipment_id?: string;
           skip_reason?: string | null;
@@ -16240,6 +16293,16 @@ export type Database = {
         };
         Returns: boolean;
       };
+      bind_repair_pickup_pending_payment_reference: {
+        Args: {
+          p_merchant_id: string;
+          p_reference: string;
+          p_repair_id: string;
+        };
+        Returns: {
+          bound: boolean;
+        }[];
+      };
       build_product_variant_key: {
         Args: { p_attributes: Json; p_condition: string };
         Returns: string;
@@ -16416,7 +16479,7 @@ export type Database = {
       claim_due_gigl_tracking_monitors: {
         Args: { p_limit: number; p_worker_id: string };
         Returns: {
-          order_id: string;
+          order_id: string | null;
           shipment_id: string;
           state: string;
           tracking_epoch_id: string;
@@ -16692,7 +16755,8 @@ export type Database = {
           max_attempts: number;
           merchant_id: string;
           notification_kind: string;
-          order_id: string;
+          order_id: string | null;
+          repair_id: string | null;
           shipment_id: string;
           tracking_epoch_id: string;
           tracking_event_id: string;
@@ -16901,6 +16965,19 @@ export type Database = {
       confirm_order_inventory_reservations: {
         Args: { p_merchant_id: string; p_order_id: string };
         Returns: Json;
+      };
+      confirm_repair_pickup_payment: {
+        Args: {
+          p_amount: number;
+          p_currency: string;
+          p_gateway_response: Json;
+          p_merchant_id: string;
+          p_reference: string;
+          p_repair_id: string;
+        };
+        Returns: {
+          confirmed: boolean;
+        }[];
       };
       convert_chat_order_to_paid_order_with_inventory: {
         Args: {
@@ -17653,6 +17730,21 @@ export type Database = {
           similarity_score: number;
           suggested_term: string;
         };
+      };
+      find_resumable_repair_pickup: {
+        Args: {
+          p_customer_email: string;
+          p_merchant_id: string;
+          p_repair_id?: string;
+        };
+        Returns: {
+          customer_phone: string;
+          device_model: string;
+          device_type: string;
+          id: string;
+          pickup_address: string | null;
+          ticket_number: number;
+        }[];
       };
       find_spelling_suggestion: {
         Args: {
@@ -18455,6 +18547,10 @@ export type Database = {
           status: string;
         }[];
       };
+      get_repair_pickup_receiver: {
+        Args: { p_merchant_id: string };
+        Returns: Json;
+      };
       get_repair_status: {
         Args: {
           p_email: string;
@@ -18465,6 +18561,9 @@ export type Database = {
           created_at: string;
           device_model: string;
           device_type: string;
+          pickup_currency: string | null;
+          pickup_fee: number | null;
+          pickup_payment_status: string | null;
           repair_type_label: string;
           service_type: string;
           status: Database['public']['Enums']['repair_status'];
@@ -18845,6 +18944,10 @@ export type Database = {
         };
         Returns: boolean;
       };
+      is_merchant_sales_transaction: {
+        Args: { p_metadata: Json };
+        Returns: boolean;
+      };
       is_reserved_merchant_slug: { Args: { p_slug: string }; Returns: boolean };
       is_sent_admin_notification_v1: {
         Args: { p_notification_id: string };
@@ -18852,6 +18955,10 @@ export type Database = {
       };
       is_staff_of_merchant: {
         Args: { p_merchant_id: string };
+        Returns: boolean;
+      };
+      is_usable_repair_pickup_phone: {
+        Args: { p_phone: string };
         Returns: boolean;
       };
       is_valid_email: { Args: { email_text: string }; Returns: boolean };
@@ -19118,6 +19225,12 @@ export type Database = {
         };
         Returns: boolean;
       };
+      mark_repair_pickup_awaiting_payment: {
+        Args: { p_merchant_id: string; p_repair_id: string };
+        Returns: {
+          marked: boolean;
+        }[];
+      };
       mark_transaction_order_item_custom: {
         Args: { p_merchant_id: string; p_order_item_id: string };
         Returns: undefined;
@@ -19204,6 +19317,10 @@ export type Database = {
       };
       normalize_product_search_text: {
         Args: { search_text: string };
+        Returns: string;
+      };
+      normalize_repair_pickup_phone_digits: {
+        Args: { p_phone: string };
         Returns: string;
       };
       normalize_variant_axis_value: {
@@ -19771,6 +19888,20 @@ export type Database = {
         Args: { p_source: string; p_token_hash: string };
         Returns: undefined;
       };
+      record_repair_pickup_payment_mismatch: {
+        Args: {
+          p_amount: number;
+          p_currency: string;
+          p_gateway_response: Json;
+          p_merchant_id: string;
+          p_mismatch_reason: string;
+          p_reference: string;
+          p_repair_id: string;
+        };
+        Returns: {
+          recorded: boolean;
+        }[];
+      };
       record_shipment_inventory_reconciliation: {
         Args: {
           p_error_code: string;
@@ -20021,6 +20152,23 @@ export type Database = {
           p_target_status?: string;
         };
         Returns: Json;
+      };
+      release_rejected_repair_pickup_reservation: {
+        Args: {
+          p_lock_token: string;
+          p_merchant_id: string;
+          p_repair_id: string;
+          p_shipment_id: string;
+        };
+        Returns: boolean;
+      };
+      release_repair_pickup_booking_claim: {
+        Args: {
+          p_lock_token: string;
+          p_merchant_id: string;
+          p_repair_id: string;
+        };
+        Returns: boolean;
       };
       release_wallet_credit_push: {
         Args: { p_claim_token: string; p_transaction_id: string };

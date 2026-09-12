@@ -4,7 +4,6 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
-import { useShallow } from 'zustand/react/shallow';
 import { CheckoutBottomAction } from '@/components/checkout/CheckoutBottomAction';
 import { CheckoutCryptoPaymentModal } from '@/components/checkout/CheckoutCryptoPaymentModal';
 import { CheckoutHeader } from '@/components/checkout/CheckoutHeader';
@@ -22,10 +21,11 @@ import Colors from '@/constants/Colors';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
 import { useMerchant } from '@/hooks/use-merchant';
 import type { MobileCheckoutIdempotencyState } from '@/lib/checkout-order-idempotency';
-import { useCartStore } from '@/stores/cart-store';
 import { CheckoutLocationPickerOverlays } from './CheckoutLocationPickerOverlays';
 import { checkoutScreenViewStyles as styles } from './CheckoutScreenView.styles';
+import { CheckoutSimulationBanner } from './CheckoutSimulationBanner';
 import { calculateCheckoutAssuranceFee } from './checkout-order-builders';
+import type { CheckoutScreenViewProps } from './checkout-prize-simulation.types';
 import {
   CHECKOUT_MERCHANT_ID,
   CHECKOUT_MERCHANT_SLUG,
@@ -36,22 +36,20 @@ import { getMerchantPickupLocation } from './merchant-pickup-location';
 import { useCheckoutAddressState } from './use-checkout-address-state';
 import { useCheckoutCryptoPayment } from './use-checkout-crypto-payment';
 import { useCheckoutCtaAnimation } from './use-checkout-cta-animation';
+import { useCheckoutDisplayCart } from './use-checkout-display-cart';
 import { useCheckoutNavigation } from './use-checkout-navigation';
 import { useCheckoutPaymentController } from './use-checkout-payment-controller';
 import { useCheckoutStepActions } from './use-checkout-step-actions';
 
-export function CheckoutScreenView() {
+export function CheckoutScreenView({
+  prizeSimulation,
+}: CheckoutScreenViewProps = {}) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = (colorScheme ?? 'light') === 'dark';
   const insets = useSafeAreaInsets();
-  const { items, subtotal, clearCart } = useCartStore(
-    useShallow((state) => ({
-      items: state.items,
-      subtotal: state.subtotal(),
-      clearCart: state.clearCart,
-    }))
-  );
+  const { clearCart, items, subtotal } =
+    useCheckoutDisplayCart(prizeSimulation);
   const { customer, isAuthenticated, user } = useAuthStatus();
   const { data: merchant } = useMerchant();
   const merchantPickupLocation = getMerchantPickupLocation(merchant);
@@ -64,6 +62,7 @@ export function CheckoutScreenView() {
     useRef<MobileCheckoutIdempotencyState | null>(null);
   const animatedCtaArrowStyle = useCheckoutCtaAnimation(isProcessing);
   const addressState = useCheckoutAddressState({
+    analyticsEnabled: !prizeSimulation,
     customer,
     isAuthenticated,
     items,
@@ -100,6 +99,7 @@ export function CheckoutScreenView() {
   } = savedAddressState;
   const { handleBack } = useCheckoutNavigation({
     isOrderInFlight,
+    isPrizeSimulation: Boolean(prizeSimulation),
     setStep,
     step,
   });
@@ -142,7 +142,6 @@ export function CheckoutScreenView() {
     setIsProcessing,
     total,
   });
-
   const { handleContinue, handlePlaceOrder } = useCheckoutStepActions({
     accountPassword,
     appliedDiscountCode: appliedDiscount?.code ?? null,
@@ -158,8 +157,10 @@ export function CheckoutScreenView() {
     isLoadingQuotes,
     isOrderInFlight,
     isProcessing,
+    isPrizeSimulation: Boolean(prizeSimulation),
     mobileCheckoutIdempotencyRef,
     merchantPickupLocation,
+    onPrizeSimulationComplete: prizeSimulation?.onComplete,
     orderTotals,
     paymentSettings,
     paymentTab,
@@ -188,23 +189,25 @@ export function CheckoutScreenView() {
   });
   return (
     <AddressSuggestionsProvider>
-      {/* Header registration keeps the screen from jumping on iOS. */}
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <PatternedBackground
           backgroundColor={colors.background}
           isDark={isDark}
         />
         <CheckoutHeader colors={colors} onBack={handleBack} />
-
         <AppKeyboardContainer
           style={[styles.contentShell, { backgroundColor: 'transparent' }]}
         >
+          {prizeSimulation ? (
+            <CheckoutSimulationBanner colors={colors} />
+          ) : null}
           <CheckoutStepper
             step={step}
             setStep={setStep}
             itemCount={items.reduce((acc, item) => acc + item.quantity, 0)}
             colors={colors}
             isDark={isDark}
+            isPrizeSimulation={Boolean(prizeSimulation)}
           />
 
           <CheckoutStepContent
@@ -217,12 +220,12 @@ export function CheckoutScreenView() {
             items={items}
             merchantPickupLocation={merchantPickupLocation}
             paymentController={paymentController}
+            prizeSimulation={Boolean(prizeSimulation)}
             setStep={setStep}
             step={step}
             subtotal={subtotal}
           />
-
-          {step === 'payment' ? (
+          {step === 'payment' && !prizeSimulation ? (
             <DiscountCodeInput
               merchantId={CHECKOUT_MERCHANT_ID}
               cartTotal={subtotal}
@@ -259,6 +262,7 @@ export function CheckoutScreenView() {
             onContinue={handleContinue}
             onPlaceOrder={handlePlaceOrder}
             selectedPayment={selectedPayment}
+            prizeSimulation={Boolean(prizeSimulation)}
             step={step}
             total={Math.max(0, total - (appliedDiscount?.discountAmount ?? 0))}
           />
@@ -277,10 +281,7 @@ export function CheckoutScreenView() {
       <CryptoSelectionModal
         visible={showCryptoSelection}
         onClose={() => setShowCryptoSelection(false)}
-        onConfirm={(chain, currency) => {
-          // Cast string types to strict union types is handled by internal logic or just pass string if API accepts string
-          handleCryptoConfirm(chain, currency);
-        }}
+        onConfirm={handleCryptoConfirm}
         isProcessing={isProcessing}
       />
 

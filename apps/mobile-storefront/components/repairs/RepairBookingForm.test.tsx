@@ -115,7 +115,7 @@ describe('RepairBookingForm', () => {
     );
   });
 
-  it('requires a pickup address when the pickup method is selected', () => {
+  it('hides courier pickup until a mobile payment flow exists', () => {
     render(
       <RepairBookingForm
         device={device}
@@ -127,12 +127,17 @@ describe('RepairBookingForm', () => {
       />
     );
 
+    expect(screen.queryByLabelText('Pickup')).toBeNull();
+    expect(
+      screen.getByText(/Courier pickup will be available in a future update/i)
+    ).toBeTruthy();
+
     fillValidForm();
-    fireEvent.press(screen.getByLabelText('Pickup'));
     fireEvent.press(screen.getByLabelText('Submit repair request'));
 
-    expect(onSubmit).not.toHaveBeenCalled();
-    expect(screen.getByText(/valid pickup address/i)).toBeTruthy();
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceType: 'dropoff' })
+    );
   });
 
   it('omits device/quote ids for the free-text path (no device)', () => {

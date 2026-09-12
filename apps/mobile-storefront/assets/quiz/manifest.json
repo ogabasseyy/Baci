@@ -3,11 +3,11 @@
   "assets": [
     {
       "repoPath": "apps/mobile-storefront/assets/quiz/audio/nobody-does-it-better.mp3",
-      "sha256": "2b75dc307e4f269294c4ef824e00ba8e0dbf4995db13c83803b1e10d1aedfbfa"
+      "sha256": "2807087288c682d2df846c3f8d76f66f43d1322146bb7ccc3a6faa2421aa576d"
     },
     {
       "repoPath": "apps/mobile-storefront/assets/quiz/audio/ogabassey-no-dey-disappoint-1.mp3",
-      "sha256": "78b977fa1fb56782fe815ed7efce8abab63cfbdb4999ad5858675e23afe7bda0"
+      "sha256": "8cedd235951bd40dfe9246aa431a6610e66dd75bbc9b97570ff12cc7a1afb5b2"
     },
     {
       "repoPath": "apps/mobile-storefront/assets/quiz/icons/Search.svg",

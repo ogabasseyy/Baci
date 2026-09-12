@@ -8,6 +8,8 @@ interface CategoryPageToolbarProps {
   basePath: string;
   displayTitle: string;
   paginationProductCount: number;
+  /** Demote when a parent route already committed the page H1. */
+  titleHeading?: 'h1' | 'h2';
   viewMode: 'grid' | 'list';
   onViewModeChange: (mode: 'grid' | 'list') => void;
   canUseClientFilters: boolean;
@@ -23,11 +25,13 @@ export function CategoryPageToolbar({
   basePath,
   displayTitle,
   paginationProductCount,
+  titleHeading = 'h1',
   viewMode,
   onViewModeChange,
   canUseClientFilters,
   onOpenMobileFilter,
 }: CategoryPageToolbarProps) {
+  const Title = titleHeading === 'h2' ? 'h2' : 'h1';
   return (
     <div className="max-w-[1400px] mx-auto px-4 md:px-6 mb-6">
       <nav className="flex items-center overflow-x-auto whitespace-nowrap pb-2 text-sm text-store-background-text/65">
@@ -45,9 +49,9 @@ export function CategoryPageToolbar({
 
       <div className="mt-4 flex items-end justify-between">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-store-background-text">
+          <Title className="text-3xl md:text-4xl font-bold text-store-background-text">
             {displayTitle}
-          </h1>
+          </Title>
           <p className="text-store-background-text/50 text-sm mt-1">
             {paginationProductCount} results found
           </p>

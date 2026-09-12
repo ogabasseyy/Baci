@@ -8,6 +8,10 @@ vi.mock('@/lib/shipping', () => ({
   },
 }));
 
+vi.mock('@/lib/shipping/refresh-order-shipment-quote', async () => ({
+  refreshOrderShipmentQuote: vi.fn(async (_supabase, quote) => quote),
+}));
+
 vi.mock(
   '@/lib/shipping/order-shipment-booking-utils',
   async (importOriginal) => {
@@ -55,6 +59,7 @@ function createMockSupabase(overrides?: {
   merchant?: { data: unknown; error: unknown };
   shipmentInsert?: { data: unknown; error: unknown };
   onShipmentInsert?: (payload: unknown) => void;
+  settlements?: { data: unknown; error: unknown };
 }) {
   const ordersSelectChain = {
     eq: vi.fn().mockReturnThis(),
@@ -111,8 +116,52 @@ function createMockSupabase(overrides?: {
   };
   shippingQuotesUpdateChain.eq.mockReturnValue(shippingQuotesUpdateChain);
 
+  const settlementsSelectChain = {
+    eq: vi.fn().mockReturnThis(),
+    // biome-ignore lint/suspicious/noThenProperty: Supabase query mocks are thenable.
+    then(
+      onfulfilled: (value: unknown) => unknown,
+      onrejected?: (reason: unknown) => unknown
+    ) {
+      return Promise.resolve(
+        overrides?.settlements ?? {
+          data: [
+            {
+              metadata: { retained_shipping_amount: 2500 },
+              status: 'completed',
+            },
+          ],
+          error: null,
+        }
+      ).then(onfulfilled, onrejected);
+    },
+  };
+
   const chain: MockChain = {
-    rpc: vi.fn(),
+    rpc: vi.fn().mockImplementation((fn: string) => {
+      if (fn === 'get_shipping_quote_booking_metadata') {
+        return Promise.resolve({
+          data: validQuote.provider_metadata,
+          error: null,
+        });
+      }
+      if (fn === 'get_shipping_quote_booking_economics') {
+        return Promise.resolve({
+          data: {
+            provider_cost: 1000,
+            platform_margin: 100,
+            platform_margin_bps: 400,
+            pricing_version: 'gigl_platform_margin_v1',
+            shipping_provider_cost: 1000,
+            shipping_platform_margin: 100,
+            shipping_pricing_version: 'gigl_platform_margin_v1',
+            shipping_platform_retained_amount: 2500,
+          },
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: [], error: null });
+    }),
     from: vi.fn((table: string) => {
       if (table === 'orders') {
         return {
@@ -141,6 +190,12 @@ function createMockSupabase(overrides?: {
       if (table === 'merchants') {
         return {
           select: vi.fn(() => merchantsSelectChain),
+        };
+      }
+
+      if (table === 'merchant_settlements') {
+        return {
+          select: vi.fn(() => settlementsSelectChain),
         };
       }
 
@@ -303,6 +358,217 @@ describe('bookOrderShipment', () => {
     );
   });
 
+  it('rejects a domestic booking when an attested quote weight differs from the order product', async () => {
+    const supabase = createMockSupabase({
+      order: {
+        data: {
+          ...validOrder,
+          order_items: [
+            {
+              name: 'Widget',
+              quantity: 2,
+              price: 5000,
+              product: { weight_value: 1, weight_unit: 'kg' },
+            },
+          ],
+        },
+        error: null,
+      },
+      quote: {
+        data: {
+          ...validQuote,
+          quote_request: {
+            sessionId: 'session-1',
+            shipmentType: 'domestic',
+            receiver: {
+              name: 'Jane Doe',
+              phone: '08012345678',
+              address: '123 Main St',
+              city: 'Lagos',
+              state: 'Lagos',
+              country: 'Nigeria',
+              countryCode: 'NG',
+            },
+            items: [{ name: 'Widget', quantity: 2, weight: 2, value: 5000 }],
+          },
+        },
+        error: null,
+      },
+      merchant: { data: validMerchant, error: null },
+    });
+
+    await expect(
+      bookOrderShipment(supabase, 'merchant-1', 'order-1')
+    ).rejects.toThrow('saved shipping quote no longer matches this order');
+    expect(shippingService.bookShipment).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['quantity', { quantity: 3, value: 5000 }],
+    ['value', { quantity: 2, value: 7000 }],
+  ])('rejects a domestic booking when attested item %s changes', async (_field, item) => {
+    const supabase = createMockSupabase({
+      order: {
+        data: {
+          ...validOrder,
+          order_items: [
+            {
+              name: 'Widget',
+              quantity: 2,
+              price: 5000,
+              product: { weight_value: 1, weight_unit: 'kg' },
+            },
+          ],
+        },
+        error: null,
+      },
+      quote: {
+        data: {
+          ...validQuote,
+          quote_request: {
+            sessionId: 'session-1',
+            shipmentType: 'domestic',
+            receiver: {
+              name: 'Jane Doe',
+              phone: '08012345678',
+              address: '123 Main St',
+              city: 'Lagos',
+              state: 'Lagos',
+              country: 'Nigeria',
+              countryCode: 'NG',
+            },
+            items: [{ name: 'Widget', ...item, weight: 1 }],
+          },
+        },
+        error: null,
+      },
+      merchant: { data: validMerchant, error: null },
+    });
+
+    await expect(
+      bookOrderShipment(supabase, 'merchant-1', 'order-1')
+    ).rejects.toThrow('saved shipping quote no longer matches this order');
+    expect(shippingService.bookShipment).not.toHaveBeenCalled();
+  });
+
+  it('books domestic items using the attested quote weights', async () => {
+    vi.mocked(shippingService.bookShipment).mockResolvedValue(bookingResult);
+
+    const supabase = createMockSupabase({
+      order: {
+        data: {
+          ...validOrder,
+          order_items: [
+            {
+              name: 'Widget',
+              quantity: 2,
+              price: 5000,
+              product: { weight_value: 2.5, weight_unit: 'kg' },
+            },
+          ],
+        },
+        error: null,
+      },
+      quote: {
+        data: {
+          ...validQuote,
+          quote_request: {
+            sessionId: 'session-1',
+            shipmentType: 'domestic',
+            sender: {
+              name: 'Test Store',
+              phone: '08098765432',
+              address: '456 Market Rd',
+              city: 'Lagos',
+              state: 'Lagos',
+              country: 'Nigeria',
+              countryCode: 'NG',
+            },
+            receiver: {
+              name: 'Jane Doe',
+              phone: '08012345678',
+              address: '123 Main St',
+              city: 'Lagos',
+              state: 'Lagos',
+              country: 'Nigeria',
+              countryCode: 'NG',
+            },
+            items: [
+              {
+                name: 'Widget',
+                quantity: 2,
+                weight: 2.5,
+                value: 5000,
+              },
+            ],
+          },
+        },
+        error: null,
+      },
+      merchant: { data: validMerchant, error: null },
+      shipmentInsert: { data: { id: 'shipment-1' }, error: null },
+    });
+
+    await bookOrderShipment(supabase, 'merchant-1', 'order-1');
+
+    expect(shippingService.bookShipment).toHaveBeenCalledWith(
+      'TOPSHIP',
+      expect.objectContaining({
+        items: [expect.objectContaining({ name: 'Widget', weight: 2.5 })],
+      })
+    );
+  });
+
+  it('rejects a domestic booking when the order receiver changed after quoting', async () => {
+    const supabase = createMockSupabase({
+      order: { data: validOrder, error: null },
+      quote: {
+        data: {
+          ...validQuote,
+          quote_request: {
+            sessionId: 'session-1',
+            shipmentType: 'domestic',
+            sender: {
+              name: 'Test Store',
+              phone: '08098765432',
+              address: '456 Market Rd',
+              city: 'Lagos',
+              state: 'Lagos',
+              country: 'Nigeria',
+              countryCode: 'NG',
+            },
+            receiver: {
+              name: 'Jane Doe',
+              phone: '08012345678',
+              address: '99 Old Address',
+              city: 'Lagos',
+              state: 'Lagos',
+              country: 'Nigeria',
+              countryCode: 'NG',
+            },
+            items: [
+              {
+                name: 'Widget',
+                quantity: 2,
+                weight: 1,
+                value: 5000,
+              },
+            ],
+          },
+        },
+        error: null,
+      },
+      merchant: { data: validMerchant, error: null },
+    });
+
+    await expect(
+      bookOrderShipment(supabase, 'merchant-1', 'order-1')
+    ).rejects.toThrow(
+      'The saved shipping quote no longer matches this order destination.'
+    );
+    expect(shippingService.bookShipment).not.toHaveBeenCalled();
+  });
+
   it('persists provider station-pickup instructions with the shipment', async () => {
     const insertedShipments: unknown[] = [];
     vi.mocked(shippingService.bookShipment).mockResolvedValue({
@@ -316,7 +582,13 @@ describe('bookOrderShipment', () => {
 
     const supabase = createMockSupabase({
       order: {
-        data: { ...validOrder, shipping_provider: 'GIGL' },
+        data: {
+          ...validOrder,
+          shipping_provider: 'GIGL',
+          shipping_funding_source: 'customer_checkout',
+          payment_status: 'paid',
+          payment_method: 'paystack',
+        },
         error: null,
       },
       quote: { data: { ...validQuote, provider: 'GIGL' }, error: null },
@@ -416,7 +688,10 @@ describe('bookOrderShipment', () => {
 
     await expect(
       bookOrderShipment(supabase, 'merchant-1', 'order-1')
-    ).rejects.toThrow('could not be saved locally');
+    ).rejects.toMatchObject({
+      code: 'SHIPMENT_SAVE_FAILED',
+      providerReference: bookingResult.providerShipmentId,
+    });
   });
 
   it('returns the shipment when a booked quote cannot be marked used', async () => {
@@ -454,5 +729,31 @@ describe('bookOrderShipment', () => {
       })
     );
     consoleErrorSpy.mockRestore();
+  });
+
+  describe('bugfix: GIGL customer checkout requires prepaid shipping', () => {
+    it('rejects unpaid pay-on-delivery GIGL bookings before quote lookup', async () => {
+      const supabase = createMockSupabase({
+        order: {
+          data: {
+            ...validOrder,
+            shipping_provider: 'GIGL',
+            shipping_funding_source: 'customer_checkout',
+            payment_status: 'unpaid',
+            payment_method: 'pay_on_delivery',
+          },
+          error: null,
+        },
+      });
+
+      await expect(
+        bookOrderShipment(supabase, 'merchant-1', 'order-1')
+      ).rejects.toMatchObject({
+        code: 'GIGL_REQUIRES_PREPAID_OR_WALLET',
+        status: 400,
+      });
+      expect(supabase.from).not.toHaveBeenCalledWith('shipping_quotes');
+      expect(shippingService.bookShipment).not.toHaveBeenCalled();
+    });
   });
 });

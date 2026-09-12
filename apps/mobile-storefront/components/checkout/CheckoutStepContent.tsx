@@ -21,6 +21,7 @@ interface CheckoutStepContentProps {
   items: CartItem[];
   merchantPickupLocation?: MerchantPickupLocation;
   paymentController: CheckoutPaymentController;
+  prizeSimulation?: boolean;
   setStep: (step: CheckoutStep) => void;
   step: CheckoutStep;
   subtotal: number;
@@ -36,6 +37,7 @@ export function CheckoutStepContent({
   items,
   merchantPickupLocation,
   paymentController,
+  prizeSimulation = false,
   setStep,
   step,
   subtotal,
@@ -170,6 +172,7 @@ export function CheckoutStepContent({
       merchantPickupLocation={merchantPickupLocation}
       onEditAddress={() => setStep('address')}
       onEditPayment={() => setStep('payment')}
+      prizeSimulation={prizeSimulation}
       selectedPayment={paymentController.selectedPayment}
       selectedQuote={addressState.shipping.selectedQuote}
       subtotal={subtotal}

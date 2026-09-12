@@ -1,4 +1,9 @@
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import {
+  canonicalizeCommerceVariantAxis,
+  getCommerceVariantAxes,
+  normalizeCanonicalProductCondition,
+  normalizeCommerceVariantOption,
+} from '@baci/shared/lib';
 import { isRenderableVariantAxis } from './non-renderable-variant-axes';
 
 interface VariantAttributeDefinition {
@@ -20,6 +25,7 @@ export type VariantAttributeSource =
 export function canonicalizeVariantAxis(axis: string) {
   return axis
     .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .toLowerCase()
     .replace(/[\s-]+/g, '_');
 }
@@ -61,9 +67,18 @@ function normalizeVariantAxisOption(axis: string, value: unknown) {
   return trimmedValue;
 }
 
+function normalizeCommerceAxisOption(axis: string, value: unknown) {
+  if (axis === 'condition') {
+    return typeof value === 'string'
+      ? normalizeCanonicalProductCondition(value)
+      : '';
+  }
+
+  return normalizeCommerceVariantOption(axis, value);
+}
+
 export function normalizeVariantAttributes(source: VariantAttributeSource) {
   const axisOptions: Record<string, string[]> = {};
-
   if (Array.isArray(source)) {
     for (const entry of source) {
       if (
@@ -92,7 +107,6 @@ export function normalizeVariantAttributes(source: VariantAttributeSource) {
 
     return axisOptions;
   }
-
   if (!source || typeof source !== 'object') {
     return axisOptions;
   }
@@ -112,12 +126,6 @@ export function normalizeVariantAttributes(source: VariantAttributeSource) {
   return axisOptions;
 }
 
-/**
- * Convenience helper for a single-axis lookup.
- * This calls normalizeVariantAttributes on every invocation, so callers that
- * need multiple axes should call normalizeVariantAttributes once and read the
- * canonicalized keys directly after applying canonicalizeVariantAxis.
- */
 export function getVariantAttributeOptions(
   source: VariantAttributeSource,
   axis: string
@@ -132,8 +140,10 @@ function normalizeVariantAttributeRecord(
   const normalized: Record<string, string> = {};
 
   for (const [rawAxis, value] of Object.entries(attributes ?? {})) {
-    const axis = canonicalizeVariantAxis(rawAxis);
-    const normalizedValue = normalizeVariantAxisOption(axis, value);
+    const axis = canonicalizeCommerceVariantAxis(rawAxis);
+    const normalizedValue = axis
+      ? normalizeCommerceAxisOption(axis, value)
+      : '';
 
     if (axis && normalizedValue) {
       normalized[axis] = normalizedValue;
@@ -160,17 +170,40 @@ export function mergeVariantAxisOptions(
   source: VariantAttributeSource,
   fallbackCondition?: string | null
 ) {
-  const axisOptions = normalizeVariantAttributes(source);
-  delete axisOptions.condition;
+  const normalizedSource = normalizeVariantAttributes(source);
+  const liveAxes = (variants ?? []).flatMap((variant) =>
+    Object.keys(variant.attributes ?? {})
+  );
+  const commerceAxes = new Set(getCommerceVariantAxes(source, liveAxes));
+  const axisOptions: Record<string, string[]> = {};
+
+  for (const [rawAxis, options] of Object.entries(normalizedSource)) {
+    const axis = canonicalizeCommerceVariantAxis(rawAxis);
+    if (!(axis && axis !== 'condition' && commerceAxes.has(axis))) {
+      continue;
+    }
+
+    for (const option of options) {
+      pushUniqueOption(
+        axisOptions,
+        axis,
+        normalizeCommerceAxisOption(axis, option)
+      );
+    }
+  }
 
   for (const variant of variants || []) {
     for (const [rawAxis, value] of Object.entries(variant.attributes || {})) {
-      const axis = canonicalizeVariantAxis(rawAxis);
-      if (!axis || axis === 'condition') {
+      const axis = canonicalizeCommerceVariantAxis(rawAxis);
+      if (!(axis && axis !== 'condition' && commerceAxes.has(axis))) {
         continue;
       }
 
-      pushUniqueOption(axisOptions, axis, value);
+      pushUniqueOption(
+        axisOptions,
+        axis,
+        normalizeCommerceAxisOption(axis, value)
+      );
     }
 
     pushUniqueOption(
@@ -183,23 +216,30 @@ export function mergeVariantAxisOptions(
   return axisOptions;
 }
 
-/**
- * Returns the reachable option values for a given axis given the current
- * selections on all other axes. Used to disable impossible combinations in
- * the variant selector UI.
- */
 export function getAvailableOptionsForAxis(
   axis: string,
   variants: VariantAttributeCarrier[] | null | undefined,
   currentSelections: Record<string, string>
 ): string[] {
-  const normalizedAxis = canonicalizeVariantAxis(axis);
+  const normalizedAxis = canonicalizeCommerceVariantAxis(axis);
+  if (!normalizedAxis) {
+    return [];
+  }
+
   const normalizedSelections = Object.fromEntries(
     Object.entries(currentSelections)
-      .filter(([k]) => canonicalizeVariantAxis(k) !== normalizedAxis)
-      .map(([k, v]) => {
-        const selectionAxis = canonicalizeVariantAxis(k);
-        return [selectionAxis, normalizeVariantAxisOption(selectionAxis, v)];
+      .flatMap(([key, value]) => {
+        const selectionAxis = canonicalizeCommerceVariantAxis(key);
+        if (!selectionAxis || selectionAxis === normalizedAxis) {
+          return [];
+        }
+
+        return [
+          [
+            selectionAxis,
+            normalizeCommerceAxisOption(selectionAxis, value),
+          ] as const,
+        ];
       })
       .filter(([, value]) => Boolean(value))
   );
@@ -250,20 +290,10 @@ export function getRenderableVariantAxes(
     .sort(([leftAxis], [rightAxis]) => {
       const leftPriority = priorityOrder.indexOf(leftAxis);
       const rightPriority = priorityOrder.indexOf(rightAxis);
-
-      if (leftPriority !== -1 && rightPriority !== -1) {
-        return leftPriority - rightPriority;
-      }
-
-      if (leftPriority !== -1) {
-        return -1;
-      }
-
-      if (rightPriority !== -1) {
-        return 1;
-      }
-
-      return leftAxis.localeCompare(rightAxis);
+      const priorityDifference =
+        (leftPriority === -1 ? priorityOrder.length : leftPriority) -
+        (rightPriority === -1 ? priorityOrder.length : rightPriority);
+      return priorityDifference || leftAxis.localeCompare(rightAxis);
     })
     .map(([axis]) => axis);
 }

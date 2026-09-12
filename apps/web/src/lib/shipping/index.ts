@@ -1,10 +1,3 @@
-/**
- * Shipping Service
- * Main entry point for all shipping operations
- * Provides a unified API for quotes, booking, tracking, and cancellation
- */
-
-import { QuoteAggregator } from './aggregator';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 import {
   type ShippingProvider,
@@ -20,6 +13,7 @@ import {
   isGiglRuntimeConfigured,
 } from './providers/gigl.constants';
 import { TopshipProvider } from './providers/topship';
+import { QuoteAggregator } from './quote-aggregator';
 import type {
   BookingRequest,
   CancellationResult,
@@ -31,10 +25,6 @@ import type {
   TrackingResult,
   UnifiedLocation,
 } from './types';
-
-// =============================================================================
-// PROVIDER REGISTRY SETUP
-// =============================================================================
 
 const registry = new ShippingProviderRegistry();
 const trackingRegistry = new ShippingProviderRegistry();
@@ -83,10 +73,6 @@ console.info('[Shipping] Provider registry initialized', {
 // Create aggregator
 const aggregator = new QuoteAggregator(registry);
 
-// =============================================================================
-// SHIPPING SERVICE CLASS
-// =============================================================================
-
 export class ShippingService {
   private registry: ShippingProviderRegistry;
   private trackingRegistry: ShippingProviderRegistry;
@@ -117,15 +103,14 @@ export class ShippingService {
     throw new Error(`Provider ${provider} not found`);
   }
 
-  // ==========================================================================
-  // QUOTES
-  // ==========================================================================
-
   /**
    * Get aggregated shipping quotes from all enabled providers
    */
-  async getQuotes(request: QuoteRequest): Promise<QuoteResponse> {
-    return await this.aggregator.getQuotes(request);
+  async getQuotes(
+    request: QuoteRequest,
+    allowedProviderCodes?: readonly ShippingProviderCode[]
+  ): Promise<QuoteResponse> {
+    return await this.aggregator.getQuotes(request, allowedProviderCodes);
   }
 
   /**
@@ -138,10 +123,6 @@ export class ShippingService {
     const providerInstance = this.getProviderForNewShipment(provider);
     return await providerInstance.getQuotes(request);
   }
-
-  // ==========================================================================
-  // BOOKING
-  // ==========================================================================
 
   /**
    * Book a shipment with the specified provider
@@ -167,10 +148,6 @@ export class ShippingService {
 
     return result;
   }
-
-  // ==========================================================================
-  // TRACKING
-  // ==========================================================================
 
   /**
    * Track a shipment by tracking number
@@ -209,10 +186,6 @@ export class ShippingService {
     );
   }
 
-  // ==========================================================================
-  // CANCELLATION
-  // ==========================================================================
-
   /**
    * Cancel a shipment
    */
@@ -232,10 +205,6 @@ export class ShippingService {
 
     return await providerInstance.cancelShipment(shipmentId);
   }
-
-  // ==========================================================================
-  // LOCATIONS
-  // ==========================================================================
 
   /**
    * Get Nigerian locations from all providers
@@ -312,5 +281,6 @@ export {
   type ShippingProvider,
   ShippingProviderRegistry,
 } from './providers/base';
+export { QuoteAggregator } from './quote-aggregator';
 export * from './status-mapper';
 export * from './types';

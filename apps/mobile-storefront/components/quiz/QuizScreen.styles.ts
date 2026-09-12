@@ -225,9 +225,15 @@ export function createQuizStyles(colors: QuizThemeColors) {
       },
       finalStandingName: {
         color: colors.text,
-        flex: 1,
         fontSize: 14,
         fontWeight: '800',
+      },
+      finalStandingIdentity: { flex: 1, gap: 2 },
+      finalStandingTime: {
+        color: colors.textSecondary,
+        fontSize: 12,
+        fontVariant: ['tabular-nums'],
+        fontWeight: '600',
       },
       finalStandingScore: {
         color: colors.textSecondary,
@@ -236,11 +242,29 @@ export function createQuizStyles(colors: QuizThemeColors) {
         fontWeight: '800',
       },
       resultActionBox: {
-        alignSelf: 'stretch',
         borderColor: colors.border,
         borderRadius: 14,
         borderWidth: 1,
+        flex: 1,
         overflow: 'hidden',
+      },
+      resultsLayout: {
+        backgroundColor: colors.background,
+        flex: 1,
+      },
+      resultsScroll: { flex: 1 },
+      resultsScrollContent: {
+        flexGrow: 1,
+        paddingBottom: 16,
+      },
+      resultActionsDock: {
+        backgroundColor: colors.background,
+        borderTopColor: colors.border,
+        borderTopWidth: 1,
+        flexDirection: 'row',
+        gap: 10,
+        paddingHorizontal: 20,
+        paddingVertical: 12,
       },
       resultAction: {
         alignItems: 'center',

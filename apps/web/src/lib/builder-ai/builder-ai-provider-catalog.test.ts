@@ -1,12 +1,14 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  type BuilderAiProviderEnvironment,
   type BuilderAiProviderFactories,
   materializeBuilderAiProviders,
 } from './builder-ai-provider-catalog';
 
 const factories: BuilderAiProviderFactories = {
   createCerebrasModel: vi.fn((key) => ({ provider: 'cerebras', key }) as never),
+  createGoogleModel: vi.fn((key) => ({ provider: 'google', key }) as never),
   createGroqModel: vi.fn((key) => ({ provider: 'groq', key }) as never),
   createOpenRouterModel: vi.fn(
     (key) => ({ provider: 'openrouter', key }) as never
@@ -42,6 +44,13 @@ function bindingTag(
 
 describe('builder AI provider catalog', () => {
   const bindingPepper = 'p'.repeat(32);
+  const googleAttestation = {
+    accountRef: 'google-account',
+    approvedModel: 'gemma-4-31b-it',
+    credential: 'google-key',
+    deploymentTier: 'approved-reliable',
+    releaseAttestedAt: '2026-08-01T00:00:00.000Z',
+  };
   const cerebrasAttestation = {
     accountRef: 'cerebras-account',
     approvedModel: 'gemma-4-31b',
@@ -57,16 +66,16 @@ describe('builder AI provider catalog', () => {
     releaseAttestedAt: '2026-08-01T00:00:00.000Z',
   };
   const attestedEnvironment = {
-    CEREBRAS_API_KEY: cerebrasAttestation.credential,
-    CEREBRAS_BUILDER_ACCOUNT_REF: cerebrasAttestation.accountRef,
-    CEREBRAS_BUILDER_CREDENTIAL_BINDING_TAG: bindingTag(
-      'cerebras',
-      cerebrasAttestation,
+    GOOGLE_GENAI_API_KEY: googleAttestation.credential,
+    GOOGLE_BUILDER_ACCOUNT_REF: googleAttestation.accountRef,
+    GOOGLE_BUILDER_CREDENTIAL_BINDING_TAG: bindingTag(
+      'google',
+      googleAttestation,
       bindingPepper
     ),
-    CEREBRAS_BUILDER_APPROVED_MODEL: cerebrasAttestation.approvedModel,
-    CEREBRAS_BUILDER_DEPLOYMENT_TIER: cerebrasAttestation.deploymentTier,
-    CEREBRAS_BUILDER_RELEASE_ATTESTED_AT: cerebrasAttestation.releaseAttestedAt,
+    GOOGLE_BUILDER_APPROVED_MODEL: googleAttestation.approvedModel,
+    GOOGLE_BUILDER_DEPLOYMENT_TIER: googleAttestation.deploymentTier,
+    GOOGLE_BUILDER_RELEASE_ATTESTED_AT: googleAttestation.releaseAttestedAt,
     GROQ_API_KEY: groqAttestation.credential,
     GROQ_BUILDER_ACCOUNT_REF: groqAttestation.accountRef,
     GROQ_BUILDER_CREDENTIAL_BINDING_TAG: bindingTag(
@@ -80,15 +89,54 @@ describe('builder AI provider catalog', () => {
     BUILDER_AI_PROVIDER_BINDING_PEPPER: bindingPepper,
   };
 
+  it('keeps the previously attested Cerebras pair available during the Google rollout', () => {
+    const legacyEnvironment = {
+      CEREBRAS_API_KEY: cerebrasAttestation.credential,
+      CEREBRAS_BUILDER_ACCOUNT_REF: cerebrasAttestation.accountRef,
+      CEREBRAS_BUILDER_CREDENTIAL_BINDING_TAG: bindingTag(
+        'cerebras',
+        cerebrasAttestation,
+        bindingPepper
+      ),
+      CEREBRAS_BUILDER_APPROVED_MODEL: cerebrasAttestation.approvedModel,
+      CEREBRAS_BUILDER_DEPLOYMENT_TIER: cerebrasAttestation.deploymentTier,
+      CEREBRAS_BUILDER_RELEASE_ATTESTED_AT:
+        cerebrasAttestation.releaseAttestedAt,
+      GROQ_API_KEY: groqAttestation.credential,
+      GROQ_BUILDER_ACCOUNT_REF: groqAttestation.accountRef,
+      GROQ_BUILDER_CREDENTIAL_BINDING_TAG: bindingTag(
+        'groq',
+        groqAttestation,
+        bindingPepper
+      ),
+      GROQ_BUILDER_APPROVED_MODEL: groqAttestation.approvedModel,
+      GROQ_BUILDER_DEPLOYMENT_TIER: groqAttestation.deploymentTier,
+      GROQ_BUILDER_RELEASE_ATTESTED_AT: groqAttestation.releaseAttestedAt,
+      BUILDER_AI_PROVIDER_BINDING_PEPPER: bindingPepper,
+    } satisfies BuilderAiProviderEnvironment;
+    const transitionFactories = {
+      ...factories,
+      createCerebrasModel: vi.fn(
+        (key: string) => ({ provider: 'cerebras', key }) as never
+      ),
+    } satisfies BuilderAiProviderFactories;
+
+    expect(
+      materializeBuilderAiProviders(legacyEnvironment, transitionFactories, {
+        now: Date.parse('2026-08-05T00:00:00.000Z'),
+      }).map(({ name }) => name)
+    ).toEqual(['cerebras:gemma-4-31b', 'groq:openai/gpt-oss-120b']);
+  });
+
   it('fails closed without both credential-bound reliable-provider attestations', () => {
     expect(
       materializeBuilderAiProviders(
-        { CEREBRAS_API_KEY: 'cerebras-key' },
+        { GOOGLE_GENAI_API_KEY: 'google-key' },
         factories,
         { now: Date.parse('2026-08-05T00:00:00.000Z') }
       )
     ).toEqual([]);
-    expect(factories.createCerebrasModel).not.toHaveBeenCalled();
+    expect(factories.createGoogleModel).not.toHaveBeenCalled();
   });
 
   it('fails closed when a keyed credential-binding tag does not bind to the deployed key', () => {
@@ -107,19 +155,19 @@ describe('builder AI provider catalog', () => {
   it('invalidates the canonical credential binding when any attested field changes', () => {
     const now = Date.parse('2026-08-05T00:00:00.000Z');
     for (const environment of [
-      { ...attestedEnvironment, CEREBRAS_API_KEY: 'wrong-cerebras-key' },
+      { ...attestedEnvironment, GOOGLE_GENAI_API_KEY: 'wrong-google-key' },
       {
         ...attestedEnvironment,
-        CEREBRAS_BUILDER_ACCOUNT_REF: 'another-account',
+        GOOGLE_BUILDER_ACCOUNT_REF: 'another-account',
       },
       {
         ...attestedEnvironment,
-        CEREBRAS_BUILDER_DEPLOYMENT_TIER: 'another-tier',
+        GOOGLE_BUILDER_DEPLOYMENT_TIER: 'another-tier',
       },
-      { ...attestedEnvironment, CEREBRAS_BUILDER_APPROVED_MODEL: 'other' },
+      { ...attestedEnvironment, GOOGLE_BUILDER_APPROVED_MODEL: 'other' },
       {
         ...attestedEnvironment,
-        CEREBRAS_BUILDER_RELEASE_ATTESTED_AT: '2026-08-02T00:00:00.000Z',
+        GOOGLE_BUILDER_RELEASE_ATTESTED_AT: '2026-08-02T00:00:00.000Z',
       },
       {
         ...attestedEnvironment,
@@ -128,11 +176,11 @@ describe('builder AI provider catalog', () => {
       {
         ...attestedEnvironment,
         GROQ_BUILDER_CREDENTIAL_BINDING_TAG:
-          attestedEnvironment.CEREBRAS_BUILDER_CREDENTIAL_BINDING_TAG,
+          attestedEnvironment.GOOGLE_BUILDER_CREDENTIAL_BINDING_TAG,
       },
       {
         ...attestedEnvironment,
-        CEREBRAS_BUILDER_CREDENTIAL_BINDING_TAG: 'bad-tag',
+        GOOGLE_BUILDER_CREDENTIAL_BINDING_TAG: 'bad-tag',
       },
     ]) {
       expect(
@@ -172,7 +220,7 @@ describe('builder AI provider catalog', () => {
       materializeBuilderAiProviders(
         {
           ...attestedEnvironment,
-          CEREBRAS_BUILDER_RELEASE_ATTESTED_AT: '2026-01-01T00:00:00.000Z',
+          GOOGLE_BUILDER_RELEASE_ATTESTED_AT: '2026-01-01T00:00:00.000Z',
         },
         factories,
         { now }
@@ -197,7 +245,7 @@ describe('builder AI provider catalog', () => {
         factories,
         { now: Date.parse('2026-08-05T00:00:00.000Z') }
       ).map(({ name }) => name)
-    ).toEqual(['cerebras:gemma-4-31b', 'groq:openai/gpt-oss-120b']);
+    ).toEqual(['google:gemma-4-31b-it', 'groq:openai/gpt-oss-120b']);
 
     expect(
       materializeBuilderAiProviders(
@@ -212,7 +260,7 @@ describe('builder AI provider catalog', () => {
         { now: Date.parse('2026-08-05T00:00:00.000Z') }
       ).map(({ name }) => name)
     ).toEqual([
-      'cerebras:gemma-4-31b',
+      'google:gemma-4-31b-it',
       'groq:openai/gpt-oss-120b',
       'openrouter:google/gemma-4-31b-it:free',
     ]);
@@ -232,7 +280,7 @@ describe('builder AI provider catalog', () => {
         }
       ).map(({ name }) => name)
     ).toEqual([
-      'cerebras:gemma-4-31b',
+      'google:gemma-4-31b-it',
       'groq:openai/gpt-oss-120b',
       'openrouter:google/gemma-4-31b-it:free',
     ]);

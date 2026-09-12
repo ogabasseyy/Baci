@@ -126,6 +126,19 @@ describe('HeroMobileCarousel', () => {
     expect(lcpImg).toHaveAttribute('fetchpriority', 'high');
   });
 
+  it('lazy-loads the first slide image when it cannot be LCP', () => {
+    const { container } = render(
+      <HeroMobileCarousel prioritizeFirstImage={false} slides={SLIDES} />
+    );
+
+    const firstImage = screen.getByRole('img', {
+      name: 'Samsung Galaxy A27 5G',
+    });
+    expect(container.querySelector('picture')).not.toBeInTheDocument();
+    expect(firstImage).toHaveAttribute('loading', 'lazy');
+    expect(firstImage).not.toHaveAttribute('fetchpriority', 'high');
+  });
+
   it('shows the progress-bar slide controls when there are multiple slides', () => {
     render(<HeroMobileCarousel slides={SLIDES} />);
 

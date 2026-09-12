@@ -14,11 +14,20 @@ export interface RepairStatusResult {
   createdAt: string;
   updatedAt: string;
   trackingNumber: string | null;
+  pickupPaymentStatus: string | null;
+  pickupFee: number | null;
+  pickupCurrency: string | null;
 }
 
 export type RepairStatusLookupOutcome =
   | { found: true; result: RepairStatusResult }
   | { found: false };
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 /**
  * Looks up a repair via the SECURITY DEFINER get_repair_status RPC. The RPC
@@ -74,6 +83,15 @@ export async function lookupRepairStatus(
       trackingNumber:
         typeof record.tracking_number === 'string'
           ? record.tracking_number
+          : null,
+      pickupPaymentStatus:
+        typeof record.pickup_payment_status === 'string'
+          ? record.pickup_payment_status
+          : null,
+      pickupFee: toFiniteNumber(record.pickup_fee),
+      pickupCurrency:
+        typeof record.pickup_currency === 'string'
+          ? record.pickup_currency
           : null,
     },
   };

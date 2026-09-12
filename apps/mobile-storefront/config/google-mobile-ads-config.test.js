@@ -31,6 +31,10 @@ const productionEnvironment = {
     'ca-app-pub-1234567890123456/3333333333',
   EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID:
     'ca-app-pub-1234567890123456/4444444444',
+  EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID:
+    'ca-app-pub-1234567890123456/5555555555',
+  EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID:
+    'ca-app-pub-1234567890123456/6666666666',
   STOREFRONT_ADMOB_ANDROID_APP_ID: 'ca-app-pub-1234567890123456~1111111111',
   STOREFRONT_ADMOB_IOS_APP_ID: 'ca-app-pub-1234567890123456~2222222222',
 };
@@ -135,6 +139,59 @@ describe('Google Mobile Ads Expo configuration', () => {
         EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID: 'demo-unit-id',
       })
     ).toThrow('EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID');
+    expect(() =>
+      buildGoogleMobileAdsExpoPlugin({
+        ...productionEnvironment,
+        EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID: 'demo-unit-id',
+      })
+    ).toThrow('EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID');
+    expect(() =>
+      buildGoogleMobileAdsExpoPlugin({
+        ...productionEnvironment,
+        EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID:
+          'ca-app-pub-3940256099942544/1712485313',
+      })
+    ).toThrow('EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID');
+  });
+
+  it.each([
+    'ca-app-pub-3940256099942544/9214589741',
+    'ca-app-pub-3940256099942544/2435281174',
+  ])('rejects adaptive banner sample IDs in rewarded env (%s)', (unitId) => {
+    expect(() =>
+      buildGoogleMobileAdsExpoPlugin({
+        ...productionEnvironment,
+        EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID: unitId,
+      })
+    ).toThrow('EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID');
+  });
+
+  it.each([
+    [
+      'EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID',
+      'ca-app-pub-3940256099942544/9214589741',
+    ],
+    [
+      'EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID',
+      'ca-app-pub-3940256099942544/2435281174',
+    ],
+  ])('rejects Google sample IDs in production banner env (%s)', (key, unitId) => {
+    expect(() =>
+      buildGoogleMobileAdsExpoPlugin({
+        ...productionEnvironment,
+        [key]: unitId,
+      })
+    ).toThrow(key);
+  });
+
+  it('allows production builds to omit the optional rewarded placement', () => {
+    const environment = { ...productionEnvironment };
+    delete environment.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID;
+    delete environment.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID;
+
+    expect(buildGoogleMobileAdsExpoPlugin(environment)).toEqual(
+      PRODUCTION_PLUGIN
+    );
   });
 
   it.each([

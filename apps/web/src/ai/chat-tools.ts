@@ -99,7 +99,13 @@ export const getRecommendationsSchema = z.object({
 
 export const addToCartSchema = z.object({
   productId: z.string().describe('Product ID to add to cart'),
-  quantity: z.number().default(1).describe('Quantity to add'),
+  quantity: z
+    .number()
+    .int()
+    .min(1)
+    .max(99)
+    .default(1)
+    .describe('Quantity to prepare for customer confirmation'),
 });
 
 // ============================================
@@ -120,7 +126,7 @@ export const TOOL_DESCRIPTIONS = {
   getRecommendations:
     'Get related product recommendations. Use "upsell" for better alternatives, "cross_sell" for complementary products, "accessories" for add-ons.',
   addToCart:
-    "Add a product to the customer's cart. Use this when the customer wants to buy a specific product.",
+    "Prepare a product card that the customer must confirm before it is added to their cart. Never claim the item was added until the customer taps the card's add button.",
 } as const;
 
 // ============================================

@@ -76,8 +76,7 @@ function normalizeInventoryRows(
  */
 export async function getCachedPdpSemanticInventory(
   merchantId: string,
-  categorySlug: string,
-  _storeSlug: string
+  categorySlug: string
 ): Promise<ProductSemanticCandidate[]> {
   // The cache key is computed before a `'use cache'` function body runs. Keep
   // bot-controlled category values outside that boundary; the PDP route's

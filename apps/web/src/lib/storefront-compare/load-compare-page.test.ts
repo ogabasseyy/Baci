@@ -785,8 +785,7 @@ describe('loadComparePage', () => {
 
       expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
         'merchant-1',
-        'smartphones',
-        'ogabassey'
+        'smartphones'
       );
     });
 
@@ -799,8 +798,7 @@ describe('loadComparePage', () => {
 
       expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
         'merchant-1',
-        'smartphones',
-        'ogabassey'
+        'smartphones'
       );
       expect(result?.kind).toBe('brand');
     });
@@ -853,8 +851,7 @@ describe('loadComparePage', () => {
     expect(mockGetMerchantByIdentifier).toHaveBeenCalledWith('ogabassey.com');
     expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
       merchant.id,
-      'smartphones',
-      'ogabassey.com'
+      'smartphones'
     );
     expect(result?.kind).toBe('brand');
   });

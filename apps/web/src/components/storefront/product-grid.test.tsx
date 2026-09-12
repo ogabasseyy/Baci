@@ -6,6 +6,7 @@ import type { Product } from '@/lib/products';
 import { StorefrontProductGrid } from './product-grid';
 
 const mockMerchantState = vi.hoisted<{
+  basePath: string;
   merchant: {
     id: string;
     slug: string;
@@ -14,6 +15,7 @@ const mockMerchantState = vi.hoisted<{
     navigationCategories: { name: string }[];
   };
 }>(() => ({
+  basePath: '',
   merchant: {
     id: 'm1',
     slug: 'test-merchant',
@@ -97,6 +99,7 @@ vi.mock('@/hooks/use-cart', () => ({
 vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: () => ({
     merchant: mockMerchantState.merchant,
+    basePath: mockMerchantState.basePath,
   }),
 }));
 
@@ -144,13 +147,23 @@ vi.mock('./did-you-mean-banner', () => ({
 }));
 
 vi.mock('./product-card', () => ({
-  StorefrontProductCard: ({ product }: { product: Product }) => (
-    <div data-testid="product-card">{product.name}</div>
+  StorefrontProductCard: ({
+    product,
+    basePath,
+  }: {
+    product: Product;
+    basePath?: string;
+  }) => (
+    <a aria-label="Card base path" href={basePath || '/'}>
+      {product.name}
+    </a>
   ),
 }));
 
 vi.mock('./quick-view-modal', () => ({
-  QuickViewModal: () => <div />,
+  QuickViewModal: ({ basePath }: { basePath?: string }) => (
+    <a href={basePath || '/'}>Quick view base path</a>
+  ),
   useQuickView: () => ({
     product: null,
     isOpen: false,
@@ -184,12 +197,27 @@ const mockProduct: Product = {
 describe('StorefrontProductGrid', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMerchantState.basePath = '';
     mockMerchantState.merchant = {
       id: 'm1',
       slug: 'test-merchant',
       brand_colors: { primary: '#000', background: '#fff', accent: '#ccc' },
       navigationCategories: [{ name: 'Fashion' }, { name: 'Other' }],
     };
+  });
+
+  it.each([
+    '',
+    '/test-merchant',
+  ])('passes routing basePath %s to cards and quick view', async (basePath) => {
+    mockMerchantState.basePath = basePath;
+    render(<StorefrontProductGrid />);
+    expect(
+      await screen.findByRole('link', { name: 'Card base path' })
+    ).toHaveAttribute('href', basePath || '/');
+    expect(
+      screen.getByRole('link', { name: 'Quick view base path' })
+    ).toHaveAttribute('href', basePath || '/');
   });
 
   it('renders without crashing', async () => {

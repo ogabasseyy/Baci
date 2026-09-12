@@ -21,8 +21,8 @@ const STOREFRONT_API_SOURCE_PATHS = new Set([
   'orders',
   'orders/credit-direct/client-completion',
   'orders/reuse',
+  // Merchant admin order PATCH/GET is not a customer storefront edge surface.
   'orders/update-payment-ref',
-  'orders/[id]',
   'places/autocomplete',
   'places/details',
   'payments/initialize',
@@ -66,15 +66,19 @@ const STOREFRONT_API_SOURCE_PATHS = new Set([
 ]);
 
 /** Limits edge-origin API inventory to reviewed customer storefront routes. */
-export function isStorefrontRequiredApiSourcePath(sourcePath: string): boolean {
+export function isStorefrontRequiredApiSourcePath(
+  sourcePath: string,
+  apiRoot = API_SOURCE_ROOT
+): boolean {
   const routeSuffixPattern = /\/route\.[tj]sx?$/;
+  const normalizedRoot = `${apiRoot.replace(/\/$/, '')}/`;
   if (
-    !sourcePath.startsWith(API_SOURCE_ROOT) ||
+    !sourcePath.startsWith(normalizedRoot) ||
     !routeSuffixPattern.test(sourcePath)
   )
     return false;
   const relativePath = sourcePath
-    .slice(API_SOURCE_ROOT.length)
+    .slice(normalizedRoot.length)
     .replace(routeSuffixPattern, '');
   return (
     relativePath.startsWith('storefront/') ||

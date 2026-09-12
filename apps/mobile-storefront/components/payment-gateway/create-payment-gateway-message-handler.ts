@@ -12,7 +12,7 @@ const getTrimmedString = (value: unknown) =>
 
 interface CreatePaymentGatewayMessageHandlerInput {
   amount?: number;
-  clearCart: () => void;
+  clearCart: () => void | Promise<void>;
   confirmVtuPaymentSuccess: (input: {
     amount: number;
     customerIdentifier?: string;
@@ -123,7 +123,7 @@ export function createPaymentGatewayMessageHandler({
     current: null,
   };
 
-  return (event: { nativeEvent: { data: string } }) => {
+  return async (event: { nativeEvent: { data: string } }) => {
     let data: unknown;
     try {
       data = JSON.parse(event.nativeEvent.data);
@@ -198,7 +198,7 @@ export function createPaymentGatewayMessageHandler({
 
       markPaymentCompletionStarted();
       setSuccessStatus();
-      clearCart();
+      await clearCart();
       scheduleDelayedNavigation(() => {
         router.replace({
           pathname: '/order-success',

@@ -27,6 +27,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FollowUpQueueList } from '@/components/customers/FollowUpQueueList';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useAdminTabScrollToTop } from '@/hooks/useAdminTabScrollToTop';
 import {
   type Customer,
   useCustomerStats,
@@ -392,6 +393,9 @@ const CUSTOMER_TABS: Array<{
 ];
 
 export default function CustomersScreen() {
+  const scrollRef = useAdminTabScrollToTop<{
+    scrollToOffset: (options: { offset: number; animated?: boolean }) => void;
+  }>('customers');
   const { colors, shadows, isDark } = useTheme();
   const { merchant } = useMerchant();
   const currencySymbol = getCurrencySymbol(merchant?.payout_currency);
@@ -673,6 +677,7 @@ export default function CustomersScreen() {
 
           {/* Customers List */}
           <FlashList
+            ref={scrollRef as never}
             data={customers}
             renderItem={renderCustomer}
             keyExtractor={customerKeyExtractor}
@@ -723,6 +728,7 @@ export default function CustomersScreen() {
           currencySymbol={currencySymbol}
           onFollowUpCountChange={setFollowUpCount}
           onScroll={handleScroll}
+          scrollRef={scrollRef}
           renderOrder={(item, failedOrderCurrencySymbol) => (
             <FailedOrderItem
               item={item}

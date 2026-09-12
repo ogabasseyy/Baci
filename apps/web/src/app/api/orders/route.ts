@@ -34,6 +34,7 @@ import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airpor
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
+import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
 import {
@@ -87,6 +88,7 @@ import type {
   MerchantRateKind,
 } from '@/lib/shipping/merchant-rates/types';
 import { verifyOrderShippingRate } from '@/lib/shipping/merchant-rates/verify-order-shipping-rate';
+import { normalizeMerchantRateOrderAddress } from '@/lib/shipping/normalize-merchant-rate-order-address';
 import {
   enrichShippingAddressWithQuoteDestination,
   OrderQuoteDestinationMismatchError,
@@ -1964,6 +1966,16 @@ export async function POST(request: NextRequest) {
       }
       throw error;
     }
+    // Capture the post-enrichment destination before Nigerian state repair so
+    // the idempotency hash below stays byte-compatible with orders created
+    // before this deploy (postal-code states like "100001"). Persistence and
+    // merchant-rate zone verification still use the repaired address.
+    const shippingAddressBeforeMerchantRateNormalization =
+      shippingAddressForOrder;
+    shippingAddressForOrder = normalizeMerchantRateOrderAddress(
+      shippingAddressForOrder,
+      isMerchantRateOrder
+    );
 
     const payOnDelivery = isPayOnDelivery(payment_method);
 
@@ -2393,7 +2405,11 @@ export async function POST(request: NextRequest) {
         payload: requestIdempotencyKey
           ? {
               ...body,
-              shipping_address: shippingAddressForOrder,
+              shipping_address: selectIdempotencyShippingAddress({
+                addressBeforeMerchantRateNormalization:
+                  shippingAddressBeforeMerchantRateNormalization,
+                normalizedAddress: shippingAddressForOrder,
+              }),
               // STABLE code identity, NOT the recomputed amount, so a merchant
               // editing the code between a checkout and its retry can't trip
               // checkout_idempotency_conflict before the wrapper's replay path.

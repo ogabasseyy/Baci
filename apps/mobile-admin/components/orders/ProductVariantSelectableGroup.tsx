@@ -8,24 +8,18 @@ import type {
 interface ProductVariantSelectableGroupProps {
   colors: Pick<
     ThemeColors,
-    | 'border'
-    | 'card'
-    | 'primary'
-    | 'text'
-    | 'textMuted'
-    | 'textOnPrimary'
-    | 'textSecondary'
+    'border' | 'card' | 'primary' | 'text' | 'textOnPrimary' | 'textSecondary'
   >;
   group: VariantOptionGroup;
-  onSelect: (key: string, value: string, available: boolean) => void;
-  visibleValues: VariantOptionValue[];
+  onSelect: (key: string, value: string) => void;
+  values: VariantOptionValue[];
 }
 
 export function ProductVariantSelectableGroup({
   colors,
   group,
   onSelect,
-  visibleValues,
+  values,
 }: ProductVariantSelectableGroupProps) {
   return (
     <View style={styles.group}>
@@ -33,9 +27,7 @@ export function ProductVariantSelectableGroup({
         {group.label}
       </Text>
       <View style={styles.options} testID={`variant-options-${group.key}`}>
-        {visibleValues.map((option) => {
-          const isUnavailable = !(option.available || option.selected);
-
+        {values.map((option) => {
           return (
             <View
               key={`${group.key}:${option.value}`}
@@ -46,7 +38,6 @@ export function ProductVariantSelectableGroup({
                     ? colors.primary
                     : colors.card,
                   borderColor: option.selected ? colors.primary : colors.border,
-                  opacity: isUnavailable ? 0.48 : 1,
                 },
               ]}
             >
@@ -54,13 +45,9 @@ export function ProductVariantSelectableGroup({
                 accessibilityLabel={`Select ${group.label} ${option.label}`}
                 accessibilityRole="button"
                 accessibilityState={{
-                  disabled: isUnavailable,
                   selected: option.selected,
                 }}
-                disabled={isUnavailable}
-                onPress={() =>
-                  onSelect(group.key, option.value, option.available)
-                }
+                onPress={() => onSelect(group.key, option.value)}
                 style={styles.optionPressable}
               >
                 <Text
@@ -69,9 +56,7 @@ export function ProductVariantSelectableGroup({
                     {
                       color: option.selected
                         ? colors.textOnPrimary
-                        : isUnavailable
-                          ? colors.textMuted
-                          : colors.text,
+                        : colors.text,
                     },
                   ]}
                 >

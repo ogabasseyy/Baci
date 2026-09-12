@@ -4,9 +4,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { BlogList } from './blog-list';
 
 vi.mock('next/image', () => ({
-  default: ({ alt, preload }: { alt: string; preload?: boolean }) => (
+  default: ({
+    alt,
+    fetchPriority,
+    loading,
+    preload,
+  }: {
+    alt: string;
+    fetchPriority?: string;
+    loading?: string;
+    preload?: boolean;
+  }) => (
     <span
       aria-label={alt}
+      data-fetch-priority={fetchPriority}
+      data-loading={loading}
       data-preload={preload ? 'true' : undefined}
       role="img"
     />
@@ -77,7 +89,7 @@ describe('BlogList', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders the first visible card image as the listing LCP candidate', () => {
+  it('keeps later listing card images off the Slow-4G LCP path', () => {
     render(
       <BlogList
         initialPosts={[
@@ -95,11 +107,15 @@ describe('BlogList', () => {
     );
 
     const images = screen.getAllByRole('img');
-    expect(images[0]).toHaveAttribute('data-preload', 'true');
+    expect(images).toHaveLength(2);
+    expect(images[0]).toHaveAttribute('data-loading', 'eager');
+    expect(images[0]).toHaveAttribute('data-fetch-priority', 'high');
     expect(images[1]).not.toHaveAttribute('data-preload');
+    expect(images[1]).toHaveAttribute('data-loading', 'lazy');
+    expect(images[1]).toHaveAttribute('data-fetch-priority', 'low');
   });
 
-  it('preloads the first image-bearing card when earlier cards have no image', () => {
+  it('treats the first usable card image as the listing LCP image', () => {
     render(
       <BlogList
         initialPosts={[
@@ -125,9 +141,9 @@ describe('BlogList', () => {
       />
     );
 
-    expect(
-      screen.getByRole('img', { name: 'Image post hero' })
-    ).toHaveAttribute('data-preload', 'true');
+    const image = screen.getByRole('img', { name: 'Image post hero' });
+    expect(image).toHaveAttribute('data-loading', 'eager');
+    expect(image).toHaveAttribute('data-fetch-priority', 'high');
   });
 
   it('renders crawlable pagination controls instead of auto-fetching with IntersectionObserver', () => {

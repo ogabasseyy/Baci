@@ -2,7 +2,14 @@ import type { BuilderAiProvider } from './builder-ai-provider-catalog';
 import { runBuilderAiJsonTransportSmoke } from './run-builder-ai-json-transport-smoke';
 
 const PROVIDER_DEADLINE_MS = 5_000;
-const WHOLE_DEADLINE_MS = 20_000;
+const GOOGLE_PROVIDER_DEADLINE_MS = 15_000;
+const WHOLE_DEADLINE_MS = 30_000;
+
+function providerDeadlineMs(provider: BuilderAiProvider): number {
+  return provider.name.startsWith('google:')
+    ? GOOGLE_PROVIDER_DEADLINE_MS
+    : PROVIDER_DEADLINE_MS;
+}
 
 export interface BuilderAiBootstrapSmokeResult {
   latencyMs: number;
@@ -30,7 +37,7 @@ export async function smokeBuilderAiBootstrapProviders(
         provider,
         AbortSignal.any([
           wholeSignal,
-          AbortSignal.timeout(PROVIDER_DEADLINE_MS),
+          AbortSignal.timeout(providerDeadlineMs(provider)),
         ])
       );
     } catch {

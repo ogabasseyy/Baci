@@ -115,6 +115,25 @@ describe('POST /api/storefront/[slug]/repairs/book', () => {
     expect(mocks.createRepairBooking).not.toHaveBeenCalled();
   });
 
+  it('returns 409 when pickup is requested because mobile must pay before booking', async () => {
+    const response = await POST(
+      buildRequest({
+        ...validBody,
+        pickupAddress: '12 Station Road, Osogbo, Osun, Nigeria',
+        serviceType: 'pickup',
+      }),
+      { params: params('ogabassey') }
+    );
+    const responseBody = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(409);
+    expect(responseBody.error).toBe(
+      'Courier pickup must be paid before booking.'
+    );
+    expect(mocks.createRepairBooking).not.toHaveBeenCalled();
+    expect(mocks.notifyRepairBooking).not.toHaveBeenCalled();
+  });
+
   it('returns 429 when the booking core reports rate_limited', async () => {
     mocks.createRepairBooking.mockResolvedValueOnce({
       success: false,

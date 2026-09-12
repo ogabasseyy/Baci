@@ -18,6 +18,7 @@ import { useCheckoutSavedAddresses } from './use-checkout-saved-addresses';
 import { useCheckoutShipping } from './use-checkout-shipping';
 
 interface UseCheckoutAddressStateParams {
+  analyticsEnabled?: boolean;
   customer: Customer | null;
   isAuthenticated: boolean;
   items: CartItem[];
@@ -26,6 +27,7 @@ interface UseCheckoutAddressStateParams {
 }
 
 export function useCheckoutAddressState({
+  analyticsEnabled = true,
   customer,
   isAuthenticated,
   items,
@@ -154,13 +156,13 @@ export function useCheckoutAddressState({
   ]);
 
   useEffect(() => {
-    if (!hasTrackedStart.current && items.length > 0) {
+    if (analyticsEnabled && !hasTrackedStart.current && items.length > 0) {
       void trackCheckoutRouteStarted({ items, subtotal }).catch(() => {
         // Checkout analytics must not interrupt checkout entry.
       });
       hasTrackedStart.current = true;
     }
-  }, [items, subtotal]);
+  }, [analyticsEnabled, items, subtotal]);
 
   useEffect(() => {
     if (!isAuthenticated) return;

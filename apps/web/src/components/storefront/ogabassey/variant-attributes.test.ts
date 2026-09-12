@@ -88,7 +88,7 @@ describe('variant attributes helpers', () => {
         ],
         [{ param: 'storage', options: ['128GB', '256GB', '512GB'] }]
       )
-    ).toEqual(['storage', 'ram', 'sim_type']);
+    ).toEqual(['storage', 'sim_type']);
   });
 
   it('shows condition as a selector only for multi-condition SKU matrices', () => {
@@ -235,6 +235,6 @@ describe('variant attributes helpers', () => {
         [{}, { attributes: undefined }, { attributes: { storage: '128GB' } }],
         []
       )
-    ).toEqual(['storage']);
+    ).toEqual([]);
   });
 });

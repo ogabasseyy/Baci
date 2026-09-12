@@ -172,7 +172,7 @@ export function createInitializeAction({
             } else if (event === 'SIGNED_OUT') {
               const storedToken = await getStoredPushToken();
               await clearLocalAndDeactivatePushToken(storedToken);
-              useCartStore.getState().clearCart();
+              await useCartStore.getState().clearCart();
               useSavedStore.getState().clearSaved();
               useComparisonStore.getState().clearComparison();
               useQuizStore.getState().reset();

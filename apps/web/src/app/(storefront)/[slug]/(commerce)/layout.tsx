@@ -1,3 +1,4 @@
+import '@/app/(storefront)/storefront-core.css';
 import '@/app/(storefront)/storefront-full.css';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';

@@ -1,21 +1,34 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import type { ShippingQuote } from '@/components/checkout/types';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { useCheckoutStepActions } from './use-checkout-step-actions';
 
+const mockCheckoutSubmit = jest.fn();
+const mockTrackCheckoutStep = jest.fn();
+const mockTrackCheckoutRoutePaymentInfo = jest.fn();
+
 // useCheckoutSubmit pulls in the full order-submission stack; the address-step
 // continue logic under test never calls it, so a no-op keeps the test focused.
 jest.mock('./use-checkout-submit', () => ({
-  useCheckoutSubmit: () => jest.fn(),
+  useCheckoutSubmit: () => mockCheckoutSubmit,
 }));
-jest.mock('@/services/analytics', () => ({ trackCheckoutStep: jest.fn() }));
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutStep: (...args: unknown[]) => mockTrackCheckoutStep(...args),
+}));
 jest.mock('@/services/tiktok-checkout-route-tracking', () => ({
-  trackCheckoutRoutePaymentInfo: jest.fn(),
+  trackCheckoutRoutePaymentInfo: (...args: unknown[]) =>
+    mockTrackCheckoutRoutePaymentInfo(...args),
 }));
 
 type Params = Parameters<typeof useCheckoutStepActions>[0];
+
+beforeEach(() => {
+  mockCheckoutSubmit.mockClear();
+  mockTrackCheckoutStep.mockClear();
+  mockTrackCheckoutRoutePaymentInfo.mockClear();
+});
 
 function renderStepActions(overrides: Partial<Params>) {
   const resetPaymentSelection = jest.fn();
@@ -26,6 +39,7 @@ function renderStepActions(overrides: Partial<Params>) {
   const handleSubmit = jest.fn(() => submitHandler);
   const params = {
     handleSubmit,
+    isOrderInFlight: { current: false },
     merchantPickupLocation: {
       address: '2 Olaide Tomori St, Ikeja, Lagos',
       city: 'Ikeja',
@@ -175,5 +189,41 @@ describe('useCheckoutStepActions — payment continue', () => {
       'Select Payment Method',
       'Choose how you want to pay before continuing to review.'
     );
+  });
+});
+
+describe('useCheckoutStepActions — test prize simulation', () => {
+  it('moves from delivery directly to review without checkout analytics', () => {
+    const setStep = jest.fn();
+    const { result } = renderStepActions({
+      isPrizeSimulation: true,
+      setStep,
+      step: 'address',
+    });
+
+    result.current.onAddressSubmit({
+      city: 'Lagos',
+      state: 'Lagos',
+    } as ShippingAddressInput);
+
+    expect(setStep).toHaveBeenCalledWith('review');
+    expect(mockTrackCheckoutStep).not.toHaveBeenCalled();
+  });
+
+  it('completes locally without invoking the production order submitter', () => {
+    const onPrizeSimulationComplete = jest.fn();
+    const { result } = renderStepActions({
+      isPrizeSimulation: true,
+      onPrizeSimulationComplete,
+      step: 'review',
+    });
+
+    result.current.handlePlaceOrder();
+    result.current.handlePlaceOrder();
+
+    expect(onPrizeSimulationComplete).toHaveBeenCalledTimes(1);
+    expect(mockCheckoutSubmit).not.toHaveBeenCalled();
+    expect(mockTrackCheckoutStep).not.toHaveBeenCalled();
+    expect(mockTrackCheckoutRoutePaymentInfo).not.toHaveBeenCalled();
   });
 });

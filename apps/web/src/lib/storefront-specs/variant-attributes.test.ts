@@ -179,7 +179,7 @@ describe('storefront variant attribute helpers', () => {
         ],
         [{ param: 'sim type', options: ['Single', 'Dual'] }]
       )
-    ).toEqual(['storage', 'ram', 'sim_type', 'connectivity', 'platform']);
+    ).toEqual(['storage', 'ram', 'sim_type', 'platform']);
 
     expect(getRenderableVariantAxes([], [])).toEqual([]);
   });
@@ -288,6 +288,6 @@ describe('storefront variant attribute helpers', () => {
 
     const axes = getRenderableVariantAxes(variants, {});
 
-    expect(axes).toEqual(['storage', 'warranty']);
+    expect(axes).toEqual(['warranty']);
   });
 });

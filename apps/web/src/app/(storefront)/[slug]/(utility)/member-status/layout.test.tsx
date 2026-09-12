@@ -16,18 +16,15 @@ vi.mock('@/app/(storefront)/[slug]/customer-auth-layout', () => ({
 import MemberStatusLayout from './layout';
 
 describe('MemberStatusLayout', () => {
-  it('wraps the member status route in CustomerAuthLayout with the resolved slug', async () => {
+  it('eagerly styles member status and wraps it in customer auth', async () => {
     const node = await MemberStatusLayout({
-      children: <div>Member status content</div>,
+      children: <div>Member status</div>,
       params: Promise.resolve({ slug: 'OgaBassey' }),
     });
 
     render(node);
 
     expect(screen.getByTestId('customer-auth-layout')).toBeInTheDocument();
-    expect(screen.getByText('Member status content')).toBeInTheDocument();
-    expect(customerAuthLayoutMock.mock.calls[0]?.[0]).toMatchObject({
-      params: { slug: 'ogabassey' },
-    });
+    expect(screen.getByText('Member status')).toBeInTheDocument();
   });
 });

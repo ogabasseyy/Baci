@@ -61,6 +61,12 @@ describe('RepairStatusLookup', () => {
     );
   });
 
+  it('prefills the ticket returned by the payment callback', () => {
+    render(<RepairStatusLookup initialTicket="1042" slug="acme" />);
+
+    expect(screen.getByLabelText('Ticket number')).toHaveValue('1042');
+  });
+
   it('shows a not-found message for a mismatch', async () => {
     mocks.fetchWithCsrf.mockResolvedValueOnce(
       jsonResponse(200, { found: false })

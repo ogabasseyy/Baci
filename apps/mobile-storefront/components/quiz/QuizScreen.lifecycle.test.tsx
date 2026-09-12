@@ -8,6 +8,21 @@ import { fetchQuizResult } from '@/services/quiz-results';
 import { useQuizStore } from '@/stores/quiz-store';
 
 let mockAuthUserId: string | null = 'quiz-shopper';
+const mockQuizResultsWakeup = { current: null as (() => void) | null };
+
+jest.mock('./use-quiz-result-realtime-wakeup', () => {
+  return {
+    useQuizResultRealtimeWakeup: ({
+      enabled,
+      onWakeup,
+    }: {
+      enabled: boolean;
+      onWakeup: () => void;
+    }) => {
+      mockQuizResultsWakeup.current = enabled ? onWakeup : null;
+    },
+  };
+});
 
 jest.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({
@@ -83,14 +98,16 @@ describe('QuizScreen result and universal-expiry lifecycle', () => {
   beforeEach(() => {
     useQuizStore.getState().reset();
     mockAuthUserId = 'quiz-shopper';
+    mockQuizResultsWakeup.current = null;
     jest.clearAllMocks();
+    jest.mocked(fetchQuizResult).mockReset();
   });
 
   afterEach(() => {
     jest.useRealTimers();
   });
 
-  it('refreshes pending results until the final score is available', async () => {
+  it('opens final results when the publication wakeup arrives', async () => {
     jest.useFakeTimers();
     jest
       .mocked(fetchQuizResult)
@@ -139,13 +156,14 @@ describe('QuizScreen result and universal-expiry lifecycle', () => {
     });
     expect(fetchQuizResult).toHaveBeenCalledTimes(1);
 
+    expect(mockQuizResultsWakeup.current).toEqual(expect.any(Function));
     await act(async () => {
-      jest.advanceTimersByTime(5_000);
+      mockQuizResultsWakeup.current?.();
       await Promise.resolve();
     });
 
     expect(await screen.findByText('You placed #1')).toBeTruthy();
-    expect(screen.getByText('4')).toBeTruthy();
+    expect(screen.getByLabelText('Rank 1, ogafan, score 4')).toBeTruthy();
     await act(async () => {
       await Promise.resolve();
     });
@@ -189,6 +207,11 @@ describe('QuizScreen result and universal-expiry lifecycle', () => {
       availability: 'pending_results',
       eventEndsAt: activeAttempt.eventEndsAt,
       serverNow: new Date(1_000).toISOString(),
+    });
+    jest.mocked(fetchQuizResult).mockResolvedValue({
+      attemptId: 'attempt-v2',
+      availability: 'pending',
+      availableAt: activeAttempt.eventEndsAt,
     });
 
     render(<QuizScreen integrityTier="device" />);

@@ -54,6 +54,7 @@ describe('supabase history replay expense pending sources', () => {
       '20260831120800_quiz_cascade_score_consistency_v2.sql',
       '20260831120900_quiz_runtime_gate_stale_health_v2.sql',
       '20260831121000_quiz_runtime_gate_server_clock_batch_v2.sql',
+      '20260903100000_quiz_attempt_submission_time_v2.sql',
     ];
     const precreatedIndexFiles = [
       '20260831115957_quiz_test_publication_retry_index_v2.sql',

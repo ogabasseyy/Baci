@@ -239,7 +239,6 @@ describe('createStorefrontEdgeInventory', () => {
     for (const requiredId of [
       'api-route:events/route.ts',
       'api-route:orders/route.ts',
-      'api-route:orders/[id]/route.ts',
       'api:unlisted',
       'next:user-legacy',
       'next:product-category',

@@ -138,9 +138,11 @@ describe('ExpenseGroupManagerSheet', () => {
     );
 
     await waitFor(() => expect(createGroup).toHaveBeenCalledWith('Marketing'));
-    expect(
-      screen.getByRole('button', { name: 'Create expense group' })
-    ).toBeDisabled();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Create expense group' })
+      ).toBeDisabled()
+    );
   });
 
   it('renames a group and requires confirmation before archiving it', async () => {

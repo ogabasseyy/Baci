@@ -7,6 +7,9 @@ import type { QuizThemeColors } from './QuizScreen.styles';
 jest.mock('expo-image', () => ({ Image: 'Image' }));
 jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
 jest.mock('@react-native-vector-icons/ionicons', () => 'Ionicons');
+jest.mock('../storefront/GadgetPatternBackground', () => ({
+  GadgetPatternBackground: () => null,
+}));
 
 const themeColors: QuizThemeColors = {
   background: '#fff',
@@ -24,6 +27,78 @@ const themeColors: QuizThemeColors = {
 };
 
 describe('QuizEventsList', () => {
+  it('keeps a recovery action when the retained event is missing from the refreshed list', () => {
+    const onResume = jest.fn();
+    const onStart = jest.fn();
+    render(
+      <QuizEventsList
+        events={[]}
+        isStarting={false}
+        onResume={onResume}
+        onStart={onStart}
+        resumeEventId="cancelled"
+        styles={createQuizLobbyStyles(themeColors)}
+      />
+    );
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Recover quiz attempt' })
+    );
+    expect(onResume).toHaveBeenCalledWith('cancelled');
+    expect(
+      screen.getByRole('button', { name: 'Recover quiz attempt' })
+    ).toHaveStyle({ minHeight: 50 });
+    expect(onStart).not.toHaveBeenCalled();
+  });
+  it('resumes the existing attempt without opening rules or starting another attempt', () => {
+    const onResume = jest.fn();
+    const onStart = jest.fn();
+    render(
+      <QuizEventsList
+        events={[
+          {
+            id: 'resume',
+            title: 'Resume me',
+            prizeName: 'Phone',
+            startsAt: null,
+            endsAt: null,
+            status: 'active',
+            questionCount: 5,
+          },
+        ]}
+        isStarting={false}
+        onStart={onStart}
+        onResume={onResume}
+        resumeEventId="resume"
+        styles={createQuizLobbyStyles(themeColors)}
+      />
+    );
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Resume quiz Resume me' })
+    );
+    expect(onResume).toHaveBeenCalledWith('resume');
+    expect(onStart).not.toHaveBeenCalled();
+    expect(screen.queryByRole('header', { name: 'How to play' })).toBeNull();
+  });
+  it('refreshes the lobby when the player pulls down', () => {
+    const onRefresh = jest.fn<() => Promise<void>>(async () => undefined);
+    render(
+      <QuizEventsList
+        events={[]}
+        fetchEvents={jest.fn(async () => [])}
+        isStarting={false}
+        onRefresh={onRefresh}
+        onStart={jest.fn()}
+        styles={createQuizLobbyStyles(themeColors)}
+      />
+    );
+
+    const list = screen.getByLabelText('Available quiz events');
+    expect(list.props.onRefresh).toEqual(expect.any(Function));
+    fireEvent(list, 'refresh');
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
   it('renders open events and triggers start callback', () => {
     const onStart = jest.fn();
     render(
@@ -42,9 +117,11 @@ describe('QuizEventsList', () => {
             timeZone: 'Africa/Lagos',
           },
         ]}
+        fetchEvents={jest.fn(async () => [])}
         isStarting={false}
         onStart={onStart}
         styles={createQuizLobbyStyles(themeColors)}
+        resumeEventId="event-1"
       />
     );
 
@@ -55,6 +132,7 @@ describe('QuizEventsList', () => {
     expect(screen.getByText(/close the digital divide/i)).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText(/Play for free Open Quiz/i));
+    expect(screen.queryByLabelText(/Resume quiz Open Quiz/i)).toBeNull();
     expect(screen.getByRole('header', { name: 'How to play' })).toBeTruthy();
     fireEvent.press(
       screen.getByRole('checkbox', { name: 'Accept quiz rules and terms' })
@@ -66,7 +144,7 @@ describe('QuizEventsList', () => {
     expect(onStart).toHaveBeenCalledWith('event-1', true);
   });
 
-  it('disables non-open events', () => {
+  it('offers scheduled events as waiting rooms', () => {
     const onStart = jest.fn();
     render(
       <QuizEventsList
@@ -75,24 +153,35 @@ describe('QuizEventsList', () => {
             id: 'event-2',
             title: 'Scheduled Quiz',
             prizeName: 'Tablet',
-            startsAt: null,
+            serverNow: '2099-01-01T00:00:00.000Z',
+            startsAt: '2099-01-01T00:10:00.000Z',
             endsAt: null,
             status: 'scheduled',
             questionCount: 5,
           },
         ]}
+        fetchEvents={jest.fn(async () => [])}
         isStarting={false}
         onStart={onStart}
         styles={createQuizLobbyStyles(themeColors)}
       />
     );
 
-    expect(
-      screen.getByLabelText('Scheduled Scheduled Quiz').props.accessibilityState
-    ).toEqual({
-      disabled: true,
+    const enterWaitingRoom = screen.getByLabelText(
+      'Enter waiting room Scheduled Quiz'
+    );
+    expect(enterWaitingRoom.props.accessibilityState).toEqual({
+      disabled: false,
     });
-    fireEvent.press(screen.getByLabelText('Scheduled Scheduled Quiz'));
+    fireEvent.press(enterWaitingRoom);
+    expect(screen.getByRole('header', { name: 'How to play' })).toBeTruthy();
+    fireEvent.press(
+      screen.getByRole('checkbox', { name: 'Accept quiz rules and terms' })
+    );
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Accept and play quiz' })
+    );
+    expect(screen.getByText('SuperQuiz waiting room')).toBeTruthy();
     expect(onStart).not.toHaveBeenCalled();
   });
 
@@ -100,6 +189,7 @@ describe('QuizEventsList', () => {
     render(
       <QuizEventsList
         events={[]}
+        fetchEvents={jest.fn(async () => [])}
         isStarting={false}
         onStart={jest.fn()}
         styles={createQuizLobbyStyles(themeColors)}

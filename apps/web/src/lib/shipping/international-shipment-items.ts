@@ -1,4 +1,5 @@
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
+import { productWeightToKg } from './product-weight-to-kg';
 import type { ShipmentItem } from './types';
 
 export type ProductShippingMetadata = {
@@ -71,19 +72,20 @@ function readProductMetadata(
   return isRecord(product) ? product : null;
 }
 
-function normalizeWeightKg(product: ProductShippingMetadata | null): number {
-  const weight = readPositiveNumber(product?.weight_value);
-  if (!weight) return 1;
+function readSupportedProductWeightKg(
+  product: ProductShippingMetadata | null
+): number | undefined {
+  return (
+    productWeightToKg(product?.weight_value, product?.weight_unit) ?? undefined
+  );
+}
 
-  const unit = product?.weight_unit?.toLowerCase();
-  const multiplier = { g: 0.001, lb: 0.453_592_37, oz: 0.028_349_523_125 }[
-    unit ?? ''
-  ];
-  return weight * (multiplier ?? 1);
+function normalizeWeightKg(product: ProductShippingMetadata | null): number {
+  return readSupportedProductWeightKg(product) ?? 1;
 }
 
 function hasProductWeight(product: ProductShippingMetadata | null): boolean {
-  return readPositiveNumber(product?.weight_value) !== undefined;
+  return readSupportedProductWeightKg(product) !== undefined;
 }
 
 function normalizeDimensionCm(

@@ -30,6 +30,7 @@ import {
   isOrderClampedAsCancelled,
 } from '@/lib/payments/handle-payment-for-cancelled-order';
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
+import { resolveOrderGiglSettlementRpc } from '@/lib/payments/resolve-order-gigl-settlement-rpc';
 import { calculatePlatformFee } from '@/lib/paystack';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { referenceSchema } from '@/schemas/payments';
@@ -97,6 +98,9 @@ export function HEAD() {
 type KlumpUpdatedOrder = KlumpPaidOrder & {
   cancelled_at?: string | null;
   payment_status?: string | null;
+  shipping_funding_source?: 'customer_checkout' | 'merchant_wallet' | null;
+  shipping_platform_retained_amount?: number | string | null;
+  shipping_provider?: string | null;
   shipping_status?: string | null;
 };
 
@@ -117,7 +121,7 @@ function updateKlumpOrder({
     .eq('id', orderId)
     .neq('payment_status', 'paid')
     .select(
-      'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at'
+      'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at, shipping_provider, shipping_funding_source, shipping_platform_retained_amount'
     )
     .maybeSingle<KlumpUpdatedOrder>();
 }
@@ -351,7 +355,7 @@ export async function POST(request: NextRequest) {
       const { data: existingOrder, error: existingOrderError } = await supabase
         .from('orders')
         .select(
-          'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at'
+          'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at, shipping_provider, shipping_funding_source, shipping_platform_retained_amount'
         )
         .eq('id', transaction.order_id)
         .maybeSingle<KlumpUpdatedOrder>();
@@ -441,9 +445,10 @@ export async function POST(request: NextRequest) {
     transaction.platform_fee,
     grossAmount
   );
+  const settlement = resolveOrderGiglSettlementRpc(order);
 
   const { error: settlementError } = await supabase.rpc(
-    'record_merchant_settlement',
+    settlement.settlementRpc,
     {
       p_description: 'Order payment via Klump',
       p_gateway: 'klump',
@@ -455,6 +460,12 @@ export async function POST(request: NextRequest) {
         klump_reference: referenceResult.data,
         klump_transaction_id: details.transactionId,
         klump_webhook_id: request.headers.get('x-klump-webhook-id'),
+        ...(settlement.hasEconomicsSnapshot
+          ? {
+              commerce_platform_fee: platformFee,
+              retained_shipping_amount: settlement.retainedShippingAmount,
+            }
+          : {}),
       },
       p_platform_fee: platformFee,
       p_source_id: transaction.order_id,

@@ -28,7 +28,26 @@ const cartItem = {
   stock: 5,
 } satisfies CartItem;
 
+vi.mock('@/hooks/use-currency', () => ({
+  useCurrency: () => ({ formatCurrencyAuto: (amount: number) => `₦${amount}`, currencyCode: 'NGN' }),
+}));
+
 describe('MobileOrderSummary', () => {
+  it('itemizes the tax included in the Home Makeover payable total', () => {
+    render(<MobileOrderSummary cart={[]} cartTotal={7000} deliveryCost={3522} deliveryMethod="door" giftWrappingCost={0} payWithWallet={false} remainingAmount={11047} walletAmountUsed={0} walletBalance={0} taxAmount={525} />);
+    fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+    expect(screen.getByText('Tax')).toBeVisible();
+    expect(screen.getByText('₦525')).toBeVisible();
+  });
+
+  it('itemizes discounts and wallet credit separately from tax and delivery', () => {
+    render(<MobileOrderSummary cart={[]} cartTotal={7000} deliveryCost={2201} deliveryMethod="door" giftWrappingCost={100} payWithWallet remainingAmount={8826} walletAmountUsed={500} walletBalance={500} taxAmount={525} discountAmount={500} />);
+    fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+    expect(screen.getByText('Discount')).toBeVisible();
+    expect(screen.getByText('Wallet Credit')).toBeVisible();
+    expect(screen.getAllByText('-₦500')).toHaveLength(2);
+    expect(screen.getAllByText('₦8826')).toHaveLength(2);
+  });
   it('keeps order summary thumbnails on the neutral image surface', () => {
     render(
       <MobileOrderSummary

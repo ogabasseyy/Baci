@@ -136,6 +136,13 @@ export async function submitNewOrder({
           address: sanitizedCustomerAddress,
           name: sanitizedCustomerName,
           phone: sanitizedCustomerPhone || '',
+          city: sanitizeText(customer.city ?? '', 100),
+          state: sanitizeText(customer.state ?? '', 100),
+          country: sanitizeText(customer.country ?? '', 100),
+          countryCode: sanitizeText(customer.countryCode ?? '', 10),
+          postalCode: sanitizeText(customer.postalCode ?? '', 30),
+          latitude: customer.latitude,
+          longitude: customer.longitude,
         }
       : {
           address: sanitizeAddress(deliveryInfo.address),
@@ -143,6 +150,11 @@ export async function submitNewOrder({
           name: sanitizeCustomerName(deliveryInfo.name),
           phone: sanitizePhone(deliveryInfo.phone),
           state: sanitizeText(deliveryInfo.state, 100),
+          country: sanitizeText(deliveryInfo.country ?? '', 100),
+          countryCode: sanitizeText(deliveryInfo.countryCode ?? '', 10),
+          postalCode: sanitizeText(deliveryInfo.postalCode ?? '', 30),
+          latitude: deliveryInfo.latitude,
+          longitude: deliveryInfo.longitude,
         };
     const validatedBranchId = await validateSelectedBranch(
       selectedBranchId,

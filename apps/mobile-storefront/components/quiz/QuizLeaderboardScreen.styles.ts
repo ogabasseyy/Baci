@@ -79,7 +79,14 @@ export function createQuizLeaderboardStyles(colors: QuizThemeColors) {
       paddingHorizontal: 10,
     },
     rank: { color: colors.primary, fontSize: 16, fontWeight: '900', width: 34 },
-    name: { color: colors.text, flex: 1, fontSize: 14, fontWeight: '700' },
+    identity: { flex: 1, gap: 2 },
+    name: { color: colors.text, fontSize: 14, fontWeight: '700' },
+    time: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontVariant: ['tabular-nums'],
+      fontWeight: '600',
+    },
     score: { color: colors.textSecondary, fontSize: 13, fontWeight: '700' },
     state: {
       color: colors.textSecondary,

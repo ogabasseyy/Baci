@@ -1,3 +1,7 @@
+import {
+  canonicalizeCommerceVariantAxis,
+  normalizeCommerceVariantOption,
+} from '@baci/shared';
 import type { AdminProductVariant } from '@/lib/product-picker-variant-rows';
 
 export interface VariantAttributeEntry {
@@ -15,34 +19,10 @@ const PREFERRED_ATTRIBUTE_ORDER = [
   'capacity',
 ];
 
-const ATTRIBUTE_KEY_ALIASES: Record<string, string> = {
-  colour: 'color',
-};
-
 const ATTRIBUTE_VALUE_KEYS = ['value', 'label', 'name', 'options'] as const;
-const NON_SELECTABLE_ATTRIBUTE_KEYS = new Set([
-  'color_hex',
-  'colorhex',
-  'colour_hex',
-  'colourhex',
-]);
 
-function normalizeAttributeKey(key: string): string {
-  const normalized = key
-    .trim()
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .toLowerCase()
-    .replace(/[\s-]+/g, '_');
-  return normalized
-    .split('.')
-    .map((part) => ATTRIBUTE_KEY_ALIASES[part] ?? part)
-    .join('.');
-}
-
-function isSelectableAttributeKey(key: string): boolean {
-  return key
-    .split('.')
-    .every((part) => !NON_SELECTABLE_ATTRIBUTE_KEYS.has(part));
+function normalizeAttributeKey(key: string): string | null {
+  return canonicalizeCommerceVariantAxis(key);
 }
 
 export function formatAttributeLabel(key: string): string {
@@ -128,17 +108,16 @@ function extractArrayAttributeEntries(
       return [];
     }
 
-    const normalizedValue =
+    const rawNormalizedValue =
       normalizeAttributeValue(record.value) ??
       normalizeAttributeValue(record.label) ??
       normalizeAttributeValue(record.options);
 
-    if (!normalizedValue) {
-      return [];
-    }
-
     const key = normalizeAttributeKey(rawKey);
-    if (!isSelectableAttributeKey(key)) {
+    const normalizedValue = key
+      ? normalizeCommerceVariantOption(key, rawNormalizedValue)
+      : '';
+    if (!(key && normalizedValue)) {
       return [];
     }
 
@@ -166,7 +145,10 @@ function extractRecordAttributeEntries(
       }
 
       const key = normalizeAttributeKey(keyPath);
-      if (!isSelectableAttributeKey(key)) {
+      const normalizedValue = key
+        ? normalizeCommerceVariantOption(key, displayValue)
+        : '';
+      if (!(key && normalizedValue)) {
         return [];
       }
 
@@ -174,18 +156,16 @@ function extractRecordAttributeEntries(
         {
           key,
           label: formatAttributeLabel(key),
-          value: displayValue,
+          value: normalizedValue,
         },
       ];
     }
 
-    const normalizedValue = normalizeAttributeValue(rawValue);
-    if (!normalizedValue) {
-      return [];
-    }
-
     const key = normalizeAttributeKey(keyPath);
-    if (!isSelectableAttributeKey(key)) {
+    const normalizedValue = key
+      ? normalizeCommerceVariantOption(key, normalizeAttributeValue(rawValue))
+      : '';
+    if (!(key && normalizedValue)) {
       return [];
     }
 

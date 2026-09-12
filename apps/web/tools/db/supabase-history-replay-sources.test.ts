@@ -132,6 +132,12 @@ describe('supabase-history-replay sources', () => {
     );
   });
 
+  it('registers the append-only sales collision repair for replay verification', () => {
+    expect(rows(PENDING_SOURCES)).toContain(
+      '2676132ef759384de03f6ad7eeed2f7e1e38abac02013aaca634bfb957106482 20260907111036_repair_sales_exclusion_wallet_version_collision.sql'
+    );
+  });
+
   it('keeps the quiz-live pending-source cohort unique and lexically ordered', () => {
     const repositoryPaths = EXPECTED_QUIZ_LIVE_PENDING_SOURCES.map(
       ({ repositoryPath }) => repositoryPath

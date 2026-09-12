@@ -54,7 +54,7 @@ beforeEach(() => {
 });
 
 describe('OgabasseyPdpCriticalCommerceProvider single-option metadata', () => {
-  it('preselects a non-variant product single metadata axis', () => {
+  it('hides single-option axes on non-variant products and stays purchasable', () => {
     render(
       <OgabasseyPdpCriticalCommerceProvider
         cartProduct={nonVariantProduct}
@@ -66,8 +66,8 @@ describe('OgabasseyPdpCriticalCommerceProvider single-option metadata', () => {
       </OgabasseyPdpCriticalCommerceProvider>
     );
 
-    expect(screen.getByText('axes:ram')).toBeInTheDocument();
-    expect(screen.getByText('selected ram:8GB')).toBeInTheDocument();
+    expect(screen.getByText('axes:')).toBeInTheDocument();
+    expect(screen.getByText('selected ram:')).toBeInTheDocument();
     expect(screen.getByText('ready')).toBeInTheDocument();
   });
 });

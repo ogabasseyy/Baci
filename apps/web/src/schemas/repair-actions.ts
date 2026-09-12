@@ -3,6 +3,21 @@ import { repairsDeviceDetailRouteParamsSchema } from '@/schemas/repair-catalog';
 
 export const repairMerchantIdSchema = z.uuid();
 
+/** Storefront slug / hostname token used to resolve the published merchant. */
+export const repairMerchantIdentifierSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(120)
+  .transform((value) => value.toLowerCase());
+
+/** Customer-facing pickup fee quoted before Paystack initialization. */
+export const repairPickupExpectedFeeSchema = z.coerce
+  .number()
+  .finite()
+  .positive()
+  .max(10_000_000);
+
 /**
  * `/[slug]/repair?device=<slug>&quote=<id>` preselection query params. Reuses
  * the same device-slug shape the storefront read API validates route params

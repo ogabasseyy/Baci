@@ -60,4 +60,38 @@ describe('createQuizV2RecoveryResponseApplier', () => {
     expect(apply).not.toHaveBeenCalled();
     expect(clearRecoveredQuizAttempt).toHaveBeenCalledWith(access, 'event-1');
   });
+
+  it('preserves the server submission time from a top-level pending recovery response', async () => {
+    const set = jest.fn();
+    const access = {
+      get: jest.fn(() => ({ recoveryUserId: 'user-1' })),
+      getGeneration: jest.fn(() => 0),
+      getMessage: jest.fn(() => ''),
+      set,
+    } as unknown as QuizV2StoreAccess;
+    const apply = jest.fn(async () => undefined);
+    const applyRecoveryResponse = createQuizV2RecoveryResponseApplier({
+      access,
+      apply,
+    });
+
+    await applyRecoveryResponse(
+      {
+        attemptId: fallback.attemptId,
+        availability: 'pending_results',
+        eventEndsAt: fallback.eventEndsAt,
+        serverNow: fallback.serverNow,
+        submittedAt: '2026-08-04T12:00:04.321Z',
+      },
+      fallback
+    );
+
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalContext: expect.objectContaining({
+          submittedAt: '2026-08-04T12:00:04.321Z',
+        }),
+      })
+    );
+  });
 });

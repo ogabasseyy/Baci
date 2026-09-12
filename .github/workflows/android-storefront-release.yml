@@ -10,8 +10,10 @@ on:
       - 'package.json'
       - 'pnpm-workspace.yaml'
       - '.npmrc'
+      # Patch/lockfile changes rebuild ReactAndroid from source.
+      - 'patches/**'
+      - 'pnpm-lock.yaml'
     tags:
-      # Tag pushes bypass the paths filter above (GitHub Actions behaviour).
       - "v*-storefront"
   workflow_dispatch:
     inputs:
@@ -163,6 +165,8 @@ jobs:
           EXPO_PUBLIC_QUIZ_ADS_ENABLED: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID != '' && 'true' || 'false' }}
           EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID }}
           EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID }}
           STOREFRONT_ADMOB_ANDROID_APP_ID: ${{ secrets.STOREFRONT_ADMOB_ANDROID_APP_ID }}
           STOREFRONT_ADMOB_IOS_APP_ID: ${{ secrets.STOREFRONT_ADMOB_IOS_APP_ID }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -214,6 +218,8 @@ jobs:
           EXPO_PUBLIC_QUIZ_ADS_ENABLED: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID != '' && 'true' || 'false' }}
           EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID }}
           EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID }}
           STOREFRONT_ADMOB_ANDROID_APP_ID: ${{ secrets.STOREFRONT_ADMOB_ANDROID_APP_ID }}
           STOREFRONT_ADMOB_IOS_APP_ID: ${{ secrets.STOREFRONT_ADMOB_IOS_APP_ID }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}

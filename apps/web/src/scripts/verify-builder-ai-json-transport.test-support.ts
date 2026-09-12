@@ -45,15 +45,15 @@ export function createDependencies(
     environment: {
       BACI_APPROVE_PAID_AI_SMOKE: '1',
       BACI_WEB_ENV_SOURCE: '/primary/apps/web/.env',
-      CEREBRAS_API_KEY: 'cerebras-test',
+      GOOGLE_GENAI_API_KEY: 'google-test',
       GROQ_API_KEY: 'groq-test',
       OPENROUTER_API_KEY: 'openrouter-test',
       ...environment,
     },
     materializeProviders: vi.fn(async () => [
       {
-        model: { id: 'cerebras' },
-        name: 'cerebras:gemma-4-31b',
+        model: { id: 'google' },
+        name: 'google:gemma-4-31b-it',
       },
       {
         model: { id: 'groq' },

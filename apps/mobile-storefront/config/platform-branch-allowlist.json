@@ -16,6 +16,7 @@
       "path": "components/checkout/CheckoutScreenView.tsx",
       "justification": "Reviewed Android hardware-back handling, list virtualization, and monospace font selection."
     },
+    "components/quiz/QuizPrizeCheckoutSimulationScreen.tsx",
     {
       "path": "components/checkout/CheckoutScreenView.styles.ts",
       "justification": "Reviewed platform-specific monospace font selection for the crypto payment address."

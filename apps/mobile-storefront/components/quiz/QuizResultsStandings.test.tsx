@@ -45,6 +45,8 @@ describe('QuizResultsStandings', () => {
     );
 
     expect(screen.getByText('Final standings')).toBeTruthy();
+    expect(screen.getByText('12.00s')).toBeTruthy();
+    expect(screen.getByLabelText('Avatar for Bassey')).toBeTruthy();
     expect(screen.getByText('4 participants')).toBeTruthy();
     expect(screen.getByText('Bassey  (You)')).toBeTruthy();
   });

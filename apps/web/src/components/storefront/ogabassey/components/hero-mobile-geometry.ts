@@ -20,7 +20,7 @@ export const HERO_MOBILE_EYEBROW_CLASSES =
   'text-[9px] font-semibold uppercase tracking-[0.12em] text-store-primary';
 
 export const HERO_MOBILE_TITLE_CLASSES =
-  'line-clamp-2 text-[1.2rem] font-extrabold leading-tight text-store-secondary-text';
+  'line-clamp-3 text-[1.65rem] font-extrabold leading-[1.05] text-store-secondary-text';
 
 export const HERO_MOBILE_PRICE_CLASSES =
   'text-[11px] font-semibold text-store-secondary-text';
@@ -28,7 +28,8 @@ export const HERO_MOBILE_PRICE_CLASSES =
 export const HERO_MOBILE_CTA_CLASSES =
   'mt-2 inline-flex w-fit items-center rounded-full bg-store-primary px-4 py-1.5 text-[11px] font-bold text-store-on-primary shadow-sm';
 
-export const HERO_MOBILE_IMAGE_COLUMN_CLASSES = 'relative col-span-2';
+export const HERO_MOBILE_IMAGE_COLUMN_CLASSES =
+  'relative col-span-2 flex items-center justify-center p-2';
 
 /** Controls row shown when the carousel has more than one slide — the real
  * hero is ~52px taller with it, so the fallback must reserve it too. */

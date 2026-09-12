@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, render, screen } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import { fetchQuizLiveLeaderboard } from '@/services/quiz-live-leaderboard';
 import { fetchQuizParticipantCount } from '@/services/quiz-participant-count';
 import { QuizResultsPanel } from './QuizResultsPanel';
@@ -43,6 +43,23 @@ const colors: QuizThemeColors = {
   warning: '#fb0',
 };
 
+const simulatedPrize = {
+  condition: 'used' as const,
+  id: 'product-1',
+  imageUrl: null,
+  name: 'iPhone XR',
+  variantId: null,
+};
+
+const finalResult = {
+  attemptId: 'a1',
+  availability: 'final' as const,
+  availableAt: new Date(0).toISOString(),
+  rank: 1,
+  score: 4,
+  totalQuestions: 5,
+};
+
 describe('QuizResultsPanel', () => {
   beforeEach(() => {
     jest.mocked(fetchQuizLiveLeaderboard).mockReset();
@@ -50,7 +67,7 @@ describe('QuizResultsPanel', () => {
     jest.mocked(fetchQuizParticipantCount).mockResolvedValue(1);
   });
 
-  it('celebrates completion and explains the server-recorded tie-break time', async () => {
+  it('celebrates completion and explains the server-recorded tie-break time', () => {
     jest.useFakeTimers();
     jest.setSystemTime(0);
     jest.mocked(fetchQuizLiveLeaderboard).mockResolvedValue({
@@ -83,10 +100,6 @@ describe('QuizResultsPanel', () => {
         }}
       />
     );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
     expect(screen.getByText("You're all done!")).toBeTruthy();
     expect(screen.getByText('You finished at')).toBeTruthy();
     expect(screen.getByText(/:\d{2}:\d{2}/)).toBeTruthy();
@@ -98,5 +111,60 @@ describe('QuizResultsPanel', () => {
     ).toBeTruthy();
     expect(screen.getByRole('timer').props.children).toBe('0:30');
     jest.useRealTimers();
+  });
+
+  it('offers a simulated checkout for a final test prize', () => {
+    render(
+      <QuizResultsPanel
+        legacyResult={null}
+        lifecycle="final"
+        simulatedPrize={simulatedPrize}
+        styles={createQuizStyles(colors)}
+        v2Result={finalResult}
+      />
+    );
+
+    expect(screen.getByText('Winner checkout preview')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Redeem prize' })).toBeTruthy();
+  });
+
+  it('prefers a signed prize claim over a simulated prize', () => {
+    render(
+      <QuizResultsPanel
+        legacyResult={null}
+        lifecycle="final"
+        simulatedPrize={simulatedPrize}
+        styles={createQuizStyles(colors)}
+        v2Result={{
+          ...finalResult,
+          prizeClaim: {
+            awardId: 'award-1',
+            cartPath: '/checkout',
+            condition: 'used',
+            productId: 'product-1',
+            variantId: null,
+            voucherToken: 'signed-voucher',
+          },
+        }}
+      />
+    );
+
+    expect(screen.getByText('Claim your prize')).toBeTruthy();
+    expect(screen.queryByText('Winner checkout preview')).toBeNull();
+  });
+
+  it('does not render a simulated checkout without a selected prize', () => {
+    render(
+      <QuizResultsPanel
+        legacyResult={null}
+        lifecycle="final"
+        simulatedPrize={null}
+        styles={createQuizStyles(colors)}
+        v2Result={finalResult}
+      />
+    );
+
+    expect(screen.queryByText('Winner checkout preview')).toBeNull();
+    expect(screen.queryByText('Claim your prize')).toBeNull();
   });
 });

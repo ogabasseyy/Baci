@@ -14,6 +14,8 @@
  * against them so the two can't drift.
  */
 
+import type { ShippingProviderCode } from '../types';
+
 /** `merchant_shipping_rates.kind` — a shippable rate vs. a local-pickup rate. */
 export type MerchantRateKind = 'ship' | 'pickup';
 
@@ -105,4 +107,10 @@ export interface StorefrontShippingRatesPayload {
    * same backward-compat reason.
    */
   merchantCountry?: string | null;
+  /**
+   * Carrier providers enabled for this merchant. `undefined` means the RPC is
+   * an older deployment that did not return the setting yet; an empty array is
+   * an explicit merchant choice to disable every carrier.
+   */
+  enabledProviderCodes?: ShippingProviderCode[];
 }

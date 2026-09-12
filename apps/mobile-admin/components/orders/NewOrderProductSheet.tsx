@@ -1,16 +1,22 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { router } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { SheetTextInputRef } from '@/components/ui/SheetTextInput';
 import type { NewOrderController } from '@/hooks/useNewOrderController';
 import type { AdminProductVariant } from '@/lib/product-picker-variant-rows';
-import { buildVariantOptionGroups } from '@/lib/product-variant-option-selector';
+import {
+  buildVariantOptionGroups,
+  resolveSelectedVariant,
+  selectVariantOption,
+  type VariantOptionSelection,
+} from '@/lib/product-variant-option-selector';
 import { NewOrderCreateProductRow } from './NewOrderCreateProductRow';
 import { NewOrderProductPickerList } from './NewOrderProductPickerList';
 import { NewOrderProductPickerSheetFrame } from './NewOrderProductPickerSheetFrame';
 import { NewOrderProductSearchFooter } from './NewOrderProductSearchFooter';
 import { ProductVariantOptionSelector } from './ProductVariantOptionSelector';
+import { ProductVariantSelectionFooter } from './ProductVariantSelectionFooter';
 
 const PRODUCT_PICKER_FOOTER_BOTTOM_INSET = 18;
 export const PRODUCT_SEARCH_FOCUS_DELAY_MS = 250;
@@ -46,6 +52,10 @@ export function NewOrderProductSheet({
   controller: NewOrderProductSheetController;
 }) {
   const inputRef = useRef<SheetTextInputRef | null | undefined>(null);
+  const [variantSelectionState, setVariantSelectionState] = useState<{
+    parentProductId?: string;
+    selection: VariantOptionSelection;
+  }>({ selection: {} });
 
   const {
     closeProductModal,
@@ -83,15 +93,32 @@ export function NewOrderProductSheet({
           })
         )
       : [];
+  const selectedParentProductId = selectedParentProduct?.id;
+  const variantSelection =
+    variantSelectionState.parentProductId === selectedParentProductId
+      ? variantSelectionState.selection
+      : {};
   const variantOptionGroups =
     structuredVariantRows.length > 0
-      ? buildVariantOptionGroups(structuredVariantRows, {})
+      ? buildVariantOptionGroups(structuredVariantRows, variantSelection, {
+          declaration: selectedParentProduct?.variant_attributes,
+        })
       : [];
+  const selectedVariant = resolveSelectedVariant(
+    structuredVariantRows,
+    variantSelection,
+    { declaration: selectedParentProduct?.variant_attributes }
+  );
   const showProductFirstVariantSelector = Boolean(
     isPickingVariant &&
       selectedParentProduct &&
       variantOptionGroups.some((group) => group.values.length > 1)
   );
+  useEffect(() => {
+    if (!showProductModal || !isPickingVariant) {
+      setVariantSelectionState({ selection: {} });
+    }
+  }, [showProductModal, isPickingVariant]);
   useEffect(() => {
     if (showProductModal && !isPickingVariant) {
       const timer = setTimeout(() => {
@@ -103,12 +130,32 @@ export function NewOrderProductSheet({
       };
     }
   }, [showProductModal, isPickingVariant]);
+  const addSelectedVariant = () => {
+    if (!(selectedVariant && selectedParentProduct)) {
+      return;
+    }
+
+    handleAddProduct({
+      ...selectedVariant,
+      images:
+        selectedVariant.images.length > 0
+          ? selectedVariant.images
+          : (selectedParentProduct.images ?? []),
+    });
+  };
+  const variantSelectionFooter = showProductFirstVariantSelector ? (
+    <ProductVariantSelectionFooter
+      colors={colors}
+      onAdd={addSelectedVariant}
+      selectedVariant={selectedVariant}
+    />
+  ) : null;
 
   return (
     <NewOrderProductPickerSheetFrame
       closeLabel="Close product sheet"
       colors={colors}
-      footer={productSearchFooter}
+      footer={productSearchFooter ?? variantSelectionFooter}
       footerBottomInset={PRODUCT_PICKER_FOOTER_BOTTOM_INSET}
       leadingAccessory={
         isPickingVariant ? (
@@ -175,10 +222,23 @@ export function NewOrderProductSheet({
           <ProductVariantOptionSelector
             colors={colors}
             formatPrice={formatPrice}
-            onAddProduct={handleAddProduct}
+            onSelect={(key, value) => {
+              setVariantSelectionState((current) => ({
+                parentProductId: selectedParentProduct.id,
+                selection: selectVariantOption(
+                  structuredVariantRows,
+                  current.parentProductId === selectedParentProduct.id
+                    ? current.selection
+                    : {},
+                  key,
+                  value,
+                  { declaration: selectedParentProduct.variant_attributes }
+                ),
+              }));
+            }}
             parentProduct={selectedParentProduct}
+            selectedVariant={selectedVariant}
             variantOptionGroups={variantOptionGroups}
-            variants={structuredVariantRows}
           />
         ) : (
           <NewOrderProductPickerList controller={controller} />

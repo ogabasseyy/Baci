@@ -6,16 +6,37 @@ import { useQuizResultRealtimeWakeup } from './use-quiz-result-realtime-wakeup';
 
 export const QUIZ_RESULT_POLL_INTERVAL_MS = 5_000;
 export const QUIZ_RESULT_POLL_MAX_INTERVAL_MS = 30_000;
+export const QUIZ_RESULT_POST_DEADLINE_FALLBACK_MIN_MS = 8_000;
+const QUIZ_RESULT_POST_DEADLINE_FALLBACK_JITTER_MS = 4_000;
+
+function getStableFallbackDelayMs(attemptId: string): number {
+  let hash = 0;
+  for (const character of attemptId) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return (
+    QUIZ_RESULT_POST_DEADLINE_FALLBACK_MIN_MS +
+    (hash % QUIZ_RESULT_POST_DEADLINE_FALLBACK_JITTER_MS)
+  );
+}
 
 function getPendingPollDelayMs(
   availableAt: string | null,
+  attemptId: string,
   nowMs = Date.now()
 ): number {
   const availableAtMs = availableAt ? Date.parse(availableAt) : Number.NaN;
   if (Number.isFinite(availableAtMs) && availableAtMs > nowMs) {
+    // availableAt is server time while nowMs is device time. A device clock
+    // that is behind can otherwise sleep this hook for hours and miss the
+    // publication. Realtime normally wakes us sooner; this cap is the safe
+    // HTTP fallback when that channel is unavailable.
     return Math.min(availableAtMs - nowMs, QUIZ_RESULT_POLL_MAX_INTERVAL_MS);
   }
-  return QUIZ_RESULT_POLL_INTERVAL_MS;
+  if (Number.isFinite(availableAtMs)) {
+    return getStableFallbackDelayMs(attemptId);
+  }
+  return QUIZ_RESULT_POLL_MAX_INTERVAL_MS;
 }
 
 function getFailedPollDelayMs(consecutiveFailures: number): number {
@@ -76,7 +97,7 @@ export function useQuizResultPolling({
         consecutiveFailures = 0;
         if (result.availability === 'pending') {
           shouldContinue = true;
-          nextDelayMs = getPendingPollDelayMs(result.availableAt);
+          nextDelayMs = getPendingPollDelayMs(result.availableAt, attemptId);
         }
         if (cancelled) return;
         if (

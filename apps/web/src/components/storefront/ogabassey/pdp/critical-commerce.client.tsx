@@ -164,7 +164,6 @@ export function OgabasseyPdpCriticalProductImage({
 export function OgabasseyPdpCriticalCommerceSummary() {
   const {
     currency,
-    explicitSelectedAxes,
     handleAttributeSelection,
     productForCart,
     renderableVariantAxes,
@@ -183,7 +182,6 @@ export function OgabasseyPdpCriticalCommerceSummary() {
       </div>
       <div data-ogabassey-pdp-summary-variant-slot>
         <OgabasseyPdpCriticalVariantSelectors
-          explicitSelectedAxes={explicitSelectedAxes}
           onAttributeSelection={handleAttributeSelection}
           renderableVariantAxes={renderableVariantAxes}
           selectedAttributes={selectedAttributes}

@@ -1,6 +1,10 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import {
+  buildOrderIdempotencyPayload,
+  hashOrderIdempotencyPayload,
+} from '@/lib/checkout/order-idempotency';
 import { generateOrderConfirmationEmail } from '@/lib/email-templates';
 import { logger } from '@/lib/logger';
 import { createQuizVoucherToken } from '@/lib/quiz-voucher-token';
@@ -7485,6 +7489,81 @@ describe('POST /api/orders — merchant shipping rate enforcement', () => {
     expect(hashA).toBeDefined();
     expect(hashB).toBeDefined();
     expect(hashA).not.toBe(hashB);
+  });
+
+  it('bugfix: keeps merchant-rate idempotency hash on pre-repair state while persisting Lagos', async () => {
+    // Arrange — postal-code state that this PR repairs to Lagos for zone
+    // verification/persistence. Pre-deploy orders hashed the original
+    // "100001"; hashing the repaired state would break Idempotency-Key retries.
+    const malformedShippingAddress = {
+      address: '2 Olaide Tomori Street, Ikeja, Lagos 100001, Nigeria',
+      city: 'Ikeja',
+      state: '100001',
+      country: 'Nigeria',
+      countryCode: 'NG',
+    };
+    primeAdminShippingRateClient(shippingRatesRpcPayload());
+    const supabase = await primeStorefrontClient();
+
+    // Act
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'malformed-state-retry-key' },
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          shipping_address: malformedShippingAddress,
+          shipping_rate_id: LAGOS_RATE_ID,
+          shipping_fee: 1500,
+        }),
+      })
+    );
+    const body = await readJson(response);
+
+    // Assert
+    expect(response.status).toBe(201);
+    expect(body).toMatchObject({ order: { id: 'order-id' } });
+    const createCall = (
+      supabase.rpc as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls.find(([name]) => name === 'create_storefront_order');
+    const rpcParams = createCall?.[1] as
+      | {
+          p_checkout_request_hash?: string;
+          p_shipping_address?: { state?: string };
+        }
+      | undefined;
+
+    expect(rpcParams?.p_shipping_address?.state).toBe('Lagos');
+    const normalizedHash = hashOrderIdempotencyPayload(
+      buildOrderIdempotencyPayload({
+        ...baseOrderPayload,
+        shipping_address: { ...malformedShippingAddress, state: 'Lagos' },
+        shipping_fee: 1500,
+        shipping_provider: null,
+        selected_quote_id: null,
+        shipping_rate_id: LAGOS_RATE_ID,
+        discount_amount: 0,
+        discount_code: null,
+        gift_wrapping_fee: 0,
+      })
+    );
+    expect(rpcParams?.p_checkout_request_hash).toBeDefined();
+    expect(rpcParams?.p_checkout_request_hash).not.toBe(normalizedHash);
+    expect(rpcParams?.p_checkout_request_hash).toBe(
+      hashOrderIdempotencyPayload(
+        buildOrderIdempotencyPayload({
+          ...baseOrderPayload,
+          shipping_address: malformedShippingAddress,
+          shipping_fee: 1500,
+          shipping_provider: null,
+          selected_quote_id: null,
+          shipping_rate_id: LAGOS_RATE_ID,
+          discount_amount: 0,
+          discount_code: null,
+          gift_wrapping_fee: 0,
+        })
+      )
+    );
   });
 
   const ROW_RATE_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';

@@ -75,6 +75,7 @@ export interface QuizV2Attempt {
   resumed?: boolean;
   serverNow: string;
   status: QuizV2AttemptStatus;
+  submittedAt?: string | null;
 }
 
 export type QuizActiveAttemptAvailability =
@@ -90,6 +91,7 @@ export interface QuizActiveAttemptResponse {
   availability: QuizActiveAttemptAvailability;
   eventEndsAt: string | null;
   serverNow: string;
+  submittedAt?: string | null;
 }
 
 export type QuizPrizeCondition = 'new' | 'used' | 'open_box' | 'refurbished';

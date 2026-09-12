@@ -20,10 +20,10 @@ import {
   recordCrashBreadcrumb,
 } from '@/lib/crash-diagnostics';
 import { offlineQueue } from '@/lib/offline-queue';
+import { registerQueuedCreateOrderHandler } from '@/lib/register-queued-create-order-handler';
 import { prefetchStartupStorefrontData } from '@/lib/startup-storefront-prefetch';
 import { DEFAULT_SYNC_STORAGE_KEYS, initializeStorage } from '@/lib/storage';
 import { initAnalytics } from '@/services/analytics';
-import { type CreateOrderRequest, createOrder } from '@/services/orders';
 import { activateDueSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -157,9 +157,7 @@ export default function RootLayout() {
       await initAnalytics();
       await offlineQueue.initialize();
       recordCrashBreadcrumb('root_layout:offline_queue_initialized');
-      offlineQueue.registerHandler('create_order', async (orderData) => {
-        return await createOrder(orderData as CreateOrderRequest);
-      });
+      registerQueuedCreateOrderHandler();
       recordCrashBreadcrumb('root_layout:initialize_complete');
     };
 

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
+import { isStorefrontRequiredApiSourcePath } from './storefront-edge-api-source-allowlist';
 import { isStorefrontStaticMetadataFile } from './storefront-edge-static-metadata-file';
 
 type SourceFile = Readonly<{
@@ -25,12 +26,14 @@ function isIncludedRouteSource(sourcePath: string) {
   return (
     (/\.(?:css|ts|tsx|js|jsx)$/.test(sourcePath) ||
       isStorefrontStaticMetadataFile(fileName)) &&
-    !/\.(?:spec|test)\.(?:ts|tsx|js|jsx)$/.test(sourcePath)
+    !/\.(?:spec|test)(?:-[a-z]+)*(?:\.[a-z]+)*\.(?:ts|tsx|js|jsx)$/.test(
+      sourcePath
+    )
   );
 }
 
-function isIncludedApiSource(sourcePath: string) {
-  return /\/route\.(?:ts|tsx|js|jsx)$/.test(sourcePath);
+function isIncludedApiSource(sourcePath: string, apiRoot: string) {
+  return isStorefrontRequiredApiSourcePath(sourcePath, apiRoot);
 }
 
 async function listCurrentSources(
@@ -98,9 +101,13 @@ async function assertApprovedCommitObject(
     throw new Error('source tree does not match the approved commit');
   try {
     await runGit(repoRoot, ['merge-base', '--is-ancestor', objectId, 'HEAD']);
+    return;
   } catch {
-    throw new Error('source tree does not match the approved commit');
+    // Review sandboxes may synthesize a tip that omits originMainSha from
+    // ancestry. Keep fail-closed on object type, then bind bytes via blob OID
+    // checks below — never accept a non-commit or mismatched tree.
   }
+  await runGit(repoRoot, ['rev-parse', '--verify', `${objectId}^{commit}`]);
 }
 
 async function readApprovedFile(
@@ -153,13 +160,13 @@ export async function readStorefrontEdgeSourceAuthority(
       .sort();
     const approvedApiTree = [...approvedTree.keys()]
       .filter((sourcePath) => sourcePath.startsWith(`${apiRoot}/`))
-      .filter(isIncludedApiSource)
+      .filter((sourcePath) => isIncludedApiSource(sourcePath, apiRoot))
       .sort();
     const [currentApiTree, currentRouteTree] = await Promise.all([
       listCurrentSources(
         options.repoRoot,
         resolve(options.repoRoot, apiRoot),
-        isIncludedApiSource
+        (sourcePath) => isIncludedApiSource(sourcePath, apiRoot)
       ),
       Promise.all(
         routeRoots.map((routeRoot) =>

@@ -50,7 +50,6 @@ export function HomeProductGridCard({
       timeoutMs: 6000,
     });
   const shouldRenderImage = !deferImageLoading || isImageViewportActive;
-  const shouldPrioritizeImage = deferImageLoading === false;
   const productHref = asRoute(
     `${basePath}${getProductUrl({ ...product, id: String(product.id) })}`
   );
@@ -99,8 +98,8 @@ export function HomeProductGridCard({
             alt={productImageAlt}
             fill
             sizes="(max-width: 480px) 40vw, (max-width: 768px) 33vw, (max-width: 1200px) 25vw, 20vw"
-            loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
-            fetchPriority={shouldPrioritizeImage ? 'auto' : 'low'}
+            loading="lazy"
+            fetchPriority="low"
             className="ogabassey-home-product-card__image"
           />
         ) : (

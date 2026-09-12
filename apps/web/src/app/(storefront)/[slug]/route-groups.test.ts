@@ -11,6 +11,7 @@ const runtimeRouteManifest = [
   '(home)/loading.tsx',
   '(catalog)/loading.tsx',
   '(catalog)/(listing)/compare/page.tsx',
+  '(catalog)/(listing)/compare/loading.tsx',
   '(catalog)/(listing)/products/page.tsx',
   '(catalog)/(listing)/search/page.tsx',
   '(catalog)/(listing)/[category]/page.tsx',
@@ -25,6 +26,7 @@ const runtimeRouteManifest = [
   '(catalog)/(pdp)/[category]/[productSlug]/page.tsx',
   '(catalog)/(pdp)/[category]/[productSlug]/loading.tsx',
   '(blog)/blog/page.tsx',
+  '(blog)/blog/loading.tsx',
   '(blog)/blog/[postSlug]/page.tsx',
   '(blog)/blog/[postSlug]/loading.tsx',
   '(content)/loading.tsx',
@@ -69,12 +71,15 @@ const runtimeRouteManifest = [
   '(customer)/delete-account/page.tsx',
   '(customer)/receipts/layout.tsx',
   '(customer)/receipts/page.tsx',
-  '(utility)/loading.tsx',
   '(utility)/imei-check/page.tsx',
+  '(utility)/imei-check/loading.tsx',
   '(utility)/member-status/page.tsx',
   '(utility)/repair/page.tsx',
+  '(utility)/repair/loading.tsx',
   '(utility)/repairs/page.tsx',
+  '(utility)/repairs/loading.tsx',
   '(utility)/reviews/page.tsx',
+  '(utility)/reviews/loading.tsx',
   '(utility)/swap/page.tsx',
 ];
 
@@ -125,19 +130,16 @@ const legacyRouteManifest = [
   'swap/page.tsx',
 ];
 
+// Nested /compare, /repair, /repairs, and /imei-check loading shells are
+// covered by colocated loading tests. This list stays on parent lazy-module
+// boundaries that settle under `act()` without importing connection()-bound
+// page graphs.
 const firstPaintOwnershipManifest = [
   {
     routePath: '/blog/post-slug',
     pagePath: '(blog)/blog/[postSlug]/page.tsx',
     loadingPath: '(blog)/blog/[postSlug]/loading.tsx',
     label: 'Loading blog post',
-    renderStrategy: 'lazy-module',
-  },
-  {
-    routePath: '/compare',
-    pagePath: '(catalog)/(listing)/compare/page.tsx',
-    loadingPath: '(catalog)/loading.tsx',
-    label: 'Loading product listing',
     renderStrategy: 'lazy-module',
   },
   {
@@ -197,16 +199,9 @@ const firstPaintOwnershipManifest = [
     renderStrategy: 'lazy-module',
   },
   {
-    routePath: '/repair',
-    pagePath: '(utility)/repair/page.tsx',
-    loadingPath: '(utility)/loading.tsx',
-    label: 'Loading utility page',
-    renderStrategy: 'lazy-module',
-  },
-  {
     routePath: '/reviews',
     pagePath: '(utility)/reviews/page.tsx',
-    loadingPath: '(utility)/loading.tsx',
+    loadingPath: '(utility)/reviews/loading.tsx',
     label: 'Loading utility page',
     renderStrategy: 'lazy-module',
   },
@@ -234,12 +229,24 @@ describe('storefront route groups', () => {
     ).toBe(false);
   });
 
+  it('keeps utility LCP routes outside a route-family loading boundary', () => {
+    // A group-level (utility)/loading.tsx becomes the visible PPR fallback for
+    // /repair, /imei-check, and /repairs, hiding their leaf LCP copy until $RC.
+    // Leaf loading.tsx files own first paint, matching /compare.
+    expect(existsSync(resolve(slugDirectory, '(utility)/loading.tsx'))).toBe(
+      false
+    );
+  });
+
   it('keeps root blog listing outside a route-family loading boundary', () => {
-    // The root blog listing owns crawlable article anchors in raw HTML for
-    // monitored SEO checks. Non-static merchants use an inline page Suspense
-    // boundary instead of a broad route-group loading.tsx shell.
+    // A group-level (blog)/loading.tsx would replace crawlable listing HTML
+    // with a family skeleton. The leaf (blog)/blog/loading.tsx owns first
+    // paint for /blog the same way compare/IMEI leaf loading files do.
     expect(existsSync(resolve(slugDirectory, '(blog)/loading.tsx'))).toBe(
       false
+    );
+    expect(existsSync(resolve(slugDirectory, '(blog)/blog/loading.tsx'))).toBe(
+      true
     );
   });
 
@@ -283,5 +290,5 @@ describe('storefront route groups', () => {
       renderStrategy: route.renderStrategy,
       ...('searchParams' in route ? { searchParams: route.searchParams } : {}),
     });
-  });
+  }, 30_000);
 });

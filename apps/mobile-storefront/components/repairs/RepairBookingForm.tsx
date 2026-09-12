@@ -176,48 +176,30 @@ export function RepairBookingForm({
         How would you like to proceed?
       </Text>
       <View style={booking.methodRow}>
-        {(['dropoff', 'pickup'] as const).map((method) => {
-          const selected = state.serviceType === method;
-          return (
-            <Pressable
-              key={method}
-              style={[
-                booking.methodOption,
-                {
-                  borderColor: selected ? BRAND.primary : colors.border,
-                  backgroundColor: selected
-                    ? BRAND.primaryAlpha06
-                    : colors.card,
-                },
-              ]}
-              onPress={() => update('serviceType', method)}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: selected }}
-              accessibilityLabel={method === 'dropoff' ? 'Drop-off' : 'Pickup'}
-            >
-              <Text
-                style={[
-                  booking.methodOptionText,
-                  { color: selected ? BRAND.primary : colors.text },
-                ]}
-              >
-                {method === 'dropoff' ? 'Drop-off' : 'Pickup'}
-              </Text>
-            </Pressable>
-          );
-        })}
+        <Pressable
+          style={[
+            booking.methodOption,
+            {
+              borderColor: BRAND.primary,
+              backgroundColor: BRAND.primaryAlpha06,
+            },
+          ]}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: true }}
+          accessibilityLabel="Drop-off"
+        >
+          <Text style={[booking.methodOptionText, { color: BRAND.primary }]}>
+            Drop-off
+          </Text>
+        </Pressable>
       </View>
-
-      {state.serviceType === 'pickup' ? (
-        <RepairTextField
-          label="Pickup address"
-          placeholder="Where should we collect the device?"
-          value={state.pickupAddress}
-          onChangeText={(v) => update('pickupAddress', v)}
-          error={errorFor('pickupAddress', 'pickupAddress')}
-          multiline
-        />
-      ) : null}
+      <Text
+        style={[booking.pickupUnavailableNote, { color: colors.textSecondary }]}
+        accessibilityRole="text"
+      >
+        Courier pickup will be available in a future update. Please drop off
+        your device at the repair center for now.
+      </Text>
 
       {serverError ? (
         <Text

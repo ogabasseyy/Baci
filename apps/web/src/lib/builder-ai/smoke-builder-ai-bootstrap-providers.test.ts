@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { smokeBuilderAiBootstrapProviders } from './smoke-builder-ai-bootstrap-providers';
 
 const providers = [
-  { model: {} as never, name: 'cerebras:gemma-4-31b' },
+  { model: {} as never, name: 'google:gemma-4-31b-it' },
   { model: {} as never, name: 'groq:openai/gpt-oss-120b' },
   {
     model: {} as never,
@@ -14,7 +14,7 @@ const providers = [
 describe('smokeBuilderAiBootstrapProviders', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('preserves C→G→optional transport order with five-second provider budgets', async () => {
+  it('preserves canonical order with a longer Google provider budget', async () => {
     const timeouts: number[] = [];
     vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
       timeouts.push(milliseconds);
@@ -44,7 +44,7 @@ describe('smokeBuilderAiBootstrapProviders', () => {
     expect(runProvider.mock.calls.map(([provider]) => provider.name)).toEqual(
       providers.map(({ name }) => name)
     );
-    expect(timeouts).toEqual([20_000, 5_000, 5_000, 5_000]);
+    expect(timeouts).toEqual([30_000, 15_000, 5_000, 5_000]);
   });
 
   it('stops before later providers after an invalid smoke output', async () => {

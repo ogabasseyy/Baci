@@ -97,8 +97,7 @@ describe('getCachedProductSeoLinkData', () => {
     });
     expect(mocks.getCachedPdpSemanticInventory).toHaveBeenCalledWith(
       'merchant-1',
-      'laptops',
-      'ogabassey'
+      'laptops'
     );
     expect(mocks.getPublishedClusterPosts).toHaveBeenCalledWith(
       'merchant-1',
@@ -160,8 +159,7 @@ describe('getCachedProductSeoLinkData', () => {
     expect(mocks.getCachedPdpSemanticInventory).toHaveBeenCalledTimes(2);
     expect(mocks.getCachedPdpSemanticInventory).toHaveBeenLastCalledWith(
       'merchant-2',
-      'phones',
-      'ogabassey'
+      'phones'
     );
   });
 

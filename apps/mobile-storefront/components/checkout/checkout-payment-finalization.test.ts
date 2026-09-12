@@ -1,3 +1,4 @@
+import './checkout-payment-finalization.test-utils';
 import {
   beforeAll,
   beforeEach,
@@ -6,108 +7,15 @@ import {
   it,
   jest,
 } from '@jest/globals';
-import type { OrderResponse } from '@/services/orders';
-
-const mockClearAndPersistCheckoutCart =
-  jest.fn<(clearCart: () => void) => Promise<void>>();
-const mockFetch =
-  jest.fn<
-    (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-  >();
-const mockRouterPush = jest.fn();
-const mockRouterReplace = jest.fn();
-const mockStartWalletFundedBankTransferCheckout =
-  jest.fn<(params: unknown) => Promise<boolean>>();
-
-jest.mock('expo-router', () => ({
-  router: {
-    push: mockRouterPush,
-    replace: mockRouterReplace,
-  },
-}));
-
-jest.mock('@/services/orders', () => ({
-  OrderError: class OrderError extends Error {
-    code: string;
-
-    constructor(message: string, code: string) {
-      super(message);
-      this.code = code;
-    }
-  },
-}));
-
-jest.mock('./checkout-cart-persistence', () => ({
-  clearAndPersistCheckoutCart: (clearCart: () => void) =>
-    mockClearAndPersistCheckoutCart(clearCart),
-}));
-
-jest.mock('./checkout-screen.constants', () => ({
-  CHECKOUT_API_BASE_URL: 'https://api.example.com',
-  CHECKOUT_MERCHANT_ID: 'merchant-1',
-}));
-
-jest.mock('./checkout-wallet-funded-bank-transfer', () => ({
-  startWalletFundedBankTransferCheckout: (params: unknown) =>
-    mockStartWalletFundedBankTransferCheckout(params),
-}));
+import {
+  createOrderResponse,
+  mockClearAndPersistCheckoutCart,
+  mockFetch,
+  mockRouterPush,
+  mockRouterReplace,
+} from './checkout-payment-finalization.test-utils';
 
 let finalizeCheckoutPayment: typeof import('./checkout-payment-finalization')['finalizeCheckoutPayment'];
-
-type OrderResponseOverrides = Omit<
-  Partial<OrderResponse>,
-  'order' | 'savings' | 'wallet'
-> & {
-  order?: Partial<OrderResponse['order']>;
-  savings?: Partial<NonNullable<OrderResponse['savings']>> | null;
-  wallet?: Partial<NonNullable<OrderResponse['wallet']>> | null;
-};
-
-const baseOrderResponse: OrderResponse = {
-  amountDueToGateway: 25000,
-  order: {
-    created_at: '2026-05-30T12:00:00.000Z',
-    id: 'order-1',
-    order_number: 'BAC-001',
-    payment_status: 'pending',
-    shipping_status: 'pending',
-    total: 25000,
-    tracking_token: 'tracking-token',
-  },
-  savings: null,
-  wallet: null,
-};
-
-function createOrderResponse(
-  overrides: OrderResponseOverrides = {}
-): OrderResponse {
-  return {
-    ...baseOrderResponse,
-    ...overrides,
-    order: {
-      ...baseOrderResponse.order,
-      ...overrides.order,
-    },
-    savings:
-      overrides.savings === undefined || overrides.savings === null
-        ? (overrides.savings ?? baseOrderResponse.savings)
-        : {
-            amountUsed: 0,
-            goalId: 'goal-1',
-            redemptionId: null,
-            ...overrides.savings,
-          },
-    wallet:
-      overrides.wallet === undefined || overrides.wallet === null
-        ? (overrides.wallet ?? baseOrderResponse.wallet)
-        : {
-            amountUsed: 0,
-            newBalance: 0,
-            transactionId: null,
-            ...overrides.wallet,
-          },
-  };
-}
 
 describe('finalizeCheckoutPayment', () => {
   beforeAll(async () => {
@@ -118,16 +26,15 @@ describe('finalizeCheckoutPayment', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockClearAndPersistCheckoutCart.mockImplementation((clearCart) => {
-      clearCart();
+    mockClearAndPersistCheckoutCart.mockImplementation(async (clearCart) => {
+      await clearCart();
       return Promise.resolve();
     });
     mockFetch.mockReset();
     global.fetch = mockFetch as unknown as typeof fetch;
   });
-
   it('routes fully paid store-credit orders directly to order success', async () => {
-    const clearCart = jest.fn();
+    const clearCart = jest.fn<() => void | Promise<void>>();
     const setIsProcessing = jest.fn();
     const runPostOrderSideEffects = jest.fn();
     const isOrderInFlight = { current: true };
@@ -176,7 +83,7 @@ describe('finalizeCheckoutPayment', () => {
     // A quiz prize (voucher) order is pre-reserved and comes back paid with
     // nothing due and no wallet/savings usage. Even with an online method
     // selected, it must go straight to success, not the ₦0 gateway.
-    const clearCart = jest.fn();
+    const clearCart = jest.fn<() => void | Promise<void>>();
     const setIsProcessing = jest.fn();
     const runPostOrderSideEffects = jest.fn();
     const isOrderInFlight = { current: true };
@@ -235,7 +142,7 @@ describe('finalizeCheckoutPayment', () => {
     } as Response);
 
     await finalizeCheckoutPayment({
-      clearCart: jest.fn(),
+      clearCart: jest.fn<() => void | Promise<void>>(),
       customerEmail: 'ada@example.com',
       customerName: 'Ada Customer',
       customerPhone: '08012345678',
@@ -278,92 +185,6 @@ describe('finalizeCheckoutPayment', () => {
         reference: 'pay-ref',
       }),
     });
-    expect(runPostOrderSideEffects).toHaveBeenCalledTimes(1);
-  });
-
-  it('uses the wallet-funded bank transfer flow when it can start', async () => {
-    const runPostOrderSideEffects = jest.fn();
-    mockStartWalletFundedBankTransferCheckout.mockResolvedValue(true);
-
-    await finalizeCheckoutPayment({
-      clearCart: jest.fn(),
-      customerEmail: 'ada@example.com',
-      customerName: 'Ada Customer',
-      customerPhone: '08012345678',
-      isOrderInFlight: { current: true },
-      orderNumber: 'BAC-001',
-      orderResponse: createOrderResponse(),
-      runPostOrderSideEffects,
-      selectedPayment: 'bank_transfer',
-      setIsProcessing: jest.fn(),
-      setPendingOrder: jest.fn(),
-      setShowCryptoSelection: jest.fn(),
-      shouldCreateWalletFundedBankTransferOrder: true,
-    });
-
-    expect(mockStartWalletFundedBankTransferCheckout).toHaveBeenCalledWith(
-      expect.objectContaining({
-        orderId: 'order-1',
-        orderNumber: 'BAC-001',
-        trackingToken: 'tracking-token',
-      })
-    );
-    expect(mockFetch).not.toHaveBeenCalled();
-    expect(runPostOrderSideEffects).toHaveBeenCalledTimes(1);
-  });
-
-  it('initializes direct bank transfer with explicit Nigerian billing country', async () => {
-    const setIsProcessing = jest.fn();
-    const runPostOrderSideEffects = jest.fn();
-    mockFetch.mockResolvedValue({
-      json: async () => ({
-        dva: {
-          account_name: 'Test Store / Ada Customer',
-          account_number: '1234567890',
-          bank_name: 'Wema Bank',
-        },
-        reference: 'dva-ref',
-        success: true,
-      }),
-      ok: true,
-    } as Response);
-
-    await finalizeCheckoutPayment({
-      clearCart: jest.fn(),
-      customerEmail: 'ada@example.com',
-      customerName: 'Ada Customer',
-      customerPhone: '08012345678',
-      isOrderInFlight: { current: true },
-      orderNumber: 'BAC-001',
-      orderResponse: createOrderResponse(),
-      runPostOrderSideEffects,
-      selectedPayment: 'bank_transfer',
-      setIsProcessing,
-      setPendingOrder: jest.fn(),
-      setShowCryptoSelection: jest.fn(),
-      shouldCreateWalletFundedBankTransferOrder: false,
-    });
-
-    const initBody = JSON.parse(
-      (mockFetch.mock.calls[0]?.[1] as RequestInit).body as string
-    );
-    expect(initBody).toEqual(
-      expect.objectContaining({
-        billing_address: { country: 'NG' },
-        gateway: 'paystack',
-        payment_type: 'dva',
-      })
-    );
-    expect(mockRouterPush).toHaveBeenCalledWith({
-      pathname: '/bank-transfer',
-      params: expect.objectContaining({
-        accountNumber: '1234567890',
-        bankName: 'Wema Bank',
-        orderId: 'order-1',
-        reference: 'dva-ref',
-      }),
-    });
-    expect(setIsProcessing).toHaveBeenCalledWith(false);
     expect(runPostOrderSideEffects).toHaveBeenCalledTimes(1);
   });
 });

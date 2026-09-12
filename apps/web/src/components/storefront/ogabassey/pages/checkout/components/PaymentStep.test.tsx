@@ -114,68 +114,6 @@ describe('PaymentStep', () => {
     });
   });
 
-  describe('Payment Tabs', () => {
-    it('renders Pay in Full and Pay in Installments tabs', () => {
-      // Arrange & Act
-      render(<PaymentStep {...defaultProps} />);
-
-      // Assert
-      expect(screen.getByRole('button', { name: /pay in full/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /pay in installments/i })).toBeInTheDocument();
-    });
-
-    it('switches to installments tab when clicked', () => {
-      // Arrange
-      const setPaymentTab = vi.fn();
-      const setPaymentMethod = vi.fn();
-      render(
-        <PaymentStep
-          {...defaultProps}
-          setPaymentTab={setPaymentTab}
-          setPaymentMethod={setPaymentMethod}
-        />
-      );
-
-      // Act
-      fireEvent.click(screen.getByRole('button', { name: /pay in installments/i }));
-
-      // Assert
-      expect(setPaymentTab).toHaveBeenCalledWith('installments');
-      expect(setPaymentMethod).toHaveBeenCalledWith('');
-    });
-
-    it('switches to full payment tab when clicked', () => {
-      // Arrange
-      const setPaymentTab = vi.fn();
-      const setPaymentMethod = vi.fn();
-      render(
-        <PaymentStep
-          {...defaultProps}
-          paymentTab="installments"
-          setPaymentTab={setPaymentTab}
-          setPaymentMethod={setPaymentMethod}
-        />
-      );
-
-      // Act
-      fireEvent.click(screen.getByRole('button', { name: /pay in full/i }));
-
-      // Assert
-      expect(setPaymentTab).toHaveBeenCalledWith('full');
-      expect(setPaymentMethod).toHaveBeenCalledWith('');
-    });
-
-    it('highlights active tab with correct styling', () => {
-      // Arrange & Act
-      render(<PaymentStep {...defaultProps} paymentTab="full" />);
-
-      // Assert
-      const fullTabButton = screen.getByRole('button', { name: /pay in full/i });
-      expect(fullTabButton.className).toContain('bg-white');
-      expect(fullTabButton.className).toContain('text-gray-900');
-    });
-  });
-
   describe('Pay in Full Options', () => {
     it('shows Paystack when the merchant has a Paystack subaccount', () => {
       // Arrange & Act
@@ -562,8 +500,8 @@ describe('PaymentStep', () => {
 
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
       expect(
-        screen.getByText(/no installment options are currently available/i),
-      ).toBeInTheDocument();
+        screen.queryByRole('button', { name: 'Pay in Installments' }),
+      ).not.toBeInTheDocument();
     });
 
     it('uses fallback Klump bounds when merchant limits are blank strings', () => {
@@ -609,8 +547,8 @@ describe('PaymentStep', () => {
 
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
       expect(
-        screen.getByText(/no installment options are currently available/i),
-      ).toBeInTheDocument();
+        screen.queryByRole('button', { name: 'Pay in Installments' }),
+      ).not.toBeInTheDocument();
     });
 
     it('shows Klump at the fallback one million naira maximum boundary', () => {
@@ -677,8 +615,8 @@ describe('PaymentStep', () => {
 
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
       expect(
-        screen.getByText(/no installment options are currently available/i),
-      ).toBeInTheDocument();
+        screen.queryByRole('button', { name: 'Pay in Installments' }),
+      ).not.toBeInTheDocument();
     });
 
     it('hides Klump for non-NGN checkout currency', () => {
@@ -740,7 +678,7 @@ describe('PaymentStep', () => {
       await waitFor(() => expect(klumpRadio).toBeChecked());
     });
 
-    it('shows empty state when no installment options are enabled', () => {
+    it('hides installments when no installment options are enabled', () => {
       // Arrange
       const merchant = {
         feature_settings: {
@@ -760,7 +698,7 @@ describe('PaymentStep', () => {
       );
 
       // Assert
-      expect(screen.getByText(/no installment options are currently available/i)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Pay in Installments' })).not.toBeInTheDocument();
     });
 
     it('shows CredPal info when CredPal is selected', () => {
@@ -961,18 +899,9 @@ describe('PaymentStep', () => {
       const { container } = render(<PaymentStep {...defaultProps} isProcessing={true} />);
 
       // Assert - button exists but text is replaced with spinner
-      const buttons = screen.getAllByRole('button');
-      const placeOrderButton = buttons.find((btn) =>
-        btn.className.includes('bg-store-primary')
-      );
-      if (!placeOrderButton) {
-        throw new Error('Expected mobile place order button to be rendered');
-      }
-      expect(placeOrderButton).toBeDisabled();
-
-      // Verify spinner is shown
       const spinner = container.querySelector('.animate-spin');
       expect(spinner).toBeInTheDocument();
+      expect(spinner?.closest('button')).toBeDisabled();
     });
 
     it('disables button when remainingAmount > 0 and no payment method selected', () => {

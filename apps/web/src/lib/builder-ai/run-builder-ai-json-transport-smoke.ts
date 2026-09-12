@@ -8,7 +8,7 @@ import { builderAiPlanOutputBudget } from './builder-ai-plan-output-budget';
 import type { BuilderAiProvider } from './builder-ai-provider-catalog';
 
 export const BUILDER_AI_JSON_SMOKE_PROMPT =
-  'Return only JSON with status "proposed", a summary string, and exactly one update_component operation for componentId "smoke-hero". Its patch must contain only componentType "Hero" and title "Smoke checked". Do not return markdown, extra keys, code, HTML, or explanations.';
+  'Return exactly this JSON object and no other content: {"status":"proposed","summary":"Smoke checked","operations":[{"kind":"update_component","componentId":"smoke-hero","patch":{"componentType":"Hero","title":"Smoke checked"}}]}';
 
 const config: BuilderData = {
   content: [{ props: { id: 'smoke-hero', title: 'Smoke' }, type: 'Hero' }],
@@ -62,7 +62,7 @@ export function isValidBuilderAiJsonTransportSmokeResult(
 }
 
 export async function runBuilderAiJsonTransportSmoke(
-  provider: Pick<BuilderAiProvider, 'model'>,
+  provider: Pick<BuilderAiProvider, 'model' | 'name'>,
   signal: AbortSignal
 ): Promise<boolean> {
   if (

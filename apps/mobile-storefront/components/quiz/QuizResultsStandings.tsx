@@ -4,6 +4,8 @@ import type {
   QuizLeaderboard,
   QuizLeaderboardEntry,
 } from '@/services/quiz-types';
+import { formatQuizStandingTime } from './format-quiz-standing-time';
+import { QuizPlayerAvatar } from './QuizPlayerAvatar';
 import type { createQuizStyles } from './QuizScreen.styles';
 
 type QuizStyles = ReturnType<typeof createQuizStyles>;
@@ -66,25 +68,38 @@ export function QuizResultsStandings({
           color={styles.finalStandingsTitle.color}
         />
       ) : null}
-      {rows.map((entry) => (
-        <View
-          key={`${entry.rank}-${entry.displayName}`}
-          accessibilityLabel={`Rank ${entry.rank}, ${entry.displayName}, score ${entry.score}`}
-          style={[
-            styles.finalStandingRow,
-            entry.isCurrentCustomer
-              ? styles.finalStandingCurrentRow
-              : undefined,
-          ]}
-        >
-          <Text style={styles.finalStandingRank}>#{entry.rank}</Text>
-          <Text numberOfLines={1} style={styles.finalStandingName}>
-            {entry.displayName}
-            {entry.isCurrentCustomer ? '  (You)' : ''}
-          </Text>
-          <Text style={styles.finalStandingScore}>{entry.score} pts</Text>
-        </View>
-      ))}
+      {rows.map((entry) => {
+        const finishTime = formatQuizStandingTime(entry.totalTimeSeconds);
+        return (
+          <View
+            key={`${entry.rank}-${entry.displayName}`}
+            accessibilityLabel={`Rank ${entry.rank}, ${entry.displayName}, score ${entry.score}`}
+            style={[
+              styles.finalStandingRow,
+              entry.isCurrentCustomer
+                ? styles.finalStandingCurrentRow
+                : undefined,
+            ]}
+          >
+            <Text style={styles.finalStandingRank}>#{entry.rank}</Text>
+            <QuizPlayerAvatar
+              accentColor={styles.finalStandingsTitle.color}
+              displayName={entry.displayName}
+              surfaceColor={styles.finalStandingCurrentRow.backgroundColor}
+            />
+            <View style={styles.finalStandingIdentity}>
+              <Text numberOfLines={1} style={styles.finalStandingName}>
+                {entry.displayName}
+                {entry.isCurrentCustomer ? '  (You)' : ''}
+              </Text>
+              {finishTime ? (
+                <Text style={styles.finalStandingTime}>{finishTime}</Text>
+              ) : null}
+            </View>
+            <Text style={styles.finalStandingScore}>{entry.score} pts</Text>
+          </View>
+        );
+      })}
       {leaderboardError && !leaderboard ? (
         <Text style={styles.eventMeta}>
           Standings are reconnecting. Your result is safely recorded.

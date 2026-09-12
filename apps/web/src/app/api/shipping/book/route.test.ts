@@ -1,5 +1,27 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  giglBookingEconomicsProjection,
+  giglQuoteEconomicsFields,
+  prepaidGiglCustomerCheckoutOrderFields,
+} from './route.test-fixtures';
+
+function createSettledRetentionEqChain(
+  retainedAmount = giglBookingEconomicsProjection.shipping_platform_retained_amount
+) {
+  const eqSourceId = vi.fn().mockResolvedValue({
+    data: [
+      {
+        metadata: { retained_shipping_amount: retainedAmount },
+        status: 'completed',
+      },
+    ],
+    error: null,
+  });
+  const eqSourceType = vi.fn(() => ({ eq: eqSourceId }));
+  const eqMerchant = vi.fn(() => ({ eq: eqSourceType }));
+  return { eq: eqMerchant };
+}
 
 const mockCheckCsrfProtection = vi.fn();
 const mockCookies = vi.fn();
@@ -37,14 +59,26 @@ vi.mock('@/lib/shipping', () => ({
   },
 }));
 
-function buildSupabaseMock() {
+function buildSupabaseMock(
+  options: {
+    selectedQuoteId?: string | null;
+    provider?: 'GIGL' | 'TOPSHIP';
+    bookingMetadata?: unknown;
+  } = {}
+) {
+  const selectedQuoteId =
+    options.selectedQuoteId === undefined
+      ? '22222222-2222-4222-8222-222222222222'
+      : options.selectedQuoteId;
+  const provider = options.provider ?? 'GIGL';
   const ordersSelectChain = {
     eq: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({
       data: {
         id: '11111111-1111-4111-8111-111111111111',
         merchant_id: 'merchant-1',
-        selected_quote_id: '22222222-2222-4222-8222-222222222222',
+        selected_quote_id: selectedQuoteId,
+        ...prepaidGiglCustomerCheckoutOrderFields,
         shipping_status: 'pending',
         shipping_address: {
           address: '123 Queen Street West',
@@ -76,7 +110,7 @@ function buildSupabaseMock() {
     single: vi.fn().mockResolvedValue({
       data: {
         id: '22222222-2222-4222-8222-222222222222',
-        provider: 'GIGL',
+        provider,
         provider_rate_id: 'gigl:service-centre:5',
         provider_metadata: { stationId: 5 },
         quote_request: null,
@@ -84,6 +118,7 @@ function buildSupabaseMock() {
         price: 4500,
         currency: 'NGN',
         estimated_days: 2,
+        ...(provider === 'GIGL' ? giglQuoteEconomicsFields : {}),
       },
       error: null,
     }),
@@ -128,10 +163,24 @@ function buildSupabaseMock() {
   };
 
   return {
-    rpc: vi.fn().mockResolvedValue({
-      data: [{ claimed: true, shipment_id: null, tracking_number: null }],
-      error: null,
-    }),
+    rpc: vi.fn((functionName: string) =>
+      functionName === 'get_shipping_quote_booking_metadata'
+        ? Promise.resolve({
+            data: options.bookingMetadata ?? null,
+            error: null,
+          })
+        : functionName === 'get_shipping_quote_booking_economics'
+          ? Promise.resolve({
+              data: giglBookingEconomicsProjection,
+              error: null,
+            })
+          : Promise.resolve({
+              data: [
+                { claimed: true, shipment_id: null, tracking_number: null },
+              ],
+              error: null,
+            })
+    ),
     auth: {
       getUser: vi.fn().mockResolvedValue({
         data: { user: { id: 'user-1' } },
@@ -179,6 +228,12 @@ function buildSupabaseMock() {
       if (table === 'merchants') {
         return {
           select: vi.fn(() => merchantSelectChain),
+        };
+      }
+
+      if (table === 'merchant_settlements') {
+        return {
+          select: vi.fn(() => createSettledRetentionEqChain()),
         };
       }
 
@@ -262,6 +317,51 @@ describe('POST /api/shipping/book', () => {
         station_name: 'Lekki Service Centre',
         station_address: '1 Admiralty Way, Lekki',
       })
+    );
+  });
+
+  it('passes sanitized Topship metadata when booking a submitted quote before order selection', async () => {
+    const supabase = buildSupabaseMock({
+      selectedQuoteId: null,
+      provider: 'TOPSHIP',
+      bookingMetadata: {
+        pricingTier: 'Premium',
+        serviceType: 'Express',
+        cost: 12500,
+      },
+    });
+    mockCreateClient.mockReturnValue(supabase);
+    mockBookShipment.mockResolvedValueOnce({
+      provider: 'TOPSHIP',
+      providerShipmentId: 'TOPSHIP-123',
+      trackingNumber: 'TOPSHIP-123',
+      carrierName: 'Topship',
+      status: 'booked',
+      rawResponse: { id: 'TOPSHIP-123' },
+    });
+
+    const { POST } = await import('./route');
+    const response = await POST(buildBookingRequest());
+
+    expect(response.status).toBe(201);
+    expect(mockBookShipment).toHaveBeenCalledWith(
+      'TOPSHIP',
+      expect.objectContaining({
+        quoteId: '22222222-2222-4222-8222-222222222222',
+        quoteMetadata: {
+          pricingTier: 'Premium',
+          serviceType: 'Express',
+          cost: 12500,
+        },
+      })
+    );
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'get_shipping_quote_booking_metadata',
+      {
+        p_merchant_id: 'merchant-1',
+        p_order_id: '11111111-1111-4111-8111-111111111111',
+        p_quote_id: '22222222-2222-4222-8222-222222222222',
+      }
     );
   });
 

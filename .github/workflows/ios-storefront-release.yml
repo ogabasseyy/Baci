@@ -32,6 +32,8 @@ permissions:
 
 env:
   BACI_MOBILE_BUILD_PLATFORM: ios
+  # Compile Expo consumers against the same resolved JSI headers and library.
+  EXPO_USE_PRECOMPILED_MODULES: '0'
   NODE_VERSION: '24'
   RUBY_VERSION: '3.4'
   XCODE_VERSION: '26.2'
@@ -92,6 +94,17 @@ jobs:
           PUPPETEER_SKIP_CHROME_HEADLESS_SHELL_DOWNLOAD: 'true'
         run: pnpm install --frozen-lockfile
 
+      # This regression targets the pinned Xcode 26.x ownership diagnostics.
+      # Reevaluate the compatibility patch before upgrading to Xcode 27.
+      - name: Verify Swift RuntimeScheduler compatibility
+        run: node --test .github/scripts/ios-runtime-scheduler.test.mjs
+
+      - name: Verify Expo JSI symbol regression fixtures
+        run: node --test .github/scripts/verify-ios-expo-jsi-symbols.test.mjs
+
+      - name: Verify Podfile precompiled-modules precedence
+        run: node --test apps/mobile-storefront/ios/podfile-precompiled-modules-precedence.test.mjs
+
       - name: Expose PostHog CLI to Xcode
         working-directory: ${{ env.WORKING_DIR }}
         run: bash "${{ github.workspace }}/.github/scripts/ios-storefront-release.sh" expose-posthog-cli
@@ -146,6 +159,8 @@ jobs:
           EXPO_PUBLIC_QUIZ_ADS_ENABLED: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID != '' && 'true' || 'false' }}
           EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID }}
           EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID }}
           STOREFRONT_ADMOB_ANDROID_APP_ID: ${{ secrets.STOREFRONT_ADMOB_ANDROID_APP_ID }}
           STOREFRONT_ADMOB_IOS_APP_ID: ${{ secrets.STOREFRONT_ADMOB_IOS_APP_ID }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -204,6 +219,8 @@ jobs:
           EXPO_PUBLIC_QUIZ_ADS_ENABLED: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID != '' && 'true' || 'false' }}
           EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID }}
           EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID }}
           STOREFRONT_ADMOB_ANDROID_APP_ID: ${{ secrets.STOREFRONT_ADMOB_ANDROID_APP_ID }}
           STOREFRONT_ADMOB_IOS_APP_ID: ${{ secrets.STOREFRONT_ADMOB_IOS_APP_ID }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}

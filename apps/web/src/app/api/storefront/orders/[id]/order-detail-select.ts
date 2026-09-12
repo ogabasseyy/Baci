@@ -1,0 +1,20 @@
+export const orderDetailSelect = `
+id,
+            order_number,
+            tracking_token,
+            subtotal,
+          tax_amount,
+          discount_amount,
+          gift_wrapping_fee,
+            shipping_fee,
+            total,
+            customer_name,
+            customer_email,
+            customer_phone,
+            shipping_address,
+            payment_status,
+            shipping_status,
+            payment_method,
+            merchant_id,
+            fulfillment_details
+`;

@@ -172,6 +172,10 @@ platform :ios do
       }
     )
 
+    # Fail before upload if the packaged native JSI ABI cannot satisfy imports.
+    sh("node", File.expand_path("../../../.github/scripts/verify-ios-expo-jsi-symbols.mjs", __dir__),
+       File.join(OUTPUT_DIR, "#{SCHEME}.ipa"))
+
     # fastlane be56dd5 currently drops --file when wrapping Xcode 26 altool.
     # Keep the Faraday 2 pin and own the upload arguments until that wrapper is fixed upstream.
     upload_ipa_with_altool!(

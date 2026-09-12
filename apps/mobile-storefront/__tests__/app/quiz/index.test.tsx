@@ -6,6 +6,7 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import QuizRoute from '@/app/quiz';
+import Colors from '@/constants/Colors';
 import {
   fetchQuizEvents,
   type QuizEvent,
@@ -13,6 +14,10 @@ import {
   submitQuizAnswer,
 } from '@/services/quiz';
 import { useQuizStore } from '@/stores/quiz-store';
+
+jest.mock('expo-router/react-navigation', () => ({
+  usePreventRemove: jest.fn(),
+}));
 
 jest.mock('react-native-safe-area-context', () => {
   const { View } =
@@ -25,7 +30,6 @@ jest.mock('react-native-safe-area-context', () => {
 jest.mock('@/components/quiz/QuizMusicPlayer', () => ({
   QuizMusicPlayer: () => null,
 }));
-
 const mockQuizEventNow = Date.now();
 const mockEvents: QuizEvent[] = [
   {
@@ -81,7 +85,38 @@ jest.mock('expo-router', () => {
     useRouter: () => ({ push: jest.fn() }),
   };
 });
-jest.mock('@react-native-vector-icons/ionicons', () => 'Ionicons');
+jest.mock('@react-native-vector-icons/ionicons', () => {
+  const { Text } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return function MockIonicons({
+    color,
+    name,
+  }: {
+    color?: string;
+    name: string;
+  }) {
+    return (
+      <Text accessibilityLabel={`icon:${name}`} style={{ color }}>
+        {name}
+      </Text>
+    );
+  };
+});
+jest.mock('@sentry/react-native', () => ({
+  addBreadcrumb: jest.fn(),
+}));
+jest.mock('@/components/quiz/QuizMusicPlayer', () => ({
+  QuizMusicPlayer: () => null,
+}));
+jest.mock('react-native-safe-area-context', () => {
+  const actual = jest.requireActual<
+    typeof import('react-native-safe-area-context')
+  >('react-native-safe-area-context');
+  return {
+    ...actual,
+    useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+  };
+});
 
 // This route test exercises the start flow directly, so the customer already
 // has a username AND a date of birth — the username and 18+ date-of-birth gates
@@ -164,6 +199,9 @@ describe('/quiz screen', () => {
         'Quiz event Daily Prize Quiz, prize N50,000 store credit'
       )
     ).toBeOnTheScreen();
+    expect(screen.getByLabelText('icon:podium-outline')).toHaveStyle({
+      color: Colors.light.primary,
+    });
   });
 
   it('starts the selected event and renders accessible answer controls', async () => {

@@ -24,6 +24,7 @@ interface RunGiglQuoteSelectionsOptions {
   signal: AbortSignal;
   timeoutMs: number;
   log: GiglQuoteIo['log'];
+  isExpectedAbort?: () => boolean;
   fetchQuote: (selection: GiglQuoteSelection) => Promise<ShippingQuote | null>;
 }
 
@@ -33,6 +34,9 @@ export function runGiglQuoteSelections(
   return Promise.all(
     options.selections.map((selection) =>
       options.fetchQuote(selection).catch((error) => {
+        if (options.isExpectedAbort?.()) {
+          return null;
+        }
         if (options.signal.aborted || isGiglAbortError(error)) {
           options.log('warn', 'GIGL quote option timed out', {
             timeoutMs: options.timeoutMs,

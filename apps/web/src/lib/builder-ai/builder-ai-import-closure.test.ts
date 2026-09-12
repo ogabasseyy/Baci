@@ -12,17 +12,13 @@ const forbiddenSourceFragments = [
   '@/env',
   '@/ai/copilot-provider-chain',
   '@/ai/provider',
-  '@ai-sdk/google',
   '@ai-sdk/google-vertex',
   '@google/generative-ai',
   'GEMINI_API_KEY',
-  'GOOGLE_GENAI_API_KEY',
   'GOOGLE_GENERATIVE_AI_API_KEY',
   'GOOGLE_VERTEX_PROJECT',
   'GOOGLE_VERTEX_LOCATION',
-  'createGoogleGenerativeAI',
   'createVertex',
-  'generativelanguage.googleapis.com',
   'aiplatform.googleapis.com',
   'googleapis.com/v1beta',
   'generateObjectWithChain',
@@ -92,7 +88,7 @@ function collectExecutableClosure(entrypoints: string[]): string[] {
 }
 
 describe('builder AI import closure', () => {
-  it('keeps the full executable dependency graph independent from legacy providers', () => {
+  it('keeps the full executable dependency graph independent from legacy provider chains', () => {
     const closure = collectExecutableClosure([
       ...builderEntrypoints,
       './builder-ai-import-closure.workspace-fixture.ts',

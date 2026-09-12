@@ -62,7 +62,7 @@ describe('critical variant selector options', () => {
           stock_quantity: 2,
         },
       ])
-    ).toEqual(['condition', 'storage']);
+    ).toEqual(['condition']);
 
     expect(
       getRenderableCriticalVariantAxes(['condition', 'storage'], [
@@ -86,7 +86,7 @@ describe('critical variant selector options', () => {
     ).toEqual(['storage']);
   });
 
-  it('keeps a single-option visible axis selected for display', () => {
+  it('does not render an axis when it has no choice to make', () => {
     expect(
       getRenderableCriticalVariantAxes(['storage', 'color'], [
         {
@@ -104,7 +104,7 @@ describe('critical variant selector options', () => {
           stock_quantity: 2,
         },
       ])
-    ).toEqual(['storage']);
+    ).toEqual([]);
   });
 
   it('canonicalizes variant attribute keys before deciding visible axes', () => {
@@ -128,7 +128,7 @@ describe('critical variant selector options', () => {
     ).toEqual(['storage']);
   });
 
-  it('preserves metadata-only axes as renderable fallback options', () => {
+  it('keeps fixed metadata available without rendering it as a selector', () => {
     expect(
       getRenderableCriticalVariantAxes(
         ['storage'],
@@ -143,10 +143,19 @@ describe('critical variant selector options', () => {
         ],
         { storage: ['128GB'] }
       )
-    ).toEqual(['storage']);
+    ).toEqual([]);
     expect(getVariantAxisOptions([], 'storage', { storage: ['128GB'] })).toEqual(
       ['128GB']
     );
+  });
+
+  it('deduplicates a fixed fallback declared through canonical axis aliases', () => {
+    expect(
+      getVariantAxisOptions([], 'storage', {
+        Storage: ['1 TB SSD'],
+        storage: ['1TB SSD'],
+      })
+    ).toEqual(['1TB SSD']);
   });
 
   it('does not render multi-option metadata axes that no variant can resolve', () => {

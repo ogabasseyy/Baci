@@ -62,6 +62,7 @@ type CheckoutReviewStepProps = {
   merchantPickupLocation?: MerchantPickupLocation;
   onEditAddress: () => void;
   onEditPayment: () => void;
+  prizeSimulation?: boolean;
   selectedPayment: PaymentMethodType | null;
   selectedQuote?: ShippingQuote;
   subtotal: number;
@@ -82,6 +83,7 @@ export function CheckoutReviewStep({
   merchantPickupLocation,
   onEditAddress,
   onEditPayment,
+  prizeSimulation = false,
   selectedPayment,
   selectedQuote,
   subtotal,
@@ -169,20 +171,24 @@ export function CheckoutReviewStep({
           <Text style={[styles.reviewTitle, { color: colors.text }]}>
             Payment Method
           </Text>
-          <Pressable
-            accessibilityLabel="Edit payment method"
-            accessibilityRole="button"
-            onPress={onEditPayment}
-          >
-            <Text style={[styles.editLink, { color: colors.primary }]}>
-              Edit
-            </Text>
-          </Pressable>
+          {!prizeSimulation ? (
+            <Pressable
+              accessibilityLabel="Edit payment method"
+              accessibilityRole="button"
+              onPress={onEditPayment}
+            >
+              <Text style={[styles.editLink, { color: colors.primary }]}>
+                Edit
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
         <Text style={[styles.reviewText, { color: colors.textSecondary }]}>
-          {selectedPayment
-            ? PAYMENT_METHOD_LABELS[selectedPayment]
-            : 'Payment method not selected'}
+          {prizeSimulation
+            ? 'Quiz prize · no payment required'
+            : selectedPayment
+              ? PAYMENT_METHOD_LABELS[selectedPayment]
+              : 'Payment method not selected'}
         </Text>
       </View>
 

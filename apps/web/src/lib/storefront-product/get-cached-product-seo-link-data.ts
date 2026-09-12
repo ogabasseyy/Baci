@@ -38,14 +38,13 @@ export async function getCachedProductSeoLinkData(
     productId,
     productName,
     productSlug,
-    storeSlug,
   } = input;
   // Inventory is the only required leg. Do not fan out two more Supabase
   // reads while it is already timing out; once it succeeds, the optional guide
   // legs run in parallel and can fail open independently.
   const inventoryScope = `${merchantId}:${categorySlug}`;
   const { response: inventory } = await runStorefrontPdpSemanticRpcWithCooldown(
-    () => getCachedPdpSemanticInventory(merchantId, categorySlug, storeSlug),
+    () => getCachedPdpSemanticInventory(merchantId, categorySlug),
     {
       deadlineMs: PDP_SEMANTIC_TOTAL_TIMEOUT_MS,
       traceThresholdMs: 1_000,

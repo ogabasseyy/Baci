@@ -32,11 +32,11 @@ describe('non-renderable-variant-axes', () => {
     expect(isRenderableVariantAxis('warranty', 3)).toBe(true);
   });
 
-  it('preserves legitimate SKU dimensions that contain substrings of metadata tokens', () => {
+  it('keeps legitimate SKU dimensions only when they offer a choice', () => {
     expect(isRenderableVariantAxis('notebook_size', 3)).toBe(true);
-    expect(isRenderableVariantAxis('extended_warranty', 1)).toBe(true);
+    expect(isRenderableVariantAxis('extended_warranty', 1)).toBe(false);
     expect(isRenderableVariantAxis('extended_warranty', 2)).toBe(true);
-    expect(isRenderableVariantAxis('noticeable_pattern', 1)).toBe(true);
+    expect(isRenderableVariantAxis('noticeable_pattern', 1)).toBe(false);
   });
 
   it('requires multiple options for condition axis', () => {
@@ -44,8 +44,8 @@ describe('non-renderable-variant-axes', () => {
     expect(isRenderableVariantAxis('condition', 2)).toBe(true);
   });
 
-  it('renders standard axes with at least one option', () => {
-    expect(isRenderableVariantAxis('storage', 1)).toBe(true);
+  it('renders standard axes only when selection is required', () => {
+    expect(isRenderableVariantAxis('storage', 1)).toBe(false);
     expect(isRenderableVariantAxis('ram', 2)).toBe(true);
     expect(isRenderableVariantAxis('storage', 0)).toBe(false);
     expect(isRenderableVariantAxis('', 1)).toBe(false);

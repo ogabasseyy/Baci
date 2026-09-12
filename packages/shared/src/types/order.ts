@@ -120,6 +120,7 @@ export interface Order {
   airport_type?: string | null;
   selected_quote_id?: string | null;
   shipping_provider?: string | null;
+  shipping_funding_source?: 'customer_checkout' | 'merchant_wallet' | null;
   tracking_number?: string | null;
   tracking_token?: string | null;
   shipment_id?: string | null;

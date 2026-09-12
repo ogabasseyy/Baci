@@ -18,6 +18,9 @@ cannot claim that row.
 ## Ceremony
 
 1. Deploy this code with the bootstrap disabled.
+   A valid pre-change Cerebras/Groq attestation remains available to Builder AI
+   during this deployment; Google becomes primary only after its binding rows
+   are present in a later deployment snapshot.
 2. Arm `attest` with a new token hash and run ID using the Vercel dashboard or
    the project-environment REST API (the CLI cannot set the required metadata
    comment). Create the production-only sensitive
@@ -28,8 +31,8 @@ cannot claim that row.
 3. Call the route once with `POST`, `Content-Type: application/json`, the raw
    token in `x-baci-builder-bootstrap`, and body `{ "runId": "<runId>" }`.
    It atomically claims the token by deleting its exact Vercel environment row,
-   makes bounded provider JSON smoke calls, then writes the fixed C/G binding
-   data only if every included provider passes.
+   makes bounded provider JSON smoke calls, then writes the fixed Google/Groq
+   binding data only if every included provider passes.
 4. Arm a new `verify` token/run ID and deploy normally again. The route now
    materializes providers from actual runtime environment values, smokes them,
    and writes disabled/expired bootstrap controls for the next deployment.

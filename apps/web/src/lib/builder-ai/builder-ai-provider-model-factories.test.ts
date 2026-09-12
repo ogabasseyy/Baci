@@ -3,7 +3,7 @@ import { builderAiProviderModelFactories } from './builder-ai-provider-model-fac
 
 describe('builder AI provider model factories', () => {
   it('exports lazy factories rather than a constructed provider catalog', () => {
-    expect(typeof builderAiProviderModelFactories.createCerebrasModel).toBe(
+    expect(typeof builderAiProviderModelFactories.createGoogleModel).toBe(
       'function'
     );
     expect(typeof builderAiProviderModelFactories.createGroqModel).toBe(
@@ -12,5 +12,14 @@ describe('builder AI provider model factories', () => {
     expect(typeof builderAiProviderModelFactories.createOpenRouterModel).toBe(
       'function'
     );
+  });
+
+  it('binds the primary factory to Google-hosted Gemma 4 31B', () => {
+    const model = builderAiProviderModelFactories.createGoogleModel('key');
+
+    expect(model).toMatchObject({
+      modelId: 'gemma-4-31b-it',
+      provider: 'google.generative-ai',
+    });
   });
 });

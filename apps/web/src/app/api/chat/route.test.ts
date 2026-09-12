@@ -238,6 +238,7 @@ import { createLlmChatResponse } from '@/lib/llm-chat';
 import { createOllamaAgenticChatResponse } from '@/lib/ollama-agentic-chat';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { POST } from './route';
+import { generateRouteChainAttempt } from './route-chain.test-support';
 
 // ---- Helpers ----
 
@@ -297,23 +298,7 @@ describe('POST /api/chat', () => {
     llmStreamError = null;
     llmResponseText = 'LLM response';
     chatProvider = 'auto';
-    generateTextWithChainMock.mockImplementation(
-      async (options: Parameters<typeof generateText>[0]) => {
-        const { chain, ...generationOptions } = options as Parameters<
-          typeof generateText
-        >[0] & {
-          chain?: Array<{ model: Parameters<typeof generateText>[0]['model'] }>;
-        };
-        const result = await generateText({
-          ...generationOptions,
-          model: chain?.[0]?.model ?? 'mock-model',
-        });
-        return {
-          providerName: 'google:gemini-2.5-flash',
-          text: result.text,
-        };
-      }
-    );
+    generateTextWithChainMock.mockImplementation(generateRouteChainAttempt);
   });
 
   it('returns 429 when rate limited', async () => {

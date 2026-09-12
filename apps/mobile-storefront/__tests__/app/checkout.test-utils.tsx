@@ -458,7 +458,7 @@ export function teardownCheckoutTest() {
   jest.useRealTimers();
 }
 
-function createCheckoutQueryClient() {
+export function createCheckoutQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {

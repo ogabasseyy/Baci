@@ -31,7 +31,15 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
     const mockOrderQuery = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: mockOrderData, error: null }),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          ...mockOrderData,
+          tax_amount: 750,
+          discount_amount: 500,
+          gift_wrapping_fee: 1500,
+        },
+        error: null,
+      }),
     };
     const mockItemsQuery = {
       select: vi.fn().mockReturnThis(),
@@ -50,6 +58,16 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
 
     expect(response.status).toBe(200);
     expect(data.id).toBe(mockOrderData.id);
+    expect(data).toMatchObject({
+      tax_amount: 750,
+      discount_amount: 500,
+      gift_wrapping_fee: 1500,
+    });
+    expect(mockOrderQuery.select.mock.calls[0][0]).toContain('tax_amount');
+    expect(mockOrderQuery.select.mock.calls[0][0]).toContain('discount_amount');
+    expect(mockOrderQuery.select.mock.calls[0][0]).toContain(
+      'gift_wrapping_fee'
+    );
     expect(data.items).toEqual([
       {
         id: 'item-1',

@@ -43,6 +43,8 @@ interface PageProps {
     category: string; // Category slug
   }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+  /** Demote when a parent route already committed the page H1. */
+  titleHeading?: 'h1' | 'h2';
 }
 
 function buildCategoryNotFoundMetadata(

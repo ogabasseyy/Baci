@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, StatusBar, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAdminTabScrollToTop } from '@/hooks/useAdminTabScrollToTop';
 import { useAiInsights } from '@/hooks/useAiInsights';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useMerchant } from '@/hooks/useMerchant';
@@ -40,6 +41,9 @@ import type {
 const MODAL_TRANSITION_DELAY_MS = 300;
 
 export default function OrdersScreen() {
+  const scrollRef = useAdminTabScrollToTop<{
+    scrollToOffset: (options: { offset: number; animated?: boolean }) => void;
+  }>('orders');
   const { colors, shadows, isDark } = useTheme();
   const { merchant, isLoading: isMerchantLoading, error } = useMerchant();
   const queryClient = useQueryClient();
@@ -242,6 +246,7 @@ export default function OrdersScreen() {
         onDismissInsight={() => setShowInsight(false)}
         onRefresh={handleRetry}
         onEndReached={handleLoadMore}
+        scrollRef={scrollRef}
       />
       <CreateOrderFab
         colors={colors}

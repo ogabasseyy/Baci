@@ -14,7 +14,7 @@ import { handleVtuConfirmation } from './use-vtu-payment-completion';
 
 interface PaymentGatewayCompletionHandlerInput
   extends Partial<PaymentGatewayParams> {
-  clearCart: () => void;
+  clearCart: () => void | Promise<void>;
   clearPendingLoadTimeout: () => void;
   queryClient: QueryClient;
   refs: PaymentGatewayRefs;
@@ -89,7 +89,7 @@ export function createPaymentGatewayCompletionHandlers({
     });
   };
 
-  const beginPaymentCompletion = () => {
+  const beginPaymentCompletion = async () => {
     const currentStatus = statusRef.current;
     if (
       paymentCompletionStartedRef.current ||
@@ -141,7 +141,7 @@ export function createPaymentGatewayCompletionHandlers({
     paymentCompletionStartedRef.current = true;
     clearPendingLoadTimeout();
     setPaymentStatus('success');
-    clearCart();
+    await clearCart();
     scheduleDelayedNavigation(() => {
       router.replace({
         pathname: '/order-success',

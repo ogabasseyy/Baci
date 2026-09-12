@@ -125,8 +125,7 @@ function toInventoryProduct(
  */
 export async function getCachedCompareCategoryInventory(
   merchantId: string,
-  categorySlug: string,
-  _storeSlug: string
+  categorySlug: string
 ): Promise<CompareCategoryInventory> {
   // LOCAL 'use cache' (not remote): this ~1MB entry is filled inside the
   // compare page model, whose large Vercel remote-cache SET (RemoteCacheHandler

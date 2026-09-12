@@ -6,6 +6,9 @@ export const OGABASSEY_HOME_URL = `${OGABASSEY_URL}/`;
 export const OGABASSEY_TITLE = 'OgaBassey - Official Online Store';
 export const OGABASSEY_DESCRIPTION =
   'Shop OgaBassey for phones, laptops, gaming consoles, accessories, subscriptions, airtime, data, and flexible payment options in Nigeria.';
+/** First-viewport home extract. Keep this shorter than the H1 box. */
+export const OGABASSEY_HOME_LCP_SUPPORT =
+  'Shop phones, laptops, consoles and gadgets in Nigeria.';
 export const OGABASSEY_SOCIAL_IMAGE_URL = `${OGABASSEY_URL}/template-previews/ogabassey-v2.png`;
 export const OGABASSEY_TWITTER_HANDLE = '@ogabasseyy';
 

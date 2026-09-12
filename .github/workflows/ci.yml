@@ -309,6 +309,14 @@ jobs:
           --sql-check supabase/migrations/tests/quiz_runtime_gate_stale_health_v2.sql
           --sql-check supabase/migrations/tests/quiz_score_repair_quiescence_gate_v2.sql
           --sql-check supabase/migrations/tests/public_shipping_sender_projection.sql
+          --sql-check supabase/migrations/tests/repair_pickup_payment_confirmation.sql
+          --sql-check supabase/migrations/tests/repair_pickup_receiver_projection.sql
+          --sql-check supabase/migrations/tests/find_resumable_repair_pickup.sql
+          --sql-check supabase/migrations/tests/claim_repair_pickup_booking_terminal.sql
+          --sql-check supabase/migrations/tests/claim_repair_pickup_booking_manual_fulfilled.sql
+          --sql-check supabase/migrations/tests/normalize_nigerian_repair_pickup_receiver_phone.sql
+          --sql-check supabase/migrations/tests/repair_pickup_receiver_fulfillment.sql
+          --sql-check supabase/migrations/tests/gigl_tracking_orderless_repair_unlink.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL
@@ -338,6 +346,8 @@ jobs:
       - name: Run CI Test Planner Unit Tests
         if: needs.changes.outputs.web == 'true'
         run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs
+      - name: Verify iOS native patch contracts
+        uses: ./.github/actions/verify-ios-native-patch-contracts
       - name: Run storefront origin cost-contract tests
         if: needs.changes.outputs.web == 'true'
         run: >-
@@ -354,6 +364,8 @@ jobs:
           .github/scripts/deploy-with-retry-current-main.test.mjs
           .github/scripts/deploy-with-retry.test.mjs
           .github/scripts/run-pinned-vercel.test.mjs
+          .github/scripts/assert-vercel-pulled-sensitive-env.test.mjs
+          .github/scripts/ensure-vercel-sensitive-env.test.mjs
           .github/scripts/inject-prebuilt-env-secret.jwk.test.mjs
           .github/scripts/inject-prebuilt-env-secret.test.mjs
           .github/scripts/sync-cloudflare-vercel-production-env.test.mjs

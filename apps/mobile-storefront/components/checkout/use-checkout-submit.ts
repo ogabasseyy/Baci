@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import { useMerchant } from '@/hooks/use-merchant';
+import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import {
   buildSavingsOrderFields,
@@ -72,6 +73,8 @@ export function useCheckoutSubmit({
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
   return async (address: ShippingAddressInput) => {
     const itemsSnapshot = [...useCartStore.getState().items];
+    const checkoutGenerationSnapshot =
+      useCartStore.getState().checkoutGeneration;
     const groupNegotiationSnapshot =
       useCartStore.getState().cartWideNegotiationActive;
 
@@ -171,6 +174,7 @@ export function useCheckoutSubmit({
           itemsSnapshot,
           liveSavingsSelection,
           liveWalletSelection,
+          checkoutGeneration: checkoutGenerationSnapshot,
           mobileCheckoutIdempotencyRef,
           paymentMethodForOrder,
           paymentSettings,
@@ -182,44 +186,49 @@ export function useCheckoutSubmit({
         return;
       }
 
-      const orderResponse = await createOrder({
-        ...buildCheckoutOrderRequest({
-          address,
-          customerEmail,
-          customerName,
-          customerPhone,
-          deliveryMethod,
-          discountCode: appliedDiscountCode,
-          itemsSnapshot,
-          paymentMethodForOrder,
-          selectedQuote,
-          shippingProvider: getShippingProvider(),
-          snapshot,
-        }),
-        ...(appliedDiscountCode
-          ? {}
-          : buildSavingsOrderFields(liveSavingsSelection)),
-        ...buildWalletOrderFields(liveWalletSelection),
-      });
+      const orderResponse = await createOrder(
+        {
+          ...buildCheckoutOrderRequest({
+            address,
+            customerEmail,
+            customerName,
+            customerPhone,
+            deliveryMethod,
+            discountCode: appliedDiscountCode,
+            itemsSnapshot,
+            paymentMethodForOrder,
+            selectedQuote,
+            shippingProvider: getShippingProvider(),
+            snapshot,
+          }),
+          ...(appliedDiscountCode
+            ? {}
+            : buildSavingsOrderFields(liveSavingsSelection)),
+          ...buildWalletOrderFields(liveWalletSelection),
+        },
+        { checkoutGeneration: checkoutGenerationSnapshot }
+      );
       const { order } = orderResponse;
       const orderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
 
-      void trackCheckoutRoutePurchaseCompleted({
-        customerEmail,
-        customerPhone,
-        items: itemsSnapshot,
-        orderId: order.id,
-        orderNumber,
-        paymentMethod: completedPaymentMethod,
-        shipping: snapshot.deliveryFee,
-        subtotal: snapshot.subtotal,
-        tax: snapshot.taxAmount,
-        total: order.total,
-        userId: user?.id ?? undefined,
-      });
+      if (await claimCheckoutPurchaseTracking(order.id)) {
+        void trackCheckoutRoutePurchaseCompleted({
+          customerEmail,
+          customerPhone,
+          items: itemsSnapshot,
+          orderId: order.id,
+          orderNumber,
+          paymentMethod: completedPaymentMethod,
+          shipping: snapshot.deliveryFee,
+          subtotal: snapshot.subtotal,
+          tax: snapshot.taxAmount,
+          total: order.total,
+          userId: user?.id ?? undefined,
+        });
+      }
 
       await finalizeCheckoutPayment({
         clearCart,
@@ -252,7 +261,16 @@ export function useCheckoutSubmit({
     } catch (error) {
       const cartStore = useCartStore.getState();
       if (cartStore.items.length === 0) {
-        cartStore.restoreItems(itemsSnapshot, groupNegotiationSnapshot);
+        try {
+          await cartStore.restoreItems(
+            itemsSnapshot,
+            groupNegotiationSnapshot,
+            checkoutGenerationSnapshot
+          );
+        } catch {
+          // In-memory restore already applied; persist failures must not hide
+          // the original checkout error.
+        }
       }
       handleCheckoutSubmitError(error, selectedPayment);
     } finally {

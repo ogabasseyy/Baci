@@ -26,6 +26,12 @@ vi.mock('./storefront-not-found-content', () => ({
   StorefrontNotFoundContent: () => <div>Missing storefront page</div>,
 }));
 
+vi.mock('@/app/(storefront)/storefront-eager-full-css-layout', () => ({
+  StorefrontEagerFullCssLayout: ({ children }: { children: ReactNode }) => (
+    <div data-testid="eager-full-css">{children}</div>
+  ),
+}));
+
 import StorefrontNotFound from './not-found';
 
 describe('StorefrontNotFound', () => {
@@ -42,6 +48,7 @@ describe('StorefrontNotFound', () => {
     render(await StorefrontNotFound());
 
     expect(screen.getByText('Missing storefront page')).toBeInTheDocument();
+    expect(screen.getByTestId('eager-full-css')).toBeInTheDocument();
     expect(themeProviderAppearances).toEqual([
       { mode: 'system', variant: 'ogabassey' },
     ]);

@@ -19,92 +19,6 @@ describe('useQuizResultPolling', () => {
     jest.useRealTimers();
   });
 
-  it('polls pending results until publication and then stops', async () => {
-    const onResult = jest.fn();
-    jest
-      .mocked(fetchQuizResult)
-      .mockResolvedValueOnce({
-        attemptId: 'attempt-1',
-        availability: 'pending',
-        availableAt: null,
-      })
-      .mockResolvedValueOnce({
-        attemptId: 'attempt-1',
-        availability: 'final',
-        availableAt: '2026-08-09T20:26:20.000Z',
-        rank: 1,
-        score: 4,
-        totalQuestions: 5,
-      });
-
-    renderHook(() =>
-      useQuizResultPolling({
-        attemptId: 'attempt-1',
-        enabled: true,
-        eventId: null,
-        expectedUserId: 'user-1',
-        onResult,
-      })
-    );
-    await waitFor(() => expect(fetchQuizResult).toHaveBeenCalledTimes(1));
-
-    await act(async () => {
-      jest.advanceTimersByTime(5_000);
-      await Promise.resolve();
-    });
-
-    expect(fetchQuizResult).toHaveBeenCalledTimes(2);
-    expect(onResult).toHaveBeenLastCalledWith(
-      expect.objectContaining({ availability: 'final', rank: 1 })
-    );
-    act(() => {
-      jest.advanceTimersByTime(10_000);
-    });
-    expect(fetchQuizResult).toHaveBeenCalledTimes(2);
-  });
-
-  it('waits until the server availability time before retrying pending results', async () => {
-    const availableAt = new Date(Date.now() + 20_000).toISOString();
-    jest
-      .mocked(fetchQuizResult)
-      .mockResolvedValueOnce({
-        attemptId: 'attempt-1',
-        availability: 'pending',
-        availableAt,
-      })
-      .mockResolvedValueOnce({
-        attemptId: 'attempt-1',
-        availability: 'final',
-        availableAt,
-        rank: 1,
-        score: 4,
-        totalQuestions: 5,
-      });
-
-    renderHook(() =>
-      useQuizResultPolling({
-        attemptId: 'attempt-1',
-        enabled: true,
-        eventId: null,
-        expectedUserId: 'user-1',
-        onResult: jest.fn(),
-      })
-    );
-    await waitFor(() => expect(fetchQuizResult).toHaveBeenCalledTimes(1));
-
-    await act(async () => {
-      jest.advanceTimersByTime(19_999);
-      await Promise.resolve();
-    });
-    expect(fetchQuizResult).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      jest.advanceTimersByTime(1);
-      await Promise.resolve();
-    });
-    expect(fetchQuizResult).toHaveBeenCalledTimes(2);
-  });
-
   it('backs off after consecutive result request failures', async () => {
     jest.mocked(fetchQuizResult).mockRejectedValue(new Error('offline'));
 
@@ -118,6 +32,10 @@ describe('useQuizResultPolling', () => {
       })
     );
     await waitFor(() => expect(fetchQuizResult).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     await act(async () => {
       jest.advanceTimersByTime(4_999);
@@ -126,9 +44,7 @@ describe('useQuizResultPolling', () => {
     expect(fetchQuizResult).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      jest.advanceTimersByTime(1);
-      await Promise.resolve();
-      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(1);
     });
     expect(fetchQuizResult).toHaveBeenCalledTimes(2);
 
@@ -139,9 +55,7 @@ describe('useQuizResultPolling', () => {
     expect(fetchQuizResult).toHaveBeenCalledTimes(2);
 
     await act(async () => {
-      jest.advanceTimersByTime(1);
-      await Promise.resolve();
-      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(1);
     });
     expect(fetchQuizResult).toHaveBeenCalledTimes(3);
   });

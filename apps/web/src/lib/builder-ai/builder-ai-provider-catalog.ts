@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { LanguageModel } from 'ai';
 import { createBuilderAiProviderBindingTag } from './create-builder-ai-provider-binding-tag';
 
+export const BUILDER_AI_GOOGLE_MODEL = 'gemma-4-31b-it';
 export const BUILDER_AI_CEREBRAS_MODEL = 'gemma-4-31b';
 export const BUILDER_AI_GROQ_MODEL = 'openai/gpt-oss-120b';
 export const BUILDER_AI_OPENROUTER_MODEL = 'google/gemma-4-31b-it:free';
@@ -17,6 +18,7 @@ export interface BuilderAiProvider {
 
 export interface BuilderAiProviderFactories {
   createCerebrasModel: (apiKey: string) => LanguageModel;
+  createGoogleModel: (apiKey: string) => LanguageModel;
   createGroqModel: (apiKey: string) => LanguageModel;
   createOpenRouterModel: (apiKey: string) => LanguageModel;
 }
@@ -28,6 +30,12 @@ export interface BuilderAiProviderEnvironment {
   CEREBRAS_BUILDER_DEPLOYMENT_TIER?: string;
   CEREBRAS_BUILDER_APPROVED_MODEL?: string;
   CEREBRAS_BUILDER_RELEASE_ATTESTED_AT?: string;
+  GOOGLE_GENAI_API_KEY?: string;
+  GOOGLE_BUILDER_ACCOUNT_REF?: string;
+  GOOGLE_BUILDER_CREDENTIAL_BINDING_TAG?: string;
+  GOOGLE_BUILDER_DEPLOYMENT_TIER?: string;
+  GOOGLE_BUILDER_APPROVED_MODEL?: string;
+  GOOGLE_BUILDER_RELEASE_ATTESTED_AT?: string;
   GROQ_API_KEY?: string;
   GROQ_BUILDER_ACCOUNT_REF?: string;
   GROQ_BUILDER_CREDENTIAL_BINDING_TAG?: string;
@@ -117,9 +125,22 @@ export function materializeBuilderAiProviders(
   const now = options.now ?? Date.now();
   const purpose = options.purpose ?? 'runtime';
   const cerebrasKey = configured(environment.CEREBRAS_API_KEY);
+  const googleKey = configured(environment.GOOGLE_GENAI_API_KEY);
   const groqKey = configured(environment.GROQ_API_KEY);
   const bindingPepper = configured(
     environment.BUILDER_AI_PROVIDER_BINDING_PEPPER
+  );
+  const googleApproved = hasReliableAttestation(
+    'google',
+    googleKey,
+    configured(environment.GOOGLE_BUILDER_ACCOUNT_REF),
+    configured(environment.GOOGLE_BUILDER_CREDENTIAL_BINDING_TAG),
+    bindingPepper,
+    configured(environment.GOOGLE_BUILDER_DEPLOYMENT_TIER),
+    configured(environment.GOOGLE_BUILDER_APPROVED_MODEL),
+    BUILDER_AI_GOOGLE_MODEL,
+    environment.GOOGLE_BUILDER_RELEASE_ATTESTED_AT,
+    now
   );
   const cerebrasApproved = hasReliableAttestation(
     'cerebras',
@@ -146,16 +167,21 @@ export function materializeBuilderAiProviders(
     now
   );
 
-  // Reliable Builder links are an all-or-nothing release gate. This prevents
-  // a silent partial rollout when a credential, account binding, or tier proof
-  // disappears from the configured environment.
-  if (!cerebrasApproved || !groqApproved) return [];
+  // Keep the already-attested Cerebras primary available for the first rollout
+  // deployment. The bootstrap route can then attest Google for the following
+  // deployment without making Builder AI unavailable between snapshots.
+  if ((!googleApproved && !cerebrasApproved) || !groqApproved) return [];
 
   const providers: BuilderAiProvider[] = [
-    {
-      model: factories.createCerebrasModel(cerebrasKey as string),
-      name: `cerebras:${BUILDER_AI_CEREBRAS_MODEL}`,
-    },
+    googleApproved
+      ? {
+          model: factories.createGoogleModel(googleKey as string),
+          name: `google:${BUILDER_AI_GOOGLE_MODEL}`,
+        }
+      : {
+          model: factories.createCerebrasModel(cerebrasKey as string),
+          name: `cerebras:${BUILDER_AI_CEREBRAS_MODEL}`,
+        },
     {
       model: factories.createGroqModel(groqKey as string),
       name: `groq:${BUILDER_AI_GROQ_MODEL}`,

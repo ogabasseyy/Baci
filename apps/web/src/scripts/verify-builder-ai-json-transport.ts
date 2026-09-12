@@ -16,8 +16,9 @@ type SmokeProvider = BuilderAiJsonTransportProviderDescriptor & { model: object 
 type SmokeResult = 'fail' | 'pass' | 'refused';
 type WorkerRunner = (command: BuilderAiSmokeWorkerCommand, deadlineMs: number) => Promise<BuilderAiSmokeWorkerResult>;
 
-const PROVIDER_SMOKE_DEADLINE_MS = 5_000;
-const WHOLE_SMOKE_DEADLINE_MS = 20_000;
+const DEFAULT_PROVIDER_SMOKE_DEADLINE_MS = 5_000;
+const GOOGLE_PROVIDER_SMOKE_DEADLINE_MS = 15_000;
+const WHOLE_SMOKE_DEADLINE_MS = 30_000;
 
 export interface BuilderAiJsonTransportSmokeDependencies {
   combineSignals: (signals: AbortSignal[]) => AbortSignal;
@@ -51,6 +52,12 @@ function writeResult(
 function refuse(dependencies: BuilderAiJsonTransportSmokeDependencies): number {
   writeResult(dependencies.write, 'none', 'none', 'refused', 0);
   return 1;
+}
+
+function providerSmokeDeadlineMs(providerAlias: string): number {
+  return providerAlias === 'google'
+    ? GOOGLE_PROVIDER_SMOKE_DEADLINE_MS
+    : DEFAULT_PROVIDER_SMOKE_DEADLINE_MS;
 }
 
 export function createDefaultBuilderAiJsonTransportSmokeDependencies(): BuilderAiJsonTransportSmokeDependencies {
@@ -134,17 +141,18 @@ export async function verifyBuilderAiJsonTransport(
     const identity = builderAiJsonTransportContract.getProviderIdentity(
       provider.name
     );
+    const providerDeadlineMs = providerSmokeDeadlineMs(identity.alias);
     const startedAt = dependencies.now();
     const signal = dependencies.combineSignals([
       wholeSmokeSignal,
-      dependencies.createDeadlineSignal(PROVIDER_SMOKE_DEADLINE_MS),
+      dependencies.createDeadlineSignal(providerDeadlineMs),
     ]);
     let passed = false;
     try {
       passed = await settleBuilderAiSmokeBeforeDeadline(
         dependencies.runProvider(provider, signal),
         signal,
-        PROVIDER_SMOKE_DEADLINE_MS
+        providerDeadlineMs
       );
     } catch {
       passed = false;
@@ -186,14 +194,17 @@ async function verifyWithCredentialWorker(
 
   let requiredProviderFailed = false;
   for (const provider of list.providers) {
-    const deadlineMs = Math.min(PROVIDER_SMOKE_DEADLINE_MS, remaining());
+    const identity = builderAiJsonTransportContract.getProviderIdentity(
+      provider.name
+    );
+    const deadlineMs = Math.min(
+      providerSmokeDeadlineMs(identity.alias),
+      remaining()
+    );
     if (deadlineMs <= 0) {
       requiredProviderFailed = true;
       break;
     }
-    const identity = builderAiJsonTransportContract.getProviderIdentity(
-      provider.name
-    );
     const providerStartedAt = dependencies.now();
     const result = await dependencies.runWorkerCommand?.(
       { deadlineMs, kind: 'probe', providerName: provider.name, sourcePath },

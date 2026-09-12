@@ -45,6 +45,7 @@ describe('order column constants', () => {
   it('MOBILE_ADMIN_ORDER_COLUMNS is a non-empty string', () => {
     expect(typeof MOBILE_ADMIN_ORDER_COLUMNS).toBe('string');
     expect(MOBILE_ADMIN_ORDER_COLUMNS.length).toBeGreaterThan(0);
+    expect(MOBILE_ADMIN_ORDER_COLUMNS).toContain('transaction_date');
   });
 
   it('column constants do not use select(*)', () => {

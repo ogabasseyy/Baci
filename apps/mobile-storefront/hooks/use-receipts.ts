@@ -63,6 +63,7 @@ export function useReceipts(userId: string | undefined) {
               amount_paid,
               currency,
               created_at,
+              transaction_date,
               order_items (
                 id,
                 name,
@@ -134,6 +135,7 @@ async function fetchReceiptDetail(
           currency,
           is_credit_order,
           created_at,
+          transaction_date,
           notes,
           customer_name,
           customer_email,

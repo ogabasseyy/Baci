@@ -114,7 +114,7 @@ export function generateReceiptHtml(
   const currencyCode = order.currency || 'NGN';
   const formatMoney = createMoneyFormatter(currencyCode);
 
-  const orderDate = new Date(order.created_at);
+  const orderDate = new Date(order.transaction_date ?? order.created_at);
   const dateStr = orderDate.toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',

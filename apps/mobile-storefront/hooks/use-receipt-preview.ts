@@ -34,6 +34,7 @@ export function useReceiptPreview() {
     const orderData: ReceiptOrder = {
       order_number: receiptDetail.order_number,
       created_at: receiptDetail.created_at,
+      transaction_date: receiptDetail.transaction_date,
       currency: receiptDetail.currency,
       total: receiptDetail.total,
       subtotal: receiptDetail.subtotal,

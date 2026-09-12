@@ -83,7 +83,8 @@ function isSvgLogoUrl(logoUrl: string) {
 }
 
 function getOrderReceiptDate(order: OrderDetailsRecord | undefined) {
-  const orderDate = order?.created_at ? new Date(order.created_at) : null;
+  const orderDateValue = order?.transaction_date ?? order?.created_at;
+  const orderDate = orderDateValue ? new Date(orderDateValue) : null;
   return orderDate && Number.isFinite(orderDate.getTime())
     ? orderDate
     : new Date();
@@ -115,6 +116,7 @@ export function createOrderDetailsReceiptActions({
         amount_paid: Number(order.amount_paid) || 0,
         balance: Number(order.balance) || 0,
         created_at: order.created_at,
+        transaction_date: order.transaction_date ?? null,
         currency: order.currency ?? 'NGN',
         customer_email: order.customer_email,
         customer_name: order.customer_name,

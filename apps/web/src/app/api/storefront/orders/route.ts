@@ -101,6 +101,8 @@ export async function GET(request: NextRequest) {
         id,
         order_number,
         created_at,
+        transaction_date,
+        invoice_issue_date,
         total,
         subtotal,
         shipping_fee,
@@ -140,6 +142,7 @@ export async function GET(request: NextRequest) {
       `)
       .eq('customer_id', customer.id)
       .eq('merchant_id', merchant.id)
+      .order('transaction_date', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false });
 
     if (ordersError) {
@@ -172,6 +175,8 @@ export async function GET(request: NextRequest) {
         id: order.id,
         order_number: order.order_number,
         created_at: order.created_at,
+        transaction_date: order.transaction_date,
+        invoice_issue_date: order.invoice_issue_date,
         total: order.total,
         subtotal: order.subtotal,
         shipping_fee: order.shipping_fee,

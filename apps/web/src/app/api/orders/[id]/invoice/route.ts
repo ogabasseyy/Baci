@@ -118,7 +118,7 @@ export async function GET(
       .from('orders')
       .select(
         `
-        ${ORDER_COLUMNS}, invoice_type_code, invoice_issue_date, tax_point_date, payment_due_date, buyer_reference, purchase_order_reference, tax_exclusive_amount, tax_inclusive_amount, invoice_note, firs_irn, firs_csid, firs_qr_code, payment_terms, is_credit_order,
+        ${ORDER_COLUMNS}, transaction_date, invoice_type_code, invoice_issue_date, tax_point_date, payment_due_date, buyer_reference, purchase_order_reference, tax_exclusive_amount, tax_inclusive_amount, invoice_note, firs_irn, firs_csid, firs_qr_code, payment_terms, is_credit_order,
         merchants!inner (
           id,
           user_id,
@@ -530,7 +530,9 @@ export async function GET(
       invoice_type_code: order.invoice_type_code || '380',
       issue_date: order.invoice_issue_date
         ? new Date(order.invoice_issue_date)
-        : new Date(order.created_at),
+        : order.transaction_date
+          ? new Date(order.transaction_date)
+          : new Date(order.created_at),
       tax_point_date: order.tax_point_date
         ? new Date(order.tax_point_date)
         : undefined,

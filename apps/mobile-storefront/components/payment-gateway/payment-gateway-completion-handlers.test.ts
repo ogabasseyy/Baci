@@ -11,7 +11,7 @@ const mockBeginWalletTopUpCompletion = jest.fn();
 const mockBeginSavingsAuthorizationCompletion = jest.fn();
 const mockHandleVtuConfirmation = jest.fn();
 const mockVerifyRedvaultPayment =
-  jest.fn<(...args: unknown[]) => Promise<'success' | 'pending' | 'held'>>();
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn() },

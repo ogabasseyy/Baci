@@ -23,6 +23,7 @@ const verificationSchema = z.object({
   success: z.literal(true).optional(),
   status: z.string().optional(),
   code: z.string().optional(),
+  orderNumber: z.string().optional(),
 });
 
 export async function getCheckoutAuthorizationHeaders() {
@@ -92,5 +93,5 @@ export async function verifyRedvaultPayment(reference: string) {
   if (!response.ok || body?.success !== true || body.status !== 'success') {
     throw new Error('REDVAULT payment verification is incomplete');
   }
-  return 'success' as const;
+  return { status: 'success' as const, orderNumber: body.orderNumber };
 }

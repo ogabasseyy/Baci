@@ -16,6 +16,7 @@ const checkout = {
       eligible_subtotal_kobo: 10000,
       ineligible_subtotal_kobo: 1000,
       discount_kobo: 500,
+      assurance_fee_kobo: 0,
       tax_kobo: 750,
       shipping_kobo: 500,
       gift_wrapping_kobo: 0,
@@ -48,6 +49,22 @@ describe('persisted REDVAULT contract', () => {
         order: { ...checkout.order, total: 900 },
       }).success
     ).toBe(false);
+  });
+
+  it('includes a positive assurance fee in the payable invariant', () => {
+    const withAssurance = {
+      ...checkout,
+      order: { ...checkout.order, total: 147.5 },
+      redvault: {
+        ...checkout.redvault,
+        quote: {
+          ...checkout.redvault.quote,
+          assurance_fee_kobo: 3000,
+          payable_kobo: 14750,
+        },
+      },
+    };
+    expect(RedvaultCheckoutSchema.parse(withAssurance)).toEqual(withAssurance);
   });
 
   it.each([

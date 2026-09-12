@@ -13,7 +13,11 @@ SELECT
   'pending',
   'payment'
 FROM public.test_result AS result
-CROSS JOIN public.test_attempt AS attempt;
+CROSS JOIN public.test_attempt AS attempt
+WHERE NOT EXISTS (SELECT 1 FROM public.transactions WHERE gateway_reference = attempt.reference);
+
+UPDATE public.transactions SET id = '33333333-3333-4333-8333-333333333333'::uuid
+WHERE gateway_reference = (SELECT reference FROM public.test_attempt LIMIT 1);
 
 GRANT SELECT ON public.test_result, public.test_attempt TO service_role;
 
@@ -27,6 +31,7 @@ SELECT public.capture_or_hold_uba_redvault_payment(
   (SELECT reference FROM public.test_attempt LIMIT 1),
   jsonb_build_object(
     'amount', (SELECT amount_kobo FROM public.test_attempt LIMIT 1),
+    'fees', 100,
     'currency', 'NGN',
     'reference', (SELECT reference FROM public.test_attempt LIMIT 1),
     'status', 'success'

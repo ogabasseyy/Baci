@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { checkVerifiedCompletionConcurrency } from './redvault-verified-completion-concurrency.mjs';
+import { extractRedvaultInventoryRelease } from './extract-redvault-inventory-release.mjs';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const migrations = resolve(directory, '..');
@@ -24,6 +25,7 @@ try {
   run('pg_ctl', ['-D', resolve(root, 'data'), '-l', resolve(root, 'postgres.log'), '-o', `-k ${root} -p ${port} -c listen_addresses='' -c max_connections=12 -c shared_buffers=32MB`, '-w', 'start']);
   running = true;
   sql(readFileSync(resolve(directory, 'redvault-native-fixture.sql'), 'utf8'));
+  sql(readFileSync(resolve(migrations, '20260723000010_transactions_refund_statuses.sql'), 'utf8'));
   const canonical = readFileSync(resolve(migrations, '20260828040000_bind_transaction_discount_proof_payload.sql'), 'utf8');
   sql(canonical.slice(0, canonical.indexOf('CREATE OR REPLACE FUNCTION private.sanitize_')));
   const proof = readFileSync(resolve(migrations, '20260527064322_quiz_rpc_secret_private_config.sql'), 'utf8');
@@ -31,6 +33,7 @@ try {
   for (const filename of ['20260721093205_harden_paid_order_completion_and_side_effect_retries.sql', '20260805173100_lock_merchant_invoice_exact_completion.sql', '20260805190000_recheck_completed_merchant_invoice_exact_payments.sql', '20260806000200_serialize_merchant_invoice_exact_claims.sql']) sql(readFileSync(resolve(migrations, filename), 'utf8'));
   sql("DO $$ BEGIN IF position('complete_order_gateway_payment_v1' IN pg_get_functiondef('public.complete_order_gateway_payment(uuid,uuid,jsonb,text)'::regprocedure)) = 0 THEN RAISE EXCEPTION 'ordered fixture did not load latest completion wrapper'; END IF; END $$;");
   const inventory = readFileSync(resolve(migrations, '20260615181534_serialized_variant_inventory.sql'), 'utf8');
+  sql(extractRedvaultInventoryRelease(inventory));
   const inventoryStart = inventory.indexOf('CREATE OR REPLACE FUNCTION private.confirm_order_inventory_reservations(');
   const inventoryEnd = inventory.indexOf('CREATE OR REPLACE FUNCTION private.mark_order_inventory_units_sold(', inventoryStart);
   sql(inventory.slice(inventoryStart, inventoryEnd));
@@ -55,7 +58,9 @@ try {
   process.stdout.write(sql(readFileSync(resolve(directory, 'redvault-item-membership-921.sql'), 'utf8')));
   process.stdout.write(sql(readFileSync(resolve(directory, 'redvault-fk-indexes-922.sql'), 'utf8')));
   process.stdout.write(sql(readFileSync(resolve(directory, 'redvault-current-tree-replay.sql'), 'utf8')));
-  process.stdout.write('Ordered 900-923 tiered draft, attempt, capture, approval, and fulfillment smoke passed.\n');
+  for (const filename of ['20260912092400_uba_redvault_atomic_order_creation.sql', '20260912092500_uba_redvault_refund_and_usage_safety.sql', '20260912092600_uba_redvault_transaction_capture_persistence.sql']) sql(readFileSync(resolve(migrations, filename), 'utf8'));
+  for (const filename of ['redvault-atomic-order-924.sql', 'redvault-usage-limits-925.sql', 'redvault-refund-finalization-925.sql', 'redvault-refund-inventory-925.sql', 'redvault-transaction-persistence-926.sql', 'redvault-verified-replay-926.sql', 'redvault-current-tree-replay.sql', 'redvault-followup-grants-926.sql']) process.stdout.write(sql(readFileSync(resolve(directory, filename), 'utf8')));
+  process.stdout.write('Ordered 900-926 legacy and final-schema REDVAULT regression smoke passed.\n');
 } finally {
   if (running) run('pg_ctl', ['-D', resolve(root, 'data'), '-m', 'fast', '-w', 'stop']);
   rmSync(root, { recursive: true, force: true });

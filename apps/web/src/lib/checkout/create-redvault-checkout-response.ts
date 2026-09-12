@@ -1,10 +1,8 @@
-import { isDeepStrictEqual } from 'node:util';
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { redvaultProofContextSchema } from '@/schemas/redvault-proof-context';
+import { createQuizRpcServerProof } from '@/lib/quiz-proof';
 import type { RedvaultOrderQuote } from './compute-redvault-order-quote';
-import { createRedvaultDiscountProof } from './create-redvault-discount-proof';
 import { createRedvaultOrderDraft } from './redvault-order-draft';
 
 export async function createRedvaultCheckoutResponse({
@@ -29,38 +27,25 @@ export async function createRedvaultCheckoutResponse({
         value,
       ])
     );
+    const authoritativeOrder: Record<string, unknown> = JSON.parse(
+      JSON.stringify({
+        ...order,
+        customer_email: customerEmail.trim().toLowerCase(),
+        discount_amount: quote.discountKobo / 100,
+        expected_total: null,
+      })
+    );
     const result = await createRedvaultOrderDraft({
       client,
       draftArgs: {
-        p_order: { ...order, discount_amount: quote.discountKobo / 100 },
+        p_order: authoritativeOrder,
         p_quote: quote,
-      },
-      createProof: (draft) => {
-        const context = redvaultProofContextSchema.parse(draft.proofContext);
-        const groups = context.groups.map((group) => ({
-          ...group,
-          members: group.members.map(
-            ({ orderItemId: _orderItemId, ...member }) => member
-          ),
-        }));
-        if (
-          !isDeepStrictEqual(groups, quote.groups) ||
-          context.discountKobo !== quote.discountKobo ||
-          context.eligibleSubtotalKobo !== quote.eligibleSubtotalKobo ||
-          context.productSubtotalKobo !== quote.productSubtotalKobo
-        ) {
-          throw new Error('redvault_snapshot_mismatch');
-        }
-        return createRedvaultDiscountProof({
-          customerEmail: customerEmail.trim().toLowerCase(),
-          groups: context.groups,
-          merchantId,
+        p_route_proof: createQuizRpcServerProof({
+          action: 'storefront_redvault_order_create',
+          payload: { order: authoritativeOrder, quote },
+          subjectId: merchantId,
           userId: userId ?? 'guest',
-          orderId: draft.id,
-          quotePayloadHash: draft.quotePayloadHash,
-          quoteVersionId: draft.quoteVersionId,
-          totals: context,
-        }).proof;
+        }),
       },
     });
     return NextResponse.json(

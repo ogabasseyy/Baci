@@ -8,6 +8,28 @@ import NegotiationsScreen from './negotiations';
 import { mocks } from './negotiations-test-setup';
 
 describe('NegotiationsScreen', () => {
+  it('executes the production query with its merchant scope and explicit columns', async () => {
+    render(<NegotiationsScreen />);
+    await screen.findByText('Wireless Headphones');
+    expect(mocks.queryOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: ['negotiation_requests', 'merchant-1'],
+        enabled: true,
+        queryFn: expect.any(Function),
+      })
+    );
+    expect(mocks.queryCalls).toContainEqual({
+      method: 'select',
+      args: [
+        'id, customer_id, type, status, offered_price, item_info, cart_snapshot, customer_email, customer_phone, created_at, evidence_url',
+      ],
+    });
+    expect(mocks.queryCalls).toContainEqual({
+      method: 'eq',
+      args: ['merchant_id', 'merchant-1'],
+    });
+  });
+
   it('resolves negotiation status through the server endpoint', async () => {
     render(<NegotiationsScreen />);
 
@@ -116,9 +138,8 @@ describe('NegotiationsScreen', () => {
     render(<NegotiationsScreen />);
 
     const acceptButton = await screen.findByText('Accept Offer');
-    const selectCountBeforeAction = mocks.queryCalls.filter(
-      ({ method }) => method === 'select'
-    ).length;
+    mocks.invalidateQueries.mockClear();
+    mocks.selectResult = { data: [], error: null };
 
     fireEvent.click(acceptButton);
 
@@ -132,9 +153,10 @@ describe('NegotiationsScreen', () => {
     expect(mocks.notificationAsync).toHaveBeenCalledWith('error');
     expect(mocks.notificationAsync).not.toHaveBeenCalledWith('success');
     await waitFor(() => {
-      expect(
-        mocks.queryCalls.filter(({ method }) => method === 'select').length
-      ).toBeGreaterThan(selectCountBeforeAction);
+      expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['negotiation_requests', 'merchant-1'],
+      });
+      expect(screen.queryByText('Wireless Headphones')).not.toBeInTheDocument();
     });
   });
 });

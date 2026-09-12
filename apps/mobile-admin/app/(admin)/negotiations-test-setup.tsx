@@ -1,10 +1,13 @@
 vi.mock('expo-router', () => ({ useIsFocused: () => true }));
 
 import '@testing-library/jest-dom/vitest';
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
 import { beforeEach, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  queryOptions: vi.fn(),
+  invalidateQueries: vi.fn(),
+  resetQueryClient: vi.fn(),
   channelOn: vi.fn(),
   channelSubscribe: vi.fn(),
   canOpenURL: vi.fn().mockResolvedValue(true),
@@ -75,91 +78,29 @@ vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: () => ({ merchant: mocks.merchant, isLoading: false }),
 }));
 
-vi.mock('@tanstack/react-query', () => {
+vi.mock('@tanstack/react-query', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tanstack/react-query')>();
+  const client = new actual.QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      mutations: { retry: false },
+    },
+  });
+  const invalidate = client.invalidateQueries.bind(client);
+  client.invalidateQueries = (...args) => {
+    mocks.invalidateQueries(...args);
+    return invalidate(...args);
+  };
+  mocks.resetQueryClient.mockImplementation(() => client.clear());
   return {
-    useQueryClient: () => ({
-      invalidateQueries: () => {
-        mocks.queryCalls.push({
-          method: 'select',
-          args: [
-            'id, customer_id, type, status, offered_price, item_info, cart_snapshot, customer_email, customer_phone, created_at, evidence_url',
-          ],
-        });
-        mocks.queryCalls.push({
-          method: 'eq',
-          args: ['merchant_id', mocks.merchant?.id],
-        });
-      },
-    }),
-    useQuery: (options: { queryKey: unknown[]; enabled?: boolean }) => {
-      const enabled = options.enabled ?? true;
-      if (options.queryKey[0] === 'negotiation_requests') {
-        const selectResult = mocks.selectResult ?? {
-          data: negotiationRows,
-          error: null,
-        };
-        const dataRows = (selectResult.data ?? []) as Array<{
-          cart_snapshot?: unknown;
-          item_info?: { current_price?: number };
-        }>;
-        const formattedData = dataRows.map((row) => ({
-          ...row,
-          cart_snapshot: Array.isArray(row.cart_snapshot)
-            ? row.cart_snapshot
-            : null,
-          current_price: row.item_info?.current_price ?? null,
-        }));
-        return {
-          data: enabled ? formattedData : [],
-          isLoading: false,
-          error: selectResult.error,
-          refetch: vi.fn().mockImplementation(() => {
-            mocks.queryCalls.push({
-              method: 'select',
-              args: [
-                'id, customer_id, type, status, offered_price, item_info, cart_snapshot, customer_email, customer_phone, created_at, evidence_url',
-              ],
-            });
-            mocks.queryCalls.push({
-              method: 'eq',
-              args: ['merchant_id', mocks.merchant?.id],
-            });
-            return selectResult;
-          }),
-        };
-      }
-      return { data: null, isLoading: false, error: null, refetch: vi.fn() };
+    ...actual,
+    useQueryClient: () => client,
+    useQuery: (options: Parameters<typeof actual.useQuery>[0]) => {
+      mocks.queryOptions(options);
+      return actual.useQuery(options, client);
     },
-    useMutation: <TVariables = unknown, TData = unknown>({
-      mutationFn,
-      onSuccess,
-      onError,
-    }: {
-      mutationFn: (variables: TVariables) => Promise<TData>;
-      onSuccess?: (data: TData, variables: TVariables) => void;
-      onError?: (error: unknown, variables: TVariables) => void;
-    }) => {
-      const [isPending, setIsPending] = useState(false);
-      const [variables, setVariables] = useState<TVariables | null>(null);
-      return {
-        isPending,
-        variables,
-        mutate: async (vars: TVariables) => {
-          setIsPending(true);
-          setVariables(vars);
-          try {
-            const res = await mutationFn(vars);
-            onSuccess?.(res, vars);
-            return res;
-          } catch (err) {
-            onError?.(err, vars);
-          } finally {
-            setIsPending(false);
-            setVariables(null);
-          }
-        },
-      };
-    },
+    useMutation: (options: Parameters<typeof actual.useMutation>[0]) =>
+      actual.useMutation(options, client),
   };
 });
 
@@ -266,6 +207,7 @@ vi.mock('react-native', () => {
 });
 
 beforeEach(() => {
+  mocks.resetQueryClient();
   vi.clearAllMocks();
   mocks.canOpenURL.mockResolvedValue(true);
   mocks.createSignedUrl.mockResolvedValue({

@@ -22,6 +22,7 @@ import { ReceiptModal } from '../components/ReceiptModal';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { ReceiptClaimAppDownloadBanner } from './receipt-claim-app-download-banner';
+import { formatReceiptListDate } from '../receipt-list-date';
 
 const currencyFormatterCache = new Map<string, Intl.NumberFormat>();
 
@@ -36,19 +37,6 @@ function getCurrencyFormatter(currency: string): Intl.NumberFormat {
     currencyFormatterCache.set(currency, formatter);
   }
   return formatter;
-}
-
-function formatReceiptListDate(value: string) {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return new Intl.DateTimeFormat(undefined, {
-      day: 'numeric',
-      month: 'numeric',
-      year: 'numeric',
-      timeZone: 'UTC',
-    }).format(new Date(`${value}T12:00:00.000Z`));
-  }
-
-  return new Date(value).toLocaleDateString();
 }
 
 /** List item for display in the receipts grid */

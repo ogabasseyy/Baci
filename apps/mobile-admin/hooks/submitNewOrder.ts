@@ -231,6 +231,7 @@ export async function submitNewOrder({
           total,
           transaction_date: orderDateIso,
           invoice_issue_date: formatPickerDateInput(orderDate),
+          tax_point_date: formatPickerDateInput(orderDate),
         },
       }
     );

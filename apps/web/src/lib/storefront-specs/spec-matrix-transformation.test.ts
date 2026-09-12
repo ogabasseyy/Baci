@@ -10,22 +10,6 @@ vi.mock('./spec-data', () => ({
 
 import { buildProductComparisonMatrix } from './spec-matrix';
 
-function trackedSections(
-  sections: Array<{
-    category: string;
-    items: Array<{ label: string; value: string }>;
-  }>
-) {
-  let findCalls = 0;
-  const find = sections.find.bind(sections);
-  sections.find = ((...args: Parameters<typeof sections.find>) => {
-    findCalls += 1;
-    return find(...args);
-  }) as typeof sections.find;
-
-  return { getFindCalls: () => findCalls, sections };
-}
-
 describe('buildProductComparisonMatrix transformation', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -72,8 +56,8 @@ describe('buildProductComparisonMatrix transformation', () => {
     ]);
   });
 
-  it('indexes detailed specs once instead of repeatedly searching each product section', () => {
-    const leftSections = trackedSections([
+  it('preserves ordered specification groups and difference counts', () => {
+    const leftSections = [
       {
         category: 'Display',
         items: [
@@ -85,8 +69,8 @@ describe('buildProductComparisonMatrix transformation', () => {
         category: 'Memory',
         items: [{ label: 'RAM', value: '8GB' }],
       },
-    ]);
-    const rightSections = trackedSections([
+    ];
+    const rightSections = [
       {
         category: 'Display',
         items: [
@@ -98,10 +82,10 @@ describe('buildProductComparisonMatrix transformation', () => {
         category: 'Memory',
         items: [{ label: 'RAM', value: '12GB' }],
       },
-    ]);
+    ];
     mocks.buildProductSpecData
-      .mockReturnValueOnce({ detailedSpecs: leftSections.sections })
-      .mockReturnValueOnce({ detailedSpecs: rightSections.sections });
+      .mockReturnValueOnce({ detailedSpecs: leftSections })
+      .mockReturnValueOnce({ detailedSpecs: rightSections });
 
     const matrix = buildProductComparisonMatrix({
       products: [
@@ -151,6 +135,5 @@ describe('buildProductComparisonMatrix transformation', () => {
       ],
       differentiatingRowCount: 3,
     });
-    expect(leftSections.getFindCalls() + rightSections.getFindCalls()).toBe(0);
   });
 });

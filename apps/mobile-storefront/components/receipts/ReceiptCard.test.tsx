@@ -2,7 +2,8 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { ReceiptListItem } from '@/types/receipt';
-import { formatDate, ReceiptCard } from './ReceiptCard';
+import { ReceiptCard } from './ReceiptCard';
+import { formatReceiptDate } from './receipt-date';
 
 jest.mock('@react-native-vector-icons/ionicons', () => () => null);
 
@@ -80,7 +81,7 @@ describe('ReceiptCard', () => {
   });
 
   it('preserves date-only invoice issue dates west of UTC', () => {
-    expect(formatDate('2026-07-16')).toBe('16 Jul 2026');
+    expect(formatReceiptDate('2026-07-16')).toBe('16 Jul 2026');
   });
 
   describe('bugfix: animated order product images on receipts', () => {

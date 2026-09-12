@@ -39,6 +39,7 @@ import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airpo
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
@@ -2294,7 +2295,7 @@ export async function POST(request: NextRequest) {
     // guest checkouts cannot pass orders RLS, and the lookup is scoped to the
     // validated merchant id + the caller's own idempotency key.
     const isIdempotentMerchantRateReplay =
-      body.shipping_rate_id && requestIdempotencyKey
+      !redvaultRequested && body.shipping_rate_id && requestIdempotencyKey
         ? await hasExistingMerchantRateOrder({
             adminSupabase: createAdminClient(),
             merchantId: merchant_id,
@@ -2647,7 +2648,13 @@ export async function POST(request: NextRequest) {
     if (redvaultRequested && redvaultQuote) {
       return createRedvaultCheckoutResponse({
         client: orderRpcClient,
-        orderRpcArgs,
+        orderRpcArgs: {
+          ...orderRpcArgs,
+          ...redvaultOrderDraftFulfillment(
+            verifiedMerchantShippingRate,
+            body.shipping_rate_id
+          ),
+        },
         quote: redvaultQuote,
         customerEmail: customer_email,
         merchantId: merchant_id,

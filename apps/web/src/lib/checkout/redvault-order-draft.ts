@@ -10,6 +10,7 @@ type RedvaultDraftRow = {
   proof_context: Record<string, unknown>;
   quote_payload_hash: string;
   quote_version_id: string;
+  status: string;
 };
 
 function firstRow(value: unknown): RedvaultDraftRow | null {
@@ -30,16 +31,9 @@ function firstRow(value: unknown): RedvaultDraftRow | null {
 
 export async function createRedvaultOrderDraft({
   client,
-  createProof,
   draftArgs,
 }: {
   client: SupabaseClient;
-  createProof: (draft: {
-    id: string;
-    proofContext: Record<string, unknown>;
-    quotePayloadHash: string;
-    quoteVersionId: string;
-  }) => object;
   draftArgs: Record<string, unknown>;
 }): Promise<{
   id: string;
@@ -48,7 +42,7 @@ export async function createRedvaultOrderDraft({
   summary: RedvaultCheckoutSummary;
 }> {
   const { data: draftData, error: draftError } = await client.rpc(
-    'create_storefront_redvault_order_draft' as never,
+    'create_storefront_redvault_order' as never,
     draftArgs as never
   );
   const draft = firstRow(draftData);
@@ -58,25 +52,7 @@ export async function createRedvaultOrderDraft({
     );
   }
 
-  const { data: attachData, error: attachError } = await client.rpc(
-    'attach_storefront_redvault_discount_proof' as never,
-    {
-      p_proof: createProof({
-        id: draft.id,
-        proofContext: draft.proof_context,
-        quotePayloadHash: draft.quote_payload_hash,
-        quoteVersionId: draft.quote_version_id,
-      }),
-      p_order_id: draft.id,
-      p_quote_payload_hash: draft.quote_payload_hash,
-      p_quote_version_id: draft.quote_version_id,
-    } as never
-  );
-  if (attachError) {
-    throw new Error(attachError.message);
-  }
-  const attached = Array.isArray(attachData) ? attachData[0] : attachData;
-  if (attached?.status !== 'pending')
+  if (draft.status !== 'pending')
     throw new Error('redvault_attachment_not_pending');
   const summary = await getRedvaultCheckoutSummary({
     client,

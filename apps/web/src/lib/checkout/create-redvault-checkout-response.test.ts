@@ -7,6 +7,7 @@ vi.mock('@/lib/quiz-proof', () => ({
 }));
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const row = {
+  status: 'pending',
   id: '44444444-4444-4444-8444-444444444444',
   quote_version_id: '55555555-5555-4555-8555-555555555555',
   quote_payload_hash: 'a'.repeat(64),
@@ -43,17 +44,46 @@ const summaryRow = {
   mixed_basket: true,
 };
 describe('REDVAULT checkout response', () => {
-  it('maps route arguments and signs only the returned item-bound context', async () => {
+  it('does not forward the web pre-REDVAULT expected_total into discounted order creation', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'redvault_disabled' },
+    });
+    await createRedvaultCheckoutResponse({
+      client: { rpc } as never,
+      orderRpcArgs: {
+        p_merchant_id: merchantId,
+        p_customer_email: 'customer@example.test',
+        p_expected_total: 107.5,
+        p_items: [
+          { product_id: 'product', quantity: 1, variant_id: undefined },
+        ],
+      },
+      quote: redvaultTestQuote,
+      merchantId,
+      customerEmail: 'customer@example.test',
+      userId: null,
+    });
+    expect(rpc.mock.calls[0][1].p_order.discount_amount).toBe(10);
+    expect(rpc.mock.calls[0][1].p_order.expected_total).toBeNull();
+    expect(rpc.mock.calls[0][1].p_route_proof.payload.order.items).toEqual([
+      { product_id: 'product', quantity: 1 },
+    ]);
+    expect(
+      Object.hasOwn(rpc.mock.calls[0][1].p_order.items[0], 'variant_id')
+    ).toBe(false);
+  });
+  it('omits the pre-discount expected total and signs the authoritative order and quote', async () => {
     const rpc = vi
       .fn()
       .mockResolvedValueOnce({ data: [row], error: null })
-      .mockResolvedValueOnce({ data: [{ status: 'pending' }], error: null })
       .mockResolvedValueOnce({ data: [summaryRow], error: null });
     const response = await createRedvaultCheckoutResponse({
       client: { rpc } as never,
       orderRpcArgs: {
         p_merchant_id: merchantId,
         p_customer_email: 'customer@example.test',
+        p_expected_total: 122.5,
       },
       quote: redvaultTestQuote,
       merchantId,
@@ -65,11 +95,17 @@ describe('REDVAULT checkout response', () => {
       merchant_id: merchantId,
       customer_email: 'customer@example.test',
       discount_amount: 10,
+      expected_total: null,
     });
-    expect(rpc.mock.calls[1][1].p_proof.payload.orderId).toBe(row.id);
-    expect(
-      rpc.mock.calls[1][1].p_proof.payload.groups[0].members[0].orderItemId
-    ).toBe('33333333-3333-4333-8333-333333333333');
+    expect(rpc.mock.calls[0][1].p_route_proof).toEqual({
+      action: 'storefront_redvault_order_create',
+      subjectId: merchantId,
+      userId: 'guest',
+      payload: {
+        order: rpc.mock.calls[0][1].p_order,
+        quote: redvaultTestQuote,
+      },
+    });
     expect(await response.json()).toEqual({
       order: {
         id: row.id,
@@ -95,12 +131,12 @@ describe('REDVAULT checkout response', () => {
       },
     });
   });
-  it('never attaches a substituted draft amount', async () => {
+  it('never exposes an unattached draft as a usable order', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [
         {
           ...row,
-          proof_context: { ...row.proof_context, discountKobo: 999 },
+          status: 'draft',
         },
       ],
       error: null,

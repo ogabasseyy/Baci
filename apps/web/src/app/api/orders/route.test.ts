@@ -221,7 +221,7 @@ function mockAuthUser(id: string) {
 }
 
 interface RpcOverrides {
-  create_storefront_redvault_order_draft?: { data: unknown; error: unknown };
+  create_storefront_redvault_order?: { data: unknown; error: unknown };
   // Per-RPC return values. Default values mirror a minimal happy path.
   create_storefront_order?: { data: unknown; error: unknown };
   create_storefront_order_with_quiz_voucher?: {
@@ -589,7 +589,11 @@ const baseOrderRow = {
 };
 
 describe('POST /api/orders REDVAULT integration', () => {
-  it('accepts a valid Idempotency-Key with availability enabled and forwards it to the protected checkout', async () => {
+  it.each([
+    null,
+    'ship',
+    'pickup',
+  ] as const)('forwards the Idempotency-Key and verified %s fulfillment to protected checkout', async (kind) => {
     vi.clearAllMocks();
     primeAdminOrderCurrencyRead();
     const availability = await import(
@@ -599,6 +603,19 @@ describe('POST /api/orders REDVAULT integration', () => {
     const checkout = await import(
       '@/lib/checkout/create-redvault-checkout-response'
     );
+    const shipping = await import(
+      '@/lib/shipping/merchant-rates/verify-order-shipping-rate'
+    );
+    const shippingSpy = vi
+      .spyOn(shipping, 'verifyOrderShippingRate')
+      .mockResolvedValue({
+        ok: true,
+        amount: 0,
+        currency: 'NGN',
+        kind: kind ?? 'ship',
+        rateName: 'Verified rate',
+        pickupAddress: kind === 'pickup' ? { address: '1 Test Street' } : null,
+      } as never);
     const { redvaultTestQuote } = await import(
       '@/lib/checkout/redvault-test-fixture'
     );
@@ -619,7 +636,18 @@ describe('POST /api/orders REDVAULT integration', () => {
           { status: 201 }
         ) as never
       );
-    const supabase = buildMockSupabase();
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Galaxy S24',
+            price: 1000,
+          },
+        ],
+      }
+    );
     vi.mocked(authenticateApiRequest).mockResolvedValue({
       user: null,
       error: 'Not authenticated',
@@ -634,6 +662,20 @@ describe('POST /api/orders REDVAULT integration', () => {
             ...baseOrderPayload,
             merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
             payment_method: 'uba_redvault',
+            ...(kind
+              ? {
+                  shipping_rate_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                  shipping_fee: 0,
+                  items: [
+                    {
+                      product_id: '11111111-1111-4111-8111-111111111111',
+                      name: 'Galaxy S24',
+                      price: 1000,
+                      quantity: 1,
+                    },
+                  ],
+                }
+              : {}),
           }),
         })
       );
@@ -646,6 +688,18 @@ describe('POST /api/orders REDVAULT integration', () => {
           orderRpcArgs: expect.objectContaining({
             p_checkout_idempotency_key: 'redvault-enabled-checkout',
             p_checkout_request_hash: expect.any(String),
+            ...(kind
+              ? {
+                  p_merchant_fulfillment: {
+                    provider:
+                      kind === 'pickup' ? 'MERCHANT_PICKUP' : 'MERCHANT',
+                    rate_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                    rate_name: 'Verified rate',
+                    pickup_details:
+                      kind === 'pickup' ? { address: '1 Test Street' } : null,
+                  },
+                }
+              : {}),
           }),
         })
       );
@@ -657,6 +711,7 @@ describe('POST /api/orders REDVAULT integration', () => {
       availabilitySpy.mockRestore();
       quoteSpy.mockRestore();
       checkoutSpy.mockRestore();
+      shippingSpy.mockRestore();
     }
   });
 
@@ -675,7 +730,7 @@ describe('POST /api/orders REDVAULT integration', () => {
     ];
     const supabase = buildMockSupabase(
       {
-        create_storefront_redvault_order_draft: {
+        create_storefront_redvault_order: {
           data: null,
           error: { message: 'redvault_disabled' },
         },
@@ -705,7 +760,7 @@ describe('POST /api/orders REDVAULT integration', () => {
       expect.anything()
     );
     expect(supabase.rpc).not.toHaveBeenCalledWith(
-      'create_storefront_redvault_order_draft',
+      'create_storefront_redvault_order',
       expect.anything()
     );
     expect(mockGeneratePaymentAccount).not.toHaveBeenCalled();

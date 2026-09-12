@@ -9,11 +9,9 @@ import type {
   ShippingAddress,
 } from '@/components/orders/new-order.types';
 import { getManualOrderDocumentDates } from '@/lib/manual-order-document-dates';
+import { generateOrderNumber } from '@/lib/manual-order-number';
 import { createManualOrderWithItems } from '@/lib/manual-order-persistence';
-import {
-  generateOrderNumber,
-  validateOrderDate,
-} from '@/lib/manual-order-validation';
+import { validateOrderDate } from '@/lib/manual-order-validation';
 import { normalizeMerchantCurrency } from '@/lib/merchant-currency';
 import {
   sanitizeAddress,

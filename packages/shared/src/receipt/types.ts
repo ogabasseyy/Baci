@@ -56,6 +56,7 @@ export interface ReceiptOrder {
   order_number: string;
   created_at: string;
   transaction_date?: string | null;
+  invoice_issue_date?: string | null;
   currency: string;
   total: number;
   subtotal: number;

@@ -117,6 +117,7 @@ export function createOrderDetailsReceiptActions({
         balance: Number(order.balance) || 0,
         created_at: order.created_at,
         transaction_date: order.transaction_date ?? null,
+        invoice_issue_date: order.invoice_issue_date ?? null,
         currency: order.currency ?? 'NGN',
         customer_email: order.customer_email,
         customer_name: order.customer_name,

@@ -3,24 +3,16 @@ import { withSupabaseRetry } from '@/lib/api';
 import { CONFIG } from '@/lib/config';
 import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
-import {
-  MerchantReceiptInfoSchema,
-  ReceiptDetailSchema,
-  ReceiptListItemSchema,
-} from '@/schemas/receipt';
+import { ReceiptDetailSchema, ReceiptListItemSchema } from '@/schemas/receipt';
 import { useAuthStore } from '@/stores/auth-store';
-import type {
-  MerchantReceiptInfo,
-  ReceiptDetail,
-  ReceiptListItem,
-} from '@/types/receipt';
+import type { ReceiptDetail, ReceiptListItem } from '@/types/receipt';
 import { mapCustomerPaymentAccountRpcRows } from './receipt-payment-account-mappers';
 import { mapCustomerTransactionRpcRows } from './receipt-transaction-mappers';
 import { resolveReceiptPaymentAccount } from './resolve-receipt-payment-account';
 
 const log = createLogger('Receipts');
 
-const MERCHANT_SLUG = CONFIG.MERCHANT_SLUG || 'ogabassey';
+export { useMerchantReceiptInfo } from './use-merchant-receipt-info';
 
 interface ReceiptDetailScope {
   merchantId: string | null;
@@ -64,6 +56,7 @@ export function useReceipts(userId: string | undefined) {
               currency,
               created_at,
               transaction_date,
+              invoice_issue_date,
               order_items (
                 id,
                 name,
@@ -140,6 +133,7 @@ async function fetchReceiptDetail(
           is_credit_order,
           created_at,
           transaction_date,
+          invoice_issue_date,
           notes,
           customer_name,
           customer_email,
@@ -257,46 +251,6 @@ export function useReceiptDetail(orderId: string | null) {
     },
     staleTime: 1000 * 60 * 5,
     enabled: !!orderId && !!userId && !!activeMerchantId,
-    networkMode: 'always',
-    retry: false,
-  });
-}
-
-export function useMerchantReceiptInfo() {
-  return useQuery<MerchantReceiptInfo>({
-    queryKey: ['merchant_receipt_info', MERCHANT_SLUG],
-    queryFn: async () => {
-      log.info('Fetching merchant receipt info for:', MERCHANT_SLUG);
-
-      // Bank/tax identity for the invoice payment block is served by the
-      // bounded SECURITY DEFINER RPC (S0-B), not a raw anon `merchants` select.
-      // The RPC returns only the fixed receipt projection for a published
-      // merchant, so anon never reaches bvn/nin/tokens or arbitrary columns and
-      // the raw anon `merchants` grant can be revoked.
-      const { data, error } = await withSupabaseRetry(
-        async () =>
-          await supabase
-            .rpc('get_storefront_receipt_merchant_info', {
-              p_slug: MERCHANT_SLUG,
-            })
-            .maybeSingle(),
-        { maxRetries: 3 }
-      );
-
-      if (error) throw error;
-      if (!data) throw new Error('Merchant not found');
-
-      const result = MerchantReceiptInfoSchema.safeParse(data);
-      if (!result.success) {
-        log.warn(
-          'Merchant receipt info validation warning:',
-          result.error.message
-        );
-      }
-
-      return data as MerchantReceiptInfo;
-    },
-    staleTime: 1000 * 60 * 60,
     networkMode: 'always',
     retry: false,
   });

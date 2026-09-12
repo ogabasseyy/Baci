@@ -390,7 +390,9 @@ export function generateReceiptPDF(
     : 'RECEIPT';
   const displayDocumentDate =
     formatOptionalReceiptDate(options.documentDate) ||
-    formatReceiptDate(order.transaction_date ?? order.created_at);
+    formatReceiptDate(
+      order.invoice_issue_date ?? order.transaction_date ?? order.created_at
+    );
   const displayDueDate = formatOptionalReceiptDate(options.dueDate);
   const firsIrn = options.firsIrn?.trim();
   const firsCsid = options.firsCsid?.trim();

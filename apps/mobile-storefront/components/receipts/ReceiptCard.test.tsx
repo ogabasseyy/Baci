@@ -42,6 +42,7 @@ const receiptItem: ReceiptListItem = {
   currency: 'NGN',
   created_at: '2026-08-01T12:00:00.000Z',
   transaction_date: '2026-07-15T12:00:00.000Z',
+  invoice_issue_date: '2026-07-16',
   items: [
     {
       id: 'item-1',
@@ -75,7 +76,7 @@ describe('ReceiptCard', () => {
       />
     );
 
-    expect(screen.getByText(/15 Jul 2026/)).toBeTruthy();
+    expect(screen.getByText(/16 Jul 2026/)).toBeTruthy();
   });
 
   describe('bugfix: animated order product images on receipts', () => {

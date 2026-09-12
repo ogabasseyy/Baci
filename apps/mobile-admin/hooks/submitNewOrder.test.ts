@@ -187,6 +187,7 @@ describe('submitNewOrder', () => {
           tax_amount: 0,
           total: 12000,
           transaction_date: params.orderDate.toISOString(),
+          invoice_issue_date: '2024-02-03',
         }),
       })
     );

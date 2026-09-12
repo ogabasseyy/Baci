@@ -38,6 +38,19 @@ function getCurrencyFormatter(currency: string): Intl.NumberFormat {
   return formatter;
 }
 
+function formatReceiptListDate(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Intl.DateTimeFormat(undefined, {
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(`${value}T12:00:00.000Z`));
+  }
+
+  return new Date(value).toLocaleDateString();
+}
+
 /** List item for display in the receipts grid */
 interface ReceiptListItem {
   id: string;
@@ -199,6 +212,7 @@ async function fetchReceiptListItems(
         String(order.id).slice(0, 8).toUpperCase(),
       created_at: order.created_at as string,
       transaction_date: order.transaction_date as string | null | undefined,
+      invoice_issue_date: order.invoice_issue_date as string | null | undefined,
       currency,
       total,
       subtotal: Number(order.subtotal ?? total),
@@ -238,10 +252,11 @@ async function fetchReceiptListItems(
     return {
       id: order.id as string,
       order_number: rawOrder.order_number,
-      date: new Date(
-        (order.transaction_date as string | null | undefined) ||
+      date: formatReceiptListDate(
+        (order.invoice_issue_date as string | null | undefined) ||
+          (order.transaction_date as string | null | undefined) ||
           (order.created_at as string)
-      ).toLocaleDateString(),
+      ),
       total: formatCurrency(total),
       status: statusLabel,
       paymentStatus: paymentStatus as ReceiptListItem['paymentStatus'],

@@ -20,7 +20,6 @@ import type {
   TaxSubtotal,
 } from '@/lib/invoice-generator';
 import { deriveTaxSubtotalsFromInvoiceItems } from '@/lib/invoice-tax-subtotals';
-import { normalizeReceiptDocumentDate } from '@/lib/receipt-pdf-formatters';
 import type {
   StorefrontAccountDocumentCustomerRow,
   StorefrontAccountDocumentItemRow,
@@ -397,7 +396,7 @@ export function buildStorefrontAccountDocumentBundle({
     issue_date: order.invoice_issue_date
       ? new Date(order.invoice_issue_date)
       : order.transaction_date
-        ? normalizeReceiptDocumentDate(order.transaction_date)
+        ? new Date(order.transaction_date)
         : new Date(order.created_at),
     tax_point_date: order.tax_point_date
       ? new Date(order.tax_point_date)

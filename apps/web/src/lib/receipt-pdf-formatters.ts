@@ -11,7 +11,6 @@ const CURRENCY_LOCALE_MAP: Record<string, string> = {
 };
 
 const _receiptCurrencyFormatterCache = new Map<string, Intl.NumberFormat>();
-const RECEIPT_TIME_ZONE = 'Africa/Lagos';
 
 function getReceiptCurrencyFormatter(currency: string): Intl.NumberFormat {
   let formatter = _receiptCurrencyFormatterCache.get(currency);
@@ -32,32 +31,6 @@ export function formatReceiptCurrency(amount: number, currency: string) {
   return getReceiptCurrencyFormatter(currency).format(amount);
 }
 
-export function normalizeReceiptDocumentDate(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return date;
-  }
-
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: RECEIPT_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const values = Object.fromEntries(
-    parts
-      .filter(({ type }) => type !== 'literal')
-      .map(({ type, value }) => [type, Number(value)])
-  );
-
-  const year = values.year as number;
-  const month = values.month as number;
-  const day = values.day as number;
-
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
 export function formatReceiptDate(value: string) {
   const date = new Date(value);
 
@@ -69,6 +42,6 @@ export function formatReceiptDate(value: string) {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
-    timeZone: RECEIPT_TIME_ZONE,
+    timeZone: 'UTC',
   });
 }

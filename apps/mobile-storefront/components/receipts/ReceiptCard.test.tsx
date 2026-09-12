@@ -41,6 +41,7 @@ const receiptItem: ReceiptListItem = {
   amount_paid: 150000,
   currency: 'NGN',
   created_at: '2026-08-01T12:00:00.000Z',
+  transaction_date: '2026-07-15T12:00:00.000Z',
   items: [
     {
       id: 'item-1',
@@ -63,6 +64,18 @@ describe('ReceiptCard', () => {
     );
 
     expect(screen.getByText('Test Phone')).toBeTruthy();
+  });
+
+  it('renders the selected transaction date when it differs from creation', () => {
+    render(
+      <ReceiptCard
+        item={receiptItem}
+        colors={Colors.light}
+        onPress={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText(/15 Jul 2026/)).toBeTruthy();
   });
 
   describe('bugfix: animated order product images on receipts', () => {

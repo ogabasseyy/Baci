@@ -83,9 +83,11 @@ jest.mock('@/stores/auth-store', () => ({
 describe('useReceipts', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockOrder.mockReset();
     mockAuthState.merchantId = 'merchant-1';
     mockAuthState.user = { id: 'auth-user-1' };
     mockOrder.mockResolvedValue({ data: [], error: null });
+    mockOrder.mockImplementationOnce(() => mockQueryBuilder as never);
     mockSingle.mockResolvedValue({ data: null, error: null });
     mockLimit.mockResolvedValue({ data: [], error: null });
   });
@@ -144,7 +146,13 @@ describe('useReceipts', () => {
       'merchant_id',
       'merchant-1'
     );
-    expect(mockOrder).toHaveBeenCalledWith('created_at', { ascending: false });
+    expect(mockOrder).toHaveBeenNthCalledWith(1, 'transaction_date', {
+      ascending: false,
+      nullsFirst: false,
+    });
+    expect(mockOrder).toHaveBeenNthCalledWith(2, 'created_at', {
+      ascending: false,
+    });
     expect(receipts).toEqual([
       expect.objectContaining({
         items: [

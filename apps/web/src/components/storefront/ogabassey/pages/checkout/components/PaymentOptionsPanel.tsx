@@ -8,26 +8,17 @@ import {
   KorapayLogo,
   PaystackLogo,
 } from '../../../components/PaymentLogos';
-import type { PaymentMethod, PaymentTab } from '../types';
+import type { PaymentTab } from '../types';
+import type { PaymentOptionsPanelProps } from './payment-options-panel.types';
 import { InstallmentInfo, PaymentOptionCard } from './PaymentOptionCard';
 import {
-  type FeatureSettings,
+  RedvaultPaymentOption,
+} from './redvault/RedvaultPaymentOption';
+import {
   isNgnChargeCurrency,
 } from './payment-step-availability';
 
-interface PaymentOptionsPanelProps {
-  paymentTab: PaymentTab;
-  setPaymentTab: (v: PaymentTab) => void;
-  paymentMethod: PaymentMethod;
-  setPaymentMethod: (v: PaymentMethod) => void;
-  paystackCheckoutAvailable: boolean;
-  korapayCheckoutAvailable: boolean;
-  bankTransferCheckoutAvailable: boolean;
-  featureSettings?: FeatureSettings | null;
-  klumpEligible: boolean;
-  hasInstallmentOptions: boolean;
-  currency?: string | null;
-}
+
 
 export function PaymentOptionsPanel({
   paymentTab,
@@ -41,6 +32,9 @@ export function PaymentOptionsPanel({
   klumpEligible,
   hasInstallmentOptions,
   currency,
+  redvaultAvailable,
+  redvaultStatus,
+  redvaultSummary,
 }: PaymentOptionsPanelProps) {
   useEffect(() => {
     if (!hasInstallmentOptions && paymentTab === 'installments') {
@@ -107,6 +101,13 @@ export function PaymentOptionsPanel({
               title="Generate Invoice"
               description="Create an invoice and pay later"
               icon={<FileText className="size-6 text-store-foreground" />}
+            />
+            <RedvaultPaymentOption
+              available={redvaultAvailable}
+              onSelect={() => setPaymentMethod('uba_redvault')}
+              selected={paymentMethod === 'uba_redvault'}
+              status={redvaultStatus}
+              summary={redvaultSummary}
             />
             {paystackCheckoutAvailable && (
               <PaymentOptionCard

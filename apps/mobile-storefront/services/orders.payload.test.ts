@@ -40,4 +40,14 @@ describe('buildOrderPayload — discount code', () => {
     expect('discount_code' in payload).toBe(false);
     expect(payload.discount_amount).toBe(0);
   });
+
+  it('preserves the REDVAULT method without sending a client discount amount', () => {
+    const payload = buildOrderPayload({
+      merchantId: 'merchant-1',
+      request: { ...baseRequest, payment_method: 'uba_redvault' },
+    });
+
+    expect(payload.payment_method).toBe('uba_redvault');
+    expect(payload.discount_amount).toBe(0);
+  });
 });

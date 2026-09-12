@@ -303,7 +303,7 @@ describe('useMerchantReceiptInfo', () => {
         cac_rc_number: null,
         tax_identification_number: null,
         legal_entity_name: null,
-        brand_colors: null,
+        brand_colors: { primary: '#111111', accent: '#222222' },
         vat_registration_status: null,
         vat_rate: null,
         bank_code: null,
@@ -334,6 +334,10 @@ describe('useMerchantReceiptInfo', () => {
     // merchants table read (removed by S0-A).
     expect(mockFrom).not.toHaveBeenCalledWith('merchants');
     expect(info.bank_account_number).toBe('0123456789');
+    expect(info.brand_colors).toEqual({
+      primary: '#111111',
+      accent: '#222222',
+    });
   });
 
   it('rejects an invalid merchant receipt payload', async () => {

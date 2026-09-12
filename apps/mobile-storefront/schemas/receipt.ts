@@ -110,7 +110,7 @@ export const MerchantReceiptInfoSchema = z.object({
   brand_colors: z
     .object({
       primary: z.string(),
-      background: z.string(),
+      background: z.string().optional(),
       accent: z.string(),
     })
     .nullable(),

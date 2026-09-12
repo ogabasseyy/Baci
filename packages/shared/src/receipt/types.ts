@@ -16,7 +16,7 @@ export interface ReceiptMerchant {
   cac_rc_number: string | null;
   tax_identification_number: string | null;
   legal_entity_name: string | null;
-  brand_colors?: { primary: string; background: string; accent: string };
+  brand_colors?: { primary: string; background?: string; accent: string };
   vat_registration_status: string | null;
   vat_rate: number | null;
   bank_code: string | null;

@@ -14,6 +14,7 @@ describe('STOREFRONT_CACHE', () => {
     expect(STOREFRONT_PUBLIC_CACHE_POLICIES).toEqual([
       {
         slug: 'ogabassey',
+        durablePdpPurge: false,
         customHostnames: ['ogabassey.com', 'www.ogabassey.com'],
         cacheableCategorySegments: [
           'accessories',

@@ -29,6 +29,9 @@
 //     product is re-fetched from origin quickly; Cloudflare's longer window
 //     (3600s) is bounded by the active purge-on-mutation chain (#2935 / #3003).
 //     Do NOT raise these past the window the purge design covers.
+//   * Explicitly qualified PDP policies use 1800s downstream freshness rather
+//     than the fallback 300s. Exact invalidation followed by the durable broad
+//     hostname purge owns all product mutations, including bulk updates.
 //
 // NON-CACHEABLE documents (query present, auth-session hint, or per-user route
 // groups) must additionally have any inherited CDN headers REMOVED, hence the
@@ -42,11 +45,14 @@ const CACHEABLE_CDN_CACHE_CONTROL =
   'max-age=3600, stale-while-revalidate=86400, stale-if-error=86400';
 const CACHEABLE_SELF_HEALING_CDN_CACHE_CONTROL =
   'max-age=300, stale-while-revalidate=86400, stale-if-error=86400';
+const CACHEABLE_PDP_CDN_CACHE_CONTROL =
+  'max-age=1800, stale-while-revalidate=86400, stale-if-error=86400';
 const NON_CACHEABLE_BROWSER_CACHE_CONTROL =
   'private, no-store, max-age=0, must-revalidate';
 
 export type StorefrontDocumentCacheKind =
   | 'cacheable'
+  | 'cacheable-pdp'
   | 'cacheable-self-healing'
   | 'cacheable-vercel-only'
   | 'non-cacheable';
@@ -70,6 +76,13 @@ export type StorefrontDocumentCacheHeaders = {
 export function buildStorefrontDocumentCacheHeaders(
   kind: StorefrontDocumentCacheKind
 ): StorefrontDocumentCacheHeaders {
+  if (kind === 'cacheable-pdp') {
+    return {
+      cacheControl: CACHEABLE_BROWSER_CACHE_CONTROL,
+      vercelCdnCacheControl: CACHEABLE_VERCEL_CDN_CACHE_CONTROL,
+      cdnCacheControl: CACHEABLE_PDP_CDN_CACHE_CONTROL,
+    };
+  }
   if (kind === 'cacheable') {
     return {
       cacheControl: CACHEABLE_BROWSER_CACHE_CONTROL,

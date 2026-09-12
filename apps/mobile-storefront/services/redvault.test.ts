@@ -75,3 +75,48 @@ describe('getRedvaultPaymentAvailability', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });
+
+describe('verifyRedvaultPayment', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    global.fetch = mockFetch as unknown as typeof fetch;
+    mockReadCheckoutStoredSession.mockResolvedValue({ session: null });
+    mockResolveCheckoutAuth.mockResolvedValue({ authorizationHeaders: {} });
+  });
+
+  it('aborts a stalled guest CSRF request without starting payment verification', async () => {
+    const abortController = new AbortController();
+    const timeout = jest
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(abortController.signal);
+    let markCsrfStarted: () => void;
+    const csrfStarted = new Promise<void>((resolve) => {
+      markCsrfStarted = resolve;
+    });
+    mockFetch.mockImplementation((_input, init) => {
+      markCsrfStarted();
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'));
+        });
+      });
+    });
+    const { verifyRedvaultPayment } = await import('./redvault');
+
+    const verification = verifyRedvaultPayment('reference-1');
+    await csrfStarted;
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    abortController.abort();
+
+    await expect(verification).rejects.toThrow('Aborted');
+    expect(timeout).toHaveBeenCalledWith(10000);
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/csrf'),
+      expect.objectContaining({ signal: abortController.signal })
+    );
+  });
+});

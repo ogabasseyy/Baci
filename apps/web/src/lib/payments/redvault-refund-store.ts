@@ -59,8 +59,21 @@ function readRefund(value: unknown): RedvaultRefund {
   };
 }
 
+function readSingleRefundRow(data: unknown): Record<string, unknown> {
+  if (Array.isArray(data)) {
+    if (data.length !== 1) {
+      throw new Error('REDVAULT refund RPC must return exactly one refund row');
+    }
+    data = data[0];
+  }
+  if (!data || typeof data !== 'object') {
+    throw new Error('REDVAULT refund RPC returned no refund row');
+  }
+  return data as Record<string, unknown>;
+}
+
 function readSingleRefund(data: unknown): RedvaultRefund {
-  return readRefund(Array.isArray(data) ? data[0] : data);
+  return readRefund(readSingleRefundRow(data));
 }
 
 export class RedvaultRefundStore {
@@ -148,21 +161,16 @@ export class RedvaultRefundStore {
       (Array.isArray(result.data) && result.data.length === 0)
     )
       return null;
-    const row = Array.isArray(result.data) ? result.data[0] : result.data;
+    const row = readSingleRefundRow(result.data);
     const refund = readRefund(row);
     if (
-      !row ||
-      typeof row !== 'object' ||
-      Array.isArray(row) ||
-      typeof (row as Record<string, unknown>).reconciliation_claim_token !==
-        'string' ||
+      typeof row.reconciliation_claim_token !== 'string' ||
       !refund.providerReference
     ) {
       throw new Error('REDVAULT reconciliation RPC returned an invalid claim');
     }
     return {
-      reconciliationClaimToken: (row as Record<string, string>)
-        .reconciliation_claim_token,
+      reconciliationClaimToken: row.reconciliation_claim_token,
       refund,
     };
   }

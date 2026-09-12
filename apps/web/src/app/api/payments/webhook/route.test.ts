@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { redvaultCaptureCases } from './redvault-capture-cases.test-support';
 import { GET, POST } from './route';
 
 const mockConfirmAgenticPaystackDvaPayment = vi.hoisted(() => vi.fn());
@@ -619,7 +620,14 @@ describe('POST /api/payments/webhook', () => {
     expect(mockRunPaidOrderSideEffects).not.toHaveBeenCalled();
   });
 
-  it('acknowledges a held REDVAULT capture without a paid or settlement signal', async () => {
+  it.each(
+    redvaultCaptureCases
+  )('acknowledges $kind for a $transactionStatus transaction without completion or settlement', async ({
+    kind,
+    code,
+    error,
+    transactionStatus,
+  }) => {
     const body = {
       data: { reference: 'PSK-REDVAULT-HELD' },
       event: 'charge.success',
@@ -641,14 +649,18 @@ describe('POST /api/payments/webhook', () => {
       } as never,
       success: true,
     });
-    setupSuccessfulTransactionMocks({
-      amount: '1000',
-      gateway_reference: 'PSK-REDVAULT-HELD',
-      order_id: 'order-redvault-1',
-    });
+    setupSuccessfulTransactionMocks(
+      {
+        amount: '1000',
+        gateway_reference: 'PSK-REDVAULT-HELD',
+        order_id: 'order-redvault-1',
+        status: transactionStatus,
+      },
+      transactionStatus === 'completed' ? { updatedTransaction: null } : {}
+    );
     mockCaptureOrHoldRedvaultPayment.mockResolvedValue({
       duplicate: false,
-      kind: 'captured_held',
+      kind,
       reason: 'provider_eligibility_evidence_unavailable',
     });
 
@@ -656,8 +668,8 @@ describe('POST /api/payments/webhook', () => {
 
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({
-      code: 'REDVAULT_CAPTURE_HELD',
-      error: 'Payment capture is pending eligibility confirmation',
+      code,
+      error,
       status: 'pending',
     });
     expect(mockServiceClient.rpc).not.toHaveBeenCalledWith(

@@ -62,6 +62,7 @@ export async function verifyRedvaultPayment(reference: string) {
   if (!authorizationHeaders.Authorization) {
     const csrfResponse = await fetch(`${API_URL}/api/csrf`, {
       credentials: 'include',
+      signal: AbortSignal.timeout(10000),
     });
     const csrf: unknown = await csrfResponse.json();
     if (

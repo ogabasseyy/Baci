@@ -7,6 +7,38 @@ import {
 } from './pending-checkout-order';
 
 describe('pending-checkout-order', () => {
+  it('keeps the REDVAULT order method distinct from generic card orders', () => {
+    expect(normalizeOrderPaymentMethod('uba_redvault')).toBe('uba_redvault');
+  });
+  it.each(['uba_redvault', 'card'])('never reopens a stored REDVAULT order through generic reuse for %s', async paymentMethod => {
+    const fetchImpl = vi.fn();
+    const result = await resolvePendingCheckoutOrder({
+      pendingOrder: {
+        orderId: 'redvault-order', merchantId: 'merchant',
+        customerEmail: 'ada@example.com', customerPhone: '', checkoutFingerprint: 'fingerprint',
+        amountDueToGateway: 117.5, createdAt: '2026-09-12', paymentMethod: 'uba_redvault',
+      },
+      merchantId: 'merchant', customerEmail: 'ada@example.com',
+      checkoutFingerprint: 'fingerprint', paymentMethod, shippingProvider: null, fetchImpl,
+    });
+    expect(result).toEqual({ reusableOrder: null, clearStoredOrder: true });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  it('preserves an ordinary pending snapshot when REDVAULT bypasses reuse', async () => {
+    const fetchImpl = vi.fn();
+    const result = await resolvePendingCheckoutOrder({
+      pendingOrder: {
+        orderId: 'ordinary-order', merchantId: 'merchant',
+        customerEmail: 'ada@example.com', customerPhone: '', checkoutFingerprint: 'fingerprint',
+        amountDueToGateway: 117.5, createdAt: '2026-09-12', paymentMethod: 'card',
+      },
+      merchantId: 'merchant', customerEmail: 'ada@example.com',
+      checkoutFingerprint: 'fingerprint', paymentMethod: 'uba_redvault', shippingProvider: null, fetchImpl,
+    });
+
+    expect(result).toEqual({ reusableOrder: null, clearStoredOrder: false });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
   it('maps payment methods to persisted order values', () => {
     expect(normalizeOrderPaymentMethod('paystack')).toBe('card');
     expect(normalizeOrderPaymentMethod('korapay')).toBe('card');

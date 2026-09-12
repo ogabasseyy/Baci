@@ -187,4 +187,35 @@ describe('finalizeCheckoutPayment', () => {
     });
     expect(runPostOrderSideEffects).toHaveBeenCalledTimes(1);
   });
+
+  it('requires persisted summary review before REDVAULT initialization', async () => {
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        authorization_url: 'https://checkout.example.com',
+        reference: 'redvault-ref',
+        success: true,
+      }),
+      ok: true,
+    } as Response);
+
+    await expect(
+      finalizeCheckoutPayment({
+        clearCart: jest.fn<() => void | Promise<void>>(),
+        customerEmail: 'ada@example.com',
+        customerName: 'Ada Customer',
+        customerPhone: '08012345678',
+        isOrderInFlight: { current: true },
+        orderNumber: 'BAC-UBA-001',
+        orderResponse: createOrderResponse(),
+        runPostOrderSideEffects: jest.fn(),
+        selectedPayment: 'uba_redvault',
+        setIsProcessing: jest.fn(),
+        setPendingOrder: jest.fn(),
+        setShowCryptoSelection: jest.fn(),
+        shouldCreateWalletFundedBankTransferOrder: false,
+      })
+    ).rejects.toMatchObject({ code: 'REDVAULT_REVIEW_REQUIRED' });
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
 });

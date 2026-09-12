@@ -8,6 +8,7 @@ import { PaymentErrorView } from '@/components/payment-gateway/PaymentErrorView'
 import { PaymentGatewayCheckoutView } from '@/components/payment-gateway/PaymentGatewayCheckoutView';
 import { PaymentProcessingView } from '@/components/payment-gateway/PaymentProcessingView';
 import { PaymentSuccessView } from '@/components/payment-gateway/PaymentSuccessView';
+import { RedvaultPendingView } from '@/components/payment-gateway/RedvaultPendingView';
 import { usePaymentGatewayController } from '@/components/payment-gateway/use-payment-gateway-controller';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -29,6 +30,16 @@ export default function PaymentGatewayScreen() {
       );
     }
 
+    if (controller.status === 'pending' || controller.status === 'held') {
+      return (
+        <RedvaultPendingView
+          colors={colors}
+          held={controller.status === 'held'}
+          onCheck={controller.handleRetry}
+          onBack={controller.handleBack}
+        />
+      );
+    }
     if (controller.status === 'processing') {
       return (
         <PaymentProcessingView

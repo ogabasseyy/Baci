@@ -124,11 +124,18 @@ import { persistCreditDirectPopupReference } from './checkout/persist-credit-dir
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
 import { selectRejectedVoucherLines } from './checkout/select-rejected-voucher-lines';
 import { PaymentStep } from './checkout/components/PaymentStep';
+import type { RedvaultQuoteSummary } from './checkout/components/redvault/RedvaultPaymentOption';
+import {
+  initializeRedvaultPayment,
+  parseRedvaultOrderQuote,
+} from './checkout/redvault-payment-response';
+import { getRedvaultCompatibleCheckoutValues } from './checkout/redvault-compatible-checkout-values';
 import { AirportDeliveryOptions } from './checkout/components/AirportDeliveryOptions';
 import {
   invalidatePendingQuoteRequests,
   loadCheckoutShippingQuotes,
 } from './checkout/hooks/checkout-shipping-quote-loader';
+import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 import {
   calculateDeliveryCost,
   KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST,
@@ -506,6 +513,7 @@ export const CheckoutPage: React.FC = () => {
   const { cart, clearCart, isHydrated, removeFromCart } = useCart();
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
+  const redvaultAvailability = useRedvaultPaymentAvailability(merchant?.id);
 
   // Address-form country: the merchant's own market (ISO-2, upper-case), NG as
   // the pilot default when unset. Drives the state list source, the Places
@@ -1187,6 +1195,23 @@ export const CheckoutPage: React.FC = () => {
   // declaration before first access)
   const [paymentTab, setPaymentTab] = useState<'full' | 'installments'>('full');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('');
+  const [redvaultSummary, setRedvaultSummary] =
+    useState<RedvaultQuoteSummary | null>(null);
+  const [redvaultStatus, setRedvaultStatus] = useState<
+    'idle' | 'pending' | 'held' | 'error'
+  >('idle');
+  const selectPaymentMethod = (nextMethod: PaymentMethod) => {
+    if (isOrderInFlightRef.current || redvaultStatus === 'pending' || redvaultStatus === 'held') return;
+    if (
+      nextMethod !== paymentMethod &&
+      (nextMethod === 'uba_redvault' || paymentMethod === 'uba_redvault')
+    ) {
+      clearPendingCheckoutOrder();
+      setRedvaultSummary(null);
+      setRedvaultStatus('idle');
+    }
+    setPaymentMethod(nextMethod);
+  };
 
   // Fetch resumed order from mobile app when orderId is in URL.
   // The async try/catch/finally flow lives in module-scope
@@ -1204,7 +1229,7 @@ export const CheckoutPage: React.FC = () => {
       setResumedOrder,
       setCheckoutFields,
       setPaymentTab,
-      setPaymentMethod,
+      setPaymentMethod: selectPaymentMethod,
       setResumeOrderError,
     });
   }, [
@@ -1542,25 +1567,25 @@ export const CheckoutPage: React.FC = () => {
           )
         : Math.min(appliedDiscount.discount_value, effectiveCheckoutCartTotal)))
     : 0;
-  // `total` is NET of the discount so wallet credit, remaining-amount gating,
-  // the displayed total, and the order payload all agree.
-  const total = Math.max(
-    0,
-    effectiveCheckoutCartTotal +
-      deliveryCost +
-      giftWrappingCost +
-      (orderTotals?.taxAmount ?? 0) -
-      discountAmount
-  );
-
   // Wallet credit calculation (2025: can't redeem more than order total).
   // The customer wallet is an NGN-denominated ledger, so redemption is only
   // offered on NGN orders — mirrors the server-side guard in /api/orders.
   const walletCurrencySupported = currencyCode === 'NGN';
-  const walletAmountUsed =
-    payWithWallet && walletCurrencySupported
-      ? Math.min(walletBalance, total)
-      : 0;
+  const checkoutValues = getRedvaultCompatibleCheckoutValues({
+    baseTotal:
+      effectiveCheckoutCartTotal +
+      deliveryCost +
+      giftWrappingCost +
+      (orderTotals?.taxAmount ?? 0),
+    discountAmount,
+    discountCode: appliedDiscount?.code,
+    paymentMethod,
+    payWithWallet,
+    walletBalance,
+    walletCurrencySupported,
+  });
+  const total = checkoutValues.total;
+  const walletAmountUsed = checkoutValues.walletAmountUsed;
   const remainingAmount = total - walletAmountUsed;
 
 
@@ -1745,7 +1770,7 @@ export const CheckoutPage: React.FC = () => {
 
   const handlePlaceOrder = async () => {
     // Double-submit protection: prevent race conditions from rapid clicks
-    if (isOrderInFlightRef.current) {
+    if (isOrderInFlightRef.current || redvaultStatus === 'pending' || redvaultStatus === 'held') {
       return;
     }
     isOrderInFlightRef.current = true;
@@ -1827,6 +1852,16 @@ export const CheckoutPage: React.FC = () => {
         title: 'Payment Unavailable',
         description:
           'Korapay is not available for this store yet. Please choose a different payment method.',
+        variant: 'destructive',
+      });
+      isOrderInFlightRef.current = false;
+      return;
+    }
+
+    if (paymentMethod === 'uba_redvault' && !redvaultAvailability.available) {
+      toast({
+        title: 'Payment Unavailable',
+        description: 'Pay with UBA is not available right now. Please choose a different payment method.',
         variant: 'destructive',
       });
       isOrderInFlightRef.current = false;
@@ -2015,7 +2050,7 @@ export const CheckoutPage: React.FC = () => {
     }
 
     const normalizedPaymentMethod = normalizeOrderPaymentMethod(paymentMethod);
-    const checkoutFingerprint = buildPendingCheckoutFingerprint({
+    const checkoutFingerprint = (paymentMethod === 'uba_redvault' ? 'uba_redvault:' : '') + buildPendingCheckoutFingerprint({
       merchantId: merchant.id,
       customerEmail,
       customerName: `${firstName} ${lastName}`.trim(),
@@ -2040,9 +2075,9 @@ export const CheckoutPage: React.FC = () => {
         variantId: item.variantId,
         variantAttributes: item.variantAttributes,
       })),
-      useWalletCredit: payWithWallet && walletAmountUsed > 0,
+      useWalletCredit: checkoutValues.useWalletCredit,
       walletAmountUsed,
-      discountCode: appliedDiscount?.code ?? null,
+      discountCode: checkoutValues.discountCode,
       giftWrappingCost,
     });
 
@@ -2061,7 +2096,8 @@ export const CheckoutPage: React.FC = () => {
       let amountDueToGateway = total;
 
       const reusablePendingOrder = await resolvePendingCheckoutOrder({
-        pendingOrder: pendingCheckoutOrder,
+        pendingOrder:
+          paymentMethod === 'uba_redvault' ? null : pendingCheckoutOrder,
         merchantId: merchant.id,
         merchantSlug: merchant.slug,
         customerEmail,
@@ -2150,7 +2186,7 @@ export const CheckoutPage: React.FC = () => {
                 deliveryCost +
                 giftWrappingCost +
                 (orderTotals?.taxAmount ?? 0) -
-                discountAmount
+                checkoutValues.discountAmount
             ),
             client_total: Math.max(
               0,
@@ -2158,10 +2194,10 @@ export const CheckoutPage: React.FC = () => {
                 deliveryCost +
                 giftWrappingCost +
                 (orderTotals?.taxAmount ?? 0) -
-                discountAmount
+                checkoutValues.discountAmount
             ),
-            ...(appliedDiscount?.code
-              ? { discount_code: appliedDiscount.code }
+            ...(checkoutValues.discountCode
+              ? { discount_code: checkoutValues.discountCode }
               : {}),
             payment_method: normalizedPaymentMethod,
             payment_status: 'unpaid',
@@ -2193,7 +2229,7 @@ export const CheckoutPage: React.FC = () => {
                     selectedQuoteId,
                   ) ?? null),
             // Wallet redemption (2025: auto-apply at checkout)
-            use_wallet_credit: payWithWallet && walletAmountUsed > 0,
+            use_wallet_credit: checkoutValues.useWalletCredit,
             wallet_amount: walletAmountUsed,
             // Link customer to auth user (2025: unified customer identity)
             user_id: user?.id,
@@ -2248,8 +2284,15 @@ export const CheckoutPage: React.FC = () => {
 
         const orderData = await orderResponse.json();
         order = orderData.order;
+        if (paymentMethod === 'uba_redvault') {
+          const summary = parseRedvaultOrderQuote(orderData);
+          setRedvaultSummary(summary);
+          amountDueToGateway = summary.payableKobo / 100;
+        }
         walletResult = orderData.wallet;
-        amountDueToGateway = orderData.amountDueToGateway ?? total;
+        if (paymentMethod !== 'uba_redvault') {
+          amountDueToGateway = orderData.amountDueToGateway ?? total;
+        }
       }
 
       // The ORDER row's stamped currency is authoritative for payment
@@ -2295,6 +2338,7 @@ export const CheckoutPage: React.FC = () => {
         customerEmail,
         customerPhone,
         checkoutFingerprint,
+        paymentMethod: normalizedPaymentMethod,
         amountDueToGateway,
         createdAt: new Date().toISOString(),
       };
@@ -2326,7 +2370,7 @@ export const CheckoutPage: React.FC = () => {
       // 2. Handle payment based on method
       // Special case: If wallet fully covers the order, no payment gateway needed
       // Order API already marks it as paid, just redirect to success
-      if (paymentAmount <= 0) {
+      if (paymentMethod !== 'uba_redvault' && paymentAmount <= 0) {
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
         clearCheckoutSession();
@@ -2398,6 +2442,35 @@ export const CheckoutPage: React.FC = () => {
         }
 
         await handleBankTransfer(order, paymentAmount, billingAddress);
+        return;
+      }
+
+      if (paymentMethod === 'uba_redvault') {
+        setRedvaultStatus('pending');
+        const paymentResult = await initializeRedvaultPayment({
+          merchantId: merchant.id,
+          orderId: order.id,
+          currency: orderChargeCurrency,
+          customerEmail,
+          customerName: `${firstName} ${lastName}`.trim(),
+          customerPhone,
+          billingAddress,
+        }).catch((error: unknown) => {
+          setRedvaultStatus('error');
+          throw error;
+        });
+        if (paymentResult.kind === 'pending_reconciliation') {
+          setIsProcessing(false);
+          isOrderInFlightRef.current = false;
+          return;
+        }
+        if (paymentResult.kind === 'captured_held') {
+          setRedvaultStatus('held');
+          setIsProcessing(false);
+          isOrderInFlightRef.current = false;
+          return;
+        }
+        window.location.assign(paymentResult.authorizationUrl);
         return;
       }
 
@@ -3244,19 +3317,19 @@ export const CheckoutPage: React.FC = () => {
 
         {/* MOBILE ORDER SUMMARY (Collapsible) */}
         {/* MOBILE ORDER SUMMARY (Collapsible) */}
-        <MobileOrderSummary
+        {paymentMethod !== 'uba_redvault' && <MobileOrderSummary
           cart={mobileSummaryCart}
           cartTotal={effectiveCheckoutCartTotal}
           deliveryCost={resumedOrder ? resumedOrder.shipping_cost : deliveryCost}
           taxAmount={resumedOrder?.tax_amount ?? orderTotals?.taxAmount ?? 0}
-          discountAmount={resumedOrder?.discount_amount ?? discountAmount}
+          discountAmount={resumedOrder?.discount_amount ?? checkoutValues.discountAmount}
           deliveryMethod={resumedOrder ? null : deliveryMethod}
           giftWrappingCost={giftWrappingCost}
           walletBalance={walletBalance}
-          payWithWallet={payWithWallet}
+          payWithWallet={checkoutValues.payWithWallet}
           walletAmountUsed={walletAmountUsed}
           remainingAmount={resumedOrder?.total ?? remainingAmount}
-        />
+        />}
 
         {/* Hidden in the resumed-order flow: that path charges the persisted
             resumedOrder.total and skips order creation, so a discount applied
@@ -3919,7 +3992,7 @@ export const CheckoutPage: React.FC = () => {
               paymentTab={paymentTab}
               setPaymentTab={setPaymentTab}
               paymentMethod={paymentMethod}
-              setPaymentMethod={setPaymentMethod}
+              setPaymentMethod={selectPaymentMethod}
               isProcessing={isProcessing}
               isPayForMeValid={isPayForMeValid}
               isDeliveryValid={isDeliveryValid}
@@ -3935,6 +4008,9 @@ export const CheckoutPage: React.FC = () => {
               remainingAmount={remainingAmount}
               orderAmount={total}
               currency={currencyCode}
+              redvaultAvailable={redvaultAvailability.available}
+              redvaultStatus={redvaultStatus}
+              redvaultSummary={redvaultSummary}
             />
 
           </div>
@@ -4035,7 +4111,7 @@ export const CheckoutPage: React.FC = () => {
                 )}
 
                 {/* Wallet Credit Section (2025: progressive disclosure - only show if balance > 0 or loading). NGN-ledger: hidden on non-NGN orders. */}
-                {walletCurrencySupported && (walletLoading || walletBalance > 0) && user && (
+                {paymentMethod !== 'uba_redvault' && walletCurrencySupported && (walletLoading || walletBalance > 0) && user && (
                   <div className="py-2 animate-in fade-in">
                     {walletLoading ? (
                       <div className="flex items-center gap-2 text-gray-500">
@@ -4082,11 +4158,11 @@ export const CheckoutPage: React.FC = () => {
                 {/* Total or Amount Due */}
                 <div className="flex justify-between text-gray-900 font-bold text-lg">
                   <span>
-                    {remainingAmount > 0 && payWithWallet
+                    {remainingAmount > 0 && checkoutValues.payWithWallet
                       ? 'Amount Due'
                       : 'Total'}
                   </span>
-                  <span>{formatCurrencyAuto(remainingAmount)}</span>
+                  <span>{paymentMethod === 'uba_redvault' ? (redvaultSummary ? formatCurrencyAuto(redvaultSummary.payableKobo / 100) : 'Confirmed after order validation') : formatCurrencyAuto(remainingAmount)}</span>
                 </div>
               </div>
 

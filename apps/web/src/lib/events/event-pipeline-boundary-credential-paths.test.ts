@@ -22,6 +22,27 @@ describe('event pipeline credential-path authority', () => {
 
     expect(manifest.authority.credentialPaths).toEqual([
       [
+        'apps/web/src/app/api/payments/initialize/route.ts',
+        'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
+        'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
+        'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
         'apps/web/src/app/api/orders/route.ts',
         'apps/web/src/lib/order-notification-dispatch.ts',
         'apps/web/src/lib/expo-push.ts',

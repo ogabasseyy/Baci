@@ -52,6 +52,11 @@ export async function finalizeCheckoutPayment({
   setShowCryptoSelection,
   shouldCreateWalletFundedBankTransferOrder,
 }: FinalizeCheckoutPaymentParams) {
+  if (selectedPayment === 'uba_redvault')
+    throw new OrderError(
+      'Review the server UBA summary before payment',
+      'REDVAULT_REVIEW_REQUIRED'
+    );
   const { order } = orderResponse;
   const fullyPaidStoreCreditPaymentMethod =
     getFullyPaidStoreCreditPaymentMethod(orderResponse);
@@ -271,7 +276,7 @@ async function initializeGatewayAndRoute({
     params: {
       orderId,
       orderNumber,
-      gateway: selectedPayment,
+      gateway,
       authorizationUrl: initData.authorization_url || initData.checkout_url,
       reference: initData.reference,
       amount: String(orderResponse.amountDueToGateway),

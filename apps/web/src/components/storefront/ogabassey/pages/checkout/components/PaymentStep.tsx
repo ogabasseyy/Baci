@@ -9,6 +9,10 @@ import {
 } from '@/lib/checkout/payment-gateway-availability';
 import type { PaymentMethod, PaymentTab } from '../types';
 import { PaymentOptionsPanel } from './PaymentOptionsPanel';
+import type {
+  RedvaultPaymentStatus,
+  RedvaultQuoteSummary,
+} from './redvault/RedvaultPaymentOption';
 import {
   type FeatureSettings,
   hasAnyInstallmentOption,
@@ -53,6 +57,9 @@ interface PaymentStepProps {
   remainingAmount: number;
   orderAmount: number;
   currency?: string;
+  redvaultAvailable: boolean;
+  redvaultStatus: RedvaultPaymentStatus;
+  redvaultSummary: RedvaultQuoteSummary | null;
 }
 
 export function PaymentStep({
@@ -77,6 +84,9 @@ export function PaymentStep({
   remainingAmount,
   orderAmount,
   currency = 'NGN',
+  redvaultAvailable,
+  redvaultStatus,
+  redvaultSummary,
 }: PaymentStepProps) {
   // Paystack (and its DVA-backed bank transfer) settle NGN only — the
   // initialize API rejects them for non-NGN orders with UNSUPPORTED_CURRENCY,
@@ -91,11 +101,16 @@ export function PaymentStep({
   );
   const bankTransferCheckoutAvailable =
     ngnRailsAvailable && isBankTransferCheckoutAvailable(merchant);
+  const redvaultCheckoutAvailable = ngnRailsAvailable && redvaultAvailable;
+  const redvaultHasEligibleItems =
+    redvaultSummary?.eligibleSubtotalKobo !== 0;
   const hasAvailableSelectedPaymentMethod = isPaymentMethodAvailable({
     paymentMethod,
     paystackCheckoutAvailable,
     korapayCheckoutAvailable,
     bankTransferCheckoutAvailable,
+    redvaultAvailable:
+      redvaultCheckoutAvailable && redvaultHasEligibleItems,
     featureSettings: merchant?.feature_settings,
     currency,
     orderAmount,
@@ -159,6 +174,9 @@ export function PaymentStep({
               klumpEligible={klumpEligible}
               hasInstallmentOptions={hasInstallmentOptions}
               currency={currency}
+              redvaultAvailable={redvaultCheckoutAvailable}
+              redvaultStatus={redvaultStatus}
+              redvaultSummary={redvaultSummary}
             />
           </div>
 
@@ -186,6 +204,8 @@ export function PaymentStep({
               disabled={
                 isProcessing ||
                 (remainingAmount > 0 && !hasAvailableSelectedPaymentMethod) ||
+                (paymentMethod === 'uba_redvault' &&
+                  (redvaultStatus === 'pending' || redvaultStatus === 'held')) ||
                 (paymentMethod === 'payforme' && !isPayForMeValid)
               }
               className="w-full bg-store-primary hover:bg-store-primary/90 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-store-primary/20 active:scale-[0.98]"

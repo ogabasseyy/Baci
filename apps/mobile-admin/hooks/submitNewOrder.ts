@@ -20,6 +20,7 @@ import {
   sanitizeText,
 } from '@/lib/sanitize';
 import { supabase } from '@/lib/supabase';
+import { formatPickerDateInput } from '@/lib/transaction-review-inputs';
 
 interface SubmitNewOrderParams {
   customer: CustomerInfo;
@@ -229,6 +230,7 @@ export async function submitNewOrder({
           tax_amount: taxesToUse,
           total,
           transaction_date: orderDateIso,
+          invoice_issue_date: formatPickerDateInput(orderDate),
         },
       }
     );

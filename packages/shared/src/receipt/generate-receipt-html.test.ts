@@ -19,6 +19,20 @@ describe('generateReceiptHtml', () => {
     expect(html).not.toContain('12 Sep 2026');
   });
 
+  it('uses the persisted calendar date for a midnight-offset manual order', () => {
+    const html = generateReceiptHtml(
+      createReceiptOrder({
+        created_at: '2026-09-12T10:00:00.000Z',
+        transaction_date: '2026-03-04T23:30:00.000Z',
+        invoice_issue_date: '2026-03-05',
+      }),
+      createReceiptMerchant()
+    );
+
+    expect(html).toContain('5 Mar 2026');
+    expect(html).not.toContain('12 Sep 2026');
+  });
+
   it('includes the variant label in receipt item rows', () => {
     const html = generateReceiptHtml(
       createReceiptOrder(),

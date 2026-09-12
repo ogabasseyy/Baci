@@ -452,6 +452,7 @@ describe('generateReceiptBlob', () => {
         ...baseOrder,
         created_at: '2026-09-12T10:00:00.000Z',
         transaction_date: '2026-03-04T23:30:00.000Z',
+        invoice_issue_date: '2026-03-05',
         items: [
           {
             product_name: 'MacBook Pro',

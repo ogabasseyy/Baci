@@ -118,7 +118,11 @@ export function ReceiptCard({
             numberOfLines={1}
           >
             #{item.order_number} ·{' '}
-            {formatDate(item.transaction_date ?? item.created_at)}
+            {formatDate(
+              item.invoice_issue_date ??
+                item.transaction_date ??
+                item.created_at
+            )}
           </Text>
         </View>
         <View style={[styles.badge, { backgroundColor: `${config.color}15` }]}>

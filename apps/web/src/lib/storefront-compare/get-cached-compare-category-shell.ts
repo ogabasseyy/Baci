@@ -10,6 +10,7 @@ import {
 import { getPublicSupabaseClient } from '@/lib/public-supabase-client';
 import { STOREFRONT_SPECIAL_COLLECTION_SLUGS } from '@/lib/storefront-special-collection-slugs';
 import type { StorefrontDatabase } from '@/types/storefront-database';
+import type { StorefrontComparisonRevision } from './get-published-storefront-comparison-revision';
 
 export interface CompareCategoryShell {
   fallbackName: string;
@@ -50,7 +51,10 @@ function getSpecialCollectionName(categorySlug: string): string {
 
 export async function getCachedCompareCategoryShell(
   merchantId: string,
-  categorySlug: string
+  categorySlug: string,
+  // This is deliberately part of the local Cache Components key. A shared
+  // manifest must never be refilled from an instance's pre-invalidation shell.
+  _comparisonRevision?: StorefrontComparisonRevision
 ): Promise<CompareCategoryShell> {
   'use cache';
   cacheLife('products');
@@ -59,7 +63,10 @@ export async function getCachedCompareCategoryShell(
     'products',
     'categories',
     `products-${merchantId}`,
-    `categories-${merchantId}`
+    `categories-${merchantId}`,
+    // Make the revision an observable cache input, rather than relying on an
+    // unused argument surviving the Cache Components compiler transform.
+    `comparison-revision-${merchantId}-${_comparisonRevision ?? 'local'}`
   );
 
   if (isSpecialCollectionSlug(categorySlug)) {

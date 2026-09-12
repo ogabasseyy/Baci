@@ -57,6 +57,21 @@ describe('getCachedCompareCategoryShell', () => {
     expect(mockCacheLife).toHaveBeenCalledWith('products');
   });
 
+  it('uses the supplied comparison revision in the local cache contract', async () => {
+    mockGetPublicSupabaseClient.mockReturnValue({ from: vi.fn() });
+
+    await getCachedCompareCategoryShell('merchant-1', 'new-arrivals', '42');
+
+    expect(mockCacheTag).toHaveBeenCalledWith(
+      'category-page-data',
+      'products',
+      'categories',
+      'products-merchant-1',
+      'categories-merchant-1',
+      'comparison-revision-merchant-1-42'
+    );
+  });
+
   it('returns active category scope including active descendants', async () => {
     const categoryQuery = createCategoryQuery({
       data: { id: 'cat-1', is_active: true, name: 'Laptops' },

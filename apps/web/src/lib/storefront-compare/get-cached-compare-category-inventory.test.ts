@@ -98,12 +98,14 @@ describe('getCachedCompareCategoryInventory', () => {
 
     const result = await getCachedCompareCategoryInventory(
       'merchant-1',
-      'laptops'
+      'laptops',
+      '42'
     );
 
     expect(mockGetCachedCategoryPageShellData).toHaveBeenCalledWith(
       'merchant-1',
-      'laptops'
+      'laptops',
+      '42'
     );
     expect(productsQuery.select).toHaveBeenCalledWith(
       expect.stringContaining(

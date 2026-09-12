@@ -28,7 +28,7 @@ jobs:
       - if: github.event_name == 'pull_request'
         name: Checkout repository
         # Pin to full SHA for supply chain security
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -36,7 +36,7 @@ jobs:
       - if: github.event_name == 'pull_request'
         name: Detect security-relevant file changes
         id: filter
-        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
           token: ''
           # Next config controls headers, redirects, and rendering behavior, so
@@ -95,7 +95,7 @@ jobs:
     steps:
       - name: Checkout repository
         # Pin to full SHA for supply chain security
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           # Required to diff against the PR base branch for targeted scans.
@@ -183,7 +183,7 @@ jobs:
 
       - name: Upload SARIF file
         # Pin to full SHA for supply chain security
-        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         if: always() && steps.verify-sarif.outputs.sarif_exists == 'true'
         with:
           sarif_file: semgrep.sarif
@@ -203,7 +203,7 @@ jobs:
     steps:
       - name: Checkout repository
         # Pin to full SHA for supply chain security
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -259,13 +259,13 @@ jobs:
     steps:
       - name: Checkout repository
         # Pin to full SHA for supply chain security
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
 
       - name: TruffleHog OSS
         # Pin to full SHA for supply-chain security
-        uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55 # v3.95.9
+        uses: trufflesecurity/trufflehog@363923b901c911a9164f50b6c423f47c15372b1c # v3.97.4
         with:
           extra_args: --only-verified --exclude-paths=.trufflehogignore

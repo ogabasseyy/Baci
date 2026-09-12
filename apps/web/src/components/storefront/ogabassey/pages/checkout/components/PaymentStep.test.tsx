@@ -106,6 +106,7 @@ describe('PaymentStep', () => {
           eligibleSubtotalKobo: 0,
           ineligibleSubtotalKobo: 10000,
           discountKobo: 0,
+          assuranceFeeKobo: 0,
           taxKobo: 0,
           shippingKobo: 0,
           giftWrappingKobo: 0,

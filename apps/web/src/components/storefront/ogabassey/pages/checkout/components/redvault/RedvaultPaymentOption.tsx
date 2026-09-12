@@ -6,6 +6,7 @@ export type RedvaultQuoteSummary = {
   productSubtotalKobo: number;
   eligibleSubtotalKobo: number;
   discountKobo: number;
+  assuranceFeeKobo: number;
   ineligibleSubtotalKobo: number;
   taxKobo: number;
   shippingKobo: number;

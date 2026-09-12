@@ -183,9 +183,35 @@ describe('negotiation notification realtime lifecycle', () => {
     mocks.focused = true;
     view.rerender(<NegotiationsScreen />);
     expect(mocks.channels.size).toBe(2);
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+    const channel = [...mocks.channels.values()][1];
+    channel.subscribe.mock.calls[0][0]('SUBSCRIBED');
     expect(mocks.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['negotiation_requests', 'merchant-1'],
     });
+  });
+
+  it('ignores delayed subscription readiness after blur', () => {
+    const view = render(<NegotiationsScreen />);
+    const channel = [...mocks.channels.values()][0];
+    mocks.focused = false;
+    view.rerender(<NegotiationsScreen />);
+    mocks.invalidateQueries.mockClear();
+    channel.subscribe.mock.calls[0][0]('SUBSCRIBED');
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+  });
+
+  it('refreshes after initial subscription and reconnection, but not error statuses', () => {
+    render(<NegotiationsScreen />);
+    const channel = [...mocks.channels.values()][0];
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+    const status = channel.subscribe.mock.calls[0][0];
+    status('CHANNEL_ERROR');
+    status('TIMED_OUT');
+    expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+    status('SUBSCRIBED');
+    status('SUBSCRIBED');
+    expect(mocks.invalidateQueries).toHaveBeenCalledTimes(2);
   });
 
   it('does not subscribe when mounted without focus', () => {

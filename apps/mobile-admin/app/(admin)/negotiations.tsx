@@ -169,10 +169,6 @@ export default function NegotiationsScreen() {
     const merchantId = merchant?.id;
     if (!merchantId || !isFocused) return;
     let active = true;
-    // Refresh changes missed while this screen was hidden in the stack.
-    queryClient.invalidateQueries({
-      queryKey: ['negotiation_requests', merchantId],
-    });
 
     // Supabase Realtime supports Postgres change filters; scope by merchant to
     // avoid refetching every connected merchant on unrelated inserts.
@@ -195,7 +191,13 @@ export default function NegotiationsScreen() {
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (!active || status !== 'SUBSCRIBED') return;
+        // Recover missed changes only after Realtime is listening, including reconnects.
+        queryClient.invalidateQueries({
+          queryKey: ['negotiation_requests', merchantId],
+        });
+      });
 
     return () => {
       active = false;

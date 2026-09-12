@@ -57,6 +57,12 @@ export async function scheduleCheckoutProductBlogPurge({
     .returns<ProductPolicyRow[]>();
 
   if (productLookupError) {
+    scheduleOrderProductBlogPurgeAfterResponse({
+      merchantId,
+      merchantSlug,
+      productIds,
+      supabase,
+    });
     logger.error({
       message: 'Failed to resolve product slugs for PDP cache revalidation',
       error: productLookupError,

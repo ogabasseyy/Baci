@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockEnrichProductPurgeEntries = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
 const mockExpireProductBlogCacheReliable = vi.fn().mockResolvedValue(true);
+const mockRevalidateSlugs = vi.fn();
+vi.mock('@/lib/cache-revalidation', () => ({
+  revalidateProductSlugs: (...args: unknown[]) => mockRevalidateSlugs(...args),
+}));
 
 vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
   enrichProductPurgeEntries: (...args: unknown[]) =>
@@ -63,6 +67,12 @@ describe('scheduleOrderProductBlogPurge', () => {
       supabase,
       'merchant-1',
       [{ id: 'product-1' }]
+    );
+    expect(mockRevalidateSlugs).toHaveBeenCalledWith('merchant-1', [
+      'iphone-15',
+    ]);
+    expect(mockRevalidateSlugs.mock.invocationCallOrder[0]).toBeLessThan(
+      mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
     );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',

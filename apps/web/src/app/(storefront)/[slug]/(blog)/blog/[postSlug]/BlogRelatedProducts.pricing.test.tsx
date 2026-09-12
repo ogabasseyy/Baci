@@ -10,6 +10,18 @@ vi.mock('next/link', () => ({
 }));
 
 describe('BlogRelatedProducts pricing', () => {
+  it('distinguishes catalog prices from quoted editorial amounts', () => {
+    render(<BlogRelatedProducts basePath="" products={[]} />);
+    expect(
+      screen.getByText(
+        /Prices quoted in the article do not update automatically/
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Open the product page to confirm the current price/)
+    ).toBeInTheDocument();
+  });
+
   it('renders the purchasable variant price instead of the stale parent price', () => {
     render(
       <BlogRelatedProducts

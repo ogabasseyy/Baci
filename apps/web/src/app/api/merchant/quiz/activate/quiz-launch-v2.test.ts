@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const { mockExpireProductBlogCache } = vi.hoisted(() => ({
+const { mockExpireProductBlogCache, mockReservationPurge } = vi.hoisted(() => ({
   mockExpireProductBlogCache: vi.fn(),
+  mockReservationPurge: vi.fn(),
+}));
+vi.mock('@/lib/schedule-reservation-product-purge', () => ({
+  scheduleReservationProductPurge: mockReservationPurge,
 }));
 
 vi.mock('@/lib/expire-product-blog-cache', () => ({
@@ -96,6 +100,12 @@ describe('launchMerchantQuizDraftV2', () => {
       p_time_zone: 'Africa/Lagos',
     });
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');
+    expect(mockReservationPurge).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      sourceId: baseInput.eventId,
+      source: 'quiz',
+      supabase: { rpc },
+    });
   });
 
   it('fails closed when the live prize has no reservable inventory', async () => {

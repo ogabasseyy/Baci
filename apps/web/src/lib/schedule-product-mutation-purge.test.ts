@@ -3,6 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 const mockRevalidateProductSlugs = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
 const mockScheduleProductBlogPurgeAfterResponse = vi.fn();
+const mockExpire = vi.fn();
+const mockHostnamePurge = vi.fn();
+vi.mock('./expire-product-blog-cache', () => ({
+  expireProductBlogCache: (...args: unknown[]) => mockExpire(...args),
+}));
+vi.mock('./storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
+    mockHostnamePurge(...args),
+}));
 
 vi.mock('./cache-revalidation', () => ({
   revalidateProductSlugs: (...args: unknown[]) =>
@@ -20,6 +29,20 @@ vi.mock('./storefront-product-purge', () => ({
 import { scheduleProductMutationPurge } from './schedule-product-mutation-purge';
 
 describe('scheduleProductMutationPurge', () => {
+  it('expires enrichment before a complete purge for incomplete delete snapshots', () => {
+    scheduleProductMutationPurge({
+      supabase: {} as never,
+      merchantId: 'm1',
+      merchantSlug: 'store',
+      productIds: ['p1'],
+      entries: [],
+      purgeWholeStorefront: true,
+    });
+    expect(mockHostnamePurge).toHaveBeenCalledWith('store');
+    expect(mockExpire.mock.invocationCallOrder[0]).toBeLessThan(
+      mockHostnamePurge.mock.invocationCallOrder[0]
+    );
+  });
   it('revalidates core slugs before scheduling the deferred article purge', () => {
     const entries = [
       { slug: 'new-phone', categorySegment: 'smartphones' },

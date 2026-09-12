@@ -89,6 +89,11 @@ export function BlogRelatedProducts({
       <h2 id="related-products-heading" className="mb-4 text-2xl font-bold">
         Popular Products Mentioned
       </h2>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Prices shown below come from the catalog. Prices quoted in the article
+        do not update automatically. Open the product page to confirm the
+        current price, selected variant and availability before buying.
+      </p>
       <ul className="grid gap-3 md:grid-cols-2">
         {products.map((product) => {
           const href = getStorefrontProductHref(

@@ -93,7 +93,7 @@ describe('scheduleCheckoutProductBlogPurge', () => {
     });
   });
 
-  it('fails open without scheduling when the product projection fails', async () => {
+  it('preserves known product purges when the product projection fails', async () => {
     const supabase = createSupabase({
       productResult: {
         data: null,
@@ -111,7 +111,12 @@ describe('scheduleCheckoutProductBlogPurge', () => {
 
     expect(mocks.revalidateProducts).toHaveBeenCalledWith('merchant-1');
     expect(mocks.revalidateProductSlugs).not.toHaveBeenCalled();
-    expect(mocks.schedule).not.toHaveBeenCalled();
+    expect(mocks.schedule).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      productIds: ['managed'],
+      supabase,
+    });
   });
 
   it('keeps unmanaged candidates when variant policy lookup fails', async () => {

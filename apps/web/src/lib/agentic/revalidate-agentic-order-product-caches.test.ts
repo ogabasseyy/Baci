@@ -238,5 +238,10 @@ describe('revalidateAgenticOrderProductCaches', () => {
       })
     ).resolves.toBeUndefined();
     expect(mockLoggerError).toHaveBeenCalled();
+    expect(mockScheduleBlogPurge).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      productIds: ['product-1'],
+      supabase,
+    });
   });
 });

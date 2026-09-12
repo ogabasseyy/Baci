@@ -81,7 +81,9 @@ export async function revalidateProductsReliable(
   );
 
   try {
-    revalidateProducts(merchantId);
+    if (revalidateProducts(merchantId) === false) {
+      throw new Error('Product cache revalidation requires a request context');
+    }
     // In-process revalidation succeeded (we had a Next store context), so the
     // Cloudflare purge can be scheduled in-process too (scheduleStorefrontProductPurge
     // is guarded and never throws). Return before the HTTP fallback.

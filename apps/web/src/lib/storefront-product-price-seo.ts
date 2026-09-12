@@ -1,3 +1,4 @@
+import { isPublicVariantPurchasable } from './is-public-variant-purchasable';
 import { getEffectiveStock } from './product-stock';
 import {
   appendCountryContext,
@@ -7,6 +8,7 @@ import {
 import { getSeoProductName } from './storefront-product-slug-disambiguation';
 
 interface ProductPriceSeoVariant {
+  inventory_tracking_policy?: string | null;
   price_override?: number | null;
   stock_quantity?: number | null;
 }
@@ -137,7 +139,14 @@ export function getProductPriceRange(
   }
 
   for (const variant of variants) {
-    if (hasAdvertisableChildStock(product, variant.stock_quantity)) {
+    const isSerialized =
+      variant.inventory_tracking_policy === 'serialized_strict' ||
+      variant.inventory_tracking_policy === 'serialized_then_unlimited';
+    if (
+      isSerialized
+        ? isPublicVariantPurchasable(product, variant)
+        : hasAdvertisableChildStock(product, variant.stock_quantity)
+    ) {
       // A nullable override inherits the parent product price at checkout.
       // Keep that inherited amount in the advertised range without adding the
       // parent as a separate selectable SKU.

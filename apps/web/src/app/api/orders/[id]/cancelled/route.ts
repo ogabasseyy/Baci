@@ -116,7 +116,14 @@ export async function POST(
           .select('id, slug, manage_stock, inventory_tracking_policy')
           .eq('merchant_id', merchantId)
           .in('id', productIds);
-        if (productsError) throw productsError;
+        if (productsError) {
+          scheduleOrderProductBlogPurgeAfterResponse({
+            merchantId,
+            productIds,
+            supabase,
+          });
+          throw productsError;
+        }
         const productsNeedingVariantLookup = new Set(
           (products ?? [])
             .filter((product) => !isInventoryTrackedProduct(product))

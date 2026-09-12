@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
+import { revalidateProductSlugs } from '@/lib/cache-revalidation';
 import { expireProductBlogCacheReliable } from '@/lib/expire-product-blog-cache-reliable';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 
@@ -67,15 +68,16 @@ export async function scheduleOrderProductBlogPurge({
 
   const products = normalizedProductIds.map((id) => ({ id }));
   try {
-    const { entries, blogPostSlugs } = await enrichProductPurgeEntries(
-      supabase,
-      merchantId,
-      products
-    );
+    const { entries, blogPostSlugs, resolvedSlugs } =
+      await enrichProductPurgeEntries(supabase, merchantId, products);
     if (entries.length === 0) {
       return;
     }
 
+    revalidateProductSlugs(
+      merchantId,
+      resolvedSlugs ?? entries.map((entry) => entry.slug)
+    );
     await expireProductBlogCacheReliable(merchantId);
     if (blogPostSlugs.length > 0) {
       scheduleStorefrontProductPurge(merchantSlug, entries, {

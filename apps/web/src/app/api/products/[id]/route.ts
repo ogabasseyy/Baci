@@ -1029,18 +1029,25 @@ export async function DELETE(
       .eq('merchant_id', merchantId)
       .maybeSingle();
 
+    if (!preReadError && !productToDelete) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
+
     // Capture relationship IDs BEFORE the delete cascades join rows. Resolve
     // the published slugs after the mutation commits so the delete handler
     // does not paginate/join blog content on its critical path.
     let linkedBlogPostIds: string[] = [];
+    let incompleteBlogSnapshot = false;
     try {
       const { data: linkedPosts, error: linkedPostsError } = await supabase
         .from('blog_post_products')
         .select('blog_post_id')
         .eq('merchant_id', merchantId)
         .eq('product_id', id)
-        .limit(PREDELETE_BLOG_POST_ID_LIMIT);
+        .limit(PREDELETE_BLOG_POST_ID_LIMIT + 1);
       if (linkedPostsError) throw linkedPostsError;
+      incompleteBlogSnapshot =
+        (linkedPosts?.length ?? 0) > PREDELETE_BLOG_POST_ID_LIMIT;
       linkedBlogPostIds = (linkedPosts ?? [])
         .map((row) => (row as { blog_post_id?: unknown }).blog_post_id)
         .filter(
@@ -1049,6 +1056,7 @@ export async function DELETE(
         )
         .map((blogPostId) => blogPostId.trim());
     } catch (linkedPostsError) {
+      incompleteBlogSnapshot = true;
       console.warn('Could not snapshot linked blog post IDs before delete', {
         merchantId,
         productId: id,
@@ -1112,17 +1120,14 @@ export async function DELETE(
           productIds: [id],
           entries: purgeEntries,
           blogPostIds: linkedBlogPostIds,
+          purgeWholeStorefront: incompleteBlogSnapshot,
         });
       } else {
-        // The pre-read errored or came back null, yet the delete above
-        // succeeded — the storefront still has the deleted product's page cached
-        // and would keep serving a 200 for it until the raised edge TTL expires.
-        // We no longer know its slug or category, so schedule a MINIMAL id-based
-        // fallback purge (`/`, `/products`, `/products/<id>`): the id path always
-        // resolves the PDP fallback, and over-purging a possibly-nonexistent id
-        // is harmless (caches self-heal) versus leaving a deleted 200 live.
+        // The pre-read failed, but deletion committed. Its old slug/category
+        // are unknown, so evict the hostname rather than leaving canonical
+        // product or cross-category article URLs cached after the cascade.
         console.warn(
-          'Product purge pre-read missing after delete; scheduling id-based fallback purge',
+          'Product purge pre-read failed after delete; scheduling complete fallback purge',
           { id, preReadError }
         );
         scheduleProductMutationPurge({
@@ -1132,6 +1137,7 @@ export async function DELETE(
           productIds: [id],
           entries: [{ slug: id, categorySegment: null }],
           blogPostIds: linkedBlogPostIds,
+          purgeWholeStorefront: true,
         });
       }
     } catch (purgeError) {

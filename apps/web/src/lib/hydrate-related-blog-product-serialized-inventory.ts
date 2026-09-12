@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { hydrateAndSanitizePublicProducts } from '@/lib/hydrate-public-products';
-import { getEffectiveStock } from '@/lib/product-stock';
+import { isPublicVariantPurchasable } from '@/lib/is-public-variant-purchasable';
 import type { RelatedBlogProduct } from '@/lib/related-blog-products';
 
 /**
@@ -26,8 +26,8 @@ export async function hydrateRelatedBlogProductSerializedInventory(
 
     return {
       ...product,
-      has_purchasable_variant: product.variants.some(
-        (variant) => getEffectiveStock(variant) > 0
+      has_purchasable_variant: product.variants.some((variant) =>
+        isPublicVariantPurchasable(product, variant)
       ),
     };
   });

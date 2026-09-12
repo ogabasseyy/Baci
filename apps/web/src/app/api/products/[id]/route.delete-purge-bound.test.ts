@@ -140,15 +140,31 @@ describe('DELETE /api/products/[id] purge snapshot', () => {
 
     // Assert
     expect(response.status).toBe(200);
-    expect(limit).toHaveBeenCalledWith(256);
+    expect(limit).toHaveBeenCalledWith(257);
     expect(mocks.purgeMutation).toHaveBeenCalledWith(
       expect.objectContaining({
         blogPostIds: expect.any(Array),
+        purgeWholeStorefront: true,
       })
     );
     const purgeInput = mocks.purgeMutation.mock.calls[0]?.[0] as {
       blogPostIds?: unknown[];
     };
-    expect(purgeInput.blogPostIds).toHaveLength(256);
+    expect(purgeInput.blogPostIds).toHaveLength(257);
+  });
+
+  it('purges the hostname if the pre-delete relationship snapshot fails', async () => {
+    const { limit, supabase } = createSupabase();
+    limit.mockRejectedValueOnce(new Error('temporary failure'));
+    vi.mocked(
+      (await import('@/lib/supabase/server')).createClient
+    ).mockReturnValue(supabase as never);
+    const response = await DELETE(makeRequest(), {
+      params: Promise.resolve({ id: PRODUCT_ID }),
+    });
+    expect(response.status).toBe(200);
+    expect(mocks.purgeMutation).toHaveBeenCalledWith(
+      expect.objectContaining({ purgeWholeStorefront: true })
+    );
   });
 });

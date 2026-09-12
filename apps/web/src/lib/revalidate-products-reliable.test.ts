@@ -81,6 +81,22 @@ describe('revalidateProductsReliable', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it('uses the remote route when local revalidation returns false', async () => {
+    mockRevalidateProducts.mockReturnValue(false);
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true });
+    await revalidateProductsReliable('merchant-1', {
+      fetchImpl,
+      merchantSlug: 'ogabassey',
+      products: [{ id: 'product-1', slug: 'phone' }],
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toMatchObject({
+      products: [{ id: 'product-1', slug: 'phone' }],
+      merchantSlug: 'ogabassey',
+    });
+  });
+
   it('falls back to the internal Bearer endpoint when in-process revalidation throws (no store context)', async () => {
     mockRevalidateProducts.mockImplementation(() => {
       throw new Error('static generation store missing');

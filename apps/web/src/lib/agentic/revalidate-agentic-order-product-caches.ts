@@ -58,6 +58,11 @@ export async function revalidateAgenticOrderProductCaches({
         .returns<ProductCacheRow[]>();
 
       if (error) {
+        scheduleOrderProductBlogPurgeAfterResponse({
+          merchantId,
+          productIds: normalizedProductIds,
+          supabase,
+        });
         productCacheRevalidation.revalidateProducts(merchantId, undefined, {
           feedScope: 'merchant',
         });
@@ -135,6 +140,11 @@ export async function revalidateAgenticOrderProductCaches({
         productCacheRevalidation.revalidateDashboard(merchantId);
       }
     } catch (error) {
+      scheduleOrderProductBlogPurgeAfterResponse({
+        merchantId,
+        productIds: normalizedProductIds,
+        supabase,
+      });
       logger.error({
         error: sanitizeForLog(error),
         message: slugLookupFailureMessage,

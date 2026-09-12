@@ -47,6 +47,11 @@ vi.mock('@/lib/cache-revalidation', () => ({
 }));
 
 const mockScheduleStorefrontProductPurge = vi.fn();
+const mockScheduleHostnamePurge = vi.fn();
+vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
+    mockScheduleHostnamePurge(...args),
+}));
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mockScheduleStorefrontProductPurge(...args),
@@ -1901,6 +1906,12 @@ describe('DELETE /api/products/[id]', () => {
   describe('success', () => {
     it('deletes product successfully', async () => {
       deleteError = null;
+      productToDelete = {
+        id: PRODUCT_ID,
+        slug: 'phone',
+        name: 'Phone',
+        category: 'Electronics',
+      };
 
       const res = await DELETE(makeDeleteRequest(PRODUCT_ID), {
         params: Promise.resolve({ id: PRODUCT_ID }),
@@ -1976,39 +1987,28 @@ describe('DELETE /api/products/[id]', () => {
       ).toBe(true);
     });
 
-    it('schedules an id-based fallback purge when the pre-read is null but the delete succeeded', async () => {
+    it('does not purge a storefront for a nonexistent product', async () => {
       const consoleWarnSpy = vi
         .spyOn(console, 'warn')
         .mockImplementation(() => undefined);
       try {
         deleteError = null;
-        // Pre-read returned no row, yet the delete succeeded — the deleted
-        // product's cached 200 must still be evicted via the id fallback.
+        // A successful empty read is not an inventory mutation.
         productToDelete = null;
 
         const res = await DELETE(makeDeleteRequest(PRODUCT_ID), {
           params: Promise.resolve({ id: PRODUCT_ID }),
         });
 
-        expect(res.status).toBe(200);
-        expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-          'test-store',
-          [{ slug: PRODUCT_ID, categorySegment: null }]
-        );
-        expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(MERCHANT_ID, [
-          PRODUCT_ID,
-        ]);
-        expect(
-          mockRevalidateProductSlugs.mock.invocationCallOrder[0]
-        ).toBeLessThan(
-          mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
-        );
+        expect(res.status).toBe(404);
+        expect(mockScheduleHostnamePurge).not.toHaveBeenCalled();
+        expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
       } finally {
         consoleWarnSpy.mockRestore();
       }
     });
 
-    it('schedules an id-based fallback purge when the pre-read errored but the delete succeeded', async () => {
+    it('schedules a complete fallback purge when the pre-read errored but the delete succeeded', async () => {
       const consoleWarnSpy = vi
         .spyOn(console, 'warn')
         .mockImplementation(() => undefined);
@@ -2022,14 +2022,10 @@ describe('DELETE /api/products/[id]', () => {
         });
 
         expect(res.status).toBe(200);
-        // Falls back to the route's product id so `/`, `/products`, and
-        // `/products/<id>` are evicted even though the row is unknown.
-        expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-          'test-store',
-          [{ slug: PRODUCT_ID, categorySegment: null }]
-        );
+        // The unknown old canonical path is covered by the hostname purge.
+        expect(mockScheduleHostnamePurge).toHaveBeenCalledWith('test-store');
         expect(consoleWarnSpy).toHaveBeenCalledWith(
-          'Product purge pre-read missing after delete; scheduling id-based fallback purge',
+          'Product purge pre-read failed after delete; scheduling complete fallback purge',
           expect.objectContaining({ id: PRODUCT_ID })
         );
       } finally {

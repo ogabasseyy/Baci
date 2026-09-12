@@ -1,5 +1,6 @@
 import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import { getQuizRulesVersion } from '@/lib/quiz/quiz-rules-version';
+import { scheduleReservationProductPurge } from '@/lib/schedule-reservation-product-purge';
 import type { MerchantQuizActivationV2Input } from '@/schemas/quiz';
 import type {
   QuizDraftEvent,
@@ -128,6 +129,12 @@ export async function launchMerchantQuizDraftV2(args: {
     });
     if (isQuizDraftEvent(data)) {
       expireProductBlogCache(merchantId);
+      scheduleReservationProductPurge({
+        merchantId,
+        sourceId: input.eventId,
+        source: 'quiz',
+        supabase,
+      });
       return { event: data, ok: true };
     }
 
@@ -139,6 +146,12 @@ export async function launchMerchantQuizDraftV2(args: {
       });
       if (alreadyLaunched) {
         expireProductBlogCache(merchantId);
+        scheduleReservationProductPurge({
+          merchantId,
+          sourceId: input.eventId,
+          source: 'quiz',
+          supabase,
+        });
         return { event: alreadyLaunched, ok: true };
       }
     }

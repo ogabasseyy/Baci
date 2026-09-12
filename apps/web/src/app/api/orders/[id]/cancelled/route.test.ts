@@ -75,6 +75,30 @@ function createSupabase() {
 }
 
 describe('POST /api/orders/[id]/cancelled', () => {
+  it('keeps product invalidation after a committed restock and failed product read', async () => {
+    const { supabase, productsIn } = createSupabase();
+    productsIn.mockResolvedValueOnce({
+      data: [],
+      error: { message: 'read failed' },
+    } as never);
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+    const response = await POST(
+      request({ cancelled_by: 'merchant', confirm_cancellation: true }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+    expect(response.status).toBe(202);
+    expect(
+      mocks.scheduleOrderProductBlogPurgeAfterResponse
+    ).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      productIds: ['product-1'],
+      supabase,
+    });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.checkCsrfProtection.mockResolvedValue({ valid: true });

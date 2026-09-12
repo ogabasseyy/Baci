@@ -12,6 +12,12 @@ import { resolveStorefrontProductPurgeCategorySlug } from './storefront-product-
 // product-purge caller; compare `countDistinctProductPurgeEntries`.
 export const PURGE_WHOLE_STOREFRONT_THRESHOLD = 50;
 
+// Cloudflare accepts at most 30 URL targets per request on non-Enterprise
+// plans. Keep post-response invalidation bounded to ten batches; if product
+// and related-article targets exceed this count, callers should use the
+// hostname-wide purge instead of starting an unbounded tail of requests.
+export const PURGE_WHOLE_STOREFRONT_URL_THRESHOLD = 300;
+
 /**
  * One product's purge target: its slug plus the canonical category segment of
  * its PDP (e.g. `smartphones`), or null when the product resolves to the
@@ -185,7 +191,8 @@ export function countDistinctProductPurgeEntries(
  */
 export function buildStorefrontProductPurgeUrls(
   identifiers: readonly string[],
-  entries: readonly StorefrontProductPurgeEntry[]
+  entries: readonly StorefrontProductPurgeEntry[],
+  blogPostSlugs: readonly string[] = []
 ): string[] {
   const dedupedEntries = dedupeProductPurgeEntries(entries);
   if (dedupedEntries.length === 0) {
@@ -197,6 +204,8 @@ export function buildStorefrontProductPurgeUrls(
       .map((entry) => entry.categorySegment ?? '')
       .filter((segment): segment is string => segment.length > 0)
   );
+  const normalizedBlogPostSlugs =
+    dedupePathSegmentsPreservingCasing(blogPostSlugs);
 
   const urls = new Set<string>();
   for (const identifier of identifiers) {
@@ -231,6 +240,21 @@ export function buildStorefrontProductPurgeUrls(
       // leaving, or changing within a category must evict them.
       for (const segment of categorySegments) {
         urls.add(`https://${hostname}/${encodeURIComponent(segment)}`);
+      }
+
+      // Related-product cards are embedded in the cached article document,
+      // not only in the product PDP. Purge the blog index and each affected
+      // published article (plus its generated social image) when a linked
+      // product changes. Keep this list caller-supplied and bounded to avoid
+      // evicting unrelated blog content on every catalog mutation.
+      if (normalizedBlogPostSlugs.length > 0) {
+        urls.add(`https://${hostname}/blog`);
+        for (const slug of normalizedBlogPostSlugs) {
+          urls.add(`https://${hostname}/blog/${encodeURIComponent(slug)}`);
+          urls.add(
+            `https://${hostname}/blog/${encodeURIComponent(slug)}/opengraph-image`
+          );
+        }
       }
     }
   }

@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   merchantThrows: false,
   revalidateProducts: vi.fn(),
   revalidateProductSlugs: vi.fn(),
+  scheduleProductBlogPurgeAfterResponse: vi.fn(),
   scheduleStorefrontProductPurge: vi.fn(),
   selectArgs: [] as string[],
   supabase: null as unknown,
@@ -74,6 +75,10 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mocks.scheduleStorefrontProductPurge(...args),
+}));
+vi.mock('@/lib/schedule-product-blog-purge-after-response', () => ({
+  scheduleProductBlogPurgeAfterResponse: (...args: unknown[]) =>
+    mocks.scheduleProductBlogPurgeAfterResponse(...args),
 }));
 vi.mock('@/lib/storefront-product-purge-urls', () => ({
   resolveProductPurgeCategorySegmentForRow: (row: {

@@ -31,7 +31,7 @@ const ENV_BOOLEAN_VALUES = new Set([
   'yes',
 ]);
 
-function hasQuizDirectWorkerEnv(env: NodeJS.ProcessEnv) {
+function hasQuizDirectWorkerEnv(env: Partial<NodeJS.ProcessEnv>) {
   if (
     !QUIZ_DIRECT_WORKER_REQUIRED_ENV.every((name) =>
       Boolean(env[name]?.trim())
@@ -74,7 +74,7 @@ export async function runQuizFinalizationCli({
   logger = console,
   runJob = finalizeDueQuizEvents,
 }: {
-  env?: NodeJS.ProcessEnv;
+  env?: Partial<NodeJS.ProcessEnv>;
   logger?: CliLogger;
   runJob?: typeof finalizeDueQuizEvents;
 } = {}): Promise<number> {
@@ -100,7 +100,7 @@ export async function runQuizFinalizationLoop({
   runJob = finalizeDueQuizEvents,
 }: {
   delay?: Delay;
-  env?: NodeJS.ProcessEnv;
+  env?: Partial<NodeJS.ProcessEnv>;
   logger?: CliLogger;
   runJob?: typeof finalizeDueQuizEvents;
 } = {}): Promise<number> {

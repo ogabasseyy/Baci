@@ -80,6 +80,11 @@ vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mockScheduleStorefrontProductPurge(...args),
 }));
+const mockExpireProductBlogCache = vi.fn();
+vi.mock('@/lib/expire-product-blog-cache', () => ({
+  expireProductBlogCache: (...args: unknown[]) =>
+    mockExpireProductBlogCache(...args),
+}));
 
 // ---- Import handler AFTER mocks ----
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
@@ -284,6 +289,7 @@ describe('POST /api/cache/revalidate', () => {
         'ogabassey',
         [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
       );
+      expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
     });
 
     it('allows a products-only purge for staff with products:create only (mobile create flow)', async () => {

@@ -61,18 +61,26 @@ export type InternalRevalidateProductEntry = z.infer<
  * (which identifies the storefront's cache policy) additionally schedules a
  * Cloudflare purge of the listed products' public URLs. `purgeWholeStorefront`
  * is reserved for broad structural mutations, such as a category path change,
- * where every cacheable document on that storefront must be evicted. Existing
- * callers that send only `merchantId` keep working unchanged.
+ * where every cacheable document on that storefront must be evicted.
+ * `expireProductBlogCache` is reserved for standalone workers that need the
+ * merchant-scoped related-product enrichment tag hard-expired in a Next
+ * request context before an edge article purge. Existing callers that send
+ * only `merchantId` keep working unchanged.
  */
 export const internalRevalidateProductsBodySchema = z
   .object({
     merchantId: z.string().trim().min(1).max(255),
     merchantSlug: z.string().trim().min(1).max(255).optional(),
+    productSlugs: z
+      .array(z.string().trim().min(1).max(300))
+      .max(10_000)
+      .optional(),
     products: z
       .array(internalRevalidateProductEntrySchema)
       .max(1000)
       .optional(),
     purgeWholeStorefront: z.literal(true).optional(),
+    expireProductBlogCache: z.literal(true).optional(),
   })
   .superRefine((value, context) => {
     if (value.purgeWholeStorefront && !value.merchantSlug) {

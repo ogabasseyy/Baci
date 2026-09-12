@@ -16,10 +16,6 @@ import {
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
-import {
-  revalidateProductSlugs,
-  revalidateProducts,
-} from '@/lib/cache-revalidation';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
@@ -37,6 +33,7 @@ import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airpo
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
@@ -3002,46 +2999,13 @@ export async function POST(request: NextRequest) {
     // it is never gated on downstream success; guarded so it can't break checkout.
     if (!idempotencyReplayed) {
       try {
-        revalidateProducts(merchant_id);
-
-        // revalidateProducts() above busts only the merchant-wide/listing
-        // tags. The bounded PDP snapshot is tagged
-        // per-slug (getProductScopedCacheTag('product', merchantId, slug)),
-        // which a bare revalidateProducts(merchantId) does NOT bust, so the
-        // exact PDP a shopper is viewing could keep serving just-sold-out
-        // stock for the full ~300s 'products' cacheLife. orderItemsPayload
-        // carries product_id but not slug, so resolve slugs with one
-        // merchant-scoped, PK-indexed lookup and bust the per-slug PDP tags too.
-        const revalidateProductIds = Array.from(
-          new Set(
-            orderItemsPayload
-              .map((item) => item.product_id)
-              .filter((id): id is string => Boolean(id))
-          )
-        );
-        if (revalidateProductIds.length > 0) {
-          const { data: revalidateProductRows, error: revalidateSlugError } =
-            await supabase
-              .from('products')
-              .select('slug')
-              .eq('merchant_id', merchant_id)
-              .in('id', revalidateProductIds)
-              .returns<Array<{ slug: string }>>();
-          if (revalidateSlugError) {
-            logger.error({
-              message:
-                'Failed to resolve product slugs for PDP cache revalidation',
-              error: revalidateSlugError,
-              orderId: order.id,
-              merchantId: merchant_id,
-            });
-          } else if (revalidateProductRows) {
-            revalidateProductSlugs(
-              merchant_id,
-              revalidateProductRows.map((row) => row.slug)
-            );
-          }
-        }
+        await scheduleCheckoutProductBlogPurge({
+          merchantId: merchant_id,
+          merchantSlug: merchant.slug,
+          orderId: order.id,
+          orderItems: orderItemsPayload,
+          supabase,
+        });
       } catch (revalidateError) {
         logger.error({
           message: 'Failed to revalidate product caches after order creation',

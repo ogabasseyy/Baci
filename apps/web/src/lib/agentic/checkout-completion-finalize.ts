@@ -28,8 +28,8 @@ import {
 import { isValidOrderFinalizationClaim } from '@/lib/agentic/checkout-order-finalization-claim-reference';
 import type { AgenticMetadata } from '@/lib/agentic/checkout-storage';
 import { buildStoredAgenticIdempotencyResponse } from '@/lib/agentic/idempotency-response-storage';
+import { revalidateAgenticOrderProductCaches } from '@/lib/agentic/revalidate-agentic-order-product-caches';
 import { logger } from '@/lib/logger';
-import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 
 type CheckoutCalculation = Awaited<ReturnType<typeof calculateCheckoutSession>>;
@@ -129,8 +129,11 @@ export async function finalizeAgenticCheckoutPayment({
       409
     );
   }
-
-  let orderId = getMarkedFinalizationOrderId(metadata);
+  const markedOrderId = metadata.agentic?.finalization_order_id;
+  let orderId =
+    typeof markedOrderId === 'string' && markedOrderId.trim().length > 0
+      ? markedOrderId.trim()
+      : null;
   if (!orderId) {
     const orderPayload = buildAgenticCheckoutOrderPayload({
       buyer,
@@ -157,7 +160,6 @@ export async function finalizeAgenticCheckoutPayment({
       });
       return respond({ error: 'Order creation failed' }, 500);
     }
-
     if (!orderResult.ok) {
       await releaseFinalizationClaimSafely({
         finalizationClaim,
@@ -176,7 +178,6 @@ export async function finalizeAgenticCheckoutPayment({
       });
       return respond({ error: 'Order creation failed' }, 500);
     }
-
     const createdOrderId = orderResult.orderId;
     if (!createdOrderId) {
       await releaseFinalizationClaimSafely({
@@ -194,63 +195,18 @@ export async function finalizeAgenticCheckoutPayment({
       return respond({ error: 'Order creation failed' }, 500);
     }
     orderId = createdOrderId;
-
-    // create_storefront_order decrements only products with manage_stock=true.
-    // Resolve that policy before cache work so unlimited-inventory sales cause
-    // no catalog or feed churn.
-    try {
-      const productIds = Array.from(
-        new Set(
-          orderSessionCalc.lineItems
-            .map((li) => li.item.product_id)
-            .filter(
-              (id): id is string => typeof id === 'string' && id.length > 0
-            )
-        )
-      );
-      if (productIds.length > 0) {
-        const { data: productsForRevalidate, error: slugLookupError } =
-          await supabase
-            .from('products')
-            .select('slug, manage_stock')
-            .in('id', productIds)
-            .eq('merchant_id', merchantId)
-            .returns<Array<{ manage_stock: boolean | null; slug: string }>>();
-        if (slugLookupError) {
-          productCacheRevalidation.revalidateProducts(merchantId, undefined, {
-            feedScope: 'merchant',
-          });
-          logger.error({
-            error: sanitizeForLog(slugLookupError),
-            message: 'Failed to load product slugs for PDP cache revalidation',
-            sessionId: sanitizeForLog(sessionId),
-          });
-        } else {
-          const trackedProducts = (productsForRevalidate ?? []).filter(
-            (product) => product.manage_stock === true
-          );
-          if (trackedProducts.length > 0) {
-            productCacheRevalidation.revalidateProducts(merchantId, undefined, {
-              feedScope: 'merchant',
-            });
-            productCacheRevalidation.revalidateProductSlugs(
-              merchantId,
-              trackedProducts.map((product) => product.slug)
-            );
-          } else {
-            productCacheRevalidation.revalidateDashboard(merchantId);
-          }
-        }
-      }
-    } catch (revalidateError) {
-      logger.error({
-        error: sanitizeForLog(revalidateError),
-        message:
-          'Failed to revalidate product caches after agentic order creation',
-        sessionId: sanitizeForLog(sessionId),
-      });
-    }
-
+    await revalidateAgenticOrderProductCaches({
+      merchantId,
+      productIds: orderSessionCalc.lineItems.map(
+        (lineItem) => lineItem.item.product_id
+      ),
+      sessionId,
+      slugLookupFailureMessage:
+        'Failed to load product slugs for PDP cache revalidation',
+      outerFailureMessage:
+        'Failed to revalidate product caches after agentic order creation',
+      supabase,
+    });
     const marker = await recordAgenticOrderFinalizationOrderCreated({
       finalizationClaim,
       merchantId,
@@ -341,13 +297,4 @@ export async function finalizeAgenticCheckoutPayment({
     sessionCalc: orderSessionCalc,
   });
   return respond(responsePayload, 200);
-}
-
-function getMarkedFinalizationOrderId(
-  metadata: AgenticMetadata
-): string | null {
-  const orderId = metadata.agentic?.finalization_order_id;
-  return typeof orderId === 'string' && orderId.trim().length > 0
-    ? orderId.trim()
-    : null;
 }

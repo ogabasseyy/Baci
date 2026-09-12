@@ -19,6 +19,7 @@ import {
   revalidateReviews,
 } from '@/lib/cache-revalidation';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import { getMerchantBlogRevalidationContext } from '@/lib/get-merchant-blog-cache-identifiers';
 import { getMerchantBlogPostCategories } from '@/lib/get-merchant-blog-post-categories';
 import { getMerchantBlogPostSlugs } from '@/lib/get-merchant-blog-post-slugs';
@@ -140,11 +141,8 @@ export async function POST(request: NextRequest) {
         // products-carrying request, independent of whether that slug lookup
         // succeeds. Fail-open lives inside enrichProductPurgeEntries: any lookup
         // problem falls back to the caller's flat hints.
-        const { entries, resolvedSlugs } = await enrichProductPurgeEntries(
-          auth.supabase,
-          merchantId,
-          products
-        );
+        const { entries, resolvedSlugs, blogPostSlugs } =
+          await enrichProductPurgeEntries(auth.supabase, merchantId, products);
         // Bust the per-slug Next product-detail caches for every resolved slug
         // BEFORE scheduling the edge purge below: without this, a Cloudflare
         // MISS after the purge refills the edge from the still-tagged Next
@@ -152,6 +150,11 @@ export async function POST(request: NextRequest) {
         // slug-less revalidateProducts above) until its cacheLife TTL,
         // defeating it.
         revalidateProductSlugs(merchantId, resolvedSlugs);
+
+        // The related-product rail is cached under the merchant product tag.
+        // Hard-expire it before a Cloudflare MISS can refill an article from a
+        // stale enrichment snapshot.
+        expireProductBlogCache(merchantId);
 
         // The Cloudflare edge purge additionally needs the merchant's public
         // storefront slug (to build the hostnames to purge) — resolve it here
@@ -176,7 +179,13 @@ export async function POST(request: NextRequest) {
         if (merchantSlug) {
           // The shared scheduler switches to a bounded hostname purge above its
           // distinct-entry threshold, so it still evicts every affected PDP.
-          scheduleStorefrontProductPurge(merchantSlug, entries);
+          if (blogPostSlugs.length > 0) {
+            scheduleStorefrontProductPurge(merchantSlug, entries, {
+              blogPostSlugs,
+            });
+          } else {
+            scheduleStorefrontProductPurge(merchantSlug, entries);
+          }
         }
       } catch (purgeError) {
         console.error('Skipped Cloudflare product purge in cache/revalidate:', {

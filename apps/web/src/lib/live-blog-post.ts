@@ -1,4 +1,5 @@
 import { getMerchantSafe } from '@/lib/cached-data';
+import { hydrateRelatedBlogProductAvailability } from '@/lib/hydrate-related-blog-product-availability';
 import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { getOrderedBlogPostProductLinks } from '@/lib/ordered-blog-post-product-links';
 import {
@@ -130,6 +131,12 @@ export async function getLiveBlogPost(
       : normalizeRelatedBlogProducts(relatedProducts);
   }
 
+  normalizedRelatedProducts = await hydrateRelatedBlogProductAvailability(
+    supabase,
+    normalizedRelatedProducts,
+    { merchantId: merchant.id }
+  );
+
   return {
     merchant: {
       id: merchant.id,
@@ -138,6 +145,7 @@ export async function getLiveBlogPost(
       logo_url: merchant.logo_url,
       custom_domain: merchant.custom_domain,
       country: merchant.country,
+      payout_currency: merchant.payout_currency,
       social_media: merchant.social_media,
     },
     post,

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getPublishedBlogPostSlugsForProducts } from '@/lib/get-published-blog-post-slugs-for-products';
 import {
   buildInternalProductPurgeEntries,
   collectResolvedProductSlugs,
@@ -28,6 +29,8 @@ export interface AuthoritativeProductPurgeEnrichment {
    * purge so a CF MISS cannot refill from stale Next-cached product data.
    */
   resolvedSlugs: string[];
+  /** Published article slugs whose related-product rail embeds these products. */
+  blogPostSlugs: string[];
 }
 
 /**
@@ -138,11 +141,24 @@ export async function enrichProductPurgeEntries(
     ),
   ];
 
+  const blogPostSlugs =
+    idsToResolve.length > 0 || entries.length > 0
+      ? await getPublishedBlogPostSlugsForProducts(
+          supabase,
+          merchantId,
+          idsToResolve,
+          entries
+            .map((entry) => entry.categorySegment)
+            .filter((segment): segment is string => Boolean(segment))
+        )
+      : [];
+
   return {
     entries,
     resolvedSlugs: collectResolvedProductSlugs(
       products,
       authoritativeSlugsById
     ),
+    blogPostSlugs,
   };
 }

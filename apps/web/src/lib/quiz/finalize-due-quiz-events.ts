@@ -6,6 +6,7 @@ import {
 } from '@/lib/quiz/quiz-runtime-env';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/types/supabase';
+import { invalidateQuizProductCaches } from './quiz-product-cache-invalidation';
 
 const COUNT_KEYS = [
   'scheduledPromoted',
@@ -169,6 +170,7 @@ function runStep(client: QuizFinalizationClient, step: FinalizationStep) {
 export async function finalizeDueQuizEvents() {
   const summary = emptySummary();
   const client: QuizFinalizationClient = createAdminClient();
+  const cacheInvalidationStartedAt = new Date().toISOString();
   const phaseIsProduction = getQuizPhaseEnv() === 'production';
   const productionApproved = getQuizProductionApprovedEnv();
 
@@ -247,6 +249,8 @@ export async function finalizeDueQuizEvents() {
   if (!phaseIsProduction || !productionApproved) {
     summary.skippedLive = summary.liveAwaitingGate;
   }
+
+  await invalidateQuizProductCaches(client, cacheInvalidationStartedAt);
 
   if (summary.failed > 0) {
     return {

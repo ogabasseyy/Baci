@@ -6,10 +6,12 @@ import {
   revalidateProducts,
 } from '@/lib/cache-revalidation';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { scheduleProductBlogPurgeAfterResponse } from '@/lib/schedule-product-blog-purge-after-response';
 import { generateProductSlug } from '@/lib/seo-utils';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 import {
@@ -134,6 +136,7 @@ export async function POST(request: NextRequest) {
     let failedCount = 0;
     const errors: string[] = [];
     const publicPurgeEntries: StorefrontProductPurgeEntry[] = [];
+    const publicPurgeProductIds: string[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -197,6 +200,9 @@ export async function POST(request: NextRequest) {
           // product listings that can now include them.
           const purgeSlug = productData.slug.trim() || insertedProduct?.id;
           if (productData.status === 'active' && purgeSlug) {
+            if (insertedProduct?.id) {
+              publicPurgeProductIds.push(insertedProduct.id);
+            }
             publicPurgeEntries.push({
               slug: purgeSlug,
               categorySegment: resolveProductPurgeCategorySegment({
@@ -228,10 +234,25 @@ export async function POST(request: NextRequest) {
           merchantId,
           publicPurgeEntries.map((entry) => entry.slug)
         );
+        // Expire the merchant-scoped related-blog data before an edge MISS can
+        // refill a stale article while the deferred lookup is still queued.
+        expireProductBlogCache(merchantId);
         scheduleStorefrontProductPurge(
           merchantContext.merchantSlug,
           publicPurgeEntries
         );
+        scheduleProductBlogPurgeAfterResponse({
+          supabase,
+          merchantId,
+          merchantSlug: merchantContext.merchantSlug,
+          productIds: publicPurgeProductIds,
+          entries: publicPurgeEntries,
+          categorySlugs: publicPurgeEntries.map(
+            (entry) => entry.categorySegment
+          ),
+          skipWhenNoLinkedPosts: true,
+          skipProductPurge: true,
+        });
       } catch (purgeError) {
         console.warn('Skipped Cloudflare product purge after bulk import', {
           purgeError,

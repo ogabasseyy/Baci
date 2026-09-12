@@ -13,9 +13,7 @@ describe('BlogRelatedProducts pricing', () => {
   it('distinguishes catalog prices from quoted editorial amounts', () => {
     render(<BlogRelatedProducts basePath="" products={[]} />);
     expect(
-      screen.getByText(
-        /Prices quoted in the article do not update automatically/
-      )
+      screen.getByText(/Historical and other quoted prices remain as written/)
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Open the product page to confirm the current price/)

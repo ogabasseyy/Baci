@@ -115,6 +115,7 @@ async function renderBlogPostContent({
     : baseUrl;
   const authorId = authorSlug ? `${baseUrl}#author-${authorSlug}` : undefined;
   const structuredData = buildBlogPostStructuredData({
+    catalogPrices: { products: relatedProducts, currencySource: merchant },
     author: {
       id: authorId,
       image: post.author_image_url ?? undefined,

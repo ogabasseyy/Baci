@@ -91,6 +91,7 @@ export async function BlogPostBody({
 
   const { isJson, legacyHtml, legacyPriorityImageSources, renderedContent } =
     await resolveBlogPostContent(content, {
+      catalogPrices: { products: relatedProducts, currencySource },
       basePath,
       baseUrl,
       fallbackImageAlt: post.title,
@@ -268,7 +269,7 @@ export async function BlogPostBody({
         <BlogRelatedProducts
           basePath={basePath}
           currencySource={currencySource}
-          products={safeRelatedProducts}
+          products={safeRelatedProducts.slice(0, 8)}
         />
       )}
     </div>

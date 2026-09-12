@@ -11,6 +11,7 @@ import {
   getBlogStructuredDataImageUrls,
 } from '@/lib/blog-structured-data-images';
 import { buildBlogVideoMetadata } from '@/lib/blog-video-metadata';
+import { resolveBlogCatalogPrices } from '@/lib/resolve-blog-catalog-prices';
 import {
   generateBlogPostSchema,
   generateBreadcrumbSchema,
@@ -18,6 +19,7 @@ import {
 import { getBlogPostTextPreview } from './blog-post-content';
 
 type BlogPostStructuredDataInput = {
+  catalogPrices?: Parameters<typeof resolveBlogCatalogPrices>[1];
   author: {
     id?: string;
     image?: string;
@@ -61,6 +63,7 @@ type BlogPostStructuredDataInput = {
 };
 
 export function buildBlogPostStructuredData({
+  catalogPrices,
   author,
   baseUrl,
   blogIndexUrl,
@@ -76,11 +79,18 @@ export function buildBlogPostStructuredData({
       : buildBlogOrganizationId(baseUrl);
   const blogImageUrls = getBlogStructuredDataImageUrls(post);
   const blogImages = getBlogStructuredDataImages(post);
-  const faqSchema = generateFaqPageSchema(extractBlogFaqItems(content));
-  const schemaDescription =
-    post.seo_description ||
-    post.excerpt ||
-    getBlogPostTextPreview(post.content);
+  const resolvePriceText = (text: string) =>
+    resolveBlogCatalogPrices({ html: text }, catalogPrices ?? { products: [] })
+      .html ?? text;
+  const faqSchema = generateFaqPageSchema(
+    extractBlogFaqItems(content).map((item) => ({
+      question: resolvePriceText(item.question),
+      answer: resolvePriceText(item.answer),
+    }))
+  );
+  const schemaDescription = resolvePriceText(
+    post.seo_description || post.excerpt || getBlogPostTextPreview(post.content)
+  );
   const title = post.seo_title || post.title;
   const videoMetadata = buildBlogVideoMetadata({
     authorName: author.name,

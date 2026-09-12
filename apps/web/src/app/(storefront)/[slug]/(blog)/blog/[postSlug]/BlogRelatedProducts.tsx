@@ -90,9 +90,9 @@ export function BlogRelatedProducts({
         Popular Products Mentioned
       </h2>
       <p className="mb-4 text-sm text-muted-foreground">
-        Prices shown below come from the catalog. Prices quoted in the article
-        do not update automatically. Open the product page to confirm the
-        current price, selected variant and availability before buying.
+        Catalog-linked prices update automatically. Historical and other quoted
+        prices remain as written. Open the product page to confirm the current
+        price, selected variant and availability before buying.
       </p>
       <ul className="grid gap-3 md:grid-cols-2">
         {products.map((product) => {

@@ -22,6 +22,7 @@ export interface BlogRelatedProduct {
   stock_quantity?: number | null;
   slug?: string | null;
   variants?: Array<{
+    id?: string;
     inventory_tracking_policy?: string | null;
     price_override?: number | null;
     stock_quantity?: number | null;

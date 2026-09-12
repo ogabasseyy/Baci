@@ -39,6 +39,7 @@ import {
   normalizeRelatedBlogProducts,
   RELATED_BLOG_PRODUCTS_SELECT,
 } from '@/lib/related-blog-products';
+import { selectBlogCatalogProducts } from '@/lib/select-blog-catalog-products';
 import { selectSemanticRelatedBlogPosts } from '@/lib/semantic-related-blog-posts';
 import { generateSlug } from '@/lib/seo-utils';
 import { normalizeOgabasseyBusinessType } from '@/lib/storefront/ogabassey-entity';
@@ -2670,9 +2671,10 @@ async function getCachedBlogPostEnrichment(core: CachedBlogPostCore) {
     throw linkedProductsError;
   }
 
-  let normalizedRelatedProducts = normalizeRelatedBlogProductLinks(
-    linkedProducts
-  ).slice(0, 8);
+  let normalizedRelatedProducts = selectBlogCatalogProducts(
+    normalizeRelatedBlogProductLinks(linkedProducts),
+    post.content
+  );
 
   const normalizedCategorySlug = normalizeStorefrontCategoryValue(
     post.category

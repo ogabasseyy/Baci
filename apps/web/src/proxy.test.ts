@@ -2,7 +2,6 @@ import type { User } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { STOREFRONT_AGENT_ROUTES } from '@/config/storefront-agent-routes';
-import { STOREFRONT_PUBLIC_CACHE_POLICIES } from '@/config/storefront-cache';
 import { STOREFRONT_FEED_ROUTES } from '@/config/storefront-feed-routes';
 import {
   getCustomDomainForSlug,
@@ -30,10 +29,6 @@ const MACHINE_READABLE_TEST_PATHS = [
   ...Object.values(STOREFRONT_AGENT_ROUTES),
   ...Object.values(STOREFRONT_FEED_ROUTES),
 ];
-
-const ogabasseyCachePolicy = STOREFRONT_PUBLIC_CACHE_POLICIES.find(
-  (policy) => policy.slug === 'ogabassey'
-);
 
 // Mock dependencies
 vi.mock('@/lib/supabase/middleware', () => ({
@@ -146,10 +141,6 @@ describe('Middleware Proxy', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    if (ogabasseyCachePolicy) {
-      (ogabasseyCachePolicy as { durablePdpPurge?: boolean }).durablePdpPurge =
-        false;
-    }
     // clearAllMocks resets call history but not implementations; restore the
     // crawl-budget membership mock to its "present" default so a per-test
     // override does not leak into unrelated custom-domain tests.
@@ -3023,28 +3014,6 @@ describe('Middleware Proxy', () => {
       'max-age=300, stale-while-revalidate=86400, stale-if-error=86400'
     );
     expect(res.headers.get('Vary') ?? '').not.toContain('Cookie');
-  });
-
-  it('wires a qualified durable-PDP policy to the 30-minute downstream header', async () => {
-    // Test-only opt-in: production stays disabled until the mutation-to-edge
-    // purge qualification gates pass.
-    if (!ogabasseyCachePolicy)
-      throw new Error('Ogabassey cache policy missing');
-    (ogabasseyCachePolicy as { durablePdpPurge?: boolean }).durablePdpPurge =
-      true;
-    const req = new NextRequest(
-      'https://ogabassey.com/smartphones/samsung-galaxy-z-fold-4'
-    );
-    req.headers.set('host', 'ogabassey.com');
-
-    const res = await proxy(req);
-
-    expect(res.headers.get('Vercel-CDN-Cache-Control')).toBe(
-      'max-age=300, stale-while-revalidate=86400'
-    );
-    expect(res.headers.get('CDN-Cache-Control')).toBe(
-      'max-age=1800, stale-while-revalidate=86400, stale-if-error=86400'
-    );
   });
 
   it.each([

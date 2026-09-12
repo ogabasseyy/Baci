@@ -6,7 +6,9 @@ an inherited `x-vercel-cache: BYPASS`; that header is not a new origin invocatio
 
 ## Change
 
-Ogabassey's public PDP policy opts into 1800-second downstream freshness.
+Ogabassey's public PDP policy keeps `durablePdpPurge: false`, retaining
+300-second downstream freshness. The 1800-second policy is implemented but
+must not be enabled until the release gates below are complete.
 Vercel remains at 300 seconds, browsers must revalidate, and the existing
 86400-second stale windows remain unchanged. Private/authenticated requests,
 queries and unsafe methods retain their existing exclusions. No comparison

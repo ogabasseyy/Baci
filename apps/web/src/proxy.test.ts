@@ -2993,7 +2993,7 @@ describe('Middleware Proxy', () => {
     'https://ogabassey.com/new-category/new-product',
     `https://ogabassey.${ROOT_DOMAIN}/smartphones/samsung-galaxy-z-fold-4`,
     `https://${ROOT_DOMAIN}/ogabassey/smartphones/samsung-galaxy-z-fold-4`,
-  ])('uses durable purge-backed 30-minute downstream PDP freshness for %s', async (url) => {
+  ])('retains five-minute downstream PDP freshness until purge qualification for %s', async (url) => {
     const req = new NextRequest(url);
     req.headers.set('host', new URL(url).host);
 
@@ -3011,7 +3011,7 @@ describe('Middleware Proxy', () => {
       'max-age=300, stale-while-revalidate=86400'
     );
     expect(res.headers.get('CDN-Cache-Control')).toBe(
-      'max-age=1800, stale-while-revalidate=86400, stale-if-error=86400'
+      'max-age=300, stale-while-revalidate=86400, stale-if-error=86400'
     );
     expect(res.headers.get('Vary') ?? '').not.toContain('Cookie');
   });
@@ -3192,7 +3192,7 @@ describe('Middleware Proxy', () => {
     { edgeCached: true, url: 'https://ogabassey.com/smartphones' },
     {
       downstreamCacheControl:
-        'max-age=1800, stale-while-revalidate=86400, stale-if-error=86400',
+        'max-age=300, stale-while-revalidate=86400, stale-if-error=86400',
       edgeCached: true,
       url: 'https://ogabassey.com/smartphones/samsung-galaxy-z-fold-4',
     },

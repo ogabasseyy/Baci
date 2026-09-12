@@ -9,7 +9,8 @@ export type StorefrontPublicCachePolicy = {
 export const STOREFRONT_PUBLIC_CACHE_POLICIES = [
   {
     slug: 'ogabassey',
-    durablePdpPurge: true,
+    // Remain at five minutes until the mutation-to-edge release gates pass.
+    durablePdpPurge: false,
     customHostnames: ['ogabassey.com', 'www.ogabassey.com'],
     // These MUST mirror the live category path segments (the first URL segment
     // of every canonical PDP/listing, e.g. `/smartphones/<slug>`) AND the

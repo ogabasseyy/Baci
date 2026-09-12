@@ -74,12 +74,7 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
     );
     expect(mockCacheLife).toHaveBeenCalledWith('products');
     expect(mockCacheTag).toHaveBeenCalledWith(
-      'products-merchant-1',
-      'categories-merchant-1',
-      'features-merchant-1',
-      'merchants',
-      'merchant-id-merchant-1',
-      'merchant-ogabassey'
+      'comparison-revision-merchant-1-42'
     );
   });
 
@@ -118,6 +113,14 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
       'merchant-1',
       'smartphones',
       undefined
+    );
+    expect(mockCacheTag).toHaveBeenCalledWith(
+      'products-merchant-1',
+      'categories-merchant-1',
+      'features-merchant-1',
+      'merchants',
+      'merchant-id-merchant-1',
+      'merchant-ogabassey'
     );
   });
 });

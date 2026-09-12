@@ -58,16 +58,20 @@ export async function getCachedCompareCategoryShell(
 ): Promise<CompareCategoryShell> {
   'use cache';
   cacheLife('products');
-  cacheTag(
-    'category-page-data',
-    'products',
-    'categories',
-    `products-${merchantId}`,
-    `categories-${merchantId}`,
-    // Make the revision an observable cache input, rather than relying on an
-    // unused argument surviving the Cache Components compiler transform.
-    `comparison-revision-${merchantId}-${_comparisonRevision ?? 'local'}`
-  );
+  // Nested tags propagate to the outer cache: a revision snapshot must not
+  // inherit the broad stock-driven product invalidation tags.
+  if (_comparisonRevision) {
+    cacheTag(`comparison-revision-${merchantId}-${_comparisonRevision}`);
+  } else {
+    cacheTag(
+      'category-page-data',
+      'products',
+      'categories',
+      `products-${merchantId}`,
+      `categories-${merchantId}`,
+      `comparison-revision-${merchantId}-local`
+    );
+  }
 
   if (isSpecialCollectionSlug(categorySlug)) {
     return {

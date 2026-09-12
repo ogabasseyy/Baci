@@ -10,11 +10,17 @@
 
 ## Cache correctness and rollout
 
-The revision must change transactionally with the catalog invalidation enqueue.
+The revision must change transactionally with mutations to comparison inputs.
+Stock-only writes must retain the revision: comparison eligibility does not read
+stock. Ordinary storefront stock invalidation continues independently.
 It must not derive from the maximum of independent outbox target counters.
 Every local snapshot used to fill the shared manifest includes the revision in
 its cache key, including the category shell. This prevents an old process-local
 snapshot from filling the new shared key after invalidation.
+
+Revision-backed manifest, inventory, and shell entries use revision-specific
+tags. Broad stock-driven product tags remain on the local fallback, but must
+not propagate through nested cache entries into the revision-backed manifest.
 
 The public revision reader returns only a scalar for a published merchant, uses
 the anonymous client, and bounds the read to a single attempt. It does not grant

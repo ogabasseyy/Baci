@@ -141,13 +141,19 @@ export async function getCachedCompareCategoryInventory(
     // instance, so bound cross-instance staleness of the embedded price to
     // ~30min. This query is <1s, so refills remain inexpensive.
     cacheLife('products');
-    cacheTag(
-      'category-page-data',
-      'products',
-      'categories',
-      `products-${merchantId}`,
-      `categories-${merchantId}`
-    );
+    // Nested tags propagate to the shared manifest. Stock invalidations must
+    // not evict snapshots whose complete input key is a catalog revision.
+    if (comparisonRevision) {
+      cacheTag(`comparison-revision-${merchantId}-${comparisonRevision}`);
+    } else {
+      cacheTag(
+        'category-page-data',
+        'products',
+        'categories',
+        `products-${merchantId}`,
+        `categories-${merchantId}`
+      );
+    }
   } catch {
     // Unit tests do not run with Next cacheComponents enabled.
   }

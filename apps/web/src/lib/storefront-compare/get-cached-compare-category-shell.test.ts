@@ -63,11 +63,6 @@ describe('getCachedCompareCategoryShell', () => {
     await getCachedCompareCategoryShell('merchant-1', 'new-arrivals', '42');
 
     expect(mockCacheTag).toHaveBeenCalledWith(
-      'category-page-data',
-      'products',
-      'categories',
-      'products-merchant-1',
-      'categories-merchant-1',
       'comparison-revision-merchant-1-42'
     );
   });

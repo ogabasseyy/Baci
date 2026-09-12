@@ -13,13 +13,16 @@ const migrationSql = readFileSync(
 describe('storefront comparison revisions migration contract', () => {
   it('creates an opaque merchant revision ledger that survives merchant deletion', () => {
     expect(migrationSql).toContain(
-      'CREATE TABLE public.storefront_comparison_revisions'
+      'CREATE TABLE IF NOT EXISTS public.storefront_comparison_revisions'
     );
     expect(migrationSql).toContain('merchant_id uuid PRIMARY KEY');
     expect(migrationSql).toContain(
       'revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0)'
     );
     expect(migrationSql).not.toContain('REFERENCES public.merchants');
+    expect(migrationSql).toContain('AND attribute.attnum > 0');
+    expect(migrationSql).toContain(') <> 2 OR NOT EXISTS');
+    expect(migrationSql).toContain('AND NOT constraint_row.condeferrable');
     expect(migrationSql).toContain(
       'ON CONFLICT (merchant_id) DO UPDATE\n  SET revision = revision.revision + 1'
     );
@@ -44,15 +47,33 @@ describe('storefront comparison revisions migration contract', () => {
     );
   });
 
-  it('increments inside the existing cache-target transaction rather than using outbox generation', () => {
+  it('advances only for comparison inputs, independently of broad cache enqueue', () => {
     expect(migrationSql).toContain(
-      'CREATE OR REPLACE FUNCTION public.enqueue_storefront_cache_targets('
+      'CREATE OR REPLACE FUNCTION public.advance_storefront_comparison_revision('
     );
     expect(migrationSql).toContain(
-      'INSERT INTO public.storefront_comparison_revisions AS revision (merchant_id)'
+      'CREATE TRIGGER products_advance_storefront_comparison_revision'
+    );
+    expect(migrationSql).toContain(
+      'UPDATE OF id, merchant_id, status, slug, name, brand,\n  price, category, category_id, created_at ON public.products'
+    );
+    expect(migrationSql).toContain(
+      'CREATE TRIGGER product_categories_advance_storefront_comparison_revision'
+    );
+    expect(migrationSql).toContain(
+      'UPDATE OF id, merchant_id, slug, name, is_active, parent_id\nON public.categories'
+    );
+    expect(migrationSql).toContain(
+      'CREATE TRIGGER product_key_specs_advance_storefront_comparison_revision'
+    );
+    expect(migrationSql).toContain(
+      'BEFORE DELETE OR UPDATE OF is_published ON public.merchants'
     );
     expect(migrationSql).not.toContain(
-      'max(outbox.generation)\n    INTO v_comparison_revision'
+      'INSERT INTO public.storefront_comparison_revisions AS revision (merchant_id)\n  VALUES (p_merchant_id)\n  ON CONFLICT (merchant_id) DO UPDATE\n  SET revision = revision.revision + 1;\n\n  SELECT coalesce(pg_catalog.array_agg(candidate ORDER BY candidate)'
+    );
+    expect(migrationSql).toContain(
+      "pg_catalog.pg_get_expr(default_row.adbin, default_row.adrelid) = '1'"
     );
   });
 });

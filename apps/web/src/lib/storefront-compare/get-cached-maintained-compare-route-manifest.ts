@@ -14,9 +14,16 @@ interface MaintainedManifestInput {
   storeUrl: string;
 }
 
-function tagMaintainedManifest(input: MaintainedManifestInput): void {
+function tagMaintainedManifest(
+  input: MaintainedManifestInput,
+  comparisonRevision?: StorefrontComparisonRevision
+): void {
   try {
     cacheLife('products');
+    if (comparisonRevision) {
+      cacheTag(`comparison-revision-${input.merchantId}-${comparisonRevision}`);
+      return;
+    }
     cacheTag(
       `products-${input.merchantId}`,
       `categories-${input.merchantId}`,
@@ -74,7 +81,7 @@ async function getRevisionCachedMaintainedCompareRouteManifest(
   comparisonRevision: StorefrontComparisonRevision
 ): Promise<string[]> {
   'use cache: remote';
-  tagMaintainedManifest(input);
+  tagMaintainedManifest(input, comparisonRevision);
   return await buildMaintainedCompareRouteManifest(input, comparisonRevision);
 }
 

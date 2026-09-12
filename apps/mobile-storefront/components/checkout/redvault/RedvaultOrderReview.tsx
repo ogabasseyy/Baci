@@ -17,6 +17,7 @@ export interface RedvaultReviewInput {
   customerEmail: string;
   customerName: string;
   customerPhone: string;
+  onInitializationSuccess?: () => void;
 }
 
 export function RedvaultOrderReview({
@@ -74,7 +75,10 @@ function RedvaultOrderReviewContent({
         () => active.current
       );
       if (!active.current) return;
-      if (result === 'ready') onClose();
+      if (result === 'ready') {
+        input.onInitializationSuccess?.();
+        onClose();
+      }
     } catch (error) {
       if (!active.current) return;
       if (
@@ -111,6 +115,7 @@ function RedvaultOrderReviewContent({
               eligibleSubtotalKobo: quote.eligible_subtotal_kobo,
               ineligibleSubtotalKobo: quote.ineligible_subtotal_kobo,
               discountKobo: quote.discount_kobo,
+              assuranceFeeKobo: quote.assurance_fee_kobo,
               taxAmountKobo: quote.tax_kobo,
               shippingFeeKobo: quote.shipping_kobo,
               giftWrappingFeeKobo: quote.gift_wrapping_kobo,

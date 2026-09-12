@@ -229,6 +229,18 @@ export function useCheckoutSubmit({
           customerEmail,
           customerName,
           customerPhone,
+          onInitializationSuccess: () => {
+            void runCheckoutPostOrderSideEffects({
+              accountPassword,
+              address,
+              customerEmail,
+              customerId: customer?.id,
+              isAuthenticated,
+              saveAsDefaultAddress,
+              saveDetails,
+              selectedSavedAddressId,
+            });
+          },
         });
         return;
       }

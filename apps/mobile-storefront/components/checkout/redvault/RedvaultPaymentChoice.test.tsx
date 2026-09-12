@@ -9,6 +9,7 @@ const summary = {
   productSubtotalKobo: 150_000_000,
   eligibleSubtotalKobo: 100_000_000,
   discountKobo: 5_000_000,
+  assuranceFeeKobo: 0,
   taxAmountKobo: 7_500_000,
   shippingFeeKobo: 2_000_000,
   giftWrappingFeeKobo: 500_000,

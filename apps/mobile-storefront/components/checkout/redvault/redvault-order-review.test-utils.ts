@@ -14,6 +14,7 @@ export const redvaultOrderResponse = {
       eligible_subtotal_kobo: 10000,
       ineligible_subtotal_kobo: 1000,
       discount_kobo: 500,
+      assurance_fee_kobo: 0,
       tax_kobo: 750,
       shipping_kobo: 500,
       gift_wrapping_kobo: 0,

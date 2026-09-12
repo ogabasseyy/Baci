@@ -50,14 +50,14 @@ describe('computeRedvaultOrderQuote', () => {
     expect(quote.lines[0].unitDiscountsKobo).toEqual([discount]);
   });
 
-  it('ignores client price and binds canonical catalog fields', async () => {
+  it('ignores client price and condition and binds canonical catalog fields', async () => {
     const quote = await computeRedvaultOrderQuote({
       ...input,
       supabase: client() as never,
     });
     expect(quote.discountKobo).toBe(1000000);
     expect(quote.lines[0]).toMatchObject({
-      condition: 'used',
+      condition: 'new',
       unitPriceKobo: 10000000,
       vatRateBp: 750,
     });
@@ -75,6 +75,14 @@ describe('computeRedvaultOrderQuote', () => {
         supabase: client({ price }) as never,
       })
     ).rejects.toThrow();
+  });
+  it('rejects a catalog price whose kobo conversion is unsafe', async () => {
+    await expect(
+      computeRedvaultOrderQuote({
+        ...input,
+        supabase: client({ price: Number.MAX_SAFE_INTEGER }) as never,
+      })
+    ).rejects.toThrow('Catalog price is not representable in kobo');
   });
   it.each([
     { variants: [] },

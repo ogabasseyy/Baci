@@ -10,6 +10,11 @@ const reserved = {
   state: 'pending',
 };
 
+function storeWith(data: unknown, error: { message: string } | null = null) {
+  const rpc = vi.fn().mockResolvedValue({ data, error });
+  return { rpc, store: new RedvaultRefundStore({ rpc }) };
+}
+
 describe('REDVAULT refund store', () => {
   it.each([
     0, -1,
@@ -58,6 +63,19 @@ describe('REDVAULT refund store', () => {
     });
   });
 
+  it('rejects multiple refund rows instead of accepting the first receipt', async () => {
+    const { store } = storeWith([reserved, { ...reserved, id: 'refund-2' }]);
+
+    await expect(
+      store.reserve({
+        attemptId: '11111111-1111-4111-8111-111111111111',
+        idempotencyKey: 'ops-multiple-rows',
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        type: 'full_capture',
+      })
+    ).rejects.toThrow('REDVAULT refund RPC must return exactly one refund row');
+  });
+
   it('persists a known accepted provider id without terminalizing the refund', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [
@@ -89,6 +107,125 @@ describe('REDVAULT refund store', () => {
         p_provider_status: 'pending',
         p_refund_id: 'refund-1',
       }
+    );
+  });
+
+  it.each([
+    {
+      call: (store: RedvaultRefundStore) => store.claimNext(),
+      name: 'claims the next refund',
+      rpcName: 'claim_next_uba_redvault_refund',
+    },
+    {
+      call: (store: RedvaultRefundStore) =>
+        store.finish({ id: 'refund-1', outcome: 'processed' }),
+      name: 'finishes a refund',
+      rpcName: 'finish_uba_redvault_refund',
+    },
+    {
+      call: (store: RedvaultRefundStore) =>
+        store.reconcile({
+          id: 'refund-1',
+          providerStatus: 'processed',
+          reconciliationClaimToken: '11111111-1111-4111-8111-111111111111',
+        }),
+      name: 'reconciles a refund',
+      rpcName: 'reconcile_uba_redvault_refund',
+    },
+  ])('$name with one valid public RPC receipt', async ({ call, rpcName }) => {
+    const { rpc, store } = storeWith([{ ...reserved, state: 'processing' }]);
+
+    await expect(call(store)).resolves.toMatchObject({ id: 'refund-1' });
+    expect(rpc).toHaveBeenCalledWith(rpcName, expect.any(Object));
+  });
+
+  it.each([
+    {
+      call: (store: RedvaultRefundStore) => store.claimNext(),
+      name: 'claim next',
+    },
+    {
+      call: (store: RedvaultRefundStore) => store.claimNextReconciliation(),
+      name: 'claim reconciliation',
+    },
+  ])('$name returns null for an empty public RPC receipt', async ({ call }) => {
+    const { store } = storeWith([]);
+    await expect(call(store)).resolves.toBeNull();
+  });
+
+  it.each([
+    {
+      call: (store: RedvaultRefundStore) => store.claimNext(),
+      name: 'claim next',
+    },
+    {
+      call: (store: RedvaultRefundStore) =>
+        store.finish({ id: 'refund-1', outcome: 'failed' }),
+      name: 'finish',
+    },
+    {
+      call: (store: RedvaultRefundStore) => store.claimNextReconciliation(),
+      name: 'claim reconciliation',
+    },
+    {
+      call: (store: RedvaultRefundStore) =>
+        store.reconcile({
+          id: 'refund-1',
+          providerStatus: 'failed',
+          reconciliationClaimToken: '11111111-1111-4111-8111-111111111111',
+        }),
+      name: 'reconcile',
+    },
+  ])('$name rejects malformed public RPC receipts', async ({ call }) => {
+    const { store } = storeWith([{ ...reserved, amount_kobo: 0 }]);
+    await expect(call(store)).rejects.toThrow('REDVAULT');
+  });
+
+  it.each([
+    {
+      call: (store: RedvaultRefundStore) => store.claimNext(),
+      name: 'claim next',
+    },
+    {
+      call: (store: RedvaultRefundStore) =>
+        store.finish({ id: 'refund-1', outcome: 'failed' }),
+      name: 'finish',
+    },
+    {
+      call: (store: RedvaultRefundStore) => store.claimNextReconciliation(),
+      name: 'claim reconciliation',
+    },
+    {
+      call: (store: RedvaultRefundStore) =>
+        store.reconcile({
+          id: 'refund-1',
+          providerStatus: 'failed',
+          reconciliationClaimToken: '11111111-1111-4111-8111-111111111111',
+        }),
+      name: 'reconcile',
+    },
+  ])('$name surfaces RPC failures', async ({ call }) => {
+    const { store } = storeWith(null, { message: 'database rejected call' });
+    await expect(call(store)).rejects.toThrow('Unable to');
+  });
+
+  it('returns a bound reconciliation claim from its public RPC', async () => {
+    const { rpc, store } = storeWith([
+      {
+        ...reserved,
+        provider_reference: 'provider-refund-1',
+        reconciliation_claim_token: '11111111-1111-4111-8111-111111111111',
+        state: 'processing',
+      },
+    ]);
+
+    await expect(store.claimNextReconciliation()).resolves.toMatchObject({
+      reconciliationClaimToken: '11111111-1111-4111-8111-111111111111',
+      refund: { id: 'refund-1', providerReference: 'provider-refund-1' },
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      'claim_next_uba_redvault_refund_reconciliation',
+      {}
     );
   });
 });

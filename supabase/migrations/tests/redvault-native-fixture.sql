@@ -50,4 +50,4 @@ BEGIN
 END;
 $$;
 GRANT USAGE ON SCHEMA public,auth TO authenticated,anon;
-GRANT USAGE ON SCHEMA private TO service_role;
+GRANT USAGE ON SCHEMA private TO anon, authenticated, service_role;

@@ -79,6 +79,7 @@ function asKobo(value: number | string | null): number {
   if (
     !Number.isFinite(amount) ||
     amount < 0 ||
+    !Number.isSafeInteger(kobo) ||
     Math.abs(amount * 100 - kobo) > 1e-6
   ) {
     throw new CanonicalOrderSubtotalLoadError(
@@ -175,7 +176,7 @@ export async function computeRedvaultOrderQuote({
         );
       return {
         brand: product.brand,
-        condition: item.condition?.trim() || product.condition,
+        condition: product.condition,
         itemId: `line-${index + 1}`,
         name: product.name,
         persistedItemOrder: index + 1,

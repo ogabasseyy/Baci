@@ -6,14 +6,14 @@ DECLARE
   v_quote jsonb;
   v_order jsonb;
 BEGIN
-  SELECT * INTO v_historical FROM private.uba_redvault_applications WHERE checkout_key = 'fixture-key';
-  IF v_historical.pricing_policy_version <> 'fixed5_v1'
-    OR v_historical.discount_kobo <> 500
-    OR (SELECT allocation_kobo FROM private.uba_redvault_line_allocations WHERE application_id = v_historical.id) <> 500 THEN
+  SELECT * INTO STRICT v_historical FROM private.uba_redvault_applications WHERE checkout_key = 'fixture-key';
+  IF v_historical.pricing_policy_version IS DISTINCT FROM 'fixed5_v1'
+    OR v_historical.discount_kobo IS DISTINCT FROM 500
+    OR (SELECT allocation_kobo FROM private.uba_redvault_line_allocations WHERE application_id = v_historical.id) IS DISTINCT FROM 500 THEN
     RAISE EXCEPTION 'historical_fixed5_snapshot_repriced';
   END IF;
 
-  SELECT quote, jsonb_set(order_input, '{checkout_idempotency_key}', '"pre912-new-draft"') INTO v_quote, v_order FROM public.test_input;
+  SELECT quote, jsonb_set(order_input, '{checkout_idempotency_key}', '"pre912-new-draft"') INTO STRICT v_quote, v_order FROM public.test_input;
   PERFORM public.test_expect_error(
     format('SELECT public.create_storefront_redvault_order_draft(%L::jsonb, %L::jsonb)', v_order::text, v_quote::text),
     'redvault_group_total_mismatch'
@@ -88,11 +88,11 @@ $$;
 
 DO $$
 BEGIN
-  IF (SELECT discount_kobo FROM private.uba_redvault_applications WHERE checkout_key = 'tier-below') <> 2000000
-    OR (SELECT discount_kobo FROM private.uba_redvault_applications WHERE checkout_key = 'tier-at') <> 1000000
-    OR (SELECT eligible_subtotal_kobo FROM private.uba_redvault_applications WHERE checkout_key = 'tier-mixed') <> 10000
-    OR (SELECT pricing_policy_version FROM private.uba_redvault_applications WHERE checkout_key = 'tier-below') <> 'mou_tiered_v1'
-    OR (SELECT count(*) FROM public.orders) <> 5 THEN
+  IF (SELECT discount_kobo FROM private.uba_redvault_applications WHERE checkout_key = 'tier-below') IS DISTINCT FROM 2000000
+    OR (SELECT discount_kobo FROM private.uba_redvault_applications WHERE checkout_key = 'tier-at') IS DISTINCT FROM 1000000
+    OR (SELECT eligible_subtotal_kobo FROM private.uba_redvault_applications WHERE checkout_key = 'tier-mixed') IS DISTINCT FROM 10000
+    OR (SELECT pricing_policy_version FROM private.uba_redvault_applications WHERE checkout_key = 'tier-below') IS DISTINCT FROM 'mou_tiered_v1'
+    OR (SELECT count(*) FROM public.orders) IS DISTINCT FROM 5 THEN
     RAISE EXCEPTION 'tiered_snapshot_assertion_failed';
   END IF;
 END;

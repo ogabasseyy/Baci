@@ -133,6 +133,7 @@ export function usePaymentGatewayController() {
     orderId,
     orderNumber,
     paymentKind,
+    paymentMethod,
     reference,
     returnTo,
     trackingToken,
@@ -155,6 +156,7 @@ export function usePaymentGatewayController() {
       orderId,
       orderNumber,
       paymentKind,
+      paymentMethod,
       queryClient,
       reference,
       refs: gatewayRefs,
@@ -183,6 +185,8 @@ export function usePaymentGatewayController() {
     amount,
     clearCart,
     confirmVtuPaymentSuccess: beginVtuPaymentCompletion,
+    confirmRedvaultPayment:
+      paymentMethod === 'uba_redvault' ? beginPaymentCompletion : undefined,
     copiedGatewayTextRef,
     copyGatewayText,
     customerIdentifier,
@@ -208,6 +212,7 @@ export function usePaymentGatewayController() {
   };
   const eventHandlers = usePaymentGatewayEventHandlers({
     beginPaymentCompletion,
+    paymentMethod,
     clearPendingLoadTimeout,
     clearPendingNavigation,
     paymentKind,
@@ -229,6 +234,7 @@ export function usePaymentGatewayController() {
     handleClose,
     ...eventHandlers,
     handleWebViewMessage,
+    paymentMethod,
     paymentKind,
     status,
     toast,

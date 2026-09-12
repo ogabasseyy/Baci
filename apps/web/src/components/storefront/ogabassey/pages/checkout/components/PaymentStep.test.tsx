@@ -57,11 +57,89 @@ describe('PaymentStep', () => {
     user: null,
     remainingAmount: 10000,
     orderAmount: 10000,
+    redvaultAvailable: false,
+    redvaultStatus: 'idle' as const,
+    redvaultSummary: null,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  it('preserves an available REDVAULT selection and clears it when availability is revoked', async () => {
+    const setPaymentMethod = vi.fn();
+    const { rerender } = render(<PaymentStep {...defaultProps} paymentMethod="uba_redvault" redvaultAvailable={true} setPaymentMethod={setPaymentMethod} />);
+    expect(screen.getByRole('radio', { name: /pay with uba/i })).toBeChecked();
+    expect(setPaymentMethod).not.toHaveBeenCalled();
+    rerender(<PaymentStep {...defaultProps} paymentMethod="uba_redvault" redvaultAvailable={false} setPaymentMethod={setPaymentMethod} />);
+    await waitFor(() => expect(setPaymentMethod).toHaveBeenCalledWith(''));
+    expect(screen.queryByRole('radio', { name: /pay with uba/i })).not.toBeInTheDocument();
+  });
+
+  it('does not offer REDVAULT or retain its selection on a non-NGN checkout', async () => {
+    const setPaymentMethod = vi.fn();
+
+    render(
+      <PaymentStep
+        {...defaultProps}
+        currency="GHS"
+        paymentMethod="uba_redvault"
+        redvaultAvailable={true}
+        setPaymentMethod={setPaymentMethod}
+      />
+    );
+
+    expect(screen.queryByRole('radio', { name: /pay with uba/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(setPaymentMethod).toHaveBeenCalledWith(''));
+  });
+
+  it('clears a REDVAULT selection when its frozen quote has no eligible items', async () => {
+    const setPaymentMethod = vi.fn();
+
+    render(
+      <PaymentStep
+        {...defaultProps}
+        paymentMethod="uba_redvault"
+        redvaultAvailable={true}
+        redvaultSummary={{
+          productSubtotalKobo: 10000,
+          eligibleSubtotalKobo: 0,
+          ineligibleSubtotalKobo: 10000,
+          discountKobo: 0,
+          taxKobo: 0,
+          shippingKobo: 0,
+          giftWrappingKobo: 0,
+          payableKobo: 10000,
+          mixedBasket: true,
+        }}
+        setPaymentMethod={setPaymentMethod}
+      />
+    );
+
+    await waitFor(() => expect(setPaymentMethod).toHaveBeenCalledWith(''));
+  });
+
+  it.each(['pending', 'held'] as const)(
+    'disables placement while REDVAULT is %s',
+    (redvaultStatus) => {
+      const handlePlaceOrder = vi.fn();
+
+      render(
+        <PaymentStep
+          {...defaultProps}
+          handlePlaceOrder={handlePlaceOrder}
+          paymentMethod="uba_redvault"
+          redvaultAvailable={true}
+          redvaultStatus={redvaultStatus}
+        />
+      );
+
+      const placeOrder = screen.getByRole('button', { name: /place order/i });
+      expect(placeOrder).toBeDisabled();
+      fireEvent.click(placeOrder);
+      expect(handlePlaceOrder).not.toHaveBeenCalled();
+    }
+  );
 
   describe('Rendering', () => {
     it('renders payment step when currentStep is payment', () => {

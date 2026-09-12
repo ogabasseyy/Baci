@@ -48,6 +48,7 @@ export interface PendingCheckoutFingerprintInput {
 }
 
 export interface PendingCheckoutOrderSnapshot {
+  paymentMethod?: string;
   orderId: string;
   orderNumber?: string;
   trackingToken?: string;
@@ -125,6 +126,7 @@ export function normalizeOrderPaymentMethod(
   }
 
   if (
+    paymentMethod === 'uba_redvault' ||
     paymentMethod === 'klump' ||
     paymentMethod === 'credit_direct' ||
     paymentMethod === 'credpal' ||
@@ -156,6 +158,15 @@ export async function resolvePendingCheckoutOrder({
   shippingRateId,
   fetchImpl = fetch,
 }: ResolvePendingCheckoutOrderOptions): Promise<ResolvePendingCheckoutOrderResult> {
+  if (paymentMethod === 'uba_redvault') {
+    return {
+      reusableOrder: null,
+      clearStoredOrder: pendingOrder?.paymentMethod === 'uba_redvault',
+    };
+  }
+  if (pendingOrder?.paymentMethod === 'uba_redvault') {
+    return { reusableOrder: null, clearStoredOrder: true };
+  }
   if (!pendingOrder) {
     return { reusableOrder: null, clearStoredOrder: false };
   }

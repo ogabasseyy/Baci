@@ -221,6 +221,7 @@ function mockAuthUser(id: string) {
 }
 
 interface RpcOverrides {
+  create_storefront_redvault_order_draft?: { data: unknown; error: unknown };
   // Per-RPC return values. Default values mirror a minimal happy path.
   create_storefront_order?: { data: unknown; error: unknown };
   create_storefront_order_with_quiz_voucher?: {
@@ -586,6 +587,131 @@ const baseOrderRow = {
   shipping_fee: 0,
   customer_id: CUSTOMER_ID,
 };
+
+describe('POST /api/orders REDVAULT integration', () => {
+  it('accepts a valid Idempotency-Key with availability enabled and forwards it to the protected checkout', async () => {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const availability = await import(
+      '@/lib/checkout/redvault-payment-availability'
+    );
+    const quoting = await import('@/lib/checkout/compute-redvault-order-quote');
+    const checkout = await import(
+      '@/lib/checkout/create-redvault-checkout-response'
+    );
+    const { redvaultTestQuote } = await import(
+      '@/lib/checkout/redvault-test-fixture'
+    );
+    const availabilitySpy = vi
+      .spyOn(availability, 'getRedvaultPaymentAvailability')
+      .mockReturnValue({
+        available: true,
+        reason: 'provider_evidence_unavailable',
+      });
+    const quoteSpy = vi
+      .spyOn(quoting, 'computeRedvaultOrderQuote')
+      .mockResolvedValue(redvaultTestQuote);
+    const checkoutSpy = vi
+      .spyOn(checkout, 'createRedvaultCheckoutResponse')
+      .mockResolvedValue(
+        Response.json(
+          { order: { id: 'protected-order' } },
+          { status: 201 }
+        ) as never
+      );
+    const supabase = buildMockSupabase();
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    try {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'redvault-enabled-checkout' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+            payment_method: 'uba_redvault',
+          }),
+        })
+      );
+      expect(await response.json()).toEqual({
+        order: { id: 'protected-order' },
+      });
+      expect(response.status).toBe(201);
+      expect(checkoutSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderRpcArgs: expect.objectContaining({
+            p_checkout_idempotency_key: 'redvault-enabled-checkout',
+            p_checkout_request_hash: expect.any(String),
+          }),
+        })
+      );
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'create_storefront_order',
+        expect.anything()
+      );
+    } finally {
+      availabilitySpy.mockRestore();
+      quoteSpy.mockRestore();
+      checkoutSpy.mockRestore();
+    }
+  });
+
+  it('rejects an unavailable offer without generic order/provider side effects', async () => {
+    vi.clearAllMocks();
+    const productRows = [
+      {
+        id: 'p-1',
+        name: 'Galaxy S24',
+        brand: 'Samsung',
+        condition: 'new',
+        price: 1000,
+        vat_category_code: 'S',
+        vat_rate: 7.5,
+      },
+    ];
+    const supabase = buildMockSupabase(
+      {
+        create_storefront_redvault_order_draft: {
+          data: null,
+          error: { message: 'redvault_disabled' },
+        },
+      },
+      { productRows }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+          payment_method: 'uba_redvault',
+        }),
+        headers: { 'Idempotency-Key': 'redvault-fixture' },
+      })
+    );
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe('REDVAULT_UNAVAILABLE');
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_redvault_order_draft',
+      expect.anything()
+    );
+    expect(mockGeneratePaymentAccount).not.toHaveBeenCalled();
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+});
 
 async function readJson(response: Response) {
   return JSON.parse(await response.text());

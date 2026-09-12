@@ -12,6 +12,8 @@
 import { customAlphabet } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
 import z from 'zod';
+import { authenticateApiRequest } from '@/lib/api-auth';
+import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
 import {
   capturePaymentWithCrypto,
   convertNgnKoboToUsdtCents,
@@ -34,6 +36,7 @@ import {
   initializePayment as initializeKorapayPayment,
 } from '@/lib/korapay';
 import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
+import { initializeRedvaultPaystackCheckout } from '@/lib/payments/initialize-redvault-paystack-checkout';
 import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
 import { redactPaymentLogValue } from '@/lib/payments/redact-payment-log-value';
 import { resolveChargeCurrency } from '@/lib/payments/resolve-charge-currency';
@@ -134,6 +137,7 @@ const PaymentInitRequestSchema = z.object({
   // Crypto payment options (only for juicyway gateway)
   crypto_chain: z.enum(['TRX', 'ETH', 'MATIC', 'AVAXC']).optional(),
   crypto_currency: z.enum(['USDT', 'USDC']).optional(),
+  payment_method: z.literal('uba_redvault').optional(),
 });
 
 type PaymentInitRequest = z.infer<typeof PaymentInitRequestSchema>;
@@ -1026,6 +1030,31 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parseResult.data;
+    const redvaultRequested = data.payment_method === 'uba_redvault';
+    if (redvaultRequested) {
+      if (data.gateway && data.gateway !== 'paystack') {
+        return createErrorResponse(
+          'REDVAULT requires Paystack hosted card checkout',
+          'REDVAULT_GATEWAY_UNSUPPORTED',
+          400
+        );
+      }
+      if (data.payment_type) {
+        return createErrorResponse(
+          'REDVAULT does not support bank-transfer payment types',
+          'REDVAULT_PAYMENT_TYPE_UNSUPPORTED',
+          400
+        );
+      }
+      const availability = getRedvaultPaymentAvailability();
+      if (!availability.available) {
+        return createErrorResponse(
+          'REDVAULT payment is not available',
+          'REDVAULT_UNAVAILABLE',
+          409
+        );
+      }
+    }
 
     // The client never dictates the charge currency (see resolveChargeCurrency).
     // Capture whether the request EXPLICITLY carried a currency: the Zod schema
@@ -1066,6 +1095,23 @@ export async function POST(request: NextRequest) {
         'Merchant mismatch for this order',
         'MERCHANT_MISMATCH',
         403
+      );
+    }
+
+    const orderRequiresRedvault =
+      orderSnapshot.payment_method === 'uba_redvault';
+    if (orderRequiresRedvault && !redvaultRequested) {
+      return createErrorResponse(
+        'This order requires REDVAULT payment initialization',
+        'REDVAULT_PAYMENT_METHOD_REQUIRED',
+        409
+      );
+    }
+    if (redvaultRequested && !orderRequiresRedvault) {
+      return createErrorResponse(
+        'REDVAULT payment requires a REDVAULT order',
+        'REDVAULT_ORDER_REQUIRED',
+        409
       );
     }
 
@@ -1174,6 +1220,50 @@ export async function POST(request: NextRequest) {
         ? orderSnapshot.tracking_token
         : undefined;
 
+    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+
+    if (orderRequiresRedvault) {
+      if (!merchant.paystack_subaccount_code) {
+        return createErrorResponse(
+          'Paystack is not configured for this merchant',
+          'GATEWAY_NOT_CONFIGURED',
+          400
+        );
+      }
+
+      const customerAuth = await authenticateApiRequest(request);
+      const fallbackClient = await createServerSupabaseClient();
+      const checkout = await initializeRedvaultPaystackCheckout({
+        customerEmail: data.customer_email,
+        fallbackClient,
+        merchantId,
+        orderId: data.order_id,
+        redirectUrl: `${protocol}://${merchant.slug}.${rootDomain}/checkout/success`,
+        subaccount: merchant.paystack_subaccount_code,
+        userId: customerAuth.user?.id ?? null,
+      });
+
+      if (checkout.status === 'pending_reconciliation') {
+        return NextResponse.json(
+          {
+            code: 'REDVAULT_RECONCILIATION_REQUIRED',
+            error: 'REDVAULT checkout needs reconciliation before retrying',
+          },
+          { status: 202 }
+        );
+      }
+
+      return NextResponse.json({
+        authorization_url: checkout.authorizationUrl,
+        checkout_url: checkout.authorizationUrl,
+        gateway: 'paystack',
+        payment_method: 'uba_redvault',
+        reference: checkout.reference,
+        success: true,
+      });
+    }
+
     // Fetch gateway settings
     const { data: featureSettings } = await adminSupabase
       .from('merchant_feature_settings')
@@ -1207,8 +1297,6 @@ export async function POST(request: NextRequest) {
         }
       : DEFAULT_GATEWAY_SETTINGS;
 
-    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
-    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
     const notificationUrl = `${protocol}://${rootDomain}/api/payments/webhook`;
 
     // Select gateway

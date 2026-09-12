@@ -36,6 +36,7 @@ export type { UseCheckoutSubmitParams };
 
 export function useCheckoutSubmit({
   accountPassword,
+  onRedvaultOrder,
   appliedDiscountCode,
   availablePaymentMethods,
   clearCart,
@@ -107,6 +108,14 @@ export function useCheckoutSubmit({
       !selectedPayment ||
       !paymentTab
     ) {
+      return;
+    }
+
+    if (selectedPayment === 'uba_redvault' && !onRedvaultOrder) {
+      Alert.alert(
+        'Unable to continue',
+        'UBA payment review is unavailable. Please choose another payment method.'
+      );
       return;
     }
 
@@ -213,6 +222,16 @@ export function useCheckoutSubmit({
         order.order_number || order.id.slice(0, 8).toUpperCase();
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
+
+      if (selectedPayment === 'uba_redvault') {
+        onRedvaultOrder?.({
+          orderResponse,
+          customerEmail,
+          customerName,
+          customerPhone,
+        });
+        return;
+      }
 
       if (await claimCheckoutPurchaseTracking(order.id)) {
         void trackCheckoutRoutePurchaseCompleted({

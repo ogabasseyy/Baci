@@ -10,6 +10,8 @@ import type {
 const mockBeginWalletTopUpCompletion = jest.fn();
 const mockBeginSavingsAuthorizationCompletion = jest.fn();
 const mockHandleVtuConfirmation = jest.fn();
+const mockVerifyRedvaultPayment =
+  jest.fn<(...args: unknown[]) => Promise<'success' | 'pending' | 'held'>>();
 
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn() },
@@ -25,6 +27,11 @@ jest.mock('./payment-gateway-completions', () => ({
 jest.mock('./use-vtu-payment-completion', () => ({
   handleVtuConfirmation: (...args: unknown[]) =>
     mockHandleVtuConfirmation(...args),
+}));
+
+jest.mock('@/services/redvault', () => ({
+  verifyRedvaultPayment: (...args: unknown[]) =>
+    mockVerifyRedvaultPayment(...args),
 }));
 
 function createRefs(
@@ -78,6 +85,56 @@ function createInput(
 describe('createPaymentGatewayCompletionHandlers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('keeps a held REDVAULT payment pending without clearing the cart or routing to success', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue('pending');
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    await beginPaymentCompletion();
+
+    expect(mockVerifyRedvaultPayment).toHaveBeenCalledWith('ref-1');
+    expect(input.setPaymentStatus).toHaveBeenLastCalledWith('pending');
+    expect(input.clearCart).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('completes REDVAULT only after successful server verification', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue('success');
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+    expect(input.clearCart).toHaveBeenCalledTimes(1);
+    expect(input.setPaymentStatus).toHaveBeenLastCalledWith('success');
+    expect(router.replace).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/order-success' })
+    );
+  });
+
+  it('preserves the cart when REDVAULT verification rejects', async () => {
+    mockVerifyRedvaultPayment.mockRejectedValue(new Error('offline'));
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+    expect(input.clearCart).not.toHaveBeenCalled();
+    expect(input.setPaymentStatus).toHaveBeenLastCalledWith('pending');
+    expect(input.setErrorMessage).toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes explicit held capture from pending verification', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue('held');
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    const handler = createPaymentGatewayCompletionHandlers(input);
+    await handler.beginPaymentCompletion();
+    await handler.beginPaymentCompletion();
+    expect(input.setPaymentStatus).toHaveBeenLastCalledWith('held');
+    expect(mockVerifyRedvaultPayment).toHaveBeenCalledTimes(1);
+    expect(input.clearCart).not.toHaveBeenCalled();
   });
 
   it('completes an order payment, clears the cart, and navigates to success', async () => {

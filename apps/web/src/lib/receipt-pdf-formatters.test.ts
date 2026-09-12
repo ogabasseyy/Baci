@@ -5,8 +5,8 @@ import {
 } from '@/lib/receipt-pdf-formatters';
 
 describe('receipt pdf formatters', () => {
-  it('formats timestamps in UTC and leaves date-only issue dates stable', () => {
-    expect(formatReceiptDate('2026-03-22T23:30:00.000Z')).toBe('22 Mar 2026');
+  it('uses Lagos time for timestamps and leaves date-only issue dates stable', () => {
+    expect(formatReceiptDate('2026-03-22T23:30:00.000Z')).toBe('23 Mar 2026');
     expect(formatReceiptDate('2026-03-05')).toBe('5 Mar 2026');
   });
 

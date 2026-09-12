@@ -34,9 +34,10 @@ export function useMerchantReceiptInfo() {
           'Merchant receipt info validation warning:',
           result.error.message
         );
+        throw result.error;
       }
 
-      return data as MerchantReceiptInfo;
+      return result.data;
     },
     staleTime: 1000 * 60 * 60,
     networkMode: 'always',

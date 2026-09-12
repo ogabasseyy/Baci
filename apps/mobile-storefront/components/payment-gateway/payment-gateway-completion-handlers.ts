@@ -140,6 +140,7 @@ export function createPaymentGatewayCompletionHandlers({
       return;
     }
 
+    let verifiedOrderNumber = orderNumber;
     if (paymentMethod === 'uba_redvault') {
       paymentCompletionStartedRef.current = true;
       clearPendingLoadTimeout();
@@ -151,6 +152,7 @@ export function createPaymentGatewayCompletionHandlers({
           setPaymentStatus(outcome);
           return;
         }
+        verifiedOrderNumber = outcome.orderNumber || orderNumber;
       } catch {
         if (!isMountedRef.current) return;
         setErrorMessage(
@@ -170,7 +172,7 @@ export function createPaymentGatewayCompletionHandlers({
         pathname: '/order-success',
         params: {
           orderId: orderId || '',
-          orderNumber: orderNumber || '',
+          orderNumber: verifiedOrderNumber || '',
           paymentMethod: gateway,
           reference: reference || '',
           ...(trackingToken && { trackingToken }),

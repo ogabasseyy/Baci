@@ -19,6 +19,7 @@ export const RedvaultCheckoutSchema = z
         eligible_subtotal_kobo: kobo,
         ineligible_subtotal_kobo: kobo,
         discount_kobo: kobo,
+        assurance_fee_kobo: kobo,
         tax_kobo: kobo,
         shipping_kobo: kobo,
         gift_wrapping_kobo: kobo,
@@ -36,6 +37,7 @@ export const RedvaultCheckoutSchema = z
       quote.payable_kobo ===
         quote.product_subtotal_kobo -
           quote.discount_kobo +
+          quote.assurance_fee_kobo +
           quote.tax_kobo +
           quote.shipping_kobo +
           quote.gift_wrapping_kobo &&

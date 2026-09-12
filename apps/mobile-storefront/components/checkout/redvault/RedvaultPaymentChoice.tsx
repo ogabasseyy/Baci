@@ -9,6 +9,7 @@ export interface RedvaultPaymentSummary {
   eligibleSubtotalKobo: number;
   ineligibleSubtotalKobo?: number;
   discountKobo: number;
+  assuranceFeeKobo: number;
   taxAmountKobo: number;
   shippingFeeKobo: number;
   giftWrappingFeeKobo: number;
@@ -171,6 +172,11 @@ export function RedvaultPaymentChoice({
           <SummaryRow
             label="UBA discount"
             value={`-${formatKobo(summary.discountKobo)}`}
+            colors={colors}
+          />
+          <SummaryRow
+            label="Device assurance"
+            value={formatKobo(summary.assuranceFeeKobo)}
             colors={colors}
           />
           <SummaryRow

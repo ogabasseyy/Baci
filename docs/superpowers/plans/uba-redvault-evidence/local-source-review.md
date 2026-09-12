@@ -8,4 +8,10 @@ The artifact and its exact expected test digest are updated together. This does 
 
 The inventory validator's 12 tests, aggregate lint and aggregate typecheck pass. The required CodeRabbit rerun was attempted but rate-limited; no paid review or account change was made. Independent Terra review above is complete, but this is not a fresh CodeRabbit approval. Evidence logs: `/private/tmp/redvault-inventory-green.log`, `/private/tmp/redvault-inventory-lint.log`, `/private/tmp/redvault-inventory-types.log`, `/private/tmp/redvault-inventory-review.log`.
 
-The unrelated `supabase/.temp/cli-latest` change will be parked separately only during clean-snapshot validation and restored afterward. No unrelated work is discarded. Full-suite results remain a separate acceptance gate; local source review is not provider/device acceptance or REDVAULT activation.
+## Clean-snapshot result
+
+`pnpm turbo test --continue` passed at exact commit `751f3f67991ce70594addd3ee61f8290e58e5f48`: all six tasks successful (four cached), in 15m10s. Web: 5423 test files and 33715 tests passed, with one existing skipped/todo test. Mobile storefront: 1024 suites and 6011 tests passed. Both previously blocked source/inventory checks pass. Full output: `/private/tmp/redvault-clean-full-suite.log`; exact tested commit: `/private/tmp/redvault-clean-suite-head.log`.
+
+The unrelated `supabase/.temp/cli-latest` change was parked separately during validation and restored byte-identically afterward, with its temporary backup removed only after verification. No unrelated work was discarded. This evidence update is documentation-only; the exact tested implementation/source-check commit remains the SHA above.
+
+Local source/full-suite validation is complete, not provider/device acceptance or REDVAULT activation. The earlier CodeRabbit rate-limit caveat remains; no push, merge, remote migration, deployment, email, real payment or activation occurred. Next gate: authorized actual Ogabassey web/app nonproduction checkout testing, followed by provider/card coverage and commercial sign-off before launch.

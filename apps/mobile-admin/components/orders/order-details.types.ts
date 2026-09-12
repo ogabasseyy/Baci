@@ -68,6 +68,7 @@ export interface OrderDetailsRecord {
   tax_exclusive_amount?: number | null;
   tax_inclusive_amount?: number | null;
   total: number;
+  transaction_date?: string | null;
   updated_at: string;
   virtual_account?: {
     assignment_customer_email_source?: string | null;

@@ -6,6 +6,19 @@ import type { ReceiptOrder } from './types';
 const { createReceiptMerchant, createReceiptOrder } = receiptTestFactory;
 
 describe('generateReceiptHtml', () => {
+  it('uses the selected transaction date instead of the creation date', () => {
+    const html = generateReceiptHtml(
+      createReceiptOrder({
+        created_at: '2026-09-12T10:40:00.000Z',
+        transaction_date: '2026-03-05T00:00:00.000Z',
+      }),
+      createReceiptMerchant()
+    );
+
+    expect(html).toContain('5 Mar 2026');
+    expect(html).not.toContain('12 Sep 2026');
+  });
+
   it('includes the variant label in receipt item rows', () => {
     const html = generateReceiptHtml(
       createReceiptOrder(),

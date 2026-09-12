@@ -55,6 +55,7 @@ export const ReceiptListItemSchema = z.object({
   amount_paid: z.number(),
   currency: z.string(),
   created_at: z.string(),
+  transaction_date: z.string().nullable().optional(),
   items: z.array(OrderItemSchema),
 });
 
@@ -77,6 +78,7 @@ export const ReceiptDetailSchema = z.object({
   currency: z.string(),
   is_credit_order: z.boolean(),
   created_at: z.string(),
+  transaction_date: z.string().nullable().optional(),
   notes: z.string().nullable(),
   customer_name: z.string(),
   customer_email: z.string(),

@@ -32,6 +32,7 @@ export function parseRedvaultOrderQuote(
   const eligibleSubtotalKobo = money('eligible_subtotal_kobo');
   const ineligibleSubtotalKobo = money('ineligible_subtotal_kobo');
   const discountKobo = money('discount_kobo');
+  const assuranceFeeKobo = money('assurance_fee_kobo');
   const taxKobo = money('tax_kobo');
   const shippingKobo = money('shipping_kobo');
   const giftWrappingKobo = money('gift_wrapping_kobo');
@@ -39,6 +40,7 @@ export function parseRedvaultOrderQuote(
   const expectedPayableKobo =
     productSubtotalKobo -
     discountKobo +
+    assuranceFeeKobo +
     taxKobo +
     shippingKobo +
     giftWrappingKobo;
@@ -58,6 +60,7 @@ export function parseRedvaultOrderQuote(
     eligibleSubtotalKobo,
     ineligibleSubtotalKobo,
     discountKobo,
+    assuranceFeeKobo,
     taxKobo,
     shippingKobo,
     giftWrappingKobo,

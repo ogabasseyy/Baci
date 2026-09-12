@@ -7,6 +7,7 @@ const mixedBasketSummary = {
   productSubtotalKobo: 15_000_000,
   eligibleSubtotalKobo: 10_000_000,
   discountKobo: 500_000,
+  assuranceFeeKobo: 0,
   ineligibleSubtotalKobo: 5_000_000,
   taxKobo: 1_125_000,
   shippingKobo: 300_000,

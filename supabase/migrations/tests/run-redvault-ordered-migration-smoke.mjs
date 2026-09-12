@@ -58,9 +58,9 @@ try {
   process.stdout.write(sql(readFileSync(resolve(directory, 'redvault-item-membership-921.sql'), 'utf8')));
   process.stdout.write(sql(readFileSync(resolve(directory, 'redvault-fk-indexes-922.sql'), 'utf8')));
   process.stdout.write(sql(readFileSync(resolve(directory, 'redvault-current-tree-replay.sql'), 'utf8')));
-  for (const filename of ['20260912092400_uba_redvault_atomic_order_creation.sql', '20260912092500_uba_redvault_refund_and_usage_safety.sql', '20260912092600_uba_redvault_transaction_capture_persistence.sql']) sql(readFileSync(resolve(migrations, filename), 'utf8'));
-  for (const filename of ['redvault-atomic-order-924.sql', 'redvault-usage-limits-925.sql', 'redvault-refund-finalization-925.sql', 'redvault-refund-inventory-925.sql', 'redvault-transaction-persistence-926.sql', 'redvault-verified-replay-926.sql', 'redvault-current-tree-replay.sql', 'redvault-followup-grants-926.sql']) process.stdout.write(sql(readFileSync(resolve(directory, filename), 'utf8')));
-  process.stdout.write('Ordered 900-926 legacy and final-schema REDVAULT regression smoke passed.\n');
+  for (const filename of ['20260912092400_uba_redvault_atomic_order_creation.sql', '20260912092500_uba_redvault_refund_and_usage_safety.sql', '20260912092600_uba_redvault_transaction_capture_persistence.sql', '20260912092700_uba_redvault_assurance_currency_retry_guards.sql']) sql(readFileSync(resolve(migrations, filename), 'utf8'));
+  for (const filename of ['redvault-atomic-order-924.sql', 'redvault-usage-limits-925.sql', 'redvault-refund-finalization-925.sql', 'redvault-refund-inventory-925.sql', 'redvault-transaction-persistence-926.sql', 'redvault-verified-replay-926.sql', 'redvault-current-tree-replay.sql', 'redvault-followup-grants-926.sql', 'redvault-assurance-currency-927.sql']) process.stdout.write(sql(readFileSync(resolve(directory, filename), 'utf8')));
+  process.stdout.write('Ordered 900-927 legacy and final-schema REDVAULT regression smoke passed.\n');
 } finally {
   if (running) run('pg_ctl', ['-D', resolve(root, 'data'), '-m', 'fast', '-w', 'stop']);
   rmSync(root, { recursive: true, force: true });

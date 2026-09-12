@@ -2307,7 +2307,12 @@ export const CheckoutPage: React.FC = () => {
           : currencyCode;
 
       // 1b. Create account if requested (Awaited to ensure session is set before moving to next page)
-      if (createAccount && !user && accountPassword.length >= 6) {
+      if (
+        paymentMethod !== 'uba_redvault' &&
+        createAccount &&
+        !user &&
+        accountPassword.length >= 6
+      ) {
         try {
           const supabase = createClient();
           await supabase.auth.signUp({
@@ -2469,6 +2474,26 @@ export const CheckoutPage: React.FC = () => {
           setIsProcessing(false);
           isOrderInFlightRef.current = false;
           return;
+        }
+        if (createAccount && !user && accountPassword.length >= 6) {
+          try {
+            const supabase = createClient();
+            await supabase.auth.signUp({
+              email: customerEmail,
+              password: accountPassword,
+              options: {
+                data: {
+                  first_name: firstName,
+                  last_name: lastName,
+                  phone: customerPhone,
+                  source: 'checkout',
+                  signup_type: 'customer',
+                },
+              },
+            });
+          } catch (authError) {
+            console.error('Silent signup background error:', authError);
+          }
         }
         window.location.assign(paymentResult.authorizationUrl);
         return;

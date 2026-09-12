@@ -240,6 +240,14 @@ jobs:
           filter: ''
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
+      - name: Hydrate storefront inventory authority
+        run: |
+          set -euo pipefail
+          source_sha="$(jq -r '.originMainSha' docs/superpowers/evidence/storefront-edge/task-1a-inventory.json)"
+          if ! git cat-file -e "${source_sha}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$source_sha"
+          fi
+          git cat-file -e "${source_sha}^{commit}"
       - name: Run web vitest shard
         run: pnpm --filter @baci/web exec vitest run --shard=${{ matrix.shard }}/6
 

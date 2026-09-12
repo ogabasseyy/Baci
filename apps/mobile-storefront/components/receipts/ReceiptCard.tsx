@@ -5,6 +5,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BRAND, SHADOWS } from '@/constants/Colors';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { ReceiptListItem } from '@/types/receipt';
+import { formatReceiptDate } from './receipt-date';
 
 const PAYMENT_STATUS_CONFIG: Record<
   string,
@@ -22,18 +23,6 @@ const PAYMENT_STATUS_CONFIG: Record<
 
 export function getPaymentConfig(status: string) {
   return PAYMENT_STATUS_CONFIG[status] ?? PAYMENT_STATUS_CONFIG.unpaid;
-}
-
-export function formatDate(dateString: string) {
-  const isCalendarDate = /^\d{4}-\d{2}-\d{2}$/.test(dateString);
-  return new Date(
-    isCalendarDate ? `${dateString}T12:00:00.000Z` : dateString
-  ).toLocaleDateString('en-NG', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: isCalendarDate ? 'UTC' : 'Africa/Lagos',
-  });
 }
 
 const PRICE_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
@@ -122,7 +111,7 @@ export function ReceiptCard({
             numberOfLines={1}
           >
             #{item.order_number} ·{' '}
-            {formatDate(
+            {formatReceiptDate(
               item.invoice_issue_date ??
                 item.transaction_date ??
                 item.created_at

@@ -10,24 +10,36 @@ const migration = readFileSync(
   'utf8'
 );
 
+// PostgreSQL behavioral checks run through the repository's Docker replay
+// workflow; this colocated Vitest suite has no database fixture or connection.
+
 describe('manual order document date migration', () => {
   it('synchronizes persisted document dates when transaction_date changes', () => {
     expect(migration).toContain(
       'AFTER UPDATE OF transaction_date ON public.orders'
     );
     expect(migration).toContain(
-      'OLD.transaction_date AT TIME ZONE v_time_zone'
-    );
-    expect(migration).toContain(
       'NEW.transaction_date AT TIME ZONE v_time_zone'
     );
-    expect(migration).toContain('OLD.transaction_date IS NULL');
-    expect(migration).toContain('OLD.created_at AT TIME ZONE');
+    expect(migration).toContain('invoice_issue_date_generated IS TRUE');
+    expect(migration).toContain('tax_point_date_generated IS TRUE');
   });
 
   it('derives the backfill timezone from merchant country', () => {
     expect(migration).toContain("WHEN 'GH' THEN 'Africa/Accra'");
     expect(migration).toContain("WHEN 'NG' THEN 'Africa/Lagos'");
-    expect(migration).toContain("ELSE 'UTC'");
+    expect(migration).toContain('ELSE NULL');
+  });
+
+  it('preserves explicit dates while updating generated dates independently', () => {
+    expect(migration).toContain(
+      'invoice_issue_date = CASE\n    WHEN invoice_issue_date_generated IS TRUE'
+    );
+    expect(migration).toContain(
+      'tax_point_date = CASE\n    WHEN tax_point_date_generated IS TRUE'
+    );
+    expect(migration).toContain(
+      '(invoice_issue_date_generated IS TRUE OR tax_point_date_generated IS TRUE)'
+    );
   });
 });

@@ -5,6 +5,7 @@ import { generateSlug } from '@/lib/seo-utils';
 import type { ComparableProductKeySpecs } from '@/lib/storefront-specs/spec-taxonomy';
 import { extractComparableKeySpecs } from './comparable-key-specs';
 import { getCachedCompareCategoryShell } from './get-cached-compare-category-shell';
+import type { StorefrontComparisonRevision } from './get-published-storefront-comparison-revision';
 
 export interface CompareCategoryInventoryProduct {
   slug: string;
@@ -125,7 +126,8 @@ function toInventoryProduct(
  */
 export async function getCachedCompareCategoryInventory(
   merchantId: string,
-  categorySlug: string
+  categorySlug: string,
+  comparisonRevision?: StorefrontComparisonRevision
 ): Promise<CompareCategoryInventory> {
   // LOCAL 'use cache' (not remote): this ~1MB entry is filled inside the
   // compare page model, whose large Vercel remote-cache SET (RemoteCacheHandler
@@ -150,7 +152,11 @@ export async function getCachedCompareCategoryInventory(
     // Unit tests do not run with Next cacheComponents enabled.
   }
 
-  const shell = await getCachedCompareCategoryShell(merchantId, categorySlug);
+  const shell = await getCachedCompareCategoryShell(
+    merchantId,
+    categorySlug,
+    comparisonRevision
+  );
   const fallbackName = shell.fallbackName ?? '';
 
   if (shell.isCollection) {

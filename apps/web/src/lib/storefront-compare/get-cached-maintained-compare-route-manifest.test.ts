@@ -1,10 +1,10 @@
-import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCachedMaintainedCompareRouteManifest } from './get-cached-maintained-compare-route-manifest';
 
 const mockCacheLife = vi.fn();
 const mockCacheTag = vi.fn();
 const mockGetCachedCompareCategoryInventory = vi.fn();
+const mockGetPublishedStorefrontComparisonRevision = vi.fn();
 
 vi.mock('next/cache', () => ({
   cacheLife: (...args: string[]) => mockCacheLife(...args),
@@ -14,6 +14,11 @@ vi.mock('next/cache', () => ({
 vi.mock('./get-cached-compare-category-inventory', () => ({
   getCachedCompareCategoryInventory: (...args: unknown[]) =>
     mockGetCachedCompareCategoryInventory(...args),
+}));
+
+vi.mock('./get-published-storefront-comparison-revision', () => ({
+  getPublishedStorefrontComparisonRevision: (...args: unknown[]) =>
+    mockGetPublishedStorefrontComparisonRevision(...args),
 }));
 
 const products = [
@@ -45,6 +50,7 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
       fallbackName: 'Smartphones',
       products,
     });
+    mockGetPublishedStorefrontComparisonRevision.mockResolvedValue('42');
   });
 
   it('returns serializable category manifest slugs from the bounded inventory', async () => {
@@ -60,7 +66,11 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
     );
     expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
       'merchant-1',
-      'smartphones'
+      'smartphones',
+      '42'
+    );
+    expect(mockGetPublishedStorefrontComparisonRevision).toHaveBeenCalledWith(
+      'merchant-1'
     );
     expect(mockCacheLife).toHaveBeenCalledWith('products');
     expect(mockCacheTag).toHaveBeenCalledWith(
@@ -90,34 +100,24 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
     ).rejects.toThrow('inventory unavailable');
   });
 
-  it('keeps the manifest local until its inventory has cross-instance authority', () => {
-    // The inventory dependency is a process-local `use cache` entry. Making
-    // this parent remote could publish a new shared manifest from another
-    // instance's stale inventory after an invalidation, so retain the local
-    // directive until a durable inventory revision is part of this cache path.
-    const manifestSource = readFileSync(
-      'src/lib/storefront-compare/get-cached-maintained-compare-route-manifest.ts',
-      'utf8'
-    );
-    const loaderSource = readFileSync(
-      'src/lib/storefront-compare/load-compare-page.ts',
-      'utf8'
-    );
-    const approvalHelperSource = readFileSync(
-      'src/lib/storefront-compare/has-maintained-product-compare-route.ts',
-      'utf8'
+  it('falls back to a local manifest when the revision authority is unavailable', async () => {
+    mockGetPublishedStorefrontComparisonRevision.mockRejectedValueOnce(
+      new Error('revision unavailable')
     );
 
-    expect(manifestSource).toContain("'use cache';");
-    expect(manifestSource).not.toContain("'use cache: remote';");
-    expect(manifestSource).not.toContain('comparisonSlug');
-    expect(loaderSource).toContain('hasMaintainedProductCompareRoute(');
-    expect(loaderSource).not.toContain('getMaintainedCompareRouteManifest(');
-    expect(approvalHelperSource).toContain(
-      'getCachedMaintainedCompareRouteManifest('
-    );
-    expect(approvalHelperSource).not.toContain(
-      'getMaintainedCompareRouteManifest('
+    await expect(
+      getCachedMaintainedCompareRouteManifest(
+        'merchant-1',
+        'smartphones',
+        'ogabassey',
+        'https://ogabassey.com'
+      )
+    ).resolves.toContain('left-phone-vs-right-phone');
+
+    expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
+      'merchant-1',
+      'smartphones',
+      undefined
     );
   });
 });

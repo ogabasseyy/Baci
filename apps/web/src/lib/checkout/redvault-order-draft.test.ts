@@ -19,6 +19,7 @@ const summary = {
   eligible_subtotal_kobo: 10000,
   ineligible_subtotal_kobo: 0,
   discount_kobo: 500,
+  assurance_fee_kobo: 0,
   tax_kobo: 0,
   shipping_kobo: 0,
   gift_wrapping_kobo: 0,

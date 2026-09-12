@@ -2646,6 +2646,15 @@ export async function POST(request: NextRequest) {
       userId: resolvedUserId,
     });
     if (redvaultRequested && redvaultQuote) {
+      if (merchantResolvedCurrency !== 'NGN') {
+        return NextResponse.json(
+          {
+            error: 'REDVAULT requires NGN orders',
+            code: 'REDVAULT_CURRENCY_UNSUPPORTED',
+          },
+          { status: 409 }
+        );
+      }
       return createRedvaultCheckoutResponse({
         client: orderRpcClient,
         orderRpcArgs: {

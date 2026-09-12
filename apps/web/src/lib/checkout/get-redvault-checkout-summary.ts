@@ -12,6 +12,7 @@ export type RedvaultCheckoutSummary = {
   };
   quote: {
     discount_kobo: number;
+    assurance_fee_kobo: number;
     eligible_subtotal_kobo: number;
     gift_wrapping_kobo: number;
     ineligible_subtotal_kobo: number;
@@ -26,6 +27,7 @@ export type RedvaultCheckoutSummary = {
 type CheckoutSummaryRow = {
   currency: unknown;
   discount_kobo: unknown;
+  assurance_fee_kobo: unknown;
   eligible_subtotal_kobo: unknown;
   gift_wrapping_kobo: unknown;
   ineligible_subtotal_kobo: unknown;
@@ -79,6 +81,7 @@ export async function getRedvaultCheckoutSummary({
         row.eligible_subtotal_kobo,
         row.ineligible_subtotal_kobo,
         row.discount_kobo,
+        row.assurance_fee_kobo,
         row.tax_kobo,
         row.shipping_kobo,
         row.gift_wrapping_kobo,
@@ -109,6 +112,7 @@ export async function getRedvaultCheckoutSummary({
     eligibleSubtotalKobo,
     ineligibleSubtotalKobo,
     discountKobo,
+    assuranceFeeKobo,
     taxKobo,
     shippingKobo,
     giftWrappingKobo,
@@ -124,6 +128,7 @@ export async function getRedvaultCheckoutSummary({
     BigInt(payableKobo) !==
       BigInt(productSubtotalKobo) -
         BigInt(discountKobo) +
+        BigInt(assuranceFeeKobo) +
         BigInt(taxKobo) +
         BigInt(shippingKobo) +
         BigInt(giftWrappingKobo)
@@ -145,6 +150,7 @@ export async function getRedvaultCheckoutSummary({
       eligible_subtotal_kobo: eligibleSubtotalKobo,
       ineligible_subtotal_kobo: ineligibleSubtotalKobo,
       discount_kobo: discountKobo,
+      assurance_fee_kobo: assuranceFeeKobo,
       tax_kobo: taxKobo,
       shipping_kobo: shippingKobo,
       gift_wrapping_kobo: giftWrappingKobo,

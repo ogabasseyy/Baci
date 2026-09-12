@@ -61,6 +61,7 @@ describe('payment schedule selection', () => {
         eligibleSubtotalKobo: 10000,
         ineligibleSubtotalKobo: 1000,
         discountKobo: 500,
+        assuranceFeeKobo: 0,
         taxKobo: 750,
         shippingKobo: 500,
         giftWrappingKobo: 0,

@@ -2,6 +2,8 @@ import {
   OGABASSEY_HOME_LCP_SUPPORT,
   OGABASSEY_TITLE,
 } from '@/config/ogabassey';
+import { OGABASSEY_HOME_CAROUSEL_CRITICAL_CSS } from './ogabassey-home-carousel-critical-css';
+import { OGABASSEY_HOME_CHROME_CRITICAL_CSS } from './ogabassey-home-chrome-critical-css';
 import { OGABASSEY_HOME_LCP_CRITICAL_CSS } from './ogabassey-home-lcp-critical-css';
 
 interface OgabasseyPublicationSafeHeroFallbackProps {
@@ -23,6 +25,8 @@ export function OgabasseyPublicationSafeHeroFallback({
       data-ogabassey-publication-safe-hero-fallback="true"
     >
       <style>{OGABASSEY_HOME_LCP_CRITICAL_CSS}</style>
+      <style>{OGABASSEY_HOME_CHROME_CRITICAL_CSS}</style>
+      <style>{OGABASSEY_HOME_CAROUSEL_CRITICAL_CSS}</style>
       <div aria-hidden="true" className="ogabassey-home-lcp-scrim" />
       <div className="ogabassey-home-lcp-inner">
         <div className="ogabassey-home-lcp-mobile">

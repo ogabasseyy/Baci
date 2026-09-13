@@ -1502,6 +1502,26 @@ export async function POST(request: NextRequest) {
           wonTransactionFlip: false,
         });
 
+        if (
+          finalizeOutcome.kind === 'captured_held' ||
+          finalizeOutcome.kind === 'capture_evidence_review'
+        ) {
+          return NextResponse.json(
+            {
+              code:
+                finalizeOutcome.kind === 'captured_held'
+                  ? 'REDVAULT_CAPTURE_HELD'
+                  : 'REDVAULT_CAPTURE_EVIDENCE_REVIEW',
+              error:
+                finalizeOutcome.kind === 'captured_held'
+                  ? 'Payment capture is pending eligibility confirmation'
+                  : 'Payment capture evidence requires review',
+              status: 'pending',
+            },
+            { status: 202 }
+          );
+        }
+
         if (finalizeOutcome.kind === 'inventory_failed') {
           return NextResponse.json(finalizeOutcome.payload, {
             status: finalizeOutcome.status,
@@ -1520,6 +1540,7 @@ export async function POST(request: NextRequest) {
           );
         }
         if (
+          finalizeOutcome.kind === 'capture_hold_failed' ||
           finalizeOutcome.kind === 'completion_failed' ||
           finalizeOutcome.kind === 'order_fetch_failed' ||
           finalizeOutcome.kind === 'inventory_cleanup_failed' ||
@@ -2758,6 +2779,41 @@ export async function POST(request: NextRequest) {
         },
         wonTransactionFlip: true,
       });
+
+      if (
+        finalizeOutcome.kind === 'captured_held' ||
+        finalizeOutcome.kind === 'capture_evidence_review'
+      ) {
+        return NextResponse.json(
+          {
+            code:
+              finalizeOutcome.kind === 'captured_held'
+                ? 'REDVAULT_CAPTURE_HELD'
+                : 'REDVAULT_CAPTURE_EVIDENCE_REVIEW',
+            error:
+              finalizeOutcome.kind === 'captured_held'
+                ? 'Payment capture is pending eligibility confirmation'
+                : 'Payment capture evidence requires review',
+            status: 'pending',
+          },
+          { status: 202 }
+        );
+      }
+
+      if (finalizeOutcome.kind === 'capture_hold_failed') {
+        logger.error({
+          message: 'Failed to record REDVAULT capture hold',
+          orderId: transaction.order_id,
+          error: finalizeOutcome.error,
+        });
+        return NextResponse.json(
+          {
+            code: 'ORDER_PAYMENT_COMPLETION_FAILED',
+            error: 'Order payment completion failed',
+          },
+          { status: 500 }
+        );
+      }
 
       if (finalizeOutcome.kind === 'completion_failed') {
         if (isMerchantInvoicePartialBalanceReview(finalizeOutcome.error)) {

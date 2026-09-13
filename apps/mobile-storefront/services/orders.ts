@@ -158,7 +158,9 @@ export async function createOrder(
           ...orderPayload,
           user_id: authPartition,
         },
-        checkoutGeneration,
+        validatedRequest.payment_method === 'uba_redvault'
+          ? `${checkoutGeneration}:uba_redvault`
+          : checkoutGeneration,
         frozenCheckoutGeneration
           ? {
               frozen: true,

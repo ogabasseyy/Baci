@@ -18,12 +18,14 @@ export function createStorefrontOrderRpcClient({
   hasCanonicalDeliveryMetadata,
   merchantId,
   userId,
+  redvaultCustomerEmail,
   now = new Date(),
 }: {
   fallbackClient: SupabaseClient;
   hasCanonicalDeliveryMetadata: boolean;
   merchantId: string;
   userId: string | null;
+  redvaultCustomerEmail?: string;
   now?: Date;
 }): SupabaseClient {
   const normalizedMerchantId = merchantId.trim();
@@ -48,6 +50,13 @@ export function createStorefrontOrderRpcClient({
 
     if (userId) {
       payload.sub = userId;
+    }
+    const normalizedRedvaultCustomerEmail = redvaultCustomerEmail
+      ?.trim()
+      .toLowerCase();
+    if (normalizedRedvaultCustomerEmail) {
+      payload.storefront_redvault_customer_email =
+        normalizedRedvaultCustomerEmail;
     }
 
     return createScopedClient(signScopedSupabaseJwt(payload));

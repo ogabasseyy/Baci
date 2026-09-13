@@ -12,6 +12,7 @@ export * from './merchant-trust-profile';
 export * from './orders';
 export * from './payment-method-settings';
 export * from './products';
+export * from './redvault-quote';
 export * from './store-readiness';
 export * from './transaction-discount';
 export * from './transaction-discount-line-key';

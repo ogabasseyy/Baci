@@ -68,6 +68,36 @@ describe('createStorefrontOrderRpcClient', () => {
     });
   });
 
+  it('binds the normalized REDVAULT guest email in the signed claim', () => {
+    createStorefrontOrderRpcClient({
+      fallbackClient,
+      hasCanonicalDeliveryMetadata: false,
+      merchantId: 'merchant-123',
+      userId: null,
+      redvaultCustomerEmail: ' Customer@Example.test ',
+    });
+    expect(mocks.signScopedSupabaseJwt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storefront_redvault_customer_email: 'customer@example.test',
+      })
+    );
+  });
+
+  it('omits a whitespace-only REDVAULT customer claim', () => {
+    createStorefrontOrderRpcClient({
+      fallbackClient,
+      hasCanonicalDeliveryMetadata: false,
+      merchantId: 'merchant-123',
+      userId: null,
+      redvaultCustomerEmail: '   ',
+    });
+
+    expect(mocks.signScopedSupabaseJwt).toHaveBeenCalledOnce();
+    expect(mocks.signScopedSupabaseJwt.mock.calls[0][0]).not.toHaveProperty(
+      'storefront_redvault_customer_email'
+    );
+  });
+
   it('does not claim a v2 hash for legacy requests without delivery metadata', () => {
     createStorefrontOrderRpcClient({
       fallbackClient,

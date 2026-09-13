@@ -26,6 +26,9 @@ interface CheckoutUser {
 }
 
 export interface UseCheckoutSubmitParams {
+  onRedvaultOrder?: (
+    input: import('./redvault/RedvaultOrderReview').RedvaultReviewInput
+  ) => void;
   accountPassword: string;
   appliedDiscountCode?: string | null;
   availablePaymentMethods: PaymentMethodType[];

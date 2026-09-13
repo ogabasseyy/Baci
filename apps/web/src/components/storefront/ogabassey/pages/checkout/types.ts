@@ -99,6 +99,7 @@ export type CryptoVerificationStatus = 'idle' | 'checking' | 'confirmed' | 'pend
 export type DeliveryMethod = 'pickup' | 'door' | 'airport' | 'pickup_station';
 export type CheckoutStep = 'contact' | 'delivery' | 'payment';
 export type PaymentMethod =
+  | 'uba_redvault'
   | 'paystack'
   | 'korapay'
   | 'juicyway'

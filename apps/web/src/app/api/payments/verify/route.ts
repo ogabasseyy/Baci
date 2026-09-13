@@ -150,6 +150,8 @@ async function verifyPaymentReference(reference: string) {
       });
     }
     return NextResponse.json({
+      orderId: transaction.order_id,
+      paymentMethod: transaction.gateway,
       success: true,
       status: 'success',
       orderNumber:
@@ -347,6 +349,8 @@ async function verifyPaymentReference(reference: string) {
     transaction.gateway_reference.slice(0, 8).toUpperCase();
 
   return NextResponse.json({
+    orderId: transaction.order_id,
+    paymentMethod: transaction.gateway,
     success: true,
     status: 'success',
     orderNumber: finalOrderNumber,

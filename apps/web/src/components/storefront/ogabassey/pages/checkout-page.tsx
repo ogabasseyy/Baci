@@ -10,6 +10,10 @@ import {
   isPickupEligible,
 } from '@baci/shared';
 import {
+  CHECKOUT_FUNNEL_EVENTS,
+  buildCheckoutFunnelProperties,
+} from '@baci/shared/contracts';
+import {
   AlertCircle,
   Building2,
   ChevronRight,
@@ -61,6 +65,7 @@ import type {
   DvaData,
   PaymentMethod,
   PendingCryptoOrder,
+  PaymentTab,
   ResumedOrder,
 } from './checkout/types';
 import { mapApiOrderToResumedOrder } from './checkout/map-api-order-to-resumed-order';
@@ -122,6 +127,8 @@ import {
 } from './checkout/credit-direct-popup-return';
 import { persistCreditDirectPopupReference } from './checkout/persist-credit-direct-popup-reference';
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
+import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
+import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { selectRejectedVoucherLines } from './checkout/select-rejected-voucher-lines';
 import { PaymentStep } from './checkout/components/PaymentStep';
 import { AirportDeliveryOptions } from './checkout/components/AirportDeliveryOptions';
@@ -266,7 +273,7 @@ interface LoadResumedCheckoutOrderParams {
   setIsLoadingResumedOrder: (isLoading: boolean) => void;
   setResumedOrder: (order: ResumedOrder) => void;
   setCheckoutFields: (fields: ResumedOrderFormFields) => void;
-  setPaymentTab: (tab: 'full' | 'installments') => void;
+  setPaymentTab: (tab: PaymentTab) => void;
   setPaymentMethod: (method: PaymentMethod) => void;
   setResumeOrderError: (error: string | null) => void;
 }
@@ -811,6 +818,30 @@ export const CheckoutPage: React.FC = () => {
     ? checkoutCartTotal
     : resumedOrder?.subtotal || checkoutCartTotal;
 
+  useEffect(() => {
+    if (!isHydrated || displayItems.length === 0) return;
+    const cartKey = displayItems
+      .map((item) => `${item.kind}:${item.id}:${item.quantity}`)
+      .join('|');
+    captureCheckoutFunnelEventOnce(
+      CHECKOUT_FUNNEL_EVENTS.checkoutStarted,
+      `cart:${merchant?.id || 'store'}:${cartKey}`,
+      buildCheckoutFunnelProperties({
+        channel: 'web',
+        itemCount: displayItems.reduce((count, item) => count + item.quantity, 0),
+        source: 'web_checkout',
+        subtotal: effectiveItemSubtotal,
+        total: effectiveCheckoutCartTotal,
+      })
+    );
+  }, [
+    displayItems,
+    effectiveCheckoutCartTotal,
+    effectiveItemSubtotal,
+    isHydrated,
+    merchant?.id,
+  ]);
+
   const autoTriggerRef = useRef(false);
   // Double-submit protection: prevents race conditions from rapid clicks
   const isOrderInFlightRef = useRef(false);
@@ -1185,7 +1216,7 @@ export const CheckoutPage: React.FC = () => {
   // Payment State (declared before the resumed-order effect below, which
   // pre-selects the tab/method for BNPL deep links — React Compiler requires
   // declaration before first access)
-  const [paymentTab, setPaymentTab] = useState<'full' | 'installments'>('full');
+  const [paymentTab, setPaymentTab] = useState<PaymentTab>('full');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('');
 
   // Fetch resumed order from mobile app when orderId is in URL.
@@ -3897,6 +3928,14 @@ export const CheckoutPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
+                          captureClientEvent(
+                            CHECKOUT_FUNNEL_EVENTS.checkoutStepCompleted,
+                            buildCheckoutFunnelProperties({
+                              channel: 'web',
+                              checkoutStep: 'shipping_info',
+                              source: 'web_checkout',
+                            })
+                          );
                           setCompletedSteps(prev => ({ ...prev, delivery: true }));
                           setCurrentStep('payment');
                         }}
@@ -4121,7 +4160,7 @@ export const CheckoutPage: React.FC = () => {
                 {isProcessing ? (
                   <Loader2 className="animate-spin" />
                 ) : paymentMethod === 'invoice' ? (
-                  'Generate Invoice'
+                  'Get a Proforma Invoice'
                 ) : paymentMethod === 'payforme' ? (
                   'Send Payment Link'
                 ) : (

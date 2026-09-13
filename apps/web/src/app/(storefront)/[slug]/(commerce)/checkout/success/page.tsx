@@ -1,5 +1,10 @@
 'use client';
 
+import {
+  buildCheckoutFunnelProperties,
+  CHECKOUT_FUNNEL_EVENTS,
+  getCheckoutPaymentIntent,
+} from '@baci/shared/contracts';
 import { motion } from 'framer-motion';
 import {
   AlertCircle,
@@ -25,6 +30,7 @@ import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
+import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { asRoute } from '@/lib/routes';
 
 /**
@@ -37,7 +43,9 @@ import { asRoute } from '@/lib/routes';
  */
 
 type VerificationResponse = {
+  orderId?: string;
   orderNumber?: string;
+  paymentMethod?: string;
   status?: 'success' | 'pending' | 'failed' | 'cancelled';
   success?: boolean;
 };
@@ -57,10 +65,21 @@ function isVerificationResponse(value: unknown): value is VerificationResponse {
   const hasValidOrderNumber =
     candidate.orderNumber === undefined ||
     typeof candidate.orderNumber === 'string';
+  const hasValidOrderId =
+    candidate.orderId === undefined || typeof candidate.orderId === 'string';
+  const hasValidPaymentMethod =
+    candidate.paymentMethod === undefined ||
+    typeof candidate.paymentMethod === 'string';
   const hasValidSuccess =
     candidate.success === undefined || typeof candidate.success === 'boolean';
 
-  return hasValidStatus && hasValidOrderNumber && hasValidSuccess;
+  return (
+    hasValidStatus &&
+    hasValidOrderNumber &&
+    hasValidOrderId &&
+    hasValidPaymentMethod &&
+    hasValidSuccess
+  );
 }
 
 const orderSteps = [
@@ -75,6 +94,7 @@ type CheckoutVerificationStatus = 'success' | 'pending' | 'failed';
 interface VerifyCheckoutPaymentParams {
   merchantSlug: string | undefined;
   orderId: string | null;
+  paymentMethod: string | null;
   reference: string | null;
   trackingToken: string | null;
 }
@@ -87,6 +107,12 @@ interface VerifyCheckoutPaymentHandlers {
   setOrderNumber: (orderNumber: string | null) => void;
   setPaymentMethod: (paymentMethod: string | null) => void;
   setStatus: (status: CheckoutVerificationStatus) => void;
+  capturePaymentCompleted: (input: {
+    orderId: string;
+    orderNumber?: string;
+    paymentMethod: string;
+    reference?: string;
+  }) => void;
 }
 
 /**
@@ -98,6 +124,7 @@ async function verifyCheckoutPayment(
   {
     merchantSlug,
     orderId,
+    paymentMethod,
     reference,
     trackingToken,
   }: VerifyCheckoutPaymentParams,
@@ -109,6 +136,7 @@ async function verifyCheckoutPayment(
     setOrderNumber,
     setPaymentMethod,
     setStatus,
+    capturePaymentCompleted,
   }: VerifyCheckoutPaymentHandlers
 ): Promise<void> {
   if (!reference) {
@@ -130,6 +158,14 @@ async function verifyCheckoutPayment(
           setOrderNumber(data.order_number || data.short_id);
           if (data.payment_method) {
             setPaymentMethod(data.payment_method);
+          }
+          if (data.payment_status === 'paid') {
+            capturePaymentCompleted({
+              orderId,
+              orderNumber: data.order_number || data.short_id,
+              paymentMethod:
+                data.payment_method || paymentMethod || 'paid_order',
+            });
           }
         } else {
           // Fallback if API lookup fails
@@ -174,6 +210,16 @@ async function verifyCheckoutPayment(
       clearCart();
       setStatus('success');
       setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
+      const verifiedOrderId = data.orderId || orderId;
+      if (verifiedOrderId) {
+        capturePaymentCompleted({
+          orderId: verifiedOrderId,
+          orderNumber: data.orderNumber,
+          paymentMethod:
+            data.paymentMethod || paymentMethod || 'payment_gateway',
+          reference,
+        });
+      }
     } else if (data.status === 'failed' || data.status === 'cancelled') {
       setStatus('failed');
       scheduleFailedRedirect();
@@ -214,6 +260,7 @@ function CheckoutSuccessContent() {
   const router = useRouter();
   const reference = searchParams.get('reference');
   const orderId = searchParams.get('orderId');
+  const paymentMethodParam = searchParams.get('paymentMethod');
   const trackingToken = searchParams.get('trackingToken');
   const { clearCart } = useCart();
   const merchantContext = useMerchantSafe();
@@ -244,6 +291,7 @@ function CheckoutSuccessContent() {
       {
         merchantSlug: merchantContext?.merchant?.slug,
         orderId,
+        paymentMethod: paymentMethodParam,
         reference,
         trackingToken,
       },
@@ -257,6 +305,22 @@ function CheckoutSuccessContent() {
         setOrderNumber,
         setPaymentMethod,
         setStatus,
+        capturePaymentCompleted: (input) => {
+          captureCheckoutFunnelEventOnce(
+            CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+            input.orderId,
+            buildCheckoutFunnelProperties({
+              channel: 'web',
+              orderId: input.orderId,
+              orderNumber: input.orderNumber,
+              paymentIntent: getCheckoutPaymentIntent(input.paymentMethod),
+              paymentMethod: input.paymentMethod,
+              paymentStatus: 'paid',
+              reference: input.reference,
+              source: 'web_checkout',
+            })
+          );
+        },
       }
     );
 
@@ -363,7 +427,7 @@ function CheckoutSuccessContent() {
           >
             {isConfirmed
               ? isInvoice
-                ? 'Invoice Generated!'
+                ? 'Proforma Invoice Ready!'
                 : 'Order Received!'
               : 'Order Being Processed'}
           </motion.h1>
@@ -497,7 +561,7 @@ function CheckoutSuccessContent() {
                   </h3>
                   <p className="text-sm text-gray-600">
                     {isInvoice
-                      ? "We've generated a compliant e-invoice and sent it to your email with payment instructions."
+                      ? "We've prepared your proforma invoice and sent it to your email. Share it with your company or procurement team."
                       : "You'll receive an email with your order details and tracking information once your order is confirmed."}
                   </p>
                 </div>
@@ -552,7 +616,7 @@ function CheckoutSuccessContent() {
                 </h3>
                 <p className="text-gray-300 text-sm mb-4">
                   {isInvoice
-                    ? 'Your e-invoice is generated and ready to download. You can settle the invoice at any time to activate your order processing.'
+                    ? 'Your proforma invoice is ready to download and share with your company or procurement team.'
                     : 'Your invoice is available from your order details in your account. Your receipt will appear there and in the documents archive once the order has shipped.'}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -564,7 +628,7 @@ function CheckoutSuccessContent() {
                   >
                     <Download className="size-4" />
                     {isInvoice
-                      ? 'Download Invoice PDF'
+                      ? 'Download Proforma Invoice PDF'
                       : 'View Order Documents'}
                   </Link>
                 </div>

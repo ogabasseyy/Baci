@@ -3,6 +3,13 @@ import { trackEvent } from './analytics-core';
 import {
   trackAddToCart,
   trackCategoryViewed,
+  trackCheckoutInvoiceGenerated,
+  trackCheckoutPaymentCompleted,
+  trackCheckoutPaymentFailed,
+  trackCheckoutPaymentMethodSelected,
+  trackCheckoutPaymentStarted,
+  trackCheckoutStarted,
+  trackCheckoutStep,
   trackError,
   trackOrderCompleted,
   trackPaymentFailed,
@@ -39,6 +46,88 @@ describe('analytics event wrappers', () => {
       value: 220000,
       slug: 'redmi-note-14',
     });
+  });
+
+  it('emits the shared checkout funnel events with platform context', () => {
+    trackCheckoutStarted({ itemCount: 2, subtotal: 450000 });
+    trackCheckoutStep('shipping_info');
+    trackCheckoutPaymentMethodSelected('invoice');
+    trackCheckoutInvoiceGenerated({
+      itemCount: 2,
+      orderId: 'order-1',
+      orderNumber: 'BAC-001',
+      total: 450000,
+    });
+    trackCheckoutPaymentStarted({
+      orderId: 'order-2',
+      paymentMethod: 'paystack',
+      value: 450000,
+    });
+    trackCheckoutPaymentCompleted({
+      orderId: 'order-2',
+      paymentMethod: 'paystack',
+      reference: 'ref-1',
+      value: 450000,
+    });
+    trackCheckoutPaymentFailed('gateway_timeout', 'order-3', 'paystack');
+
+    expect(trackEvent).toHaveBeenNthCalledWith(
+      2,
+      'checkout_started',
+      expect.objectContaining({
+        channel: 'mobile_app',
+        checkout_flow: 'storefront',
+        source: 'mobile_app',
+      })
+    );
+    expect(trackEvent).toHaveBeenCalledWith(
+      'checkout_step_completed',
+      expect.objectContaining({
+        checkout_step: 'shipping_info',
+        channel: 'mobile_app',
+      })
+    );
+    expect(trackEvent).toHaveBeenCalledWith(
+      'checkout_payment_method_selected',
+      expect.objectContaining({
+        channel: 'mobile_app',
+        payment_intent: 'proforma_invoice',
+        payment_method: 'invoice',
+      })
+    );
+    expect(trackEvent).toHaveBeenCalledWith(
+      'invoice_generated',
+      expect.objectContaining({
+        order_id: 'order-1',
+        payment_intent: 'proforma_invoice',
+        payment_status: 'unpaid',
+      })
+    );
+    expect(trackEvent).toHaveBeenCalledWith(
+      'payment_started',
+      expect.objectContaining({
+        order_id: 'order-2',
+        payment_intent: 'pay_now',
+        payment_method: 'paystack',
+        total: 450000,
+      })
+    );
+    expect(trackEvent).toHaveBeenCalledWith(
+      'payment_completed',
+      expect.objectContaining({
+        order_id: 'order-2',
+        payment_status: 'paid',
+        reference: 'ref-1',
+      })
+    );
+    expect(trackEvent).toHaveBeenCalledWith(
+      'payment_failed',
+      expect.objectContaining({
+        order_id: 'order-3',
+        payment_method: 'paystack',
+        reason: 'gateway_timeout',
+      })
+    );
   });
 
   it('tracks add-to-cart and order completion with checkout context', () => {

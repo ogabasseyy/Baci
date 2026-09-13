@@ -301,6 +301,12 @@ jest.mock('@/lib/supabase', () => ({
 }));
 
 jest.mock('@/services/analytics', () => ({
+  trackCheckoutInvoiceGenerated: jest.fn(),
+  trackCheckoutOrderCreated: jest.fn(),
+  trackCheckoutPaymentCompleted: jest.fn(),
+  trackCheckoutPaymentFailed: jest.fn(),
+  trackCheckoutPaymentMethodSelected: jest.fn(),
+  trackCheckoutPaymentStarted: jest.fn(),
   trackCheckoutStarted: (...args: unknown[]) =>
     mockTrackCheckoutStarted(...args),
   trackCheckoutStep: (...args: unknown[]) => mockTrackCheckoutStep(...args),

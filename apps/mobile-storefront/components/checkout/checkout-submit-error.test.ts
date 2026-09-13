@@ -16,6 +16,7 @@ jest.mock('@/services/orders', () => {
 });
 
 jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentFailed: jest.fn(),
   trackError: jest.fn(),
 }));
 

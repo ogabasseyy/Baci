@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import type { MutableRefObject } from 'react';
 import { PAYMENT_CLIPBOARD_BRIDGE } from '@/constants/payment-clipboard-bridge';
+import { trackCheckoutPaymentCompleted } from '@/services/analytics';
 import {
   isPlainRecord,
   PAYMENT_KINDS,
@@ -32,7 +33,7 @@ interface CreatePaymentGatewayMessageHandlerInput {
   reference?: string;
   trackingToken?: string;
   utilityType?: string;
-  markPaymentCompletionStarted: () => void;
+  markPaymentCompletionStarted: () => boolean;
   scheduleDelayedNavigation: (navigate: () => void) => void;
   setSuccessStatus: () => void;
 }
@@ -196,8 +197,17 @@ export function createPaymentGatewayMessageHandler({
         return;
       }
 
-      markPaymentCompletionStarted();
+      if (!markPaymentCompletionStarted()) {
+        return;
+      }
       setSuccessStatus();
+      trackCheckoutPaymentCompleted({
+        orderId: cryptoOrderId,
+        orderNumber: getTrimmedString(orderNumber),
+        paymentMethod: getTrimmedString(gateway) || 'crypto',
+        reference: cryptoReference,
+        value: amount,
+      });
       await clearCart();
       scheduleDelayedNavigation(() => {
         router.replace({

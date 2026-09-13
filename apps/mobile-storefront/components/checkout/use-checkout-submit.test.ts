@@ -66,6 +66,7 @@ jest.mock('@/lib/wallet-payment-helpers', () => ({
 }));
 
 jest.mock('@/services/analytics', () => ({
+  trackCheckoutInvoiceGenerated: jest.fn(),
   trackCheckoutStep: jest.fn(),
 }));
 
@@ -301,6 +302,7 @@ describe('useCheckoutSubmit', () => {
     // Standard path taken (createOrder called); BNPL flow NOT taken.
     expect(mockCreateOrder).toHaveBeenCalled();
     expect(mockCreateOrder).toHaveBeenCalledWith(expect.anything(), {
+      analyticsPaymentMethod: 'credit_direct',
       checkoutGeneration: 'gen-1',
     });
     expect(mockSubmitBnplCheckout).not.toHaveBeenCalled();

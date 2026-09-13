@@ -62,6 +62,7 @@ jest.mock('@/lib/wallet-payment-helpers', () => ({
 }));
 
 jest.mock('@/services/analytics', () => ({
+  trackCheckoutInvoiceGenerated: jest.fn(),
   trackCheckoutStep: jest.fn(),
 }));
 
@@ -262,7 +263,7 @@ describe('useCheckoutSubmit recovery', () => {
     );
   });
 
-  it('tracks a recovered order on the first observed replay response', async () => {
+  it('does not count a replay response as a new purchase completion', async () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
@@ -290,8 +291,6 @@ describe('useCheckoutSubmit recovery', () => {
       await result.current(address);
     });
 
-    expect(trackCheckoutRoutePurchaseCompleted).toHaveBeenCalledWith(
-      expect.objectContaining({ orderId: 'order-replay-1' })
-    );
+    expect(trackCheckoutRoutePurchaseCompleted).not.toHaveBeenCalled();
   });
 });

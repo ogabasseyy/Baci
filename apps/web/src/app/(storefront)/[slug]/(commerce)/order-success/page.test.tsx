@@ -183,11 +183,11 @@ describe('storefront order success page', () => {
     render(<OrderSuccessPage />);
 
     expect(
-      await screen.findByRole('heading', { name: /invoice generated!/i })
+      await screen.findByRole('heading', { name: /proforma invoice ready!/i })
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /we have prepared your invoice and sent it to your email/i
+        /we have prepared your proforma invoice and sent it to your email/i
       )
     ).toBeInTheDocument();
   });

@@ -11,7 +11,7 @@ import {
   supabaseAuthStorage,
   supabaseAuthStorageKey,
 } from '@/lib/supabase';
-import { trackEvent } from '@/services/analytics';
+import { trackCheckoutOrderCreated } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 import {
   mapCreateOrderException,
@@ -78,6 +78,7 @@ async function checkNetwork(): Promise<boolean> {
 
 export type CreateOrderOptions = {
   checkoutGeneration?: string;
+  analyticsPaymentMethod?: string;
   expectedOwner?: string;
   queuedReplay?: boolean;
 };
@@ -218,14 +219,21 @@ export async function createOrder(
       normalizedOrderResponse.idempotency?.replayed === true;
 
     if (!replayed) {
-      trackEvent('order_created', {
+      trackCheckoutOrderCreated({
+        itemCount: request.items.reduce(
+          (count, item) => count + item.quantity,
+          0
+        ),
         orderId: normalizedOrderResponse.order.id,
         orderNumber: normalizedOrderResponse.order.order_number ?? 'N/A',
+        durationMs: Date.now() - startTime,
+        paymentMethod:
+          options?.analyticsPaymentMethod || request.payment_method,
+        paymentStatus: normalizedOrderResponse.order.payment_status,
+        shipping: request.shipping_fee,
+        subtotal: request.subtotal,
+        tax: request.tax_amount,
         total: normalizedOrderResponse.order.total,
-        itemCount: request.items.length,
-        paymentMethod: request.payment_method,
-        duration_ms: Date.now() - startTime,
-        source: 'mobile_app',
       });
     }
 

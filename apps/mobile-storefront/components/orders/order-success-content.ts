@@ -3,14 +3,14 @@ const FALLBACK_DELIVERY_ESTIMATE = 'Shared after order confirmation';
 export function getOrderSuccessTone(paymentMethod?: string) {
   if (paymentMethod === 'invoice') {
     return {
-      documentLabel: 'View / Download Invoice',
-      eyebrow: 'Invoice ready',
+      documentLabel: 'View / Download Proforma Invoice',
+      eyebrow: 'Proforma invoice ready',
       nextDocumentText:
-        'Your branded invoice is ready now. You can view it and share it as a PDF.',
-      nextDocumentTitle: 'Invoice',
+        'Your proforma invoice is ready now. Share it with your company or procurement team.',
+      nextDocumentTitle: 'Proforma Invoice',
       subtitle:
-        "We've prepared your invoice. Once payment is made, we'll confirm the order and start processing it.",
-      title: 'Invoice Created',
+        "We've prepared your proforma invoice. Share it with your company or procurement team.",
+      title: 'Proforma Invoice Ready!',
     };
   }
 
@@ -19,10 +19,10 @@ export function getOrderSuccessTone(paymentMethod?: string) {
       documentLabel: 'View / Download Invoice',
       eyebrow: 'Payment request ready',
       nextDocumentText:
-        'The invoice remains available while this payment request is pending.',
+        'The invoice remains available while this payment request is open.',
       nextDocumentTitle: 'Invoice',
       subtitle:
-        "We've saved this order for later payment. Once it is settled, we'll confirm it and begin processing.",
+        "We've saved this order for your payer. Once it is settled, we'll confirm it and begin processing.",
       title: 'Payment Request Created',
     };
   }

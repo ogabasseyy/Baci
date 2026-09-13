@@ -73,6 +73,10 @@ jest.mock('@/services/orders', () => ({
   },
 }));
 
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentStarted: jest.fn(),
+}));
+
 jest.mock('./checkout-order-builders', () => ({
   buildCheckoutOrderRequest: (params: unknown) =>
     mockBuildCheckoutOrderRequest(params),
@@ -207,7 +211,10 @@ describe('submitBnplCheckout', () => {
 
     expect(mockCreateOrder).toHaveBeenCalledWith(
       expect.objectContaining({ payment_method: 'credit_direct' }),
-      { checkoutGeneration: 'gen-1' }
+      {
+        analyticsPaymentMethod: 'credit_direct',
+        checkoutGeneration: 'gen-1',
+      }
     );
     expect(mockCreateOrder.mock.calls[0][0]).not.toHaveProperty(
       'idempotency_key'

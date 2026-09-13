@@ -127,14 +127,14 @@ function OrderSuccessContent() {
 
   const heading = hasValidatedOrder
     ? isInvoice
-      ? 'Invoice Generated!'
+      ? 'Proforma Invoice Ready!'
       : 'Order Confirmed!'
     : hasRecoveryState
       ? 'We could not confirm this order yet'
       : 'Finalizing your order';
   const description = hasValidatedOrder
     ? isInvoice
-      ? 'We have prepared your invoice and sent it to your email. Please check your inbox.'
+      ? 'We have prepared your proforma invoice and sent it to your email. Share it with your company or procurement team.'
       : 'Thank you for your purchase. Your order has been received.'
     : hasRecoveryState
       ? 'We could not validate this order from the current link. You can return to checkout or keep shopping while we sort it out.'
@@ -243,7 +243,7 @@ function OrderSuccessContent() {
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-store-border bg-store-background px-6 py-4 font-bold text-store-background-text transition-colors hover:bg-store-secondary"
               >
                 <Download size={18} />
-                Download Invoice PDF
+                Download Proforma Invoice PDF
               </Link>
             )}
 

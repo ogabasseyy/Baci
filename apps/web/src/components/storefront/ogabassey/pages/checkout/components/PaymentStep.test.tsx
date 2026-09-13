@@ -878,12 +878,14 @@ describe('PaymentStep', () => {
       expect(screen.getByRole('button', { name: /place order/i })).toBeInTheDocument();
     });
 
-    it('shows Generate Invoice button text when payment method is invoice', () => {
+    it('shows proforma invoice button text when payment method is invoice', () => {
       // Arrange & Act
       render(<PaymentStep {...defaultProps} paymentMethod="invoice" />);
 
       // Assert
-      expect(screen.getByRole('button', { name: /generate invoice/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /get a proforma invoice for mobile/i })
+      ).toBeInTheDocument();
     });
 
     it('shows Send Payment Link button text when payment method is payforme', () => {

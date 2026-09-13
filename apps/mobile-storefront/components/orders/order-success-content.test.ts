@@ -8,10 +8,10 @@ import {
 describe('order success content helpers', () => {
   it('returns invoice messaging for invoice orders', () => {
     expect(getOrderSuccessTone('invoice')).toMatchObject({
-      documentLabel: 'View / Download Invoice',
-      eyebrow: 'Invoice ready',
-      nextDocumentTitle: 'Invoice',
-      title: 'Invoice Created',
+      documentLabel: 'View / Download Proforma Invoice',
+      eyebrow: 'Proforma invoice ready',
+      nextDocumentTitle: 'Proforma Invoice',
+      title: 'Proforma Invoice Ready!',
     });
   });
 

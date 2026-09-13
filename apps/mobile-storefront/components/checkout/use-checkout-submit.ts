@@ -1,19 +1,19 @@
 import { Alert } from 'react-native';
 import { useMerchant } from '@/hooks/use-merchant';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import {
   buildSavingsOrderFields,
   buildWalletOrderFields,
-  getFullyPaidStoreCreditPaymentMethod,
 } from '@/lib/wallet-payment-helpers';
-import { trackCheckoutStep } from '@/services/analytics';
+import {
+  trackCheckoutInvoiceGenerated,
+  trackCheckoutStep,
+} from '@/services/analytics';
 import {
   pickChangedPriceById,
   repriceCartItems,
 } from '@/services/cart-reprice';
 import { createOrder } from '@/services/orders';
-import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { useCartStore } from '@/stores/cart-store';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
 import {
@@ -64,7 +64,6 @@ export function useCheckoutSubmit({
   setPendingOrder,
   setShowCryptoSelection,
   setStep,
-  user,
   walletBalance,
   walletFundedBankTransferOptionEnabled,
   walletSelection,
@@ -206,27 +205,24 @@ export function useCheckoutSubmit({
             : buildSavingsOrderFields(liveSavingsSelection)),
           ...buildWalletOrderFields(liveWalletSelection),
         },
-        { checkoutGeneration: checkoutGenerationSnapshot }
+        {
+          analyticsPaymentMethod: selectedPayment,
+          checkoutGeneration: checkoutGenerationSnapshot,
+        }
       );
       const { order } = orderResponse;
       const orderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
-      const completedPaymentMethod =
-        getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
-
-      if (await claimCheckoutPurchaseTracking(order.id)) {
-        void trackCheckoutRoutePurchaseCompleted({
-          customerEmail,
-          customerPhone,
-          items: itemsSnapshot,
+      if (selectedPayment === 'invoice') {
+        trackCheckoutInvoiceGenerated({
+          itemCount: itemsSnapshot.reduce(
+            (count, item) => count + item.quantity,
+            0
+          ),
           orderId: order.id,
           orderNumber,
-          paymentMethod: completedPaymentMethod,
-          shipping: snapshot.deliveryFee,
-          subtotal: snapshot.subtotal,
-          tax: snapshot.taxAmount,
+          paymentMethod: 'invoice',
           total: order.total,
-          userId: user?.id ?? undefined,
         });
       }
 

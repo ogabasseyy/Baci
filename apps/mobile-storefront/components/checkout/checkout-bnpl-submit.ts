@@ -17,6 +17,7 @@ import type {
   SavingsSelection,
   WalletSelection,
 } from '@/lib/wallet-payment-helpers';
+import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { createOrder, OrderError } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
 import {
@@ -109,7 +110,15 @@ export async function submitBnplCheckout({
   // The order service owns durable retry identity across payment methods.
   // Never rotate it when a completed order rejects reuse.
   const orderResponse = await createOrder(orderRequest, {
+    analyticsPaymentMethod: selectedPayment,
     checkoutGeneration,
+  });
+  trackCheckoutPaymentStarted({
+    orderId: orderResponse.order.id,
+    orderNumber:
+      orderResponse.order.order_number || orderResponse.order.id.slice(0, 8),
+    paymentMethod: selectedPayment,
+    value: orderResponse.amountDueToGateway,
   });
 
   if (selectedPayment === 'klump') {

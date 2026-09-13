@@ -194,7 +194,11 @@ export function usePaymentGatewayController() {
     trackingToken,
     utilityType,
     markPaymentCompletionStarted: () => {
+      if (paymentCompletionStartedRef.current) {
+        return false;
+      }
       paymentCompletionStartedRef.current = true;
+      return true;
     },
     scheduleDelayedNavigation,
     setSuccessStatus: () => setPaymentStatus('success'),

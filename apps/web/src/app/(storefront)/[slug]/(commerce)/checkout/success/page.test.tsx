@@ -277,7 +277,7 @@ describe('checkout success page', () => {
     );
     expect(mockClearCart).toHaveBeenCalled();
     expect(
-      await screen.findByRole('heading', { name: /invoice generated/i })
+      await screen.findByRole('heading', { name: /proforma invoice ready/i })
     ).toBeInTheDocument();
   });
 

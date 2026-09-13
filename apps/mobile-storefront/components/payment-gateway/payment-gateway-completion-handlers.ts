@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
+import { trackCheckoutPaymentCompleted } from '@/services/analytics';
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
 import {
   beginSavingsAuthorizationCompletion,
@@ -141,6 +142,15 @@ export function createPaymentGatewayCompletionHandlers({
     paymentCompletionStartedRef.current = true;
     clearPendingLoadTimeout();
     setPaymentStatus('success');
+    if (orderId) {
+      trackCheckoutPaymentCompleted({
+        orderId,
+        orderNumber,
+        paymentMethod: gateway || 'payment_gateway',
+        reference,
+        value: amount,
+      });
+    }
     await clearCart();
     scheduleDelayedNavigation(() => {
       router.replace({

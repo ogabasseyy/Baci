@@ -78,7 +78,7 @@ describe('OrderSuccessPage', () => {
   it('renders invoice title for invoice type', () => {
     setSearchParams({ orderId: 'inv-1', type: 'invoice' });
     render(<OrderSuccessPage />);
-    expect(screen.getByText('Invoice Generated!')).toBeTruthy();
+    expect(screen.getByText('Proforma Invoice Ready!')).toBeTruthy();
   });
 
   it('renders payforme title with payer name', () => {

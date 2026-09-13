@@ -510,7 +510,9 @@ describe('POST /api/payments/verify — finalizer outcomes', () => {
 
     expect(response.status).toBe(200);
     expect(data).toEqual({
+      orderId: 'order-1',
       orderNumber: 'ORD-1',
+      paymentMethod: 'juicyway',
       status: 'success',
       success: true,
     });

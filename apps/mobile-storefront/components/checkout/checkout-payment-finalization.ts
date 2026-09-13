@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import type { MutableRefObject } from 'react';
 import type { PaymentMethodType } from '@/components/checkout/PaymentMethodSelector';
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
+import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { OrderError, type OrderResponse } from '@/services/orders';
 import { clearAndPersistCheckoutCart } from './checkout-cart-persistence';
 import {
@@ -96,6 +97,12 @@ export async function finalizeCheckoutPayment({
   }
 
   if (selectedPayment === 'juicyway') {
+    trackCheckoutPaymentStarted({
+      orderId: order.id,
+      orderNumber,
+      paymentMethod: selectedPayment,
+      value: orderResponse.amountDueToGateway,
+    });
     setPendingOrder({
       order,
       orderResponse,
@@ -116,6 +123,12 @@ export async function finalizeCheckoutPayment({
   const isBankTransfer = selectedPayment === 'bank_transfer';
 
   if (isOnlinePayment || isBankTransfer) {
+    trackCheckoutPaymentStarted({
+      orderId: order.id,
+      orderNumber,
+      paymentMethod: selectedPayment,
+      value: orderResponse.amountDueToGateway,
+    });
     if (isBankTransfer && shouldCreateWalletFundedBankTransferOrder) {
       const startedWalletFundedBankTransfer =
         await startWalletFundedBankTransferCheckout({

@@ -77,7 +77,7 @@ export const OrderSuccessPage: React.FC = () => {
   }, []);
 
   const getTitle = () => {
-    if (successType === 'invoice') return 'Invoice Generated!';
+    if (successType === 'invoice') return 'Proforma Invoice Ready!';
     if (successType === 'payforme') return 'Request Sent!';
     if (isBnplSuccess) return 'BNPL Checkout Submitted';
     return 'Order Successful!';
@@ -85,7 +85,7 @@ export const OrderSuccessPage: React.FC = () => {
 
   const getMessage = () => {
     if (successType === 'invoice')
-      return 'Your invoice has been generated successfully. Please complete the transfer to process your order.';
+      return 'Your proforma invoice is ready to share with your company or procurement team.';
     if (successType === 'payforme')
       return `We've sent a payment link to ${payerName}. Your order will be processed once payment is received.`;
     if (isBnplSuccess)
@@ -155,14 +155,14 @@ export const OrderSuccessPage: React.FC = () => {
           {getMessage()}
         </p>
 
-        {/* Download Invoice Button (Only for Invoice Mode) */}
+        {/* Download Proforma Invoice Button (Only for Invoice Mode) */}
         {successType === 'invoice' && displayOrder && (
           <div className="mb-10">
             <button type="button"
               onClick={() => setIsInvoiceOpen(true)}
               className="w-full bg-store-primary hover:bg-store-primary/90 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-lg hover:shadow-store-primary/20 flex items-center justify-center gap-2 active:scale-[0.98]"
             >
-              <Download size={20} /> Download Invoice
+              <Download size={20} /> Download Proforma Invoice
             </button>
             <p className="text-xs text-gray-400 mt-2">
               PDF format • {displayOrder.total}

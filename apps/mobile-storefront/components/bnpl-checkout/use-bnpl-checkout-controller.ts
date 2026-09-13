@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WebView, WebViewNavigation } from 'react-native-webview';
+import { trackCheckoutPaymentCompleted } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 import type {
   BNPLShouldStartLoadRequest,
@@ -138,8 +139,19 @@ export function useBNPLCheckoutController({
       return;
     }
 
-    setCheckoutStatus(effect.status);
     if (effect.status === 'success') {
+      if (statusRef.current === 'success') {
+        return;
+      }
+      setCheckoutStatus('success');
+      if (orderId) {
+        trackCheckoutPaymentCompleted({
+          orderId,
+          paymentMethod: gateway || 'bnpl',
+          reference: effect.reference || undefined,
+          value: amount ? Number(amount) : undefined,
+        });
+      }
       await clearCart();
       getAppNavigation().scheduleOrderSuccess({
         gateway,
@@ -149,6 +161,7 @@ export function useBNPLCheckoutController({
       });
       return;
     }
+    setCheckoutStatus(effect.status);
     setErrorMessage(effect.errorMessage);
   };
 

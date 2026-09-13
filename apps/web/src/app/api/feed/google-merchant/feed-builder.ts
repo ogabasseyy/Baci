@@ -253,7 +253,10 @@ export function generateGoogleMerchantFeed(
             offerImages.additionalImagesXml,
             `        <g:availability>${offerAvailability}</g:availability>`,
             `        <g:quantity>${offerStock}</g:quantity>`,
-            `        <g:price>${offer.price.toFixed(2)} ${currency}</g:price>`,
+            typeof offer.compare_at_price === 'number' &&
+            offer.compare_at_price > offer.price
+              ? `        <g:price>${offer.compare_at_price.toFixed(2)} ${currency}</g:price>\n        <g:sale_price>${offer.price.toFixed(2)} ${currency}</g:sale_price>`
+              : `        <g:price>${offer.price.toFixed(2)} ${currency}</g:price>`,
             `        <g:brand>${escapeXml(effectiveBrand)}</g:brand>`,
             `        <g:condition>${toGmcCondition(offer.condition)}</g:condition>`,
             product.gtin

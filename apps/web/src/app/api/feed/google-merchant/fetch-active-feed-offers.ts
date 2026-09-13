@@ -3,6 +3,7 @@ import type { FeedOffer } from './feed-types';
 
 interface FeedOfferRow {
   condition: FeedOffer['condition'];
+  compare_at_price: number | string | null;
   id: string;
   images?: unknown;
   price: number | string;
@@ -21,7 +22,9 @@ export async function fetchActiveFeedOffers(
   for (let start = 0; start < productIds.length; start += BATCH_SIZE) {
     const { data, error } = await supabase
       .from('product_offers')
-      .select('id, product_id, condition, price, stock_quantity, images')
+      .select(
+        'id, product_id, condition, price, compare_at_price, stock_quantity, images'
+      )
       .in('product_id', productIds.slice(start, start + BATCH_SIZE))
       .eq('status', 'active');
     if (error) throw new Error('Failed to fetch product offers');

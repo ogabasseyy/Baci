@@ -130,18 +130,30 @@ export function toDomesticBookingItems(
   quoteItems: ShipmentItem[] | undefined
 ): ShipmentItem[] {
   if (!quoteItems?.length) return toShipmentItems(orderItems);
+  const unmatchedOrderItems = [...orderItems];
   return quoteItems
-    .map((item, index) => ({
-      name: item.name,
-      description: item.description || item.name,
-      quantity: survivingShipmentQuantity(orderItems[index] ?? item),
-      weight: item.weight,
-      value: item.value,
-      ...(item.hsCode ? { hsCode: item.hsCode } : {}),
-      ...(item.length !== undefined ? { length: item.length } : {}),
-      ...(item.width !== undefined ? { width: item.width } : {}),
-      ...(item.height !== undefined ? { height: item.height } : {}),
-    }))
+    .map((item) => {
+      const orderItemIndex = unmatchedOrderItems.findIndex(
+        (orderItem) =>
+          orderItem.name === item.name &&
+          orderItem.quantity === item.quantity &&
+          Number(orderItem.price) === item.value
+      );
+      const matchedOrderItem =
+        orderItemIndex === -1 ? item : unmatchedOrderItems[orderItemIndex];
+      if (orderItemIndex !== -1) unmatchedOrderItems.splice(orderItemIndex, 1);
+      return {
+        name: item.name,
+        description: item.description || item.name,
+        quantity: survivingShipmentQuantity(matchedOrderItem),
+        weight: item.weight,
+        value: item.value,
+        ...(item.hsCode ? { hsCode: item.hsCode } : {}),
+        ...(item.length !== undefined ? { length: item.length } : {}),
+        ...(item.width !== undefined ? { width: item.width } : {}),
+        ...(item.height !== undefined ? { height: item.height } : {}),
+      };
+    })
     .filter((item) => item.quantity > 0);
 }
 

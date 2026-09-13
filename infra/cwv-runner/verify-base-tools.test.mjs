@@ -106,8 +106,7 @@ esac
 `
   );
   const dpkg = join(bin, 'dpkg-query');
-  const dpkgFixture =
-    '#!/bin/sh\nif [ "$1" = -S ]; then name=${2##*/}; case "$name" in awk-target) printf "mawk: %s" "$2" ;; *) name=$(printf \'%s\' "$name" | tr \':\' \'-\'); printf "pkg-%s: %s" "$name" "$2" ;; esac; else printf 1; fi\n';
+  const dpkgFixture = `#!/bin/sh\nif [ "$1" = -S ]; then name=\${2##*/}; case "$name" in awk-target) printf "mawk: %s" "$2" ;; *) name=$(printf '%s' "$name" | tr ':' '-'); printf "pkg-%s: %s" "$name" "$2" ;; esac; else printf 1; fi\n`;
   writeFileSync(dpkg, dpkgFixture);
   const move = join(bin, 'mv');
   writeFileSync(

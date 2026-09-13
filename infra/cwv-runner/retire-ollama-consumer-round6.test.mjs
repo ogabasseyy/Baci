@@ -15,6 +15,8 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
+const containerId =
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const prelude =
   'stat() { printf "1:2:81a4:10:501:20:644\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
 const unprivileged = process.getuid?.() === 0 ? { gid: 65534, uid: 65534 } : {};
@@ -115,10 +117,10 @@ test('fails closed when a stopped container changes from the reviewed name', asy
       join(bin, 'docker'),
       `#!/bin/sh
 case "$*" in
-  *' ps -a '*) printf 'container-id\\n' ;;
-  *'inspect -f {{.Name}} container-id') count=$(cat '${state}' 2>/dev/null || printf 0); count=$((count + 1)); printf '%s' "$count" >'${state}'; [ "$count" -eq 1 ] && printf '/ollama-loopback\\n' || printf '/generic-api\\n' ;;
-  *'inspect -f {{.Id}} '*) printf 'container-id /ollama-loopback /bin/true [] [] {} null [] {} {} {} [] "bridge"\\n' ;;
-  *'inspect -f {{json .Mounts}} container-id') printf '[]\\n' ;;
+  *' ps -a '*) printf '${containerId}\\n' ;;
+  *'inspect -f {{.Name}} ${containerId}') count=$(cat '${state}' 2>/dev/null || printf 0); count=$((count + 1)); printf '%s' "$count" >'${state}'; [ "$count" -eq 1 ] && printf '/ollama-loopback\\n' || printf '/generic-api\\n' ;;
+  *'inspect -f {{.Id}} '*) printf '${containerId} /ollama-loopback /bin/true [] [] {} null [] {} {} {} [] "bridge"\\n' ;;
+  *'inspect -f {{json .Mounts}} ${containerId}') printf '[]\\n' ;;
 esac
 `
     );
@@ -134,7 +136,10 @@ esac
         ],
         {
           ...unprivileged,
-          env: { ...process.env, RETIRE_OLLAMA_TEST_BIN: bin },
+          env: {
+            ...process.env,
+            RETIRE_OLLAMA_TEST_BIN: bin,
+          },
         }
       ),
       (error) => error.code === 2

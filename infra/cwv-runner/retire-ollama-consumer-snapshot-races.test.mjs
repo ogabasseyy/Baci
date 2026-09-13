@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
 const prelude =
-  'stat() { inode=$(/bin/ls -di "$3" | /usr/bin/awk "{print \\$1}"); printf "1:%s:81a4:10:501:20:644\\n" "$inode"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
+  'RETIRE_OLLAMA_TEST_BIN=/usr/bin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; stat() { inode=$(/bin/ls -di "$3" | /usr/bin/awk "{print \\$1}"); printf "1:%s:81a4:10:501:20:644\\n" "$inode"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
 
 async function expectReplacementRace(initial, replacement) {
   const directory = await realpath(
@@ -106,7 +106,7 @@ test('fails closed when a captured Compose definition is replaced with a symlink
     await assert.rejects(
       execFileAsync('sh', [
         '-c',
-        '. "$1"; SCRIPT_DIR=$(dirname "$1"); COMPOSE_ROOTS="$2"; replacement=$3; definition=$4; marker=$5; init_temp_root; trap cleanup_temp EXIT; load_consumer_scanners; stat() { printf "1:2:81a4:10:501:20:644\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; consumer_matches() { /usr/bin/grep -q -Ei "ollama|11434" "$1"; status=$?; if [ ! -e "$marker" ]; then : >"$marker"; rm -f "$definition"; ln -s "$replacement" "$definition"; fi; return "$status"; }; scan_compose_definitions',
+        'RETIRE_OLLAMA_TEST_BIN=/usr/bin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; SCRIPT_DIR=$(dirname "$1"); COMPOSE_ROOTS="$2"; replacement=$3; definition=$4; marker=$5; init_temp_root; trap cleanup_temp EXIT; load_consumer_scanners; stat() { printf "1:2:81a4:10:501:20:644\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; consumer_matches() { /usr/bin/grep -q -Ei "ollama|11434" "$1"; status=$?; if [ ! -e "$marker" ]; then : >"$marker"; rm -f "$definition"; ln -s "$replacement" "$definition"; fi; return "$status"; }; scan_compose_definitions',
         'retire-ollama-consumer-snapshot-symlink-test',
         script.pathname,
         directory,
@@ -133,7 +133,7 @@ test('rejects a noncanonical regular-file alias before consumer capture', async 
     await assert.rejects(
       execFileAsync('sh', [
         '-c',
-        '. "$1"; SCRIPT_DIR=$(dirname "$1"); init_temp_root; trap cleanup_temp EXIT; load_consumer_scanners; consumer_canonical_regular "$2"',
+        'RETIRE_OLLAMA_TEST_BIN=/usr/bin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; SCRIPT_DIR=$(dirname "$1"); init_temp_root; trap cleanup_temp EXIT; load_consumer_scanners; consumer_canonical_regular "$2"',
         'retire-ollama-consumer-canonical-alias-test',
         script.pathname,
         alias,

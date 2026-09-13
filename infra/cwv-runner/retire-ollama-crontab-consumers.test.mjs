@@ -21,7 +21,7 @@ test('classifies uppercase Ollama crontab variables without changing evidence by
     );
     const { stdout } = await execFileAsync('sh', [
       '-c',
-      '. "$1"; init_temp_root; trap cleanup_temp EXIT; OLLAMA_CRON_ONE=$(hash_text "$3"); deps="[]"; consumer_counts="[]"; consumer_evidence="[]"; record_consumers current-crontab "$2" cron; printf "%s\\n%s\\n" "$consumer_counts" "$consumer_evidence"',
+      'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; init_temp_root; trap cleanup_temp EXIT; OLLAMA_CRON_ONE=$(hash_text "$3"); deps="[]"; consumer_counts="[]"; consumer_evidence="[]"; record_consumers current-crontab "$2" cron; printf "%s\\n%s\\n" "$consumer_counts" "$consumer_evidence"',
       'retire-ollama-crontab-consumers-test',
       script.pathname,
       cron,
@@ -51,7 +51,7 @@ test('keeps compound ollama serve cron consumers while exempting only a reviewed
     await writeFile(cron, `${approved}\n${compound}\n`);
     const { stdout } = await execFileAsync('sh', [
       '-c',
-      '. "$1"; init_temp_root; trap cleanup_temp EXIT; OLLAMA_CRON_ONE=$(hash_text "$3"); deps="[]"; consumer_counts="[]"; consumer_evidence="[]"; record_consumers current-crontab "$2" cron; printf "%s\\n%s\\n" "$consumer_counts" "$consumer_evidence"',
+      'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; init_temp_root; trap cleanup_temp EXIT; OLLAMA_CRON_ONE=$(hash_text "$3"); deps="[]"; consumer_counts="[]"; consumer_evidence="[]"; record_consumers current-crontab "$2" cron; printf "%s\\n%s\\n" "$consumer_counts" "$consumer_evidence"',
       'retire-ollama-crontab-consumers-test',
       script.pathname,
       cron,
@@ -86,7 +86,7 @@ test('discovers a file-valued crontab environment setting', async () => {
     await chmod(worker, 0o755);
     const { stdout } = await execFileAsync('sh', [
       '-c',
-      '. "$1"; SCRIPT_DIR=$(dirname "$1"); load_cron_inventory_helper; cron_inventory_anacrontab() { printf /etc/anacrontab; }; cron_inventory_system_file() { printf /etc/crontab; }; cron_inventory_system_dir() { printf /etc/cron.d; }; cron_inventory_hourly_dir() { printf /etc/cron.hourly; }; cron_inventory_daily_dir() { printf /etc/cron.daily; }; cron_inventory_weekly_dir() { printf /etc/cron.weekly; }; cron_inventory_monthly_dir() { printf /etc/cron.monthly; }; cron_inventory_command_targets user "$2" "$2"',
+      'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; SCRIPT_DIR=$(dirname "$1"); load_cron_inventory_helper; cron_inventory_anacrontab() { printf /etc/anacrontab; }; cron_inventory_system_file() { printf /etc/crontab; }; cron_inventory_system_dir() { printf /etc/cron.d; }; cron_inventory_hourly_dir() { printf /etc/cron.hourly; }; cron_inventory_daily_dir() { printf /etc/cron.daily; }; cron_inventory_weekly_dir() { printf /etc/cron.weekly; }; cron_inventory_monthly_dir() { printf /etc/cron.monthly; }; cron_inventory_command_targets user "$2" "$2"',
       'retire-ollama-crontab-env-file-test',
       script.pathname,
       cron,

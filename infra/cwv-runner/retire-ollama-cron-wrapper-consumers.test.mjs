@@ -9,6 +9,8 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
+process.env.RETIRE_OLLAMA_TEST_BIN = '/sbin';
+process.env.RETIRE_OLLAMA_TEST_FSTYPE = 'apfs';
 
 test('records a generic cron wrapper whose target alone uses the Ollama endpoint', async () => {
   const directory = await mkdtemp(

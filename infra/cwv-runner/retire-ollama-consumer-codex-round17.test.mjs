@@ -15,8 +15,10 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
+const containerId =
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const prelude =
-  'sha256sum() { /usr/bin/shasum -a 256 "$@"; }; stat() { printf "1:2:81a4:10:0:0:600\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
+  'RETIRE_OLLAMA_TEST_BIN=/usr/bin; sha256sum() { /usr/bin/shasum -a 256 "$@"; }; stat() { printf "1:2:81a4:10:0:0:600\\n"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
 
 async function cronComposeFixture(command) {
   const directory = await realpath(
@@ -88,7 +90,7 @@ test('content-binds a stopped container absolute Path when Args is empty', async
   try {
     const { stdout } = await execFileAsync('sh', [
       '-c',
-      `${prelude}docker() { case "$*" in *' ps -a '*) printf 'generic-api\\n' ;; *'inspect -f {{.Name}} generic-api') printf '/generic-api\\n' ;; *'inspect -f {{json .State.Running}} generic-api') printf 'false\\n' ;; *'inspect -f {{.Id}} '*) printf 'generic-api /generic-api /opt/application-worker [] [] {} null [] {} {} {} [] "bridge"\\n' ;; *'inspect -f {{json .Mounts}} generic-api') printf '[]\\n' ;; *' cp generic-api:/opt/application-worker '*) for destination do :; done; printf '#!/bin/sh\\nexec /usr/bin/curl http://127.0.0.1:11434\\n' >"$destination" ;; *' cp generic-api:/usr/bin/curl '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;; *) return 2 ;; esac; }; . "$1"; SCRIPT_DIR=$(dirname "$1"); RETIRE_OLLAMA_TMPDIR="$2"; init_temp_root; trap cleanup_temp EXIT; CANONICAL_DOCKER_SOCKET=/run/docker.sock; CONTAINER=ollama-loopback; scan_container_rows all`,
+      `${prelude}docker() { case "$*" in *' ps -a '*) printf '${containerId}\\n' ;; *'inspect -f {{.Name}} ${containerId}') printf '/generic-api\\n' ;; *'inspect -f {{json .State.Running}} ${containerId}') printf 'false\\n' ;; *'inspect -f {{.Id}} '*) printf '${containerId} /generic-api /opt/application-worker [] [] {} null [] {} {} {} [] "bridge"\\n' ;; *'inspect -f {{json .Mounts}} ${containerId}') printf '[]\\n' ;; *' cp ${containerId}:/opt/application-worker '*) for destination do :; done; printf '#!/bin/sh\\nexec /usr/bin/curl http://127.0.0.1:11434\\n' >"$destination" ;; *' cp ${containerId}:/usr/bin/curl '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;; *) return 2 ;; esac; }; . "$1"; SCRIPT_DIR=$(dirname "$1"); RETIRE_OLLAMA_TMPDIR="$2"; init_temp_root; trap cleanup_temp EXIT; CANONICAL_DOCKER_SOCKET=/run/docker.sock; CONTAINER=ollama-loopback; scan_container_rows all`,
       'retire-ollama-container-path-test',
       script.pathname,
       directory,
@@ -98,11 +100,11 @@ test('content-binds a stopped container absolute Path when Args is empty', async
     assert.equal(records.length, 2);
     assert.match(
       records[0],
-      /^container-argument:generic-api:.*application-worker/
+      new RegExp(`^container-argument:${containerId}:.*application-worker`)
     );
     assert.match(
       records[1],
-      /^container-argument:generic-api:.*usr\/bin\/curl/
+      new RegExp(`^container-argument:${containerId}:.*usr\\/bin\\/curl`)
     );
   } finally {
     await rm(directory, { force: true, recursive: true });

@@ -21,6 +21,10 @@ const quiescenceHelper = new URL(
   './retire-ollama-at-quiescence.sh',
   import.meta.url
 );
+const cronInventoryHelper = new URL(
+  './retire-ollama-cron-inventory.sh',
+  import.meta.url
+);
 
 function testEnvironment(bin, uid = process.getuid?.()) {
   const environment = {
@@ -28,8 +32,12 @@ function testEnvironment(bin, uid = process.getuid?.()) {
     RETIRE_OLLAMA_TEST_BIN: bin,
   };
   delete environment.RETIRE_OLLAMA_AT_QUIESCENCE_HELPER;
-  if (uid !== 0)
+  delete environment.RETIRE_OLLAMA_CRON_INVENTORY_HELPER;
+  if (uid !== 0) {
     environment.RETIRE_OLLAMA_AT_QUIESCENCE_HELPER = quiescenceHelper.pathname;
+    environment.RETIRE_OLLAMA_CRON_INVENTORY_HELPER =
+      cronInventoryHelper.pathname;
+  }
   return environment;
 }
 
@@ -79,7 +87,7 @@ async function runApplyWithLateAtJob(target) {
       'sh',
       [
         '-c',
-        `. "$1"; load_at_quiescence_helper
+        `. "$1"; load_at_quiescence_helper; load_cron_inventory_helper() { :; }
 RECEIPT_DIR=$2; RECEIPT=$3; INVENTORY=$4; QUEUE=$5; ACTIONS=$6; TARGET=$7
 root() { :; }; init_temp_root() { :; }; cleanup_temp() { :; }
 canonical_receipt() { :; }; assert_approved_dependency_classes() { :; }; assert_zero_consumers() { :; }
@@ -100,7 +108,7 @@ disable_unit() { printf '%s\\n' disable_unit >>"$ACTIONS"; }
 remove_container() { printf '%s\\n' remove_container >>"$ACTIONS"; }
 delete_models() { printf '%s\\n' delete_models >>"$ACTIONS"; }
 apply`,
-        'retire-ollama-atq-action-boundary-test',
+        `${script.pathname}.source`,
         script.pathname,
         receiptDirectory,
         receipt,
@@ -174,7 +182,7 @@ test('blocks an at submission after the terminal queue check and before model de
       'sh',
       [
         '-c',
-        `. "$1"; load_at_quiescence_helper
+        `. "$1"; load_at_quiescence_helper; load_cron_inventory_helper() { :; }
 RECEIPT_DIR=$2; RECEIPT=$3; INVENTORY=$4; AT_JOB_DIR=$5; ACTIONS=$6; MOUNT_STATE=$7
 root() { :; }; init_temp_root() { :; }; cleanup_temp() { :; }; fsync_dir() { :; }
 canonical_receipt() { :; }; assert_approved_dependency_classes() { :; }; assert_zero_consumers() { :; }
@@ -196,7 +204,7 @@ disable_unit() { printf '%s\\n' disable_unit >>"$ACTIONS"; }
 remove_container() { printf '%s\\n' remove_container >>"$ACTIONS"; }
 delete_models() { [ "$(cat "$MOUNT_STATE")" = ro ] || printf '%s\\n' submitted >>"$ACTIONS"; printf '%s\\n' delete_models >>"$ACTIONS"; }
 apply`,
-        'retire-ollama-atq-quiescence-test',
+        `${script.pathname}.source`,
         script.pathname,
         receiptDirectory,
         receipt,

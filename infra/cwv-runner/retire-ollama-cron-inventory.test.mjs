@@ -65,6 +65,13 @@ test('runs cron inventory fixtures without root authority', async () => {
   assert.notEqual(stdout.trim(), '0');
 });
 
+test('does not cache a cron helper before its receipt digest binding succeeds', async () => {
+  const { stdout } = await shell(
+    `died=0; die() { died=$((died + 1)); }; source_loader_source() { SOURCE_LOADER_DIGEST=actual; }; RECOVERY_CRON_INVENTORY_SHA=expected; unset CRON_INVENTORY_HELPER_SHA; load_cron_inventory_helper || :; if [ "\${CRON_INVENTORY_HELPER_SHA+x}" = x ]; then printf cached; else printf uncached; fi; printf '|die=%s' "$died"`
+  );
+  assert.equal(stdout, 'uncached|die=1');
+});
+
 test('binds system, root, and other-user cron sources while excluding owner spool duplication', async () => {
   const directory = await fixtureDirectory('baci-cron-inventory-');
   const system = join(directory, 'etc', 'crontab');

@@ -37,7 +37,10 @@ export async function processNextRedvaultRefund({
   provider: RedvaultRefundProvider;
   store: Pick<
     RedvaultRefundStore,
-    'claimNext' | 'finish' | 'recordProviderSubmission'
+    | 'claimNext'
+    | 'finish'
+    | 'recordProviderSubmission'
+    | 'markSubmissionIndeterminate'
   >;
 }): Promise<
   | { kind: 'idle' }
@@ -55,11 +58,17 @@ export async function processNextRedvaultRefund({
       originalCaptureReference: refund.attemptReference,
     });
   } catch {
-    return { kind: 'indeterminate', refund };
+    return {
+      kind: 'indeterminate',
+      refund: await store.markSubmissionIndeterminate(refund.id),
+    };
   }
 
   if (outcome.kind === 'indeterminate')
-    return { kind: 'indeterminate', refund };
+    return {
+      kind: 'indeterminate',
+      refund: await store.markSubmissionIndeterminate(refund.id),
+    };
   if (outcome.kind === 'accepted_pending') {
     return {
       kind: 'indeterminate',

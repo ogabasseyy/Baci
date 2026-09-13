@@ -20,6 +20,7 @@ type RedvaultRefundRecoveryStore = Pick<
   | 'claimNext'
   | 'finish'
   | 'recordProviderSubmission'
+  | 'markSubmissionIndeterminate'
   | 'claimNextReconciliation'
   | 'reconcile'
 >;
@@ -54,7 +55,10 @@ async function runSubmission({
   provider: RedvaultRefundProvider;
   store: Pick<
     RedvaultRefundRecoveryStore,
-    'claimNext' | 'finish' | 'recordProviderSubmission'
+    | 'claimNext'
+    | 'finish'
+    | 'recordProviderSubmission'
+    | 'markSubmissionIndeterminate'
   >;
 }): Promise<string> {
   try {

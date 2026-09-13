@@ -27,12 +27,19 @@ export async function createRedvaultCheckoutResponse({
         value,
       ])
     );
+    const items = Array.isArray(order.items)
+      ? order.items.map((item, index) => ({
+          ...(item as Record<string, unknown>),
+          condition: quote.lines[index]?.condition ?? null,
+        }))
+      : order.items;
     const authoritativeOrder: Record<string, unknown> = JSON.parse(
       JSON.stringify({
         ...order,
         customer_email: customerEmail.trim().toLowerCase(),
         discount_amount: quote.discountKobo / 100,
         expected_total: null,
+        items,
       })
     );
     const result = await createRedvaultOrderDraft({

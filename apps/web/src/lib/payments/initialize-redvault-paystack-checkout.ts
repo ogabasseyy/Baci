@@ -10,7 +10,6 @@ export function initializeRedvaultPaystackCheckout({
   merchantId,
   orderId,
   redirectUrl,
-  subaccount,
   userId,
 }: {
   customerEmail: string;
@@ -18,7 +17,6 @@ export function initializeRedvaultPaystackCheckout({
   merchantId: string;
   orderId: string;
   redirectUrl: string;
-  subaccount: string;
   userId: string | null;
 }) {
   const attemptAdapter = createRedvaultPaymentAttemptClient({
@@ -43,9 +41,12 @@ export function initializeRedvaultPaystackCheckout({
             ...input.authorizationMetadata,
             merchant_id: merchantId,
             order_id: orderId,
+            platform_fee_kobo: input.platformFeeKobo,
           },
           reference: input.reference,
-          subaccount,
+          subaccount: input.paystackSubaccount,
+          transaction_charge: input.platformFeeKobo,
+          bearer: 'account',
         });
         if (!paystack.authorization_url) {
           throw new Error('REDVAULT Paystack checkout URL is missing');

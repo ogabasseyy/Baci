@@ -34,6 +34,8 @@ describe('initializeRedvaultPaystackCheckout', () => {
         },
         customerEmail: 'customer@example.test',
         orderId: 'order-1',
+        paystackSubaccount: 'ACCT_reserved',
+        platformFeeKobo: 10000,
         redirectUrl: 'https://shop.example.test/checkout/success',
         reference: 'RV-attempt-1',
       });
@@ -50,7 +52,6 @@ describe('initializeRedvaultPaystackCheckout', () => {
         merchantId: 'merchant-1',
         orderId: 'order-1',
         redirectUrl: 'https://shop.example.test/checkout/success',
-        subaccount: 'ACCT_test',
         userId: null,
       })
     ).resolves.toEqual({
@@ -72,9 +73,12 @@ describe('initializeRedvaultPaystackCheckout', () => {
         merchant_id: 'merchant-1',
         order_id: 'order-1',
         partnership: 'uba_redvault',
+        platform_fee_kobo: 10000,
       },
       reference: 'RV-attempt-1',
-      subaccount: 'ACCT_test',
+      subaccount: 'ACCT_reserved',
+      transaction_charge: 10000,
+      bearer: 'account',
     });
   });
 });

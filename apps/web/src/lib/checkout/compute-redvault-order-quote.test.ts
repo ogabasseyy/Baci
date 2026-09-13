@@ -103,10 +103,32 @@ describe('computeRedvaultOrderQuote', () => {
       ...input,
       items: [{ ...input.items[0], variant_id: 'v1' }],
       supabase: client({ price: null }, [
-        { id: 'v1', product_id: productId, price_override: 20 },
+        {
+          condition: 'used',
+          id: 'v1',
+          product_id: productId,
+          price_override: 20,
+        },
       ]) as never,
     });
     expect(quote.lines[0].unitPriceKobo).toBe(2000);
+  });
+  it('binds an eligible line to the selected variant condition', async () => {
+    const quote = await computeRedvaultOrderQuote({
+      ...input,
+      items: [{ ...input.items[0], condition: 'new', variant_id: 'v1' }],
+      supabase: client({}, [
+        {
+          condition: 'used',
+          id: 'v1',
+          product_id: productId,
+          price_override: null,
+        },
+      ]) as never,
+    });
+
+    expect(quote.lines[0].condition).toBe('used');
+    expect(quote.groups[0].condition).toBe('used');
   });
   it('mirrors persisted tax column fallbacks for null category and rate', async () => {
     const quote = await computeRedvaultOrderQuote({

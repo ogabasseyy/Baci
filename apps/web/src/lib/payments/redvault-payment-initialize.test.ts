@@ -6,6 +6,8 @@ const createdAttempt = {
   authorizationUrl: null,
   bankCode: '033',
   id: 'attempt-1',
+  paystackSubaccount: 'ACCT_reserved',
+  platformFeeKobo: 1900,
   reference: 'RV-reference-1',
   state: 'created' as const,
 };
@@ -54,6 +56,8 @@ describe('initializeRedvaultCheckout', () => {
           },
           partnership: 'uba_redvault',
         },
+        paystackSubaccount: 'ACCT_reserved',
+        platformFeeKobo: 1900,
         reference: 'RV-reference-1',
       })
     );

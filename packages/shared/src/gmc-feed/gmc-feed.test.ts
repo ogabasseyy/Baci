@@ -7,6 +7,23 @@ import {
 
 // ---------- extractImageCandidates ----------
 describe('extractImageCandidates', () => {
+  it('supports condition-offer images as product-level manifest candidates', () => {
+    const [candidate] = extractImageCandidates('product-1', [
+      { url: 'https://cdn.example.com/offers/used-phone.jpg' },
+    ]);
+    expect(candidate).toEqual({
+      product_id: 'product-1',
+      source_url: 'https://cdn.example.com/offers/used-phone.jpg',
+      is_primary: true,
+      position: 0,
+    });
+  });
+
+  it('ignores empty condition-offer image URLs', () => {
+    expect(
+      extractImageCandidates('product-1', [{ url: '  ' }, { url: '' }])
+    ).toEqual([]);
+  });
   it('extracts images from string array', () => {
     const images = [
       'https://cdn.ogabassey.com/core-assets/products/phone.avif',

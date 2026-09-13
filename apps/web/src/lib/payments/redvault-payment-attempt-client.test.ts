@@ -41,6 +41,8 @@ describe('createRedvaultPaymentAttemptClient', () => {
             attempt_id: 'attempt-1',
             authorization_url: null,
             bank_code: '033',
+            paystack_subaccount_code: 'ACCT_reserved',
+            platform_fee_kobo: 1900,
             reference: 'RV-reference-1',
             state: 'created',
           },
@@ -54,6 +56,8 @@ describe('createRedvaultPaymentAttemptClient', () => {
             attempt_id: 'attempt-1',
             authorization_url: null,
             bank_code: '033',
+            paystack_subaccount_code: 'ACCT_reserved',
+            platform_fee_kobo: 1900,
             initialization_claimed: true,
             reference: 'RV-reference-1',
             state: 'initializing',
@@ -68,6 +72,8 @@ describe('createRedvaultPaymentAttemptClient', () => {
             attempt_id: 'attempt-1',
             authorization_url: 'https://paystack.test/checkout/1',
             bank_code: '033',
+            paystack_subaccount_code: 'ACCT_reserved',
+            platform_fee_kobo: 1900,
             reference: 'RV-reference-1',
             state: 'initialized',
           },
@@ -86,6 +92,8 @@ describe('createRedvaultPaymentAttemptClient', () => {
 
     await expect(adapter.reserve('order-1')).resolves.toMatchObject({
       amountKobo: 95000,
+      paystackSubaccount: 'ACCT_reserved',
+      platformFeeKobo: 1900,
       state: 'created',
     });
     await expect(
@@ -110,12 +118,12 @@ describe('createRedvaultPaymentAttemptClient', () => {
     );
     expect(rpc).toHaveBeenNthCalledWith(
       1,
-      'reserve_storefront_redvault_payment_attempt',
+      'reserve_storefront_redvault_payment_attempt_v2',
       { p_order_id: 'order-1' }
     );
     expect(rpc).toHaveBeenNthCalledWith(
       2,
-      'claim_storefront_redvault_payment_attempt_initialization',
+      'claim_storefront_redvault_payment_attempt_initialization_v2',
       { p_attempt_id: 'attempt-1' }
     );
     expect(rpc).toHaveBeenNthCalledWith(

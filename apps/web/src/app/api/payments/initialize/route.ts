@@ -1240,7 +1240,6 @@ export async function POST(request: NextRequest) {
         merchantId,
         orderId: data.order_id,
         redirectUrl: `${protocol}://${merchant.slug}.${rootDomain}/checkout/success`,
-        subaccount: merchant.paystack_subaccount_code,
         userId: customerAuth.user?.id ?? null,
       });
 

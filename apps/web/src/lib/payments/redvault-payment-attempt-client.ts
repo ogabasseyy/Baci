@@ -11,6 +11,8 @@ export type RedvaultReservedAttempt = {
   authorizationUrl: string | null;
   bankCode: string;
   id: string;
+  paystackSubaccount: string;
+  platformFeeKobo: number;
   reference: string;
   state: 'created' | 'initializing' | 'initialized' | 'indeterminate';
 };
@@ -35,6 +37,12 @@ function parseReservedAttempt(value: unknown): RedvaultReservedAttempt | null {
     row.amount_kobo <= 0 ||
     typeof row.bank_code !== 'string' ||
     !/^\d{3}$/.test(row.bank_code) ||
+    typeof row.paystack_subaccount_code !== 'string' ||
+    !row.paystack_subaccount_code.trim() ||
+    typeof row.platform_fee_kobo !== 'number' ||
+    !Number.isSafeInteger(row.platform_fee_kobo) ||
+    row.platform_fee_kobo < 0 ||
+    row.platform_fee_kobo > row.amount_kobo ||
     (row.state !== 'created' &&
       row.state !== 'initializing' &&
       row.state !== 'initialized' &&
@@ -50,6 +58,8 @@ function parseReservedAttempt(value: unknown): RedvaultReservedAttempt | null {
     authorizationUrl: row.authorization_url,
     bankCode: row.bank_code,
     id: row.attempt_id,
+    paystackSubaccount: row.paystack_subaccount_code,
+    platformFeeKobo: row.platform_fee_kobo,
     reference: row.reference,
     state: row.state,
   };
@@ -114,7 +124,7 @@ export function createRedvaultPaymentAttemptClient({
       claimed: boolean;
     }> {
       const { data, error } = await client.rpc(
-        'claim_storefront_redvault_payment_attempt_initialization' as never,
+        'claim_storefront_redvault_payment_attempt_initialization_v2' as never,
         { p_attempt_id: attemptId } as never
       );
       const row = firstRow(data);
@@ -162,7 +172,7 @@ export function createRedvaultPaymentAttemptClient({
     },
     async reserve(orderId: string): Promise<RedvaultReservedAttempt> {
       const { data, error } = await client.rpc(
-        'reserve_storefront_redvault_payment_attempt' as never,
+        'reserve_storefront_redvault_payment_attempt_v2' as never,
         { p_order_id: orderId } as never
       );
       const attempt = parseReservedAttempt(data);

@@ -21,6 +21,8 @@ export type RedvaultCheckoutProvider = {
     authorizationMetadata: ReturnType<typeof createRedvaultPaystackMetadata>;
     customerEmail: string;
     orderId: string;
+    paystackSubaccount: string;
+    platformFeeKobo: number;
     redirectUrl: string;
     reference: string;
   }): Promise<{ authorizationUrl: string }>;
@@ -75,6 +77,8 @@ export async function initializeRedvaultCheckout({
       ),
       customerEmail,
       orderId,
+      paystackSubaccount: claim.attempt.paystackSubaccount,
+      platformFeeKobo: claim.attempt.platformFeeKobo,
       redirectUrl,
       reference: claim.attempt.reference,
     });

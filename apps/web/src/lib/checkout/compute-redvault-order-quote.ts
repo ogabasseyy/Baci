@@ -26,6 +26,7 @@ type CatalogProduct = {
 };
 
 type VariantPrice = {
+  condition: string | null;
   id: string;
   price_override: number | string | null;
   product_id: string;
@@ -138,7 +139,7 @@ export async function computeRedvaultOrderQuote({
     ),
   ];
   const { data: variants, error: variantsError } = variantIds.length
-    ? ((await supabase.rpc('get_order_variant_overrides', {
+    ? ((await supabase.rpc('get_storefront_redvault_variant_pricing', {
         p_variant_ids: variantIds,
       })) as unknown as {
         data: VariantPrice[] | null;
@@ -176,7 +177,7 @@ export async function computeRedvaultOrderQuote({
         );
       return {
         brand: product.brand,
-        condition: product.condition,
+        condition: variant?.condition ?? product.condition,
         itemId: `line-${index + 1}`,
         name: product.name,
         persistedItemOrder: index + 1,

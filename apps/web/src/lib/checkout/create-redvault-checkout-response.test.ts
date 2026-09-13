@@ -68,7 +68,7 @@ describe('REDVAULT checkout response', () => {
     expect(rpc.mock.calls[0][1].p_order.discount_amount).toBe(10);
     expect(rpc.mock.calls[0][1].p_order.expected_total).toBeNull();
     expect(rpc.mock.calls[0][1].p_route_proof.payload.order.items).toEqual([
-      { product_id: 'product', quantity: 1 },
+      { condition: 'new', product_id: 'product', quantity: 1 },
     ]);
     expect(
       Object.hasOwn(rpc.mock.calls[0][1].p_order.items[0], 'variant_id')
@@ -153,6 +153,38 @@ describe('REDVAULT checkout response', () => {
     });
     expect(response.status).toBe(409);
     expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('signs the selected variant condition rather than the client item condition', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'redvault_disabled' },
+    });
+    const quote = {
+      ...redvaultTestQuote,
+      lines: redvaultTestQuote.lines.map((line) => ({
+        ...line,
+        condition: 'used',
+      })),
+    };
+
+    await createRedvaultCheckoutResponse({
+      client: { rpc } as never,
+      orderRpcArgs: {
+        p_items: [{ condition: 'new', product_id: 'product', quantity: 1 }],
+      },
+      quote,
+      merchantId,
+      customerEmail: 'customer@example.test',
+      userId: null,
+    });
+
+    expect(rpc.mock.calls[0][1].p_order.items).toEqual([
+      { condition: 'used', product_id: 'product', quantity: 1 },
+    ]);
+    expect(rpc.mock.calls[0][1].p_route_proof.payload.order.items).toEqual([
+      { condition: 'used', product_id: 'product', quantity: 1 },
+    ]);
   });
   it('reports infrastructure failures without exposing their details', async () => {
     const rpc = vi.fn().mockResolvedValue({

@@ -1,16 +1,12 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
-
-const availabilityQuerySchema = z.object({
-  merchant_id: z.string().uuid(),
-});
+import { redvaultAvailabilityQuerySchema } from '@/schemas/redvault-availability-query';
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 
 export function GET(request: NextRequest) {
-  const parsed = availabilityQuerySchema.safeParse({
+  const parsed = redvaultAvailabilityQuerySchema.safeParse({
     merchant_id: request.nextUrl.searchParams.get('merchant_id'),
   });
 

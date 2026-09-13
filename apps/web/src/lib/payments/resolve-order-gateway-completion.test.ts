@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   capture: vi.fn(),
   verify: vi.fn(),
   complete: vi.fn(),
+  fileReview: vi.fn(),
 }));
 vi.mock('./redvault-capture-hold', () => ({
   captureOrHoldRedvaultPayment: mocks.capture,
@@ -14,6 +15,9 @@ vi.mock('./verify-and-complete-redvault-payment', () => ({
 }));
 vi.mock('./complete-order-gateway-payment', () => ({
   completeOrderGatewayPayment: mocks.complete,
+}));
+vi.mock('./file-inventory-confirmation-review', () => ({
+  fileInventoryConfirmationFailureReview: mocks.fileReview,
 }));
 const input = {
   actor: 'test',
@@ -43,6 +47,14 @@ describe('gateway completion routing', () => {
       outcome: held,
     });
     expect(mocks.complete).not.toHaveBeenCalled();
+    expect(mocks.fileReview).toHaveBeenCalledWith({
+      gatewayReference: 'RV-test',
+      merchantId: 'merchant',
+      metadata: { reason: held.reason },
+      orderId: 'order',
+      reason: `REDVAULT capture held: ${held.reason}`,
+      transactionId: 'transaction',
+    });
   });
   it('uses the atomic approved receipt without repeating normal completion', async () => {
     const completion = { order_updated: true, payment_status: 'paid' };

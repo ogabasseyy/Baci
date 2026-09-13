@@ -1071,11 +1071,13 @@ export async function POST(request: NextRequest) {
     // order, merchant, and gateway-setting reads. The proof-bound DVA
     // reservation below deliberately uses the request-scoped server client so
     // the reservation itself never crosses a service-role boundary.
-    const adminSupabase = createAdminClient();
+    const paymentDataClient = redvaultRequested
+      ? await createServerSupabaseClient()
+      : createAdminClient();
 
     // Validate order context (order + email) before initiating payment
     const { data: snapshotRows, error: snapshotError } =
-      await adminSupabase.rpc('get_order_payment_snapshot', {
+      await paymentDataClient.rpc('get_order_payment_snapshot', {
         p_order_id: data.order_id,
         p_email: data.customer_email,
       });
@@ -1152,7 +1154,7 @@ export async function POST(request: NextRequest) {
         : 'NGN';
 
     const { data: orderPaymentRow, error: orderPaymentError } =
-      await adminSupabase
+      await paymentDataClient
         .from('orders')
         .select('wallet_amount_used')
         .eq('id', data.order_id)
@@ -1176,7 +1178,7 @@ export async function POST(request: NextRequest) {
       0
     );
 
-    const { data: savingsRows, error: savingsError } = await adminSupabase
+    const { data: savingsRows, error: savingsError } = await paymentDataClient
       .from('customer_savings_redemptions')
       .select('amount')
       .eq('order_id', data.order_id)
@@ -1201,7 +1203,7 @@ export async function POST(request: NextRequest) {
       : 0;
 
     // Fetch merchant
-    const { data: merchant, error: merchantError } = await adminSupabase
+    const { data: merchant, error: merchantError } = await paymentDataClient
       .from('merchants')
       .select('id, business_name, slug, paystack_subaccount_code')
       .eq('id', merchantId)
@@ -1264,7 +1266,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch gateway settings
-    const { data: featureSettings } = await adminSupabase
+    const { data: featureSettings } = await paymentDataClient
       .from('merchant_feature_settings')
       .select(
         'paystack_enabled, korapay_enabled, wallet_paystack_dva_enabled, klump_enabled, klump_min_amount, klump_max_amount, preferred_local_gateway, preferred_international_gateway'
@@ -1644,7 +1646,7 @@ export async function POST(request: NextRequest) {
         : {};
 
     // Create transaction record (via RPC) and update order status
-    const { error: transactionError } = await adminSupabase.rpc(
+    const { error: transactionError } = await paymentDataClient.rpc(
       'create_payment_transaction',
       {
         p_merchant_id: merchantId,

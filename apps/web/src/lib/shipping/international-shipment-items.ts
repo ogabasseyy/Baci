@@ -249,32 +249,34 @@ export function toInternationalShipmentItemsFromOrder(
 ): ShipmentItem[] {
   const unmatchedQuoteItems = [...quoteItems];
 
-  return orderItems.map((item) => {
-    const metadata = deriveItemMetadata(item);
-    const { name } = metadata;
-    const quoteItemIndex = findMatchingQuoteItemIndex(
-      metadata,
-      unmatchedQuoteItems
-    );
-    const quoteItem =
-      quoteItemIndex === -1
-        ? undefined
-        : unmatchedQuoteItems.splice(quoteItemIndex, 1)[0];
-    validateQuotedPhysicalMetadata(metadata, quoteItem);
-    const bookingMetadata = resolveBookingMetadata(metadata, quoteItem);
+  return orderItems
+    .map((item) => {
+      const metadata = deriveItemMetadata(item);
+      const { name } = metadata;
+      const quoteItemIndex = findMatchingQuoteItemIndex(
+        metadata,
+        unmatchedQuoteItems
+      );
+      const quoteItem =
+        quoteItemIndex === -1
+          ? undefined
+          : unmatchedQuoteItems.splice(quoteItemIndex, 1)[0];
+      validateQuotedPhysicalMetadata(metadata, quoteItem);
+      const bookingMetadata = resolveBookingMetadata(metadata, quoteItem);
 
-    return {
-      name,
-      description: name,
-      quantity: survivingShipmentQuantity(item),
-      weight: bookingMetadata.weight,
-      value:
-        readOptionalNonNegativeNumber(quoteItem?.value) ??
-        readNonNegativeNumber(item.price, name),
-      ...(bookingMetadata.hsCode ? { hsCode: bookingMetadata.hsCode } : {}),
-      ...(bookingMetadata.dimensions ?? {}),
-    };
-  });
+      return {
+        name,
+        description: name,
+        quantity: survivingShipmentQuantity(item),
+        weight: bookingMetadata.weight,
+        value:
+          readOptionalNonNegativeNumber(quoteItem?.value) ??
+          readNonNegativeNumber(item.price, name),
+        ...(bookingMetadata.hsCode ? { hsCode: bookingMetadata.hsCode } : {}),
+        ...(bookingMetadata.dimensions ?? {}),
+      };
+    })
+    .filter((item) => item.quantity > 0);
 }
 
 export function toInternationalQuoteValidationItemsFromOrder(

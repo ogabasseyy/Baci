@@ -23,6 +23,9 @@ export interface RedvaultRefundProvider {
 export interface RedvaultRefundReconciliationProvider {
   lookup(input: {
     providerReference: string;
+    expectedAmountKobo: number;
+    expectedCaptureReference: string;
+    expectedCurrency: string;
   }): Promise<
     | { kind: 'pending'; providerStatus: string }
     | { kind: 'processed'; providerStatus: string }
@@ -120,6 +123,9 @@ export async function reconcileNextRedvaultRefund({
   }
   const outcome = await provider.lookup({
     providerReference,
+    expectedAmountKobo: claim.refund.amountKobo,
+    expectedCaptureReference: claim.refund.attemptReference,
+    expectedCurrency: 'NGN',
   });
   const refund = await store.reconcile({
     id: claim.refund.id,

@@ -114,13 +114,15 @@ export function parseStoredQuoteRequest(value: unknown): QuoteRequest | null {
 }
 
 export function toShipmentItems(orderItems: OrderItemRecord[]): ShipmentItem[] {
-  return orderItems.map((item) => ({
-    name: item.name || 'Order item',
-    description: item.name || 'Order item',
-    quantity: survivingShipmentQuantity(item),
-    weight: 1,
-    value: Number(item.price || 0),
-  }));
+  return orderItems
+    .map((item) => ({
+      name: item.name || 'Order item',
+      description: item.name || 'Order item',
+      quantity: survivingShipmentQuantity(item),
+      weight: 1,
+      value: Number(item.price || 0),
+    }))
+    .filter((item) => item.quantity > 0);
 }
 
 export function toDomesticBookingItems(
@@ -128,17 +130,19 @@ export function toDomesticBookingItems(
   quoteItems: ShipmentItem[] | undefined
 ): ShipmentItem[] {
   if (!quoteItems?.length) return toShipmentItems(orderItems);
-  return quoteItems.map((item, index) => ({
-    name: item.name,
-    description: item.description || item.name,
-    quantity: survivingShipmentQuantity(orderItems[index] ?? item),
-    weight: item.weight,
-    value: item.value,
-    ...(item.hsCode ? { hsCode: item.hsCode } : {}),
-    ...(item.length !== undefined ? { length: item.length } : {}),
-    ...(item.width !== undefined ? { width: item.width } : {}),
-    ...(item.height !== undefined ? { height: item.height } : {}),
-  }));
+  return quoteItems
+    .map((item, index) => ({
+      name: item.name,
+      description: item.description || item.name,
+      quantity: survivingShipmentQuantity(orderItems[index] ?? item),
+      weight: item.weight,
+      value: item.value,
+      ...(item.hsCode ? { hsCode: item.hsCode } : {}),
+      ...(item.length !== undefined ? { length: item.length } : {}),
+      ...(item.width !== undefined ? { width: item.width } : {}),
+      ...(item.height !== undefined ? { height: item.height } : {}),
+    }))
+    .filter((item) => item.quantity > 0);
 }
 
 export function quotedShipmentItemWeight(item: {

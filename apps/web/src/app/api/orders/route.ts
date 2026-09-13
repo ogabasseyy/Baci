@@ -2094,6 +2094,18 @@ export async function POST(request: NextRequest) {
     const requestedSavingsRedemption =
       savingsRedemptionRequested && savingsCurrencySupported;
 
+    const redvaultOrderRpcClient = redvaultRequested
+      ? createStorefrontOrderRpcClient({
+          redvaultCustomerEmail: customer_email,
+          fallbackClient: supabase,
+          hasCanonicalDeliveryMetadata: Boolean(
+            canonicalDeliveryMethod || canonicalAirportType
+          ),
+          merchantId: merchant_id,
+          userId: resolvedUserId,
+        })
+      : null;
+
     if (redvaultRequested) {
       if (
         requestedDiscountCode ||
@@ -2115,7 +2127,7 @@ export async function POST(request: NextRequest) {
         redvaultQuote = await computeRedvaultOrderQuote({
           items: orderItemsPayload,
           merchantId: merchant_id,
-          supabase,
+          supabase: redvaultOrderRpcClient ?? supabase,
         });
       } catch (error) {
         logger.warn({
@@ -2636,15 +2648,17 @@ export async function POST(request: NextRequest) {
         ? { ...orderRpcArgs, p_discount_code_id: discountCodeId }
         : orderRpcArgs;
 
-    const orderRpcClient = createStorefrontOrderRpcClient({
-      ...(redvaultRequested ? { redvaultCustomerEmail: customer_email } : {}),
-      fallbackClient: supabase,
-      hasCanonicalDeliveryMetadata: Boolean(
-        canonicalDeliveryMethod || canonicalAirportType
-      ),
-      merchantId: merchant_id,
-      userId: resolvedUserId,
-    });
+    const orderRpcClient =
+      redvaultOrderRpcClient ??
+      createStorefrontOrderRpcClient({
+        ...(redvaultRequested ? { redvaultCustomerEmail: customer_email } : {}),
+        fallbackClient: supabase,
+        hasCanonicalDeliveryMetadata: Boolean(
+          canonicalDeliveryMethod || canonicalAirportType
+        ),
+        merchantId: merchant_id,
+        userId: resolvedUserId,
+      });
     if (redvaultRequested && redvaultQuote) {
       if (merchantResolvedCurrency !== 'NGN') {
         return NextResponse.json(

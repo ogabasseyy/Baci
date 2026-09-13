@@ -13,10 +13,10 @@ export function survivingShipmentQuantity(
     if (
       typeof fulfillmentQuantity === 'number' &&
       Number.isInteger(fulfillmentQuantity) &&
-      fulfillmentQuantity > 0
+      fulfillmentQuantity >= 0
     ) {
       return fulfillmentQuantity;
     }
   }
-  return Math.max(1, item.quantity ?? 1);
+  return Math.max(0, item.quantity ?? 1);
 }

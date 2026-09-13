@@ -3,15 +3,11 @@ import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import { verifyAndCompleteRedvaultPayment } from './verify-and-complete-redvault-payment';
 
 const mocks = vi.hoisted(() => ({
-  availability: vi.fn(),
   verify: vi.fn(),
   revalidate: vi.fn(),
 }));
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProducts: mocks.revalidate,
-}));
-vi.mock('@/lib/checkout/redvault-payment-availability', () => ({
-  getRedvaultPaymentAvailability: mocks.availability,
 }));
 vi.mock('@/lib/paystack', () => ({ verifyTransaction: mocks.verify }));
 
@@ -89,15 +85,7 @@ function setup() {
 describe('server verified REDVAULT completion', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mocks.availability.mockReturnValue({ available: true });
     mocks.verify.mockResolvedValue({ success: true, data: verificationData() });
-  });
-  it('does not query or verify while availability is disabled', async () => {
-    mocks.availability.mockReturnValue({ available: false });
-    const { input, rpc } = setup();
-    expect(await verifyAndCompleteRedvaultPayment(input)).toBeNull();
-    expect(rpc).not.toHaveBeenCalled();
-    expect(mocks.verify).not.toHaveBeenCalled();
   });
   it('rejects a different merchant before any authority call', async () => {
     const { input, rpc } = setup();

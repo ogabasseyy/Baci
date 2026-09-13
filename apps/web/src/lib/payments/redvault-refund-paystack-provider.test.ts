@@ -73,9 +73,14 @@ describe('isolated REDVAULT Paystack refund transport', () => {
     const { provider, fetcher } = setup(null);
     fetcher.mockRejectedValue(new Error('secret provider detail'));
     expect(await provider.submit(input)).toEqual({ kind: 'indeterminate' });
-    await expect(provider.lookup({ providerReference: '123' })).rejects.toThrow(
-      'REDVAULT refund lookup unverified'
-    );
+    await expect(
+      provider.lookup({
+        providerReference: '123',
+        expectedAmountKobo: 9500,
+        expectedCaptureReference: 'RV-capture',
+        expectedCurrency: 'NGN',
+      })
+    ).rejects.toThrow('REDVAULT refund lookup unverified');
   });
   it('holds malformed JSON', async () => {
     const { provider, fetcher } = setup(null);
@@ -125,12 +130,19 @@ describe('isolated REDVAULT Paystack refund transport', () => {
   ])('reads bound status %s with GET only', async (status) => {
     const { provider, fetcher } = setup({
       status: true,
-      data: { id: 123, status },
+      data: { ...data, status },
     });
     const expected = ['processed', 'failed'].includes(status)
       ? status
       : 'pending';
-    expect(await provider.lookup({ providerReference: '123' })).toEqual({
+    expect(
+      await provider.lookup({
+        providerReference: '123',
+        expectedAmountKobo: 9500,
+        expectedCaptureReference: 'RV-capture',
+        expectedCurrency: 'NGN',
+      })
+    ).toEqual({
       kind: expected,
       providerStatus: expected,
     });
@@ -152,14 +164,24 @@ describe('isolated REDVAULT Paystack refund transport', () => {
     { id: 123, status: 'unknown' },
   ])('rejects untrusted lookup %j', async (response) => {
     const { provider } = setup({ status: true, data: response });
-    await expect(provider.lookup({ providerReference: '123' })).rejects.toThrow(
-      /REDVAULT refund lookup/
-    );
+    await expect(
+      provider.lookup({
+        providerReference: '123',
+        expectedAmountKobo: 9500,
+        expectedCaptureReference: 'RV-capture',
+        expectedCurrency: 'NGN',
+      })
+    ).rejects.toThrow(/REDVAULT refund lookup/);
   });
   it('rejects path injection before requesting', async () => {
     const { provider, fetcher } = setup(null);
     await expect(
-      provider.lookup({ providerReference: '../123' })
+      provider.lookup({
+        providerReference: '../123',
+        expectedAmountKobo: 9500,
+        expectedCaptureReference: 'RV-capture',
+        expectedCurrency: 'NGN',
+      })
     ).rejects.toThrow('invalid identifier');
     expect(fetcher).not.toHaveBeenCalled();
   });

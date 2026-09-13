@@ -11,12 +11,12 @@ describe('survivingShipmentQuantity', () => {
     ).toBe(1);
   });
 
-  it('falls back to the order quantity for invalid persisted data', () => {
+  it('preserves zero when all surviving units were refunded', () => {
     expect(
       survivingShipmentQuantity({
         quantity: 2,
         fulfillment_data: { fulfillmentQuantity: 0 },
       })
-    ).toBe(2);
+    ).toBe(0);
   });
 });

@@ -3,6 +3,7 @@ import type { RedvaultRefundRequest } from '@/schemas/redvault-refund-request';
 export type RedvaultRefundState =
   | 'pending'
   | 'processing'
+  | 'needs_reconciliation'
   | 'failed'
   | 'processed';
 
@@ -39,9 +40,13 @@ function readRefund(value: unknown): RedvaultRefund {
     typeof amountKobo !== 'number' ||
     !Number.isSafeInteger(amountKobo) ||
     amountKobo <= 0 ||
-    !['pending', 'processing', 'failed', 'processed'].includes(
-      String(row.state)
-    )
+    ![
+      'pending',
+      'processing',
+      'needs_reconciliation',
+      'failed',
+      'processed',
+    ].includes(String(row.state))
   ) {
     throw new Error('REDVAULT refund RPC returned an invalid refund row');
   }
@@ -143,6 +148,18 @@ export class RedvaultRefundStore {
     if (result.error)
       throw new Error(
         `Unable to persist REDVAULT refund provider submission: ${result.error.message}`
+      );
+    return readSingleRefund(result.data);
+  }
+
+  async markSubmissionIndeterminate(id: string): Promise<RedvaultRefund> {
+    const result = await this.client.rpc(
+      'mark_uba_redvault_refund_submission_indeterminate',
+      { p_refund_id: id }
+    );
+    if (result.error)
+      throw new Error(
+        `Unable to preserve REDVAULT refund reconciliation: ${result.error.message}`
       );
     return readSingleRefund(result.data);
   }

@@ -78,16 +78,9 @@ export function useCheckoutSubmit({
       useCartStore.getState().checkoutGeneration;
     const groupNegotiationSnapshot =
       useCartStore.getState().cartWideNegotiationActive;
-
-    // Checkout-time safety net: never let a prize voucher check out alongside
-    // paid items (the prize redeems on its own order and the cart is cleared).
     if (blockIfMixedPrizeCart(itemsSnapshot)) {
       return;
     }
-    // A voucher-only cart (₦0 prize) must take the standard order path, which
-    // returns the pre-reserved order already paid and routes to success — never
-    // a BNPL/financing flow (those bypass the fully-paid route and would open a
-    // ₦0 loan while leaving the voucher in the cart).
     const isVoucherOnlyCart = cartHasVoucherLine(itemsSnapshot);
 
     if (
@@ -156,10 +149,6 @@ export function useCheckoutSubmit({
       const customerEmail = customer?.email || address.email;
       const customerPhone = address.phone;
       const customerName = `${address.firstName} ${address.lastName}`;
-      // A voucher-only cart is a ₦0 prize: force a non-POD method so the voucher
-      // RPC marks the pre-reserved order paid (it keys payment_status off
-      // p_payment_method — 'pod'/'pay_on_delivery' → pending, else → paid). With
-      // POD the prize order would be left pending while the cart is cleared.
       const paymentMethodForOrder = isVoucherOnlyCart
         ? 'card'
         : selectedPayment === 'payforme'
@@ -298,9 +287,8 @@ export function useCheckoutSubmit({
             groupNegotiationSnapshot,
             checkoutGenerationSnapshot
           );
-        } catch {
-          // In-memory restore already applied; persist failures must not hide
-          // the original checkout error.
+        } catch (restoreError) {
+          void restoreError;
         }
       }
       handleCheckoutSubmitError(error, selectedPayment);

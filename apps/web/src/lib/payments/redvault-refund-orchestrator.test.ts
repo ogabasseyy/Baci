@@ -156,6 +156,9 @@ describe('REDVAULT refund operator worker', () => {
     });
     expect(lookup).toHaveBeenCalledWith({
       providerReference: 'provider-refund-1',
+      expectedAmountKobo: 9500,
+      expectedCaptureReference: 'RV-original-capture',
+      expectedCurrency: 'NGN',
     });
     expect(reconcile).toHaveBeenCalledWith({
       id: 'refund-1',

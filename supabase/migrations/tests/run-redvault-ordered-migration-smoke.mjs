@@ -25,6 +25,14 @@ try {
   run('pg_ctl', ['-D', resolve(root, 'data'), '-l', resolve(root, 'postgres.log'), '-o', `-k ${root} -p ${port} -c listen_addresses='' -c max_connections=12 -c shared_buffers=32MB`, '-w', 'start']);
   running = true;
   sql(readFileSync(resolve(directory, 'redvault-native-fixture.sql'), 'utf8'));
+  const settlement = readFileSync(resolve(migrations, '20260510170000_payment_rpc_null_safe_role_guards_and_tenant_scope.sql'), 'utf8');
+  const settlementStart = settlement.indexOf('CREATE OR REPLACE FUNCTION public.record_merchant_settlement(');
+  const settlementEnd = settlement.indexOf('-- ---------- Δ-87: claim_payment_side_effect ----------', settlementStart);
+  sql(settlement.slice(settlementStart, settlementEnd));
+  const baseline = readFileSync(resolve(migrations, '20260418000000_baseline.sql'), 'utf8');
+  const processSettlementsStart = baseline.indexOf('CREATE OR REPLACE FUNCTION "public"."process_due_settlements"()');
+  const processSettlementsEnd = baseline.indexOf('ALTER FUNCTION "public"."process_due_settlements"()', processSettlementsStart);
+  sql(baseline.slice(processSettlementsStart, processSettlementsEnd));
   sql(readFileSync(resolve(migrations, '20260723000010_transactions_refund_statuses.sql'), 'utf8'));
   const canonical = readFileSync(resolve(migrations, '20260828040000_bind_transaction_discount_proof_payload.sql'), 'utf8');
   sql(canonical.slice(0, canonical.indexOf('CREATE OR REPLACE FUNCTION private.sanitize_')));
@@ -63,9 +71,10 @@ try {
   sql(readFileSync(resolve(migrations, '20260912092800_uba_redvault_commercial_term_enforcement.sql'), 'utf8'));
   sql(readFileSync(resolve(migrations, '20260912092900_uba_redvault_variant_condition_and_paystack_split.sql'), 'utf8'));
   sql(readFileSync(resolve(migrations, '20260913090000_uba_redvault_recovery_and_booking_lock.sql'), 'utf8'));
-  for (const filename of ['20260913090200_uba_redvault_partial_refund_inventory_reconciliation.sql', '20260913090300_uba_redvault_remaining_capture_refunds.sql']) sql(readFileSync(resolve(migrations, filename), 'utf8'));
-  for (const filename of ['redvault-atomic-order-924.sql', 'redvault-usage-limits-925.sql', 'redvault-refund-finalization-925.sql', 'redvault-refund-inventory-925.sql', 'redvault-transaction-persistence-926.sql', 'redvault-verified-replay-926.sql', 'redvault-current-tree-replay.sql', 'redvault-followup-grants-926.sql', 'redvault-assurance-currency-927.sql', 'redvault-commercial-terms-928.sql', 'redvault-variant-condition-paystack-split-929.sql', 'redvault-partial-refund-quantity-safety-932.sql']) process.stdout.write(sql(readFileSync(resolve(directory, filename), 'utf8')));
-  process.stdout.write('Ordered 900-932 legacy and final-schema REDVAULT regression smoke passed.\n');
+  sql(readFileSync(resolve(migrations, '20260913090100_uba_redvault_refund_settlement_reversal.sql'), 'utf8'));
+  for (const filename of ['20260913090200_uba_redvault_partial_refund_inventory_reconciliation.sql', '20260913090300_uba_redvault_remaining_capture_refunds.sql', '20260913090400_uba_redvault_attempt_persistence_and_replay_guards.sql']) sql(readFileSync(resolve(migrations, filename), 'utf8'));
+  for (const filename of ['redvault-atomic-order-924.sql', 'redvault-usage-limits-925.sql', 'redvault-refund-finalization-925.sql', 'redvault-refund-inventory-925.sql', 'redvault-transaction-persistence-926.sql', 'redvault-verified-replay-926.sql', 'redvault-current-tree-replay.sql', 'redvault-followup-grants-926.sql', 'redvault-assurance-currency-927.sql', 'redvault-commercial-terms-928.sql', 'redvault-variant-condition-paystack-split-929.sql', 'redvault-refund-settlement-reversal-929.sql', 'redvault-partial-refund-quantity-safety-932.sql', 'redvault-attempt-persistence-904.sql']) process.stdout.write(sql(readFileSync(resolve(directory, filename), 'utf8')));
+  process.stdout.write('Ordered REDVAULT legacy and final-schema regression smoke passed.\n');
 } finally {
   if (running) run('pg_ctl', ['-D', resolve(root, 'data'), '-m', 'fast', '-w', 'stop']);
   rmSync(root, { recursive: true, force: true });

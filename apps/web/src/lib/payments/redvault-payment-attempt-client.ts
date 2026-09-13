@@ -124,7 +124,7 @@ export function createRedvaultPaymentAttemptClient({
       claimed: boolean;
     }> {
       const { data, error } = await client.rpc(
-        'claim_storefront_redvault_payment_attempt_initialization_v2' as never,
+        'claim_storefront_redvault_payment_attempt_initialization_v3' as never,
         { p_attempt_id: attemptId } as never
       );
       const row = firstRow(data);
@@ -141,7 +141,7 @@ export function createRedvaultPaymentAttemptClient({
     },
     async markIndeterminate(attemptId: string): Promise<void> {
       const { error } = await client.rpc(
-        'record_storefront_redvault_payment_attempt_initialization' as never,
+        'record_storefront_redvault_payment_attempt_initialization_v2' as never,
         {
           p_attempt_id: attemptId,
           p_authorization_url: null,
@@ -155,7 +155,7 @@ export function createRedvaultPaymentAttemptClient({
       authorizationUrl: string
     ): Promise<RedvaultReservedAttempt> {
       const { data, error } = await client.rpc(
-        'record_storefront_redvault_payment_attempt_initialization' as never,
+        'record_storefront_redvault_payment_attempt_initialization_v2' as never,
         {
           p_attempt_id: attemptId,
           p_authorization_url: authorizationUrl,
@@ -172,7 +172,7 @@ export function createRedvaultPaymentAttemptClient({
     },
     async reserve(orderId: string): Promise<RedvaultReservedAttempt> {
       const { data, error } = await client.rpc(
-        'reserve_storefront_redvault_payment_attempt_v2' as never,
+        'reserve_storefront_redvault_payment_attempt_v3' as never,
         { p_order_id: orderId } as never
       );
       const attempt = parseReservedAttempt(data);

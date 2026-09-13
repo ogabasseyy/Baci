@@ -123,7 +123,7 @@ it('creates a protected order, displays only persisted totals, then opens Paysta
   expect(screen.getByText('₦10.00')).toBeTruthy();
   expect(screen.getByText('₦7.50')).toBeTruthy();
   expect(screen.getByText('-₦5.00')).toBeTruthy();
-  expect(screen.getByText('₦0.00')).toBeTruthy();
+  expect(screen.getAllByText('₦0.00')).toHaveLength(2);
   expect(screen.queryByText('₦999.00')).toBeNull();
   fireEvent.press(
     screen.getByRole('button', { name: 'Continue to secure UBA payment' })

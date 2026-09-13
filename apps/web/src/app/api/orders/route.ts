@@ -2295,7 +2295,7 @@ export async function POST(request: NextRequest) {
     // guest checkouts cannot pass orders RLS, and the lookup is scoped to the
     // validated merchant id + the caller's own idempotency key.
     const isIdempotentMerchantRateReplay =
-      !redvaultRequested && body.shipping_rate_id && requestIdempotencyKey
+      body.shipping_rate_id && requestIdempotencyKey
         ? await hasExistingMerchantRateOrder({
             adminSupabase: createAdminClient(),
             merchantId: merchant_id,

@@ -9,6 +9,7 @@ import { SHIPPING_PROVIDER_CODES } from '@/lib/shipping/types';
 import { matchesGiglProviderRate } from './matches-gigl-provider-rate';
 import { OrderShipmentBookingError } from './order-shipment-booking-error';
 import { readPackageDimensionsCm } from './package-dimensions';
+import { survivingShipmentQuantity } from './surviving-shipment-quantity';
 
 export { OrderShipmentBookingError };
 
@@ -16,6 +17,7 @@ type OrderItemRecord = {
   name: string | null;
   quantity: number | null;
   price: number | string | null;
+  fulfillment_data?: unknown;
 };
 
 export function isShippingProviderCode(
@@ -115,7 +117,7 @@ export function toShipmentItems(orderItems: OrderItemRecord[]): ShipmentItem[] {
   return orderItems.map((item) => ({
     name: item.name || 'Order item',
     description: item.name || 'Order item',
-    quantity: Math.max(1, item.quantity ?? 1),
+    quantity: survivingShipmentQuantity(item),
     weight: 1,
     value: Number(item.price || 0),
   }));
@@ -126,10 +128,10 @@ export function toDomesticBookingItems(
   quoteItems: ShipmentItem[] | undefined
 ): ShipmentItem[] {
   if (!quoteItems?.length) return toShipmentItems(orderItems);
-  return quoteItems.map((item) => ({
+  return quoteItems.map((item, index) => ({
     name: item.name,
     description: item.description || item.name,
-    quantity: item.quantity,
+    quantity: survivingShipmentQuantity(orderItems[index] ?? item),
     weight: item.weight,
     value: item.value,
     ...(item.hsCode ? { hsCode: item.hsCode } : {}),

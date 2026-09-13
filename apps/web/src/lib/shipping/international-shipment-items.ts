@@ -1,5 +1,6 @@
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 import { productWeightToKg } from './product-weight-to-kg';
+import { survivingShipmentQuantity } from './surviving-shipment-quantity';
 import type { ShipmentItem } from './types';
 
 export type ProductShippingMetadata = {
@@ -13,6 +14,7 @@ export type InternationalShipmentOrderItem = {
   name: string | null;
   quantity: number | null;
   price: number | string | null;
+  fulfillment_data?: unknown;
   product?: ProductShippingMetadata | ProductShippingMetadata[] | null;
   products?: ProductShippingMetadata | ProductShippingMetadata[] | null;
 };
@@ -249,7 +251,7 @@ export function toInternationalShipmentItemsFromOrder(
 
   return orderItems.map((item) => {
     const metadata = deriveItemMetadata(item);
-    const { name, quantity } = metadata;
+    const { name } = metadata;
     const quoteItemIndex = findMatchingQuoteItemIndex(
       metadata,
       unmatchedQuoteItems
@@ -264,7 +266,7 @@ export function toInternationalShipmentItemsFromOrder(
     return {
       name,
       description: name,
-      quantity,
+      quantity: survivingShipmentQuantity(item),
       weight: bookingMetadata.weight,
       value:
         readOptionalNonNegativeNumber(quoteItem?.value) ??

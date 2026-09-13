@@ -16,7 +16,7 @@ const REFUND_RPC_NAMES = new Set([
   'finish_uba_redvault_refund',
   'reconcile_uba_redvault_refund',
   'record_uba_redvault_refund_provider_submission',
-  'reserve_uba_redvault_refund',
+  'reserve_uba_redvault_refund_v2',
 ]);
 
 function parseLocalTestDatabaseUrl(value: string): URL {

@@ -21,6 +21,11 @@ INSERT INTO public.product_variants(
 );
 
 SET ROLE authenticated;
+SELECT set_config('request.jwt.claims', json_build_object(
+  'role', 'authenticated',
+  'storefront_order_context', 'route',
+  'storefront_order_merchant_id', '6b5cb8a4-5575-456c-b936-8cdfae30db74'
+)::text, false);
 DO $$
 DECLARE selected_condition text;
 BEGIN

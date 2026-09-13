@@ -52,7 +52,7 @@ describe('REDVAULT refund store', () => {
         ],
       })
     ).resolves.toMatchObject({ amountKobo: 9_500, state: 'pending' });
-    expect(rpc).toHaveBeenCalledWith('reserve_uba_redvault_refund', {
+    expect(rpc).toHaveBeenCalledWith('reserve_uba_redvault_refund_v2', {
       p_attempt_id: '11111111-1111-4111-8111-111111111111',
       p_idempotency_key: 'ops-return-1',
       p_merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',

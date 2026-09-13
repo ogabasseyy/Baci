@@ -10,13 +10,13 @@ import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { resolveMerchantContextIdentifier } from '@/lib/storefront-route-identifier';
 import { OgabasseyHomeDynamicContent } from './ogabassey-home-dynamic-content';
+import { OgabasseyHomeRecoveryHero } from './ogabassey-home-recovery-hero';
 
 interface OgabasseyHomePageContentProps {
   /** Skip Hero's H1 when a parent already committed the document title. */
   omitDocumentHeading?: boolean;
-  /** When the static parent already painted a committed mobile text LCP, skip
-   *  the request-scoped mobile carousel so a later product title cannot steal
-   *  Slow-4G LCP. Desktop grid still streams after the publication guard. */
+  /** Optional alternate layout: omit the mobile carousel while preserving
+   *  the publication-checked desktop grid. */
   omitMobileCarousel?: boolean;
   /** Static per-route path prefix supplied by the parent. */
   pathPrefix: string;
@@ -39,9 +39,8 @@ export function resolveOgabasseyHomePathPrefix(
 
 /**
  * Request-scoped publication boundary for the homepage shopping surface. The
- * static parent may prepare slide data and paint the committed mobile text LCP,
- * but this component is the sole owner of the desktop Hero, utility panel, and
- * PDP links.
+ * static parent prepares slide data and critical styles; this component owns
+ * the visible product Hero, utility panel, and PDP links on both viewports.
  */
 export async function OgabasseyHomePageContent({
   omitDocumentHeading = false,
@@ -82,6 +81,7 @@ export async function OgabasseyHomePageContent({
     <>
       {requestMerchantShellSlides ? (
         <Hero
+          prioritizeMobileHeroImage
           omitDocumentHeading={omitDocumentHeading}
           omitMobileCarousel={omitMobileCarousel}
           slides={requestMerchantShellSlides}
@@ -89,6 +89,11 @@ export async function OgabasseyHomePageContent({
       ) : omitDocumentHeading ? null : (
         <h1 className="sr-only">{OGABASSEY_TITLE}</h1>
       )}
+      {!requestMerchantShellSlides ? (
+        <Suspense fallback={null}>
+          <OgabasseyHomeRecoveryHero merchant={merchant} />
+        </Suspense>
+      ) : null}
       <Suspense fallback={null}>
         <OgabasseyHomeDynamicContent
           merchant={merchant}

@@ -1,35 +1,24 @@
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import {
-  OGABASSEY_DESCRIPTION,
-  OGABASSEY_HOME_LCP_SUPPORT,
-  OGABASSEY_TITLE,
-} from '@/config/ogabassey';
+import { OGABASSEY_DESCRIPTION, OGABASSEY_TITLE } from '@/config/ogabassey';
 import { OgabasseyHomeCommittedLcp } from './ogabassey-home-committed-lcp';
 
 describe('OgabasseyHomeCommittedLcp', () => {
-  it('paints brand text LCP for OgaBassey tenants', async () => {
+  it('provides document semantics without a second visible banner', async () => {
     render(
       await OgabasseyHomeCommittedLcp({
         params: Promise.resolve({ slug: 'ogabassey.com' }),
       })
     );
 
+    expect(screen.queryByText(OGABASSEY_DESCRIPTION)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('heading')).toHaveLength(1);
     expect(
-      document.querySelector('[data-ogabassey-committed-lcp-copy="true"]')
-        ?.textContent
-    ).toBe(OGABASSEY_HOME_LCP_SUPPORT);
-    expect(
-      document.querySelector('[data-ogabassey-home-lcp-shell="true"]')
-        ?.textContent
-    ).not.toContain(OGABASSEY_DESCRIPTION);
-    expect(
-      document.querySelector('.ogabassey-home-unique-copy')?.textContent
-    ).toBe(OGABASSEY_DESCRIPTION);
-    expect(
-      document.querySelector('.ogabassey-home-lcp-desktop-title')?.textContent
-    ).toBe(OGABASSEY_TITLE);
-    expect(document.querySelector('img, picture, a, button')).toBeNull();
+      screen.getByRole('heading', { level: 1, name: OGABASSEY_TITLE })
+    ).toHaveClass('sr-only');
+    for (const role of ['img', 'link', 'button', 'region']) {
+      expect(screen.queryByRole(role)).not.toBeInTheDocument();
+    }
   });
 
   it('renders nothing for other storefronts', async () => {

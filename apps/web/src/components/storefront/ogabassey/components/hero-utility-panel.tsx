@@ -8,7 +8,7 @@ import {
   Zap,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS } from './hero-mobile-geometry';
 
 type UtilityTab = 'airtime' | 'data' | 'tv' | 'power' | 'betting';
@@ -82,10 +82,33 @@ function UtilityOptionButton({
 
 export function HeroUtilityPanel() {
   const [activeUtilityIndex, setActiveUtilityIndex] = useState(0);
+  const [manualUtility, setManualUtility] = useState(false);
   const [showUtilityModal, setShowUtilityModal] = useState(false);
   const [utilityTab, setUtilityTab] = useState<UtilityTab>('airtime');
 
+  useEffect(() => {
+    if (manualUtility) return;
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const start = () => {
+      if (timer || motion.matches) return;
+      timer = setInterval(() => {
+        if (!document.hidden && !motion.matches) {
+          setActiveUtilityIndex((index) => (index + 1) % UTILITY_WORDS.length);
+        }
+      }, 2500);
+    };
+    // Keep pre-interaction LCP stable; resume decorative rotation on engagement.
+    const events = ['pointerdown', 'keydown', 'wheel'] as const;
+    for (const event of events) window.addEventListener(event, start, { passive: true });
+    return () => {
+      for (const event of events) window.removeEventListener(event, start);
+      if (timer) clearInterval(timer);
+    };
+  }, [manualUtility]);
+
   const handleUtilitySelect = (option: UtilityOption, index: number) => {
+    setManualUtility(true);
     setUtilityTab(option.id);
     setShowUtilityModal(true);
     setActiveUtilityIndex(index);

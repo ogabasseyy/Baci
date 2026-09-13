@@ -28,11 +28,13 @@ import { HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS } from './hero-mobile-geomet
 describe('HeroUtilityPanel', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
   });
 
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('opens the deferred utility modal with the selected tab', () => {
@@ -72,11 +74,40 @@ describe('HeroUtilityPanel', () => {
     );
   });
 
+  it('rotates after engagement and stops after selecting a service', () => {
+    render(<HeroUtilityPanel />);
+    fireEvent.keyDown(window, { key: 'Tab' });
+    act(() => { vi.advanceTimersByTime(2500); });
+    expect(screen.getAllByText('Data!')[0]).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /airtime/i })[0]);
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(screen.getAllByText('Airtime!')[0]).toBeInTheDocument();
+  });
+
   it('shares the mobile minimum height with the publication-safe fallback', () => {
     const { container } = render(<HeroUtilityPanel />);
 
     expect(
       container.querySelector('[data-ogabassey-mobile-utility-panel="true"]')
     ).toHaveClass(HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS);
+  });
+
+  it('respects reduced motion after engagement', () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true })));
+    render(<HeroUtilityPanel />);
+    fireEvent.keyDown(window, { key: 'Tab' });
+    act(() => { vi.advanceTimersByTime(10000); });
+    expect(screen.queryByText('Data!')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Airtime!')[0]).toBeInTheDocument();
+  });
+
+  it('cleans up its timer and engagement listeners on unmount', () => {
+    const { unmount } = render(<HeroUtilityPanel />);
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(vi.getTimerCount()).toBe(1);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

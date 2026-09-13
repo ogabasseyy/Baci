@@ -1,11 +1,9 @@
-import { OgabasseyPublicationSafeHeroFallback } from '@/app/(storefront)/ogabassey/ogabassey-publication-safe-hero-fallback';
-import { OGABASSEY_DESCRIPTION } from '@/config/ogabassey';
+import { OgabasseyHomeCriticalShell } from '@/app/(storefront)/ogabassey/ogabassey-home-critical-shell';
 import { isOgabasseyHomeIdentifier } from './is-ogabassey-home-identifier';
 
 /**
- * Committed (non-fallback) home LCP copy. Must stay outside the route Suspense
- * that awaits `params` — awaiting in the page put HomeRouteLoading's 400px
- * skeleton ahead of the brand paragraph and pinned Slow-4G LCP at ~3.8s.
+ * Early critical styles and accessible document heading, without a second
+ * visible banner. The request-scoped publication owner renders the real hero.
  *
  * Awaits `params` only. Do not read request APIs or `'use cache'` listing data.
  */
@@ -20,11 +18,8 @@ export async function OgabasseyHomeCommittedLcp({
   }
 
   return (
-    <>
-      <div data-ogabassey-home-lcp-shell="true">
-        <OgabasseyPublicationSafeHeroFallback heroImageUrl="committed" />
-      </div>
-      <p className="ogabassey-home-unique-copy">{OGABASSEY_DESCRIPTION}</p>
-    </>
+    <div data-ogabassey-home-lcp-shell="true">
+      <OgabasseyHomeCriticalShell />
+    </div>
   );
 }

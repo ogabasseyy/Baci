@@ -69,12 +69,29 @@ vi.mock('next/server', () => ({
 }));
 
 vi.mock('./ogabassey-home-dynamic-content', () => ({
-  OgabasseyHomeDynamicContent: ({ pathPrefix }: { pathPrefix: string }) => {
+  OgabasseyHomeDynamicContent: ({
+    pathPrefix,
+    recoverHero,
+  }: {
+    pathPrefix: string;
+    recoverHero?: boolean;
+  }) => {
     if (mockDynamicContentShouldSuspend()) {
       throw new Promise(() => undefined);
     }
-    return <section aria-label="Dynamic home content">{pathPrefix}</section>;
+    return (
+      <section
+        aria-label="Dynamic home content"
+        data-recover-hero={String(recoverHero)}
+      >
+        {pathPrefix}
+      </section>
+    );
   },
+}));
+
+vi.mock('./ogabassey-home-recovery-hero', () => ({
+  OgabasseyHomeRecoveryHero: () => <section aria-label="Recovered hero" />,
 }));
 
 vi.mock('@/components/storefront/store-not-published', () => ({
@@ -137,6 +154,18 @@ const SHELL_SLIDE = {
 };
 
 describe('OgabasseyHomePageContent', () => {
+  it('recovers the hero after a shell timeout through the publication-checked content', async () => {
+    render(
+      await OgabasseyHomePageContent({
+        pathPrefix: '',
+        shellMerchantId: null,
+        shellSlides: null,
+      })
+    );
+    expect(
+      screen.getByRole('region', { name: 'Recovered hero' })
+    ).toBeInTheDocument();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockHeaders.mockResolvedValue(new Headers());

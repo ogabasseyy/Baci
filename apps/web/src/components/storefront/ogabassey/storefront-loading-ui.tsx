@@ -18,9 +18,9 @@ interface ShellChromeLoadingProps {
 }
 
 const shellChromeLoadingStyle = {
-  background: 'var(--store-background, #ffffff)',
+  background: 'var(--storefront-shell-background, #0f0f0f)',
   boxSizing: 'border-box',
-  color: 'var(--store-background-text, #111827)',
+  color: 'var(--ogabassey-shell-text, #ffffff)',
   padding: '0.75rem 1rem',
   position: 'relative',
   width: '100%',

@@ -15,6 +15,17 @@ function declarationsFor(selector: string): Record<string, string> {
 }
 
 describe('homepage carousel critical CSS', () => {
+  it('uses matched theme surfaces and text for utility panels', () => {
+    for (const selector of [
+      '[data-ogabassey-hero-utility]',
+      '[data-ogabassey-mobile-utility-panel]',
+    ]) {
+      expect(declarationsFor(selector)).toMatchObject({
+        background: 'var(--store-background, #ffffff)',
+        color: 'var(--store-foreground, #111827)',
+      });
+    }
+  });
   it('contains product fill images before the deferred card stylesheet arrives', () => {
     expect(declarationsFor('.ogabassey-home-product-card')).toMatchObject({
       position: 'relative',

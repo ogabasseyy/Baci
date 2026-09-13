@@ -120,7 +120,8 @@ describe('storefront-loading-ui', () => {
     const bar = container.querySelector('.storefront-shell-loading__bar');
 
     expect(shell).toHaveStyle({
-      background: 'var(--store-background, #ffffff)',
+      background: 'var(--storefront-shell-background, #0f0f0f)',
+      color: 'var(--ogabassey-shell-text, #ffffff)',
       boxSizing: 'border-box',
       padding: '0.75rem 1rem',
     });

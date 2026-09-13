@@ -148,11 +148,15 @@ function createMockSupabase() {
         return Promise.resolve(rpcTransactionResult);
       if (name === 'reserve_paystack_order_payment_account')
         return Promise.resolve(rpcDvaReservationResult);
-      if (name === 'reserve_storefront_redvault_payment_attempt')
+      if (name === 'reserve_storefront_redvault_payment_attempt_v3')
         return Promise.resolve(redvaultAttemptReserveResults.shift());
-      if (name === 'claim_storefront_redvault_payment_attempt_initialization')
+      if (
+        name === 'claim_storefront_redvault_payment_attempt_initialization_v3'
+      )
         return Promise.resolve(redvaultAttemptClaimResults.shift());
-      if (name === 'record_storefront_redvault_payment_attempt_initialization')
+      if (
+        name === 'record_storefront_redvault_payment_attempt_initialization_v2'
+      )
         return Promise.resolve(redvaultAttemptInitializeResult);
       return Promise.resolve({ data: null, error: null });
     }),
@@ -449,6 +453,8 @@ describe('POST /api/payments/initialize', () => {
               attempt_id: 'attempt-1',
               authorization_url: null,
               bank_code: '033',
+              paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+              platform_fee_kobo: 10000,
               reference: 'RV-attempt-1',
               state: 'created',
             },
@@ -462,6 +468,8 @@ describe('POST /api/payments/initialize', () => {
               attempt_id: 'attempt-1',
               authorization_url: 'https://paystack.test/checkout/1',
               bank_code: '033',
+              paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+              platform_fee_kobo: 10000,
               reference: 'RV-attempt-1',
               state: 'initialized',
             },
@@ -478,6 +486,8 @@ describe('POST /api/payments/initialize', () => {
               authorization_url: null,
               bank_code: '033',
               initialization_claimed: true,
+              paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+              platform_fee_kobo: 10000,
               reference: 'RV-attempt-1',
               state: 'initializing',
             },
@@ -492,6 +502,8 @@ describe('POST /api/payments/initialize', () => {
             attempt_id: 'attempt-1',
             authorization_url: 'https://paystack.test/checkout/1',
             bank_code: '033',
+            paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+            platform_fee_kobo: 10000,
             reference: 'RV-attempt-1',
             state: 'initialized',
           },

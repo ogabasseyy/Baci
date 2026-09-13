@@ -312,6 +312,24 @@ describe('getClassifiedImageVerificationUrl', () => {
 
 // ---------- verifyRemoteImage ----------
 describe('verifyRemoteImage', () => {
+  it('rejects private destinations without issuing a request', async () => {
+    const fetchFn = vi.fn<FetchFn>();
+    const result = await verifyRemoteImage('http://169.254.169.254/latest/meta-data', fetchFn);
+    expect(result.status).toBe('invalid');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('rejects HTTP redirects instead of following them', async () => {
+    const fetchFn = vi.fn<FetchFn>().mockResolvedValue(
+      fakeResponse({ ok: false, status: 302, headers: new Headers({ location: 'http://127.0.0.1' }) })
+    );
+    const result = await verifyRemoteImage('https://images.example.com/phone.jpg', fetchFn);
+    expect(result.status).toBe('invalid');
+    expect(fetchFn).toHaveBeenCalledWith(
+      'https://images.example.com/phone.jpg',
+      expect.objectContaining({ redirect: 'manual' })
+    );
+  });
   let fetchMock: Mock<FetchFn>;
 
   beforeEach(() => {

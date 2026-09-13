@@ -27,10 +27,18 @@ interface VariantFeedInput {
 
 const text = (value: unknown) =>
   typeof value === 'string' ? value.trim() : '';
-const canonicalAttributes = (variant: FeedVariant): Record<string, string> => {
+export const canonicalAttributes = (
+  variant: FeedVariant
+): Record<string, string> => {
   const entries = Object.entries(variant.attributes || {});
   const normalized = Object.fromEntries(
-    entries.map(([key, value]) => [key.trim().toLowerCase(), text(value)])
+    entries.map(([key, value]) => [
+      key
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, '_'),
+      text(value),
+    ])
   );
   const name = normalized.color || normalized.colour;
   return {
@@ -53,7 +61,13 @@ const canonicalAttributes = (variant: FeedVariant): Record<string, string> => {
                 .replace(/[\s-]+/g, '_')
             )
         )
-        .map(([key, value]) => [key, text(value)])
+        .map(([key, value]) => [
+          key
+            .trim()
+            .toLowerCase()
+            .replace(/[\s-]+/g, '_'),
+          text(value),
+        ])
     ),
     ...(name ? { color: name } : {}),
     ...(normalized.color_hex ? { color_hex: normalized.color_hex } : {}),

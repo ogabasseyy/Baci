@@ -36,6 +36,30 @@ const CONTENT_TYPE_TO_FORMAT: Record<string, string> = {
   'image/webp': 'webp',
 };
 
+function isBlockedRemoteHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true;
+  if (host === 'metadata.google.internal' || host === 'metadata') return true;
+  const octets = host.split('.').map(Number);
+  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:');
+  }
+  const [a, b] = octets;
+  return a === 10 || a === 127 || (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
+    a === 0;
+}
+
+function validateRemoteUrl(value: string): URL | null {
+  try {
+    const parsed = new URL(value);
+    if (!['http:', 'https:'].includes(parsed.protocol) || isBlockedRemoteHost(parsed.hostname)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Verify a CDN-hosted image by checking the local filesystem.
  *
@@ -158,18 +182,45 @@ export async function verifyRemoteImage(
   url: string,
   fetchFn: FetchFn = globalThis.fetch
 ): Promise<VerificationResult> {
+  if (!validateRemoteUrl(url)) {
+    return {
+      status: 'invalid',
+      verified_url: null,
+      verified_format: null,
+      failure_reason: `Rejected remote image destination: ${url}`,
+    };
+  }
   try {
     let response = await fetchFn(url, {
       method: 'HEAD',
+      redirect: 'manual',
       signal: AbortSignal.timeout(10_000),
     });
+
+    if (response.status >= 300 && response.status < 400) {
+      return {
+        status: 'invalid',
+        verified_url: null,
+        verified_format: null,
+        failure_reason: `Redirect rejected for ${url}`,
+      };
+    }
 
     // Fallback to GET if server doesn't support HEAD
     if (response.status === 405) {
       response = await fetchFn(url, {
         method: 'GET',
+        redirect: 'manual',
         signal: AbortSignal.timeout(10_000),
       });
+      if (response.status >= 300 && response.status < 400) {
+        return {
+          status: 'invalid',
+          verified_url: null,
+          verified_format: null,
+          failure_reason: `Redirect rejected for ${url}`,
+        };
+      }
       // Cancel body consumption since we only need status and headers
       await response.body?.cancel();
     }

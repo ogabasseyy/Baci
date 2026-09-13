@@ -49,6 +49,21 @@ const input = {
   ],
 };
 describe('buildVariantFeedItems', () => {
+  it('normalizes attribute aliases for color, gtin, titles, and links', () => {
+    const xml = buildVariantFeedItems({
+      ...input,
+      variants: [
+        {
+          ...input.variants[0],
+          attributes: { 'color-hex': '#fff', GTIN: ' 1234567890123 ' },
+        },
+      ],
+    });
+    expect(xml).toContain('<g:gtin>1234567890123</g:gtin>');
+    expect(xml).toContain('color_hex=%23fff');
+    expect(xml).not.toContain('color-hex');
+    expect(xml).not.toContain('GTIN');
+  });
   it.each([
     'variant_id',
     'variant-id',

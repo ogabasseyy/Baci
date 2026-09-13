@@ -6,7 +6,15 @@
  */
 export const OGABASSEY_HOME_LCP_CRITICAL_CSS = `
 @media (max-width: 767px) {
-  [data-ogabassey-home-lcp-shell] { min-height: 100svh; }
+  /* Keep the footer below streaming content, not a blank viewport above it. */
+  .ogabassey-storefront-main {
+    min-height: calc(100svh - 132px);
+    background: var(--store-background, #ffffff);
+  }
+  .storefront-shell-loading {
+    min-height: 132px;
+    background: var(--storefront-shell-background, #0f0f0f) !important;
+  }
   [data-ogabassey-desktop-hero] { display: none !important; }
   .ogabassey-home-lcp-desktop-title { display: none !important; }
 }

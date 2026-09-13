@@ -92,7 +92,7 @@ export function HeroUtilityPanel() {
   };
 
   return (
-    <div className="w-full bg-white mt-3 md:mt-8 mb-6 border-y border-gray-100 md:py-5">
+    <div className="w-full bg-white mt-3 md:mt-8 mb-6 border-y border-gray-100 md:py-5" data-ogabassey-hero-utility="true">
       <div className="md:hidden px-4">
         <div
           className={`${HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS} bg-white rounded-3xl shadow-sm border border-gray-100 p-2`}

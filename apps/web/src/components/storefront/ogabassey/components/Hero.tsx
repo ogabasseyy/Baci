@@ -58,7 +58,7 @@ export const Hero: React.FC<HeroProps> = ({
     prioritizeMobileHeroImage ?? !omitDocumentHeading;
 
   return (
-    <div className="w-full bg-store-background relative">
+    <div className="w-full bg-store-background relative" data-ogabassey-hero="true">
       {omitDocumentHeading ? null : (
         <h1 className="sr-only">
           OgaBassey - Buy Phones, Laptops, Gaming Consoles & More. Pay Later in

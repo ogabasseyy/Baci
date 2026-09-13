@@ -29,10 +29,14 @@ describe('OGABASSEY_HOME_LCP_CRITICAL_CSS', () => {
     );
   });
 
-  it('keeps the mobile LCP shell one viewport tall so the footer stays below the fold', () => {
+  it('reserves space on the main, not a blank viewport ahead of products', () => {
     expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
+      'min-height: calc(100svh - 132px)'
+    );
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).not.toContain(
       '[data-ogabassey-home-lcp-shell] { min-height: 100svh; }'
     );
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain('min-height: 132px');
   });
 
   it('reserves the semantic footer height before Tailwind loads', () => {

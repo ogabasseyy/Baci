@@ -1,18 +1,17 @@
 'use client';
 
 import { useEffect } from 'react';
-import { loadStylesheetAfterFirstInput } from '@/app/(storefront)/load-stylesheet-after-first-input';
 import { loadOgabasseyHomeStyles } from './load-ogabassey-home-styles';
 
 const HOME_STYLESHEET_ERROR = 'Failed to load OgaBassey homepage stylesheet';
-const DESKTOP_RETRY_EVENTS = [
+const RETRY_EVENTS = [
   'pointerdown',
   'touchstart',
   'keydown',
   'pageshow',
 ] as const;
 
-function armDesktopHomeStyleRetry(): () => void {
+function armHomeStyleRetry(): () => void {
   let cancelled = false;
   let started = false;
   const cleanups: Array<() => void> = [];
@@ -45,7 +44,7 @@ function armDesktopHomeStyleRetry(): () => void {
       });
     };
 
-    for (const eventName of DESKTOP_RETRY_EVENTS) {
+    for (const eventName of RETRY_EVENTS) {
       window.addEventListener(eventName, onInput, {
         once: true,
         passive: true,
@@ -60,28 +59,20 @@ function armDesktopHomeStyleRetry(): () => void {
 
 export function OgabasseyHomeStyleLoader() {
   useEffect(() => {
-    if (
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(min-width: 768px)').matches
-    ) {
-      let cancelled = false;
-      let stopRetry: () => void = () => undefined;
-      void loadOgabasseyHomeStyles().catch((error: unknown) => {
-        console.error(new Error(HOME_STYLESHEET_ERROR, { cause: error }));
-        if (!cancelled) {
-          stopRetry = armDesktopHomeStyleRetry();
-        }
-      });
-      return () => {
-        cancelled = true;
-        stopRetry();
-      };
-    }
-
-    return loadStylesheetAfterFirstInput(
-      loadOgabasseyHomeStyles,
-      HOME_STYLESHEET_ERROR
-    );
+    // Critical shell geometry is already in the HTML. Load the remaining home
+    // styles on every viewport without requiring a tap to finish rendering.
+    let cancelled = false;
+    let stopRetry: () => void = () => undefined;
+    void loadOgabasseyHomeStyles().catch((error: unknown) => {
+      console.error(new Error(HOME_STYLESHEET_ERROR, { cause: error }));
+      if (!cancelled) {
+        stopRetry = armHomeStyleRetry();
+      }
+    });
+    return () => {
+      cancelled = true;
+      stopRetry();
+    };
   }, []);
 
   return null;

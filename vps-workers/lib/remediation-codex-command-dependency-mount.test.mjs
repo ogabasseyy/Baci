@@ -12,6 +12,8 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { buildRemediationCodexCommand } from './remediation-codex-command.mjs';
 
+const testContainerIdentity = { gid: 1001, uid: 1001 };
+
 function dockerEnvironment(dependencyRoot) {
   return {
     BACI_CODEX_CONTAINER_BIN: '/opt/host/codex-native',
@@ -33,6 +35,7 @@ describe('remediation Codex dependency mounts', () => {
 
       const result = buildRemediationCodexCommand({
         codexBin: '/opt/host/codex',
+        containerIdentity: testContainerIdentity,
         env: dockerEnvironment(dependencyRoot),
         prompt: 'Research safely.',
         readOnly: true,
@@ -67,6 +70,7 @@ describe('remediation Codex dependency mounts', () => {
         () =>
           buildRemediationCodexCommand({
             codexBin: '/opt/host/codex',
+            containerIdentity: testContainerIdentity,
             env: dockerEnvironment(dependencyRoot),
             prompt: 'Research safely.',
             readOnly: true,
@@ -97,6 +101,7 @@ describe('remediation Codex dependency mounts', () => {
         () =>
           buildRemediationCodexCommand({
             codexBin: '/opt/host/codex',
+            containerIdentity: testContainerIdentity,
             env: dockerEnvironment(dependencyRoot),
             prompt: 'Research safely.',
             readOnly: true,

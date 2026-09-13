@@ -31,43 +31,32 @@ export const canonicalAttributes = (
   variant: FeedVariant
 ): Record<string, string> => {
   const entries = Object.entries(variant.attributes || {});
-  const normalized = Object.fromEntries(
-    entries.map(([key, value]) => [
-      key
-        .trim()
-        .toLowerCase()
-        .replace(/[\s-]+/g, '_'),
-      text(value),
-    ])
+  const normalizedEntries = entries.map(
+    ([key, value]) =>
+      [
+        key
+          .trim()
+          .toLowerCase()
+          .replace(/[\s-]+/g, '_'),
+        text(value),
+      ] as const
   );
+  const normalized = Object.fromEntries(normalizedEntries);
   const name = normalized.color || normalized.colour;
   return {
     ...Object.fromEntries(
-      entries
-        .filter(
-          ([key, value]) =>
-            text(value) &&
-            ![
-              'color',
-              'colour',
-              'color_hex',
-              'variantid',
-              'variant_id',
-              'condition',
-            ].includes(
-              key
-                .trim()
-                .toLowerCase()
-                .replace(/[\s-]+/g, '_')
-            )
-        )
-        .map(([key, value]) => [
-          key
-            .trim()
-            .toLowerCase()
-            .replace(/[\s-]+/g, '_'),
-          text(value),
-        ])
+      normalizedEntries.filter(
+        ([key, value]) =>
+          text(value) &&
+          ![
+            'color',
+            'colour',
+            'color_hex',
+            'variantid',
+            'variant_id',
+            'condition',
+          ].includes(key)
+      )
     ),
     ...(name ? { color: name } : {}),
     ...(normalized.color_hex ? { color_hex: normalized.color_hex } : {}),

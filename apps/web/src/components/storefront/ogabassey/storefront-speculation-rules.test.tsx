@@ -1,12 +1,12 @@
 import { render } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { StorefrontSpeculationRules } from './storefront-speculation-rules';
 
 function readSpeculationScript(container: HTMLElement): {
   raw: string;
   json: { prerender: unknown[]; prefetch: unknown[] };
 } {
-  const script = container.querySelector(
+  const script = container.ownerDocument.head.querySelector(
     'script[type="speculationrules"]'
   ) as HTMLScriptElement | null;
   if (!script) {
@@ -17,6 +17,29 @@ function readSpeculationScript(container: HTMLElement): {
 }
 
 describe('StorefrontSpeculationRules', () => {
+  afterEach(() => {
+    document.head
+      .querySelectorAll('script[type="speculationrules"]')
+      .forEach((script) => script.remove());
+  });
+
+  it('registers a fresh script outside the streamed React subtree and cleans it up', () => {
+    const { container, rerender, unmount } = render(
+      <StorefrontSpeculationRules basePath="" />
+    );
+    expect(container.querySelector('script')).toBeNull();
+    const first = document.head.querySelector('script[type="speculationrules"]');
+    expect(first).not.toBeNull();
+    rerender(<StorefrontSpeculationRules basePath="/shop" />);
+    expect(first?.isConnected).toBe(false);
+    expect(
+      document.head.querySelectorAll('script[type="speculationrules"]')
+    ).toHaveLength(1);
+    unmount();
+    expect(
+      document.head.querySelector('script[type="speculationrules"]')
+    ).toBeNull();
+  });
   it('emits a speculationrules script with prerender and prefetch rules', () => {
     // Arrange & Act
     const { container } = render(<StorefrontSpeculationRules basePath="" />);

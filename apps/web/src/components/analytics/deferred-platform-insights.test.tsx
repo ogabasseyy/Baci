@@ -5,10 +5,28 @@ import { DeferredPlatformInsights } from '@/components/analytics/deferred-platfo
 describe('DeferredPlatformInsights', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.stubGlobal('location', new URL('https://ogabassey.com/'));
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    'localhost',
+    '127.0.0.1',
+    '[::1]',
+  ])('does not request Vercel-only scripts on %s', async (hostname) => {
+    vi.stubGlobal('location', new URL(`http://${hostname}/`));
+    const loadModules = vi.fn().mockResolvedValue({});
+    render(
+      <DeferredPlatformInsights timeoutMs={1} loadModules={loadModules} />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(loadModules).not.toHaveBeenCalled();
   });
 
   it('does not render the Vercel scripts before activation', () => {

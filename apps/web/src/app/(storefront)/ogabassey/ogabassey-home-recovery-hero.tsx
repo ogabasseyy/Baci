@@ -1,9 +1,8 @@
 import { buildLaunchSlides } from '@/components/storefront/ogabassey/components/build-launch-slides';
 import { Hero } from '@/components/storefront/ogabassey/components/Hero';
 import type { getRequestScopedMerchant } from '@/lib/cached-data';
-import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildStoreUrl } from '@/lib/store-url';
-import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
+import type { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
 
 type Merchant = Pick<
   NonNullable<Awaited<ReturnType<typeof getRequestScopedMerchant>>>,
@@ -14,13 +13,12 @@ type Merchant = Pick<
  * shell independently of below-fold catalog and navigation queries. */
 export async function OgabasseyHomeRecoveryHero({
   merchant,
+  productsPromise,
 }: {
   merchant: Merchant;
+  productsPromise: ReturnType<typeof loadOgabasseyLaunchProducts>;
 }) {
-  const products = await loadOgabasseyLaunchProducts(
-    merchant.id,
-    resolveMerchantCurrencyConfig(merchant)
-  );
+  const products = await productsPromise;
   return (
     <Hero
       omitDocumentHeading

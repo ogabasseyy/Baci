@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import '@/app/(storefront)/storefront-not-found.css';
 import { notFound } from 'next/navigation';
 import type React from 'react';
 import { ShellChromeLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';

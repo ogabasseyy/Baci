@@ -30,14 +30,7 @@ function resolveStorefrontNotFoundAppearance(headersList: Headers) {
 export default async function StorefrontNotFound() {
   const headersList = await headers();
   const appearance = resolveStorefrontNotFoundAppearance(headersList);
-  const { StorefrontEagerFullCssLayout } = await import(
-    '@/app/(storefront)/storefront-eager-full-css-layout'
-  );
-  const content = (
-    <StorefrontEagerFullCssLayout>
-      <StorefrontNotFoundContent />
-    </StorefrontEagerFullCssLayout>
-  );
+  const content = <StorefrontNotFoundContent />;
 
   if (!appearance) {
     return content;

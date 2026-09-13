@@ -8,8 +8,10 @@ import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-s
 import { OGABASSEY_TITLE } from '@/config/ogabassey';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
+import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { resolveMerchantContextIdentifier } from '@/lib/storefront-route-identifier';
 import { OgabasseyHomeDynamicContent } from './ogabassey-home-dynamic-content';
+import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
 import { OgabasseyHomeRecoveryHero } from './ogabassey-home-recovery-hero';
 
 interface OgabasseyHomePageContentProps {
@@ -91,7 +93,13 @@ export async function OgabasseyHomePageContent({
       )}
       {!requestMerchantShellSlides ? (
         <Suspense fallback={null}>
-          <OgabasseyHomeRecoveryHero merchant={merchant} />
+          <OgabasseyHomeRecoveryHero
+            merchant={merchant}
+            productsPromise={loadOgabasseyLaunchProducts(
+              merchant.id,
+              resolveMerchantCurrencyConfig(merchant)
+            )}
+          />
         </Suspense>
       ) : null}
       <Suspense fallback={null}>

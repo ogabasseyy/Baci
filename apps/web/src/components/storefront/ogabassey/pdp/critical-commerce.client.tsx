@@ -252,6 +252,7 @@ export function OgabasseyPdpCriticalCommerceControls({
       <Link
         data-ogabassey-pdp-commerce-secondary-action
         href={cartHref}
+        prefetch={false}
       >
         View cart
       </Link>

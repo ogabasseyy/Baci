@@ -2,6 +2,10 @@ import { render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('./ogabassey-home-launch-products', () => ({
+  loadOgabasseyLaunchProducts: vi.fn(async () => []),
+}));
+
 const {
   mockDynamicContentShouldSuspend,
   mockHeaders,

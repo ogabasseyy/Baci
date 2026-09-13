@@ -24,12 +24,14 @@ vi.mock('next/link', () => ({
   default: ({
     children,
     href,
+    prefetch,
     ...props
   }: {
     children: ReactNode;
     href: string;
+    prefetch?: boolean;
   }) => (
-    <a href={href} {...props}>
+    <a href={href} data-prefetch={String(prefetch)} {...props}>
       {children}
     </a>
   ),
@@ -82,6 +84,20 @@ const variantCartProduct: CartProduct = {
 };
 
 describe('OgabasseyPdpCriticalCommerceClient', () => {
+  it('keeps cart styles off the initial product load', () => {
+    render(
+      <OgabasseyPdpCriticalCommerceClient
+        cartHref="/cart"
+        cartProduct={cartProduct}
+        productName={cartProduct.name}
+        variantCount={0}
+      />
+    );
+    expect(screen.getByRole('link', { name: 'View cart' })).toHaveAttribute(
+      'data-prefetch',
+      'false'
+    );
+  });
   it('adds simple products with the selected quantity', () => {
     render(
       <OgabasseyPdpCriticalCommerceClient

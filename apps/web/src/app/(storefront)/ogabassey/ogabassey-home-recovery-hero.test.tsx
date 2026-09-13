@@ -1,11 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
 import { OgabasseyHomeRecoveryHero } from './ogabassey-home-recovery-hero';
 
-vi.mock('./ogabassey-home-launch-products', () => ({
-  loadOgabasseyLaunchProducts: vi.fn(async () => []),
-}));
 vi.mock('@/components/storefront/ogabassey/components/Hero', () => ({
   Hero: ({
     omitDocumentHeading,
@@ -25,6 +21,7 @@ vi.mock('@/components/storefront/ogabassey/components/Hero', () => ({
 it('restores the hero independently from below-fold catalog data after the shell budget expires', async () => {
   render(
     await OgabasseyHomeRecoveryHero({
+      productsPromise: Promise.resolve([]),
       merchant: {
         id: 'verified-merchant',
         slug: 'ogabassey',
@@ -33,10 +30,6 @@ it('restores the hero independently from below-fold catalog data after the shell
         payout_currency: 'NGN',
       },
     })
-  );
-  expect(loadOgabasseyLaunchProducts).toHaveBeenCalledWith(
-    'verified-merchant',
-    expect.objectContaining({ code: 'NGN' })
   );
   const hero = screen.getByRole('region', {
     name: 'Recovered hero and utilities',

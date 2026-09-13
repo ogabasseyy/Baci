@@ -1,6 +1,7 @@
 'use client';
 
 import { type ComponentType, useEffect, useState } from 'react';
+import { isLocalhostIdentifier } from '@/lib/storefront-host';
 
 const DEFAULT_PLATFORM_INSIGHTS_TIMEOUT_MS = 15000;
 
@@ -34,7 +35,7 @@ export function DeferredPlatformInsights({
   const [modules, setModules] = useState<InsightModules>({});
 
   useEffect(() => {
-    if (isActivated) {
+    if (isActivated || isLocalhostIdentifier(window.location.hostname)) {
       return;
     }
 

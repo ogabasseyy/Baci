@@ -26,6 +26,7 @@ type CatalogProduct = {
 };
 
 type VariantPrice = {
+  attributes: unknown;
   condition: string | null;
   id: string;
   price_override: number | string | null;
@@ -94,6 +95,15 @@ function stableAttributes(value: Record<string, string> | null): string {
   return JSON.stringify(
     Object.entries(value ?? {}).sort(([left], [right]) =>
       left.localeCompare(right)
+    )
+  );
+}
+
+function readVariantAttributes(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string'
     )
   );
 }
@@ -185,7 +195,9 @@ export async function computeRedvaultOrderQuote({
         quantity: item.quantity,
         taxBasis: 'exclusive',
         unitPriceKobo: asKobo(variant?.price_override ?? product.price),
-        variantAttributes: item.variant_attributes ?? {},
+        variantAttributes: item.variant_id
+          ? readVariantAttributes(variant?.attributes)
+          : (item.variant_attributes ?? {}),
         variantId: item.variant_id ?? null,
         vatCategoryCode: product.vat_category_code ?? 'S',
         vatRateBasisPoints: asKobo(product.vat_rate ?? 7.5),

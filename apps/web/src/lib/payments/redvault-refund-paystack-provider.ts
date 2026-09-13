@@ -86,11 +86,22 @@ export function createRedvaultPaystackRefundProvider({
           : 'unknown',
       };
     },
-    async lookup({ providerReference }) {
+    async lookup({
+      providerReference,
+      expectedAmountKobo,
+      expectedCaptureReference,
+      expectedCurrency,
+    }) {
       if (!/^[1-9][0-9]*$/.test(providerReference))
         throw new Error('REDVAULT refund lookup invalid identifier');
       const data = await request(`/${providerReference}`);
-      if (!data || refundId(data.id) !== providerReference)
+      if (
+        !data ||
+        refundId(data.id) !== providerReference ||
+        record(data.transaction)?.reference !== expectedCaptureReference ||
+        data.amount !== expectedAmountKobo ||
+        data.currency !== expectedCurrency
+      )
         throw new Error('REDVAULT refund lookup unverified');
       if (data.status === 'processed' || data.status === 'failed')
         return { kind: data.status, providerStatus: data.status };

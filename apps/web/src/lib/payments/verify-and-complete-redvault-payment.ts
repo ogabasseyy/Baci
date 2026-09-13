@@ -2,7 +2,6 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import { revalidateProducts } from '@/lib/cache-revalidation';
-import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
 import { logger } from '@/lib/logger';
 import { verifyTransaction } from '@/lib/paystack';
 import { redvaultApprovedCompletionSchema } from '@/schemas/redvault-approved-completion';
@@ -22,10 +21,7 @@ export async function verifyAndCompleteRedvaultPayment({
   supabase: Pick<SupabaseClient, 'rpc'>;
   transactionId: string;
 }) {
-  if (
-    merchantId !== OGABASSEY_MERCHANT_ID ||
-    !getRedvaultPaymentAvailability().available
-  ) {
+  if (merchantId !== OGABASSEY_MERCHANT_ID) {
     return null;
   }
   const { data, error } = await supabase.rpc(

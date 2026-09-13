@@ -6992,7 +6992,7 @@ describe('POST /api/orders — merchant shipping rate enforcement', () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         maybeSingle: vi.fn().mockResolvedValue({
-          data: { currency: 'NGN' },
+          data: { id: 'existing-order', currency: 'NGN' },
           error: null,
         }),
         update,

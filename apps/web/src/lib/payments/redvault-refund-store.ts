@@ -85,7 +85,7 @@ export class RedvaultRefundStore {
   constructor(private readonly client: RedvaultRefundRpcClient) {}
 
   async reserve(request: RedvaultRefundRequest): Promise<RedvaultRefund> {
-    const result = await this.client.rpc('reserve_uba_redvault_refund', {
+    const result = await this.client.rpc('reserve_uba_redvault_refund_v2', {
       p_attempt_id: request.attemptId,
       p_idempotency_key: request.idempotencyKey,
       p_merchant_id: request.merchantId,

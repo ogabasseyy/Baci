@@ -43,6 +43,8 @@ export const canonicalAttributes = (
   );
   const normalized = Object.fromEntries(normalizedEntries);
   const name = normalized.color || normalized.colour;
+  const hex =
+    normalized.color_hex || normalized.colour_hex || normalized.colourhex;
   return {
     ...Object.fromEntries(
       normalizedEntries.filter(
@@ -59,7 +61,7 @@ export const canonicalAttributes = (
       )
     ),
     ...(name ? { color: name } : {}),
-    ...(normalized.color_hex ? { color_hex: normalized.color_hex } : {}),
+    ...(hex ? { color_hex: hex } : {}),
   };
 };
 const color = (variant: FeedVariant) => {

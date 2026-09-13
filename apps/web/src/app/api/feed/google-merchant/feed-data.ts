@@ -500,6 +500,8 @@ export async function getGoogleMerchantFeedData(
           images: row.images,
           id: row.id as string,
           condition: row.condition as FeedOffer['condition'],
+          compare_at_price:
+            row.compare_at_price == null ? null : Number(row.compare_at_price),
           price: Number(row.price),
           stock_quantity: row.stock_quantity as number,
         });

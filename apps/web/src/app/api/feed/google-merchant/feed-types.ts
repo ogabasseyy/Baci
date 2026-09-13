@@ -39,6 +39,7 @@ export interface FeedOffer {
   images?: unknown;
   id: string;
   condition: 'new' | 'used' | 'refurbished' | 'open_box' | 'uk_used';
+  compare_at_price?: number | null;
   price: number;
   stock_quantity?: number | null;
 }

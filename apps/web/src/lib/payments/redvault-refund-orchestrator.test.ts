@@ -48,9 +48,15 @@ describe('REDVAULT refund operator worker', () => {
           claimNext: vi.fn().mockResolvedValue(claimed),
           finish,
           recordProviderSubmission: vi.fn(),
+          markSubmissionIndeterminate: vi
+            .fn()
+            .mockResolvedValue({ ...claimed, state: 'needs_reconciliation' }),
         },
       })
-    ).resolves.toEqual({ kind: 'indeterminate', refund: claimed });
+    ).resolves.toEqual({
+      kind: 'indeterminate',
+      refund: { ...claimed, state: 'needs_reconciliation' },
+    });
     expect(provider.submit).toHaveBeenCalledOnce();
     expect(finish).not.toHaveBeenCalled();
   });
@@ -72,6 +78,9 @@ describe('REDVAULT refund operator worker', () => {
           claimNext: vi.fn().mockResolvedValue(claimed),
           finish,
           recordProviderSubmission: vi.fn(),
+          markSubmissionIndeterminate: vi
+            .fn()
+            .mockResolvedValue({ ...claimed, state: 'needs_reconciliation' }),
         },
       })
     ).resolves.toMatchObject({
@@ -105,6 +114,7 @@ describe('REDVAULT refund operator worker', () => {
           claimNext: vi.fn().mockResolvedValue(claimed),
           finish: vi.fn(),
           recordProviderSubmission,
+          markSubmissionIndeterminate: vi.fn(),
         },
       })
     ).resolves.toMatchObject({

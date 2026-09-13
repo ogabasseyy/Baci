@@ -61,8 +61,9 @@ try {
   for (const filename of ['20260912092400_uba_redvault_atomic_order_creation.sql', '20260912092500_uba_redvault_refund_and_usage_safety.sql', '20260912092600_uba_redvault_transaction_capture_persistence.sql', '20260912092700_uba_redvault_assurance_currency_retry_guards.sql']) sql(readFileSync(resolve(migrations, filename), 'utf8'));
   sql("UPDATE private.uba_redvault_runtime SET commercial_terms = jsonb_build_object('campaign_dates', jsonb_build_object('starts_at', '2000-01-01T00:00:00Z', 'ends_at', '2999-01-01T00:00:00Z'), 'minimum_spend', jsonb_build_object('eligible_subtotal_kobo', 0), 'caps', jsonb_build_object('discount_kobo', 100000000), 'usage_limits', jsonb_build_object('usage_limit', NULL, 'usage_limit_per_customer', NULL), 'stacking', 'fixture', 'split_payments', 'fixture', 'funding_fees', 'fixture', 'refund_usage_restoration', 'fixture', 'operations_owner', 'fixture');");
   sql(readFileSync(resolve(migrations, '20260912092800_uba_redvault_commercial_term_enforcement.sql'), 'utf8'));
+  sql(readFileSync(resolve(migrations, '20260913090000_uba_redvault_recovery_and_booking_lock.sql'), 'utf8'));
   for (const filename of ['redvault-atomic-order-924.sql', 'redvault-usage-limits-925.sql', 'redvault-refund-finalization-925.sql', 'redvault-refund-inventory-925.sql', 'redvault-transaction-persistence-926.sql', 'redvault-verified-replay-926.sql', 'redvault-current-tree-replay.sql', 'redvault-followup-grants-926.sql', 'redvault-assurance-currency-927.sql', 'redvault-commercial-terms-928.sql']) process.stdout.write(sql(readFileSync(resolve(directory, filename), 'utf8')));
-  process.stdout.write('Ordered 900-928 legacy and final-schema REDVAULT regression smoke passed.\n');
+  process.stdout.write('Ordered 900-930 legacy and final-schema REDVAULT regression smoke passed.\n');
 } finally {
   if (running) run('pg_ctl', ['-D', resolve(root, 'data'), '-m', 'fast', '-w', 'stop']);
   rmSync(root, { recursive: true, force: true });

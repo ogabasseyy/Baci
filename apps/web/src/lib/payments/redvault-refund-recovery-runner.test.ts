@@ -17,6 +17,7 @@ const store = {
   finish: vi.fn(),
   reconcile: vi.fn(),
   recordProviderSubmission: vi.fn(),
+  markSubmissionIndeterminate: vi.fn(),
 };
 
 describe('REDVAULT refund recovery runner', () => {

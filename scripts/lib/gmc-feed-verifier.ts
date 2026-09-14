@@ -14,6 +14,7 @@ import {
   getImageFormat,
   replaceAvifWithJpg,
 } from '../../packages/shared/src/gmc-feed/index';
+import { validateRemoteUrl } from './remote-url-policy';
 
 export interface VerificationResult {
   status:
@@ -35,30 +36,6 @@ const CONTENT_TYPE_TO_FORMAT: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
 };
-
-function isBlockedRemoteHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/\.$/, '');
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true;
-  if (host === 'metadata.google.internal' || host === 'metadata') return true;
-  const octets = host.split('.').map(Number);
-  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
-    return host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:');
-  }
-  const [a, b] = octets;
-  return a === 10 || a === 127 || (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
-    a === 0;
-}
-
-function validateRemoteUrl(value: string): URL | null {
-  try {
-    const parsed = new URL(value);
-    if (!['http:', 'https:'].includes(parsed.protocol) || isBlockedRemoteHost(parsed.hostname)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Verify a CDN-hosted image by checking the local filesystem.

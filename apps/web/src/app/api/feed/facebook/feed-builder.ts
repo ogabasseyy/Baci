@@ -260,7 +260,7 @@ export function generateFacebookCatalogFeed(
             id: offer.id,
             groupId: product.id,
             price: offer.price,
-            compareAtPrice: undefined,
+            compareAtPrice: offer.compare_at_price,
             condition: toFacebookCondition(offer.condition),
             availability:
               getFeedStockCount(product, offer) > 0

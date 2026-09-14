@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "849b423f85ab0f56644b0b85cd62b6abfca5e452",
+  "originMainSha": "b64a9400b40c6218899ad71d1093617cd7d449ca",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
   "routeTreeSha256": "e2adde30ec957b0217d00c22f9d66f276477562506b315f621a2ad3cdfb3cf54",
-  "routingProxyInputSha256": "33a93e63c93883c7bc7d77a6b5935a0f9ae1820eb29bd35da789bd72bf3d3263",
+  "routingProxyInputSha256": "d9db38686e2a5195a7c5aa4f716dd51816e39d84dc88f6fb075909e296110c92",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -4467,52 +4467,6 @@
     },
     {
       "decision": "origin_dynamic",
-      "id": "machine:vercel-insights-script",
-      "methods": [
-        "GET",
-        "HEAD"
-      ],
-      "reason": "explicit_storefront_machine_family",
-      "routePattern": "/_vercel/insights/script.js",
-      "sourceKind": "machine_family",
-      "sourcePath": "apps/web/src/components/analytics/deferred-platform-insights.tsx"
-    },
-    {
-      "decision": "origin_dynamic",
-      "id": "machine:vercel-insights-view",
-      "methods": [
-        "POST"
-      ],
-      "reason": "explicit_storefront_machine_family",
-      "routePattern": "/_vercel/insights/view",
-      "sourceKind": "machine_family",
-      "sourcePath": "apps/web/src/components/analytics/deferred-platform-insights.tsx"
-    },
-    {
-      "decision": "origin_dynamic",
-      "id": "machine:vercel-speed-insights-script",
-      "methods": [
-        "GET",
-        "HEAD"
-      ],
-      "reason": "explicit_storefront_machine_family",
-      "routePattern": "/_vercel/speed-insights/script.js",
-      "sourceKind": "machine_family",
-      "sourcePath": "apps/web/src/components/analytics/deferred-platform-insights.tsx"
-    },
-    {
-      "decision": "origin_dynamic",
-      "id": "machine:vercel-speed-insights-vitals",
-      "methods": [
-        "POST"
-      ],
-      "reason": "explicit_storefront_machine_family",
-      "routePattern": "/_vercel/speed-insights/vitals",
-      "sourceKind": "machine_family",
-      "sourcePath": "apps/web/src/components/analytics/deferred-platform-insights.tsx"
-    },
-    {
-      "decision": "origin_dynamic",
       "id": "machine:well-known-agent-auth-claim",
       "methods": [
         "GET",
@@ -8292,5 +8246,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "a8f8c75b1e9d7267dd279694edca56ab723f70a32f9ce9c8527d4c59f7f54cab"
+  "inventorySha256": "55810433d6d09489ab1f1bb8c9739aa8dd1c5109be8dfbba0f556bb5633da3a3"
 }

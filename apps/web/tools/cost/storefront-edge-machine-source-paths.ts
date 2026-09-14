@@ -41,14 +41,6 @@ export const STOREFRONT_EDGE_MACHINE_SOURCE_PATHS = {
   '/_next/image': 'apps/web/next.config.ts',
   '/_next/static/{*asset}': 'apps/web/next.config.ts',
   '/_next/{*unlisted?}': 'apps/web/next.config.ts',
-  '/_vercel/insights/script.js':
-    'apps/web/src/components/analytics/deferred-platform-insights.tsx',
-  '/_vercel/insights/view':
-    'apps/web/src/components/analytics/deferred-platform-insights.tsx',
-  '/_vercel/speed-insights/script.js':
-    'apps/web/src/components/analytics/deferred-platform-insights.tsx',
-  '/_vercel/speed-insights/vitals':
-    'apps/web/src/components/analytics/deferred-platform-insights.tsx',
   '/ads.txt': 'apps/web/src/app/ads.txt/route.ts',
   '/app-ads.txt': 'apps/web/src/app/app-ads.txt/route.ts',
   '/agent-commerce.json': 'apps/web/src/app/agent-commerce.json/route.ts',

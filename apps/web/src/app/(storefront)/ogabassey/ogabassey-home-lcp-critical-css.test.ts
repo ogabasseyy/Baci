@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { OGABASSEY_HOME_LCP_CRITICAL_CSS } from './ogabassey-home-lcp-critical-css';
 
 describe('OGABASSEY_HOME_LCP_CRITICAL_CSS', () => {
+  it('keeps the empty desktop main on the final theme surface while the hero streams', () => {
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
+      '.ogabassey-storefront-main {\n  background: var(--store-background, #ffffff);\n}'
+    );
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).not.toContain(
+      '.ogabassey-storefront-main {\n    min-height: calc(100svh - 132px);\n    background:'
+    );
+  });
+
   it('hides the desktop hero on mobile before Tailwind loads', () => {
     expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
       '[data-ogabassey-desktop-hero] { display: none !important; }'
@@ -37,6 +46,15 @@ describe('OGABASSEY_HOME_LCP_CRITICAL_CSS', () => {
       '[data-ogabassey-home-lcp-shell] { min-height: 100svh; }'
     );
     expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain('min-height: 132px');
+  });
+
+  it('keeps the loading slot on the final theme surface before the hero streams', () => {
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
+      'background: var(--store-background, #ffffff) !important'
+    );
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).not.toContain(
+      'background: var(--storefront-shell-background, #0f0f0f) !important'
+    );
   });
 
   it('reserves the semantic footer height before Tailwind loads', () => {

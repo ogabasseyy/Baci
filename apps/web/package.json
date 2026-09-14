@@ -28,6 +28,8 @@
     "perf:ogabassey-cache-probe": "node tools/perf/measure-ogabassey-cache-hit-rate.mjs",
     "perf:ogabassey-css-budget": "node tools/perf/assert-ogabassey-css-budget.mjs",
     "perf:ogabassey-pdp-lcp": "node tools/perf/measure-ogabassey-pdp-lcp.mjs",
+    "perf:storefront:validate": "node tools/perf/assert-lighthouse-report.mjs",
+    "test:storefront-report": "node --test tools/perf/assert-lighthouse-report.test.mjs",
     "cost:storefront-origin-budget": "tsx tools/cost/storefront-origin-budget.ts",
     "db:replay:capture-ledger": "tsx tools/db/capture-supabase-history-ledger.ts",
     "db:replay:capture-production-effect": "tsx tools/db/capture-production-effect-provenance-cli.ts",

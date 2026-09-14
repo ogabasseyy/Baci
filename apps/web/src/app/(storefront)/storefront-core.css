@@ -416,6 +416,12 @@
     width: 100%;
   }
 
+  /* Keep main anchored while the header Suspense fallback is replaced by the
+     real two-row desktop chrome. The mobile row is 132px; desktop is 128px. */
+  .ogabassey-header-chrome-loading {
+    min-height: 132px;
+  }
+
   .storefront-shell-loading__bar {
     animation: storefront-shell-loading-shimmer 1.5s ease-in-out infinite;
     background: linear-gradient(
@@ -973,6 +979,10 @@
   }
 
   @media (min-width: 768px) {
+    .ogabassey-header-chrome-loading {
+      min-height: 128px;
+    }
+
     .ogabassey-navbar__primary-row {
       align-items: center;
       flex-direction: row;

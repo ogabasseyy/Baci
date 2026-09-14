@@ -24,6 +24,14 @@ const cssRuleFor = (selector: string) => {
 };
 
 describe('storefront-core OgaBassey navbar layering', () => {
+  it('reserves the actual header height at mobile and desktop breakpoints', () => {
+    const headerSlot = cssRuleFor('.ogabassey-header-chrome-loading');
+    expect(headerSlot).toContain('min-height: 132px');
+    expect(storefrontCoreCss).toContain(
+      '@media (min-width: 768px) {\n    .ogabassey-header-chrome-loading {\n      min-height: 128px;'
+    );
+  });
+
   it('allows search autocomplete suggestions to render above the secondary nav instead of being clipped by the black header row', () => {
     expect(cssRuleFor('.ogabassey-navbar__top')).toContain('overflow: visible');
     expect(cssRuleFor('.ogabassey-navbar__search-wrap')).toContain(

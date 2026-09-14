@@ -29,6 +29,7 @@ const mockGetKlumpDisabledReason =
 const mockGetMobileCheckoutIdempotencyKey =
   jest.fn<(...params: unknown[]) => string>();
 const mockRouterPush = jest.fn();
+const mockTrackCheckoutPaymentStarted = jest.fn();
 
 jest.mock('react-native', () => ({
   Alert: {
@@ -74,7 +75,8 @@ jest.mock('@/services/orders', () => ({
 }));
 
 jest.mock('@/services/analytics', () => ({
-  trackCheckoutPaymentStarted: jest.fn(),
+  trackCheckoutPaymentStarted: (...args: unknown[]) =>
+    mockTrackCheckoutPaymentStarted(...args),
 }));
 
 jest.mock('./checkout-order-builders', () => ({
@@ -181,6 +183,7 @@ describe('submitBnplCheckout', () => {
       savings: null,
       wallet: null,
     });
+    mockTrackCheckoutPaymentStarted.mockReset();
     global.fetch = jest.fn() as unknown as typeof fetch;
   });
 
@@ -202,6 +205,7 @@ describe('submitBnplCheckout', () => {
     expect(params.isOrderInFlight.current).toBe(false);
     expect(params.setIsProcessing).toHaveBeenCalledWith(false);
     expect(mockCreateOrder).not.toHaveBeenCalled();
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
   });
 
   it('uses the order service retry identity before routing BNPL', async () => {
@@ -221,6 +225,12 @@ describe('submitBnplCheckout', () => {
     );
     expect(params.isOrderInFlight.current).toBe(false);
     expect(params.setIsProcessing).toHaveBeenCalledWith(false);
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledWith({
+      orderId: 'order-1',
+      orderNumber: 'BAC-001',
+      paymentMethod: 'credit_direct',
+      value: 21500,
+    });
     expect(mockRouterPush).toHaveBeenCalledWith({
       pathname: '/bnpl-checkout',
       params: expect.objectContaining({

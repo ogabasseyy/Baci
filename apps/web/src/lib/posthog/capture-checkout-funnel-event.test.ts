@@ -41,4 +41,31 @@ describe('captureCheckoutFunnelEventOnce', () => {
 
     expect(captureClientEvent).toHaveBeenCalledTimes(2);
   });
+
+  it('uses in-memory deduplication when session storage is unavailable', async () => {
+    const storageDescriptor = Object.getOwnPropertyDescriptor(
+      window,
+      'sessionStorage'
+    );
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      get() {
+        throw new Error('session storage unavailable');
+      },
+    });
+
+    try {
+      const { captureCheckoutFunnelEventOnce } = await loadCaptureOnce();
+      captureCheckoutFunnelEventOnce('order_created', 'order-1', {});
+      captureCheckoutFunnelEventOnce('order_created', 'order-1', {});
+    } finally {
+      if (storageDescriptor) {
+        Object.defineProperty(window, 'sessionStorage', storageDescriptor);
+      } else {
+        Reflect.deleteProperty(window, 'sessionStorage');
+      }
+    }
+
+    expect(captureClientEvent).toHaveBeenCalledTimes(1);
+  });
 });

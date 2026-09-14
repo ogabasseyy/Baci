@@ -213,7 +213,10 @@ export function useCheckoutSubmit({
       const { order } = orderResponse;
       const orderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
-      if (selectedPayment === 'invoice') {
+      if (
+        selectedPayment === 'invoice' &&
+        !orderResponse.idempotency?.replayed
+      ) {
         trackCheckoutInvoiceGenerated({
           itemCount: itemsSnapshot.reduce(
             (count, item) => count + item.quantity,

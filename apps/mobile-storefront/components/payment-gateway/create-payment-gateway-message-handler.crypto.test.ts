@@ -6,6 +6,13 @@ import {
 } from './create-payment-gateway-message-handler.test-utils';
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
 
+const mockTrackCheckoutPaymentCompleted = jest.fn();
+
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentCompleted: (...args: unknown[]) =>
+    mockTrackCheckoutPaymentCompleted(...args),
+}));
+
 jest.mock('expo-router', () => ({
   router: {
     replace: jest.fn(),
@@ -15,6 +22,7 @@ jest.mock('expo-router', () => ({
 describe('createPaymentGatewayMessageHandler crypto success', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockTrackCheckoutPaymentCompleted.mockReset();
   });
   it('routes crypto success with sanitized fallback params', async () => {
     const {
@@ -84,6 +92,14 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
     expect(markPaymentCompletionStarted).toHaveBeenCalledTimes(2);
     expect(setSuccessStatus).toHaveBeenCalledTimes(1);
     expect(clearCart).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentCompleted).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentCompleted).toHaveBeenCalledWith({
+      orderId: 'order-123',
+      orderNumber: 'ORD-123',
+      paymentMethod: 'crypto',
+      reference: 'ref-123',
+      value: undefined,
+    });
   });
 
   it('omits whitespace-only tracking token when routing order crypto success', async () => {

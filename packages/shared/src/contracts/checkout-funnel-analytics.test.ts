@@ -10,6 +10,7 @@ describe('checkout funnel analytics contract', () => {
     expect(getCheckoutPaymentIntent('invoice')).toBe('proforma_invoice');
     expect(getCheckoutPaymentIntent('paystack')).toBe('pay_now');
     expect(getCheckoutPaymentIntent('credpal')).toBe('installments');
+    expect(getCheckoutPaymentIntent('unknown_method')).toBeUndefined();
   });
 
   it('keeps the event names and shared properties stable across clients', () => {

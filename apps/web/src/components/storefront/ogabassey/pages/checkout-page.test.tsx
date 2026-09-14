@@ -29,6 +29,11 @@ vi.mock('@/hooks/cart', () => ({
   })),
 }));
 
+const mockCaptureCheckoutFunnelEventOnce = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
+  captureCheckoutFunnelEventOnce: mockCaptureCheckoutFunnelEventOnce,
+}));
+
 vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: vi.fn(() => ({
     merchant: {
@@ -203,6 +208,7 @@ import {
 } from '@/hooks/use-persisted-state';
 import { CHECKOUT_IDEMPOTENCY_STORAGE_KEY } from './checkout/checkout-idempotency';
 import { readCreditDirectPopupMarker } from './checkout/credit-direct-popup-return';
+import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 
 function mockCheckoutSubmissionState() {
   vi.mocked(useCart).mockReturnValue({
@@ -2851,6 +2857,16 @@ describe('CheckoutPage', () => {
     expect(JSON.parse(snapshot.checkoutFingerprint).items[0]).toMatchObject({
       variantId: 'variant-blue', variantAttributes: { color: 'blue', storage: '128gb' },
     });
+    expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+      'order_created',
+      'order-123',
+      expect.objectContaining({
+        channel: 'web',
+        order_id: 'order-123',
+        order_number: 'ORD-123',
+        source: 'web_checkout',
+      })
+    );
     storageSpy.mockRestore();
     fetchMock.mockRestore();
     randomUuidSpy.mockRestore();

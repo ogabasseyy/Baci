@@ -12,6 +12,7 @@ import {
 import {
   CHECKOUT_FUNNEL_EVENTS,
   buildCheckoutFunnelProperties,
+  getCheckoutPaymentIntent,
 } from '@baci/shared/contracts';
 import {
   AlertCircle,
@@ -160,6 +161,7 @@ import { isWalletOrderAutoDebitWebEnabled } from '@/config/wallet-order-auto-deb
 import { isEligibleForWalletFundedBankTransfer } from './checkout/wallet-funded-transfer-eligibility';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
+import { useCheckoutStartFunnel } from './checkout/hooks/use-checkout-start-funnel';
 import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
 import { DeferredWalletTransferConsentDialog as WalletTransferConsentDialog } from './checkout/components/DeferredWalletTransferConsentDialog';
 
@@ -818,29 +820,13 @@ export const CheckoutPage: React.FC = () => {
     ? checkoutCartTotal
     : resumedOrder?.subtotal || checkoutCartTotal;
 
-  useEffect(() => {
-    if (!isHydrated || displayItems.length === 0) return;
-    const cartKey = displayItems
-      .map((item) => `${item.kind}:${item.id}:${item.quantity}`)
-      .join('|');
-    captureCheckoutFunnelEventOnce(
-      CHECKOUT_FUNNEL_EVENTS.checkoutStarted,
-      `cart:${merchant?.id || 'store'}:${cartKey}`,
-      buildCheckoutFunnelProperties({
-        channel: 'web',
-        itemCount: displayItems.reduce((count, item) => count + item.quantity, 0),
-        source: 'web_checkout',
-        subtotal: effectiveItemSubtotal,
-        total: effectiveCheckoutCartTotal,
-      })
-    );
-  }, [
+  useCheckoutStartFunnel({
     displayItems,
     effectiveCheckoutCartTotal,
     effectiveItemSubtotal,
     isHydrated,
-    merchant?.id,
-  ]);
+    merchantId: merchant?.id,
+  });
 
   const autoTriggerRef = useRef(false);
   // Double-submit protection: prevents race conditions from rapid clicks
@@ -2077,10 +2063,15 @@ export const CheckoutPage: React.FC = () => {
       giftWrappingCost,
     });
 
+    let createdOrderId: string | undefined;
+    let createdOrderNumber = '';
+
     try {
       let order: {
         id: string;
         order_number?: string;
+        payment_status?: string;
+        total?: number;
         tracking_token?: string;
         /** Stamped orders.currency (returned by /api/orders and /api/orders/reuse). */
         currency?: string | null;
@@ -2283,6 +2274,28 @@ export const CheckoutPage: React.FC = () => {
         amountDueToGateway = orderData.amountDueToGateway ?? total;
       }
 
+      createdOrderId = order.id;
+      createdOrderNumber =
+        order.order_number || order.id.slice(0, 8).toUpperCase();
+      captureCheckoutFunnelEventOnce(
+        CHECKOUT_FUNNEL_EVENTS.orderCreated,
+        order.id,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+          paymentMethod,
+          paymentStatus: order.payment_status || 'unpaid',
+          shipping: deliveryCost,
+          source: 'web_checkout',
+          subtotal: effectiveItemSubtotal,
+          tax: orderTotals?.taxAmount ?? 0,
+          total: order.total ?? total,
+        })
+      );
+
       // The ORDER row's stamped currency is authoritative for payment
       // initialization: a reused/idempotent order keeps its original currency
       // even if the merchant's payout currency changed after it was created,
@@ -2345,6 +2358,31 @@ export const CheckoutPage: React.FC = () => {
         setIsProcessing(false);
         isOrderInFlightRef.current = false;
         return;
+      }
+
+      if (
+        paymentAmount > 0 &&
+        (paymentMethod === 'bank_transfer' ||
+          paymentMethod === 'paystack' ||
+          paymentMethod === 'korapay' ||
+          paymentMethod === 'juicyway' ||
+          paymentMethod === 'klump' ||
+          paymentMethod === 'credit_direct' ||
+          (paymentMethod === 'credpal' &&
+            Boolean(process.env.NEXT_PUBLIC_CREDPAL_KEY)))
+      ) {
+        captureClientEvent(
+          CHECKOUT_FUNNEL_EVENTS.paymentStarted,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            orderId: order.id,
+            orderNumber: createdOrderNumber,
+            paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+            paymentMethod,
+            source: 'web_checkout',
+            total: paymentAmount,
+          })
+        );
       }
 
       // Update local wallet balance if redemption occurred
@@ -2645,7 +2683,21 @@ export const CheckoutPage: React.FC = () => {
         // Don't proceed further - callbacks handle the flow
         return;
       } else if (paymentMethod === 'invoice') {
-        // Invoice/Pay Later - order created, redirect to success
+        captureCheckoutFunnelEventOnce(
+          CHECKOUT_FUNNEL_EVENTS.invoiceGenerated,
+          order.id,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
+            orderId: order.id,
+            orderNumber: createdOrderNumber,
+            paymentIntent: 'proforma_invoice',
+            paymentMethod: 'invoice',
+            paymentStatus: 'unpaid',
+            source: 'web_checkout',
+            total: order.total ?? total,
+          })
+        );
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
         clearCheckoutSession();
@@ -2690,6 +2742,20 @@ export const CheckoutPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Checkout error:', error);
+      if (createdOrderId) {
+        captureClientEvent(
+          CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            orderId: createdOrderId,
+            orderNumber: createdOrderNumber,
+            paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+            paymentMethod,
+            reason: error instanceof Error ? error.name : 'checkout_error',
+            source: 'web_checkout',
+          })
+        );
+      }
       toast({
         title: 'Checkout Failed',
         description: error instanceof Error

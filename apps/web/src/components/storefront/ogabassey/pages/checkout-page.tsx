@@ -2588,6 +2588,19 @@ export const CheckoutPage: React.FC = () => {
           },
           onError: (error) => {
             console.error('Credit Direct error:', error);
+            captureClientEvent(
+              CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+              buildCheckoutFunnelProperties({
+                channel: 'web',
+                orderId: order.id,
+                orderNumber: createdOrderNumber,
+                paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+                paymentMethod,
+                reason: 'credit_direct_error',
+                source: 'web_checkout',
+                total: paymentAmount,
+              })
+            );
             toast({
               title: 'Credit Direct Failed',
               description: error || 'Credit Direct checkout failed. Please try again.',
@@ -2667,6 +2680,19 @@ export const CheckoutPage: React.FC = () => {
           },
           onError: (error) => {
             console.error('CredPal error:', error);
+            captureClientEvent(
+              CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+              buildCheckoutFunnelProperties({
+                channel: 'web',
+                orderId: order.id,
+                orderNumber: createdOrderNumber,
+                paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+                paymentMethod,
+                reason: 'credpal_error',
+                source: 'web_checkout',
+                total: paymentAmount,
+              })
+            );
             toast({
               title: 'CredPal Failed',
               description: error.message || 'CredPal checkout failed. Please try again.',
@@ -2812,6 +2838,18 @@ export const CheckoutPage: React.FC = () => {
       })
       .catch((error: unknown) => {
         console.error('DVA initialization error:', error);
+        captureClientEvent(
+          CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            orderId: order.id,
+            paymentMethod: 'bank_transfer',
+            paymentIntent: getCheckoutPaymentIntent('bank_transfer'),
+            reason: 'bank_transfer_error',
+            source: 'web_checkout',
+            total: paymentAmount,
+          })
+        );
         toast({
           title: 'Bank Transfer Failed',
           description:

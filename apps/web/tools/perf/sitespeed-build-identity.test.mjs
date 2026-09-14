@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { assertServedBuild } from './sitespeed-build-identity.mjs';
 
 function response(html, status = 200) {

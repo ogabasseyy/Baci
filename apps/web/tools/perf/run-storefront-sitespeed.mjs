@@ -4,17 +4,20 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  renameSync,
   statfsSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { validateArtifacts } from './sitespeed-artifacts.mjs';
 import { assertServedBuild } from './sitespeed-build-identity.mjs';
 import { parseArgs } from './sitespeed-cli-options.mjs';
 import { validateMatrix } from './sitespeed-matrix.mjs';
+import {
+  prepareSampleDirectory,
+  saveManifest,
+} from './sitespeed-run-output.mjs';
 import { gitMetadata } from './sitespeed-source-metadata.mjs';
 
 export { validateArtifacts } from './sitespeed-artifacts.mjs';
@@ -24,9 +27,7 @@ export const SITESPEED_IMAGE =
   'sitespeedio/sitespeed.io:42.7.0@sha256:3b89ded94e75faf09d34a9f0921d621d470564dcee7c7f51bf2297d701451f71';
 export const DEFAULT_BASE_URL =
   process.env.PERF_BASE_URL || 'http://host.docker.internal:3105';
-const moduleDirectory = import.meta.url.startsWith('file://')
-  ? dirname(decodeURIComponent(import.meta.url.slice('file://'.length)))
-  : dirname(import.meta.url);
+const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_MATRIX = join(
   moduleDirectory,
   'storefront-route-matrix.json'
@@ -103,7 +104,7 @@ export function dockerArgs(run, outputFolder, baseUrl = DEFAULT_BASE_URL) {
     '-v',
     `${resolve(outputFolder)}:/sitespeed.io`,
     SITESPEED_IMAGE,
-    `${baseUrl}${run.path}`,
+    new URL(run.path, baseUrl).href,
     '-b',
     'chrome',
     '-n',
@@ -113,14 +114,8 @@ export function dockerArgs(run, outputFolder, baseUrl = DEFAULT_BASE_URL) {
     '--visualMetrics',
     '--browsertime.chrome.collectConsoleLog',
     '--outputFolder',
-    `/sitespeed.io/${run.profile}/${run.family}/sample-${run.sample}`,
+    `/sitespeed.io/${run.output ? relative(resolve(outputFolder), run.output) : `${run.profile}/${run.family}/sample-${run.sample}`}`,
   ];
-}
-
-function saveManifest(file, manifest) {
-  const temp = `${file}.tmp-${process.pid}`;
-  writeFileSync(temp, `${JSON.stringify(manifest, null, 2)}\n`);
-  renameSync(temp, file);
 }
 
 export async function runMatrix({
@@ -210,8 +205,6 @@ export async function runMatrix({
   if (dryRun) return { manifest, runs: planned, dryRun: true };
   mkdirSync(output, { recursive: true });
   const disk = diskPreflight(output);
-  if (minFreeGiB < 5)
-    throw new Error('min-free-gib cannot be below the hard 5 GiB floor');
   if (disk.freeBytes < minFreeGiB * 1024 ** 3)
     throw new Error(
       `insufficient free disk: ${(disk.freeBytes / 1024 ** 3).toFixed(2)} GiB; need ${minFreeGiB} GiB`
@@ -221,7 +214,7 @@ export async function runMatrix({
     if (completed >= maxRuns) break;
     if (manifest.runs[run.key]?.status === 'complete') {
       try {
-        validateArtifacts(run.output);
+        validateArtifacts(manifest.runs[run.key].output);
         continue;
       } catch {
         manifest.runs[run.key].status = 'pending';
@@ -236,7 +229,7 @@ export async function runMatrix({
       saveManifest(manifestFile, manifest);
       break;
     }
-    mkdirSync(run.output, { recursive: true });
+    run.output = prepareSampleDirectory(output, run);
     manifest.runs[run.key] = {
       ...run,
       status: 'running',

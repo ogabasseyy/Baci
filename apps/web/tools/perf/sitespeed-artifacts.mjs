@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 
 function filesUnder(path) {
   if (!existsSync(path)) return [];
@@ -20,6 +21,34 @@ export function validateArtifacts(path) {
       return false;
     }
   });
+  const consoleFiles = files.filter((file) =>
+    /console-\d+\.json\.gz$/i.test(file)
+  );
+  if (!consoleFiles.length) throw new Error('missing console evidence');
+  let consoleRecords;
+  try {
+    const parsed = consoleFiles.map((file) =>
+      JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'))
+    );
+    if (parsed.some((records) => !Array.isArray(records)))
+      throw new Error('shape');
+    consoleRecords = parsed.flat();
+  } catch {
+    throw new Error('malformed console evidence');
+  }
+  if (!Array.isArray(consoleRecords))
+    throw new Error('malformed console evidence');
+  if (
+    consoleRecords.some(
+      (record) =>
+        !record ||
+        typeof record !== 'object' ||
+        typeof record.level !== 'string'
+    )
+  )
+    throw new Error('malformed console evidence');
+  if (consoleRecords.some((record) => /^(SEVERE|ERROR)$/i.test(record.level)))
+    throw new Error('error-level console record captured');
   let browser;
   let failedResource = false;
   let visualMetricsInHar = false;

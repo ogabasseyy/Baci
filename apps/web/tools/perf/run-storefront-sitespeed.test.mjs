@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   dockerArgs,
@@ -13,6 +14,11 @@ import {
 import { parseArgs } from './sitespeed-cli-options.mjs';
 
 const directories = [];
+const cleanConsole = (directory) =>
+  writeFile(
+    join(directory, 'console-1.json.gz'),
+    gzipSync(JSON.stringify([{ level: 'INFO', message: 'ok' }]))
+  );
 afterEach(async () => {
   await Promise.all(
     directories
@@ -61,6 +67,7 @@ describe('storefront sitespeed matrix runner', () => {
   it('dry-run plans selected routes without Docker, disk writes, or claiming a measurement', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'sitespeed-runner-'));
     directories.push(directory);
+    await cleanConsole(directory);
     const result = await runMatrix({
       outputFolder: join(directory, 'out'),
       profiles: ['desktop'],
@@ -79,6 +86,7 @@ describe('storefront sitespeed matrix runner', () => {
   it('rejects an incomplete artifact directory', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'sitespeed-artifacts-'));
     directories.push(directory);
+    await cleanConsole(directory);
     await writeFile(join(directory, 'visualMetrics.json'), '{}');
     await expect(() => validateArtifacts(directory)).toThrow(
       /missing sitespeed artifacts/
@@ -92,6 +100,7 @@ describe('storefront sitespeed matrix runner', () => {
   it('accepts HAR visual metrics and records the actual browser, not an emulated user agent', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'sitespeed-valid-'));
     directories.push(directory);
+    await cleanConsole(directory);
     const browser = {
       name: 'Chrome Emulated Moto G4',
       version: '151.0.7922.169',
@@ -153,6 +162,7 @@ describe('storefront sitespeed matrix runner', () => {
   it('rejects failed images despite valid visual metrics', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'sitespeed-failed-image-'));
     directories.push(directory);
+    await cleanConsole(directory);
     await writeFile(join(directory, 'run.mp4'), 'video');
     await writeFile(
       join(directory, 'run.har'),
@@ -180,6 +190,7 @@ describe('storefront sitespeed matrix runner', () => {
   it('rejects a HAR that has no visual metric page metadata', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'sitespeed-no-metrics-'));
     directories.push(directory);
+    await cleanConsole(directory);
     await writeFile(
       join(directory, 'run.har'),
       JSON.stringify({ log: { pages: [{ pageTimings: {} }] } })

@@ -44,7 +44,10 @@ export const canonicalAttributes = (
   const normalized = Object.fromEntries(normalizedEntries);
   const name = normalized.color || normalized.colour;
   const hex =
-    normalized.color_hex || normalized.colour_hex || normalized.colourhex;
+    normalized.color_hex ||
+    normalized.colour_hex ||
+    normalized.colourhex ||
+    normalized.colorhex;
   return {
     ...Object.fromEntries(
       normalizedEntries.filter(
@@ -107,7 +110,9 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
         variant.condition === 'open_box' ? 'open_box' : condition
       );
       for (const key of Object.keys(attributes)
-        .filter((key) => !['gtin', 'mpn'].includes(key))
+        .filter(
+          (key) => !['gtin', 'mpn', 'variantid', 'variant_id'].includes(key)
+        )
         .sort())
         url.searchParams.set(key, attributes[key]);
       const stock = getFeedStockCount(product, variant);

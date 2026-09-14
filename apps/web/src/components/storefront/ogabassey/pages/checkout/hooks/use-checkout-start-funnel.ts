@@ -15,6 +15,7 @@ interface UseCheckoutStartFunnelParams {
   displayItems: CheckoutStartFunnelItem[];
   effectiveCheckoutCartTotal: number;
   effectiveItemSubtotal: number;
+  currency?: string;
   isHydrated: boolean;
   merchantId?: string;
 }
@@ -23,6 +24,7 @@ export function useCheckoutStartFunnel({
   displayItems,
   effectiveCheckoutCartTotal,
   effectiveItemSubtotal,
+  currency,
   isHydrated,
   merchantId,
 }: UseCheckoutStartFunnelParams): void {
@@ -36,6 +38,7 @@ export function useCheckoutStartFunnel({
       `cart:${merchantId || 'store'}:${cartKey}`,
       buildCheckoutFunnelProperties({
         channel: 'web',
+        currency: currency || 'NGN',
         itemCount: displayItems.reduce((count, item) => count + item.quantity, 0),
         source: 'web_checkout',
         subtotal: effectiveItemSubtotal,
@@ -46,6 +49,7 @@ export function useCheckoutStartFunnel({
     displayItems,
     effectiveCheckoutCartTotal,
     effectiveItemSubtotal,
+    currency,
     isHydrated,
     merchantId,
   ]);

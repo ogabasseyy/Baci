@@ -3830,6 +3830,21 @@ describe('CheckoutPage', () => {
         await act(async () => {
           options?.onError?.({ success: false, message: 'declined' });
         });
+        await act(async () => {
+          await options?.onSuccess?.({
+            order_no: 'credpal-order-1',
+            item: 'Test Product',
+            amount: 5000,
+            status: 'success',
+            channel: 'web',
+            customer: {
+              full_name: 'Ada Buyer',
+              email: 'ada@example.com',
+              phone_no: '+2348123456789',
+            },
+            created_at: '2026-09-14T00:00:00.000Z',
+          });
+        });
       } else {
         await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/payments/initialize', expect.anything()));
       }
@@ -3847,6 +3862,14 @@ describe('CheckoutPage', () => {
       'credit_direct',
       'credpal',
     ]);
+    expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+      'payment_completed',
+      'order-credpal',
+      expect.objectContaining({
+        payment_method: 'credpal',
+        reference: 'credpal-order-1',
+      })
+    );
     vi.unstubAllEnvs();
   });
 });

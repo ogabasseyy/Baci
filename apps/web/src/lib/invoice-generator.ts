@@ -55,6 +55,7 @@ const VAT_CATEGORY_NAMES: Record<string, string> = {
 
 // Invoice type code descriptions (UNCL 1001)
 const INVOICE_TYPE_NAMES: Record<string, string> = {
+  '325': 'Proforma Invoice',
   '380': 'Commercial Invoice',
   '381': 'Credit Note',
   '383': 'Debit Note',

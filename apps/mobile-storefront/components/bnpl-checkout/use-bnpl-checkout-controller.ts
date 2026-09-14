@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WebView, WebViewNavigation } from 'react-native-webview';
 import { trackCheckoutPaymentCompleted } from '@/services/analytics';
+import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { useCartStore } from '@/stores/cart-store';
 import type {
   BNPLShouldStartLoadRequest,
@@ -150,6 +151,16 @@ export function useBNPLCheckoutController({
           paymentMethod: gateway || 'bnpl',
           reference: effect.reference || undefined,
           value: amount ? Number(amount) : undefined,
+        });
+        trackCheckoutRoutePurchaseCompleted({
+          items: useCartStore.getState().items,
+          orderId,
+          orderNumber: orderId,
+          paymentMethod: gateway || 'bnpl',
+          shipping: 0,
+          subtotal: amount ? Number(amount) : 0,
+          tax: 0,
+          total: amount ? Number(amount) : 0,
         });
       }
       await clearCart();

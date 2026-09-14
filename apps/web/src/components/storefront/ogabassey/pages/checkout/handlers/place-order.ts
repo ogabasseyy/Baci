@@ -481,6 +481,7 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
       createdOrderId,
       buildCheckoutFunnelProperties({
         channel: 'web',
+        currency,
         itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
         orderId: createdOrderId,
         orderNumber: createdOrderNumber,
@@ -545,6 +546,7 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
         CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
         buildCheckoutFunnelProperties({
           channel: 'web',
+          currency,
           orderId: order.id,
           orderNumber: createdOrderNumber,
           paymentIntent: getCheckoutPaymentIntent(paymentMethod),
@@ -569,6 +571,7 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
         CHECKOUT_FUNNEL_EVENTS.paymentStarted,
         buildCheckoutFunnelProperties({
           channel: 'web',
+          currency,
           orderId: order.id,
           orderNumber: createdOrderNumber,
           paymentIntent: getCheckoutPaymentIntent(paymentMethod),
@@ -591,6 +594,7 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
         CHECKOUT_FUNNEL_EVENTS.paymentStarted,
         buildCheckoutFunnelProperties({
           channel: 'web',
+          currency,
           orderId: order.id,
           orderNumber: createdOrderNumber,
           paymentIntent: getCheckoutPaymentIntent(paymentMethod),
@@ -633,6 +637,7 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
         CHECKOUT_FUNNEL_EVENTS.paymentStarted,
         buildCheckoutFunnelProperties({
           channel: 'web',
+          currency,
           orderId: order.id,
           orderNumber: createdOrderNumber,
           paymentIntent: getCheckoutPaymentIntent(paymentMethod),
@@ -694,6 +699,7 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
         CHECKOUT_FUNNEL_EVENTS.paymentStarted,
         buildCheckoutFunnelProperties({
           channel: 'web',
+          currency,
           orderId: order.id,
           orderNumber: createdOrderNumber,
           paymentIntent: getCheckoutPaymentIntent(paymentMethod),
@@ -809,6 +815,7 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
         CHECKOUT_FUNNEL_EVENTS.paymentStarted,
         buildCheckoutFunnelProperties({
           channel: 'web',
+          currency,
           orderId: order.id,
           orderNumber: createdOrderNumber,
           paymentIntent: getCheckoutPaymentIntent(paymentMethod),
@@ -832,6 +839,7 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
               order.id,
               buildCheckoutFunnelProperties({
                 channel: 'web',
+                currency,
                 orderId: order.id,
                 orderNumber: createdOrderNumber,
                 paymentIntent: 'installments',
@@ -877,6 +885,7 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
         order.id,
         buildCheckoutFunnelProperties({
           channel: 'web',
+          currency,
           itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
           orderId: order.id,
           orderNumber: createdOrderNumber,
@@ -918,6 +927,7 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
         CHECKOUT_FUNNEL_EVENTS.paymentFailed,
         buildCheckoutFunnelProperties({
           channel: 'web',
+          currency,
           orderId: createdOrderId,
           orderNumber: createdOrderNumber,
           paymentIntent: getCheckoutPaymentIntent(paymentMethod),

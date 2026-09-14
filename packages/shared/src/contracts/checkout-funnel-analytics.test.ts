@@ -45,4 +45,15 @@ describe('checkout funnel analytics contract', () => {
       value: 120_000,
     });
   });
+
+  it('preserves a non-NGN checkout currency', () => {
+    expect(
+      buildCheckoutFunnelProperties({
+        channel: 'web',
+        currency: 'KES',
+        source: 'web_checkout',
+        total: 42_000,
+      }).currency
+    ).toBe('KES');
+  });
 });

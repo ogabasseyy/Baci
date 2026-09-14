@@ -22,7 +22,8 @@ function parseTrackedOrderIds(raw: string | null): string[] {
 }
 
 export async function claimCheckoutPurchaseTracking(
-  orderId: string
+  orderId: string,
+  eventName = 'purchase'
 ): Promise<boolean> {
   if (!orderId) {
     return false;
@@ -31,12 +32,14 @@ export async function claimCheckoutPurchaseTracking(
     const stored = parseTrackedOrderIds(
       await AsyncStorage.getItem(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY)
     );
-    if (stored.includes(orderId)) {
+    const claim =
+      eventName === 'purchase' ? orderId : `${eventName}:${orderId}`;
+    if (stored.includes(claim)) {
       return false;
     }
     await AsyncStorage.setItem(
       CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
-      JSON.stringify([...stored, orderId])
+      JSON.stringify([...stored, claim])
     );
     return true;
   } catch (error) {

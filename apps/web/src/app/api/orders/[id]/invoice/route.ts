@@ -522,12 +522,16 @@ export async function GET(
       : undefined;
     const amountPaid = Number(order.amount_paid || 0);
 
+    // Invoice-payment orders are explicitly proforma documents until paid.
+    const isProformaInvoice = order.payment_method === 'invoice';
+
     // Build the invoice data structure
     const invoiceData: InvoiceData = {
       // Document identifiers
       invoice_number:
         order.order_number || `INV-${order.id.slice(0, 8).toUpperCase()}`,
-      invoice_type_code: order.invoice_type_code || '380',
+      invoice_type_code:
+        order.invoice_type_code || (isProformaInvoice ? '325' : '380'),
       issue_date: order.invoice_issue_date
         ? new Date(order.invoice_issue_date)
         : new Date(order.created_at),
@@ -717,7 +721,10 @@ export async function GET(
       buyerReference: invoiceData.buyer_reference,
       complianceNote,
       documentDate: invoiceData.issue_date,
-      documentKind: 'invoice',
+      documentKind:
+        invoiceData.invoice_type_code === '325'
+          ? 'proforma_invoice'
+          : 'invoice',
       dueDate: invoiceData.due_date,
       firsCsid: invoiceData.firs_csid,
       firsIrn: invoiceData.firs_irn,

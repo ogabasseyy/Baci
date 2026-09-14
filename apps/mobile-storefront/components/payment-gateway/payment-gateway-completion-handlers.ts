@@ -2,6 +2,8 @@ import type { QueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
 import { trackCheckoutPaymentCompleted } from '@/services/analytics';
+import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
+import { useCartStore } from '@/stores/cart-store';
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
 import {
   beginSavingsAuthorizationCompletion,
@@ -145,10 +147,20 @@ export function createPaymentGatewayCompletionHandlers({
     if (orderId) {
       trackCheckoutPaymentCompleted({
         orderId,
-        orderNumber,
+        orderNumber: orderNumber || orderId,
         paymentMethod: gateway || 'payment_gateway',
         reference,
         value: amount,
+      });
+      trackCheckoutRoutePurchaseCompleted({
+        items: useCartStore.getState().items,
+        orderId,
+        orderNumber: orderNumber || orderId,
+        paymentMethod: gateway || 'payment_gateway',
+        shipping: 0,
+        subtotal: amount ?? 0,
+        tax: 0,
+        total: amount ?? 0,
       });
     }
     await clearCart();

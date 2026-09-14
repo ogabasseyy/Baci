@@ -392,7 +392,9 @@ export function buildStorefrontAccountDocumentBundle({
 
   const invoiceData: InvoiceData = {
     invoice_number: order.order_number,
-    invoice_type_code: order.invoice_type_code || '380',
+    invoice_type_code:
+      order.invoice_type_code ||
+      (order.payment_method === 'invoice' ? '325' : '380'),
     issue_date: new Date(order.invoice_issue_date || order.created_at),
     tax_point_date: order.tax_point_date
       ? new Date(order.tax_point_date)

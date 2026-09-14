@@ -16,7 +16,7 @@ interface CheckoutTrackingItem {
   quantity: number;
 }
 
-interface CheckoutPurchaseInput {
+export interface CheckoutPurchaseInput {
   customerEmail?: string;
   customerPhone?: string;
   items: CheckoutTrackingItem[];
@@ -68,14 +68,14 @@ export function trackCheckoutRoutePaymentInfo(paymentMethod: string) {
 export function trackCheckoutRoutePurchaseCompleted({
   customerEmail,
   customerPhone,
-  items,
+  items = [],
   orderId,
-  orderNumber,
+  orderNumber = orderId,
   paymentMethod,
-  shipping,
-  subtotal,
-  tax,
-  total,
+  total = 0,
+  shipping = 0,
+  subtotal = total,
+  tax = 0,
   userId,
 }: CheckoutPurchaseInput) {
   trackOrderCompleted({

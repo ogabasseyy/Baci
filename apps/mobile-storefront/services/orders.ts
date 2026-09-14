@@ -4,6 +4,7 @@ import { DEFAULT_TIMEOUT, fetchWithRetry } from '@/lib/api';
 import { resolveApiBaseUrl } from '@/lib/api-url';
 import { assertQueuedCreateOrderSendOwner } from '@/lib/assert-queued-create-order-send-owner';
 import { getCheckoutAttemptKey } from '@/lib/checkout-attempt-key';
+import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import { createLogger } from '@/lib/logger';
 import { resolveCheckoutAuthPartition } from '@/lib/resolve-checkout-auth-partition';
 import {
@@ -218,7 +219,7 @@ export async function createOrder(
       response.headers.get('x-idempotency-replayed') === 'true' ||
       normalizedOrderResponse.idempotency?.replayed === true;
 
-    if (!replayed) {
+    if (await claimCheckoutPurchaseTracking(normalizedOrderResponse.order.id)) {
       trackCheckoutOrderCreated({
         itemCount: request.items.reduce(
           (count, item) => count + item.quantity,

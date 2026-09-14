@@ -2,6 +2,8 @@ import { router } from 'expo-router';
 import type { MutableRefObject } from 'react';
 import { PAYMENT_CLIPBOARD_BRIDGE } from '@/constants/payment-clipboard-bridge';
 import { trackCheckoutPaymentCompleted } from '@/services/analytics';
+import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
+import { useCartStore } from '@/stores/cart-store';
 import {
   isPlainRecord,
   PAYMENT_KINDS,
@@ -207,6 +209,16 @@ export function createPaymentGatewayMessageHandler({
         paymentMethod: getTrimmedString(gateway) || 'crypto',
         reference: cryptoReference,
         value: amount,
+      });
+      trackCheckoutRoutePurchaseCompleted({
+        items: useCartStore.getState().items,
+        orderId: cryptoOrderId,
+        orderNumber: getTrimmedString(orderNumber) || cryptoOrderId,
+        paymentMethod: getTrimmedString(gateway) || 'crypto',
+        shipping: 0,
+        subtotal: amount ?? 0,
+        tax: 0,
+        total: amount ?? 0,
       });
       await clearCart();
       scheduleDelayedNavigation(() => {

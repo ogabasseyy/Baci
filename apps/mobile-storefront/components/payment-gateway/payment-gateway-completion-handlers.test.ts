@@ -10,9 +10,15 @@ import type {
 const mockBeginWalletTopUpCompletion = jest.fn();
 const mockBeginSavingsAuthorizationCompletion = jest.fn();
 const mockHandleVtuConfirmation = jest.fn();
+const mockTrackCheckoutRoutePurchaseCompleted = jest.fn();
 
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn() },
+}));
+
+jest.mock('@/services/tiktok-checkout-route-tracking', () => ({
+  trackCheckoutRoutePurchaseCompleted: (...args: unknown[]) =>
+    mockTrackCheckoutRoutePurchaseCompleted(...args),
 }));
 
 jest.mock('./payment-gateway-completions', () => ({
@@ -93,6 +99,10 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     expect(refs.paymentCompletionStartedRef.current).toBe(true);
     expect(input.clearPendingLoadTimeout).toHaveBeenCalledTimes(1);
     expect(input.setPaymentStatus).toHaveBeenCalledWith('success');
+    expect(mockTrackCheckoutRoutePurchaseCompleted).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutRoutePurchaseCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-1', total: 5000 })
+    );
     expect(input.clearCart).toHaveBeenCalledTimes(1);
     expect(router.replace).toHaveBeenCalledWith(
       expect.objectContaining({

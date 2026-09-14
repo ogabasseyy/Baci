@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import { useMerchant } from '@/hooks/use-merchant';
+import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import {
   buildSavingsOrderFields,
@@ -215,7 +216,7 @@ export function useCheckoutSubmit({
         order.order_number || order.id.slice(0, 8).toUpperCase();
       if (
         selectedPayment === 'invoice' &&
-        !orderResponse.idempotency?.replayed
+        (await claimCheckoutPurchaseTracking(order.id, 'invoice_generated'))
       ) {
         trackCheckoutInvoiceGenerated({
           itemCount: itemsSnapshot.reduce(

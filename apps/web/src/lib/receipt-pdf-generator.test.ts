@@ -124,6 +124,37 @@ describe('generateReceiptBlob', () => {
     expect(pdfText).toContain('Line Total');
   });
 
+  it('labels invoice-payment documents as proforma invoices', () => {
+    const order = {
+      ...baseOrder,
+      payment_status: 'unpaid' as const,
+      payment_method: 'invoice',
+      items: [],
+      transactions: [],
+    };
+
+    const pdfText = getPdfText(order, baseMerchant, {
+      documentKind: 'proforma_invoice',
+      invoiceTypeCode: '325',
+    });
+
+    expect(pdfText).toContain('PROFORMA INVOICE');
+    expect(pdfText).not.toContain('Commercial Invoice');
+  });
+
+  it('uses the default invoice label for an unknown invoice type', () => {
+    const pdfText = getPdfText(
+      { ...baseOrder, items: [], transactions: [] },
+      baseMerchant,
+      {
+        documentKind: 'invoice',
+        invoiceTypeCode: 'unknown',
+      }
+    );
+
+    expect(pdfText).toContain('INVOICE');
+  });
+
   it('can render a paid order as an invoice document when requested', () => {
     const order = {
       ...baseOrder,

@@ -821,6 +821,7 @@ export const CheckoutPage: React.FC = () => {
     : resumedOrder?.subtotal || checkoutCartTotal;
 
   useCheckoutStartFunnel({
+    currency: currencyCode,
     displayItems,
     effectiveCheckoutCartTotal,
     effectiveItemSubtotal,
@@ -2065,6 +2066,7 @@ export const CheckoutPage: React.FC = () => {
 
     let createdOrderId: string | undefined;
     let createdOrderNumber = '';
+    let orderChargeCurrency = currencyCode;
 
     try {
       let order: {
@@ -2277,11 +2279,16 @@ export const CheckoutPage: React.FC = () => {
       createdOrderId = order.id;
       createdOrderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
+      orderChargeCurrency =
+        typeof order.currency === 'string' && order.currency.trim()
+          ? order.currency.trim().toUpperCase()
+          : currencyCode;
       captureCheckoutFunnelEventOnce(
         CHECKOUT_FUNNEL_EVENTS.orderCreated,
         order.id,
         buildCheckoutFunnelProperties({
           channel: 'web',
+          currency: orderChargeCurrency,
           itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
           orderId: order.id,
           orderNumber: createdOrderNumber,
@@ -2302,11 +2309,6 @@ export const CheckoutPage: React.FC = () => {
       // and the initialize API rejects an explicit client/order mismatch.
       // Both order sources return it (/api/orders and /api/orders/reuse);
       // fall back to the merchant-resolved code only if it is ever absent.
-      const orderChargeCurrency =
-        typeof order.currency === 'string' && order.currency.trim()
-          ? order.currency.trim().toUpperCase()
-          : currencyCode;
-
       // 1b. Create account if requested (Awaited to ensure session is set before moving to next page)
       if (createAccount && !user && accountPassword.length >= 6) {
         try {
@@ -2375,6 +2377,7 @@ export const CheckoutPage: React.FC = () => {
           CHECKOUT_FUNNEL_EVENTS.paymentStarted,
           buildCheckoutFunnelProperties({
             channel: 'web',
+            currency: orderChargeCurrency,
             orderId: order.id,
             orderNumber: createdOrderNumber,
             paymentIntent: getCheckoutPaymentIntent(paymentMethod),
@@ -2592,6 +2595,7 @@ export const CheckoutPage: React.FC = () => {
               CHECKOUT_FUNNEL_EVENTS.paymentFailed,
               buildCheckoutFunnelProperties({
                 channel: 'web',
+                currency: orderChargeCurrency,
                 orderId: order.id,
                 orderNumber: createdOrderNumber,
                 paymentIntent: getCheckoutPaymentIntent(paymentMethod),
@@ -2662,6 +2666,22 @@ export const CheckoutPage: React.FC = () => {
           customerPhone,
           onSuccess: async (data) => {
             console.log('CredPal success:', data);
+            captureCheckoutFunnelEventOnce(
+              CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+              order.id,
+              buildCheckoutFunnelProperties({
+                channel: 'web',
+                currency: orderChargeCurrency,
+                orderId: order.id,
+                orderNumber: createdOrderNumber,
+                paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+                paymentMethod,
+                paymentStatus: 'paid',
+                reference: data.order_no,
+                source: 'web_checkout',
+                total: paymentAmount,
+              })
+            );
             clearPendingCheckoutOrder();
             await clearCheckoutIdempotencyKey(checkoutFingerprint);
             clearCheckoutSession();
@@ -2684,6 +2704,7 @@ export const CheckoutPage: React.FC = () => {
               CHECKOUT_FUNNEL_EVENTS.paymentFailed,
               buildCheckoutFunnelProperties({
                 channel: 'web',
+                currency: orderChargeCurrency,
                 orderId: order.id,
                 orderNumber: createdOrderNumber,
                 paymentIntent: getCheckoutPaymentIntent(paymentMethod),
@@ -2714,6 +2735,7 @@ export const CheckoutPage: React.FC = () => {
           order.id,
           buildCheckoutFunnelProperties({
             channel: 'web',
+            currency: orderChargeCurrency,
             itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
             orderId: order.id,
             orderNumber: createdOrderNumber,
@@ -2773,6 +2795,7 @@ export const CheckoutPage: React.FC = () => {
           CHECKOUT_FUNNEL_EVENTS.paymentFailed,
           buildCheckoutFunnelProperties({
             channel: 'web',
+            currency: orderChargeCurrency,
             orderId: createdOrderId,
             orderNumber: createdOrderNumber,
             paymentIntent: getCheckoutPaymentIntent(paymentMethod),
@@ -2842,6 +2865,10 @@ export const CheckoutPage: React.FC = () => {
           CHECKOUT_FUNNEL_EVENTS.paymentFailed,
           buildCheckoutFunnelProperties({
             channel: 'web',
+            currency:
+              typeof order.currency === 'string' && order.currency.trim()
+                ? order.currency.trim().toUpperCase()
+                : currencyCode,
             orderId: order.id,
             paymentMethod: 'bank_transfer',
             paymentIntent: getCheckoutPaymentIntent('bank_transfer'),

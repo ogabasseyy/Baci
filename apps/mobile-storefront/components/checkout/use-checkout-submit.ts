@@ -1,9 +1,6 @@
 import { Alert } from 'react-native';
 import { useMerchant } from '@/hooks/use-merchant';
-import {
-  claimCheckoutPurchaseTracking,
-  saveRedvaultPurchaseTrackingContext,
-} from '@/lib/claim-checkout-purchase-tracking';
+import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import {
   buildSavingsOrderFields,
@@ -23,7 +20,6 @@ import {
   buildCheckoutOrderRequest,
   createCheckoutSnapshot,
 } from './checkout-order-builders';
-import { finalizeCheckoutPayment } from './checkout-payment-finalization';
 import { runCheckoutPostOrderSideEffects } from './checkout-post-order-side-effects';
 import {
   blockIfMixedPrizeCart,
@@ -33,10 +29,12 @@ import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
+import { isBnplPayment } from './is-bnpl-payment';
+import { runFinalizeCheckoutPayment } from './run-finalize-checkout-payment';
+import { submitRedvaultCheckout } from './submit-redvault-checkout';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 
 export type { UseCheckoutSubmitParams };
-
 export function useCheckoutSubmit({
   accountPassword,
   onRedvaultOrder,
@@ -77,15 +75,14 @@ export function useCheckoutSubmit({
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
   return async (address: ShippingAddressInput) => {
     const itemsSnapshot = [...useCartStore.getState().items];
-    const checkoutGenerationSnapshot =
-      useCartStore.getState().checkoutGeneration;
-    const groupNegotiationSnapshot =
-      useCartStore.getState().cartWideNegotiationActive;
+    const {
+      checkoutGeneration: checkoutGenerationSnapshot,
+      cartWideNegotiationActive: groupNegotiationSnapshot,
+    } = useCartStore.getState();
     if (blockIfMixedPrizeCart(itemsSnapshot)) {
       return;
     }
     const isVoucherOnlyCart = cartHasVoucherLine(itemsSnapshot);
-
     if (
       !validateCheckoutSubmission({
         availablePaymentMethods,
@@ -106,7 +103,6 @@ export function useCheckoutSubmit({
     ) {
       return;
     }
-
     if (selectedPayment === 'uba_redvault' && !onRedvaultOrder) {
       Alert.alert(
         'Unable to continue',
@@ -114,10 +110,8 @@ export function useCheckoutSubmit({
       );
       return;
     }
-
     isOrderInFlight.current = true;
     setIsProcessing(true);
-
     try {
       if (itemsSnapshot.length > 0) {
         const reprice = await repriceCartItems(itemsSnapshot, merchantId);
@@ -131,7 +125,6 @@ export function useCheckoutSubmit({
           return;
         }
       }
-
       const snapshot = createCheckoutSnapshot(
         itemsSnapshot,
         deliveryFee,
@@ -147,7 +140,6 @@ export function useCheckoutSubmit({
           walletBalance,
           walletSelection,
         });
-
       trackCheckoutStep('review');
       const customerEmail = customer?.email || address.email;
       const customerPhone = address.phone;
@@ -157,11 +149,7 @@ export function useCheckoutSubmit({
         : selectedPayment === 'payforme'
           ? 'invoice'
           : selectedPayment;
-      const isBNPL =
-        selectedPayment === 'credpal' ||
-        selectedPayment === 'credit_direct' ||
-        selectedPayment === 'klump';
-
+      const isBNPL = isBnplPayment(selectedPayment);
       if (isBNPL && !isVoucherOnlyCart) {
         await submitBnplCheckout({
           address,
@@ -186,7 +174,6 @@ export function useCheckoutSubmit({
         });
         return;
       }
-
       const orderResponse = await createOrder(
         {
           ...buildCheckoutOrderRequest({
@@ -210,26 +197,12 @@ export function useCheckoutSubmit({
         { checkoutGeneration: checkoutGenerationSnapshot }
       );
       const { order } = orderResponse;
-      const orderNumber =
-        order.order_number || order.id.slice(0, 8).toUpperCase();
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
-
+      const orderNumber =
+        order.order_number || order.id.slice(0, 8).toUpperCase();
       if (selectedPayment === 'uba_redvault') {
-        await saveRedvaultPurchaseTrackingContext(order.id, {
-          customerEmail,
-          customerPhone,
-          items: itemsSnapshot,
-          orderNumber,
-          paymentMethod: completedPaymentMethod,
-          shipping: snapshot.deliveryFee,
-          subtotal: snapshot.subtotal,
-          tax: snapshot.taxAmount,
-          total: order.total,
-          userId: customer?.id ?? undefined,
-        });
-        onRedvaultOrder?.({
-          orderResponse,
+        await submitRedvaultCheckout({
           customerEmail,
           customerName,
           customerPhone,
@@ -245,10 +218,23 @@ export function useCheckoutSubmit({
               selectedSavedAddressId,
             });
           },
+          onRedvaultOrder,
+          orderResponse,
+          trackingContext: {
+            customerEmail,
+            customerPhone,
+            items: itemsSnapshot,
+            orderNumber,
+            paymentMethod: completedPaymentMethod,
+            shipping: snapshot.deliveryFee,
+            subtotal: snapshot.subtotal,
+            tax: snapshot.taxAmount,
+            total: order.total,
+            userId: customer?.id ?? undefined,
+          },
         });
         return;
       }
-
       if (await claimCheckoutPurchaseTracking(order.id)) {
         void trackCheckoutRoutePurchaseCompleted({
           customerEmail,
@@ -264,8 +250,7 @@ export function useCheckoutSubmit({
           userId: user?.id ?? undefined,
         });
       }
-
-      await finalizeCheckoutPayment({
+      await runFinalizeCheckoutPayment({
         clearCart,
         customerEmail,
         customerName,

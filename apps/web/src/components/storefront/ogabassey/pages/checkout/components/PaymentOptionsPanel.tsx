@@ -9,7 +9,8 @@ import {
   PaystackLogo,
 } from '../../../components/PaymentLogos';
 import type { PaymentMethod, PaymentTab } from '../types';
-import { InstallmentInfo, PaymentOptionCard } from './PaymentOptionCard';
+import { PaymentOptionCard } from './PaymentOptionCard';
+import { PaymentInstallmentDetails } from './PaymentInstallmentDetails';
 import {
   type FeatureSettings,
   isNgnChargeCurrency,
@@ -240,42 +241,7 @@ export function PaymentOptionsPanel({
             )}
           </div>
 
-          {paymentMethod === 'credpal' && (
-            <InstallmentInfo
-              title="How CredPal works"
-              tone="blue"
-              items={[
-                'Quick approval in minutes',
-                'Pay over 3-6 months',
-                'Competitive interest rates',
-                'Receive your items immediately',
-              ]}
-            />
-          )}
-          {paymentMethod === 'credit_direct' && (
-            <InstallmentInfo
-              title="How Credit Direct works"
-              tone="purple"
-              items={[
-                'Instant approval decision',
-                'Pay over 3-6 months',
-                'No hidden fees',
-                'Get your items immediately',
-              ]}
-            />
-          )}
-          {paymentMethod === 'klump' && (
-            <InstallmentInfo
-              title="How Klump works"
-              tone="primary"
-              items={[
-                'Choose Klump at checkout',
-                'Complete approval securely',
-                'Split payment over time',
-                'Get your items immediately',
-              ]}
-            />
-          )}
+          <PaymentInstallmentDetails paymentMethod={paymentMethod} />
           {!hasInstallmentOptions && (
             <div className="text-center py-6 bg-store-background rounded-xl border border-dashed border-store-background-text/25">
               <p className="text-sm text-store-background-text/60">

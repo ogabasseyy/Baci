@@ -7,10 +7,12 @@ import {
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
 
 const mockTrackCheckoutPaymentCompleted = jest.fn();
+const mockTrackOrderCompleted = jest.fn();
 
 jest.mock('@/services/analytics', () => ({
   trackCheckoutPaymentCompleted: (...args: unknown[]) =>
     mockTrackCheckoutPaymentCompleted(...args),
+  trackOrderCompleted: (...args: unknown[]) => mockTrackOrderCompleted(...args),
 }));
 
 jest.mock('expo-router', () => ({

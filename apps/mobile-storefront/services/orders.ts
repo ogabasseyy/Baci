@@ -4,7 +4,6 @@ import { DEFAULT_TIMEOUT, fetchWithRetry } from '@/lib/api';
 import { resolveApiBaseUrl } from '@/lib/api-url';
 import { assertQueuedCreateOrderSendOwner } from '@/lib/assert-queued-create-order-send-owner';
 import { getCheckoutAttemptKey } from '@/lib/checkout-attempt-key';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import { createLogger } from '@/lib/logger';
 import { resolveCheckoutAuthPartition } from '@/lib/resolve-checkout-auth-partition';
 import {
@@ -12,7 +11,6 @@ import {
   supabaseAuthStorage,
   supabaseAuthStorageKey,
 } from '@/lib/supabase';
-import { trackCheckoutOrderCreated } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 import {
   mapCreateOrderException,
@@ -26,6 +24,7 @@ import {
   CreateOrderRequestSchema,
   type OrderResponse,
 } from './orders.schemas';
+import { trackCreatedOrderOnce } from './orders-analytics';
 import { resolveCheckoutAuth } from './orders-auth';
 import { getCheckoutStoredSession } from './orders-session';
 import { readCheckoutStoredSession } from './read-checkout-stored-session';
@@ -219,24 +218,12 @@ export async function createOrder(
       response.headers.get('x-idempotency-replayed') === 'true' ||
       normalizedOrderResponse.idempotency?.replayed === true;
 
-    if (await claimCheckoutPurchaseTracking(normalizedOrderResponse.order.id)) {
-      trackCheckoutOrderCreated({
-        itemCount: request.items.reduce(
-          (count, item) => count + item.quantity,
-          0
-        ),
-        orderId: normalizedOrderResponse.order.id,
-        orderNumber: normalizedOrderResponse.order.order_number ?? 'N/A',
-        durationMs: Date.now() - startTime,
-        paymentMethod:
-          options?.analyticsPaymentMethod || request.payment_method,
-        paymentStatus: normalizedOrderResponse.order.payment_status,
-        shipping: request.shipping_fee,
-        subtotal: request.subtotal,
-        tax: request.tax_amount,
-        total: normalizedOrderResponse.order.total,
-      });
-    }
+    await trackCreatedOrderOnce(
+      normalizedOrderResponse,
+      request,
+      startTime,
+      options?.analyticsPaymentMethod
+    );
 
     return replayed
       ? { ...normalizedOrderResponse, idempotency: { replayed: true } }

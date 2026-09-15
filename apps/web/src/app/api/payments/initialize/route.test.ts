@@ -144,6 +144,15 @@ function createMockSupabase() {
       rpcCalls.push({ name, args });
       if (name === 'get_order_payment_snapshot')
         return Promise.resolve(rpcResult);
+      if (name === 'get_storefront_redvault_paystack_subaccount')
+        return Promise.resolve({
+          data:
+            merchantResult.data && typeof merchantResult.data === 'object'
+              ? (merchantResult.data as { paystack_subaccount_code?: unknown })
+                  .paystack_subaccount_code
+              : null,
+          error: null,
+        });
       if (name === 'create_payment_transaction')
         return Promise.resolve(rpcTransactionResult);
       if (name === 'reserve_paystack_order_payment_account')

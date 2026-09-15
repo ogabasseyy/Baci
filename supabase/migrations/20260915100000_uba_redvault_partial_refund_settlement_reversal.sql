@@ -76,7 +76,7 @@ BEGIN
           wallet_id, merchant_id, type, amount, balance_after,
           source_type, source_id, description, status, metadata
         ) VALUES (
-          v_settlement.wallet_id, v_settlement.merchant_id, 'refund',
+          v_settlement.wallet_id, v_settlement.merchant_id, 'debit',
           v_delta, v_balance, 'refund', p_refund_id,
           'UBA REDVAULT partial capture refund settlement reversal', 'completed',
           jsonb_build_object(

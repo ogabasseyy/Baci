@@ -7,6 +7,10 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+export function runKey(run) {
+  return `${run.profile}/${run.family}/${run.sample}`;
+}
+
 export function saveManifest(file, manifest) {
   const temp = `${file}.tmp-${process.pid}`;
   writeFileSync(temp, `${JSON.stringify(manifest, null, 2)}\n`);

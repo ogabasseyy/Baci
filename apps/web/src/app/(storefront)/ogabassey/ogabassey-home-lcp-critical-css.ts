@@ -24,6 +24,9 @@ footer[aria-label="Semantic storefront footer"] {
   min-height: 1100px;
 }
 @media (min-width: 768px) {
+  .ogabassey-storefront-main {
+    min-height: 100svh;
+  }
   footer[aria-label="Semantic storefront footer"] {
     min-height: 910px;
   }

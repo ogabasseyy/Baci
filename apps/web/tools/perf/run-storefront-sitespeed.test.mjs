@@ -19,6 +19,7 @@ const cleanConsole = (directory) =>
     join(directory, 'console-1.json.gz'),
     gzipSync(JSON.stringify([{ level: 'INFO', message: 'ok' }]))
   );
+const playableVideo = { videoProbe: () => ({ ok: true, duration: 1 }) };
 afterEach(async () => {
   await Promise.all(
     directories
@@ -68,6 +69,14 @@ describe('storefront sitespeed matrix runner', () => {
     const directory = await mkdtemp(join(tmpdir(), 'sitespeed-runner-'));
     directories.push(directory);
     await cleanConsole(directory);
+    await mkdir(join(directory, 'out'));
+    await writeFile(
+      join(directory, 'out', 'run-manifest.json'),
+      JSON.stringify({
+        buildId: 'previous-build',
+        runs: { old: { status: 'complete' } },
+      })
+    );
     const result = await runMatrix({
       outputFolder: join(directory, 'out'),
       profiles: ['desktop'],
@@ -93,7 +102,15 @@ describe('storefront sitespeed matrix runner', () => {
     );
     await mkdir(join(directory, 'video'));
     await writeFile(join(directory, 'video', 'run.mp4'), 'video');
-    await writeFile(join(directory, 'run.har'), '{}');
+    await writeFile(
+      join(directory, 'run.har'),
+      JSON.stringify({
+        log: {
+          browser: { name: 'Chrome', version: '151' },
+          pages: [],
+        },
+      })
+    );
     expect(() => validateArtifacts(directory)).toThrow(/visualMetrics/);
   });
 
@@ -119,7 +136,7 @@ describe('storefront sitespeed matrix runner', () => {
         },
       })
     );
-    expect(validateArtifacts(directory)).toMatchObject({
+    expect(validateArtifacts(directory, playableVideo)).toMatchObject({
       video: true,
       har: true,
       visualMetrics: true,
@@ -168,6 +185,7 @@ describe('storefront sitespeed matrix runner', () => {
       join(directory, 'run.har'),
       JSON.stringify({
         log: {
+          browser: { name: 'Chrome', version: '151' },
           pages: [
             {
               _visualMetrics: { FirstVisualChange: 100, LastVisualChange: 200 },
@@ -182,7 +200,7 @@ describe('storefront sitespeed matrix runner', () => {
         },
       })
     );
-    expect(() => validateArtifacts(directory)).toThrow(
+    expect(() => validateArtifacts(directory, playableVideo)).toThrow(
       /failed critical resource/
     );
   });
@@ -193,9 +211,16 @@ describe('storefront sitespeed matrix runner', () => {
     await cleanConsole(directory);
     await writeFile(
       join(directory, 'run.har'),
-      JSON.stringify({ log: { pages: [{ pageTimings: {} }] } })
+      JSON.stringify({
+        log: {
+          browser: { name: 'Chrome', version: '151' },
+          pages: [{ pageTimings: {} }],
+        },
+      })
     );
     await writeFile(join(directory, 'run.mp4'), 'video');
-    expect(() => validateArtifacts(directory)).toThrow(/visualMetrics/);
+    expect(() => validateArtifacts(directory, playableVideo)).toThrow(
+      /visualMetrics/
+    );
   });
 });

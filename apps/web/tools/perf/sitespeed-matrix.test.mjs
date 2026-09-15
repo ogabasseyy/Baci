@@ -20,6 +20,7 @@ it('rejects empty, malformed, duplicate or unsafe matrix entries', () => {
     { profiles: ['mobile', 'mobile'] },
     { routes: [{ family: '../escape', path: '/' }] },
     { routes: [{ family: 'home', path: '//other.test' }] },
+    { routes: [{ family: 'home', path: '/\\other.test' }] },
     { routes: [valid.routes[0], valid.routes[0]] },
   ])
     expect(() => validateMatrix({ ...valid, ...patch })).toThrow(

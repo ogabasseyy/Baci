@@ -13,15 +13,18 @@ type Merchant = Pick<
  * shell independently of below-fold catalog and navigation queries. */
 export async function OgabasseyHomeRecoveryHero({
   merchant,
+  omitMobileCarousel = false,
   productsPromise,
 }: {
   merchant: Merchant;
+  omitMobileCarousel?: boolean;
   productsPromise: ReturnType<typeof loadOgabasseyLaunchProducts>;
 }) {
   const products = await productsPromise;
   return (
     <Hero
       omitDocumentHeading
+      omitMobileCarousel={omitMobileCarousel}
       prioritizeMobileHeroImage
       slides={buildLaunchSlides(products, buildStoreUrl(merchant))}
     />

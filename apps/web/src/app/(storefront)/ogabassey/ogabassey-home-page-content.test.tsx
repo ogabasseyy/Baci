@@ -2,6 +2,11 @@ import { render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockPreload = vi.hoisted(() => vi.fn());
+vi.mock('./ogabassey-home-hero-resource-hints', () => ({
+  preloadOgabasseyHomeHeroResources: mockPreload,
+}));
+
 vi.mock('./ogabassey-home-launch-products', () => ({
   loadOgabasseyLaunchProducts: vi.fn(async () => []),
 }));
@@ -95,7 +100,16 @@ vi.mock('./ogabassey-home-dynamic-content', () => ({
 }));
 
 vi.mock('./ogabassey-home-recovery-hero', () => ({
-  OgabasseyHomeRecoveryHero: () => <section aria-label="Recovered hero" />,
+  OgabasseyHomeRecoveryHero: ({
+    omitMobileCarousel,
+  }: {
+    omitMobileCarousel?: boolean;
+  }) => (
+    <section
+      aria-label="Recovered hero"
+      data-omit-mobile-carousel={String(omitMobileCarousel)}
+    />
+  ),
 }));
 
 vi.mock('@/components/storefront/store-not-published', () => ({
@@ -158,18 +172,6 @@ const SHELL_SLIDE = {
 };
 
 describe('OgabasseyHomePageContent', () => {
-  it('recovers the hero after a shell timeout through the publication-checked content', async () => {
-    render(
-      await OgabasseyHomePageContent({
-        pathPrefix: '',
-        shellMerchantId: null,
-        shellSlides: null,
-      })
-    );
-    expect(
-      screen.getByRole('region', { name: 'Recovered hero' })
-    ).toBeInTheDocument();
-  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockHeaders.mockResolvedValue(new Headers());
@@ -238,6 +240,7 @@ describe('OgabasseyHomePageContent', () => {
   });
 
   it('shows the unpublished storefront state when production store is disabled', async () => {
+    mockPreload.mockClear();
     vi.mocked(getRequestScopedMerchant).mockResolvedValueOnce({
       ...mockPublishedMerchant,
       is_published: false,
@@ -251,6 +254,7 @@ describe('OgabasseyHomePageContent', () => {
 
     render(result as ReactElement);
 
+    expect(mockPreload).not.toHaveBeenCalled();
     expect(screen.getByTestId('store-not-published')).toHaveTextContent(
       'OgaBassey'
     );

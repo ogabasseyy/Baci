@@ -30,6 +30,18 @@ test('rejects a failed font', () => {
   ];
   assert.throws(() => assertLighthouseReport(input), /failed Font/);
 });
+test('rejects failed application requests even when static assets succeed', () => {
+  for (const resourceType of ['XHR', 'Fetch']) {
+    for (const statusCode of [404, 500, -1]) {
+      const input = report();
+      input.audits['network-requests'].details.items.push({
+        resourceType,
+        statusCode,
+      });
+      assert.throws(() => assertLighthouseReport(input), /failed .* request/);
+    }
+  }
+});
 test('rejects absent metrics, network evidence and screenshots', () => {
   for (const key of Object.keys(report().audits)) {
     const input = report();

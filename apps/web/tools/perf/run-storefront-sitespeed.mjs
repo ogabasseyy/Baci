@@ -16,11 +16,13 @@ import { parseArgs } from './sitespeed-cli-options.mjs';
 import { validateMatrix } from './sitespeed-matrix.mjs';
 import {
   prepareSampleDirectory,
+  runKey,
   saveManifest,
 } from './sitespeed-run-output.mjs';
 import { gitMetadata } from './sitespeed-source-metadata.mjs';
 
 export { validateArtifacts } from './sitespeed-artifacts.mjs';
+export { runKey } from './sitespeed-run-output.mjs';
 
 const execFileAsync = promisify(execFile);
 export const SITESPEED_IMAGE =
@@ -70,10 +72,6 @@ export function selectRuns(
       }))
     )
   );
-}
-
-export function runKey(run) {
-  return `${run.profile}/${run.family}/${run.sample}`;
 }
 
 function bytesFree(path) {
@@ -167,20 +165,21 @@ export async function runMatrix({
     .update(readFileSync(matrixFile))
     .digest('hex');
   const metadata = await gitMetadata(cwd);
-  const manifest = existsSync(manifestFile)
-    ? JSON.parse(readFileSync(manifestFile, 'utf8'))
-    : {
-        schemaVersion: 1,
-        image: SITESPEED_IMAGE,
-        sitespeedVersion: '42.7.0',
-        baseUrl,
-        profileMode: 'native (no mobile throttling)',
-        minFreeGiB,
-        buildId,
-        matrixSha256,
-        runs: {},
-        metadata,
-      };
+  const manifest =
+    !dryRun && existsSync(manifestFile)
+      ? JSON.parse(readFileSync(manifestFile, 'utf8'))
+      : {
+          schemaVersion: 1,
+          image: SITESPEED_IMAGE,
+          sitespeedVersion: '42.7.0',
+          baseUrl,
+          profileMode: 'native (no mobile throttling)',
+          minFreeGiB,
+          buildId,
+          matrixSha256,
+          runs: {},
+          metadata,
+        };
   for (const [key, value] of [
     ['image', SITESPEED_IMAGE],
     ['baseUrl', baseUrl],
@@ -209,12 +208,15 @@ export async function runMatrix({
     throw new Error(
       `insufficient free disk: ${(disk.freeBytes / 1024 ** 3).toFixed(2)} GiB; need ${minFreeGiB} GiB`
     );
+  delete manifest.stopReason;
+  saveManifest(manifestFile, manifest);
   let completed = 0;
   for (const run of planned) {
+    const expectedUrl = new URL(run.path, baseUrl).href;
     if (completed >= maxRuns) break;
     if (manifest.runs[run.key]?.status === 'complete') {
       try {
-        validateArtifacts(manifest.runs[run.key].output);
+        validateArtifacts(manifest.runs[run.key].output, { expectedUrl });
         continue;
       } catch {
         manifest.runs[run.key].status = 'pending';
@@ -247,12 +249,11 @@ export async function runMatrix({
       );
       if (typeof execution?.stdout === 'string')
         writeFileSync(join(run.output, 'runner.stdout.log'), execution.stdout);
-      validateArtifacts(run.output);
       manifest.runs[run.key] = {
         ...manifest.runs[run.key],
         status: 'complete',
         completedAt: new Date().toISOString(),
-        artifacts: validateArtifacts(run.output),
+        artifacts: validateArtifacts(run.output, { expectedUrl }),
         stdoutTail:
           typeof execution?.stdout === 'string'
             ? execution.stdout.slice(-4000)

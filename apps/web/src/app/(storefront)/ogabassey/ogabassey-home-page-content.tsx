@@ -95,6 +95,7 @@ export async function OgabasseyHomePageContent({
         <Suspense fallback={null}>
           <OgabasseyHomeRecoveryHero
             merchant={merchant}
+            omitMobileCarousel={omitMobileCarousel}
             productsPromise={loadOgabasseyLaunchProducts(
               merchant.id,
               resolveMerchantCurrencyConfig(merchant)

@@ -7,6 +7,7 @@ import {
   OGABASSEY_TITLE,
 } from '@/config/ogabassey';
 import { OgabasseyHomeCriticalShell } from './ogabassey-home-critical-shell';
+import { preloadOgabasseyHomeHeroResources } from './ogabassey-home-hero-resource-hints';
 import { resolveOgabasseyHomeHeroShell } from './ogabassey-home-hero-shell-data';
 import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
 import { OgabasseyHomeStyleLoader } from './ogabassey-home-style-loader';
@@ -51,6 +52,11 @@ export async function OgabasseyStaticHomePageContent({
   const shellMerchantId =
     heroShell?.status === 'published' ? heroShell.merchantId : null;
   const committedMobileLcpUrl = shellSlides?.[0]?.imageUrl ?? null;
+  // Public immutable asset hints do not render shopping UI. Publication and
+  // tenant checks remain in the request child (see the hero-shell contract).
+  if (committedMobileLcpUrl) {
+    preloadOgabasseyHomeHeroResources(committedMobileLcpUrl);
+  }
   const paintCommittedHero =
     Boolean(committedMobileLcpUrl) && !omitCommittedHero;
 

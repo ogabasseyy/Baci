@@ -20,9 +20,15 @@ export function assertLighthouseReport(report) {
   }
   for (const request of requests) {
     if (
-      !['Image', 'Document', 'Stylesheet', 'Script', 'Font'].includes(
-        request.resourceType
-      )
+      ![
+        'Image',
+        'Document',
+        'Stylesheet',
+        'Script',
+        'Font',
+        'XHR',
+        'Fetch',
+      ].includes(request.resourceType)
     )
       continue;
     if (

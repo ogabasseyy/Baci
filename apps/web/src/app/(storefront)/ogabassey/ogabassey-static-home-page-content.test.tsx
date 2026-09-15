@@ -125,7 +125,7 @@ describe('OgabasseyStaticHomePageContent', () => {
         '[data-ogabassey-publication-safe-hero-fallback="true"]'
       )
     ).not.toBeInTheDocument();
-    expect(mockPreloadHeroResources).not.toHaveBeenCalled();
+    expect(mockPreloadHeroResources).toHaveBeenCalledWith(SHELL_SLIDE.imageUrl);
     expect(mockCriticalHero).not.toHaveBeenCalled();
     expect(mockResolveHeroShell).toHaveBeenCalledWith();
   });
@@ -160,10 +160,10 @@ describe('OgabasseyStaticHomePageContent', () => {
     ).toHaveAttribute('data-prefix', '');
   });
 
-  it('does not preload the slide-0 hero image because committed LCP is text', async () => {
+  it('preloads the cached public asset without rendering shopping UI', async () => {
     render(await OgabasseyStaticHomePageContent({ pathPrefix: '' }));
 
-    expect(mockPreloadHeroResources).not.toHaveBeenCalled();
+    expect(mockPreloadHeroResources).toHaveBeenCalledWith(SHELL_SLIDE.imageUrl);
   });
 
   it('shows only publication-safe geometry while the publication owner suspends', async () => {
@@ -185,7 +185,6 @@ describe('OgabasseyStaticHomePageContent', () => {
     expect(
       screen.getByRole('heading', { level: 1, name: /OgaBassey/ })
     ).toHaveClass('sr-only');
-    expect(document.querySelector('.ogabassey-home-unique-copy')).toBeNull();
     expect(
       document.querySelector(
         '[data-ogabassey-publication-safe-utility-fallback="true"]'

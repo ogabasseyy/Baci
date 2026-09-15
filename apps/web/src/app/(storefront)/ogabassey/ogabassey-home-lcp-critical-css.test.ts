@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { OGABASSEY_HOME_LCP_CRITICAL_CSS } from './ogabassey-home-lcp-critical-css';
 
 describe('OGABASSEY_HOME_LCP_CRITICAL_CSS', () => {
+  it('keeps the footer outside the desktop viewport while main content streams', () => {
+    expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
+      '@media (min-width: 768px) {\n  .ogabassey-storefront-main {\n    min-height: 100svh;\n  }'
+    );
+  });
   it('keeps the empty desktop main on the final theme surface while the hero streams', () => {
     expect(OGABASSEY_HOME_LCP_CRITICAL_CSS).toContain(
       '.ogabassey-storefront-main {\n  background: var(--store-background, #ffffff);\n}'

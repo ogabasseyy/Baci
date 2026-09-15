@@ -18,7 +18,8 @@ export function validateMatrix(matrix) {
         !/^[a-z0-9-]+$/.test(route.family) ||
         typeof route.path !== 'string' ||
         !route.path.startsWith('/') ||
-        route.path.startsWith('//')
+        route.path.startsWith('//') ||
+        route.path.includes('\\')
     ) ||
     new Set(matrix.routes.map((route) => route.family)).size !==
       matrix.routes.length

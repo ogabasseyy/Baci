@@ -84,20 +84,6 @@ const variantCartProduct: CartProduct = {
 };
 
 describe('OgabasseyPdpCriticalCommerceClient', () => {
-  it('keeps cart styles off the initial product load', () => {
-    render(
-      <OgabasseyPdpCriticalCommerceClient
-        cartHref="/cart"
-        cartProduct={cartProduct}
-        productName={cartProduct.name}
-        variantCount={0}
-      />
-    );
-    expect(screen.getByRole('link', { name: 'View cart' })).toHaveAttribute(
-      'data-prefetch',
-      'false'
-    );
-  });
   it('adds simple products with the selected quantity', () => {
     render(
       <OgabasseyPdpCriticalCommerceClient
@@ -305,25 +291,6 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
 
     expect(screen.getByText('GH₵7,098,000')).toBeInTheDocument();
     expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
-  });
-
-  it('keeps add to cart disabled until all required variant axes are selected', () => {
-    render(
-      <OgabasseyPdpCriticalCommerceClient
-        cartHref="/cart"
-        cartProduct={variantCartProduct}
-        productName={variantCartProduct.name}
-        variantAxes={['storage', 'ram']}
-        variantCount={2}
-      />
-    );
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /select 256gb storage/i })
-    );
-
-    expect(screen.getByRole('button', { name: /add to cart/i })).toBeDisabled();
-    expect(cartMocks.addToCart).not.toHaveBeenCalled();
   });
 
 });

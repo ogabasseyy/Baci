@@ -15,9 +15,9 @@ const storefrontCoreCss = readFileSync(cssPath, 'utf8');
  * overrides, because the bug was caused by the base header row clipping the
  * lazily mounted autocomplete layer before desktop/mobile overrides apply.
  */
-const cssRuleFor = (selector: string) => {
+const cssRuleFor = (selector: string, css = storefrontCoreCss) => {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = storefrontCoreCss.match(
+  const match = css.match(
     new RegExp(`${escapedSelector}\\s*\\{(?<body>[^}]*)\\}`)
   );
   return match?.groups?.body ?? '';
@@ -25,10 +25,20 @@ const cssRuleFor = (selector: string) => {
 
 describe('storefront-core OgaBassey navbar layering', () => {
   it('reserves the actual header height at mobile and desktop breakpoints', () => {
-    const headerSlot = cssRuleFor('.ogabassey-header-chrome-loading');
-    expect(headerSlot).toContain('min-height: 132px');
-    expect(storefrontCoreCss).toContain(
-      '@media (min-width: 768px) {\n    .ogabassey-header-chrome-loading {\n      min-height: 128px;'
+    const loadingCss = readFileSync(
+      join(dirname(cssPath), 'storefront-header-loading.css'),
+      'utf8'
+    );
+    expect(storefrontCoreCss).toMatch(
+      /@import\s+['"]\.\/storefront-header-loading\.css['"]\s*;/
+    );
+    const headerSlot = cssRuleFor(
+      '.ogabassey-header-chrome-loading',
+      loadingCss
+    );
+    expect(headerSlot).toMatch(/min-height\s*:\s*132px/);
+    expect(loadingCss).toMatch(
+      /@media\s*\(min-width\s*:\s*768px\)\s*\{\s*\.ogabassey-header-chrome-loading\s*\{\s*min-height\s*:\s*128px;/
     );
   });
 

@@ -14,6 +14,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import z from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
+import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import {
   capturePaymentWithCrypto,
   convertNgnKoboToUsdtCents,
@@ -1031,6 +1032,9 @@ export async function POST(request: NextRequest) {
 
     const data = parseResult.data;
     const redvaultRequested = data.payment_method === 'uba_redvault';
+    const redvaultCustomerAuth = redvaultRequested
+      ? await authenticateApiRequest(request)
+      : null;
     if (redvaultRequested) {
       if (data.gateway && data.gateway !== 'paystack') {
         return createErrorResponse(
@@ -1072,7 +1076,13 @@ export async function POST(request: NextRequest) {
     // reservation below deliberately uses the request-scoped server client so
     // the reservation itself never crosses a service-role boundary.
     const paymentDataClient = redvaultRequested
-      ? await createServerSupabaseClient()
+      ? createStorefrontOrderRpcClient({
+          fallbackClient: await createServerSupabaseClient(),
+          hasCanonicalDeliveryMetadata: false,
+          merchantId: data.merchant_id,
+          redvaultCustomerEmail: data.customer_email,
+          userId: redvaultCustomerAuth?.user?.id ?? null,
+        })
       : createAdminClient();
 
     // Validate order context (order + email) before initiating payment
@@ -1234,7 +1244,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const customerAuth = await authenticateApiRequest(request);
       const fallbackClient = await createServerSupabaseClient();
       const checkout = await initializeRedvaultPaystackCheckout({
         customerEmail: data.customer_email,
@@ -1242,7 +1251,7 @@ export async function POST(request: NextRequest) {
         merchantId,
         orderId: data.order_id,
         redirectUrl: `${protocol}://${merchant.slug}.${rootDomain}/checkout/success`,
-        userId: customerAuth.user?.id ?? null,
+        userId: redvaultCustomerAuth?.user?.id ?? null,
       });
 
       if (checkout.status === 'pending_reconciliation') {

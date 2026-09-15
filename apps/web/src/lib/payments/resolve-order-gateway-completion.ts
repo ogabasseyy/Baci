@@ -33,7 +33,22 @@ export async function resolveOrderGatewayCompletion({
       transactionId,
     });
     if (capture.kind !== 'not_redvault') {
-      if (capture.kind === 'captured_held' && gateway === 'paystack') {
+      if (
+        (capture.kind === 'captured_held' ||
+          capture.kind === 'capture_evidence_review') &&
+        gateway === 'paystack'
+      ) {
+        if (capture.kind === 'capture_evidence_review') {
+          await fileInventoryConfirmationFailureReview({
+            gatewayReference: reference,
+            merchantId,
+            metadata: { reason: capture.reason },
+            orderId,
+            reason: `REDVAULT capture evidence requires review: ${capture.reason}`,
+            transactionId,
+          });
+          return { ok: false as const, outcome: capture };
+        }
         const approved = await verifyAndCompleteRedvaultPayment({
           merchantId,
           orderId,

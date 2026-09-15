@@ -28,7 +28,10 @@ import {
   isCanonicalOrderSubtotalUuidError,
 } from '@/lib/checkout/canonical-order-subtotal';
 import { prepareCheckoutIdempotencyReplay } from '@/lib/checkout/checkout-idempotency-replay';
-import { computeRedvaultOrderQuote } from '@/lib/checkout/compute-redvault-order-quote';
+import {
+  computeRedvaultOrderQuote,
+  type RedvaultOrderQuote,
+} from '@/lib/checkout/compute-redvault-order-quote';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { createRedvaultCheckoutResponse } from '@/lib/checkout/create-redvault-checkout-response';
 import type { createTransactionDiscountProof } from '@/lib/checkout/create-transaction-discount-proof';
@@ -2107,6 +2110,15 @@ export async function POST(request: NextRequest) {
       : null;
 
     if (redvaultRequested) {
+      if (!redvaultOrderRpcClient) {
+        return NextResponse.json(
+          {
+            code: 'REDVAULT_QUOTE_INVALID',
+            error: 'Unable to validate REDVAULT items',
+          },
+          { status: 400 }
+        );
+      }
       if (
         requestedDiscountCode ||
         use_savings_credit ||
@@ -2124,11 +2136,21 @@ export async function POST(request: NextRequest) {
         );
       }
       try {
-        redvaultQuote = await computeRedvaultOrderQuote({
-          items: orderItemsPayload,
-          merchantId: merchant_id,
-          supabase: redvaultOrderRpcClient ?? supabase,
-        });
+        const { data: replayRows, error: replayError } =
+          await redvaultOrderRpcClient.rpc(
+            'get_storefront_redvault_checkout_replay' as never,
+            { p_checkout_key: requestIdempotencyKey } as never
+          );
+        const replay = Array.isArray(replayRows) ? replayRows[0] : replayRows;
+        if (replayError) throw replayError;
+        redvaultQuote =
+          replay && typeof replay === 'object' && 'quote_payload' in replay
+            ? (replay as { quote_payload: RedvaultOrderQuote }).quote_payload
+            : await computeRedvaultOrderQuote({
+                items: orderItemsPayload,
+                merchantId: merchant_id,
+                supabase: redvaultOrderRpcClient,
+              });
       } catch (error) {
         logger.warn({
           error,

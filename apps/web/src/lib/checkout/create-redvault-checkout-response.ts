@@ -31,6 +31,7 @@ export async function createRedvaultCheckoutResponse({
       ? order.items.map((item, index) => ({
           ...(item as Record<string, unknown>),
           condition: quote.lines[index]?.condition ?? null,
+          variant_attributes: quote.lines[index]?.variantAttributes ?? {},
         }))
       : order.items;
     const authoritativeOrder: Record<string, unknown> = JSON.parse(

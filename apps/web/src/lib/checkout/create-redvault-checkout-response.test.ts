@@ -68,7 +68,12 @@ describe('REDVAULT checkout response', () => {
     expect(rpc.mock.calls[0][1].p_order.discount_amount).toBe(10);
     expect(rpc.mock.calls[0][1].p_order.expected_total).toBeNull();
     expect(rpc.mock.calls[0][1].p_route_proof.payload.order.items).toEqual([
-      { condition: 'new', product_id: 'product', quantity: 1 },
+      {
+        condition: 'new',
+        product_id: 'product',
+        quantity: 1,
+        variant_attributes: {},
+      },
     ]);
     expect(
       Object.hasOwn(rpc.mock.calls[0][1].p_order.items[0], 'variant_id')
@@ -180,10 +185,20 @@ describe('REDVAULT checkout response', () => {
     });
 
     expect(rpc.mock.calls[0][1].p_order.items).toEqual([
-      { condition: 'used', product_id: 'product', quantity: 1 },
+      {
+        condition: 'used',
+        product_id: 'product',
+        quantity: 1,
+        variant_attributes: {},
+      },
     ]);
     expect(rpc.mock.calls[0][1].p_route_proof.payload.order.items).toEqual([
-      { condition: 'used', product_id: 'product', quantity: 1 },
+      {
+        condition: 'used',
+        product_id: 'product',
+        quantity: 1,
+        variant_attributes: {},
+      },
     ]);
   });
   it('reports infrastructure failures without exposing their details', async () => {

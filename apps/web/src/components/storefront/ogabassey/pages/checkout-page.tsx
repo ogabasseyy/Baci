@@ -1787,18 +1787,23 @@ export const CheckoutPage: React.FC = () => {
     if (paymentMethod === 'uba_redvault' && redvaultOrderReady) {
       setIsProcessing(true);
       setRedvaultStatus('pending');
-      const paymentResult = await initializeRedvaultPayment({
-        merchantId: merchant?.id ?? '',
-        orderId: redvaultOrderReady.orderId,
-        currency: redvaultOrderReady.currency,
-        customerEmail: redvaultOrderReady.customerEmail,
-        customerName: redvaultOrderReady.customerName,
-        customerPhone: redvaultOrderReady.customerPhone,
-        billingAddress: redvaultOrderReady.billingAddress,
-      }).catch((error: unknown) => {
+      let paymentResult: Awaited<ReturnType<typeof initializeRedvaultPayment>>;
+      try {
+        paymentResult = await initializeRedvaultPayment({
+          merchantId: merchant?.id ?? '',
+          orderId: redvaultOrderReady.orderId,
+          currency: redvaultOrderReady.currency,
+          customerEmail: redvaultOrderReady.customerEmail,
+          customerName: redvaultOrderReady.customerName,
+          customerPhone: redvaultOrderReady.customerPhone,
+          billingAddress: redvaultOrderReady.billingAddress,
+        });
+      } catch {
         setRedvaultStatus('error');
-        throw error;
-      });
+        setIsProcessing(false);
+        isOrderInFlightRef.current = false;
+        return;
+      }
       setRedvaultOrderReady(null);
       if (paymentResult.kind === 'pending_reconciliation') {
         setIsProcessing(false);

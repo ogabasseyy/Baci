@@ -25,7 +25,7 @@ export function RedvaultOrderReview({
   onClose,
 }: {
   input: RedvaultReviewInput | null;
-  onClose: () => void;
+  onClose: (options?: { cancel?: boolean }) => void;
 }) {
   return input ? (
     <RedvaultOrderReviewContent
@@ -41,7 +41,7 @@ function RedvaultOrderReviewContent({
   onClose,
 }: {
   input: RedvaultReviewInput;
-  onClose: () => void;
+  onClose: (options?: { cancel?: boolean }) => void;
 }) {
   const { colors } = useTheme();
   const [status, setStatus] = useState<'idle' | 'pending' | 'error'>('idle');
@@ -77,7 +77,7 @@ function RedvaultOrderReviewContent({
       if (!active.current) return;
       if (result === 'ready') {
         input.onInitializationSuccess?.();
-        onClose();
+        onClose({ cancel: false });
       }
     } catch (error) {
       if (!active.current) return;

@@ -17,20 +17,22 @@ export function useRedvaultReview({
     useState<RedvaultReviewInput | null>(null);
   const apiClientRef = useRef(createStorefrontCustomerApiClient());
 
-  const closeRedvaultReview = async () => {
+  const closeRedvaultReview = async (options?: { cancel?: boolean }) => {
     if (!redvaultReview) return;
-    try {
-      await apiClientRef.current.fetchJson({
-        body: { reason: 'Customer cancelled before starting UBA payment' },
-        method: 'POST',
-        path: `/api/storefront/account/orders/${redvaultReview.orderResponse.order.id}/cancel`,
-      });
-    } catch {
-      Alert.alert(
-        'Order still open',
-        'We could not release this order yet. Please keep this screen open and try again.'
-      );
-      return;
+    if (options?.cancel !== false) {
+      try {
+        await apiClientRef.current.fetchJson({
+          body: { reason: 'Customer cancelled before starting UBA payment' },
+          method: 'POST',
+          path: `/api/storefront/account/orders/${redvaultReview.orderResponse.order.id}/cancel`,
+        });
+      } catch {
+        Alert.alert(
+          'Order still open',
+          'We could not release this order yet. Please keep this screen open and try again.'
+        );
+        return;
+      }
     }
     setRedvaultReview(null);
     resetPaymentSelection();

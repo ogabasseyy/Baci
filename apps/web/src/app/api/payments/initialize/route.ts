@@ -1215,17 +1215,42 @@ export async function POST(request: NextRequest) {
     // Fetch merchant
     const { data: merchant, error: merchantError } = await paymentDataClient
       .from('merchants')
-      .select('id, business_name, slug, paystack_subaccount_code')
+      .select(
+        redvaultRequested
+          ? 'id, business_name, slug'
+          : 'id, business_name, slug, paystack_subaccount_code'
+      )
       .eq('id', merchantId)
       .single();
 
-    if (merchantError || !merchant) {
+    const { data: paystackSubaccount, error: paystackSubaccountError } =
+      redvaultRequested
+        ? await paymentDataClient.rpc(
+            'get_storefront_redvault_paystack_subaccount',
+            { p_merchant_id: merchantId }
+          )
+        : {
+            data:
+              merchant && typeof merchant === 'object'
+                ? (merchant as { paystack_subaccount_code?: unknown })
+                    .paystack_subaccount_code
+                : null,
+            error: null,
+          };
+
+    if (merchantError || paystackSubaccountError || !merchant) {
       return createErrorResponse(
         'Merchant not found',
         'MERCHANT_NOT_FOUND',
         404
       );
     }
+
+    const merchantWithPaystack = {
+      ...merchant,
+      paystack_subaccount_code:
+        typeof paystackSubaccount === 'string' ? paystackSubaccount : null,
+    };
 
     const trackingToken =
       typeof orderSnapshot.tracking_token === 'string'
@@ -1236,7 +1261,7 @@ export async function POST(request: NextRequest) {
     const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
 
     if (orderRequiresRedvault) {
-      if (!merchant.paystack_subaccount_code) {
+      if (!merchantWithPaystack.paystack_subaccount_code) {
         return createErrorResponse(
           'Paystack is not configured for this merchant',
           'GATEWAY_NOT_CONFIGURED',
@@ -1250,7 +1275,7 @@ export async function POST(request: NextRequest) {
         fallbackClient,
         merchantId,
         orderId: data.order_id,
-        redirectUrl: `${protocol}://${merchant.slug}.${rootDomain}/checkout/success`,
+        redirectUrl: `${protocol}://${merchantWithPaystack.slug}.${rootDomain}/checkout/success`,
         userId: redvaultCustomerAuth?.user?.id ?? null,
       });
 
@@ -1310,7 +1335,8 @@ export async function POST(request: NextRequest) {
     const notificationUrl = `${protocol}://${rootDomain}/api/payments/webhook`;
 
     // Select gateway
-    const hasPaystackSubaccount = !!merchant.paystack_subaccount_code;
+    const hasPaystackSubaccount =
+      !!merchantWithPaystack.paystack_subaccount_code;
     const gateway: PaymentGateway =
       data.payment_type === 'dva'
         ? 'paystack'
@@ -1456,7 +1482,7 @@ export async function POST(request: NextRequest) {
           break;
 
         case 'paystack':
-          if (!merchant.paystack_subaccount_code) {
+          if (!merchantWithPaystack.paystack_subaccount_code) {
             return createErrorResponse(
               'Paystack is not configured for this merchant',
               'GATEWAY_NOT_CONFIGURED',
@@ -1501,7 +1527,7 @@ export async function POST(request: NextRequest) {
                 last_name: lastName,
                 phone: paymentData.customer_phone || '',
               },
-              { subaccount: merchant.paystack_subaccount_code }
+              { subaccount: merchantWithPaystack.paystack_subaccount_code }
             );
 
             const fees = calculatePaystackFee(
@@ -1548,7 +1574,7 @@ export async function POST(request: NextRequest) {
           } else {
             paymentResult = await initializePaystack(
               paymentData,
-              merchant,
+              merchantWithPaystack,
               gatewaySettings,
               redirectUrl,
               reference,

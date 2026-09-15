@@ -1,3 +1,6 @@
+'use client';
+
+import { useEffect } from 'react';
 import { safeJsonLdStringify } from '@/lib/sanitize-json-ld';
 import { buildStorefrontSpeculationRules } from '@/lib/storefront/speculation-rules';
 
@@ -10,10 +13,11 @@ interface StorefrontSpeculationRulesProps {
 }
 
 /**
- * Emits the storefront Speculation Rules (SPEC-RULES) as an inline
- * `<script type="speculationrules">` in the first-flush HTML.
+ * Registers rules after hydration using a fresh native script. Scripts moved
+ * through streaming HTML insertion can be ignored by Chrome; merely having
+ * a script in the React subtree does not prove registration.
  *
- * Server Component, mounted from the OgaBassey template layout: the URL
+ * Mounted from the OgaBassey template layout: the URL
  * patterns are template-structural (PDP = `/:category/:product`, listing =
  * `/:category`), so they apply to any merchant on this template. The storefront
  * CSP allows inline scripts (`script-src 'unsafe-inline'`), so no nonce is
@@ -37,8 +41,15 @@ interface StorefrontSpeculationRulesProps {
 export function StorefrontSpeculationRules({
   basePath,
 }: StorefrontSpeculationRulesProps) {
-  const rules = buildStorefrontSpeculationRules(basePath);
-  return (
-    <script type="speculationrules">{safeJsonLdStringify(rules)}</script>
-  );
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.type = 'speculationrules';
+    script.textContent = safeJsonLdStringify(
+      buildStorefrontSpeculationRules(basePath)
+    );
+    document.head.append(script);
+    return () => script.remove();
+  }, [basePath]);
+
+  return null;
 }

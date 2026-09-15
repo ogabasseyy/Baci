@@ -83,7 +83,7 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(fullCss).toMatch(/@source\s+["']\.\/\[slug\]\/\(catalog\)["']/);
   });
 
-  it('keeps listing, utility, and blog Tailwind sheets off the render-blocking layout graph', () => {
+  it('defers shared listing styles but loads scoped blog styles before first paint', () => {
     const listingLayout = readStorefrontFile(
       '[slug]/(catalog)/(listing)/layout.tsx'
     );
@@ -102,12 +102,12 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(utilityLayout).not.toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-full\.css['"]/
     );
-    expect(blogLayout).not.toMatch(
+    expect(blogLayout).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-blog\.css['"]/
     );
     expect(listingLayout).toContain('StorefrontFullStyleLoader');
     expect(utilityLayout).toContain('StorefrontFullStyleLoader');
-    expect(blogLayout).toContain('StorefrontBlogStyleLoader');
+    expect(blogLayout).not.toContain('StorefrontBlogStyleLoader');
     expect(utilityLayout).not.toContain('storefront-eager-full-css-layout');
     expect(blogLayout).not.toContain('storefront-eager-blog-css-layout');
     expect(blogListingQuery).not.toContain('storefront-eager-blog-css-layout');
@@ -117,7 +117,16 @@ describe('storefront CSS partitioning (route sheets)', () => {
     const comparePage = readStorefrontFile(
       '[slug]/(catalog)/(listing)/compare/page.tsx'
     );
+    const compareLayout = readStorefrontFile(
+      '[slug]/(catalog)/(listing)/compare/layout.tsx'
+    );
+    expect(
+      comparePage.match(
+        /var\(--store-background,#ffffff\).*?var\(--store-background-text,#111827\)/g
+      )
+    ).toHaveLength(2);
     expect(comparePage).not.toContain('storefront-eager-full-css-layout');
+    expect(compareLayout).toContain('StorefrontEagerFullCssLayout');
   });
 
   it('locks committed LCP copy to the Inter fallback face without a render-blocking CSS file', () => {

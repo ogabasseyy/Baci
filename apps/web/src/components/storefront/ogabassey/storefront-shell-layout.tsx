@@ -28,7 +28,10 @@ export function StorefrontShellLayout({
         style={getOgabasseyLayoutStyle(merchant)}
       >
         {headerChrome}
-        <main id="main-content" className="ogabassey-storefront-main">
+        <main
+          id="main-content"
+          className="ogabassey-storefront-main"
+        >
           {children}
         </main>
         {footerChrome}

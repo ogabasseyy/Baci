@@ -5,15 +5,17 @@
  * must not change font-size/line-clamp after those sheets arrive.
  */
 export const OGABASSEY_HOME_LCP_CRITICAL_CSS = `
+.ogabassey-storefront-main {
+  background: var(--store-background, #ffffff);
+}
 @media (max-width: 767px) {
   /* Keep the footer below streaming content, not a blank viewport above it. */
   .ogabassey-storefront-main {
     min-height: calc(100svh - 132px);
-    background: var(--store-background, #ffffff);
   }
   .storefront-shell-loading {
     min-height: 132px;
-    background: var(--storefront-shell-background, #0f0f0f) !important;
+    background: var(--store-background, #ffffff) !important;
   }
   [data-ogabassey-desktop-hero] { display: none !important; }
   .ogabassey-home-lcp-desktop-title { display: none !important; }
@@ -22,6 +24,9 @@ footer[aria-label="Semantic storefront footer"] {
   min-height: 1100px;
 }
 @media (min-width: 768px) {
+  .ogabassey-storefront-main {
+    min-height: 100svh;
+  }
   footer[aria-label="Semantic storefront footer"] {
     min-height: 910px;
   }

@@ -48,7 +48,7 @@ describe('StorefrontNotFound', () => {
     render(await StorefrontNotFound());
 
     expect(screen.getByText('Missing storefront page')).toBeInTheDocument();
-    expect(screen.getByTestId('eager-full-css')).toBeInTheDocument();
+    expect(screen.queryByTestId('eager-full-css')).not.toBeInTheDocument();
     expect(themeProviderAppearances).toEqual([
       { mode: 'system', variant: 'ogabassey' },
     ]);

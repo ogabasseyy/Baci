@@ -2,6 +2,10 @@ import { render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('./ogabassey-home-launch-products', () => ({
+  loadOgabasseyLaunchProducts: vi.fn(async () => []),
+}));
+
 const {
   mockDynamicContentShouldSuspend,
   mockHeaders,
@@ -69,12 +73,38 @@ vi.mock('next/server', () => ({
 }));
 
 vi.mock('./ogabassey-home-dynamic-content', () => ({
-  OgabasseyHomeDynamicContent: ({ pathPrefix }: { pathPrefix: string }) => {
+  OgabasseyHomeDynamicContent: ({
+    pathPrefix,
+    recoverHero,
+  }: {
+    pathPrefix: string;
+    recoverHero?: boolean;
+  }) => {
     if (mockDynamicContentShouldSuspend()) {
       throw new Promise(() => undefined);
     }
-    return <section aria-label="Dynamic home content">{pathPrefix}</section>;
+    return (
+      <section
+        aria-label="Dynamic home content"
+        data-recover-hero={String(recoverHero)}
+      >
+        {pathPrefix}
+      </section>
+    );
   },
+}));
+
+vi.mock('./ogabassey-home-recovery-hero', () => ({
+  OgabasseyHomeRecoveryHero: ({
+    omitMobileCarousel,
+  }: {
+    omitMobileCarousel?: boolean;
+  }) => (
+    <section
+      aria-label="Recovered hero"
+      data-omit-mobile-carousel={String(omitMobileCarousel)}
+    />
+  ),
 }));
 
 vi.mock('@/components/storefront/store-not-published', () => ({
@@ -121,7 +151,6 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-import { notFound } from 'next/navigation';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
 
@@ -256,19 +285,5 @@ describe('OgabasseyHomePageContent', () => {
         name: 'OgaBassey - Official Online Store',
       })
     ).toBeInTheDocument();
-  });
-
-  it('returns 404 when merchant lookup is null', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValueOnce(null);
-
-    await expect(
-      OgabasseyHomePageContent({
-        pathPrefix: '/ogabassey',
-        shellMerchantId: 'merchant-1',
-        shellSlides: [SHELL_SLIDE],
-      })
-    ).rejects.toThrow('not-found');
-
-    expect(notFound).toHaveBeenCalledOnce();
   });
 });

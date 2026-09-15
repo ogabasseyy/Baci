@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
+import tailwind from '@tailwindcss/postcss';
 import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 import { OGABASSEY_HOME_CAROUSEL_CRITICAL_CSS } from './ogabassey-home-carousel-critical-css';
@@ -7,6 +8,22 @@ import { OGABASSEY_HOME_CHROME_CRITICAL_CSS } from './ogabassey-home-chrome-crit
 import { OGABASSEY_HOME_LCP_CRITICAL_CSS } from './ogabassey-home-lcp-critical-css';
 
 describe('homepage first-screen CSS', () => {
+  it('inlines the extracted loading geometry with unchanged responsive heights', async () => {
+    const from = 'src/app/(storefront)/storefront-core.css';
+    const result = await postcss([tailwind({ optimize: true })]).process(
+      readFileSync(from, 'utf8'),
+      { from, map: false }
+    );
+    const heights: string[] = [];
+    result.root.walkRules('.ogabassey-header-chrome-loading', (rule) => {
+      rule.walkDecls('min-height', (declaration) => {
+        heights.push(declaration.value);
+      });
+    });
+    expect(heights).toEqual(['132px', '128px']);
+    expect(result.css).not.toContain('storefront-header-loading.css');
+  });
+
   it('keeps initial chrome declarations identical to the full stylesheet', () => {
     const core = postcss.parse(
       readFileSync('src/app/(storefront)/storefront-core.css', 'utf8')

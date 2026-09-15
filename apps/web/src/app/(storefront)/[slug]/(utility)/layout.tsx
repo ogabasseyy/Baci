@@ -1,3 +1,5 @@
+import '@/app/(storefront)/storefront-core.css';
+import '@/app/(storefront)/storefront-utility.css';
 import type { ReactNode } from 'react';
 import { StorefrontFullStyleLoader } from '@/app/(storefront)/storefront-full-style-loader';
 
@@ -8,10 +10,8 @@ import { StorefrontFullStyleLoader } from '@/app/(storefront)/storefront-full-st
 // static-shell validation so /repair, /imei-check, and /repairs can paint their
 // LCP copy from colocated loading.tsx in the visible PPR shell.
 //
-// Do not import the eager full-css layout from this file. Next treats that
-// module's static CSS imports as render-blocking for every utility route,
-// including OgaBassey /repair and /imei-check. Non-LCP siblings (quiz, swap,
-// status) keep their own eager layouts.
+// Ship scoped essential styles before paint. The legacy full sheet remains
+// deferred for secondary controls; initial appearance cannot depend on input.
 export const unstable_instant = false;
 
 export default function StorefrontFullCssLayout({

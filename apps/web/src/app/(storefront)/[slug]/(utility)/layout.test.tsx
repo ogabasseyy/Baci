@@ -5,6 +5,11 @@ const { mockFullStorefrontCssImport } = vi.hoisted(() => ({
   mockFullStorefrontCssImport: vi.fn(),
 }));
 
+const essentialStyles = vi.hoisted(() => vi.fn());
+vi.mock('@/app/(storefront)/storefront-utility.css', () => {
+  essentialStyles();
+  return {};
+});
 vi.mock('@/app/(storefront)/storefront-core.css', () => ({}));
 vi.mock('@/app/(storefront)/storefront-full.css', () => {
   mockFullStorefrontCssImport();
@@ -22,6 +27,9 @@ function stubMatchMedia(matches: boolean) {
 }
 
 describe('utility StorefrontFullCssLayout', () => {
+  it('loads essential utility styles before rendering or input', () => {
+    expect(essentialStyles).toHaveBeenCalledOnce();
+  });
   beforeEach(() => {
     mockFullStorefrontCssImport.mockClear();
     stubMatchMedia(false);

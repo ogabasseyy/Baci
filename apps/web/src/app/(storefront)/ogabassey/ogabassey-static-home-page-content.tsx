@@ -6,16 +6,17 @@ import {
   OGABASSEY_SOCIAL_IMAGE_URL,
   OGABASSEY_TITLE,
 } from '@/config/ogabassey';
+import { OgabasseyHomeCriticalShell } from './ogabassey-home-critical-shell';
+import { preloadOgabasseyHomeHeroResources } from './ogabassey-home-hero-resource-hints';
 import { resolveOgabasseyHomeHeroShell } from './ogabassey-home-hero-shell-data';
 import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
 import { OgabasseyHomeStyleLoader } from './ogabassey-home-style-loader';
-import { OgabasseyPublicationSafeHeroFallback } from './ogabassey-publication-safe-hero-fallback';
 
 interface OgabasseyStaticHomePageContentProps {
   /** Static per-route prefix for request-streamed storefront links: '' for the
    *  apex domain and '/ogabassey' for the path route. */
   pathPrefix: string;
-  /** Set when the parent page already committed the brand-text LCP sibling. */
+  /** Set when the parent page already supplied critical styles and heading. */
   omitCommittedHero?: boolean;
 }
 
@@ -43,17 +44,19 @@ export async function OgabasseyStaticHomePageContent({
   // Cached-only lookup (never request APIs — those stay in the dynamic
   // subtree). Slides are inert data here: only the request-scoped subtree may
   // turn them into shopping UI after it confirms the current publication
-  // state. The committed mobile hero is a Suspense sibling (blog listing
-  // pattern): text LCP in the static shell, no CDN preload racing CSS. The
-  // streamed Hero follows the compact brand shell in normal document flow so
-  // launch products are visible as soon as publication is confirmed. Brand copy
-  // only in the committed slot — no product names, prices, links, or controls.
+  // state. The early shell supplies styles and an accessible heading only;
+  // the publication-checked Hero owns the single visible banner.
   const heroShell = await resolveOgabasseyHomeHeroShell();
   const shellSlides =
     heroShell?.status === 'published' ? heroShell.slides : null;
   const shellMerchantId =
     heroShell?.status === 'published' ? heroShell.merchantId : null;
   const committedMobileLcpUrl = shellSlides?.[0]?.imageUrl ?? null;
+  // Public immutable asset hints do not render shopping UI. Publication and
+  // tenant checks remain in the request child (see the hero-shell contract).
+  if (committedMobileLcpUrl) {
+    preloadOgabasseyHomeHeroResources(committedMobileLcpUrl);
+  }
   const paintCommittedHero =
     Boolean(committedMobileLcpUrl) && !omitCommittedHero;
 
@@ -64,11 +67,8 @@ export async function OgabasseyStaticHomePageContent({
       {paintCommittedHero && committedMobileLcpUrl ? (
         <>
           <div data-ogabassey-home-lcp-shell="true">
-            <OgabasseyPublicationSafeHeroFallback
-              heroImageUrl={committedMobileLcpUrl}
-            />
+            <OgabasseyHomeCriticalShell />
           </div>
-          <p className="ogabassey-home-unique-copy">{OGABASSEY_DESCRIPTION}</p>
           <Suspense fallback={null}>
             <OgabasseyHomePageContent
               omitDocumentHeading

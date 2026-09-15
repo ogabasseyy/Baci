@@ -33,9 +33,9 @@ export interface ScheduleIdleBootOptions {
  *   boots instrumentation promptly instead of waiting for idle), or
  * - the `timeoutMs` hard fallback.
  *
- * This mirrors the DeferredPlatformInsights gating so expensive analytics work
- * (PostHog init: session recording, heatmaps, autocapture, dead-click capture)
- * boots after first paint without missing an early interaction.
+ * This keeps expensive analytics work (PostHog init: session recording,
+ * heatmaps, autocapture, dead-click capture) off the initial critical path
+ * without missing an early interaction.
  *
  * While the document is being speculatively prerendered
  * (`document.prerendering === true`, e.g. Cloudflare Speed Brain), the gate is

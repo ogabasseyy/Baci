@@ -231,7 +231,10 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: () => createMockSupabase(),
+  createClient: () => ({
+    ...createMockSupabase(),
+    ...createMockAdminClient(),
+  }),
 }));
 
 // ---- Import handler AFTER mocks ----

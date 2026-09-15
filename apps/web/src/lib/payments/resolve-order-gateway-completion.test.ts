@@ -100,6 +100,11 @@ describe('gateway completion routing', () => {
     await resolveOrderGatewayCompletion(input);
     expect(mocks.verify).not.toHaveBeenCalled();
     expect(mocks.complete).not.toHaveBeenCalled();
+    expect(mocks.fileReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'REDVAULT capture evidence requires review: undefined',
+      })
+    );
   });
   it('fails closed on approval uncertainty instead of retrying ordinary completion', async () => {
     mocks.verify.mockRejectedValue(new Error('response lost'));

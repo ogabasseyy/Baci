@@ -183,6 +183,10 @@ export function RedvaultPaymentOption({
                   <dd>{formatKobo(summary.giftWrappingKobo)}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
+                  <dt>Device assurance</dt>
+                  <dd>{formatKobo(summary.assuranceFeeKobo)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
                   <dt>Total due</dt>
                   <dd>{formatKobo(summary.payableKobo)}</dd>
                 </div>

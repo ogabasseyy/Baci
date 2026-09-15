@@ -107,6 +107,7 @@ describe('RedvaultPaymentOption', () => {
     expect(screen.getByText('₦150,000.00')).toBeInTheDocument();
     expect(screen.getByText('₦100,000.00')).toBeInTheDocument();
     expect(screen.getByText('-₦5,000.00')).toBeInTheDocument();
+    expect(screen.getByText('₦0.00')).toBeInTheDocument();
     expect(screen.getByText('₦159,750.00')).toBeInTheDocument();
   });
 

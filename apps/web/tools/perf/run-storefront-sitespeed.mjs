@@ -1,18 +1,13 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  statfsSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, readFileSync, statfsSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { validateArtifacts } from './sitespeed-artifacts.mjs';
 import { assertServedBuild } from './sitespeed-build-identity.mjs';
 import { parseArgs } from './sitespeed-cli-options.mjs';
+import { loadResumableManifest } from './sitespeed-manifest.mjs';
 import { validateMatrix } from './sitespeed-matrix.mjs';
 import {
   prepareSampleDirectory,
@@ -165,21 +160,22 @@ export async function runMatrix({
     .update(readFileSync(matrixFile))
     .digest('hex');
   const metadata = await gitMetadata(cwd);
-  const manifest =
-    !dryRun && existsSync(manifestFile)
-      ? JSON.parse(readFileSync(manifestFile, 'utf8'))
-      : {
-          schemaVersion: 1,
-          image: SITESPEED_IMAGE,
-          sitespeedVersion: '42.7.0',
-          baseUrl,
-          profileMode: 'native (no mobile throttling)',
-          minFreeGiB,
-          buildId,
-          matrixSha256,
-          runs: {},
-          metadata,
-        };
+  const manifest = loadResumableManifest(
+    manifestFile,
+    {
+      schemaVersion: 1,
+      image: SITESPEED_IMAGE,
+      sitespeedVersion: '42.7.0',
+      baseUrl,
+      profileMode: 'native (no mobile throttling)',
+      minFreeGiB,
+      buildId,
+      matrixSha256,
+      runs: {},
+      metadata,
+    },
+    dryRun
+  );
   for (const [key, value] of [
     ['image', SITESPEED_IMAGE],
     ['baseUrl', baseUrl],

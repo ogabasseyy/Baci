@@ -140,6 +140,12 @@ export function validateArtifacts(
           throw new Error('soft-404/application error evidence in HAR');
       }
       validMetrics = pages.some((page) => {
+        const finalUrl = page?._url || page?.title;
+        if (
+          expectedUrl &&
+          (!finalUrl || new URL(finalUrl).href !== new URL(expectedUrl).href)
+        )
+          return false;
         const metrics = page._visualMetrics;
         return (
           metrics &&

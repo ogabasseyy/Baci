@@ -7,6 +7,43 @@ import { validateArtifacts } from './sitespeed-artifacts.mjs';
 
 const playableVideo = { videoProbe: () => ({ ok: true, duration: 1 }) };
 
+it('does not combine a matching URL with visual metrics from another HAR', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'sitespeed-page-binding-'));
+  try {
+    for (const [name, page] of [
+      ['matching', { _url: 'http://served/compare' }],
+      [
+        'other',
+        {
+          _url: 'http://served/blog',
+          _visualMetrics: { FirstVisualChange: 10, LastVisualChange: 20 },
+        },
+      ],
+    ]) {
+      await writeFile(
+        join(root, `${name}.har`),
+        JSON.stringify({
+          log: {
+            browser: { name: 'Chrome', version: '152' },
+            pages: [page],
+            entries: [],
+          },
+        })
+      );
+    }
+    await writeFile(join(root, 'run.mp4'), 'video');
+    await writeFile(join(root, 'console-1.json.gz'), gzipSync('[]'));
+    expect(() =>
+      validateArtifacts(root, {
+        ...playableVideo,
+        expectedUrl: 'http://served/compare',
+      })
+    ).toThrow(/visualMetrics/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it('scans HARs after the first valid sample and rejects a later failed critical resource', async () => {
   const root = await mkdtemp(join(tmpdir(), 'sitespeed-har-scan-'));
   try {

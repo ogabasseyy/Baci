@@ -1,7 +1,13 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
+import {
+  claimCheckoutPurchaseTracking,
+  clearRedvaultPurchaseTrackingContext,
+  loadRedvaultPurchaseTrackingContext,
+} from '@/lib/claim-checkout-purchase-tracking';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
 import { verifyRedvaultPayment } from '@/services/redvault';
+import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
 import {
   beginSavingsAuthorizationCompletion,
@@ -153,6 +159,20 @@ export function createPaymentGatewayCompletionHandlers({
           return;
         }
         verifiedOrderNumber = outcome.orderNumber || orderNumber;
+        const trackingContext = await loadRedvaultPurchaseTrackingContext(
+          orderId || ''
+        );
+        if (
+          trackingContext &&
+          (await claimCheckoutPurchaseTracking(orderId || ''))
+        ) {
+          trackCheckoutRoutePurchaseCompleted({
+            ...trackingContext,
+            orderId: orderId || '',
+            orderNumber: verifiedOrderNumber || trackingContext.orderNumber,
+          });
+          await clearRedvaultPurchaseTrackingContext(orderId || '');
+        }
       } catch {
         if (!isMountedRef.current) return;
         setErrorMessage(

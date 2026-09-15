@@ -60,6 +60,7 @@ interface PaymentStepProps {
   redvaultAvailable: boolean;
   redvaultStatus: RedvaultPaymentStatus;
   redvaultSummary: RedvaultQuoteSummary | null;
+  redvaultOrderReady: boolean;
 }
 
 export function PaymentStep({
@@ -87,6 +88,7 @@ export function PaymentStep({
   redvaultAvailable,
   redvaultStatus,
   redvaultSummary,
+  redvaultOrderReady,
 }: PaymentStepProps) {
   // Paystack (and its DVA-backed bank transfer) settle NGN only — the
   // initialize API rejects them for non-NGN orders with UNSUPPORTED_CURRENCY,
@@ -216,6 +218,8 @@ export function PaymentStep({
                 'Generate Invoice'
               ) : paymentMethod === 'payforme' ? (
                 'Send Payment Link'
+              ) : paymentMethod === 'uba_redvault' && redvaultOrderReady ? (
+                'Review and continue to UBA'
               ) : (
                 'Place Order'
               )}

@@ -3779,12 +3779,19 @@ describe('CheckoutPage', () => {
       setValues: vi.fn(),
       clear: vi.fn(),
     } as unknown as ReturnType<typeof usePersistedForm>;
+    const routerPush = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: routerPush,
+      back: vi.fn(),
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
 
     const submitAndCapture = async (tab: 'full' | 'installments', method: string) => {
+      const clearCart = vi.fn();
       vi.mocked(useCart).mockReturnValue({
         cart: [{ id: 'item-1', name: 'Test Product', price: 5000, quantity: 1, image: '', slug: 'test-product' }],
         cartTotal: 5000,
-        clearCart: vi.fn(),
+        clearCart,
         isHydrated: true,
       } as unknown as ReturnType<typeof useCart>);
       vi.mocked(useMerchantSafe).mockReturnValue({ merchant, basePath: '/ogabassey' } as unknown as ReturnType<typeof useMerchantSafe>);
@@ -3830,6 +3837,29 @@ describe('CheckoutPage', () => {
         await act(async () => {
           options?.onError?.({ success: false, message: 'declined' });
         });
+        mockCaptureCheckoutFunnelEventOnce.mockClear();
+        await act(async () => {
+          await options?.onSuccess?.({
+            order_no: 'credpal-order-pending',
+            item: 'Test Product',
+            amount: 5000,
+            status: 'pending',
+            channel: 'web',
+            customer: {
+              full_name: 'Ada Buyer',
+              email: 'ada@example.com',
+              phone_no: '+2348123456789',
+            },
+            created_at: '2026-09-14T00:00:00.000Z',
+          });
+        });
+        expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+          'payment_completed',
+          expect.anything(),
+          expect.anything()
+        );
+        expect(clearCart).not.toHaveBeenCalled();
+        expect(routerPush).not.toHaveBeenCalled();
         await act(async () => {
           await options?.onSuccess?.({
             order_no: 'credpal-order-1',

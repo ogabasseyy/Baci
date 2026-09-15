@@ -2666,6 +2666,9 @@ export const CheckoutPage: React.FC = () => {
           customerPhone,
           onSuccess: async (data) => {
             console.log('CredPal success:', data);
+            if (data.status !== 'success') {
+              return;
+            }
             captureCheckoutFunnelEventOnce(
               CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
               order.id,

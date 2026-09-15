@@ -19,14 +19,14 @@ interface CheckoutTrackingItem {
 export interface CheckoutPurchaseInput {
   customerEmail?: string;
   customerPhone?: string;
-  items: CheckoutTrackingItem[];
+  items?: CheckoutTrackingItem[];
   orderId: string;
-  orderNumber: string;
+  orderNumber?: string;
   paymentMethod: string;
-  shipping: number;
-  subtotal: number;
-  tax: number;
-  total: number;
+  shipping?: number;
+  subtotal?: number;
+  tax?: number;
+  total?: number;
   userId?: string;
 }
 

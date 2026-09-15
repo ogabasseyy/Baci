@@ -105,7 +105,7 @@ export function validateArtifacts(
         const kind = entry._resourceType ?? entry.response?._resourceType ?? '';
         const mime = entry.response?.content?.mimeType ?? '';
         const critical =
-          /^(document|stylesheet|script|font|image)$/i.test(kind) ||
+          /^(document|stylesheet|script|font|image|fetch|xhr)$/i.test(kind) ||
           /^(image\/|font\/|text\/css|text\/html|application\/(javascript|x-javascript))/i.test(
             mime
           );

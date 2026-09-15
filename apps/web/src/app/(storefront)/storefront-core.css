@@ -1,4 +1,5 @@
 @import "./storefront-ogabassey-dark-mode.css";
+@import "./storefront-header-loading.css";
 /* Deferred with this sheet so first-paint CSS has no woff2 url() for Lantern. */
 @import "../inter-naira-font.css";
 
@@ -414,12 +415,6 @@
     box-sizing: border-box;
     padding: 0.75rem 1rem;
     width: 100%;
-  }
-
-  /* Keep main anchored while the header Suspense fallback is replaced by the
-     real two-row desktop chrome. The mobile row is 132px; desktop is 128px. */
-  .ogabassey-header-chrome-loading {
-    min-height: 132px;
   }
 
   .storefront-shell-loading__bar {
@@ -979,10 +974,6 @@
   }
 
   @media (min-width: 768px) {
-    .ogabassey-header-chrome-loading {
-      min-height: 128px;
-    }
-
     .ogabassey-navbar__primary-row {
       align-items: center;
       flex-direction: row;

@@ -7,6 +7,42 @@ import { validateArtifacts } from './sitespeed-artifacts.mjs';
 
 const playableVideo = { videoProbe: () => ({ ok: true, duration: 1 }) };
 
+it.each([
+  'Fetch',
+  'XHR',
+])('rejects failed %s application requests', async (kind) => {
+  const root = await mkdtemp(join(tmpdir(), 'sitespeed-application-failure-'));
+  try {
+    await writeFile(
+      join(root, 'run.har'),
+      JSON.stringify({
+        log: {
+          browser: { name: 'Chrome', version: '152' },
+          pages: [
+            { _visualMetrics: { FirstVisualChange: 10, LastVisualChange: 20 } },
+          ],
+          entries: [
+            {
+              _resourceType: kind,
+              response: {
+                status: 500,
+                content: { mimeType: 'application/json' },
+              },
+            },
+          ],
+        },
+      })
+    );
+    await writeFile(join(root, 'run.mp4'), 'video');
+    await writeFile(join(root, 'console-1.json.gz'), gzipSync('[]'));
+    expect(() => validateArtifacts(root, playableVideo)).toThrow(
+      /failed critical resource/
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it('does not combine a matching URL with visual metrics from another HAR', async () => {
   const root = await mkdtemp(join(tmpdir(), 'sitespeed-page-binding-'));
   try {

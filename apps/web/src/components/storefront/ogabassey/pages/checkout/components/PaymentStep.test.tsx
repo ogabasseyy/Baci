@@ -60,6 +60,7 @@ describe('PaymentStep', () => {
     redvaultAvailable: false,
     redvaultStatus: 'idle' as const,
     redvaultSummary: null,
+    redvaultOrderReady: false,
   };
 
   beforeEach(() => {

@@ -1200,6 +1200,14 @@ export const CheckoutPage: React.FC = () => {
   const [redvaultStatus, setRedvaultStatus] = useState<
     'idle' | 'pending' | 'held' | 'error'
   >('idle');
+  const [redvaultOrderReady, setRedvaultOrderReady] = useState<{
+    billingAddress: DvaBillingAddress;
+    customerEmail: string;
+    customerName: string;
+    customerPhone: string;
+    currency: string;
+    orderId: string;
+  } | null>(null);
   const selectPaymentMethod = (nextMethod: PaymentMethod) => {
     if (isOrderInFlightRef.current || redvaultStatus === 'pending' || redvaultStatus === 'held') return;
     if (
@@ -1209,6 +1217,7 @@ export const CheckoutPage: React.FC = () => {
       clearPendingCheckoutOrder();
       setRedvaultSummary(null);
       setRedvaultStatus('idle');
+      setRedvaultOrderReady(null);
     }
     setPaymentMethod(nextMethod);
   };
@@ -1775,6 +1784,57 @@ export const CheckoutPage: React.FC = () => {
     }
     isOrderInFlightRef.current = true;
 
+    if (paymentMethod === 'uba_redvault' && redvaultOrderReady) {
+      setIsProcessing(true);
+      setRedvaultStatus('pending');
+      const paymentResult = await initializeRedvaultPayment({
+        merchantId: merchant?.id ?? '',
+        orderId: redvaultOrderReady.orderId,
+        currency: redvaultOrderReady.currency,
+        customerEmail: redvaultOrderReady.customerEmail,
+        customerName: redvaultOrderReady.customerName,
+        customerPhone: redvaultOrderReady.customerPhone,
+        billingAddress: redvaultOrderReady.billingAddress,
+      }).catch((error: unknown) => {
+        setRedvaultStatus('error');
+        throw error;
+      });
+      setRedvaultOrderReady(null);
+      if (paymentResult.kind === 'pending_reconciliation') {
+        setIsProcessing(false);
+        isOrderInFlightRef.current = false;
+        return;
+      }
+      if (paymentResult.kind === 'captured_held') {
+        setRedvaultStatus('held');
+        setIsProcessing(false);
+        isOrderInFlightRef.current = false;
+        return;
+      }
+      if (createAccount && !user && accountPassword.length >= 6) {
+        try {
+          const supabase = createClient();
+          await supabase.auth.signUp({
+            email: redvaultOrderReady.customerEmail,
+            password: accountPassword,
+            options: {
+              data: {
+                first_name: firstName,
+                last_name: lastName,
+                phone: redvaultOrderReady.customerPhone,
+                source: 'checkout',
+                signup_type: 'customer',
+              },
+            },
+          });
+        } catch (authError) {
+          console.error('Silent signup background error:', authError);
+        }
+      }
+      window.location.assign(paymentResult.authorizationUrl);
+      return;
+    }
+
     if (!merchant?.id) {
       toast({
         title: 'Error',
@@ -2305,6 +2365,26 @@ export const CheckoutPage: React.FC = () => {
         typeof order.currency === 'string' && order.currency.trim()
           ? order.currency.trim().toUpperCase()
           : currencyCode;
+      const billingAddress = buildCheckoutBillingAddress(
+        finalAddress,
+        finalCity,
+        finalState,
+        merchantCountry
+      );
+
+      if (paymentMethod === 'uba_redvault' && !redvaultOrderReady) {
+        setRedvaultOrderReady({
+          billingAddress,
+          customerEmail,
+          customerName: `${firstName} ${lastName}`.trim(),
+          customerPhone,
+          currency: orderChargeCurrency,
+          orderId: order.id,
+        });
+        setIsProcessing(false);
+        isOrderInFlightRef.current = false;
+        return;
+      }
 
       // 1b. Create account if requested (Awaited to ensure session is set before moving to next page)
       if (
@@ -2369,8 +2449,6 @@ export const CheckoutPage: React.FC = () => {
       if (walletResult?.amountUsed) {
         setWalletBalance(walletResult.newBalance);
       }
-
-      const billingAddress = buildCheckoutBillingAddress(finalAddress, finalCity, finalState, merchantCountry);
 
       // 2. Handle payment based on method
       // Special case: If wallet fully covers the order, no payment gateway needed
@@ -4036,6 +4114,7 @@ export const CheckoutPage: React.FC = () => {
               redvaultAvailable={redvaultAvailability.available}
               redvaultStatus={redvaultStatus}
               redvaultSummary={redvaultSummary}
+              redvaultOrderReady={Boolean(redvaultOrderReady)}
             />
 
           </div>

@@ -1,6 +1,9 @@
 import { Alert } from 'react-native';
 import { useMerchant } from '@/hooks/use-merchant';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import {
+  claimCheckoutPurchaseTracking,
+  saveRedvaultPurchaseTrackingContext,
+} from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import {
   buildSavingsOrderFields,
@@ -213,6 +216,18 @@ export function useCheckoutSubmit({
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
 
       if (selectedPayment === 'uba_redvault') {
+        await saveRedvaultPurchaseTrackingContext(order.id, {
+          customerEmail,
+          customerPhone,
+          items: itemsSnapshot,
+          orderNumber,
+          paymentMethod: completedPaymentMethod,
+          shipping: snapshot.deliveryFee,
+          subtotal: snapshot.subtotal,
+          tax: snapshot.taxAmount,
+          total: order.total,
+          userId: customer?.id ?? undefined,
+        });
         onRedvaultOrder?.({
           orderResponse,
           customerEmail,

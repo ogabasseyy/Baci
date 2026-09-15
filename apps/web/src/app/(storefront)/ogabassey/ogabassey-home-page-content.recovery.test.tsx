@@ -1,5 +1,7 @@
 import { render, screen } from '@testing-library/react';
+import { notFound } from 'next/navigation';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
 
 const merchant = {
@@ -42,7 +44,11 @@ vi.mock('@/lib/cached-data', () => ({
 }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('next/server', () => ({ connection: async () => undefined }));
-vi.mock('next/navigation', () => ({ notFound: vi.fn() }));
+vi.mock('next/navigation', () => ({
+  notFound: vi.fn(() => {
+    throw new Error('not-found');
+  }),
+}));
 vi.mock('./ogabassey-home-dynamic-content', () => ({
   OgabasseyHomeDynamicContent: () => <div />,
 }));
@@ -60,6 +66,18 @@ vi.mock('./ogabassey-home-recovery-hero', () => ({
 }));
 
 beforeEach(() => vi.clearAllMocks());
+
+it('returns 404 when merchant lookup is null', async () => {
+  vi.mocked(getRequestScopedMerchant).mockResolvedValueOnce(null);
+  await expect(
+    OgabasseyHomePageContent({
+      pathPrefix: '/ogabassey',
+      shellMerchantId: 'merchant-1',
+      shellSlides: [],
+    })
+  ).rejects.toThrow('not-found');
+  expect(notFound).toHaveBeenCalledOnce();
+});
 
 it('recovers after a shell timeout through the publication-checked content', async () => {
   render(

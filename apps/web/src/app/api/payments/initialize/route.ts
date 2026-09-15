@@ -1213,15 +1213,19 @@ export async function POST(request: NextRequest) {
       : 0;
 
     // Fetch merchant
-    const { data: merchant, error: merchantError } = await paymentDataClient
-      .from('merchants')
-      .select(
-        redvaultRequested
-          ? 'id, business_name, slug'
-          : 'id, business_name, slug, paystack_subaccount_code'
-      )
-      .eq('id', merchantId)
-      .single();
+    const merchantResult = redvaultRequested
+      ? await paymentDataClient
+          .from('merchants')
+          .select('id, business_name, slug')
+          .eq('id', merchantId)
+          .single()
+      : await paymentDataClient
+          .from('merchants')
+          .select('id, business_name, slug, paystack_subaccount_code')
+          .eq('id', merchantId)
+          .single();
+
+    const { data: merchant, error: merchantError } = merchantResult;
 
     const { data: paystackSubaccount, error: paystackSubaccountError } =
       redvaultRequested
@@ -1247,7 +1251,9 @@ export async function POST(request: NextRequest) {
     }
 
     const merchantWithPaystack = {
-      ...merchant,
+      id: merchant.id,
+      business_name: merchant.business_name,
+      slug: merchant.slug,
       paystack_subaccount_code:
         typeof paystackSubaccount === 'string' ? paystackSubaccount : null,
     };

@@ -41,10 +41,7 @@ export function hasListicleCountSuffix(
       while (isListicleWhitespace(haystack[tokenStart])) {
         tokenStart += 1;
       }
-      if (
-        tokenStart === tokenEnd ||
-        !haystack.startsWith(token, tokenStart)
-      ) {
+      if (tokenStart === tokenEnd || !haystack.startsWith(token, tokenStart)) {
         matched = false;
         break;
       }

@@ -76,7 +76,9 @@ describe('bugfix: booking SELECTs must not request revoked economics columns', (
   });
 
   it('returns undefined when the table marker is missing', () => {
-    expect(firstSelect(bookOrderShipmentSource, 'nonexistent_table')).toBeUndefined();
+    expect(
+      firstSelect(bookOrderShipmentSource, 'nonexistent_table')
+    ).toBeUndefined();
   });
 
   it('returns undefined for an empty quoted select value', () => {

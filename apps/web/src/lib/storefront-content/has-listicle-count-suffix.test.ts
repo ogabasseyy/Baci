@@ -17,8 +17,9 @@ describe('hasListicleCountSuffix', () => {
 
   it('rejects titles without a trailing count', () => {
     expect(hasListicleCountSuffix('iPhone 15', ['iphone', '15'])).toBe(false);
-    expect(hasListicleCountSuffix('Top 10 iPhone 15 cases', ['iphone', '15']))
-      .toBe(false);
+    expect(
+      hasListicleCountSuffix('Top 10 iPhone 15 cases', ['iphone', '15'])
+    ).toBe(false);
   });
 
   it('matches identifier tokens literally, not as a pattern', () => {

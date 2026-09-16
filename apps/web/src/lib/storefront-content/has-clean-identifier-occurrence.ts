@@ -1,11 +1,11 @@
 import type { PublishedClusterPost } from './content-cluster-types';
 import { findCleanIdentifierEnd } from './find-clean-identifier-end';
 import { getPostTokenGroups } from './get-post-token-groups';
+import { hasListicleCountSuffix } from './has-listicle-count-suffix';
 import { hasShorthandIdentifierOccurrence } from './has-shorthand-identifier-occurrence';
 import { matchesIdentifierDiscriminatorSegment } from './matches-identifier-discriminator-segment';
 import { matchesVariantDiscriminatorTokens } from './matches-variant-discriminator-tokens';
 import { tokenizeContentText } from './tokenize-content-text';
-import { hasListicleCountSuffix } from './has-listicle-count-suffix';
 
 const MODEL_VARIANT_MARKER_TOKENS = new Set([
   'active',

@@ -25,9 +25,9 @@ describe('isLegacyAnalyticsFanoutDisabled', () => {
     delete process.env.EVENT_PIPELINE_ENQUEUE_ENABLED;
     delete process.env.EVENT_PIPELINE_DELIVERY_ENABLED;
     delete process.env.EVENT_PIPELINE_ROUTING_MODE;
-    vi.setSystemTime(new Date('2026-09-15T23:59:59.999Z'));
+    vi.setSystemTime(new Date('2026-09-29T23:59:59.999Z'));
     expect(isLegacyAnalyticsFanoutDisabled()).toBe(false);
-    vi.setSystemTime(new Date('2026-09-16T00:00:00.000Z'));
+    vi.setSystemTime(new Date('2026-09-30T00:00:00.000Z'));
     expect(isLegacyAnalyticsFanoutDisabled()).toBe(true);
   });
 

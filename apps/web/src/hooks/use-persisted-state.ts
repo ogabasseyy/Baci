@@ -1,16 +1,23 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 const subscribeToHydration = () => () => undefined;
 const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
+
+function writeStorageValue(
+  storage: 'session' | 'local',
+  key: string,
+  value: unknown
+): void {
+  try {
+    const storageApi = storage === 'local' ? localStorage : sessionStorage;
+    storageApi.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage write failed (quota exceeded, private browsing, etc.)
+  }
+}
 
 /**
  * Custom hook for state that persists to sessionStorage.
@@ -64,22 +71,10 @@ export function usePersistedState<T>(
   // cannot flush a stale closure over a newer snapshot (e.g. pending order).
   const latestValueRef = useRef(state);
 
-  const writeValue = useCallback(
-    (value: T) => {
-      try {
-        const storageApi = storage === 'local' ? localStorage : sessionStorage;
-        storageApi.setItem(key, JSON.stringify(value));
-      } catch {
-        // Storage write failed (quota exceeded, private browsing, etc.)
-      }
-    },
-    [key, storage]
-  );
-
   const armFlush = () => {
     flushRef.current = () => {
       if (clearedRef.current) return;
-      writeValue(latestValueRef.current);
+      writeStorageValue(storage, key, latestValueRef.current);
     };
   };
 
@@ -98,7 +93,7 @@ export function usePersistedState<T>(
 
     const persist = () => {
       if (clearedRef.current) return;
-      writeValue(latestValueRef.current);
+      writeStorageValue(storage, key, latestValueRef.current);
     };
     flushRef.current = persist;
     timerRef.current = setTimeout(persist, debounceMs);
@@ -108,7 +103,7 @@ export function usePersistedState<T>(
         clearTimeout(timerRef.current);
       }
     };
-  }, [state, debounceMs, writeValue]);
+  }, [state, debounceMs, storage, key]);
 
   // Cleanup on unmount
   useEffect(() => {

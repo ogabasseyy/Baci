@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 
 const subscribeToHydration = () => () => undefined;
 const getClientSnapshot = () => true;
@@ -58,14 +64,17 @@ export function usePersistedState<T>(
   // cannot flush a stale closure over a newer snapshot (e.g. pending order).
   const latestValueRef = useRef(state);
 
-  const writeValue = (value: T) => {
-    try {
-      const storageApi = storage === 'local' ? localStorage : sessionStorage;
-      storageApi.setItem(key, JSON.stringify(value));
-    } catch {
-      // Storage write failed (quota exceeded, private browsing, etc.)
-    }
-  };
+  const writeValue = useCallback(
+    (value: T) => {
+      try {
+        const storageApi = storage === 'local' ? localStorage : sessionStorage;
+        storageApi.setItem(key, JSON.stringify(value));
+      } catch {
+        // Storage write failed (quota exceeded, private browsing, etc.)
+      }
+    },
+    [key, storage]
+  );
 
   const armFlush = () => {
     flushRef.current = () => {

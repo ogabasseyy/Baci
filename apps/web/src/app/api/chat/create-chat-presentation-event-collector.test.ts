@@ -85,9 +85,9 @@ describe('createChatPresentationEventCollector', () => {
   it('does not turn unknown tools or inactive products into UI', () => {
     const collector = createChatPresentationEventCollector();
 
-    expect(collector.capture('runJavascript', { html: '<script />' })).toBe(
-      false
-    );
+    expect(
+      collector.capture('runJavascript', { html: 'not a real tool result' })
+    ).toBe(false);
     expect(
       collector.capture('getProductDetails', {
         ...product(1),

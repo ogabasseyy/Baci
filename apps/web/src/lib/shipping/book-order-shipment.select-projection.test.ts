@@ -10,10 +10,34 @@ const refreshWalletSource = readFileSync(
   'utf8'
 );
 
+function isWhitespace(value: string | undefined): boolean {
+  return value !== undefined && /\s/.test(value);
+}
+
 function firstSelect(source: string, table: string): string | undefined {
-  return source.match(
-    new RegExp(String.raw`\.from\('${table}'\)[\s\S]*?\.select\(\s*'([^']+)'`)
-  )?.[1];
+  const fromMarker = `.from('${table}')`;
+  let searchFrom = source.indexOf(fromMarker);
+  if (searchFrom === -1) {
+    return undefined;
+  }
+  const selectMarker = '.select(';
+  for (;;) {
+    const selectIndex = source.indexOf(selectMarker, searchFrom);
+    if (selectIndex === -1) {
+      return undefined;
+    }
+    let valueStart = selectIndex + selectMarker.length;
+    while (isWhitespace(source[valueStart])) {
+      valueStart += 1;
+    }
+    if (source[valueStart] === "'") {
+      const valueEnd = source.indexOf("'", valueStart + 1);
+      if (valueEnd !== -1 && valueEnd > valueStart + 1) {
+        return source.slice(valueStart + 1, valueEnd);
+      }
+    }
+    searchFrom = selectIndex + 1;
+  }
 }
 
 describe('bugfix: booking SELECTs must not request revoked economics columns', () => {

@@ -73,4 +73,22 @@ describe('Ads spend service-role boundary', () => {
     expect(source.match(/spendSupabase\.rpc/g)).toHaveLength(1);
     expect(rpcCallTargets(source, rpcName)).toBe(true);
   });
+
+  it('returns false when no spendSupabase.rpc call is present', () => {
+    expect(
+      rpcCallTargets(
+        "const rows = await input.spendSupabase.from('spend').select('*');",
+        'replace_google_ads_spend_daily'
+      )
+    ).toBe(false);
+  });
+
+  it('skips an invalid candidate before a valid matching call', () => {
+    expect(
+      rpcCallTargets(
+        "await input.spendSupabase.rpc(\n    'replace_something_else',\n    {}\n  );\n  await input.spendSupabase.rpc('replace_google_ads_spend_daily', {});",
+        'replace_google_ads_spend_daily'
+      )
+    ).toBe(true);
+  });
 });

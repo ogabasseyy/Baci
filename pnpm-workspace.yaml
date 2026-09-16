@@ -109,8 +109,10 @@ overrides:
   yaml: ">=2.8.3"
   # Pin esbuild 0.28 for path hardening / binary integrity.
   esbuild: "^0.28.1"
-  # Pin to 0.35.3 to mitigate GHSA-f88m-g3jw-g9cj and retain the corrected TypeScript export map.
-  sharp: "0.35.3"
+  # Pin to 0.35.4 to mitigate GHSA-f88m-g3jw-g9cj plus the libheif
+  # GHSA-g89c-p67h-r497 / GHSA-2jg2-4ch7-h545, and retain the corrected
+  # TypeScript export map.
+  sharp: "0.35.4"
   prismjs: "^1.30.0"
   # Pin qs for GHSA-q8mj-m7cp-5q26 (comma-format arrays).
   qs: "6.15.2"

@@ -16,14 +16,18 @@ function isWhitespace(value: string | undefined): boolean {
 
 function firstSelect(source: string, table: string): string | undefined {
   const fromMarker = `.from('${table}')`;
-  let searchFrom = source.indexOf(fromMarker);
-  if (searchFrom === -1) {
+  const fromIndex = source.indexOf(fromMarker);
+  if (fromIndex === -1) {
     return undefined;
   }
+  // Stay inside the target fluent chain: a later `.from(` starts a
+  // different query whose projection must never satisfy this lookup.
+  const chainEnd = source.indexOf('.from(', fromIndex + fromMarker.length);
   const selectMarker = '.select(';
+  let searchFrom = fromIndex;
   for (;;) {
     const selectIndex = source.indexOf(selectMarker, searchFrom);
-    if (selectIndex === -1) {
+    if (selectIndex === -1 || (chainEnd !== -1 && selectIndex >= chainEnd)) {
       return undefined;
     }
     let valueStart = selectIndex + selectMarker.length;
@@ -88,5 +92,14 @@ describe('bugfix: booking SELECTs must not request revoked economics columns', (
         'orders'
       )
     ).toBe('id, status');
+  });
+
+  it('does not match a later table projection outside the target chain', () => {
+    expect(
+      firstSelect(
+        "supabase\n  .from('orders')\n  .eq('id', orderId)\n  .single();\n  const quote = await supabase\n  .from('shipping_quotes')\n  .select('id, price')",
+        'orders'
+      )
+    ).toBeUndefined();
   });
 });

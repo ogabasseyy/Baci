@@ -297,5 +297,3 @@ ${items}
   </channel>
 </rss>`;
 }
-
-export { normalizeFeedVariantStringAttributes } from './normalize-feed-variant-string-attributes';

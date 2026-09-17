@@ -41,7 +41,6 @@ describe('isBlockedRemoteHost', () => {
     expect(isBlockedRemoteHost('fd00::1')).toBe(true);
     expect(isBlockedRemoteHost('2001:db8::1')).toBe(false);
   });
-
   it('blocks IPv4-mapped IPv6 destinations by their embedded address', () => {
     expect(isBlockedRemoteHost('::ffff:127.0.0.1')).toBe(true);
     expect(isBlockedRemoteHost('::ffff:7f00:1')).toBe(true);

@@ -2,7 +2,7 @@ import type React from 'react';
 import { GadgetPattern } from './GadgetPattern';
 import { HeroDesktopGrid } from './hero-desktop-grid';
 import { HeroMobileCarousel } from './hero-mobile-carousel';
-import { HeroUtilityPanel } from './hero-utility-panel';
+import { HeroUtilityPanelGate } from './hero-utility-panel-gate';
 import type { LaunchProductSlide } from './LaunchCarousel';
 import { OgabasseyEmptyMobileHero } from './ogabassey-empty-mobile-hero';
 
@@ -93,7 +93,7 @@ export const Hero: React.FC<HeroProps> = ({
         )}
       </section>
 
-      <HeroUtilityPanel />
+      <HeroUtilityPanelGate />
     </div>
   );
 };

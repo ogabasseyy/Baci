@@ -64,6 +64,12 @@ export function HeroMobileCarousel({
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   useEffect(() => {
+    // matchMedia is universal in browsers but absent in some test/SSR
+    // shells; a missing API must not crash the carousel (it only gates the
+    // decorative progress fill). Absent means "no preference expressed".
+    if (typeof window.matchMedia !== 'function') {
+      return;
+    }
     const query = window.matchMedia('(prefers-reduced-motion: reduce)');
     setPrefersReducedMotion(query.matches);
     const handleChange = (event: MediaQueryListEvent) => {

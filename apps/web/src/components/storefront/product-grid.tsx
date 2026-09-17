@@ -1,7 +1,7 @@
 'use client';
 
 import { orderRecordsByIds } from '@baci/shared/lib';
-import Fuse from 'fuse.js';
+import type Fuse from 'fuse.js';
 import { useEffect, useState } from 'react';
 import { ThemedButton } from '@/components/themed';
 import { ProductGridSkeleton } from '@/components/ui/skeletons';
@@ -237,16 +237,33 @@ export function StorefrontProductGrid({
     return [];
   })();
 
-  const fuse = (() => {
-    if (products.length > 0) {
-      return new Fuse(products, {
-        keys: ['name', 'description', 'brand'],
-        includeScore: true,
-        threshold: 0.4,
-      });
+  // Lazily built client search index, preview merchants only: importing
+  // fuse.js statically would ship the engine to every storefront page load
+  // even though live storefronts search server-side and never touch it.
+  // Rebuilt whenever the query or products change, mirroring the previous
+  // per-render freshness; until it resolves, preview search falls back to
+  // the unfiltered list exactly as the old null-index path did.
+  const [fuse, setFuse] = useState<Fuse<Product> | null>(null);
+  useEffect(() => {
+    if (!isPreviewMode || !debouncedSearchQuery) {
+      setFuse(null);
+      return;
     }
-    return null;
-  })();
+    let cancelled = false;
+    void import('fuse.js').then(({ default: FuseImpl }) => {
+      if (cancelled) return;
+      setFuse(
+        new FuseImpl(products, {
+          keys: ['name', 'description', 'brand'],
+          includeScore: true,
+          threshold: 0.4,
+        })
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isPreviewMode, debouncedSearchQuery, products]);
 
   const categories = (() => {
     const priorityList: string[] = [];

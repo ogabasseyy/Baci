@@ -35,6 +35,13 @@ vi.mock('@/lib/posthog/schedule-idle-boot', () => ({
   scheduleIdleBoot: mocks.scheduleIdleBoot,
 }));
 
+// The LCP gate (PerformanceObserver / timeout) is covered in
+// wait-for-lcp.test.ts. Here it resolves immediately so boot timing stays
+// deterministic under jsdom, which never emits LCP entries.
+vi.mock('@/lib/posthog/wait-for-lcp', () => ({
+  waitForFirstLcpCandidate: vi.fn(async () => undefined),
+}));
+
 function importPostHogClientBootstrap() {
   return import('./posthog-client-bootstrap');
 }

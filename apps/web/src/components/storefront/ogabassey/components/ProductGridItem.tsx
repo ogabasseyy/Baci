@@ -9,7 +9,7 @@ import { getProductImageAlt } from '@baci/shared/lib';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import type { Product } from '../types';
 import { useViewportActivation } from '@/components/storefront/use-viewport-activation';
-import { getProductUrl } from '@/lib/seo-utils';
+import { getProductUrl } from '@/lib/product-url';
 import { asRoute } from '@/lib/routes';
 import { useDeferredActivation } from './deferred-shell-feature';
 import { resolveProductImageSource } from './product-image-source';

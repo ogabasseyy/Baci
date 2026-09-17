@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuthSafe } from '@/contexts/auth-context';
 import { logger } from '@/lib/logger';
 import { permissionGrantsAccess } from '@/lib/permission-grant';
-import { createClient } from '@/lib/supabase/client';
+import type { createClient } from '@/lib/supabase/client';
 import { defaultStaffAccess } from './constants';
 import { fetchDashboardMerchantViaApi } from './fetch-dashboard-merchant-via-api';
 import { MerchantContext } from './merchant-context';
@@ -25,6 +25,28 @@ interface LoadBySlugArgs {
   isCancelled: () => boolean;
   setMerchant: (merchant: MerchantData | null) => void;
   setLoading: (loading: boolean) => void;
+}
+
+// Module scope: React Compiler cannot lower dynamic import() inside the
+// provider. Lazy so the generic branch's static supabase edge (which every
+// storefront page ships via the server-awaited page.tsx branch union) becomes
+// load-on-first-merchant-fetch instead.
+async function loadSupabaseClient(): Promise<ReturnType<typeof createClient>> {
+  const { createClient } = await import('@/lib/supabase/client');
+  return createClient();
+}
+
+let supabaseClientPromise: Promise<ReturnType<typeof createClient>> | null =
+  null;
+
+// Module scope: stable across renders (no exhaustive-deps churn) and out of
+// the React Compiler-lowered provider. The browser client is process-wide
+// state anyway; every caller shares the first resolution.
+function getSupabaseClient(): Promise<ReturnType<typeof createClient>> {
+  if (!supabaseClientPromise) {
+    supabaseClientPromise = loadSupabaseClient();
+  }
+  return supabaseClientPromise;
 }
 
 // Module scope keeps try/finally out of the React Compiler-lowered provider.
@@ -87,6 +109,37 @@ async function loadDashboardMerchant({
     }
   } finally {
     if (!isCancelled()) setLoading(false);
+  }
+}
+
+interface ReloadBySlugArgs {
+  getSupabase: () => Promise<ReturnType<typeof createClient>>;
+  slug: string;
+  setMerchant: (merchant: MerchantData | null) => void;
+  setLoading: (loading: boolean) => void;
+}
+
+// Module scope keeps try/finally out of the React Compiler-lowered provider.
+async function reloadMerchantBySlug({
+  getSupabase,
+  slug,
+  setMerchant,
+  setLoading,
+}: ReloadBySlugArgs): Promise<void> {
+  try {
+    const supabase = await getSupabase();
+    const data = await fetchMerchantBySlug(supabase, slug);
+    if (data?.id) {
+      const domain = await fetchPrimaryDomain(supabase, data.id);
+      if (domain) data.custom_domain = domain;
+    }
+    setMerchant(data);
+  } catch (error) {
+    logger.error({
+      message: `Reload failed: ${(error as Error).message}`,
+    });
+  } finally {
+    setLoading(false);
   }
 }
 
@@ -171,8 +224,9 @@ export const MerchantProvider = ({
   const basePath =
     routingMode === 'domain' ? '' : `/${merchant?.slug || slug || ''}`;
 
-  // Stable Supabase client — created once, not on every render
-  const supabaseRef = useRef(createClient());
+  // The Supabase client resolves once per process via the module-scope
+  // getSupabaseClient — never constructed for readers that only consume SSR
+  // merchant data, and stable across renders for effect dependencies.
 
   // ---- DATA LOADING ----
   // CASE 1: initialMerchant provided → no fetch (dashboard + storefront with SSR data)
@@ -192,13 +246,17 @@ export const MerchantProvider = ({
       // `loading` is flipped on during render (see fetchLoadingKey above).
       let cancelled = false;
 
-      void loadMerchantBySlug({
-        supabase: supabaseRef.current,
-        slug,
-        isCancelled: () => cancelled,
-        setMerchant,
-        setLoading,
-      });
+      void (async () => {
+        const supabase = await getSupabaseClient();
+        if (cancelled) return;
+        await loadMerchantBySlug({
+          supabase,
+          slug,
+          isCancelled: () => cancelled,
+          setMerchant,
+          setLoading,
+        });
+      })();
 
       return () => {
         cancelled = true;
@@ -231,23 +289,12 @@ export const MerchantProvider = ({
     setLoading(true);
 
     if (slug) {
-      fetchMerchantBySlug(supabaseRef.current, slug)
-        .then(async (data) => {
-          if (data?.id) {
-            const domain = await fetchPrimaryDomain(
-              supabaseRef.current,
-              data.id
-            );
-            if (domain) data.custom_domain = domain;
-          }
-          setMerchant(data);
-        })
-        .catch((error) => {
-          logger.error({
-            message: `Reload failed: ${(error as Error).message}`,
-          });
-        })
-        .finally(() => setLoading(false));
+      void reloadMerchantBySlug({
+        getSupabase: getSupabaseClient,
+        slug,
+        setMerchant,
+        setLoading,
+      });
     } else if (user) {
       fetchDashboardMerchantViaApi()
         .then((result) => {
@@ -266,7 +313,7 @@ export const MerchantProvider = ({
   };
 
   const updateMerchant = createMerchantUpdate({
-    supabase: supabaseRef.current,
+    getSupabase: getSupabaseClient,
     userId: user?.id ?? null,
     staffAccess,
     activeMerchantId: merchant?.id,

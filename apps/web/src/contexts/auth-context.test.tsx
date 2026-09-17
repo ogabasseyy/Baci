@@ -28,6 +28,9 @@ function AuthProbe() {
 describe('AuthProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // A stored session takes the immediate boot path (same timing as the
+    // pre-deferral behavior these cases pin down).
+    window.localStorage.setItem('sb-testref-auth-token', '{}');
     mocks.getUser.mockReturnValue(
       new Promise(() => {
         // Intentionally unresolved to verify initialUser is used immediately.
@@ -119,7 +122,10 @@ describe('AuthProvider', () => {
       </AuthProvider>
     );
 
-    expect(pushAuthEvent).not.toBeNull();
+    // The subscription attaches once the lazily imported client resolves.
+    await waitFor(() => {
+      expect(pushAuthEvent).not.toBeNull();
+    });
     // Two-step cast because TS can't narrow `let` re-assigned inside the
     // mockImplementation callback above.
     const push = pushAuthEvent as unknown as (
@@ -131,5 +137,78 @@ describe('AuthProvider', () => {
     await waitFor(() => {
       expect(screen.getByText('user:user-2')).toBeInTheDocument();
     });
+  });
+
+  it('reports signed-out without touching auth when the browser holds no session', async () => {
+    window.localStorage.clear();
+    mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>
+    );
+
+    expect(screen.getByText('user:none')).toBeInTheDocument();
+    expect(mocks.createClient).not.toHaveBeenCalled();
+    expect(mocks.getUser).not.toHaveBeenCalled();
+
+    window.localStorage.setItem('sb-testref-auth-token', '{}');
+  });
+
+  it('boots auth on first interaction for session-less browsers', async () => {
+    window.localStorage.clear();
+    mocks.getUser.mockResolvedValue({
+      data: { user: { id: 'user-3' } as User },
+      error: null,
+    });
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>
+    );
+
+    expect(mocks.getUser).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new window.PointerEvent('pointerdown'));
+
+    await waitFor(() => {
+      expect(mocks.getUser).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByText('user:user-3')).toBeInTheDocument();
+    });
+
+    window.localStorage.setItem('sb-testref-auth-token', '{}');
+  });
+
+  it('boots auth at the backstop even with no interaction', async () => {
+    vi.useFakeTimers();
+    try {
+      window.localStorage.clear();
+      mocks.getUser.mockResolvedValue({
+        data: { user: { id: 'user-4' } as User },
+        error: null,
+      });
+
+      render(
+        <AuthProvider>
+          <AuthProbe />
+        </AuthProvider>
+      );
+
+      expect(mocks.getUser).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(8000);
+      vi.useRealTimers();
+
+      await waitFor(() => {
+        expect(mocks.getUser).toHaveBeenCalled();
+      });
+    } finally {
+      vi.useRealTimers();
+      window.localStorage.setItem('sb-testref-auth-token', '{}');
+    }
   });
 });

@@ -88,12 +88,18 @@ export function HeroUtilityPanel() {
 
   useEffect(() => {
     if (manualUtility) return;
-    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    // matchMedia is universal in browsers but absent in some test/SSR
+    // shells; a missing API must not crash the panel (it only gates a
+    // decorative rotation). Null means "no preference expressed".
+    const motion =
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia('(prefers-reduced-motion: reduce)')
+        : null;
     let timer: ReturnType<typeof setInterval> | undefined;
     const start = () => {
-      if (timer || motion.matches) return;
+      if (timer || motion?.matches) return;
       timer = setInterval(() => {
-        if (!document.hidden && !motion.matches) {
+        if (!document.hidden && !motion?.matches) {
           setActiveUtilityIndex((index) => (index + 1) % UTILITY_WORDS.length);
         }
       }, 2500);
@@ -124,8 +130,23 @@ export function HeroUtilityPanel() {
           <div className="bg-primary/5 rounded-2xl py-3 px-4 mb-4 text-center">
             <span className="text-gray-900 font-medium text-sm">
               We Pay <span className="text-primary font-bold">YOU</span> When You Buy{' '}
-              <span className="text-primary font-bold transition-all duration-500 inline-block min-w-[60px] text-left">
-                {UTILITY_WORDS[activeUtilityIndex]}
+              {/*
+                All words stay in the tree, stacked in one grid cell, so the
+                box always sizes to the longest word ("Airtime!"). Swapping the
+                visible word then repaints without resizing — the previous
+                single-word span grew/shrank past its 60px floor on every
+                rotation, shifting the surrounding copy (field CLS).
+              */}
+              <span className="text-primary font-bold transition-all duration-500 inline-grid min-w-[60px] text-left align-baseline">
+                {UTILITY_WORDS.map((word, index) => (
+                  <span
+                    aria-hidden={index === activeUtilityIndex ? undefined : true}
+                    className={`col-start-1 row-start-1 ${index === activeUtilityIndex ? '' : 'invisible'}`}
+                    key={word}
+                  >
+                    {word}
+                  </span>
+                ))}
               </span>
             </span>
           </div>
@@ -168,8 +189,22 @@ export function HeroUtilityPanel() {
         <div className="hidden md:block bg-primary/5 px-10 py-8 rounded-lg min-w-[280px] text-center xl:text-right xl:translate-x-[5%]">
           <span className="text-gray-900 font-medium text-xl">
             You Buy{' '}
-            <span className="text-primary font-bold transition-all duration-500 inline-block min-w-[80px] text-left">
-              {UTILITY_WORDS[activeUtilityIndex]}
+            {/*
+              Same stacked-words reservation as mobile: the desktop floor was
+              80px but "Airtime!" at text-xl renders wider, so every rotation
+              through it resized the box. Stacked grid cells size to the
+              longest word once; rotation is paint-only.
+            */}
+            <span className="text-primary font-bold transition-all duration-500 inline-grid min-w-[80px] text-left align-baseline">
+              {UTILITY_WORDS.map((word, index) => (
+                <span
+                  aria-hidden={index === activeUtilityIndex ? undefined : true}
+                  className={`col-start-1 row-start-1 ${index === activeUtilityIndex ? '' : 'invisible'}`}
+                  key={word}
+                >
+                  {word}
+                </span>
+              ))}
             </span>
           </span>
         </div>

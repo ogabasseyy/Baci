@@ -1,6 +1,7 @@
 import type React from 'react';
 import { vi } from 'vitest';
 import { getCachedBlogListing } from '@/lib/cached-data';
+import type { TemplateBlogPageProps } from '@/templates/registry';
 import { buildListingResult } from './blog-page-content.test-utils.fixtures';
 import type {
   MockDefaultBlogUiProps,
@@ -21,6 +22,15 @@ const hoistedMocks = vi.hoisted(() => ({
     </>
   )),
   mockGetTemplate: vi.fn<(...args: unknown[]) => unknown>(() => null),
+  // Stands in for the directly-imported OgabasseyV2Blog (the route no longer
+  // resolves it through the deleted info-pages map). The optional storeSlug
+  // mirrors the extra prop the renderer probe passes at runtime; tests
+  // configure rendered output per case.
+  mockOgabasseyV2Blog: vi.fn(
+    (
+      _props: TemplateBlogPageProps & { storeSlug?: string }
+    ): React.ReactNode => null
+  ),
   mockHeaders: vi.fn(() => new Headers()),
   mockPreloadBlogListingFeaturedImage: vi.fn(),
   mockNotFound: vi.fn(() => {
@@ -40,6 +50,7 @@ const hoistedMocks = vi.hoisted(() => ({
 export const {
   mockBuildBlogClusterCollections,
   mockDefaultBlogUi,
+  mockOgabasseyV2Blog,
   mockGetTemplate,
   mockHeaders,
   mockNotFound,
@@ -167,6 +178,12 @@ vi.mock('@/templates/registry', () => ({
   getTemplate: (templateId: unknown) => mockGetTemplate(templateId),
 }));
 
+vi.mock('@/components/storefront/ogabassey/pages/blog', () => ({
+  OgabasseyV2Blog: (
+    props: TemplateBlogPageProps & { storeSlug?: string }
+  ) => mockOgabasseyV2Blog(props),
+}));
+
 vi.mock('./blog-listing-featured-image-preload', () => ({
   preloadBlogListingFeaturedImage: (src: string | null | undefined) =>
     mockPreloadBlogListingFeaturedImage(src),
@@ -232,6 +249,8 @@ export function resetBlogPageContentMocks() {
   ));
   mockGetTemplate.mockReset();
   mockGetTemplate.mockReturnValue(null);
+  mockOgabasseyV2Blog.mockReset();
+  mockOgabasseyV2Blog.mockReturnValue(null);
   mockTemplateBlogRenderer.mockReset();
   mockTemplateBlogRenderer.mockImplementation(
     (_props: MockTemplateBlogRendererProps) => <div>Template blog</div>

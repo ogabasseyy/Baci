@@ -6,8 +6,16 @@ import {
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { CartItem } from '@/hooks/cart';
-import { createClient } from '@/lib/supabase/client';
+import type { createClient } from '@/lib/supabase/client';
 import { computeCounterOffer } from './negotiation-modal-pricing';
+
+// Module scope: React Compiler cannot lower dynamic import() inside the hook.
+// Lazy so the negotiation modal (reached via footer-chrome -> cart sidebar)
+// never pulls @supabase/ssr into the initial bundle.
+async function loadSupabaseClient(): Promise<ReturnType<typeof createClient>> {
+  const { createClient } = await import('@/lib/supabase/client');
+  return createClient();
+}
 import { submitNegotiationUpload } from './negotiation-modal-upload';
 
 export type NegotiationStatus =
@@ -72,7 +80,18 @@ export function useNegotiationModalController({
   const [uploadLink, setUploadLink] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [supabase] = useState(() => createClient());
+  // Lazily resolved: eager createClient() at hook init pulled @supabase/ssr
+  // toward the homepage bundle via footer-chrome -> cart sidebar. The client
+  // is only needed inside submit handlers (user action), where a dynamic
+  // import is invisible. Promise cache so the import stays in module scope.
+  const supabasePromiseRef =
+    useRef<Promise<ReturnType<typeof createClient>> | null>(null);
+  const getSupabaseClient = () => {
+    if (!supabasePromiseRef.current) {
+      supabasePromiseRef.current = loadSupabaseClient();
+    }
+    return supabasePromiseRef.current;
+  };
   const submitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(false);
   const isOpenRef = useRef(isOpen);
@@ -181,6 +200,7 @@ export function useNegotiationModalController({
 
   const handleUploadSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    const supabase = await getSupabaseClient();
     await submitNegotiationUpload({
       canApplyAsyncResult,
       cart,

@@ -1,6 +1,5 @@
 'use client';
 
-import { AnimatePresence, motion } from 'framer-motion';
 import {
   LogOut,
   Menu,
@@ -402,28 +401,33 @@ export function Header({
       </header>
 
       {/* Mobile Menu Overlay */}
-      <AnimatePresence>
-        {mobilePanel.mode !== 'closed' && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed inset-0 z-40 bg-background pt-24 px-6 md:hidden"
-          >
-            <div className="flex flex-col gap-6">
-              {mobilePanel.mode === 'search' ? (
-                <>
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-medium">Search</h2>
-                    <button
-                      type="button"
-                      aria-label="Close search"
-                      onClick={mobilePanel.close}
-                      className="p-2 hover:bg-black/5 rounded-full transition-colors"
-                    >
-                      <X className="size-5" />
-                    </button>
-                  </div>
+      {mobilePanel.mode !== 'closed' && (
+        <div className="fixed inset-0 z-40 bg-background pt-24 px-6 md:hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-5 motion-safe:duration-200">
+          <div className="flex flex-col gap-6">
+            {mobilePanel.mode === 'search' ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-medium">Search</h2>
+                  <button
+                    type="button"
+                    aria-label="Close search"
+                    onClick={mobilePanel.close}
+                    className="p-2 hover:bg-black/5 rounded-full transition-colors"
+                  >
+                    <X className="size-5" />
+                  </button>
+                </div>
+                <HeaderSearch
+                  mobile
+                  onChange={setSearchQuery}
+                  radius={searchRadius}
+                  style={searchStyle}
+                  value={searchQuery}
+                />
+              </>
+            ) : (
+              <>
+                {showSearch && (
                   <HeaderSearch
                     mobile
                     onChange={setSearchQuery}
@@ -431,105 +435,93 @@ export function Header({
                     style={searchStyle}
                     value={searchQuery}
                   />
-                </>
-              ) : (
-                <>
-                  {showSearch && (
-                    <HeaderSearch
-                      mobile
-                      onChange={setSearchQuery}
-                      radius={searchRadius}
-                      style={searchStyle}
-                      value={searchQuery}
-                    />
-                  )}
-                  <nav className="flex flex-col gap-4 text-lg font-medium">
+                )}
+                <nav className="flex flex-col gap-4 text-lg font-medium">
+                  <Link
+                    href={asRoute(getHref('/'))}
+                    onClick={mobilePanel.close}
+                  >
+                    Home
+                  </Link>
+                  {navigationLinks.map((link) => (
                     <Link
-                      href={asRoute(getHref('/'))}
+                      key={link.label}
+                      href={asRoute(getHref(link.url))}
                       onClick={mobilePanel.close}
                     >
-                      Home
+                      {link.label}
                     </Link>
-                    {navigationLinks.map((link) => (
-                      <Link
-                        key={link.label}
-                        href={asRoute(getHref(link.url))}
-                        onClick={mobilePanel.close}
-                      >
-                        {link.label}
-                      </Link>
-                    ))}
-                    {user && merchant?.id && (
-                      <button
-                        type="button"
-                        onClick={mobilePanel.close}
-                        className="w-full text-left"
-                      >
-                        <LoyaltyBadge
-                          merchantId={merchant.id}
-                          customerId={user.id}
-                          showPoints
-                          rewardsHref={getHref('/pages/rewards')}
-                        />
-                      </button>
-                    )}
+                  ))}
+                  {user && merchant?.id && (
+                    <button
+                      type="button"
+                      onClick={mobilePanel.close}
+                      className="w-full text-left"
+                    >
+                      <LoyaltyBadge
+                        merchantId={merchant.id}
+                        customerId={user.id}
+                        showPoints
+                        rewardsHref={getHref('/pages/rewards')}
+                      />
+                    </button>
+                  )}
 
-                    {/* Mobile Account Links */}
-                    {showAccount && (
-                      <div className="pt-4 border-t space-y-4">
-                        {customerSession?.authenticated &&
-                        customerSession.customer ? (
-                          <>
-                            <div className="text-sm text-current">
-                              Signed in as {customerSession.customer.email}
-                            </div>
-                            <Link
-                              href={asRoute(getHref('/account'))}
-                              onClick={mobilePanel.close}
-                              className="flex items-center gap-2"
-                            >
-                              <User className="size-5" />
-                              My Account
-                            </Link>
-                            <Link
-                              href={asRoute(getHref('/account/orders'))}
-                              onClick={mobilePanel.close}
-                              className="flex items-center gap-2"
-                            >
-                              <Package className="size-5" />
-                              Orders
-                            </Link>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleLogout();
-                                mobilePanel.close();
-                              }}
-                              className="flex items-center gap-2 rounded-md bg-destructive px-3 py-2 text-destructive-foreground"
-                            >
-                              <LogOut className="size-5" />
-                              Sign out
-                            </button>
-                          </>
-                        ) : (
+                  {/* Mobile Account Links */}
+                  {showAccount && (
+                    <div className="pt-4 border-t space-y-4">
+                      {customerSession?.authenticated &&
+                      customerSession.customer ? (
+                        <>
+                          <div className="text-sm text-current">
+                            Signed in as {customerSession.customer.email}
+                          </div>
                           <Link
-                            href={asRoute(getHref('/account/login'))}
+                            href={asRoute(getHref('/account'))}
                             onClick={mobilePanel.close}
                             className="flex items-center gap-2"
                           >
                             <User className="size-5" />
-                            Sign in
+                            My Account
                           </Link>
-                        )}
-                      </div>
-                    )}
-                  </nav>
-                </>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                          <Link
+                            href={asRoute(getHref('/account/orders'))}
+                            onClick={mobilePanel.close}
+                            className="flex items-center gap-2"
+                          >
+                            <Package className="size-5" />
+                            Orders
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleLogout();
+                              mobilePanel.close();
+                            }}
+                            className="flex items-center gap-2 rounded-md bg-destructive px-3 py-2 text-destructive-foreground"
+                          >
+                            <LogOut className="size-5" />
+                            Sign out
+                          </button>
+                        </>
+                      ) : (
+                        <Link
+                          href={asRoute(getHref('/account/login'))}
+                          onClick={mobilePanel.close}
+                          className="flex items-center gap-2"
+                        >
+                          <User className="size-5" />
+                          Sign in
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </nav>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       <Cart />
     </Sheet>
   );

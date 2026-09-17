@@ -34,8 +34,8 @@ vi.mock('./GadgetPattern', () => ({
   },
 }));
 
-vi.mock('./hero-utility-panel', () => ({
-  HeroUtilityPanel: () => (
+vi.mock('./hero-utility-panel-gate', () => ({
+  HeroUtilityPanelGate: () => (
     <aside aria-label="Hero utilities">Utility panel</aside>
   ),
 }));

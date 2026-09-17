@@ -7,6 +7,7 @@ import { hasPostHogBrowserInitialized } from '@/lib/posthog/browser-state';
 import { getPostHogBrowserEnv } from '@/lib/posthog/config';
 import { isPublicBlogPathname } from '@/lib/posthog/public-blog-path';
 import { scheduleIdleBoot } from '@/lib/posthog/schedule-idle-boot';
+import { waitForFirstLcpCandidate } from '@/lib/posthog/wait-for-lcp';
 
 const postHogBrowserEnv = getPostHogBrowserEnv();
 
@@ -29,6 +30,15 @@ async function bootPostHogForPathname(
   }
 
   try {
+    // Keep the 76KB client (plus its transitive chunks) out of the LCP
+    // window: boot once the first LCP candidate has painted, or the backstop
+    // elapses. Pre-boot metrics are buffered by the web-vitals queue, so
+    // nothing is lost — it just flushes after boot.
+    await waitForFirstLcpCandidate();
+    if (isCancelled()) {
+      return;
+    }
+
     const { initializePostHogBrowser } = await import('@/lib/posthog/browser');
 
     if (isCancelled()) {

@@ -113,11 +113,22 @@ vi.mock('@/hooks/use-debounce', () => ({
   useDebounce: (value: any) => value,
 }));
 
+const mockStorefrontUiState = vi.hoisted(() => ({
+  searchQuery: '',
+  selectedCategory: 'All',
+}));
+
 vi.mock('@/contexts/storefront-context', () => ({
   useStorefrontSafe: () => ({
-    searchQuery: '',
-    selectedCategory: 'All',
-    setSearchQuery: vi.fn(),
+    get searchQuery() {
+      return mockStorefrontUiState.searchQuery;
+    },
+    get selectedCategory() {
+      return mockStorefrontUiState.selectedCategory;
+    },
+    setSearchQuery: vi.fn((query: string) => {
+      mockStorefrontUiState.searchQuery = query;
+    }),
     setSelectedCategory: vi.fn(),
   }),
 }));
@@ -197,6 +208,8 @@ const mockProduct: Product = {
 describe('StorefrontProductGrid', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockStorefrontUiState.searchQuery = '';
+    mockStorefrontUiState.selectedCategory = 'All';
     mockMerchantState.basePath = '';
     mockMerchantState.merchant = {
       id: 'm1',
@@ -293,5 +306,29 @@ describe('StorefrontProductGrid', () => {
           String(url).includes('/api/storefront/products')
         )
     ).toBe(false);
+  });
+
+  it('filters preview products once the lazily loaded search index resolves', async () => {
+    mockMerchantState.merchant = {
+      id: 'preview-merchant-id',
+      slug: 'preview-store',
+      business_type: 'food-beverage',
+      brand_colors: { primary: '#000', background: '#fff', accent: '#ccc' },
+      navigationCategories: [{ name: 'Food & Beverage' }],
+    };
+    mockStorefrontUiState.searchQuery = 'Sourdough';
+
+    render(<StorefrontProductGrid />);
+
+    // The match survives; non-matches disappear only after the lazy index
+    // arrives (before that the list falls back to unfiltered, as before).
+    expect(
+      await screen.findByText('Artisanal Sourdough Loaf')
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.queryByText('Cold-Pressed Olive Oil')
+      ).not.toBeInTheDocument();
+    });
   });
 });

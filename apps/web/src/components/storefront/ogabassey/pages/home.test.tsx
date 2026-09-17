@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
@@ -70,24 +70,26 @@ describe('OgabasseyHomePage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders core sections: hero, ad unit, and product grid', () => {
+  it('renders core sections: hero, ad unit, and product grid', async () => {
     render(<OgabasseyHomePage products={[]} categories={[]} />);
 
     expect(
       screen.getByRole('region', { name: /launch hero/i })
     ).toBeInTheDocument();
     expect(screen.getByText(/^Ad unit/)).toBeInTheDocument();
-    expect(screen.getByText(/^Product grid/)).toBeInTheDocument();
+    // The grid arrives through the viewport gate (async module load once the
+    // section activates), so await it; the static fallback holds its place.
+    expect(await screen.findByText(/^Product grid/)).toBeInTheDocument();
   });
 
-  it('can omit the hero when the route shell renders it outside dynamic content', () => {
+  it('can omit the hero when the route shell renders it outside dynamic content', async () => {
     render(
       <OgabasseyHomePage products={[]} categories={[]} renderHero={false} />
     );
 
     expect(screen.queryByText(/^Hero/)).not.toBeInTheDocument();
     expect(screen.getByText(/^Ad unit/)).toBeInTheDocument();
-    expect(screen.getByText(/^Product grid/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Product grid/)).toBeInTheDocument();
   });
 
   it('joins a slug route base path into the hero launch deep-links', () => {
@@ -132,7 +134,7 @@ describe('OgabasseyHomePage', () => {
     );
   });
 
-  it('passes products to the home product grid', () => {
+  it('passes products to the home product grid', async () => {
     const testProducts: Product[] = [
       {
         id: 'p-1',
@@ -160,14 +162,17 @@ describe('OgabasseyHomePage', () => {
       />
     );
 
-    expect(mockHomeProductGrid).toHaveBeenCalledWith(
-      expect.objectContaining({
-        storeSlug: 'test-store',
-        products: testProducts,
-        initialDisplayCount: 8,
-        inlineAdBreakpoints: [12, 24],
-      })
-    );
+    // The gate loads the grid module asynchronously after activation.
+    await waitFor(() => {
+      expect(mockHomeProductGrid).toHaveBeenCalledWith(
+        expect.objectContaining({
+          storeSlug: 'test-store',
+          products: testProducts,
+          initialDisplayCount: 8,
+          inlineAdBreakpoints: [12, 24],
+        })
+      );
+    });
   });
 
   it('falls back to the product feed for the hero when launchProducts is omitted', () => {

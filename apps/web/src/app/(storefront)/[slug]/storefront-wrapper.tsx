@@ -9,11 +9,7 @@ import { Button } from '@/components/ui/button';
 import { StorefrontPageSkeleton } from '@/components/ui/skeletons';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import type { Product } from '@/lib/products';
-import {
-  getTemplate,
-  getTemplateIdByBusinessType,
-  type TemplatePageProps,
-} from '@/templates/registry';
+import type { TemplatePageProps } from '@/templates/registry';
 
 const DynamicPuckStorefront = dynamic(
   () =>
@@ -58,6 +54,15 @@ export function StorefrontWrapper({
   useEffect(() => {
     const loadTemplate = async () => {
       if (loading) return;
+
+      // The template registry (all storefront templates and their page
+      // components) loads on demand so it never joins the initial bundle of
+      // routes that only sometimes render a registry template (e.g. the
+      // statically-rendered Ogabassey homepage). The skeleton stays up until
+      // this resolves, so loading UX is unchanged.
+      const { getTemplate, getTemplateIdByBusinessType } = await import(
+        '@/templates/registry'
+      );
 
       let templateId = merchant?.template_id;
 

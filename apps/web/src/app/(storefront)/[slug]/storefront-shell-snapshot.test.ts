@@ -284,6 +284,64 @@ describe('getStorefrontShellSnapshot', () => {
     expect(getStorefrontNavigationCategories).not.toHaveBeenCalled();
   });
 
+  it('adopts a pre-started categories read when the merchant id matches', async () => {
+    vi.mocked(getStorefrontNavigationCategories).mockResolvedValue([
+      { name: 'Phones', slug: 'phones' },
+    ]);
+    const shellSnapshotBase = {
+      merchant: {
+        id: 'merchant-1',
+        user_id: '',
+        business_name: 'Ogabassey',
+        business_type: 'electronics',
+        slug: 'ogabassey',
+        is_published: true,
+      },
+      routingMode: 'path' as const,
+      basePath: '/ogabassey',
+    };
+
+    const snapshot = await getStorefrontShellSnapshot(shellSnapshotBase, {
+      merchantId: 'merchant-1',
+      categories: Promise.resolve([{ name: 'Early', slug: 'early' }]),
+    });
+
+    expect(snapshot).toMatchObject({
+      navigationCategories: [{ name: 'Early', slug: 'early' }],
+    });
+    expect(getStorefrontNavigationCategories).not.toHaveBeenCalled();
+  });
+
+  it('refetches by the resolved id when the pre-started read assumed wrong', async () => {
+    vi.mocked(getStorefrontNavigationCategories).mockResolvedValue([
+      { name: 'Phones', slug: 'phones' },
+    ]);
+    const shellSnapshotBase = {
+      merchant: {
+        id: 'merchant-1',
+        user_id: '',
+        business_name: 'Ogabassey',
+        business_type: 'electronics',
+        slug: 'ogabassey',
+        is_published: true,
+      },
+      routingMode: 'path' as const,
+      basePath: '/ogabassey',
+    };
+
+    const snapshot = await getStorefrontShellSnapshot(shellSnapshotBase, {
+      merchantId: 'stale-merchant-id',
+      categories: Promise.resolve([{ name: 'Early', slug: 'early' }]),
+    });
+
+    expect(snapshot).toMatchObject({
+      navigationCategories: [{ name: 'Phones', slug: 'phones' }],
+    });
+    expect(getStorefrontNavigationCategories).toHaveBeenCalledWith(
+      'merchant-1'
+    );
+  });
+
   it('redacts secret feature settings before serializing shell merchant data', async () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue({
       ...baseMerchant,

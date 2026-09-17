@@ -20,6 +20,12 @@ vi.mock('@/templates/registry', () => ({
   getTemplate: vi.fn(() => null),
 }));
 
+// The Privacy page is imported directly by the route; stub it to keep the
+// heavy page module out of this test's module graph.
+vi.mock('@/components/storefront/ogabassey/pages/privacy-policy', () => ({
+  OgabasseyV2PrivacyPolicy: vi.fn(() => null),
+}));
+
 vi.mock('../pages/privacy/privacy-page-client', () => ({
   PrivacyPageClient: vi.fn(() => null),
 }));

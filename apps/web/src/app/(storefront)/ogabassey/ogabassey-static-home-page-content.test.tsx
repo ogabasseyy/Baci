@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/components/seo/json-ld', () => ({
   JsonLd: () => <script type="application/ld+json" />,
@@ -89,8 +89,16 @@ const SHELL_SLIDE = {
 };
 
 describe('OgabasseyStaticHomePageContent', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // The streaming Suspense fallback renders the utility panel for
+    // geometry; its engagement effect needs matchMedia like the panel's
+    // own tests provide.
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
     mockDynamicContentSuspends.value = false;
     mockResolveHeroShell.mockResolvedValue({
       status: 'published',
@@ -150,6 +158,9 @@ describe('OgabasseyStaticHomePageContent', () => {
       screen.getByRole('region', { name: /dynamic home content/i })
     ).toHaveAttribute('data-omit-document-heading', 'false');
     expect(mockPreloadHeroResources).not.toHaveBeenCalled();
+    expect(
+      document.querySelector('link[data-ogabassey-home-hero-preload="true"]')
+    ).not.toBeInTheDocument();
   });
 
   it('passes the apex-domain root prefix through to the dynamic home content', async () => {
@@ -164,6 +175,18 @@ describe('OgabasseyStaticHomePageContent', () => {
     render(await OgabasseyStaticHomePageContent({ pathPrefix: '' }));
 
     expect(mockPreloadHeroResources).toHaveBeenCalledWith(SHELL_SLIDE.imageUrl);
+  });
+
+  it('renders a scanner-visible preload link for the committed hero image', async () => {
+    render(await OgabasseyStaticHomePageContent({ pathPrefix: '' }));
+
+    const link = document.querySelector(
+      'link[data-ogabassey-home-hero-preload="true"]'
+    );
+    expect(link).toBeInTheDocument();
+    expect(link?.getAttribute('rel')).toBe('preload');
+    expect(link?.getAttribute('as')).toBe('image');
+    expect(link?.getAttribute('fetchpriority')).toBe('high');
   });
 
   it('shows only publication-safe geometry while the publication owner suspends', async () => {

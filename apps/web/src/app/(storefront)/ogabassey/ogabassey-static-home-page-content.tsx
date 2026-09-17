@@ -7,6 +7,8 @@ import {
   OGABASSEY_TITLE,
 } from '@/config/ogabassey';
 import { OgabasseyHomeCriticalShell } from './ogabassey-home-critical-shell';
+import { OgabasseyHomeHeroPreloadLink } from './ogabassey-home-hero-preload-link';
+import { OgabasseyHomeHeroReserveFallback } from './ogabassey-home-hero-reserve-fallback';
 import { preloadOgabasseyHomeHeroResources } from './ogabassey-home-hero-resource-hints';
 import { resolveOgabasseyHomeHeroShell } from './ogabassey-home-hero-shell-data';
 import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
@@ -69,7 +71,8 @@ export async function OgabasseyStaticHomePageContent({
           <div data-ogabassey-home-lcp-shell="true">
             <OgabasseyHomeCriticalShell />
           </div>
-          <Suspense fallback={null}>
+          <OgabasseyHomeHeroPreloadLink src={committedMobileLcpUrl} />
+          <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>
             <OgabasseyHomePageContent
               omitDocumentHeading
               pathPrefix={pathPrefix}
@@ -79,14 +82,19 @@ export async function OgabasseyStaticHomePageContent({
           </Suspense>
         </>
       ) : (
-        <Suspense fallback={null}>
-          <OgabasseyHomePageContent
-            omitDocumentHeading={omitCommittedHero}
-            pathPrefix={pathPrefix}
-            shellMerchantId={shellMerchantId}
-            shellSlides={shellSlides}
-          />
-        </Suspense>
+        <>
+          {committedMobileLcpUrl ? (
+            <OgabasseyHomeHeroPreloadLink src={committedMobileLcpUrl} />
+          ) : null}
+          <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>
+            <OgabasseyHomePageContent
+              omitDocumentHeading={omitCommittedHero}
+              pathPrefix={pathPrefix}
+              shellMerchantId={shellMerchantId}
+              shellSlides={shellSlides}
+            />
+          </Suspense>
+        </>
       )}
     </>
   );

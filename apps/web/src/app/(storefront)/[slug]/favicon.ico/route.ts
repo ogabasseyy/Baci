@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getMerchantSafe } from '@/lib/cached-data';
 
-export const preferredRegion = 'dub1';
+// Region pinning lives in vercel.json `regions` (dub1) — `preferredRegion`
+// is deprecated and removed.
 
 const FAVICON_CACHE_CONTROL = 'public, max-age=300, stale-while-revalidate=600';
 

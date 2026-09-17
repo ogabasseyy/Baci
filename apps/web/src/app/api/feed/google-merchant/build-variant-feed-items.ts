@@ -27,9 +27,7 @@ interface VariantFeedInput {
 
 const text = (value: unknown) =>
   typeof value === 'string' ? value.trim() : '';
-export const canonicalAttributes = (
-  variant: FeedVariant
-): Record<string, string> => {
+const canonicalAttributes = (variant: FeedVariant): Record<string, string> => {
   const entries = Object.entries(variant.attributes || {});
   const normalizedEntries = entries.map(
     ([key, value]) =>
@@ -57,6 +55,9 @@ export const canonicalAttributes = (
             'color',
             'colour',
             'color_hex',
+            'colour_hex',
+            'colourhex',
+            'colorhex',
             'variantid',
             'variant_id',
             'condition',

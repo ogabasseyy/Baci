@@ -50,9 +50,11 @@ export function resolveGmcPrimaryImage(
 export function resolveGmcAdditionalImages(
   entries: FeedImageManifestEntry[]
 ): string[] {
-  return entries
+  const urls = entries
     .filter((e): e is VerifiedEntry => !e.is_primary && isVerifiedWithUrl(e))
     .sort((a, b) => a.position - b.position)
-    .slice(0, GMC_ADDITIONAL_IMAGES_MAX)
     .map((e) => e.verified_url);
+  // Deduplicate before the cap so repeated URLs cannot crowd out later
+  // distinct images.
+  return [...new Set(urls)].slice(0, GMC_ADDITIONAL_IMAGES_MAX);
 }

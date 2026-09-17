@@ -21,7 +21,7 @@ describe('fetchActiveFeedOffers', () => {
       { id: 'offer', images: mock.images },
     ]);
     expect(mock.select).toHaveBeenCalledWith(
-      'id, product_id, condition, price, stock_quantity, images'
+      'id, product_id, condition, price, compare_at_price, stock_quantity, images'
     );
     expect(mock.inFilter).toHaveBeenCalledWith('product_id', ['phone']);
     expect(mock.eq).toHaveBeenCalledWith('status', 'active');

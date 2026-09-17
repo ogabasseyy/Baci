@@ -32,7 +32,7 @@ function isPhraseBoundary(value: string | undefined): boolean {
   return value === undefined || /[^a-z0-9]/.test(value);
 }
 
-export function hasPhrase(haystack: string, needle: string) {
+function hasPhrase(haystack: string, needle: string) {
   const normalizedNeedle = normalizeText(needle);
   if (normalizedNeedle.length === 0) {
     return false;

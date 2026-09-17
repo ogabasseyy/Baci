@@ -1,9 +1,12 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMerchantWalletFundingRecoveryAttestation } from './merchant-wallet-funding-recovery-attestation';
 
-// Generated per run so the suite never hardcodes an HMAC secret.
-const TEST_HMAC_SECRET = randomBytes(32).toString('hex');
+// Derived deterministically at runtime: stable across runs (no random test
+// data) yet never a hardcoded secret literal.
+const TEST_HMAC_SECRET = createHash('sha256')
+  .update('merchant-wallet-funding-recovery-attestation-test')
+  .digest('hex');
 
 describe('createMerchantWalletFundingRecoveryAttestation', () => {
   afterEach(() => {

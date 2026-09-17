@@ -123,4 +123,31 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
       'merchant-ogabassey'
     );
   });
+
+  it('falls back to a local manifest when the revision authority returns null', async () => {
+    mockGetPublishedStorefrontComparisonRevision.mockResolvedValueOnce(null);
+
+    await expect(
+      getCachedMaintainedCompareRouteManifest(
+        'merchant-1',
+        'smartphones',
+        'ogabassey',
+        'https://ogabassey.com'
+      )
+    ).resolves.toContain('left-phone-vs-right-phone');
+
+    expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
+      'merchant-1',
+      'smartphones',
+      undefined
+    );
+    expect(mockCacheTag).toHaveBeenCalledWith(
+      'products-merchant-1',
+      'categories-merchant-1',
+      'features-merchant-1',
+      'merchants',
+      'merchant-id-merchant-1',
+      'merchant-ogabassey'
+    );
+  });
 });

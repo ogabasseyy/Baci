@@ -1,6 +1,7 @@
 import type { PublishedClusterPost } from './content-cluster-types';
 import { findCleanIdentifierEnd } from './find-clean-identifier-end';
 import { getPostTokenGroups } from './get-post-token-groups';
+import { hasListicleCountSuffix } from './has-listicle-count-suffix';
 import { hasShorthandIdentifierOccurrence } from './has-shorthand-identifier-occurrence';
 import { matchesIdentifierDiscriminatorSegment } from './matches-identifier-discriminator-segment';
 import { matchesVariantDiscriminatorTokens } from './matches-variant-discriminator-tokens';
@@ -243,10 +244,10 @@ export function hasCleanIdentifierOccurrence(
       )
         ? hasNumericModelContext(postTokens, startIndex, options.brand)
         : true;
-      const listicleSuffix = new RegExp(
-        `${identifierTokens.join('\\s+')}\\s*[:—–-]\\s*\\d+`,
-        'iu'
-      ).test(post.title);
+      const listicleSuffix = hasListicleCountSuffix(
+        post.title,
+        identifierTokens
+      );
       const displaySizeSuffix =
         (/^\d{1,2}$/u.test(suffix) && ['in', 'inch'].includes(nextSuffix)) ||
         (/^\d{1,2}$/u.test(suffix) &&

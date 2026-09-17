@@ -4,7 +4,7 @@ import { analyticsDeliveryAuthorityManifest as manifest } from './analytics-deli
 describe('analytics delivery authority manifest', () => {
   it('records the temporary authority expiry', () => {
     expect(manifest.temporaryAuthorityExpiresAt).toBe(
-      '2026-09-16T00:00:00.000Z'
+      '2026-09-30T00:00:00.000Z'
     );
     expect(manifest.queueOnlyDeliveryActivated).toBe(false);
   });

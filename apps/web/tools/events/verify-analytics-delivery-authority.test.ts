@@ -12,11 +12,11 @@ describe('analytics delivery authority verifier', () => {
     ).toEqual([]);
     expect(
       analyzeTemporaryAuthorityExpiry(
-        new Date('2026-09-16T00:00:00.000Z'),
+        new Date('2026-09-30T00:00:00.000Z'),
         false
       )
     ).toEqual([
-      'temporary event-pipeline analytics authority expired at 2026-09-16T00:00:00.000Z',
+      'temporary event-pipeline analytics authority expired at 2026-09-30T00:00:00.000Z',
     ]);
   });
 

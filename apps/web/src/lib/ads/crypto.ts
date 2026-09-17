@@ -49,7 +49,8 @@ export function encryptAdsToken(
   const cipher = createCipheriv(
     'aes-256-gcm',
     encryptionKeyBytes(encryptionKey),
-    iv
+    iv,
+    { authTagLength: 16 }
   );
   cipher.setAAD(providerAad(provider));
   const ciphertext = Buffer.concat([
@@ -81,7 +82,8 @@ export function decryptAdsToken(
   const decipher = createDecipheriv(
     'aes-256-gcm',
     encryptionKeyBytes(encryptionKey),
-    decode(ivPart)
+    decode(ivPart),
+    { authTagLength: 16 }
   );
   decipher.setAAD(providerAad(provider));
   decipher.setAuthTag(decode(tagPart));

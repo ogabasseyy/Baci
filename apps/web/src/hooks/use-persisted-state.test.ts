@@ -33,6 +33,21 @@ describe('usePersistedState', () => {
     );
   });
 
+  it('does not restart the debounce timer on unrelated rerenders', () => {
+    const { result, rerender } = renderHook(() =>
+      usePersistedState('test', 'initial')
+    );
+    act(() => result.current[1]('updated'));
+    // Default debounce is 300ms: rerender before it elapses, then advance
+    // past the original deadline but short of a restarted one (500ms).
+    vi.advanceTimersByTime(200);
+    rerender();
+    vi.advanceTimersByTime(150);
+    expect(JSON.parse(sessionStorage.getItem('test') as string)).toBe(
+      'updated'
+    );
+  });
+
   it('flushes a pending checkout order before payment navigation', () => {
     const { result, unmount } = renderHook(() =>
       usePersistedState('pending-order', '')

@@ -61,6 +61,7 @@ describe('isBlockedRemoteHost', () => {
     expect(isBlockedRemoteHost('12345::67890')).toBe(true);
   });
 
+
   it('strips URL brackets before classifying IPv6 literals', () => {
     expect(isBlockedRemoteHost('[::1]')).toBe(true);
     expect(isBlockedRemoteHost('[fe80::1]')).toBe(true);

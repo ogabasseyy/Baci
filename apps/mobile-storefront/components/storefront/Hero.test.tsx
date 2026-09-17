@@ -1,7 +1,39 @@
-import { render } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import { getTemplateConfig } from '@/lib/templates';
 import type { HeroSlide } from './Hero';
 import { Hero } from './Hero';
+
+function renderedMarkerOrder(): string[] {
+  const markers: string[] = [];
+  const walk = (node: unknown): void => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    const record = node as {
+      children?: unknown;
+      props?: { accessibilityLabel?: unknown; testID?: unknown };
+    };
+    const testID = record.props?.testID;
+    const label = record.props?.accessibilityLabel;
+    if (typeof testID === 'string') markers.push(testID);
+    else if (typeof label === 'string') markers.push(label);
+    if (record.children !== undefined) walk(record.children);
+  };
+  walk(screen.toJSON());
+  return markers;
+}
+
+jest.mock('react-native-google-mobile-ads', () => ({
+  BannerAd: 'BannerAd',
+  BannerAdSize: {
+    LARGE_ANCHORED_ADAPTIVE_BANNER: 'large-anchored-adaptive-banner',
+  },
+}));
+jest.mock('@/services/analytics-core', () => ({
+  trackEvent: jest.fn(),
+}));
 
 const mockImage = jest.fn();
 
@@ -130,5 +162,68 @@ describe('Hero bounded image sources', () => {
         },
       })
     );
+  });
+});
+
+describe('Hero trailing ad slide', () => {
+  const ORIGINAL_FLAG = process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
+
+  function renderCarousel(
+    extraProps: { trailingAdPlacement?: 'HOME_STRIP' } = {}
+  ) {
+    mockedGetTemplateConfig.mockReset();
+    mockedGetTemplateConfig.mockReturnValue({
+      ...baseTemplate,
+      heroVariant: 'carousel',
+    });
+    return render(<Hero slides={[slide]} {...extraProps} />);
+  }
+
+  it('appends a sponsored slide after the CMS slides when enabled', () => {
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
+
+    expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
+  });
+
+  it('renders no ad slide without a placement', () => {
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    renderCarousel();
+
+    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
+  });
+
+  it('renders no ad slide while ads are disabled', () => {
+    delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
+    renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
+
+    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
+  });
+
+  it('places the ad slide second, not last', () => {
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    mockedGetTemplateConfig.mockReset();
+    mockedGetTemplateConfig.mockReturnValue({
+      ...baseTemplate,
+      heroVariant: 'carousel',
+    });
+    const secondSlide: HeroSlide = { ...slide, title: 'Second slide' };
+    render(
+      <Hero slides={[slide, secondSlide]} trailingAdPlacement="HOME_STRIP" />
+    );
+
+    const markers = renderedMarkerOrder();
+    const adIndex = markers.indexOf('hero-ad-slide');
+    const imageIndexes = markers.reduce<number[]>((acc, marker, index) => {
+      if (marker === 'hero-image') acc.push(index);
+      return acc;
+    }, []);
+    expect(imageIndexes).toHaveLength(2);
+    expect(adIndex).toBeGreaterThan(imageIndexes[0]);
+    expect(adIndex).toBeLessThan(imageIndexes[1]);
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
   });
 });

@@ -18,6 +18,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Animated, { type ScrollHandlerProcessed } from 'react-native-reanimated';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { BlockRenderer } from '@/components/storefront/BlockRenderer';
 import { FilterBar } from '@/components/storefront/FilterBar';
 import { HomeServiceCards } from '@/components/storefront/HomeServiceCards';
@@ -238,6 +239,7 @@ export function HomeFeedList({
         blockWrapperStyle={blockWrapperStyle}
         renderAfterBlock={renderAfterCategoryRail}
       />
+      <AdSlot placement="PRODUCT_GRID_IN_FEED" />
     </View>
   );
 

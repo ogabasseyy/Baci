@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
+import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
 import { calculateQuizServerClockOffset } from './use-quiz-server-clock';
 
 const CLOCK_TICK_MS = 250;
 const BOUNDARY_REFRESH_MIN_INTERVAL_MS = 1_000;
+// Minimum countdown remaining (at lobby open) for the pre-quiz interstitial.
+// Below this the ad could eat into live play, so it is skipped.
+const QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS = 30;
 
 function getRemainingMs(event: QuizEvent, offsetMs: number): number {
   if (!event.startsAt) return 0;
@@ -141,6 +145,15 @@ export function useQuizWaitingRoom({
 
   useEffect(() => {
     let mounted = true;
+    // Fire-and-forget: the lobby countdown keeps ticking underneath and play
+    // never waits on the ad. Skipped when the quiz starts too soon for an ad
+    // to fit before live play.
+    if (
+      getRemainingSeconds(eventRef.current, offsetRef.current) >
+      QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS
+    ) {
+      void maybeShowQuizStartInterstitial();
+    }
     const tick = () => {
       if (
         !mounted ||

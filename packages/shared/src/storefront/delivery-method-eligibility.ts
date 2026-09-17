@@ -64,6 +64,18 @@ export function isPickupEligible(state?: string | null): boolean {
 }
 
 /**
+ * True when the delivery address is in the store's origin city (Lagos).
+ * Same-city shipping never offers air-cargo — even when the provider returns
+ * a GoFaster quote for the route — so callers must hide the By Air option.
+ */
+export function isStoreOriginDelivery(
+  city?: string | null,
+  state?: string | null
+): boolean {
+  return normalizeState(city) === 'lagos' || normalizeState(state) === 'lagos';
+}
+
+/**
  * True for a non-Lagos state that has an airport. Returns false when no state
  * is selected yet, so the option only appears once the address is known.
  */

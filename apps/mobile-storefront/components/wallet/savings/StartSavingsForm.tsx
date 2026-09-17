@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { BRAND, palette } from '@/constants/Colors';
+import { PlanWalletStagingSection } from './PlanWalletStagingSection';
 import { StartSavingsProductFields } from './StartSavingsProductFields';
 import { themedInputStyle } from './start-savings.helpers';
 import { startSavingsStyles as styles } from './start-savings.styles';
@@ -30,6 +31,10 @@ export function StartSavingsForm({
       <StartSavingsProductFields colors={colors} controller={controller} />
       <ContributionSection colors={colors} controller={controller} />
       <SourceModeSection colors={colors} controller={controller} />
+      <PlanWalletStagingSection
+        colors={colors}
+        targetKobo={Math.round((controller.targetValue || 0) * 100)}
+      />
       <SavingsTermsSection colors={colors} controller={controller} />
       {controller.formError ? (
         <Text style={[styles.errorText, { color: colors.error }]}>

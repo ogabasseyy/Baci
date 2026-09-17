@@ -32,9 +32,7 @@ function readBuildIds(html) {
       try {
         const payload = JSON.parse(root[1]);
         if (typeof payload?.b === 'string') ids.add(payload.b);
-      } catch {
-        continue;
-      }
+      } catch {}
     }
   }
   return [...ids];

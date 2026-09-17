@@ -14,11 +14,16 @@ import Animated, {
   useAnimatedScrollHandler,
   useSharedValue,
 } from 'react-native-reanimated';
+import {
+  getMobileAdUnitId,
+  type MobileAdBannerPlacementKey,
+} from '@/config/mobile-ad-placements';
 import { palette, RADIUS, SPACING, withAlpha } from '@/constants/Colors';
 import { useTheme } from '@/hooks/useTheme';
 import { CONFIG } from '@/lib/config';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import { getTemplateConfig } from '@/lib/templates';
+import { trackEvent } from '@/services/analytics-core';
 import { ELITE_HEIGHT, getHeroStyles } from './Hero.styles';
 
 type ThemeColors = ReturnType<typeof useTheme>['colors'];
@@ -37,7 +42,74 @@ export interface HeroSlide {
 interface HeroProps {
   slides?: HeroSlide[];
   autoplayDelay?: number;
+  /**
+   * Inserts one sponsored slide second (after the first CMS slide). The
+   * existing autoplay rotates onto it like any other slide. Ignored while
+   * ads are disabled.
+   */
+  trailingAdPlacement?: MobileAdBannerPlacementKey;
 }
+
+type HeroAdSlideItem = { kind: 'hero-ad-slide' };
+
+type HeroRenderItem = HeroSlide | HeroAdSlideItem;
+
+function isHeroAdSlide(item: HeroRenderItem): item is HeroAdSlideItem {
+  return 'kind' in item && item.kind === 'hero-ad-slide';
+}
+
+function HeroAdSlide({
+  height,
+  screenWidth,
+  unitId,
+}: {
+  height: number;
+  screenWidth: number;
+  unitId: string;
+}) {
+  const { BannerAd, BannerAdSize } =
+    require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads');
+
+  return (
+    <View
+      accessibilityLabel="Sponsored advertisement"
+      style={[heroAdSlideStyles.slide, { width: screenWidth, height }]}
+      testID="hero-ad-slide"
+    >
+      <Text style={heroAdSlideStyles.label}>Sponsored</Text>
+      <BannerAd
+        onAdFailedToLoad={() =>
+          trackEvent('mobile_ad_failed', {
+            format: 'banner',
+            placement: 'HERO_AD_SLIDE',
+          })
+        }
+        onAdImpression={() =>
+          trackEvent('mobile_ad_impression', {
+            format: 'banner',
+            placement: 'HERO_AD_SLIDE',
+          })
+        }
+        size={BannerAdSize.LARGE_ANCHORED_ADAPTIVE_BANNER}
+        unitId={unitId}
+      />
+    </View>
+  );
+}
+
+const heroAdSlideStyles = StyleSheet.create({
+  slide: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    fontSize: 10,
+    letterSpacing: 1,
+    marginBottom: 8,
+    opacity: 0.7,
+    textTransform: 'uppercase',
+  },
+});
 
 const DEFAULT_SLIDES: HeroSlide[] = [];
 
@@ -201,6 +273,7 @@ const StandardSlide = ({
 export function Hero({
   slides = DEFAULT_SLIDES,
   autoplayDelay = 5000,
+  trailingAdPlacement,
 }: HeroProps) {
   const { colors, isDark } = useTheme();
   const styles = getHeroStyles(colors, isDark);
@@ -208,7 +281,17 @@ export function Hero({
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
   const scrollX = useSharedValue(0);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const flatListRef = useRef<Animated.FlatList<HeroSlide>>(null);
+  const flatListRef = useRef<Animated.FlatList<HeroRenderItem>>(null);
+
+  const adUnitConfig = trailingAdPlacement
+    ? getMobileAdUnitId(trailingAdPlacement)
+    : { enabled: false as const };
+  const renderSlides: HeroRenderItem[] =
+    adUnitConfig.enabled &&
+    adUnitConfig.format === 'banner' &&
+    slides.length > 0
+      ? [slides[0], { kind: 'hero-ad-slide' } as const, ...slides.slice(1)]
+      : slides;
 
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -223,18 +306,29 @@ export function Hero({
   };
 
   useEffect(() => {
-    if (slides.length <= 1) return;
+    if (renderSlides.length <= 1) return;
     const interval = setInterval(() => {
-      const nextIndex = (currentIndex + 1) % slides.length;
+      const nextIndex = (currentIndex + 1) % renderSlides.length;
       flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
     }, autoplayDelay);
     return () => clearInterval(interval);
-  }, [currentIndex, slides.length, autoplayDelay]);
+  }, [currentIndex, renderSlides.length, autoplayDelay]);
 
   // Don't render if no slides available (prevents "New Collection" placeholder flash)
-  if (slides.length === 0) return null;
+  if (renderSlides.length === 0) return null;
 
-  const renderSlide = ({ item }: { item: HeroSlide }) => {
+  const renderSlide = ({ item }: { item: HeroRenderItem }) => {
+    if (isHeroAdSlide(item)) {
+      return (
+        <HeroAdSlide
+          height={getHeroHeight()}
+          screenWidth={screenWidth}
+          unitId={
+            adUnitConfig.enabled ? adUnitConfig.unitId : 'unused-ad-unit-id'
+          }
+        />
+      );
+    }
     switch (template.heroVariant) {
       case 'parallax':
         return (
@@ -270,7 +364,7 @@ export function Hero({
           offset: screenWidth * index,
           index,
         })}
-        data={slides}
+        data={renderSlides}
         renderItem={renderSlide}
         keyExtractor={(_, index) => index.toString()}
         horizontal
@@ -285,10 +379,12 @@ export function Hero({
         scrollEventThrottle={16}
         bounces={false}
       />
-      {slides.length > 1 && (
-        <View style={styles.dotsContainer}>
-          {slides.map((_, index) => (
+      {renderSlides.length > 1 && (
+        <View style={styles.dotsContainer} testID="hero-dots">
+          {renderSlides.map((_, index) => (
             <View
+              // biome-ignore lint/suspicious/noArrayIndexKey: pagination dots are
+              // positionally stable and never reorder; the index is their identity.
               key={index}
               style={[styles.dot, currentIndex === index && styles.dotActive]}
             />

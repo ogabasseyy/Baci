@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+jest.mock('react-native-google-mobile-ads', () => ({
+  BannerAd: 'BannerAd',
+  BannerAdSize: {
+    ANCHORED_ADAPTIVE_BANNER: 'anchored-adaptive-banner',
+  },
+}));
+
 const mockPush = jest.fn();
 const mockUseProducts = jest.fn();
 const mockUsePinned = jest.fn();
@@ -188,6 +195,62 @@ describe('JustLaunchedCarousel', () => {
     expect(buttons[1]?.props.accessibilityLabel).toContain(
       'Samsung Galaxy A27 5G Preorder'
     );
+  });
+
+  it('inserts the sponsored card second when ads are enabled', () => {
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    mockUseProducts.mockReturnValue({
+      products: [xiaomi, a27],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JustLaunchedCarousel />);
+
+    const markers: string[] = [];
+    const walk = (node: unknown): void => {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      const record = node as {
+        children?: unknown;
+        props?: { accessibilityLabel?: unknown; testID?: unknown };
+      };
+      const testID = record.props?.testID;
+      const label = record.props?.accessibilityLabel;
+      if (typeof testID === 'string') markers.push(testID);
+      else if (typeof label === 'string') markers.push(label);
+      if (record.children !== undefined) walk(record.children);
+    };
+    walk(screen.toJSON());
+
+    const adIndex = markers.indexOf('launch-ad-card');
+    const firstProductIndex = markers.findIndex((marker) =>
+      marker.includes('Samsung Galaxy A27 5G Preorder')
+    );
+    const secondProductIndex = markers.findIndex((marker) =>
+      marker.includes('Xiaomi 17T')
+    );
+    expect(adIndex).toBeGreaterThan(-1);
+    expect(firstProductIndex).toBeGreaterThan(-1);
+    expect(adIndex).toBeGreaterThan(firstProductIndex);
+    expect(adIndex).toBeLessThan(secondProductIndex);
+    delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
+  });
+
+  it('renders no sponsored card while ads are disabled', () => {
+    delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
+    mockUseProducts.mockReturnValue({
+      products: [xiaomi, a27],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JustLaunchedCarousel />);
+
+    expect(screen.queryByTestId('launch-ad-card')).toBeNull();
   });
 
   it('skips launch rows that cannot render an image', () => {

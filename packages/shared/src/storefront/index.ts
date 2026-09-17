@@ -11,6 +11,7 @@ export {
   AIRPORT_DELIVERY_STATES,
   isAirportDeliveryEligible,
   isPickupEligible,
+  isStoreOriginDelivery,
   isWebStorefrontDeliveryMethodEligible,
   resolveEligibleWebStorefrontDeliveryMethod,
   type WebStorefrontDeliveryMethod,

@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { ProductCard } from '@/components/storefront/ProductCard';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -98,8 +99,11 @@ export default function CategoryScreen() {
   const renderFooter = () => {
     if (!hasMore) return null;
     return (
-      <View style={styles.footer}>
-        <ActivityIndicator size="small" color={BRAND.primary} />
+      <View>
+        <AdSlot placement="PRODUCT_GRID_MPU" />
+        <View style={styles.footer}>
+          <ActivityIndicator size="small" color={BRAND.primary} />
+        </View>
       </View>
     );
   };

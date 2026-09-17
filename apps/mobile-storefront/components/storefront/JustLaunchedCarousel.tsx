@@ -17,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
 import { usePinnedLaunchProducts } from '@/hooks/use-pinned-launch-products';
 import { useProducts } from '@/hooks/use-products';
 import { useTheme } from '@/hooks/useTheme';
@@ -29,6 +30,46 @@ const SECTION_TITLE = 'Just Launched';
 const CARD_HEIGHT = 168;
 const IMAGE_PADDING = 8;
 const BLURHASH = 'L6PZfSi_.AyE_3t7t7RjE1%MWBR*';
+
+type LaunchAdCardColors = {
+  border: string;
+  card: string;
+  textSecondary: string;
+};
+
+function LaunchAdCard({
+  cardWidth,
+  colors,
+  unitId,
+}: {
+  cardWidth: number;
+  colors: LaunchAdCardColors;
+  unitId: string;
+}) {
+  const { BannerAd, BannerAdSize } =
+    require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads');
+
+  return (
+    <View
+      accessibilityLabel="Sponsored advertisement"
+      style={[
+        styles.card,
+        styles.adCard,
+        {
+          width: cardWidth,
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+        },
+      ]}
+      testID="launch-ad-card"
+    >
+      <Text style={[styles.adLabel, { color: colors.textSecondary }]}>
+        Sponsored
+      </Text>
+      <BannerAd size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER} unitId={unitId} />
+    </View>
+  );
+}
 
 export function JustLaunchedCarousel() {
   const { colors } = useTheme();
@@ -126,7 +167,36 @@ export function JustLaunchedCarousel() {
     return null;
   }
 
-  const renderItem = ({ item }: { item: Product }) => {
+  const adUnitConfig = getMobileAdUnitId('PRODUCT_GRID_MPU');
+  const showAdCard =
+    adUnitConfig.enabled &&
+    adUnitConfig.format === 'banner' &&
+    launchProducts.length > 0;
+  type LaunchAdCardItem = { kind: 'launch-ad-card' };
+  type LaunchRenderItem = Product | LaunchAdCardItem;
+  const renderItems: LaunchRenderItem[] = showAdCard
+    ? [
+        launchProducts[0],
+        { kind: 'launch-ad-card' },
+        ...launchProducts.slice(1),
+      ]
+    : launchProducts;
+
+  const isLaunchAdCard = (item: LaunchRenderItem): item is LaunchAdCardItem =>
+    (item as Partial<LaunchAdCardItem>).kind === 'launch-ad-card';
+
+  const renderItem = ({ item }: { item: LaunchRenderItem }) => {
+    if (isLaunchAdCard(item)) {
+      return (
+        <LaunchAdCard
+          cardWidth={cardWidth}
+          colors={colors}
+          unitId={
+            adUnitConfig.enabled ? adUnitConfig.unitId : 'unused-ad-unit-id'
+          }
+        />
+      );
+    }
     const imageUri = item.image || item.images?.[0];
     const ctaLabel = launchCtaLabel(item.name);
     return (
@@ -203,9 +273,13 @@ export function JustLaunchedCarousel() {
       </Text>
       <FlatList
         contentContainerStyle={styles.list}
-        data={launchProducts}
+        data={renderItems}
         horizontal
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) =>
+          'kind' in item && item.kind === 'launch-ad-card'
+            ? 'launch-ad-card'
+            : (item as Product).id
+        }
         renderItem={renderItem}
         showsHorizontalScrollIndicator={false}
       />
@@ -233,6 +307,19 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
+  },
+  adCard: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: IMAGE_PADDING,
+  },
+  adLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 6,
+    textTransform: 'uppercase',
   },
   imageWrap: {
     width: '42%',

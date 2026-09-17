@@ -1,8 +1,17 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 import { AppState } from 'react-native';
+import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
 import { useQuizWaitingRoom } from './use-quiz-waiting-room';
+
+jest.mock('@/lib/quiz-start-interstitial', () => ({
+  maybeShowQuizStartInterstitial: jest.fn(async () => 'skipped'),
+}));
+
+const mockMaybeShowQuizStartInterstitial = jest.mocked(
+  maybeShowQuizStartInterstitial
+);
 
 const event = (overrides: Partial<QuizEvent> = {}): QuizEvent => ({
   endsAt: '2026-08-23T12:10:00.000Z',
@@ -208,6 +217,32 @@ describe('useQuizWaitingRoom', () => {
     });
     expect(onStart).toHaveBeenCalledWith('event-1', true);
     expect(onStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the pre-quiz interstitial when the lobby opens with ample countdown', () => {
+    mockMaybeShowQuizStartInterstitial.mockClear();
+    renderHook(() =>
+      useQuizWaitingRoom({
+        event: event(),
+        onExit: jest.fn(),
+        onStart: jest.fn(),
+        refresh: jest.fn(async () => []),
+      })
+    );
+    expect(mockMaybeShowQuizStartInterstitial).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips the pre-quiz interstitial when the quiz starts within 30 seconds', () => {
+    mockMaybeShowQuizStartInterstitial.mockClear();
+    renderHook(() =>
+      useQuizWaitingRoom({
+        event: event({ serverNow: '2026-08-23T11:59:50.000Z' }),
+        onExit: jest.fn(),
+        onStart: jest.fn(),
+        refresh: jest.fn(async () => []),
+      })
+    );
+    expect(mockMaybeShowQuizStartInterstitial).not.toHaveBeenCalled();
   });
 
   it('cancels a pending active response when the waiting room unmounts', async () => {

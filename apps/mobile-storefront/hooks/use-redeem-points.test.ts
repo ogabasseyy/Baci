@@ -56,9 +56,12 @@ jest.mock('@/lib/loyalty-redemption-idempotency', () => ({
     mockGetReusablePendingLoyaltyRedemptionId(...args),
 }));
 
-jest.mock('@/lib/supabase', () => ({
+jest.mock('@/lib/commerce-brain', () => ({
   calculateCommerce: (type: string, payload: unknown) =>
     mockCalculateCommerce(type, payload),
+}));
+
+jest.mock('@/lib/supabase', () => ({
   supabase: {
     rpc: (name: string, params?: unknown) => mockRpc(name, params),
   },

@@ -22,9 +22,12 @@ const mockTrackEvent = jest.fn();
 type RealtimeHandler = () => void;
 const mockRealtimeHandlers: Record<string, RealtimeHandler[]> = {};
 
-jest.mock('@/lib/supabase', () => ({
+jest.mock('@/lib/commerce-brain', () => ({
   calculateCommerce: (type: string, payload: unknown) =>
     mockCalculateCommerce(type, payload),
+}));
+
+jest.mock('@/lib/supabase', () => ({
   supabase: {
     channel: jest.fn(() => {
       const channel = {

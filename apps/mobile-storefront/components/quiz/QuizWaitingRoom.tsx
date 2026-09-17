@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { useQuizRewardedBadge } from '@/hooks/use-quiz-rewarded-badge';
 import { useTheme } from '@/hooks/useTheme';
 import type { QuizEvent } from '@/services/quiz-types';
 import { useAuthStore } from '@/stores/auth-store';
 import { QuizRewardedBadgeOffer } from './QuizRewardedBadgeOffer';
+import { QuizRulesModal } from './QuizRulesModal';
 import { formatQuizClock, formatRemainingTime } from './QuizScreen.utils';
 import { createQuizWaitingRoomStyles } from './QuizWaitingRoom.styles';
 import {
@@ -47,6 +50,7 @@ export function QuizWaitingRoom({
     status: currentEvent.status,
     userId,
   });
+  const [rulesVisible, setRulesVisible] = useState(false);
 
   return (
     <View
@@ -54,7 +58,7 @@ export function QuizWaitingRoom({
       style={styles.screen}
     >
       <ScrollView
-        accessibilityLabel="Scrollable SuperQuiz waiting room"
+        accessibilityLabel="Scrollable waiting room"
         contentContainerStyle={styles.scrollContent}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
@@ -62,7 +66,7 @@ export function QuizWaitingRoom({
         style={styles.scrollView}
       >
         <View style={styles.card}>
-          <Text style={styles.eyebrow}>SuperQuiz waiting room</Text>
+          <Text style={styles.eyebrow}>Waiting room</Text>
           <Text style={styles.title}>{currentEvent.title}</Text>
           <Text style={styles.prize}>Win {currentEvent.prizeName}</Text>
           <View>
@@ -90,6 +94,14 @@ export function QuizWaitingRoom({
             <Text style={styles.error}>{waitingRoom.error}</Text>
           ) : null}
           <Pressable
+            accessibilityLabel="View quiz rules"
+            accessibilityRole="button"
+            onPress={() => setRulesVisible(true)}
+            style={styles.primaryButton}
+          >
+            <Text style={styles.primaryButtonText}>View rules</Text>
+          </Pressable>
+          <Pressable
             accessibilityLabel="Leave waiting room"
             accessibilityRole="button"
             onPress={onExit}
@@ -98,7 +110,16 @@ export function QuizWaitingRoom({
             <Text style={styles.secondaryButtonText}>Leave waiting room</Text>
           </Pressable>
         </View>
+        <AdSlot placement="FOOTER_ANCHOR" />
       </ScrollView>
+      <QuizRulesModal
+        eventTitle={currentEvent.title}
+        onClose={() => setRulesVisible(false)}
+        onConfirm={() => setRulesVisible(false)}
+        requiresAcceptance={false}
+        timePerQuestionSeconds={timePerQuestion}
+        visible={rulesVisible}
+      />
     </View>
   );
 }

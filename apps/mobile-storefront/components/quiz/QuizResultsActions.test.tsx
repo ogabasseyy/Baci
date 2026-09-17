@@ -1,7 +1,8 @@
 import { jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { QuizResultsActions } from './QuizResultsActions';
-import { createQuizStyles, type QuizThemeColors } from './QuizScreen.styles';
+import { createQuizStyles } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({

@@ -19,8 +19,10 @@ export interface QuizRewardedBadgeState {
   available: boolean;
   dismiss: () => void;
   isWatching: boolean;
+  justEarned: boolean;
   roomBlocked: false;
   watchAd: () => void;
+  watchFailed: boolean;
 }
 
 interface RewardedAdInstance {
@@ -65,6 +67,8 @@ export function useQuizRewardedBadge({
 }: UseQuizRewardedBadgeOptions): QuizRewardedBadgeState {
   const [dismissed, setDismissed] = useState(false);
   const [isWatching, setIsWatching] = useState(false);
+  const [watchFailed, setWatchFailed] = useState(false);
+  const [justEarned, setJustEarned] = useState(false);
   const identityKey = `${userId ?? ''}:${eventId}`;
   const identityRef = useRef(identityKey);
   const generationRef = useRef(0);
@@ -88,14 +92,17 @@ export function useQuizRewardedBadge({
     status === 'scheduled' &&
     remainingSeconds > MINIMUM_REMAINING_SECONDS &&
     Boolean(userId);
+  // The earned confirmation outlives eligibility: once the reward lands the
+  // shopper keeps seeing it even as the countdown runs under 90 seconds.
   const available =
-    isEligible &&
-    !dismissed &&
-    !isUnlocked &&
-    adState.enabled &&
-    adState.initialized &&
-    adState.canRequestAds &&
-    Boolean(adState.rewardedUnitId);
+    justEarned ||
+    (isEligible &&
+      !dismissed &&
+      !isUnlocked &&
+      adState.enabled &&
+      adState.initialized &&
+      adState.canRequestAds &&
+      Boolean(adState.rewardedUnitId));
 
   // The composite identity intentionally owns the ad session lifetime.
   // biome-ignore lint/correctness/useExhaustiveDependencies: account/event identity is the session boundary
@@ -103,6 +110,8 @@ export function useQuizRewardedBadge({
     generationRef.current += 1;
     setDismissed(false);
     setIsWatching(false);
+    setWatchFailed(false);
+    setJustEarned(false);
     return () => {
       generationRef.current += 1;
       const session = sessionRef.current;
@@ -118,6 +127,8 @@ export function useQuizRewardedBadge({
 
   useEffect(() => {
     const session = sessionRef.current;
+    // A presented ad owns its reward: the countdown crossing 90 seconds
+    // mid-watch must not swallow the earned badge.
     if (isEligible || !session || session.presented) return;
     session.settled = true;
     session.cleanups.forEach((unsubscribe) => {
@@ -139,14 +150,21 @@ export function useQuizRewardedBadge({
       sessionRef.current = null;
     }
     setIsWatching(false);
+    setWatchFailed(false);
+    setJustEarned(false);
     setDismissed(true);
   };
 
   const watchAd = () => {
     if (!available || !userId || !adState.rewardedUnitId || isWatching) return;
     const mobileAds = loadMobileAdsModule();
-    if (!mobileAds) return;
+    if (!mobileAds) {
+      // Native ads module missing (e.g. Expo Go): say so instead of a dead tap.
+      setWatchFailed(true);
+      return;
+    }
 
+    setWatchFailed(false);
     setIsWatching(true);
     const session: RewardedAdSession = {
       cleanups: [],
@@ -183,7 +201,10 @@ export function useQuizRewardedBadge({
           () => {
             if (!isCurrent()) return;
             session.presented = true;
-            void rewardedAd.show().catch(finish);
+            void rewardedAd.show().catch(() => {
+              if (isCurrent()) setWatchFailed(true);
+              finish();
+            });
           }
         ),
         rewardedAd.addAdEventListener(
@@ -192,7 +213,7 @@ export function useQuizRewardedBadge({
             if (!isCurrent()) return;
             session.settled = true;
             unlockBadge(userId, eventId, eventTitle);
-            setDismissed(true);
+            setJustEarned(true);
             finish();
           }
         ),
@@ -200,7 +221,9 @@ export function useQuizRewardedBadge({
           if (isCurrent()) finish();
         }),
         rewardedAd.addAdEventListener(mobileAds.AdEventType.ERROR, () => {
-          if (isCurrent()) finish();
+          if (!isCurrent()) return;
+          setWatchFailed(true);
+          finish();
         }),
       ];
       rewardedAd.load();
@@ -209,5 +232,13 @@ export function useQuizRewardedBadge({
     }
   };
 
-  return { available, dismiss, isWatching, roomBlocked: false, watchAd };
+  return {
+    available,
+    dismiss,
+    isWatching,
+    justEarned,
+    roomBlocked: false,
+    watchAd,
+    watchFailed,
+  };
 }

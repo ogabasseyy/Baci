@@ -2,7 +2,7 @@
 
 import { Loader2, Sparkles } from 'lucide-react';
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { QuizPrizeProduct } from '@/schemas/quiz-prize-product';
 import {
   clampNumber,
@@ -64,7 +64,7 @@ export function QuizAuthoringForm({
   );
   const [mode, setMode] = useState<'test' | 'live'>('test');
   const [timingKind, setTimingKind] = useState<'immediate' | 'scheduled'>(
-    'immediate'
+    'scheduled'
   );
   const [scheduledStart, setScheduledStart] = useState(
     localDatetime(new Date(now.getTime() + 3_600_000))
@@ -72,7 +72,25 @@ export function QuizAuthoringForm({
   const [scheduledEnd, setScheduledEnd] = useState(
     localDatetime(new Date(now.getTime() + 3_900_000))
   );
+  // The admin owns Universal end once they edit it; until then it tracks the
+  // scheduled start plus the expected play time from the quiz summary.
+  const [endTouched, setEndTouched] = useState(false);
   const questionCount = topics.length * clampNumber(Number(perTopic), 1, 20);
+  const timePerQuestionSeconds = clampNumber(Number(time), 5, 60);
+  // Floor keeps the defaulted end after the start when no questions exist yet.
+  const expectedPlaySeconds = Math.max(
+    questionCount * timePerQuestionSeconds,
+    60
+  );
+  useEffect(() => {
+    if (endTouched) return;
+    const startMs = Date.parse(scheduledStart);
+    if (!Number.isFinite(startMs)) return;
+    const synced = localDatetime(
+      new Date(startMs + expectedPlaySeconds * 1000)
+    );
+    setScheduledEnd((current) => (current === synced ? current : synced));
+  }, [endTouched, expectedPlaySeconds, scheduledStart]);
   const closesAt =
     timingKind === 'scheduled' && scheduledEnd
       ? new Date(scheduledEnd).toLocaleString()
@@ -235,7 +253,10 @@ export function QuizAuthoringForm({
                   className="h-11 rounded-md border bg-background px-3"
                   type="datetime-local"
                   value={scheduledEnd}
-                  onChange={(event) => setScheduledEnd(event.target.value)}
+                  onChange={(event) => {
+                    setEndTouched(true);
+                    setScheduledEnd(event.target.value);
+                  }}
                 />
               </label>
             </>
@@ -246,7 +267,7 @@ export function QuizAuthoringForm({
         <QuizPlanSummary
           closesAt={closesAt}
           questionCount={questionCount}
-          timePerQuestionSeconds={clampNumber(Number(time), 5, 60)}
+          timePerQuestionSeconds={timePerQuestionSeconds}
         />
       </div>
       <p className="mt-3 text-xs text-muted-foreground">

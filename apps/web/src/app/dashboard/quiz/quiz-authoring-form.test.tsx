@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { QuizAuthoringForm } from './quiz-authoring-form';
@@ -43,5 +43,49 @@ describe('QuizAuthoringForm', () => {
         timePerQuestionSeconds: 10,
       })
     );
+  });
+
+  it('defaults to scheduled timing with the end synced to the expected play', () => {
+    render(
+      <QuizAuthoringForm
+        disabled={false}
+        initialProducts={[prize]}
+        isGenerating={false}
+        onGenerate={vi.fn()}
+      />
+    );
+    // 2 default topics x 1 per topic x 10s = 20s, floored to 60s.
+    const startInput = screen.getByLabelText(
+      /scheduled start/i
+    ) as HTMLInputElement;
+    const endInput = screen.getByLabelText(
+      /universal end/i
+    ) as HTMLInputElement;
+    const expectedEnd = new Date(new Date(startInput.value).getTime() + 60_000);
+    const offset = expectedEnd.getTimezoneOffset() * 60_000;
+    expect(endInput.value).toBe(
+      new Date(expectedEnd.getTime() - offset).toISOString().slice(0, 16)
+    );
+  });
+
+  it('keeps a manually edited end when the start changes', () => {
+    render(
+      <QuizAuthoringForm
+        disabled={false}
+        initialProducts={[prize]}
+        isGenerating={false}
+        onGenerate={vi.fn()}
+      />
+    );
+    const startInput = screen.getByLabelText(
+      /scheduled start/i
+    ) as HTMLInputElement;
+    const endInput = screen.getByLabelText(
+      /universal end/i
+    ) as HTMLInputElement;
+    fireEvent.change(endInput, { target: { value: '2026-09-20T18:00' } });
+    expect(endInput.value).toBe('2026-09-20T18:00');
+    fireEvent.change(startInput, { target: { value: '2026-09-20T17:00' } });
+    expect(endInput.value).toBe('2026-09-20T18:00');
   });
 });

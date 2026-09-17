@@ -51,9 +51,7 @@ describe('QuizWaitingRoom', () => {
     expect(
       screen.getByLabelText('Waiting room for Noon Quiz').props.edges
     ).toBeUndefined();
-    const scrollView = screen.getByLabelText(
-      'Scrollable SuperQuiz waiting room'
-    );
+    const scrollView = screen.getByLabelText('Scrollable waiting room');
     expect(scrollView.props.keyboardShouldPersistTaps).toBe('handled');
     expect(scrollView.props.showsVerticalScrollIndicator).toBe(false);
     expect(scrollView.props.contentContainerStyle).toEqual(
@@ -61,5 +59,20 @@ describe('QuizWaitingRoom', () => {
     );
     fireEvent.press(screen.getByRole('button', { name: 'Leave waiting room' }));
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the rules without an acceptance gate', () => {
+    render(
+      <QuizWaitingRoom
+        event={scheduled}
+        onExit={jest.fn()}
+        onStart={jest.fn()}
+        refresh={jest.fn(async () => [scheduled])}
+      />
+    );
+    fireEvent.press(screen.getByRole('button', { name: 'View rules' }));
+    expect(screen.getByRole('header', { name: 'How to play' })).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Close rules' }));
+    expect(screen.queryByRole('header', { name: 'How to play' })).toBeNull();
   });
 });

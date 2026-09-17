@@ -173,6 +173,11 @@ describe('useQuizRewardedBadge', () => {
       'event-1',
       'Today Quiz'
     );
+    expect(result.current.justEarned).toBe(true);
+    expect(result.current.available).toBe(true);
+    act(() => result.current.dismiss());
+    expect(result.current.justEarned).toBe(false);
+    expect(result.current.available).toBe(false);
   });
 
   it('does not block the room when the user dismisses the offer', () => {
@@ -189,6 +194,28 @@ describe('useQuizRewardedBadge', () => {
     act(() => result.current.dismiss());
     expect(result.current.available).toBe(false);
     expect(result.current.roomBlocked).toBe(false);
+  });
+
+  it('flags a retryable failure when the ad errors', () => {
+    const { result } = renderHook(() =>
+      useQuizRewardedBadge({
+        eventId: 'event-1',
+        eventTitle: 'Today Quiz',
+        remainingSeconds: 120,
+        status: 'scheduled',
+        userId: 'user-1',
+      })
+    );
+
+    expect(result.current.watchFailed).toBe(false);
+    act(() => result.current.watchAd());
+    act(() => listeners.get('error')?.());
+    expect(result.current.watchFailed).toBe(true);
+    expect(result.current.isWatching).toBe(false);
+    expect(mockUnlockBadge).not.toHaveBeenCalled();
+    act(() => result.current.watchAd());
+    expect(result.current.watchFailed).toBe(false);
+    expect(result.current.isWatching).toBe(true);
   });
 
   it('does not show a rewarded ad if it finishes loading after dismissal', () => {

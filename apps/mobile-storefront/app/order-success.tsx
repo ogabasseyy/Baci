@@ -12,6 +12,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { usePermissionBooster } from '@/hooks/use-permission-booster';
 import { useReceiptPreview } from '@/hooks/use-receipt-preview';
+import { maybeShowPostOrderInterstitial } from '@/lib/post-order-interstitial';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { SERVER_CONFIRMED_ORDER_NOTIFICATION_METHODS } from '@/services/payment-status';
 import { scheduleLocalNotification } from '@/services/push-notifications';
@@ -78,6 +79,18 @@ export default function OrderSuccessScreen() {
       console.warn('Failed to schedule order received notification', error);
     });
   }, [orderId, orderNumber, paymentMethod]);
+
+  useEffect(() => {
+    // Post-purchase interstitial (once per session, skipped while ads are
+    // disabled). Delayed past the success animation like the soft ask below.
+    const interstitialTimerId = setTimeout(() => {
+      void maybeShowPostOrderInterstitial();
+    }, 2500);
+
+    return () => {
+      clearTimeout(interstitialTimerId);
+    };
+  }, []);
 
   useEffect(() => {
     // Check for notification permissions (Soft Ask)

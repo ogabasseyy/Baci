@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useState } from 'react';
 import { Linking, Modal, Pressable, Text, View } from 'react-native';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { useTheme } from '@/hooks/useTheme';
 import { createQuizLobbyStyles } from './QuizLobby.styles';
 
@@ -38,6 +39,17 @@ export function QuizRulesModal({
       visible={visible}
     >
       <View style={styles.modalBackdrop}>
+        <View
+          style={{
+            alignItems: 'center',
+            left: 0,
+            position: 'absolute',
+            right: 0,
+            top: 16,
+          }}
+        >
+          <AdSlot placement="FOOTER_ANCHOR" />
+        </View>
         <View accessibilityViewIsModal style={styles.rulesSheet}>
           <View style={styles.rulesHeader}>
             <View>

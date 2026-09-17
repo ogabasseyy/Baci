@@ -30,7 +30,7 @@ jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
   }),
 }));
 
-jest.mock('@/lib/supabase', () => ({
+jest.mock('@/lib/commerce-brain', () => ({
   calculateCommerce: (...args: unknown[]) => mockCalculateCommerce(...args),
 }));
 

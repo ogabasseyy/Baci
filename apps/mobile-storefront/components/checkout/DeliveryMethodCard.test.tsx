@@ -39,11 +39,26 @@ describe('DeliveryMethodCard', () => {
     expect(screen.queryByText('By Air')).toBeNull();
   });
 
-  it('offers GIGL GoFaster air service for a Lagos address', () => {
+  it('hides By Air for a Lagos address even with a GIGL GoFaster quote', () => {
     render(
       <DeliveryMethodCard
         {...baseProps}
+        deliveryCity="Ikeja"
         deliveryState="Lagos"
+        hasGiglGoFasterQuote
+      />
+    );
+
+    expect(screen.getByText('By Road')).toBeTruthy();
+    expect(screen.queryByText('By Air')).toBeNull();
+  });
+
+  it('still offers By Air via a GIGL GoFaster quote outside Lagos', () => {
+    render(
+      <DeliveryMethodCard
+        {...baseProps}
+        deliveryCity="Abeokuta"
+        deliveryState="Ogun"
         hasGiglGoFasterQuote
       />
     );

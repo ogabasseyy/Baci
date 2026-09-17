@@ -1,4 +1,4 @@
-import { isAirportDeliveryEligible } from '@baci/shared';
+import { isAirportDeliveryEligible, isStoreOriginDelivery } from '@baci/shared';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { fetchShippingQuotes } from '@/components/checkout/checkout-shipping.helpers';
 import {
@@ -90,9 +90,10 @@ export function useCheckoutShipping({
     (deliveryMethod !== 'door' && !hasResolvedDeliveryLocation) ||
     (deliveryMethod === 'airport' &&
       !isAirportDeliveryEligible(watchedState) &&
-      !isGiglGoFasterQuote(
+      (!isGiglGoFasterQuote(
         findSelectedQuote(shippingQuotes, selectedQuoteId)
-      )) ||
+      ) ||
+        isStoreOriginDelivery(watchedCity, watchedState))) ||
     (deliveryMethod === 'pickup_station' && !canUsePickupStation)
   ) {
     setDeliveryMethod('door');

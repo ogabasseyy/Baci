@@ -23,6 +23,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { useShallow } from 'zustand/react/shallow';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { GadgetPattern } from '@/components/storefront/GadgetPattern';
 import { Logo } from '@/components/ui/Logo';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -258,6 +259,7 @@ export function DrawerMenu() {
             pathname={pathname}
             onNavigate={handleNavigate}
           />
+          <AdSlot placement="FOOTER_ANCHOR" />
 
           {/* Footer */}
           <View

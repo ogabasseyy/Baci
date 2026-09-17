@@ -2,6 +2,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { Stack } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { GoogleLogo } from '@/components/icons/GoogleLogo';
 import { SuccessIcon } from '@/components/icons/SuccessIcon';
 import { PermissionModal } from '@/components/ui/PermissionModal';
@@ -271,6 +272,7 @@ export function OrderSuccessView({
                   </Text>
                 </Pressable>
               </View>
+              <AdSlot placement="ORDER_SUCCESS_BANNER" />
             </View>
           </View>
         </ScrollView>

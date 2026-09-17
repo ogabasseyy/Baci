@@ -79,6 +79,7 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
                 <Hero
                   slides={slides}
                   autoplayDelay={heroBlock.props.autoplayDelay}
+                  trailingAdPlacement="HOME_STRIP"
                 />
               );
             }

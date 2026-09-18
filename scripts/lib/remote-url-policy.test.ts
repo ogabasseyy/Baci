@@ -62,6 +62,18 @@ describe('validateRemoteUrl host classification', () => {
     );
   });
 
+  it('blocks benchmark-network destinations', () => {
+    for (const host of ['198.18.0.1', '198.19.255.255']) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    expect(validateRemoteUrl(url('198.17.255.255'))?.toString()).toBe(
+      url('198.17.255.255'),
+    );
+    expect(validateRemoteUrl(url('198.20.0.1'))?.toString()).toBe(
+      url('198.20.0.1'),
+    );
+  });
+
   it('blocks IPv6 loopback, link-local, and unique-local literals', () => {
     for (const host of ['::1', 'fe80::1', 'fc00::1', 'fd00::1']) {
       expect(validateRemoteUrl(url(host))).toBeNull();

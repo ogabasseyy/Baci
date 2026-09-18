@@ -1,0 +1,2 @@
+export const STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW =
+  '4c4264dd85683ca3302fd0f8cea0b01a13c8730c44b85af52b53b53028de5517 20260911100000_add_storefront_comparison_revisions.sql';

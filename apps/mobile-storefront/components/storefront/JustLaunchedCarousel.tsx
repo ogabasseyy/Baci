@@ -26,7 +26,15 @@ import type { Product } from '@/types/product';
 
 const SECTION_TITLE = 'Just Launched';
 
-export function JustLaunchedCarousel() {
+export function JustLaunchedCarousel({
+  suppressAds = false,
+}: {
+  /**
+   * While true (e.g. search obscures the feed) the sponsored card is
+   * withheld so no invisible delivery is requested or attributed.
+   */
+  suppressAds?: boolean;
+} = {}) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   // Fetch window is wider than the display count so pins/newest are present.
@@ -147,6 +155,7 @@ export function JustLaunchedCarousel() {
     adUnitConfig.format === 'banner' &&
     adsReadiness.canRequestAds &&
     !adLoadFailed &&
+    !suppressAds &&
     launchProducts.length > 0;
   type LaunchAdCardItem = { kind: 'launch-ad-card' };
   type LaunchRenderItem = Product | LaunchAdCardItem;

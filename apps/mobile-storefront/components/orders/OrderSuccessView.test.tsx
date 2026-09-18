@@ -19,6 +19,16 @@ jest.mock('@/components/icons/SuccessIcon', () => ({
   SuccessIcon: () => null,
 }));
 
+jest.mock('@/components/ads/AdSlot', () => {
+  const React = jest.requireActual<typeof import('react')>('react');
+  const { View } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    AdSlot: ({ placement }: { placement: string }) =>
+      React.createElement(View, { testID: `ad-slot-${placement}` }),
+  };
+});
+
 jest.mock('@/components/ui/PermissionModal', () => {
   const { Pressable, Text, View } = jest.requireActual(
     'react-native'
@@ -183,5 +193,19 @@ describe('OrderSuccessView', () => {
 
     expect(onPermissionGrant).toHaveBeenCalledTimes(1);
     expect(onPermissionDeny).toHaveBeenCalledTimes(1);
+  });
+
+  it('unmounts the banner while the permission modal is open', () => {
+    // Regression: an obscured ORDER_SUCCESS_BANNER must not load or report
+    // impressions behind the permission modal.
+    const { rerender } = render(
+      <OrderSuccessView {...createProps()} showPermissionModal={false} />
+    );
+    expect(screen.getByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeTruthy();
+
+    rerender(
+      <OrderSuccessView {...createProps()} showPermissionModal={true} />
+    );
+    expect(screen.queryByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeNull();
   });
 });

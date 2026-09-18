@@ -102,6 +102,21 @@ describe('maybeShowQuizStartInterstitial', () => {
     setAdsEnabled(ORIGINAL_ENV);
   });
 
+  it('reserves the session cap while a load is in flight', async () => {
+    // Regression: overlapping lobby visits must not create a second
+    // interstitial while the first ad is still loading.
+    setAdsEnabled('true');
+    const first = maybeShowQuizStartInterstitial();
+    const second = maybeShowQuizStartInterstitial();
+    await flushConsentGate();
+    expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
+    for (const listener of listeners.loaded) listener();
+    await expect(first).resolves.toBe('shown');
+    await expect(second).resolves.toBe('skipped');
+    expect(mockInterstitialShow).toHaveBeenCalledTimes(1);
+    setAdsEnabled(ORIGINAL_ENV);
+  });
+
   it('skips when loading errors', async () => {
     setAdsEnabled('true');
     const attempt = maybeShowQuizStartInterstitial();

@@ -102,6 +102,21 @@ describe('maybeShowPostOrderInterstitial', () => {
     setAdsEnabled(ORIGINAL_ENV);
   });
 
+  it('reserves the session cap while a load is in flight', async () => {
+    // Regression: a rapid remount must not create a second interstitial
+    // while the first ad is still loading; the loser abandons as skipped.
+    setAdsEnabled('true');
+    const first = maybeShowPostOrderInterstitial();
+    const second = maybeShowPostOrderInterstitial();
+    await flushConsentGate();
+    expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
+    for (const listener of listeners.loaded) listener();
+    await expect(first).resolves.toBe('shown');
+    await expect(second).resolves.toBe('skipped');
+    expect(mockInterstitialShow).toHaveBeenCalledTimes(1);
+    setAdsEnabled(ORIGINAL_ENV);
+  });
+
   it('skips when loading errors', async () => {
     setAdsEnabled('true');
     const attempt = maybeShowPostOrderInterstitial();

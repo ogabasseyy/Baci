@@ -122,8 +122,13 @@ describe('savings-policy v1 (shared)', () => {
     expect(() =>
       applicablePriceKobo({ guaranteedPriceKobo: 0, currentPriceKobo: 0 })
     ).toThrow(RangeError);
+    // A zero applicable price must never read ready: isReady(0, 0) would
+    // otherwise mark an unfunded plan ready.
+    expect(() => isReady(0, 0)).toThrow(RangeError);
+    expect(() => isReady(9_800_000, 0)).toThrow(RangeError);
     expect(purchasingPowerKobo(0, 0)).toBe(0);
     expect(isActivated(0, 10_000_000)).toBe(false);
+    expect(isReady(0, 10_000_000)).toBe(false);
   });
 
   it('rejects invalid dates', () => {

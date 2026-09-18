@@ -74,11 +74,28 @@ jest.mock('@/components/storefront/BlockRenderer', () => {
     'react-native'
   ) as typeof import('react-native');
   return {
-    BlockRenderer: ({ blocks }: { blocks: Block[] }) => (
-      <View testID="block-renderer">
+    BlockRenderer: ({
+      blocks,
+      suppressAds,
+    }: {
+      blocks: Block[];
+      suppressAds?: boolean;
+    }) => (
+      <View testID={suppressAds ? 'block-renderer-ads-off' : 'block-renderer'}>
         <Text>{blocks.length}</Text>
       </View>
     ),
+  };
+});
+
+jest.mock('@/components/ads/AdSlot', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+  return {
+    AdSlot: ({ placement }: { placement: string }) =>
+      React.createElement(View, { testID: `ad-slot-${placement}` }),
   };
 });
 
@@ -218,6 +235,23 @@ describe('HomeFeedList', () => {
     screen.getByTestId('home-feed-list').props.onEndReached();
 
     expect(loadMore).not.toHaveBeenCalled();
+  });
+
+  it('renders home ad placements while the search overlay is closed', () => {
+    renderList({ isSearchOpen: false });
+
+    expect(screen.getAllByTestId('block-renderer')).toHaveLength(2);
+    expect(screen.getByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeTruthy();
+  });
+
+  it('suppresses home ad placements while the search overlay is open', () => {
+    // Regression: search covers the feed with a full-screen scrim, so the
+    // block placements and the in-feed slot must unmount while it is open.
+    renderList({ isSearchOpen: true });
+
+    expect(screen.getAllByTestId('block-renderer-ads-off')).toHaveLength(2);
+    expect(screen.queryByTestId('block-renderer')).toBeNull();
+    expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
   });
 
   it('builds a RefreshControl with the header offset and theme color', () => {

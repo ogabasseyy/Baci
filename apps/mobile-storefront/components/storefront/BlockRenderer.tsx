@@ -26,6 +26,11 @@ interface BlockRendererProps {
   onCategorySelect: (id: string | null) => void;
   blockWrapperStyle?: StyleProp<ViewStyle>;
   renderAfterBlock?: (block: Block, index: number) => React.ReactNode;
+  /**
+   * While true (e.g. search obscures the feed) the hero and launch ad
+   * placements are withheld so no invisible delivery is requested.
+   */
+  suppressAds?: boolean;
 }
 
 export const BlockRenderer: React.FC<BlockRendererProps> = ({
@@ -34,6 +39,7 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
   onCategorySelect,
   blockWrapperStyle,
   renderAfterBlock,
+  suppressAds = false,
 }) => {
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
   const { data: categories = [] } = useCategories();
@@ -79,12 +85,12 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
                 <Hero
                   slides={slides}
                   autoplayDelay={heroBlock.props.autoplayDelay}
-                  trailingAdPlacement="HOME_STRIP"
+                  trailingAdPlacement={suppressAds ? undefined : 'HOME_STRIP'}
                 />
               );
             }
             case 'JustLaunched':
-              return <JustLaunchedCarousel />;
+              return <JustLaunchedCarousel suppressAds={suppressAds} />;
             case 'CategoryRail':
               return (
                 <UtilityPanel

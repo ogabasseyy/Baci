@@ -12,9 +12,14 @@ import { trackInterstitialPaidEvent } from './interstitial-paid-event';
  * disabled, on web, or when the native ads module is unavailable.
  */
 let didShowThisSession = false;
+// A load in progress already holds the session cap: a second invocation
+// while the first ad is still loading must not create a second
+// interstitial, or a rapid remount could present two ads.
+let loadInFlight = false;
 
 export function resetPostOrderInterstitialForTests(): void {
   didShowThisSession = false;
+  loadInFlight = false;
 }
 
 export function wasPostOrderInterstitialShown(): boolean {
@@ -76,11 +81,16 @@ export async function maybeShowPostOrderInterstitial(
     return 'skipped';
   }
 
+  if (loadInFlight) {
+    return 'skipped';
+  }
+
   return new Promise<'shown' | 'skipped'>((resolve) => {
     let settled = false;
     const finish = (outcome: 'shown' | 'skipped') => {
       if (settled) return;
       settled = true;
+      loadInFlight = false;
       if (outcome === 'shown') {
         didShowThisSession = true;
         trackEvent('mobile_ad_impression', {
@@ -92,6 +102,7 @@ export async function maybeShowPostOrderInterstitial(
     };
 
     try {
+      loadInFlight = true;
       const interstitial = mobileAds.InterstitialAd.createForAdRequest(
         config.unitId
       );

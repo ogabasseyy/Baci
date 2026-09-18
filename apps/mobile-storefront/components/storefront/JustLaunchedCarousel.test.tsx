@@ -276,6 +276,22 @@ describe('JustLaunchedCarousel', () => {
     delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
   });
 
+  it('withholds the sponsored card while ads are suppressed', () => {
+    // Regression: an obscured feed (e.g. search open) must not request or
+    // attribute the sponsored card.
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    mockUseProducts.mockReturnValue({
+      products: [xiaomi, a27],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JustLaunchedCarousel suppressAds />);
+
+    expect(screen.queryByTestId('launch-ad-card')).toBeNull();
+    delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
+  });
+
   it('renders no sponsored card while ads are disabled', () => {
     delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
     mockUseProducts.mockReturnValue({

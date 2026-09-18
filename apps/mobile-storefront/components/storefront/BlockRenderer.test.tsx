@@ -26,7 +26,13 @@ jest.mock('@/lib/templates', () => ({
 jest.mock('./Hero', () => {
   const { Text: MockText } = jest.requireActual('react-native');
   return {
-    Hero: () => <MockText testID="hero-carousel">Hero carousel</MockText>,
+    Hero: ({ trailingAdPlacement }: { trailingAdPlacement?: string }) => (
+      <MockText
+        testID={trailingAdPlacement ? 'hero-carousel-with-ad' : 'hero-carousel'}
+      >
+        Hero carousel
+      </MockText>
+    ),
   };
 });
 
@@ -42,8 +48,12 @@ jest.mock('./UtilityPanel', () => ({
 jest.mock('./JustLaunchedCarousel', () => {
   const { Text: MockText } = jest.requireActual('react-native');
   return {
-    JustLaunchedCarousel: () => (
-      <MockText testID="just-launched">Just launched</MockText>
+    JustLaunchedCarousel: ({ suppressAds }: { suppressAds?: boolean }) => (
+      <MockText
+        testID={suppressAds ? 'just-launched-ads-off' : 'just-launched'}
+      >
+        Just launched
+      </MockText>
     ),
   };
 });
@@ -69,12 +79,16 @@ const configuredHeroBlock: Block = {
   },
 };
 
-function renderBlocks(blocks: Block[]) {
+function renderBlocks(
+  blocks: Block[],
+  extraProps: Partial<Parameters<typeof BlockRenderer>[0]> = {}
+) {
   return render(
     <BlockRenderer
       blocks={blocks}
       selectedCategoryId={null}
       onCategorySelect={jest.fn()}
+      {...extraProps}
     />
   );
 }
@@ -96,6 +110,22 @@ describe('BlockRenderer', () => {
     renderBlocks([{ type: 'JustLaunched', props: { id: 'launches' } }]);
 
     expect(screen.getByText('Just launched')).toBeTruthy();
+  });
+
+  it('withholds ad placements from hero and launch blocks while suppressed', () => {
+    // Regression: an obscured feed (e.g. search open) must propagate ad
+    // suppression into every block that mounts a placement.
+    renderBlocks(
+      [
+        configuredHeroBlock,
+        { type: 'JustLaunched', props: { id: 'launches' } },
+      ],
+      { suppressAds: true }
+    );
+
+    expect(screen.getByTestId('hero-carousel')).toBeTruthy();
+    expect(screen.queryByTestId('hero-carousel-with-ad')).toBeNull();
+    expect(screen.getByTestId('just-launched-ads-off')).toBeTruthy();
   });
 
   it('renders no content for an unknown block type', () => {

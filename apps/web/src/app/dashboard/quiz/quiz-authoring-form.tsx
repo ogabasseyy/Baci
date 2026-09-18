@@ -106,10 +106,26 @@ export function QuizAuthoringForm({
             Number.NaN
         ).toLocaleString()
       : `About ${windowMinutes} minute${windowMinutes === '1' ? '' : 's'} after launch`;
+  // The inputs are launch-policy-zone wall clocks: compare their zoned ISO
+  // conversions (as activation does), not Date.parse, which would read them
+  // in the admin browser's zone and misjudge DST-gap intervals.
+  const scheduledStartIso = scheduledStart
+    ? quizDatetimeLocalToIso(scheduledStart, QUIZ_DEFAULT_TIME_ZONE)
+    : null;
+  const scheduledEndIso = scheduledEnd
+    ? quizDatetimeLocalToIso(scheduledEnd, QUIZ_DEFAULT_TIME_ZONE)
+    : null;
+  const scheduledStartMs = scheduledStartIso
+    ? Date.parse(scheduledStartIso)
+    : Number.NaN;
+  const scheduledEndMs = scheduledEndIso
+    ? Date.parse(scheduledEndIso)
+    : Number.NaN;
   const timingValid =
     timingKind === 'immediate' ||
-    (Boolean(scheduledStart && scheduledEnd) &&
-      Date.parse(scheduledEnd) > Date.parse(scheduledStart));
+    (Number.isFinite(scheduledStartMs) &&
+      Number.isFinite(scheduledEndMs) &&
+      scheduledEndMs > scheduledStartMs);
   const canSubmit =
     !disabled &&
     !isGenerating &&

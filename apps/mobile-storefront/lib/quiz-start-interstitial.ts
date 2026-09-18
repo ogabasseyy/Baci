@@ -14,9 +14,14 @@ import { trackInterstitialPaidEvent } from './interstitial-paid-event';
  * unavailable.
  */
 let didShowThisSession = false;
+// A load in progress already holds the session cap: a second invocation
+// while the first ad is still loading must not create a second
+// interstitial, or overlapping lobby visits could present two ads.
+let loadInFlight = false;
 
 export function resetQuizStartInterstitialForTests(): void {
   didShowThisSession = false;
+  loadInFlight = false;
 }
 
 export function wasQuizStartInterstitialShown(): boolean {
@@ -78,11 +83,16 @@ export async function maybeShowQuizStartInterstitial(
     return 'skipped';
   }
 
+  if (loadInFlight) {
+    return 'skipped';
+  }
+
   return new Promise<'shown' | 'skipped'>((resolve) => {
     let settled = false;
     const finish = (outcome: 'shown' | 'skipped') => {
       if (settled) return;
       settled = true;
+      loadInFlight = false;
       if (outcome === 'shown') {
         didShowThisSession = true;
         trackEvent('mobile_ad_impression', {
@@ -94,6 +104,7 @@ export async function maybeShowQuizStartInterstitial(
     };
 
     try {
+      loadInFlight = true;
       const interstitial = mobileAds.InterstitialAd.createForAdRequest(
         config.unitId
       );

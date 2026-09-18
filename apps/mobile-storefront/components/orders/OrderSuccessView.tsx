@@ -272,7 +272,12 @@ export function OrderSuccessView({
                   </Text>
                 </Pressable>
               </View>
-              <AdSlot placement="ORDER_SUCCESS_BANNER" />
+              {/* The permission modal covers this screen; unmount the slot
+                  while it is visible so no obscured delivery is requested
+                  or attributed. */}
+              {showPermissionModal ? null : (
+                <AdSlot placement="ORDER_SUCCESS_BANNER" />
+              )}
             </View>
           </View>
         </ScrollView>

@@ -201,6 +201,9 @@ export function HomeFeedList({
         onCategorySelect={onCategorySelect}
         blockWrapperStyle={blockWrapperStyle}
         renderAfterBlock={renderAfterCategoryRail}
+        // Search covers the feed with a full-screen scrim; withhold the
+        // home ad placements so no obscured delivery is requested.
+        suppressAds={isSearchOpen}
       />
       {hasPrimaryGrid ? (
         <>
@@ -238,8 +241,9 @@ export function HomeFeedList({
         onCategorySelect={onCategorySelect}
         blockWrapperStyle={blockWrapperStyle}
         renderAfterBlock={renderAfterCategoryRail}
+        suppressAds={isSearchOpen}
       />
-      <AdSlot placement="PRODUCT_GRID_IN_FEED" />
+      {isSearchOpen ? null : <AdSlot placement="PRODUCT_GRID_IN_FEED" />}
     </View>
   );
 

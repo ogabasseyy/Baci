@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useViewportActivation } from '@/components/storefront/use-viewport-activation';
 import type { Product } from '../types';
 import { useActivationFocusRestore } from './use-activation-focus-restore';
@@ -41,6 +41,11 @@ interface HomeProductGridGateProps extends HomeProductGridGateGridProps {
 // unaffected: the chunk still loads on first activation only.
 const loadDefaultGridModule = () => import('./HomeProductGrid');
 
+// Maximum time the gate holds a loaded grid on the fallback while a press
+// is in flight, awaiting its completion (click/up/cancel). Mirrors
+// HeroUtilityPanelGate.
+const PRESS_SETTLE_TIMEOUT_MS = 500;
+
 /**
  * Viewport gate for the homepage featured-products grid. Renders the static
  * fallback (SSR HTML, zero JS) until the shopper's first interaction or
@@ -74,6 +79,14 @@ export function HomeProductGridGate({
   // permanently mounted. Same contract as HeroUtilityPanelGate.
   const [loadFailed, setLoadFailed] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  // A press began (pointerdown) but has not completed (up/click/cancel).
+  // While set, a loaded grid holds the fallback mounted so the completing
+  // click still lands on the pressed link and navigates natively — without
+  // this, a cached-fast chunk swaps between pointerdown and click and the
+  // first tap is swallowed. Same contract as HeroUtilityPanelGate.
+  const [pressHeld, setPressHeld] = useState(false);
+  const [settleEpoch, setSettleEpoch] = useState(0);
+  const pointerDownRef = useRef(false);
 
   // Replacing the fallback unmounts the focused node and drops keyboard
   // focus to <body> — capture before the swap, restore the matching
@@ -85,28 +98,75 @@ export function HomeProductGridGate({
     Grid !== null
   );
 
-  // Retry arm: a later pointer/key interaction after a failed load clears
-  // the parked failure and re-arms the load effect below. Each retry needs
-  // a fresh interaction — no timer loop, no render loop.
   useEffect(() => {
-    if (!loadFailed) {
+    // Capture stays armed while the fallback is mounted — not just until
+    // first activation, and crucially THROUGH a loaded grid held back by
+    // an in-flight press. Only the committed swap unsubscribes.
+    if (Grid !== null && !pressHeld) {
       return;
     }
+
+    // A later interaction after a failed load retries the import (the
+    // load effect re-runs on the attempt bump). Each retry needs a fresh
+    // interaction — no timer loop, no render loop.
     const retryAfterFailure = () => {
-      setLoadFailed(false);
-      setLoadAttempt((attempt) => attempt + 1);
+      if (loadFailed) {
+        setLoadFailed(false);
+        setLoadAttempt((attempt) => attempt + 1);
+      }
     };
-    window.addEventListener('pointerdown', retryAfterFailure, {
+
+    const handlePointerDown = () => {
+      pointerDownRef.current = true;
+      setPressHeld(true);
+      retryAfterFailure();
+    };
+
+    // The completing click lands on the still-mounted fallback link and
+    // navigates natively; releasing here lets the swap commit after it.
+    const handleClick = () => {
+      pointerDownRef.current = false;
+      setPressHeld(false);
+      retryAfterFailure();
+    };
+
+    const handlePointerUp = () => {
+      pointerDownRef.current = false;
+      setPressHeld(false);
+    };
+
+    const handlePointerCancel = () => {
+      pointerDownRef.current = false;
+      setPressHeld(false);
+    };
+
+    const handleKeyDown = () => {
+      retryAfterFailure();
+    };
+
+    // The page lost focus mid-press: the gesture can never complete.
+    const handleBlur = () => {
+      pointerDownRef.current = false;
+      setPressHeld(false);
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown, {
       passive: true,
     });
-    window.addEventListener('keydown', retryAfterFailure);
-    window.addEventListener('click', retryAfterFailure);
+    window.addEventListener('click', handleClick);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', handleBlur);
     return () => {
-      window.removeEventListener('pointerdown', retryAfterFailure);
-      window.removeEventListener('keydown', retryAfterFailure);
-      window.removeEventListener('click', retryAfterFailure);
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('click', handleClick);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', handleBlur);
     };
-  }, [loadFailed]);
+  }, [Grid, pressHeld, ref, loadFailed]);
 
   useEffect(() => {
     if (!isActive || Grid || loadFailed) {
@@ -137,7 +197,31 @@ export function HomeProductGridGate({
     // biome-ignore lint/correctness/useExhaustiveDependencies: see above.
   }, [Grid, isActive, loadGridModule, loadFailed, loadAttempt]);
 
-  if (!isActive || !Grid) {
+  // Bound the press hold like HeroUtilityPanelGate: a press with no
+  // observable completion must not wedge the loaded grid behind the
+  // fallback, but a press that outlasts the bound with the pointer still
+  // down is a genuine long press — the hold extends until release.
+  useEffect(() => {
+    if (Grid === null || !pressHeld) {
+      return;
+    }
+    const settleTimer = setTimeout(() => {
+      if (pointerDownRef.current) {
+        setSettleEpoch((epoch) => epoch + 1);
+      } else {
+        setPressHeld(false);
+      }
+    }, PRESS_SETTLE_TIMEOUT_MS);
+    return () => {
+      clearTimeout(settleTimer);
+    };
+  }, [Grid, pressHeld, settleEpoch]);
+
+  // Hold the fallback mounted while a press is in flight against a loaded
+  // grid, so the completing click can still land on the pressed link.
+  const holdSwapForPress = Grid !== null && pressHeld;
+
+  if (!isActive || !Grid || holdSwapForPress) {
     return <div ref={ref}>{fallback}</div>;
   }
 

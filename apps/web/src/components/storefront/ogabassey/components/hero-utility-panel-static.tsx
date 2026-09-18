@@ -1,4 +1,9 @@
 import { HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS } from './hero-mobile-geometry';
+import { StaticUtilityOptionButton } from './static-utility-option-button';
+import {
+  STATIC_ACTIVE_WORD_INDEX,
+  StaticUtilityWords,
+} from './static-utility-words';
 
 /**
  * Zero-JavaScript twin of {@link HeroUtilityPanel}'s first frame.
@@ -28,8 +33,6 @@ import { HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS } from './hero-mobile-geomet
  * this file to match.
  */
 
-const STATIC_UTILITY_WORDS = ['Airtime!', 'Data!', 'TV!', 'Power!', 'Gaming!'];
-
 interface StaticUtilityOption {
   id: string;
   label: string;
@@ -42,64 +45,6 @@ const STATIC_UTILITY_OPTIONS: StaticUtilityOption[] = [
   { id: 'power', label: 'Power' },
   { id: 'betting', label: 'Gaming' },
 ];
-
-const STATIC_ACTIVE_INDEX = 0;
-
-function StaticUtilityOptionButton({
-  isActive,
-  label,
-  optionId,
-  tone,
-}: {
-  isActive: boolean;
-  label: string;
-  optionId: string;
-  tone: 'mobile' | 'desktop';
-}) {
-  const baseClass =
-    tone === 'mobile'
-      ? 'bg-gray-100 text-gray-600'
-      : 'bg-gray-50 text-gray-600 group-hover:bg-primary group-hover:text-white';
-  const activeClass = 'bg-primary/10 text-primary';
-
-  return (
-    <button
-      type="button"
-      data-utility-option={optionId}
-      tabIndex={-1}
-      className="flex flex-col items-center gap-2 group cursor-pointer"
-    >
-      <div
-        className={`w-12 h-12 rounded-full flex items-center justify-center transition-[background-color,color] duration-300 ${isActive ? activeClass : baseClass}`}
-      >
-        <span aria-hidden="true" className="block h-5 w-5" />
-      </div>
-      <span
-        className={`text-xs font-medium transition-colors duration-300 ${isActive ? 'text-gray-900 font-bold' : 'text-gray-700'}`}
-      >
-        {label}
-      </span>
-    </button>
-  );
-}
-
-function StaticUtilityWords({ minWidthClass }: { minWidthClass: string }) {
-  return (
-    <span
-      className={`text-primary font-bold transition-all duration-500 inline-grid ${minWidthClass} text-left align-baseline`}
-    >
-      {STATIC_UTILITY_WORDS.map((word, index) => (
-        <span
-          aria-hidden={index === STATIC_ACTIVE_INDEX ? undefined : true}
-          className={`col-start-1 row-start-1 ${index === STATIC_ACTIVE_INDEX ? '' : 'invisible'}`}
-          key={word}
-        >
-          {word}
-        </span>
-      ))}
-    </span>
-  );
-}
 
 export function HeroUtilityPanelStatic() {
   return (
@@ -124,7 +69,7 @@ export function HeroUtilityPanelStatic() {
             {STATIC_UTILITY_OPTIONS.map((option, index) => (
               <StaticUtilityOptionButton
                 key={option.id}
-                isActive={STATIC_ACTIVE_INDEX === index}
+                isActive={STATIC_ACTIVE_WORD_INDEX === index}
                 label={option.label}
                 optionId={option.id}
                 tone="mobile"
@@ -145,7 +90,7 @@ export function HeroUtilityPanelStatic() {
           {STATIC_UTILITY_OPTIONS.map((option, index) => (
             <StaticUtilityOptionButton
               key={option.id}
-              isActive={STATIC_ACTIVE_INDEX === index}
+              isActive={STATIC_ACTIVE_WORD_INDEX === index}
               label={option.label}
               optionId={option.id}
               tone="desktop"

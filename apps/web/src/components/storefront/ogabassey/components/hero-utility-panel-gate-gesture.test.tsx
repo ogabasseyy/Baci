@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeroUtilityPanelGate } from './hero-utility-panel-gate';
 import {
   echoPanelLoader,
+  fireViewportApproach,
+  settleLcpSignal,
   setupGateHarness,
   teardownGateHarness,
 } from './hero-utility-panel-gate-test-setup';
@@ -210,4 +212,61 @@ describe('HeroUtilityPanelGate tap gestures', () => {
       'none'
     );
   });
+  it('records a fallback tap that lands after activation but before the chunk arrives', async () => {
+    // Activation (viewport) starts the import; a tap on a still-visible
+    // fallback option while the chunk is in flight must still replay.
+    const echoPanel = ({
+      pendingUtilityTab,
+    }: {
+      pendingUtilityTab?: string | null;
+    }) => (
+      <div
+        data-testid="interactive-utility-panel"
+        data-pending={pendingUtilityTab ?? 'none'}
+      />
+    );
+    let resolveLoad: (value: { HeroUtilityPanel: typeof echoPanel }) => void =
+      () => undefined;
+    const deferredLoader = vi.fn(
+      () =>
+        new Promise<{ HeroUtilityPanel: typeof echoPanel }>((resolve) => {
+          resolveLoad = resolve;
+        })
+    );
+    render(
+      <HeroUtilityPanelGate
+        loadPanelModule={deferredLoader as never}
+        timeoutMs={1000}
+      />
+    );
+    await settleLcpSignal();
+
+    await act(async () => {
+      fireViewportApproach();
+      await Promise.resolve();
+    });
+    expect(deferredLoader).toHaveBeenCalledOnce();
+
+    const tvButton = screen.getAllByText('Tv')[0]?.closest('button');
+    expect(tvButton).toHaveAttribute('data-utility-option', 'tv');
+
+    await act(async () => {
+      fireEvent.click(tvButton!);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      resolveLoad({ HeroUtilityPanel: echoPanel });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('interactive-utility-panel')).toHaveAttribute(
+      'data-pending',
+      'tv'
+    );
+  });
+
 });

@@ -26,7 +26,11 @@ const OFFER = {
   id: 'o1',
   product_id: 'p1',
   images: ['https://cdn.example/offer.jpg'],
+  price: 5000,
+  condition: 'used',
 };
+
+const CONDITIONS = new Map([['p1', 'new']]);
 
 describe('appendOfferImageCandidates', () => {
   it('scopes the offer query to the resolved merchant', async () => {
@@ -37,6 +41,7 @@ describe('appendOfferImageCandidates', () => {
       merchantId: 'm-1',
       storefrontBaseUrl: 'https://store.example',
       productRows: [],
+      productConditions: CONDITIONS,
     });
     const eqCalls = calls.filter((call) => call.method === 'eq');
     expect(eqCalls).toContainEqual({ method: 'eq', args: ['merchant_id', 'm-1'] });
@@ -51,6 +56,7 @@ describe('appendOfferImageCandidates', () => {
       merchantId: 'm-1',
       storefrontBaseUrl: 'https://store.example',
       productRows: [],
+      productConditions: CONDITIONS,
     });
     expect(rows).toHaveLength(1);
     expect(rows[0].candidate.is_primary).toBe(false);
@@ -62,8 +68,30 @@ describe('appendOfferImageCandidates', () => {
       merchantId: 'm-1',
       storefrontBaseUrl: 'https://store.example',
       productRows: rows,
+      productConditions: CONDITIONS,
     });
     expect(rerun).toHaveLength(0);
+  });
+
+  it('skips offers that cannot emit feed rows', async () => {
+    const { supabase } = stubSupabase([
+      {
+        data: [
+          { ...OFFER, id: 'zero', price: 0 },
+          { ...OFFER, id: 'same', condition: 'new' },
+          { ...OFFER, id: 'bad', condition: 'bogus' },
+        ],
+      },
+    ]);
+    const rows = await appendOfferImageCandidates({
+      supabase,
+      productIds: ['p1'],
+      merchantId: 'm-1',
+      storefrontBaseUrl: 'https://store.example',
+      productRows: [],
+      productConditions: CONDITIONS,
+    });
+    expect(rows).toHaveLength(0);
   });
 
   it('throws loudly on query failure', async () => {
@@ -75,6 +103,7 @@ describe('appendOfferImageCandidates', () => {
         merchantId: 'm-1',
         storefrontBaseUrl: 'https://store.example',
         productRows: [],
+        productConditions: CONDITIONS,
       })
     ).rejects.toThrow('Failed to fetch product offer images: boom');
   });

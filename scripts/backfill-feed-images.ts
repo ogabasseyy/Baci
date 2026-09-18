@@ -162,6 +162,7 @@ async function main() {
   const products: {
     id: string;
     images: unknown;
+    condition?: string | null;
     has_condition_offers?: boolean | null;
   }[] = [];
   let offset = 0;
@@ -170,7 +171,7 @@ async function main() {
   while (hasMore) {
     const { data, error: productsError } = await supabase
       .from('products')
-      .select('id, images, has_condition_offers')
+      .select('id, images, condition, has_condition_offers')
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .range(offset, offset + PAGE_SIZE - 1);
@@ -204,17 +205,20 @@ async function main() {
   // products are eligible: feed hydration skips the offers relation
   // otherwise, so unflagged offer rows could never build an exclusion set
   // and would leak into base product imagery.
-  const offerProductIds = products
-    .filter((product) => product.has_condition_offers)
-    .map((product) => product.id);
+  const offerProducts = products.filter(
+    (product) => product.has_condition_offers
+  );
   try {
     classifiedRows.push(
       ...(await appendOfferImageCandidates({
         supabase,
-        productIds: offerProductIds,
+        productIds: offerProducts.map((product) => product.id),
         merchantId,
         storefrontBaseUrl,
         productRows: classifiedRows,
+        productConditions: new Map(
+          offerProducts.map((product) => [product.id, product.condition])
+        ),
       }))
     );
   } catch (err) {

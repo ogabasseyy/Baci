@@ -20,6 +20,7 @@ import {
   classifyFeedImageCandidate,
   extractImageCandidates,
 } from '../../packages/shared/src/gmc-feed/index';
+import { toGoogleListingCondition } from '../../packages/shared/src/lib/product-condition';
 
 export interface OfferImageBackfillInput {
   supabase: SupabaseClient;
@@ -30,6 +31,8 @@ export interface OfferImageBackfillInput {
     candidate: BackfillImageCandidate;
     classified: ClassifiedImage;
   }>;
+  /** Parent product conditions keyed by product ID, for offer eligibility. */
+  productConditions: ReadonlyMap<string, string | null | undefined>;
 }
 
 const PRODUCT_ID_CHUNK_SIZE = 250;
@@ -46,17 +49,28 @@ export async function appendOfferImageCandidates(
 ): Promise<
   Array<{ candidate: BackfillImageCandidate; classified: ClassifiedImage }>
 > {
-  const { supabase, productIds, merchantId, storefrontBaseUrl, productRows } =
-    input;
-  const offers: Array<{ id: string; product_id: string; images: unknown }> =
-    [];
+  const {
+    supabase,
+    productIds,
+    merchantId,
+    storefrontBaseUrl,
+    productRows,
+    productConditions,
+  } = input;
+  const offers: Array<{
+    id: string;
+    product_id: string;
+    images: unknown;
+    price: number | string | null;
+    condition: string | null;
+  }> = [];
   for (let start = 0; start < productIds.length; start += PRODUCT_ID_CHUNK_SIZE) {
     let offerOffset = 0;
     let hasMoreOffers = true;
     while (hasMoreOffers) {
       const { data, error: offersError } = await supabase
         .from('product_offers')
-        .select('id, product_id, images')
+        .select('id, product_id, images, price, condition')
         .in('product_id', productIds.slice(start, start + PRODUCT_ID_CHUNK_SIZE))
         .eq('merchant_id', merchantId)
         .eq('status', 'active')
@@ -84,6 +98,23 @@ export async function appendOfferImageCandidates(
     classified: ClassifiedImage;
   }> = [];
   for (const offer of offers) {
+    // Mirror the feed eligibility rule: only offers that can emit rows
+    // (positive finite price, valid condition, different from the parent
+    // condition) contribute manifest entries. Anything else would persist
+    // imagery with no exclusion set to guard it.
+    const price = Number(offer.price);
+    const offerCondition = toGoogleListingCondition(offer.condition);
+    if (
+      !Number.isFinite(price) ||
+      price <= 0 ||
+      !offerCondition ||
+      offerCondition ===
+        toGoogleListingCondition(
+          productConditions.get(offer.product_id)
+        )
+    ) {
+      continue;
+    }
     const candidates = extractImageCandidates(
       offer.product_id,
       offer.images as ProductImages

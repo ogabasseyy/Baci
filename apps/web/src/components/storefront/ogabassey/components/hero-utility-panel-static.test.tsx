@@ -46,6 +46,8 @@ describe('HeroUtilityPanelStatic', () => {
     expect(buttons).toHaveLength(10);
     for (const button of buttons) {
       expect(button).toHaveAttribute('type', 'button');
+      // Handler-free until the interactive module loads: no tab stops.
+      expect(button).toHaveAttribute('tabindex', '-1');
     }
   });
 

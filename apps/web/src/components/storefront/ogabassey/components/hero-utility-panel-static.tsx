@@ -10,11 +10,14 @@ import { HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS } from './hero-mobile-geomet
  * keep their size, so the icon slots collapse to an empty fixed box with no
  * layout delta) and minus all event handlers.
  *
- * Intended render sites (both wrap it in an `inert` boundary because the
- * buttons are intentionally handler-free until the interactive module loads):
+ * Intended render sites (the buttons stay handler-free until the
+ * interactive module loads):
  *   - `HeroUtilityPanelGate` pre-activation fallback (visible homepage hero):
  *     identical boxes mean the activation swap is paint-only (no CLS) while
  *     the panel's client JS + icon modules stay out of the initial bundle.
+ *     The gate shell is `aria-hidden` (NOT `inert`: inert subtrees are
+ *     excluded from hit testing, which would hide the tapped option from
+ *     first-tap replay); the `tabIndex={-1}` buttons take no tab stops.
  *   - `OgabasseyHomeHeroReserveFallback` geometry reservation (already
  *     `inert` + `aria-hidden`): exact panel height on both viewports with
  *     HTML bytes only.
@@ -63,6 +66,7 @@ function StaticUtilityOptionButton({
     <button
       type="button"
       data-utility-option={optionId}
+      tabIndex={-1}
       className="flex flex-col items-center gap-2 group cursor-pointer"
     >
       <div

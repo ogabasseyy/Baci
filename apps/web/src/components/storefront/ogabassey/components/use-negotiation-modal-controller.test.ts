@@ -158,6 +158,47 @@ describe('useNegotiationModalController', () => {
     expect(mocks.createClient).not.toHaveBeenCalled();
   });
 
+  it('recovers when the lazy client fails to load and retries cleanly', async () => {
+    vi.stubGlobal('alert', vi.fn());
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    // The client chunk (or factory) rejects once, then recovers — modeling a
+    // stale-chunk transition.
+    mocks.createClient.mockImplementationOnce(() => {
+      throw new Error('chunk failed');
+    });
+    vi.mocked(submitNegotiationUpload).mockResolvedValue(undefined);
+    const file = new File(['proof'], 'proof.png', { type: 'image/png' });
+    const { result } = renderHook(() =>
+      useNegotiationModalController(options)
+    );
+    act(() => {
+      result.current.setOffer('90000');
+      result.current.setUploadFile(file);
+    });
+    const event = { preventDefault: vi.fn() } as never;
+
+    await act(async () => {
+      await result.current.handleUploadSubmit(event);
+    });
+
+    expect(alert).toHaveBeenCalledWith(
+      'Unable to load the submission service. Check your connection and try again.'
+    );
+    expect(submitNegotiationUpload).not.toHaveBeenCalled();
+    // The form keeps its pre-submit state (never stuck in processing).
+    expect(result.current.status).toBe('input');
+
+    // The poisoned cached promise was dropped: a retry re-imports and submits.
+    await act(async () => {
+      await result.current.handleUploadSubmit(event);
+    });
+
+    expect(submitNegotiationUpload).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
+  });
+
   it('keeps a discounted non-negotiable product at its final price', () => {
     vi.useFakeTimers();
     const { result } = renderHook(() =>

@@ -46,9 +46,12 @@ function hasStoredBrowserSession(): boolean {
         }
       }
     }
+    // @supabase/ssr splits large sessions into chunked cookies named
+    // `sb-<ref>-auth-token.0` … `.4` (see its cookie `getWithHints`); accept
+    // the optional chunk suffix so chunked-only browsers still boot eagerly.
     return (
       typeof document !== 'undefined' &&
-      /(?:^|;\s*)sb-[^;]*auth-token=/.test(document.cookie ?? '')
+      /(?:^|;\s*)sb-[^;]*auth-token(\.\d+)?=/.test(document.cookie ?? '')
     );
   } catch {
     return true;
@@ -172,7 +175,20 @@ export function AuthProvider({
 
     const start = () => {
       void (async () => {
-        const supabase = await loadSupabaseClient();
+        let supabase: Awaited<ReturnType<typeof loadSupabaseClient>>;
+        try {
+          supabase = await loadSupabaseClient();
+        } catch (error) {
+          // A rejected lazy import or factory must settle auth instead of
+          // stranding the page on loading=true: without an initialUser there
+          // is no other path that clears it. Fail open to signed-out (a
+          // reload recovers); a server-supplied initialUser stays intact.
+          console.error('[AuthProvider] Failed to load Supabase client', error);
+          if (isMounted) {
+            setLoading(false);
+          }
+          return;
+        }
         if (!isMounted) return;
 
         // Listen for auth changes (login, logout, token refresh) without

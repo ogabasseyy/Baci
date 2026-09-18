@@ -1,8 +1,6 @@
+import { HeroMobileControlsSkeleton } from '@/components/storefront/ogabassey/components/hero-mobile-controls-skeleton';
 import {
-  HERO_MOBILE_CONTROL_TRACK_CLASSES,
-  HERO_MOBILE_CONTROLS_ROW_CLASSES,
   HERO_MOBILE_PANEL_CLASSES,
-  HERO_MOBILE_PLAY_TOGGLE_SLOT_CLASSES,
   HERO_MOBILE_WRAPPER_CLASSES,
 } from '@/components/storefront/ogabassey/components/hero-mobile-geometry';
 import { HeroUtilityPanelStatic } from '@/components/storefront/ogabassey/components/hero-utility-panel-static';
@@ -21,9 +19,10 @@ import { HeroUtilityPanelStatic } from '@/components/storefront/ogabassey/compon
  * so stream-in replaces same-sized boxes and moves nothing.
  *
  * Tradeoffs, documented so they are not "fixed" back:
- *   - The controls row is reserved unconditionally. Single-slide feeds have
- *     no controls row, so a (rare) single-slide cold miss keeps 52px of slack
- *     for one frame instead of shifting. Multi-slide is the common case.
+ *   - The controls row is reserved unconditionally (multi-slide is the
+ *     common case). The resolved zero/single-slide heroes keep the same
+ *     slot invisibly via the shared skeleton, so even degenerate swaps
+ *     move nothing.
  *   - No product art or copy: feed degradation must not invent shopping UI,
  *     and an inline banner here would bloat the stream for a transient frame.
  *   - The zero-JS HeroUtilityPanelStatic renders (not a sized div) because
@@ -61,17 +60,7 @@ export function OgabasseyHomeHeroReserveFallback({
             data-ogabassey-home-hero-reserve-mobile="true"
           >
             <div className={HERO_MOBILE_PANEL_CLASSES} />
-            <div className={HERO_MOBILE_CONTROLS_ROW_CLASSES}>
-              <div className="flex flex-1 items-center gap-1.5">
-                {[0, 1, 2].map((index) => (
-                  <div
-                    className={HERO_MOBILE_CONTROL_TRACK_CLASSES}
-                    key={index}
-                  />
-                ))}
-              </div>
-              <div className={HERO_MOBILE_PLAY_TOGGLE_SLOT_CLASSES} />
-            </div>
+            <HeroMobileControlsSkeleton />
           </div>
         )}
         <div

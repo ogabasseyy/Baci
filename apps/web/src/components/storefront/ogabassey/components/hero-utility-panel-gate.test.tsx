@@ -53,7 +53,7 @@ describe('HeroUtilityPanelGate', () => {
     );
   }
 
-  it('renders the inert static fallback without loading the panel module', () => {
+  it('renders the non-interactive static fallback without loading the panel module', () => {
     const { loader } = renderGate();
 
     expect(
@@ -61,9 +61,17 @@ describe('HeroUtilityPanelGate', () => {
         .getAllByText(/we pay/i)[0]
         ?.closest('[data-ogabassey-hero-utility="true"]')
     ).not.toBeNull();
-    expect(
-      document.querySelector('[data-ogabassey-hero-utility-gate="true"]')
-    ).toHaveAttribute('inert');
+    // Deliberately NOT inert: inert subtrees are excluded from hit testing,
+    // which would hide the tapped option from first-tap replay. The shell
+    // is aria-hidden with unfocusable buttons instead.
+    const shell = document.querySelector(
+      '[data-ogabassey-hero-utility-gate="true"]'
+    );
+    expect(shell).toHaveAttribute('aria-hidden', 'true');
+    expect(shell).not.toHaveAttribute('inert');
+    for (const button of screen.getAllByRole('button', { hidden: true })) {
+      expect(button).toHaveAttribute('tabindex', '-1');
+    }
     expect(loader).not.toHaveBeenCalled();
     expect(
       screen.queryByTestId('interactive-utility-panel')

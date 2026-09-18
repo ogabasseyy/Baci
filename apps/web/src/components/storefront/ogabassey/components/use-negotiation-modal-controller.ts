@@ -216,7 +216,21 @@ export function useNegotiationModalController({
       alert(formError);
       return;
     }
-    const supabase = await getSupabaseClient();
+    let supabase: Awaited<ReturnType<typeof getSupabaseClient>>;
+    try {
+      supabase = await getSupabaseClient();
+    } catch (error) {
+      // The client chunk (or its factory) can reject on stale-chunk and
+      // offline transitions — before any of submitNegotiationUpload's guarded
+      // paths run. Surface feedback, drop the poisoned cached promise so a
+      // retry re-imports, and leave the form in its actionable upload state.
+      console.error('Failed to load Supabase client:', error);
+      supabasePromiseRef.current = null;
+      alert(
+        'Unable to load the submission service. Check your connection and try again.'
+      );
+      return;
+    }
     await submitNegotiationUpload({
       canApplyAsyncResult,
       cart,

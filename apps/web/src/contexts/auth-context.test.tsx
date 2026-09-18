@@ -226,6 +226,60 @@ describe('AuthProvider', () => {
     }
   });
 
+  it('settles loading when the lazy client initialization rejects', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    mocks.createClient.mockImplementationOnce(() => {
+      throw new Error('chunk failed');
+    });
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>
+    );
+
+    // Fails open to signed-out instead of stranding the page on loading.
+    await waitFor(() => {
+      expect(screen.getByText('loading:false')).toBeInTheDocument();
+    });
+    expect(screen.getByText('user:none')).toBeInTheDocument();
+    consoleError.mockRestore();
+  });
+
+  it('boots immediately when the browser holds only chunked auth cookies', async () => {
+    // @supabase/ssr splits large sessions into `sb-<ref>-auth-token.N`
+    // cookies; a chunked-only browser must still take the immediate path.
+    window.localStorage.clear();
+    // biome-ignore lint/suspicious/noDocumentCookie: the test models a
+    // chunked-only browser by construction.
+    document.cookie = 'sb-testref-auth-token.0={}';
+    mocks.getUser.mockResolvedValue({
+      data: { user: { id: 'user-5' } as User },
+      error: null,
+    });
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(mocks.getUser).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByText('user:user-5')).toBeInTheDocument();
+    });
+
+    // biome-ignore lint/suspicious/noDocumentCookie: cleanup for the
+    // chunked-cookie case above.
+    document.cookie =
+      'sb-testref-auth-token.0=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    window.localStorage.setItem('sb-testref-auth-token', '{}');
+  });
+
   it('boots auth at the short fallback when requestIdleCallback is unavailable', async () => {
     // jsdom ships no requestIdleCallback, so this pins the RIC-less path
     // (older engines, embedded webviews) without stubbing.

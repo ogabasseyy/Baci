@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { asRoute } from '@/lib/routes';
 import { CarouselPlayToggle } from './carousel-play-toggle';
 import { CarouselProgressFill } from './carousel-progress-fill';
+import { HeroMobileControlsSkeleton } from './hero-mobile-controls-skeleton';
 import type { LaunchProductSlide } from './LaunchCarousel';
 import {
   MOBILE_HERO_IMAGE_QUALITY,
@@ -276,7 +277,12 @@ export function HeroMobileCarousel({
             />
           )}
         </div>
-      ) : null}
+      ) : (
+        // Single slide: no interactive controls, but the streaming reserve
+        // fallback bets on a multi-slide hero — keep its row slot (empty but
+        // sized) so the fallback-to-content swap moves nothing.
+        <HeroMobileControlsSkeleton invisible />
+      )}
     </div>
   );
 }

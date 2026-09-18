@@ -10,7 +10,7 @@ import {
   type IdleBootReason,
   scheduleIdleBoot,
 } from '@/lib/posthog/schedule-idle-boot';
-import { waitForFirstLcpCandidate } from '@/lib/posthog/wait-for-lcp';
+import { waitForLcpWindowEnd } from '@/lib/posthog/wait-for-lcp';
 
 const postHogBrowserEnv = getPostHogBrowserEnv();
 
@@ -23,7 +23,8 @@ const postHogBrowserEnv = getPostHogBrowserEnv();
 async function bootPostHogForPathname(
   currentPathname: string,
   isCancelled: () => boolean,
-  idleReason?: IdleBootReason
+  idleReason?: IdleBootReason,
+  getCurrentPathname: () => string | undefined = () => currentPathname
 ): Promise<void> {
   const isPublicBlog = isPublicBlogPathname(currentPathname, {
     hostname: globalThis.location?.hostname,
@@ -35,19 +36,31 @@ async function bootPostHogForPathname(
 
   try {
     // Keep the 76KB client (plus its transitive chunks) out of the LCP
-    // window: boot once the first LCP candidate has painted, or the backstop
-    // elapses. Pre-boot metrics are buffered by the web-vitals queue, so
-    // nothing is lost — it just flushes after boot.
+    // window: boot once the first LCP candidate has painted, the shopper
+    // interacts, or the backstop elapses. Pre-boot metrics are buffered by
+    // the web-vitals queue, so nothing is lost — it just flushes after boot.
     //
     // Exception: when the idle gate fired on an early interaction, the
-    // shopper is already engaging — waiting out LCP would install
-    // autocapture too late and lose the follow-up clicks (user events are
-    // NOT buffered, only web-vitals are). Boot immediately instead; the
-    // triggering interaction usually lands after LCP anyway.
+    // shopper is already engaging — waiting would install autocapture too
+    // late and lose the follow-up clicks (user events are NOT buffered,
+    // only web-vitals are). Boot immediately instead; the triggering
+    // interaction usually lands after LCP anyway.
     if (idleReason !== 'interaction') {
-      await waitForFirstLcpCandidate();
+      await waitForLcpWindowEnd();
     }
     if (isCancelled()) {
+      return;
+    }
+
+    // The LCP wait is async: a navigation may have landed on a different
+    // route while it pended. Re-resolve so a stale non-blog capture can't
+    // initialize the full client on a public blog destination (or attribute
+    // the boot to the wrong route).
+    const pathname = getCurrentPathname() ?? currentPathname;
+    const resolvedPublicBlog = isPublicBlogPathname(pathname, {
+      hostname: globalThis.location?.hostname,
+    });
+    if (resolvedPublicBlog && !hasPostHogBrowserInitialized()) {
       return;
     }
 
@@ -58,12 +71,12 @@ async function bootPostHogForPathname(
     }
 
     initializePostHogBrowser(postHogBrowserEnv, console, {
-      lightweight: isPublicBlog,
-      pathname: currentPathname,
+      lightweight: resolvedPublicBlog,
+      pathname,
       hostname: globalThis.location?.hostname,
     });
 
-    if (isPublicBlog) {
+    if (resolvedPublicBlog) {
       return;
     }
 
@@ -72,7 +85,7 @@ async function bootPostHogForPathname(
     );
 
     if (!isCancelled()) {
-      initializePostHogInstrumentationIfAllowed(currentPathname);
+      initializePostHogInstrumentationIfAllowed(pathname);
     }
   } catch (error) {
     if (!isCancelled()) {
@@ -106,7 +119,12 @@ export function PostHogClientBootstrap() {
       const currentPathname =
         pathnameRef.current ?? globalThis.location?.pathname;
       if (!isCancelled() && currentPathname) {
-        void bootPostHogForPathname(currentPathname, isCancelled, reason);
+        void bootPostHogForPathname(
+          currentPathname,
+          isCancelled,
+          reason,
+          () => pathnameRef.current ?? globalThis.location?.pathname
+        );
       }
     });
 

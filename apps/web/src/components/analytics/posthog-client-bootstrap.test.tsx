@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   scheduleIdleBoot: vi.fn(
     (_callback: (reason?: IdleBootReason) => void) => () => undefined
   ),
-  waitForFirstLcpCandidate: vi.fn(async () => undefined),
+  waitForLcpWindowEnd: vi.fn(async () => undefined),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -44,7 +44,7 @@ vi.mock('@/lib/posthog/schedule-idle-boot', () => ({
 // deterministic under jsdom, which never emits LCP entries. Hoisted into
 // `mocks` so tests can assert whether the boot waited for LCP at all.
 vi.mock('@/lib/posthog/wait-for-lcp', () => ({
-  waitForFirstLcpCandidate: mocks.waitForFirstLcpCandidate,
+  waitForLcpWindowEnd: mocks.waitForLcpWindowEnd,
 }));
 
 function importPostHogClientBootstrap() {
@@ -116,7 +116,7 @@ describe('PostHogClientBootstrap', () => {
     await vi.waitFor(() => {
       expect(mocks.initializePostHogBrowser).toHaveBeenCalledOnce();
     });
-    expect(mocks.waitForFirstLcpCandidate).toHaveBeenCalledOnce();
+    expect(mocks.waitForLcpWindowEnd).toHaveBeenCalledOnce();
   });
 
   it('skips the LCP wait when the boot is triggered by an early interaction', async () => {
@@ -133,10 +133,55 @@ describe('PostHogClientBootstrap', () => {
     await vi.waitFor(() => {
       expect(mocks.initializePostHogBrowser).toHaveBeenCalledOnce();
     });
-    expect(mocks.waitForFirstLcpCandidate).not.toHaveBeenCalled();
+    expect(mocks.waitForLcpWindowEnd).not.toHaveBeenCalled();
     expect(
       mocks.initializePostHogInstrumentationIfAllowed
     ).toHaveBeenCalledWith('/');
+  });
+
+  it('suppresses a stale boot that resumes on a blog route after navigation', async () => {
+    // An idle-triggered boot starts on a non-blog route, then the shopper
+    // navigates to a public blog route while the LCP wait pends. The stale
+    // invocation must re-resolve the route and stay off the full client.
+    pathname = '/ogabassey/laptops/macbook-pro';
+    vi.stubGlobal('location', {
+      pathname,
+      href: 'https://usebaci.com/ogabassey/laptops/macbook-pro',
+      hostname: 'usebaci.com',
+    });
+    let resolveLcpWindow: () => void = () => undefined;
+    mocks.waitForLcpWindowEnd.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolveLcpWindow = () => resolve(undefined);
+        })
+    );
+    const { PostHogClientBootstrap } = await importPostHogClientBootstrap();
+
+    const { rerender } = render(<PostHogClientBootstrap />);
+
+    fireDeferredBoot('idle');
+    expect(mocks.waitForLcpWindowEnd).toHaveBeenCalledOnce();
+    expect(mocks.initializePostHogBrowser).not.toHaveBeenCalled();
+
+    pathname = '/ogabassey/blog/phone-guide';
+    vi.stubGlobal('location', {
+      pathname,
+      href: 'https://usebaci.com/ogabassey/blog/phone-guide',
+      hostname: 'usebaci.com',
+    });
+    rerender(<PostHogClientBootstrap />);
+
+    resolveLcpWindow();
+    // Macrotask flush: the suppression path has no dynamic imports, so the
+    // resumed boot settles before this timer fires — the assertions below
+    // cannot pass vacuously on a still-pending boot.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(mocks.initializePostHogBrowser).not.toHaveBeenCalled();
+    expect(
+      mocks.initializePostHogInstrumentationIfAllowed
+    ).not.toHaveBeenCalled();
   });
 
   it('does not initialize the full PostHog browser client on initial public blog pages', async () => {

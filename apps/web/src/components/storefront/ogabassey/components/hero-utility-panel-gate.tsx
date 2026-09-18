@@ -50,16 +50,19 @@ function isUtilityTab(value: string | null): value is UtilityTab {
  * Activation fires on the first of: the panel approaching the viewport
  * (600px margin, so the swap lands before it is visible), the shopper's
  * first pointer/key interaction, or the backstop timeout. The pre-activation
- * fallback sits inside an `inert` boundary (React 19 boolean prop) because
- * its buttons are intentionally handler-free; `inert` has no visual effect,
- * so geometry is untouched. A failed module load keeps the static fallback
+ * fallback is deliberately NOT `inert`: inert subtrees are excluded from hit
+ * testing (verified in Chromium: a tap inside retargets `pointerdown` to the
+ * nearest non-inert ancestor), which would make first-tap replay
+ * unobservable. Instead the fallback is `aria-hidden` with unfocusable
+ * (`tabIndex={-1}`) handler-free buttons — same practical outcome (no tab
+ * stops, hidden from assistive tech, taps do nothing until the swap) while
+ * keeping the tapped option's `data-utility-option` id readable from the
+ * activating pointerdown. A failed module load keeps the static fallback
  * and logs once (same contract as HomeProductGridGate).
  *
- * First-tap replay: `inert` swallows the click that triggers activation, so
- * a tap on a fallback option would otherwise do nothing and force the
- * shopper to tap again. The gate records the tapped option's
- * `data-utility-option` id from the activating pointerdown and replays it
- * into the interactive panel, which opens that tab's modal on mount.
+ * First-tap replay: the gate records the tapped option id and replays it
+ * into the interactive panel, which opens that tab's modal on mount — the
+ * shopper's first tap is honored instead of merely triggering the load.
  */
 export function HeroUtilityPanelGate({
   loadPanelModule = loadDefaultPanelModule,
@@ -143,7 +146,11 @@ export function HeroUtilityPanelGate({
 
   if (!isActive || !Panel) {
     return (
-      <div ref={ref} inert data-ogabassey-hero-utility-gate="true">
+      <div
+        ref={ref}
+        aria-hidden="true"
+        data-ogabassey-hero-utility-gate="true"
+      >
         <HeroUtilityPanelStatic />
       </div>
     );

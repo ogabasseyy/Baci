@@ -185,7 +185,7 @@ describe('OgabasseyHomeDynamicContent', () => {
     await expect(productProps.productsPromise).resolves.toEqual([]);
   });
 
-  it('isolates each half in its own null-fallback Suspense boundary', () => {
+  it('isolates each half in its own Suspense boundary with a CLS-safe fallback', () => {
     // No `as ReactElement`: the inferred element type keeps `.props`
     // accessible for tree inspection (the imported ReactElement type does
     // not expose it under this repo's React 19 types).
@@ -194,19 +194,42 @@ describe('OgabasseyHomeDynamicContent', () => {
       pathPrefix: '/ogabassey',
     });
 
-    // Structural probe: the only contract is two Suspense boundaries with
-    // null fallbacks, so type the tree minimally instead of fighting the
-    // ReactElement generic.
+    // Structural probe: two Suspense boundaries — the product half keeps a
+    // null fallback (no spinners below the fold) while the discovery half
+    // reserves its card geometry, so independent streaming cannot push a
+    // viewport-visible footer down when it inserts.
     const children = (
       Array.isArray(result.props.children)
         ? result.props.children
         : [result.props.children]
-    ) as Array<{ type?: unknown; props?: { fallback?: unknown } }>;
+    ) as Array<{
+      type?: unknown;
+      props?: {
+        children?: { props?: Record<string, unknown> };
+        fallback?: null | {
+          props?: Record<string, unknown> & {
+            children?: { props?: Record<string, unknown> };
+          };
+        };
+      };
+    }>;
     const boundaries = children.filter((child) => child?.type === Suspense);
     expect(boundaries).toHaveLength(2);
-    for (const boundary of boundaries) {
-      expect(boundary.props?.fallback).toBeNull();
-    }
+    expect(boundaries[0]?.props?.fallback).toBeNull();
+    const discoveryFallback = boundaries[1]?.props?.fallback;
+    expect(discoveryFallback).not.toBeNull();
+    const reserve = (
+      discoveryFallback as {
+        props: Record<string, unknown> & {
+          children: { props: Record<string, unknown> };
+        };
+      }
+    ).props;
+    expect(reserve['data-ogabassey-discovery-reserve']).toBe('true');
+    expect(reserve['aria-hidden']).toBe('true');
+    expect(
+      (reserve.children as { props: Record<string, unknown> }).props.className
+    ).toContain('min-h-');
   });
 
   it('renders merchant analytics without waiting for any fetch leg', () => {

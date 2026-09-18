@@ -43,9 +43,10 @@ const loadDefaultGridModule = () => import('./HomeProductGrid');
 
 /**
  * Viewport gate for the homepage featured-products grid. Renders the static
- * fallback (SSR HTML, zero JS) until the section is within 600px of the
- * viewport — or the backstop timeout fires — then loads the interactive
- * grid module on demand. Below-fold grid JS stays out of the initial bundle.
+ * fallback (SSR HTML, zero JS) until the shopper's first interaction or
+ * the post-LCP signal — which then honors the 600px approach margin and
+ * the backstop timeout — then loads the interactive grid module on demand.
+ * Below-fold grid JS stays out of the initial bundle AND the LCP window.
  */
 export function HomeProductGridGate({
   fallback,
@@ -56,6 +57,11 @@ export function HomeProductGridGate({
   const { ref, isActive } = useViewportActivation<HTMLDivElement>({
     rootMargin: '600px 0px',
     timeoutMs,
+    // The grid follows only the hero, utility panel, and strip-ad slot —
+    // inside the expanded initial root on mobile viewports — so an ungated
+    // observer would import the chunk on hydration, mid-LCP. Activation
+    // waits for the shopper's first interaction or the post-LCP signal.
+    deferUntilLcp: true,
   });
   const [Grid, setGrid] =
     useState<HomeProductGridModule['HomeProductGrid'] | null>(null);

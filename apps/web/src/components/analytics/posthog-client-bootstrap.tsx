@@ -36,16 +36,21 @@ async function bootPostHogForPathname(
 
   try {
     // Keep the 76KB client (plus its transitive chunks) out of the LCP
-    // window: boot once the first LCP candidate has painted, the shopper
-    // interacts, or the backstop elapses. Pre-boot metrics are buffered by
-    // the web-vitals queue, so nothing is lost — it just flushes after boot.
+    // window: boot once LCP candidates settle, the shopper interacts, or
+    // the backstop elapses. Pre-boot metrics are buffered by the web-vitals
+    // queue, so nothing is lost — it just flushes after boot.
     //
     // Exception: when the idle gate fired on an early interaction, the
     // shopper is already engaging — waiting would install autocapture too
     // late and lose the follow-up clicks (user events are NOT buffered,
     // only web-vitals are). Boot immediately instead; the triggering
     // interaction usually lands after LCP anyway.
-    if (idleReason !== 'interaction') {
+    //
+    // Second exception: once the client is already initialized (client-side
+    // navigations), the heavy chunk is cached and there is no LCP left to
+    // protect on the settled document — re-waiting would only delay
+    // instrumentation for the new route.
+    if (idleReason !== 'interaction' && !hasPostHogBrowserInitialized()) {
       await waitForLcpWindowEnd();
     }
     if (isCancelled()) {

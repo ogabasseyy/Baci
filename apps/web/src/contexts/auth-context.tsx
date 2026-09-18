@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { waitForLcpWindowEnd } from '@/lib/posthog/wait-for-lcp';
 
 interface AuthContextType {
   user: User | null;
@@ -25,8 +26,9 @@ const AUTH_BOOT_BACKSTOP_MS = 8000;
 // engines, some embedded webviews): with no idle signal, an anonymous
 // visitor who never interacts would otherwise sit on `loading=true` for the
 // full backstop (e.g. /builder stuck on its loading view instead of
-// redirecting signed-out visitors). 2s stays inside the LCP budget while
-// resolving auth 4x sooner on those browsers.
+// redirecting signed-out visitors). The 2s timer starts the LCP wait rather
+// than booting outright, so auth still resolves far sooner than the
+// backstop on those browsers without re-entering the LCP window.
 const AUTH_BOOT_NO_IDLE_FALLBACK_MS = 2000;
 
 /**
@@ -69,6 +71,13 @@ async function loadSupabaseClient(): Promise<SupabaseClient> {
  * interacts, or the backstop fires — whichever comes first. Anonymous page
  * loads (the common storefront case) pay zero auth bytes and zero auth
  * network during LCP; the provider keeps reporting signed-out until boot.
+ *
+ * Idle and timer triggers additionally wait out the LCP window before
+ * starting: importing the Supabase client mid-hero-download would re-enter
+ * the critical window with chunk download, parsing, and initialization.
+ * Interaction still starts immediately (an engaged shopper outranks LCP),
+ * and the absolute backstop stays unconditional so auth can never strand
+ * behind a wait that never settles.
  */
 function scheduleAuthBoot(start: () => void): () => void {
   if (hasStoredBrowserSession()) {
@@ -101,6 +110,19 @@ function scheduleAuthBoot(start: () => void): () => void {
     start();
   }
 
+  // Idle and timer triggers wait out the LCP window first; the LCP wait
+  // carries its own backstop, so this still resolves when LCP never fires.
+  // An interaction (or unmount) that settles first cancels the wait via the
+  // `settled` guard — the boot runs exactly once, on the earliest trigger.
+  function onDeferredTrigger() {
+    if (settled) return;
+    void waitForLcpWindowEnd().then(() => {
+      if (settled) return;
+      cancel();
+      start();
+    });
+  }
+
   if (typeof window !== 'undefined') {
     window.addEventListener('pointerdown', onFirstInteraction, { once: true });
     window.addEventListener('keydown', onFirstInteraction, { once: true });
@@ -113,16 +135,19 @@ function scheduleAuthBoot(start: () => void): () => void {
       }
     ).requestIdleCallback;
     if (typeof ric === 'function') {
-      idleHandle = ric.call(window, onFirstInteraction, {
+      idleHandle = ric.call(window, onDeferredTrigger, {
         timeout: AUTH_BOOT_BACKSTOP_MS,
       });
       backstopTimer = setTimeout(onFirstInteraction, AUTH_BOOT_BACKSTOP_MS);
     } else {
       // No idle API: the short fallback is the only timer. An idle-capable
       // browser resolves at the first idle period instead, so only RIC-less
-      // browsers ever wait the (short) fixed delay.
+      // browsers ever wait the (short) fixed delay — now plus the LCP
+      // window, still well under the absolute backstop these browsers lack.
+      // (/builder-style pages on such browsers resolve auth slightly later
+      // on slow LCPs; interaction still boots immediately.)
       backstopTimer = setTimeout(
-        onFirstInteraction,
+        onDeferredTrigger,
         AUTH_BOOT_NO_IDLE_FALLBACK_MS
       );
     }

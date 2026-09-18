@@ -5,9 +5,21 @@ import {
   echoPanelLoader,
   fireViewportApproach,
   renderGate,
+  settleLcpSignal,
   setupGateHarness,
   teardownGateHarness,
 } from './hero-utility-panel-gate-test-setup';
+
+const mocks = vi.hoisted(() => ({
+  // The gate defers to the post-LCP signal; resolve immediately so timing
+  // stays deterministic under jsdom, which never emits LCP entries. The
+  // settle mechanics are covered in wait-for-lcp.test.ts.
+  waitForLcpWindowEnd: vi.fn(async () => undefined),
+}));
+
+vi.mock('@/lib/posthog/wait-for-lcp', () => ({
+  waitForLcpWindowEnd: mocks.waitForLcpWindowEnd,
+}));
 
 describe('HeroUtilityPanelGate', () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -47,6 +59,7 @@ describe('HeroUtilityPanelGate', () => {
 
   it('loads the panel module once the panel approaches the viewport', async () => {
     const { loader } = renderGate();
+    await settleLcpSignal();
 
     expect(loader).not.toHaveBeenCalled();
 
@@ -65,6 +78,42 @@ describe('HeroUtilityPanelGate', () => {
     expect(
       document.querySelector('[data-ogabassey-hero-utility-gate="true"]')
     ).toBeNull();
+  });
+
+  it('holds the chunk while the LCP window is pending despite intersection', async () => {
+    // The panel sits inside the expanded initial viewport on mobile: the
+    // observer fires on hydration, but the import must wait for the
+    // post-LCP signal (or interaction) instead of racing the hero.
+    let resolveLcpWindow: () => void = () => undefined;
+    mocks.waitForLcpWindowEnd.mockReturnValueOnce(
+      new Promise<undefined>((resolve) => {
+        resolveLcpWindow = () => resolve(undefined);
+      })
+    );
+    const { loader } = renderGate();
+
+    await act(async () => {
+      fireViewportApproach();
+      await Promise.resolve();
+    });
+    expect(loader).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveLcpWindow();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireViewportApproach();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(loader).toHaveBeenCalledOnce();
+    expect(
+      screen.getByTestId('interactive-utility-panel')
+    ).toBeInTheDocument();
   });
 
   it('loads the panel on first pointer interaction before the viewport fires', async () => {
@@ -180,6 +229,7 @@ describe('HeroUtilityPanelGate', () => {
         timeoutMs={1000}
       />
     );
+    await settleLcpSignal();
 
     await act(async () => {
       fireViewportApproach();
@@ -228,6 +278,7 @@ describe('HeroUtilityPanelGate', () => {
 
   it('loads the panel module after the backstop timeout', async () => {
     const { loader } = renderGate();
+    await settleLcpSignal();
 
     act(() => {
       vi.advanceTimersByTime(999);
@@ -253,6 +304,7 @@ describe('HeroUtilityPanelGate', () => {
       Promise.reject(new Error('chunk failed'))
     );
     renderGate(failingLoad as never);
+    await settleLcpSignal();
 
     await act(async () => {
       vi.advanceTimersByTime(1000);
@@ -269,6 +321,52 @@ describe('HeroUtilityPanelGate', () => {
         ?.closest('[data-ogabassey-hero-utility="true"]')
     ).not.toBeNull();
     expect(consoleErrorSpy).toHaveBeenCalledOnce();
+  });
+
+  it('retries the module load on the next interaction after a failure', async () => {
+    // An offline or stale-deployment blip must not wedge the fallback
+    // permanently: the following tap retries the import and swaps in the
+    // panel when it succeeds.
+    let shouldFail = true;
+    const flakyLoad = vi.fn(() =>
+      shouldFail
+        ? Promise.reject(new Error('chunk failed'))
+        : Promise.resolve({
+            HeroUtilityPanel: () => (
+              <div data-testid="interactive-utility-panel" />
+            ),
+          })
+    );
+    renderGate(flakyLoad as never);
+    await settleLcpSignal();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(flakyLoad).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByTestId('interactive-utility-panel')
+    ).not.toBeInTheDocument();
+
+    shouldFail = false;
+    await act(async () => {
+      fireEvent.pointerDown(window);
+      fireEvent.pointerUp(window);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(flakyLoad).toHaveBeenCalledTimes(2);
+    expect(
+      screen.getByTestId('interactive-utility-panel')
+    ).toBeInTheDocument();
   });
 
   it('removes interaction listeners on unmount before activation', () => {

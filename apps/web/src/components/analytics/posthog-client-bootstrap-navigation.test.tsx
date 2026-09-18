@@ -231,4 +231,22 @@ describe('PostHogClientBootstrap navigation', () => {
       mocks.initializePostHogInstrumentationIfAllowed
     ).toHaveBeenCalledWith('/ogabassey/laptops/macbook-pro');
   });
+
+  it('skips the LCP wait when the client is already initialized', async () => {
+    // Client-side navigations after boot must not re-pay the LCP settle
+    // delay: the heavy chunk is cached and the settled document has no LCP
+    // left to protect — re-waiting would only delay instrumentation.
+    mocks.hasPostHogBrowserInitialized.mockReturnValue(true);
+    vi.stubGlobal('location', { pathname: '/', href: 'https://usebaci.com/' });
+    const { PostHogClientBootstrap } = await importPostHogClientBootstrap();
+
+    render(<PostHogClientBootstrap />);
+
+    fireDeferredBoot('idle');
+
+    await vi.waitFor(() => {
+      expect(mocks.initializePostHogBrowser).toHaveBeenCalledOnce();
+    });
+    expect(mocks.waitForLcpWindowEnd).not.toHaveBeenCalled();
+  });
 });

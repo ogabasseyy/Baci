@@ -3,6 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
 import { HomeProductGridGate } from './home-product-grid-gate';
 
+const mocks = vi.hoisted(() => ({
+  // The gate defers to the post-LCP signal; resolve immediately so timing
+  // stays deterministic under jsdom, which never emits LCP entries.
+  waitForLcpWindowEnd: vi.fn(async () => undefined),
+}));
+
+vi.mock('@/lib/posthog/wait-for-lcp', () => ({
+  waitForLcpWindowEnd: mocks.waitForLcpWindowEnd,
+}));
+
 const stubProduct: Product = {
   id: 'product-1',
   name: 'iPhone 17 Pro Max',
@@ -35,6 +45,18 @@ describe('HomeProductGridGate', () => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
+
+  async function settleLcpSignal() {
+    // Flush the mocked post-LCP signal through effects so the gate arms
+    // its observer and backstop — the test-side equivalent of LCP
+    // settling in production.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
 
   it('renders the static fallback without loading the grid module', () => {
     const loadGridModule = vi.fn(() =>
@@ -76,6 +98,7 @@ describe('HomeProductGridGate', () => {
         timeoutMs={1000}
       />
     );
+    await settleLcpSignal();
 
     act(() => {
       vi.advanceTimersByTime(999);
@@ -114,9 +137,63 @@ describe('HomeProductGridGate', () => {
         timeoutMs={10000}
       />
     );
+    await settleLcpSignal();
 
     expect(loadGridModule).not.toHaveBeenCalled();
 
+    await act(async () => {
+      observerCallback?.(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(loadGridModule).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('interactive-grid')).toBeInTheDocument();
+  });
+
+  it('holds the chunk while the LCP window is pending despite intersection', async () => {
+    // The grid sits inside the expanded initial viewport on mobile: the
+    // observer fires on hydration, but the import must wait for the
+    // post-LCP signal (or interaction) instead of racing the hero.
+    let resolveLcpWindow: () => void = () => undefined;
+    mocks.waitForLcpWindowEnd.mockReturnValueOnce(
+      new Promise<undefined>((resolve) => {
+        resolveLcpWindow = () => resolve(undefined);
+      })
+    );
+    const loadGridModule = vi.fn(() =>
+      Promise.resolve({
+        HomeProductGrid: () => <div data-testid="interactive-grid" />,
+      })
+    );
+
+    render(
+      <HomeProductGridGate
+        fallback={<div>Static product snapshot</div>}
+        loadGridModule={loadGridModule}
+        products={[stubProduct]}
+        timeoutMs={10000}
+      />
+    );
+
+    await act(async () => {
+      observerCallback?.(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver
+      );
+      await Promise.resolve();
+    });
+    expect(loadGridModule).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveLcpWindow();
+      await Promise.resolve();
+    });
     await act(async () => {
       observerCallback?.(
         [{ isIntersecting: true } as IntersectionObserverEntry],
@@ -155,6 +232,7 @@ describe('HomeProductGridGate', () => {
         timeoutMs={10000}
       />
     );
+    await settleLcpSignal();
 
     const fallbackLink = screen.getByRole('link', {
       name: 'iPhone 17 Pro Max',
@@ -194,6 +272,7 @@ describe('HomeProductGridGate', () => {
         timeoutMs={1000}
       />
     );
+    await settleLcpSignal();
 
     await act(async () => {
       vi.advanceTimersByTime(1000);

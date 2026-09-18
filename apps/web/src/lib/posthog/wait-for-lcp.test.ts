@@ -18,25 +18,12 @@ describe('waitForLcpWindowEnd', () => {
     });
   });
 
-  it('resolves immediately when an LCP candidate already exists', async () => {
-    const getEntriesByType = vi.fn().mockReturnValue([{ startTime: 123 }]);
-    Object.defineProperty(window, 'performance', {
-      value: { getEntriesByType },
-      writable: true,
-      configurable: true,
-    });
-
-    await expect(waitForLcpWindowEnd(10)).resolves.toBeUndefined();
-    expect(getEntriesByType).toHaveBeenCalledWith('largest-contentful-paint');
-  });
-
-  it('resolves when the observer delivers a candidate', async () => {
-    Object.defineProperty(window, 'performance', {
-      value: { getEntriesByType: vi.fn().mockReturnValue([]) },
-      writable: true,
-      configurable: true,
-    });
-
+  it('waits out the quiet window after a candidate instead of resolving on first paint', async () => {
+    // Regression test: the first LCP callback is often an early text or
+    // placeholder paint while the hero image is still downloading. Resolving
+    // on it would start deferred work mid-LCP; the wait must hold until
+    // candidates settle.
+    vi.useFakeTimers();
     const deliveredCallbacks: Array<() => void> = [];
     const disconnect = vi.fn();
     function FakePerformanceObserver(callback: () => void) {
@@ -50,12 +37,85 @@ describe('waitForLcpWindowEnd', () => {
       configurable: true,
     });
 
-    const pending = waitForLcpWindowEnd(5000);
+    let resolved = false;
+    const pending = waitForLcpWindowEnd(5000, 500).then(() => {
+      resolved = true;
+    });
     expect(deliveredCallbacks).toHaveLength(1);
     deliveredCallbacks[0]?.();
 
-    await expect(pending).resolves.toBeUndefined();
+    await vi.advanceTimersByTimeAsync(499);
+    expect(resolved).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await pending;
+    expect(resolved).toBe(true);
     expect(disconnect).toHaveBeenCalled();
+  });
+
+  it('restarts the quiet window when a larger candidate arrives', async () => {
+    vi.useFakeTimers();
+    const deliveredCallbacks: Array<() => void> = [];
+    function FakePerformanceObserver(callback: () => void) {
+      deliveredCallbacks.push(callback);
+    }
+    FakePerformanceObserver.prototype.observe = vi.fn();
+    FakePerformanceObserver.prototype.disconnect = vi.fn();
+    Object.defineProperty(globalThis, 'PerformanceObserver', {
+      value: FakePerformanceObserver,
+      writable: true,
+      configurable: true,
+    });
+
+    let resolved = false;
+    const pending = waitForLcpWindowEnd(5000, 500).then(() => {
+      resolved = true;
+    });
+    deliveredCallbacks[0]?.();
+
+    // A second candidate 400ms later (hero image after text paint) restarts
+    // the window: 499ms after the first paint must still be pending.
+    await vi.advanceTimersByTimeAsync(400);
+    deliveredCallbacks[0]?.();
+    await vi.advanceTimersByTimeAsync(499);
+    expect(resolved).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await pending;
+    expect(resolved).toBe(true);
+  });
+
+  it('delivers already-fired candidates through the buffered observer', async () => {
+    // Candidates painted before the wait starts arrive via buffered
+    // delivery and enter the same settle logic — never an instant resolve.
+    vi.useFakeTimers();
+    const deliveredCallbacks: Array<() => void> = [];
+    function FakePerformanceObserver(callback: () => void) {
+      deliveredCallbacks.push(callback);
+      // Simulate buffered redelivery on observe: the pre-existing candidate
+      // is reported asynchronously, like the real observer.
+      queueMicrotask(callback);
+    }
+    FakePerformanceObserver.prototype.observe = vi.fn();
+    FakePerformanceObserver.prototype.disconnect = vi.fn();
+    Object.defineProperty(globalThis, 'PerformanceObserver', {
+      value: FakePerformanceObserver,
+      writable: true,
+      configurable: true,
+    });
+
+    let resolved = false;
+    const pending = waitForLcpWindowEnd(5000, 500).then(() => {
+      resolved = true;
+    });
+    // Flush the buffered redelivery, then hold for the quiet window.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(deliveredCallbacks).toHaveLength(1);
+    expect(resolved).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(500);
+    await pending;
+    expect(resolved).toBe(true);
   });
 
   it('resolves at the timeout backstop when LCP never fires', async () => {

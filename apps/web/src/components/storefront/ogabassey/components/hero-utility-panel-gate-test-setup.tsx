@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { vi } from 'vitest';
 import { HeroUtilityPanelGate } from './hero-utility-panel-gate';
 
@@ -42,6 +42,21 @@ export function renderGate(loadPanelModule?: () => Promise<never>) {
     <HeroUtilityPanelGate loadPanelModule={loader as never} timeoutMs={1000} />
   );
   return { loader: loader as ReturnType<typeof vi.fn>, ...utils };
+}
+
+/**
+ * Flush the mocked post-LCP signal through effects so the gate arms its
+ * observer and backstop — the test-side equivalent of LCP settling in
+ * production. Tests that activate via interaction skip this; tests that
+ * activate via intersection or the backstop need it first.
+ */
+export async function settleLcpSignal() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
 }
 
 export function fireViewportApproach() {

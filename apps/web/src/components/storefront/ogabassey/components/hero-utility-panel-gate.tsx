@@ -1,7 +1,7 @@
 'use client';
 
 import type { ComponentType } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useViewportActivation } from '@/components/storefront/use-viewport-activation';
 import type {
   HeroUtilityPanelProps,
@@ -51,9 +51,10 @@ function isUtilityTab(value: string | null): value is UtilityTab {
  * module on demand. Panel JS + its icon modules stay out of the initial
  * bundle.
  *
- * Activation fires on the first of: the panel approaching the viewport
- * (600px margin, so the swap lands before it is visible), the shopper's
- * first pointer/key interaction, or the backstop timeout. The pre-activation
+ * Activation fires on the first of: the shopper's first pointer/key
+ * interaction, the post-LCP signal (which then honors the 600px approach
+ * margin and the backstop timeout, so the swap still lands before the
+ * panel is visible). The pre-activation
  * fallback is deliberately NOT `inert`: inert subtrees are excluded from hit
  * testing (verified in Chromium: a tap inside retargets `pointerdown` to the
  * nearest non-inert ancestor), which would make first-tap replay
@@ -62,7 +63,8 @@ function isUtilityTab(value: string | null): value is UtilityTab {
  * stops, hidden from assistive tech, taps do nothing until the swap) while
  * keeping the tapped option's `data-utility-option` id readable from the
  * activating pointerdown. A failed module load keeps the static fallback
- * and logs once (same contract as HomeProductGridGate).
+ * and logs, then parks: the next interaction retries the import (same
+ * SSR-safe fallback geometry as HomeProductGridGate, plus recovery).
  *
  * First-tap replay: a completed click on a fallback option records its id
  * and the interactive panel replays it, opening that tab's modal on mount
@@ -70,10 +72,12 @@ function isUtilityTab(value: string | null): value is UtilityTab {
  * load. Recording on click (not pointerdown) means cancelled scroll
  * gestures never replay. Because a cached-fast chunk can resolve between
  * pointerdown and click, the swap additionally waits out the in-flight
- * press (bounded by PRESS_SETTLE_TIMEOUT_MS): the fallback stays mounted
- * so the completing click still lands on the option it pressed. Capture
- * stays armed until the panel mounts, so a tap landing after a viewport/key
- * activation but before the chunk arrives still replays.
+ * press: the fallback stays mounted so the completing click still lands
+ * on the option it pressed. The wait re-bounds every
+ * PRESS_SETTLE_TIMEOUT_MS while the pointer stays down (long presses
+ * survive; only a press with no observable completion settles), and
+ * capture stays armed until the panel mounts, so a tap landing after a
+ * viewport/key activation but before the chunk arrives still replays.
  */
 export function HeroUtilityPanelGate({
   loadPanelModule = loadDefaultPanelModule,
@@ -83,6 +87,11 @@ export function HeroUtilityPanelGate({
     useViewportActivation<HTMLDivElement>({
       rootMargin: '600px 0px',
       timeoutMs,
+      // The panel sits ~244px below the hero — inside the initial viewport
+      // (and certainly the 600px margin) — so an ungated observer would
+      // import the chunk on hydration, mid-LCP. Activation waits for the
+      // shopper's first interaction or the post-LCP signal instead.
+      deferUntilLcp: true,
     });
   const [hasInteracted, setHasInteracted] = useState(false);
   const [pendingUtilityTab, setPendingUtilityTab] =
@@ -91,8 +100,23 @@ export function HeroUtilityPanelGate({
   // While set, a loaded panel holds the fallback mounted so the completing
   // tap can still record its replay before the swap.
   const [pressHeld, setPressHeld] = useState(false);
+  // Re-arms the settle bound below while the pointer is still down: each
+  // extension is a new effect run with a fresh timer.
+  const [settleEpoch, setSettleEpoch] = useState(0);
+  // Tracks whether a pointer is currently down. A press that outlasts the
+  // settle bound with the pointer still down is a genuine long press, not
+  // a stuck one — the hold must survive until release, or the swap
+  // unmounts the pressed button and the completing click (which targets
+  // the removed node) never fires.
+  const pointerDownRef = useRef(false);
   const [Panel, setPanel] =
     useState<HeroUtilityPanelModule['HeroUtilityPanel'] | null>(null);
+  // A rejected module load parks here instead of retrying in a loop: the
+  // next interaction clears it and re-arms the load effect, so an offline
+  // or stale-deployment blip recovers on the following tap instead of
+  // leaving the fallback permanently dead.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const isActive = isInViewport || hasInteracted;
 
@@ -106,11 +130,23 @@ export function HeroUtilityPanelGate({
       return;
     }
 
+    // A later interaction after a failed load retries the import (the
+    // load effect re-runs on the attempt bump). Each retry needs a fresh
+    // interaction — no timer loop, no render loop.
+    const retryAfterFailure = () => {
+      if (loadFailed) {
+        setLoadFailed(false);
+        setLoadAttempt((attempt) => attempt + 1);
+      }
+    };
+
     // pointerdown starts the load and marks the press in-flight, but
     // records nothing: scroll gestures also begin here.
     const handlePointerDown = () => {
+      pointerDownRef.current = true;
       setHasInteracted(true);
       setPressHeld(true);
+      retryAfterFailure();
     };
 
     // A completed click is the replay signal: browsers suppress it for
@@ -130,20 +166,31 @@ export function HeroUtilityPanelGate({
       }
       setHasInteracted(true);
       setPressHeld(false);
+      retryAfterFailure();
     };
 
     // Any press completion without a click (release off-element, scroll
     // cancel) ends the hold with no replay. A completed click stands.
     const handlePointerUp = () => {
+      pointerDownRef.current = false;
       setPressHeld(false);
     };
 
     const handlePointerCancel = () => {
+      pointerDownRef.current = false;
       setPressHeld(false);
     };
 
     const handleKeyDown = () => {
       setHasInteracted(true);
+      retryAfterFailure();
+    };
+
+    // The page lost focus mid-press (tab switch, alert): the gesture can
+    // never complete, so release the hold instead of wedging the fallback.
+    const handleBlur = () => {
+      pointerDownRef.current = false;
+      setPressHeld(false);
     };
 
     window.addEventListener('pointerdown', handlePointerDown, {
@@ -153,6 +200,7 @@ export function HeroUtilityPanelGate({
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('pointercancel', handlePointerCancel);
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('blur', handleBlur);
 
     return () => {
       window.removeEventListener('pointerdown', handlePointerDown);
@@ -160,11 +208,12 @@ export function HeroUtilityPanelGate({
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerCancel);
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('blur', handleBlur);
     };
-  }, [Panel, pressHeld, ref]);
+  }, [Panel, pressHeld, ref, loadFailed]);
 
   useEffect(() => {
-    if (!isActive || Panel) {
+    if (!isActive || Panel || loadFailed) {
       return;
     }
 
@@ -181,27 +230,42 @@ export function HeroUtilityPanelGate({
           '[HeroUtilityPanelGate] Failed to load utility panel module',
           error
         );
+        if (!cancelled) {
+          // Park for retry: the failure keeps the static fallback mounted
+          // (same SSR-safe geometry as HomeProductGridGate) and the next
+          // interaction re-arms this effect. No auto-retry loop.
+          setLoadFailed(true);
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [Panel, isActive, loadPanelModule]);
+  }, [Panel, isActive, loadPanelModule, loadFailed, loadAttempt]);
 
-  // Bound the press hold: a press that never completes (lost capture
-  // off-window) must not wedge the loaded panel on the fallback forever.
-  // Tap completion latencies sit well under this bound.
+  // Bound the press hold: a press whose completion is never observed
+  // (capture lost off-window with no up/cancel/blur delivery) must not
+  // wedge the loaded panel on the fallback forever. Tap completion
+  // latencies sit well under this bound — but a press that OUTLASTS it
+  // with the pointer still down is a genuine long press, not a stuck one:
+  // the hold extends until release so the completing click still lands on
+  // the pressed option and replays, instead of the swap unmounting it
+  // mid-press and swallowing the tap.
   useEffect(() => {
     if (Panel === null || !pressHeld) {
       return;
     }
     const settleTimer = setTimeout(() => {
-      setPressHeld(false);
+      if (pointerDownRef.current) {
+        setSettleEpoch((epoch) => epoch + 1);
+      } else {
+        setPressHeld(false);
+      }
     }, PRESS_SETTLE_TIMEOUT_MS);
     return () => {
       clearTimeout(settleTimer);
     };
-  }, [Panel, pressHeld]);
+  }, [Panel, pressHeld, settleEpoch]);
 
   // Hold the fallback mounted while a press is in flight against a loaded
   // panel, so the completing click can still record its replay. Without

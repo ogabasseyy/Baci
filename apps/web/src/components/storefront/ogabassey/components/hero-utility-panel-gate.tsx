@@ -60,13 +60,14 @@ function isUtilityTab(value: string | null): value is UtilityTab {
  * activating pointerdown. A failed module load keeps the static fallback
  * and logs once (same contract as HomeProductGridGate).
  *
- * First-tap replay: the gate records the tapped option id and replays it
- * into the interactive panel, which opens that tab's modal on mount — the
- * shopper's first tap is honored instead of merely triggering the load.
- * Capture stays armed until the panel mounts, so a tap landing after a
- * viewport/key/outside activation but before the chunk arrives still replays.
- * A tap that becomes a scroll gesture (pointercancel, or any scroll before
- * the chunk arrives) discards the recording instead — the shopper moved on.
+ * First-tap replay: a completed click on a fallback option records its id
+ * and the interactive panel replays it, opening that tab's modal on mount
+ * — the shopper's first tap is honored instead of merely triggering the
+ * load. Recording on click (not pointerdown) means cancelled scroll
+ * gestures never replay, and pointerdown stays purely the load trigger even
+ * when a cached chunk mounts before cancellation could run. Capture stays
+ * armed until the panel mounts, so a tap landing after a viewport/key
+ * activation but before the chunk arrives still replays.
  */
 export function HeroUtilityPanelGate({
   loadPanelModule = loadDefaultPanelModule,
@@ -95,10 +96,19 @@ export function HeroUtilityPanelGate({
       return;
     }
 
-    const handlePointerDown = (event: PointerEvent) => {
-      // A tap on a fallback option is recorded so the interactive panel
-      // can replay the action on mount. Taps outside the fallback (or on
-      // non-option chrome) activate without a replay.
+    // pointerdown only starts the load: recording here would also capture
+    // scroll gestures (and a fast chunk could mount before pointercancel or
+    // scroll gets a chance to clear it), opening a modal the shopper never
+    // tapped.
+    const handlePointerDown = () => {
+      setHasInteracted(true);
+    };
+
+    // A completed click is the replay signal: browsers suppress it for
+    // cancelled scroll gestures, so only genuine taps record an option. A
+    // chunk fast enough to mount before the click lands leaves the fallback
+    // unmounted, and the tap then drives the interactive panel natively.
+    const handleClick = (event: MouseEvent) => {
       const target = event.target;
       if (target instanceof Element && ref.current?.contains(target)) {
         const optionId =
@@ -116,31 +126,16 @@ export function HeroUtilityPanelGate({
       setHasInteracted(true);
     };
 
-    const discardRecordedTap = () => {
-      // A scroll gesture starting on a fallback option fires pointerdown
-      // (recording the option) and then pointercancel — replaying it would
-      // open a modal the shopper never tapped. A wheel scroll between the
-      // tap and the chunk arrival means the same: the shopper moved on.
-      setPendingUtilityTab(null);
-    };
-
     window.addEventListener('pointerdown', handlePointerDown, {
       passive: true,
     });
+    window.addEventListener('click', handleClick);
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('pointercancel', discardRecordedTap);
-    window.addEventListener('scroll', discardRecordedTap, {
-      capture: true,
-      passive: true,
-    });
 
     return () => {
       window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('click', handleClick);
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('pointercancel', discardRecordedTap);
-      window.removeEventListener('scroll', discardRecordedTap, {
-        capture: true,
-      });
     };
   }, [Panel, ref]);
 

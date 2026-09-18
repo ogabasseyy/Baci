@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Cart } from '@/components/cart';
 import { Logo } from '@/components/logo';
 import { ThemedButton } from '@/components/themed';
-import { CartIcon } from '@/components/ui/animated-icons';
+import { CartIcon } from '@/components/ui/animated-shop-icons';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetTrigger } from '@/components/ui/sheet';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';

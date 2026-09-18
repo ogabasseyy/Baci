@@ -1,16 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  AnimatedIcon,
-  CartIcon,
-  ChevronToggle,
-  HeartIcon,
   LoadingSpinner,
-  MenuToggle,
   NotificationBell,
-  QuantityButton,
   SuccessCheck,
-} from './animated-icons';
+} from './animated-feedback-icons';
+import { AnimatedIcon } from './animated-icons';
+import { ChevronToggle, MenuToggle } from './animated-nav-icons';
+import { CartIcon, HeartIcon, QuantityButton } from './animated-shop-icons';
 
 describe('animated-icons', () => {
   it('renders a non-interactive div wrapper without onClick', () => {

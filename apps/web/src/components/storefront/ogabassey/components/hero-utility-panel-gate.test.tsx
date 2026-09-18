@@ -99,7 +99,7 @@ describe('HeroUtilityPanelGate', () => {
     expect(dataButton).toHaveAttribute('data-utility-option', 'data');
 
     await act(async () => {
-      fireEvent.pointerDown(dataButton!);
+      fireEvent.click(dataButton!);
       await Promise.resolve();
     });
     await act(async () => {
@@ -175,7 +175,7 @@ describe('HeroUtilityPanelGate', () => {
     expect(tvButton).toHaveAttribute('data-utility-option', 'tv');
 
     await act(async () => {
-      fireEvent.pointerDown(tvButton!);
+      fireEvent.click(tvButton!);
       await Promise.resolve();
     });
 

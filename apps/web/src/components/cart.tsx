@@ -15,7 +15,7 @@ import { useCart } from '@/hooks/use-cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
-import { QuantityButton } from './ui/animated-icons';
+import { QuantityButton } from './ui/animated-shop-icons';
 import { Input } from './ui/input';
 
 export function Cart() {

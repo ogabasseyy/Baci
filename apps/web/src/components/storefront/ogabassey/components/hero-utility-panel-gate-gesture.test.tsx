@@ -18,9 +18,35 @@ describe('HeroUtilityPanelGate tap gestures', () => {
     teardownGateHarness(consoleErrorSpy);
   });
 
-  it('drops the recorded tap when the gesture cancels before the chunk arrives', async () => {
-    // pointerdown records the option and starts the load; the touch scroll
-    // cancels the gesture before the chunk resolves, so no modal replays.
+  it('replays a completed click on a fallback option', async () => {
+    const echoLoader = echoPanelLoader();
+    render(
+      <HeroUtilityPanelGate
+        loadPanelModule={echoLoader as never}
+        timeoutMs={1000}
+      />
+    );
+
+    const dataButton = screen.getAllByText('Data')[0]?.closest('button');
+    fireEvent.click(dataButton!);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(echoLoader).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('interactive-utility-panel')).toHaveAttribute(
+      'data-pending',
+      'data'
+    );
+  });
+
+  it('never replays a press without click completion (scroll gesture)', async () => {
+    // pointerdown starts the load but records nothing; the swipe ends
+    // without a click, so the panel mounts with no replay.
     const echoLoader = echoPanelLoader();
     render(
       <HeroUtilityPanelGate
@@ -47,7 +73,10 @@ describe('HeroUtilityPanelGate tap gestures', () => {
     );
   });
 
-  it('drops the recorded tap when the shopper scrolls before the chunk arrives', async () => {
+  it('never replays when a cached chunk mounts before the tap completes', async () => {
+    // Fast-load race: the press starts the load and the already-cached
+    // chunk mounts the panel before pointerup/click can run, so there is
+    // no recording to replay — and no scroll modal either.
     const echoLoader = echoPanelLoader();
     render(
       <HeroUtilityPanelGate
@@ -58,7 +87,6 @@ describe('HeroUtilityPanelGate tap gestures', () => {
 
     const dataButton = screen.getAllByText('Data')[0]?.closest('button');
     fireEvent.pointerDown(dataButton!);
-    fireEvent.scroll(window);
 
     await act(async () => {
       await Promise.resolve();

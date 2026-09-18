@@ -78,7 +78,7 @@ vi.mock('@/components/ui/sheet', () => ({
   SheetTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
 }));
 
-vi.mock('./ui/animated-icons', () => ({
+vi.mock('./ui/animated-shop-icons', () => ({
   QuantityButton: ({
     disabled,
     onClick,

@@ -7,7 +7,7 @@ import { useState } from 'react';
 import {
   LoadingSpinner,
   NotificationBell,
-} from '@/components/ui/animated-icons';
+} from '@/components/ui/animated-feedback-icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {

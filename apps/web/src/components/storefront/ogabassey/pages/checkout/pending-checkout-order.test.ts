@@ -11,18 +11,49 @@ describe('pending-checkout-order', () => {
     expect(normalizeOrderPaymentMethod('uba_redvault')).toBe('uba_redvault');
   });
   it.each(['uba_redvault', 'card'])('never reopens a stored REDVAULT order through generic reuse for %s', async paymentMethod => {
-    const fetchImpl = vi.fn();
+    const fetchImpl = vi.fn(async () => Response.json({
+      id: 'redvault-order', payment_status: 'unpaid', shipping_status: 'pending',
+    }));
     const result = await resolvePendingCheckoutOrder({
       pendingOrder: {
         orderId: 'redvault-order', merchantId: 'merchant',
         customerEmail: 'ada@example.com', customerPhone: '', checkoutFingerprint: 'fingerprint',
         amountDueToGateway: 117.5, createdAt: '2026-09-12', paymentMethod: 'uba_redvault',
+        trackingToken: 'track-redvault',
       },
       merchantId: 'merchant', customerEmail: 'ada@example.com',
       checkoutFingerprint: 'fingerprint', paymentMethod, shippingProvider: null, fetchImpl,
     });
+    if (paymentMethod === 'uba_redvault') {
+      expect(result).toEqual({ reusableOrder: null, clearStoredOrder: true });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    } else {
+      expect(result).toEqual({
+        reusableOrder: null,
+        clearStoredOrder: false,
+        redvaultUnresolved: true,
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(
+        String((fetchImpl.mock.calls[0] as unknown[])?.[0])
+      ).toContain('/api/storefront/orders/redvault-order');
+    }
+  });
+  it('clears a stored REDVAULT order once it reaches a definitive state', async () => {
+    const fetchImpl = vi.fn(async () => Response.json({
+      id: 'redvault-order', payment_status: 'paid', shipping_status: 'processing',
+    }));
+    const result = await resolvePendingCheckoutOrder({
+      pendingOrder: {
+        orderId: 'redvault-order', merchantId: 'merchant',
+        customerEmail: 'ada@example.com', customerPhone: '', checkoutFingerprint: 'fingerprint',
+        amountDueToGateway: 117.5, createdAt: '2026-09-12', paymentMethod: 'uba_redvault',
+        trackingToken: 'track-redvault',
+      },
+      merchantId: 'merchant', customerEmail: 'ada@example.com',
+      checkoutFingerprint: 'fingerprint', paymentMethod: 'card', shippingProvider: null, fetchImpl,
+    });
     expect(result).toEqual({ reusableOrder: null, clearStoredOrder: true });
-    expect(fetchImpl).not.toHaveBeenCalled();
   });
   it('preserves an ordinary pending snapshot when REDVAULT bypasses reuse', async () => {
     const fetchImpl = vi.fn();

@@ -65,6 +65,11 @@ describe('REDVAULT refund operator worker', () => {
     const finish = vi
       .fn()
       .mockResolvedValue({ ...claimed, state: 'processed' });
+    const recordProviderSubmission = vi.fn().mockResolvedValue({
+      ...claimed,
+      providerReference: 'provider-refund-1',
+      providerStatus: 'processed',
+    });
     await expect(
       processNextRedvaultRefund({
         provider: {
@@ -77,7 +82,7 @@ describe('REDVAULT refund operator worker', () => {
         store: {
           claimNext: vi.fn().mockResolvedValue(claimed),
           finish,
-          recordProviderSubmission: vi.fn(),
+          recordProviderSubmission,
           markSubmissionIndeterminate: vi
             .fn()
             .mockResolvedValue({ ...claimed, state: 'needs_reconciliation' }),
@@ -87,12 +92,22 @@ describe('REDVAULT refund operator worker', () => {
       kind: 'processed',
       refund: { state: 'processed' },
     });
+    // The provider reference must be persisted before finalization so a
+    // finalizer failure still leaves the row recoverable by reconciliation.
+    expect(recordProviderSubmission).toHaveBeenCalledWith({
+      id: 'refund-1',
+      providerReference: 'provider-refund-1',
+      providerStatus: 'processed',
+    });
     expect(finish).toHaveBeenCalledWith({
       id: 'refund-1',
       outcome: 'processed',
       providerReference: 'provider-refund-1',
       providerStatus: 'processed',
     });
+    expect(recordProviderSubmission.mock.invocationCallOrder[0]).toBeLessThan(
+      finish.mock.invocationCallOrder[0]
+    );
   });
 
   it('persists an accepted pending provider refund id before reconciliation', async () => {

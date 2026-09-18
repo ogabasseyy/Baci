@@ -644,6 +644,7 @@ describe('POST /api/orders REDVAULT integration', () => {
             id: '11111111-1111-4111-8111-111111111111',
             name: 'Galaxy S24',
             price: 1000,
+            slug: 'galaxy-s24',
           },
         ],
       }
@@ -706,6 +707,15 @@ describe('POST /api/orders REDVAULT integration', () => {
       expect(supabase.rpc).not.toHaveBeenCalledWith(
         'create_storefront_order',
         expect.anything()
+      );
+      // The REDVAULT draft reserves inventory, so the draft success path
+      // runs the same merchant and per-slug PDP cache revalidation.
+      expect(mockRevalidateProducts).toHaveBeenCalledWith(
+        '6b5cb8a4-5575-456c-b936-8cdfae30db74'
+      );
+      expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+        '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        ['galaxy-s24']
       );
     } finally {
       availabilitySpy.mockRestore();

@@ -1,87 +1,93 @@
 import { describe, expect, it } from 'vitest';
-import { isBlockedRemoteHost, validateRemoteUrl } from './remote-url-policy';
+import { validateRemoteUrl } from './remote-url-policy';
 
-describe('isBlockedRemoteHost', () => {
+const url = (host: string) => `http://${
+  host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
+}/p.jpg`;
+
+describe('validateRemoteUrl host classification', () => {
   it('allows ordinary public hostnames', () => {
-    expect(isBlockedRemoteHost('cdn.example.com')).toBe(false);
-    expect(isBlockedRemoteHost('images.merchant.com')).toBe(false);
+    expect(validateRemoteUrl(url('cdn.example.com'))?.toString()).toBe(
+      url('cdn.example.com'),
+    );
+    expect(validateRemoteUrl(url('images.merchant.com'))?.toString()).toBe(
+      url('images.merchant.com'),
+    );
   });
 
   it('does not mistake hostnames starting with fc or fd for IPv6 literals', () => {
-    expect(isBlockedRemoteHost('fcdn.example.com')).toBe(false);
-    expect(isBlockedRemoteHost('fdimages.example.com')).toBe(false);
+    expect(validateRemoteUrl(url('fcdn.example.com'))?.toString()).toBe(
+      url('fcdn.example.com'),
+    );
+    expect(validateRemoteUrl(url('fdimages.example.com'))?.toString()).toBe(
+      url('fdimages.example.com'),
+    );
   });
 
   it('blocks loopback and local names', () => {
-    expect(isBlockedRemoteHost('localhost')).toBe(true);
-    expect(isBlockedRemoteHost('app.localhost')).toBe(true);
-    expect(isBlockedRemoteHost('printer.local')).toBe(true);
+    expect(validateRemoteUrl(url('localhost'))).toBeNull();
+    expect(validateRemoteUrl(url('app.localhost'))).toBeNull();
+    expect(validateRemoteUrl(url('printer.local'))).toBeNull();
   });
 
   it('blocks cloud metadata endpoints', () => {
-    expect(isBlockedRemoteHost('metadata.google.internal')).toBe(true);
-    expect(isBlockedRemoteHost('metadata')).toBe(true);
+    expect(validateRemoteUrl(url('metadata.google.internal'))).toBeNull();
+    expect(validateRemoteUrl(url('metadata'))).toBeNull();
   });
 
   it('blocks IPv4 private, loopback, and link-local ranges', () => {
-    expect(isBlockedRemoteHost('10.1.2.3')).toBe(true);
-    expect(isBlockedRemoteHost('127.0.0.1')).toBe(true);
-    expect(isBlockedRemoteHost('169.254.169.254')).toBe(true);
-    expect(isBlockedRemoteHost('172.16.0.1')).toBe(true);
-    expect(isBlockedRemoteHost('172.31.255.255')).toBe(true);
-    expect(isBlockedRemoteHost('192.168.1.1')).toBe(true);
-    expect(isBlockedRemoteHost('0.0.0.0')).toBe(true);
-    expect(isBlockedRemoteHost('8.8.8.8')).toBe(false);
+    for (const host of [
+      '10.1.2.3',
+      '127.0.0.1',
+      '169.254.169.254',
+      '172.16.0.1',
+      '172.31.255.255',
+      '192.168.1.1',
+      '0.0.0.0',
+    ]) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    expect(validateRemoteUrl(url('8.8.8.8'))?.toString()).toBe(url('8.8.8.8'));
   });
 
   it('blocks IPv6 loopback, link-local, and unique-local literals', () => {
-    expect(isBlockedRemoteHost('::1')).toBe(true);
-    expect(isBlockedRemoteHost('fe80::1')).toBe(true);
-    expect(isBlockedRemoteHost('fc00::1')).toBe(true);
-    expect(isBlockedRemoteHost('fd00::1')).toBe(true);
-    expect(isBlockedRemoteHost('2001:db8::1')).toBe(false);
+    for (const host of ['::1', 'fe80::1', 'fc00::1', 'fd00::1']) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    expect(validateRemoteUrl(url('2001:db8::1'))?.toString()).toBe(
+      url('2001:db8::1'),
+    );
   });
   it('blocks IPv4-mapped IPv6 destinations by their embedded address', () => {
-    expect(isBlockedRemoteHost('::ffff:127.0.0.1')).toBe(true);
-    expect(isBlockedRemoteHost('::ffff:7f00:1')).toBe(true);
-    expect(isBlockedRemoteHost('::ffff:10.0.0.1')).toBe(true);
-    expect(isBlockedRemoteHost('::ffff:8.8.8.8')).toBe(false);
-    expect(validateRemoteUrl('http://[::ffff:127.0.0.1]/image')).toBeNull();
+    for (const host of ['::ffff:127.0.0.1', '::ffff:7f00:1', '::ffff:10.0.0.1']) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    // Node normalizes the dotted quad to hex; the public address stays allowed.
+    expect(validateRemoteUrl(url('::ffff:8.8.8.8'))?.toString()).toBe(
+      'http://[::ffff:808:808]/p.jpg',
+    );
   });
 
   it('blocks the full link-local range and the unspecified address', () => {
-    expect(isBlockedRemoteHost('::')).toBe(true);
-    expect(isBlockedRemoteHost('fe90::1')).toBe(true);
-    expect(isBlockedRemoteHost('febf:ffff::1')).toBe(true);
-    expect(isBlockedRemoteHost('fec0::1')).toBe(false);
+    for (const host of ['::', 'fe90::1', 'febf:ffff::1']) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    expect(validateRemoteUrl(url('fec0::1'))?.toString()).toBe(url('fec0::1'));
   });
 
-  it('fails closed on malformed colon-bearing hostnames', () => {
-    expect(isBlockedRemoteHost('foo:bar')).toBe(true);
-    expect(isBlockedRemoteHost('12345::67890')).toBe(true);
-  });
-
-
-  it('strips URL brackets before classifying IPv6 literals', () => {
-    expect(isBlockedRemoteHost('[::1]')).toBe(true);
-    expect(isBlockedRemoteHost('[fe80::1]')).toBe(true);
-    expect(isBlockedRemoteHost('[fc00::1]')).toBe(true);
-    expect(isBlockedRemoteHost('[2001:db8::1]')).toBe(false);
-    expect(validateRemoteUrl('http://[::1]/image')).toBeNull();
-    expect(validateRemoteUrl('http://[fc00::1]/image')).toBeNull();
-    expect(
-      validateRemoteUrl('http://[2001:db8::1]/image')?.toString()
-    ).toBe('http://[2001:db8::1]/image');
+  it('rejects malformed bracketed literals during URL parsing', () => {
+    expect(validateRemoteUrl('http://[foo:bar]/p.jpg')).toBeNull();
+    expect(validateRemoteUrl('http://[12345::67890]/p.jpg')).toBeNull();
   });
 });
 
 describe('validateRemoteUrl', () => {
   it('accepts public http and https image URLs', () => {
     expect(
-      validateRemoteUrl('https://cdn.example.com/p.jpg')?.toString()
+      validateRemoteUrl('https://cdn.example.com/p.jpg')?.toString(),
     ).toBe('https://cdn.example.com/p.jpg');
     expect(
-      validateRemoteUrl('http://fcdn.example.com/p.jpg')?.toString()
+      validateRemoteUrl('http://fcdn.example.com/p.jpg')?.toString(),
     ).toBe('http://fcdn.example.com/p.jpg');
   });
 

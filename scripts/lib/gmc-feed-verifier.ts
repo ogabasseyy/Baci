@@ -5,6 +5,7 @@
  * This module is Node.js-only (fs, fetch) and runs exclusively on the VPS.
  */
 
+import { lookup as dnsLookup } from 'node:dns/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 // Relative path: scripts/ has no tsconfig and runs via `npx tsx` outside the
@@ -150,22 +151,64 @@ export function getClassifiedImageVerificationUrl(
   return classified.verified_url || classified.source_url;
 }
 
+/** DNS resolution seam: hostname -> resolved addresses. */
+export type DnsLookupFn = (hostname: string) => Promise<
+  Array<{ address: string; family: number }>
+>;
+
 /**
  * Verify a remote image URL via HTTP HEAD (with GET fallback on 405).
  *
  * @param fetchFn Injectable for testing — defaults to global `fetch`
+ * @param lookupFn Injectable DNS resolver — defaults to `node:dns/promises`
  */
 export async function verifyRemoteImage(
   url: string,
-  fetchFn: FetchFn = globalThis.fetch
+  fetchFn: FetchFn = globalThis.fetch,
+  lookupFn: DnsLookupFn = (hostname) => dnsLookup(hostname, { all: true })
 ): Promise<VerificationResult> {
-  if (!validateRemoteUrl(url)) {
+  const validUrl = validateRemoteUrl(url);
+  if (!validUrl) {
     return {
       status: 'invalid',
       verified_url: null,
       verified_format: null,
       failure_reason: `Rejected remote image destination: ${url}`,
     };
+  }
+  // Hostnames can resolve (or be rebound) to private addresses that literal
+  // checks never see. Resolve every address up front and classify each
+  // through the same destination policy before any request leaves the VPS.
+  // Lookup failures stay retryable: the address was never proven private.
+  let addresses: Array<{ address: string; family: number }>;
+  try {
+    addresses = await lookupFn(validUrl.hostname);
+  } catch {
+    return {
+      status: 'pending_verification',
+      verified_url: null,
+      verified_format: null,
+      failure_reason: `DNS resolution failed for ${validUrl.hostname}`,
+    };
+  }
+  if (addresses.length === 0) {
+    return {
+      status: 'pending_verification',
+      verified_url: null,
+      verified_format: null,
+      failure_reason: `DNS resolution returned no addresses for ${validUrl.hostname}`,
+    };
+  }
+  for (const { address, family } of addresses) {
+    const literal = family === 6 ? `http://[${address}]/` : `http://${address}/`;
+    if (!validateRemoteUrl(literal)) {
+      return {
+        status: 'invalid',
+        verified_url: null,
+        verified_format: null,
+        failure_reason: `Rejected remote image destination: ${validUrl.hostname} resolves to non-public address ${address}`,
+      };
+    }
   }
   try {
     let response = await fetchFn(url, {
@@ -247,7 +290,8 @@ export async function verifyCdnImageWithTransformFallback(
   sourceUrl: string,
   cdnBasePath: string,
   fileExistsFn: (path: string) => boolean = existsSync,
-  fetchFn: FetchFn = globalThis.fetch
+  fetchFn: FetchFn = globalThis.fetch,
+  lookupFn: DnsLookupFn = (hostname) => dnsLookup(hostname, { all: true })
 ): Promise<VerificationResult> {
   const localVerification = verifyCdnImage(
     sourceUrl,
@@ -264,7 +308,8 @@ export async function verifyCdnImageWithTransformFallback(
 
   const transformedVerification = await verifyRemoteImage(
     transformedUrl,
-    fetchFn
+    fetchFn,
+    lookupFn
   );
 
   if (

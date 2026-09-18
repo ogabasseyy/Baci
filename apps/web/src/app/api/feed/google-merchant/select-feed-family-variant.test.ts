@@ -78,3 +78,31 @@ it('falls back to a valid sold-out SKU but never a zero price', () => {
     selectFeedFamilyVariant(product, [{ ...variant, price_override: 0 }])
   ).toBeUndefined();
 });
+
+it('ranks by condition/price when null manage_stock means unmanaged', () => {
+  const product = {
+    id: 'p',
+    name: 'Phone',
+    description: '',
+    price: 10,
+    stock: 0,
+    manage_stock: null,
+  };
+  const variants = [
+    {
+      id: 'first-created',
+      condition: 'new' as const,
+      price_override: 30,
+      stock_quantity: 0,
+    },
+    {
+      id: 'condition-preferred',
+      condition: 'used' as const,
+      price_override: 20,
+      stock_quantity: 0,
+    },
+  ];
+  expect(selectFeedFamilyVariant(product, variants)?.id).toBe(
+    'condition-preferred'
+  );
+});

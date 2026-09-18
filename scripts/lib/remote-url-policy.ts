@@ -59,7 +59,7 @@ function isBlockedIpv6Literal(host: string): boolean {
   return false;
 }
 
-export function isBlockedRemoteHost(hostname: string): boolean {
+function isBlockedRemoteHost(hostname: string): boolean {
   // URL.hostname keeps IPv6 brackets ("[::1]"); strip them so the literal
   // checks below see the bare address.
   const host = hostname

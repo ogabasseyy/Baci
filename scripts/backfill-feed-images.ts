@@ -33,6 +33,7 @@ import {
   verifyCdnImageWithTransformFallback,
   verifyRemoteImage,
 } from './lib/gmc-feed-verifier';
+import { appendOfferImageCandidates } from './lib/feed-offer-image-backfill';
 
 // ---------- Config ----------
 
@@ -182,35 +183,6 @@ async function main() {
 
   console.log(`Found ${products.length} active products`);
 
-  // Condition offers can own imagery that is not duplicated on the parent
-  // product. Include those URLs in the same verified manifest so feed rows
-  // can resolve offer-specific images without falling back to parent media.
-  const offers: { id: string; product_id: string; images: unknown }[] = [];
-  for (let start = 0; start < products.length; start += 250) {
-    let offerOffset = 0;
-    let hasMoreOffers = true;
-    while (hasMoreOffers) {
-      const { data, error: offersError } = await supabase
-        .from('product_offers')
-        .select('id, product_id, images')
-        .in(
-          'product_id',
-          products.slice(start, start + 250).map((product) => product.id)
-        )
-        .eq('status', 'active')
-        .order('id', { ascending: true })
-        .range(offerOffset, offerOffset + PAGE_SIZE - 1);
-
-      if (offersError) {
-        console.error('Failed to fetch product offer images:', offersError.message);
-        process.exit(1);
-      }
-      offers.push(...(data || []));
-      hasMoreOffers = (data?.length ?? 0) === PAGE_SIZE;
-      offerOffset += PAGE_SIZE;
-    }
-  }
-
   // 3. Extract and classify (pure)
   const classifiedRows: Array<{ candidate: BackfillImageCandidate; classified: ClassifiedImage }> = [];
 
@@ -222,27 +194,25 @@ async function main() {
     }
   }
 
-  const seenCandidateKeys = new Set(
-    classifiedRows.map(({ candidate }) => `${candidate.product_id}:${candidate.source_url}`)
-  );
-
-  for (const offer of offers) {
-    const candidates = extractImageCandidates(
-      offer.product_id,
-      offer.images as ProductImages
+  // Condition offers can own imagery that is not duplicated on the parent
+  // product. Merge those URLs (merchant-scoped) into the same verified
+  // manifest so feed rows can resolve offer-specific images.
+  try {
+    classifiedRows.push(
+      ...(await appendOfferImageCandidates({
+        supabase,
+        productIds: products.map((product) => product.id),
+        merchantId,
+        storefrontBaseUrl,
+        productRows: classifiedRows,
+      }))
     );
-    for (const candidate of candidates) {
-      const candidateKey = `${candidate.product_id}:${candidate.source_url}`;
-      if (seenCandidateKeys.has(candidateKey)) continue;
-      seenCandidateKeys.add(candidateKey);
-      classifiedRows.push({
-        candidate: { ...candidate, is_primary: false },
-        classified: classifyFeedImageCandidate(
-          { ...candidate, is_primary: false },
-          storefrontBaseUrl
-        ),
-      });
-    }
+  } catch (err) {
+    console.error(
+      'Failed to fetch product offer images:',
+      err instanceof Error ? err.message : String(err)
+    );
+    process.exit(1);
   }
 
   console.log(`\nClassified ${classifiedRows.length} image candidates`);

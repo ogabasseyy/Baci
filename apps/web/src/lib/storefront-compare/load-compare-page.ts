@@ -51,6 +51,7 @@ import {
   type CompareCategoryInventoryProduct,
   getCachedCompareCategoryInventory,
 } from './get-cached-compare-category-inventory';
+import { isSelfComparePair } from './is-self-compare-pair';
 
 interface CompareBreadcrumbItem {
   name: string;
@@ -450,6 +451,17 @@ async function loadComparePageForRequest(args: {
       categorySlug: args.categorySlug.slice(0, 120),
       comparisonSlug: args.comparisonSlug.slice(0, 120),
       reason: 'unsafe_compare_key',
+    });
+    return null;
+  }
+
+  // This is the only missing-pair outcome known from the URL alone. Alias
+  // equivalence requires inventory/detail authority, so do not reject merely
+  // similar or canonicalized keys before the normal resolution path.
+  if (isSelfComparePair(parsed)) {
+    logCompareRouteMiss({
+      ...args,
+      reason: 'self_compare_pair',
     });
     return null;
   }

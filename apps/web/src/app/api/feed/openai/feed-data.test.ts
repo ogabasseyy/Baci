@@ -375,6 +375,7 @@ describe('getCachedOpenAIFeedData', () => {
     expect(result.imageManifest?.['prod-1']).toEqual([
       {
         variant_id: null,
+        source_url: null,
         verified_url: 'https://cdn.example.com/manifest-front.jpg',
         verified_format: 'jpeg',
         status: 'verified',
@@ -383,6 +384,7 @@ describe('getCachedOpenAIFeedData', () => {
       },
       {
         variant_id: 'var-1',
+        source_url: null,
         verified_url: 'https://cdn.example.com/manifest-red.jpg',
         verified_format: 'jpeg',
         status: 'verified',

@@ -72,10 +72,16 @@ describe.each([
     expect(xml).toContain(
       '<g:additional_image_link>https://cdn.example/back.jpg</g:additional_image_link>'
     );
-    expect(xml).not.toContain('parent.jpg');
+    // The null-condition base row emits as new with the product primary.
+    expect(xml).toContain('<g:id>phone</g:id>');
+    expect(xml).toContain(
+      '<g:image_link>https://cdn.example/parent.jpg</g:image_link>'
+    );
   });
   it('omits offers with unverified explicit images', () => {
-    expect(render({ phone: [manifest.phone[0]] })).not.toContain('<item>');
+    const xml = render({ phone: [manifest.phone[0]] });
+    expect(xml).not.toContain('<g:id>used</g:id>');
+    expect(xml).toContain('<g:id>phone</g:id>');
   });
   it('retains verified offer imagery even without a parent primary image', () => {
     expect(render({ phone: manifest.phone.slice(1) })).toContain(

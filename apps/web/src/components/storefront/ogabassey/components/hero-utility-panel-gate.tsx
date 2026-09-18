@@ -65,6 +65,8 @@ function isUtilityTab(value: string | null): value is UtilityTab {
  * shopper's first tap is honored instead of merely triggering the load.
  * Capture stays armed until the panel mounts, so a tap landing after a
  * viewport/key/outside activation but before the chunk arrives still replays.
+ * A tap that becomes a scroll gesture (pointercancel, or any scroll before
+ * the chunk arrives) discards the recording instead — the shopper moved on.
  */
 export function HeroUtilityPanelGate({
   loadPanelModule = loadDefaultPanelModule,
@@ -114,14 +116,31 @@ export function HeroUtilityPanelGate({
       setHasInteracted(true);
     };
 
+    const discardRecordedTap = () => {
+      // A scroll gesture starting on a fallback option fires pointerdown
+      // (recording the option) and then pointercancel — replaying it would
+      // open a modal the shopper never tapped. A wheel scroll between the
+      // tap and the chunk arrival means the same: the shopper moved on.
+      setPendingUtilityTab(null);
+    };
+
     window.addEventListener('pointerdown', handlePointerDown, {
       passive: true,
     });
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('pointercancel', discardRecordedTap);
+    window.addEventListener('scroll', discardRecordedTap, {
+      capture: true,
+      passive: true,
+    });
 
     return () => {
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('pointercancel', discardRecordedTap);
+      window.removeEventListener('scroll', discardRecordedTap, {
+        capture: true,
+      });
     };
   }, [Panel, ref]);
 

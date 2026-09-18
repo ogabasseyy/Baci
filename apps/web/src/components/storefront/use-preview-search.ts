@@ -1,5 +1,5 @@
 import type Fuse from 'fuse.js';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Product } from '@/lib/products';
 
 export interface PreviewSearchIndex {
@@ -69,9 +69,11 @@ export function usePreviewSearch({
     };
   }, [attempt, debouncedSearchQuery, isPreviewMode, products]);
 
-  const retrySearch = useCallback(() => {
+  // Plain function by contract: manual useCallback/useMemo is forbidden —
+  // the React Compiler stabilizes this (AGENTS.md NEVER rules).
+  function retrySearch() {
     setAttempt((count) => count + 1);
-  }, []);
+  }
 
   return { fuse, searchFailed, retrySearch };
 }

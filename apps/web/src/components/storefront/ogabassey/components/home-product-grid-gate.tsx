@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useViewportActivation } from '@/components/storefront/use-viewport-activation';
 import type { Product } from '../types';
+import { useActivationFocusRestore } from './use-activation-focus-restore';
 
 interface HomeProductGridModule {
   HomeProductGrid: React.ComponentType<HomeProductGridGateGridProps>;
@@ -59,6 +60,16 @@ export function HomeProductGridGate({
   const [Grid, setGrid] =
     useState<HomeProductGridModule['HomeProductGrid'] | null>(null);
 
+  // Replacing the fallback unmounts the focused node and drops keyboard
+  // focus to <body> — capture before the swap, restore the matching
+  // control (same link href, or same button label) after the grid mounts.
+  // The same div wraps both branches so the container ref stays valid
+  // across the swap.
+  const { capture: captureFocusBeforeSwap } = useActivationFocusRestore(
+    ref,
+    Grid !== null
+  );
+
   useEffect(() => {
     if (!isActive || Grid) {
       return;
@@ -69,6 +80,7 @@ export function HomeProductGridGate({
     void loadGridModule()
       .then((module) => {
         if (!cancelled) {
+          captureFocusBeforeSwap();
           setGrid(() => module.HomeProductGrid);
         }
       })
@@ -79,11 +91,18 @@ export function HomeProductGridGate({
     return () => {
       cancelled = true;
     };
+    // captureFocusBeforeSwap is a stable per-render closure over the ref;
+    // re-running the load effect on its identity change would refetch.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: see above.
   }, [Grid, isActive, loadGridModule]);
 
   if (!isActive || !Grid) {
     return <div ref={ref}>{fallback}</div>;
   }
 
-  return <Grid {...gridProps} />;
+  return (
+    <div ref={ref}>
+      <Grid {...gridProps} />
+    </div>
+  );
 }

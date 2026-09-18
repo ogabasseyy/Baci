@@ -50,10 +50,16 @@ export function HomeProductGridStaticFallback({
   allProductsHref,
   serverRenderedImageCount = 2,
 }: HomeProductGridStaticFallbackProps) {
-  const visibleProducts = prioritizeSmartphoneProducts(products).slice(
+  const prioritizedProducts = prioritizeSmartphoneProducts(products);
+  const visibleProducts = prioritizedProducts.slice(
     0,
     Math.max(1, initialDisplayCount)
   );
+  // The interactive grid appends its load-more button + count row for this
+  // same condition; without a geometry-matched twin the gate swap inserts
+  // the whole row and shifts the discovery section and footer (visible when
+  // the backstop fires or the shopper reaches the grid pre-chunk).
+  const hasMoreProducts = visibleProducts.length < prioritizedProducts.length;
 
   return (
     <section className="ogabassey-home-products">
@@ -154,6 +160,22 @@ export function HomeProductGridStaticFallback({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {hasMoreProducts && (
+        <div
+          className="mt-8 flex flex-col items-center gap-2"
+          inert
+          data-ogabassey-home-products-more="true"
+        >
+          <span className="px-8 py-3 bg-red-600 text-white font-semibold rounded-xl">
+            Load More Products
+          </span>
+          <span className="ogabassey-home-products__count">
+            Showing {visibleProducts.length} of {prioritizedProducts.length}{' '}
+            products
+          </span>
         </div>
       )}
     </section>

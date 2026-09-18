@@ -89,6 +89,40 @@ describe('HomeProductGridStaticFallback', () => {
     expect(screen.getByText('No products found.')).toBeInTheDocument();
   });
 
+  it('reserves an inert load-more row when the catalog exceeds the initial count', () => {
+    // Geometry twin of the interactive grid's row (same wrapper/pill/count
+    // classes) so the gate swap inserts no new boxes; inert, so the dead
+    // control takes no tab stop and stays out of the accessibility tree.
+    const { container } = render(
+      <HomeProductGridStaticFallback
+        basePath=""
+        products={[baseProduct, secondProduct]}
+        initialDisplayCount={1}
+      />
+    );
+
+    const row = container.querySelector(
+      '[data-ogabassey-home-products-more="true"]'
+    );
+    expect(row).toHaveAttribute('inert');
+    expect(row?.className).toContain('mt-8 flex flex-col items-center gap-2');
+    expect(screen.getByText('Showing 1 of 2 products')).toBeInTheDocument();
+  });
+
+  it('omits the load-more row when everything already fits', () => {
+    const { container } = render(
+      <HomeProductGridStaticFallback
+        basePath=""
+        products={[baseProduct, secondProduct]}
+        initialDisplayCount={8}
+      />
+    );
+
+    expect(
+      container.querySelector('[data-ogabassey-home-products-more="true"]')
+    ).toBeNull();
+  });
+
   it('renders images only for the first two cards (LCP bandwidth parity)', () => {
     const thirdProduct: Product = {
       ...secondProduct,

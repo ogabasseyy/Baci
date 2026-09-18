@@ -132,6 +132,55 @@ describe('HomeProductGridGate', () => {
     expect(screen.getByTestId('interactive-grid')).toBeInTheDocument();
   });
 
+  it('restores focus to the matching grid control when the swap unmounts the focused fallback link', async () => {
+    const loadGridModule = vi.fn(() =>
+      Promise.resolve({
+        HomeProductGrid: () => (
+          <div data-testid="interactive-grid">
+            <a href="/products/iphone">iPhone 17 Pro Max</a>
+          </div>
+        ),
+      })
+    );
+
+    render(
+      <HomeProductGridGate
+        fallback={
+          <div>
+            <a href="/products/iphone">iPhone 17 Pro Max</a>
+          </div>
+        }
+        loadGridModule={loadGridModule}
+        products={[stubProduct]}
+        timeoutMs={10000}
+      />
+    );
+
+    const fallbackLink = screen.getByRole('link', {
+      name: 'iPhone 17 Pro Max',
+    });
+    fallbackLink.focus();
+    expect(document.activeElement).toBe(fallbackLink);
+
+    await act(async () => {
+      observerCallback?.(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('interactive-grid')).toBeInTheDocument();
+    expect(document.activeElement).toHaveAttribute(
+      'href',
+      '/products/iphone'
+    );
+    expect(document.activeElement).not.toBe(fallbackLink);
+  });
+
   it('keeps the fallback when the grid module fails to load', async () => {
     const loadGridModule = vi.fn(() =>
       Promise.reject(new Error('chunk failed'))

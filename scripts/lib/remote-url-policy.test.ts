@@ -50,6 +50,18 @@ describe('validateRemoteUrl host classification', () => {
     expect(validateRemoteUrl(url('8.8.8.8'))?.toString()).toBe(url('8.8.8.8'));
   });
 
+  it('blocks shared-address CGNAT space including provider metadata endpoints', () => {
+    for (const host of ['100.64.0.1', '100.100.100.200', '100.127.255.255']) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    expect(validateRemoteUrl(url('100.63.255.255'))?.toString()).toBe(
+      url('100.63.255.255'),
+    );
+    expect(validateRemoteUrl(url('100.128.0.1'))?.toString()).toBe(
+      url('100.128.0.1'),
+    );
+  });
+
   it('blocks IPv6 loopback, link-local, and unique-local literals', () => {
     for (const host of ['::1', 'fe80::1', 'fc00::1', 'fd00::1']) {
       expect(validateRemoteUrl(url(host))).toBeNull();

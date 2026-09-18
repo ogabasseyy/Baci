@@ -1,13 +1,13 @@
 import { type Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DestinationLookupFn as DnsLookupFn } from './remote-destination-gate';
 import {
-  type DnsLookupFn,
   type FetchFn,
   buildCdnTransformImageUrl,
   getClassifiedImageVerificationUrl,
-  verifyCdnImage,
   verifyCdnImageWithTransformFallback,
   verifyRemoteImage,
 } from './gmc-feed-verifier';
+import { verifyCdnImage } from './cdn-image-verifier';
 
 /** Builds a partial Response matching only what verifyRemoteImage inspects. */
 function fakeResponse(props: {
@@ -582,5 +582,25 @@ describe('verifyRemoteImage', () => {
     expect(result.status).toBe('pending_verification');
     expect(result.failure_reason).toContain('DNS resolution failed');
     expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('fetches through the pinned dispatcher from the destination gate', async () => {
+    const seen: unknown[] = [];
+    const fetchFn = vi.fn<FetchFn>(async (input, init) => {
+      seen.push(init);
+      return fakeResponse({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'image/jpeg' }),
+      });
+    });
+    const result = await verifyRemoteImage(
+      'https://images.example.com/phone.jpg',
+      fetchFn,
+      publicLookup
+    );
+    expect(result.status).toBe('verified');
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(seen[0]).toMatchObject({ dispatcher: expect.anything() });
   });
 });

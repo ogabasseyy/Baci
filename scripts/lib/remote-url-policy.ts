@@ -1,7 +1,9 @@
 function isBlockedIpv4Octets(octets: number[]): boolean {
   const [a, b] = octets;
   return a === 10 || a === 127 || (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a === 0;
+    (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
+    // Shared-address (CGNAT) space also reaches private overlays.
+    (a === 100 && b >= 64 && b <= 127) || a === 0;
 }
 
 /** Strictly parse an IPv6 literal into eight 16-bit groups. */

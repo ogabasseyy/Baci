@@ -5,17 +5,17 @@
  * This module is Node.js-only (fs, fetch) and runs exclusively on the VPS.
  */
 
-import { lookup as dnsLookup } from 'node:dns/promises';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import {
+  type DestinationLookupFn,
+  resolvePinnedDestination,
+} from './remote-destination-gate';
 // Relative path: scripts/ has no tsconfig and runs via `npx tsx` outside the
 // workspace package graph, so `@baci/shared/gmc-feed` won't resolve here.
 import {
   type ClassifiedImage,
-  getImageFormat,
-  replaceAvifWithJpg,
 } from '../../packages/shared/src/gmc-feed/index';
-import { validateRemoteUrl } from './remote-url-policy';
+import { verifyCdnImage } from './cdn-image-verifier';
 
 export interface VerificationResult {
   status:
@@ -38,83 +38,6 @@ const CONTENT_TYPE_TO_FORMAT: Record<string, string> = {
   'image/webp': 'webp',
 };
 
-/**
- * Verify a CDN-hosted image by checking the local filesystem.
- *
- * Maps `https://cdn.ogabassey.com/core-assets/...` to the local path
- * under `cdnBasePath`. For AVIF sources, checks if a sibling `.jpg`
- * derivative exists.
- *
- * @param fileExistsFn Injectable for testing — defaults to `fs.existsSync`
- */
-export function verifyCdnImage(
-  sourceUrl: string,
-  cdnBasePath: string,
-  fileExistsFn: (path: string) => boolean = existsSync
-): VerificationResult {
-  let url: URL;
-  try {
-    url = new URL(sourceUrl);
-  } catch {
-    return {
-      status: 'invalid',
-      verified_url: null,
-      verified_format: null,
-      failure_reason: `Invalid URL: ${sourceUrl}`,
-    };
-  }
-
-  // Prevent path traversal
-  const localPath = resolve(cdnBasePath, `.${url.pathname}`);
-  if (!localPath.startsWith(resolve(cdnBasePath))) {
-    return {
-      status: 'invalid',
-      verified_url: null,
-      verified_format: null,
-      failure_reason: `Path traversal detected: ${url.pathname}`,
-    };
-  }
-
-  const format = getImageFormat(sourceUrl);
-
-  // AVIF: check sibling .jpg derivative
-  if (format === 'avif') {
-    const jpgPath = localPath.replace(/\.avif$/i, '.jpg');
-    const jpgUrl = replaceAvifWithJpg(sourceUrl);
-
-    if (fileExistsFn(jpgPath)) {
-      return {
-        status: 'verified',
-        verified_url: jpgUrl,
-        verified_format: 'jpeg',
-        failure_reason: null,
-      };
-    }
-    return {
-      status: 'pending_derivative',
-      verified_url: jpgUrl,
-      verified_format: 'jpeg',
-      failure_reason: null,
-    };
-  }
-
-  // JPG/PNG/WebP: check file exists
-  if (fileExistsFn(localPath)) {
-    return {
-      status: 'verified',
-      verified_url: sourceUrl,
-      verified_format: format,
-      failure_reason: null,
-    };
-  }
-
-  return {
-    status: 'missing',
-    verified_url: null,
-    verified_format: null,
-    failure_reason: `File not found on CDN: ${url.pathname}`,
-  };
-}
 
 /** Single-overload fetch signature for easy mock injection. */
 export type FetchFn = (
@@ -151,69 +74,35 @@ export function getClassifiedImageVerificationUrl(
   return classified.verified_url || classified.source_url;
 }
 
-/** DNS resolution seam: hostname -> resolved addresses. */
-export type DnsLookupFn = (hostname: string) => Promise<
-  Array<{ address: string; family: number }>
->;
-
 /**
  * Verify a remote image URL via HTTP HEAD (with GET fallback on 405).
  *
+ * The fetch runs on a dispatcher pinned to the validated address, so the
+ * transport cannot re-resolve the hostname to a different destination.
+ *
  * @param fetchFn Injectable for testing — defaults to global `fetch`
- * @param lookupFn Injectable DNS resolver — defaults to `node:dns/promises`
+ * @param lookupFn Injectable DNS resolver, forwarded to the destination gate
  */
 export async function verifyRemoteImage(
   url: string,
   fetchFn: FetchFn = globalThis.fetch,
-  lookupFn: DnsLookupFn = (hostname) => dnsLookup(hostname, { all: true })
+  lookupFn?: DestinationLookupFn
 ): Promise<VerificationResult> {
-  const validUrl = validateRemoteUrl(url);
-  if (!validUrl) {
+  const gate = await resolvePinnedDestination(url, lookupFn);
+  if ('failure' in gate) {
     return {
-      status: 'invalid',
+      status: gate.retryable ? 'pending_verification' : 'invalid',
       verified_url: null,
       verified_format: null,
-      failure_reason: `Rejected remote image destination: ${url}`,
+      failure_reason: gate.failure,
     };
   }
-  // Hostnames can resolve (or be rebound) to private addresses that literal
-  // checks never see. Resolve every address up front and classify each
-  // through the same destination policy before any request leaves the VPS.
-  // Lookup failures stay retryable: the address was never proven private.
-  let addresses: Array<{ address: string; family: number }>;
-  try {
-    addresses = await lookupFn(validUrl.hostname);
-  } catch {
-    return {
-      status: 'pending_verification',
-      verified_url: null,
-      verified_format: null,
-      failure_reason: `DNS resolution failed for ${validUrl.hostname}`,
-    };
-  }
-  if (addresses.length === 0) {
-    return {
-      status: 'pending_verification',
-      verified_url: null,
-      verified_format: null,
-      failure_reason: `DNS resolution returned no addresses for ${validUrl.hostname}`,
-    };
-  }
-  for (const { address, family } of addresses) {
-    const literal = family === 6 ? `http://[${address}]/` : `http://${address}/`;
-    if (!validateRemoteUrl(literal)) {
-      return {
-        status: 'invalid',
-        verified_url: null,
-        verified_format: null,
-        failure_reason: `Rejected remote image destination: ${validUrl.hostname} resolves to non-public address ${address}`,
-      };
-    }
-  }
+  const { dispatcher } = gate;
   try {
     let response = await fetchFn(url, {
       method: 'HEAD',
       redirect: 'manual',
+      dispatcher,
       signal: AbortSignal.timeout(10_000),
     });
 
@@ -231,6 +120,7 @@ export async function verifyRemoteImage(
       response = await fetchFn(url, {
         method: 'GET',
         redirect: 'manual',
+        dispatcher,
         signal: AbortSignal.timeout(10_000),
       });
       if (response.status >= 300 && response.status < 400) {
@@ -283,6 +173,9 @@ export async function verifyRemoteImage(
       verified_format: null,
       failure_reason: `${message} for ${url}`,
     };
+  } finally {
+    // Release the pinned sockets on every path, including early returns.
+    await dispatcher.close().catch(() => {});
   }
 }
 

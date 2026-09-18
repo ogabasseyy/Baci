@@ -444,17 +444,19 @@ export function StorefrontProductGrid({
           </div>
         )}
         {isPreviewMode && searchFailed && debouncedSearchQuery && (
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-store-accent bg-store-secondary px-4 py-3 text-sm text-store-secondary-text">
             <span>
               Preview search could not load, so showing all products instead.
             </span>
-            <button
+            <ThemedButton
               type="button"
               onClick={retrySearch}
-              className="font-medium underline underline-offset-2 hover:text-amber-900"
+              variant="outline"
+              colorRole="accent"
+              size="sm"
             >
               Retry search
-            </button>
+            </ThemedButton>
           </div>
         )}
         {/* Did you mean banner */}

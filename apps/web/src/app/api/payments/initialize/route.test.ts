@@ -568,6 +568,106 @@ describe('POST /api/payments/initialize', () => {
       ).toHaveLength(0);
     });
 
+    it('reads the REDVAULT wallet amount from the snapshot when the orders table is RLS-hidden', async () => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+      });
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            payment_method: 'uba_redvault',
+            total: 5000,
+            wallet_amount_used: 0,
+          },
+        ],
+        error: null,
+      };
+      // Guest REDVAULT checkouts run through the scoped storefront client,
+      // which has no grant on public.orders: the direct table read fails.
+      orderPaymentResult = { data: null, error: { message: 'RLS hidden' } };
+      redvaultAttemptReserveResults = [
+        {
+          data: [
+            {
+              amount_kobo: 500000,
+              attempt_id: 'attempt-1',
+              authorization_url: null,
+              bank_code: '033',
+              paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+              platform_fee_kobo: 10000,
+              reference: 'RV-attempt-1',
+              state: 'created',
+            },
+          ],
+          error: null,
+        },
+        {
+          data: [
+            {
+              amount_kobo: 500000,
+              attempt_id: 'attempt-1',
+              authorization_url: 'https://paystack.test/checkout/1',
+              bank_code: '033',
+              paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+              platform_fee_kobo: 10000,
+              reference: 'RV-attempt-1',
+              state: 'initialized',
+            },
+          ],
+          error: null,
+        },
+      ];
+      redvaultAttemptClaimResults = [
+        {
+          data: [
+            {
+              amount_kobo: 500000,
+              attempt_id: 'attempt-1',
+              authorization_url: null,
+              bank_code: '033',
+              initialization_claimed: true,
+              paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+              platform_fee_kobo: 10000,
+              reference: 'RV-attempt-1',
+              state: 'initializing',
+            },
+          ],
+          error: null,
+        },
+      ];
+      redvaultAttemptInitializeResult = {
+        data: [
+          {
+            amount_kobo: 500000,
+            attempt_id: 'attempt-1',
+            authorization_url: 'https://paystack.test/checkout/1',
+            bank_code: '033',
+            paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+            platform_fee_kobo: 10000,
+            reference: 'RV-attempt-1',
+            state: 'initialized',
+          },
+        ],
+        error: null,
+      };
+      mockInitializePaystack.mockResolvedValue({
+        authorization_url: 'https://paystack.test/checkout/1',
+      });
+
+      const res = await POST(
+        makeRequest({ ...validBody, payment_method: 'uba_redvault' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json).toMatchObject({
+        checkout_url: 'https://paystack.test/checkout/1',
+        payment_method: 'uba_redvault',
+        reference: 'RV-attempt-1',
+      });
+    });
+
     it('ignores a client-supplied amount and derives the gateway amount from the order', async () => {
       enableKorapayForTest();
       mockInitializeKorapay.mockResolvedValue({

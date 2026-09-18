@@ -3750,6 +3750,7 @@ describe('CheckoutPage', () => {
               product_subtotal_kobo: 500_000,
               eligible_subtotal_kobo: 500_000,
               discount_kobo: 25_000,
+              assurance_fee_kobo: 0,
               ineligible_subtotal_kobo: 0,
               tax_kobo: 750,
               shipping_kobo: 500,
@@ -3779,6 +3780,12 @@ describe('CheckoutPage', () => {
       ) as HTMLButtonElement,
     );
 
+    // The first submit creates the order and opens the REDVAULT review step;
+    // confirming the review issues payment initialization.
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/orders')).toBe(true);
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /review and continue to uba/i }));
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/payments/initialize')).toBe(true);
     });

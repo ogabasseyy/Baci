@@ -1163,30 +1163,46 @@ export async function POST(request: NextRequest) {
         ? orderSnapshot.currency.trim().toUpperCase()
         : 'NGN';
 
-    const { data: orderPaymentRow, error: orderPaymentError } =
-      await paymentDataClient
-        .from('orders')
-        .select('wallet_amount_used')
-        .eq('id', data.order_id)
-        .eq('merchant_id', merchantId)
-        .single();
+    // REDVAULT requests run through the scoped storefront client
+    // (authenticated role with no sub for guests), which has no grant on
+    // public.orders. Read the wallet amount from the bounded SECURITY DEFINER
+    // snapshot instead of a direct table lookup that RLS would hide.
+    let walletAmountUsed: number;
+    if (redvaultRequested) {
+      walletAmountUsed = Math.max(
+        numberOrDefault(
+          (orderSnapshot as { wallet_amount_used?: unknown })
+            .wallet_amount_used,
+          0
+        ),
+        0
+      );
+    } else {
+      const { data: orderPaymentRow, error: orderPaymentError } =
+        await paymentDataClient
+          .from('orders')
+          .select('wallet_amount_used')
+          .eq('id', data.order_id)
+          .eq('merchant_id', merchantId)
+          .single();
 
-    if (orderPaymentError || !orderPaymentRow) {
-      return createErrorResponse(
-        'Unable to verify order payment amount',
-        'ORDER_AMOUNT_LOOKUP_FAILED',
-        500
+      if (orderPaymentError || !orderPaymentRow) {
+        return createErrorResponse(
+          'Unable to verify order payment amount',
+          'ORDER_AMOUNT_LOOKUP_FAILED',
+          500
+        );
+      }
+
+      walletAmountUsed = Math.max(
+        numberOrDefault(
+          (orderPaymentRow as { wallet_amount_used?: unknown })
+            .wallet_amount_used,
+          0
+        ),
+        0
       );
     }
-
-    const walletAmountUsed = Math.max(
-      numberOrDefault(
-        (orderPaymentRow as { wallet_amount_used?: unknown })
-          .wallet_amount_used,
-        0
-      ),
-      0
-    );
 
     const { data: savingsRows, error: savingsError } = await paymentDataClient
       .from('customer_savings_redemptions')

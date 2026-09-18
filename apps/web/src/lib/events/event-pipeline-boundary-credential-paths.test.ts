@@ -43,6 +43,13 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/env.ts',
       ],
       [
+        'apps/web/src/app/api/payments/initialize/route.ts',
+        'apps/web/src/lib/checkout/storefront-order-rpc-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
         'apps/web/src/app/api/orders/route.ts',
         'apps/web/src/lib/order-notification-dispatch.ts',
         'apps/web/src/lib/expo-push.ts',
@@ -283,6 +290,17 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/lib/agentic/scoped-supabase.ts',
         'apps/web/src/lib/supabase/scoped-jwt.ts',
         'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/payments/resolve-order-gateway-completion.ts',
+        'apps/web/src/lib/payments/file-inventory-confirmation-review.ts',
+        'apps/web/src/lib/supabase/admin.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/payments/file-inventory-confirmation-review.ts',
+        'apps/web/src/lib/supabase/admin.ts',
         'apps/web/src/env.ts',
       ],
       ...eventPipelineJumiaCredentialPaths,

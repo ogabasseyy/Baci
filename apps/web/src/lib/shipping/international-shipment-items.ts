@@ -248,7 +248,6 @@ export function toInternationalShipmentItemsFromOrder(
   quoteItems: ShipmentItem[] = []
 ): ShipmentItem[] {
   const unmatchedQuoteItems = [...quoteItems];
-
   return orderItems
     .map((item) => {
       const metadata = deriveItemMetadata(item);
@@ -263,7 +262,6 @@ export function toInternationalShipmentItemsFromOrder(
           : unmatchedQuoteItems.splice(quoteItemIndex, 1)[0];
       validateQuotedPhysicalMetadata(metadata, quoteItem);
       const bookingMetadata = resolveBookingMetadata(metadata, quoteItem);
-
       return {
         name,
         description: name,

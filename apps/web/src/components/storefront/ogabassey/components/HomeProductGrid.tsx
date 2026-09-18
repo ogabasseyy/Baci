@@ -262,7 +262,7 @@ export function HomeProductGrid({
               setDisplayCount((currentCount) => currentCount + PRODUCTS_PER_PAGE)
             }
             type="button"
-            className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-all duration-200 active:scale-95"
+            className="px-8 py-3 bg-store-primary hover:bg-store-primary/90 text-store-primary-text font-semibold rounded-xl transition-all duration-200 active:scale-95"
           >
             Load More Products
           </button>

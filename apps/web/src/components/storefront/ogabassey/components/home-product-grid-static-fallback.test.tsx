@@ -107,6 +107,12 @@ describe('HomeProductGridStaticFallback', () => {
     expect(row).toHaveAttribute('inert');
     expect(row?.className).toContain('mt-8 flex flex-col items-center gap-2');
     expect(screen.getByText('Showing 1 of 2 products')).toBeInTheDocument();
+    // Themed (not hardcoded red): non-red merchant palettes keep their
+    // configured colors on the fallback control, matching the interactive
+    // twin's store-primary button.
+    const control = screen.getByText('Load More Products');
+    expect(control.className).toContain('bg-store-primary');
+    expect(control.className).toContain('text-store-primary-text');
   });
 
   it('omits the load-more row when everything already fits', () => {

@@ -166,7 +166,7 @@ export function HomeProductGridStaticFallback({
           inert
           data-ogabassey-home-products-more="true"
         >
-          <span className="px-8 py-3 bg-red-600 text-white font-semibold rounded-xl">
+          <span className="px-8 py-3 bg-store-primary text-store-primary-text font-semibold rounded-xl">
             Load More Products
           </span>
           <span className="ogabassey-home-products__count">

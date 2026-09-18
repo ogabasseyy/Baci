@@ -31,6 +31,10 @@ beforeEach(() => {
   mockRead.mockResolvedValue(null);
 });
 
+afterEach(() => {
+  jest.useRealTimers();
+});
+
 it('applies the empty cart before persisting the new purchase identity', async () => {
   const applied: ReturnType<typeof emptyCheckoutCart>[] = [];
   let persistStarted = false;
@@ -46,6 +50,19 @@ it('applies the empty cart before persisting the new purchase identity', async (
   expect(applied).toEqual([rotated]);
   expect(rotated.checkoutGeneration).not.toBe(first.checkoutGeneration);
   expect(rotated.items).toEqual([]);
+});
+
+it('still returns after a never-resolving generation write', async () => {
+  jest.useFakeTimers();
+  mockPersist.mockImplementation(() => new Promise(() => undefined));
+  const applied: ReturnType<typeof emptyCheckoutCart>[] = [];
+  const rotation = rotateEmptyCheckoutCart((next) => {
+    applied.push(next);
+  });
+  await jest.advanceTimersByTimeAsync(5_000);
+  await expect(rotation).resolves.toEqual(applied[0]);
+  expect(applied[0]?.items).toEqual([]);
+  jest.useRealTimers();
 });
 
 it('still applies the empty cart when generation persist rejects', async () => {

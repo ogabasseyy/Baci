@@ -249,6 +249,38 @@ describe('useQuizRewardedBadge', () => {
     expect(result.current.isWatching).toBe(false);
   });
 
+  it('releases interstitial ownership when eligibility expires mid-load', () => {
+    // Regression: starting a rewarded load claims interstitial ownership; if
+    // the countdown crosses the threshold before presentation, the expiry
+    // cleanup must release ownership so the quiz-start interstitial is not
+    // skipped for a flow that no longer exists.
+    const { result, rerender } = renderHook(
+      (props: GateProps) => useQuizRewardedBadge(props),
+      {
+        initialProps: {
+          eventId: 'event-1',
+          eventTitle: 'Today Quiz',
+          remainingSeconds: 120,
+          status: 'scheduled',
+          userId: 'user-1',
+        },
+      }
+    );
+
+    mockSetQuizRewardedFlowActive.mockClear();
+    act(() => result.current.watchAd());
+    expect(mockSetQuizRewardedFlowActive).toHaveBeenCalledWith(true);
+    rerender({
+      eventId: 'event-1',
+      eventTitle: 'Today Quiz',
+      remainingSeconds: 90,
+      status: 'scheduled',
+      userId: 'user-1',
+    });
+    expect(mockSetQuizRewardedFlowActive).toHaveBeenCalledWith(false);
+    expect(result.current.isWatching).toBe(false);
+  });
+
   it('flags a retryable failure when rewarded setup throws synchronously', () => {
     // Regression: a synchronous createForAdRequest/load throw (e.g.
     // uninitialized native SDK) must surface the failure state instead of

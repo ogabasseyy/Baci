@@ -139,6 +139,10 @@ export function useQuizRewardedBadge({
     });
     session.cleanups = [];
     sessionRef.current = null;
+    // Release rewarded ownership like finish/dismiss: without this, a
+    // concurrently loading quiz-start interstitial stays skipped even though
+    // the rewarded flow no longer exists.
+    setQuizRewardedFlowActive(false);
     setIsWatching(false);
   }, [isEligible]);
 

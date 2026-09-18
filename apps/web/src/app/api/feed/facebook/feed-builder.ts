@@ -1,6 +1,7 @@
 import { toGoogleListingCondition } from '@baci/shared/lib';
 import { buildFeedDescription } from '@/app/api/feed/google-merchant/build-feed-description';
 import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
+import { getEligibleConditionOffers } from '@/lib/eligible-condition-offers';
 import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
@@ -204,20 +205,16 @@ export function generateFacebookCatalogFeed(
           platform: 'facebook',
         });
       }
-      // Only offers that can emit feed rows may claim imagery or emit
-      // rows: the storefront never selects a same-condition offer, and
-      // zero-price or unconditioned offers render nothing.
-      const parentCondition = toGoogleListingCondition(product.condition);
-      const eligibleOffers = (product.offers || []).filter(
-        (offer) =>
-          offer.id &&
-          Number.isFinite(offer.price) &&
-          offer.price > 0 &&
-          toGoogleListingCondition(offer.condition) &&
-          toGoogleListingCondition(offer.condition) !== parentCondition
+      const eligibleOffers = getEligibleConditionOffers(
+        product.offers,
+        product.condition
       );
       const offerClaimedImageUrls =
         collectOfferClaimedImageUrls(eligibleOffers);
+      const parentCondition =
+        product.condition == null
+          ? 'new'
+          : toGoogleListingCondition(product.condition);
       const primaryImageUrl = resolveGmcPrimaryImage(
         manifestEntries,
         offerClaimedImageUrls
@@ -254,7 +251,7 @@ export function generateFacebookCatalogFeed(
       };
       const base =
         primaryImageUrl &&
-        toGoogleListingCondition(product.condition) &&
+        parentCondition &&
         Number.isFinite(product.price) &&
         product.price > 0
           ? buildItemXml(baseArgs)

@@ -33,7 +33,7 @@ import {
   verifyCdnImageWithTransformFallback,
   verifyRemoteImage,
 } from './lib/gmc-feed-verifier';
-import { appendOfferImageCandidates } from './lib/feed-offer-image-backfill';
+import { appendOfferProductImages } from './lib/offer-product-images';
 
 // ---------- Config ----------
 
@@ -201,24 +201,15 @@ async function main() {
 
   // Condition offers can own imagery that is not duplicated on the parent
   // product. Merge those URLs (merchant-scoped) into the same verified
-  // manifest so feed rows can resolve offer-specific images. Only flagged
-  // products are eligible: feed hydration skips the offers relation
-  // otherwise, so unflagged offer rows could never build an exclusion set
-  // and would leak into base product imagery.
-  const offerProducts = products.filter(
-    (product) => product.has_condition_offers
-  );
+  // manifest so feed rows can resolve offer-specific images.
   try {
     classifiedRows.push(
-      ...(await appendOfferImageCandidates({
+      ...(await appendOfferProductImages({
         supabase,
-        productIds: offerProducts.map((product) => product.id),
+        products,
         merchantId,
         storefrontBaseUrl,
         productRows: classifiedRows,
-        productConditions: new Map(
-          offerProducts.map((product) => [product.id, product.condition])
-        ),
       }))
     );
   } catch (err) {

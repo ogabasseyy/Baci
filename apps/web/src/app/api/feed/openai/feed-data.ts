@@ -1,6 +1,6 @@
-import { toGoogleListingCondition } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
+import { getEligibleConditionOffers } from '@/lib/eligible-condition-offers';
 import { createAnonClient } from '@/lib/supabase/anon';
 import type { ImageManifestMap } from '../google-merchant/feed-builder';
 import { fetchActiveFeedOffers } from '../google-merchant/fetch-active-feed-offers';
@@ -234,7 +234,10 @@ export async function getCachedOpenAIFeedData(
     .filter((product) => product.has_condition_offers)
     .map((product) => product.id);
   if (offerProductIds.length > 0) {
-    const offersByProduct = new Map<string, Array<{ images?: unknown }>>();
+    type FeedOfferRow = Awaited<
+      ReturnType<typeof fetchActiveFeedOffers>
+    >[number];
+    const rowsByProduct = new Map<string, FeedOfferRow[]>();
     const productsById = new Map(
       products.map((product) => [product.id, product])
     );
@@ -242,30 +245,21 @@ export async function getCachedOpenAIFeedData(
       supabase,
       offerProductIds
     )) {
-      // Mirror the Google/Facebook eligibility rule: only offers that can
-      // emit feed rows (positive finite price, valid condition, different
-      // from the parent condition) may claim imagery. Non-emittable
-      // offers must not delete the base product's images.
-      const product = productsById.get(offer.product_id);
-      const price = Number(offer.price);
-      const offerCondition = toGoogleListingCondition(offer.condition);
-      if (
-        !product ||
-        !offer.id ||
-        !Number.isFinite(price) ||
-        price <= 0 ||
-        !offerCondition ||
-        offerCondition === toGoogleListingCondition(product.condition)
-      ) {
-        continue;
-      }
-      const list = offersByProduct.get(offer.product_id) ?? [];
-      list.push({ images: offer.images });
-      offersByProduct.set(offer.product_id, list);
+      if (!productsById.has(offer.product_id)) continue;
+      const list = rowsByProduct.get(offer.product_id) ?? [];
+      list.push(offer);
+      rowsByProduct.set(offer.product_id, list);
     }
     for (const product of products) {
-      const offers = offersByProduct.get(product.id);
-      if (offers) product.offers = offers;
+      // Same eligible-offers predicate as Google/Facebook/TikTok, so
+      // non-emittable offers never reach the generators' claim sets.
+      const eligible = getEligibleConditionOffers(
+        rowsByProduct.get(product.id),
+        product.condition
+      );
+      if (eligible.length > 0) {
+        product.offers = eligible.map((offer) => ({ images: offer.images }));
+      }
     }
   }
   const productIds = products.map((product) => product.id);

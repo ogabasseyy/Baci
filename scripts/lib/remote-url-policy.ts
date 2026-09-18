@@ -65,6 +65,7 @@ function isBlockedIpv6Literal(host: string): boolean {
   const [g0, g1, g2, g3, g4, g5, g6, g7] = groups;
   if (groups.every((g) => g === 0)) return true; // ::
   if (groups.slice(0, 7).every((g) => g === 0) && g7 === 1) return true; // ::1
+  if ((g0 & 0xff00) === 0xff00) return true; // ff00::/8 multicast
   if ((g0 & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
   if ((g0 & 0xffc0) === 0xfec0) return true; // fec0::/10 deprecated site-local
   // 2001:2::/48 benchmarking prefix never appears on the public internet

@@ -8,6 +8,7 @@ import { buildBaseItemXml } from './build-base-feed-item';
 
 import { toGoogleListingCondition } from '@baci/shared/lib';
 import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
+import { getEligibleConditionOffers } from '@/lib/eligible-condition-offers';
 import type { FeedImageManifestEntry } from '@/lib/gmc-feed-images';
 import {
   resolveGmcAdditionalImages,
@@ -42,23 +43,11 @@ interface ResolvedFeedImages {
 
 const VALID_GMC_CONDITIONS = new Set(['new', 'used', 'refurbished'] as const);
 
-function hasEmittableConditionOffer(product: FeedProduct): boolean {
-  const parentCondition = toGoogleListingCondition(product.condition);
-  return (product.offers || []).some(
-    (offer) =>
-      offer.id &&
-      Number.isFinite(offer.price) &&
-      offer.price > 0 &&
-      toGoogleListingCondition(offer.condition) &&
-      toGoogleListingCondition(offer.condition) !== parentCondition
-  );
-}
-
 function isValidForGmc(product: FeedProduct): boolean {
   if (
     product.variant_model !== 'sku_matrix' &&
     (!Number.isFinite(product.price) || product.price <= 0) &&
-    !hasEmittableConditionOffer(product)
+    getEligibleConditionOffers(product.offers, product.condition).length === 0
   )
     return false;
   if (!product.name || product.name.trim() === '') return false;
@@ -156,17 +145,9 @@ export function generateGoogleMerchantFeed(
       if (!isValidGmcUrl(productUrl)) return null;
 
       const manifestEntries = imageManifest[product.id] || [];
-      // Only offers that can emit feed rows may claim imagery or emit
-      // rows: the storefront never selects a same-condition offer, and
-      // zero-price or unconditioned offers render nothing.
-      const parentCondition = toGoogleListingCondition(product.condition);
-      const eligibleOffers = (product.offers || []).filter(
-        (offer) =>
-          offer.id &&
-          Number.isFinite(offer.price) &&
-          offer.price > 0 &&
-          toGoogleListingCondition(offer.condition) &&
-          toGoogleListingCondition(offer.condition) !== parentCondition
+      const eligibleOffers = getEligibleConditionOffers(
+        product.offers,
+        product.condition
       );
       const productLevelImages = resolveFeedImages(
         getProductLevelManifestEntries(manifestEntries),
@@ -207,9 +188,13 @@ export function generateGoogleMerchantFeed(
         );
         return selection ? rows.get(selection.id) : '';
       }
+      const parentCondition =
+        product.condition == null
+          ? 'new'
+          : toGoogleListingCondition(product.condition);
       const baseItem =
         productLevelImages &&
-        toGoogleListingCondition(product.condition) &&
+        parentCondition &&
         Number.isFinite(product.price) &&
         product.price > 0
           ? buildBaseItemXml({

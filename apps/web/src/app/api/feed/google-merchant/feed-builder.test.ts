@@ -841,6 +841,33 @@ describe('generateGoogleMerchantFeed — multi-condition offers', () => {
     );
   });
 
+  it('retains the valid offer row when the parent price is not positive', () => {
+    const xml = generateGoogleMerchantFeed(
+      [
+        product({
+          price: 0,
+          has_condition_offers: true,
+          offers: [
+            {
+              id: 'offer-1',
+              condition: 'used',
+              price: 710000,
+              stock_quantity: 9999,
+            },
+          ],
+        }),
+      ],
+      merchant(),
+      BASE_URL,
+      defaultManifest
+    );
+    // No base row (parent price invalid), but the eligible offer emits.
+    expect(xml).toContain('<g:id>offer-1</g:id>');
+    expect(xml).not.toContain('<g:id>prod-1</g:id>');
+    const itemCount = (xml.match(/<item>/g) || []).length;
+    expect(itemCount).toBe(1);
+  });
+
   it('base item carries the family group id when offers are emitted', () => {
     const xml = generateGoogleMerchantFeed(
       [

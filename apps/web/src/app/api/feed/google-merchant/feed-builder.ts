@@ -42,10 +42,23 @@ interface ResolvedFeedImages {
 
 const VALID_GMC_CONDITIONS = new Set(['new', 'used', 'refurbished'] as const);
 
+function hasEmittableConditionOffer(product: FeedProduct): boolean {
+  const parentCondition = toGoogleListingCondition(product.condition);
+  return (product.offers || []).some(
+    (offer) =>
+      offer.id &&
+      Number.isFinite(offer.price) &&
+      offer.price > 0 &&
+      toGoogleListingCondition(offer.condition) &&
+      toGoogleListingCondition(offer.condition) !== parentCondition
+  );
+}
+
 function isValidForGmc(product: FeedProduct): boolean {
   if (
     product.variant_model !== 'sku_matrix' &&
-    (!Number.isFinite(product.price) || product.price <= 0)
+    (!Number.isFinite(product.price) || product.price <= 0) &&
+    !hasEmittableConditionOffer(product)
   )
     return false;
   if (!product.name || product.name.trim() === '') return false;
@@ -195,7 +208,10 @@ export function generateGoogleMerchantFeed(
         return selection ? rows.get(selection.id) : '';
       }
       const baseItem =
-        productLevelImages && toGoogleListingCondition(product.condition)
+        productLevelImages &&
+        toGoogleListingCondition(product.condition) &&
+        Number.isFinite(product.price) &&
+        product.price > 0
           ? buildBaseItemXml({
               additionalImagesXml: productLevelImages.additionalImagesXml,
               availability:

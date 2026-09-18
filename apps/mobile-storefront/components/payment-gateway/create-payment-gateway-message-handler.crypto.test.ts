@@ -100,8 +100,22 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
       orderNumber: 'ORD-123',
       paymentMethod: 'crypto',
       reference: 'ref-123',
-      value: undefined,
+      value: 0,
     });
+  });
+
+  it('reports the canonical order total for crypto success', async () => {
+    const { handler } = createHandler({ amount: 5000, orderTotal: 21500 });
+
+    await sendMessage(handler, { type: 'crypto_success' });
+
+    expect(mockTrackCheckoutPaymentCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-123',
+        reference: 'ref-123',
+        value: 21500,
+      })
+    );
   });
 
   it('omits whitespace-only tracking token when routing order crypto success', async () => {

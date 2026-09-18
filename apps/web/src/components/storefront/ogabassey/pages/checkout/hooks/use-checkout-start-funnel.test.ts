@@ -36,6 +36,25 @@ describe('useCheckoutStartFunnel', () => {
     );
   });
 
+  it('scopes the dedupe key to the checkout attempt', () => {
+    renderHook(() =>
+      useCheckoutStartFunnel({
+        attemptId: 'attempt-7',
+        displayItems: items,
+        effectiveCheckoutCartTotal: 21500,
+        effectiveItemSubtotal: 20000,
+        isHydrated: true,
+        merchantId: 'merchant-1',
+      })
+    );
+
+    expect(captureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+      'checkout_started',
+      'cart:merchant-1:attempt-7:cart:line-1:2',
+      expect.objectContaining({ channel: 'web' })
+    );
+  });
+
   it.each([
     { isHydrated: false, label: 'not hydrated' },
     { isHydrated: true, label: 'empty cart', items: [] },

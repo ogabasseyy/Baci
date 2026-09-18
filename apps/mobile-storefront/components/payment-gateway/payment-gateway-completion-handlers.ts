@@ -36,6 +36,7 @@ export function createPaymentGatewayCompletionHandlers({
   merchantSlug,
   orderId,
   orderNumber,
+  orderTotal,
   paymentKind,
   queryClient,
   reference,
@@ -145,12 +146,15 @@ export function createPaymentGatewayCompletionHandlers({
     clearPendingLoadTimeout();
     setPaymentStatus('success');
     if (orderId) {
+      // Prefer the canonical order total: `amount` is only the residual due
+      // at the gateway after wallet/savings credits.
+      const purchaseTotal = orderTotal ?? amount ?? 0;
       trackCheckoutPaymentCompleted({
         orderId,
         orderNumber: orderNumber || orderId,
         paymentMethod: gateway || 'payment_gateway',
         reference,
-        value: amount,
+        value: purchaseTotal,
       });
       trackCheckoutRoutePurchaseCompleted({
         items: useCartStore.getState().items,
@@ -158,9 +162,9 @@ export function createPaymentGatewayCompletionHandlers({
         orderNumber: orderNumber || orderId,
         paymentMethod: gateway || 'payment_gateway',
         shipping: 0,
-        subtotal: amount ?? 0,
+        subtotal: purchaseTotal,
         tax: 0,
-        total: amount ?? 0,
+        total: purchaseTotal,
       });
     }
     await clearCart();

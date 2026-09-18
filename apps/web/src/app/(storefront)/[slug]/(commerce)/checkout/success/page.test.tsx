@@ -55,6 +55,13 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: () => mockUseMerchantSafe(),
 }));
 
+const mockCaptureCheckoutFunnelEventOnce = vi.fn();
+
+vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
+  captureCheckoutFunnelEventOnce: (...args: unknown[]) =>
+    mockCaptureCheckoutFunnelEventOnce(...args),
+}));
+
 vi.mock('@/lib/api-client', () => ({
   fetchWithCsrf: (...args: unknown[]) => mockFetchWithCsrf(...args),
 }));
@@ -108,6 +115,8 @@ describe('checkout success page', () => {
     mockFetchWithCsrf.mockResolvedValue({
       ok: true,
       json: async () => ({
+        finalizationOutcome: 'completed',
+        orderId: 'order-1',
         orderNumber: 'ORD-2001',
         status: 'success',
         success: true,
@@ -124,6 +133,33 @@ describe('checkout success page', () => {
       })
     );
     expect(mockClearCart).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        expect.anything(),
+        expect.objectContaining({ payment_status: 'paid' })
+      )
+    );
+  });
+
+  it('does not count cancelled finalizations as paid conversions', async () => {
+    mockFetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        finalizationOutcome: 'order_cancelled',
+        orderNumber: 'ORD-2001',
+        status: 'success',
+        success: true,
+      }),
+    });
+
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() => expect(mockClearCart).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByText(/ORD-2001/i)).toBeInTheDocument()
+    );
+    expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
   });
 
   it('keeps the cart intact when payment verification does not succeed', async () => {

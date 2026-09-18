@@ -15,6 +15,8 @@ import {
   type WalletFundedBankTransferParams,
   WalletFundedBankTransferParamsSchema,
 } from '@/schemas/bank-transfer-params';
+import { trackCheckoutPaymentCompleted } from '@/services/analytics';
+import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { useCartStore } from '@/stores/cart-store';
 
 const copyToClipboard = async (text: string) => {
@@ -183,6 +185,29 @@ export default function BankTransferScreen() {
     merchantId,
     merchantSlug,
     onCompleted: (intent) => {
+      // The funding intent is confirmed: record the conversion before the
+      // success route clears the cart (purchase capture needs cart items).
+      if (orderId) {
+        const fundedValue = Number(amount);
+        const fundedTotal = Number.isFinite(fundedValue) ? fundedValue : 0;
+        trackCheckoutPaymentCompleted({
+          orderId,
+          orderNumber: orderNumber || orderId,
+          paymentMethod: 'bank_transfer',
+          reference: intent.id,
+          value: fundedTotal,
+        });
+        trackCheckoutRoutePurchaseCompleted({
+          items: useCartStore.getState().items,
+          orderId,
+          orderNumber: orderNumber || orderId,
+          paymentMethod: 'bank_transfer',
+          shipping: 0,
+          subtotal: fundedTotal,
+          tax: 0,
+          total: fundedTotal,
+        });
+      }
       void routeToOrderSuccess({ successReference: intent.id });
     },
     onError: () => {

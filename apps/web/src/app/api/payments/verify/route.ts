@@ -157,6 +157,8 @@ async function verifyPaymentReference(reference: string) {
       orderNumber:
         existingOrder.order_number ||
         transaction.gateway_reference.slice(0, 8).toUpperCase(),
+      // Locally-finalized paid order: semantically a completed finalization.
+      finalizationOutcome: 'completed',
     });
   }
   const storedGatewayResponse = transaction.gateway_response;
@@ -354,6 +356,9 @@ async function verifyPaymentReference(reference: string) {
     success: true,
     status: 'success',
     orderNumber: finalOrderNumber,
+    // completed = active paid order; order_cancelled/order_skipped report
+    // success too (money captured) but must not count as paid conversions.
+    finalizationOutcome: finalizeOutcome.kind,
   });
 }
 

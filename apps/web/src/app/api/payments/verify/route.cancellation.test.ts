@@ -273,7 +273,11 @@ describe('POST /api/payments/verify — finalizer outcomes', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data).toMatchObject({ status: 'success', success: true });
+    expect(data).toMatchObject({
+      finalizationOutcome: 'order_cancelled',
+      status: 'success',
+      success: true,
+    });
     expect(mockNotifyNewOrder).not.toHaveBeenCalled();
     expect(mockRunPaidOrderSideEffects).not.toHaveBeenCalled();
     expect(mockReconciliationInsert).toHaveBeenCalledWith(
@@ -510,6 +514,7 @@ describe('POST /api/payments/verify — finalizer outcomes', () => {
 
     expect(response.status).toBe(200);
     expect(data).toEqual({
+      finalizationOutcome: 'completed',
       orderId: 'order-1',
       orderNumber: 'ORD-1',
       paymentMethod: 'juicyway',

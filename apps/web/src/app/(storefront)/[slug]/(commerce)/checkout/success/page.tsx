@@ -48,6 +48,7 @@ type VerificationResponse = {
   paymentMethod?: string;
   status?: 'success' | 'pending' | 'failed' | 'cancelled';
   success?: boolean;
+  finalizationOutcome?: string;
 };
 
 function isVerificationResponse(value: unknown): value is VerificationResponse {
@@ -72,13 +73,17 @@ function isVerificationResponse(value: unknown): value is VerificationResponse {
     typeof candidate.paymentMethod === 'string';
   const hasValidSuccess =
     candidate.success === undefined || typeof candidate.success === 'boolean';
+  const hasValidFinalizationOutcome =
+    candidate.finalizationOutcome === undefined ||
+    typeof candidate.finalizationOutcome === 'string';
 
   return (
     hasValidStatus &&
     hasValidOrderNumber &&
     hasValidOrderId &&
     hasValidPaymentMethod &&
-    hasValidSuccess
+    hasValidSuccess &&
+    hasValidFinalizationOutcome
   );
 }
 
@@ -211,7 +216,10 @@ async function verifyCheckoutPayment(
       setStatus('success');
       setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
       const verifiedOrderId = data.orderId || orderId;
-      if (verifiedOrderId) {
+      // The verify API reports success for completed, order_cancelled, and
+      // order_skipped outcomes alike: only a completed finalization leaves an
+      // active paid order, so only it counts as a paid conversion.
+      if (verifiedOrderId && data.finalizationOutcome === 'completed') {
         capturePaymentCompleted({
           orderId: verifiedOrderId,
           orderNumber: data.orderNumber,

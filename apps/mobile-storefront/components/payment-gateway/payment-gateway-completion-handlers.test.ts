@@ -118,6 +118,25 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     );
   });
 
+  it('reports the canonical order total instead of the gateway residual', async () => {
+    // Arrange
+    const { input } = createInput({ amount: 5000, orderTotal: 21500 });
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert
+    expect(mockTrackCheckoutRoutePurchaseCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-1',
+        subtotal: 21500,
+        total: 21500,
+      })
+    );
+  });
+
   it('ignores a second completion once one has already started', () => {
     // Arrange
     const { input, refs } = createInput();

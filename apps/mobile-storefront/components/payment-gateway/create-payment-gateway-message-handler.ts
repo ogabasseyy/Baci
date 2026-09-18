@@ -31,6 +31,7 @@ interface CreatePaymentGatewayMessageHandlerInput {
   customerIdentifier?: string;
   orderId?: string;
   orderNumber?: string;
+  orderTotal?: number;
   paymentKind?: PaymentKind;
   reference?: string;
   trackingToken?: string;
@@ -114,6 +115,7 @@ export function createPaymentGatewayMessageHandler({
   gateway,
   orderId,
   orderNumber,
+  orderTotal,
   paymentKind,
   reference,
   trackingToken,
@@ -203,12 +205,15 @@ export function createPaymentGatewayMessageHandler({
         return;
       }
       setSuccessStatus();
+      // Prefer the canonical order total: `amount` is only the residual due
+      // at the gateway after wallet/savings credits.
+      const cryptoPurchaseTotal = orderTotal ?? amount ?? 0;
       trackCheckoutPaymentCompleted({
         orderId: cryptoOrderId,
         orderNumber: getTrimmedString(orderNumber),
         paymentMethod: getTrimmedString(gateway) || 'crypto',
         reference: cryptoReference,
-        value: amount,
+        value: cryptoPurchaseTotal,
       });
       trackCheckoutRoutePurchaseCompleted({
         items: useCartStore.getState().items,
@@ -216,9 +221,9 @@ export function createPaymentGatewayMessageHandler({
         orderNumber: getTrimmedString(orderNumber) || cryptoOrderId,
         paymentMethod: getTrimmedString(gateway) || 'crypto',
         shipping: 0,
-        subtotal: amount ?? 0,
+        subtotal: cryptoPurchaseTotal,
         tax: 0,
-        total: amount ?? 0,
+        total: cryptoPurchaseTotal,
       });
       await clearCart();
       scheduleDelayedNavigation(() => {

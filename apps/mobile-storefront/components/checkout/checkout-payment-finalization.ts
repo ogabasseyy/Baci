@@ -288,6 +288,9 @@ async function initializeGatewayAndRoute({
       authorizationUrl: initData.authorization_url || initData.checkout_url,
       reference: initData.reference,
       amount: String(orderResponse.amountDueToGateway),
+      // Canonical order total for revenue-accurate purchase reporting; the
+      // gateway `amount` above is only the residual due after credits.
+      orderTotal: String(orderResponse.order.total),
       ...(trackingToken && { trackingToken }),
     },
   });

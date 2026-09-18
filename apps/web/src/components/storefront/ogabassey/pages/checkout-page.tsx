@@ -53,7 +53,7 @@ import { useCryptoPaymentInitializer } from './checkout/use-crypto-payment-initi
 import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
 import { persistPendingCheckoutOrder } from './checkout/persist-pending-checkout-order';
 import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useId, useState, useRef } from 'react';
 import { useCart } from '@/hooks/cart';
 import type { CartItem } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -820,7 +820,11 @@ export const CheckoutPage: React.FC = () => {
     ? checkoutCartTotal
     : resumedOrder?.subtotal || checkoutCartTotal;
 
+  // Mount-scoped checkout attempt: remounting the page starts a new attempt,
+  // so a repeat purchase of the same cart in one session emits a fresh start.
+  const checkoutAttemptId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   useCheckoutStartFunnel({
+    attemptId: checkoutAttemptId,
     currency: currencyCode,
     displayItems,
     effectiveCheckoutCartTotal,
@@ -1633,6 +1637,23 @@ export const CheckoutPage: React.FC = () => {
                 gateway: 'credpal',
               }),
             });
+            // Resumed orders bypass the standard submission instrumentation,
+            // so record the conversion here to avoid an artificial drop-off.
+            captureCheckoutFunnelEventOnce(
+              CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+              resumedOrder.id,
+              buildCheckoutFunnelProperties({
+                channel: 'web',
+                currency: currencyCode,
+                orderId: resumedOrder.id,
+                paymentIntent: getCheckoutPaymentIntent('credpal'),
+                paymentMethod: 'credpal',
+                paymentStatus: 'paid',
+                reference: data.order_no,
+                source: 'web_checkout',
+                total: resumedOrder.total,
+              })
+            );
             clearCheckoutSession();
             const successQuery = new URLSearchParams({
               orderId: resumedOrder.id,
@@ -2399,6 +2420,23 @@ export const CheckoutPage: React.FC = () => {
       // Special case: If wallet fully covers the order, no payment gateway needed
       // Order API already marks it as paid, just redirect to success
       if (paymentAmount <= 0) {
+        // Wallet/server-side credit covered the full amount and the order API
+        // already marked the order paid: record the conversion before leaving.
+        captureCheckoutFunnelEventOnce(
+          CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+          order.id,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            currency: orderChargeCurrency,
+            orderId: order.id,
+            orderNumber: createdOrderNumber,
+            paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+            paymentMethod,
+            paymentStatus: 'paid',
+            source: 'web_checkout',
+            total: order.total ?? total,
+          })
+        );
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
         clearCheckoutSession();

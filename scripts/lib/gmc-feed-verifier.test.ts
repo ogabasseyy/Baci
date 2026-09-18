@@ -1,5 +1,6 @@
 import { type Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  type DnsLookupFn,
   type FetchFn,
   buildCdnTransformImageUrl,
   getClassifiedImageVerificationUrl,
@@ -16,6 +17,11 @@ function fakeResponse(props: {
 }): Response {
   return props as unknown as Response;
 }
+
+/** Resolves every hostname to a public documentation IP. */
+const publicLookup: DnsLookupFn = async () => [
+  { address: '93.184.216.1', family: 4 },
+];
 
 // ---------- verifyCdnImage ----------
 describe('verifyCdnImage', () => {
@@ -205,7 +211,8 @@ describe('verifyCdnImageWithTransformFallback', () => {
       'https://cdn.ogabassey.com/core-assets/products/phone.avif',
       cdnBasePath,
       existsSyncMock,
-      fetchMock
+      fetchMock,
+      publicLookup
     );
 
     expect(result.status).toBe('verified');
@@ -229,7 +236,8 @@ describe('verifyCdnImageWithTransformFallback', () => {
       'https://cdn.ogabassey.com/core-assets/products/phone.avif',
       cdnBasePath,
       existsSyncMock,
-      fetchMock
+      fetchMock,
+      publicLookup
     );
 
     expect(result.status).toBe('verified');
@@ -253,7 +261,8 @@ describe('verifyCdnImageWithTransformFallback', () => {
       'https://cdn.ogabassey.com/core-assets/products/phone.avif',
       cdnBasePath,
       existsSyncMock,
-      fetchMock
+      fetchMock,
+      publicLookup
     );
 
     expect(result.status).toBe('pending_derivative');
@@ -276,7 +285,8 @@ describe('verifyCdnImageWithTransformFallback', () => {
       'https://cdn.ogabassey.com/core-assets/products/phone.avif',
       cdnBasePath,
       existsSyncMock,
-      fetchMock
+      fetchMock,
+      publicLookup
     );
 
     expect(result.status).toBe('pending_verification');
@@ -323,7 +333,11 @@ describe('verifyRemoteImage', () => {
     const fetchFn = vi.fn<FetchFn>().mockResolvedValue(
       fakeResponse({ ok: false, status: 302, headers: new Headers({ location: 'http://127.0.0.1' }) })
     );
-    const result = await verifyRemoteImage('https://images.example.com/phone.jpg', fetchFn);
+    const result = await verifyRemoteImage(
+      'https://images.example.com/phone.jpg',
+      fetchFn,
+      publicLookup
+    );
     expect(result.status).toBe('invalid');
     expect(fetchFn).toHaveBeenCalledWith(
       'https://images.example.com/phone.jpg',
@@ -348,7 +362,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://ogabassey.com/game-covers/cyberpunk-2077.png',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('verified');
     expect(result.verified_url).toBe(
@@ -369,7 +384,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://ogabassey.com/game-covers/cyberpunk-2077.png',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('verified');
     expect(result.verified_format).toBe('png');
@@ -383,7 +399,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://example.com/photo.webp',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('verified');
     expect(result.verified_format).toBe('webp');
@@ -397,7 +414,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://ogabassey.com/missing-image.jpg',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('missing');
     expect(result.failure_reason).toContain('404');
@@ -411,7 +429,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://ogabassey.com/game-covers/temp-error.png',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('pending_verification');
     expect(result.failure_reason).toContain('503');
@@ -425,7 +444,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://example.com/photo.jpg',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('pending_verification');
     expect(result.failure_reason).toContain('429');
@@ -439,7 +459,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://example.com/photo.jpg',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('missing');
     expect(result.failure_reason).toContain('403');
@@ -449,7 +470,8 @@ describe('verifyRemoteImage', () => {
     fetchMock.mockRejectedValue(new Error('fetch failed'));
     const result = await verifyRemoteImage(
       'https://ogabassey.com/game-covers/timeout.png',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('pending_verification');
     expect(result.failure_reason).toContain('fetch failed');
@@ -463,7 +485,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://ogabassey.com/not-an-image',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('invalid');
     expect(result.failure_reason).toContain('text/html');
@@ -483,7 +506,8 @@ describe('verifyRemoteImage', () => {
       }));
     const result = await verifyRemoteImage(
       'https://example.com/photo.jpg',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('verified');
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -497,7 +521,8 @@ describe('verifyRemoteImage', () => {
     fetchMock.mockRejectedValue('string error');
     const result = await verifyRemoteImage(
       'https://example.com/photo.jpg',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('pending_verification');
     expect(result.failure_reason).toContain('string error');
@@ -511,9 +536,51 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://example.com/photo.avif',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('invalid');
     expect(result.failure_reason).toContain('image/avif');
+  });
+
+  it('rejects hostnames that resolve to private addresses without fetching', async () => {
+    const fetchFn = vi.fn<FetchFn>();
+    const lookupFn: DnsLookupFn = async () => [{ address: '10.0.0.5', family: 4 }];
+    const result = await verifyRemoteImage(
+      'https://images.example.com/phone.jpg',
+      fetchFn,
+      lookupFn
+    );
+    expect(result.status).toBe('invalid');
+    expect(result.failure_reason).toContain('non-public address 10.0.0.5');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('rejects IPv4-mapped IPv6 resolutions by their embedded address', async () => {
+    const fetchFn = vi.fn<FetchFn>();
+    const lookupFn: DnsLookupFn = async () => [{ address: '::ffff:7f00:1', family: 6 }];
+    const result = await verifyRemoteImage(
+      'https://images.example.com/phone.jpg',
+      fetchFn,
+      lookupFn
+    );
+    expect(result.status).toBe('invalid');
+    expect(result.failure_reason).toContain('non-public address ::ffff:7f00:1');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('retries verification when DNS resolution fails', async () => {
+    const fetchFn = vi.fn<FetchFn>();
+    const lookupFn: DnsLookupFn = async () => {
+      throw new Error('ENOTFOUND images.example.com');
+    };
+    const result = await verifyRemoteImage(
+      'https://images.example.com/phone.jpg',
+      fetchFn,
+      lookupFn
+    );
+    expect(result.status).toBe('pending_verification');
+    expect(result.failure_reason).toContain('DNS resolution failed');
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 });

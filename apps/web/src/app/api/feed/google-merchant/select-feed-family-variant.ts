@@ -20,6 +20,10 @@ export function selectFeedFamilyVariant(
   const candidates = variants.filter(isFeedValid);
   const selection = resolveDefaultVariantSelection({
     ...product,
+    // The feed treats nullish manage_stock as unmanaged (9999 quantity);
+    // align the resolver so zero-stock families rank by condition/price
+    // instead of falling through to RPC creation order.
+    manage_stock: product.manage_stock ?? false,
     variants: candidates.map((variant) => ({
       ...variant,
       attributes: normalizeFeedVariantStringAttributes(variant.attributes),

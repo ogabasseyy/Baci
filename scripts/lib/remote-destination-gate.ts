@@ -12,6 +12,11 @@
  * repository modularity boundary.
  */
 
+import type {
+  LookupAddress,
+  LookupAllOptions,
+  LookupOneOptions,
+} from 'node:dns';
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { Agent, type Dispatcher } from 'undici';
 import { validateRemoteUrl } from './remote-url-policy';
@@ -73,11 +78,25 @@ export async function resolvePinnedDestination(
     };
   }
   const family = pinned.family === 6 ? 6 : 4;
-  const dispatcher = new Agent({
-    connect: {
-      lookup: (_host, _opts, callback) =>
-        callback(null, pinned.address, family),
-    },
-  });
+  // Matches node's dns.lookup overloads: net.connect requests all:true for
+  // family autoselection, in which case the callback must receive the
+  // address-record array form — the scalar form fails the connection with
+  // ERR_INVALID_IP_ADDRESS.
+  const lookup = (
+    _hostname: string,
+    options: LookupOneOptions | LookupAllOptions,
+    callback: (
+      err: NodeJS.ErrnoException | null,
+      address: string | LookupAddress[],
+      family?: number
+    ) => void
+  ): void => {
+    if (options.all) {
+      callback(null, [{ address: pinned.address, family }]);
+    } else {
+      callback(null, pinned.address, family);
+    }
+  };
+  const dispatcher = new Agent({ connect: { lookup } });
   return { address: pinned.address, family, dispatcher };
 }

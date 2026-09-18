@@ -320,6 +320,33 @@ describe('useQuizWaitingRoom', () => {
     expect(isCancelled?.()).toBe(true);
   });
 
+  it('cancels the pending pre-quiz ad once the safety margin expires', async () => {
+    // A load requested with 60 seconds left that is still pending with 25
+    // seconds left must not present over the timed quiz: the same 30-second
+    // threshold gates presentation, not just the initial request.
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-23T11:59:00.000Z'));
+    mockMaybeShowQuizStartInterstitial.mockClear();
+    renderHook(() =>
+      useQuizWaitingRoom({
+        event: event(),
+        onExit: jest.fn(),
+        onStart: jest.fn(),
+        refresh: jest.fn(async () => []),
+      })
+    );
+    const isCancelled =
+      mockMaybeShowQuizStartInterstitial.mock.calls[0]?.[0]?.isCancelled;
+    expect(isCancelled?.()).toBe(false);
+    await act(async () => {
+      jest.advanceTimersByTime(35_000);
+      for (let flush = 0; flush < 10; flush += 1) {
+        await Promise.resolve();
+      }
+    });
+    expect(isCancelled?.()).toBe(true);
+  });
+
   it('cancels a pending active response when the waiting room unmounts', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-08-23T11:59:59.000Z'));

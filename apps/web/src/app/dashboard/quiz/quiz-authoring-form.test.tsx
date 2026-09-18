@@ -94,6 +94,32 @@ describe('QuizAuthoringForm', () => {
     ).toBe(120_000);
   });
 
+  it('rounds a non-minute test window up so play fits inside it', () => {
+    // Two 35-second questions expect 70 seconds of play; datetime-local
+    // inputs drop seconds, so the synced end rounds up to 120 seconds out
+    // instead of truncating to 60.
+    render(
+      <QuizAuthoringForm
+        disabled={false}
+        initialProducts={[prize]}
+        isGenerating={false}
+        onGenerate={vi.fn()}
+      />
+    );
+    fireEvent.change(screen.getByLabelText(/time per question \(seconds\)/i), {
+      target: { value: '35' },
+    });
+    const startInput = screen.getByLabelText(
+      /scheduled start/i
+    ) as HTMLInputElement;
+    const endInput = screen.getByLabelText(
+      /universal end/i
+    ) as HTMLInputElement;
+    expect(
+      new Date(endInput.value).getTime() - new Date(startInput.value).getTime()
+    ).toBe(120_000);
+  });
+
   it('keeps a manually edited end when the start changes', () => {
     render(
       <QuizAuthoringForm

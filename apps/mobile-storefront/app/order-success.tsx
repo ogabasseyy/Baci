@@ -107,12 +107,18 @@ export default function OrderSuccessScreen() {
 
   useEffect(() => {
     // Check for notification permissions (Soft Ask)
-    // Small delay to let the success animation play (better UX)
+    // Small delay to let the success animation play (better UX).
+    // The flag is set before awaiting the permission lookup: on a slow
+    // device the native-module import or status check can still be pending
+    // past the interstitial timer, and the ad must not present just as the
+    // soft ask opens. Terminal non-modal results clear it immediately.
     const timerId = setTimeout(async () => {
+      permissionFlowActiveRef.current = true;
       const result = await requestPermission('notifications');
       if (result === 'soft-ask-needed') {
-        permissionFlowActiveRef.current = true;
         setShowPermissionModal(true);
+      } else {
+        permissionFlowActiveRef.current = false;
       }
     }, 1500);
 

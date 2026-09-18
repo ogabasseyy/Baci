@@ -11,6 +11,10 @@ jest.mock('@/hooks/use-mobile-ads-readiness', () => ({
 
 const mockUseMobileAdsReadiness = jest.mocked(useMobileAdsReadiness);
 
+jest.mock('@/services/analytics-core', () => ({
+  trackEvent: jest.fn(),
+}));
+
 jest.mock('react-native-google-mobile-ads', () => ({
   BannerAd: 'BannerAd',
   BannerAdSize: {

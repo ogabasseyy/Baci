@@ -14,15 +14,12 @@ import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { useTheme } from '@/hooks/useTheme';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
+import { EliteSlide } from './EliteSlide';
+import { FashionSlide } from './FashionSlide';
 import { ELITE_HEIGHT, getHeroStyles } from './Hero.styles';
 import { HeroAdSlide } from './HeroAdSlide';
-import {
-  CAROUSEL_HEIGHT,
-  EliteSlide,
-  FashionSlide,
-  STANDARD_HEIGHT,
-  StandardSlide,
-} from './HeroSlideVariants';
+import { CAROUSEL_HEIGHT, STANDARD_HEIGHT } from './HeroSlideShared';
+import { StandardSlide } from './StandardSlide';
 
 export interface HeroSlide {
   title: string;

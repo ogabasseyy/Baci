@@ -1,10 +1,12 @@
 import { Text, View } from 'react-native';
 import { BRAND } from '@/constants/Colors';
+import { formatKoboToNaira } from '@/lib/format-kobo-to-naira';
 import {
   applicablePriceKobo,
   isReady,
   purchasingPowerKobo,
 } from '@/lib/piggyvest/savings-policy';
+import { PlanWalletStagingPreviewRow } from './PlanWalletStagingPreviewRow';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import type { StartSavingsColors } from './start-savings.types';
 
@@ -23,10 +25,6 @@ type PlanWalletStagingSectionProps = {
 const SYNTHETIC_PRINCIPAL_KOBO = 9_500_000;
 const SYNTHETIC_PAID_INTEREST_KOBO = 300_000;
 const SYNTHETIC_PENDING_ACCRUAL_KOBO = 200_000;
-
-export function formatKoboToNaira(kobo: number): string {
-  return `₦${(kobo / 100).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 export function PlanWalletStagingSection({
   colors,
@@ -84,27 +82,27 @@ export function PlanWalletStagingSection({
       </Text>
 
       <View style={{ marginTop: 8, gap: 2 }}>
-        <PreviewRow
+        <PlanWalletStagingPreviewRow
           colors={colors}
           label="Funding account"
           value="9000 000 001 · Synthetic Bank"
         />
-        <PreviewRow
+        <PlanWalletStagingPreviewRow
           colors={colors}
           label="Purchasing power"
           value={formatKoboToNaira(power)}
         />
-        <PreviewRow
+        <PlanWalletStagingPreviewRow
           colors={colors}
           label="Pending accrual (not spendable)"
           value={formatKoboToNaira(SYNTHETIC_PENDING_ACCRUAL_KOBO)}
         />
-        <PreviewRow
+        <PlanWalletStagingPreviewRow
           colors={colors}
           label="Cancel quote: principal refund"
           value={formatKoboToNaira(SYNTHETIC_PRINCIPAL_KOBO)}
         />
-        <PreviewRow
+        <PlanWalletStagingPreviewRow
           colors={colors}
           label="Cancel quote: interest forfeited"
           value={formatKoboToNaira(
@@ -144,34 +142,6 @@ export function PlanWalletStagingSection({
         {ready
           ? 'Ready — covers the target. Review & buy only, never auto-order.'
           : 'Continue saving — progress reflects confirmed funds only.'}
-      </Text>
-    </View>
-  );
-}
-
-function PreviewRow({
-  colors,
-  label,
-  value,
-}: {
-  colors: StartSavingsColors;
-  label: string;
-  value: string;
-}) {
-  return (
-    <View
-      style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}
-    >
-      <Text
-        style={[
-          styles.sourceModeHint,
-          { color: colors.textSecondary, flex: 1 },
-        ]}
-      >
-        {label}
-      </Text>
-      <Text style={[styles.sourceModeHint, { color: colors.text }]}>
-        {value}
       </Text>
     </View>
   );

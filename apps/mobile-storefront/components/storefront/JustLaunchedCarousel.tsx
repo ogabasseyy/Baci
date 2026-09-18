@@ -161,6 +161,7 @@ export function JustLaunchedCarousel() {
         <LaunchAdCard
           cardWidth={cardWidth}
           colors={colors}
+          placement="PRODUCT_GRID_MPU"
           unitId={
             adUnitConfig.enabled ? adUnitConfig.unitId : 'unused-ad-unit-id'
           }

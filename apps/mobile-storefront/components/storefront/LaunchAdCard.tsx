@@ -1,4 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
+import type { MobileAdBannerPlacementKey } from '@/config/mobile-ad-placements';
+import { trackEvent } from '@/services/analytics-core';
 
 interface LaunchAdCardColors {
   border: string;
@@ -9,15 +11,24 @@ interface LaunchAdCardColors {
 interface LaunchAdCardProps {
   cardWidth: number;
   colors: LaunchAdCardColors;
+  /** Configured placement this slot resolves from; used for event attribution. */
+  placement: MobileAdBannerPlacementKey;
   unitId: string;
 }
 
 /**
- * Sponsored card inserted into the Just Launched carousel. Renders nothing
- * when the Google Mobile Ads native module is unavailable (e.g. Expo Go)
- * rather than crashing the carousel.
+ * Sponsored card inserted into the Just Launched carousel. Impressions and
+ * failures are attributed to the configured placement so placement-level
+ * monetization reporting stays accurate. Renders nothing when the Google
+ * Mobile Ads native module is unavailable (e.g. Expo Go) rather than
+ * crashing the carousel.
  */
-export function LaunchAdCard({ cardWidth, colors, unitId }: LaunchAdCardProps) {
+export function LaunchAdCard({
+  cardWidth,
+  colors,
+  placement,
+  unitId,
+}: LaunchAdCardProps) {
   let bannerModule: typeof import('react-native-google-mobile-ads') | null =
     null;
   try {
@@ -45,7 +56,22 @@ export function LaunchAdCard({ cardWidth, colors, unitId }: LaunchAdCardProps) {
       <Text style={[styles.adLabel, { color: colors.textSecondary }]}>
         Sponsored
       </Text>
-      <BannerAd size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER} unitId={unitId} />
+      <BannerAd
+        onAdFailedToLoad={() =>
+          trackEvent('mobile_ad_failed', {
+            format: 'banner',
+            placement,
+          })
+        }
+        onAdImpression={() =>
+          trackEvent('mobile_ad_impression', {
+            format: 'banner',
+            placement,
+          })
+        }
+        size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+        unitId={unitId}
+      />
     </View>
   );
 }

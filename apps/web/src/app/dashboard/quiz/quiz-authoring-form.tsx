@@ -1,9 +1,8 @@
 'use client';
 
-import { getSuggestedQuizLiveWindowSeconds } from '@baci/shared';
 import { Loader2, Sparkles } from 'lucide-react';
 import type { FormEvent } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { QuizPrizeProduct } from '@/schemas/quiz-prize-product';
 import {
   clampNumber,
@@ -13,6 +12,10 @@ import {
 import { QuizPlanSummary } from './quiz-plan-summary';
 import { QuizPrizeProductPicker } from './quiz-prize-product-picker';
 import { QuizTopicInput } from './quiz-topic-input';
+import {
+  localDatetime,
+  useQuizAuthoringWindowSync,
+} from './use-quiz-authoring-window-sync';
 
 export type QuizDraftConfiguration = {
   difficulty: 'easy' | 'standard' | 'hard';
@@ -27,11 +30,6 @@ export type QuizDraftConfiguration = {
   title: string;
   topics: string[];
 };
-
-function localDatetime(date: Date): string {
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
 
 export function QuizAuthoringForm({
   disabled,
@@ -78,24 +76,14 @@ export function QuizAuthoringForm({
   const [endTouched, setEndTouched] = useState(false);
   const questionCount = topics.length * clampNumber(Number(perTopic), 1, 20);
   const timePerQuestionSeconds = clampNumber(Number(time), 5, 60);
-  // Live mode tracks the shared suggested live window (expected play plus
-  // the documented grace, whole minutes) so the auto-synced end always
-  // satisfies the launch timing bounds. Other modes use raw expected play
-  // with a floor that keeps the defaulted end after the start when no
-  // questions exist yet.
-  const expectedPlaySeconds =
-    mode === 'live' && questionCount > 0
-      ? getSuggestedQuizLiveWindowSeconds(questionCount, timePerQuestionSeconds)
-      : Math.max(questionCount * timePerQuestionSeconds, 60);
-  useEffect(() => {
-    if (endTouched) return;
-    const startMs = Date.parse(scheduledStart);
-    if (!Number.isFinite(startMs)) return;
-    const synced = localDatetime(
-      new Date(startMs + expectedPlaySeconds * 1000)
-    );
-    setScheduledEnd((current) => (current === synced ? current : synced));
-  }, [endTouched, expectedPlaySeconds, scheduledStart]);
+  useQuizAuthoringWindowSync({
+    endTouched,
+    mode,
+    questionCount,
+    scheduledStart,
+    setScheduledEnd,
+    timePerQuestionSeconds,
+  });
   const closesAt =
     timingKind === 'scheduled' && scheduledEnd
       ? new Date(scheduledEnd).toLocaleString()

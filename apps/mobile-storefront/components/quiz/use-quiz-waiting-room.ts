@@ -146,11 +146,11 @@ export function useQuizWaitingRoom({
   useEffect(() => {
     let mounted = true;
     // Fire-and-forget: the lobby countdown keeps ticking underneath and play
-    // never waits on the ad. Skipped when the quiz starts too soon for an ad
-    // to fit before live play. The load is abandoned if the shopper moves
-    // into live play, the countdown expires while the authoritative refresh
-    // is still in flight, or the lobby unmounts — so a late LOADED event can
-    // never present over timed questions or an unrelated screen.
+    // never waits on the ad. The load is abandoned if the shopper moves into
+    // live play, the lobby unmounts, or the countdown drops below the safety
+    // margin while the load is in flight — a load that started with just
+    // over 30 seconds left must not present over the timed quiz, so the same
+    // threshold gates presentation, not just the initial request.
     if (
       getRemainingSeconds(eventRef.current, offsetRef.current) >
       QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS
@@ -160,7 +160,8 @@ export function useQuizWaitingRoom({
           !mounted ||
           startedRef.current ||
           stoppedRef.current ||
-          getRemainingSeconds(eventRef.current, offsetRef.current) <= 0,
+          getRemainingSeconds(eventRef.current, offsetRef.current) <
+            QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS,
       });
     }
     const tick = () => {

@@ -1,7 +1,17 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
+import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { AdSlot } from './AdSlot';
+
+jest.mock('@/hooks/use-mobile-ads-readiness', () => ({
+  useMobileAdsReadiness: jest.fn(() => ({
+    canRequestAds: true,
+    initialized: true,
+  })),
+}));
+
+const mockUseMobileAdsReadiness = jest.mocked(useMobileAdsReadiness);
 
 jest.mock('@/config/mobile-ad-placements', () => {
   const actual = jest.requireActual('@/config/mobile-ad-placements') as Record<
@@ -48,6 +58,17 @@ describe('AdSlot', () => {
     expect(screen.getByLabelText('Sponsored advertisement')).toBeTruthy();
     expect(screen.getByText('Sponsored')).toBeTruthy();
     expect(screen.getByTestId('ad-slot-cart-mpu')).toBeTruthy();
+    setAdsEnabled(ORIGINAL_ENV);
+  });
+
+  it('renders nothing until consent is ready', () => {
+    mockUseMobileAdsReadiness.mockReturnValueOnce({
+      canRequestAds: false,
+      initialized: false,
+    });
+    setAdsEnabled('true');
+    const { toJSON } = render(<AdSlot placement="CART_MPU" />);
+    expect(toJSON()).toBeNull();
     setAdsEnabled(ORIGINAL_ENV);
   });
 

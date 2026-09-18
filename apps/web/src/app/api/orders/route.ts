@@ -16,10 +16,6 @@ import {
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
-import {
-  revalidateProductSlugs,
-  revalidateProducts,
-} from '@/lib/cache-revalidation';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
@@ -44,6 +40,7 @@ import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiatio
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
+import { revalidateOrderProductCaches } from '@/lib/checkout/revalidate-order-product-caches';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
@@ -2700,7 +2697,7 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      return createRedvaultCheckoutResponse({
+      const redvaultCheckoutResponse = await createRedvaultCheckoutResponse({
         client: orderRpcClient,
         orderRpcArgs: {
           ...orderRpcArgs,
@@ -2714,6 +2711,19 @@ export async function POST(request: NextRequest) {
         merchantId: merchant_id,
         userId: resolvedUserId,
       });
+      // The REDVAULT draft reserves inventory through the standard
+      // order-creation path. Run the same best-effort product cache
+      // revalidation as the standard branch so listings and PDP pages do
+      // not keep advertising pre-reservation stock.
+      if (redvaultCheckoutResponse.status === 201) {
+        await revalidateOrderProductCaches({
+          merchantId: merchant_id,
+          orderId: null,
+          productIds: orderItemsPayload.map((item) => item.product_id),
+          supabase,
+        });
+      }
+      return redvaultCheckoutResponse;
     }
     const { data: orderRows, error: orderError } = await orderRpcClient.rpc(
       orderCreateRpcName,
@@ -3145,63 +3155,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // create_storefront_order* decremented product_variants/products stock inside
-    // the RPC above (for every order — paid, POD, or unpaid). Bust the merchant's
-    // storefront product caches so stock is fresh immediately instead of after the
-    // ~300s 'products' cacheLife. One call covers the whole cart (the RPC processes
-    // all p_items atomically — no per-line-item fan-out). Skip on idempotent replay
-    // (no re-decrement). Fire here — before wallet/savings/email side effects — so
-    // it is never gated on downstream success; guarded so it can't break checkout.
+    // The order RPC decremented stock above (for every order — paid, POD,
+    // or unpaid). Bust caches here — before wallet/savings/email side
+    // effects — so it is never gated on downstream success. Skip on
+    // idempotent replay (no re-decrement). Best-effort: never breaks checkout.
     if (!idempotencyReplayed) {
-      try {
-        revalidateProducts(merchant_id);
-
-        // revalidateProducts() above busts only the merchant-wide/listing
-        // tags. The bounded PDP snapshot is tagged
-        // per-slug (getProductScopedCacheTag('product', merchantId, slug)),
-        // which a bare revalidateProducts(merchantId) does NOT bust, so the
-        // exact PDP a shopper is viewing could keep serving just-sold-out
-        // stock for the full ~300s 'products' cacheLife. orderItemsPayload
-        // carries product_id but not slug, so resolve slugs with one
-        // merchant-scoped, PK-indexed lookup and bust the per-slug PDP tags too.
-        const revalidateProductIds = Array.from(
-          new Set(
-            orderItemsPayload
-              .map((item) => item.product_id)
-              .filter((id): id is string => Boolean(id))
-          )
-        );
-        if (revalidateProductIds.length > 0) {
-          const { data: revalidateProductRows, error: revalidateSlugError } =
-            await supabase
-              .from('products')
-              .select('slug')
-              .eq('merchant_id', merchant_id)
-              .in('id', revalidateProductIds)
-              .returns<Array<{ slug: string }>>();
-          if (revalidateSlugError) {
-            logger.error({
-              message:
-                'Failed to resolve product slugs for PDP cache revalidation',
-              error: revalidateSlugError,
-              orderId: order.id,
-              merchantId: merchant_id,
-            });
-          } else if (revalidateProductRows) {
-            revalidateProductSlugs(
-              merchant_id,
-              revalidateProductRows.map((row) => row.slug)
-            );
-          }
-        }
-      } catch (revalidateError) {
-        logger.error({
-          message: 'Failed to revalidate product caches after order creation',
-          error: revalidateError,
-          orderId: order.id,
-          merchantId: merchant_id,
-        });
-      }
+      await revalidateOrderProductCaches({
+        merchantId: merchant_id,
+        orderId: order.id,
+        productIds: orderItemsPayload.map((item) => item.product_id),
+        supabase,
+      });
     }
 
     const orderTotal = Number(order.total ?? 0);

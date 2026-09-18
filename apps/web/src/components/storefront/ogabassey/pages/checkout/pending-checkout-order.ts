@@ -92,6 +92,12 @@ export interface ResolvePendingCheckoutOrderResult {
     amountDueToGateway: number;
   } | null;
   clearStoredOrder: boolean;
+  /**
+   * Set when a stored REDVAULT order is still unresolved server-side. The
+   * caller must not open a second order with another payment method until
+   * the REDVAULT attempt reaches a definitive state.
+   */
+  redvaultUnresolved?: boolean;
 }
 
 const NON_REUSABLE_SHIPPING_STATUSES = new Set([
@@ -165,7 +171,46 @@ export async function resolvePendingCheckoutOrder({
     };
   }
   if (pendingOrder?.paymentMethod === 'uba_redvault') {
-    return { reusableOrder: null, clearStoredOrder: true };
+    // The shopper is leaving a REDVAULT attempt for another method. Clearing
+    // the stored guard unconditionally would let the unchanged cart create a
+    // second order while the first capture may still approve asynchronously.
+    // Validate the server-side order first and preserve the fence until the
+    // REDVAULT attempt reaches a definitive state.
+    if (!pendingOrder.trackingToken || !pendingOrder.orderId) {
+      return { reusableOrder: null, clearStoredOrder: true };
+    }
+    const fencedParams = new URLSearchParams({
+      tracking_token: pendingOrder.trackingToken,
+    });
+    if (merchantSlug) {
+      fencedParams.set('merchant_slug', merchantSlug);
+    }
+    const fencedResponse = await fetchImpl(
+      `/api/storefront/orders/${pendingOrder.orderId}?${fencedParams.toString()}`
+    );
+    if (!fencedResponse.ok) {
+      if (shouldClearStoredOrder(fencedResponse.status)) {
+        return { reusableOrder: null, clearStoredOrder: true };
+      }
+      throw new Error('Failed to validate pending checkout order');
+    }
+    const fencedOrder = (await fencedResponse.json()) as {
+      id?: string;
+      payment_status?: string;
+      shipping_status?: string;
+    };
+    if (
+      !fencedOrder?.id ||
+      NON_REUSABLE_PAYMENT_STATUSES.has(fencedOrder.payment_status || '') ||
+      NON_REUSABLE_SHIPPING_STATUSES.has(fencedOrder.shipping_status || '')
+    ) {
+      return { reusableOrder: null, clearStoredOrder: true };
+    }
+    return {
+      reusableOrder: null,
+      clearStoredOrder: false,
+      redvaultUnresolved: true,
+    };
   }
   if (!pendingOrder) {
     return { reusableOrder: null, clearStoredOrder: false };

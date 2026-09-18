@@ -2189,6 +2189,12 @@ export const CheckoutPage: React.FC = () => {
         shippingRateId: merchantRateId ?? undefined,
       });
 
+      if (reusablePendingOrder.redvaultUnresolved) {
+        raiseCheckoutError(
+          'Your UBA payment is still being verified. Do not pay again with another method until it completes.'
+        );
+      }
+
       if (reusablePendingOrder.clearStoredOrder) {
         clearPendingCheckoutOrder();
       }

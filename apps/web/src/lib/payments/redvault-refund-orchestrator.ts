@@ -92,6 +92,16 @@ export async function processNextRedvaultRefund({
       }),
     };
   }
+  // The provider already settled this refund externally. Persist the provider
+  // reference first (leaving the row recoverable through reconciliation),
+  // then finalize: finish runs settlement/inventory triggers in the same
+  // transaction, so a finalizer failure after a direct finish would strand
+  // the row in processing with no reference for any runner to recover.
+  await store.recordProviderSubmission({
+    id: refund.id,
+    providerReference: outcome.providerReference,
+    providerStatus: outcome.providerStatus,
+  });
   return {
     kind: 'processed',
     refund: await store.finish({

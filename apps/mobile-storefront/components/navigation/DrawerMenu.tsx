@@ -259,7 +259,10 @@ export function DrawerMenu() {
             pathname={pathname}
             onNavigate={handleNavigate}
           />
-          <AdSlot placement="FOOTER_ANCHOR" />
+          {/* Mounted only while the drawer is open: the drawer stays mounted
+          (translated off-screen) when closed, and an always-mounted slot
+          would request and attribute impressions nobody can see. */}
+          {isOpen ? <AdSlot placement="FOOTER_ANCHOR" /> : null}
 
           {/* Footer */}
           <DrawerMenuFooter

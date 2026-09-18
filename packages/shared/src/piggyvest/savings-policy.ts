@@ -13,6 +13,8 @@
  * review-required; there is no automatic refund or forfeiture.
  *
  * All money fields are integer kobo. Pending interest is never spendable.
+ * Price inputs (quotes, guarantees, offers) must be positive; balances and
+ * contributions may be zero.
  */
 
 export const SAVINGS_POLICY_VERSION = 1;
@@ -34,7 +36,7 @@ export function purchasingPowerKobo(
 }
 
 export function activationThresholdKobo(quotedPriceKobo: number): number {
-  assertKobo(quotedPriceKobo, 'quotedPriceKobo');
+  assertPositiveKobo(quotedPriceKobo, 'quotedPriceKobo');
   return Math.ceil(
     (quotedPriceKobo * ACTIVATION_RATIO_NUMERATOR) /
       ACTIVATION_RATIO_DENOMINATOR
@@ -46,6 +48,7 @@ export function isActivated(
   quotedPriceKobo: number
 ): boolean {
   assertKobo(confirmedContributionKobo, 'confirmedContributionKobo');
+  assertPositiveKobo(quotedPriceKobo, 'quotedPriceKobo');
   return confirmedContributionKobo >= activationThresholdKobo(quotedPriceKobo);
 }
 
@@ -56,15 +59,18 @@ export function applicablePriceKobo(args: {
   protectedOfferExpiresAt?: Date;
   now?: Date;
 }): number {
-  assertKobo(args.guaranteedPriceKobo, 'guaranteedPriceKobo');
-  assertKobo(args.currentPriceKobo, 'currentPriceKobo');
+  assertPositiveKobo(args.guaranteedPriceKobo, 'guaranteedPriceKobo');
+  assertPositiveKobo(args.currentPriceKobo, 'currentPriceKobo');
   const now = args.now ?? new Date();
   if (
     args.protectedOfferPriceKobo !== undefined &&
     args.protectedOfferExpiresAt !== undefined &&
     now <= args.protectedOfferExpiresAt
   ) {
-    assertKobo(args.protectedOfferPriceKobo, 'protectedOfferPriceKobo');
+    assertPositiveKobo(
+      args.protectedOfferPriceKobo,
+      'protectedOfferPriceKobo'
+    );
     return args.protectedOfferPriceKobo;
   }
   return Math.min(args.guaranteedPriceKobo, args.currentPriceKobo);
@@ -202,5 +208,17 @@ function assertValidDate(value: Date, name: string): void {
 function assertKobo(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative safe integer kobo`);
+  }
+}
+
+/**
+ * Price inputs (quotes, guarantees, offers) must be positive: a zero price
+ * would zero the activation threshold so an unfunded plan reads activated,
+ * and would price decisions at zero. Balances and contributions stay
+ * nonnegative-only.
+ */
+function assertPositiveKobo(value: number, name: string): void {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${name} must be a positive safe integer kobo`);
   }
 }

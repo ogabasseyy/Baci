@@ -115,6 +115,17 @@ describe('savings-policy v1 (shared)', () => {
     expect(() => purchasingPowerKobo(1.5, 0)).toThrow(RangeError);
   });
 
+  it('rejects zero prices while zero balances stay valid', () => {
+    // A zero quote must never activate an unfunded plan or price at zero.
+    expect(() => activationThresholdKobo(0)).toThrow(RangeError);
+    expect(() => isActivated(0, 0)).toThrow(RangeError);
+    expect(() =>
+      applicablePriceKobo({ guaranteedPriceKobo: 0, currentPriceKobo: 0 })
+    ).toThrow(RangeError);
+    expect(purchasingPowerKobo(0, 0)).toBe(0);
+    expect(isActivated(0, 10_000_000)).toBe(false);
+  });
+
   it('rejects invalid dates', () => {
     expect(() => addCalendarMonthsClamped(new Date('invalid'), 6)).toThrow(
       RangeError

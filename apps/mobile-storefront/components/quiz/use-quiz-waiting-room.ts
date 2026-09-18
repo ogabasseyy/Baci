@@ -147,10 +147,10 @@ export function useQuizWaitingRoom({
     let mounted = true;
     // Fire-and-forget: the lobby countdown keeps ticking underneath and play
     // never waits on the ad. The load is abandoned if the shopper moves into
-    // live play, the lobby unmounts, or the countdown drops below the safety
-    // margin while the load is in flight — a load that started with just
-    // over 30 seconds left must not present over the timed quiz, so the same
-    // threshold gates presentation, not just the initial request.
+    // live play, the lobby unmounts, or the countdown reaches the safety
+    // margin while the load is in flight. The request requires strictly more
+    // than 30 seconds, so presentation cancels at 30 or below: a whole
+    // "30" on screen can be as little as 29.001 real seconds.
     if (
       getRemainingSeconds(eventRef.current, offsetRef.current) >
       QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS
@@ -160,7 +160,7 @@ export function useQuizWaitingRoom({
           !mounted ||
           startedRef.current ||
           stoppedRef.current ||
-          getRemainingSeconds(eventRef.current, offsetRef.current) <
+          getRemainingSeconds(eventRef.current, offsetRef.current) <=
             QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS,
       });
     }

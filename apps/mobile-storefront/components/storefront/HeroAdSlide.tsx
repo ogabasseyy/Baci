@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import type { PaidEvent } from 'react-native-google-mobile-ads';
 import type { MobileAdBannerPlacementKey } from '@/config/mobile-ad-placements';
 import { trackEvent } from '@/services/analytics-core';
 
@@ -34,6 +35,16 @@ export function HeroAdSlide({
   if (!bannerModule) return null;
   const { BannerAd, BannerAdSize } = bannerModule;
 
+  const handlePaid = (event: PaidEvent) => {
+    trackEvent('mobile_ad_paid', {
+      currency: event.currency,
+      format: 'banner',
+      placement,
+      precision: String(event.precision),
+      valueMicros: event.value,
+    });
+  };
+
   return (
     <View
       accessibilityLabel="Sponsored advertisement"
@@ -54,6 +65,7 @@ export function HeroAdSlide({
             placement,
           })
         }
+        onPaid={handlePaid}
         size={BannerAdSize.LARGE_ANCHORED_ADAPTIVE_BANNER}
         unitId={unitId}
       />

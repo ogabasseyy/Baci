@@ -1,5 +1,6 @@
 'use client';
 
+import { QUIZ_DEFAULT_TIME_ZONE } from '@baci/shared';
 import { Loader2, Sparkles } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useState } from 'react';
@@ -9,13 +10,14 @@ import {
   clampNumberInput,
   isQuizDifficulty,
 } from './quiz-admin-actions';
+import {
+  quizDatetimeLocalToIso,
+  quizInstantToDatetimeLocal,
+} from './quiz-datetime-local';
 import { QuizPlanSummary } from './quiz-plan-summary';
 import { QuizPrizeProductPicker } from './quiz-prize-product-picker';
 import { QuizTopicInput } from './quiz-topic-input';
-import {
-  localDatetime,
-  useQuizAuthoringWindowSync,
-} from './use-quiz-authoring-window-sync';
+import { useQuizAuthoringWindowSync } from './use-quiz-authoring-window-sync';
 
 export type QuizDraftConfiguration = {
   difficulty: 'easy' | 'standard' | 'hard';
@@ -65,11 +67,22 @@ export function QuizAuthoringForm({
   const [timingKind, setTimingKind] = useState<'immediate' | 'scheduled'>(
     'scheduled'
   );
+  // Defaults are generated in the launch policy zone: activation
+  // interprets these wall clocks as Africa/Lagos, so browser-local defaults
+  // would shift the window for admins elsewhere.
   const [scheduledStart, setScheduledStart] = useState(
-    localDatetime(new Date(now.getTime() + 3_600_000))
+    () =>
+      quizInstantToDatetimeLocal(
+        now.getTime() + 3_600_000,
+        QUIZ_DEFAULT_TIME_ZONE
+      ) ?? ''
   );
   const [scheduledEnd, setScheduledEnd] = useState(
-    localDatetime(new Date(now.getTime() + 3_900_000))
+    () =>
+      quizInstantToDatetimeLocal(
+        now.getTime() + 3_900_000,
+        QUIZ_DEFAULT_TIME_ZONE
+      ) ?? ''
   );
   // The admin owns Universal end once they edit it; until then it tracks the
   // scheduled start plus the expected play time from the quiz summary.
@@ -84,9 +97,14 @@ export function QuizAuthoringForm({
     setScheduledEnd,
     timePerQuestionSeconds,
   });
+  // The inputs hold launch-policy-zone wall clocks; interpret them in that
+  // zone here too so the preview matches what activation will schedule.
   const closesAt =
     timingKind === 'scheduled' && scheduledEnd
-      ? new Date(scheduledEnd).toLocaleString()
+      ? new Date(
+          quizDatetimeLocalToIso(scheduledEnd, QUIZ_DEFAULT_TIME_ZONE) ??
+            Number.NaN
+        ).toLocaleString()
       : `About ${windowMinutes} minute${windowMinutes === '1' ? '' : 's'} after launch`;
   const timingValid =
     timingKind === 'immediate' ||

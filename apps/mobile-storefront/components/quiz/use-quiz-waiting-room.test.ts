@@ -347,6 +347,32 @@ describe('useQuizWaitingRoom', () => {
     expect(isCancelled?.()).toBe(true);
   });
 
+  it('cancels the pending pre-quiz ad at exactly the safety margin', async () => {
+    // A displayed "30" can be as little as 29.001 real seconds while the
+    // request required strictly more than 30, so presentation cancels at 30.
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-23T11:59:00.000Z'));
+    mockMaybeShowQuizStartInterstitial.mockClear();
+    renderHook(() =>
+      useQuizWaitingRoom({
+        event: event(),
+        onExit: jest.fn(),
+        onStart: jest.fn(),
+        refresh: jest.fn(async () => []),
+      })
+    );
+    const isCancelled =
+      mockMaybeShowQuizStartInterstitial.mock.calls[0]?.[0]?.isCancelled;
+    expect(isCancelled?.()).toBe(false);
+    await act(async () => {
+      jest.advanceTimersByTime(30_000);
+      for (let flush = 0; flush < 10; flush += 1) {
+        await Promise.resolve();
+      }
+    });
+    expect(isCancelled?.()).toBe(true);
+  });
+
   it('cancels a pending active response when the waiting room unmounts', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-08-23T11:59:59.000Z'));

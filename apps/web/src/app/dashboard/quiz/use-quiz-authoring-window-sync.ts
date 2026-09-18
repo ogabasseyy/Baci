@@ -1,12 +1,14 @@
-import { getSuggestedQuizLiveWindowSeconds } from '@baci/shared';
+import {
+  getSuggestedQuizLiveWindowSeconds,
+  QUIZ_DEFAULT_TIME_ZONE,
+} from '@baci/shared';
 import { useEffect } from 'react';
+import {
+  quizDatetimeLocalToIso,
+  quizInstantToDatetimeLocal,
+} from './quiz-datetime-local';
 
 const MINUTE_MS = 60_000;
-
-export function localDatetime(date: Date): string {
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
 
 interface QuizAuthoringWindowSyncInput {
   endTouched: boolean;
@@ -43,9 +45,11 @@ export function resolveQuizAuthoringWindowSeconds({
 
 /**
  * Keep the Universal end synced to the start until the merchant edits it.
- * Rounds the synced end up to minute precision because datetime-local
- * inputs drop seconds — a 70-second play window must not sync an end only
- * 60 seconds out.
+ * All values are launch-policy-zone (Africa/Lagos) wall clocks: activation
+ * interprets the inputs in that zone, so browser-local defaults would shift
+ * the window for admins elsewhere. Rounds the synced end up to minute
+ * precision because datetime-local inputs drop seconds — a 70-second play
+ * window must not sync an end only 60 seconds out.
  */
 export function useQuizAuthoringWindowSync({
   endTouched,
@@ -62,11 +66,19 @@ export function useQuizAuthoringWindowSync({
   });
   useEffect(() => {
     if (endTouched) return;
-    const startMs = Date.parse(scheduledStart);
+    const startIso = quizDatetimeLocalToIso(
+      scheduledStart,
+      QUIZ_DEFAULT_TIME_ZONE
+    );
+    const startMs = startIso ? Date.parse(startIso) : Number.NaN;
     if (!Number.isFinite(startMs)) return;
     const syncedEndMs =
       Math.ceil((startMs + expectedPlaySeconds * 1000) / MINUTE_MS) * MINUTE_MS;
-    const synced = localDatetime(new Date(syncedEndMs));
+    const synced = quizInstantToDatetimeLocal(
+      syncedEndMs,
+      QUIZ_DEFAULT_TIME_ZONE
+    );
+    if (!synced) return;
     setScheduledEnd((current) => (current === synced ? current : synced));
   }, [endTouched, expectedPlaySeconds, scheduledStart, setScheduledEnd]);
 }

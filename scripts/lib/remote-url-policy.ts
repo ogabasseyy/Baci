@@ -69,11 +69,10 @@ function isBlockedIpv6Literal(host: string): boolean {
   // 2001:db8::/32 documentation prefix (RFC 3849) is not globally
   // routable and is commonly routed to internal lab infrastructure.
   if (g0 === 0x2001 && g1 === 0x0db8) return true;
-  // 64:ff9b::/96 well-known translation prefix (RFC 6052) never
-  // originates real traffic.
-  if (g0 === 0x0064 && g1 === 0xff9b && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0) {
-    return true;
-  }
+  // 64:ff9b::/32 holds the well-known translation prefix (RFC 6052)
+  // and the local-use NAT64 prefix (RFC 8219, 64:ff9b:1::/48); neither
+  // ever originates real traffic.
+  if (g0 === 0x0064 && g1 === 0xff9b) return true;
   if ((g0 & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
   if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) {
     // ::ffff:0:0/96 — classify the embedded IPv4 address.

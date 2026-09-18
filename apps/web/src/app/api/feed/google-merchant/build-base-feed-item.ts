@@ -10,6 +10,7 @@ export function buildBaseItemXml(args: {
   description: string;
   googleProductCategory?: string;
   id: string;
+  groupId?: string;
   imageUrl: string;
   price: number;
   productType?: string;
@@ -31,6 +32,9 @@ export function buildBaseItemXml(args: {
       : [`        <g:price>${formattedPrice} ${args.currency}</g:price>`];
   const lines = [
     `        <g:id>${escapeXml(args.id)}</g:id>`,
+    args.groupId
+      ? `        <g:item_group_id>${escapeXml(args.groupId)}</g:item_group_id>`
+      : '',
     `        <g:title>${escapeXml(args.title)}</g:title>`,
     `        <g:description>${escapeXml(args.description)}</g:description>`,
     `        <g:link>${escapeXml(args.url)}</g:link>`,

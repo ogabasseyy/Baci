@@ -97,6 +97,31 @@ describe('generateFacebookCatalogFeed', () => {
     expect(xml).not.toContain('<image_link></image_link>');
   });
 
+  it('excludes offers that duplicate the parent condition', () => {
+    const xml = generateFacebookCatalogFeed(
+      [
+        {
+          ...baseProduct,
+          offers: [
+            {
+              id: 'offer-same',
+              condition: 'new',
+              price: 1_100_000,
+              stock_quantity: 2,
+            },
+          ],
+        },
+      ],
+      merchant,
+      'https://ogabassey.com',
+      imageManifest
+    );
+
+    expect(xml).not.toContain('offer-same');
+    const itemCount = (xml.match(/<item>/g) || []).length;
+    expect(itemCount).toBe(1);
+  });
+
   it('skips products without verified primary images', () => {
     const xml = generateFacebookCatalogFeed(
       [baseProduct],

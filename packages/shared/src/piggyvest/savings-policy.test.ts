@@ -27,6 +27,18 @@ describe('savings-policy v1 (shared)', () => {
     expect(isReady(spendable, 10_000_000)).toBe(true);
   });
 
+  it('purchasing power rejects sums outside the safe-integer range', () => {
+    // Regression: two individually safe balances can sum past
+    // MAX_SAFE_INTEGER; the rounded total must throw here rather than
+    // fail the readiness check downstream or misstate spendable funds.
+    expect(() => purchasingPowerKobo(Number.MAX_SAFE_INTEGER, 2)).toThrow(
+      RangeError
+    );
+    expect(purchasingPowerKobo(Number.MAX_SAFE_INTEGER, 0)).toBe(
+      Number.MAX_SAFE_INTEGER
+    );
+  });
+
   it('activation threshold is 5%: 499,999 does not activate, 500,000 does on a 10M quote', () => {
     expect(activationThresholdKobo(10_000_000)).toBe(500_000);
     expect(isActivated(499_999, 10_000_000)).toBe(false);

@@ -452,3 +452,14 @@ jest.mock('react-native-webview', () => {
     React.createElement(View, props);
   return { __esModule: true, default: WebView, WebView };
 });
+
+// `useSafeAreaInsets` throws without a `SafeAreaProvider` ancestor, but most
+// suites render screens in isolation. Default the insets to zero globally;
+// suites needing nonzero insets still override with a per-file `jest.mock`.
+jest.mock('react-native-safe-area-context', () => {
+  const actual = jest.requireActual('react-native-safe-area-context');
+  return {
+    ...actual,
+    useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+  };
+});

@@ -4,12 +4,8 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { HeroSlide } from './Hero';
 import { ELITE_HEIGHT } from './Hero.styles';
-import {
-  getHeroImageSource,
-  type HeroThemeColors,
-  type HeroVariantStyles,
-  heroImageProps,
-} from './HeroSlideShared';
+import type { HeroThemeColors, HeroVariantStyles } from './HeroSlideShared';
+import { getHeroImageSource, heroImageProps } from './hero-slide-image';
 
 interface EliteSlideProps {
   colors: HeroThemeColors;

@@ -15,9 +15,7 @@ export function activationThresholdKobo(quotedPriceKobo: number): number {
   // threshold up by one kobo. Both partial products stay in safe range
   // because the quotient is at most the (safe) price and the remainder is
   // below the denominator.
-  const quotient = Math.floor(
-    quotedPriceKobo / ACTIVATION_RATIO_DENOMINATOR
-  );
+  const quotient = Math.floor(quotedPriceKobo / ACTIVATION_RATIO_DENOMINATOR);
   const remainder = quotedPriceKobo % ACTIVATION_RATIO_DENOMINATOR;
   return (
     quotient * ACTIVATION_RATIO_NUMERATOR +

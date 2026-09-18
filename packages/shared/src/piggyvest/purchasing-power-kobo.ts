@@ -10,5 +10,10 @@ export function purchasingPowerKobo(
 ): number {
   assertKobo(principalKobo, 'principalKobo');
   assertKobo(paidInterestKobo, 'paidInterestKobo');
-  return principalKobo + paidInterestKobo;
+  // Individually safe operands can still sum past MAX_SAFE_INTEGER; a
+  // rounded total would then fail downstream safe-integer checks (or worse,
+  // silently misstate spendable funds), so validate the sum itself.
+  const totalKobo = principalKobo + paidInterestKobo;
+  assertKobo(totalKobo, 'purchasingPowerKobo total');
+  return totalKobo;
 }

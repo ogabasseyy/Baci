@@ -18,7 +18,7 @@ import { EliteSlide } from './EliteSlide';
 import { FashionSlide } from './FashionSlide';
 import { ELITE_HEIGHT, getHeroStyles } from './Hero.styles';
 import { HeroAdSlide } from './HeroAdSlide';
-import { CAROUSEL_HEIGHT, STANDARD_HEIGHT } from './HeroSlideShared';
+import { CAROUSEL_HEIGHT, STANDARD_HEIGHT } from './hero-slide-dimensions';
 import { StandardSlide } from './StandardSlide';
 
 export interface HeroSlide {
@@ -186,11 +186,9 @@ export function Hero({
       />
       {renderSlides.length > 1 && (
         <View style={styles.dotsContainer} testID="hero-dots">
-          {renderSlides.map((_, index) => (
+          {renderSlides.map((slide, index) => (
             <View
-              // biome-ignore lint/suspicious/noArrayIndexKey: pagination dots are
-              // positionally stable and never reorder; the index is their identity.
-              key={index}
+              key={isHeroAdSlide(slide) ? 'hero-dot-ad' : slide.image}
               style={[styles.dot, currentIndex === index && styles.dotActive]}
             />
           ))}

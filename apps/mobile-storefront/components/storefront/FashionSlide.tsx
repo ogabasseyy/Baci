@@ -4,12 +4,9 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { palette, withAlpha } from '@/constants/Colors';
 import type { HeroSlide } from './Hero';
-import {
-  CAROUSEL_HEIGHT,
-  getCoverHeroImageSource,
-  type HeroVariantStyles,
-  heroImageProps,
-} from './HeroSlideShared';
+import type { HeroVariantStyles } from './HeroSlideShared';
+import { CAROUSEL_HEIGHT } from './hero-slide-dimensions';
+import { getCoverHeroImageSource, heroImageProps } from './hero-slide-image';
 
 interface FashionSlideProps {
   item: HeroSlide;

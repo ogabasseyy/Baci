@@ -5,7 +5,7 @@ import {
   OGABASSEY_PINNED_LAUNCH_SLUGS,
   selectLaunchProducts,
 } from '@baci/shared/storefront';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { LaunchAdCard } from '@/components/storefront/LaunchAdCard';
 import { LaunchProductCard } from '@/components/storefront/LaunchProductCard';
+import { nextOffsetAfterAdToggle } from '@/components/storefront/launch-ad-offset';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
@@ -25,6 +26,8 @@ import { PRODUCT_PLACEHOLDER_IMAGE } from '@/lib/product-normalization';
 import type { Product } from '@/types/product';
 
 const SECTION_TITLE = 'Just Launched';
+// Matches styles.list.gap: one ad slot occupies a card plus one gap.
+const LAUNCH_LIST_GAP = 12;
 
 export function JustLaunchedCarousel({
   suppressAds = false,
@@ -94,11 +97,38 @@ export function JustLaunchedCarousel({
   // other hooks, above the early returns.
   const [adLoadFailed, setAdLoadFailed] = useState(false);
 
+  const cardWidth = Math.round(width * 0.82);
+  type LaunchAdCardItem = { kind: 'launch-ad-card' };
+  type LaunchRenderItem = Product | LaunchAdCardItem;
+  const showAdCard =
+    adUnitConfig.enabled &&
+    adUnitConfig.format === 'banner' &&
+    adsReadiness.canRequestAds &&
+    !adLoadFailed &&
+    !suppressAds &&
+    launchProducts.length > 0;
+  const flatListRef = useRef<FlatList<LaunchRenderItem>>(null);
+  const scrollOffsetRef = useRef(0);
+  const wasAdShownRef = useRef(showAdCard);
+  useEffect(() => {
+    // Consent resolving (or a load failure) inserts or removes the card at
+    // index 1 under a scrolled list; shift the offset by one slot so the
+    // visible product stays put instead of sliding away.
+    const target = nextOffsetAfterAdToggle({
+      adSlotWidth: cardWidth + LAUNCH_LIST_GAP,
+      isAdShown: showAdCard,
+      scrollOffset: scrollOffsetRef.current,
+      wasAdShown: wasAdShownRef.current,
+    });
+    wasAdShownRef.current = showAdCard;
+    if (target !== null) {
+      flatListRef.current?.scrollToOffset({ offset: target, animated: false });
+    }
+  }, [showAdCard, cardWidth]);
+
   if (isError) {
     return null;
   }
-
-  const cardWidth = Math.round(width * 0.82);
 
   // Show a skeleton on first load (rather than a blank gap) for clearer loading
   // feedback; gate on BOTH queries so pinned items can't pop in after the
@@ -150,15 +180,6 @@ export function JustLaunchedCarousel({
     return null;
   }
 
-  const showAdCard =
-    adUnitConfig.enabled &&
-    adUnitConfig.format === 'banner' &&
-    adsReadiness.canRequestAds &&
-    !adLoadFailed &&
-    !suppressAds &&
-    launchProducts.length > 0;
-  type LaunchAdCardItem = { kind: 'launch-ad-card' };
-  type LaunchRenderItem = Product | LaunchAdCardItem;
   const renderItems: LaunchRenderItem[] = showAdCard
     ? [
         launchProducts[0],
@@ -203,6 +224,7 @@ export function JustLaunchedCarousel({
         {SECTION_TITLE}
       </Text>
       <FlatList
+        ref={flatListRef}
         contentContainerStyle={styles.list}
         data={renderItems}
         horizontal
@@ -213,6 +235,10 @@ export function JustLaunchedCarousel({
         }
         renderItem={renderItem}
         showsHorizontalScrollIndicator={false}
+        onScroll={(event) => {
+          scrollOffsetRef.current = event.nativeEvent.contentOffset.x;
+        }}
+        scrollEventThrottle={16}
       />
     </View>
   );
@@ -230,7 +256,7 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: 16,
-    gap: 12,
+    gap: LAUNCH_LIST_GAP,
   },
   card: {
     height: 168,

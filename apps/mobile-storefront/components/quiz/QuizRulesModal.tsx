@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useState } from 'react';
 import { Linking, Modal, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdSlot } from '@/components/ads/AdSlot';
 import { useTheme } from '@/hooks/useTheme';
 import { createQuizLobbyStyles } from './QuizLobby.styles';
@@ -24,6 +25,7 @@ export function QuizRulesModal({
 }: QuizRulesModalProps) {
   const { colors } = useTheme();
   const styles = createQuizLobbyStyles(colors);
+  const insets = useSafeAreaInsets();
   const [accepted, setAccepted] = useState(false);
 
   useEffect(() => {
@@ -40,12 +42,16 @@ export function QuizRulesModal({
     >
       <View style={styles.modalBackdrop}>
         <View
+          testID="quiz-rules-modal-banner"
           style={{
             alignItems: 'center',
             left: 0,
             position: 'absolute',
             right: 0,
-            top: 16,
+            // Below the status bar / display cutout: the overFullScreen
+            // modal draws under system chrome, so a fixed offset would hide
+            // the creative and its tap target on tall-inset devices.
+            top: insets.top + 16,
           }}
         >
           <AdSlot placement="FOOTER_ANCHOR" />

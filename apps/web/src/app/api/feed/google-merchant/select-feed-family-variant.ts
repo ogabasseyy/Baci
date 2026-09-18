@@ -18,16 +18,25 @@ export function selectFeedFamilyVariant(
     );
   };
   const candidates = variants.filter(isFeedValid);
+  const normalized = candidates.map((variant) => ({
+    ...variant,
+    attributes: normalizeFeedVariantStringAttributes(variant.attributes),
+  }));
+  const base = { ...product, variants: normalized };
   const selection = resolveDefaultVariantSelection({
-    ...product,
-    // The feed treats nullish manage_stock as unmanaged (9999 quantity);
-    // align the resolver so zero-stock families rank by condition/price
-    // instead of falling through to RPC creation order.
+    ...base,
+    // The feed treats nullish manage_stock as unmanaged (9999 quantity).
     manage_stock: product.manage_stock ?? false,
-    variants: candidates.map((variant) => ({
-      ...variant,
-      attributes: normalizeFeedVariantStringAttributes(variant.attributes),
-    })),
-  });
-  return selection?.variant ?? candidates[0];
+  })?.variant;
+  if (selection) return selection;
+  // Fully sold-out managed families still need a deterministic SKU: rank by
+  // condition/price and return the raw candidate instead of RPC creation
+  // order.
+  const rankedId = resolveDefaultVariantSelection({
+    ...base,
+    manage_stock: false,
+  })?.variant.id;
+  return (
+    candidates.find((candidate) => candidate.id === rankedId) ?? candidates[0]
+  );
 }

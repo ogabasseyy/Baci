@@ -45,13 +45,11 @@ describe('bugfix: compare category inventory alias cache key', () => {
 
   it('ignores legacy storefront aliases while keeping one cache computation', async () => {
     // Arrange: Next.js `'use cache'` keys on the cached helper's formal args
-    // (merchantId + categorySlug). A three-argument reader that also keyed on
-    // legacy storefront aliases would create separate entries for the same
-    // category. Simulate that production boundary so sequential alias call
-    // sites share one underlying category-shell read.
-    expect(getCachedCompareCategoryInventory.length).toBe(2);
+    // (merchantId + categorySlug + revision). Legacy storefront aliases must
+    // not create separate entries for the same catalog revision. This models
+    // the key boundary; Next's cache runtime is not active in this unit test.
     expect(source).toMatch(
-      /export async function getCachedCompareCategoryInventory\(\s*merchantId: string,\s*categorySlug: string\s*\)/
+      /export async function getCachedCompareCategoryInventory\(\s*merchantId: string,\s*categorySlug: string,\s*comparisonRevision\?: StorefrontComparisonRevision\s*\)/
     );
 
     const inventoryCache = new Map<
@@ -61,14 +59,16 @@ describe('bugfix: compare category inventory alias cache key', () => {
     const invokeWithLegacyAlias = async (
       merchantId: string,
       categorySlug: string,
-      _legacyStoreSlug: string
+      _legacyStoreSlug: string,
+      revision = '42'
     ) => {
-      const cacheKey = JSON.stringify([merchantId, categorySlug]);
+      const cacheKey = JSON.stringify([merchantId, categorySlug, revision]);
       const cached = inventoryCache.get(cacheKey);
       if (cached) return cached;
       const pending = getCachedCompareCategoryInventory(
         merchantId,
-        categorySlug
+        categorySlug,
+        revision
       );
       inventoryCache.set(cacheKey, pending);
       return pending;
@@ -96,7 +96,8 @@ describe('bugfix: compare category inventory alias cache key', () => {
     expect(mocks.getCachedCompareCategoryShell).toHaveBeenCalledTimes(1);
     expect(mocks.getCachedCompareCategoryShell).toHaveBeenCalledWith(
       'merchant-1',
-      'laptops'
+      'laptops',
+      '42'
     );
     expect(mocks.getCachedCompareCategoryShell.mock.calls.flat()).not.toContain(
       'ogabassey'
@@ -105,6 +106,13 @@ describe('bugfix: compare category inventory alias cache key', () => {
       'shop-alias'
     );
     expect(mocks.cacheTag).toHaveBeenCalledTimes(1);
+    await invokeWithLegacyAlias('merchant-1', 'laptops', 'shop-alias', '43');
+    expect(mocks.getCachedCompareCategoryShell).toHaveBeenCalledTimes(2);
+    expect(mocks.getCachedCompareCategoryShell).toHaveBeenLastCalledWith(
+      'merchant-1',
+      'laptops',
+      '43'
+    );
     expect(
       new Set(
         ['ogabassey', 'shop-alias'].map((alias) =>

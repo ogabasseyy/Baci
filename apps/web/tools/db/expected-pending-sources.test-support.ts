@@ -261,4 +261,9 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260907111036_repair_sales_exclusion_wallet_version_collision.sql',
     sha256: '2676132ef759384de03f6ad7eeed2f7e1e38abac02013aaca634bfb957106482',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260911100000_add_storefront_comparison_revisions.sql',
+    sha256: '4c4264dd85683ca3302fd0f8cea0b01a13c8730c44b85af52b53b53028de5517',
+  },
 ].sort((a, b) => a.repositoryPath.localeCompare(b.repositoryPath));

@@ -40,6 +40,19 @@ describe('getCachedCompareCategoryInventory', () => {
     vi.clearAllMocks();
   });
 
+  it('keeps revision snapshots out of broad stock invalidation tags', async () => {
+    mockGetCachedCategoryPageShellData.mockResolvedValue({
+      isCollection: true,
+      fallbackName: 'New arrivals',
+    });
+
+    await getCachedCompareCategoryInventory('merchant-1', 'new-arrivals', '42');
+
+    expect(mockCacheTag).toHaveBeenCalledExactlyOnceWith(
+      'comparison-revision-merchant-1-42'
+    );
+  });
+
   it('fetches a light category-scoped projection and normalizes rows', async () => {
     mockGetCachedCategoryPageShellData.mockResolvedValue({
       isCollection: false,
@@ -98,12 +111,14 @@ describe('getCachedCompareCategoryInventory', () => {
 
     const result = await getCachedCompareCategoryInventory(
       'merchant-1',
-      'laptops'
+      'laptops',
+      '42'
     );
 
     expect(mockGetCachedCategoryPageShellData).toHaveBeenCalledWith(
       'merchant-1',
-      'laptops'
+      'laptops',
+      '42'
     );
     expect(productsQuery.select).toHaveBeenCalledWith(
       expect.stringContaining(

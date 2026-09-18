@@ -92,11 +92,7 @@ export interface ResolvePendingCheckoutOrderResult {
     amountDueToGateway: number;
   } | null;
   clearStoredOrder: boolean;
-  /**
-   * Set when a stored REDVAULT order is still unresolved server-side. The
-   * caller must not open a second order with another payment method until
-   * the REDVAULT attempt reaches a definitive state.
-   */
+  /** Stored REDVAULT order still unresolved: do not open a second order with another method. */
   redvaultUnresolved?: boolean;
 }
 
@@ -171,11 +167,8 @@ export async function resolvePendingCheckoutOrder({
     };
   }
   if (pendingOrder?.paymentMethod === 'uba_redvault') {
-    // The shopper is leaving a REDVAULT attempt for another method. Clearing
-    // the stored guard unconditionally would let the unchanged cart create a
-    // second order while the first capture may still approve asynchronously.
-    // Validate the server-side order first and preserve the fence until the
-    // REDVAULT attempt reaches a definitive state.
+    // Leaving REDVAULT for another method: validate the server order first.
+    // Clearing blindly could open a second order while the capture approves.
     if (!pendingOrder.trackingToken || !pendingOrder.orderId) {
       return { reusableOrder: null, clearStoredOrder: true };
     }

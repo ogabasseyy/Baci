@@ -5,6 +5,11 @@ export interface OrderSuccessViewProps {
   deliveryEstimate?: string;
   isDark: boolean;
   isDocumentLoading?: boolean;
+  /**
+   * While true the receipt preview is loading or open full-screen, so the
+   * banner slot is withheld to avoid obscured delivery.
+   */
+  isReceiptPreviewActive?: boolean;
   onContinueShopping: () => void;
   onLeaveGoogleReview: () => void;
   onPermissionDeny: () => void;

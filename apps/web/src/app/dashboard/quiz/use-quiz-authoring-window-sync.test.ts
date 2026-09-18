@@ -12,6 +12,7 @@ import {
 import {
   defaultQuizAuthoringSchedule,
   isQuizAuthoringTimingValid,
+  isQuizAuthoringWindowAllowed,
   resolveQuizAuthoringClosesAt,
   resolveQuizAuthoringWindowSeconds,
   useQuizAuthoringSchedule,
@@ -322,5 +323,59 @@ describe('useQuizAuthoringWindowSync', () => {
 
     // Assert
     expect(result.current).toBe('preset');
+  });
+});
+
+describe('isQuizAuthoringWindowAllowed', () => {
+  // Live bounds for 20 questions at 10 seconds each are [230, 320] seconds.
+  const liveQuiz = {
+    mode: 'live' as const,
+    questionCount: 20,
+    timePerQuestionSeconds: 10,
+    timingKind: 'scheduled' as const,
+  };
+
+  it('rejects a manually shrunk window outside the launch bounds', () => {
+    // Regression: a one-minute window for a 20-question quiz passes
+    // interval-order validation but activation would reject it, wasting
+    // the AI draft request.
+    expect(
+      isQuizAuthoringWindowAllowed({
+        ...liveQuiz,
+        scheduledEnd: '2026-09-20T17:01',
+        scheduledStart: '2026-09-20T17:00',
+      })
+    ).toBe(false);
+  });
+
+  it('accepts a window inside the launch bounds', () => {
+    expect(
+      isQuizAuthoringWindowAllowed({
+        ...liveQuiz,
+        scheduledEnd: '2026-09-20T17:05',
+        scheduledStart: '2026-09-20T17:00',
+      })
+    ).toBe(true);
+  });
+
+  it('still rejects an end before the start', () => {
+    expect(
+      isQuizAuthoringWindowAllowed({
+        ...liveQuiz,
+        scheduledEnd: '2026-09-20T17:00',
+        scheduledStart: '2026-09-20T17:05',
+      })
+    ).toBe(false);
+  });
+
+  it('allows immediate launches without a scheduled interval', () => {
+    expect(
+      isQuizAuthoringWindowAllowed({
+        ...liveQuiz,
+        scheduledEnd: '',
+        scheduledStart: '',
+        timingKind: 'immediate',
+      })
+    ).toBe(true);
   });
 });

@@ -208,4 +208,18 @@ describe('OrderSuccessView', () => {
     );
     expect(screen.queryByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeNull();
   });
+
+  it('unmounts the banner while the receipt preview is active', () => {
+    // Regression: an obscured ORDER_SUCCESS_BANNER must not load or report
+    // impressions behind the full-screen receipt preview.
+    const { rerender } = render(
+      <OrderSuccessView {...createProps()} isReceiptPreviewActive={false} />
+    );
+    expect(screen.getByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeTruthy();
+
+    rerender(
+      <OrderSuccessView {...createProps()} isReceiptPreviewActive={true} />
+    );
+    expect(screen.queryByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeNull();
+  });
 });

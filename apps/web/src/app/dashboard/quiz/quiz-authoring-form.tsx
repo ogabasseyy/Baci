@@ -13,7 +13,7 @@ import { QuizPlanSummary } from './quiz-plan-summary';
 import { QuizPrizeProductPicker } from './quiz-prize-product-picker';
 import { QuizTopicInput } from './quiz-topic-input';
 import {
-  isQuizAuthoringTimingValid,
+  isQuizAuthoringWindowAllowed,
   resolveQuizAuthoringClosesAt,
   useQuizAuthoringSchedule,
   useQuizAuthoringWindowSync,
@@ -87,9 +87,15 @@ export function QuizAuthoringForm({
     timingKind,
     windowMinutes,
   });
-  const timingValid = isQuizAuthoringTimingValid({
+  // Generation requires an interval activation will accept, not just an
+  // end after the start: a manually shrunk window outside the launch
+  // bounds would waste the AI draft request on an unlaunchable quiz.
+  const timingValid = isQuizAuthoringWindowAllowed({
+    mode,
+    questionCount,
     scheduledEnd,
     scheduledStart,
+    timePerQuestionSeconds,
     timingKind,
   });
   const canSubmit =
@@ -270,7 +276,8 @@ export function QuizAuthoringForm({
       </p>
       {!timingValid ? (
         <p className="mt-2 text-sm text-destructive" role="alert">
-          Universal end must be after the scheduled start.
+          Universal end must be after the scheduled start and inside the allowed
+          window for this quiz.
         </p>
       ) : null}
       <button

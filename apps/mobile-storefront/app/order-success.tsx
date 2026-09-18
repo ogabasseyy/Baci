@@ -181,6 +181,9 @@ export default function OrderSuccessScreen() {
         orderNumber={orderNumber}
         paymentMethod={paymentMethod}
         reference={reference}
+        isReceiptPreviewActive={
+          receiptPreview.isLoading || receiptPreview.isOpen
+        }
         showPermissionModal={showPermissionModal}
       />
       <ReceiptPreviewModal

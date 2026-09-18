@@ -1,6 +1,8 @@
 import {
   getSuggestedQuizLiveWindowSeconds,
+  isQuizWindowSecondsAllowed,
   QUIZ_DEFAULT_TIME_ZONE,
+  type QuizMode,
 } from '@baci/shared';
 import type { Dispatch, SetStateAction } from 'react';
 import { useEffect, useState } from 'react';
@@ -100,23 +102,60 @@ export function isQuizAuthoringTimingValid({
   timingKind: 'immediate' | 'scheduled';
 }): boolean {
   if (timingKind === 'immediate') return true;
+  const interval = quizAuthoringIntervalMs(scheduledStart, scheduledEnd);
+  return interval !== null && interval.endMs > interval.startMs;
+}
+
+/**
+ * Gate draft generation on the activation timing bounds, not just interval
+ * order. The auto-sync keeps the defaulted end inside the bounds, but a
+ * manual end edit can shrink the window below what activation accepts
+ * (e.g. a one-minute window for a 20-question quiz), which would waste the
+ * AI draft request on a quiz that can never launch.
+ */
+export function isQuizAuthoringWindowAllowed({
+  mode,
+  questionCount,
+  scheduledEnd,
+  scheduledStart,
+  timePerQuestionSeconds,
+  timingKind,
+}: {
+  mode: QuizMode;
+  questionCount: number;
+  scheduledEnd: string;
+  scheduledStart: string;
+  timePerQuestionSeconds: number;
+  timingKind: 'immediate' | 'scheduled';
+}): boolean {
+  if (timingKind === 'immediate') return true;
+  const interval = quizAuthoringIntervalMs(scheduledStart, scheduledEnd);
+  if (interval === null || interval.endMs <= interval.startMs) return false;
+  const windowSeconds = (interval.endMs - interval.startMs) / 1000;
+  return isQuizWindowSecondsAllowed(
+    mode,
+    questionCount,
+    timePerQuestionSeconds,
+    windowSeconds
+  );
+}
+
+function quizAuthoringIntervalMs(
+  scheduledStart: string,
+  scheduledEnd: string
+): { endMs: number; startMs: number } | null {
   const scheduledStartIso = scheduledStart
     ? quizDatetimeLocalToIso(scheduledStart, QUIZ_DEFAULT_TIME_ZONE)
     : null;
   const scheduledEndIso = scheduledEnd
     ? quizDatetimeLocalToIso(scheduledEnd, QUIZ_DEFAULT_TIME_ZONE)
     : null;
-  const scheduledStartMs = scheduledStartIso
+  const startMs = scheduledStartIso
     ? Date.parse(scheduledStartIso)
     : Number.NaN;
-  const scheduledEndMs = scheduledEndIso
-    ? Date.parse(scheduledEndIso)
-    : Number.NaN;
-  return (
-    Number.isFinite(scheduledStartMs) &&
-    Number.isFinite(scheduledEndMs) &&
-    scheduledEndMs > scheduledStartMs
-  );
+  const endMs = scheduledEndIso ? Date.parse(scheduledEndIso) : Number.NaN;
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
+  return { endMs, startMs };
 }
 
 interface QuizAuthoringWindowSyncInput {

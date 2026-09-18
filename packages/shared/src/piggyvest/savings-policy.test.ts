@@ -65,6 +65,26 @@ describe('savings-policy v1 (shared)', () => {
     ).toBe(10_000_000);
   });
 
+  it('fails closed on malformed offer dates instead of discarding price protection', () => {
+    // Regression: comparing against an invalid Date is always false, which
+    // used to silently fall back to the (possibly higher) fallback price.
+    const args = {
+      guaranteedPriceKobo: 10_000_000,
+      currentPriceKobo: 11_000_000,
+      protectedOfferPriceKobo: 9_700_000,
+      protectedOfferExpiresAt: new Date('2026-10-01T00:00:00.000Z'),
+    };
+    expect(() =>
+      applicablePriceKobo({
+        ...args,
+        protectedOfferExpiresAt: new Date('invalid'),
+      })
+    ).toThrow(RangeError);
+    expect(() =>
+      applicablePriceKobo({ ...args, now: new Date('invalid') })
+    ).toThrow(RangeError);
+  });
+
   it('maturity: active before 6 months, grace within 30 days after, review-required past grace', () => {
     const activatedAt = new Date('2026-01-15T10:00:00.000Z');
     expect(maturityStatus(activatedAt, new Date('2026-06-14T10:00:00Z'))).toBe(

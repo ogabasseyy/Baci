@@ -204,9 +204,20 @@ export function generateFacebookCatalogFeed(
           platform: 'facebook',
         });
       }
-      const offerClaimedImageUrls = collectOfferClaimedImageUrls(
-        product.offers
+      // Only offers that can emit feed rows may claim imagery or emit
+      // rows: the storefront never selects a same-condition offer, and
+      // zero-price or unconditioned offers render nothing.
+      const parentCondition = toGoogleListingCondition(product.condition);
+      const eligibleOffers = (product.offers || []).filter(
+        (offer) =>
+          offer.id &&
+          Number.isFinite(offer.price) &&
+          offer.price > 0 &&
+          toGoogleListingCondition(offer.condition) &&
+          toGoogleListingCondition(offer.condition) !== parentCondition
       );
+      const offerClaimedImageUrls =
+        collectOfferClaimedImageUrls(eligibleOffers);
       const primaryImageUrl = resolveGmcPrimaryImage(
         manifestEntries,
         offerClaimedImageUrls
@@ -248,38 +259,28 @@ export function generateFacebookCatalogFeed(
         product.price > 0
           ? buildItemXml(baseArgs)
           : '';
-      const offers = (product.offers || [])
-        .filter(
-          (offer) =>
-            offer.id &&
-            toGoogleListingCondition(offer.condition) &&
-            Number.isFinite(offer.price) &&
-            offer.price > 0
-        )
-        .map((offer) => {
-          const offerImages = resolveOfferFeedImages(
-            offer.images,
-            manifestEntries,
-            collectOfferClaimedImageUrls(product.offers)
-          );
-          if (!offerImages) return '';
-          const url = new URL(productUrl);
-          url.searchParams.set('condition', offer.condition);
-          return buildItemXml({
-            ...baseArgs,
-            ...offerImages,
-            id: offer.id,
-            groupId: product.id,
-            price: offer.price,
-            compareAtPrice: offer.compare_at_price,
-            condition: toFacebookCondition(offer.condition),
-            availability:
-              getFeedStockCount(product, offer) > 0
-                ? 'in stock'
-                : 'out of stock',
-            link: url.toString(),
-          });
+      const offers = eligibleOffers.map((offer) => {
+        const offerImages = resolveOfferFeedImages(
+          offer.images,
+          manifestEntries,
+          collectOfferClaimedImageUrls(eligibleOffers)
+        );
+        if (!offerImages) return '';
+        const url = new URL(productUrl);
+        url.searchParams.set('condition', offer.condition);
+        return buildItemXml({
+          ...baseArgs,
+          ...offerImages,
+          id: offer.id,
+          groupId: product.id,
+          price: offer.price,
+          compareAtPrice: offer.compare_at_price,
+          condition: toFacebookCondition(offer.condition),
+          availability:
+            getFeedStockCount(product, offer) > 0 ? 'in stock' : 'out of stock',
+          link: url.toString(),
         });
+      });
       return [base, ...offers].filter(Boolean).join('\n');
     })
     .filter(Boolean)

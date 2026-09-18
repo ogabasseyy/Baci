@@ -110,6 +110,8 @@ describe('validateRemoteUrl host classification', () => {
       '2001:db8::1',
       '2001:db8:ffff:ffff:ffff:ffff:ffff:ffff',
       '64:ff9b::808:808',
+      '64:ff9b:1::1',
+      '64:ff9b:1:ffff:ffff:ffff:ffff:ffff',
     ]) {
       expect(validateRemoteUrl(url(host))).toBeNull();
     }

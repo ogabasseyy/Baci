@@ -143,9 +143,21 @@ export function generateGoogleMerchantFeed(
       if (!isValidGmcUrl(productUrl)) return null;
 
       const manifestEntries = imageManifest[product.id] || [];
+      // Only offers that can emit feed rows may claim imagery or emit
+      // rows: the storefront never selects a same-condition offer, and
+      // zero-price or unconditioned offers render nothing.
+      const parentCondition = toGoogleListingCondition(product.condition);
+      const eligibleOffers = (product.offers || []).filter(
+        (offer) =>
+          offer.id &&
+          Number.isFinite(offer.price) &&
+          offer.price > 0 &&
+          toGoogleListingCondition(offer.condition) &&
+          toGoogleListingCondition(offer.condition) !== parentCondition
+      );
       const productLevelImages = resolveFeedImages(
         getProductLevelManifestEntries(manifestEntries),
-        collectOfferClaimedImageUrls(product.offers)
+        collectOfferClaimedImageUrls(eligibleOffers)
       );
       const description = buildFeedDescription(product);
       const colorXml = buildGoogleColorXml(product);
@@ -197,6 +209,7 @@ export function generateGoogleMerchantFeed(
               googleProductCategory: product.google_product_category,
               gtin: product.gtin,
               id: product.id,
+              groupId: eligibleOffers.length > 0 ? product.id : undefined,
               imageUrl: productLevelImages.primaryImageUrl,
               mpn: product.mpn,
               price: product.price,
@@ -209,68 +222,57 @@ export function generateGoogleMerchantFeed(
             })
           : '';
 
-      if (!product.offers || product.offers.length === 0) {
+      if (eligibleOffers.length === 0) {
         return baseItem;
       }
 
-      const offerItems = product.offers
-        .filter(
-          (offer) =>
-            offer.id &&
-            Number.isFinite(offer.price) &&
-            offer.price > 0 &&
-            toGoogleListingCondition(offer.condition)
-        )
-        .map((offer) => {
-          const offerImages = resolveOfferFeedImages(
-            offer.images,
-            manifestEntries,
-            collectOfferClaimedImageUrls(product.offers)
-          );
-          if (!offerImages) return '';
-          const offerStock = getFeedStockCount(product, offer);
-          const offerAvailability =
-            offerStock > 0 ? 'in_stock' : 'out_of_stock';
+      const offerItems = eligibleOffers.map((offer) => {
+        const offerImages = resolveOfferFeedImages(
+          offer.images,
+          manifestEntries,
+          collectOfferClaimedImageUrls(eligibleOffers)
+        );
+        if (!offerImages) return '';
+        const offerStock = getFeedStockCount(product, offer);
+        const offerAvailability = offerStock > 0 ? 'in_stock' : 'out_of_stock';
 
-          const offerLines = [
-            `        <g:id>${escapeXml(offer.id)}</g:id>`,
-            `        <g:item_group_id>${escapeXml(product.id)}</g:item_group_id>`,
-            `        <g:title>${escapeXml(product.name)}</g:title>`,
-            `        <g:description>${escapeXml(description)}</g:description>`,
-            `        <g:link>${escapeXml(`${productUrl}?condition=${offer.condition}`)}</g:link>`,
-            `        <g:canonical_link>${escapeXml(productUrl)}</g:canonical_link>`,
-            `        <g:image_link>${escapeXml(offerImages.imageUrl)}</g:image_link>`,
-            offerImages.additionalImagesXml,
-            `        <g:availability>${offerAvailability}</g:availability>`,
-            `        <g:quantity>${offerStock}</g:quantity>`,
-            typeof offer.compare_at_price === 'number' &&
-            offer.compare_at_price > offer.price
-              ? `        <g:price>${offer.compare_at_price.toFixed(2)} ${currency}</g:price>\n        <g:sale_price>${offer.price.toFixed(2)} ${currency}</g:sale_price>`
-              : `        <g:price>${offer.price.toFixed(2)} ${currency}</g:price>`,
-            `        <g:brand>${escapeXml(effectiveBrand)}</g:brand>`,
-            `        <g:condition>${toGmcCondition(offer.condition)}</g:condition>`,
-            product.gtin
-              ? `        <g:gtin>${escapeXml(product.gtin)}</g:gtin>`
-              : '',
-            product.mpn
-              ? `        <g:mpn>${escapeXml(product.mpn)}</g:mpn>`
-              : '',
-            product.gtin || (product.mpn && effectiveBrand)
-              ? '        <g:identifier_exists>yes</g:identifier_exists>'
-              : '        <g:identifier_exists>no</g:identifier_exists>',
-            colorXml,
-            productDetailsXml,
-            product.google_product_category
-              ? `        <g:google_product_category>${escapeXml(product.google_product_category)}</g:google_product_category>`
-              : '',
-            productType
-              ? `        <g:product_type>${escapeXml(productType)}</g:product_type>`
-              : '',
-            shippingWeight,
-          ].filter(Boolean);
+        const offerLines = [
+          `        <g:id>${escapeXml(offer.id)}</g:id>`,
+          `        <g:item_group_id>${escapeXml(product.id)}</g:item_group_id>`,
+          `        <g:title>${escapeXml(product.name)}</g:title>`,
+          `        <g:description>${escapeXml(description)}</g:description>`,
+          `        <g:link>${escapeXml(`${productUrl}?condition=${offer.condition}`)}</g:link>`,
+          `        <g:canonical_link>${escapeXml(productUrl)}</g:canonical_link>`,
+          `        <g:image_link>${escapeXml(offerImages.imageUrl)}</g:image_link>`,
+          offerImages.additionalImagesXml,
+          `        <g:availability>${offerAvailability}</g:availability>`,
+          `        <g:quantity>${offerStock}</g:quantity>`,
+          typeof offer.compare_at_price === 'number' &&
+          offer.compare_at_price > offer.price
+            ? `        <g:price>${offer.compare_at_price.toFixed(2)} ${currency}</g:price>\n        <g:sale_price>${offer.price.toFixed(2)} ${currency}</g:sale_price>`
+            : `        <g:price>${offer.price.toFixed(2)} ${currency}</g:price>`,
+          `        <g:brand>${escapeXml(effectiveBrand)}</g:brand>`,
+          `        <g:condition>${toGmcCondition(offer.condition)}</g:condition>`,
+          product.gtin
+            ? `        <g:gtin>${escapeXml(product.gtin)}</g:gtin>`
+            : '',
+          product.mpn ? `        <g:mpn>${escapeXml(product.mpn)}</g:mpn>` : '',
+          product.gtin || (product.mpn && effectiveBrand)
+            ? '        <g:identifier_exists>yes</g:identifier_exists>'
+            : '        <g:identifier_exists>no</g:identifier_exists>',
+          colorXml,
+          productDetailsXml,
+          product.google_product_category
+            ? `        <g:google_product_category>${escapeXml(product.google_product_category)}</g:google_product_category>`
+            : '',
+          productType
+            ? `        <g:product_type>${escapeXml(productType)}</g:product_type>`
+            : '',
+          shippingWeight,
+        ].filter(Boolean);
 
-          return `    <item>\n${offerLines.join('\n')}\n    </item>`;
-        });
+        return `    <item>\n${offerLines.join('\n')}\n    </item>`;
+      });
 
       return [baseItem, ...offerItems].join('\n');
     })

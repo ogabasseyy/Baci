@@ -159,14 +159,18 @@ async function main() {
 
   // 2. Load active products (paginated — Supabase defaults to 1000 row limit)
   const PAGE_SIZE = 1000;
-  const products: { id: string; images: unknown }[] = [];
+  const products: {
+    id: string;
+    images: unknown;
+    has_condition_offers?: boolean | null;
+  }[] = [];
   let offset = 0;
   let hasMore = true;
 
   while (hasMore) {
     const { data, error: productsError } = await supabase
       .from('products')
-      .select('id, images')
+      .select('id, images, has_condition_offers')
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .range(offset, offset + PAGE_SIZE - 1);
@@ -196,12 +200,18 @@ async function main() {
 
   // Condition offers can own imagery that is not duplicated on the parent
   // product. Merge those URLs (merchant-scoped) into the same verified
-  // manifest so feed rows can resolve offer-specific images.
+  // manifest so feed rows can resolve offer-specific images. Only flagged
+  // products are eligible: feed hydration skips the offers relation
+  // otherwise, so unflagged offer rows could never build an exclusion set
+  // and would leak into base product imagery.
+  const offerProductIds = products
+    .filter((product) => product.has_condition_offers)
+    .map((product) => product.id);
   try {
     classifiedRows.push(
       ...(await appendOfferImageCandidates({
         supabase,
-        productIds: products.map((product) => product.id),
+        productIds: offerProductIds,
         merchantId,
         storefrontBaseUrl,
         productRows: classifiedRows,

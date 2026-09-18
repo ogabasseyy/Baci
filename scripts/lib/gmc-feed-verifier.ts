@@ -184,7 +184,7 @@ export async function verifyCdnImageWithTransformFallback(
   cdnBasePath: string,
   fileExistsFn: (path: string) => boolean = existsSync,
   fetchFn: FetchFn = globalThis.fetch,
-  lookupFn: DnsLookupFn = (hostname) => dnsLookup(hostname, { all: true })
+  lookupFn?: DestinationLookupFn
 ): Promise<VerificationResult> {
   const localVerification = verifyCdnImage(
     sourceUrl,

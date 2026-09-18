@@ -94,6 +94,12 @@ describe('QuizAdminClient', () => {
     });
     const user = userEvent.setup();
     render(<QuizAdminClient initialPrizeProducts={[prize]} />);
+    // Scheduled timing is the form default; this flow covers the immediate
+    // activation payload.
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Launch timing' }),
+      'immediate'
+    );
     await user.click(screen.getByRole('button', { name: /generate draft/i }));
     await user.click(
       await screen.findByRole('checkbox', {

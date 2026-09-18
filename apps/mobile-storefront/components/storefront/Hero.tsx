@@ -81,10 +81,16 @@ export function Hero({
   const adsReadiness = useMobileAdsReadiness({
     enabled: adUnitConfig.enabled === true,
   });
+  // A failed banner (no fill, network/load error) drops the sponsored slide
+  // so autoplay never rotates shoppers onto a full-height blank page. Keyed
+  // by placement so a placement change re-arms the slot.
+  const [failedPlacement, setFailedPlacement] =
+    useState<MobileAdBannerPlacementKey | null>(null);
   const renderSlides: HeroRenderItem[] =
     adUnitConfig.enabled &&
     adUnitConfig.format === 'banner' &&
     adsReadiness.canRequestAds &&
+    failedPlacement !== trailingAdPlacement &&
     slides.length > 0
       ? [slides[0], { kind: 'hero-ad-slide' } as const, ...slides.slice(1)]
       : slides;
@@ -119,6 +125,7 @@ export function Hero({
       return (
         <HeroAdSlide
           height={getHeroHeight()}
+          onAdFailedToLoad={() => setFailedPlacement(trailingAdPlacement)}
           placement={trailingAdPlacement}
           screenWidth={screenWidth}
           unitId={

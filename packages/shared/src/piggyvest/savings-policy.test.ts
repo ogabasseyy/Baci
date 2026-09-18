@@ -8,7 +8,7 @@ import {
   maturityStatus,
   purchasingPowerKobo,
   SAVINGS_POLICY_VERSION,
-} from './savings-policy';
+} from './index';
 
 describe('savings-policy v1 (shared)', () => {
   it('is versioned', () => {

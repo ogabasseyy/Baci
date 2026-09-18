@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { act, render, screen } from '@testing-library/react-native';
 import * as placements from '@/config/mobile-ad-placements';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { getTemplateConfig } from '@/lib/templates';
@@ -239,6 +239,23 @@ describe('Hero trailing ad slide', () => {
       initialized: false,
     });
     renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
+
+    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
+    expect(screen.getAllByTestId('hero-image')).toHaveLength(1);
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
+  });
+
+  it('drops the ad slide when the banner fails to load instead of keeping a blank page', () => {
+    // Regression: on no-fill or load error the carousel must remove the
+    // sponsored slide so autoplay never rotates onto a blank hero page.
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
+
+    expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
+    const banner = screen.UNSAFE_getByType('BannerAd' as never);
+    act(() => {
+      (banner.props as { onAdFailedToLoad: () => void }).onAdFailedToLoad();
+    });
 
     expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
     expect(screen.getAllByTestId('hero-image')).toHaveLength(1);

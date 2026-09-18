@@ -110,7 +110,10 @@ export function QuizWaitingRoom({
             <Text style={styles.secondaryButtonText}>Leave waiting room</Text>
           </Pressable>
         </View>
-        <AdSlot placement="FOOTER_ANCHOR" />
+        {/* The rules modal mounts its own FOOTER_ANCHOR slot; unmount this
+            one while it is visible so only one banner request is live per
+            logical placement and delivery attributes to the visible screen. */}
+        {rulesVisible ? null : <AdSlot placement="FOOTER_ANCHOR" />}
       </ScrollView>
       <QuizRulesModal
         eventTitle={currentEvent.title}

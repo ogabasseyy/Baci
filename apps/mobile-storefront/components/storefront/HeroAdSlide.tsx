@@ -7,6 +7,11 @@ interface HeroAdSlideProps {
   height: number;
   /** Configured placement this slot resolves from; used for event attribution. */
   placement: MobileAdBannerPlacementKey;
+  /**
+   * Called when AdMob reports no fill or a load error so the carousel can
+   * drop the sponsored slide instead of rotating onto a blank page.
+   */
+  onAdFailedToLoad?: () => void;
   screenWidth: number;
   unitId: string;
 }
@@ -18,6 +23,7 @@ interface HeroAdSlideProps {
  */
 export function HeroAdSlide({
   height,
+  onAdFailedToLoad,
   placement,
   screenWidth,
   unitId,
@@ -53,12 +59,13 @@ export function HeroAdSlide({
     >
       <Text style={styles.label}>Sponsored</Text>
       <BannerAd
-        onAdFailedToLoad={() =>
+        onAdFailedToLoad={() => {
           trackEvent('mobile_ad_failed', {
             format: 'banner',
             placement,
-          })
-        }
+          });
+          onAdFailedToLoad?.();
+        }}
         onAdImpression={() =>
           trackEvent('mobile_ad_impression', {
             format: 'banner',

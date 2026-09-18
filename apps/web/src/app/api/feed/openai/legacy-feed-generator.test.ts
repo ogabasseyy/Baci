@@ -105,6 +105,34 @@ describe('generateOpenAIFeed', () => {
     expect(parsed.additional_image_links).toEqual([]);
   });
 
+  it('does not restore an offer-claimed primary through raw fallbacks', () => {
+    const [line] = generateOpenAIFeed(
+      [
+        product({
+          images: ['https://cdn.example.com/manifest-front.jpg'],
+          offers: [{ images: ['https://cdn.example.com/manifest-front.jpg'] }],
+        }),
+      ],
+      merchant,
+      'https://ogabassey.com',
+      {
+        'product-1': [
+          {
+            verified_url: 'https://cdn.example.com/manifest-front.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 0,
+          },
+        ],
+      }
+    );
+    const parsed = parseLine(line);
+
+    expect(parsed.image_link).toBe('');
+    expect(parsed.additional_image_links).toEqual([]);
+  });
+
   it('builds canonical policy URLs and normalizes trailing base URL slashes', () => {
     const [line] = generateOpenAIFeed(
       [product({ manage_stock: false, stock: 0 })],

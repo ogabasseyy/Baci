@@ -1,13 +1,11 @@
 import { toGoogleListingCondition } from '@baci/shared/lib';
+import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
 import {
   type FeedImageManifestEntry,
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
-import {
-  collectOfferClaimedImageUrls,
-  isOfferClaimedImage,
-} from '@/lib/gmc-offer-claimed-images';
+import { isOfferClaimedImage } from '@/lib/is-offer-claimed-image';
 import { escapeXml } from '@/lib/xml-utils';
 import { buildFeedDescription } from './build-feed-description';
 import {

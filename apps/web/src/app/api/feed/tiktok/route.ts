@@ -8,6 +8,7 @@ import type {
 } from '@/app/api/feed/google-merchant/feed-builder';
 import { getCachedGoogleMerchantFeedData } from '@/app/api/feed/google-merchant/feed-data';
 import { buildMerchantBaseUrl } from '@/app/api/feed/google-merchant/route-utils';
+import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
 import {
   MerchantNotFoundError,
   resolveFeedMerchant,
@@ -16,7 +17,6 @@ import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
-import { collectOfferClaimedImageUrls } from '@/lib/gmc-offer-claimed-images';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';

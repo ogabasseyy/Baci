@@ -1,8 +1,8 @@
+import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
 import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
-import { collectOfferClaimedImageUrls } from '@/lib/gmc-offer-claimed-images';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { stripHtmlTags } from '@/lib/sanitize-core';
@@ -70,8 +70,14 @@ function getProductImageUrl(
     typeof parentFirstImageRaw === 'string'
       ? parentFirstImageRaw
       : parentFirstImageRaw?.url || '';
+  // The raw fallback must not restore an offer-owned URL the manifest
+  // path just excluded.
+  const offerClaimedImageUrls = collectOfferClaimedImageUrls(product.offers);
+  const fallbackImage = offerClaimedImageUrls.has(parentFirstImage)
+    ? ''
+    : parentFirstImage;
 
-  return variant?.primary_image || parentFirstImage;
+  return variant?.primary_image || fallbackImage;
 }
 
 function getAdditionalImageLinks(
@@ -87,10 +93,14 @@ function getAdditionalImageLinks(
     return manifestAdditionalImages;
   }
 
+  const offerClaimedImageUrls = collectOfferClaimedImageUrls(product.offers);
   return product.images
     ?.slice(1, 11)
     .map((img) => (typeof img === 'string' ? img : img.url))
-    .filter((url): url is string => typeof url === 'string');
+    .filter(
+      (url): url is string =>
+        typeof url === 'string' && !offerClaimedImageUrls.has(url)
+    );
 }
 
 function buildPlainDescription(product: Product) {

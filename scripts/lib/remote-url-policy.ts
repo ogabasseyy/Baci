@@ -5,7 +5,11 @@ function isBlockedIpv4Octets(octets: number[]): boolean {
     // Shared-address (CGNAT) space also reaches private overlays.
     (a === 100 && b >= 64 && b <= 127) ||
     // Benchmarking range is routed to internal test infrastructure.
-    (a === 198 && (b === 18 || b === 19)) || a === 0;
+    (a === 198 && (b === 18 || b === 19)) ||
+    // Documentation TEST-NET ranges never appear as real origins.
+    (a === 192 && b === 0 && octets[2] === 2) ||
+    (a === 198 && b === 51 && octets[2] === 100) ||
+    (a === 203 && b === 0 && octets[2] === 113) || a === 0;
 }
 
 /** Strictly parse an IPv6 literal into eight 16-bit groups. */

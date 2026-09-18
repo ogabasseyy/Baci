@@ -62,6 +62,21 @@ describe('validateRemoteUrl host classification', () => {
     );
   });
 
+  it('blocks documentation TEST-NET destinations', () => {
+    for (const host of [
+      '192.0.2.1',
+      '192.0.2.255',
+      '198.51.100.23',
+      '203.0.113.7',
+    ]) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    // Adjacent space outside the documentation ranges stays reachable.
+    for (const host of ['192.0.3.1', '198.51.101.1', '203.0.114.1']) {
+      expect(validateRemoteUrl(url(host))?.toString()).toBe(url(host));
+    }
+  });
+
   it('blocks benchmark-network destinations', () => {
     for (const host of ['198.18.0.1', '198.19.255.255']) {
       expect(validateRemoteUrl(url(host))).toBeNull();

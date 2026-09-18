@@ -20,7 +20,7 @@ import {
   classifyFeedImageCandidate,
   extractImageCandidates,
 } from '../../packages/shared/src/gmc-feed/index';
-import { toGoogleListingCondition } from '../../packages/shared/src/lib/product-condition';
+import { getEligibleConditionOffers } from '../../packages/shared/src/lib/product-condition';
 
 export interface OfferImageBackfillInput {
   supabase: SupabaseClient;
@@ -97,24 +97,23 @@ export async function appendOfferImageCandidates(
     candidate: BackfillImageCandidate;
     classified: ClassifiedImage;
   }> = [];
+  const offersByProduct = new Map<string, typeof offers>();
   for (const offer of offers) {
-    // Mirror the feed eligibility rule: only offers that can emit rows
-    // (positive finite price, valid condition, different from the parent
-    // condition) contribute manifest entries. Anything else would persist
-    // imagery with no exclusion set to guard it.
-    const price = Number(offer.price);
-    const offerCondition = toGoogleListingCondition(offer.condition);
-    if (
-      !Number.isFinite(price) ||
-      price <= 0 ||
-      !offerCondition ||
-      offerCondition ===
-        toGoogleListingCondition(
-          productConditions.get(offer.product_id)
-        )
-    ) {
-      continue;
-    }
+    const list = offersByProduct.get(offer.product_id) ?? [];
+    list.push(offer);
+    offersByProduct.set(offer.product_id, list);
+  }
+  // The shared feed eligibility rule: only offers that can emit rows
+  // contribute manifest entries. Anything else would persist imagery
+  // with no exclusion set to guard it.
+  const eligibleOffers = [...offersByProduct].flatMap(
+    ([productId, productOffers]) =>
+      getEligibleConditionOffers(
+        productOffers,
+        productConditions.get(productId)
+      )
+  );
+  for (const offer of eligibleOffers) {
     const candidates = extractImageCandidates(
       offer.product_id,
       offer.images as ProductImages

@@ -17,10 +17,19 @@ export function wasPostOrderInterstitialShown(): boolean {
   return didShowThisSession;
 }
 
+export interface PostOrderInterstitialOptions {
+  /**
+   * Polled before presenting a loaded interstitial. When it returns true the
+   * load is abandoned as `skipped` instead of showing an ad over an
+   * unrelated screen after the shopper leaves order success.
+   */
+  isCancelled?: () => boolean;
+}
+
 // biome-ignore lint/suspicious/useAwait: async wraps the early 'skipped' returns in the declared Promise.
-export async function maybeShowPostOrderInterstitial(): Promise<
-  'shown' | 'skipped'
-> {
+export async function maybeShowPostOrderInterstitial(
+  options: PostOrderInterstitialOptions = {}
+): Promise<'shown' | 'skipped'> {
   if (didShowThisSession) {
     return 'skipped';
   }
@@ -70,6 +79,12 @@ export async function maybeShowPostOrderInterstitial(): Promise<
       );
       const cleanups = [
         interstitial.addAdEventListener(mobileAds.AdEventType.LOADED, () => {
+          // The shopper may have left order success while the ad was
+          // loading; presenting now would surface it on an unrelated screen.
+          if (options.isCancelled?.()) {
+            finish('skipped');
+            return;
+          }
           try {
             void interstitial.show().then(
               () => finish('shown'),

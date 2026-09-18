@@ -19,10 +19,19 @@ export function wasQuizStartInterstitialShown(): boolean {
   return didShowThisSession;
 }
 
+export interface QuizStartInterstitialOptions {
+  /**
+   * Polled before presenting a loaded interstitial. When it returns true the
+   * load is abandoned as `skipped` instead of showing an ad over live play
+   * or an unmounted lobby.
+   */
+  isCancelled?: () => boolean;
+}
+
 // biome-ignore lint/suspicious/useAwait: async wraps the early 'skipped' returns in the declared Promise.
-export async function maybeShowQuizStartInterstitial(): Promise<
-  'shown' | 'skipped'
-> {
+export async function maybeShowQuizStartInterstitial(
+  options: QuizStartInterstitialOptions = {}
+): Promise<'shown' | 'skipped'> {
   if (didShowThisSession) {
     return 'skipped';
   }
@@ -72,6 +81,13 @@ export async function maybeShowQuizStartInterstitial(): Promise<
       );
       const cleanups = [
         interstitial.addAdEventListener(mobileAds.AdEventType.LOADED, () => {
+          // The lobby may have moved into live play (or unmounted) while the
+          // ad was loading; presenting now would steal timed-question time or
+          // surface an ad on an unrelated screen.
+          if (options.isCancelled?.()) {
+            finish('skipped');
+            return;
+          }
           try {
             void interstitial.show().then(
               () => finish('shown'),

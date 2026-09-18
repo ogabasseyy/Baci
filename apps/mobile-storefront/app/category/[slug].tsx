@@ -97,7 +97,12 @@ export default function CategoryScreen() {
   );
 
   const renderFooter = () => {
-    if (!hasMore) return null;
+    // The MPU renders independently of pagination: categories that fit in the
+    // initial page (or finish loading) must still show the placement.
+    // AdSlot renders nothing while ads are disabled or misconfigured.
+    if (!hasMore) {
+      return <AdSlot placement="PRODUCT_GRID_MPU" />;
+    }
     return (
       <View>
         <AdSlot placement="PRODUCT_GRID_MPU" />

@@ -35,8 +35,16 @@ export function AdSlot({ placement, testID }: AdSlotProps) {
     return null;
   }
 
-  const { BannerAd, BannerAdSize } =
-    require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads');
+  // Builds without the Google Mobile Ads native module (e.g. Expo Go) throw
+  // on require; only registry misconfiguration is caught above.
+  let bannerModule: typeof import('react-native-google-mobile-ads');
+  try {
+    bannerModule =
+      require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads');
+  } catch {
+    return null;
+  }
+  const { BannerAd, BannerAdSize } = bannerModule;
 
   const handlePaid = (event: PaidEvent) => {
     trackEvent('mobile_ad_paid', {

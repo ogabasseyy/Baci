@@ -250,6 +250,14 @@
       "justification": "Reviewed web and Android notification channel handling."
     },
     {
+      "path": "lib/post-order-interstitial.ts",
+      "justification": "Reviewed web guard that skips the native post-order interstitial off Android/iOS, with cancellation before presentation once checkout completes or the screen unmounts."
+    },
+    {
+      "path": "lib/quiz-start-interstitial.ts",
+      "justification": "Reviewed web guard that skips the native pre-quiz interstitial off Android/iOS, with cancellation before presentation once live play starts or the lobby unmounts."
+    },
+    {
       "path": "lib/performance-trace.ts",
       "justification": "Reviewed Android-only native system trace markers; iOS and web intentionally use the no-op fallback because the local trace module is Android-only."
     },

@@ -147,12 +147,16 @@ export function useQuizWaitingRoom({
     let mounted = true;
     // Fire-and-forget: the lobby countdown keeps ticking underneath and play
     // never waits on the ad. Skipped when the quiz starts too soon for an ad
-    // to fit before live play.
+    // to fit before live play. The load is abandoned if the shopper moves
+    // into live play or leaves the lobby before it resolves, so a late LOADED
+    // event can never present over timed questions or an unrelated screen.
     if (
       getRemainingSeconds(eventRef.current, offsetRef.current) >
       QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS
     ) {
-      void maybeShowQuizStartInterstitial();
+      void maybeShowQuizStartInterstitial({
+        isCancelled: () => !mounted || startedRef.current || stoppedRef.current,
+      });
     }
     const tick = () => {
       if (

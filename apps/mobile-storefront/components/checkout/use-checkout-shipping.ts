@@ -12,6 +12,7 @@ import {
   getQuotePreference,
   isGiglGoFasterQuote,
   requiresQuote,
+  resolveDoorDeliveryQuoteId,
 } from '@/components/checkout/checkout-step-helpers';
 import { buildShippingQuoteContextKey } from '@/lib/shipping-quotes';
 import { applyCheckoutGoogleCitySuggestion } from './apply-checkout-google-city-suggestion';
@@ -97,6 +98,12 @@ export function useCheckoutShipping({
     (deliveryMethod === 'pickup_station' && !canUsePickupStation)
   ) {
     setDeliveryMethod('door');
+    // A stale air (GoFaster) or station quote must not survive the fallback:
+    // door pricing treats it as zero while the order builder could still
+    // send its ID. Re-resolve to the road quote (or clear when none exists).
+    setSelectedQuoteId(
+      resolveDoorDeliveryQuoteId(shippingQuotes, selectedQuoteId)
+    );
   }
   const resetQuotes = () => {
     setShippingQuotes([]);

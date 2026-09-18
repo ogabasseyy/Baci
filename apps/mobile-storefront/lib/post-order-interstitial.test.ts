@@ -77,4 +77,18 @@ describe('maybeShowPostOrderInterstitial', () => {
     await expect(attempt).resolves.toBe('skipped');
     setAdsEnabled(ORIGINAL_ENV);
   });
+
+  it('abandons a loaded ad when cancelled before presentation', async () => {
+    // A shopper who leaves order success while the ad loads must never see
+    // it presented over an unrelated screen.
+    setAdsEnabled('true');
+    const attempt = maybeShowPostOrderInterstitial({
+      isCancelled: () => true,
+    });
+    expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
+    for (const listener of listeners.loaded) listener();
+    await expect(attempt).resolves.toBe('skipped');
+    expect(mockInterstitialShow).not.toHaveBeenCalled();
+    setAdsEnabled(ORIGINAL_ENV);
+  });
 });

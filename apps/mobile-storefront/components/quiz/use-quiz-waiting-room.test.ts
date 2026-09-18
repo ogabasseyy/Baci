@@ -245,6 +245,46 @@ describe('useQuizWaitingRoom', () => {
     expect(mockMaybeShowQuizStartInterstitial).not.toHaveBeenCalled();
   });
 
+  it('cancels the pending pre-quiz ad once live play begins', async () => {
+    // Regression: a lobby that moves into the timed quiz while the
+    // interstitial loads must abandon the presentation.
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-23T11:59:00.000Z'));
+    mockMaybeShowQuizStartInterstitial.mockClear();
+    const refresh = jest
+      .fn<() => Promise<QuizEvent[]>>()
+      .mockResolvedValueOnce([
+        event({
+          serverNow: '2026-08-23T11:59:00.000Z',
+          startsAt: '2026-08-23T12:00:00.000Z',
+          status: 'active',
+        }),
+      ]);
+    const onStart = jest.fn();
+    renderHook(() =>
+      useQuizWaitingRoom({
+        event: event(),
+        onExit: jest.fn(),
+        onStart,
+        refresh,
+      })
+    );
+    expect(mockMaybeShowQuizStartInterstitial).toHaveBeenCalledTimes(1);
+    const isCancelled =
+      mockMaybeShowQuizStartInterstitial.mock.calls[0]?.[0]?.isCancelled;
+    expect(typeof isCancelled).toBe('function');
+    expect(isCancelled?.()).toBe(false);
+    const listener = jest
+      .mocked(AppState.addEventListener)
+      .mock.calls.at(-1)?.[1] as (state: 'active') => void;
+    await act(async () => {
+      listener('active');
+      await Promise.resolve();
+    });
+    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(isCancelled?.()).toBe(true);
+  });
+
   it('cancels a pending active response when the waiting room unmounts', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-08-23T11:59:59.000Z'));

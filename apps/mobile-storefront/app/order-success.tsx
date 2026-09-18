@@ -83,11 +83,17 @@ export default function OrderSuccessScreen() {
   useEffect(() => {
     // Post-purchase interstitial (once per session, skipped while ads are
     // disabled). Delayed past the success animation like the soft ask below.
+    // Abandoned if the shopper leaves before the ad loads so a late LOADED
+    // event can never present over an unrelated screen.
+    let interstitialCancelled = false;
     const interstitialTimerId = setTimeout(() => {
-      void maybeShowPostOrderInterstitial();
+      void maybeShowPostOrderInterstitial({
+        isCancelled: () => interstitialCancelled,
+      });
     }, 2500);
 
     return () => {
+      interstitialCancelled = true;
       clearTimeout(interstitialTimerId);
     };
   }, []);

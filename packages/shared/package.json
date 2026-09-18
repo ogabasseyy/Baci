@@ -12,6 +12,7 @@
     "./imei": "./src/imei/index.ts",
     "./insurance": "./src/insurance/index.ts",
     "./lib": "./src/lib/index.ts",
+    "./piggyvest": "./src/piggyvest/index.ts",
     "./schemas": "./src/schemas/index.ts",
     "./schemas/merchant-settings": "./src/schemas/merchant-settings.ts",
     "./receipt": "./src/receipt/index.ts",

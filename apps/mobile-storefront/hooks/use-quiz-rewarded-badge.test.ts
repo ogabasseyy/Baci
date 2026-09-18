@@ -44,7 +44,10 @@ jest.mock('react-native-google-mobile-ads', () => ({
   RewardedAdEventType: { EARNED_REWARD: 'earned-reward', LOADED: 'loaded' },
 }));
 
-import { RewardedAdEventType } from 'react-native-google-mobile-ads';
+import {
+  RewardedAd,
+  RewardedAdEventType,
+} from 'react-native-google-mobile-ads';
 import { useQuizRewardedBadge } from './use-quiz-rewarded-badge';
 
 type GateProps = {
@@ -216,6 +219,30 @@ describe('useQuizRewardedBadge', () => {
     act(() => result.current.watchAd());
     expect(result.current.watchFailed).toBe(false);
     expect(result.current.isWatching).toBe(true);
+  });
+
+  it('flags a retryable failure when rewarded setup throws synchronously', () => {
+    // Regression: a synchronous createForAdRequest/load throw (e.g.
+    // uninitialized native SDK) must surface the failure state instead of
+    // silently clearing the loading state on the unchanged offer.
+    jest.mocked(RewardedAd.createForAdRequest).mockImplementationOnce(() => {
+      throw new Error('native SDK not initialized');
+    });
+    const { result } = renderHook(() =>
+      useQuizRewardedBadge({
+        eventId: 'event-1',
+        eventTitle: 'Today Quiz',
+        remainingSeconds: 120,
+        status: 'scheduled',
+        userId: 'user-1',
+      })
+    );
+
+    expect(result.current.watchFailed).toBe(false);
+    act(() => result.current.watchAd());
+    expect(result.current.watchFailed).toBe(true);
+    expect(result.current.isWatching).toBe(false);
+    expect(mockUnlockBadge).not.toHaveBeenCalled();
   });
 
   it('does not show a rewarded ad if it finishes loading after dismissal', () => {

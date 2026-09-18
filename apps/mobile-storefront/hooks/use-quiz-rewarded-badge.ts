@@ -228,6 +228,10 @@ export function useQuizRewardedBadge({
       ];
       rewardedAd.load();
     } catch {
+      // Synchronous setup failures (e.g. uninitialized native SDK) must
+      // surface the same failure state as async ERROR / show() rejections,
+      // otherwise the tap looks like a dead button on the unchanged offer.
+      if (isCurrent()) setWatchFailed(true);
       finish();
     }
   };

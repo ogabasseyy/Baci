@@ -1,0 +1,71 @@
+import { StyleSheet, Text, View } from 'react-native';
+
+interface LaunchAdCardColors {
+  border: string;
+  card: string;
+  textSecondary: string;
+}
+
+interface LaunchAdCardProps {
+  cardWidth: number;
+  colors: LaunchAdCardColors;
+  unitId: string;
+}
+
+/**
+ * Sponsored card inserted into the Just Launched carousel. Renders nothing
+ * when the Google Mobile Ads native module is unavailable (e.g. Expo Go)
+ * rather than crashing the carousel.
+ */
+export function LaunchAdCard({ cardWidth, colors, unitId }: LaunchAdCardProps) {
+  let bannerModule: typeof import('react-native-google-mobile-ads') | null =
+    null;
+  try {
+    bannerModule =
+      require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads');
+  } catch {
+    return null;
+  }
+  if (!bannerModule) return null;
+  const { BannerAd, BannerAdSize } = bannerModule;
+
+  return (
+    <View
+      accessibilityLabel="Sponsored advertisement"
+      style={[
+        styles.card,
+        {
+          width: cardWidth,
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+        },
+      ]}
+      testID="launch-ad-card"
+    >
+      <Text style={[styles.adLabel, { color: colors.textSecondary }]}>
+        Sponsored
+      </Text>
+      <BannerAd size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER} unitId={unitId} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    height: 168,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    padding: 8,
+  },
+  adLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+});

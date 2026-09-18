@@ -1,5 +1,9 @@
 import { describe, expect, it } from '@jest/globals';
-import { getMobileAdUnitId } from './mobile-ad-placements';
+import {
+  getMobileAdUnitId,
+  MOBILE_AD_ENV_KEYS,
+  readMobileAdDefaultEnvironment,
+} from './mobile-ad-placements';
 
 const ENABLED_ENV = { EXPO_PUBLIC_MOBILE_ADS_ENABLED: 'true' };
 
@@ -131,5 +135,19 @@ describe('getMobileAdUnitId', () => {
         platform: 'ios',
       })
     ).toThrow('[mobile-ads]');
+  });
+
+  it('statically reads every registry variable so release bundles inline them', () => {
+    // Expo only inlines `process.env.EXPO_PUBLIC_*` referenced with static
+    // dot notation; a missing key here stays undefined in production and
+    // silently disables (or throws for) that placement.
+    const environment = readMobileAdDefaultEnvironment();
+    expect(new Set(MOBILE_AD_ENV_KEYS).size).toBe(MOBILE_AD_ENV_KEYS.length);
+    for (const key of MOBILE_AD_ENV_KEYS) {
+      expect(environment).toHaveProperty(key);
+    }
+    expect(Object.keys(environment).sort()).toEqual(
+      [...MOBILE_AD_ENV_KEYS].sort()
+    );
   });
 });

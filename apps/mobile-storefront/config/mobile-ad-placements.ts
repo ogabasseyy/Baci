@@ -145,29 +145,84 @@ function placementEnvKey(
   return platform === 'android' ? keys.androidEnvKey : keys.iosEnvKey;
 }
 
+/**
+ * Every `EXPO_PUBLIC_*` variable the placement registry can look up.
+ * Exported so tests can assert the static reader below stays in sync when
+ * placements are added.
+ */
+export const MOBILE_AD_ENV_KEYS: readonly string[] = [
+  'EXPO_PUBLIC_MOBILE_ADS_ENABLED',
+  ...Object.values(BANNER_PLACEMENTS).flatMap((keys) => [
+    keys.androidEnvKey,
+    keys.iosEnvKey,
+  ]),
+  ...Object.values(INTERSTITIAL_ENV_KEYS).flatMap((keys) => [
+    keys.android,
+    keys.ios,
+  ]),
+  REWARDED_ENV_KEYS.android,
+  REWARDED_ENV_KEYS.ios,
+];
+
+/**
+ * Default environment snapshot. Every variable is read with static
+ * `process.env.EXPO_PUBLIC_*` dot notation because Expo only inlines
+ * statically referenced variables into release bundles — computed
+ * `process.env[key]` reads stay undefined in production and would disable
+ * every placement (or throw for uncaught callers). Callers that need a
+ * synthetic environment (tests, previews) pass `options.environment`.
+ *
+ * When adding a placement, add its variables here AND to
+ * MOBILE_AD_ENV_KEYS (covered by `mobile-ad-placements.test.ts`).
+ */
+export function readMobileAdDefaultEnvironment(): MobileAdEnvironment {
+  return {
+    EXPO_PUBLIC_MOBILE_ADS_ENABLED: process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED,
+    EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID,
+    EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID:
+      process.env.EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID,
+    EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID:
+      process.env.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID,
+    EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID:
+      process.env.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID,
+  };
+}
+
 export function getMobileAdUnitId(
   key: MobileAdPlacementKey,
   options: GetMobileAdUnitIdOptions = {}
 ): MobileAdUnitConfig {
-  const environment: MobileAdEnvironment = options.environment ?? {
-    EXPO_PUBLIC_MOBILE_ADS_ENABLED: process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED,
-    ...Object.values(BANNER_PLACEMENTS).reduce<
-      Record<string, string | undefined>
-    >((acc, keys) => {
-      acc[keys.androidEnvKey] = process.env[keys.androidEnvKey];
-      acc[keys.iosEnvKey] = process.env[keys.iosEnvKey];
-      return acc;
-    }, {}),
-    ...Object.values(INTERSTITIAL_ENV_KEYS).reduce<
-      Record<string, string | undefined>
-    >((acc, keys) => {
-      acc[keys.android] = process.env[keys.android];
-      acc[keys.ios] = process.env[keys.ios];
-      return acc;
-    }, {}),
-    [REWARDED_ENV_KEYS.android]: process.env[REWARDED_ENV_KEYS.android],
-    [REWARDED_ENV_KEYS.ios]: process.env[REWARDED_ENV_KEYS.ios],
-  };
+  const environment: MobileAdEnvironment =
+    options.environment ?? readMobileAdDefaultEnvironment();
 
   if (environment.EXPO_PUBLIC_MOBILE_ADS_ENABLED !== 'true') {
     return { enabled: false };

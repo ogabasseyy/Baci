@@ -16,6 +16,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { LaunchAdCard } from '@/components/storefront/LaunchAdCard';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
 import { usePinnedLaunchProducts } from '@/hooks/use-pinned-launch-products';
@@ -30,46 +31,6 @@ const SECTION_TITLE = 'Just Launched';
 const CARD_HEIGHT = 168;
 const IMAGE_PADDING = 8;
 const BLURHASH = 'L6PZfSi_.AyE_3t7t7RjE1%MWBR*';
-
-type LaunchAdCardColors = {
-  border: string;
-  card: string;
-  textSecondary: string;
-};
-
-function LaunchAdCard({
-  cardWidth,
-  colors,
-  unitId,
-}: {
-  cardWidth: number;
-  colors: LaunchAdCardColors;
-  unitId: string;
-}) {
-  const { BannerAd, BannerAdSize } =
-    require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads');
-
-  return (
-    <View
-      accessibilityLabel="Sponsored advertisement"
-      style={[
-        styles.card,
-        styles.adCard,
-        {
-          width: cardWidth,
-          backgroundColor: colors.card,
-          borderColor: colors.border,
-        },
-      ]}
-      testID="launch-ad-card"
-    >
-      <Text style={[styles.adLabel, { color: colors.textSecondary }]}>
-        Sponsored
-      </Text>
-      <BannerAd size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER} unitId={unitId} />
-    </View>
-  );
-}
 
 export function JustLaunchedCarousel() {
   const { colors } = useTheme();
@@ -167,7 +128,17 @@ export function JustLaunchedCarousel() {
     return null;
   }
 
-  const adUnitConfig = getMobileAdUnitId('PRODUCT_GRID_MPU');
+  // A missing or malformed placement must fail closed: the registry throws
+  // for unconfigured production IDs, and that must never crash the carousel
+  // during render.
+  let adUnitConfig: ReturnType<typeof getMobileAdUnitId> = {
+    enabled: false as const,
+  };
+  try {
+    adUnitConfig = getMobileAdUnitId('PRODUCT_GRID_MPU');
+  } catch {
+    adUnitConfig = { enabled: false as const };
+  }
   const showAdCard =
     adUnitConfig.enabled &&
     adUnitConfig.format === 'banner' &&
@@ -308,19 +279,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
-  adCard: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: IMAGE_PADDING,
-  },
-  adLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
+
   imageWrap: {
     width: '42%',
     height: '100%',

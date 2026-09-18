@@ -77,4 +77,18 @@ describe('maybeShowQuizStartInterstitial', () => {
     await expect(attempt).resolves.toBe('skipped');
     setAdsEnabled(ORIGINAL_ENV);
   });
+
+  it('abandons a loaded ad when cancelled before presentation', async () => {
+    // Regression: a lobby that moves into live play (or unmounts) while the
+    // interstitial loads must never have the ad presented over it.
+    setAdsEnabled('true');
+    const attempt = maybeShowQuizStartInterstitial({
+      isCancelled: () => true,
+    });
+    expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
+    for (const listener of listeners.loaded) listener();
+    await expect(attempt).resolves.toBe('skipped');
+    expect(mockInterstitialShow).not.toHaveBeenCalled();
+    setAdsEnabled(ORIGINAL_ENV);
+  });
 });

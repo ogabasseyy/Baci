@@ -1,4 +1,6 @@
+import { jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
+import * as placements from '@/config/mobile-ad-placements';
 import { getTemplateConfig } from '@/lib/templates';
 import type { HeroSlide } from './Hero';
 import { Hero } from './Hero';
@@ -200,6 +202,23 @@ describe('Hero trailing ad slide', () => {
     renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
 
     expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
+  });
+
+  it('fails closed when the placement is misconfigured instead of crashing', () => {
+    // Regression: getMobileAdUnitId throws for unconfigured production IDs;
+    // the hero must omit the ad slide rather than take down the home feed.
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    const spy = jest
+      .spyOn(placements, 'getMobileAdUnitId')
+      .mockImplementation(() => {
+        throw new Error('[mobile-ads] misconfigured');
+      });
+    renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
+
+    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
+    expect(screen.getAllByTestId('hero-image')).toHaveLength(1);
+    spy.mockRestore();
     process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
   });
 

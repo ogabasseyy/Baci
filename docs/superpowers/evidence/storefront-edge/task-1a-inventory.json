@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "f8d531e2f633913f56bb02ebba3fbcc2194c7c52",
+  "originMainSha": "2aed1d584e15d3037923c26dc078afad33ff4692",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "95bf8276b3dfc1528ed380b5c1ec51a846687fa610ee772ad356d3078dcfa582",
-  "routingProxyInputSha256": "991b10fa66a8c44a854e8e840ab2a0cbefe96d8e1126a1021434b1107dfbcf3e",
+  "routeTreeSha256": "2e375594f9a01e8b92e241048fec016be262bd9ce9c337de8bed0b7e6b7897f0",
+  "routingProxyInputSha256": "caf110821a08e402504db19ec65359e8129f29797d2ff49f489de8cd5e42fc3a",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -4467,52 +4467,6 @@
     },
     {
       "decision": "origin_dynamic",
-      "id": "machine:vercel-insights-script",
-      "methods": [
-        "GET",
-        "HEAD"
-      ],
-      "reason": "explicit_storefront_machine_family",
-      "routePattern": "/_vercel/insights/script.js",
-      "sourceKind": "machine_family",
-      "sourcePath": "apps/web/src/components/analytics/deferred-platform-insights.tsx"
-    },
-    {
-      "decision": "origin_dynamic",
-      "id": "machine:vercel-insights-view",
-      "methods": [
-        "POST"
-      ],
-      "reason": "explicit_storefront_machine_family",
-      "routePattern": "/_vercel/insights/view",
-      "sourceKind": "machine_family",
-      "sourcePath": "apps/web/src/components/analytics/deferred-platform-insights.tsx"
-    },
-    {
-      "decision": "origin_dynamic",
-      "id": "machine:vercel-speed-insights-script",
-      "methods": [
-        "GET",
-        "HEAD"
-      ],
-      "reason": "explicit_storefront_machine_family",
-      "routePattern": "/_vercel/speed-insights/script.js",
-      "sourceKind": "machine_family",
-      "sourcePath": "apps/web/src/components/analytics/deferred-platform-insights.tsx"
-    },
-    {
-      "decision": "origin_dynamic",
-      "id": "machine:vercel-speed-insights-vitals",
-      "methods": [
-        "POST"
-      ],
-      "reason": "explicit_storefront_machine_family",
-      "routePattern": "/_vercel/speed-insights/vitals",
-      "sourceKind": "machine_family",
-      "sourcePath": "apps/web/src/components/analytics/deferred-platform-insights.tsx"
-    },
-    {
-      "decision": "origin_dynamic",
       "id": "machine:well-known-agent-auth-claim",
       "methods": [
         "GET",
@@ -8292,5 +8246,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "800522cd385dac3fc7101504c6a65571dd35464a2b30975ba5680c03368d6318"
+  "inventorySha256": "dcbf4f4e3f5a189193b5826354d284c1aa27b0a8eb3fe185a04fe0e01df218c1"
 }

@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
+
+jest.mock('@/hooks/use-mobile-ads-readiness', () => ({
+  useMobileAdsReadiness: jest.fn(() => ({
+    canRequestAds: true,
+    initialized: true,
+  })),
+}));
+
+const mockUseMobileAdsReadiness = jest.mocked(useMobileAdsReadiness);
 
 jest.mock('react-native-google-mobile-ads', () => ({
   BannerAd: 'BannerAd',
@@ -251,6 +261,24 @@ describe('JustLaunchedCarousel', () => {
     render(<JustLaunchedCarousel />);
 
     expect(screen.queryByTestId('launch-ad-card')).toBeNull();
+  });
+
+  it('withholds the sponsored card until consent is ready', () => {
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    mockUseMobileAdsReadiness.mockReturnValueOnce({
+      canRequestAds: false,
+      initialized: false,
+    });
+    mockUseProducts.mockReturnValue({
+      products: [xiaomi, a27],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JustLaunchedCarousel />);
+
+    expect(screen.queryByTestId('launch-ad-card')).toBeNull();
+    delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
   });
 
   it('skips launch rows that cannot render an image', () => {

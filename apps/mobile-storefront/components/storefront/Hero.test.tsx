@@ -1,9 +1,19 @@
 import { jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import * as placements from '@/config/mobile-ad-placements';
+import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { getTemplateConfig } from '@/lib/templates';
 import type { HeroSlide } from './Hero';
 import { Hero } from './Hero';
+
+jest.mock('@/hooks/use-mobile-ads-readiness', () => ({
+  useMobileAdsReadiness: jest.fn(() => ({
+    canRequestAds: true,
+    initialized: true,
+  })),
+}));
+
+const mockUseMobileAdsReadiness = jest.mocked(useMobileAdsReadiness);
 
 function renderedMarkerOrder(): string[] {
   const markers: string[] = [];
@@ -219,6 +229,19 @@ describe('Hero trailing ad slide', () => {
     expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
     expect(screen.getAllByTestId('hero-image')).toHaveLength(1);
     spy.mockRestore();
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
+  });
+
+  it('withholds the ad slide until consent is ready', () => {
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    mockUseMobileAdsReadiness.mockReturnValueOnce({
+      canRequestAds: false,
+      initialized: false,
+    });
+    renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
+
+    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
+    expect(screen.getAllByTestId('hero-image')).toHaveLength(1);
     process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
   });
 

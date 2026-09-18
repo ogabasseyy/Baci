@@ -68,6 +68,32 @@ describe('QuizAuthoringForm', () => {
     );
   });
 
+  it('syncs live mode to the shared suggested live window with grace', () => {
+    // 2 default topics x 1 per topic x 10s = 20s play; the shared live
+    // suggestion adds the 90s grace whole-minuted to 120s so activation
+    // satisfies the launch timing bounds.
+    render(
+      <QuizAuthoringForm
+        disabled={false}
+        initialProducts={[prize]}
+        isGenerating={false}
+        onGenerate={vi.fn()}
+      />
+    );
+    fireEvent.change(screen.getByLabelText(/mode/i), {
+      target: { value: 'live' },
+    });
+    const startInput = screen.getByLabelText(
+      /scheduled start/i
+    ) as HTMLInputElement;
+    const endInput = screen.getByLabelText(
+      /universal end/i
+    ) as HTMLInputElement;
+    expect(
+      new Date(endInput.value).getTime() - new Date(startInput.value).getTime()
+    ).toBe(120_000);
+  });
+
   it('keeps a manually edited end when the start changes', () => {
     render(
       <QuizAuthoringForm

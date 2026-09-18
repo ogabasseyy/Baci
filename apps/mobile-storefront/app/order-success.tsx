@@ -51,6 +51,10 @@ export default function OrderSuccessScreen() {
   const { requestPermission, triggerSystemPrompt, markDenied } =
     usePermissionBooster();
   const [showPermissionModal, setShowPermissionModal] = useState(false);
+  // Tracks the notification permission flow (soft-ask modal through the
+  // native prompt) independently of render state so the interstitial
+  // cancellation predicate below always sees the current value.
+  const permissionFlowActiveRef = useRef(false);
 
   useEffect(() => {
     const isServerConfirmedNotificationMethod =
@@ -84,11 +88,14 @@ export default function OrderSuccessScreen() {
     // Post-purchase interstitial (once per session, skipped while ads are
     // disabled). Delayed past the success animation like the soft ask below.
     // Abandoned if the shopper leaves before the ad loads so a late LOADED
-    // event can never present over an unrelated screen.
+    // event can never present over an unrelated screen — and while the
+    // notification permission flow is visible or in progress so the ad can
+    // never cover the soft-ask modal or race the native prompt.
     let interstitialCancelled = false;
     const interstitialTimerId = setTimeout(() => {
       void maybeShowPostOrderInterstitial({
-        isCancelled: () => interstitialCancelled,
+        isCancelled: () =>
+          interstitialCancelled || permissionFlowActiveRef.current,
       });
     }, 2500);
 
@@ -104,6 +111,7 @@ export default function OrderSuccessScreen() {
     const timerId = setTimeout(async () => {
       const result = await requestPermission('notifications');
       if (result === 'soft-ask-needed') {
+        permissionFlowActiveRef.current = true;
         setShowPermissionModal(true);
       }
     }, 1500);
@@ -116,10 +124,12 @@ export default function OrderSuccessScreen() {
   const handlePermissionGrant = async () => {
     setShowPermissionModal(false);
     await triggerSystemPrompt('notifications');
+    permissionFlowActiveRef.current = false;
   };
 
   const handlePermissionDeny = () => {
     setShowPermissionModal(false);
+    permissionFlowActiveRef.current = false;
     markDenied('notifications');
   };
 

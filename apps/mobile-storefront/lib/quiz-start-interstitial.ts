@@ -1,6 +1,8 @@
 import { Platform } from 'react-native';
+import { isQuizMobileAdsAvailable } from '@/components/quiz/is-quiz-mobile-ads-available';
 import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
 import { trackEvent } from '@/services/analytics-core';
+import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
 
 /**
  * Pre-quiz interstitial, shown when the waiting room opens and capped to one
@@ -46,6 +48,20 @@ export async function maybeShowQuizStartInterstitial(
     return 'skipped';
   }
   if (!config.enabled || config.format !== 'interstitial') {
+    return 'skipped';
+  }
+
+  // Consent gate: never request the interstitial before UMP consent is
+  // gathered and the protective under-age configuration is applied.
+  try {
+    if (!isQuizMobileAdsAvailable()) {
+      return 'skipped';
+    }
+    const { canRequestAds } = await initializeQuizMobileAds();
+    if (!canRequestAds) {
+      return 'skipped';
+    }
+  } catch {
     return 'skipped';
   }
 

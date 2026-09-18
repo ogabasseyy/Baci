@@ -1,4 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
+import { isQuizMobileAdsAvailable } from '@/components/quiz/is-quiz-mobile-ads-available';
+import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
 import {
   maybeShowPostOrderInterstitial,
   resetPostOrderInterstitialForTests,
@@ -7,6 +9,17 @@ import {
 jest.mock('@/services/analytics-core', () => ({
   trackEvent: jest.fn(),
 }));
+
+jest.mock('@/components/quiz/is-quiz-mobile-ads-available', () => ({
+  isQuizMobileAdsAvailable: jest.fn(() => true),
+}));
+
+jest.mock('@/services/initialize-quiz-mobile-ads', () => ({
+  initializeQuizMobileAds: jest.fn(async () => ({ canRequestAds: true })),
+}));
+
+const mockIsQuizMobileAdsAvailable = jest.mocked(isQuizMobileAdsAvailable);
+const mockInitializeQuizMobileAds = jest.mocked(initializeQuizMobileAds);
 
 type Listener = () => void;
 
@@ -39,10 +52,19 @@ jest.mock('react-native-google-mobile-ads', () => ({
 
 const ORIGINAL_ENV = process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
 
+async function flushConsentGate(): Promise<void> {
+  // The helper awaits UMP consent before constructing the ad; pump the
+  // microtask queue so listeners are registered before firing them.
+  for (let flush = 0; flush < 10; flush += 1) {
+    await Promise.resolve();
+  }
+}
+
 function setAdsEnabled(value: string | undefined) {
   for (const key of Object.keys(listeners)) listeners[key] = [];
   mockInterstitialLoad.mockClear();
   mockInterstitialShow.mockClear();
+  mockInitializeQuizMobileAds.mockClear();
   resetPostOrderInterstitialForTests();
   if (value === undefined) {
     delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
@@ -62,6 +84,7 @@ describe('maybeShowPostOrderInterstitial', () => {
   it('shows on load and then caps to one per session', async () => {
     setAdsEnabled('true');
     const first = maybeShowPostOrderInterstitial();
+    await flushConsentGate();
     expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
     for (const listener of listeners.loaded) listener();
     await expect(first).resolves.toBe('shown');
@@ -73,6 +96,7 @@ describe('maybeShowPostOrderInterstitial', () => {
   it('skips when loading errors', async () => {
     setAdsEnabled('true');
     const attempt = maybeShowPostOrderInterstitial();
+    await flushConsentGate();
     for (const listener of listeners.error) listener();
     await expect(attempt).resolves.toBe('skipped');
     setAdsEnabled(ORIGINAL_ENV);
@@ -85,10 +109,32 @@ describe('maybeShowPostOrderInterstitial', () => {
     const attempt = maybeShowPostOrderInterstitial({
       isCancelled: () => true,
     });
+    await flushConsentGate();
     expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
     for (const listener of listeners.loaded) listener();
     await expect(attempt).resolves.toBe('skipped');
     expect(mockInterstitialShow).not.toHaveBeenCalled();
+    setAdsEnabled(ORIGINAL_ENV);
+  });
+
+  it('skips before requesting when consent is unresolved', async () => {
+    setAdsEnabled('true');
+    mockInitializeQuizMobileAds.mockResolvedValueOnce({
+      canRequestAds: false,
+    });
+    await expect(maybeShowPostOrderInterstitial()).resolves.toBe('skipped');
+    expect(mockInterstitialLoad).not.toHaveBeenCalled();
+    expect(mockInterstitialShow).not.toHaveBeenCalled();
+    mockInitializeQuizMobileAds.mockResolvedValue({ canRequestAds: true });
+    setAdsEnabled(ORIGINAL_ENV);
+  });
+
+  it('skips when the native ads module is unavailable', async () => {
+    setAdsEnabled('true');
+    mockIsQuizMobileAdsAvailable.mockReturnValueOnce(false);
+    await expect(maybeShowPostOrderInterstitial()).resolves.toBe('skipped');
+    expect(mockInitializeQuizMobileAds).not.toHaveBeenCalled();
+    expect(mockInterstitialLoad).not.toHaveBeenCalled();
     setAdsEnabled(ORIGINAL_ENV);
   });
 });

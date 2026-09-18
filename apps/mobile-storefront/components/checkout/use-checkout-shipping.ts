@@ -1,4 +1,3 @@
-import { isAirportDeliveryEligible, isStoreOriginDelivery } from '@baci/shared';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { fetchShippingQuotes } from '@/components/checkout/checkout-shipping.helpers';
 import {
@@ -10,12 +9,11 @@ import {
   getDeliveryMethodFee,
   getShippingProviderForMethod as getProvider,
   getQuotePreference,
-  isGiglGoFasterQuote,
   requiresQuote,
-  resolveDoorDeliveryQuoteId,
 } from '@/components/checkout/checkout-step-helpers';
 import { buildShippingQuoteContextKey } from '@/lib/shipping-quotes';
 import { applyCheckoutGoogleCitySuggestion } from './apply-checkout-google-city-suggestion';
+import { useApplyDeliveryFallback } from './checkout-door-fallback';
 import { createCheckoutShippingHandlers } from './checkout-shipping-handlers';
 import { loadShippingStates } from './checkout-shipping-loaders';
 import { getCheckoutLocationPickerVisibility } from './get-checkout-location-picker-visibility';
@@ -87,24 +85,17 @@ export function useCheckoutShipping({
     shippingQuotes,
     state: watchedState,
   });
-  if (
-    (deliveryMethod !== 'door' && !hasResolvedDeliveryLocation) ||
-    (deliveryMethod === 'airport' &&
-      !isAirportDeliveryEligible(watchedState) &&
-      (!isGiglGoFasterQuote(
-        findSelectedQuote(shippingQuotes, selectedQuoteId)
-      ) ||
-        isStoreOriginDelivery(watchedCity, watchedState))) ||
-    (deliveryMethod === 'pickup_station' && !canUsePickupStation)
-  ) {
-    setDeliveryMethod('door');
-    // A stale air (GoFaster) or station quote must not survive the fallback:
-    // door pricing treats it as zero while the order builder could still
-    // send its ID. Re-resolve to the road quote (or clear when none exists).
-    setSelectedQuoteId(
-      resolveDoorDeliveryQuoteId(shippingQuotes, selectedQuoteId)
-    );
-  }
+  useApplyDeliveryFallback({
+    canUsePickupStation,
+    deliveryMethod,
+    hasResolvedDeliveryLocation,
+    selectedQuoteId,
+    setDeliveryMethod,
+    setSelectedQuoteId,
+    shippingQuotes,
+    watchedCity,
+    watchedState,
+  });
   const resetQuotes = () => {
     setShippingQuotes([]);
     setSelectedQuoteId('');

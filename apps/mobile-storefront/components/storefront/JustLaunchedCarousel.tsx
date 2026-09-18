@@ -1,36 +1,29 @@
 import {
   effectiveLaunchPins,
   LAUNCH_CAROUSEL_LIMIT,
-  launchCtaLabel,
   OGABASSEY_LAUNCH_PINS_SINCE,
   OGABASSEY_PINNED_LAUNCH_SLUGS,
   selectLaunchProducts,
 } from '@baci/shared/storefront';
-import { Image } from 'expo-image';
-import { router } from 'expo-router';
 import {
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { LaunchAdCard } from '@/components/storefront/LaunchAdCard';
+import { LaunchProductCard } from '@/components/storefront/LaunchProductCard';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
+import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { usePinnedLaunchProducts } from '@/hooks/use-pinned-launch-products';
 import { useProducts } from '@/hooks/use-products';
 import { useTheme } from '@/hooks/useTheme';
-import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { PRODUCT_PLACEHOLDER_IMAGE } from '@/lib/product-normalization';
-import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { Product } from '@/types/product';
 
 const SECTION_TITLE = 'Just Launched';
-const CARD_HEIGHT = 168;
-const IMAGE_PADDING = 8;
-const BLURHASH = 'L6PZfSi_.AyE_3t7t7RjE1%MWBR*';
 
 export function JustLaunchedCarousel() {
   const { colors } = useTheme();
@@ -70,13 +63,29 @@ export function JustLaunchedCarousel() {
     limit: LAUNCH_CAROUSEL_LIMIT,
   });
 
+  // A missing or malformed placement must fail closed: the registry throws
+  // for unconfigured production IDs, and that must never crash the carousel
+  // during render.
+  let adUnitConfig: ReturnType<typeof getMobileAdUnitId> = {
+    enabled: false as const,
+  };
+  try {
+    adUnitConfig = getMobileAdUnitId('PRODUCT_GRID_MPU');
+  } catch {
+    adUnitConfig = { enabled: false as const };
+  }
+  // Consent readiness gates the sponsored card: the native banner must never
+  // be constructed before UMP consent is gathered. All hooks stay above the
+  // early returns below so hook order never changes between renders.
+  const adsReadiness = useMobileAdsReadiness({
+    enabled: adUnitConfig.enabled === true,
+  });
+
   if (isError) {
     return null;
   }
 
   const cardWidth = Math.round(width * 0.82);
-  const imageSourceWidth = cardWidth * 0.42 - IMAGE_PADDING * 2;
-  const imageSourceHeight = CARD_HEIGHT - IMAGE_PADDING * 2;
 
   // Show a skeleton on first load (rather than a blank gap) for clearer loading
   // feedback; gate on BOTH queries so pinned items can't pop in after the
@@ -128,20 +137,10 @@ export function JustLaunchedCarousel() {
     return null;
   }
 
-  // A missing or malformed placement must fail closed: the registry throws
-  // for unconfigured production IDs, and that must never crash the carousel
-  // during render.
-  let adUnitConfig: ReturnType<typeof getMobileAdUnitId> = {
-    enabled: false as const,
-  };
-  try {
-    adUnitConfig = getMobileAdUnitId('PRODUCT_GRID_MPU');
-  } catch {
-    adUnitConfig = { enabled: false as const };
-  }
   const showAdCard =
     adUnitConfig.enabled &&
     adUnitConfig.format === 'banner' &&
+    adsReadiness.canRequestAds &&
     launchProducts.length > 0;
   type LaunchAdCardItem = { kind: 'launch-ad-card' };
   type LaunchRenderItem = Product | LaunchAdCardItem;
@@ -168,69 +167,13 @@ export function JustLaunchedCarousel() {
         />
       );
     }
-    const imageUri = item.image || item.images?.[0];
-    const ctaLabel = launchCtaLabel(item.name);
     return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${item.name} — ${ctaLabel}`}
-        onPress={() => {
-          if (item.slug) {
-            router.push(`/product/${item.slug}`);
-          }
-        }}
-        style={[
-          styles.card,
-          {
-            width: cardWidth,
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <View
-          style={[styles.imageWrap, { backgroundColor: colors.background }]}
-        >
-          {imageUri ? (
-            <Image
-              accessibilityLabel={item.name}
-              cachePolicy="memory-disk"
-              contentFit="contain"
-              enforceEarlyResizing
-              autoplay={false}
-              placeholder={{ blurhash: BLURHASH }}
-              source={createSafeBoundedImageSource({
-                height: imageSourceHeight,
-                uri: imageUri,
-                width: imageSourceWidth,
-              })}
-              style={styles.image}
-              transition={200}
-            />
-          ) : null}
-        </View>
-        <View style={styles.info}>
-          <Text style={[styles.badge, { color: colors.primary }]}>
-            {SECTION_TITLE}
-          </Text>
-          <Text numberOfLines={2} style={[styles.name, { color: colors.text }]}>
-            {item.name}
-          </Text>
-          <Text style={[styles.price, { color: colors.text }]}>
-            {formatNgnCurrency(item.price)}
-          </Text>
-          <View style={[styles.ctaButton, { backgroundColor: colors.primary }]}>
-            <Text
-              style={[
-                styles.ctaButtonText,
-                { color: colors.primaryForeground },
-              ]}
-            >
-              {ctaLabel}
-            </Text>
-          </View>
-        </View>
-      </Pressable>
+      <LaunchProductCard
+        cardWidth={cardWidth}
+        colors={colors}
+        item={item}
+        sectionTitle={SECTION_TITLE}
+      />
     );
   };
 
@@ -273,7 +216,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   card: {
-    height: CARD_HEIGHT,
+    height: 168,
     flexDirection: 'row',
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
@@ -285,42 +228,13 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: IMAGE_PADDING,
-  },
-  image: {
-    width: '100%',
-    height: '100%',
+    padding: 8,
   },
   info: {
     flex: 1,
     padding: 14,
     justifyContent: 'center',
     gap: 2,
-  },
-  badge: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  name: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  price: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  ctaButton: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 999,
-  },
-  ctaButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
   },
   skeletonGap: {
     marginTop: 6,

@@ -1,5 +1,6 @@
 'use client';
 
+import { getSuggestedQuizLiveWindowSeconds } from '@baci/shared';
 import { Loader2, Sparkles } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
@@ -77,11 +78,15 @@ export function QuizAuthoringForm({
   const [endTouched, setEndTouched] = useState(false);
   const questionCount = topics.length * clampNumber(Number(perTopic), 1, 20);
   const timePerQuestionSeconds = clampNumber(Number(time), 5, 60);
-  // Floor keeps the defaulted end after the start when no questions exist yet.
-  const expectedPlaySeconds = Math.max(
-    questionCount * timePerQuestionSeconds,
-    60
-  );
+  // Live mode tracks the shared suggested live window (expected play plus
+  // the documented grace, whole minutes) so the auto-synced end always
+  // satisfies the launch timing bounds. Other modes use raw expected play
+  // with a floor that keeps the defaulted end after the start when no
+  // questions exist yet.
+  const expectedPlaySeconds =
+    mode === 'live' && questionCount > 0
+      ? getSuggestedQuizLiveWindowSeconds(questionCount, timePerQuestionSeconds)
+      : Math.max(questionCount * timePerQuestionSeconds, 60);
   useEffect(() => {
     if (endTouched) return;
     const startMs = Date.parse(scheduledStart);

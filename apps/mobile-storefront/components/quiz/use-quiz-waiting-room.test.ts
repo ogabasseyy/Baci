@@ -285,6 +285,41 @@ describe('useQuizWaitingRoom', () => {
     expect(isCancelled?.()).toBe(true);
   });
 
+  it('cancels the pending pre-quiz ad when the countdown expires before start', async () => {
+    // Refresh latency must not reopen the late-ad defect: once the local
+    // countdown reaches zero the loaded ad is abandoned even though the
+    // authoritative refresh has not returned an active event yet. The
+    // refreshed event carries a current server clock so the offset cannot
+    // rewind the countdown.
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-23T11:59:00.000Z'));
+    mockMaybeShowQuizStartInterstitial.mockClear();
+    renderHook(() =>
+      useQuizWaitingRoom({
+        event: event(),
+        onExit: jest.fn(),
+        onStart: jest.fn(),
+        refresh: jest.fn(async () => [
+          event({
+            serverNow: '2026-08-23T12:00:01.000Z',
+            status: 'scheduled',
+          }),
+        ]),
+      })
+    );
+    expect(mockMaybeShowQuizStartInterstitial).toHaveBeenCalledTimes(1);
+    const isCancelled =
+      mockMaybeShowQuizStartInterstitial.mock.calls[0]?.[0]?.isCancelled;
+    expect(isCancelled?.()).toBe(false);
+    await act(async () => {
+      jest.advanceTimersByTime(61_000);
+      for (let flush = 0; flush < 10; flush += 1) {
+        await Promise.resolve();
+      }
+    });
+    expect(isCancelled?.()).toBe(true);
+  });
+
   it('cancels a pending active response when the waiting room unmounts', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-08-23T11:59:59.000Z'));

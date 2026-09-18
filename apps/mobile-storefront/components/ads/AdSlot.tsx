@@ -5,6 +5,7 @@ import {
   type MobileAdBannerPlacementKey,
 } from '@/config/mobile-ad-placements';
 import { BRAND } from '@/constants/Colors';
+import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { trackEvent } from '@/services/analytics-core';
 
 type AdSlotProps = {
@@ -20,18 +21,23 @@ function getAdErrorCode(error: Error): string {
 /**
  * App-wide banner slot. Resolves its unit ID from the placement registry
  * (sample IDs in dev, per-placement production IDs), renders nothing while
- * ads are disabled, and keeps the native module behind a lazy require so
- * builds without Google Mobile Ads keep working.
+ * ads are disabled or UMP consent is unresolved, and keeps the native module
+ * behind a lazy require so builds without Google Mobile Ads keep working.
+ * Consent readiness gates the request so banners never fire before consent
+ * is gathered and the under-age request configuration is applied.
  */
 export function AdSlot({ placement, testID }: AdSlotProps) {
-  let config: ReturnType<typeof getMobileAdUnitId>;
+  let config: ReturnType<typeof getMobileAdUnitId> | null = null;
   try {
     config = getMobileAdUnitId(placement);
   } catch {
     // A misconfigured placement must never crash the hosting screen.
-    return null;
+    config = null;
   }
-  if (!config.enabled) {
+  const readiness = useMobileAdsReadiness({
+    enabled: config?.enabled === true,
+  });
+  if (config?.enabled !== true || !readiness.canRequestAds) {
     return null;
   }
 

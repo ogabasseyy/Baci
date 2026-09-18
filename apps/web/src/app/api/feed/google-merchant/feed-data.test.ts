@@ -829,6 +829,8 @@ describe('getCachedGoogleMerchantFeedData', () => {
         condition: 'used',
         price: 420000,
         stock_quantity: 3,
+        images: undefined,
+        compare_at_price: null,
       },
     ]);
   });
@@ -873,6 +875,8 @@ describe('getCachedGoogleMerchantFeedData', () => {
         condition: 'used',
         price: 420000,
         stock_quantity: 3,
+        images: undefined,
+        compare_at_price: null,
       },
     ]);
     expect(
@@ -883,6 +887,8 @@ describe('getCachedGoogleMerchantFeedData', () => {
         condition: 'used',
         price: 420000,
         stock_quantity: 3,
+        images: undefined,
+        compare_at_price: null,
       },
     ]);
   });

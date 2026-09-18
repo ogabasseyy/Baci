@@ -66,4 +66,18 @@ describe('getEligibleConditionOffers', () => {
       { id: 'o3', price: 80, condition: 'used' },
     ]);
   });
+
+  it('picks the storefront winner regardless of source order', () => {
+    const input = [
+      { id: 'o2', price: 90, condition: 'refurbished' },
+      { id: 'o3', price: 80, condition: 'used' },
+      { id: 'o1', price: 100, condition: 'open_box' },
+    ];
+    expect(getEligibleConditionOffers(input, 'new')).toEqual([
+      { id: 'o1', price: 100, condition: 'open_box' },
+      { id: 'o3', price: 80, condition: 'used' },
+    ]);
+    // Input order is preserved for the caller.
+    expect(input[0].id).toBe('o2');
+  });
 });

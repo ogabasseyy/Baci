@@ -78,8 +78,19 @@ describe('validateRemoteUrl host classification', () => {
     for (const host of ['::1', 'fe80::1', 'fc00::1', 'fd00::1']) {
       expect(validateRemoteUrl(url(host))).toBeNull();
     }
-    expect(validateRemoteUrl(url('2001:db8::1'))?.toString()).toBe(
-      url('2001:db8::1'),
+  });
+
+  it('blocks documentation-only and translation IPv6 destinations', () => {
+    for (const host of [
+      '2001:db8::1',
+      '2001:db8:ffff:ffff:ffff:ffff:ffff:ffff',
+      '64:ff9b::808:808',
+    ]) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    // Adjacent globally routable space stays reachable.
+    expect(validateRemoteUrl(url('2606:4700:4700::1111'))?.toString()).toBe(
+      url('2606:4700:4700::1111'),
     );
   });
   it('blocks IPv4-mapped IPv6 destinations by their embedded address', () => {
@@ -102,9 +113,6 @@ describe('validateRemoteUrl host classification', () => {
     for (const host of ['fec0::1', 'feff::1']) {
       expect(validateRemoteUrl(url(host))).toBeNull();
     }
-    expect(validateRemoteUrl(url('2001:db8::1'))?.toString()).toBe(
-      url('2001:db8::1'),
-    );
   });
 
   it('blocks the IPv6 benchmarking prefix', () => {

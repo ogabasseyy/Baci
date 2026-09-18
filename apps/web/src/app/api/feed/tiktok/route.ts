@@ -16,6 +16,7 @@ import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
+import { collectOfferClaimedImageUrls } from '@/lib/gmc-offer-claimed-images';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';
@@ -52,17 +53,18 @@ function escapeXml(unsafe: string): string {
 }
 
 function resolveTikTokImages(
-  manifestEntries: ImageManifestMap[string] | undefined
+  manifestEntries: ImageManifestMap[string] | undefined,
+  excludeUrls: ReadonlySet<string> = new Set()
 ): ResolvedTikTokImages | null {
   const entries = manifestEntries || [];
-  const primaryImageUrl = resolveGmcPrimaryImage(entries);
+  const primaryImageUrl = resolveGmcPrimaryImage(entries, excludeUrls);
   if (!primaryImageUrl) {
     return null;
   }
 
   return {
     primaryImageUrl,
-    additionalImageUrls: resolveGmcAdditionalImages(entries),
+    additionalImageUrls: resolveGmcAdditionalImages(entries, excludeUrls),
   };
 }
 
@@ -158,7 +160,10 @@ function generateTikTokFeed(
       (product) => product.id && product.name?.trim() && product.price > 0
     )
     .map((product) => {
-      const images = resolveTikTokImages(imageManifest[product.id]);
+      const images = resolveTikTokImages(
+        imageManifest[product.id],
+        collectOfferClaimedImageUrls(product.offers)
+      );
       if (!images) {
         return null;
       }

@@ -12,13 +12,12 @@
  * repository modularity boundary.
  */
 
-import type {
-  LookupAddress,
-  LookupAllOptions,
-  LookupOneOptions,
-} from 'node:dns';
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { Agent, type Dispatcher } from 'undici';
+import {
+  createPinnedLookup,
+  type ValidatedDestinationAddress,
+} from './pinned-destination-lookup';
 import { validateRemoteUrl } from './remote-url-policy';
 
 /** DNS resolution seam: hostname -> resolved addresses. */
@@ -32,35 +31,6 @@ export type PinnedDestination =
 
 const defaultLookup: DestinationLookupFn = (hostname) =>
   dnsLookup(hostname, { all: true });
-
-export interface ValidatedDestinationAddress {
-  address: string;
-  family: 4 | 6;
-}
-
-/**
- * Build the DNS override that pins the transport to validated addresses.
- * The `all:true` branch returns the full validated set so the transport
- * can fall back across records; single-address callers get the first.
- */
-export function createPinnedLookup(addresses: ValidatedDestinationAddress[]) {
-  const first = addresses[0];
-  return (
-    _hostname: string,
-    options: LookupOneOptions | LookupAllOptions,
-    callback: (
-      err: NodeJS.ErrnoException | null,
-      address: string | LookupAddress[],
-      family?: number
-    ) => void
-  ): void => {
-    if (options.all) {
-      callback(null, [...addresses]);
-    } else {
-      callback(null, first.address, first.family);
-    }
-  };
-}
 
 /**
  * Validate `url`, resolve its hostname, and pin a dispatcher to the
@@ -107,7 +77,9 @@ export async function resolvePinnedDestination(
       if (validateRemoteUrl(literal) === null) return null;
       return { address, family: family === 6 ? 6 : 4 } as const;
     })
-    .filter((entry): entry is { address: string; family: 4 | 6 } => entry !== null);
+    .filter(
+      (entry): entry is ValidatedDestinationAddress => entry !== null
+    );
   if (validated.length === 0) {
     const seen = addresses.map((entry) => entry.address).join(', ');
     return {

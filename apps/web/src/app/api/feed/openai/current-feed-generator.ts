@@ -2,6 +2,7 @@ import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
+import { collectOfferClaimedImageUrls } from '@/lib/gmc-offer-claimed-images';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { stripHtmlTags } from '@/lib/sanitize-core';
 import {
@@ -23,11 +24,15 @@ function getOpenAIFeedImageUrls(
   imageManifest: ImageManifestMap
 ): string[] {
   const manifestEntries = imageManifest[product.id] || [];
-  const manifestPrimaryImage = resolveGmcPrimaryImage(manifestEntries);
+  const offerClaimedImageUrls = collectOfferClaimedImageUrls(product.offers);
+  const manifestPrimaryImage = resolveGmcPrimaryImage(
+    manifestEntries,
+    offerClaimedImageUrls
+  );
   if (manifestPrimaryImage) {
     return [
       manifestPrimaryImage,
-      ...resolveGmcAdditionalImages(manifestEntries),
+      ...resolveGmcAdditionalImages(manifestEntries, offerClaimedImageUrls),
     ];
   }
 

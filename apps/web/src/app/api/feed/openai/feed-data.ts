@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import type { ImageManifestMap } from '../google-merchant/feed-builder';
+import { fetchActiveFeedOffers } from '../google-merchant/fetch-active-feed-offers';
 import { fetchVerifiedOpenAIImageManifest } from './feed-image-manifest';
 import { hydrateOpenAIFeedProductsWithReviewSignals } from './feed-review-signals';
 
@@ -10,7 +11,7 @@ const OPENAI_FEED_PRODUCTS_PAGE_SIZE = 1000;
 // catalogs above 10k products across both machine-readable surfaces.
 const MAX_OPENAI_FEED_PRODUCTS = 10_000;
 const OPENAI_FEED_PRODUCTS_SELECT = `id, name, description, slug, canonical_url, price, compare_at_price, images,
-       brand, gtin, mpn, sku, stock, stock_quantity, manage_stock, condition, google_product_category, category,
+       brand, gtin, mpn, sku, stock, stock_quantity, manage_stock, condition, has_condition_offers, google_product_category, category,
        weight_value, weight_unit, created_at, updated_at,
        categories:category_id(name, slug),
        product_categories(categories(name, slug)),
@@ -42,6 +43,8 @@ export interface OpenAIFeedProduct {
   stock_quantity?: number;
   manage_stock?: boolean | null;
   condition?: 'new' | 'used' | 'refurbished';
+  has_condition_offers?: boolean | null;
+  offers?: Array<{ images?: unknown }>;
   google_product_category?: string;
   category?: string;
   category_slug?: string | null;
@@ -223,6 +226,27 @@ export async function getCachedOpenAIFeedData(
 
   const supabase = createAnonClient();
   const products = await fetchActiveOpenAIFeedProducts(supabase, merchantId);
+  // Offer-claimed image URLs must be excluded from product-level images,
+  // mirroring the Google/Facebook/TikTok builders. Fetch offers only for
+  // flagged products so the common no-offers case adds no queries.
+  const offerProductIds = products
+    .filter((product) => product.has_condition_offers)
+    .map((product) => product.id);
+  if (offerProductIds.length > 0) {
+    const offersByProduct = new Map<string, Array<{ images?: unknown }>>();
+    for (const offer of await fetchActiveFeedOffers(
+      supabase,
+      offerProductIds
+    )) {
+      const list = offersByProduct.get(offer.product_id) ?? [];
+      list.push({ images: offer.images });
+      offersByProduct.set(offer.product_id, list);
+    }
+    for (const product of products) {
+      const offers = offersByProduct.get(product.id);
+      if (offers) product.offers = offers;
+    }
+  }
   const productIds = products.map((product) => product.id);
   const imageManifest = await fetchVerifiedOpenAIImageManifest(
     supabase,

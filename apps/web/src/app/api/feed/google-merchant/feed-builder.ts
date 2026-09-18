@@ -1,5 +1,4 @@
 import { buildBaseItemXml } from './build-base-feed-item';
-import { normalizeFeedVariantStringAttributes } from './normalize-feed-variant-string-attributes';
 /**
  * Google Merchant Center feed XML builder.
  *
@@ -10,6 +9,7 @@ import { normalizeFeedVariantStringAttributes } from './normalize-feed-variant-s
 import { toGoogleListingCondition } from '@baci/shared/lib';
 import type { FeedImageManifestEntry } from '@/lib/gmc-feed-images';
 import {
+  collectOfferClaimedImageUrls,
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
@@ -24,13 +24,7 @@ import {
 } from './build-product-detail-xml';
 import { buildVariantFeedItems } from './build-variant-feed-items';
 import { getFeedStockCount } from './feed-stock';
-import type {
-  FeedDefaultVariant,
-  FeedMerchant,
-  FeedProduct,
-  FeedVariant,
-  ImageManifestMap,
-} from './feed-types';
+import type { FeedMerchant, FeedProduct, ImageManifestMap } from './feed-types';
 import { selectFeedFamilyVariant } from './select-feed-family-variant';
 
 export type {
@@ -47,13 +41,6 @@ interface ResolvedFeedImages {
 }
 
 const VALID_GMC_CONDITIONS = new Set(['new', 'used', 'refurbished'] as const);
-
-export function toFeedDefaultVariant(variant: FeedVariant): FeedDefaultVariant {
-  return {
-    ...variant,
-    attributes: normalizeFeedVariantStringAttributes(variant.attributes),
-  };
-}
 
 function isValidForGmc(product: FeedProduct): boolean {
   if (
@@ -85,7 +72,8 @@ function buildAdditionalImagesXml(urls: string[]) {
 }
 
 function resolveFeedImages(
-  entries: FeedImageManifestEntry[]
+  entries: FeedImageManifestEntry[],
+  excludeUrls: ReadonlySet<string> = new Set()
 ): ResolvedFeedImages | null {
   const primaryImageUrl = resolveGmcPrimaryImage(entries);
 
@@ -96,7 +84,7 @@ function resolveFeedImages(
   return {
     primaryImageUrl,
     additionalImagesXml: buildAdditionalImagesXml(
-      resolveGmcAdditionalImages(entries)
+      resolveGmcAdditionalImages(entries, excludeUrls)
     ),
   };
 }
@@ -156,7 +144,8 @@ export function generateGoogleMerchantFeed(
 
       const manifestEntries = imageManifest[product.id] || [];
       const productLevelImages = resolveFeedImages(
-        getProductLevelManifestEntries(manifestEntries)
+        getProductLevelManifestEntries(manifestEntries),
+        collectOfferClaimedImageUrls(product.offers)
       );
       const description = buildFeedDescription(product);
       const colorXml = buildGoogleColorXml(product);
@@ -235,7 +224,8 @@ export function generateGoogleMerchantFeed(
         .map((offer) => {
           const offerImages = resolveOfferFeedImages(
             offer.images,
-            manifestEntries
+            manifestEntries,
+            collectOfferClaimedImageUrls(product.offers)
           );
           if (!offerImages) return '';
           const offerStock = getFeedStockCount(product, offer);

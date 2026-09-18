@@ -1,16 +1,25 @@
 import {
   type FeedImageManifestEntry,
+  isOfferClaimedImage,
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
 import { escapeXml } from '@/lib/xml-utils';
 
-/** Explicit offer imagery must match verified manifest entries, never the parent fallback. */
+/**
+ * Explicit offer imagery must match verified manifest entries, never the
+ * parent fallback. Without explicit images, the offer falls back to
+ * product-level entries minus URLs claimed by any offer, so siblings never
+ * inherit each other's condition-specific imagery.
+ */
 export function resolveOfferFeedImages(
   images: unknown,
-  manifest: FeedImageManifestEntry[]
+  manifest: FeedImageManifestEntry[],
+  claimedUrls: ReadonlySet<string> = new Set()
 ) {
-  let entries = manifest.filter((entry) => !entry.variant_id);
+  let entries = manifest.filter(
+    (entry) => !entry.variant_id && !isOfferClaimedImage(entry, claimedUrls)
+  );
   if (images != null && !(Array.isArray(images) && images.length === 0)) {
     if (!Array.isArray(images)) return null;
     entries = images.flatMap((image: unknown, position) => {

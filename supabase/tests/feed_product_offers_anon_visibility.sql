@@ -30,6 +30,16 @@ BEGIN
     ('b2000000-0000-4000-8000-000000000011', v_active_product, v_merchant, 'new', 100, 5, 'active'),
     ('b2000000-0000-4000-8000-000000000012', v_active_product, v_merchant, 'used', 80, 0, 'inactive'),
     ('b2000000-0000-4000-8000-000000000013', v_draft_product, v_merchant, 'new', 100, 5, 'active');
+
+  -- Cross-tenant attack row: another merchant's offer planted on our active
+  -- product. The service role bypasses RLS for seeding; readers must not
+  -- see it.
+  INSERT INTO public.merchants (id, email, business_name, slug)
+  VALUES ('b2000000-0000-4000-8000-000000000099', 'attacker@example.com', 'Attacker Store', 'attacker-store');
+  INSERT INTO public.product_offers
+    (id, product_id, merchant_id, condition, price, stock_quantity, status)
+  VALUES
+    ('b2000000-0000-4000-8000-000000000014', v_active_product, 'b2000000-0000-4000-8000-000000000099', 'new', 1, 5, 'active');
 END;
 $$;
 

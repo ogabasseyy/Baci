@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { act, render, screen } from '@testing-library/react-native';
 import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { AdSlot } from './AdSlot';
@@ -79,6 +79,27 @@ describe('AdSlot', () => {
     setAdsEnabled('true');
     const { toJSON } = render(<AdSlot placement="CART_MPU" />);
     expect(toJSON()).toBeNull();
+    setAdsEnabled(ORIGINAL_ENV);
+  });
+
+  it('unmounts the slot when the banner fails to load instead of keeping a blank frame', () => {
+    // Regression: a no-fill or load error must remove the whole slot
+    // (label and reserved frame), not just record telemetry.
+    setAdsEnabled('true');
+    render(<AdSlot placement="CART_MPU" />);
+
+    expect(screen.getByTestId('ad-slot-cart-mpu')).toBeTruthy();
+    const banner = screen.UNSAFE_getByType('BannerAd' as never);
+    act(() => {
+      (
+        banner.props as {
+          onAdFailedToLoad: (error: Error) => void;
+        }
+      ).onAdFailedToLoad(new Error('no-fill'));
+    });
+
+    expect(screen.queryByTestId('ad-slot-cart-mpu')).toBeNull();
+    expect(screen.queryByText('Sponsored')).toBeNull();
     setAdsEnabled(ORIGINAL_ENV);
   });
 });

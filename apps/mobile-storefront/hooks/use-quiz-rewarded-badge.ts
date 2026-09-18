@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getQuizMobileAdsConfig } from '@/config/quiz-mobile-ads';
 import { useQuizMobileAds } from '@/hooks/use-quiz-mobile-ads';
+import { setQuizRewardedFlowActive } from '@/lib/quiz-start-interstitial';
 import { isAdultDateOfBirth } from '@/schemas/date-of-birth';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQuizBadgeStore } from '@/stores/quiz-badge-store';
@@ -112,8 +113,10 @@ export function useQuizRewardedBadge({
     setIsWatching(false);
     setWatchFailed(false);
     setJustEarned(false);
+    setQuizRewardedFlowActive(false);
     return () => {
       generationRef.current += 1;
+      setQuizRewardedFlowActive(false);
       const session = sessionRef.current;
       if (!session) return;
       session.settled = true;
@@ -149,6 +152,7 @@ export function useQuizRewardedBadge({
       session.cleanups = [];
       sessionRef.current = null;
     }
+    setQuizRewardedFlowActive(false);
     setIsWatching(false);
     setWatchFailed(false);
     setJustEarned(false);
@@ -166,6 +170,9 @@ export function useQuizRewardedBadge({
 
     setWatchFailed(false);
     setIsWatching(true);
+    // Claim full-screen ownership synchronously so an interstitial LOADED
+    // event landing before the rerender still defers to the rewarded ad.
+    setQuizRewardedFlowActive(true);
     const session: RewardedAdSession = {
       cleanups: [],
       generation: generationRef.current,
@@ -183,6 +190,7 @@ export function useQuizRewardedBadge({
     const finish = () => {
       cleanup();
       if (sessionRef.current === session) sessionRef.current = null;
+      setQuizRewardedFlowActive(false);
       setIsWatching(false);
     };
     const isCurrent = () =>

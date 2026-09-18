@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { PaidEvent } from 'react-native-google-mobile-ads';
 import {
@@ -21,12 +22,18 @@ function getAdErrorCode(error: Error): string {
 /**
  * App-wide banner slot. Resolves its unit ID from the placement registry
  * (sample IDs in dev, per-placement production IDs), renders nothing while
- * ads are disabled or UMP consent is unresolved, and keeps the native module
- * behind a lazy require so builds without Google Mobile Ads keep working.
+ * ads are disabled or UMP consent is unresolved, unmounts after a no-fill
+ * or load error so no blank "Sponsored" slot is retained, and keeps the
+ * native module behind a lazy require so builds without Google Mobile Ads
+ * keep working.
  * Consent readiness gates the request so banners never fire before consent
  * is gathered and the under-age request configuration is applied.
  */
 export function AdSlot({ placement, testID }: AdSlotProps) {
+  // Dropped when the banner reports no fill or a load error so generic
+  // placements never retain a blank "Sponsored" slot. Declared with the
+  // other hooks, above the early returns.
+  const [loadFailed, setLoadFailed] = useState(false);
   let config: ReturnType<typeof getMobileAdUnitId> | null = null;
   try {
     config = getMobileAdUnitId(placement);
@@ -37,7 +44,7 @@ export function AdSlot({ placement, testID }: AdSlotProps) {
   const readiness = useMobileAdsReadiness({
     enabled: config?.enabled === true,
   });
-  if (config?.enabled !== true || !readiness.canRequestAds) {
+  if (config?.enabled !== true || !readiness.canRequestAds || loadFailed) {
     return null;
   }
 
@@ -77,6 +84,7 @@ export function AdSlot({ placement, testID }: AdSlotProps) {
               format: 'banner',
               placement,
             });
+            setLoadFailed(true);
           }}
           onAdImpression={() =>
             trackEvent('mobile_ad_impression', {

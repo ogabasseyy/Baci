@@ -55,6 +55,11 @@ export default function OrderSuccessScreen() {
   // native prompt) independently of render state so the interstitial
   // cancellation predicate below always sees the current value.
   const permissionFlowActiveRef = useRef(false);
+  // Same for the receipt preview: a late LOADED event must never present
+  // the interstitial over an explicit document-viewing action.
+  const receiptPreviewActiveRef = useRef(false);
+  receiptPreviewActiveRef.current =
+    receiptPreview.isLoading || receiptPreview.isOpen;
 
   useEffect(() => {
     const isServerConfirmedNotificationMethod =
@@ -88,14 +93,18 @@ export default function OrderSuccessScreen() {
     // Post-purchase interstitial (once per session, skipped while ads are
     // disabled). Delayed past the success animation like the soft ask below.
     // Abandoned if the shopper leaves before the ad loads so a late LOADED
-    // event can never present over an unrelated screen — and while the
+    // event can never present over an unrelated screen — while the
     // notification permission flow is visible or in progress so the ad can
-    // never cover the soft-ask modal or race the native prompt.
+    // never cover the soft-ask modal or race the native prompt — and while
+    // the receipt preview is loading or open so it never covers an
+    // explicit document-viewing action.
     let interstitialCancelled = false;
     const interstitialTimerId = setTimeout(() => {
       void maybeShowPostOrderInterstitial({
         isCancelled: () =>
-          interstitialCancelled || permissionFlowActiveRef.current,
+          interstitialCancelled ||
+          permissionFlowActiveRef.current ||
+          receiptPreviewActiveRef.current,
       });
     }, 2500);
 

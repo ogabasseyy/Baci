@@ -24,6 +24,12 @@ jest.mock('@/stores/quiz-badge-store', () => ({
     selector({ getBadge: () => null, unlockBadge: mockUnlockBadge }),
 }));
 
+const mockSetQuizRewardedFlowActive = jest.fn();
+jest.mock('@/lib/quiz-start-interstitial', () => ({
+  setQuizRewardedFlowActive: (active: boolean) =>
+    mockSetQuizRewardedFlowActive(active),
+}));
+
 const listeners = new Map<string, (payload?: unknown) => void>();
 const mockAd = {
   addAdEventListener: jest.fn(
@@ -63,6 +69,7 @@ describe('useQuizRewardedBadge', () => {
     listeners.clear();
     mockAuthCustomer.date_of_birth = null;
     mockUnlockBadge.mockClear();
+    mockSetQuizRewardedFlowActive.mockClear();
     mockAd.show.mockClear();
     mockUseQuizMobileAds.mockReturnValue({
       canRequestAds: true,
@@ -219,6 +226,27 @@ describe('useQuizRewardedBadge', () => {
     act(() => result.current.watchAd());
     expect(result.current.watchFailed).toBe(false);
     expect(result.current.isWatching).toBe(true);
+  });
+
+  it('claims and releases interstitial ownership around the rewarded flow', () => {
+    // Regression: the interstitial must defer while the rewarded ad is
+    // loading or presented so the two full-screen placements never race.
+    const { result } = renderHook(() =>
+      useQuizRewardedBadge({
+        eventId: 'event-1',
+        eventTitle: 'Today Quiz',
+        remainingSeconds: 120,
+        status: 'scheduled',
+        userId: 'user-1',
+      })
+    );
+
+    mockSetQuizRewardedFlowActive.mockClear();
+    act(() => result.current.watchAd());
+    expect(mockSetQuizRewardedFlowActive).toHaveBeenCalledWith(true);
+    act(() => listeners.get('closed')?.());
+    expect(mockSetQuizRewardedFlowActive).toHaveBeenCalledWith(false);
+    expect(result.current.isWatching).toBe(false);
   });
 
   it('flags a retryable failure when rewarded setup throws synchronously', () => {

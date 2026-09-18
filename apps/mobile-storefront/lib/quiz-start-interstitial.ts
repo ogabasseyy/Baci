@@ -18,10 +18,20 @@ let didShowThisSession = false;
 // while the first ad is still loading must not create a second
 // interstitial, or overlapping lobby visits could present two ads.
 let loadInFlight = false;
+// Set while the quiz rewarded-badge flow owns the full screen. The rewarded
+// hook sets this synchronously on tap (before any rerender), so a
+// late-arriving interstitial LOADED event can never present over — or
+// under — the rewarded ad.
+let rewardedFlowActive = false;
+
+export function setQuizRewardedFlowActive(active: boolean): void {
+  rewardedFlowActive = active;
+}
 
 export function resetQuizStartInterstitialForTests(): void {
   didShowThisSession = false;
   loadInFlight = false;
+  rewardedFlowActive = false;
 }
 
 export function wasQuizStartInterstitialShown(): boolean {
@@ -112,8 +122,9 @@ export async function maybeShowQuizStartInterstitial(
         interstitial.addAdEventListener(mobileAds.AdEventType.LOADED, () => {
           // The lobby may have moved into live play (or unmounted) while the
           // ad was loading; presenting now would steal timed-question time or
-          // surface an ad on an unrelated screen.
-          if (options.isCancelled?.()) {
+          // surface an ad on an unrelated screen. The rewarded-badge flow
+          // likewise owns the full screen while loading or presented.
+          if (options.isCancelled?.() || rewardedFlowActive) {
             finish('skipped');
             return;
           }

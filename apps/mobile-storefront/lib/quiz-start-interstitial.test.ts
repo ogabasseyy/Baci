@@ -5,6 +5,7 @@ import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
 import {
   maybeShowQuizStartInterstitial,
   resetQuizStartInterstitialForTests,
+  setQuizRewardedFlowActive,
 } from './quiz-start-interstitial';
 
 jest.mock('@/services/analytics-core', () => ({
@@ -159,6 +160,21 @@ describe('maybeShowQuizStartInterstitial', () => {
     await expect(maybeShowQuizStartInterstitial()).resolves.toBe('skipped');
     expect(mockInitializeQuizMobileAds).not.toHaveBeenCalled();
     expect(mockInterstitialLoad).not.toHaveBeenCalled();
+    setAdsEnabled(ORIGINAL_ENV);
+  });
+
+  it('defers to an active rewarded flow instead of presenting over it', async () => {
+    // Regression: when the shopper taps "Watch ad" while the interstitial
+    // is loading, the late LOADED event must abandon instead of racing the
+    // rewarded ad for the full screen.
+    setAdsEnabled('true');
+    const attempt = maybeShowQuizStartInterstitial();
+    await flushConsentGate();
+    setQuizRewardedFlowActive(true);
+    for (const listener of listeners.loaded) listener();
+    await expect(attempt).resolves.toBe('skipped');
+    expect(mockInterstitialShow).not.toHaveBeenCalled();
+    setQuizRewardedFlowActive(false);
     setAdsEnabled(ORIGINAL_ENV);
   });
 

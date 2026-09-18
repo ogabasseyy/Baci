@@ -180,7 +180,11 @@ export default function CartLoadedView({
         )}
         ListFooterComponent={
           <>
-            <AdSlot placement="CART_MPU" />
+            {/* Either modal covers this screen; unmount the slot while one
+                is visible so no obscured delivery is requested. */}
+            {isIdentityModalOpen || showNegotiateWarning ? null : (
+              <AdSlot placement="CART_MPU" />
+            )}
             <View style={styles.secureBadgeInside}>
               <Ionicons
                 name="shield-checkmark-outline"

@@ -1,57 +1,24 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeroUtilityPanelGate } from './hero-utility-panel-gate';
+import {
+  echoPanelLoader,
+  fireViewportApproach,
+  renderGate,
+  setupGateHarness,
+  teardownGateHarness,
+} from './hero-utility-panel-gate-test-setup';
 
 describe('HeroUtilityPanelGate', () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-  let observerCallback: IntersectionObserverCallback | null = null;
 
   beforeEach(() => {
-    vi.useFakeTimers();
-    observerCallback = null;
-    class MockIntersectionObserver {
-      constructor(callback: IntersectionObserverCallback) {
-        observerCallback = callback;
-      }
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
-    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
-    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    consoleErrorSpy = setupGateHarness();
   });
 
   afterEach(() => {
-    consoleErrorSpy.mockRestore();
-    vi.unstubAllGlobals();
-    vi.useRealTimers();
+    teardownGateHarness(consoleErrorSpy);
   });
-
-  function renderGate(loadPanelModule?: () => Promise<never>) {
-    const loader =
-      loadPanelModule ??
-      vi.fn(() =>
-        Promise.resolve({
-          HeroUtilityPanel: () => (
-            <div data-testid="interactive-utility-panel" />
-          ),
-        })
-      );
-    const utils = render(
-      <HeroUtilityPanelGate
-        loadPanelModule={loader as never}
-        timeoutMs={1000}
-      />
-    );
-    return { loader: loader as ReturnType<typeof vi.fn>, ...utils };
-  }
-
-  function fireViewportApproach() {
-    observerCallback?.(
-      [{ isIntersecting: true } as IntersectionObserverEntry],
-      {} as IntersectionObserver
-    );
-  }
 
   it('renders the non-interactive static fallback without loading the panel module', () => {
     const { loader } = renderGate();
@@ -120,20 +87,7 @@ describe('HeroUtilityPanelGate', () => {
   it('replays a fallback option tap into the interactive panel', async () => {
     // The inert fallback swallows the activating click; the gate records the
     // tapped option and replays it so the shopper does not have to tap twice.
-    const echoLoader = vi.fn(() =>
-      Promise.resolve({
-        HeroUtilityPanel: ({
-          pendingUtilityTab,
-        }: {
-          pendingUtilityTab?: string | null;
-        }) => (
-          <div
-            data-testid="interactive-utility-panel"
-            data-pending={pendingUtilityTab ?? 'none'}
-          />
-        ),
-      })
-    );
+    const echoLoader = echoPanelLoader();
     render(
       <HeroUtilityPanelGate
         loadPanelModule={echoLoader as never}
@@ -160,20 +114,7 @@ describe('HeroUtilityPanelGate', () => {
   });
 
   it('activates without a replay for taps outside the fallback options', async () => {
-    const echoLoader = vi.fn(() =>
-      Promise.resolve({
-        HeroUtilityPanel: ({
-          pendingUtilityTab,
-        }: {
-          pendingUtilityTab?: string | null;
-        }) => (
-          <div
-            data-testid="interactive-utility-panel"
-            data-pending={pendingUtilityTab ?? 'none'}
-          />
-        ),
-      })
-    );
+    const echoLoader = echoPanelLoader();
     render(
       <HeroUtilityPanelGate
         loadPanelModule={echoLoader as never}

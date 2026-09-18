@@ -1,7 +1,6 @@
 'use client';
 
 import { orderRecordsByIds } from '@baci/shared/lib';
-import type Fuse from 'fuse.js';
 import { useEffect, useState } from 'react';
 import { ThemedButton } from '@/components/themed';
 import { ProductGridSkeleton } from '@/components/ui/skeletons';
@@ -18,6 +17,7 @@ import { DidYouMeanBanner } from './did-you-mean-banner';
 import { ProductGridHeading } from './product-grid-heading';
 import { ProductGridItems } from './product-grid-items';
 import { QuickViewModal, useQuickView } from './quick-view-modal';
+import { usePreviewSearch } from './use-preview-search';
 
 interface StorefrontProductGridProps {
   title?: string;
@@ -237,33 +237,19 @@ export function StorefrontProductGrid({
     return [];
   })();
 
-  // Lazily built client search index, preview merchants only: importing
-  // fuse.js statically would ship the engine to every storefront page load
-  // even though live storefronts search server-side and never touch it.
-  // Rebuilt whenever the query or products change, mirroring the previous
-  // per-render freshness; until it resolves, preview search falls back to
-  // the unfiltered list exactly as the old null-index path did.
-  const [fuse, setFuse] = useState<Fuse<Product> | null>(null);
-  useEffect(() => {
-    if (!isPreviewMode || !debouncedSearchQuery) {
-      setFuse(null);
-      return;
-    }
-    let cancelled = false;
-    void import('fuse.js').then(({ default: FuseImpl }) => {
-      if (cancelled) return;
-      setFuse(
-        new FuseImpl(products, {
-          keys: ['name', 'description', 'brand'],
-          includeScore: true,
-          threshold: 0.4,
-        })
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isPreviewMode, debouncedSearchQuery, products]);
+  // Lazily built client search index, preview merchants only (see
+  // use-preview-search): until it resolves — or when its chunk fails to
+  // load — preview search falls back to the unfiltered list exactly as the
+  // old null-index path did.
+  const { fuse, searchFailed, retrySearch } = usePreviewSearch({
+    // The storefront context types the query as optional; fall back to the
+    // inactive empty query exactly as the old falsy guard did.
+    debouncedSearchQuery: debouncedSearchQuery ?? '',
+    // The optional-chaining derivation below can type as undefined; it was
+    // only ever truthiness-checked, so normalize to a strict boolean.
+    isPreviewMode: isPreviewMode ?? false,
+    products,
+  });
 
   const categories = (() => {
     const priorityList: string[] = [];
@@ -455,6 +441,20 @@ export function StorefrontProductGrid({
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             Search is temporarily unavailable. Showing the last available
             results. {searchError}
+          </div>
+        )}
+        {isPreviewMode && searchFailed && debouncedSearchQuery && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span>
+              Preview search could not load, so showing all products instead.
+            </span>
+            <button
+              type="button"
+              onClick={retrySearch}
+              className="font-medium underline underline-offset-2 hover:text-amber-900"
+            >
+              Retry search
+            </button>
           </div>
         )}
         {/* Did you mean banner */}

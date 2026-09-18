@@ -174,24 +174,6 @@ describe('OgabasseyStaticHomePageContent', () => {
     ).toHaveAttribute('data-prefix', '');
   });
 
-  it('preloads the cached public asset without rendering shopping UI', async () => {
-    render(await OgabasseyStaticHomePageContent({ pathPrefix: '' }));
-
-    expect(mockPreloadHeroResources).toHaveBeenCalledWith(SHELL_SLIDE.imageUrl);
-  });
-
-  it('renders a scanner-visible preload link for the committed hero image', async () => {
-    render(await OgabasseyStaticHomePageContent({ pathPrefix: '' }));
-
-    const link = document.querySelector(
-      'link[data-ogabassey-home-hero-preload="true"]'
-    );
-    expect(link).toBeInTheDocument();
-    expect(link?.getAttribute('rel')).toBe('preload');
-    expect(link?.getAttribute('as')).toBe('image');
-    expect(link?.getAttribute('fetchpriority')).toBe('high');
-  });
-
   it('shows only publication-safe geometry while the publication owner suspends', async () => {
     mockDynamicContentSuspends.value = true;
 

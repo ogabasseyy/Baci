@@ -77,6 +77,16 @@ describe('validateRemoteUrl host classification', () => {
     }
   });
 
+  it('blocks multicast and reserved IPv4 destinations', () => {
+    for (const host of ['224.0.0.1', '239.255.255.250', '240.0.0.1', '255.255.255.255']) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    // The highest globally routable space stays reachable.
+    expect(validateRemoteUrl(url('223.255.255.1'))?.toString()).toBe(
+      url('223.255.255.1'),
+    );
+  });
+
   it('blocks benchmark-network destinations', () => {
     for (const host of ['198.18.0.1', '198.19.255.255']) {
       expect(validateRemoteUrl(url(host))).toBeNull();

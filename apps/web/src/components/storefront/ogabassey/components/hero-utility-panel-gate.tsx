@@ -63,6 +63,8 @@ function isUtilityTab(value: string | null): value is UtilityTab {
  * First-tap replay: the gate records the tapped option id and replays it
  * into the interactive panel, which opens that tab's modal on mount — the
  * shopper's first tap is honored instead of merely triggering the load.
+ * Capture stays armed until the panel mounts, so a tap landing after a
+ * viewport/key/outside activation but before the chunk arrives still replays.
  */
 export function HeroUtilityPanelGate({
   loadPanelModule = loadDefaultPanelModule,
@@ -82,14 +84,19 @@ export function HeroUtilityPanelGate({
   const isActive = isInViewport || hasInteracted;
 
   useEffect(() => {
-    if (isActive) {
+    // Capture stays armed until the interactive panel mounts — not just
+    // until first activation. Activation may come from the viewport
+    // observer, a tap outside the fallback, or a key press while the module
+    // chunk is still in flight; a later tap on a still-visible fallback
+    // option must still be recorded for replay.
+    if (Panel) {
       return;
     }
 
     const handlePointerDown = (event: PointerEvent) => {
-      // The activating tap may land on a fallback option: record it so the
-      // interactive panel can replay the action on mount. Taps outside the
-      // fallback (or on non-option chrome) activate without a replay.
+      // A tap on a fallback option is recorded so the interactive panel
+      // can replay the action on mount. Taps outside the fallback (or on
+      // non-option chrome) activate without a replay.
       const target = event.target;
       if (target instanceof Element && ref.current?.contains(target)) {
         const optionId =
@@ -108,16 +115,15 @@ export function HeroUtilityPanelGate({
     };
 
     window.addEventListener('pointerdown', handlePointerDown, {
-      once: true,
       passive: true,
     });
-    window.addEventListener('keydown', handleKeyDown, { once: true });
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isActive, ref]);
+  }, [Panel, ref]);
 
   useEffect(() => {
     if (!isActive || Panel) {

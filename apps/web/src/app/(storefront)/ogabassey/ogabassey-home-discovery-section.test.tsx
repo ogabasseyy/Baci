@@ -6,44 +6,11 @@ import {
   getCachedStorefrontLaunchProducts,
 } from '@/lib/cached-data';
 import { getCachedStorefrontProductsBySlugs } from '@/lib/cached-storefront-products-by-slugs';
-
-const mockMerchant = {
-  id: 'merchant-1',
-  business_name: 'Oga & Bassey',
-  business_type: 'electronics',
-  email: 'hello@ogabassey.com',
-  phone: '+2341234567',
-  logo_url: '',
-  brand_colors: undefined,
-  country: 'NG',
-  pages: undefined,
-  slug: 'ogabassey',
-  custom_domain: 'ogabassey.com',
-  favicon_svg_url: undefined,
-  favicon_png_32_url: undefined,
-  favicon_apple_touch_url: undefined,
-  social_media: undefined,
-  business_address: '',
-  is_published: true,
-  feature_settings: {
-    google_analytics_id: 'G-OGABASSEY',
-    // Real settings field (blog hub gating); default off so tests that omit
-    // it keep asserting the no-blog baseline.
-    blog_enabled: false,
-  },
-  template_id: 'ogabassey',
-  vat_registration_status: undefined,
-  vat_rate: undefined,
-  hero_slides: undefined,
-  mobile_hero_slides: undefined,
-  site_title: '',
-  site_tagline: '',
-  site_description: '',
-  payout_currency: 'NGN',
-  plan_expires_at: null,
-  plan_tier: 'pro',
-  premium_features: [],
-};
+import {
+  createSectionProduct,
+  mockSectionMerchant,
+  resolveSectionDiscovery,
+} from './ogabassey-home-section-test-fixtures';
 
 vi.mock('@/lib/cached-data', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
@@ -77,39 +44,6 @@ vi.mock('next/link', () => ({
 import { OgabasseyHomeDiscoverySection } from './ogabassey-home-discovery-section';
 import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
 
-type StorefrontHomeProduct = Awaited<
-  ReturnType<typeof getCachedStorefrontHomeProducts>
->[number];
-
-function createProduct(
-  overrides: Partial<StorefrontHomeProduct> = {}
-): StorefrontHomeProduct {
-  return {
-    id: 'product-1',
-    name: 'iPhone 17 Pro Max',
-    slug: 'iphone-17-pro-max',
-    description: 'Apple flagship phone.',
-    price: 2500000,
-    compare_at_price: null,
-    images: [
-      'https://cdn.ogabassey.com/core-assets/products/iphone-17-pro-max.avif',
-    ],
-    category: 'Smartphones',
-    brand: 'Apple',
-    condition: 'new',
-    stock: 4,
-    stock_quantity: null,
-    manage_stock: false,
-    low_stock_threshold: null,
-    product_categories: [],
-    ...overrides,
-  };
-}
-
-function createCategories() {
-  return [{ name: 'Smartphones', slug: 'smartphones' }];
-}
-
 describe('OgabasseyHomeDiscoverySection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -118,30 +52,8 @@ describe('OgabasseyHomeDiscoverySection', () => {
     vi.mocked(getCachedStorefrontProductsBySlugs).mockResolvedValue([]);
   });
 
-  function renderDiscovery({
-    merchant = mockMerchant,
-    pathPrefix = '/ogabassey',
-    products = [] as StorefrontHomeProduct[],
-    categories = createCategories(),
-    launchProductsPromise = loadOgabasseyLaunchProducts('merchant-1'),
-  }: {
-    merchant?: typeof mockMerchant;
-    pathPrefix?: string;
-    products?: StorefrontHomeProduct[];
-    categories?: { name: string; slug: string }[];
-    launchProductsPromise?: ReturnType<typeof loadOgabasseyLaunchProducts>;
-  }) {
-    return OgabasseyHomeDiscoverySection({
-      categoriesPromise: Promise.resolve(categories),
-      launchProductsPromise,
-      merchant,
-      pathPrefix,
-      productsPromise: Promise.resolve(products),
-    });
-  }
-
   it('renders category discovery links with the route prefix', async () => {
-    const result = await renderDiscovery({});
+    const result = await resolveSectionDiscovery({});
 
     render(result as ReactElement);
 
@@ -152,9 +64,9 @@ describe('OgabasseyHomeDiscoverySection', () => {
   });
 
   it('keeps discovery links for products whose slugs are generated from names', async () => {
-    const result = await renderDiscovery({
+    const result = await resolveSectionDiscovery({
       products: [
-        createProduct({
+        createSectionProduct({
           id: 'product-slugless',
           name: 'Galaxy Fold 8',
           slug: '',
@@ -171,8 +83,8 @@ describe('OgabasseyHomeDiscoverySection', () => {
   });
 
   it('emits raw parsable JSON-LD scripts', async () => {
-    const result = await renderDiscovery({
-      products: [createProduct()],
+    const result = await resolveSectionDiscovery({
+      products: [createSectionProduct()],
     });
 
     const { container } = render(result as ReactElement);
@@ -219,7 +131,7 @@ describe('OgabasseyHomeDiscoverySection', () => {
   it('prepends targeted pinned launch products into the home ItemList even when they fall outside the recent window', async () => {
     // Recent window: 8 products, none of them the pinned launch device.
     const windowProducts = Array.from({ length: 8 }, (_, index) =>
-      createProduct({
+      createSectionProduct({
         id: `recent-${index}`,
         name: `Recent ${index}`,
         slug: `recent-${index}`,
@@ -229,7 +141,7 @@ describe('OgabasseyHomeDiscoverySection', () => {
     // A real pinned product carries an image, so it survives the renderable
     // filter and is prepended into the launch set + schema.
     vi.mocked(getCachedStorefrontProductsBySlugs).mockResolvedValue([
-      createProduct({
+      createSectionProduct({
         id: 'a27',
         name: 'Samsung Galaxy A27 5G Preorder',
         slug: 'samsung-galaxy-a27-5g',
@@ -238,7 +150,7 @@ describe('OgabasseyHomeDiscoverySection', () => {
       }),
     ]);
 
-    const result = await renderDiscovery({ products: windowProducts });
+    const result = await resolveSectionDiscovery({ products: windowProducts });
 
     const { container } = render(result as ReactElement);
     const script = container.querySelector(
@@ -264,7 +176,7 @@ describe('OgabasseyHomeDiscoverySection', () => {
     // inventory) and in the recent window (template-shaped, has inventory). The
     // launch copy wins the slug dedupe, so without restoring inventory the schema
     // would wrongly emit InStock.
-    const soldOut = createProduct({
+    const soldOut = createSectionProduct({
       id: 'a27',
       name: 'Samsung Galaxy A27 5G',
       slug: 'samsung-galaxy-a27-5g',
@@ -276,7 +188,7 @@ describe('OgabasseyHomeDiscoverySection', () => {
     });
     vi.mocked(getCachedStorefrontProductsBySlugs).mockResolvedValue([soldOut]);
 
-    const result = await renderDiscovery({ products: [soldOut] });
+    const result = await resolveSectionDiscovery({ products: [soldOut] });
 
     const { container } = render(result as ReactElement);
     const json =
@@ -295,16 +207,16 @@ describe('OgabasseyHomeDiscoverySection', () => {
   });
 
   it('includes the blog hub in the semantic graph only when the visible blog link is enabled', async () => {
-    const result = await renderDiscovery({
+    const result = await resolveSectionDiscovery({
       merchant: {
-        ...mockMerchant,
+        ...mockSectionMerchant,
         feature_settings: {
-          ...mockMerchant.feature_settings,
+          ...mockSectionMerchant.feature_settings,
           blog_enabled: true,
         },
       },
       pathPrefix: '',
-      products: [createProduct()],
+      products: [createSectionProduct()],
     });
 
     const { container } = render(result as ReactElement);
@@ -335,8 +247,8 @@ describe('OgabasseyHomeDiscoverySection', () => {
       new Error('launch feed down')
     );
 
-    const result = await renderDiscovery({
-      products: [createProduct()],
+    const result = await resolveSectionDiscovery({
+      products: [createSectionProduct()],
     });
 
     const { container } = render(result as ReactElement);

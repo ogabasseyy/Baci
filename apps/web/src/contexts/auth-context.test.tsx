@@ -252,8 +252,7 @@ describe('AuthProvider', () => {
     // @supabase/ssr splits large sessions into `sb-<ref>-auth-token.N`
     // cookies; a chunked-only browser must still take the immediate path.
     window.localStorage.clear();
-    // biome-ignore lint/suspicious/noDocumentCookie: the test models a
-    // chunked-only browser by construction.
+    // biome-ignore lint/suspicious/noDocumentCookie: models a chunked-only browser.
     document.cookie = 'sb-testref-auth-token.0={}';
     mocks.getUser.mockResolvedValue({
       data: { user: { id: 'user-5' } as User },
@@ -273,8 +272,7 @@ describe('AuthProvider', () => {
       expect(screen.getByText('user:user-5')).toBeInTheDocument();
     });
 
-    // biome-ignore lint/suspicious/noDocumentCookie: cleanup for the
-    // chunked-cookie case above.
+    // biome-ignore lint/suspicious/noDocumentCookie: chunked-cookie cleanup.
     document.cookie =
       'sb-testref-auth-token.0=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     window.localStorage.setItem('sb-testref-auth-token', '{}');

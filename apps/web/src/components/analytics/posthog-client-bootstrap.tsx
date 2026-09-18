@@ -70,13 +70,25 @@ async function bootPostHogForPathname(
       return;
     }
 
+    // The chunk load is async: a navigation may have landed on a public
+    // blog while it pended. Re-resolve again so the stale invocation can't
+    // initialize the full client for the old route after the blog's own
+    // effect already stood down.
+    const postImportPathname = getCurrentPathname() ?? pathname;
+    const postImportPublicBlog = isPublicBlogPathname(postImportPathname, {
+      hostname: globalThis.location?.hostname,
+    });
+    if (postImportPublicBlog && !hasPostHogBrowserInitialized()) {
+      return;
+    }
+
     initializePostHogBrowser(postHogBrowserEnv, console, {
-      lightweight: resolvedPublicBlog,
-      pathname,
+      lightweight: postImportPublicBlog,
+      pathname: postImportPathname,
       hostname: globalThis.location?.hostname,
     });
 
-    if (resolvedPublicBlog) {
+    if (postImportPublicBlog) {
       return;
     }
 
@@ -84,8 +96,19 @@ async function bootPostHogForPathname(
       '@/instrumentation-client'
     );
 
-    if (!isCancelled()) {
-      initializePostHogInstrumentationIfAllowed(pathname);
+    if (isCancelled()) {
+      return;
+    }
+
+    // Attribute instrumentation to the latest route, never a stale one —
+    // and stay off it entirely when the latest route is a public blog.
+    const finalPathname = getCurrentPathname() ?? postImportPathname;
+    if (
+      !isPublicBlogPathname(finalPathname, {
+        hostname: globalThis.location?.hostname,
+      })
+    ) {
+      initializePostHogInstrumentationIfAllowed(finalPathname);
     }
   } catch (error) {
     if (!isCancelled()) {

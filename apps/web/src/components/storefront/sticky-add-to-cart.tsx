@@ -4,7 +4,7 @@ import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { ChevronUp, ShoppingCart } from 'lucide-react';
 import { useState, useSyncExternalStore } from 'react';
 import { ThemedButton } from '@/components/themed';
-import { QuantityButton } from '@/components/ui/animated-shop-icons';
+import { QuantityButton } from '@/components/ui/quantity-button';
 import { useCart } from '@/hooks/use-cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useToast } from '@/hooks/use-toast';

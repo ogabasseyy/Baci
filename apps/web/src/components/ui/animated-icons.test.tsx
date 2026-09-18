@@ -1,13 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  LoadingSpinner,
-  NotificationBell,
-  SuccessCheck,
-} from './animated-feedback-icons';
 import { AnimatedIcon } from './animated-icons';
-import { ChevronToggle, MenuToggle } from './animated-nav-icons';
-import { CartIcon, HeartIcon, QuantityButton } from './animated-shop-icons';
+import { CartIcon } from './cart-icon';
+import { ChevronToggle } from './chevron-toggle';
+import { HeartIcon } from './heart-icon';
+import { LoadingSpinner } from './loading-spinner';
+import { MenuToggle } from './menu-toggle';
+import { NotificationBell } from './notification-bell';
+import { QuantityButton } from './quantity-button';
+import { SuccessCheck } from './success-check';
 
 describe('animated-icons', () => {
   it('renders a non-interactive div wrapper without onClick', () => {

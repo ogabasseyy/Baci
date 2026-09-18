@@ -41,9 +41,6 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-import { OgabasseyHomeDiscoverySection } from './ogabassey-home-discovery-section';
-import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
-
 describe('OgabasseyHomeDiscoverySection', () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -55,6 +55,7 @@ function isBlockedIpv6Literal(host: string): boolean {
   if (groups.every((g) => g === 0)) return true; // ::
   if (groups.slice(0, 7).every((g) => g === 0) && g7 === 1) return true; // ::1
   if ((g0 & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  if ((g0 & 0xffc0) === 0xfec0) return true; // fec0::/10 deprecated site-local
   if ((g0 & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
   if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) {
     // ::ffff:0:0/96 — classify the embedded IPv4 address.

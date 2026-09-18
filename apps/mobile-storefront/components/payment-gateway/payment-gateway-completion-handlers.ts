@@ -159,19 +159,26 @@ export function createPaymentGatewayCompletionHandlers({
           return;
         }
         verifiedOrderNumber = outcome.orderNumber || orderNumber;
-        const trackingContext = await loadRedvaultPurchaseTrackingContext(
-          orderId || ''
-        );
-        if (
-          trackingContext &&
-          (await claimCheckoutPurchaseTracking(orderId || ''))
-        ) {
-          trackCheckoutRoutePurchaseCompleted({
-            ...trackingContext,
-            orderId: orderId || '',
-            orderNumber: verifiedOrderNumber || trackingContext.orderNumber,
-          });
-          await clearRedvaultPurchaseTrackingContext(orderId || '');
+        // Post-verification analytics and storage cleanup are best-effort:
+        // a tracking-context failure must never revert an already-verified
+        // payment back to pending.
+        try {
+          const trackingContext = await loadRedvaultPurchaseTrackingContext(
+            orderId || ''
+          );
+          if (
+            trackingContext &&
+            (await claimCheckoutPurchaseTracking(orderId || ''))
+          ) {
+            trackCheckoutRoutePurchaseCompleted({
+              ...trackingContext,
+              orderId: orderId || '',
+              orderNumber: verifiedOrderNumber || trackingContext.orderNumber,
+            });
+            await clearRedvaultPurchaseTrackingContext(orderId || '');
+          }
+        } catch {
+          // Verification already succeeded; ignore cleanup failures.
         }
       } catch {
         if (!isMountedRef.current) return;

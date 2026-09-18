@@ -5,12 +5,12 @@ export function RedvaultPendingView({
   colors,
   held,
   onCheck,
-  onBack,
+  onViewOrders,
 }: {
   colors: typeof Colors.light;
   held: boolean;
   onCheck: () => void;
-  onBack: () => void;
+  onViewOrders: () => void;
 }) {
   return (
     <View style={{ padding: 24, gap: 20 }}>
@@ -22,8 +22,8 @@ export function RedvaultPendingView({
       <Pressable accessibilityRole="button" onPress={onCheck}>
         <Text style={{ color: colors.primary }}>Check payment status</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" onPress={onBack}>
-        <Text style={{ color: colors.primary }}>Back to checkout</Text>
+      <Pressable accessibilityRole="button" onPress={onViewOrders}>
+        <Text style={{ color: colors.primary }}>View your orders</Text>
       </Pressable>
     </View>
   );

@@ -2135,11 +2135,20 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+      if (!requestIdempotencyKey?.trim()) {
+        return NextResponse.json(
+          {
+            code: 'REDVAULT_IDEMPOTENCY_KEY_REQUIRED',
+            error: 'A checkout idempotency key is required',
+          },
+          { status: 400 }
+        );
+      }
       try {
         const { data: replayRows, error: replayError } =
           await redvaultOrderRpcClient.rpc(
-            'get_storefront_redvault_checkout_replay' as never,
-            { p_checkout_key: requestIdempotencyKey } as never
+            'get_storefront_redvault_checkout_replay',
+            { p_checkout_key: requestIdempotencyKey }
           );
         const replay = Array.isArray(replayRows) ? replayRows[0] : replayRows;
         if (replayError) throw replayError;

@@ -55,8 +55,7 @@ e8aab2aed87c3ae93090db6343ac125210d1fd90f80de1cff51772ef33b29750 20260718070005_
 1601b3893fead9b30f72214ce1ce5a91b0cbfea0dd0a6b18304791045cdbe0b2 20260718070009_scope_credit_direct_payment_audit_notes.sql
 2dbcca4189d7a656fa8504383a54d8ea55024cb76720572931818d4df878be9e 20260718070010_preserve_credit_direct_provider_reference.sql
 395cfdef9ec80858ce34b031df0b642e51b3ba4d5d81922a9687a58962e35c5e 20260718070011_require_credit_direct_guest_tracking_token.sql`;
-// PayPal/Korapay BYOK migrations land in PENDING before the existing 20260721
-// cancellation batch because they are version-earlier and not yet attested.
+// PayPal/Korapay BYOK migrations land in PENDING before the 20260721 cancellation batch (version-earlier, unattested).
 const PENDING_SOURCES_HEAD = `e8398b0b10a5e9d199707bcceb5835f865bfce85dd4732e9bc46fc4e13d16d29 20260721093205_harden_paid_order_completion_and_side_effect_retries.sql
 b36447107978f1612b0f158bbd3331f635bf8bd940ec0ff01545ecba765a753b 20260721093206_merchant_order_cancellation_audit.sql
 399dfc28247c2f3d3c720783eeb13c3376a1b207f7ea1095e66366e919f1e5ea 20260721093207_order_cancellation_side_effect_claims.sql
@@ -281,18 +280,8 @@ const PENDING_SOURCES = [
   STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW,
 ]
   .flatMap((sourceBlock) => sourceBlock.trim().split('\n'))
-  .sort((left, right) => {
-    const leftFilename = left.split(' ')[1] ?? '';
-    const rightFilename = right.split(' ')[1] ?? '';
-    if (leftFilename < rightFilename) {
-      return -1;
-    }
-    if (leftFilename > rightFilename) {
-      return 1;
-    }
-    return 0;
-  })
-  .join('\n');
+  .sort((left, right) => { const l = left.split(' ')[1] ?? ''; const r = right.split(' ')[1] ?? ''; if (l < r) return -1; if (l > r) return 1; return 0; })
+  .join('\n'); // biome-ignore format: keep the manifest at the 300-line modularity limit
 // One primary export (repo one-export-per-file rule): manifest module/tests destructure the collection.
 export const REPLAY_SOURCE_DATA = {
   PIPELINE_SOURCES,

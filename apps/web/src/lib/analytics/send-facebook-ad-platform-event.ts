@@ -156,7 +156,8 @@ export async function sendFacebookAdPlatformEvent(
               }
             : {}),
           contentType:
-            eventName === 'AddToWishlist' && firstCatalogItem
+            (eventName === 'AddToWishlist' || eventName === 'AddPaymentInfo') &&
+            firstCatalogItem
               ? 'product_group'
               : event.custom_data.content_type,
           currency,

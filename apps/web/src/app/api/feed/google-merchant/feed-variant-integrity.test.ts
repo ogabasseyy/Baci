@@ -77,19 +77,21 @@ describe('feed variant integrity', () => {
   it.each([
     ['Google', generateGoogleMerchantFeed],
     ['Facebook', generateFacebookCatalogFeed],
-  ] as const)('%s does not label a legacy product with a blank condition as new', (_label, build) => {
+  ] as const)('%s labels a legacy product with a blank condition as new', (_label, build) => {
     const xml = build(
       [{ ...product, variant_model: 'legacy', condition: undefined }],
       merchant,
       'https://example.com',
       { phone: [{ ...images.phone[0], variant_id: null }] }
     );
-    expect(xml).not.toContain('<item>');
+    // A nullish parent defaults to `new`, matching storefront selection.
+    expect(xml).toContain('<g:id>phone</g:id>');
+    expect(xml).toContain('<g:condition>new</g:condition>');
   });
   it.each([
     ['Google', generateGoogleMerchantFeed],
     ['Facebook', generateFacebookCatalogFeed],
-  ] as const)('%s keeps valid legacy offers when the parent condition is absent', (_label, build) => {
+  ] as const)('%s emits the base row and drops same-condition offers when the parent condition is absent', (_label, build) => {
     const xml = build(
       [
         {
@@ -110,8 +112,10 @@ describe('feed variant integrity', () => {
       'https://example.com',
       { phone: [{ ...images.phone[0], variant_id: null }] }
     );
-    expect(xml).toContain('<g:id>offer-new</g:id>');
-    expect(xml).not.toContain('<g:id>phone</g:id>');
+    // Null parent means `new`: the base row emits and the duplicate
+    // same-condition offer is ineligible.
+    expect(xml).toContain('<g:id>phone</g:id>');
+    expect(xml).not.toContain('<g:id>offer-new</g:id>');
   });
   it.each([
     0, 100,

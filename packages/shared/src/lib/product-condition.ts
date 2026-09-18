@@ -142,17 +142,26 @@ export function getEligibleConditionOffers<T extends ConditionOfferLike>(
   // anything else must map cleanly or the parent contributes no condition.
   const parent =
     parentCondition == null ? 'new' : toGoogleListingCondition(parentCondition);
+  // The storefront selects the first offer matching a normalized
+  // condition, so duplicate normalized conditions would land at least
+  // one row on the wrong purchasable price: keep the first only.
+  const seen = new Set<string>();
   return (offers ?? []).filter((offer) => {
     const price = Number(offer.price);
     const condition = toGoogleListingCondition(
       offer.condition as string | null | undefined
     );
-    return (
-      !!offer.id &&
-      Number.isFinite(price) &&
-      price > 0 &&
-      !!condition &&
-      condition !== parent
-    );
+    if (
+      !offer.id ||
+      !Number.isFinite(price) ||
+      price <= 0 ||
+      !condition ||
+      condition === parent ||
+      seen.has(condition)
+    ) {
+      return false;
+    }
+    seen.add(condition);
+    return true;
   });
 }

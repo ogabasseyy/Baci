@@ -21,6 +21,14 @@ interface AuthContextType {
 // the non-scroller backstop precedent used by below-fold gates.
 const AUTH_BOOT_BACKSTOP_MS = 8000;
 
+// Short boot fallback for browsers without `requestIdleCallback` (older
+// engines, some embedded webviews): with no idle signal, an anonymous
+// visitor who never interacts would otherwise sit on `loading=true` for the
+// full backstop (e.g. /builder stuck on its loading view instead of
+// redirecting signed-out visitors). 2s stays inside the LCP budget while
+// resolving auth 4x sooner on those browsers.
+const AUTH_BOOT_NO_IDLE_FALLBACK_MS = 2000;
+
 /**
  * Whether this browser plausibly holds a session (localStorage or cookie).
  * Anything unreadable fails closed to `true` — an unknown state must boot
@@ -105,8 +113,16 @@ function scheduleAuthBoot(start: () => void): () => void {
       idleHandle = ric.call(window, onFirstInteraction, {
         timeout: AUTH_BOOT_BACKSTOP_MS,
       });
+      backstopTimer = setTimeout(onFirstInteraction, AUTH_BOOT_BACKSTOP_MS);
+    } else {
+      // No idle API: the short fallback is the only timer. An idle-capable
+      // browser resolves at the first idle period instead, so only RIC-less
+      // browsers ever wait the (short) fixed delay.
+      backstopTimer = setTimeout(
+        onFirstInteraction,
+        AUTH_BOOT_NO_IDLE_FALLBACK_MS
+      );
     }
-    backstopTimer = setTimeout(onFirstInteraction, AUTH_BOOT_BACKSTOP_MS);
   } else {
     start();
   }
@@ -152,9 +168,7 @@ export function AuthProvider({
 
   useEffect(() => {
     let isMounted = true;
-    let subscription:
-      | { unsubscribe: () => void }
-      | undefined;
+    let subscription: { unsubscribe: () => void } | undefined;
 
     const start = () => {
       void (async () => {
@@ -164,12 +178,10 @@ export function AuthProvider({
         // Listen for auth changes (login, logout, token refresh) without
         // waiting for the refresh below: a hung getUser must never silence
         // live auth events.
-        const listener = supabase.auth.onAuthStateChange(
-          (_event, session) => {
-            setUser(session?.user ?? null);
-            setLoading(false);
-          }
-        );
+        const listener = supabase.auth.onAuthStateChange((_event, session) => {
+          setUser(session?.user ?? null);
+          setLoading(false);
+        });
         if (!isMounted) {
           listener.data.subscription.unsubscribe();
           return;

@@ -145,7 +145,10 @@ describe('OgabasseyHomePageContent committed hero', () => {
     // The cold-miss Suspense fallback renders the utility panel for
     // geometry; its engagement effect needs matchMedia like the panel's
     // own tests provide.
-    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false }))
+    );
     mockHeaders.mockResolvedValue(new Headers());
     mockDynamicContentShouldSuspend.mockReturnValue(false);
     vi.mocked(getRequestScopedMerchant).mockResolvedValue(

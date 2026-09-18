@@ -17,6 +17,7 @@ async function loadSupabaseClient(): Promise<ReturnType<typeof createClient>> {
   return createClient();
 }
 import { submitNegotiationUpload } from './negotiation-modal-upload';
+import { getUploadFormValidationError } from './negotiation-modal-validation';
 
 export type NegotiationStatus =
   | 'input'
@@ -200,6 +201,21 @@ export function useNegotiationModalController({
 
   const handleUploadSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    // Validate before downloading the lazily-loaded Supabase client: an
+    // immediately rejectable form (conflicting/missing evidence, bad link,
+    // bad offer) must surface feedback instantly instead of stalling on the
+    // client chunk — and a chunk-load failure must not swallow validation.
+    const formError = getUploadFormValidationError({
+      currentPrice,
+      merchantId,
+      offer,
+      uploadFile,
+      uploadLink,
+    });
+    if (formError) {
+      alert(formError);
+      return;
+    }
     const supabase = await getSupabaseClient();
     await submitNegotiationUpload({
       canApplyAsyncResult,

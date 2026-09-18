@@ -45,10 +45,12 @@ const STATIC_ACTIVE_INDEX = 0;
 function StaticUtilityOptionButton({
   isActive,
   label,
+  optionId,
   tone,
 }: {
   isActive: boolean;
   label: string;
+  optionId: string;
   tone: 'mobile' | 'desktop';
 }) {
   const baseClass =
@@ -60,6 +62,7 @@ function StaticUtilityOptionButton({
   return (
     <button
       type="button"
+      data-utility-option={optionId}
       className="flex flex-col items-center gap-2 group cursor-pointer"
     >
       <div
@@ -119,6 +122,7 @@ export function HeroUtilityPanelStatic() {
                 key={option.id}
                 isActive={STATIC_ACTIVE_INDEX === index}
                 label={option.label}
+                optionId={option.id}
                 tone="mobile"
               />
             ))}
@@ -139,6 +143,7 @@ export function HeroUtilityPanelStatic() {
               key={option.id}
               isActive={STATIC_ACTIVE_INDEX === index}
               label={option.label}
+              optionId={option.id}
               tone="desktop"
             />
           ))}

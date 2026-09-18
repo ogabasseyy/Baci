@@ -91,8 +91,9 @@ describe('getCachedNavigationCategories', () => {
     vi.stubEnv('BACI_STOREFRONT_BUILD_READS', 'bounded');
     mockOrder.mockResolvedValueOnce({ data: [], error: null });
     const releases: Array<() => void> = [];
-    const upstream = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (input) =>
+    const upstream = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) =>
         // Bulk reads park on manual releases (envelope-bound); the nav URL
         // resolves immediately to prove it never needed a release.
         String(input).includes('/nav')
@@ -100,7 +101,7 @@ describe('getCachedNavigationCategories', () => {
           : new Promise<Response>((resolve) => {
               releases.push(() => resolve(new Response('ok')));
             })
-    );
+      );
 
     await getCachedNavigationCategories('merchant-1');
     createPublicClient({ clientInfo: 'baci-storefront-other-read-1' });

@@ -25,7 +25,9 @@ function createSupabaseStub() {
   return {
     client: {
       from,
-    } as unknown as Awaited<ReturnType<Parameters<typeof createMerchantUpdate>[0]['getSupabase']>>,
+    } as unknown as Awaited<
+      ReturnType<Parameters<typeof createMerchantUpdate>[0]['getSupabase']>
+    >,
     from,
     update,
     eq: query.eq,

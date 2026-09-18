@@ -133,4 +133,16 @@ describe('HeroUtilityPanel', () => {
     fireEvent.keyDown(window, { key: 'Tab' });
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('opens the replayed tab modal on mount when a fallback tap is pending', () => {
+    render(<HeroUtilityPanel pendingUtilityTab="tv" />);
+
+    expect(screen.getByTestId('utility-modal')).toHaveTextContent('tv');
+  });
+
+  it('keeps the modal closed on mount without a pending fallback tap', () => {
+    render(<HeroUtilityPanel />);
+
+    expect(screen.queryByTestId('utility-modal')).not.toBeInTheDocument();
+  });
 });

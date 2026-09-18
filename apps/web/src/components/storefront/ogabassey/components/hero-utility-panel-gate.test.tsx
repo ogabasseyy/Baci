@@ -109,6 +109,85 @@ describe('HeroUtilityPanelGate', () => {
     ).toBeInTheDocument();
   });
 
+  it('replays a fallback option tap into the interactive panel', async () => {
+    // The inert fallback swallows the activating click; the gate records the
+    // tapped option and replays it so the shopper does not have to tap twice.
+    const echoLoader = vi.fn(() =>
+      Promise.resolve({
+        HeroUtilityPanel: ({
+          pendingUtilityTab,
+        }: {
+          pendingUtilityTab?: string | null;
+        }) => (
+          <div
+            data-testid="interactive-utility-panel"
+            data-pending={pendingUtilityTab ?? 'none'}
+          />
+        ),
+      })
+    );
+    render(
+      <HeroUtilityPanelGate
+        loadPanelModule={echoLoader as never}
+        timeoutMs={1000}
+      />
+    );
+
+    const dataButton = screen.getAllByText('Data')[0]?.closest('button');
+    expect(dataButton).toHaveAttribute('data-utility-option', 'data');
+
+    await act(async () => {
+      fireEvent.pointerDown(dataButton!);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(echoLoader).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('interactive-utility-panel')).toHaveAttribute(
+      'data-pending',
+      'data'
+    );
+  });
+
+  it('activates without a replay for taps outside the fallback options', async () => {
+    const echoLoader = vi.fn(() =>
+      Promise.resolve({
+        HeroUtilityPanel: ({
+          pendingUtilityTab,
+        }: {
+          pendingUtilityTab?: string | null;
+        }) => (
+          <div
+            data-testid="interactive-utility-panel"
+            data-pending={pendingUtilityTab ?? 'none'}
+          />
+        ),
+      })
+    );
+    render(
+      <HeroUtilityPanelGate
+        loadPanelModule={echoLoader as never}
+        timeoutMs={1000}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.pointerDown(window);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(echoLoader).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('interactive-utility-panel')).toHaveAttribute(
+      'data-pending',
+      'none'
+    );
+  });
+
   it('loads the panel on first keyboard interaction', async () => {
     const { loader } = renderGate();
 

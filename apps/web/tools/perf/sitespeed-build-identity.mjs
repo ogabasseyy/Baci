@@ -33,7 +33,7 @@ function readBuildIds(html) {
         const payload = JSON.parse(root[1]);
         if (typeof payload?.b === 'string') ids.add(payload.b);
       } catch {
-        continue;
+        // Non-JSON flight records carry no build id; skip the line.
       }
     }
   }

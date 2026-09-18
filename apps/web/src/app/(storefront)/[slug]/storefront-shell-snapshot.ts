@@ -110,9 +110,7 @@ export async function getStorefrontShellSnapshot(
     eagerCategories &&
     eagerCategories.merchantId === shellSnapshotBase.merchant.id
       ? await eagerCategories.categories
-      : await getStorefrontNavigationCategories(
-          shellSnapshotBase.merchant.id
-        );
+      : await getStorefrontNavigationCategories(shellSnapshotBase.merchant.id);
 
   return {
     ...shellSnapshotBase,

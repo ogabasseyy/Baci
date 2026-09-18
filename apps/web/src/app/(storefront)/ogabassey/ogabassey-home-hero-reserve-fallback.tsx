@@ -28,8 +28,14 @@ import { HeroUtilityPanelStatic } from '@/components/storefront/ogabassey/compon
  *     and an inline banner here would bloat the stream for a transient frame.
  *   - The zero-JS HeroUtilityPanelStatic renders (not a sized div) because
  *     the panel's desktop-row height has no static token; the static twin
- *     carries the exact copy and boxes with HTML bytes only, keeping the
- *     interactive panel's client JS out of the fallback path entirely.
+ *     carries the exact boxes with HTML bytes only, keeping the interactive
+ *     panel's client JS out of the fallback path entirely.
+ *   - The static panel renders `invisible` (visibility:hidden): this
+ *     fallback shows while the request-scoped publication check is still
+ *     pending, so its copy/controls must not become visible shopping UI for
+ *     an unpublished store, a tenant mismatch, or a slow lookup. Visibility
+ *     keeps the geometry (no CLS delta) while painting nothing; `inert` +
+ *     `aria-hidden` already remove it from interaction and assistive tech.
  */
 export function OgabasseyHomeHeroReserveFallback({
   omitMobileCarousel = false,
@@ -80,7 +86,12 @@ export function OgabasseyHomeHeroReserveFallback({
         </div>
       </section>
 
-      <HeroUtilityPanelStatic />
+      <div
+        className="invisible"
+        data-ogabassey-home-hero-reserve-utility="true"
+      >
+        <HeroUtilityPanelStatic />
+      </div>
     </div>
   );
 }

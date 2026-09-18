@@ -27,9 +27,8 @@ const hoistedMocks = vi.hoisted(() => ({
   // mirrors the extra prop the renderer probe passes at runtime; tests
   // configure rendered output per case.
   mockOgabasseyV2Blog: vi.fn(
-    (
-      _props: TemplateBlogPageProps & { storeSlug?: string }
-    ): React.ReactNode => null
+    (_props: TemplateBlogPageProps & { storeSlug?: string }): React.ReactNode =>
+      null
   ),
   mockHeaders: vi.fn(() => new Headers()),
   mockPreloadBlogListingFeaturedImage: vi.fn(),
@@ -179,9 +178,8 @@ vi.mock('@/templates/registry', () => ({
 }));
 
 vi.mock('@/components/storefront/ogabassey/pages/blog', () => ({
-  OgabasseyV2Blog: (
-    props: TemplateBlogPageProps & { storeSlug?: string }
-  ) => mockOgabasseyV2Blog(props),
+  OgabasseyV2Blog: (props: TemplateBlogPageProps & { storeSlug?: string }) =>
+    mockOgabasseyV2Blog(props),
 }));
 
 vi.mock('./blog-listing-featured-image-preload', () => ({

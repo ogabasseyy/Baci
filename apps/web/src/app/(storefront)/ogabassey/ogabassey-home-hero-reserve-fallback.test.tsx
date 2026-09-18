@@ -27,7 +27,10 @@ function firstClass(token: string): string {
 
 describe('OgabasseyHomeHeroReserveFallback', () => {
   beforeEach(() => {
-    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false }))
+    );
   });
 
   afterEach(() => {
@@ -52,9 +55,7 @@ describe('OgabasseyHomeHeroReserveFallback', () => {
     );
     expect(wrapper).not.toBeNull();
     expect(wrapper).toHaveClass(
-      ...HERO_MOBILE_WRAPPER_CLASSES.split(' ').map((c) =>
-        c.replace(/\\/g, '')
-      )
+      ...HERO_MOBILE_WRAPPER_CLASSES.split(' ').map((c) => c.replace(/\\/g, ''))
     );
     expect(
       wrapper?.querySelector(`.${firstClass(HERO_MOBILE_PANEL_CLASSES)}`)
@@ -74,6 +75,22 @@ describe('OgabasseyHomeHeroReserveFallback', () => {
     // The utility panel renders for real (exact height on both viewports).
     expect(
       container.querySelector('[data-ogabassey-hero-utility="true"]')
+    ).not.toBeNull();
+  });
+
+  it('keeps the reserved utility panel visually hidden until publication resolves', () => {
+    // This fallback renders while the request-scoped publication check is
+    // still pending: visibility:hidden reserves the exact geometry without
+    // showing shopping UI for an unpublished store or tenant mismatch.
+    const { container } = render(<OgabasseyHomeHeroReserveFallback />);
+
+    const reservedUtility = container.querySelector(
+      '[data-ogabassey-home-hero-reserve-utility="true"]'
+    );
+    expect(reservedUtility).not.toBeNull();
+    expect(reservedUtility).toHaveClass('invisible');
+    expect(
+      reservedUtility?.querySelector('[data-ogabassey-hero-utility="true"]')
     ).not.toBeNull();
   });
 

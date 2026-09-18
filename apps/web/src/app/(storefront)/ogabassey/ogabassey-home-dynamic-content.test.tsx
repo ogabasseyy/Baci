@@ -86,9 +86,12 @@ vi.mock('./ogabassey-home-launch-products', () => ({
     mockLoadOgabasseyLaunchProducts(merchantId, currency),
 }));
 
-vi.mock('./ogabassey-home-dynamic-sections', () => ({
+vi.mock('./ogabassey-home-discovery-section', () => ({
   OgabasseyHomeDiscoverySection: (props: OgabasseyHomeDiscoverySectionProps) =>
     mockDiscoverySection(props),
+}));
+
+vi.mock('./ogabassey-home-product-section', () => ({
   OgabasseyHomeProductSection: (props: OgabasseyHomeProductSectionProps) =>
     mockProductSection(props),
 }));
@@ -103,11 +106,9 @@ vi.mock('@/components/analytics/analytics-pixel-provider', () => ({
   ),
 }));
 
+import type { OgabasseyHomeDiscoverySectionProps } from './ogabassey-home-discovery-section';
 import { OgabasseyHomeDynamicContent } from './ogabassey-home-dynamic-content';
-import type {
-  OgabasseyHomeDiscoverySectionProps,
-  OgabasseyHomeProductSectionProps,
-} from './ogabassey-home-dynamic-sections';
+import type { OgabasseyHomeProductSectionProps } from './ogabassey-home-product-section';
 
 describe('OgabasseyHomeDynamicContent', () => {
   beforeEach(() => {

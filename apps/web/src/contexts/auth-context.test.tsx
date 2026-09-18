@@ -185,6 +185,14 @@ describe('AuthProvider', () => {
 
   it('boots auth at the backstop even with no interaction', async () => {
     vi.useFakeTimers();
+    // jsdom has no requestIdleCallback; stub a never-firing idle callback so
+    // this pins the full 8s backstop of the idle-capable path.
+    const requestIdleCallback = vi.fn(() => 1);
+    Object.defineProperty(window, 'requestIdleCallback', {
+      configurable: true,
+      value: requestIdleCallback,
+      writable: true,
+    });
     try {
       window.localStorage.clear();
       mocks.getUser.mockResolvedValue({
@@ -199,12 +207,56 @@ describe('AuthProvider', () => {
       );
 
       expect(mocks.getUser).not.toHaveBeenCalled();
+      expect(requestIdleCallback).toHaveBeenCalledOnce();
 
-      await vi.advanceTimersByTimeAsync(8000);
+      // The short no-idle-API fallback must not fire when the idle API exists.
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(mocks.getUser).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(6000);
       vi.useRealTimers();
 
       await waitFor(() => {
         expect(mocks.getUser).toHaveBeenCalled();
+      });
+    } finally {
+      vi.useRealTimers();
+      Reflect.deleteProperty(window, 'requestIdleCallback');
+      window.localStorage.setItem('sb-testref-auth-token', '{}');
+    }
+  });
+
+  it('boots auth at the short fallback when requestIdleCallback is unavailable', async () => {
+    // jsdom ships no requestIdleCallback, so this pins the RIC-less path
+    // (older engines, embedded webviews) without stubbing.
+    expect(window.requestIdleCallback).toBeUndefined();
+    vi.useFakeTimers();
+    try {
+      window.localStorage.clear();
+      mocks.getUser.mockResolvedValue({
+        data: { user: null },
+        error: null,
+      });
+
+      render(
+        <AuthProvider>
+          <AuthProbe />
+        </AuthProvider>
+      );
+
+      expect(mocks.getUser).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(mocks.getUser).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      vi.useRealTimers();
+
+      await waitFor(() => {
+        expect(mocks.getUser).toHaveBeenCalled();
+      });
+      await waitFor(() => {
+        expect(screen.getByText('loading:false')).toBeInTheDocument();
       });
     } finally {
       vi.useRealTimers();

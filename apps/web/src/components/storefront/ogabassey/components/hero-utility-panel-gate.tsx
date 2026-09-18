@@ -3,10 +3,14 @@
 import type { ComponentType } from 'react';
 import { useEffect, useState } from 'react';
 import { useViewportActivation } from '@/components/storefront/use-viewport-activation';
+import type {
+  HeroUtilityPanelProps,
+  UtilityTab,
+} from './hero-utility-panel';
 import { HeroUtilityPanelStatic } from './hero-utility-panel-static';
 
 interface HeroUtilityPanelModule {
-  HeroUtilityPanel: ComponentType;
+  HeroUtilityPanel: ComponentType<HeroUtilityPanelProps>;
 }
 
 interface HeroUtilityPanelGateProps {
@@ -28,6 +32,14 @@ interface HeroUtilityPanelGateProps {
 // unaffected: the chunk loads on first activation only.
 const loadDefaultPanelModule = () => import('./hero-utility-panel');
 
+const UTILITY_TABS = ['airtime', 'data', 'tv', 'power', 'betting'] as const;
+
+function isUtilityTab(value: string | null): value is UtilityTab {
+  return (
+    value !== null && (UTILITY_TABS as readonly string[]).includes(value)
+  );
+}
+
 /**
  * Viewport gate for the homepage utility panel. Server-renders (and keeps
  * until activation) the zero-JavaScript static twin — same copy, same boxes,
@@ -42,6 +54,12 @@ const loadDefaultPanelModule = () => import('./hero-utility-panel');
  * its buttons are intentionally handler-free; `inert` has no visual effect,
  * so geometry is untouched. A failed module load keeps the static fallback
  * and logs once (same contract as HomeProductGridGate).
+ *
+ * First-tap replay: `inert` swallows the click that triggers activation, so
+ * a tap on a fallback option would otherwise do nothing and force the
+ * shopper to tap again. The gate records the tapped option's
+ * `data-utility-option` id from the activating pointerdown and replays it
+ * into the interactive panel, which opens that tab's modal on mount.
  */
 export function HeroUtilityPanelGate({
   loadPanelModule = loadDefaultPanelModule,
@@ -53,6 +71,8 @@ export function HeroUtilityPanelGate({
       timeoutMs,
     });
   const [hasInteracted, setHasInteracted] = useState(false);
+  const [pendingUtilityTab, setPendingUtilityTab] =
+    useState<UtilityTab | null>(null);
   const [Panel, setPanel] =
     useState<HeroUtilityPanelModule['HeroUtilityPanel'] | null>(null);
 
@@ -63,21 +83,38 @@ export function HeroUtilityPanelGate({
       return;
     }
 
-    const handleInteraction = () => {
+    const handlePointerDown = (event: PointerEvent) => {
+      // The activating tap may land on a fallback option: record it so the
+      // interactive panel can replay the action on mount. Taps outside the
+      // fallback (or on non-option chrome) activate without a replay.
+      const target = event.target;
+      if (target instanceof Element && ref.current?.contains(target)) {
+        const optionId =
+          target
+            .closest('[data-utility-option]')
+            ?.getAttribute('data-utility-option') ?? null;
+        if (isUtilityTab(optionId)) {
+          setPendingUtilityTab(optionId);
+        }
+      }
       setHasInteracted(true);
     };
 
-    window.addEventListener('pointerdown', handleInteraction, {
+    const handleKeyDown = () => {
+      setHasInteracted(true);
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown, {
       once: true,
       passive: true,
     });
-    window.addEventListener('keydown', handleInteraction, { once: true });
+    window.addEventListener('keydown', handleKeyDown, { once: true });
 
     return () => {
-      window.removeEventListener('pointerdown', handleInteraction);
-      window.removeEventListener('keydown', handleInteraction);
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isActive]);
+  }, [isActive, ref]);
 
   useEffect(() => {
     if (!isActive || Panel) {
@@ -112,5 +149,5 @@ export function HeroUtilityPanelGate({
     );
   }
 
-  return <Panel />;
+  return <Panel pendingUtilityTab={pendingUtilityTab} />;
 }

@@ -6,7 +6,10 @@ import { logger } from '@/lib/logger';
 import { hasPostHogBrowserInitialized } from '@/lib/posthog/browser-state';
 import { getPostHogBrowserEnv } from '@/lib/posthog/config';
 import { isPublicBlogPathname } from '@/lib/posthog/public-blog-path';
-import { scheduleIdleBoot } from '@/lib/posthog/schedule-idle-boot';
+import {
+  type IdleBootReason,
+  scheduleIdleBoot,
+} from '@/lib/posthog/schedule-idle-boot';
 import { waitForFirstLcpCandidate } from '@/lib/posthog/wait-for-lcp';
 
 const postHogBrowserEnv = getPostHogBrowserEnv();
@@ -19,7 +22,8 @@ const postHogBrowserEnv = getPostHogBrowserEnv();
  */
 async function bootPostHogForPathname(
   currentPathname: string,
-  isCancelled: () => boolean
+  isCancelled: () => boolean,
+  idleReason?: IdleBootReason
 ): Promise<void> {
   const isPublicBlog = isPublicBlogPathname(currentPathname, {
     hostname: globalThis.location?.hostname,
@@ -34,7 +38,15 @@ async function bootPostHogForPathname(
     // window: boot once the first LCP candidate has painted, or the backstop
     // elapses. Pre-boot metrics are buffered by the web-vitals queue, so
     // nothing is lost — it just flushes after boot.
-    await waitForFirstLcpCandidate();
+    //
+    // Exception: when the idle gate fired on an early interaction, the
+    // shopper is already engaging — waiting out LCP would install
+    // autocapture too late and lose the follow-up clicks (user events are
+    // NOT buffered, only web-vitals are). Boot immediately instead; the
+    // triggering interaction usually lands after LCP anyway.
+    if (idleReason !== 'interaction') {
+      await waitForFirstLcpCandidate();
+    }
     if (isCancelled()) {
       return;
     }
@@ -89,12 +101,12 @@ export function PostHogClientBootstrap() {
     cancelledRef.current = false;
     const isCancelled = () => cancelledRef.current;
 
-    const cancelIdleBoot = scheduleIdleBoot(() => {
+    const cancelIdleBoot = scheduleIdleBoot((reason) => {
       hasIdledRef.current = true;
       const currentPathname =
         pathnameRef.current ?? globalThis.location?.pathname;
       if (!isCancelled() && currentPathname) {
-        void bootPostHogForPathname(currentPathname, isCancelled);
+        void bootPostHogForPathname(currentPathname, isCancelled, reason);
       }
     });
 

@@ -11,7 +11,7 @@ import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import { HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS } from './hero-mobile-geometry';
 
-type UtilityTab = 'airtime' | 'data' | 'tv' | 'power' | 'betting';
+export type UtilityTab = 'airtime' | 'data' | 'tv' | 'power' | 'betting';
 
 interface UtilityOption {
   id: UtilityTab;
@@ -63,6 +63,7 @@ function UtilityOptionButton({
   return (
     <button
       type="button"
+      data-utility-option={option.id}
       onClick={() => onSelect(option, index)}
       className="flex flex-col items-center gap-2 group cursor-pointer"
     >
@@ -80,11 +81,31 @@ function UtilityOptionButton({
   );
 }
 
-export function HeroUtilityPanel() {
-  const [activeUtilityIndex, setActiveUtilityIndex] = useState(0);
-  const [manualUtility, setManualUtility] = useState(false);
-  const [showUtilityModal, setShowUtilityModal] = useState(false);
-  const [utilityTab, setUtilityTab] = useState<UtilityTab>('airtime');
+export interface HeroUtilityPanelProps {
+  /**
+   * Utility the shopper tapped while the static fallback was still mounted.
+   * The gate replays it on mount (opens that tab's modal) so the first tap
+   * is honored instead of merely triggering the module load. Null/omitted
+   * for viewport- and timeout-driven activations.
+   */
+  pendingUtilityTab?: UtilityTab | null;
+}
+
+export function HeroUtilityPanel({
+  pendingUtilityTab = null,
+}: HeroUtilityPanelProps = {}) {
+  const pendingIndex = pendingUtilityTab
+    ? UTILITY_OPTIONS.findIndex((option) => option.id === pendingUtilityTab)
+    : -1;
+  const hasPendingUtility = pendingIndex >= 0;
+  const [activeUtilityIndex, setActiveUtilityIndex] = useState(
+    hasPendingUtility ? pendingIndex : 0
+  );
+  const [manualUtility, setManualUtility] = useState(hasPendingUtility);
+  const [showUtilityModal, setShowUtilityModal] = useState(hasPendingUtility);
+  const [utilityTab, setUtilityTab] = useState<UtilityTab>(
+    hasPendingUtility && pendingUtilityTab ? pendingUtilityTab : 'airtime'
+  );
 
   useEffect(() => {
     if (manualUtility) return;

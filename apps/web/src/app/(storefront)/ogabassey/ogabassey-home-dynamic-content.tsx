@@ -7,11 +7,9 @@ import {
   type getRequestScopedMerchant,
 } from '@/lib/cached-data';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
-import {
-  OgabasseyHomeDiscoverySection,
-  OgabasseyHomeProductSection,
-} from './ogabassey-home-dynamic-sections';
+import { OgabasseyHomeDiscoverySection } from './ogabassey-home-discovery-section';
 import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
+import { OgabasseyHomeProductSection } from './ogabassey-home-product-section';
 
 type OgabasseyMerchant = NonNullable<
   Awaited<ReturnType<typeof getRequestScopedMerchant>>

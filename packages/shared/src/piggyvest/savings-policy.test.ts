@@ -98,6 +98,15 @@ describe('savings-policy v1 (shared)', () => {
     );
   });
 
+  it('fails closed on an invalid maturity comparison date', () => {
+    // Regression: every comparison is false for an invalid Date, which
+    // used to silently report review-required for an active plan.
+    const activatedAt = new Date('2026-01-15T10:00:00.000Z');
+    expect(() => maturityStatus(activatedAt, new Date('invalid'))).toThrow(
+      RangeError
+    );
+  });
+
   it('month-end clamps: 31 Aug + 6 months lands on end of Feb, not March', () => {
     const activatedAt = new Date('2025-08-31T10:00:00.000Z');
     expect(maturityStatus(activatedAt, new Date('2026-02-27T10:00:00Z'))).toBe(

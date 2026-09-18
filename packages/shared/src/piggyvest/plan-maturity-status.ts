@@ -17,6 +17,10 @@ export function maturityStatus(
   activatedAt: Date,
   now: Date = new Date()
 ): PlanMaturityStatus {
+  // An invalid comparison instant must fail closed: every comparison below
+  // is false for it, which would silently report review-required and move
+  // an otherwise active or grace-period plan into manual review.
+  assertValidDate(now, 'now');
   const maturity = addCalendarMonthsClamped(activatedAt, MAX_DURATION_MONTHS);
   if (now < maturity) return 'active';
   const graceEnd = addCalendarDays(maturity, GRACE_PERIOD_DAYS);

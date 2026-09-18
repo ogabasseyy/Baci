@@ -7,12 +7,12 @@ import { buildBaseItemXml } from './build-base-feed-item';
  */
 
 import { toGoogleListingCondition } from '@baci/shared/lib';
+import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
 import type { FeedImageManifestEntry } from '@/lib/gmc-feed-images';
 import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
-import { collectOfferClaimedImageUrls } from '@/lib/gmc-offer-claimed-images';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { resolveOfferFeedImages } from '@/lib/resolve-offer-feed-images';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';

@@ -3,7 +3,7 @@ import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
-import { isOfferClaimedImage } from '@/lib/gmc-offer-claimed-images';
+import { isOfferClaimedImage } from '@/lib/is-offer-claimed-image';
 import { escapeXml } from '@/lib/xml-utils';
 
 /**

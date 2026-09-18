@@ -1,10 +1,10 @@
 import { toGoogleListingCondition } from '@baci/shared/lib';
 import { buildFeedDescription } from '@/app/api/feed/google-merchant/build-feed-description';
+import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
 import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
-import { collectOfferClaimedImageUrls } from '@/lib/gmc-offer-claimed-images';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { resolveOfferFeedImages } from '@/lib/resolve-offer-feed-images';

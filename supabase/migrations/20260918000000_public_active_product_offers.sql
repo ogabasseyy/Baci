@@ -15,6 +15,10 @@ USING (
     SELECT 1 FROM public.products p
     WHERE p.id = product_offers.product_id
       AND p.status = 'active'
+      -- Bind the offer to the product's own merchant: without this, a
+      -- merchant who knows another merchant's product UUID could publish
+      -- offers into the victim's public feeds.
+      AND p.merchant_id = product_offers.merchant_id
   )
 );
 

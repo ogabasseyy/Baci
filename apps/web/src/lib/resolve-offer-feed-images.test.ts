@@ -44,4 +44,48 @@ describe('resolveOfferFeedImages', () => {
       )
     ).toBeNull();
   });
+  it('excludes sibling-claimed urls from the no-images fallback', () => {
+    const productEntry = {
+      ...entry,
+      source_url: 'https://cdn.example/product.jpg',
+      verified_url: 'https://cdn.example/product.jpg',
+    };
+    const extraEntry = {
+      ...entry,
+      is_primary: false,
+      position: 1,
+      source_url: 'https://cdn.example/product-extra.jpg',
+      verified_url: 'https://cdn.example/product-extra.jpg',
+    };
+    const siblingEntry = {
+      ...entry,
+      is_primary: false,
+      position: 2,
+      source_url: 'https://cdn.example/sibling-used.jpg',
+      verified_url: 'https://cdn.example/sibling-used.jpg',
+    };
+    const manifest = [productEntry, extraEntry, siblingEntry];
+    const claimed = new Set(['https://cdn.example/sibling-used.jpg']);
+    const fallback = resolveOfferFeedImages(undefined, manifest, claimed);
+    expect(fallback?.imageUrl).toBe('https://cdn.example/product.jpg');
+    expect(fallback?.additionalImagesXml ?? '').toContain('product-extra');
+    expect(fallback?.additionalImagesXml ?? '').not.toContain('sibling-used');
+  });
+  it('still matches explicit images even when claimed', () => {
+    const siblingEntry = {
+      ...entry,
+      is_primary: false,
+      position: 1,
+      source_url: 'https://cdn.example/sibling-used.jpg',
+      verified_url: 'https://cdn.example/sibling-used.jpg',
+    };
+    const claimed = new Set(['https://cdn.example/sibling-used.jpg']);
+    expect(
+      resolveOfferFeedImages(
+        ['https://cdn.example/sibling-used.jpg'],
+        [entry, siblingEntry],
+        claimed
+      )?.imageUrl
+    ).toBe('https://cdn.example/sibling-used.jpg');
+  });
 });

@@ -1,6 +1,8 @@
 import { toGoogleListingCondition } from '@baci/shared/lib';
 import {
+  collectOfferClaimedImageUrls,
   type FeedImageManifestEntry,
+  isOfferClaimedImage,
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
@@ -97,8 +99,12 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
         );
       }
       // A generic family image cannot prove the advertised colour.
+      // Offer-owned imagery is excluded from the family fallback.
       if (!resolveGmcPrimaryImage(entries) && !color(variant)) {
-        entries = manifest.filter((entry) => !entry.variant_id);
+        const claimed = collectOfferClaimedImageUrls(product.offers);
+        entries = manifest.filter(
+          (entry) => !entry.variant_id && !isOfferClaimedImage(entry, claimed)
+        );
       }
       const image = resolveGmcPrimaryImage(entries);
       if (!image) return '';

@@ -1,6 +1,7 @@
 import { toGoogleListingCondition } from '@baci/shared/lib';
 import { buildFeedDescription } from '@/app/api/feed/google-merchant/build-feed-description';
 import {
+  collectOfferClaimedImageUrls,
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
@@ -205,7 +206,10 @@ export function generateFacebookCatalogFeed(
       }
       const primaryImageUrl = resolveGmcPrimaryImage(manifestEntries);
 
-      const additionalImagesXml = resolveGmcAdditionalImages(manifestEntries)
+      const additionalImagesXml = resolveGmcAdditionalImages(
+        manifestEntries,
+        collectOfferClaimedImageUrls(product.offers)
+      )
         .map(
           (url) =>
             `        <g:additional_image_link>${escapeXml(url)}</g:additional_image_link>`
@@ -249,7 +253,8 @@ export function generateFacebookCatalogFeed(
         .map((offer) => {
           const offerImages = resolveOfferFeedImages(
             offer.images,
-            manifestEntries
+            manifestEntries,
+            collectOfferClaimedImageUrls(product.offers)
           );
           if (!offerImages) return '';
           const url = new URL(productUrl);

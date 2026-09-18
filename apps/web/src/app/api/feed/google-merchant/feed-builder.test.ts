@@ -841,6 +841,38 @@ describe('generateGoogleMerchantFeed — multi-condition offers', () => {
     );
   });
 
+  it('defaults a null parent condition to new for base and eligibility', () => {
+    const xml = generateGoogleMerchantFeed(
+      [
+        product({
+          condition: null,
+          has_condition_offers: true,
+          offers: [
+            {
+              id: 'offer-new',
+              condition: 'new',
+              price: 90000,
+              stock_quantity: 3,
+            },
+            {
+              id: 'offer-used',
+              condition: 'used',
+              price: 80000,
+              stock_quantity: 2,
+            },
+          ],
+        }),
+      ],
+      merchant(),
+      BASE_URL,
+      defaultManifest
+    );
+    // Base row emits as new; the duplicate-condition new offer does not.
+    expect(xml).toContain('<g:condition>new</g:condition>');
+    expect(xml).not.toContain('<g:id>offer-new</g:id>');
+    expect(xml).toContain('<g:id>offer-used</g:id>');
+  });
+
   it('retains the valid offer row when the parent price is not positive', () => {
     const xml = generateGoogleMerchantFeed(
       [

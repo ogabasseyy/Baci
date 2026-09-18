@@ -120,6 +120,12 @@ describe('validateRemoteUrl host classification', () => {
     }
   });
 
+  it('blocks IPv6 multicast destinations', () => {
+    for (const host of ['ff02::1', 'ff0e::1', 'ffff:ffff::1']) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+  });
+
   it('blocks documentation-only and translation IPv6 destinations', () => {
     for (const host of [
       '2001:db8::1',

@@ -9,6 +9,7 @@ import type {
 import { getCachedGoogleMerchantFeedData } from '@/app/api/feed/google-merchant/feed-data';
 import { buildMerchantBaseUrl } from '@/app/api/feed/google-merchant/route-utils';
 import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
+import { getEligibleConditionOffers } from '@/lib/eligible-condition-offers';
 import {
   MerchantNotFoundError,
   resolveFeedMerchant,
@@ -162,7 +163,9 @@ function generateTikTokFeed(
     .map((product) => {
       const images = resolveTikTokImages(
         imageManifest[product.id],
-        collectOfferClaimedImageUrls(product.offers)
+        collectOfferClaimedImageUrls(
+          getEligibleConditionOffers(product.offers, product.condition)
+        )
       );
       if (!images) {
         return null;

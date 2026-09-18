@@ -96,7 +96,15 @@ describe('validateRemoteUrl host classification', () => {
     for (const host of ['::', 'fe90::1', 'febf:ffff::1']) {
       expect(validateRemoteUrl(url(host))).toBeNull();
     }
-    expect(validateRemoteUrl(url('fec0::1'))?.toString()).toBe(url('fec0::1'));
+  });
+
+  it('blocks deprecated site-local destinations', () => {
+    for (const host of ['fec0::1', 'feff::1']) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    expect(validateRemoteUrl(url('2001:db8::1'))?.toString()).toBe(
+      url('2001:db8::1'),
+    );
   });
 
   it('rejects malformed bracketed literals during URL parsing', () => {

@@ -39,7 +39,7 @@ BEGIN
   INSERT INTO public.product_offers
     (id, product_id, merchant_id, condition, price, stock_quantity, status)
   VALUES
-    ('b2000000-0000-4000-8000-000000000014', v_active_product, 'b2000000-0000-4000-8000-000000000099', 'new', 1, 5, 'active');
+    ('b2000000-0000-4000-8000-000000000014', v_active_product, 'b2000000-0000-4000-8000-000000000099', 'open_box', 1, 5, 'active');
 END;
 $$;
 

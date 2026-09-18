@@ -8,6 +8,7 @@ import {
   clampNumber,
   clampNumberInput,
   isQuizDifficulty,
+  type QuizDraftConfiguration,
 } from './quiz-admin-actions';
 import { QuizPlanSummary } from './quiz-plan-summary';
 import { QuizPrizeProductPicker } from './quiz-prize-product-picker';
@@ -18,20 +19,6 @@ import {
   useQuizAuthoringSchedule,
   useQuizAuthoringWindowSync,
 } from './use-quiz-authoring-window-sync';
-
-export type QuizDraftConfiguration = {
-  difficulty: 'easy' | 'standard' | 'hard';
-  liveWindowMinutes: number;
-  mode: 'test' | 'live';
-  prizeProduct: QuizPrizeProduct;
-  questionCountPerTopic: number;
-  scheduledEnd: string;
-  scheduledStart: string;
-  timePerQuestionSeconds: number;
-  timingKind: 'immediate' | 'scheduled';
-  title: string;
-  topics: string[];
-};
 
 export function QuizAuthoringForm({
   disabled,
@@ -46,7 +33,6 @@ export function QuizAuthoringForm({
   isGenerating: boolean;
   onGenerate: (configuration: QuizDraftConfiguration) => void;
 }) {
-  const now = new Date();
   const [title, setTitle] = useState('Daily Phone Quiz');
   const [topics, setTopics] = useState([
     'iPhone buying advice',
@@ -68,7 +54,7 @@ export function QuizAuthoringForm({
     'scheduled'
   );
   const { scheduledEnd, scheduledStart, setScheduledEnd, setScheduledStart } =
-    useQuizAuthoringSchedule(now.getTime());
+    useQuizAuthoringSchedule(Date.now());
   // The admin owns Universal end once they edit it; until then it tracks the
   // scheduled start plus the expected play time from the quiz summary.
   const [endTouched, setEndTouched] = useState(false);
@@ -87,9 +73,8 @@ export function QuizAuthoringForm({
     timingKind,
     windowMinutes,
   });
-  // Generation requires an interval activation will accept, not just an
-  // end after the start: a manually shrunk window outside the launch
-  // bounds would waste the AI draft request on an unlaunchable quiz.
+  // Generation requires an interval activation will accept: a manually
+  // shrunk window outside the launch bounds wastes the AI draft request.
   const liveWindowMinutes = clampNumber(Number(windowMinutes), 1, 120);
   const timingValid = isQuizAuthoringWindowAllowed({
     liveWindowMinutes,
@@ -109,6 +94,21 @@ export function QuizAuthoringForm({
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!prizeProduct || !canSubmit) return;
+    // Render-time validation goes stale while the page sits open; recheck
+    // the current clock before spending the AI request on an expired start.
+    if (
+      !isQuizAuthoringWindowAllowed({
+        liveWindowMinutes,
+        mode,
+        nowMs: Date.now(),
+        questionCount,
+        scheduledEnd,
+        scheduledStart,
+        timePerQuestionSeconds,
+        timingKind,
+      })
+    )
+      return;
     onGenerate({
       difficulty,
       liveWindowMinutes,

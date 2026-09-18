@@ -12,7 +12,10 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { usePermissionBooster } from '@/hooks/use-permission-booster';
 import { useReceiptPreview } from '@/hooks/use-receipt-preview';
-import { maybeShowPostOrderInterstitial } from '@/lib/post-order-interstitial';
+import {
+  hasOrderSuccessIdentity,
+  maybeShowPostOrderInterstitial,
+} from '@/lib/post-order-interstitial';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { SERVER_CONFIRMED_ORDER_NOTIFICATION_METHODS } from '@/services/payment-status';
 import { scheduleLocalNotification } from '@/services/push-notifications';
@@ -98,6 +101,12 @@ export default function OrderSuccessScreen() {
     // never cover the soft-ask modal or race the native prompt — and while
     // the receipt preview is loading or open so it never covers an
     // explicit document-viewing action.
+    // A deep link or stale route with no success identity schedules
+    // nothing: presenting would burn the once-per-session cap with no
+    // completed order behind it.
+    if (!hasOrderSuccessIdentity({ orderId, orderNumber, reference })) {
+      return;
+    }
     let interstitialCancelled = false;
     const interstitialTimerId = setTimeout(() => {
       void maybeShowPostOrderInterstitial({
@@ -112,7 +121,7 @@ export default function OrderSuccessScreen() {
       interstitialCancelled = true;
       clearTimeout(interstitialTimerId);
     };
-  }, []);
+  }, [orderId, orderNumber, reference]);
 
   useEffect(() => {
     // Check for notification permissions (Soft Ask)

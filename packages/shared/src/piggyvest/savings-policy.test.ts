@@ -33,6 +33,16 @@ describe('savings-policy v1 (shared)', () => {
     expect(isActivated(500_000, 10_000_000)).toBe(true);
   });
 
+  it('activation threshold stays exact at the safe-integer boundary', () => {
+    // Regression: multiplying before dividing overflows past
+    // MAX_SAFE_INTEGER and raises the threshold by one kobo, so a
+    // contribution at the correct threshold reads inactive.
+    expect(activationThresholdKobo(9_007_199_254_740_940)).toBe(
+      450_359_962_737_047
+    );
+    expect(isActivated(450_359_962_737_047, 9_007_199_254_740_940)).toBe(true);
+  });
+
   it('price falls: guarantee 10M, current 9.7M, spendable 9.8M is ready with 100k surplus', () => {
     const price = applicablePriceKobo({
       guaranteedPriceKobo: 10_000_000,

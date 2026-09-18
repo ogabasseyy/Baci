@@ -141,6 +141,35 @@ describe('QuizAuthoringForm', () => {
     expect(endInput.value).toBe('2026-09-20T18:00');
   });
 
+  it('disables generation once the scheduled start has passed', () => {
+    // Regression: a page left open past its start must not spend the AI
+    // request; activation rejects starts that are not in the future.
+    // Travel past the defaulted start (rendered as now + 1h), then nudge a
+    // rerender with an edited title so render-time validation re-evaluates
+    // against the clock.
+    render(
+      <QuizAuthoringForm
+        disabled={false}
+        initialProducts={[prize]}
+        isGenerating={false}
+        onGenerate={vi.fn()}
+      />
+    );
+    const nowSpy = vi
+      .spyOn(Date, 'now')
+      .mockReturnValue(Date.now() + 3_700_000);
+    try {
+      fireEvent.change(screen.getByLabelText(/quiz title/i), {
+        target: { value: 'Daily Phone Quiz 2' },
+      });
+      expect(
+        screen.getByRole('button', { name: /generate draft/i })
+      ).toBeDisabled();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   it('accepts a Lagos interval inside the admin timezone DST gap', () => {
     // Regression: validity must compare launch-policy-zone instants (as
     // activation does), not Date.parse in the admin browser zone. 02:15

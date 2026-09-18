@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Dispatcher } from 'undici';
 import {
+  createPinnedLookup,
   type DestinationLookupFn,
   resolvePinnedDestination,
 } from './remote-destination-gate';
@@ -68,6 +69,44 @@ describe('resolvePinnedDestination', () => {
     if ('failure' in gate) return;
     expect(gate.address).toBe('2001:db8::1');
     await gate.dispatcher.close();
+  });
+
+  it('exposes every validated address for connection fallback', async () => {
+    const lookup: DestinationLookupFn = async () => [
+      { address: '2001:db8::2', family: 6 },
+      { address: '93.184.216.3', family: 4 },
+    ];
+    const gate = await resolvePinnedDestination(
+      'https://images.example.com/phone.jpg',
+      lookup
+    );
+    expect('failure' in gate).toBe(false);
+    if ('failure' in gate) return;
+    // The reported pin stays the first validated address.
+    expect(gate.address).toBe('2001:db8::2');
+    await gate.dispatcher.close();
+
+    const pinned = createPinnedLookup([
+      { address: '2001:db8::2', family: 6 },
+      { address: '93.184.216.3', family: 4 },
+    ]);
+    const all = await new Promise((resolve, reject) =>
+      pinned('images.example.com', { all: true }, (err, address) =>
+        err ? reject(err) : resolve(address)
+      )
+    );
+    // Family autoselection receives the full validated set, never a
+    // re-resolved hostname, so the transport can fall back across records.
+    expect(all).toEqual([
+      { address: '2001:db8::2', family: 6 },
+      { address: '93.184.216.3', family: 4 },
+    ]);
+    const one = await new Promise((resolve, reject) =>
+      pinned('images.example.com', {}, (err, address, family) =>
+        err ? reject(err) : resolve({ address, family })
+      )
+    );
+    expect(one).toEqual({ address: '2001:db8::2', family: 6 });
   });
 
   it('leaves DNS failures retryable', async () => {

@@ -9,10 +9,10 @@ import { buildBaseItemXml } from './build-base-feed-item';
 import { toGoogleListingCondition } from '@baci/shared/lib';
 import type { FeedImageManifestEntry } from '@/lib/gmc-feed-images';
 import {
-  collectOfferClaimedImageUrls,
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
+import { collectOfferClaimedImageUrls } from '@/lib/gmc-offer-claimed-images';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { resolveOfferFeedImages } from '@/lib/resolve-offer-feed-images';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';
@@ -75,7 +75,7 @@ function resolveFeedImages(
   entries: FeedImageManifestEntry[],
   excludeUrls: ReadonlySet<string> = new Set()
 ): ResolvedFeedImages | null {
-  const primaryImageUrl = resolveGmcPrimaryImage(entries);
+  const primaryImageUrl = resolveGmcPrimaryImage(entries, excludeUrls);
 
   if (!primaryImageUrl) {
     return null;

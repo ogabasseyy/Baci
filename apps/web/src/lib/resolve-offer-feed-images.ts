@@ -1,9 +1,9 @@
 import {
   type FeedImageManifestEntry,
-  isOfferClaimedImage,
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
+import { isOfferClaimedImage } from '@/lib/gmc-offer-claimed-images';
 import { escapeXml } from '@/lib/xml-utils';
 
 /**

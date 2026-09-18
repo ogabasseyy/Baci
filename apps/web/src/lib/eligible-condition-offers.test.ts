@@ -50,4 +50,20 @@ describe('getEligibleConditionOffers', () => {
     expect(getEligibleConditionOffers(undefined, 'new')).toEqual([]);
     expect(getEligibleConditionOffers([], 'new')).toEqual([]);
   });
+
+  it('keeps only the first offer per normalized condition', () => {
+    expect(
+      getEligibleConditionOffers(
+        [
+          { id: 'o1', price: 100, condition: 'open_box' },
+          { id: 'o2', price: 90, condition: 'refurbished' },
+          { id: 'o3', price: 80, condition: 'used' },
+        ],
+        'new'
+      )
+    ).toEqual([
+      { id: 'o1', price: 100, condition: 'open_box' },
+      { id: 'o3', price: 80, condition: 'used' },
+    ]);
+  });
 });

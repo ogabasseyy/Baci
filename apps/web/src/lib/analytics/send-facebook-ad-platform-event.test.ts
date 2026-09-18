@@ -66,8 +66,9 @@ describe('sendFacebookAdPlatformEvent', () => {
       },
       'AddPaymentInfo'
     );
+    // Payment-info items match at catalog-group level like wishlist.
     expect(mocks.generic.mock.calls.at(-1)?.[4]).toMatchObject({
-      contentType,
+      contentType: 'product_group',
       contentIds: ['phone'],
     });
   });

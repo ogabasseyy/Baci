@@ -125,6 +125,8 @@ describe('validateRemoteUrl host classification', () => {
       '100::1',
       '2001::1',
       '2001:0:ffff:ffff:ffff:ffff:ffff:ffff',
+      '2001:10::1',
+      '2001:1f:ffff:ffff:ffff:ffff:ffff:ffff',
       '2002:c000:0201::1',
       '2001:2::1',
       '2001:db8::1',

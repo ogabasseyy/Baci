@@ -59,6 +59,14 @@ function isBlockedIpv6Literal(host: string): boolean {
   // 2001:2::/48 benchmarking prefix never appears on the public internet
   // and may be routed to internal test infrastructure.
   if (g0 === 0x2001 && g1 === 0x0002) return true;
+  // 2001:db8::/32 documentation prefix (RFC 3849) is not globally
+  // routable and is commonly routed to internal lab infrastructure.
+  if (g0 === 0x2001 && g1 === 0x0db8) return true;
+  // 64:ff9b::/96 well-known translation prefix (RFC 6052) never
+  // originates real traffic.
+  if (g0 === 0x0064 && g1 === 0xff9b && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0) {
+    return true;
+  }
   if ((g0 & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
   if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) {
     // ::ffff:0:0/96 — classify the embedded IPv4 address.

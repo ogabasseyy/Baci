@@ -67,6 +67,41 @@ describe('generateCurrentOpenAIProductFeed', () => {
     ]);
   });
 
+  it('excludes offer-claimed images from product-level media', () => {
+    const [line] = generateCurrentOpenAIProductFeed(
+      [
+        product({
+          offers: [{ images: ['https://cdn.example.com/manifest-side.jpg'] }],
+        }),
+      ],
+      merchant,
+      'https://ogabassey.com',
+      {
+        'product-1': [
+          {
+            verified_url: 'https://cdn.example.com/manifest-front.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 0,
+          },
+          {
+            verified_url: 'https://cdn.example.com/manifest-side.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: false,
+            position: 1,
+          },
+        ],
+      }
+    );
+    const parsed = parseLine(line);
+
+    expect(parsed.media).toEqual([
+      { type: 'image', url: 'https://cdn.example.com/manifest-front.jpg' },
+    ]);
+  });
+
   it('builds current feed items with untracked availability', () => {
     const [line] = generateCurrentOpenAIProductFeed(
       [product({ manage_stock: false, stock: 0 })],

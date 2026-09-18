@@ -2,6 +2,7 @@ import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
+import { collectOfferClaimedImageUrls } from '@/lib/gmc-offer-claimed-images';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { stripHtmlTags } from '@/lib/sanitize-core';
@@ -57,7 +58,8 @@ function getProductImageUrl(
   imageManifest: ImageManifestMap = {}
 ) {
   const manifestPrimaryImage = resolveGmcPrimaryImage(
-    getManifestEntriesForProductVariant(imageManifest, product, variant)
+    getManifestEntriesForProductVariant(imageManifest, product, variant),
+    collectOfferClaimedImageUrls(product.offers)
   );
   if (manifestPrimaryImage) {
     return manifestPrimaryImage;
@@ -78,7 +80,8 @@ function getAdditionalImageLinks(
   variant?: OpenAIFeedVariant
 ) {
   const manifestAdditionalImages = resolveGmcAdditionalImages(
-    getManifestEntriesForProductVariant(imageManifest, product, variant)
+    getManifestEntriesForProductVariant(imageManifest, product, variant),
+    collectOfferClaimedImageUrls(product.offers)
   );
   if (manifestAdditionalImages.length > 0) {
     return manifestAdditionalImages;

@@ -1,8 +1,10 @@
 import { Platform } from 'react-native';
+import type { PaidEvent } from 'react-native-google-mobile-ads';
 import { isQuizMobileAdsAvailable } from '@/components/quiz/is-quiz-mobile-ads-available';
 import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
 import { trackEvent } from '@/services/analytics-core';
 import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
+import { trackInterstitialPaidEvent } from './interstitial-paid-event';
 
 /**
  * Post-order interstitial, capped to one presentation per app session so a
@@ -112,6 +114,15 @@ export async function maybeShowPostOrderInterstitial(
         }),
         interstitial.addAdEventListener(mobileAds.AdEventType.ERROR, () =>
           finish('skipped')
+        ),
+        interstitial.addAdEventListener(mobileAds.AdEventType.PAID, (payload) =>
+          trackInterstitialPaidEvent(
+            'POST_ORDER_INTERSTITIAL',
+            // The SDK types the PAID payload as undefined, but the native
+            // bridge delivers { currency, precision, value } for
+            // full-screen ads (verified in the installed v16 sources).
+            payload as unknown as PaidEvent
+          )
         ),
         interstitial.addAdEventListener(mobileAds.AdEventType.CLOSED, () =>
           finish(didShowThisSession ? 'shown' : 'skipped')

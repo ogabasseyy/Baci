@@ -285,6 +285,35 @@ describe('useQuizWaitingRoom', () => {
     expect(isCancelled?.()).toBe(true);
   });
 
+  it('cancels the pending pre-quiz ad while the lobby is suspended', async () => {
+    // Regression: opening the rules modal while the interstitial loads must
+    // abandon the presentation so no full-screen ad covers the rules; closing
+    // the modal re-arms it.
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-23T11:59:00.000Z'));
+    mockMaybeShowQuizStartInterstitial.mockClear();
+    const { rerender } = renderHook(
+      ({ suspended }: { suspended: boolean }) =>
+        useQuizWaitingRoom({
+          event: event(),
+          onExit: jest.fn(),
+          onStart: jest.fn(),
+          refresh: jest.fn(async () => []),
+          suspended,
+        }),
+      { initialProps: { suspended: false } }
+    );
+    expect(mockMaybeShowQuizStartInterstitial).toHaveBeenCalledTimes(1);
+    const isCancelled =
+      mockMaybeShowQuizStartInterstitial.mock.calls[0]?.[0]?.isCancelled;
+    expect(typeof isCancelled).toBe('function');
+    expect(isCancelled?.()).toBe(false);
+    rerender({ suspended: true });
+    expect(isCancelled?.()).toBe(true);
+    rerender({ suspended: false });
+    expect(isCancelled?.()).toBe(false);
+  });
+
   it('cancels the pending pre-quiz ad when the countdown expires before start', async () => {
     // Refresh latency must not reopen the late-ad defect: once the local
     // countdown reaches zero the loaded ad is abandoned even though the

@@ -14,6 +14,11 @@ interface LaunchAdCardProps {
   colors: LaunchAdCardColors;
   /** Configured placement this slot resolves from; used for event attribution. */
   placement: MobileAdBannerPlacementKey;
+  /**
+   * Called when AdMob reports no fill or a load error so the carousel can
+   * drop the sponsored card instead of keeping a blank 168px slot.
+   */
+  onAdFailedToLoad?: () => void;
   unitId: string;
 }
 
@@ -27,6 +32,7 @@ interface LaunchAdCardProps {
 export function LaunchAdCard({
   cardWidth,
   colors,
+  onAdFailedToLoad,
   placement,
   unitId,
 }: LaunchAdCardProps) {
@@ -68,12 +74,13 @@ export function LaunchAdCard({
         Sponsored
       </Text>
       <BannerAd
-        onAdFailedToLoad={() =>
+        onAdFailedToLoad={() => {
           trackEvent('mobile_ad_failed', {
             format: 'banner',
             placement,
-          })
-        }
+          });
+          onAdFailedToLoad?.();
+        }}
         onAdImpression={() =>
           trackEvent('mobile_ad_impression', {
             format: 'banner',

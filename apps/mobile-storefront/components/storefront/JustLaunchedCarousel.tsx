@@ -5,6 +5,7 @@ import {
   OGABASSEY_PINNED_LAUNCH_SLUGS,
   selectLaunchProducts,
 } from '@baci/shared/storefront';
+import { useState } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -80,6 +81,10 @@ export function JustLaunchedCarousel() {
   const adsReadiness = useMobileAdsReadiness({
     enabled: adUnitConfig.enabled === true,
   });
+  // A failed banner (no fill, network/load error) drops the sponsored card
+  // so shoppers never see a blank 168px "Sponsored" slot. Declared with the
+  // other hooks, above the early returns.
+  const [adLoadFailed, setAdLoadFailed] = useState(false);
 
   if (isError) {
     return null;
@@ -141,6 +146,7 @@ export function JustLaunchedCarousel() {
     adUnitConfig.enabled &&
     adUnitConfig.format === 'banner' &&
     adsReadiness.canRequestAds &&
+    !adLoadFailed &&
     launchProducts.length > 0;
   type LaunchAdCardItem = { kind: 'launch-ad-card' };
   type LaunchRenderItem = Product | LaunchAdCardItem;
@@ -161,6 +167,7 @@ export function JustLaunchedCarousel() {
         <LaunchAdCard
           cardWidth={cardWidth}
           colors={colors}
+          onAdFailedToLoad={() => setAdLoadFailed(true)}
           placement="PRODUCT_GRID_MPU"
           unitId={
             adUnitConfig.enabled ? adUnitConfig.unitId : 'unused-ad-unit-id'

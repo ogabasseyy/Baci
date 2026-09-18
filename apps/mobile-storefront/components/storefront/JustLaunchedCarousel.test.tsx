@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 
 jest.mock('@/hooks/use-mobile-ads-readiness', () => ({
@@ -251,6 +251,28 @@ describe('JustLaunchedCarousel', () => {
     expect(firstProductIndex).toBeGreaterThan(-1);
     expect(adIndex).toBeGreaterThan(firstProductIndex);
     expect(adIndex).toBeLessThan(secondProductIndex);
+    delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
+  });
+
+  it('drops the sponsored card when the banner fails to load instead of keeping a blank slot', () => {
+    // Regression: on no-fill or load error the carousel must remove the
+    // sponsored card rather than retaining a blank 168px slot.
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    mockUseProducts.mockReturnValue({
+      products: [xiaomi, a27],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JustLaunchedCarousel />);
+
+    expect(screen.getByTestId('launch-ad-card')).toBeTruthy();
+    const banner = screen.UNSAFE_getByType('BannerAd' as never);
+    act(() => {
+      (banner.props as { onAdFailedToLoad: () => void }).onAdFailedToLoad();
+    });
+
+    expect(screen.queryByTestId('launch-ad-card')).toBeNull();
     delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
   });
 

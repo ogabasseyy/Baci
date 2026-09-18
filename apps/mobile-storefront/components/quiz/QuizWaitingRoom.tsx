@@ -34,12 +34,15 @@ export function QuizWaitingRoom({
   const { colors } = useTheme();
   const styles = createQuizWaitingRoomStyles(colors);
   const userId = useAuthStore((state) => state.user?.id ?? null);
+  const [rulesVisible, setRulesVisible] = useState(false);
   const waitingRoom: QuizWaitingRoomState = useQuizWaitingRoom({
     event,
     onEventsUpdated,
     onExit,
     onStart,
     refresh,
+    // A pending interstitial must never present over the rules modal.
+    suspended: rulesVisible,
   });
   const currentEvent = waitingRoom.event;
   const timePerQuestion = currentEvent.timePerQuestionSeconds ?? 10;
@@ -50,7 +53,6 @@ export function QuizWaitingRoom({
     status: currentEvent.status,
     userId,
   });
-  const [rulesVisible, setRulesVisible] = useState(false);
 
   return (
     <View

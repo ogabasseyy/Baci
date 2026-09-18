@@ -40,12 +40,19 @@ export function useQuizWaitingRoom({
   onExit,
   onStart,
   refresh,
+  suspended = false,
 }: {
   event: QuizEvent;
   onEventsUpdated?: (events: QuizEvent[]) => void;
   onExit: () => void;
   onStart: (eventId: string, termsAccepted: true) => void;
   refresh: RefreshEvents;
+  /**
+   * While true (e.g. the rules modal covers the lobby) a pending
+   * interstitial load is abandoned instead of presenting a full-screen ad
+   * over the modal.
+   */
+  suspended?: boolean;
 }): QuizWaitingRoomState {
   const [event, setEvent] = useState(initialEvent);
   const [offsetMs, setOffsetMs] = useState(() =>
@@ -72,6 +79,7 @@ export function useQuizWaitingRoom({
   );
   const startedRef = useRef(false);
   const stoppedRef = useRef(false);
+  const suspendedRef = useRef(suspended);
   const lastBoundaryRefreshAtRef = useRef(0);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
@@ -79,6 +87,7 @@ export function useQuizWaitingRoom({
   onEventsUpdatedRef.current = onEventsUpdated;
   onExitRef.current = onExit;
   onStartRef.current = onStart;
+  suspendedRef.current = suspended;
 
   const applyRefreshedEvent = (nextEvent: QuizEvent) => {
     eventRef.current = nextEvent;
@@ -147,8 +156,8 @@ export function useQuizWaitingRoom({
     let mounted = true;
     // Fire-and-forget: the lobby countdown keeps ticking underneath and play
     // never waits on the ad. The load is abandoned if the shopper moves into
-    // live play, the lobby unmounts, or the countdown reaches the safety
-    // margin while the load is in flight. The request requires strictly more
+    // live play, the lobby unmounts, the rules modal suspends the lobby, or
+    // the countdown reaches the safety margin while the load is in flight. The request requires strictly more
     // than 30 seconds, so presentation cancels at 30 or below: a whole
     // "30" on screen can be as little as 29.001 real seconds.
     if (
@@ -160,6 +169,7 @@ export function useQuizWaitingRoom({
           !mounted ||
           startedRef.current ||
           stoppedRef.current ||
+          suspendedRef.current ||
           getRemainingSeconds(eventRef.current, offsetRef.current) <=
             QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS,
       });

@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { isQuizMobileAdsAvailable } from '@/components/quiz/is-quiz-mobile-ads-available';
+import { trackEvent } from '@/services/analytics-core';
 import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
 import {
   maybeShowPostOrderInterstitial,
@@ -20,13 +21,15 @@ jest.mock('@/services/initialize-quiz-mobile-ads', () => ({
 
 const mockIsQuizMobileAdsAvailable = jest.mocked(isQuizMobileAdsAvailable);
 const mockInitializeQuizMobileAds = jest.mocked(initializeQuizMobileAds);
+const mockTrackEvent = jest.mocked(trackEvent);
 
-type Listener = () => void;
+type Listener = (...args: unknown[]) => void;
 
 const listeners: Record<string, Listener[]> = {
   closed: [],
   error: [],
   loaded: [],
+  paid: [],
 };
 
 const mockInterstitialShow = jest.fn<(...args: unknown[]) => Promise<void>>(
@@ -37,7 +40,12 @@ const mockInterstitialLoad = jest.fn<(...args: unknown[]) => void>(
 );
 
 jest.mock('react-native-google-mobile-ads', () => ({
-  AdEventType: { CLOSED: 'closed', ERROR: 'error', LOADED: 'loaded' },
+  AdEventType: {
+    CLOSED: 'closed',
+    ERROR: 'error',
+    LOADED: 'loaded',
+    PAID: 'paid',
+  },
   InterstitialAd: {
     createForAdRequest: () => ({
       addAdEventListener: (type: string, listener: Listener) => {
@@ -65,6 +73,7 @@ function setAdsEnabled(value: string | undefined) {
   mockInterstitialLoad.mockClear();
   mockInterstitialShow.mockClear();
   mockInitializeQuizMobileAds.mockClear();
+  mockTrackEvent.mockClear();
   resetPostOrderInterstitialForTests();
   if (value === undefined) {
     delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
@@ -135,6 +144,28 @@ describe('maybeShowPostOrderInterstitial', () => {
     await expect(maybeShowPostOrderInterstitial()).resolves.toBe('skipped');
     expect(mockInitializeQuizMobileAds).not.toHaveBeenCalled();
     expect(mockInterstitialLoad).not.toHaveBeenCalled();
+    setAdsEnabled(ORIGINAL_ENV);
+  });
+
+  it('reports paid events with the interstitial placement', async () => {
+    // Regression: interstitial revenue must reach mobile_ad_paid like the
+    // banner placements do, or placement-level reporting undercounts it.
+    setAdsEnabled('true');
+    const attempt = maybeShowPostOrderInterstitial();
+    await flushConsentGate();
+    for (const listener of listeners.paid) {
+      listener({ currency: 'USD', precision: 1, value: 0.000_02 });
+    }
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      'mobile_ad_paid',
+      expect.objectContaining({
+        currency: 'USD',
+        format: 'interstitial',
+        placement: 'POST_ORDER_INTERSTITIAL',
+      })
+    );
+    for (const listener of listeners.loaded) listener();
+    await expect(attempt).resolves.toBe('shown');
     setAdsEnabled(ORIGINAL_ENV);
   });
 });

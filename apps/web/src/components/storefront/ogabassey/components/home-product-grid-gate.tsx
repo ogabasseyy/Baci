@@ -47,6 +47,8 @@ const loadDefaultGridModule = () => import('./HomeProductGrid');
  * the post-LCP signal — which then honors the 600px approach margin and
  * the backstop timeout — then loads the interactive grid module on demand.
  * Below-fold grid JS stays out of the initial bundle AND the LCP window.
+ * A rejected import parks and retries on the next interaction instead of
+ * wedging the fallback permanently.
  */
 export function HomeProductGridGate({
   fallback,
@@ -65,6 +67,13 @@ export function HomeProductGridGate({
   });
   const [Grid, setGrid] =
     useState<HomeProductGridModule['HomeProductGrid'] | null>(null);
+  // A rejected grid import parks here instead of retrying in a loop: the
+  // next interaction clears it and re-arms the load effect, so an offline
+  // or stale-deployment blip recovers on the following scroll or tap
+  // instead of leaving the static fallback (and its inert Load More row)
+  // permanently mounted. Same contract as HeroUtilityPanelGate.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   // Replacing the fallback unmounts the focused node and drops keyboard
   // focus to <body> — capture before the swap, restore the matching
@@ -76,8 +85,31 @@ export function HomeProductGridGate({
     Grid !== null
   );
 
+  // Retry arm: a later pointer/key interaction after a failed load clears
+  // the parked failure and re-arms the load effect below. Each retry needs
+  // a fresh interaction — no timer loop, no render loop.
   useEffect(() => {
-    if (!isActive || Grid) {
+    if (!loadFailed) {
+      return;
+    }
+    const retryAfterFailure = () => {
+      setLoadFailed(false);
+      setLoadAttempt((attempt) => attempt + 1);
+    };
+    window.addEventListener('pointerdown', retryAfterFailure, {
+      passive: true,
+    });
+    window.addEventListener('keydown', retryAfterFailure);
+    window.addEventListener('click', retryAfterFailure);
+    return () => {
+      window.removeEventListener('pointerdown', retryAfterFailure);
+      window.removeEventListener('keydown', retryAfterFailure);
+      window.removeEventListener('click', retryAfterFailure);
+    };
+  }, [loadFailed]);
+
+  useEffect(() => {
+    if (!isActive || Grid || loadFailed) {
       return;
     }
 
@@ -92,6 +124,9 @@ export function HomeProductGridGate({
       })
       .catch((error: unknown) => {
         console.error('[HomeProductGridGate] Failed to load grid module', error);
+        if (!cancelled) {
+          setLoadFailed(true);
+        }
       });
 
     return () => {
@@ -100,7 +135,7 @@ export function HomeProductGridGate({
     // captureFocusBeforeSwap is a stable per-render closure over the ref;
     // re-running the load effect on its identity change would refetch.
     // biome-ignore lint/correctness/useExhaustiveDependencies: see above.
-  }, [Grid, isActive, loadGridModule]);
+  }, [Grid, isActive, loadGridModule, loadFailed, loadAttempt]);
 
   if (!isActive || !Grid) {
     return <div ref={ref}>{fallback}</div>;

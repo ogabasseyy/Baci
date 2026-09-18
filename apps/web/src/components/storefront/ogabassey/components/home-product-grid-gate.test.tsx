@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
 import { HomeProductGridGate } from './home-product-grid-gate';
@@ -284,5 +284,52 @@ describe('HomeProductGridGate', () => {
 
     expect(loadGridModule).toHaveBeenCalledOnce();
     expect(screen.getByText('Static product snapshot')).toBeInTheDocument();
+  });
+
+  it('retries the grid load on the next interaction after a failure', async () => {
+    // An offline or stale-deployment blip must not wedge the fallback (and
+    // its inert Load More row) permanently: the following interaction
+    // retries the import and swaps in the grid when it succeeds.
+    let shouldFail = true;
+    const flakyLoad = vi.fn(() =>
+      shouldFail
+        ? Promise.reject(new Error('chunk failed'))
+        : Promise.resolve({
+            HomeProductGrid: () => <div data-testid="interactive-grid" />,
+          })
+    );
+
+    render(
+      <HomeProductGridGate
+        fallback={<div>Static product snapshot</div>}
+        loadGridModule={flakyLoad}
+        products={[stubProduct]}
+        timeoutMs={1000}
+      />
+    );
+    await settleLcpSignal();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(flakyLoad).toHaveBeenCalledOnce();
+    expect(screen.queryByTestId('interactive-grid')).not.toBeInTheDocument();
+
+    shouldFail = false;
+    await act(async () => {
+      fireEvent.pointerDown(window);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(flakyLoad).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('interactive-grid')).toBeInTheDocument();
   });
 });

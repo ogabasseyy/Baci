@@ -85,6 +85,78 @@ describe('waitForLcpWindowEnd', () => {
     expect(resolved).toBe(true);
   });
 
+  it('holds a settled quiet window until page load when still loading', async () => {
+    // A quiet gap is not finality: on a throttled load the hero image can
+    // take far longer than the gap to follow an early text candidate. The
+    // wait must hold for the `load` lifecycle signal even after candidates
+    // go quiet, and release when it fires.
+    vi.useFakeTimers();
+    const realReadyState = document.readyState;
+    Object.defineProperty(document, 'readyState', {
+      value: 'loading',
+      configurable: true,
+    });
+    try {
+      const deliveredCallbacks: Array<() => void> = [];
+      function FakePerformanceObserver(callback: () => void) {
+        deliveredCallbacks.push(callback);
+      }
+      FakePerformanceObserver.prototype.observe = vi.fn();
+      FakePerformanceObserver.prototype.disconnect = vi.fn();
+      Object.defineProperty(globalThis, 'PerformanceObserver', {
+        value: FakePerformanceObserver,
+        writable: true,
+        configurable: true,
+      });
+
+      let resolved = false;
+      const pending = waitForLcpWindowEnd(5000, 500).then(() => {
+        resolved = true;
+      });
+      deliveredCallbacks[0]?.();
+
+      // Quiet window elapses with the page still loading: must hold.
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(resolved).toBe(false);
+
+      window.dispatchEvent(new Event('load'));
+      await pending;
+      expect(resolved).toBe(true);
+    } finally {
+      Object.defineProperty(document, 'readyState', {
+        value: realReadyState,
+        configurable: true,
+      });
+    }
+  });
+
+  it('resolves on the quiet window alone when the page already loaded', async () => {
+    // A wait that starts after `load` degrades to the quiet-only path.
+    expect(document.readyState).toBe('complete');
+    vi.useFakeTimers();
+    const deliveredCallbacks: Array<() => void> = [];
+    function FakePerformanceObserver(callback: () => void) {
+      deliveredCallbacks.push(callback);
+    }
+    FakePerformanceObserver.prototype.observe = vi.fn();
+    FakePerformanceObserver.prototype.disconnect = vi.fn();
+    Object.defineProperty(globalThis, 'PerformanceObserver', {
+      value: FakePerformanceObserver,
+      writable: true,
+      configurable: true,
+    });
+
+    let resolved = false;
+    const pending = waitForLcpWindowEnd(5000, 500).then(() => {
+      resolved = true;
+    });
+    deliveredCallbacks[0]?.();
+
+    await vi.advanceTimersByTimeAsync(500);
+    await pending;
+    expect(resolved).toBe(true);
+  });
+
   it('delivers already-fired candidates through the buffered observer', async () => {
     // Candidates painted before the wait starts arrive via buffered
     // delivery and enter the same settle logic — never an instant resolve.

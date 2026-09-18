@@ -1,3 +1,4 @@
+import { toGoogleListingCondition } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
 import { createAnonClient } from '@/lib/supabase/anon';
@@ -234,10 +235,30 @@ export async function getCachedOpenAIFeedData(
     .map((product) => product.id);
   if (offerProductIds.length > 0) {
     const offersByProduct = new Map<string, Array<{ images?: unknown }>>();
+    const productsById = new Map(
+      products.map((product) => [product.id, product])
+    );
     for (const offer of await fetchActiveFeedOffers(
       supabase,
       offerProductIds
     )) {
+      // Mirror the Google/Facebook eligibility rule: only offers that can
+      // emit feed rows (positive finite price, valid condition, different
+      // from the parent condition) may claim imagery. Non-emittable
+      // offers must not delete the base product's images.
+      const product = productsById.get(offer.product_id);
+      const price = Number(offer.price);
+      const offerCondition = toGoogleListingCondition(offer.condition);
+      if (
+        !product ||
+        !offer.id ||
+        !Number.isFinite(price) ||
+        price <= 0 ||
+        !offerCondition ||
+        offerCondition === toGoogleListingCondition(product.condition)
+      ) {
+        continue;
+      }
       const list = offersByProduct.get(offer.product_id) ?? [];
       list.push({ images: offer.images });
       offersByProduct.set(offer.product_id, list);

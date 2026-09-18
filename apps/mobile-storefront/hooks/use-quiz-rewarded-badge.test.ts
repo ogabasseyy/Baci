@@ -249,6 +249,36 @@ describe('useQuizRewardedBadge', () => {
     expect(result.current.isWatching).toBe(false);
   });
 
+  it('fails the watch when loading stalls past the settlement timeout', () => {
+    // Regression: a hung SDK load (neither LOADED nor ERROR) must not hold
+    // fullscreen ownership forever. After the 30s settlement timeout the
+    // offer shows its retry state and the interstitial path unblocks.
+    jest.useFakeTimers();
+    try {
+      const { result } = renderHook(() =>
+        useQuizRewardedBadge({
+          eventId: 'event-1',
+          eventTitle: 'Today Quiz',
+          remainingSeconds: 120,
+          status: 'scheduled',
+          userId: 'user-1',
+        })
+      );
+
+      mockSetQuizRewardedFlowActive.mockClear();
+      act(() => result.current.watchAd());
+      expect(mockSetQuizRewardedFlowActive).toHaveBeenCalledWith(true);
+      act(() => {
+        jest.advanceTimersByTime(30_000);
+      });
+      expect(result.current.watchFailed).toBe(true);
+      expect(result.current.isWatching).toBe(false);
+      expect(mockSetQuizRewardedFlowActive).toHaveBeenCalledWith(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('releases interstitial ownership when eligibility expires mid-load', () => {
     // Regression: starting a rewarded load claims interstitial ownership; if
     // the countdown crosses the threshold before presentation, the expiry

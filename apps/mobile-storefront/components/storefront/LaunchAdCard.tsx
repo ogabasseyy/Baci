@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { PaidEvent } from 'react-native-google-mobile-ads';
 import type { MobileAdBannerPlacementKey } from '@/config/mobile-ad-placements';
 import { trackEvent } from '@/services/analytics-core';
+import { useDrawerStore } from '@/stores/drawer-store';
 
 interface LaunchAdCardColors {
   border: string;
@@ -36,6 +37,9 @@ export function LaunchAdCard({
   placement,
   unitId,
 }: LaunchAdCardProps) {
+  // Like AdSlot: suspend while the navigation drawer is open so the card
+  // never loads or refreshes under the drawer backdrop.
+  const drawerOpen = useDrawerStore((state) => state.isOpen);
   let bannerModule: typeof import('react-native-google-mobile-ads') | null =
     null;
   try {
@@ -44,7 +48,7 @@ export function LaunchAdCard({
   } catch {
     return null;
   }
-  if (!bannerModule) return null;
+  if (!bannerModule || drawerOpen) return null;
   const { BannerAd, BannerAdSize } = bannerModule;
 
   const handlePaid = (event: PaidEvent) => {

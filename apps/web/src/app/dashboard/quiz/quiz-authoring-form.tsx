@@ -90,7 +90,9 @@ export function QuizAuthoringForm({
   // Generation requires an interval activation will accept, not just an
   // end after the start: a manually shrunk window outside the launch
   // bounds would waste the AI draft request on an unlaunchable quiz.
+  const liveWindowMinutes = clampNumber(Number(windowMinutes), 1, 120);
   const timingValid = isQuizAuthoringWindowAllowed({
+    liveWindowMinutes,
     mode,
     questionCount,
     scheduledEnd,
@@ -109,7 +111,7 @@ export function QuizAuthoringForm({
     if (!prizeProduct || !canSubmit) return;
     onGenerate({
       difficulty,
-      liveWindowMinutes: clampNumber(Number(windowMinutes), 1, 120),
+      liveWindowMinutes,
       mode,
       prizeProduct,
       questionCountPerTopic: clampNumber(Number(perTopic), 1, 20),

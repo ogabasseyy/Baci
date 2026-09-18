@@ -8,6 +8,10 @@ import { useQuizBadgeStore } from '@/stores/quiz-badge-store';
 
 const MINIMUM_REMAINING_SECONDS = 90;
 
+// Matches the interstitial settlement timers: a load that never resolves
+// must not hold fullscreen ownership forever.
+const REWARDED_AD_LOAD_TIMEOUT_MS = 30_000;
+
 export interface UseQuizRewardedBadgeOptions {
   eventId: string;
   eventTitle: string;
@@ -239,6 +243,16 @@ export function useQuizRewardedBadge({
         }),
       ];
       rewardedAd.load();
+      const loadTimeout = setTimeout(() => {
+        // A hung load (neither LOADED nor ERROR) must fail like an SDK
+        // error: the offer shows its retry state and fullscreen ownership
+        // releases so the interstitial path unblocks. Presented ads are
+        // owned by their CLOSED/EARNED_REWARD handlers instead.
+        if (!isCurrent() || session.presented) return;
+        setWatchFailed(true);
+        finish();
+      }, REWARDED_AD_LOAD_TIMEOUT_MS);
+      session.cleanups.push(() => clearTimeout(loadTimeout));
     } catch {
       // Synchronous setup failures (e.g. uninitialized native SDK) must
       // surface the same failure state as async ERROR / show() rejections,

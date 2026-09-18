@@ -144,8 +144,9 @@ describe('QuizAuthoringForm', () => {
   it('accepts a Lagos interval inside the admin timezone DST gap', () => {
     // Regression: validity must compare launch-policy-zone instants (as
     // activation does), not Date.parse in the admin browser zone. 02:15
-    // does not exist in America/New_York on 2026-03-08 (spring forward),
-    // so a browser-zone comparison collapses this valid Lagos hour.
+    // does not exist in America/New_York on 2027-03-14 (spring forward),
+    // so a browser-zone comparison collapses this valid Lagos hour. The
+    // walls stay in the future so the expired-start guard also passes.
     const previousTz = process.env.TZ;
     process.env.TZ = 'America/New_York';
     try {
@@ -158,10 +159,10 @@ describe('QuizAuthoringForm', () => {
         />
       );
       fireEvent.change(screen.getByLabelText(/scheduled start/i), {
-        target: { value: '2026-03-08T02:15' },
+        target: { value: '2027-03-14T02:15' },
       });
       fireEvent.change(screen.getByLabelText(/universal end/i), {
-        target: { value: '2026-03-08T03:15' },
+        target: { value: '2027-03-14T03:15' },
       });
       expect(
         screen.getByRole('button', { name: /generate draft/i })

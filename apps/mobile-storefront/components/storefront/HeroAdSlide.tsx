@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { PaidEvent } from 'react-native-google-mobile-ads';
 import type { MobileAdBannerPlacementKey } from '@/config/mobile-ad-placements';
 import { trackEvent } from '@/services/analytics-core';
+import { useDrawerStore } from '@/stores/drawer-store';
 
 interface HeroAdSlideProps {
   height: number;
@@ -28,6 +29,9 @@ export function HeroAdSlide({
   screenWidth,
   unitId,
 }: HeroAdSlideProps) {
+  // Like AdSlot: suspend while the navigation drawer is open so the home
+  // banner never loads or refreshes under the drawer backdrop.
+  const drawerOpen = useDrawerStore((state) => state.isOpen);
   // Builds without the Google Mobile Ads native module (e.g. Expo Go) throw
   // on require; render nothing rather than crashing the home feed.
   let bannerModule: typeof import('react-native-google-mobile-ads') | null =
@@ -38,7 +42,7 @@ export function HeroAdSlide({
   } catch {
     return null;
   }
-  if (!bannerModule) return null;
+  if (!bannerModule || drawerOpen) return null;
   const { BannerAd, BannerAdSize } = bannerModule;
 
   const handlePaid = (event: PaidEvent) => {

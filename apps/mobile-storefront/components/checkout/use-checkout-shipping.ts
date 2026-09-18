@@ -13,11 +13,11 @@ import {
 } from '@/components/checkout/checkout-step-helpers';
 import { buildShippingQuoteContextKey } from '@/lib/shipping-quotes';
 import { applyCheckoutGoogleCitySuggestion } from './apply-checkout-google-city-suggestion';
-import { useApplyDeliveryFallback } from './checkout-door-fallback';
 import { createCheckoutShippingHandlers } from './checkout-shipping-handlers';
 import { loadShippingStates } from './checkout-shipping-loaders';
 import { getCheckoutLocationPickerVisibility } from './get-checkout-location-picker-visibility';
 import type { DeliveryMethod, ShippingQuote } from './types';
+import { useApplyDeliveryFallback } from './use-apply-delivery-fallback';
 import type {
   SavedDoorAddress,
   UseCheckoutShippingParams,

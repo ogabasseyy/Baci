@@ -2,13 +2,122 @@ import {
   getSuggestedQuizLiveWindowSeconds,
   QUIZ_DEFAULT_TIME_ZONE,
 } from '@baci/shared';
-import { useEffect } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
+import { useEffect, useState } from 'react';
 import {
   quizDatetimeLocalToIso,
   quizInstantToDatetimeLocal,
 } from './quiz-datetime-local';
 
 const MINUTE_MS = 60_000;
+
+const SCHEDULE_START_LEAD_MS = 3_600_000;
+const SCHEDULE_END_LEAD_MS = 3_900_000;
+
+/**
+ * Default schedule inputs in the launch policy zone: activation interprets
+ * these wall clocks as Africa/Lagos, so browser-local defaults would shift
+ * the window for admins elsewhere. The default end sits 5 minutes after the
+ * default start.
+ */
+export function defaultQuizAuthoringSchedule(nowMs: number): {
+  scheduledEnd: string;
+  scheduledStart: string;
+} {
+  return {
+    scheduledEnd:
+      quizInstantToDatetimeLocal(
+        nowMs + SCHEDULE_END_LEAD_MS,
+        QUIZ_DEFAULT_TIME_ZONE
+      ) ?? '',
+    scheduledStart:
+      quizInstantToDatetimeLocal(
+        nowMs + SCHEDULE_START_LEAD_MS,
+        QUIZ_DEFAULT_TIME_ZONE
+      ) ?? '',
+  };
+}
+
+/**
+ * Preview text for when the quiz closes. Scheduled quizzes show the
+ * launch-policy-zone end interpreted in that same zone so the preview
+ * matches what activation will schedule; immediate launches show the live
+ * window length instead.
+ */
+export function resolveQuizAuthoringClosesAt({
+  scheduledEnd,
+  timingKind,
+  windowMinutes,
+}: {
+  scheduledEnd: string;
+  timingKind: 'immediate' | 'scheduled';
+  windowMinutes: string;
+}): string {
+  if (timingKind === 'scheduled' && scheduledEnd) {
+    return new Date(
+      quizDatetimeLocalToIso(scheduledEnd, QUIZ_DEFAULT_TIME_ZONE) ?? Number.NaN
+    ).toLocaleString();
+  }
+  return `About ${windowMinutes} minute${windowMinutes === '1' ? '' : 's'} after launch`;
+}
+
+/**
+ * Schedule input state with launch-policy-zone defaults. The admin owns the
+ * Universal end once they edit it; until then it tracks the start via
+ * useQuizAuthoringWindowSync.
+ */
+export function useQuizAuthoringSchedule(nowMs: number): {
+  scheduledEnd: string;
+  scheduledStart: string;
+  setScheduledEnd: Dispatch<SetStateAction<string>>;
+  setScheduledStart: Dispatch<SetStateAction<string>>;
+} {
+  const [scheduleDefaults] = useState(() =>
+    defaultQuizAuthoringSchedule(nowMs)
+  );
+  const [scheduledStart, setScheduledStart] = useState(
+    scheduleDefaults.scheduledStart
+  );
+  const [scheduledEnd, setScheduledEnd] = useState(
+    scheduleDefaults.scheduledEnd
+  );
+  return { scheduledEnd, scheduledStart, setScheduledEnd, setScheduledStart };
+}
+
+/**
+ * Validate launch timing. Scheduled quizzes compare the zoned ISO
+ * conversions of the inputs (as activation does), not Date.parse, which
+ * would read the wall clocks in the admin browser's zone and misjudge
+ * DST-gap intervals.
+ */
+export function isQuizAuthoringTimingValid({
+  scheduledEnd,
+  scheduledStart,
+  timingKind,
+}: {
+  scheduledEnd: string;
+  scheduledStart: string;
+  timingKind: 'immediate' | 'scheduled';
+}): boolean {
+  if (timingKind === 'immediate') return true;
+  const scheduledStartIso = scheduledStart
+    ? quizDatetimeLocalToIso(scheduledStart, QUIZ_DEFAULT_TIME_ZONE)
+    : null;
+  const scheduledEndIso = scheduledEnd
+    ? quizDatetimeLocalToIso(scheduledEnd, QUIZ_DEFAULT_TIME_ZONE)
+    : null;
+  const scheduledStartMs = scheduledStartIso
+    ? Date.parse(scheduledStartIso)
+    : Number.NaN;
+  const scheduledEndMs = scheduledEndIso
+    ? Date.parse(scheduledEndIso)
+    : Number.NaN;
+  return (
+    Number.isFinite(scheduledStartMs) &&
+    Number.isFinite(scheduledEndMs) &&
+    scheduledEndMs > scheduledStartMs
+  );
+}
 
 interface QuizAuthoringWindowSyncInput {
   endTouched: boolean;

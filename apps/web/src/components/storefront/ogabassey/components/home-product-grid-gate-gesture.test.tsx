@@ -79,8 +79,20 @@ describe('HomeProductGridGate tap gestures', () => {
       screen.getByRole('link', { name: 'iPhone 17 Pro Max' })
     ).toBeInTheDocument();
 
+    // Release alone must NOT swap: the click still has to dispatch, and
+    // swapping here would unmount the pressed anchor before it lands.
     await act(async () => {
       fireEvent.pointerUp(window);
+      await Promise.resolve();
+    });
+    expect(
+      screen.queryByTestId('interactive-grid')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'iPhone 17 Pro Max' })
+    ).toBeInTheDocument();
+
+    await act(async () => {
       fireEvent.click(fallbackLink);
       await Promise.resolve();
     });

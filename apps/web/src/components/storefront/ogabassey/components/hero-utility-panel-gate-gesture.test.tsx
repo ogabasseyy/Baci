@@ -161,10 +161,20 @@ describe('HeroUtilityPanelGate tap gestures', () => {
       screen.queryByTestId('interactive-utility-panel')
     ).not.toBeInTheDocument();
 
+    // Release alone must NOT swap: the click still has to dispatch, and
+    // swapping here would unmount the pressed option before the replay
+    // records it.
+    await act(async () => {
+      fireEvent.pointerUp(window);
+      await Promise.resolve();
+    });
+    expect(
+      screen.queryByTestId('interactive-utility-panel')
+    ).not.toBeInTheDocument();
+
     // Release completes the gesture: the click lands on the still-mounted
     // fallback option and replays into the panel.
     await act(async () => {
-      fireEvent.pointerUp(window);
       fireEvent.click(dataButton!);
       await Promise.resolve();
     });

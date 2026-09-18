@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
-import { Suspense } from 'react';
+import { Suspense, use } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockMerchant = {
@@ -194,10 +194,10 @@ describe('OgabasseyHomeDynamicContent', () => {
       pathPrefix: '/ogabassey',
     });
 
-    // Structural probe: two Suspense boundaries — the product half keeps a
-    // null fallback (no spinners below the fold) while the discovery half
-    // reserves its card geometry, so independent streaming cannot push a
-    // viewport-visible footer down when it inserts.
+    // Structural probe: two Suspense boundaries with geometry-matched
+    // reserves — the median full product grid and the median discovery
+    // card — so whichever leg loses the streaming race inserts near-exact
+    // instead of pushing a viewport-visible footer down.
     const children = (
       Array.isArray(result.props.children)
         ? result.props.children
@@ -215,21 +215,83 @@ describe('OgabasseyHomeDynamicContent', () => {
     }>;
     const boundaries = children.filter((child) => child?.type === Suspense);
     expect(boundaries).toHaveLength(2);
-    expect(boundaries[0]?.props?.fallback).toBeNull();
-    const discoveryFallback = boundaries[1]?.props?.fallback;
-    expect(discoveryFallback).not.toBeNull();
-    const reserve = (
-      discoveryFallback as {
-        props: Record<string, unknown> & {
-          children: { props: Record<string, unknown> };
-        };
+    for (const [index, marker, minHeight] of [
+      [0, 'data-ogabassey-product-reserve', 'min-h-[1200px]'],
+      [1, 'data-ogabassey-discovery-reserve', 'min-h-[280px]'],
+    ] as [number, string, string][]) {
+      const fallback = boundaries[index]?.props?.fallback;
+      expect(fallback).not.toBeNull();
+      const reserve = (
+        fallback as {
+          props: Record<string, unknown> & {
+            children: { props: Record<string, unknown> };
+          };
+        }
+      ).props;
+      expect(reserve[marker]).toBe('true');
+      expect(reserve['aria-hidden']).toBe('true');
+      expect(
+        (reserve.children as { props: Record<string, unknown> }).props.className
+      ).toBe(minHeight);
+    }
+  });
+
+  it('holds product-section geometry while the home-product feed is pending', () => {
+    // The slow-product-feed race: categories/launch resolve first while
+    // products are still in flight. The product boundary must show its
+    // median-grid reserve (not zero height) while discovery streams.
+    mockProductSection.mockImplementationOnce(
+      ({ productsPromise }: OgabasseyHomeProductSectionProps) => {
+        use(productsPromise);
+        return <section aria-label="Home products">/ogabassey</section>;
       }
-    ).props;
-    expect(reserve['data-ogabassey-discovery-reserve']).toBe('true');
-    expect(reserve['aria-hidden']).toBe('true');
+    );
+
+    const result = OgabasseyHomeDynamicContent({
+      merchant: mockMerchant,
+      pathPrefix: '/ogabassey',
+    }) as ReactElement;
+
+    render(result);
+
+    const reserve = document.querySelector(
+      '[data-ogabassey-product-reserve="true"]'
+    );
+    expect(reserve).not.toBeNull();
+    expect(reserve?.querySelector('.min-h-\\[1200px\\]')).not.toBeNull();
+    // Discovery streams ahead independently.
     expect(
-      (reserve.children as { props: Record<string, unknown> }).props.className
-    ).toContain('min-h-');
+      screen.getByRole('region', { name: 'Home discovery' })
+    ).toBeInTheDocument();
+  });
+
+  it('holds discovery geometry while the enrichment legs are pending', () => {
+    // The slow-category race: products resolve first while categories are
+    // still in flight. The discovery boundary must show its median-card
+    // reserve (not zero height) while the product grid streams.
+    mockDiscoverySection.mockImplementationOnce(
+      ({ categoriesPromise }: OgabasseyHomeDiscoverySectionProps) => {
+        use(categoriesPromise);
+        return <section aria-label="Home discovery">/ogabassey</section>;
+      }
+    );
+
+    const result = OgabasseyHomeDynamicContent({
+      merchant: mockMerchant,
+      pathPrefix: '/ogabassey',
+    }) as ReactElement;
+
+    render(result);
+
+    const reserve = document.querySelector(
+      '[data-ogabassey-discovery-reserve="true"]'
+    );
+    expect(reserve).not.toBeNull();
+    expect(reserve?.querySelector('.min-h-\\[280px\\]')).not.toBeNull();
+    // The product grid streams ahead independently.
+    expect(
+      screen.getByRole('region', { name: 'Home products' })
+    ).toBeInTheDocument();
   });
 
   it('renders merchant analytics without waiting for any fetch leg', () => {

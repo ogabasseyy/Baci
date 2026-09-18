@@ -120,6 +120,7 @@ describe('HomeProductGridGate loading failure recovery', () => {
     await act(async () => {
       fireEvent.pointerDown(window);
       fireEvent.pointerUp(window);
+      fireEvent.click(window);
       await Promise.resolve();
     });
     await act(async () => {

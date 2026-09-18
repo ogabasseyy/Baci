@@ -133,6 +133,15 @@ describe('HeroUtilityPanelGate', () => {
       fireEvent.pointerUp(window);
       await Promise.resolve();
     });
+    // Release alone does not end the hold — the completing click may still
+    // be dispatching. A press with no click settles on the timer bound.
+    expect(
+      screen.queryByTestId('interactive-utility-panel')
+    ).not.toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
     await act(async () => {
       await Promise.resolve();
     });
@@ -186,9 +195,16 @@ describe('HeroUtilityPanelGate', () => {
       await Promise.resolve();
     });
     // The press stays in flight until it completes; a bare press holds the
-    // swap just like a tap does.
+    // swap just like a tap does — release alone does not end it.
     await act(async () => {
       fireEvent.pointerUp(window);
+      await Promise.resolve();
+    });
+    expect(
+      screen.queryByTestId('interactive-utility-panel')
+    ).not.toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(500);
       await Promise.resolve();
     });
     await act(async () => {

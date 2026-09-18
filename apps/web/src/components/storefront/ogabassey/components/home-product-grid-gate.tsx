@@ -130,9 +130,14 @@ export function HomeProductGridGate({
       retryAfterFailure();
     };
 
+    // Release updates pointer tracking but NOT the hold: the click that
+    // completes the press dispatches after pointerup, and swapping between
+    // the two would unmount the pressed link before the click lands
+    // (losing the tap and its navigation). The click below releases the
+    // hold; a press that produces no click settles via cancel, blur, or
+    // the settle timer.
     const handlePointerUp = () => {
       pointerDownRef.current = false;
-      setPressHeld(false);
     };
 
     const handlePointerCancel = () => {

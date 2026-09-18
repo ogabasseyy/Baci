@@ -169,11 +169,13 @@ export function HeroUtilityPanelGate({
       retryAfterFailure();
     };
 
-    // Any press completion without a click (release off-element, scroll
-    // cancel) ends the hold with no replay. A completed click stands.
+    // Release updates pointer tracking but NOT the hold: the click that
+    // completes the press dispatches after pointerup, and swapping between
+    // the two would unmount the pressed option before the click lands
+    // (losing the tap/replay). The click below releases the hold; a press
+    // that produces no click settles via cancel, blur, or the settle timer.
     const handlePointerUp = () => {
       pointerDownRef.current = false;
-      setPressHeld(false);
     };
 
     const handlePointerCancel = () => {

@@ -90,6 +90,40 @@ describe('StorefrontWrapper', () => {
     expect(screen.queryByTestId('storefront-skeleton')).not.toBeInTheDocument();
   });
 
+  it('renders explicit Puck stores without importing the registry chunk', async () => {
+    // Regression test: the registry import used to run before the puck
+    // branch, so every Puck homepage paid a registry round-trip behind the
+    // skeleton. With a rejected registry chunk, the old code still rendered
+    // Puck but logged a registry error; the fixed code never imports it.
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    mocks.merchantContext = {
+      merchant: {
+        template_id: 'puck',
+        business_name: 'Puck Store',
+        business_type: 'fashion',
+        slug: 'puck-store',
+      },
+      loading: false,
+    };
+    vi.resetModules();
+    vi.doMock('@/templates/registry', () => {
+      throw new Error('registry chunk failed');
+    });
+    const { StorefrontWrapper } = await import('./storefront-wrapper');
+
+    render(<StorefrontWrapper />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('puck-storefront')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('storefront-skeleton')).not.toBeInTheDocument();
+    expect(consoleError).not.toHaveBeenCalled();
+    vi.doUnmock('@/templates/registry');
+    consoleError.mockRestore();
+  });
+
   it('falls back to Puck when the registry chunk fails to load', async () => {
     const consoleError = vi
       .spyOn(console, 'error')

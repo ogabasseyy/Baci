@@ -16,16 +16,32 @@ type OgabasseyMerchant = NonNullable<
 >;
 
 /**
+ * Geometry reserve for the product section while the home-product feed
+ * resolves. The feed is usually the fastest leg (cached), so this rarely
+ * shows — but when it loses the race, the grid, strip-ad slot, and cards
+ * insert at zero height and shift everything below. Sized to the median
+ * full 8-card mobile grid (section header ~90 + 4 rows of square-media
+ * cards ~270 each + load-more row ~110 ≈ 1200): a full catalog swaps
+ * near-exact, which is the common case. An empty catalog over-reserves
+ * (accepted: rare, and the alternative — no reserve — shifts the common
+ * case by the full section height instead). Desktop grids run slightly
+ * shorter; tall desktop viewports absorb the difference.
+ */
+const PRODUCT_RESERVE_MIN_HEIGHT_CLASS = 'min-h-[1200px]';
+
+/**
  * Geometry reserve for the discovery section while its enrichment legs
  * resolve. Mirrors the section wrapper so the streamed card replaces
  * same-footprint space instead of pushing a viewport-visible footer down
  * (a CLS shift when the product feed wins the race on a short catalog).
- * Sized to the heading + category-pills block that always renders; a full
- * 24-link list is taller, but then the product grid above is long enough
- * to keep the insertion below the fold. Approximate by design — it bounds
- * the shift, and the empty-catalog case over-reserves slightly.
+ * Sized to the median heading + category-pills block (~280: card padding
+ * and heading plus ~4 wrapping pill rows): empty catalogs (~104px of card)
+ * over-reserve, and extreme full catalogs (20 pills + 24 links ≈ 980px)
+ * under-reserve — both tails are rare, and the median-minimizing height
+ * keeps the common case near-exact. A full catalog also implies a long
+ * product grid above, which keeps the residual insertion below the fold.
  */
-const DISCOVERY_RESERVE_MIN_HEIGHT_CLASS = 'min-h-[180px]';
+const DISCOVERY_RESERVE_MIN_HEIGHT_CLASS = 'min-h-[280px]';
 
 interface OgabasseyHomeDynamicContentProps {
   merchant: OgabasseyMerchant;
@@ -42,10 +58,11 @@ interface OgabasseyHomeDynamicContentProps {
  * leg can no longer hold the SEO-critical product grid out of the streamed
  * HTML — the grid needs only the home-product feed, while the discovery
  * links and JSON-LD wait for the enrichment legs. Crawlers still receive the
- * fully rendered page. The product boundary keeps a null fallback to match
- * the outer boundary (no spinners below the fold); the discovery boundary
- * reserves its card geometry instead, so independent streaming does not
- * shift a viewport-visible footer when it inserts.
+ * fully rendered page. Both boundaries reserve median geometry (product
+ * grid, discovery card) instead of null fallbacks, so whichever leg loses
+ * the race inserts near-exact instead of shifting a viewport-visible
+ * footer. No spinners below the fold — reserves are empty, aria-hidden
+ * space only.
  */
 export function OgabasseyHomeDynamicContent({
   merchant,
@@ -70,7 +87,17 @@ export function OgabasseyHomeDynamicContent({
       <AnalyticsPixelProvider
         merchant={buildMerchantAnalyticsSettings(merchant)}
       />
-      <Suspense fallback={null}>
+      <Suspense
+        fallback={
+          <div
+            aria-hidden="true"
+            className="ogabassey-home-products"
+            data-ogabassey-product-reserve="true"
+          >
+            <div className={PRODUCT_RESERVE_MIN_HEIGHT_CLASS} />
+          </div>
+        }
+      >
         <OgabasseyHomeProductSection
           merchant={merchant}
           pathPrefix={pathPrefix}

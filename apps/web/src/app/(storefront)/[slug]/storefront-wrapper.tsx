@@ -56,6 +56,19 @@ export function StorefrontWrapper({
       if (loading) return;
 
       try {
+        let templateId = merchant?.template_id;
+
+        // Explicit Puck stores (including onboarding-upsert merchants) skip
+        // the registry chunk entirely: it is only needed to resolve
+        // business-type fallbacks and named registry templates. Without
+        // this, every Puck homepage pays a registry round-trip behind the
+        // skeleton before even starting the Puck component load.
+        if (templateId === 'puck') {
+          setTemplateHome(null);
+          setTemplateLoading(false);
+          return;
+        }
+
         // The template registry (all storefront templates and their page
         // components) loads on demand so it never joins the initial bundle of
         // routes that only sometimes render a registry template (e.g. the
@@ -64,8 +77,6 @@ export function StorefrontWrapper({
         const { getTemplate, getTemplateIdByBusinessType } = await import(
           '@/templates/registry'
         );
-
-        let templateId = merchant?.template_id;
 
         // If no template_id or it's 'default', use business_type fallback
         if (!templateId || templateId === 'default') {
@@ -76,13 +87,6 @@ export function StorefrontWrapper({
             `No template_id set for "${merchant?.business_name}", using business_type fallback: ${fallbackId}`
           );
           templateId = fallbackId;
-        }
-
-        // If it's explicitly 'puck', use Puck storefront
-        if (templateId === 'puck') {
-          setTemplateHome(null);
-          setTemplateLoading(false);
-          return;
         }
 
         // Try to load the template from registry

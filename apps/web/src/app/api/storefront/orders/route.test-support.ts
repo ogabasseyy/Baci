@@ -47,7 +47,7 @@ function createOrdersQuery<TData>(result: QueryResult<TData>) {
   };
   query.select.mockReturnValue(query);
   query.eq.mockReturnValue(query);
-  query.order.mockResolvedValue(result);
+  query.order.mockImplementationOnce(() => query).mockResolvedValue(result);
   return query;
 }
 
@@ -71,6 +71,7 @@ export function createSupabaseMock(input?: {
       id: string;
       order_number: string;
       created_at: string;
+      transaction_date?: string | null;
       total: number;
       subtotal: number;
       shipping_fee: number;

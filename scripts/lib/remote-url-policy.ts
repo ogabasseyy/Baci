@@ -9,7 +9,10 @@ function isBlockedIpv4Octets(octets: number[]): boolean {
     // Documentation TEST-NET ranges never appear as real origins.
     (a === 192 && b === 0 && octets[2] === 2) ||
     (a === 198 && b === 51 && octets[2] === 100) ||
-    (a === 203 && b === 0 && octets[2] === 113) || a === 0;
+    (a === 203 && b === 0 && octets[2] === 113) ||
+    // Multicast and reserved-for-future-use space is never globally
+    // routable to a real origin.
+    a >= 224 || a === 0;
 }
 
 /** Strictly parse an IPv6 literal into eight 16-bit groups. */

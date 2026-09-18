@@ -262,7 +262,9 @@ export function DrawerMenu() {
           {/* Mounted only while the drawer is open: the drawer stays mounted
           (translated off-screen) when closed, and an always-mounted slot
           would request and attribute impressions nobody can see. */}
-          {isOpen ? <AdSlot placement="FOOTER_ANCHOR" /> : null}
+          {isOpen ? (
+            <AdSlot placement="FOOTER_ANCHOR" visibleWhileDrawerOpen />
+          ) : null}
 
           {/* Footer */}
           <DrawerMenuFooter

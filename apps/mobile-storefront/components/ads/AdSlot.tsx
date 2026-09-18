@@ -8,10 +8,17 @@ import {
 import { BRAND } from '@/constants/Colors';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { trackEvent } from '@/services/analytics-core';
+import { useDrawerStore } from '@/stores/drawer-store';
 
 type AdSlotProps = {
   placement: MobileAdBannerPlacementKey;
   testID?: string;
+  /**
+   * Set only by the drawer-owned slot. Every other slot suspends while the
+   * navigation drawer is open so a single FOOTER_ANCHOR request stays live
+   * and impressions attribute to the visible screen.
+   */
+  visibleWhileDrawerOpen?: boolean;
 };
 
 function getAdErrorCode(error: Error): string {
@@ -23,13 +30,18 @@ function getAdErrorCode(error: Error): string {
  * App-wide banner slot. Resolves its unit ID from the placement registry
  * (sample IDs in dev, per-placement production IDs), renders nothing while
  * ads are disabled or UMP consent is unresolved, unmounts after a no-fill
- * or load error so no blank "Sponsored" slot is retained, and keeps the
- * native module behind a lazy require so builds without Google Mobile Ads
- * keep working.
+ * or load error so no blank "Sponsored" slot is retained, suspends while
+ * the navigation drawer is open (unless marked drawer-owned) so duplicate
+ * placements never request in parallel, and keeps the native module behind
+ * a lazy require so builds without Google Mobile Ads keep working.
  * Consent readiness gates the request so banners never fire before consent
  * is gathered and the under-age request configuration is applied.
  */
-export function AdSlot({ placement, testID }: AdSlotProps) {
+export function AdSlot({
+  placement,
+  testID,
+  visibleWhileDrawerOpen = false,
+}: AdSlotProps) {
   // Dropped when the banner reports no fill or a load error so generic
   // placements never retain a blank "Sponsored" slot. Declared with the
   // other hooks, above the early returns.
@@ -44,7 +56,13 @@ export function AdSlot({ placement, testID }: AdSlotProps) {
   const readiness = useMobileAdsReadiness({
     enabled: config?.enabled === true,
   });
-  if (config?.enabled !== true || !readiness.canRequestAds || loadFailed) {
+  const drawerOpen = useDrawerStore((state) => state.isOpen);
+  if (
+    config?.enabled !== true ||
+    !readiness.canRequestAds ||
+    loadFailed ||
+    (drawerOpen && !visibleWhileDrawerOpen)
+  ) {
     return null;
   }
 

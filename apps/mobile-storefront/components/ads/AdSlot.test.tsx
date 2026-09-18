@@ -34,6 +34,12 @@ jest.mock('@/services/analytics-core', () => ({
   trackEvent: jest.fn(),
 }));
 
+let mockDrawerOpen = false;
+jest.mock('@/stores/drawer-store', () => ({
+  useDrawerStore: (selector: (state: { isOpen: boolean }) => boolean) =>
+    selector({ isOpen: mockDrawerOpen }),
+}));
+
 const ORIGINAL_ENV = process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
 
 function setAdsEnabled(value: string | undefined) {
@@ -101,5 +107,31 @@ describe('AdSlot', () => {
     expect(screen.queryByTestId('ad-slot-cart-mpu')).toBeNull();
     expect(screen.queryByText('Sponsored')).toBeNull();
     setAdsEnabled(ORIGINAL_ENV);
+  });
+
+  it('suspends page slots while the drawer is open so only the drawer slot requests', () => {
+    // Regression: the drawer owns FOOTER_ANCHOR while open, so page-level
+    // slots must unmount (no parallel requests, no hidden-slot impressions).
+    setAdsEnabled('true');
+    mockDrawerOpen = true;
+    try {
+      const { toJSON } = render(<AdSlot placement="FOOTER_ANCHOR" />);
+      expect(toJSON()).toBeNull();
+    } finally {
+      mockDrawerOpen = false;
+      setAdsEnabled(ORIGINAL_ENV);
+    }
+  });
+
+  it('keeps the drawer-owned slot mounted while the drawer is open', () => {
+    setAdsEnabled('true');
+    mockDrawerOpen = true;
+    try {
+      render(<AdSlot placement="FOOTER_ANCHOR" visibleWhileDrawerOpen />);
+      expect(screen.getByTestId('ad-slot-footer-anchor')).toBeTruthy();
+    } finally {
+      mockDrawerOpen = false;
+      setAdsEnabled(ORIGINAL_ENV);
+    }
   });
 });

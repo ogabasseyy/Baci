@@ -22,7 +22,6 @@ import { AdSlot } from '@/components/ads/AdSlot';
 import { BlockRenderer } from '@/components/storefront/BlockRenderer';
 import { FilterBar } from '@/components/storefront/FilterBar';
 import { HomeServiceCards } from '@/components/storefront/HomeServiceCards';
-import { ProductCard } from '@/components/storefront/ProductCard';
 import { styles as gridStyles } from '@/components/storefront/ProductGrid.styles';
 import { ProductGridSkeleton } from '@/components/ui/Skeleton';
 import { palette } from '@/constants/Colors';
@@ -33,10 +32,10 @@ import { getTemplateConfig } from '@/lib/templates';
 import type { Block, ProductGridBlock } from '@/types/blocks';
 import type { Product } from '@/types/product';
 import { HomeFeedEmptyState } from './HomeFeedEmptyState';
-import { homeFeedStyles } from './home-feed.styles';
+import { HomeFeedListItemView } from './HomeFeedListItemView';
 import { useHomeProductFeed } from './use-home-product-feed';
 
-type HomeFeedListItem =
+export type HomeFeedListItem =
   | { kind: 'product'; product: Product }
   | { kind: 'product-list-end'; id: string };
 
@@ -137,39 +136,15 @@ export function HomeFeedList({
     item: HomeFeedListItem;
     index: number;
     target?: string;
-  }) => {
-    if (item.kind === 'product-list-end') {
-      return (
-        <View
-          testID="home-feed-product-end-sentinel"
-          style={homeFeedStyles.productEndSentinel}
-          onLayout={target === 'Cell' ? handleProductDataEndReached : undefined}
-        />
-      );
-    }
-
-    const productIndex = index;
-    if (currentVariant === 'grid') {
-      return (
-        <View
-          style={[
-            homeFeedStyles.productWrapper,
-            productIndex % 2 === 0
-              ? homeFeedStyles.productLeft
-              : homeFeedStyles.productRight,
-          ]}
-        >
-          <ProductCard product={item.product} variant="grid" />
-        </View>
-      );
-    }
-
-    return (
-      <View style={homeFeedStyles.fullWidthCell}>
-        <ProductCard product={item.product} variant={currentVariant} />
-      </View>
-    );
-  };
+  }) => (
+    <HomeFeedListItemView
+      item={item}
+      index={index}
+      target={target}
+      currentVariant={currentVariant}
+      onProductDataEndReached={handleProductDataEndReached}
+    />
+  );
 
   const handleEndReached = () => {
     // Backup trigger for layouts without post-grid blocks; the sentinel handles

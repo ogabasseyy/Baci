@@ -120,6 +120,25 @@ describe('validateRemoteUrl host classification', () => {
     }
   });
 
+  it('blocks non-global space inside global unicast', () => {
+    for (const host of [
+      '100::1',
+      '2001::1',
+      '2001:0:ffff:ffff:ffff:ffff:ffff:ffff',
+      '2002:c000:0201::1',
+      '2001:2::1',
+      '2001:db8::1',
+      '3fff::1',
+      '3fff:fff:ffff:ffff:ffff:ffff:ffff:ffff',
+    ]) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    // Ordinary global unicast stays reachable.
+    for (const host of ['2001:3::1', '2606:4700:4700::1111']) {
+      expect(validateRemoteUrl(url(host))?.toString()).toBe(url(host));
+    }
+  });
+
   it('blocks IPv6 multicast destinations', () => {
     for (const host of ['ff02::1', 'ff0e::1', 'ffff:ffff::1']) {
       expect(validateRemoteUrl(url(host))).toBeNull();

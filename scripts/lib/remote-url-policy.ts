@@ -63,26 +63,21 @@ function isBlockedIpv6Literal(host: string): boolean {
   // malformed and must never be treated as a public destination.
   if (!groups) return true;
   const [g0, g1, g2, g3, g4, g5, g6, g7] = groups;
-  if (groups.every((g) => g === 0)) return true; // ::
-  if (groups.slice(0, 7).every((g) => g === 0) && g7 === 1) return true; // ::1
-  if ((g0 & 0xff00) === 0xff00) return true; // ff00::/8 multicast
-  if ((g0 & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
-  if ((g0 & 0xffc0) === 0xfec0) return true; // fec0::/10 deprecated site-local
-  // 2001:2::/48 benchmarking prefix never appears on the public internet
-  // and may be routed to internal test infrastructure.
-  if (g0 === 0x2001 && g1 === 0x0002) return true;
-  // 2001:db8::/32 documentation prefix (RFC 3849) is not globally
-  // routable and is commonly routed to internal lab infrastructure.
-  if (g0 === 0x2001 && g1 === 0x0db8) return true;
-  // 64:ff9b::/32 holds the well-known translation prefix (RFC 6052)
-  // and the local-use NAT64 prefix (RFC 8219, 64:ff9b:1::/48); neither
-  // ever originates real traffic.
-  if (g0 === 0x0064 && g1 === 0xff9b) return true;
-  if ((g0 & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
   if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) {
-    // ::ffff:0:0/96 — classify the embedded IPv4 address.
+    // ::ffff:0:0/96 — classify the embedded IPv4 address first: a public
+    // translation must stay reachable while private ones stay blocked.
     return isBlockedIpv4Octets([g6 >> 8, g6 & 0xff, g7 >> 8, g7 & 0xff]);
   }
+  // Default deny: accept only global unicast 2000::/3. Every other space
+  // (loopback, multicast, link-local, unique-local, documentation,
+  // translation, discard) is not a real origin.
+  if ((g0 & 0xe000) !== 0x2000) return true;
+  // Carve-outs inside global unicast that never originate traffic.
+  if (g0 === 0x2001 && g1 === 0x0000) return true; // 2001::/32 Teredo
+  if (g0 === 0x2002) return true; // 2002::/16 6to4
+  if (g0 === 0x2001 && g1 === 0x0002) return true; // 2001:2::/48 benchmarking
+  if (g0 === 0x2001 && g1 === 0x0db8) return true; // 2001:db8::/32 documentation
+  if (g0 === 0x3fff && (g1 & 0xf000) === 0x0000) return true; // 3fff::/20 documentation
   return false;
 }
 

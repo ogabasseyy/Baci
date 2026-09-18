@@ -107,6 +107,16 @@ describe('validateRemoteUrl host classification', () => {
     );
   });
 
+  it('blocks the IPv6 benchmarking prefix', () => {
+    for (const host of ['2001:2::1', '2001:2:ffff:ffff:ffff:ffff:ffff:ffff']) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    // Adjacent prefixes outside 2001:2::/48 stay reachable.
+    expect(validateRemoteUrl(url('2001:3::1'))?.toString()).toBe(
+      url('2001:3::1'),
+    );
+  });
+
   it('rejects malformed bracketed literals during URL parsing', () => {
     expect(validateRemoteUrl('http://[foo:bar]/p.jpg')).toBeNull();
     expect(validateRemoteUrl('http://[12345::67890]/p.jpg')).toBeNull();

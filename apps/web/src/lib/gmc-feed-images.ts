@@ -6,6 +6,8 @@
  * that were prevalidated by an offline backfill/audit job.
  */
 
+import { isOfferClaimedImage } from '@/lib/gmc-offer-claimed-images';
+
 const GMC_ADDITIONAL_IMAGES_MAX = 10;
 
 /**
@@ -33,55 +35,22 @@ function isVerifiedWithUrl(e: FeedImageManifestEntry): e is VerifiedEntry {
  * Resolve the primary feed image from manifest entries.
  * Returns the verified URL or null if no valid primary image exists.
  * When null, the feed builder must skip the entire product item.
+ * Entries claimed by offers are excluded when provided, so offer-owned
+ * imagery never leaks into the base product primary image.
  */
 export function resolveGmcPrimaryImage(
-  entries: FeedImageManifestEntry[]
+  entries: FeedImageManifestEntry[],
+  excludeUrls: ReadonlySet<string> = new Set()
 ): string | null {
   const primary = entries
-    .filter((e): e is VerifiedEntry => e.is_primary && isVerifiedWithUrl(e))
+    .filter(
+      (e): e is VerifiedEntry =>
+        e.is_primary &&
+        isVerifiedWithUrl(e) &&
+        !isOfferClaimedImage(e, excludeUrls)
+    )
     .sort((a, b) => a.position - b.position)[0];
   return primary?.verified_url ?? null;
-}
-
-/**
- * URLs explicitly claimed by offers. Parent and sibling fallbacks must
- * exclude them so condition-specific imagery cannot leak into the base
- * product or across offers; an offer's own explicit images still match
- * directly against the manifest.
- */
-export function collectOfferClaimedImageUrls(
-  offers: Array<{ images?: unknown }> | undefined
-): Set<string> {
-  const claimed = new Set<string>();
-  for (const offer of offers ?? []) {
-    const images = Array.isArray(offer.images) ? offer.images : [offer.images];
-    for (const image of images) {
-      const url =
-        typeof image === 'string'
-          ? image
-          : image && typeof image === 'object' && 'url' in image
-            ? (image as { url: unknown }).url
-            : null;
-      if (typeof url === 'string' && url.trim()) claimed.add(url.trim());
-    }
-  }
-  return claimed;
-}
-
-/**
- * Whether a manifest entry's URL is claimed by an offer exclusion set.
- * Shared by parent-level and sibling fallbacks so offer-owned imagery is
- * filtered identically everywhere.
- */
-export function isOfferClaimedImage(
-  entry: FeedImageManifestEntry,
-  excludeUrls: ReadonlySet<string>
-): boolean {
-  if (excludeUrls.size === 0) return false;
-  return (
-    (!!entry.source_url && excludeUrls.has(entry.source_url)) ||
-    (!!entry.verified_url && excludeUrls.has(entry.verified_url))
-  );
 }
 
 /**

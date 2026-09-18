@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  collectOfferClaimedImageUrls,
   type FeedImageManifestEntry,
-  isOfferClaimedImage,
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
@@ -65,6 +63,21 @@ describe('resolveGmcPrimaryImage', () => {
 
   it('returns null when no entries exist', () => {
     expect(resolveGmcPrimaryImage([])).toBeNull();
+  });
+
+  it('skips primary entries claimed by offers', () => {
+    const entries = [
+      verifiedEntry({ verified_url: 'https://cdn.example/offer-used.jpg' }),
+    ];
+    expect(
+      resolveGmcPrimaryImage(
+        entries,
+        new Set(['https://cdn.example/offer-used.jpg'])
+      )
+    ).toBeNull();
+    expect(resolveGmcPrimaryImage(entries, new Set())).toBe(
+      'https://cdn.example/offer-used.jpg'
+    );
   });
 
   it('returns null when no primary entry is marked verified', () => {
@@ -283,53 +296,5 @@ describe('resolveGmcAdditionalImages', () => {
         new Set(['https://cdn.example/offer-used.jpg'])
       )
     ).toEqual(['https://cdn.example/product-extra.jpg']);
-  });
-});
-
-describe('collectOfferClaimedImageUrls', () => {
-  it('normalizes string and object image shapes', () => {
-    expect(
-      collectOfferClaimedImageUrls([
-        {
-          images: [
-            ' https://cdn.example/a.jpg ',
-            { url: 'https://cdn.example/b.jpg' },
-          ],
-        },
-        { images: 'https://cdn.example/c.jpg' },
-        {},
-      ])
-    ).toEqual(
-      new Set([
-        'https://cdn.example/a.jpg',
-        'https://cdn.example/b.jpg',
-        'https://cdn.example/c.jpg',
-      ])
-    );
-  });
-
-  it('returns an empty set without offers', () => {
-    expect(collectOfferClaimedImageUrls(undefined)).toEqual(new Set());
-    expect(collectOfferClaimedImageUrls([])).toEqual(new Set());
-  });
-});
-
-describe('isOfferClaimedImage', () => {
-  it('matches source or verified urls', () => {
-    const claimed = new Set(['https://cdn.example/offer.jpg']);
-    expect(
-      isOfferClaimedImage(
-        verifiedEntry({ source_url: 'https://cdn.example/offer.jpg' }),
-        claimed
-      )
-    ).toBe(true);
-    expect(
-      isOfferClaimedImage(
-        verifiedEntry({ verified_url: 'https://cdn.example/offer.jpg' }),
-        claimed
-      )
-    ).toBe(true);
-    expect(isOfferClaimedImage(verifiedEntry(), claimed)).toBe(false);
-    expect(isOfferClaimedImage(verifiedEntry(), new Set())).toBe(false);
   });
 });

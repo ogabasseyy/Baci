@@ -62,12 +62,18 @@ describe('validateRemoteUrl host classification', () => {
     );
   });
 
-  it('blocks the NAT64 discovery range', () => {
-    for (const host of ['192.0.0.170', '192.0.0.171']) {
+  it('blocks the non-global IETF protocol block', () => {
+    for (const host of [
+      '192.0.0.1',
+      '192.0.0.169',
+      '192.0.0.170',
+      '192.0.0.171',
+    ]) {
       expect(validateRemoteUrl(url(host))).toBeNull();
     }
-    expect(validateRemoteUrl(url('192.0.0.169'))?.toString()).toBe(
-      url('192.0.0.169'),
+    // Adjacent space outside 192.0.0.0/24 stays reachable.
+    expect(validateRemoteUrl(url('192.0.1.1'))?.toString()).toBe(
+      url('192.0.1.1'),
     );
   });
 

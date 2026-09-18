@@ -6,9 +6,10 @@ function isBlockedIpv4Octets(octets: number[]): boolean {
     (a === 100 && b >= 64 && b <= 127) ||
     // Benchmarking range is routed to internal test infrastructure.
     (a === 198 && (b === 18 || b === 19)) ||
-    // NAT64 discovery range (RFC 7050) reaches local translation
-    // infrastructure, never a real origin.
-    (a === 192 && b === 0 && octets[2] === 0 && (octets[3] === 170 || octets[3] === 171)) ||
+    // IETF protocol assignments (RFC 6890), including the NAT64
+    // discovery range (RFC 7050): non-globally reachable, and no
+    // global anycast origin lives in 192.0.0.0/24.
+    (a === 192 && b === 0 && octets[2] === 0) ||
     // Documentation TEST-NET ranges never appear as real origins.
     (a === 192 && b === 0 && octets[2] === 2) ||
     (a === 198 && b === 51 && octets[2] === 100) ||

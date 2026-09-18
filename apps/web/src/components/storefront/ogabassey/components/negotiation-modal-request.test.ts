@@ -1,7 +1,7 @@
 import { AuthSessionMissingError } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { insertNegotiationRequest } from './negotiation-modal-request';
-import { NegotiationValidationError } from './negotiation-modal-validation';
+import { NegotiationValidationError } from './negotiation-validation-error';
 
 const insert = vi.fn();
 const getUser = vi.fn();

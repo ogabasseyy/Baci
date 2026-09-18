@@ -44,9 +44,10 @@ describe('HeroUtilityPanelGate tap gestures', () => {
     );
   });
 
-  it('never replays a press without click completion (scroll gesture)', async () => {
-    // pointerdown starts the load but records nothing; the swipe ends
-    // without a click, so the panel mounts with no replay.
+  it('replays a fast-load tap that completes after the chunk resolves', async () => {
+    // The cached-fast race: the press starts the load, the chunk resolves
+    // while the press is still in flight, but the swap waits — so the
+    // completing click still lands on the pressed option and replays it.
     const echoLoader = echoPanelLoader();
     render(
       <HeroUtilityPanelGate
@@ -56,10 +57,48 @@ describe('HeroUtilityPanelGate tap gestures', () => {
     );
 
     const dataButton = screen.getAllByText('Data')[0]?.closest('button');
-    fireEvent.pointerDown(dataButton!);
-    fireEvent.pointerCancel(window);
+    await act(async () => {
+      fireEvent.pointerDown(dataButton!);
+      await Promise.resolve();
+    });
+    // Loaded, but the in-flight press holds the fallback mounted.
+    expect(echoLoader).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByTestId('interactive-utility-panel')
+    ).not.toBeInTheDocument();
 
     await act(async () => {
+      fireEvent.click(dataButton!);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('interactive-utility-panel')).toHaveAttribute(
+      'data-pending',
+      'data'
+    );
+  });
+
+  it('never replays a press cancelled mid-gesture', async () => {
+    // pointerdown starts the load but records nothing; the swipe cancels
+    // before completion, so the panel mounts with no replay.
+    const echoLoader = echoPanelLoader();
+    render(
+      <HeroUtilityPanelGate
+        loadPanelModule={echoLoader as never}
+        timeoutMs={1000}
+      />
+    );
+
+    const dataButton = screen.getAllByText('Data')[0]?.closest('button');
+    await act(async () => {
+      fireEvent.pointerDown(dataButton!);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.pointerCancel(window);
       await Promise.resolve();
     });
     await act(async () => {
@@ -73,10 +112,9 @@ describe('HeroUtilityPanelGate tap gestures', () => {
     );
   });
 
-  it('never replays when a cached chunk mounts before the tap completes', async () => {
-    // Fast-load race: the press starts the load and the already-cached
-    // chunk mounts the panel before pointerup/click can run, so there is
-    // no recording to replay — and no scroll modal either.
+  it('settles a stuck press and swaps without replay', async () => {
+    // A press that never completes (lost capture off-window) must not
+    // wedge the loaded panel on the fallback forever.
     const echoLoader = echoPanelLoader();
     render(
       <HeroUtilityPanelGate
@@ -86,9 +124,16 @@ describe('HeroUtilityPanelGate tap gestures', () => {
     );
 
     const dataButton = screen.getAllByText('Data')[0]?.closest('button');
-    fireEvent.pointerDown(dataButton!);
+    await act(async () => {
+      fireEvent.pointerDown(dataButton!);
+      await Promise.resolve();
+    });
+    expect(
+      screen.queryByTestId('interactive-utility-panel')
+    ).not.toBeInTheDocument();
 
     await act(async () => {
+      vi.advanceTimersByTime(500);
       await Promise.resolve();
     });
     await act(async () => {

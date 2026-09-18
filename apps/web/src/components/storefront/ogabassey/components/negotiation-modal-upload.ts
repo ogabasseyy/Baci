@@ -4,11 +4,9 @@ import { uploadNegotiationEvidenceFile } from './negotiation-evidence';
 import { resolveNegotiationCustomer } from './negotiation-modal-customer';
 import { insertNegotiationRequest } from './negotiation-modal-request';
 import type { NegotiationStatus } from './use-negotiation-modal-controller';
-import {
-  NegotiationValidationError,
-  getContactValidationError,
-  getUploadFormValidationError,
-} from './negotiation-modal-validation';
+import { getContactValidationError } from './negotiation-contact-validation';
+import { getUploadFormValidationError } from './negotiation-upload-validation';
+import { NegotiationValidationError } from './negotiation-validation-error';
 
 interface SubmitNegotiationUploadOptions {
   canApplyAsyncResult: () => boolean;

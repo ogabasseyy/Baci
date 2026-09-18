@@ -71,7 +71,17 @@ describe('HeroUtilityPanelGate', () => {
     const { loader } = renderGate();
 
     await act(async () => {
+      // The press stays in flight, so the loaded panel holds the fallback
+      // mounted until the press completes.
       fireEvent.pointerDown(window);
+      await Promise.resolve();
+    });
+    expect(
+      screen.queryByTestId('interactive-utility-panel')
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.pointerUp(window);
       await Promise.resolve();
     });
     await act(async () => {
@@ -124,6 +134,12 @@ describe('HeroUtilityPanelGate', () => {
 
     await act(async () => {
       fireEvent.pointerDown(window);
+      await Promise.resolve();
+    });
+    // The press stays in flight until it completes; a bare press holds the
+    // swap just like a tap does.
+    await act(async () => {
+      fireEvent.pointerUp(window);
       await Promise.resolve();
     });
     await act(async () => {

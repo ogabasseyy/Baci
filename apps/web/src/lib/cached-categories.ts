@@ -222,26 +222,32 @@ export const getStorefrontNavigationCategories = cache(
         return [];
       }
 
+      // Preserved for the diagnostic below: when the retry fails for a
+      // real reason, the log must name the retry failure — not the
+      // expected outer cache-scope rejection that triggered the retry.
+      let retryError: unknown;
       if (isPrerenderEndedRejection(error)) {
         try {
           return await fetchNavigationCategoriesUncached(merchantId);
-        } catch (retryError) {
+        } catch (innerError) {
           // The teardown won the race even on the priority lane. Expected
           // build-time degradation: stay silent, the request-time retry
           // fills the real nav.
           if (
-            isPrerenderEndedRejection(retryError) ||
-            isPrerenderOverRejection(retryError)
+            isPrerenderEndedRejection(innerError) ||
+            isPrerenderOverRejection(innerError)
           ) {
             return [];
           }
-          // Direct read failed too — fall through to the empty nav below.
+          // Direct read failed too — fall through to the empty nav below,
+          // logging the retry failure as the cause.
+          retryError = innerError;
         }
       }
 
       console.error('Navigation categories query failed outside cache:', {
         merchantId,
-        error,
+        error: retryError ?? error,
       });
       return [];
     }

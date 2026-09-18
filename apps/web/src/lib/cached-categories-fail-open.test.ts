@@ -163,14 +163,17 @@ describe('getStorefrontNavigationCategories (request-local fail-open boundary)',
         digest: 'HANGING_PROMISE_REJECTION',
       })
     );
-    mockOrder.mockRejectedValueOnce(new Error('connection refused'));
+    const retryFailure = new Error('connection refused');
+    mockOrder.mockRejectedValueOnce(retryFailure);
 
     await expect(
       getStorefrontNavigationCategories('merchant-1')
     ).resolves.toEqual([]);
+    // The diagnostic must name the retry failure — not the expected outer
+    // cache-scope rejection that triggered the retry.
     expect(consoleSpy).toHaveBeenCalledWith(
       'Navigation categories query failed outside cache:',
-      expect.objectContaining({ merchantId: 'merchant-1' })
+      expect.objectContaining({ merchantId: 'merchant-1', error: retryFailure })
     );
   });
 });

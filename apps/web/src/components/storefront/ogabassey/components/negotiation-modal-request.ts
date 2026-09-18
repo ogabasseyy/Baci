@@ -11,9 +11,9 @@ import type { createClient } from '@/lib/supabase/client';
 import { toNegotiationCartLine } from './negotiation-modal-cart';
 import {
   getContactValidationError,
-  NegotiationValidationError,
   normalizeOptionalEmail,
-} from './negotiation-modal-validation';
+} from './negotiation-contact-validation';
+import { NegotiationValidationError } from './negotiation-validation-error';
 
 const SESSION_KEY = 'ogabassey_guest_session';
 

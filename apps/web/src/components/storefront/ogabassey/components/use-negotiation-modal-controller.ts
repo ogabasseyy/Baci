@@ -17,7 +17,7 @@ async function loadSupabaseClient(): Promise<ReturnType<typeof createClient>> {
   return createClient();
 }
 import { submitNegotiationUpload } from './negotiation-modal-upload';
-import { getUploadFormValidationError } from './negotiation-modal-validation';
+import { getUploadFormValidationError } from './negotiation-upload-validation';
 
 export type NegotiationStatus =
   | 'input'

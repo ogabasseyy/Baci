@@ -522,8 +522,10 @@ export async function GET(
       : undefined;
     const amountPaid = Number(order.amount_paid || 0);
 
-    // Invoice-payment orders are explicitly proforma documents until paid.
-    const isProformaInvoice = order.payment_method === 'invoice';
+    // Invoice-payment orders are proforma documents only while unpaid: once
+    // the order is paid it must download as a standard 380 commercial invoice.
+    const isProformaInvoice =
+      order.payment_method?.trim().toLowerCase() === 'invoice' && !isPaidOrder;
 
     // Build the invoice data structure
     const invoiceData: InvoiceData = {

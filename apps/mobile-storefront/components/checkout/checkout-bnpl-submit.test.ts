@@ -245,6 +245,27 @@ describe('submitBnplCheckout', () => {
     });
   });
 
+  it('maps a non-JSON Klump initialize response to PAYMENT_INIT_ERROR', async () => {
+    const params = {
+      ...createParams(),
+      selectedPayment: 'klump' as const,
+    };
+    const mockFetch = global.fetch as jest.Mock;
+    mockFetch.mockImplementationOnce(async () => ({
+      ok: true,
+      json: async (): Promise<unknown> => {
+        throw new SyntaxError('Unexpected token < in JSON');
+      },
+    }));
+
+    await expect(submitBnplCheckout(params)).rejects.toMatchObject({
+      code: 'PAYMENT_INIT_ERROR',
+    });
+
+    expect(mockCreateOrder).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
   it('preserves the existing checkout identity when the server rejects reuse', async () => {
     const conflict = new Error('not reusable') as Error & { code: string };
     conflict.code = 'CHECKOUT_ORDER_NOT_REUSABLE';

@@ -30,6 +30,10 @@ import {
   CHECKOUT_MERCHANT_ID,
   CHECKOUT_MERCHANT_SLUG,
 } from './checkout-screen.constants';
+import {
+  type PaymentInitializeData,
+  toPaymentInitializeData,
+} from './payment-initialize-data';
 
 const BNPL_PAYMENT_INIT_TIMEOUT_MS = 10_000;
 
@@ -213,7 +217,15 @@ async function initializeKlumpAndRoute({
     clearTimeout(timeout);
   }
 
-  const initData = await initResponse.json();
+  let initData: PaymentInitializeData;
+  try {
+    initData = toPaymentInitializeData(await initResponse.json());
+  } catch {
+    throw new OrderError(
+      'Failed to initialize Klump payment',
+      'PAYMENT_INIT_ERROR'
+    );
+  }
   if (
     !initResponse.ok ||
     !initData.success ||

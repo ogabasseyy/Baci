@@ -11,7 +11,8 @@ import type { Product } from './feed-types';
 function getManifestEntriesForProductVariant(
   imageManifest: ImageManifestMap,
   product: Product,
-  variant?: OpenAIFeedVariant
+  variant?: OpenAIFeedVariant,
+  excludeUrls: ReadonlySet<string> = new Set()
 ) {
   const manifestEntries = imageManifest[product.id] || [];
   if (!variant) {
@@ -21,7 +22,10 @@ function getManifestEntriesForProductVariant(
   const variantEntries = manifestEntries.filter(
     (entry) => entry.variant_id === variant.id
   );
-  return resolveGmcPrimaryImage(variantEntries)
+  // A variant primary the claims exclude is unusable: fall through to the
+  // product-level manifest primary (family fallback) instead of the raw
+  // product image.
+  return resolveGmcPrimaryImage(variantEntries, excludeUrls)
     ? variantEntries
     : manifestEntries;
 }
@@ -33,7 +37,12 @@ function getProductImageUrl(
 ) {
   const offerClaimedImageUrls = collectOfferClaimedImageUrls(product.offers);
   const manifestPrimaryImage = resolveGmcPrimaryImage(
-    getManifestEntriesForProductVariant(imageManifest, product, variant),
+    getManifestEntriesForProductVariant(
+      imageManifest,
+      product,
+      variant,
+      offerClaimedImageUrls
+    ),
     offerClaimedImageUrls
   );
   if (manifestPrimaryImage) {
@@ -70,7 +79,12 @@ function getAdditionalImageLinks(
 ) {
   const offerClaimedImageUrls = collectOfferClaimedImageUrls(product.offers);
   const manifestAdditionalImages = resolveGmcAdditionalImages(
-    getManifestEntriesForProductVariant(imageManifest, product, variant),
+    getManifestEntriesForProductVariant(
+      imageManifest,
+      product,
+      variant,
+      offerClaimedImageUrls
+    ),
     offerClaimedImageUrls
   );
   if (manifestAdditionalImages.length > 0) {

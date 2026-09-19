@@ -21,8 +21,8 @@ vi.mock('./verify-and-complete-redvault-payment', () => ({
 vi.mock('./complete-order-gateway-payment', () => ({
   completeOrderGatewayPayment: mocks.complete,
 }));
-vi.mock('./file-inventory-confirmation-review', () => ({
-  fileInventoryConfirmationFailureReview: mocks.fileReview,
+vi.mock('./file-redvault-inventory-confirmation-review', () => ({
+  fileRedvaultInventoryConfirmationReview: mocks.fileReview,
 }));
 const input = {
   actor: 'test',
@@ -61,6 +61,7 @@ describe('gateway completion routing', () => {
       metadata: { reason: held.reason },
       orderId: 'order',
       reason: `REDVAULT capture held: ${held.reason}`,
+      supabase: mocks.scopedClient,
       transactionId: 'transaction',
     });
   });
@@ -111,6 +112,7 @@ describe('gateway completion routing', () => {
     expect(mocks.fileReview).toHaveBeenCalledWith(
       expect.objectContaining({
         reason: 'REDVAULT capture evidence requires review: undefined',
+        supabase: mocks.scopedClient,
       })
     );
   });

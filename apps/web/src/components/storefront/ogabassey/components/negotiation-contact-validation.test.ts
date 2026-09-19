@@ -1,23 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  NegotiationValidationError,
-  getContactValidationError,
-  normalizeOptionalEmail,
-} from './negotiation-modal-validation';
+import { getContactValidationError } from './negotiation-contact-validation';
 
-describe('negotiation modal validation helpers', () => {
-  it('normalizes optional email addresses for storage', () => {
-    expect(normalizeOptionalEmail('  Buyer@Example.COM  ')).toBe(
-      'buyer@example.com'
-    );
-    expect(normalizeOptionalEmail('')).toBeNull();
-  });
-
-  it('rejects invalid or overlong email addresses', () => {
-    expect(normalizeOptionalEmail('a@b@c.com')).toBeNull();
-    expect(normalizeOptionalEmail(`${'a'.repeat(250)}@x.com`)).toBeNull();
-  });
-
+describe('negotiation contact validation', () => {
   it('returns the submit-time contact validation message', () => {
     expect(
       getContactValidationError({ email: 'not an email', phone: '' })
@@ -60,13 +44,5 @@ describe('negotiation modal validation helpers', () => {
 
     // Assert
     expect(result).toBe('Enter a valid email address.');
-  });
-
-  it('uses a typed validation error for modal request failures', () => {
-    const error = new NegotiationValidationError('Invalid contact');
-
-    expect(error).toBeInstanceOf(Error);
-    expect(error.name).toBe('NegotiationValidationError');
-    expect(error.message).toBe('Invalid contact');
   });
 });

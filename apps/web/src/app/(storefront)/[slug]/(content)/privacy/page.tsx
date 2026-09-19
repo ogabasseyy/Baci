@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { ContentRouteLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { JsonLd } from '@/components/seo/json-ld';
+import { OgabasseyV2PrivacyPolicy } from '@/components/storefront/ogabassey/pages/privacy-policy';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { buildStorefrontContentPageSchema } from '@/lib/build-storefront-content-page-schema';
 import { getMerchantByIdentifier } from '@/lib/cached-data';
 import { toTemplateMerchantData } from '@/lib/merchant-template-data';
@@ -12,7 +14,6 @@ import {
   getIndexableRobotsMetadata,
 } from '@/lib/seo-utils';
 import { buildRequestScopedStoreUrl, buildStoreUrl } from '@/lib/store-url';
-import { getTemplate, type TemplateComponents } from '@/templates/registry';
 import { PrivacyPageClient } from '../pages/privacy/privacy-page-client';
 
 interface PageProps {
@@ -92,36 +93,22 @@ async function PrivacyPageContent({ params }: PageProps) {
 
   const jsonLdScript = <JsonLd data={privacySchema} />;
 
-  // Resolve template component server-side for SEO (H1 in SSR HTML)
+  // Resolve template component server-side for SEO (H1 in SSR HTML).
+  // Only the Ogabassey template defines a Privacy page; import it directly
+  // so this route's chunk carries exactly this page.
   if (templateHasPrivacyPage) {
-    const template = getTemplate(merchant.template_id);
-    if (template) {
-      let PrivacyComponent: NonNullable<TemplateComponents['Privacy']> | null =
-        null;
-      try {
-        const components = await template.getComponents();
-        PrivacyComponent = components.Privacy ?? null;
-      } catch (error) {
-        console.error(
-          'Failed to load Privacy component for template',
-          merchant.template_id,
-          ':',
-          error
-        );
-      }
+    const TemplatePrivacy =
+      merchant.template_id === OGABASSEY_TEMPLATE_ID
+        ? OgabasseyV2PrivacyPolicy
+        : null;
 
-      if (PrivacyComponent) {
-        return (
-          <>
-            {jsonLdScript}
-            <PrivacyComponent
-              merchant={toTemplateMerchantData(merchant)}
-              storeSlug={merchant.slug}
-              isPreview={false}
-            />
-          </>
-        );
-      }
+    if (TemplatePrivacy) {
+      return (
+        <>
+          {jsonLdScript}
+          <TemplatePrivacy merchant={toTemplateMerchantData(merchant)} />
+        </>
+      );
     }
   }
 

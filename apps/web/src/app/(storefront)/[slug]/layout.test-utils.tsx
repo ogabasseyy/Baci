@@ -6,6 +6,7 @@ export const themeProviderAppearances: unknown[] = [];
 export const themeProviderDocumentScopes: unknown[] = [];
 export let themeProviderRenders = 0;
 const getRequestScopedMerchant = vi.hoisted(() => vi.fn());
+const getStorefrontNavigationCategories = vi.hoisted(() => vi.fn());
 const getStorefrontShellSnapshot = vi.hoisted(() => vi.fn());
 const getStorefrontShellSnapshotBase = vi.hoisted(() => vi.fn());
 const mockIsValidMerchantIdentifier = vi.hoisted(() =>
@@ -33,6 +34,7 @@ const mockOgabasseyStorefrontLayout = vi.hoisted(() =>
 
 export {
   getRequestScopedMerchant,
+  getStorefrontNavigationCategories,
   getStorefrontShellSnapshot,
   getStorefrontShellSnapshotBase,
   mockIsValidMerchantIdentifier,
@@ -99,6 +101,10 @@ vi.mock('@/hooks/merchant/storefront-merchant-provider', () => ({
 
 vi.mock('@/lib/cached-data', () => ({
   getRequestScopedMerchant,
+}));
+
+vi.mock('@/lib/cached-categories', () => ({
+  getStorefrontNavigationCategories,
 }));
 
 export const notFound = vi.fn(() => {
@@ -201,6 +207,10 @@ export const {
 
 export function resetStorefrontLayoutTestState() {
   getRequestScopedMerchant.mockReset();
+  getStorefrontNavigationCategories.mockReset();
+  // Faithful default: the real boundary always resolves (fail-open []), never
+  // undefined. Tests that need a specific nav override this per case.
+  getStorefrontNavigationCategories.mockResolvedValue([]);
   getStorefrontShellSnapshotBase.mockReset();
   getStorefrontShellSnapshot.mockReset();
   notFound.mockClear();

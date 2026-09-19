@@ -8,7 +8,8 @@ import {
   resolveStorefrontSitemapContext,
 } from '../../../sitemap-data';
 
-export const preferredRegion = 'dub1';
+// Region pinning lives in vercel.json `regions` (dub1) — `preferredRegion`
+// is deprecated and removed.
 
 const NEWS_SITEMAP_WINDOW_MS = 48 * 60 * 60 * 1000;
 const NEWS_SITEMAP_MAX_CACHE_AGE_MS = 60 * 60 * 1000;

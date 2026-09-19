@@ -1,15 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuthSafe } from '@/contexts/auth-context';
 import { logger } from '@/lib/logger';
 import { permissionGrantsAccess } from '@/lib/permission-grant';
-import { createClient } from '@/lib/supabase/client';
 import { defaultStaffAccess } from './constants';
 import { fetchDashboardMerchantViaApi } from './fetch-dashboard-merchant-via-api';
 import { MerchantContext } from './merchant-context';
+import { reloadMerchantBySlug } from './merchant-reload-by-slug';
+import { loadMerchantBySlug } from './merchant-slug-loader';
+import { merchantSupabaseClientCache } from './merchant-supabase-client';
 import { getDemoMerchant } from './mock-data';
-import { fetchMerchantBySlug, fetchPrimaryDomain } from './queries';
 import type {
   MerchantContextType,
   MerchantData,
@@ -17,43 +18,6 @@ import type {
   StaffAccess,
 } from './types';
 import { createMerchantUpdate } from './update-merchant-data';
-
-type SupabaseClient = ReturnType<typeof createClient>;
-interface LoadBySlugArgs {
-  supabase: SupabaseClient;
-  slug: string;
-  isCancelled: () => boolean;
-  setMerchant: (merchant: MerchantData | null) => void;
-  setLoading: (loading: boolean) => void;
-}
-
-// Module scope keeps try/finally out of the React Compiler-lowered provider.
-async function loadMerchantBySlug({
-  supabase,
-  slug,
-  isCancelled,
-  setMerchant,
-  setLoading,
-}: LoadBySlugArgs): Promise<void> {
-  try {
-    const data = await fetchMerchantBySlug(supabase, slug);
-    if (isCancelled()) return;
-
-    if (data?.id) {
-      const domain = await fetchPrimaryDomain(supabase, data.id);
-      if (!isCancelled() && domain) data.custom_domain = domain;
-    }
-
-    if (!isCancelled()) setMerchant(data);
-  } catch (error) {
-    logger.error({
-      message: `Failed to load merchant by slug: ${slug}. Error: ${(error as Error).message}`,
-    });
-    if (!isCancelled()) setMerchant(null);
-  } finally {
-    if (!isCancelled()) setLoading(false);
-  }
-}
 
 interface LoadDashboardArgs {
   isCancelled: () => boolean;
@@ -171,8 +135,9 @@ export const MerchantProvider = ({
   const basePath =
     routingMode === 'domain' ? '' : `/${merchant?.slug || slug || ''}`;
 
-  // Stable Supabase client — created once, not on every render
-  const supabaseRef = useRef(createClient());
+  // The Supabase client resolves once per process via the module-scope
+  // merchantSupabaseClientCache — never constructed for readers that only
+  // consume SSR merchant data, and stable across renders for effect deps.
 
   // ---- DATA LOADING ----
   // CASE 1: initialMerchant provided → no fetch (dashboard + storefront with SSR data)
@@ -192,12 +157,32 @@ export const MerchantProvider = ({
       // `loading` is flipped on during render (see fetchLoadingKey above).
       let cancelled = false;
 
-      void loadMerchantBySlug({
-        supabase: supabaseRef.current,
-        slug,
-        isCancelled: () => cancelled,
-        setMerchant,
-        setLoading,
+      // The loader below settles its own failures; the trailing catch covers
+      // only the lazy client await above it, so a rejected client chunk
+      // still releases loading instead of stranding the page on it. (A
+      // .catch chain — no try statement — keeps the Compiler-lowered effect
+      // constraint intact.)
+      void (async () => {
+        const supabase = await merchantSupabaseClientCache.get();
+        if (cancelled) return;
+        await loadMerchantBySlug({
+          supabase,
+          slug,
+          isCancelled: () => cancelled,
+          setMerchant,
+          setLoading,
+        });
+      })().catch((error: unknown) => {
+        logger.error({
+          message: `Failed to load Supabase client: ${(error as Error).message}`,
+        });
+        // A rejected client on a slug transition must not strand the
+        // previous merchant under the new slug: clear it exactly as the
+        // downstream loader does on fetch failure.
+        if (!cancelled) {
+          setMerchant(null);
+          setLoading(false);
+        }
       });
 
       return () => {
@@ -231,23 +216,12 @@ export const MerchantProvider = ({
     setLoading(true);
 
     if (slug) {
-      fetchMerchantBySlug(supabaseRef.current, slug)
-        .then(async (data) => {
-          if (data?.id) {
-            const domain = await fetchPrimaryDomain(
-              supabaseRef.current,
-              data.id
-            );
-            if (domain) data.custom_domain = domain;
-          }
-          setMerchant(data);
-        })
-        .catch((error) => {
-          logger.error({
-            message: `Reload failed: ${(error as Error).message}`,
-          });
-        })
-        .finally(() => setLoading(false));
+      void reloadMerchantBySlug({
+        getSupabase: merchantSupabaseClientCache.get,
+        slug,
+        setMerchant,
+        setLoading,
+      });
     } else if (user) {
       fetchDashboardMerchantViaApi()
         .then((result) => {
@@ -266,7 +240,7 @@ export const MerchantProvider = ({
   };
 
   const updateMerchant = createMerchantUpdate({
-    supabase: supabaseRef.current,
+    getSupabase: merchantSupabaseClientCache.get,
     userId: user?.id ?? null,
     staffAccess,
     activeMerchantId: merchant?.id,

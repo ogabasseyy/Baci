@@ -224,6 +224,7 @@ export function generateFacebookCatalogFeed(
         manifestEntries,
         offerClaimedImageUrls
       )
+        .filter((url) => url !== primaryImageUrl)
         .map(
           (url) =>
             `        <g:additional_image_link>${escapeXml(url)}</g:additional_image_link>`

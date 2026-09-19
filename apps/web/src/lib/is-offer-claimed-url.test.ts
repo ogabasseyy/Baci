@@ -52,6 +52,16 @@ describe('isOfferClaimedUrl', () => {
     ).toBe(false);
   });
 
+  it('matches canonically equivalent absolute spellings', () => {
+    const claimed = new Set(['https://CDN.example:443/used.jpg#offer']);
+    expect(isOfferClaimedUrl('https://cdn.example/used.jpg', claimed)).toBe(
+      true
+    );
+    expect(
+      isOfferClaimedUrl('https://cdn.example:8443/used.jpg', claimed)
+    ).toBe(false);
+  });
+
   it('does not match an absolute claim from another host by path alone', () => {
     const claimed = new Set(['https://other.example/images/used.jpg']);
     expect(

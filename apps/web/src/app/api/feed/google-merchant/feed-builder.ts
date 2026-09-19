@@ -86,7 +86,9 @@ function resolveFeedImages(
   return {
     primaryImageUrl,
     additionalImagesXml: buildAdditionalImagesXml(
-      resolveGmcAdditionalImages(entries, excludeUrls)
+      resolveGmcAdditionalImages(entries, excludeUrls).filter(
+        (url) => url !== primaryImageUrl
+      )
     ),
   };
 }

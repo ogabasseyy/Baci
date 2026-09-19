@@ -97,12 +97,13 @@ export function resolveLegacyFeedImages(
   variant: OpenAIFeedVariant | undefined,
   imageManifest: ImageManifestMap = {}
 ): { image_link: string; additional_image_links?: string[] } {
+  const image_link = getProductImageUrl(product, variant, imageManifest);
   return {
-    image_link: getProductImageUrl(product, variant, imageManifest),
+    image_link,
     additional_image_links: getAdditionalImageLinks(
       product,
       imageManifest,
       variant
-    ),
+    )?.filter((url) => url !== image_link),
   };
 }

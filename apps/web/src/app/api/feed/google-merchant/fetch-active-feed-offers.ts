@@ -26,7 +26,11 @@ export async function fetchActiveFeedOffers(
         'id, product_id, condition, price, compare_at_price, stock_quantity, images'
       )
       .in('product_id', productIds.slice(start, start + BATCH_SIZE))
-      .eq('status', 'active');
+      .eq('status', 'active')
+      // Deterministic (condition, id) winner like the storefront RPC, so
+      // the first row per condition below matches the PDP selection.
+      .order('condition', { ascending: true })
+      .order('id', { ascending: true });
     if (error) throw new Error('Failed to fetch product offers');
     rows.push(...((data || []) as FeedOfferRow[]));
   }

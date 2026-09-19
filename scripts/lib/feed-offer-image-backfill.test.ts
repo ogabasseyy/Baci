@@ -48,6 +48,23 @@ describe('appendOfferImageCandidates', () => {
     expect(eqCalls).toContainEqual({ method: 'eq', args: ['status', 'active'] });
   });
 
+  it('orders offers by condition then id like the storefront', async () => {
+    const { calls, supabase } = stubSupabase([{ data: [OFFER] }]);
+    await appendOfferImageCandidates({
+      supabase,
+      productIds: ['p1'],
+      merchantId: 'm-1',
+      storefrontBaseUrl: 'https://store.example',
+      productRows: [],
+      productConditions: CONDITIONS,
+    });
+    const orderCalls = calls.filter((call) => call.method === 'order');
+    expect(orderCalls).toEqual([
+      { method: 'order', args: ['condition', { ascending: true }] },
+      { method: 'order', args: ['id', { ascending: true }] },
+    ]);
+  });
+
   it('merges offer candidates without duplicating product urls', async () => {
     const { supabase } = stubSupabase([{ data: [OFFER] }]);
     const rows = await appendOfferImageCandidates({

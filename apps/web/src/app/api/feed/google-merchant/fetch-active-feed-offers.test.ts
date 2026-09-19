@@ -4,15 +4,25 @@ import { fetchActiveFeedOffers } from './fetch-active-feed-offers';
 
 function mockClient(error: unknown = null) {
   const images = ['https://cdn.example/used.jpg'];
-  const eq = vi
+  const orderById = vi
     .fn()
     .mockResolvedValue({ data: [{ id: 'offer', images }], error });
+  const orderByCondition = vi.fn().mockReturnValue({ order: orderById });
+  const eq = vi.fn().mockReturnValue({ order: orderByCondition });
   const inFilter = vi.fn().mockReturnValue({ eq });
   const select = vi.fn().mockReturnValue({ in: inFilter });
   const client = {
     from: vi.fn().mockReturnValue({ select }),
   } as unknown as SupabaseClient;
-  return { client, select, inFilter, eq, images };
+  return {
+    client,
+    select,
+    inFilter,
+    eq,
+    orderByCondition,
+    orderById,
+    images,
+  };
 }
 describe('fetchActiveFeedOffers', () => {
   it('selects offer imagery and only active offers for requested products', async () => {
@@ -37,6 +47,14 @@ describe('fetchActiveFeedOffers', () => {
     expect(mock.inFilter.mock.calls.map((call) => call[1].length)).toEqual([
       250, 1,
     ]);
+  });
+  it('orders offers by condition then id like the storefront', async () => {
+    const mock = mockClient();
+    await fetchActiveFeedOffers(mock.client, ['phone']);
+    expect(mock.orderByCondition).toHaveBeenCalledWith('condition', {
+      ascending: true,
+    });
+    expect(mock.orderById).toHaveBeenCalledWith('id', { ascending: true });
   });
   it('fails closed on database errors', async () => {
     await expect(

@@ -169,7 +169,11 @@ function createMockSupabase() {
         return {
           select: () => ({
             in: () => ({
-              eq: () => Promise.resolve(offersResult),
+              eq: () => ({
+                order: () => ({
+                  order: () => Promise.resolve(offersResult),
+                }),
+              }),
             }),
           }),
         };

@@ -18,6 +18,7 @@ import { createOrder } from '@/services/orders';
 import { serializeAfterOrderCreated } from '@/services/serialize-after-order-created';
 import { useCartStore } from '@/stores/cart-store';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
+import { buildCheckoutCompletionAttribution } from './checkout-completion-attribution';
 import {
   buildCheckoutOrderRequest,
   createCheckoutSnapshot,
@@ -242,15 +243,13 @@ export function useCheckoutSubmit({
       }
 
       await finalizeCheckoutPayment({
-        attribution: {
+        attribution: buildCheckoutCompletionAttribution({
           customerEmail,
           customerPhone,
-          items: itemsSnapshot,
-          shipping: snapshot.deliveryFee,
-          subtotal: snapshot.subtotal,
-          tax: snapshot.taxAmount,
           userId: customer?.id,
-        },
+          items: itemsSnapshot,
+          snapshot,
+        }),
         clearCart,
         customerEmail,
         customerName,

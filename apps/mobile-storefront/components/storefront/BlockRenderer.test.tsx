@@ -155,6 +155,40 @@ describe('BlockRenderer', () => {
     expect(screen.getAllByTestId('hero-carousel')).toHaveLength(1);
   });
 
+  it('honours a page-level owner from another slice', () => {
+    // Regression: the feed elects one HOME_STRIP owner across its header
+    // and footer slices, so a slice must defer to an owner elected
+    // elsewhere instead of claiming the slot itself.
+    render(
+      <BlockRenderer
+        blocks={[
+          configuredHeroBlock,
+          {
+            type: 'HeroCarousel',
+            props: {
+              id: 'footer-hero',
+              slides: [
+                {
+                  image: 'https://example.com/banner-2.jpg',
+                  title: 'Footer hero',
+                  subtitle: 'More deals',
+                  ctaText: 'Shop',
+                  ctaLink: '/category/audio',
+                },
+              ],
+            },
+          } as Block,
+        ]}
+        selectedCategoryId={null}
+        onCategorySelect={jest.fn()}
+        heroAdOwnerBlockId="footer-hero"
+      />
+    );
+
+    expect(screen.getAllByTestId('hero-carousel-with-ad')).toHaveLength(1);
+    expect(screen.getAllByTestId('hero-carousel')).toHaveLength(1);
+  });
+
   it('renders no content for an unknown block type', () => {
     const { toJSON } = renderBlocks([
       { type: 'Mystery', props: { id: 'x' } } as unknown as Block,

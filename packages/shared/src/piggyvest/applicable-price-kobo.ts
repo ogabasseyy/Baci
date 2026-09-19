@@ -1,7 +1,10 @@
 /**
- * Applicable device price: a live protected offer wins until expiry, then
- * the lower of the guaranteed and current prices. Decides only from
- * confirmed amounts, never from pending accrual or client claims.
+ * Applicable device price: the lower of the guaranteed and current prices,
+ * with a live protected offer acting as one more ceiling until expiry. A
+ * live offer never overrides a still-lower catalogue price (early readiness
+ * covers the lower of guaranteed/current for the identical device).
+ * Decides only from confirmed amounts, never from pending accrual or
+ * client claims.
  */
 import { assertPositiveKobo, assertValidDate } from './kobo-validators';
 
@@ -38,7 +41,11 @@ export function applicablePriceKobo(args: {
     assertValidDate(now, 'now');
     if (now <= offerExpiry) {
       assertPositiveKobo(offerPrice, 'protectedOfferPriceKobo');
-      return offerPrice;
+      return Math.min(
+        offerPrice,
+        args.guaranteedPriceKobo,
+        args.currentPriceKobo
+      );
     }
   }
   return Math.min(args.guaranteedPriceKobo, args.currentPriceKobo);

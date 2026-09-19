@@ -2,7 +2,7 @@
 
 import { Loader2, Sparkles } from 'lucide-react';
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { QuizPrizeProduct } from '@/schemas/quiz-prize-product';
 import {
   clampNumber,
@@ -73,6 +73,15 @@ export function QuizAuthoringForm({
   });
   // Generation requires an interval activation will accept: a manually
   // shrunk window outside the launch bounds wastes the AI draft request.
+  // Render-time validity goes stale while the page sits open, so retick
+  // the clock: validity reads Date.now() fresh every render, and the tick
+  // rerenders anyway — when the scheduled start passes, the button
+  // disables and the timing alert appears without any further interaction.
+  const [, setClockTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setClockTick((tick) => tick + 1), 15_000);
+    return () => clearInterval(timer);
+  }, []);
   const liveWindowMinutes = clampNumber(Number(windowMinutes), 1, 120);
   const timingValid = isQuizAuthoringWindowAllowed({
     liveWindowMinutes,
@@ -105,8 +114,13 @@ export function QuizAuthoringForm({
         timePerQuestionSeconds,
         timingKind,
       })
-    )
+    ) {
+      // The start passed inside the tick window with the button still
+      // enabled: rerender so validity re-reads the clock and the admin is
+      // told to choose a future start instead of clicking into silence.
+      setClockTick((tick) => tick + 1);
       return;
+    }
     onGenerate({
       difficulty,
       liveWindowMinutes,

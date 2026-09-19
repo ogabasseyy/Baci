@@ -1,4 +1,23 @@
 import { Platform } from 'react-native';
+import {
+  BANNER_PLACEMENT_ENV_KEYS,
+  INTERSTITIAL_ENV_KEYS,
+  type MobileAdBannerPlacementKey,
+  type MobileAdFormat,
+  type MobileAdPlacementKey,
+  REWARDED_ENV_KEYS,
+} from './mobile-ad-env-keys';
+import {
+  type MobileAdEnvironment,
+  readMobileAdDefaultEnvironment,
+} from './mobile-ad-environment';
+
+export type {
+  MobileAdBannerPlacementKey,
+  MobileAdEnvironment,
+  MobileAdFormat,
+  MobileAdPlacementKey,
+};
 
 /**
  * App-wide AdMob placement registry. Mirrors the web placement keys
@@ -12,25 +31,7 @@ import { Platform } from 'react-native';
  *   missing IDs throw, matching the quiz config behavior.
  */
 
-export type MobileAdBannerPlacementKey =
-  | 'HOME_STRIP'
-  | 'PRODUCT_GRID_IN_FEED'
-  | 'PRODUCT_GRID_MPU'
-  | 'CART_MPU'
-  | 'ORDER_SUCCESS_BANNER'
-  | 'FOOTER_ANCHOR';
-
-export type MobileAdPlacementKey =
-  | MobileAdBannerPlacementKey
-  | 'POST_ORDER_INTERSTITIAL'
-  | 'QUIZ_START_INTERSTITIAL'
-  | 'REWARDED';
-
-export type MobileAdFormat = 'banner' | 'interstitial' | 'rewarded';
-
 type MobileAdPlatform = 'android' | 'ios';
-
-type MobileAdEnvironment = Readonly<Record<string, string | undefined>>;
 
 interface GetMobileAdUnitIdOptions {
   development?: boolean;
@@ -43,56 +44,6 @@ export type MobileAdUnitConfig =
   | { enabled: true; format: MobileAdFormat; unitId: string };
 
 const UNIT_ID_PATTERN = /^ca-app-pub-\d+\/\d+$/;
-
-const BANNER_PLACEMENTS: Record<
-  MobileAdBannerPlacementKey,
-  { androidEnvKey: string; iosEnvKey: string }
-> = {
-  HOME_STRIP: {
-    androidEnvKey: 'EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID',
-    iosEnvKey: 'EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID',
-  },
-  PRODUCT_GRID_IN_FEED: {
-    androidEnvKey: 'EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID',
-    iosEnvKey: 'EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID',
-  },
-  PRODUCT_GRID_MPU: {
-    androidEnvKey: 'EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID',
-    iosEnvKey: 'EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID',
-  },
-  CART_MPU: {
-    androidEnvKey: 'EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID',
-    iosEnvKey: 'EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID',
-  },
-  ORDER_SUCCESS_BANNER: {
-    androidEnvKey: 'EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID',
-    iosEnvKey: 'EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID',
-  },
-  FOOTER_ANCHOR: {
-    androidEnvKey: 'EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID',
-    iosEnvKey: 'EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID',
-  },
-};
-
-const INTERSTITIAL_ENV_KEYS: Record<
-  'POST_ORDER_INTERSTITIAL' | 'QUIZ_START_INTERSTITIAL',
-  { android: string; ios: string }
-> = {
-  POST_ORDER_INTERSTITIAL: {
-    android: 'EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID',
-    ios: 'EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID',
-  },
-  QUIZ_START_INTERSTITIAL: {
-    android: 'EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID',
-    ios: 'EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID',
-  },
-};
-
-// Rewarded reuses the quiz rewarded units: one rewarded placement exists.
-const REWARDED_ENV_KEYS = {
-  android: 'EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID',
-  ios: 'EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID',
-} as const;
 
 const SAMPLE_UNIT_IDS: Record<
   MobileAdFormat,
@@ -141,80 +92,8 @@ function placementEnvKey(
   if (key === 'REWARDED') {
     return REWARDED_ENV_KEYS[platform];
   }
-  const keys = BANNER_PLACEMENTS[key];
+  const keys = BANNER_PLACEMENT_ENV_KEYS[key];
   return platform === 'android' ? keys.androidEnvKey : keys.iosEnvKey;
-}
-
-/**
- * Every `EXPO_PUBLIC_*` variable the placement registry can look up.
- * Exported so tests can assert the static reader below stays in sync when
- * placements are added.
- */
-export const MOBILE_AD_ENV_KEYS: readonly string[] = [
-  'EXPO_PUBLIC_MOBILE_ADS_ENABLED',
-  ...Object.values(BANNER_PLACEMENTS).flatMap((keys) => [
-    keys.androidEnvKey,
-    keys.iosEnvKey,
-  ]),
-  ...Object.values(INTERSTITIAL_ENV_KEYS).flatMap((keys) => [
-    keys.android,
-    keys.ios,
-  ]),
-  REWARDED_ENV_KEYS.android,
-  REWARDED_ENV_KEYS.ios,
-];
-
-/**
- * Default environment snapshot. Every variable is read with static
- * `process.env.EXPO_PUBLIC_*` dot notation because Expo only inlines
- * statically referenced variables into release bundles — computed
- * `process.env[key]` reads stay undefined in production and would disable
- * every placement (or throw for uncaught callers). Callers that need a
- * synthetic environment (tests, previews) pass `options.environment`.
- *
- * When adding a placement, add its variables here AND to
- * MOBILE_AD_ENV_KEYS (covered by `mobile-ad-placements.test.ts`).
- */
-export function readMobileAdDefaultEnvironment(): MobileAdEnvironment {
-  return {
-    EXPO_PUBLIC_MOBILE_ADS_ENABLED: process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED,
-    EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID,
-    EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID:
-      process.env.EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID,
-    EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID:
-      process.env.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID,
-    EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID:
-      process.env.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID,
-  };
 }
 
 export function getMobileAdUnitId(

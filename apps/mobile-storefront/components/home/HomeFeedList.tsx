@@ -22,6 +22,7 @@ import { AdSlot } from '@/components/ads/AdSlot';
 import { BlockRenderer } from '@/components/storefront/BlockRenderer';
 import { FilterBar } from '@/components/storefront/FilterBar';
 import { HomeServiceCards } from '@/components/storefront/HomeServiceCards';
+import { findHeroAdOwnerBlockId } from '@/components/storefront/hero-ad-owner';
 import { styles as gridStyles } from '@/components/storefront/ProductGrid.styles';
 import { ProductGridSkeleton } from '@/components/ui/Skeleton';
 import { palette } from '@/constants/Colors';
@@ -116,6 +117,13 @@ export function HomeFeedList({
   const footerBlocks = hasPrimaryGrid
     ? blocks.slice(primaryProductGridIndex + 1)
     : [];
+  // HOME_STRIP is one logical slot for the whole page, but each slice
+  // renders its own BlockRenderer: elect the owner across both slices so a
+  // header hero and a footer hero cannot each claim it.
+  const heroAdOwnerBlockId = findHeroAdOwnerBlockId([
+    ...headerBlocks,
+    ...footerBlocks,
+  ]);
   const renderAfterCategoryRail = (block: Block) =>
     block.type === 'CategoryRail' ? (
       <HomeServiceCards placement="belowUtility" />
@@ -179,6 +187,7 @@ export function HomeFeedList({
         // Search covers the feed with a full-screen scrim; withhold the
         // home ad placements so no obscured delivery is requested.
         suppressAds={isSearchOpen}
+        heroAdOwnerBlockId={heroAdOwnerBlockId}
       />
       {hasPrimaryGrid ? (
         <>
@@ -217,6 +226,7 @@ export function HomeFeedList({
         blockWrapperStyle={blockWrapperStyle}
         renderAfterBlock={renderAfterCategoryRail}
         suppressAds={isSearchOpen}
+        heroAdOwnerBlockId={heroAdOwnerBlockId}
       />
       {isSearchOpen ? null : <AdSlot placement="PRODUCT_GRID_IN_FEED" />}
     </View>

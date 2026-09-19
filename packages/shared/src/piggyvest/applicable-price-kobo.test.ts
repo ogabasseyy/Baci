@@ -28,6 +28,24 @@ describe('applicablePriceKobo', () => {
     expect(price).toBe(9_000_000);
   });
 
+  it('keeps a lower catalogue price during a live offer', () => {
+    // Regression: the live offer acted as an override, resolving a
+    // ₦97,000 offer against a ₦90,000 current price to ₦97,000 and
+    // leaving a funded plan marked not ready. The offer is one more
+    // ceiling, never a floor above the catalogue rule.
+    // Arrange & Act
+    const price = applicablePriceKobo({
+      currentPriceKobo: 9_000_000,
+      guaranteedPriceKobo: 10_000_000,
+      now: new Date('2026-09-01T00:00:00.000Z'),
+      protectedOfferExpiresAt: new Date('2026-09-10T00:00:00.000Z'),
+      protectedOfferPriceKobo: 9_700_000,
+    });
+
+    // Assert
+    expect(price).toBe(9_000_000);
+  });
+
   it('falls back after the protected offer expires', () => {
     // Arrange & Act
     const price = applicablePriceKobo({

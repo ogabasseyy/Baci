@@ -69,22 +69,29 @@ jest.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ colors: { text: '#000000' } }),
 }));
 
+const mockBlockRenderer = jest.fn();
+
 jest.mock('@/components/storefront/BlockRenderer', () => {
   const { View, Text } = jest.requireActual(
     'react-native'
   ) as typeof import('react-native');
   return {
-    BlockRenderer: ({
-      blocks,
-      suppressAds,
-    }: {
+    BlockRenderer: (props: {
       blocks: Block[];
       suppressAds?: boolean;
-    }) => (
-      <View testID={suppressAds ? 'block-renderer-ads-off' : 'block-renderer'}>
-        <Text>{blocks.length}</Text>
-      </View>
-    ),
+      heroAdOwnerBlockId?: string | null;
+    }) => {
+      mockBlockRenderer(props);
+      return (
+        <View
+          testID={
+            props.suppressAds ? 'block-renderer-ads-off' : 'block-renderer'
+          }
+        >
+          <Text>{props.blocks.length}</Text>
+        </View>
+      );
+    },
   };
 });
 
@@ -242,6 +249,42 @@ describe('HomeFeedList', () => {
 
     expect(screen.getAllByTestId('block-renderer')).toHaveLength(2);
     expect(screen.getByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeTruthy();
+  });
+
+  it('elects one hero ad owner across the header and footer slices', () => {
+    // Regression: each slice renders its own BlockRenderer, so per-slice
+    // elections would let a header hero and a footer hero each claim
+    // HOME_STRIP and request it concurrently.
+    const hero = (id: string) =>
+      ({
+        type: 'HeroCarousel',
+        props: {
+          id,
+          slides: [
+            {
+              ctaLink: `/deals/${id}`,
+              ctaText: 'Shop',
+              image: `https://example.com/${id}.jpg`,
+              subtitle: 'Available now',
+              title: id,
+            },
+          ],
+        },
+      }) as unknown as Block;
+    renderList({
+      blocks: [
+        hero('header-hero'),
+        { type: 'ProductGrid', props: { id: 'grid' } },
+        hero('footer-hero'),
+      ] as unknown as Block[],
+      primaryProductGridIndex: 1,
+    });
+
+    const owners = mockBlockRenderer.mock.calls.map(
+      (call) =>
+        (call[0] as { heroAdOwnerBlockId?: string | null }).heroAdOwnerBlockId
+    );
+    expect(owners).toEqual(['header-hero', 'header-hero']);
   });
 
   it('suppresses home ad placements while the search overlay is open', () => {

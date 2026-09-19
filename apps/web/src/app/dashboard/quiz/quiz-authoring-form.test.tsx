@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { QuizAuthoringForm } from './quiz-authoring-form';
@@ -162,6 +162,65 @@ describe('QuizAuthoringForm', () => {
       fireEvent.change(screen.getByLabelText(/quiz title/i), {
         target: { value: 'Daily Phone Quiz 2' },
       });
+      expect(
+        screen.getByRole('button', { name: /generate draft/i })
+      ).toBeDisabled();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('disables generation on its own once the clock passes the start', () => {
+    // Regression: render-time validity goes stale while the page sits
+    // open, so the tick must disable the button and surface the alert
+    // without any further interaction.
+    vi.useFakeTimers();
+    try {
+      render(
+        <QuizAuthoringForm
+          disabled={false}
+          initialProducts={[prize]}
+          isGenerating={false}
+          onGenerate={vi.fn()}
+        />
+      );
+      expect(
+        screen.getByRole('button', { name: /generate draft/i })
+      ).toBeEnabled();
+      // Travel past the defaulted start (rendered as now + 1h) via the
+      // clock tick instead of a manual rerender nudge.
+      act(() => {
+        vi.advanceTimersByTime(3_700_000);
+      });
+      expect(
+        screen.getByRole('button', { name: /generate draft/i })
+      ).toBeDisabled();
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('surfaces the timing alert when a stale click hits an expired start', () => {
+    // Regression: a click inside the tick window with the button still
+    // enabled must not silently drop the submission; the failed recheck
+    // refreshes visible validation instead.
+    const onGenerate = vi.fn();
+    render(
+      <QuizAuthoringForm
+        disabled={false}
+        initialProducts={[prize]}
+        isGenerating={false}
+        onGenerate={onGenerate}
+      />
+    );
+    const nowSpy = vi
+      .spyOn(Date, 'now')
+      .mockReturnValue(Date.now() + 3_700_000);
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /generate draft/i }));
+      expect(onGenerate).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toBeInTheDocument();
       expect(
         screen.getByRole('button', { name: /generate draft/i })
       ).toBeDisabled();

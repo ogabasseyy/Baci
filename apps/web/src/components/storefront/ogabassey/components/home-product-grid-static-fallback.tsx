@@ -5,6 +5,7 @@ import { getProductUrl } from '@/lib/product-url';
 import type { Product } from '../types';
 import { getProductConditionClass } from './product-condition-class';
 import { resolveProductImageSource } from './product-image-source';
+import { FALLBACK_RENDERED_IMAGE_COUNT } from './home-product-grid-fallback-swap';
 import { HomeProductGridFallbackImage } from './home-product-grid-fallback-image';
 import { ProductRatingRow } from './ProductRatingRow';
 
@@ -16,11 +17,12 @@ interface HomeProductGridStaticFallbackProps {
   initialDisplayCount?: number;
   allProductsHref?: string;
   /**
-   * How many leading cards render a real `<img>`. Mirrors
-   * SERVER_RENDERED_HOME_PRODUCT_IMAGES in HomeProductGrid: the remaining
-   * cards render the same placeholder shell the interactive card shows
-   * pre-activation, so below-fold product images never compete with LCP for
-   * bandwidth — even on fast connections where lazy-load thresholds expand.
+   * How many leading cards render a real `<img>`. Defaults to
+   * FALLBACK_RENDERED_IMAGE_COUNT (shared with the swap-tier predicate):
+   * the remaining cards render the same placeholder shell the
+   * interactive card shows pre-activation, so below-fold product images
+   * never compete with LCP for bandwidth — even on fast connections
+   * where lazy-load thresholds expand.
    */
   serverRenderedImageCount?: number;
 }
@@ -45,7 +47,7 @@ export function HomeProductGridStaticFallback({
   showViewAll = true,
   initialDisplayCount = 8,
   allProductsHref,
-  serverRenderedImageCount = 2,
+  serverRenderedImageCount = FALLBACK_RENDERED_IMAGE_COUNT,
 }: HomeProductGridStaticFallbackProps) {
   const prioritizedProducts = prioritizeSmartphoneProducts(products);
   const visibleProducts = prioritizedProducts.slice(

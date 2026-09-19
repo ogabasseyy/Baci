@@ -14,29 +14,34 @@ async function loadSupabaseClient(): Promise<MerchantSupabaseClient> {
 let supabaseClientPromise: Promise<MerchantSupabaseClient> | null = null;
 
 /**
- * Process-wide cached browser client for merchant data fetching. Stable
- * across renders (no exhaustive-deps churn); every caller shares the first
- * resolution.
+ * Sole export: process-wide cached browser client for merchant data
+ * fetching. Stable across renders (no exhaustive-deps churn); every
+ * caller shares the first resolution.
  *
  * Self-healing: a rejected import/factory drops the cached promise so the
  * failure does not poison every future caller for the page lifetime — the
  * next call re-imports. Callers still observe (and must handle) the original
  * rejection; this only clears the cache fork.
+ *
+ * `reset` is the test seam (drop the cached client so tests isolate
+ * resolutions), kept as a method so the module exposes a single cache
+ * abstraction.
  */
-export function getSupabaseClient(): Promise<MerchantSupabaseClient> {
-  if (!supabaseClientPromise) {
-    const pending = loadSupabaseClient();
-    supabaseClientPromise = pending;
-    void pending.catch(() => {
-      if (supabaseClientPromise === pending) {
-        supabaseClientPromise = null;
-      }
-    });
-  }
-  return supabaseClientPromise;
-}
+export const merchantSupabaseClientCache = {
+  get(): Promise<MerchantSupabaseClient> {
+    if (!supabaseClientPromise) {
+      const pending = loadSupabaseClient();
+      supabaseClientPromise = pending;
+      void pending.catch(() => {
+        if (supabaseClientPromise === pending) {
+          supabaseClientPromise = null;
+        }
+      });
+    }
+    return supabaseClientPromise;
+  },
 
-/** Test seam: drop the cached client so tests isolate resolutions. */
-export function resetSupabaseClientCache(): void {
-  supabaseClientPromise = null;
-}
+  reset(): void {
+    supabaseClientPromise = null;
+  },
+};

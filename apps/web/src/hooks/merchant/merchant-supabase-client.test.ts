@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  getSupabaseClient,
-  resetSupabaseClientCache,
-} from './merchant-supabase-client';
+import { merchantSupabaseClientCache } from './merchant-supabase-client';
 
 const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
@@ -14,7 +11,7 @@ vi.mock('@/lib/supabase/client', () => ({
 
 describe('merchant-supabase-client', () => {
   afterEach(() => {
-    resetSupabaseClientCache();
+    merchantSupabaseClientCache.reset();
     vi.clearAllMocks();
   });
 
@@ -23,8 +20,8 @@ describe('merchant-supabase-client', () => {
     mocks.createClient.mockReturnValue(client);
 
     const [first, second] = await Promise.all([
-      getSupabaseClient(),
-      getSupabaseClient(),
+      merchantSupabaseClientCache.get(),
+      merchantSupabaseClientCache.get(),
     ]);
 
     expect(first).toBe(client);
@@ -39,17 +36,19 @@ describe('merchant-supabase-client', () => {
       })
       .mockReturnValue({ from: vi.fn() });
 
-    await expect(getSupabaseClient()).rejects.toThrow('chunk failed');
-    await expect(getSupabaseClient()).resolves.toBeDefined();
+    await expect(merchantSupabaseClientCache.get()).rejects.toThrow(
+      'chunk failed'
+    );
+    await expect(merchantSupabaseClientCache.get()).resolves.toBeDefined();
     expect(mocks.createClient).toHaveBeenCalledTimes(2);
   });
 
   it('resets the cache on demand', async () => {
     mocks.createClient.mockReturnValue({ from: vi.fn() });
 
-    await getSupabaseClient();
-    resetSupabaseClientCache();
-    await getSupabaseClient();
+    await merchantSupabaseClientCache.get();
+    merchantSupabaseClientCache.reset();
+    await merchantSupabaseClientCache.get();
 
     expect(mocks.createClient).toHaveBeenCalledTimes(2);
   });

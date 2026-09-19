@@ -58,6 +58,11 @@ export interface ProductGridItemProps {
   interactiveChromeTimeoutMs?: number;
   interactiveChromeActivateOnIdle?: boolean;
   deferImageLoading?: boolean;
+  /**
+   * Render the static fallback's JPEG tier instead of the AVIF tier for
+   * fallback-rendered cards, so the swap reuses the fetched bytes.
+   */
+  disableAvifTier?: boolean;
 }
 
 export const ProductGridItem: React.FC<ProductGridItemProps> = ({
@@ -73,6 +78,7 @@ export const ProductGridItem: React.FC<ProductGridItemProps> = ({
   interactiveChromeTimeoutMs = 1400,
   interactiveChromeActivateOnIdle = true,
   deferImageLoading = false,
+  disableAvifTier = false,
 }) => {
   const iconSize = viewMode === 'list' ? 22 : 18;
 
@@ -181,6 +187,7 @@ export const ProductGridItem: React.FC<ProductGridItemProps> = ({
             sizes="(max-width: 480px) 40vw, (max-width: 768px) 33vw, (max-width: 1200px) 25vw, 20vw"
             loading="lazy"
             fetchPriority="low"
+            disableAvifTier={disableAvifTier}
             // A cached image on an SSR'd native <img> can be `complete` before
             // hydration attaches onLoad — without this mount-time check the
             // card would keep its skeleton and hold the image at opacity-0.

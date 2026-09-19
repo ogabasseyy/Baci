@@ -9,7 +9,7 @@ import { fetchDashboardMerchantViaApi } from './fetch-dashboard-merchant-via-api
 import { MerchantContext } from './merchant-context';
 import { reloadMerchantBySlug } from './merchant-reload-by-slug';
 import { loadMerchantBySlug } from './merchant-slug-loader';
-import { getSupabaseClient } from './merchant-supabase-client';
+import { merchantSupabaseClientCache } from './merchant-supabase-client';
 import { getDemoMerchant } from './mock-data';
 import type {
   MerchantContextType,
@@ -136,8 +136,8 @@ export const MerchantProvider = ({
     routingMode === 'domain' ? '' : `/${merchant?.slug || slug || ''}`;
 
   // The Supabase client resolves once per process via the module-scope
-  // getSupabaseClient — never constructed for readers that only consume SSR
-  // merchant data, and stable across renders for effect dependencies.
+  // merchantSupabaseClientCache — never constructed for readers that only
+  // consume SSR merchant data, and stable across renders for effect deps.
 
   // ---- DATA LOADING ----
   // CASE 1: initialMerchant provided → no fetch (dashboard + storefront with SSR data)
@@ -163,7 +163,7 @@ export const MerchantProvider = ({
       // .catch chain — no try statement — keeps the Compiler-lowered effect
       // constraint intact.)
       void (async () => {
-        const supabase = await getSupabaseClient();
+        const supabase = await merchantSupabaseClientCache.get();
         if (cancelled) return;
         await loadMerchantBySlug({
           supabase,
@@ -217,7 +217,7 @@ export const MerchantProvider = ({
 
     if (slug) {
       void reloadMerchantBySlug({
-        getSupabase: getSupabaseClient,
+        getSupabase: merchantSupabaseClientCache.get,
         slug,
         setMerchant,
         setLoading,
@@ -240,7 +240,7 @@ export const MerchantProvider = ({
   };
 
   const updateMerchant = createMerchantUpdate({
-    getSupabase: getSupabaseClient,
+    getSupabase: merchantSupabaseClientCache.get,
     userId: user?.id ?? null,
     staffAccess,
     activeMerchantId: merchant?.id,

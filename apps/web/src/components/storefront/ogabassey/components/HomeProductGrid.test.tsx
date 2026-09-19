@@ -150,11 +150,11 @@ describe('HomeProductGrid', () => {
     expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument();
   });
 
-  it('keeps the fallback-rendered slice on the JPEG tier after the swap', async () => {
-    // The static fallback already fetched the initial slice as JPEG: those
-    // cards must not select the AVIF tier or the browser downloads every
-    // image a second time. Load-more cards were never fallback-rendered
-    // and keep the AVIF tier.
+  it('keeps the fallback-rendered images on the JPEG tier after the swap', async () => {
+    // The default fallback renders real images for the first two cards
+    // only (placeholders below): those two must not select the AVIF tier
+    // or the browser downloads them a second time. Placeholder and
+    // load-more cards keep AVIF.
     render(
       <HomeProductGrid
         storeSlug="test-store"
@@ -167,8 +167,10 @@ describe('HomeProductGrid', () => {
 
     const initialCards = screen.getAllByRole('article');
     expect(initialCards).toHaveLength(8);
-    for (const card of initialCards) {
-      expect(card).toHaveAttribute('data-disable-avif-tier', 'true');
+    expect(initialCards[0]).toHaveAttribute('data-disable-avif-tier', 'true');
+    expect(initialCards[1]).toHaveAttribute('data-disable-avif-tier', 'true');
+    for (const card of initialCards.slice(2)) {
+      expect(card).toHaveAttribute('data-disable-avif-tier', 'false');
     }
 
     await act(async () => {

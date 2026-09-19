@@ -12,8 +12,20 @@ import type {
   ProductGridParticle,
 } from './ProductGridInteractionBindings';
 import { DeferredAdUnit } from './deferred-ad-unit';
+import {
+  FALLBACK_RENDERED_IMAGE_COUNT,
+  loadDefaultInteractionBindingsModule,
+  loadDefaultInteractiveCardModule,
+  PRODUCTS_PER_PAGE,
+  STATIC_BINDINGS,
+  useFallbackSwapPage,
+} from './home-product-grid-fallback-swap';
+import type {
+  PreviewCatalogModule,
+  ProductGridInteractionBindingsModule,
+  ProductGridItemModule,
+} from './home-product-grid-fallback-swap';
 import { HomeProductGridCard } from './HomeProductGridCard';
-import type { ProductGridItemProps } from './ProductGridItem';
 import { hasRealProducts, useHomePreviewCatalog } from './useHomePreviewCatalog';
 import { useActivationFocusRestore } from './use-activation-focus-restore';
 import type { Product } from '../types';
@@ -23,22 +35,6 @@ const DeferredFloatingParticles = dynamic(
   () => import('./FloatingParticles').then((mod) => mod.FloatingParticles),
   { loading: () => null }
 );
-
-interface ProductGridInteractionBindingsModule {
-  ProductGridInteractionBindings: React.ComponentType<{
-    children: (
-      bindings: ProductGridInteractionBindingsValue
-    ) => React.ReactNode;
-  }>;
-}
-
-interface ProductGridItemModule {
-  ProductGridItem: React.ComponentType<ProductGridItemProps>;
-}
-
-interface PreviewCatalogModule {
-  products: Product[];
-}
 
 interface HomeProductGridProps {
   basePath?: string;
@@ -67,30 +63,6 @@ interface HomeProductGridProps {
   loadPreviewCatalog?: () => Promise<PreviewCatalogModule>;
 }
 
-const PRODUCTS_PER_PAGE = 20;
-const SERVER_RENDERED_HOME_PRODUCT_IMAGES = 2;
-const NO_PARTICLES: ProductGridParticle[] = [];
-
-const loadDefaultInteractionBindingsModule = () =>
-  import('./ProductGridInteractionBindings');
-
-const loadDefaultInteractiveCardModule = () => import('./ProductGridItem');
-
-const STATIC_BINDINGS: ProductGridInteractionBindingsValue = {
-  isAdded: () => false,
-  getCartQuantity: () => 0,
-  isWishlisted: () => false,
-  onAddToCart: (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  },
-  onToggleWishlist: (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  },
-  particles: NO_PARTICLES,
-};
-
 export function HomeProductGrid({
   basePath: explicitBasePath,
   storeSlug,
@@ -105,18 +77,12 @@ export function HomeProductGrid({
   loadInteractiveCard,
   loadPreviewCatalog,
 }: HomeProductGridProps) {
-  const [displayCount, setDisplayCount] = useState(
-    () =>
-      Math.max(1, initialDisplayCount) +
-      (replayLoadMore ? PRODUCTS_PER_PAGE : 0)
-  );
-  const [prevInitialDisplayCount, setPrevInitialDisplayCount] = useState(
-    initialDisplayCount
-  );
-  if (initialDisplayCount !== prevInitialDisplayCount) {
-    setPrevInitialDisplayCount(initialDisplayCount);
-    setDisplayCount(Math.max(1, initialDisplayCount));
-  }
+  const { displayCount, setDisplayCount, isFallbackTierIndex } =
+    useFallbackSwapPage({
+      initialDisplayCount,
+      replayLoadMore,
+      matchFallbackImageTier,
+    });
   const [InteractionBindings, setInteractionBindings] = useState<
     ProductGridInteractionBindingsModule['ProductGridInteractionBindings'] | null
   >(null);
@@ -234,11 +200,9 @@ export function HomeProductGrid({
                   basePath={basePath}
                   product={product}
                   deferImageLoading={
-                    index >= SERVER_RENDERED_HOME_PRODUCT_IMAGES
+                    index >= FALLBACK_RENDERED_IMAGE_COUNT
                   }
-                  disableAvifTier={
-                    matchFallbackImageTier && index < initialDisplayCount
-                  }
+                  disableAvifTier={isFallbackTierIndex(index)}
                 />
               ) : (
                 <InteractiveCard
@@ -258,8 +222,9 @@ export function HomeProductGrid({
                   interactiveChromeTimeoutMs={deferInteractiveChrome ? 0 : undefined}
                   interactiveChromeActivateOnIdle={!deferInteractiveChrome}
                   deferImageLoading={
-                    index >= SERVER_RENDERED_HOME_PRODUCT_IMAGES
+                    index >= FALLBACK_RENDERED_IMAGE_COUNT
                   }
+                  disableAvifTier={isFallbackTierIndex(index)}
                 />
               )}
 

@@ -4,32 +4,23 @@ import { mapHomeProductsToTemplateProducts } from '@/app/(storefront)/ogabassey/
 import { JsonLd } from '@/components/seo/json-ld';
 import { OGABASSEY_HOME_SCHEMA_PRODUCT_LIMIT } from '@/components/storefront/ogabassey/config/products';
 import type { CategoryNavItem } from '@/lib/cached-categories';
-import type {
-  getRequestScopedMerchant,
-  StorefrontHomeProduct,
-} from '@/lib/cached-data';
+import type { StorefrontHomeProduct } from '@/lib/cached-data';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
 import {
   generateCollectionPageSchema,
-  generateLocalBusinessSchema,
   generateMetaDescription,
-  generateOrganizationSchema,
-  generateWebSiteSchema,
   getProductUrl,
-  type LocalBusinessData,
-  type OrganizationData,
 } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
 import { OGABASSEY_ENTITY } from '@/lib/storefront/ogabassey-entity';
 import { canonicalizeCategorySlug } from '@/lib/storefront-canonical-url';
 import { buildStorefrontHomeSemanticGraph } from '@/lib/storefront-home-semantic-graph';
-import { buildMerchantTrustProfile } from '@/lib/storefront-trust/build-merchant-trust-profile';
 import type { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
-
-type OgabasseyMerchant = NonNullable<
-  Awaited<ReturnType<typeof getRequestScopedMerchant>>
->;
+import {
+  buildOrganizationGraphSchema,
+  type OgabasseyMerchant,
+} from './ogabassey-home-organization-schema';
 
 export interface OgabasseyHomeDiscoverySectionProps {
   merchant: OgabasseyMerchant;
@@ -46,68 +37,6 @@ export interface OgabasseyHomeDiscoverySectionProps {
    * list), so a launch-feed outage degrades JSON-LD coverage only.
    */
   launchProductsPromise: ReturnType<typeof loadOgabasseyLaunchProducts>;
-}
-
-function buildOrganizationGraphSchema(merchant: OgabasseyMerchant) {
-  const baseUrl = buildStoreUrl(merchant);
-  const trustProfile = buildMerchantTrustProfile(merchant, baseUrl);
-  const description =
-    merchant.site_description ||
-    merchant.site_tagline ||
-    `Welcome to ${merchant.business_name}`;
-
-  const businessData: LocalBusinessData = {
-    name: merchant.business_name,
-    description,
-    url: baseUrl,
-    logo: merchant.logo_url || undefined,
-    telephone: merchant.phone || undefined,
-    address: merchant.business_address
-      ? {
-          street: merchant.business_address,
-          country: merchant.country || 'NG',
-        }
-      : undefined,
-    socialMedia:
-      Object.keys(trustProfile.socialLinks).length > 0
-        ? trustProfile.socialLinks
-        : undefined,
-  };
-
-  const organizationData: OrganizationData = {
-    name: merchant.business_name,
-    description,
-    url: baseUrl,
-    logo: merchant.logo_url || undefined,
-    email: trustProfile.supportEmail || merchant.email || undefined,
-    telephone: trustProfile.supportPhone || merchant.phone || undefined,
-    country: merchant.country || 'NG',
-    socialMedia:
-      Object.keys(trustProfile.socialLinks).length > 0
-        ? trustProfile.socialLinks
-        : undefined,
-    trustProfile,
-  };
-
-  const organizationSchema = generateOrganizationSchema(organizationData);
-  const localBusinessSchema = merchant.business_address
-    ? generateLocalBusinessSchema(businessData)
-    : null;
-  const webSiteSchema = generateWebSiteSchema(
-    merchant.business_name,
-    baseUrl,
-    `${baseUrl}/search?q={search_term_string}`
-  );
-
-  return {
-    '@context': 'https://schema.org',
-    '@graph': [organizationSchema, localBusinessSchema, webSiteSchema]
-      .filter(Boolean)
-      .map((schema) => {
-        const { '@context': _, ...rest } = schema as Record<string, unknown>;
-        return rest;
-      }),
-  };
 }
 
 /**

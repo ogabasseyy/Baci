@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
+import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
 import {
   beginSavingsAuthorizationCompletion,
@@ -11,6 +12,7 @@ import type {
   PaymentStatusSetter,
 } from './payment-gateway-controller.types';
 import { handleVtuConfirmation } from './use-vtu-payment-completion';
+import { verifyOrderPaymentForCompletion } from './verify-order-payment';
 
 interface PaymentGatewayCompletionHandlerInput
   extends Partial<PaymentGatewayParams> {
@@ -33,6 +35,7 @@ export function createPaymentGatewayCompletionHandlers({
   merchantSlug,
   orderId,
   orderNumber,
+  orderTotal,
   paymentKind,
   queryClient,
   reference,
@@ -141,6 +144,39 @@ export function createPaymentGatewayCompletionHandlers({
     paymentCompletionStartedRef.current = true;
     clearPendingLoadTimeout();
     setPaymentStatus('success');
+    if (orderId) {
+      // Prefer the canonical order total: `amount` is only the residual due
+      // at the gateway after wallet/savings credits.
+      const purchaseTotal = orderTotal ?? amount ?? 0;
+      // A completion-looking redirect proves association, not settlement:
+      // only a server-confirmed paid order records the conversion here.
+      // Unverified orders still navigate to success, where settlement
+      // polling may complete them once the webhook marks them paid.
+      const verification = await verifyOrderPaymentForCompletion({
+        orderId,
+        trackingToken,
+        reference,
+      });
+      if (verification.paid) {
+        // The tracked order already carries the checkout identity,
+        // breakdown, and line items: forward them so the durable claim is
+        // consumed with full attribution (later polling cannot enrich it).
+        // First completion wins the durable claim; replays emit nothing.
+        await trackCheckoutPaymentCompletedOnce({
+          customerEmail: verification.customerEmail,
+          customerPhone: verification.customerPhone,
+          items: verification.items,
+          orderId,
+          orderNumber: orderNumber || orderId,
+          paymentMethod: gateway || 'payment_gateway',
+          reference,
+          shipping: verification.shipping,
+          subtotal: verification.subtotal,
+          tax: verification.tax,
+          value: verification.total ?? purchaseTotal,
+        });
+      }
+    }
     await clearCart();
     scheduleDelayedNavigation(() => {
       router.replace({

@@ -5,17 +5,20 @@ import type { ShippingAddressInput } from '@/lib/validation';
 import {
   buildSavingsOrderFields,
   buildWalletOrderFields,
-  getFullyPaidStoreCreditPaymentMethod,
 } from '@/lib/wallet-payment-helpers';
-import { trackCheckoutStep } from '@/services/analytics';
+import {
+  trackCheckoutInvoiceGenerated,
+  trackCheckoutStep,
+} from '@/services/analytics';
 import {
   pickChangedPriceById,
   repriceCartItems,
 } from '@/services/cart-reprice';
 import { createOrder } from '@/services/orders';
-import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
+import { serializeAfterOrderCreated } from '@/services/serialize-after-order-created';
 import { useCartStore } from '@/stores/cart-store';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
+import { buildCheckoutCompletionAttribution } from './checkout-completion-attribution';
 import {
   buildCheckoutOrderRequest,
   createCheckoutSnapshot,
@@ -64,7 +67,6 @@ export function useCheckoutSubmit({
   setPendingOrder,
   setShowCryptoSelection,
   setStep,
-  user,
   walletBalance,
   walletFundedBankTransferOptionEnabled,
   walletSelection,
@@ -151,11 +153,12 @@ export function useCheckoutSubmit({
       // RPC marks the pre-reserved order paid (it keys payment_status off
       // p_payment_method — 'pod'/'pay_on_delivery' → pending, else → paid). With
       // POD the prize order would be left pending while the cart is cleared.
+      // Pay-for-me keeps its own persisted identity (like web checkout):
+      // collapsing it to 'invoice' would misclassify its documents as
+      // proforma. The server defaults it to pending, matching invoice flow.
       const paymentMethodForOrder = isVoucherOnlyCart
         ? 'card'
-        : selectedPayment === 'payforme'
-          ? 'invoice'
-          : selectedPayment;
+        : selectedPayment;
       const isBNPL =
         selectedPayment === 'credpal' ||
         selectedPayment === 'credit_direct' ||
@@ -206,31 +209,55 @@ export function useCheckoutSubmit({
             : buildSavingsOrderFields(liveSavingsSelection)),
           ...buildWalletOrderFields(liveWalletSelection),
         },
-        { checkoutGeneration: checkoutGenerationSnapshot }
+        {
+          analyticsPaymentMethod: selectedPayment,
+          checkoutGeneration: checkoutGenerationSnapshot,
+        }
       );
       const { order } = orderResponse;
       const orderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
-      const completedPaymentMethod =
-        getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
-
-      if (await claimCheckoutPurchaseTracking(order.id)) {
-        void trackCheckoutRoutePurchaseCompleted({
-          customerEmail,
-          customerPhone,
-          items: itemsSnapshot,
-          orderId: order.id,
-          orderNumber,
-          paymentMethod: completedPaymentMethod,
-          shipping: snapshot.deliveryFee,
-          subtotal: snapshot.subtotal,
-          tax: snapshot.taxAmount,
-          total: order.total,
-          userId: user?.id ?? undefined,
+      // A fully covered invoice selection comes back paid with nothing due:
+      // claiming invoice_generated would book a proforma conversion for an
+      // order that routes straight to paid completion. Only unpaid orders
+      // with a positive amount due generate a proforma.
+      const invoiceAmountDue = Number(orderResponse.amountDueToGateway);
+      const isUnpaidInvoiceOrder =
+        order.payment_status !== 'paid' &&
+        (!Number.isFinite(invoiceAmountDue) || invoiceAmountDue > 0);
+      if (selectedPayment === 'invoice' && isUnpaidInvoiceOrder) {
+        // Chain behind the order-created emission so the funnel keeps
+        // causal order even though creation is recorded fire-and-forget.
+        await serializeAfterOrderCreated(order.id, async () => {
+          if (
+            !(await claimCheckoutPurchaseTracking(
+              order.id,
+              'invoice_generated'
+            ))
+          ) {
+            return;
+          }
+          trackCheckoutInvoiceGenerated({
+            itemCount: itemsSnapshot.reduce(
+              (count, item) => count + item.quantity,
+              0
+            ),
+            orderId: order.id,
+            orderNumber,
+            paymentMethod: 'invoice',
+            total: order.total,
+          });
         });
       }
 
       await finalizeCheckoutPayment({
+        attribution: buildCheckoutCompletionAttribution({
+          customerEmail,
+          customerPhone,
+          userId: customer?.id,
+          items: itemsSnapshot,
+          snapshot,
+        }),
         clearCart,
         customerEmail,
         customerName,

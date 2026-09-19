@@ -55,6 +55,13 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: () => mockUseMerchantSafe(),
 }));
 
+const mockCaptureCheckoutFunnelEventOnce = vi.fn();
+
+vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
+  captureCheckoutFunnelEventOnce: (...args: unknown[]) =>
+    mockCaptureCheckoutFunnelEventOnce(...args),
+}));
+
 vi.mock('@/lib/api-client', () => ({
   fetchWithCsrf: (...args: unknown[]) => mockFetchWithCsrf(...args),
 }));
@@ -108,6 +115,8 @@ describe('checkout success page', () => {
     mockFetchWithCsrf.mockResolvedValue({
       ok: true,
       json: async () => ({
+        finalizationOutcome: 'completed',
+        orderId: 'order-1',
         orderNumber: 'ORD-2001',
         status: 'success',
         success: true,
@@ -124,6 +133,67 @@ describe('checkout success page', () => {
       })
     );
     expect(mockClearCart).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        expect.anything(),
+        expect.objectContaining({ payment_status: 'paid' })
+      )
+    );
+  });
+
+  it.each([
+    { status: 'failed', reason: 'payment_failed' },
+    { status: 'cancelled', reason: 'payment_cancelled' },
+  ])('captures a failed conversion for a $status verification ($reason)', async ({
+    status,
+    reason,
+  }) => {
+    mockFetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        finalizationOutcome: 'completed',
+        orderId: 'order-1',
+        orderNumber: 'ORD-2001',
+        status,
+        success: false,
+      }),
+    });
+
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() =>
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_failed',
+        'txn-ref-123',
+        expect.objectContaining({ reason })
+      )
+    );
+    expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+      'payment_completed',
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it('does not count cancelled finalizations as paid conversions', async () => {
+    mockFetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        finalizationOutcome: 'order_cancelled',
+        orderNumber: 'ORD-2001',
+        status: 'success',
+        success: true,
+      }),
+    });
+
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() => expect(mockClearCart).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByText(/ORD-2001/i)).toBeInTheDocument()
+    );
+    expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
   });
 
   it('keeps the cart intact when payment verification does not succeed', async () => {
@@ -252,6 +322,60 @@ describe('checkout success page', () => {
     }
   });
 
+  it('carries the canonical total into verified completion events', async () => {
+    mockFetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        currency: 'USD',
+        finalizationOutcome: 'completed',
+        orderId: 'order-1',
+        orderNumber: 'ORD-2001',
+        orderTotal: 21500,
+        status: 'success',
+        success: true,
+      }),
+    });
+
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() =>
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-1',
+        expect.objectContaining({ currency: 'USD', total: 21500 })
+      )
+    );
+  });
+
+  it('carries the looked-up total into paid-order completion events', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        trackingToken: 'track-token-123',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        currency: 'GHS',
+        order_number: 'ORD-1001',
+        payment_method: 'paystack',
+        payment_status: 'paid',
+        total: 470000,
+      }),
+    });
+
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() =>
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-123',
+        expect.objectContaining({ currency: 'GHS', total: 470000 })
+      )
+    );
+  });
+
   it('fetches invoice order details with merchant slug and tracking token', async () => {
     mockSearchParams.mockReturnValue(
       new URLSearchParams({
@@ -277,7 +401,7 @@ describe('checkout success page', () => {
     );
     expect(mockClearCart).toHaveBeenCalled();
     expect(
-      await screen.findByRole('heading', { name: /invoice generated/i })
+      await screen.findByRole('heading', { name: /proforma invoice ready/i })
     ).toBeInTheDocument();
   });
 

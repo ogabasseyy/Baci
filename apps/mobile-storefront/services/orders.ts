@@ -11,7 +11,6 @@ import {
   supabaseAuthStorage,
   supabaseAuthStorageKey,
 } from '@/lib/supabase';
-import { trackEvent } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 import {
   mapCreateOrderException,
@@ -25,6 +24,7 @@ import {
   CreateOrderRequestSchema,
   type OrderResponse,
 } from './orders.schemas';
+import { trackCreatedOrderOnce } from './orders-analytics';
 import { resolveCheckoutAuth } from './orders-auth';
 import { getCheckoutStoredSession } from './orders-session';
 import { readCheckoutStoredSession } from './read-checkout-stored-session';
@@ -78,6 +78,7 @@ async function checkNetwork(): Promise<boolean> {
 
 export type CreateOrderOptions = {
   checkoutGeneration?: string;
+  analyticsPaymentMethod?: string;
   expectedOwner?: string;
   queuedReplay?: boolean;
 };
@@ -217,17 +218,17 @@ export async function createOrder(
       response.headers.get('x-idempotency-replayed') === 'true' ||
       normalizedOrderResponse.idempotency?.replayed === true;
 
-    if (!replayed) {
-      trackEvent('order_created', {
-        orderId: normalizedOrderResponse.order.id,
-        orderNumber: normalizedOrderResponse.order.order_number ?? 'N/A',
-        total: normalizedOrderResponse.order.total,
-        itemCount: request.items.length,
-        paymentMethod: request.payment_method,
-        duration_ms: Date.now() - startTime,
-        source: 'mobile_app',
-      });
-    }
+    // Analytics must never hold the order response hostage: a stalled
+    // native store would otherwise keep the shopper on the submitting state
+    // for an already-committed order (and invite a duplicate retry).
+    void trackCreatedOrderOnce(
+      normalizedOrderResponse,
+      request,
+      startTime,
+      options?.analyticsPaymentMethod
+    ).catch((error) => {
+      log.error('Failed to record order-created analytics:', error);
+    });
 
     return replayed
       ? { ...normalizedOrderResponse, idempotency: { replayed: true } }

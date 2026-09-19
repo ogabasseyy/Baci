@@ -31,6 +31,7 @@ const mockRestoreItems = jest.fn<
 const mockUseMerchant = jest.fn() as jest.MockedFunction<
   () => { data: { id: string } | null }
 >;
+const mockTrackCheckoutInvoiceGenerated = jest.fn();
 let cartItems: CartItem[] = [];
 
 jest.mock('@/services/cart-reprice', () => ({
@@ -62,6 +63,8 @@ jest.mock('@/lib/wallet-payment-helpers', () => ({
 }));
 
 jest.mock('@/services/analytics', () => ({
+  trackCheckoutInvoiceGenerated: (...args: unknown[]) =>
+    mockTrackCheckoutInvoiceGenerated(...args),
   trackCheckoutStep: jest.fn(),
 }));
 
@@ -262,7 +265,7 @@ describe('useCheckoutSubmit recovery', () => {
     );
   });
 
-  it('tracks a recovered order on the first observed replay response', async () => {
+  it('does not count a replay response as a new purchase completion', async () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
@@ -290,8 +293,50 @@ describe('useCheckoutSubmit recovery', () => {
       await result.current(address);
     });
 
-    expect(trackCheckoutRoutePurchaseCompleted).toHaveBeenCalledWith(
-      expect.objectContaining({ orderId: 'order-replay-1' })
+    expect(trackCheckoutRoutePurchaseCompleted).not.toHaveBeenCalled();
+  });
+
+  it('emits one invoice event when a retry replays the created order', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    const order = {
+      created_at: '2026-07-09T12:00:00.000Z',
+      id: 'order-invoice-1',
+      order_number: 'ORD-I1',
+      payment_status: 'pending',
+      shipping_status: 'pending',
+      total: 1201500,
+    };
+    mockCreateOrder
+      .mockResolvedValueOnce({
+        amountDueToGateway: 1201500,
+        order,
+        wallet: null,
+      })
+      .mockResolvedValueOnce({
+        amountDueToGateway: 1201500,
+        idempotency: { replayed: true },
+        order,
+        wallet: null,
+      });
+    const params = createParams({ selectedPayment: 'invoice' });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+      await result.current(address);
+    });
+
+    expect(mockTrackCheckoutInvoiceGenerated).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutInvoiceGenerated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-invoice-1',
+        orderNumber: 'ORD-I1',
+        paymentMethod: 'invoice',
+        total: 1201500,
+      })
     );
   });
 });

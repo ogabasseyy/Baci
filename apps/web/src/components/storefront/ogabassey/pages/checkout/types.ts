@@ -111,4 +111,4 @@ export type PaymentMethod =
   | 'bank_transfer'
   | 'paypal'
   | '';
-export type PaymentTab = 'full' | 'installments';
+export type PaymentTab = 'full' | 'installments' | 'invoice';

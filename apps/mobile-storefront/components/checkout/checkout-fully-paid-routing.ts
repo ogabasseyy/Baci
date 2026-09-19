@@ -1,7 +1,9 @@
 import { router } from 'expo-router';
 import type { MutableRefObject } from 'react';
 import type { StoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
+import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 import type { OrderResponse } from '@/services/orders';
+import type { CheckoutCompletionAttribution } from '@/services/track-checkout-payment-completed-once';
 import { clearAndPersistCheckoutCart } from './checkout-cart-persistence';
 
 /**
@@ -9,6 +11,7 @@ import { clearAndPersistCheckoutCart } from './checkout-cart-persistence';
  * store-credit amounts used so the receipt can show them.
  */
 export async function routeStoreCreditSuccess({
+  attribution,
   clearCart,
   orderId,
   orderNumber,
@@ -17,6 +20,7 @@ export async function routeStoreCreditSuccess({
   setIsProcessing,
   trackingToken,
 }: {
+  attribution?: CheckoutCompletionAttribution;
   clearCart: () => void | Promise<void>;
   orderId: string;
   orderNumber: string;
@@ -25,6 +29,17 @@ export async function routeStoreCreditSuccess({
   setIsProcessing: (value: boolean) => void;
   trackingToken?: string | null;
 }) {
+  // Fully-paid orders bypass the gateway completion handlers: record the
+  // conversion here before the cart is cleared (purchase capture needs items).
+  const paidTotal = orderResponse.order.total;
+  // First completion wins the durable claim; replays emit nothing.
+  await trackCheckoutPaymentCompletedOnce({
+    ...attribution,
+    orderId,
+    orderNumber,
+    paymentMethod,
+    value: paidTotal,
+  });
   await clearAndPersistCheckoutCart(clearCart);
   setIsProcessing(false);
   router.replace({
@@ -49,20 +64,34 @@ export async function routeStoreCreditSuccess({
  * order would fail or wrongly start a payment for a free prize.
  */
 export async function routeFullyPaidPrizeSuccess({
+  attribution,
   clearCart,
   isOrderInFlight,
   orderId,
   orderNumber,
+  orderTotal,
   setIsProcessing,
   trackingToken,
 }: {
+  attribution?: CheckoutCompletionAttribution;
   clearCart: () => void | Promise<void>;
   isOrderInFlight: MutableRefObject<boolean>;
   orderId: string;
   orderNumber: string;
+  orderTotal: number;
   setIsProcessing: (value: boolean) => void;
   trackingToken?: string | null;
 }) {
+  // Prize orders bypass every completion handler: record the conversion here
+  // before the cart is cleared (purchase capture needs items).
+  // First completion wins the durable claim; replays emit nothing.
+  await trackCheckoutPaymentCompletedOnce({
+    ...attribution,
+    orderId,
+    orderNumber,
+    paymentMethod: 'quiz_voucher',
+    value: orderTotal,
+  });
   await clearAndPersistCheckoutCart(clearCart);
   setIsProcessing(false);
   isOrderInFlight.current = false;

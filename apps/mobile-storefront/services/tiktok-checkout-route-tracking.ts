@@ -8,7 +8,7 @@ import {
   trackOrderCompleted,
 } from '@/services/analytics';
 
-interface CheckoutTrackingItem {
+export interface CheckoutTrackingItem {
   name?: string;
   negotiatedPrice?: number | null;
   price?: number;
@@ -16,17 +16,17 @@ interface CheckoutTrackingItem {
   quantity: number;
 }
 
-interface CheckoutPurchaseInput {
+export interface CheckoutPurchaseInput {
   customerEmail?: string;
   customerPhone?: string;
-  items: CheckoutTrackingItem[];
+  items?: CheckoutTrackingItem[];
   orderId: string;
-  orderNumber: string;
+  orderNumber?: string;
   paymentMethod: string;
-  shipping: number;
-  subtotal: number;
-  tax: number;
-  total: number;
+  shipping?: number;
+  subtotal?: number;
+  tax?: number;
+  total?: number;
   userId?: string;
 }
 
@@ -68,14 +68,14 @@ export function trackCheckoutRoutePaymentInfo(paymentMethod: string) {
 export function trackCheckoutRoutePurchaseCompleted({
   customerEmail,
   customerPhone,
-  items,
+  items = [],
   orderId,
-  orderNumber,
+  orderNumber = orderId,
   paymentMethod,
-  shipping,
-  subtotal,
-  tax,
-  total,
+  total = 0,
+  shipping = 0,
+  subtotal = total,
+  tax = 0,
   userId,
 }: CheckoutPurchaseInput) {
   trackOrderCompleted({

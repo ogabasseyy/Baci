@@ -6,6 +6,17 @@ import {
 } from './create-payment-gateway-message-handler.test-utils';
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
 
+const mockTrackCheckoutPaymentCompletedOnce = jest.fn(
+  async (_input: unknown) => true
+);
+const mockTrackOrderCompleted = jest.fn();
+
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentCompletedOnce: (input: unknown) =>
+    mockTrackCheckoutPaymentCompletedOnce(input),
+  trackOrderCompleted: (...args: unknown[]) => mockTrackOrderCompleted(...args),
+}));
+
 jest.mock('expo-router', () => ({
   router: {
     replace: jest.fn(),
@@ -15,6 +26,7 @@ jest.mock('expo-router', () => ({
 describe('createPaymentGatewayMessageHandler crypto success', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockTrackCheckoutPaymentCompletedOnce.mockReset();
   });
   it('routes crypto success with sanitized fallback params', async () => {
     const {
@@ -67,6 +79,45 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
         trackingToken: 'track-token-123',
       },
     });
+  });
+
+  it('ignores duplicate crypto success messages after completion starts', async () => {
+    const markPaymentCompletionStarted = jest
+      .fn<() => boolean>()
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false);
+    const { clearCart, handler, setSuccessStatus } = createHandler({
+      markPaymentCompletionStarted,
+    });
+
+    await sendMessage(handler, { type: 'crypto_success' });
+    await sendMessage(handler, { type: 'crypto_success' });
+
+    expect(markPaymentCompletionStarted).toHaveBeenCalledTimes(2);
+    expect(setSuccessStatus).toHaveBeenCalledTimes(1);
+    expect(clearCart).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith({
+      orderId: 'order-123',
+      orderNumber: 'ORD-123',
+      paymentMethod: 'crypto',
+      reference: 'ref-123',
+      value: 0,
+    });
+  });
+
+  it('reports the canonical order total for crypto success', async () => {
+    const { handler } = createHandler({ amount: 5000, orderTotal: 21500 });
+
+    await sendMessage(handler, { type: 'crypto_success' });
+
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-123',
+        reference: 'ref-123',
+        value: 21500,
+      })
+    );
   });
 
   it('omits whitespace-only tracking token when routing order crypto success', async () => {

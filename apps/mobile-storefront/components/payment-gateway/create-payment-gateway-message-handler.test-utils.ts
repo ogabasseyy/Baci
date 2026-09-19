@@ -19,7 +19,7 @@ export function createHandler(
   const copyGatewayText = jest.fn<
     (text: string, success: string, failure?: string) => Promise<void>
   >(() => Promise.resolve());
-  const markPaymentCompletionStarted = jest.fn();
+  const markPaymentCompletionStarted = jest.fn(() => true);
   const scheduleDelayedNavigation = jest.fn<(navigate: () => void) => void>();
   const setSuccessStatus = jest.fn();
   const handler = createPaymentGatewayMessageHandler({

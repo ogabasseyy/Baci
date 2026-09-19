@@ -1,6 +1,7 @@
 import type { MutableRefObject } from 'react';
 import { useState } from 'react';
 import { Alert } from 'react-native';
+import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { OrderError } from '@/services/orders';
 import {
   CHECKOUT_API_BASE_URL,
@@ -139,6 +140,13 @@ async function runCryptoPaymentInitialization({
       );
     }
 
+    // The provider initialized with a wallet address: record the start now.
+    await trackCheckoutPaymentStarted({
+      orderId: order.id,
+      orderNumber: order.order_number || order.id.slice(0, 8).toUpperCase(),
+      paymentMethod: 'juicyway',
+      value: orderResponse.amountDueToGateway,
+    });
     setIsProcessing(false);
     setShowCryptoSelection(false);
     isOrderInFlight.current = false;

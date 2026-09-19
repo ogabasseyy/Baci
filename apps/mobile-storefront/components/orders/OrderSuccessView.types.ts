@@ -5,6 +5,7 @@ export interface OrderSuccessViewProps {
   deliveryEstimate?: string;
   isDark: boolean;
   isDocumentLoading?: boolean;
+  isPaid?: boolean;
   onContinueShopping: () => void;
   onLeaveGoogleReview: () => void;
   onPermissionDeny: () => void;

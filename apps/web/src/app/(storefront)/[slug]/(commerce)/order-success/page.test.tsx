@@ -183,12 +183,45 @@ describe('storefront order success page', () => {
     render(<OrderSuccessPage />);
 
     expect(
-      await screen.findByRole('heading', { name: /invoice generated!/i })
+      await screen.findByRole('heading', { name: /proforma invoice ready!/i })
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /we have prepared your invoice and sent it to your email/i
+        /we have prepared your proforma invoice and sent it to your email/i
       )
     ).toBeInTheDocument();
+  });
+
+  it('renders commercial copy for a paid invoice-method order', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'invoice',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        items: [],
+        subtotal: 3500,
+        shipping_cost: 0,
+        total: 3500,
+        payment_method: 'invoice',
+        payment_status: 'paid',
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    expect(
+      await screen.findByRole('heading', { name: /order confirmed!/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /download proforma invoice pdf/i })
+    ).toBeNull();
   });
 });

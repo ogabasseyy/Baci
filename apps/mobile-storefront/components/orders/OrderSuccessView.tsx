@@ -28,11 +28,12 @@ export function OrderSuccessView({
   paymentMethod,
   reference,
   isDocumentLoading = false,
+  isPaid = false,
   showPermissionModal,
 }: OrderSuccessViewProps) {
   const resolvedDeliveryEstimate =
     resolveOrderSuccessDeliveryEstimate(deliveryEstimate);
-  const successTone = getOrderSuccessTone(paymentMethod);
+  const successTone = getOrderSuccessTone(paymentMethod, isPaid);
 
   return (
     <>

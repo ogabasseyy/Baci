@@ -8,13 +8,26 @@
  *   loading → loading (user taps a different receipt while loading)
  */
 
-import type { ReceiptMerchant, ReceiptOrder } from '@baci/shared';
+import type {
+  ReceiptDocumentKind,
+  ReceiptMerchant,
+  ReceiptOrder,
+} from '@baci/shared';
 import { generateReceiptHtml } from '@baci/shared';
 import { useState } from 'react';
 import type { ReceiptListItem } from '@/types/receipt';
 import { useMerchantReceiptInfo, useReceiptDetail } from './use-receipts';
 
-export function useReceiptPreview() {
+export interface ReceiptPreviewOptions {
+  /**
+   * Explicit document kind for the generated HTML. Order-success passes
+   * `proforma` for unpaid invoice orders so the opened artifact matches
+   * the "View / Download Proforma Invoice" action that opened it.
+   */
+  documentKind?: ReceiptDocumentKind;
+}
+
+export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const { data: merchantInfo } = useMerchantReceiptInfo();
 
@@ -76,7 +89,9 @@ export function useReceiptPreview() {
       pages: merchantInfo.pages,
     };
 
-    html = generateReceiptHtml(orderData, merchant);
+    html = generateReceiptHtml(orderData, merchant, {
+      documentKind: options.documentKind,
+    });
     isPaid = receiptDetail.payment_status === 'paid';
   }
 

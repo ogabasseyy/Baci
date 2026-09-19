@@ -32,6 +32,7 @@ import {
   generateReceiptBlob,
   resolveReceiptLogoDataUri,
 } from '@/lib/receipt-pdf-generator';
+import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { createClient } from '@/lib/supabase/server';
 
 const paramsSchema = z.object({
@@ -527,7 +528,11 @@ export async function GET(
       // Document identifiers
       invoice_number:
         order.order_number || `INV-${order.id.slice(0, 8).toUpperCase()}`,
-      invoice_type_code: order.invoice_type_code || '380',
+      invoice_type_code: resolveInvoiceTypeCode({
+        paymentMethod: order.payment_method,
+        isPaid: isPaidOrder,
+        storedTypeCode: order.invoice_type_code,
+      }),
       issue_date: order.invoice_issue_date
         ? new Date(order.invoice_issue_date)
         : new Date(order.created_at),
@@ -692,11 +697,18 @@ export async function GET(
       pages: merchant.pages,
     };
     let complianceNote: string | undefined;
-    try {
-      generatePeppolInvoiceXml(invoiceData);
-      complianceNote = PEPPOL_BIS_BILLING_COMPLIANCE_NOTE;
-    } catch (peppolError) {
-      console.error('Failed to generate Peppol UBL invoice XML:', peppolError);
+    // Peppol UBL is a commercial-invoice artifact: proforma (325)
+    // documents skip the XML call and carry no compliance note.
+    if (invoiceData.invoice_type_code !== '325') {
+      try {
+        generatePeppolInvoiceXml(invoiceData);
+        complianceNote = PEPPOL_BIS_BILLING_COMPLIANCE_NOTE;
+      } catch (peppolError) {
+        console.error(
+          'Failed to generate Peppol UBL invoice XML:',
+          peppolError
+        );
+      }
     }
 
     // Generate the branded PDF
@@ -717,7 +729,10 @@ export async function GET(
       buyerReference: invoiceData.buyer_reference,
       complianceNote,
       documentDate: invoiceData.issue_date,
-      documentKind: 'invoice',
+      documentKind:
+        invoiceData.invoice_type_code === '325'
+          ? 'proforma_invoice'
+          : 'invoice',
       dueDate: invoiceData.due_date,
       firsCsid: invoiceData.firs_csid,
       firsIrn: invoiceData.firs_irn,
@@ -736,7 +751,7 @@ export async function GET(
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': buildPdfContentDisposition(
-          'invoice',
+          invoiceData.invoice_type_code === '325' ? 'proforma' : 'invoice',
           invoiceData.invoice_number
         ),
         'Cache-Control': 'no-cache',

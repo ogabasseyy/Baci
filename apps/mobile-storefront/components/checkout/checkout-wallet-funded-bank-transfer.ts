@@ -4,23 +4,31 @@ import { Alert } from 'react-native';
 import { createWalletFundedBankTransferIntent } from '@/lib/checkout/wallet-funded-bank-transfer';
 import type { WalletOrderFundingIntentCreateResponse } from '@/lib/order-wallet-funding-intent';
 import { trackError } from '@/services/analytics';
+import type { CheckoutCompletionAttribution } from '@/services/track-checkout-payment-completed-once';
 import {
   CHECKOUT_MERCHANT_ID,
   CHECKOUT_MERCHANT_SLUG,
 } from './checkout-screen.constants';
 
 interface StartWalletFundedBankTransferCheckoutParams {
+  attribution?: Pick<
+    CheckoutCompletionAttribution,
+    'customerEmail' | 'customerPhone' | 'subtotal' | 'shipping' | 'tax'
+  >;
   isOrderInFlight: MutableRefObject<boolean>;
   orderId: string;
   orderNumber: string;
+  orderTotal: number;
   setIsProcessing: (value: boolean) => void;
   trackingToken?: string | null;
 }
 
 export function startWalletFundedBankTransferCheckout({
+  attribution,
   isOrderInFlight,
   orderId,
   orderNumber,
+  orderTotal,
   setIsProcessing,
   trackingToken,
 }: StartWalletFundedBankTransferCheckoutParams) {
@@ -41,9 +49,11 @@ export function startWalletFundedBankTransferCheckout({
     },
     onSuccess: (response) =>
       routeToWalletFundedBankTransfer({
+        attribution,
         isOrderInFlight,
         orderId,
         orderNumber,
+        orderTotal,
         response,
         setIsProcessing,
         trackingToken,
@@ -58,9 +68,11 @@ function requestWalletFundingAccountConsent() {
 }
 
 function routeToWalletFundedBankTransfer({
+  attribution,
   isOrderInFlight,
   orderId,
   orderNumber,
+  orderTotal,
   response,
   setIsProcessing,
   trackingToken,
@@ -76,6 +88,7 @@ function routeToWalletFundedBankTransfer({
       accountNumber: response.account.accountNumber,
       amount: String(response.intent.expectedAmount),
       bankName: response.account.bankName,
+      orderTotal: String(orderTotal),
       intentId: response.intent.id,
       merchantId: CHECKOUT_MERCHANT_ID,
       merchantSlug: CHECKOUT_MERCHANT_SLUG,
@@ -84,6 +97,23 @@ function routeToWalletFundedBankTransfer({
       reference: response.intent.id,
       walletFunded: 'true',
       ...(trackingToken && { trackingToken }),
+      // Route params are strings: carry the checkout attribution snapshot
+      // so the wallet-funded completion keeps identity and breakdown.
+      ...(attribution?.customerEmail && {
+        customerEmail: attribution.customerEmail,
+      }),
+      ...(attribution?.customerPhone && {
+        customerPhone: attribution.customerPhone,
+      }),
+      ...(typeof attribution?.subtotal === 'number' && {
+        subtotal: String(attribution.subtotal),
+      }),
+      ...(typeof attribution?.shipping === 'number' && {
+        shipping: String(attribution.shipping),
+      }),
+      ...(typeof attribution?.tax === 'number' && {
+        tax: String(attribution.tax),
+      }),
     },
   });
 }

@@ -21,11 +21,11 @@ const PAYMENT_METHOD_LABELS: Record<PaymentMethodType, string> = {
   korapay: 'Card Payment (Korapay)',
   bank_transfer: 'Bank Transfer',
   pay_on_delivery: 'Pay on Delivery',
-  credpal: 'CredPal (Buy Now Pay Later)',
+  credpal: 'CredPal (Installments)',
   credit_direct: 'Credit Direct (Installments)',
-  klump: 'Klump (Buy Now Pay Later)',
+  klump: 'Klump (Installments)',
   juicyway: 'Crypto (Juicyway)',
-  invoice: 'Generate Invoice',
+  invoice: 'Proforma Invoice',
   payforme: 'Pay for Me',
 };
 

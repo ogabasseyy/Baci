@@ -9,7 +9,8 @@ import {
   PaystackLogo,
 } from '../../../components/PaymentLogos';
 import type { PaymentMethod, PaymentTab } from '../types';
-import { InstallmentInfo, PaymentOptionCard } from './PaymentOptionCard';
+import { PaymentOptionCard } from './PaymentOptionCard';
+import { PaymentInstallmentDetails } from './PaymentInstallmentDetails';
 import {
   type FeatureSettings,
   isNgnChargeCurrency,
@@ -50,7 +51,10 @@ export function PaymentOptionsPanel({
       setPaymentTab('full');
     }
   }, [hasInstallmentOptions, paymentTab, setPaymentTab]);
-  const visiblePaymentTab = hasInstallmentOptions ? paymentTab : 'full';
+  const visiblePaymentTab =
+    paymentTab === 'installments' && !hasInstallmentOptions
+      ? 'full'
+      : paymentTab;
   const selectPaymentTab = (nextTab: PaymentTab) => {
     setPaymentTab(nextTab);
     setPaymentMethod('');
@@ -94,20 +98,24 @@ export function PaymentOptionsPanel({
             Pay in Installments
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => selectPaymentTab('invoice')}
+          aria-pressed={visiblePaymentTab === 'invoice'}
+          className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-store-primary ${
+            visiblePaymentTab === 'invoice'
+              ? 'bg-store-primary text-store-primary-text shadow-sm'
+              : 'text-store-foreground/75 hover:bg-store-foreground/10 hover:text-store-foreground'
+          }`}
+        >
+          Get a Proforma Invoice
+        </button>
       </div>
 
       {visiblePaymentTab === 'full' && (
         <div className="space-y-3 animate-in fade-in">
           <p className="text-xs text-store-background-text/60">Choose how you'd like to pay:</p>
           <div className="grid grid-cols-1 gap-3">
-            <PaymentOptionCard
-              method="invoice"
-              paymentMethod={paymentMethod}
-              setPaymentMethod={setPaymentMethod}
-              title="Generate Invoice"
-              description="Create an invoice and pay later"
-              icon={<FileText className="size-6 text-store-foreground" />}
-            />
             {paystackCheckoutAvailable && (
               <PaymentOptionCard
                 method="paystack"
@@ -181,7 +189,7 @@ export function PaymentOptionsPanel({
 
       {visiblePaymentTab === 'installments' && (
         <div className="space-y-3 animate-in fade-in">
-          <p className="text-xs text-store-background-text/60">Buy Now, Pay Later options:</p>
+          <p className="text-xs text-store-background-text/60">Flexible payment options:</p>
           <div className="grid grid-cols-1 gap-3">
             {featureSettings?.credpal_enabled === true &&
               ngnOnlyRailsAvailable && (
@@ -221,7 +229,7 @@ export function PaymentOptionsPanel({
                 title="Klump"
                 description="Split payment at checkout"
                 badge={{
-                  label: 'Buy now, pay later',
+                  label: 'Split payments',
                   className: 'bg-store-primary/10 text-store-primary',
                 }}
                 icon={
@@ -233,42 +241,7 @@ export function PaymentOptionsPanel({
             )}
           </div>
 
-          {paymentMethod === 'credpal' && (
-            <InstallmentInfo
-              title="How CredPal works"
-              tone="blue"
-              items={[
-                'Quick approval in minutes',
-                'Pay over 3-6 months',
-                'Competitive interest rates',
-                'Receive your items immediately',
-              ]}
-            />
-          )}
-          {paymentMethod === 'credit_direct' && (
-            <InstallmentInfo
-              title="How Credit Direct works"
-              tone="purple"
-              items={[
-                'Instant approval decision',
-                'Pay over 3-6 months',
-                'No hidden fees',
-                'Get your items immediately',
-              ]}
-            />
-          )}
-          {paymentMethod === 'klump' && (
-            <InstallmentInfo
-              title="How Klump works"
-              tone="primary"
-              items={[
-                'Choose Klump at checkout',
-                'Complete approval securely',
-                'Split payment over time',
-                'Get your items immediately',
-              ]}
-            />
-          )}
+          <PaymentInstallmentDetails paymentMethod={paymentMethod} />
           {!hasInstallmentOptions && (
             <div className="text-center py-6 bg-store-background rounded-xl border border-dashed border-store-background-text/25">
               <p className="text-sm text-store-background-text/60">
@@ -276,6 +249,24 @@ export function PaymentOptionsPanel({
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {visiblePaymentTab === 'invoice' && (
+        <div className="space-y-3 animate-in fade-in">
+          <p className="text-xs text-store-background-text/60">
+            Need a document for your company or procurement team?
+          </p>
+          <div className="grid grid-cols-1 gap-3">
+            <PaymentOptionCard
+              method="invoice"
+              paymentMethod={paymentMethod}
+              setPaymentMethod={setPaymentMethod}
+              title="Get a Proforma Invoice"
+              description="Send it to your company"
+              icon={<FileText className="size-6 text-store-foreground" />}
+            />
+          </div>
         </div>
       )}
     </>

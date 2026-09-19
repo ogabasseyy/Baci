@@ -17,6 +17,7 @@ import type {
   SavingsSelection,
   WalletSelection,
 } from '@/lib/wallet-payment-helpers';
+import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { createOrder, OrderError } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
 import {
@@ -29,6 +30,10 @@ import {
   CHECKOUT_MERCHANT_ID,
   CHECKOUT_MERCHANT_SLUG,
 } from './checkout-screen.constants';
+import {
+  type PaymentInitializeData,
+  toPaymentInitializeData,
+} from './payment-initialize-data';
 
 const BNPL_PAYMENT_INIT_TIMEOUT_MS = 10_000;
 
@@ -109,8 +114,11 @@ export async function submitBnplCheckout({
   // The order service owns durable retry identity across payment methods.
   // Never rotate it when a completed order rejects reuse.
   const orderResponse = await createOrder(orderRequest, {
+    analyticsPaymentMethod: selectedPayment,
     checkoutGeneration,
   });
+  const createdOrderNumber =
+    orderResponse.order.order_number || orderResponse.order.id.slice(0, 8);
 
   if (selectedPayment === 'klump') {
     await initializeKlumpAndRoute({
@@ -122,9 +130,24 @@ export async function submitBnplCheckout({
       setIsProcessing,
       trackingToken: orderResponse.order.tracking_token,
     });
+    // Record the start only after the provider initialized: a timed-out or
+    // rejected initialize opens no Klump flow, so it must not count as one.
+    await trackCheckoutPaymentStarted({
+      orderId: orderResponse.order.id,
+      orderNumber: createdOrderNumber,
+      paymentMethod: selectedPayment,
+      value: orderResponse.amountDueToGateway,
+    });
     isOrderInFlight.current = false;
     return;
   }
+
+  await trackCheckoutPaymentStarted({
+    orderId: orderResponse.order.id,
+    orderNumber: createdOrderNumber,
+    paymentMethod: selectedPayment,
+    value: orderResponse.amountDueToGateway,
+  });
 
   isOrderInFlight.current = false;
   setIsProcessing(false);
@@ -204,7 +227,15 @@ async function initializeKlumpAndRoute({
     clearTimeout(timeout);
   }
 
-  const initData = await initResponse.json();
+  let initData: PaymentInitializeData;
+  try {
+    initData = toPaymentInitializeData(await initResponse.json());
+  } catch {
+    throw new OrderError(
+      'Failed to initialize Klump payment',
+      'PAYMENT_INIT_ERROR'
+    );
+  }
   if (
     !initResponse.ok ||
     !initData.success ||

@@ -66,6 +66,7 @@ jest.mock('@/lib/wallet-payment-helpers', () => ({
 }));
 
 jest.mock('@/services/analytics', () => ({
+  trackCheckoutInvoiceGenerated: jest.fn(),
   trackCheckoutStep: jest.fn(),
 }));
 
@@ -301,6 +302,7 @@ describe('useCheckoutSubmit', () => {
     // Standard path taken (createOrder called); BNPL flow NOT taken.
     expect(mockCreateOrder).toHaveBeenCalled();
     expect(mockCreateOrder).toHaveBeenCalledWith(expect.anything(), {
+      analyticsPaymentMethod: 'credit_direct',
       checkoutGeneration: 'gen-1',
     });
     expect(mockSubmitBnplCheckout).not.toHaveBeenCalled();
@@ -418,6 +420,75 @@ describe('useCheckoutSubmit', () => {
     });
 
     expect(params.isOrderInFlight.current).toBe(false);
+  });
+
+  it('emits invoice_generated for an unpaid invoice order with an amount due', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    mockCreateOrder.mockResolvedValue({
+      amountDueToGateway: 1201500,
+      order: {
+        created_at: '2026-07-09T12:00:00.000Z',
+        id: 'order-invoice-unpaid',
+        order_number: 'ORD-INV-1',
+        payment_status: 'pending',
+        shipping_status: 'pending',
+        total: 1201500,
+      },
+      wallet: null,
+    });
+    const { trackCheckoutInvoiceGenerated } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutInvoiceGenerated: jest.Mock };
+    const params = createParams({ selectedPayment: 'invoice' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(trackCheckoutInvoiceGenerated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-invoice-unpaid',
+        paymentMethod: 'invoice',
+      })
+    );
+  });
+
+  it('skips invoice_generated when wallet coverage pays a selected invoice order in full', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    mockCreateOrder.mockResolvedValue({
+      amountDueToGateway: 0,
+      order: {
+        created_at: '2026-07-09T12:00:00.000Z',
+        id: 'order-invoice-paid',
+        order_number: 'ORD-INV-2',
+        payment_status: 'paid',
+        shipping_status: 'pending',
+        total: 1201500,
+      },
+      wallet: { amountUsed: 1201500, newBalance: 0, transactionId: 'tx-1' },
+    });
+    const { trackCheckoutInvoiceGenerated } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutInvoiceGenerated: jest.Mock };
+    const params = createParams({ selectedPayment: 'invoice' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    // No unpaid proforma outcome occurred: the order routes straight to
+    // paid completion and must not also book a proforma conversion.
+    expect(trackCheckoutInvoiceGenerated).not.toHaveBeenCalled();
   });
 
   it('proceeds past the freeze step into order creation when prices are unchanged', async () => {

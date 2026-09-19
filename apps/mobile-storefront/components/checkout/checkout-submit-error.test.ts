@@ -16,6 +16,7 @@ jest.mock('@/services/orders', () => {
 });
 
 jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentFailed: jest.fn(),
   trackError: jest.fn(),
 }));
 
@@ -202,5 +203,51 @@ describe('handleCheckoutSubmitError', () => {
     );
 
     expect(mockRemoveItem).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['NETWORK_ERROR'],
+    ['VALIDATION_ERROR'],
+    ['AUTH_ERROR'],
+  ])('does not record pre-order %s failures as payment failures', (code) => {
+    const { trackCheckoutPaymentFailed, trackError } = jest.requireMock(
+      '@/services/analytics'
+    ) as {
+      trackCheckoutPaymentFailed: jest.Mock;
+      trackError: jest.Mock;
+    };
+    trackCheckoutPaymentFailed.mockClear();
+    trackError.mockClear();
+
+    handleCheckoutSubmitError(
+      new OrderError('pre-order failure', code),
+      'paystack' as Parameters<typeof handleCheckoutSubmitError>[1]
+    );
+
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+    // Diagnostics still fire; only the funnel event is suppressed.
+    expect(trackError).toHaveBeenCalledWith(
+      'checkout_failed',
+      'pre-order failure',
+      expect.objectContaining({ errorCode: code })
+    );
+  });
+
+  it('records post-order payment failures', () => {
+    const { trackCheckoutPaymentFailed } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutPaymentFailed: jest.Mock };
+    trackCheckoutPaymentFailed.mockClear();
+
+    handleCheckoutSubmitError(
+      new OrderError('provider declined', 'PAYMENT_INIT_ERROR'),
+      'paystack' as Parameters<typeof handleCheckoutSubmitError>[1]
+    );
+
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
+      'PAYMENT_INIT_ERROR',
+      undefined,
+      'paystack'
+    );
   });
 });

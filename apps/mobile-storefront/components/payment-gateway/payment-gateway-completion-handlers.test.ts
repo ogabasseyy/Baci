@@ -10,9 +10,17 @@ import type {
 const mockBeginWalletTopUpCompletion = jest.fn();
 const mockBeginSavingsAuthorizationCompletion = jest.fn();
 const mockHandleVtuConfirmation = jest.fn();
+const mockTrackCheckoutPaymentCompletedOnce = jest.fn(
+  async (_input: unknown) => true
+);
 
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn() },
+}));
+
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentCompletedOnce: (input: unknown) =>
+    mockTrackCheckoutPaymentCompletedOnce(input),
 }));
 
 jest.mock('./payment-gateway-completions', () => ({
@@ -75,9 +83,83 @@ function createInput(
   };
 }
 
+function mockPaidVerification(total = 5000) {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/api/payments/verify')) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'success',
+          finalizationOutcome: 'completed',
+          orderId: 'order-1',
+          orderTotal: total,
+        }),
+        { status: 200 }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        order: {
+          id: 'order-1',
+          order_number: 'ORD-1',
+          payment_status: 'paid',
+          subtotal: 45000,
+          shipping_cost: 1500,
+          discount_amount: 0,
+          total,
+        },
+        customer: {
+          name: 'Ada Buyer',
+          email: 'ada@example.com',
+          phone: '+2348123456789',
+        },
+        items: [
+          {
+            id: 'line-1',
+            product_id: 'prod-1',
+            product_name: 'Jar',
+            quantity: 1,
+            unit_price: 45000,
+            total_price: 45000,
+            product_image: null,
+          },
+        ],
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+}
+
+function mockPendingVerification() {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/api/payments/verify')) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          status: 'pending',
+          error: 'still pending',
+        }),
+        { status: 400 }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        order: {
+          id: 'order-1',
+          order_number: 'ORD-1',
+          payment_status: 'pending',
+          total: 5000,
+        },
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+}
+
 describe('createPaymentGatewayCompletionHandlers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPaidVerification();
   });
 
   it('completes an order payment, clears the cart, and navigates to success', async () => {
@@ -93,6 +175,10 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     expect(refs.paymentCompletionStartedRef.current).toBe(true);
     expect(input.clearPendingLoadTimeout).toHaveBeenCalledTimes(1);
     expect(input.setPaymentStatus).toHaveBeenCalledWith('success');
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-1', value: 5000 })
+    );
     expect(input.clearCart).toHaveBeenCalledTimes(1);
     expect(router.replace).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -105,6 +191,70 @@ describe('createPaymentGatewayCompletionHandlers', () => {
           trackingToken: 'track-1',
         }),
       })
+    );
+  });
+
+  it('forwards tracked identity, breakdown, and items on direct completion', async () => {
+    // Arrange: the server already marks the order paid (total = 45000 +
+    // 1500 shipping + 3375 VAT).
+    mockPaidVerification(49875);
+    const { input } = createInput({ amount: 5000, orderTotal: 49875 });
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: the durable claim is consumed with full attribution.
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        items: [expect.objectContaining({ product_id: 'prod-1', quantity: 1 })],
+        orderId: 'order-1',
+        shipping: 1500,
+        subtotal: 45000,
+        tax: 3375,
+        value: 49875,
+      })
+    );
+  });
+
+  it('reports the canonical order total instead of the gateway residual', async () => {
+    // Arrange
+    mockPaidVerification(21500);
+    const { input } = createInput({ amount: 5000, orderTotal: 21500 });
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-1',
+        value: 21500,
+      })
+    );
+  });
+
+  it('skips the conversion when server verification is still pending', async () => {
+    // Arrange: a matching-reference redirect whose order is not paid yet.
+    mockPendingVerification();
+    const { input } = createInput();
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: no paid conversion, but the shopper still reaches success
+    // (settlement polling may complete the order once the webhook lands).
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.clearCart).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/order-success' })
     );
   });
 

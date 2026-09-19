@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import type { MutableRefObject } from 'react';
 import { PAYMENT_CLIPBOARD_BRIDGE } from '@/constants/payment-clipboard-bridge';
+import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 import {
   isPlainRecord,
   PAYMENT_KINDS,
@@ -28,11 +29,12 @@ interface CreatePaymentGatewayMessageHandlerInput {
   customerIdentifier?: string;
   orderId?: string;
   orderNumber?: string;
+  orderTotal?: number;
   paymentKind?: PaymentKind;
   reference?: string;
   trackingToken?: string;
   utilityType?: string;
-  markPaymentCompletionStarted: () => void;
+  markPaymentCompletionStarted: () => boolean;
   scheduleDelayedNavigation: (navigate: () => void) => void;
   setSuccessStatus: () => void;
 }
@@ -111,6 +113,7 @@ export function createPaymentGatewayMessageHandler({
   gateway,
   orderId,
   orderNumber,
+  orderTotal,
   paymentKind,
   reference,
   trackingToken,
@@ -196,8 +199,21 @@ export function createPaymentGatewayMessageHandler({
         return;
       }
 
-      markPaymentCompletionStarted();
+      if (!markPaymentCompletionStarted()) {
+        return;
+      }
       setSuccessStatus();
+      // Prefer the canonical order total: `amount` is only the residual due
+      // at the gateway after wallet/savings credits.
+      const cryptoPurchaseTotal = orderTotal ?? amount ?? 0;
+      // First completion wins the durable claim; replays emit nothing.
+      await trackCheckoutPaymentCompletedOnce({
+        orderId: cryptoOrderId,
+        orderNumber: getTrimmedString(orderNumber) || cryptoOrderId,
+        paymentMethod: getTrimmedString(gateway) || 'crypto',
+        reference: cryptoReference,
+        value: cryptoPurchaseTotal,
+      });
       await clearCart();
       scheduleDelayedNavigation(() => {
         router.replace({

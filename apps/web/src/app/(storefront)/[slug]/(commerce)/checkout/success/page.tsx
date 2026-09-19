@@ -1,5 +1,10 @@
 'use client';
 
+import {
+  buildCheckoutFunnelProperties,
+  CHECKOUT_FUNNEL_EVENTS,
+  getCheckoutPaymentIntent,
+} from '@baci/shared/contracts';
 import { motion } from 'framer-motion';
 import {
   AlertCircle,
@@ -25,6 +30,7 @@ import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
+import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { asRoute } from '@/lib/routes';
 
 /**
@@ -37,10 +43,23 @@ import { asRoute } from '@/lib/routes';
  */
 
 type VerificationResponse = {
+  currency?: string;
+  orderId?: string;
   orderNumber?: string;
+  orderTotal?: number;
+  paymentMethod?: string;
   status?: 'success' | 'pending' | 'failed' | 'cancelled';
   success?: boolean;
+  finalizationOutcome?: string;
 };
+
+function normalizeCurrencyCode(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const normalized = value.trim().toUpperCase();
+  return normalized || undefined;
+}
 
 function isVerificationResponse(value: unknown): value is VerificationResponse {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -57,10 +76,25 @@ function isVerificationResponse(value: unknown): value is VerificationResponse {
   const hasValidOrderNumber =
     candidate.orderNumber === undefined ||
     typeof candidate.orderNumber === 'string';
+  const hasValidOrderId =
+    candidate.orderId === undefined || typeof candidate.orderId === 'string';
+  const hasValidPaymentMethod =
+    candidate.paymentMethod === undefined ||
+    typeof candidate.paymentMethod === 'string';
   const hasValidSuccess =
     candidate.success === undefined || typeof candidate.success === 'boolean';
+  const hasValidFinalizationOutcome =
+    candidate.finalizationOutcome === undefined ||
+    typeof candidate.finalizationOutcome === 'string';
 
-  return hasValidStatus && hasValidOrderNumber && hasValidSuccess;
+  return (
+    hasValidStatus &&
+    hasValidOrderNumber &&
+    hasValidOrderId &&
+    hasValidPaymentMethod &&
+    hasValidSuccess &&
+    hasValidFinalizationOutcome
+  );
 }
 
 const orderSteps = [
@@ -75,6 +109,7 @@ type CheckoutVerificationStatus = 'success' | 'pending' | 'failed';
 interface VerifyCheckoutPaymentParams {
   merchantSlug: string | undefined;
   orderId: string | null;
+  paymentMethod: string | null;
   reference: string | null;
   trackingToken: string | null;
 }
@@ -87,6 +122,21 @@ interface VerifyCheckoutPaymentHandlers {
   setOrderNumber: (orderNumber: string | null) => void;
   setPaymentMethod: (paymentMethod: string | null) => void;
   setStatus: (status: CheckoutVerificationStatus) => void;
+  capturePaymentCompleted: (input: {
+    currency?: string;
+    orderId: string;
+    orderNumber?: string;
+    paymentMethod: string;
+    reference?: string;
+    total?: number;
+  }) => void;
+  capturePaymentFailed: (input: {
+    orderId?: string | null;
+    orderNumber?: string;
+    paymentMethod?: string | null;
+    reference?: string | null;
+    reason: string;
+  }) => void;
 }
 
 /**
@@ -98,6 +148,7 @@ async function verifyCheckoutPayment(
   {
     merchantSlug,
     orderId,
+    paymentMethod,
     reference,
     trackingToken,
   }: VerifyCheckoutPaymentParams,
@@ -109,6 +160,8 @@ async function verifyCheckoutPayment(
     setOrderNumber,
     setPaymentMethod,
     setStatus,
+    capturePaymentCompleted,
+    capturePaymentFailed,
   }: VerifyCheckoutPaymentHandlers
 ): Promise<void> {
   if (!reference) {
@@ -130,6 +183,18 @@ async function verifyCheckoutPayment(
           setOrderNumber(data.order_number || data.short_id);
           if (data.payment_method) {
             setPaymentMethod(data.payment_method);
+          }
+          if (data.payment_status === 'paid') {
+            const lookupTotal = Number(data.total);
+            const lookupCurrency = normalizeCurrencyCode(data.currency);
+            capturePaymentCompleted({
+              orderId,
+              orderNumber: data.order_number || data.short_id,
+              paymentMethod:
+                data.payment_method || paymentMethod || 'paid_order',
+              ...(Number.isFinite(lookupTotal) ? { total: lookupTotal } : {}),
+              ...(lookupCurrency ? { currency: lookupCurrency } : {}),
+            });
           }
         } else {
           // Fallback if API lookup fails
@@ -169,13 +234,45 @@ async function verifyCheckoutPayment(
     } else if (!response.ok) {
       console.error('Payment verification failed:', data);
       setStatus('failed');
+      capturePaymentFailed({
+        orderId,
+        orderNumber: data.orderNumber,
+        paymentMethod: data.paymentMethod || paymentMethod,
+        reference,
+        reason: 'verification_failed',
+      });
       scheduleFailedRedirect();
     } else if (data.success && data.status === 'success') {
       clearCart();
       setStatus('success');
       setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
+      const verifiedOrderId = data.orderId || orderId;
+      // The verify API reports success for completed, order_cancelled, and
+      // order_skipped outcomes alike: only a completed finalization leaves an
+      // active paid order, so only it counts as a paid conversion.
+      if (verifiedOrderId && data.finalizationOutcome === 'completed') {
+        const verifiedTotal = Number(data.orderTotal);
+        const verifiedCurrency = normalizeCurrencyCode(data.currency);
+        capturePaymentCompleted({
+          orderId: verifiedOrderId,
+          orderNumber: data.orderNumber,
+          paymentMethod:
+            data.paymentMethod || paymentMethod || 'payment_gateway',
+          reference,
+          ...(Number.isFinite(verifiedTotal) ? { total: verifiedTotal } : {}),
+          ...(verifiedCurrency ? { currency: verifiedCurrency } : {}),
+        });
+      }
     } else if (data.status === 'failed' || data.status === 'cancelled') {
       setStatus('failed');
+      capturePaymentFailed({
+        orderId,
+        orderNumber: data.orderNumber,
+        paymentMethod: data.paymentMethod || paymentMethod,
+        reference,
+        reason:
+          data.status === 'cancelled' ? 'payment_cancelled' : 'payment_failed',
+      });
       scheduleFailedRedirect();
     } else {
       setStatus('pending');
@@ -214,6 +311,7 @@ function CheckoutSuccessContent() {
   const router = useRouter();
   const reference = searchParams.get('reference');
   const orderId = searchParams.get('orderId');
+  const paymentMethodParam = searchParams.get('paymentMethod');
   const trackingToken = searchParams.get('trackingToken');
   const { clearCart } = useCart();
   const merchantContext = useMerchantSafe();
@@ -244,6 +342,7 @@ function CheckoutSuccessContent() {
       {
         merchantSlug: merchantContext?.merchant?.slug,
         orderId,
+        paymentMethod: paymentMethodParam,
         reference,
         trackingToken,
       },
@@ -257,6 +356,42 @@ function CheckoutSuccessContent() {
         setOrderNumber,
         setPaymentMethod,
         setStatus,
+        capturePaymentCompleted: (input) => {
+          captureCheckoutFunnelEventOnce(
+            CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+            input.orderId,
+            buildCheckoutFunnelProperties({
+              channel: 'web',
+              currency: input.currency,
+              orderId: input.orderId,
+              orderNumber: input.orderNumber,
+              paymentIntent: getCheckoutPaymentIntent(input.paymentMethod),
+              paymentMethod: input.paymentMethod,
+              paymentStatus: 'paid',
+              reference: input.reference,
+              source: 'web_checkout',
+              total: input.total,
+            })
+          );
+        },
+        capturePaymentFailed: (input) => {
+          captureCheckoutFunnelEventOnce(
+            CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+            input.orderId || input.reference || 'unknown-order',
+            buildCheckoutFunnelProperties({
+              channel: 'web',
+              orderId: input.orderId ?? undefined,
+              orderNumber: input.orderNumber,
+              paymentIntent: input.paymentMethod
+                ? getCheckoutPaymentIntent(input.paymentMethod)
+                : undefined,
+              paymentMethod: input.paymentMethod ?? undefined,
+              reason: input.reason,
+              reference: input.reference ?? undefined,
+              source: 'web_checkout',
+            })
+          );
+        },
       }
     );
 
@@ -363,7 +498,7 @@ function CheckoutSuccessContent() {
           >
             {isConfirmed
               ? isInvoice
-                ? 'Invoice Generated!'
+                ? 'Proforma Invoice Ready!'
                 : 'Order Received!'
               : 'Order Being Processed'}
           </motion.h1>
@@ -497,7 +632,7 @@ function CheckoutSuccessContent() {
                   </h3>
                   <p className="text-sm text-gray-600">
                     {isInvoice
-                      ? "We've generated a compliant e-invoice and sent it to your email with payment instructions."
+                      ? "We've prepared your proforma invoice and sent it to your email. Share it with your company or procurement team."
                       : "You'll receive an email with your order details and tracking information once your order is confirmed."}
                   </p>
                 </div>
@@ -552,7 +687,7 @@ function CheckoutSuccessContent() {
                 </h3>
                 <p className="text-gray-300 text-sm mb-4">
                   {isInvoice
-                    ? 'Your e-invoice is generated and ready to download. You can settle the invoice at any time to activate your order processing.'
+                    ? 'Your proforma invoice is ready to download and share with your company or procurement team.'
                     : 'Your invoice is available from your order details in your account. Your receipt will appear there and in the documents archive once the order has shipped.'}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -564,7 +699,7 @@ function CheckoutSuccessContent() {
                   >
                     <Download className="size-4" />
                     {isInvoice
-                      ? 'Download Invoice PDF'
+                      ? 'Download Proforma Invoice PDF'
                       : 'View Order Documents'}
                   </Link>
                 </div>

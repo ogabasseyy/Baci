@@ -208,6 +208,7 @@ function buildSupabase({
             order_number: 'ORD-1',
             payment_status: existingOrderStatus,
             shipping_status: 'pending',
+            total: 21500,
           },
           error: null,
         }),
@@ -273,7 +274,11 @@ describe('POST /api/payments/verify — finalizer outcomes', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data).toMatchObject({ status: 'success', success: true });
+    expect(data).toMatchObject({
+      finalizationOutcome: 'order_cancelled',
+      status: 'success',
+      success: true,
+    });
     expect(mockNotifyNewOrder).not.toHaveBeenCalled();
     expect(mockRunPaidOrderSideEffects).not.toHaveBeenCalled();
     expect(mockReconciliationInsert).toHaveBeenCalledWith(
@@ -510,7 +515,12 @@ describe('POST /api/payments/verify — finalizer outcomes', () => {
 
     expect(response.status).toBe(200);
     expect(data).toEqual({
+      currency: 'NGN',
+      finalizationOutcome: 'completed',
+      orderId: 'order-1',
       orderNumber: 'ORD-1',
+      orderTotal: 21500,
+      paymentMethod: 'juicyway',
       status: 'success',
       success: true,
     });

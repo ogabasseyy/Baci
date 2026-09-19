@@ -10,6 +10,11 @@ import {
   isPickupEligible,
 } from '@baci/shared';
 import {
+  CHECKOUT_FUNNEL_EVENTS,
+  buildCheckoutFunnelProperties,
+  getCheckoutPaymentIntent,
+} from '@baci/shared/contracts';
+import {
   AlertCircle,
   Building2,
   ChevronRight,
@@ -61,6 +66,7 @@ import type {
   DvaData,
   PaymentMethod,
   PendingCryptoOrder,
+  PaymentTab,
   ResumedOrder,
 } from './checkout/types';
 import { mapApiOrderToResumedOrder } from './checkout/map-api-order-to-resumed-order';
@@ -122,6 +128,8 @@ import {
 } from './checkout/credit-direct-popup-return';
 import { persistCreditDirectPopupReference } from './checkout/persist-credit-direct-popup-reference';
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
+import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
+import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { selectRejectedVoucherLines } from './checkout/select-rejected-voucher-lines';
 import { PaymentStep } from './checkout/components/PaymentStep';
 import { AirportDeliveryOptions } from './checkout/components/AirportDeliveryOptions';
@@ -153,6 +161,8 @@ import { isWalletOrderAutoDebitWebEnabled } from '@/config/wallet-order-auto-deb
 import { isEligibleForWalletFundedBankTransfer } from './checkout/wallet-funded-transfer-eligibility';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
+import { useCheckoutStartFunnel } from './checkout/hooks/use-checkout-start-funnel';
+import { readCheckoutAttemptGeneration, rotateCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
 import { DeferredWalletTransferConsentDialog as WalletTransferConsentDialog } from './checkout/components/DeferredWalletTransferConsentDialog';
 
@@ -266,7 +276,7 @@ interface LoadResumedCheckoutOrderParams {
   setIsLoadingResumedOrder: (isLoading: boolean) => void;
   setResumedOrder: (order: ResumedOrder) => void;
   setCheckoutFields: (fields: ResumedOrderFormFields) => void;
-  setPaymentTab: (tab: 'full' | 'installments') => void;
+  setPaymentTab: (tab: PaymentTab) => void;
   setPaymentMethod: (method: PaymentMethod) => void;
   setResumeOrderError: (error: string | null) => void;
 }
@@ -811,6 +821,25 @@ export const CheckoutPage: React.FC = () => {
     ? checkoutCartTotal
     : resumedOrder?.subtotal || checkoutCartTotal;
 
+  // Set once an order is created for this attempt: post-creation rerenders
+  // (pending-order persist, widget state) must not re-emit checkout_started
+  // for the same attempt just because the generation already rotated.
+  // Declared before the funnel hook below, which reads it.
+  const [checkoutOrderCreated, setCheckoutOrderCreated] = useState(false);
+  // Session-persisted checkout attempt: rotates after every created order so
+  // a repeat purchase of the same cart emits a fresh start, while a reload
+  // mid-attempt keeps the same generation (unlike React useId, which is
+  // deterministic per rendered tree and collides after reload).
+  useCheckoutStartFunnel({
+    attemptId: `gen-${readCheckoutAttemptGeneration()}`,
+    currency: currencyCode,
+    displayItems,
+    effectiveCheckoutCartTotal,
+    effectiveItemSubtotal,
+    isHydrated: isHydrated && !checkoutOrderCreated,
+    merchantId: merchant?.id,
+  });
+
   const autoTriggerRef = useRef(false);
   // Double-submit protection: prevents race conditions from rapid clicks
   const isOrderInFlightRef = useRef(false);
@@ -834,7 +863,25 @@ export const CheckoutPage: React.FC = () => {
   const walletFundedTransfer = useWalletFundedBankTransfer({
     merchantId: merchant?.id,
     merchantSlug: merchant?.slug ?? undefined,
-    onOrderPaid: ({ checkoutFingerprint, orderId, trackingToken }) => {
+    onOrderPaid: ({ checkoutFingerprint, currency, orderId, orderNumber, total, trackingToken }) => {
+      // The intent reached server-confirmed `completed`: record the paid
+      // conversion before redirecting, or the funnel stalls at the start
+      // stage for every auto-debited transfer.
+      captureCheckoutFunnelEventOnce(
+        CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+        orderId,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency,
+          orderId,
+          ...(orderNumber ? { orderNumber } : {}),
+          paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+          paymentMethod,
+          paymentStatus: 'paid',
+          source: 'web_checkout',
+          total,
+        })
+      );
       clearPendingCheckoutOrder();
       void clearCheckoutIdempotencyKey(checkoutFingerprint);
       clearCheckoutSession();
@@ -868,6 +915,22 @@ export const CheckoutPage: React.FC = () => {
     onReady: (payment) => {
       setShowCryptoSelector(false);
       setCryptoPaymentData(payment);
+      // The normal Juicyway flow returns after opening the selector, so the
+      // generic initialization branch below is unreachable for it: the start
+      // fires here once address initialization succeeds.
+      captureCheckoutFunnelEventOnce(
+        CHECKOUT_FUNNEL_EVENTS.paymentStarted,
+        payment.orderId,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency: pendingCryptoOrder?.orderCurrency ?? 'NGN',
+          orderId: payment.orderId,
+          paymentIntent: getCheckoutPaymentIntent('juicyway'),
+          paymentMethod: 'juicyway',
+          source: 'web_checkout',
+          total: pendingCryptoOrder?.amount,
+        })
+      );
     },
     onError: (error) => toast({
       title: 'Crypto Payment Failed',
@@ -892,6 +955,43 @@ export const CheckoutPage: React.FC = () => {
     intervalId: null,
     attempts: 0,
   });
+
+  // Records the paid conversion for a server-confirmed Juicyway payment,
+  // then runs the shared success cleanup and redirect.
+  const completeCryptoPayment = () => {
+    if (!cryptoPaymentData) {
+      return;
+    }
+    captureCheckoutFunnelEventOnce(
+      CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+      cryptoPaymentData.orderId,
+      buildCheckoutFunnelProperties({
+        channel: 'web',
+        currency: pendingCryptoOrder?.orderCurrency ?? 'NGN',
+        orderId: cryptoPaymentData.orderId,
+        paymentIntent: getCheckoutPaymentIntent('juicyway'),
+        paymentMethod: 'juicyway',
+        paymentStatus: 'paid',
+        reference: cryptoPaymentData.reference,
+        source: 'web_checkout',
+        total: pendingCryptoOrder?.amount,
+      })
+    );
+    setIsVerifyingCrypto(false);
+    setCryptoVerificationStatus('confirmed');
+    clearPendingCheckoutOrder();
+    clearCheckoutSession();
+    clearCart();
+    const successQuery = new URLSearchParams({
+      type: 'crypto',
+      orderId: cryptoPaymentData.orderId,
+      reference: cryptoPaymentData.reference,
+    });
+    if (cryptoPaymentData.trackingToken) {
+      successQuery.set('trackingToken', cryptoPaymentData.trackingToken);
+    }
+    router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
+  };
 
   const verifyCryptoPayment = async () => {
     // Use paymentId for verification (from the capture response)
@@ -953,20 +1053,7 @@ export const CheckoutPage: React.FC = () => {
     const initialStatus = await checkPaymentStatus();
 
     if (initialStatus === 'confirmed') {
-      setIsVerifyingCrypto(false);
-      setCryptoVerificationStatus('confirmed');
-      clearPendingCheckoutOrder();
-      clearCheckoutSession();
-      clearCart();
-      const successQuery = new URLSearchParams({
-        type: 'crypto',
-        orderId: cryptoPaymentData.orderId,
-        reference: cryptoPaymentData.reference,
-      });
-      if (cryptoPaymentData.trackingToken) {
-        successQuery.set('trackingToken', cryptoPaymentData.trackingToken);
-      }
-      router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
+      completeCryptoPayment();
       return;
     }
 
@@ -1000,20 +1087,7 @@ export const CheckoutPage: React.FC = () => {
           clearInterval(pollingRef.current.intervalId);
           pollingRef.current.intervalId = null;
         }
-        setIsVerifyingCrypto(false);
-        setCryptoVerificationStatus('confirmed');
-        clearPendingCheckoutOrder();
-        clearCheckoutSession();
-        clearCart();
-        const successQuery = new URLSearchParams({
-          type: 'crypto',
-          orderId: cryptoPaymentData.orderId,
-          reference: cryptoPaymentData.reference,
-        });
-        if (cryptoPaymentData.trackingToken) {
-          successQuery.set('trackingToken', cryptoPaymentData.trackingToken);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
+        completeCryptoPayment();
       } else if (status === 'failed') {
         if (pollingRef.current.intervalId) {
           clearInterval(pollingRef.current.intervalId);
@@ -1185,7 +1259,7 @@ export const CheckoutPage: React.FC = () => {
   // Payment State (declared before the resumed-order effect below, which
   // pre-selects the tab/method for BNPL deep links — React Compiler requires
   // declaration before first access)
-  const [paymentTab, setPaymentTab] = useState<'full' | 'installments'>('full');
+  const [paymentTab, setPaymentTab] = useState<PaymentTab>('full');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('');
 
   // Fetch resumed order from mobile app when orderId is in URL.
@@ -1592,6 +1666,31 @@ export const CheckoutPage: React.FC = () => {
     try {
       const paymentAmount = resumedOrder.total;
 
+      // Resumed orders bypass the standard submission instrumentation, so
+      // emit the funnel start here once the provider flow opens. CredPal's
+      // opener throws on initialization failure, so reaching the call below
+      // its await means the widget opened; Credit Direct's opener swallows
+      // failures into onError instead, so its start fires from onPopup.
+      // Once semantics keep the auto-trigger plus a manual retry to a
+      // single start per order.
+      const captureResumedPaymentStarted = (
+        gateway: 'credpal' | 'credit_direct'
+      ) => {
+        captureCheckoutFunnelEventOnce(
+          CHECKOUT_FUNNEL_EVENTS.paymentStarted,
+          resumedOrder.id,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            currency: currencyCode,
+            orderId: resumedOrder.id,
+            paymentIntent: getCheckoutPaymentIntent(gateway),
+            paymentMethod: gateway,
+            source: 'web_checkout',
+            total: paymentAmount,
+          })
+        );
+      };
+
       // For CredPal, use the inline checkout widget (statically imported —
       // dynamic `import()` expressions bail React Compiler)
       if (preferredGateway === 'credpal') {
@@ -1615,6 +1714,26 @@ export const CheckoutPage: React.FC = () => {
                 gateway: 'credpal',
               }),
             });
+            // Resumed orders bypass the standard submission instrumentation,
+            // so record the conversion here to avoid an artificial drop-off.
+            // Accepted-but-pending applications are not paid conversions.
+            if (data.status === 'success') {
+              captureCheckoutFunnelEventOnce(
+                CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+                resumedOrder.id,
+                buildCheckoutFunnelProperties({
+                  channel: 'web',
+                  currency: currencyCode,
+                  orderId: resumedOrder.id,
+                  paymentIntent: getCheckoutPaymentIntent('credpal'),
+                  paymentMethod: 'credpal',
+                  paymentStatus: 'paid',
+                  reference: data.order_no,
+                  source: 'web_checkout',
+                  total: resumedOrder.total,
+                })
+              );
+            }
             clearCheckoutSession();
             const successQuery = new URLSearchParams({
               orderId: resumedOrder.id,
@@ -1639,6 +1758,7 @@ export const CheckoutPage: React.FC = () => {
             setIsProcessing(false);
           },
         });
+        captureResumedPaymentStarted('credpal');
         return;
       }
 
@@ -1697,6 +1817,10 @@ export const CheckoutPage: React.FC = () => {
             setIsProcessing(false);
           },
           onPopup: async ({ checkoutTransactionId, sessionId }) => {
+            // The opener swallows initialization failures into onError
+            // instead of rejecting, so only a real popup opening proves the
+            // provider flow started.
+            captureResumedPaymentStarted('credit_direct');
             writeCreditDirectPopupMarker(
               resumedOrder.id,
               checkoutTransactionId || sessionId
@@ -2046,13 +2170,25 @@ export const CheckoutPage: React.FC = () => {
       giftWrappingCost,
     });
 
+    let createdOrderId: string | undefined;
+    let createdOrderNumber = '';
+    let orderChargeCurrency = currencyCode;
+
     try {
       let order: {
         id: string;
         order_number?: string;
+        payment_status?: string;
+        total?: number;
         tracking_token?: string;
         /** Stamped orders.currency (returned by /api/orders and /api/orders/reuse). */
         currency?: string | null;
+        /**
+         * Server-authoritative method: the API rewrites this to
+         * wallet/store_credit/savings/quiz_voucher when credits or prizes
+         * cover the order, so it differs from the UI selection then.
+         */
+        payment_method?: string | null;
       };
       let walletResult: {
         amountUsed: number;
@@ -2252,17 +2388,54 @@ export const CheckoutPage: React.FC = () => {
         amountDueToGateway = orderData.amountDueToGateway ?? total;
       }
 
+      createdOrderId = order.id;
+      createdOrderNumber =
+        order.order_number || order.id.slice(0, 8).toUpperCase();
+      // A created order completes this checkout attempt: rotate the session
+      // generation so a repeat purchase emits a fresh checkout_started, and
+      // suppress further starts for this attempt (post-creation rerenders
+      // must not re-emit just because the generation already rotated).
+      rotateCheckoutAttemptGeneration();
+      setCheckoutOrderCreated(true);
+      orderChargeCurrency =
+        typeof order.currency === 'string' && order.currency.trim()
+          ? order.currency.trim().toUpperCase()
+          : currencyCode;
+      // The server is authoritative when wallet, savings, or a quiz voucher
+      // fully covers an order placed under another selection: attribute
+      // creation to the finalized method so creation and completion share
+      // one funnel instead of straddling proforma_invoice and pay_now.
+      const finalizedPaymentMethod =
+        typeof order.payment_method === 'string' &&
+        order.payment_method.trim() !== ''
+          ? order.payment_method
+          : paymentMethod;
+      captureCheckoutFunnelEventOnce(
+        CHECKOUT_FUNNEL_EVENTS.orderCreated,
+        order.id,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency: orderChargeCurrency,
+          itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          paymentIntent: getCheckoutPaymentIntent(finalizedPaymentMethod),
+          paymentMethod: finalizedPaymentMethod,
+          paymentStatus: order.payment_status || 'unpaid',
+          shipping: deliveryCost,
+          source: 'web_checkout',
+          subtotal: effectiveItemSubtotal,
+          tax: orderTotals?.taxAmount ?? 0,
+          total: order.total ?? total,
+        })
+      );
+
       // The ORDER row's stamped currency is authoritative for payment
       // initialization: a reused/idempotent order keeps its original currency
       // even if the merchant's payout currency changed after it was created,
       // and the initialize API rejects an explicit client/order mismatch.
       // Both order sources return it (/api/orders and /api/orders/reuse);
       // fall back to the merchant-resolved code only if it is ever absent.
-      const orderChargeCurrency =
-        typeof order.currency === 'string' && order.currency.trim()
-          ? order.currency.trim().toUpperCase()
-          : currencyCode;
-
       // 1b. Create account if requested (Awaited to ensure session is set before moving to next page)
       if (createAccount && !user && accountPassword.length >= 6) {
         try {
@@ -2316,6 +2489,25 @@ export const CheckoutPage: React.FC = () => {
         return;
       }
 
+      // payment_started is emitted only once a provider flow actually opens
+      // (initialized DVA, provider URL, opened widget, confirmed transfer
+      // setup) — never speculatively before initialization runs.
+      const capturePaymentStarted = () => {
+        captureClientEvent(
+          CHECKOUT_FUNNEL_EVENTS.paymentStarted,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            currency: orderChargeCurrency,
+            orderId: order.id,
+            orderNumber: createdOrderNumber,
+            paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+            paymentMethod,
+            source: 'web_checkout',
+            total: paymentAmount,
+          })
+        );
+      };
+
       // Update local wallet balance if redemption occurred
       if (walletResult?.amountUsed) {
         setWalletBalance(walletResult.newBalance);
@@ -2327,6 +2519,26 @@ export const CheckoutPage: React.FC = () => {
       // Special case: If wallet fully covers the order, no payment gateway needed
       // Order API already marks it as paid, just redirect to success
       if (paymentAmount <= 0) {
+        // Wallet/server-side credit covered the full amount and the order API
+        // already marked the order paid: record the conversion before leaving.
+        // Attribute the server-returned method (wallet/store_credit/savings/
+        // quiz_voucher after full coverage), not the UI selection.
+        const zeroDuePaymentMethod = order.payment_method || paymentMethod;
+        captureCheckoutFunnelEventOnce(
+          CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+          order.id,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            currency: orderChargeCurrency,
+            orderId: order.id,
+            orderNumber: createdOrderNumber,
+            paymentIntent: getCheckoutPaymentIntent(zeroDuePaymentMethod),
+            paymentMethod: zeroDuePaymentMethod,
+            paymentStatus: 'paid',
+            source: 'web_checkout',
+            total: order.total ?? total,
+          })
+        );
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
         clearCheckoutSession();
@@ -2368,14 +2580,17 @@ export const CheckoutPage: React.FC = () => {
           })
             ? await walletFundedTransfer.start({
                 checkoutFingerprint,
+                currency: orderChargeCurrency,
                 merchantId: merchant.id,
                 merchantSlug: merchant.slug ?? undefined,
                 orderId: order.id,
+                orderNumber: createdOrderNumber,
                 trackingToken: order.tracking_token,
               })
             : ('fallback' as const);
 
         if (walletFundedOutcome === 'started') {
+          capturePaymentStarted();
           setIsProcessing(false);
           isOrderInFlightRef.current = false;
           return;
@@ -2397,7 +2612,12 @@ export const CheckoutPage: React.FC = () => {
           return;
         }
 
-        await handleBankTransfer(order, paymentAmount, billingAddress);
+        await handleBankTransfer(
+          order,
+          paymentAmount,
+          billingAddress,
+          capturePaymentStarted
+        );
         return;
       }
 
@@ -2450,6 +2670,7 @@ export const CheckoutPage: React.FC = () => {
 
         if (paymentResult.success && paymentResult.crypto_payment) {
           // Juicyway crypto payment - show wallet address modal
+          capturePaymentStarted();
           setCryptoPaymentData({
             address: paymentResult.crypto_payment.address,
             chain: paymentResult.crypto_payment.chain,
@@ -2469,10 +2690,12 @@ export const CheckoutPage: React.FC = () => {
           // NOTE: Don't clear cart here - it causes a flash of empty state
           // Cart will be cleared on the payment callback page after successful payment
           // (location.assign over `href =` — global assignment bails React Compiler)
+          capturePaymentStarted();
           window.location.assign(paymentResult.authorization_url);
           return;
         } else if (paymentResult.success && paymentResult.checkout_url) {
           // Juicyway uses checkout_url
+          capturePaymentStarted();
           window.location.assign(paymentResult.checkout_url);
           return;
         } else {
@@ -2481,6 +2704,8 @@ export const CheckoutPage: React.FC = () => {
       } else if (paymentMethod === 'credit_direct') {
         // Credit Direct BNPL - Client-side popup checkout
         // Note: BNPL typically uses full total (wallet credits may not apply)
+        // The opener swallows init failures into onError, so the start fires
+        // from onPopup: only a real popup opening proves the flow started.
         await openCreditDirectCheckout({
           merchantSlug: merchant.slug || '',
           orderId: order.id,
@@ -2519,6 +2744,20 @@ export const CheckoutPage: React.FC = () => {
           },
           onError: (error) => {
             console.error('Credit Direct error:', error);
+            captureClientEvent(
+              CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+              buildCheckoutFunnelProperties({
+                channel: 'web',
+                currency: orderChargeCurrency,
+                orderId: order.id,
+                orderNumber: createdOrderNumber,
+                paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+                paymentMethod,
+                reason: 'credit_direct_error',
+                source: 'web_checkout',
+                total: paymentAmount,
+              })
+            );
             toast({
               title: 'Credit Direct Failed',
               description: error || 'Credit Direct checkout failed. Please try again.',
@@ -2532,6 +2771,7 @@ export const CheckoutPage: React.FC = () => {
             isOrderInFlightRef.current = false;
           },
           onPopup: async ({ checkoutTransactionId, sessionId }) => {
+            capturePaymentStarted();
             writeCreditDirectPopupMarker(
               order.id,
               checkoutTransactionId || sessionId
@@ -2570,7 +2810,9 @@ export const CheckoutPage: React.FC = () => {
           return;
         }
 
-        // Open CredPal popup
+        // Open CredPal popup. The opener throws on script/SDK init failure,
+        // so the start fires from the widget's load confirmation instead of
+        // before initialization: a failed load records only the failure.
         await openCredPalCheckout({
           key: credpalKey,
           amount: paymentAmount,
@@ -2578,8 +2820,32 @@ export const CheckoutPage: React.FC = () => {
           customerEmail,
           customerName: `${firstName} ${lastName}`.trim(),
           customerPhone,
+          onLoad: () => {
+            capturePaymentStarted();
+          },
           onSuccess: async (data) => {
             console.log('CredPal success:', data);
+            // Accepted-but-pending applications are not paid conversions, but
+            // the shopper must still reach the success experience: cleanup and
+            // navigation run for both outcomes, capture only for success.
+            if (data.status === 'success') {
+              captureCheckoutFunnelEventOnce(
+                CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+                order.id,
+                buildCheckoutFunnelProperties({
+                  channel: 'web',
+                  currency: orderChargeCurrency,
+                  orderId: order.id,
+                  orderNumber: createdOrderNumber,
+                  paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+                  paymentMethod,
+                  paymentStatus: 'paid',
+                  reference: data.order_no,
+                  source: 'web_checkout',
+                  total: paymentAmount,
+                })
+              );
+            }
             clearPendingCheckoutOrder();
             await clearCheckoutIdempotencyKey(checkoutFingerprint);
             clearCheckoutSession();
@@ -2589,6 +2855,10 @@ export const CheckoutPage: React.FC = () => {
               orderId: order.id,
               credpalRef: data.order_no,
             });
+            if (data.status) {
+              // Lets native hosts skip paid attribution for pending results.
+              successQuery.set('credpalStatus', data.status);
+            }
             if (order.tracking_token) {
               successQuery.set('trackingToken', order.tracking_token);
             }
@@ -2598,6 +2868,20 @@ export const CheckoutPage: React.FC = () => {
           },
           onError: (error) => {
             console.error('CredPal error:', error);
+            captureClientEvent(
+              CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+              buildCheckoutFunnelProperties({
+                channel: 'web',
+                currency: orderChargeCurrency,
+                orderId: order.id,
+                orderNumber: createdOrderNumber,
+                paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+                paymentMethod,
+                reason: 'credpal_error',
+                source: 'web_checkout',
+                total: paymentAmount,
+              })
+            );
             toast({
               title: 'CredPal Failed',
               description: error.message || 'CredPal checkout failed. Please try again.',
@@ -2614,7 +2898,22 @@ export const CheckoutPage: React.FC = () => {
         // Don't proceed further - callbacks handle the flow
         return;
       } else if (paymentMethod === 'invoice') {
-        // Invoice/Pay Later - order created, redirect to success
+        captureCheckoutFunnelEventOnce(
+          CHECKOUT_FUNNEL_EVENTS.invoiceGenerated,
+          order.id,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            currency: orderChargeCurrency,
+            itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
+            orderId: order.id,
+            orderNumber: createdOrderNumber,
+            paymentIntent: 'proforma_invoice',
+            paymentMethod: 'invoice',
+            paymentStatus: 'unpaid',
+            source: 'web_checkout',
+            total: order.total ?? total,
+          })
+        );
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
         clearCheckoutSession();
@@ -2659,6 +2958,21 @@ export const CheckoutPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Checkout error:', error);
+      if (createdOrderId) {
+        captureClientEvent(
+          CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            currency: orderChargeCurrency,
+            orderId: createdOrderId,
+            orderNumber: createdOrderNumber,
+            paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+            paymentMethod,
+            reason: error instanceof Error ? error.name : 'checkout_error',
+            source: 'web_checkout',
+          })
+        );
+      }
       toast({
         title: 'Checkout Failed',
         description: error instanceof Error
@@ -2682,7 +2996,8 @@ export const CheckoutPage: React.FC = () => {
   const handleBankTransfer = async (
     order: { id: string; currency?: string | null },
     paymentAmount: number,
-    billingAddress: DvaBillingAddress
+    billingAddress: DvaBillingAddress,
+    onDvaReady?: () => void
   ) => {
     if (!merchant) {
       isOrderInFlightRef.current = false;
@@ -2711,10 +3026,27 @@ export const CheckoutPage: React.FC = () => {
           reference: result.reference,
         });
         setDvaCountdown(3600);
+        onDvaReady?.();
         isOrderInFlightRef.current = false;
       })
       .catch((error: unknown) => {
         console.error('DVA initialization error:', error);
+        captureClientEvent(
+          CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            currency:
+              typeof order.currency === 'string' && order.currency.trim()
+                ? order.currency.trim().toUpperCase()
+                : currencyCode,
+            orderId: order.id,
+            paymentMethod: 'bank_transfer',
+            paymentIntent: getCheckoutPaymentIntent('bank_transfer'),
+            reason: 'bank_transfer_error',
+            source: 'web_checkout',
+            total: paymentAmount,
+          })
+        );
         toast({
           title: 'Bank Transfer Failed',
           description:
@@ -3897,6 +4229,14 @@ export const CheckoutPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
+                          captureClientEvent(
+                            CHECKOUT_FUNNEL_EVENTS.checkoutStepCompleted,
+                            buildCheckoutFunnelProperties({
+                              channel: 'web',
+                              checkoutStep: 'shipping_info',
+                              source: 'web_checkout',
+                            })
+                          );
                           setCompletedSteps(prev => ({ ...prev, delivery: true }));
                           setCurrentStep('payment');
                         }}
@@ -4121,7 +4461,7 @@ export const CheckoutPage: React.FC = () => {
                 {isProcessing ? (
                   <Loader2 className="animate-spin" />
                 ) : paymentMethod === 'invoice' ? (
-                  'Generate Invoice'
+                  'Get a Proforma Invoice'
                 ) : paymentMethod === 'payforme' ? (
                   'Send Payment Link'
                 ) : (

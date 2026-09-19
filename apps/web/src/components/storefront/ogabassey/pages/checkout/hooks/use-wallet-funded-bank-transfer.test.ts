@@ -34,9 +34,11 @@ const ACCOUNT = {
 
 const START_ARGS = {
   checkoutFingerprint: 'fingerprint-1',
+  currency: 'NGN',
   merchantId: 'merchant-1',
   merchantSlug: 'test-store',
   orderId: 'order-1',
+  orderNumber: 'ORD-1',
   trackingToken: 'track-1',
 };
 
@@ -140,7 +142,10 @@ describe('useWalletFundedBankTransfer', () => {
     await waitFor(() => {
       expect(onOrderPaid).toHaveBeenCalledWith({
         checkoutFingerprint: 'fingerprint-1',
+        currency: 'NGN',
         orderId: 'order-1',
+        orderNumber: 'ORD-1',
+        total: 5000,
         trackingToken: 'track-1',
       });
     });

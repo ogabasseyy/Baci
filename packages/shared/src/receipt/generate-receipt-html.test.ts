@@ -438,6 +438,48 @@ describe('generateReceiptHtml', () => {
     expect(html).toContain('<div class="info-name">Verified</div>');
   });
 
+  it('renders an explicit proforma kind as a proforma invoice, not a commercial invoice', () => {
+    const html = generateReceiptHtml(
+      createReceiptOrder({
+        payment_method: 'invoice',
+        payment_status: 'unpaid',
+      }),
+      createReceiptMerchant(),
+      { documentKind: 'proforma' }
+    );
+
+    expect(html).toContain('<div class="doc-title">Proforma Invoice</div>');
+    expect(html).toContain('Proforma Info');
+    expect(html).not.toContain('<div class="doc-title">Invoice</div>');
+  });
+
+  it('keeps the commercial invoice title when no proforma kind is passed', () => {
+    const html = generateReceiptHtml(
+      createReceiptOrder({
+        payment_method: 'invoice',
+        payment_status: 'unpaid',
+      }),
+      createReceiptMerchant()
+    );
+
+    expect(html).toContain('<div class="doc-title">Invoice</div>');
+    expect(html).not.toContain('Proforma Invoice');
+  });
+
+  it('renders a paid order as a receipt even with a stale proforma kind', () => {
+    const html = generateReceiptHtml(
+      createReceiptOrder({
+        payment_method: 'invoice',
+        payment_status: 'paid',
+      }),
+      createReceiptMerchant(),
+      { documentKind: 'proforma' }
+    );
+
+    expect(html).toContain('<div class="doc-title">Receipt</div>');
+    expect(html).not.toContain('Proforma Invoice');
+  });
+
   it('never leaks the private account email onto the receipt', () => {
     // With no support email and no business name, the receipt must not fall
     // back to `merchant.email` (the private login address) for either the

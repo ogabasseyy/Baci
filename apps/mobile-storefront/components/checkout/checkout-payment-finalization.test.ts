@@ -17,6 +17,17 @@ import {
 
 let finalizeCheckoutPayment: typeof import('./checkout-payment-finalization')['finalizeCheckoutPayment'];
 
+const mockTrackCheckoutPaymentStarted = jest.fn();
+const mockTrackCheckoutPaymentCompletedOnce = jest.fn(
+  async (_input: unknown) => true
+);
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentCompletedOnce: (input: unknown) =>
+    mockTrackCheckoutPaymentCompletedOnce(input),
+  trackCheckoutPaymentStarted: (...args: unknown[]) =>
+    mockTrackCheckoutPaymentStarted(...args),
+}));
+
 describe('finalizeCheckoutPayment', () => {
   beforeAll(async () => {
     ({ finalizeCheckoutPayment } = await import(
@@ -185,6 +196,44 @@ describe('finalizeCheckoutPayment', () => {
         reference: 'pay-ref',
       }),
     });
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledWith({
+      orderId: 'order-1',
+      orderNumber: 'BAC-001',
+      paymentMethod: 'paystack',
+      value: 25000,
+    });
     expect(runPostOrderSideEffects).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips payment start when gateway initialization fails', async () => {
+    const setIsProcessing = jest.fn();
+    const runPostOrderSideEffects = jest.fn();
+    const isOrderInFlight = { current: true };
+    mockFetch.mockResolvedValue({
+      json: async () => ({ error: 'gateway down', success: false }),
+      ok: true,
+    } as Response);
+
+    await expect(
+      finalizeCheckoutPayment({
+        clearCart: jest.fn<() => void | Promise<void>>(),
+        customerEmail: 'ada@example.com',
+        customerName: 'Ada Customer',
+        customerPhone: '08012345678',
+        isOrderInFlight,
+        orderNumber: 'BAC-001',
+        orderResponse: createOrderResponse(),
+        runPostOrderSideEffects,
+        selectedPayment: 'paystack',
+        setIsProcessing,
+        setPendingOrder: jest.fn(),
+        setShowCryptoSelection: jest.fn(),
+        shouldCreateWalletFundedBankTransferOrder: false,
+      })
+    ).rejects.toMatchObject({ code: 'PAYMENT_INIT_ERROR' });
+
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(runPostOrderSideEffects).not.toHaveBeenCalled();
   });
 });

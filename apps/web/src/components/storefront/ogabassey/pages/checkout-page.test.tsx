@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const addressAutocompleteMock = vi.hoisted(() => ({
@@ -20,6 +20,11 @@ vi.mock('@/lib/feature-flags', () => ({
   hasPriceNegotiationEntitlement: vi.fn(() => true),
 }));
 
+const mockCaptureClientEvent = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/posthog/capture-client-event', () => ({
+  captureClientEvent: mockCaptureClientEvent,
+}));
+
 vi.mock('@/hooks/cart', () => ({
   useCart: vi.fn(() => ({
     cart: [],
@@ -27,6 +32,11 @@ vi.mock('@/hooks/cart', () => ({
     clearCart: vi.fn(),
     isHydrated: true,
   })),
+}));
+
+const mockCaptureCheckoutFunnelEventOnce = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
+  captureCheckoutFunnelEventOnce: mockCaptureCheckoutFunnelEventOnce,
 }));
 
 vi.mock('@/hooks/use-merchant-client', () => ({
@@ -148,6 +158,30 @@ vi.mock('@/lib/credit-direct-client', () => ({
   openCreditDirectCheckout: vi.fn(),
 }));
 
+const walletFundedTransferMock = vi.hoisted(() => ({
+  start: vi.fn(async () => 'fallback' as const),
+  onOrderPaid: null as null | ((payload: Record<string, unknown>) => void),
+}));
+vi.mock('./checkout/hooks/use-wallet-funded-bank-transfer', () => ({
+  useWalletFundedBankTransfer: (args: {
+    onOrderPaid: (payload: Record<string, unknown>) => void;
+  }) => {
+    walletFundedTransferMock.onOrderPaid = args.onOrderPaid;
+    return {
+      account: null,
+      acceptConsent: vi.fn(),
+      checkNow: vi.fn(),
+      close: vi.fn(),
+      consentRequested: false,
+      declineConsent: vi.fn(),
+      error: null,
+      intent: null,
+      isChecking: false,
+      start: walletFundedTransferMock.start,
+    };
+  },
+}));
+
 vi.mock('@/lib/api-client', () => ({
   fetchWithCsrf: (input: RequestInfo | URL, init?: RequestInit) =>
     fetch(input, init),
@@ -203,6 +237,7 @@ import {
 } from '@/hooks/use-persisted-state';
 import { CHECKOUT_IDEMPOTENCY_STORAGE_KEY } from './checkout/checkout-idempotency';
 import { readCreditDirectPopupMarker } from './checkout/credit-direct-popup-return';
+import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 
 function mockCheckoutSubmissionState() {
   vi.mocked(useCart).mockReturnValue({
@@ -1103,6 +1138,165 @@ describe('CheckoutPage', () => {
     }
   });
 
+  it.each([
+    {
+      gateway: 'credpal',
+      openWidget: async () => {
+        // The default CredPal mock resolves without firing callbacks, which
+        // models a successfully opened widget (its opener rejects on init
+        // failure instead of resolving).
+        await waitFor(() => {
+          expect(openCredPalCheckout).toHaveBeenCalled();
+        });
+      },
+    },
+    {
+      gateway: 'credit_direct',
+      openWidget: async () => {
+        // Credit Direct's opener swallows init failures into onError, so
+        // only invoking the real popup callback models an opened flow.
+        await waitFor(() => {
+          expect(openCreditDirectCheckout).toHaveBeenCalled();
+        });
+        const options = vi.mocked(openCreditDirectCheckout).mock.calls.at(
+          -1
+        )?.[0];
+        await act(async () => {
+          await options?.onPopup?.({
+            checkoutTransactionId: 'cd-popup-1',
+            sessionId: 'signed-session-1',
+          });
+        });
+      },
+    },
+  ])(
+    'emits payment_started once the resumed $gateway flow opens',
+    async ({ gateway, openWidget }) => {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams({
+          orderId: 'ord-1',
+          gateway,
+          trackingToken: 'tok-123',
+        }) as unknown as ReturnType<typeof useSearchParams>
+      );
+      const fetchMock = vi
+        .spyOn(globalThis, 'fetch')
+        .mockImplementation(async (input) => {
+          if (String(input).startsWith('/api/storefront/orders/ord-1')) {
+            return {
+              ok: true,
+              json: async () => ({
+                id: 'ord-1',
+                short_id: 'ORD-1',
+                subtotal: 1000,
+                shipping_cost: 0,
+                total: 1000,
+                customer_name: 'Ada Buyer',
+                customer_email: 'ada@example.com',
+                customer_phone: '+2348123456789',
+                tracking_token: 'tok-123',
+                shipping_address: { address: '', city: '', state: '' },
+                items: [],
+              }),
+            } as Response;
+          }
+          return {
+            ok: true,
+            json: async () => ({ states: [], locations: [] }),
+            text: async () => '',
+          } as Response;
+        });
+
+      try {
+        render(<CheckoutPage />);
+
+        await openWidget();
+        await waitFor(() => {
+          expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+            'payment_started',
+            'ord-1',
+            expect.objectContaining({
+              payment_method: gateway,
+              total: 1000,
+            })
+          );
+        });
+        expect(
+          mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+            ([event]) => event === 'payment_started'
+          )
+        ).toHaveLength(1);
+      } finally {
+        fetchMock.mockRestore();
+      }
+    }
+  );
+
+  it('skips payment_started when resumed Credit Direct initialization fails', async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams({
+        orderId: 'ord-1',
+        gateway: 'credit_direct',
+        trackingToken: 'tok-123',
+      }) as unknown as ReturnType<typeof useSearchParams>
+    );
+    // Mirror the opener's catch-and-resolve contract: init failure reaches
+    // onError without ever opening a popup.
+    vi.mocked(openCreditDirectCheckout).mockImplementationOnce(
+      async ({ onError }) => {
+        onError?.('Failed to initialize Credit Direct');
+      }
+    );
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        if (String(input).startsWith('/api/storefront/orders/ord-1')) {
+          return {
+            ok: true,
+            json: async () => ({
+              id: 'ord-1',
+              short_id: 'ORD-1',
+              subtotal: 1000,
+              shipping_cost: 0,
+              total: 1000,
+              customer_name: 'Ada Buyer',
+              customer_email: 'ada@example.com',
+              customer_phone: '+2348123456789',
+              tracking_token: 'tok-123',
+              shipping_address: { address: '', city: '', state: '' },
+              items: [],
+            }),
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({ states: [], locations: [] }),
+          text: async () => '',
+        } as Response;
+      });
+
+    try {
+      render(<CheckoutPage />);
+
+      await waitFor(() => {
+        expect(openCreditDirectCheckout).toHaveBeenCalled();
+      });
+      // Let the error path settle, then assert no start was recorded.
+      await waitFor(() => {
+        expect(toast).toHaveBeenCalledWith(
+          expect.objectContaining({ title: 'Payment Failed' })
+        );
+      });
+      expect(
+        mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+          ([event]) => event === 'payment_started'
+        )
+      ).toHaveLength(0);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it('hands fresh Credit Direct success to server verification before cleanup', async () => {
     const clearCart = vi.fn();
     const clearCheckoutSession = vi.fn();
@@ -1262,6 +1456,509 @@ describe('CheckoutPage', () => {
     } finally {
       fetchMock.mockRestore();
       consoleErrorSpy.mockRestore();
+    }
+  });
+
+  const renderFreshBNPLCheckout = ({
+    featureSettings,
+    orderId,
+  }: {
+    featureSettings: Record<string, boolean>;
+    orderId: string;
+  }) => {
+    vi.mocked(useCart).mockReturnValue({
+      cart: [
+        {
+          id: 'item-1',
+          name: 'Test Product',
+          price: 5000,
+          quantity: 1,
+          image: '',
+          slug: 'test-product',
+        },
+      ],
+      cartTotal: 5000,
+      clearCart: vi.fn(),
+      isHydrated: true,
+    } as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        slug: 'ogabassey',
+        business_name: 'Test Store',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+        country: 'NG',
+        feature_settings: featureSettings,
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    vi.mocked(usePersistedForm).mockReturnValue({
+      values: {
+        firstName: 'Ada',
+        lastName: 'Buyer',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        newAddressStreet: '2 Olaide Tomori Street',
+        newAddressState: 'Lagos',
+        newAddressCity: 'Ikeja',
+        currentStep: 'delivery',
+        completedSteps: { contact: true, delivery: false },
+      },
+      setValue: vi.fn(),
+      setValues: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as ReturnType<typeof usePersistedForm>);
+    vi.mocked(usePersistedState).mockReturnValue([
+      null,
+      vi.fn(),
+      vi.fn(),
+    ] as unknown as ReturnType<typeof usePersistedState>);
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        if (String(input) === '/api/orders') {
+          return {
+            ok: true,
+            json: async () => ({
+              amountDueToGateway: 5750,
+              order: {
+                id: orderId,
+                order_number: 'ORD-BNPL',
+                tracking_token: 'track-bnpl',
+              },
+              wallet: null,
+            }),
+            text: async () => '',
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({ states: ['Lagos'], locations: [] }),
+          text: async () => '',
+        } as Response;
+      });
+    return { fetchMock };
+  };
+
+  const driveFreshBNPLPlaceOrder = async (radioName: RegExp) => {
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+    fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /pay in installments/i })
+    );
+    fireEvent.click(await screen.findByRole('radio', { name: radioName }));
+    const placeOrderButton = screen
+      .getAllByRole('button', { name: /place order/i })
+      .find((button) => !button.hasAttribute('disabled'));
+    fireEvent.click(placeOrderButton as HTMLButtonElement);
+  };
+
+  const paymentStartedCalls = () =>
+    mockCaptureClientEvent.mock.calls.filter(([event]) => event === 'payment_started');
+
+  it('emits fresh Credit Direct payment_started only after the popup opens', async () => {
+    const { fetchMock } = renderFreshBNPLCheckout({
+      featureSettings: { credit_direct_enabled: true },
+      orderId: 'order-cd-fresh',
+    });
+
+    try {
+      await driveFreshBNPLPlaceOrder(/credit direct/i);
+
+      await waitFor(() => {
+        expect(openCreditDirectCheckout).toHaveBeenCalled();
+      });
+      // The opener resolved without a popup: no start yet.
+      expect(paymentStartedCalls()).toHaveLength(0);
+
+      const callArgs = vi.mocked(openCreditDirectCheckout).mock.calls[0]?.[0];
+      await act(async () => {
+        await callArgs?.onPopup?.({
+          checkoutTransactionId: 'cd-popup-fresh-1',
+          sessionId: 'signed-session-fresh-1',
+        });
+      });
+
+      await waitFor(() => {
+        expect(paymentStartedCalls()).toHaveLength(1);
+      });
+      expect(paymentStartedCalls()[0]?.[1]).toEqual(
+        expect.objectContaining({ payment_method: 'credit_direct' })
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('skips payment_started when fresh Credit Direct initialization fails', async () => {
+    const { fetchMock } = renderFreshBNPLCheckout({
+      featureSettings: { credit_direct_enabled: true },
+      orderId: 'order-cd-fresh-fail',
+    });
+    vi.mocked(openCreditDirectCheckout).mockImplementationOnce(
+      async ({ onError }) => {
+        onError?.('Failed to initialize Credit Direct');
+      }
+    );
+
+    try {
+      await driveFreshBNPLPlaceOrder(/credit direct/i);
+
+      await waitFor(() => {
+        expect(openCreditDirectCheckout).toHaveBeenCalled();
+      });
+      await waitFor(() => {
+        expect(toast).toHaveBeenCalledWith(
+          expect.objectContaining({ title: 'Credit Direct Failed' })
+        );
+      });
+      expect(paymentStartedCalls()).toHaveLength(0);
+      expect(
+        mockCaptureClientEvent.mock.calls.some(
+          ([event]) => event === 'payment_failed'
+        )
+      ).toBe(true);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('emits fresh CredPal payment_started only after the widget loads', async () => {
+    vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
+    const { fetchMock } = renderFreshBNPLCheckout({
+      featureSettings: { credpal_enabled: true },
+      orderId: 'order-credpal-fresh',
+    });
+
+    try {
+      await driveFreshBNPLPlaceOrder(/credpal/i);
+
+      await waitFor(() => {
+        expect(openCredPalCheckout).toHaveBeenCalled();
+      });
+      // The widget has not confirmed loading: no start yet.
+      expect(paymentStartedCalls()).toHaveLength(0);
+
+      const callArgs = vi.mocked(openCredPalCheckout).mock.calls[0]?.[0];
+      await act(async () => {
+        callArgs?.onLoad?.();
+      });
+
+      await waitFor(() => {
+        expect(paymentStartedCalls()).toHaveLength(1);
+      });
+      expect(paymentStartedCalls()[0]?.[1]).toEqual(
+        expect.objectContaining({ payment_method: 'credpal' })
+      );
+    } finally {
+      fetchMock.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('skips payment_started when fresh CredPal initialization fails', async () => {
+    vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
+    const { fetchMock } = renderFreshBNPLCheckout({
+      featureSettings: { credpal_enabled: true },
+      orderId: 'order-credpal-fresh-fail',
+    });
+    vi.mocked(openCredPalCheckout).mockRejectedValueOnce(
+      new Error('Failed to load CredPal script')
+    );
+
+    try {
+      await driveFreshBNPLPlaceOrder(/credpal/i);
+
+      await waitFor(() => {
+        expect(openCredPalCheckout).toHaveBeenCalled();
+      });
+      await waitFor(() => {
+        expect(toast).toHaveBeenCalled();
+      });
+      expect(paymentStartedCalls()).toHaveLength(0);
+    } finally {
+      fetchMock.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('records payment_completed before redirecting a paid wallet-funded transfer', async () => {
+    const routerPush = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: routerPush,
+      back: vi.fn(),
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useCart).mockReturnValue({
+      cart: [
+        {
+          id: 'item-1',
+          name: 'Test Product',
+          price: 5000,
+          quantity: 1,
+          image: '',
+          slug: 'test-product',
+        },
+      ],
+      cartTotal: 5000,
+      clearCart: vi.fn(),
+      isHydrated: true,
+    } as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        slug: 'ogabassey',
+        business_name: 'Test Store',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+        country: 'NG',
+        paystack_subaccount_code: 'ACCT_123',
+        feature_settings: {
+          paystack_enabled: true,
+          wallet_paystack_dva_enabled: true,
+        },
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    vi.mocked(usePersistedForm).mockReturnValue({
+      values: {
+        firstName: 'Ada',
+        lastName: 'Buyer',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        newAddressStreet: '2 Olaide Tomori Street',
+        newAddressState: 'Lagos',
+        newAddressCity: 'Ikeja',
+        currentStep: 'delivery',
+        completedSteps: { contact: true, delivery: false },
+      },
+      setValue: vi.fn(),
+      setValues: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as ReturnType<typeof usePersistedForm>);
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => ({
+        ok: true,
+        json: async () => ({ states: ['Lagos'], locations: [] }),
+        text: async () => '',
+      }) as Response);
+
+    try {
+      render(<CheckoutPage />);
+      fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /continue to payment/i })
+      );
+      const bankTransferRadio = (
+        await screen.findAllByRole('radio', { name: /bank transfer/i })
+      ).find((radio) => radio.getAttribute('value') === 'bank_transfer');
+      expect(bankTransferRadio).toBeDefined();
+      fireEvent.click(bankTransferRadio as HTMLInputElement);
+
+      // The polling hook reports a server-confirmed completed intent.
+      await act(async () => {
+        walletFundedTransferMock.onOrderPaid?.({
+          checkoutFingerprint: 'fingerprint-wf-1',
+          currency: 'NGN',
+          orderId: 'order-wf-1',
+          orderNumber: 'ORD-WF-1',
+          total: 5750,
+          trackingToken: 'track-wf-1',
+        });
+      });
+
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-wf-1',
+        expect.objectContaining({
+          order_number: 'ORD-WF-1',
+          payment_method: 'bank_transfer',
+          payment_status: 'paid',
+          total: 5750,
+        })
+      );
+      expect(routerPush).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '/order-success?orderId=order-wf-1&wallet=true&trackingToken=track-wf-1'
+        )
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('traverses the Juicyway funnel from selector init to confirmed completion', async () => {
+    const routerPush = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: routerPush,
+      back: vi.fn(),
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useCart).mockReturnValue({
+      cart: [
+        {
+          id: 'item-1',
+          name: 'Test Product',
+          price: 5000,
+          quantity: 1,
+          image: '',
+          slug: 'test-product',
+        },
+      ],
+      cartTotal: 5000,
+      clearCart: vi.fn(),
+      isHydrated: true,
+    } as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        slug: 'ogabassey',
+        business_name: 'Test Store',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+        country: 'NG',
+        feature_settings: { juicyway_enabled: true },
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    vi.mocked(usePersistedForm).mockReturnValue({
+      values: {
+        firstName: 'Ada',
+        lastName: 'Buyer',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        newAddressStreet: '2 Olaide Tomori Street',
+        newAddressState: 'Lagos',
+        newAddressCity: 'Ikeja',
+        currentStep: 'delivery',
+        completedSteps: { contact: true, delivery: false },
+      },
+      setValue: vi.fn(),
+      setValues: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as ReturnType<typeof usePersistedForm>);
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url === '/api/orders') {
+          return {
+            ok: true,
+            json: async () => ({
+              amountDueToGateway: 5750,
+              order: {
+                id: 'order-juicy-1',
+                order_number: 'ORD-JUICY-1',
+                tracking_token: 'track-juicy-1',
+              },
+              wallet: null,
+            }),
+            text: async () => '',
+          } as Response;
+        }
+        if (url === '/api/payments/initialize') {
+          return {
+            ok: true,
+            json: async () => ({
+              success: true,
+              reference: 'juicy-ref-1',
+              session_id: 'sess-1',
+              crypto_payment: {
+                // Must satisfy the TRX base58 address check in the
+                // initialization response schema or init rejects.
+                address: 'T7WHdR7vj4i3L4575w8V5hV8tKf9w2Q3xY',
+                chain: 'TRX',
+                currency: 'USDT',
+                amount: 5750,
+                crypto_amount: '1.5',
+                confirmation_time: '10 minutes',
+                payment_id: 'pay-1',
+              },
+            }),
+            text: async () => '',
+          } as Response;
+        }
+        if (url.startsWith('/api/payments/status')) {
+          return {
+            ok: true,
+            json: async () => ({ is_confirmed: true }),
+            text: async () => '',
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({ states: ['Lagos'], locations: [] }),
+          text: async () => '',
+        } as Response;
+      });
+
+    try {
+      render(<CheckoutPage />);
+      fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /continue to payment/i })
+      );
+      const juicywayRadio = (
+        await screen.findAllByRole('radio', { name: /juicyway/i })
+      ).find((radio) => radio.getAttribute('value') === 'juicyway');
+      expect(juicywayRadio).toBeDefined();
+      fireEvent.click(juicywayRadio as HTMLInputElement);
+      const placeOrderButton = screen
+        .getAllByRole('button', { name: /place order/i })
+        .find((button) => !button.hasAttribute('disabled'));
+      fireEvent.click(placeOrderButton as HTMLButtonElement);
+
+      // The selector opens without any funnel event: initialization has not
+      // run yet. The Juicyway start travels through the Once helper (not the
+      // raw client event), so filter that mock here.
+      const juicywayPaymentStartedCalls = () =>
+        mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+          ([event]) => event === 'payment_started'
+        );
+      const continueButton = await screen.findByRole('button', {
+        name: /continue with USDT on TRX/i,
+      });
+      expect(juicywayPaymentStartedCalls()).toHaveLength(0);
+
+      // Successful address initialization records the start.
+      fireEvent.click(continueButton);
+      await waitFor(() => {
+        expect(juicywayPaymentStartedCalls()).toHaveLength(1);
+      });
+      expect(juicywayPaymentStartedCalls()[0]?.[1]).toBe('order-juicy-1');
+      expect(juicywayPaymentStartedCalls()[0]?.[2]).toEqual(
+        expect.objectContaining({
+          payment_method: 'juicyway',
+          total: 5750,
+        })
+      );
+
+      // Server-confirmed verification records the completion, then routes.
+      fireEvent.click(
+        await screen.findByRole('button', { name: /i've sent the payment/i })
+      );
+      await waitFor(() => {
+        expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+          'payment_completed',
+          'order-juicy-1',
+          expect.objectContaining({
+            payment_method: 'juicyway',
+            payment_status: 'paid',
+            reference: 'juicy-ref-1',
+            total: 5750,
+          })
+        );
+      });
+      expect(routerPush).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '/order-success?type=crypto&orderId=order-juicy-1&reference=juicy-ref-1'
+        )
+      );
+    } finally {
+      fetchMock.mockRestore();
     }
   });
 
@@ -2851,7 +3548,77 @@ describe('CheckoutPage', () => {
     expect(JSON.parse(snapshot.checkoutFingerprint).items[0]).toMatchObject({
       variantId: 'variant-blue', variantAttributes: { color: 'blue', storage: '128gb' },
     });
+    expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+      'order_created',
+      'order-123',
+      expect.objectContaining({
+        channel: 'web',
+        order_id: 'order-123',
+        order_number: 'ORD-123',
+        source: 'web_checkout',
+      })
+    );
     storageSpy.mockRestore();
+    fetchMock.mockRestore();
+    randomUuidSpy.mockRestore();
+    scrollSpy.mockRestore();
+    window.localStorage.clear();
+  });
+
+  it('attributes order_created to the server-finalized method when coverage changes it', async () => {
+    const scrollSpy = vi
+      .spyOn(window, 'scrollTo')
+      .mockImplementation(() => undefined);
+    const randomUuidSpy = vi
+      .spyOn(crypto, 'randomUUID')
+      .mockReturnValue('11111111-1111-4111-8111-111111111111');
+    window.localStorage.clear();
+    mockCheckoutSubmissionState();
+
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url === '/api/orders') {
+          return {
+            ok: true,
+            json: async () => ({
+              amountDueToGateway: 0,
+              order: {
+                id: 'order-123',
+                order_number: 'ORD-123',
+                tracking_token: 'track-123',
+                // Wallet fully covered an order placed under another
+                // selection: creation must follow the finalized method.
+                payment_method: 'wallet',
+                payment_status: 'paid',
+              },
+              wallet: null,
+            }),
+            text: async () => '',
+          } as Response;
+        }
+
+        return {
+          ok: true,
+          json: async () => ({ states: ['Lagos'], locations: [] }),
+          text: async () => '',
+        } as Response;
+      });
+
+    await submitPickupPayOnDeliveryOrder();
+
+    await waitFor(() => {
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'order_created',
+        'order-123',
+        expect.objectContaining({
+          payment_method: 'wallet',
+          payment_intent: 'pay_now',
+          payment_status: 'paid',
+        })
+      );
+    });
     fetchMock.mockRestore();
     randomUuidSpy.mockRestore();
     scrollSpy.mockRestore();
@@ -3718,5 +4485,351 @@ describe('CheckoutPage', () => {
     );
 
     fetchMock.mockRestore();
+  });
+
+  it('emits payment_started only after bank-transfer initialization succeeds', async () => {
+    const startedEvents: unknown[][] = [];
+    const failedEvents: unknown[][] = [];
+    mockCaptureClientEvent.mockImplementation((...args: unknown[]) => {
+      if (args[0] === 'payment_started') startedEvents.push(args);
+      if (args[0] === 'payment_failed') failedEvents.push(args);
+    });
+    const merchant = {
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      business_name: 'Test Store',
+      country: 'NG',
+      vat_registration_status: 'registered',
+      vat_rate: 7.5,
+      paystack_subaccount_code: 'ACCT_test123',
+      feature_settings: {
+        bank_transfer_enabled: true,
+        wallet_paystack_dva_enabled: true,
+      },
+    };
+    const paymentForm = {
+      values: {
+        firstName: 'Ada',
+        lastName: 'Buyer',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        newAddressStreet: '2 Olaide Tomori Street',
+        newAddressState: 'Lagos',
+        newAddressCity: 'Ikeja',
+        currentStep: 'payment',
+        completedSteps: { contact: true, delivery: true },
+      },
+      setValue: vi.fn(),
+      setValues: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as ReturnType<typeof usePersistedForm>;
+    let dvaSucceeds = false;
+
+    const submitBankTransfer = async () => {
+      vi.mocked(useCart).mockReturnValue({
+        cart: [{ id: 'item-1', name: 'Test Product', price: 5000, quantity: 1, image: '', slug: 'test-product' }],
+        cartTotal: 5000,
+        clearCart: vi.fn(),
+        isHydrated: true,
+      } as unknown as ReturnType<typeof useCart>);
+      vi.mocked(useMerchantSafe).mockReturnValue({ merchant, basePath: '/ogabassey' } as unknown as ReturnType<typeof useMerchantSafe>);
+      vi.mocked(usePersistedForm).mockReturnValue(paymentForm);
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        if (String(input) === '/api/payments/initialize') {
+          if (!dvaSucceeds) {
+            return { ok: false, json: async () => ({ error: 'declined' }) } as Response;
+          }
+          return {
+            ok: true,
+            json: async () => ({
+              success: true,
+              dva: { account_number: '1234567890', account_name: 'Test', bank_name: 'Test Bank' },
+              reference: 'dva-ref-1',
+            }),
+          } as Response;
+        }
+        if (String(input) === '/api/orders') {
+          return { ok: true, json: async () => ({ amountDueToGateway: 5000, order: { id: 'order-dva', order_number: 'ORD-DVA', total: 5000, payment_status: 'pending', tracking_token: 'track-1' }, wallet: null }) } as Response;
+        }
+        return { ok: true, json: async () => ({ states: [], locations: [] }) } as Response;
+      });
+
+      render(<CheckoutPage />);
+      fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+      const paymentRadio = screen
+        .getAllByRole('radio', { name: /bank transfer/i })
+        .find((radio) => radio.getAttribute('value') === 'bank_transfer');
+      expect(paymentRadio).toBeDefined();
+      fireEvent.click(paymentRadio as HTMLInputElement);
+      fireEvent.click(screen.getAllByRole('button', { name: /place order/i }).find((button) => !button.hasAttribute('disabled')) as HTMLButtonElement);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/orders', expect.anything()));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/payments/initialize', expect.anything()));
+      fetchMock.mockRestore();
+      cleanup();
+    };
+
+    await submitBankTransfer();
+    await waitFor(() =>
+      expect(failedEvents.map(([, p]) => (p as Record<string, unknown>).payment_method)).toContain('bank_transfer')
+    );
+    expect(startedEvents).toHaveLength(0);
+
+    dvaSucceeds = true;
+    await submitBankTransfer();
+    await waitFor(() => expect(startedEvents).toHaveLength(1));
+    expect((startedEvents[0][1] as Record<string, unknown>).payment_method).toBe('bank_transfer');
+  });
+
+  it('routes pending CredPal applications to success without a paid conversion', async () => {
+    const completedEvents: unknown[][] = [];
+    mockCaptureClientEvent.mockImplementation((...args: unknown[]) => {
+      if (args[0] === 'payment_completed') completedEvents.push(args);
+    });
+    vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
+    const merchant = {
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      business_name: 'Test Store',
+      country: 'NG',
+      paystack_subaccount_configured: true,
+      vat_registration_status: 'registered',
+      vat_rate: 7.5,
+      feature_settings: {
+        credpal_enabled: true,
+        paystack_enabled: true,
+      },
+    };
+    const paymentForm = {
+      values: {
+        firstName: 'Ada',
+        lastName: 'Buyer',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        newAddressStreet: '2 Olaide Tomori Street',
+        newAddressState: 'Lagos',
+        newAddressCity: 'Ikeja',
+        currentStep: 'payment',
+        completedSteps: { contact: true, delivery: true },
+      },
+      setValue: vi.fn(),
+      setValues: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as ReturnType<typeof usePersistedForm>;
+    const routerPush = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: routerPush,
+      back: vi.fn(),
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useCart).mockReturnValue({
+      cart: [{ id: 'item-1', name: 'Test Product', price: 5000, quantity: 1, image: '', slug: 'test-product' }],
+      cartTotal: 5000,
+      clearCart: vi.fn(),
+      isHydrated: true,
+    } as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useMerchantSafe).mockReturnValue({ merchant, basePath: '/ogabassey' } as unknown as ReturnType<typeof useMerchantSafe>);
+    vi.mocked(usePersistedForm).mockReturnValue(paymentForm);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input) === '/api/orders') {
+        return { ok: true, json: async () => ({ amountDueToGateway: 5000, order: { id: 'order-credpal', order_number: 'ORD-CREDPAL', total: 5000, payment_status: 'pending', tracking_token: 'track-1' }, wallet: null }) } as Response;
+      }
+      return { ok: true, json: async () => ({ states: [], locations: [] }) } as Response;
+    });
+    vi.mocked(openCredPalCheckout).mockImplementation(async ({ onSuccess }) => {
+      await onSuccess?.({ order_no: 'credpal-pending-1', status: 'pending' } as never);
+    });
+
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+    fireEvent.click(screen.getByRole('button', { name: /pay in installments/i }));
+    const paymentRadio = screen
+      .getAllByRole('radio', { name: /credpal/i })
+      .find((radio) => radio.getAttribute('value') === 'credpal');
+    expect(paymentRadio).toBeDefined();
+    fireEvent.click(paymentRadio as HTMLInputElement);
+    fireEvent.click(screen.getAllByRole('button', { name: /place order/i }).find((button) => !button.hasAttribute('disabled')) as HTMLButtonElement);
+
+    await waitFor(() => expect(openCredPalCheckout).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(routerPush).toHaveBeenCalledWith(
+        expect.stringContaining('/order-success?')
+      )
+    );
+    expect(routerPush).toHaveBeenCalledWith(
+      expect.stringContaining('type=credpal')
+    );
+    expect(routerPush).toHaveBeenCalledWith(
+      expect.stringContaining('credpalStatus=pending')
+    );
+    expect(completedEvents).toHaveLength(0);
+    vi.unstubAllEnvs();
+  });
+
+  it('tracks payment failures from DVA, Credit Direct, and CredPal callbacks', async () => {
+    const paymentErrorEvents: unknown[][] = [];
+    mockCaptureClientEvent.mockImplementation((...args: unknown[]) => {
+      if (args[0] === 'payment_failed') paymentErrorEvents.push(args);
+    });
+    vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
+    const merchant = {
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      business_name: 'Test Store',
+      country: 'NG',
+      paystack_subaccount_configured: true,
+      vat_registration_status: 'registered',
+      vat_rate: 7.5,
+      feature_settings: {
+        bank_transfer_enabled: true,
+        credit_direct_enabled: true,
+        credpal_enabled: true,
+        paystack_enabled: true,
+        wallet_paystack_dva_enabled: true,
+      },
+    };
+    const paymentForm = {
+      values: {
+        firstName: 'Ada',
+        lastName: 'Buyer',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        newAddressStreet: '2 Olaide Tomori Street',
+        newAddressState: 'Lagos',
+        newAddressCity: 'Ikeja',
+        currentStep: 'payment',
+        completedSteps: { contact: true, delivery: true },
+      },
+      setValue: vi.fn(),
+      setValues: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as ReturnType<typeof usePersistedForm>;
+    const routerPush = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: routerPush,
+      back: vi.fn(),
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+
+    const submitAndCapture = async (tab: 'full' | 'installments', method: string) => {
+      const clearCart = vi.fn();
+      vi.mocked(useCart).mockReturnValue({
+        cart: [{ id: 'item-1', name: 'Test Product', price: 5000, quantity: 1, image: '', slug: 'test-product' }],
+        cartTotal: 5000,
+        clearCart,
+        isHydrated: true,
+      } as unknown as ReturnType<typeof useCart>);
+      vi.mocked(useMerchantSafe).mockReturnValue({ merchant, basePath: '/ogabassey' } as unknown as ReturnType<typeof useMerchantSafe>);
+      vi.mocked(usePersistedForm).mockReturnValue(paymentForm);
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        if (String(input) === '/api/payments/initialize') {
+          const body = JSON.parse(String(init?.body));
+          if (body.payment_type === 'dva') {
+            return { ok: false, json: async () => ({ error: 'declined' }) } as Response;
+          }
+        }
+        if (String(input) === '/api/orders') {
+          return { ok: true, json: async () => ({ amountDueToGateway: 5000, order: { id: `order-${method}`, order_number: `ORD-${method}`, total: 5000, payment_status: 'pending', tracking_token: 'track-1' }, wallet: null }) } as Response;
+        }
+        return { ok: true, json: async () => ({ states: [], locations: [] }) } as Response;
+      });
+
+      render(<CheckoutPage />);
+      fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+      if (tab === 'installments') fireEvent.click(screen.getByRole('button', { name: /pay in installments/i }));
+      const paymentLabel = method.replace('_', ' ');
+      const paymentRadio = screen
+        .getAllByRole('radio', { name: new RegExp(paymentLabel, 'i') })
+        .find((radio) => radio.getAttribute('value') === method);
+      expect(paymentRadio).toBeDefined();
+      fireEvent.click(
+        paymentRadio as HTMLInputElement
+      );
+      fireEvent.click(screen.getAllByRole('button', { name: /place order/i }).find((button) => !button.hasAttribute('disabled')) as HTMLButtonElement);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/orders', expect.anything()));
+
+      if (method === 'credit_direct') {
+        await waitFor(() => expect(openCreditDirectCheckout).toHaveBeenCalled());
+        const options = vi.mocked(openCreditDirectCheckout).mock.calls.at(-1)?.[0];
+        expect(options).toBeDefined();
+        await act(async () => {
+          options?.onError?.('declined');
+        });
+      } else if (method === 'credpal') {
+        await waitFor(() => expect(openCredPalCheckout).toHaveBeenCalled());
+        const options = vi.mocked(openCredPalCheckout).mock.calls.at(-1)?.[0];
+        expect(options).toBeDefined();
+        await act(async () => {
+          options?.onError?.({ success: false, message: 'declined' });
+        });
+        mockCaptureCheckoutFunnelEventOnce.mockClear();
+        await act(async () => {
+          await options?.onSuccess?.({
+            order_no: 'credpal-order-pending',
+            item: 'Test Product',
+            amount: 5000,
+            status: 'pending',
+            channel: 'web',
+            customer: {
+              full_name: 'Ada Buyer',
+              email: 'ada@example.com',
+              phone_no: '+2348123456789',
+            },
+            created_at: '2026-09-14T00:00:00.000Z',
+          });
+        });
+        expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+          'payment_completed',
+          expect.anything(),
+          expect.anything()
+        );
+        // Pending applications still reach the success experience.
+        expect(clearCart).toHaveBeenCalled();
+        expect(routerPush).toHaveBeenCalledWith(
+          expect.stringContaining('/order-success?')
+        );
+        expect(routerPush).toHaveBeenCalledWith(
+          expect.stringContaining('credpalStatus=pending')
+        );
+        await act(async () => {
+          await options?.onSuccess?.({
+            order_no: 'credpal-order-1',
+            item: 'Test Product',
+            amount: 5000,
+            status: 'success',
+            channel: 'web',
+            customer: {
+              full_name: 'Ada Buyer',
+              email: 'ada@example.com',
+              phone_no: '+2348123456789',
+            },
+            created_at: '2026-09-14T00:00:00.000Z',
+          });
+        });
+      } else {
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/payments/initialize', expect.anything()));
+      }
+      fetchMock.mockRestore();
+      cleanup();
+    };
+
+    await submitAndCapture('full', 'bank_transfer');
+    await submitAndCapture('installments', 'credit_direct');
+    await submitAndCapture('installments', 'credpal');
+
+    expect(paymentErrorEvents).toHaveLength(3);
+    expect(paymentErrorEvents.map(([, properties]) => (properties as Record<string, unknown>).payment_method)).toEqual([
+      'bank_transfer',
+      'credit_direct',
+      'credpal',
+    ]);
+    expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+      'payment_completed',
+      'order-credpal',
+      expect.objectContaining({
+        payment_method: 'credpal',
+        reference: 'credpal-order-1',
+      })
+    );
+    vi.unstubAllEnvs();
   });
 });

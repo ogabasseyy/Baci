@@ -8,6 +8,12 @@ import {
   isPaystackCheckoutAvailable,
 } from '@/lib/checkout/payment-gateway-availability';
 import type { PaymentMethod, PaymentTab } from '../types';
+import { captureClientEvent } from '@/lib/posthog/capture-client-event';
+import {
+  CHECKOUT_FUNNEL_EVENTS,
+  buildCheckoutFunnelProperties,
+  getCheckoutPaymentIntent,
+} from '@baci/shared/contracts';
 import { PaymentOptionsPanel } from './PaymentOptionsPanel';
 import {
   type FeatureSettings,
@@ -114,6 +120,22 @@ export function PaymentStep({
     payableAmount: remainingAmount,
   });
 
+  const handlePaymentMethodChange = (method: PaymentMethod) => {
+    setPaymentMethod(method);
+    if (method) {
+      captureClientEvent(
+        CHECKOUT_FUNNEL_EVENTS.paymentMethodSelected,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency,
+          paymentIntent: getCheckoutPaymentIntent(method),
+          paymentMethod: method,
+          source: 'web_checkout',
+        })
+      );
+    }
+  };
+
   useEffect(() => {
     if (paymentMethod && !hasAvailableSelectedPaymentMethod) {
       setPaymentMethod('');
@@ -151,7 +173,7 @@ export function PaymentStep({
               paymentTab={paymentTab}
               setPaymentTab={setPaymentTab}
               paymentMethod={paymentMethod}
-              setPaymentMethod={setPaymentMethod}
+              setPaymentMethod={handlePaymentMethodChange}
               paystackCheckoutAvailable={paystackCheckoutAvailable}
               korapayCheckoutAvailable={korapayCheckoutAvailable}
               bankTransferCheckoutAvailable={bankTransferCheckoutAvailable}
@@ -183,6 +205,11 @@ export function PaymentStep({
             )}
             <button type="button"
               onClick={handlePlaceOrder}
+              aria-label={
+                paymentMethod === 'invoice'
+                  ? 'Get a Proforma Invoice for mobile'
+                  : undefined
+              }
               disabled={
                 isProcessing ||
                 (remainingAmount > 0 && !hasAvailableSelectedPaymentMethod) ||
@@ -193,7 +220,7 @@ export function PaymentStep({
               {isProcessing ? (
                 <Loader2 className="animate-spin" size={20} />
               ) : paymentMethod === 'invoice' ? (
-                'Generate Invoice'
+                'Get a Proforma Invoice'
               ) : paymentMethod === 'payforme' ? (
                 'Send Payment Link'
               ) : (

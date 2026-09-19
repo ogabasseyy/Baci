@@ -1,7 +1,5 @@
 import {
   type AnalyticsProperties,
-  buildCheckoutStartedProperties,
-  buildCheckoutStepCompletedProperties,
   buildOrderCompletedProperties,
   buildPaymentFailedProperties,
   buildProductAddedProperties,
@@ -10,13 +8,24 @@ import {
   buildProductsSearchedProperties,
   buildProductViewedProperties,
   buildWishlistProductProperties,
-  type CheckoutStepName,
   compactAnalyticsProperties,
   ECOMMERCE_ANALYTICS_EVENTS,
   eventForWishlistAction,
   type WishlistAction,
 } from '@baci/shared/contracts';
 import { trackEvent } from './analytics-core';
+
+export {
+  trackCheckoutInvoiceGenerated,
+  trackCheckoutOrderCreated,
+  trackCheckoutPaymentCompleted,
+  trackCheckoutPaymentCompletedOnce,
+  trackCheckoutPaymentFailed,
+  trackCheckoutPaymentMethodSelected,
+  trackCheckoutPaymentStarted,
+  trackCheckoutStarted,
+  trackCheckoutStep,
+} from './analytics-checkout-events';
 
 export function trackProductViewed(product: {
   id: string;
@@ -72,28 +81,6 @@ export function trackRemoveFromCart(product: {
   trackEvent(
     ECOMMERCE_ANALYTICS_EVENTS.productRemoved,
     buildProductRemovedProperties(product)
-  );
-}
-
-export function trackCheckoutStarted(checkout: {
-  cartId?: string;
-  itemCount: number;
-  subtotal: number;
-  currency?: string;
-}): void {
-  trackEvent(
-    ECOMMERCE_ANALYTICS_EVENTS.checkoutStarted,
-    buildCheckoutStartedProperties(checkout)
-  );
-}
-
-export function trackCheckoutStep(
-  step: CheckoutStepName,
-  properties?: AnalyticsProperties
-): void {
-  trackEvent(
-    ECOMMERCE_ANALYTICS_EVENTS.checkoutStepCompleted,
-    buildCheckoutStepCompletedProperties(step, properties)
   );
 }
 

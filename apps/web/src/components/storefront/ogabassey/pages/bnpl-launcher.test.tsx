@@ -57,6 +57,13 @@ vi.mock('@/lib/api-client', () => ({
     fetch(input, init),
 }));
 
+const mockCaptureCheckoutFunnelEventOnce = vi.fn();
+
+vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
+  captureCheckoutFunnelEventOnce: (...args: unknown[]) =>
+    mockCaptureCheckoutFunnelEventOnce(...args),
+}));
+
 describe('BnplLauncher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -464,6 +471,91 @@ describe('BnplLauncher', () => {
         '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&trackingToken=track-order-token'
       );
     });
+  });
+
+  it('records a paid conversion only for approved CredPal results', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'credpal',
+        merchant_slug: 'test-store',
+        trackingToken: 'tok-123',
+      })
+    );
+    mockOpenCredPalCheckout.mockImplementation(({ onSuccess }) => {
+      onSuccess({ order_no: 'credpal-ref-1', status: 'success' });
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    await waitFor(() =>
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-1',
+        expect.objectContaining({ payment_status: 'paid' })
+      )
+    );
+  });
+
+  it('suppresses web attribution inside a native BNPL WebView', async () => {
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage: vi.fn() },
+    });
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'credpal',
+        merchant_slug: 'test-store',
+        trackingToken: 'tok-123',
+      })
+    );
+    mockOpenCredPalCheckout.mockImplementation(({ onSuccess }) => {
+      onSuccess({ order_no: 'credpal-ref-1', status: 'success' });
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(
+        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=success&trackingToken=track-order-token'
+      );
+    });
+    expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+      'payment_completed',
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it('skips the paid conversion for pending CredPal applications', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'credpal',
+        merchant_slug: 'test-store',
+        trackingToken: 'tok-123',
+      })
+    );
+    mockOpenCredPalCheckout.mockImplementation(({ onSuccess }) => {
+      onSuccess({ order_no: 'credpal-ref-1', status: 'pending' });
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(
+        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=pending&trackingToken=track-order-token'
+      );
+    });
+    expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+      'payment_completed',
+      expect.anything(),
+      expect.anything()
+    );
   });
 
   it('posts CredPal close events to the native WebView bridge', async () => {
@@ -1012,6 +1104,49 @@ describe('BnplLauncher', () => {
       '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
     );
   });
+
+  it.each([
+    { paymentStatus: 'paid', captures: true },
+    { paymentStatus: 'pending', captures: false },
+  ])(
+    'counts the Klump conversion only when the order is server-confirmed paid ($paymentStatus)',
+    async ({ paymentStatus, captures }) => {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-1',
+          gateway: 'klump',
+          merchant_slug: 'test-store',
+          reference: 'BAC-ABCD12345678',
+          trackingToken: 'tok-123',
+          klump_callback: '1',
+          transaction_id: 'klump-txn-123',
+        })
+      );
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            id: 'order-1',
+            payment_status: paymentStatus,
+          }),
+        })
+      );
+
+      render(<BnplLauncher />);
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith(
+          '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+        );
+      });
+      const completedCalls =
+        mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+          ([event]) => event === 'payment_completed'
+        );
+      expect(completedCalls.length).toBe(captures ? 1 : 0);
+    }
+  );
 
   it('shows an error state and does not redirect when order fetch fails', async () => {
     vi.stubGlobal(

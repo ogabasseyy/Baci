@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import type { PaymentMethodType } from '@/components/checkout/PaymentMethodSelector';
-import { trackError } from '@/services/analytics';
+import { trackCheckoutPaymentFailed, trackError } from '@/services/analytics';
 import { OrderError } from '@/services/orders';
 import { useCartStore } from '@/stores/cart-store';
 import { selectRejectedVoucherLineIds } from './select-rejected-voucher-lines';
@@ -49,11 +49,23 @@ function pruneRejectedQuizVoucherLines(error: OrderError): void {
   }
 }
 
+// Raised before an order exists or a provider flow starts: offline clients,
+// invalid carts, and expired sessions are not payment declines and must not
+// enter the funnel as payment_failed.
+const PRE_ORDER_ERROR_CODES = new Set([
+  'NETWORK_ERROR',
+  'VALIDATION_ERROR',
+  'AUTH_ERROR',
+]);
+
 export function handleCheckoutSubmitError(
   error: unknown,
   selectedPayment: PaymentMethodType
 ) {
   if (error instanceof OrderError) {
+    if (!PRE_ORDER_ERROR_CODES.has(error.code)) {
+      trackCheckoutPaymentFailed(error.code, undefined, selectedPayment);
+    }
     trackError('checkout_failed', error.message, {
       step: 'place_order',
       paymentMethod: selectedPayment,
@@ -127,6 +139,11 @@ export function handleCheckoutSubmitError(
     'checkout_failed',
     error instanceof Error ? error.message : 'Unknown error',
     { step: 'place_order', paymentMethod: selectedPayment }
+  );
+  trackCheckoutPaymentFailed(
+    error instanceof Error ? error.name : 'unknown_error',
+    undefined,
+    selectedPayment
   );
   Alert.alert('Error', 'Failed to place order. Please try again.', [
     { text: 'OK' },

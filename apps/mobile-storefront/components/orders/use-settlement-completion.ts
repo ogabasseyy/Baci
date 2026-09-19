@@ -1,0 +1,186 @@
+import { useEffect } from 'react';
+import type { TrackOrderData } from '@/components/track-order/TrackOrderScreen.types';
+import {
+  TRACK_ORDER_API_BASE_URL,
+  TRACK_ORDER_MERCHANT_SLUG,
+} from '@/components/track-order/track-order.config';
+import { toTrackedCompletionAttribution } from '@/lib/tracked-order-completion';
+import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
+
+// Asynchronous settlement methods: the shopper can reach success before the
+// provider/webhook confirms payment (on-chain detection for Juicyway, DVA
+// credit for bank transfers, late gateway webhooks for card payments), so
+// the success screen polls the server-confirmed order state instead of
+// trusting the arrival. Synchronous methods (wallet, store_credit, voucher)
+// complete inline and never poll.
+const SETTLEMENT_POLL_METHODS = new Set([
+  'juicyway',
+  'bank_transfer',
+  'paystack',
+  'korapay',
+  // Accepted-but-pending CredPal applications skip inline completion and
+  // settle asynchronously after approval.
+  'credpal',
+  // Klump returns carry no settlement proof, so every Klump checkout
+  // defers completion to the tracked order.
+  'klump',
+]);
+
+const SETTLEMENT_LOOKUP_TIMEOUT_MS = 15_000;
+const SETTLEMENT_POLL_INTERVAL_MS = 10_000;
+const SETTLEMENT_MAX_ATTEMPTS = 18;
+
+interface SettlementCompletionParams {
+  orderId?: string;
+  orderNumber?: string;
+  paymentMethod?: string;
+  trackingToken?: string;
+  pollIntervalMs?: number;
+  maxAttempts?: number;
+}
+
+function toTrackedOrder(value: unknown): TrackOrderData['order'] | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const order = (value as { order?: unknown }).order;
+  if (!order || typeof order !== 'object') {
+    return null;
+  }
+  return order as TrackOrderData['order'];
+}
+
+function toTrackedCustomer(value: unknown): TrackOrderData['customer'] | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const customer = (value as { customer?: unknown }).customer;
+  if (!customer || typeof customer !== 'object') {
+    return null;
+  }
+  return customer as TrackOrderData['customer'];
+}
+
+function toTrackedItems(value: unknown): TrackOrderData['items'] {
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+  const items = (value as { items?: unknown }).items;
+  return Array.isArray(items) ? (items as TrackOrderData['items']) : [];
+}
+
+async function fetchSettlementState(
+  trackingToken: string,
+  signal: AbortSignal
+): Promise<{
+  body: unknown;
+  order: TrackOrderData['order'] | null;
+  customer: TrackOrderData['customer'] | null;
+}> {
+  const response = await fetch(
+    `${TRACK_ORDER_API_BASE_URL}/api/storefront/orders/track-order?token=${encodeURIComponent(trackingToken)}&merchant_slug=${encodeURIComponent(TRACK_ORDER_MERCHANT_SLUG)}`,
+    { signal }
+  );
+  if (!response.ok) {
+    return { body: null, order: null, customer: null };
+  }
+  const body: unknown = await response.json();
+  return {
+    body,
+    order: toTrackedOrder(body),
+    customer: toTrackedCustomer(body),
+  };
+}
+
+// Settlement-confirmed completion for asynchronous mobile payments. Only a
+// server-confirmed paid state for this exact order records
+// payment_completed; the durable once-helper keeps remounts, polling
+// retries, and repeated visits to a single completion.
+export function useSettlementCompletion({
+  orderId,
+  orderNumber,
+  paymentMethod,
+  trackingToken,
+  pollIntervalMs = SETTLEMENT_POLL_INTERVAL_MS,
+  maxAttempts = SETTLEMENT_MAX_ATTEMPTS,
+}: SettlementCompletionParams): void {
+  useEffect(() => {
+    if (
+      !paymentMethod ||
+      !SETTLEMENT_POLL_METHODS.has(paymentMethod) ||
+      !orderId ||
+      !trackingToken
+    ) {
+      return;
+    }
+    let cancelled = false;
+    const attemptControllers: AbortController[] = [];
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+
+    const check = async (): Promise<void> => {
+      if (cancelled) {
+        return;
+      }
+      attempts += 1;
+      const controller = new AbortController();
+      attemptControllers.push(controller);
+      const lookupTimeout = setTimeout(
+        () => controller.abort(),
+        SETTLEMENT_LOOKUP_TIMEOUT_MS
+      );
+      try {
+        const { body, order, customer } = await fetchSettlementState(
+          trackingToken,
+          controller.signal
+        );
+        if (cancelled) {
+          return;
+        }
+        if (order && order.id === orderId && order.payment_status === 'paid') {
+          const { total: verifiedTotal, ...attribution } =
+            toTrackedCompletionAttribution(
+              order,
+              customer,
+              toTrackedItems(body)
+            );
+          await trackCheckoutPaymentCompletedOnce({
+            ...attribution,
+            orderId,
+            orderNumber: orderNumber || order.order_number || orderId,
+            paymentMethod,
+            value: verifiedTotal,
+          });
+          return;
+        }
+      } catch {
+        // Transient lookup failure: retry until the attempt budget runs out.
+      } finally {
+        clearTimeout(lookupTimeout);
+      }
+      if (!cancelled && attempts < maxAttempts) {
+        retryTimer = setTimeout(() => {
+          void check();
+        }, pollIntervalMs);
+      }
+    };
+
+    void check();
+    return () => {
+      cancelled = true;
+      for (const controller of attemptControllers) {
+        controller.abort();
+      }
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+    };
+  }, [
+    maxAttempts,
+    orderId,
+    orderNumber,
+    paymentMethod,
+    pollIntervalMs,
+    trackingToken,
+  ]);
+}

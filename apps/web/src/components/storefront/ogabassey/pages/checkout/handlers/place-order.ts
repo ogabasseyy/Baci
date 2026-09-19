@@ -1,4 +1,9 @@
 import { toast } from '@/hooks/use-toast';
+import {
+  CHECKOUT_FUNNEL_EVENTS,
+  buildCheckoutFunnelProperties,
+  getCheckoutPaymentIntent,
+} from '@baci/shared/contracts';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import { toCreditDirectItems } from '@/lib/checkout/credit-direct-items';
 import {
@@ -9,6 +14,8 @@ import {
 import { openCredPalCheckout } from '@/lib/credpal';
 import { openCreditDirectCheckout } from '@/lib/credit-direct-client';
 import { createClient } from '@/lib/supabase/client';
+import { captureClientEvent } from '@/lib/posthog/capture-client-event';
+import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { writeCreditDirectPopupMarker } from '../credit-direct-popup-return';
 import { captureCreditDirectClientCompletion } from '../credit-direct-client-completion';
 import { normalizeOrderPaymentMethod } from '../pending-checkout-order';
@@ -392,6 +399,8 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
   }
 
   const orderItems = buildCheckoutOrderItems(cart);
+  let createdOrderId: string | undefined;
+  let createdOrderNumber: string | undefined;
 
   try {
     // 1. Create order via API
@@ -465,6 +474,34 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
 
     const orderData = await orderResponse.json();
     const { order, wallet: walletResult, amountDueToGateway } = orderData;
+    createdOrderId = order.id;
+    createdOrderNumber = order.order_number || order.id.slice(0, 8).toUpperCase();
+    // Attribute creation to the server-finalized method (see checkout-page):
+    // wallet/savings/voucher full coverage changes the authoritative method.
+    const finalizedPaymentMethod =
+      typeof order.payment_method === 'string' &&
+      order.payment_method.trim() !== ''
+        ? order.payment_method
+        : paymentMethod;
+    captureCheckoutFunnelEventOnce(
+      CHECKOUT_FUNNEL_EVENTS.orderCreated,
+      createdOrderId,
+      buildCheckoutFunnelProperties({
+        channel: 'web',
+        currency,
+        itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
+        orderId: createdOrderId,
+        orderNumber: createdOrderNumber,
+        paymentIntent: getCheckoutPaymentIntent(finalizedPaymentMethod),
+        paymentMethod: finalizedPaymentMethod,
+        paymentStatus: order.payment_status || 'unpaid',
+        shipping: deliveryCost,
+        source: 'web_checkout',
+        subtotal: cartTotal,
+        tax: taxAmount,
+        total: order.total,
+      })
+    );
 
     // 1b. Create account if requested
     if (shouldCreateAccount && !user && accountPassword.length >= 6) {
@@ -512,6 +549,20 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
 
     // 2. Route to payment gateway
     if (paymentAmount <= 0) {
+      captureClientEvent(
+        CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency,
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+          paymentMethod,
+          paymentStatus: 'paid',
+          source: 'web_checkout',
+          total: order.total,
+        })
+      );
       clearCheckoutSession();
       routerPush(
         getHref(
@@ -523,6 +574,19 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
     }
 
     if (paymentMethod === 'bank_transfer') {
+      captureClientEvent(
+        CHECKOUT_FUNNEL_EVENTS.paymentStarted,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency,
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+          paymentMethod,
+          source: 'web_checkout',
+          total: paymentAmount,
+        })
+      );
       await dva.handleBankTransfer(
         order,
         paymentAmount,
@@ -533,6 +597,19 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
     }
 
     if (paymentMethod === 'juicyway') {
+      captureClientEvent(
+        CHECKOUT_FUNNEL_EVENTS.paymentStarted,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency,
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+          paymentMethod,
+          source: 'web_checkout',
+          total: paymentAmount,
+        })
+      );
       crypto.setPendingCryptoOrder({
         orderId: order.id,
         amount: paymentAmount,
@@ -563,6 +640,19 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
       paymentMethod === 'korapay' ||
       paymentMethod === 'klump'
     ) {
+      captureClientEvent(
+        CHECKOUT_FUNNEL_EVENTS.paymentStarted,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency,
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+          paymentMethod,
+          source: 'web_checkout',
+          total: paymentAmount,
+        })
+      );
       const result = await initializeCardPayment(
         merchant.id,
         order.id,
@@ -612,6 +702,19 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
     }
 
     if (paymentMethod === 'credit_direct') {
+      captureClientEvent(
+        CHECKOUT_FUNNEL_EVENTS.paymentStarted,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency,
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+          paymentMethod,
+          source: 'web_checkout',
+          total: paymentAmount,
+        })
+      );
       // Weight the Credit Direct allocation by CANONICAL order-item prices
       // (negotiated applied, quiz vouchers 0), never the raw cart price — a
       // display price would finance a voucher item and under-allocate a paid
@@ -715,6 +818,20 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
         return;
       }
 
+      captureClientEvent(
+        CHECKOUT_FUNNEL_EVENTS.paymentStarted,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency,
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+          paymentMethod,
+          source: 'web_checkout',
+          total: paymentAmount,
+        })
+      );
+
       await openCredPalCheckout({
         key: credpalKey,
         amount: paymentAmount,
@@ -723,6 +840,24 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
         customerName: `${firstName} ${lastName}`.trim(),
         customerPhone,
         onSuccess: (data) => {
+          if (data.status === 'success') {
+            captureCheckoutFunnelEventOnce(
+              CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+              order.id,
+              buildCheckoutFunnelProperties({
+                channel: 'web',
+                currency,
+                orderId: order.id,
+                orderNumber: createdOrderNumber,
+                paymentIntent: 'installments',
+                paymentMethod: 'credpal',
+                paymentStatus: 'paid',
+                reference: data.order_no,
+                source: 'web_checkout',
+                total: order.total,
+              })
+            );
+          }
           clearCheckoutSession();
           clearCart();
           routerPush(
@@ -752,6 +887,22 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
     }
 
     if (paymentMethod === 'invoice') {
+      captureCheckoutFunnelEventOnce(
+        CHECKOUT_FUNNEL_EVENTS.invoiceGenerated,
+        order.id,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency,
+          itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          paymentIntent: 'proforma_invoice',
+          paymentMethod: 'invoice',
+          paymentStatus: 'unpaid',
+          source: 'web_checkout',
+          total: order.total,
+        })
+      );
       clearCheckoutSession();
       routerPush(
         getHref(
@@ -778,6 +929,21 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
       setTimeout(clearCart, 500);
     }
   } catch (error) {
+    if (createdOrderId) {
+      captureClientEvent(
+        CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency,
+          orderId: createdOrderId,
+          orderNumber: createdOrderNumber,
+          paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+          paymentMethod,
+          reason: error instanceof Error ? error.name : 'checkout_error',
+          source: 'web_checkout',
+        })
+      );
+    }
     console.error('Checkout error:', error);
     toast({
       title: 'Checkout Failed',

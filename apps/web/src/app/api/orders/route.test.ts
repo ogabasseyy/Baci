@@ -5831,10 +5831,10 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     expect(mockSendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'customer@example.com',
-        subject: expect.stringContaining('Invoice Generated'),
+        subject: expect.stringContaining('Proforma Invoice Generated'),
         attachments: [
           expect.objectContaining({
-            name: expect.stringMatching(/^invoice-ORD-.*\.pdf$/),
+            name: expect.stringMatching(/^proforma-ORD-.*\.pdf$/),
             mime_type: 'application/pdf',
             content: expect.any(String), // base64 string
           }),
@@ -5867,7 +5867,8 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       }),
       expect.objectContaining({
         complianceNote: undefined,
-        documentKind: 'invoice',
+        documentKind: 'proforma_invoice',
+        invoiceTypeCode: '325',
         invoiceNotes: undefined,
         logoDataUri: 'data:image/png;base64,AA==',
         paymentTerms: undefined,
@@ -6291,7 +6292,8 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       expect.anything(),
       expect.anything(),
       expect.objectContaining({
-        documentKind: 'invoice',
+        documentKind: 'proforma_invoice',
+        invoiceTypeCode: '325',
         logoDataUri: null,
       })
     );

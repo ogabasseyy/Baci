@@ -103,7 +103,7 @@ async function verifyPaymentReference(reference: string) {
   const { data: existingOrder } = transaction.order_id
     ? await supabase
         .from('orders')
-        .select('id, order_number, payment_status, shipping_status')
+        .select('id, order_number, payment_status, shipping_status, total')
         .eq('id', transaction.order_id)
         .maybeSingle()
     : { data: null };
@@ -149,12 +149,23 @@ async function verifyPaymentReference(reference: string) {
         status: payload.code === 'serialized_inventory_unavailable' ? 409 : 500,
       });
     }
+    const juicywayTotal = Number(existingOrder?.total);
+    const juicywayCurrency =
+      typeof transaction.currency === 'string'
+        ? transaction.currency.trim().toUpperCase()
+        : '';
     return NextResponse.json({
+      orderId: transaction.order_id,
+      paymentMethod: transaction.gateway,
       success: true,
       status: 'success',
       orderNumber:
         existingOrder.order_number ||
         transaction.gateway_reference.slice(0, 8).toUpperCase(),
+      ...(Number.isFinite(juicywayTotal) ? { orderTotal: juicywayTotal } : {}),
+      ...(juicywayCurrency ? { currency: juicywayCurrency } : {}),
+      // Locally-finalized paid order: semantically a completed finalization.
+      finalizationOutcome: 'completed',
     });
   }
   const storedGatewayResponse = transaction.gateway_response;
@@ -346,10 +357,23 @@ async function verifyPaymentReference(reference: string) {
     existingOrder?.order_number ||
     transaction.gateway_reference.slice(0, 8).toUpperCase();
 
+  const verifiedTotal = Number(existingOrder?.total);
+  const verifiedCurrency =
+    typeof transaction.currency === 'string'
+      ? transaction.currency.trim().toUpperCase()
+      : '';
   return NextResponse.json({
+    orderId: transaction.order_id,
+    paymentMethod: transaction.gateway,
     success: true,
     status: 'success',
     orderNumber: finalOrderNumber,
+    // Lets the success page attribute revenue without a second lookup.
+    ...(Number.isFinite(verifiedTotal) ? { orderTotal: verifiedTotal } : {}),
+    ...(verifiedCurrency ? { currency: verifiedCurrency } : {}),
+    // completed = active paid order; order_cancelled/order_skipped report
+    // success too (money captured) but must not count as paid conversions.
+    finalizationOutcome: finalizeOutcome.kind,
   });
 }
 

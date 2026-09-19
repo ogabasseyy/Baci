@@ -3357,6 +3357,16 @@ export async function POST(request: NextRequest) {
       voucherOrderFullyCovered &&
       amountDueToGateway <= 0 &&
       (quizVoucherFinalized || order.payment_status === 'paid');
+    // Wallet/quiz-voucher full coverage finalizes payment server-side, but
+    // the create-RPC row still carries the pre-coverage status. Derive the
+    // paid state from the coverage flags so the immediate invoice email —
+    // subject, PDF kind, and Peppol type code — presents a paid commercial
+    // invoice instead of an unpaid proforma.
+    const isPaidForImmediateEmail =
+      isWalletFullyPaid ||
+      isQuizVoucherFullyPaid ||
+      String(order.payment_status || payment_status || '').toLowerCase() ===
+        'paid';
     const shouldSendImmediateOrderNotifications =
       !idempotencyReplayed &&
       (isPayOnDelivery(effectivePaymentMethod) ||
@@ -3550,7 +3560,9 @@ export async function POST(request: NextRequest) {
                   discount_amount: Number(order.discount_amount || 0),
                   amount_paid: amountPaid,
                   balance: Math.max(orderTotal - amountPaid, 0),
-                  payment_status: order.payment_status || payment_status,
+                  payment_status: isPaidForImmediateEmail
+                    ? 'paid'
+                    : order.payment_status || payment_status,
                   payment_method: effectivePaymentMethod,
                   is_credit_order: Boolean(
                     (order as Record<string, unknown>).is_credit_order
@@ -3604,10 +3616,7 @@ export async function POST(request: NextRequest) {
                   orderTotal,
                   paymentAccount: invoiceVirtualAccount,
                   paymentMethod: effectivePaymentMethod,
-                  isPaid:
-                    String(
-                      order.payment_status || payment_status || ''
-                    ).toLowerCase() === 'paid',
+                  isPaid: isPaidForImmediateEmail,
                   shippingAddress: shippingAddressForOrder,
                 });
                 let peppolInvoiceXml: string | null = null;

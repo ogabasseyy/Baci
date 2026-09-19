@@ -54,8 +54,18 @@ export function useBNPLCheckoutController({
     return appNavigationRef.current;
   };
   const validatedParams = parseBNPLParams(params);
-  const { orderId, gateway, amount, trackingToken, merchantSlug } =
-    validatedParams.data || {};
+  const {
+    orderId,
+    gateway,
+    amount,
+    trackingToken,
+    merchantSlug,
+    customerEmail,
+    customerPhone,
+    subtotal,
+    shipping,
+    tax,
+  } = validatedParams.data || {};
   const bnplUrl = buildBNPLCheckoutUrl({
     apiBaseUrl,
     params: validatedParams,
@@ -153,10 +163,18 @@ export function useBNPLCheckoutController({
       // Accepted-but-pending provider results still reach the success
       // experience below, but are not paid conversions: skip attribution.
       if (orderId && !effect.isPending) {
+        // The approved completion consumes the durable claim immediately:
+        // forward the routed guest identity and breakdown snapshot, since
+        // success-screen polling cannot enrich the claim afterwards.
         await trackCheckoutPaymentCompletedOnce({
+          ...(customerEmail && { customerEmail }),
+          ...(customerPhone && { customerPhone }),
           orderId,
           paymentMethod: gateway || 'bnpl',
           reference: effect.reference || undefined,
+          ...(shipping !== undefined && { shipping: Number(shipping) }),
+          ...(subtotal !== undefined && { subtotal: Number(subtotal) }),
+          ...(tax !== undefined && { tax: Number(tax) }),
           value: amount ? Number(amount) : undefined,
         });
       }
@@ -170,7 +188,13 @@ export function useBNPLCheckoutController({
       return;
     }
     // Terminal provider error redirect: capture the failure so declined or
-    // broken BNPL attempts are distinguishable from abandonment.
+    // broken BNPL attempts are distinguishable from abandonment. Late
+    // callbacks arriving after success (e.g. an aborted-load error while
+    // the success navigation is replaced) must not flip a paid checkout
+    // back to error or double-emit failure beside the completion.
+    if (statusRef.current === 'success') {
+      return;
+    }
     recordCheckoutFailure('bnpl_provider_error');
     setCheckoutStatus(effect.status);
     setErrorMessage(effect.errorMessage);
@@ -283,6 +307,10 @@ export function useBNPLCheckoutController({
   ) => {
     // Terminal WebView load failure: capture it like a provider error
     // redirect so broken BNPL attempts are not counted as abandonment.
+    // Ignore callbacks once the attempt has succeeded (see above).
+    if (statusRef.current === 'success') {
+      return;
+    }
     recordCheckoutFailure('bnpl_load_error');
     handleBNPLWebViewError(
       error,

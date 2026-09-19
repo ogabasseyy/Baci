@@ -524,6 +524,45 @@ describe('useBNPLCheckoutController', () => {
     );
   });
 
+  it('carries guest attribution into approved BNPL completions', async () => {
+    mockRouteParams = {
+      gateway: 'credpal',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+      trackingToken: 'track-token-123',
+      customerEmail: 'guest@example.com',
+      customerPhone: '+2348123456789',
+      amount: '470000',
+      subtotal: '450000',
+      shipping: '15000',
+      tax: '5000',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'navigation',
+            url: 'https://usebaci.com/ogabassey/order-success?type=credpal&orderId=order-123&credpalStatus=success',
+          }),
+        },
+      });
+    });
+
+    expect(result.current.status).toBe('success');
+    expect(trackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerEmail: 'guest@example.com',
+        customerPhone: '+2348123456789',
+        orderId: 'order-123',
+        shipping: 15000,
+        subtotal: 450000,
+        tax: 5000,
+      })
+    );
+  });
+
   it('emits payment_failed for terminal provider error redirects', async () => {
     mockRouteParams = {
       gateway: 'credit_direct',
@@ -573,6 +612,53 @@ describe('useBNPLCheckoutController', () => {
       'order-123',
       'credit_direct'
     );
+  });
+
+  it('ignores late errors arriving after successful completion', async () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+      trackingToken: 'track-token-123',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'navigation',
+            url: 'https://usebaci.com/ogabassey/order-success?reference=BAC-123',
+          }),
+        },
+      });
+    });
+    expect(result.current.status).toBe('success');
+    expect(trackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(1);
+
+    // A late aborted-load error (and a late provider error redirect) while
+    // the success navigation is replaced must not flip the paid checkout
+    // back to error or emit payment_failed beside the completion.
+    act(() => {
+      result.current.handleWebViewError({
+        description: 'net::ERR_ABORTED',
+        url: 'https://usebaci.com/ogabassey/order-success?reference=BAC-123',
+      });
+    });
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'navigation',
+            url: 'https://usebaci.com/ogabassey/checkout?error=declined',
+          }),
+        },
+      });
+    });
+
+    expect(result.current.status).toBe('success');
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+    expect(trackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(1);
   });
 
   it('dedupes duplicate failure callbacks after rerender until Retry', async () => {

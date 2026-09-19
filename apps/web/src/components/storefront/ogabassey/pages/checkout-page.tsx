@@ -512,6 +512,19 @@ async function requestDvaInitialization({
   throw new Error('DVA not returned by the gateway');
 }
 
+// Module-scope helper: probes the DVA reference server-side so "Confirm
+// Transfer Sent" only records a conversion for a detected transfer.
+async function verifyDvaTransferStatus(reference: string): Promise<boolean> {
+  const response = await fetch(
+    `/api/payments/status?gateway=paystack&reference=${encodeURIComponent(reference)}`
+  );
+  if (!response.ok) {
+    return false;
+  }
+  const result = await response.json().catch(() => null);
+  return result?.success === true && result?.is_confirmed === true;
+}
+
 export const CheckoutPage: React.FC = () => {
   const { cart, clearCart, isHydrated, removeFromCart } = useCart();
   const merchantContext = useMerchantSafe();
@@ -721,7 +734,11 @@ export const CheckoutPage: React.FC = () => {
     bank_code: string;
     amount: number;
     reference: string;
+    orderId?: string;
+    orderNumber?: string;
+    trackingToken?: string | null;
   } | null>(null);
+  const [isVerifyingDva, setIsVerifyingDva] = useState(false);
   const [isInitializingDva, setIsInitializingDva] = useState(false);
   const [dvaCountdown, setDvaCountdown] = useState(3600); // 1 hour in seconds
 
@@ -2994,7 +3011,12 @@ export const CheckoutPage: React.FC = () => {
   // module-scope `requestDvaInitialization`; the promise chain replaces
   // try/catch/finally, which would bail React Compiler.
   const handleBankTransfer = async (
-    order: { id: string; currency?: string | null },
+    order: {
+      id: string;
+      currency?: string | null;
+      order_number?: string | null;
+      tracking_token?: string | null;
+    },
     paymentAmount: number,
     billingAddress: DvaBillingAddress,
     onDvaReady?: () => void
@@ -3024,6 +3046,9 @@ export const CheckoutPage: React.FC = () => {
           ...result.dva,
           amount: paymentAmount,
           reference: result.reference,
+          orderId: order.id,
+          orderNumber: order.order_number ?? undefined,
+          trackingToken: order.tracking_token,
         });
         setDvaCountdown(3600);
         onDvaReady?.();
@@ -3058,6 +3083,76 @@ export const CheckoutPage: React.FC = () => {
       .finally(() => {
         setIsProcessing(false);
         setIsInitializingDva(false);
+      });
+  };
+
+  // "Confirm Transfer Sent" verifies the DVA reference server-side before
+  // recording the conversion: completing on the shopper's word alone would
+  // book paid revenue for transfers that never land. Still pending → toast
+  // and stay on the modal so the shopper can retry or close-and-check-later.
+  const handleDvaConfirmTransfer = () => {
+    if (!dvaData || !dvaData.orderId || isVerifyingDva) {
+      return;
+    }
+    const { orderId, orderNumber, reference, amount, trackingToken } = dvaData;
+    setIsVerifyingDva(true);
+    verifyDvaTransferStatus(reference)
+      .then(async (confirmed) => {
+        if (!confirmed) {
+          toast({
+            title: 'Transfer not detected yet',
+            description:
+              'We could not find your transfer. If you already sent it, wait a moment and confirm again.',
+          });
+          return;
+        }
+        const confirmedItems = buildCheckoutOrderItems(checkoutCart);
+        captureCheckoutFunnelEventOnce(
+          CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+          orderId,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            // Component-scope merchant currency (same fallback the DVA
+            // initialization used); the stamped order currency is not
+            // retained on the modal state.
+            currency: currencyCode,
+            itemCount: confirmedItems.reduce(
+              (count, item) => count + item.quantity,
+              0
+            ),
+            orderId,
+            orderNumber,
+            paymentIntent: getCheckoutPaymentIntent('bank_transfer'),
+            paymentMethod: 'bank_transfer',
+            paymentStatus: 'paid',
+            reference,
+            source: 'web_checkout',
+            total: amount,
+          })
+        );
+        clearPendingCheckoutOrder();
+        await clearCheckoutIdempotencyKey();
+        clearCheckoutSession();
+        setDvaData(null);
+        const successQuery = new URLSearchParams({
+          type: 'standard',
+          orderId,
+        });
+        if (trackingToken) {
+          successQuery.set('trackingToken', trackingToken);
+        }
+        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
+        setTimeout(clearCart, 500);
+      })
+      .catch(() => {
+        toast({
+          title: 'Could not verify transfer',
+          description: 'Please check your connection and try again.',
+          variant: 'destructive',
+        });
+      })
+      .finally(() => {
+        setIsVerifyingDva(false);
       });
   };
 
@@ -3541,10 +3636,11 @@ export const CheckoutPage: React.FC = () => {
               <div className="space-y-3">
                 <button
                   type="button"
-                  onClick={() => window.location.reload()}
-                  className="w-full py-4 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors shadow-lg shadow-store-primary/20"
+                  onClick={handleDvaConfirmTransfer}
+                  disabled={isVerifyingDva}
+                  className="w-full py-4 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors shadow-lg shadow-store-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Confirm Transfer Sent
+                  {isVerifyingDva ? 'Verifying transfer…' : 'Confirm Transfer Sent'}
                 </button>
                 <button
                   type="button"

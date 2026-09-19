@@ -5929,6 +5929,143 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     expect(supabase.from).not.toHaveBeenCalledWith('order_payment_accounts');
   });
 
+  it('emails a paid commercial invoice when wallet covers an invoice-method order in full', async () => {
+    const finalizeSpy = vi.fn(() =>
+      Promise.resolve({ data: null, error: null })
+    );
+    const supabase = buildMockSupabase({
+      redeem_wallet_for_order: {
+        data: [
+          {
+            success: true,
+            redeemed_amount: 2000,
+            new_balance: 500,
+            transaction_id: 'tx-wallet-full',
+          },
+        ],
+        error: null,
+      },
+    });
+    const originalRpc = supabase.rpc;
+    supabase.rpc = vi.fn((name: string) => {
+      if (name === 'finalize_wallet_order_payment') {
+        return finalizeSpy();
+      }
+      return originalRpc(name);
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock({});
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+
+    supabase.from = vi.fn((_table: string) => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          id: MERCHANT_ID,
+          business_name: 'Test Merchant',
+          country: 'NG',
+          slug: 'test-merchant',
+          support_email: 'support@example.com',
+          email_sender_name: 'Test Store',
+          email: 'merchant@example.com',
+          vat_registration_status: 'registered',
+          vat_rate: 7.5,
+        },
+        error: null,
+      }),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: MERCHANT_ID,
+          business_name: 'Test Merchant',
+          country: 'NG',
+          slug: 'test-merchant',
+          support_email: 'support@example.com',
+          email_sender_name: 'Test Store',
+          email: 'merchant@example.com',
+          vat_registration_status: 'registered',
+          vat_rate: 7.5,
+        },
+        error: null,
+      }),
+      in: vi.fn().mockReturnThis(),
+      returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+      overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+      insert: vi.fn().mockResolvedValue({ error: null }),
+      update: vi.fn().mockReturnThis(),
+      // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+      then: (resolve: any) => Promise.resolve().then(resolve),
+    })) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            ...baseOrderPayload.items[0],
+            has_assurance: true,
+          },
+        ],
+        payment_method: 'invoice',
+        use_wallet_credit: true,
+        wallet_amount: 2000,
+      }),
+    });
+
+    const response = await POST(request);
+    const body = await readJson(response);
+    expect(response.status).toBe(201);
+    // The create-RPC row still carries the pre-coverage status, but the
+    // response already presents the finalized paid wallet order.
+    expect(body.amountDueToGateway).toBe(0);
+    expect(body.order.payment_status).toBe('paid');
+    expect(body.order.payment_method).toBe('wallet');
+    expect(finalizeSpy).toHaveBeenCalledTimes(1);
+
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    // Paid commercial-invoice artifacts: no proforma subject, no
+    // proforma-prefixed attachment, commercial Peppol type code.
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'customer@example.com',
+        subject: expect.stringContaining('Invoice Generated'),
+        attachments: [
+          expect.objectContaining({
+            name: expect.stringMatching(/^invoice-ORD-.*\.pdf$/),
+            mime_type: 'application/pdf',
+          }),
+        ],
+      })
+    );
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: expect.not.stringContaining('Proforma'),
+      })
+    );
+    expect(mockGenerateReceiptBlob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_status: 'paid',
+      }),
+      expect.anything(),
+      expect.objectContaining({
+        documentKind: 'invoice',
+        invoiceTypeCode: '380',
+      })
+    );
+  });
+
   it('still sends the base invoice email when attachment generation cannot load persisted items', async () => {
     const supabase = buildMockSupabase();
     const { backgroundSupabase } = createBackgroundSupabaseMock({

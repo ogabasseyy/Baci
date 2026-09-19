@@ -116,6 +116,30 @@ async function readStoredClaims(): Promise<string[] | typeof STORAGE_TIMEOUT> {
   return parseTrackedOrderIds(raw);
 }
 
+// Merges the in-process grant set over a stored claim list, optionally
+// dropping one phantom late claim. Returns null when there is nothing to
+// repair so callers never rewrite a healthy store.
+function computeReconciledClaims(
+  stored: string[],
+  removeClaim?: string
+): string[] | null {
+  const reconciled = new Set(
+    removeClaim === undefined
+      ? stored
+      : stored.filter((entry) => entry !== removeClaim)
+  );
+  for (const granted of grantedClaims) {
+    reconciled.add(granted);
+  }
+  if (
+    reconciled.size === stored.length &&
+    stored.every((entry) => reconciled.has(entry))
+  ) {
+    return null;
+  }
+  return [...reconciled];
+}
+
 // A write that lands after its caller already timed out must not leave a
 // phantom claim: the caller suppressed the analytics event, so a replay
 // would see the persisted claim and skip the event forever. Remove exactly
@@ -129,30 +153,58 @@ async function removeClaimAfterLateWrite(claim: string): Promise<void> {
     if (stored === STORAGE_TIMEOUT) {
       return;
     }
-    const reconciled = new Set(stored.filter((entry) => entry !== claim));
-    for (const granted of grantedClaims) {
-      reconciled.add(granted);
-    }
+    const reconciled = computeReconciledClaims(stored, claim);
     // Nothing to repair: the late claim never landed and no newer grants
     // exist. Skip the write so a healthy store is never rewritten here.
-    if (
-      reconciled.size === stored.length &&
-      stored.every((entry) => reconciled.has(entry))
-    ) {
+    if (reconciled === null) {
       return;
     }
+    const rollbackWrite = AsyncStorage.setItem(
+      CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
+      serializeTrackedOrderIds(reconciled)
+    );
     const written = await Promise.race([
-      AsyncStorage.setItem(
-        CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
-        serializeTrackedOrderIds([...reconciled])
-      ).then(() => true as const),
+      rollbackWrite.then(() => true as const),
       storageTimeout(),
     ]);
     if (written === STORAGE_TIMEOUT) {
       log.error('Checkout purchase tracking claim rollback timed out.');
+      // The rollback may still land after newer grants and erase them, the
+      // same way the original late write did: reconcile once more on
+      // landing. No further compensation — the residual needs consecutive
+      // stalls at every level to matter.
+      void rollbackWrite.then(
+        () => reconcileStoredClaims().catch(() => undefined),
+        () => undefined
+      );
     }
   } catch (error) {
     log.error('Failed to roll back late checkout purchase claim:', error);
+  }
+}
+
+// Merges the in-process grant set over the current store. Used both by the
+// late-write rollback (which additionally drops one phantom claim) and as
+// the compensation when a rollback write itself lands late.
+async function reconcileStoredClaims(): Promise<void> {
+  try {
+    const stored = await readStoredClaims();
+    if (stored === STORAGE_TIMEOUT) {
+      return;
+    }
+    const reconciled = computeReconciledClaims(stored);
+    if (reconciled === null) {
+      return;
+    }
+    await Promise.race([
+      AsyncStorage.setItem(
+        CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
+        serializeTrackedOrderIds(reconciled)
+      ),
+      storageTimeout(),
+    ]);
+  } catch (error) {
+    log.error('Failed to reconcile checkout purchase claims:', error);
   }
 }
 

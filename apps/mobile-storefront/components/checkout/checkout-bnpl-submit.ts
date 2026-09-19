@@ -167,6 +167,11 @@ export async function submitBnplCheckout({
       ...(orderResponse.order.tracking_token && {
         trackingToken: orderResponse.order.tracking_token,
       }),
+      // Breakdown snapshot for the approved completion's durable claim
+      // (see use-bnpl-checkout-controller): identity already travels above.
+      subtotal: String(snapshot.subtotal),
+      shipping: String(snapshot.deliveryFee),
+      tax: String(snapshot.taxAmount),
     },
   });
 }

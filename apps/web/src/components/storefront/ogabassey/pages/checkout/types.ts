@@ -44,6 +44,10 @@ export interface DvaData {
   bank_code: string;
   amount: number;
   reference: string;
+  /** Created order id, for the server-confirmed completion on "Confirm Transfer Sent". */
+  orderId?: string;
+  orderNumber?: string;
+  trackingToken?: string | null;
 }
 
 export interface PendingCryptoOrder {

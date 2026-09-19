@@ -232,6 +232,69 @@ it('reconciles newer claims when a timed-out write lands after them', async () =
   }
 });
 
+it('reconciles again when the rollback write lands after a newer grant', async () => {
+  jest.useFakeTimers();
+  try {
+    // Write #1 (the claim) and write #3 (its compensating rollback) hang
+    // until released manually; every other write lands immediately.
+    const pendingWrites: Array<() => void> = [];
+    let writeCalls = 0;
+    mockSetItem.mockImplementation((key: string, value: string) => {
+      writeCalls += 1;
+      if (writeCalls === 1 || writeCalls === 3) {
+        return new Promise<void>((resolve) => {
+          pendingWrites.push(() => {
+            storage.set(key, value);
+            resolve();
+          });
+        });
+      }
+      storage.set(key, value);
+      return Promise.resolve();
+    });
+    const first = claimCheckoutPurchaseTracking('order-stale');
+    await jest.advanceTimersByTimeAsync(3000);
+    await expect(first).resolves.toBe(false);
+
+    // Queue released; a newer claim succeeds on the old envelope.
+    await jest.advanceTimersByTimeAsync(11000);
+    await expect(claimCheckoutPurchaseTracking('order-newer')).resolves.toBe(
+      true
+    );
+
+    // The stale claim write lands and its rollback runs, but the rollback
+    // write hangs: its caller race expires and the queue advances.
+    pendingWrites[0]();
+    await jest.advanceTimersByTimeAsync(4000);
+    // Granted on the still-stale read (rollback not landed yet).
+    await expect(claimCheckoutPurchaseTracking('order-third')).resolves.toBe(
+      true
+    );
+
+    // The stale rollback lands, erasing the third grant — the attached
+    // compensation must restore it without resurrecting the phantom.
+    pendingWrites[1]();
+    await jest.advanceTimersByTimeAsync(1000);
+    const stored = parseStoredClaimsForTest(
+      storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY)
+    );
+    expect(stored).toContain('order-newer');
+    expect(stored).toContain('order-third');
+    expect(stored).not.toContain('order-stale');
+    await expect(claimCheckoutPurchaseTracking('order-newer')).resolves.toBe(
+      false
+    );
+    await expect(claimCheckoutPurchaseTracking('order-third')).resolves.toBe(
+      false
+    );
+  } finally {
+    jest.useRealTimers();
+    mockSetItem.mockImplementation(async (key: string, value: string) => {
+      storage.set(key, value);
+    });
+  }
+});
+
 it('releases the queue when a write never settles', async () => {
   jest.useFakeTimers();
   try {

@@ -249,6 +249,33 @@ describe('useQuizRewardedBadge', () => {
     expect(result.current.isWatching).toBe(false);
   });
 
+  it('holds fullscreen ownership after EARNED_REWARD until the ad closes', () => {
+    // Regression: the reward fires while the ad is still on screen, so
+    // releasing here lets a quiz-start interstitial present over it.
+    const { result } = renderHook(() =>
+      useQuizRewardedBadge({
+        eventId: 'event-1',
+        eventTitle: 'Today Quiz',
+        remainingSeconds: 120,
+        status: 'scheduled',
+        userId: 'user-1',
+      })
+    );
+
+    mockSetQuizRewardedFlowActive.mockClear();
+    act(() => result.current.watchAd());
+    act(() =>
+      listeners.get(RewardedAdEventType.EARNED_REWARD)?.({ amount: 1 })
+    );
+    expect(mockUnlockBadge).toHaveBeenCalledTimes(1);
+    expect(result.current.justEarned).toBe(true);
+    expect(result.current.isWatching).toBe(true);
+    expect(mockSetQuizRewardedFlowActive).not.toHaveBeenCalledWith(false);
+    act(() => listeners.get('closed')?.());
+    expect(mockSetQuizRewardedFlowActive).toHaveBeenCalledWith(false);
+    expect(result.current.isWatching).toBe(false);
+  });
+
   it('fails the watch when loading stalls past the settlement timeout', () => {
     // Regression: a hung SDK load (neither LOADED nor ERROR) must not hold
     // fullscreen ownership forever. After the 30s settlement timeout the

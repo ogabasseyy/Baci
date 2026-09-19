@@ -25,6 +25,7 @@ const props = {
     card: '#ffffff',
     textSecondary: '#666666',
   },
+  isVisible: true,
   placement: 'PRODUCT_GRID_MPU' as const,
   unitId: 'test-launch-unit',
 };
@@ -37,6 +38,20 @@ describe('LaunchAdCard', () => {
 
     // Assert
     expect(screen.getByTestId('launch-ad-card')).toBeTruthy();
+    expect(screen.UNSAFE_getByType('BannerAd' as never)).toBeTruthy();
+  });
+
+  it('withholds the banner while the card is offscreen', () => {
+    // Regression: the list eagerly renders its initial batch, so an
+    // offscreen card must not construct its native banner. The same-size
+    // placeholder keeps list layout stable.
+    // Arrange & Act
+    mockDrawerOpen = false;
+    render(<LaunchAdCard {...props} isVisible={false} />);
+
+    // Assert
+    expect(screen.getByTestId('launch-ad-card')).toBeTruthy();
+    expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
   });
 
   it('suspends the carousel ad while the drawer is open', () => {

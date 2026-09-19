@@ -5,13 +5,14 @@ import {
   OGABASSEY_PINNED_LAUNCH_SLUGS,
   selectLaunchProducts,
 } from '@baci/shared/storefront';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
+  type ViewToken,
 } from 'react-native';
 import { LaunchAdCard } from '@/components/storefront/LaunchAdCard';
 import { LaunchProductCard } from '@/components/storefront/LaunchProductCard';
@@ -28,6 +29,13 @@ import type { Product } from '@/types/product';
 const SECTION_TITLE = 'Just Launched';
 // Matches styles.list.gap: one ad slot occupies a card plus one gap.
 const LAUNCH_LIST_GAP = 12;
+
+type LaunchAdCardItem = { kind: 'launch-ad-card' };
+type LaunchRenderItem = Product | LaunchAdCardItem;
+
+function isLaunchAdCard(item: LaunchRenderItem): item is LaunchAdCardItem {
+  return (item as Partial<LaunchAdCardItem>).kind === 'launch-ad-card';
+}
 
 export function JustLaunchedCarousel({
   suppressAds = false,
@@ -98,8 +106,6 @@ export function JustLaunchedCarousel({
   const [adLoadFailed, setAdLoadFailed] = useState(false);
 
   const cardWidth = Math.round(width * 0.82);
-  type LaunchAdCardItem = { kind: 'launch-ad-card' };
-  type LaunchRenderItem = Product | LaunchAdCardItem;
   const showAdCard =
     adUnitConfig.enabled &&
     adUnitConfig.format === 'banner' &&
@@ -110,12 +116,29 @@ export function JustLaunchedCarousel({
   const flatListRef = useRef<FlatList<LaunchRenderItem>>(null);
   const scrollOffsetRef = useRef(0);
   const wasAdShownRef = useRef(showAdCard);
+  // The list eagerly renders its initial batch, so constructing the native
+  // banner on mount would request/refresh while the sponsored card is
+  // offscreen. Mount it only while its item is actually viewable.
+  const [isAdVisible, setIsAdVisible] = useState(false);
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
+  const handleViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      setIsAdVisible(
+        viewableItems.some(
+          (entry) =>
+            entry.isViewable && isLaunchAdCard(entry.item as LaunchRenderItem)
+        )
+      );
+    },
+    []
+  );
   useEffect(() => {
     // Consent resolving (or a load failure) inserts or removes the card at
     // index 1 under a scrolled list; shift the offset by one slot so the
     // visible product stays put instead of sliding away.
     const target = nextOffsetAfterAdToggle({
       adSlotWidth: cardWidth + LAUNCH_LIST_GAP,
+      insertionOffset: cardWidth + LAUNCH_LIST_GAP,
       isAdShown: showAdCard,
       scrollOffset: scrollOffsetRef.current,
       wasAdShown: wasAdShownRef.current,
@@ -188,15 +211,13 @@ export function JustLaunchedCarousel({
       ]
     : launchProducts;
 
-  const isLaunchAdCard = (item: LaunchRenderItem): item is LaunchAdCardItem =>
-    (item as Partial<LaunchAdCardItem>).kind === 'launch-ad-card';
-
   const renderItem = ({ item }: { item: LaunchRenderItem }) => {
     if (isLaunchAdCard(item)) {
       return (
         <LaunchAdCard
           cardWidth={cardWidth}
           colors={colors}
+          isVisible={isAdVisible}
           onAdFailedToLoad={() => setAdLoadFailed(true)}
           placement="PRODUCT_GRID_MPU"
           unitId={
@@ -227,14 +248,18 @@ export function JustLaunchedCarousel({
         ref={flatListRef}
         contentContainerStyle={styles.list}
         data={renderItems}
+        extraData={isAdVisible}
         horizontal
         keyExtractor={(item) =>
           'kind' in item && item.kind === 'launch-ad-card'
             ? 'launch-ad-card'
             : (item as Product).id
         }
+        onViewableItemsChanged={handleViewableItemsChanged}
         renderItem={renderItem}
         showsHorizontalScrollIndicator={false}
+        testID="launch-carousel-list"
+        viewabilityConfig={viewabilityConfig.current}
         onScroll={(event) => {
           scrollOffsetRef.current = event.nativeEvent.contentOffset.x;
         }}

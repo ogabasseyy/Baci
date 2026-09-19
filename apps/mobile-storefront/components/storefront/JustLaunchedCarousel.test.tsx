@@ -26,6 +26,7 @@ const mockPush = jest.fn();
 const mockUseProducts = jest.fn();
 const mockUsePinned = jest.fn();
 const mockImage = jest.fn();
+const mockCaptureViewability = jest.fn();
 jest.mock('expo-image', () => {
   const React = jest.requireActual<typeof import('react')>('react');
   return {
@@ -49,13 +50,18 @@ jest.mock('react-native', () => {
       value: ({
         data,
         keyExtractor,
+        onViewableItemsChanged,
         renderItem,
       }: {
         data: unknown[];
         keyExtractor: (item: unknown, index: number) => string;
+        onViewableItemsChanged?: (info: {
+          viewableItems: Array<{ index?: number; isViewable?: boolean }>;
+        }) => void;
         renderItem: (info: { item: unknown }) => React.ReactNode;
-      }) =>
-        React.createElement(
+      }) => {
+        mockCaptureViewability(onViewableItemsChanged);
+        return React.createElement(
           React.Fragment,
           null,
           data.map((item, index) =>
@@ -65,7 +71,8 @@ jest.mock('react-native', () => {
               renderItem({ item })
             )
           )
-        ),
+        );
+      },
     },
     PixelRatio: { configurable: true, value: { get: () => 2 } },
     Pressable: {
@@ -133,6 +140,37 @@ const xiaomi = {
   price: 800000,
   image: 'https://cdn.ogabassey.com/core-assets/products/xiaomi.avif',
 };
+
+type ViewabilityInfo = {
+  viewableItems: Array<{
+    index?: number;
+    isViewable?: boolean;
+    item?: unknown;
+  }>;
+};
+
+function latestViewabilityHandler():
+  | ((info: ViewabilityInfo) => void)
+  | undefined {
+  const calls = mockCaptureViewability.mock.calls;
+  return calls.at(-1)?.[0] as ((info: ViewabilityInfo) => void) | undefined;
+}
+
+function showAdCard(): void {
+  act(() => {
+    latestViewabilityHandler()?.({
+      viewableItems: [
+        { index: 1, isViewable: true, item: { kind: 'launch-ad-card' } },
+      ],
+    });
+  });
+}
+
+function hideAdCard(): void {
+  act(() => {
+    latestViewabilityHandler()?.({ viewableItems: [] });
+  });
+}
 
 describe('JustLaunchedCarousel', () => {
   beforeEach(() => {
@@ -265,6 +303,7 @@ describe('JustLaunchedCarousel', () => {
     });
 
     render(<JustLaunchedCarousel />);
+    showAdCard();
 
     expect(screen.getByTestId('launch-ad-card')).toBeTruthy();
     const banner = screen.UNSAFE_getByType('BannerAd' as never);
@@ -273,6 +312,27 @@ describe('JustLaunchedCarousel', () => {
     });
 
     expect(screen.queryByTestId('launch-ad-card')).toBeNull();
+    delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
+  });
+
+  it('withholds the native banner until the sponsored card is viewable', () => {
+    // Regression: the list eagerly renders its initial batch, so the
+    // sponsored card must not request while offscreen.
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    mockUseProducts.mockReturnValue({
+      products: [xiaomi, a27],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JustLaunchedCarousel />);
+
+    expect(screen.getByTestId('launch-ad-card')).toBeTruthy();
+    expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
+    showAdCard();
+    expect(screen.UNSAFE_getByType('BannerAd' as never)).toBeTruthy();
+    hideAdCard();
+    expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
     delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
   });
 

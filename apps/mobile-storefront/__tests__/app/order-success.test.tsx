@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, waitFor } from '@testing-library/react-native';
+import { act, render, waitFor } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 import OrderSuccessScreen from '@/app/order-success';
 
 const mockScheduleLocalNotification =
@@ -74,6 +75,22 @@ jest.mock('@/services/push-notifications', () => ({
   scheduleLocalNotification: (...args: unknown[]) =>
     mockScheduleLocalNotification(...args),
 }));
+
+const mockMaybeShowPostOrderInterstitial = jest.fn<
+  (options?: { isCancelled?: () => boolean }) => Promise<'shown' | 'skipped'>
+>(async () => 'skipped');
+
+jest.mock('@/lib/post-order-interstitial', () => {
+  const actual = jest.requireActual<
+    typeof import('@/lib/post-order-interstitial')
+  >('@/lib/post-order-interstitial');
+  return {
+    ...actual,
+    maybeShowPostOrderInterstitial: (options?: {
+      isCancelled?: () => boolean;
+    }) => mockMaybeShowPostOrderInterstitial(options),
+  };
+});
 
 describe('OrderSuccessScreen', () => {
   beforeEach(() => {
@@ -172,6 +189,76 @@ describe('OrderSuccessScreen', () => {
     await waitFor(() => {
       expect(mockScheduleLocalNotification).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('cancels the post-order interstitial while the app is backgrounded', async () => {
+    // Regression: a LOADED event firing after backgrounding would present
+    // the purchase ad on resume, outside the post-order moment.
+    jest.useFakeTimers();
+    try {
+      render(<OrderSuccessScreen />);
+      // Flush the permission lookup too: until it resolves the permission
+      // flow flag stays set and would mask the AppState assertion below.
+      await act(async () => {
+        jest.advanceTimersByTime(2600);
+      });
+
+      expect(mockMaybeShowPostOrderInterstitial).toHaveBeenCalledTimes(1);
+      const isCancelled =
+        mockMaybeShowPostOrderInterstitial.mock.calls[0]?.[0]?.isCancelled;
+      expect(isCancelled).toBeDefined();
+      AppState.currentState = 'active';
+      expect(isCancelled?.()).toBe(false);
+      AppState.currentState = 'background';
+      expect(isCancelled?.()).toBe(true);
+      AppState.currentState = 'active';
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('withholds the banner until the native permission prompt resolves', async () => {
+    // Regression: clearing the soft-ask modal on grant must not remount
+    // the banner underneath the native system prompt still in flight.
+    mockRequestPermission.mockResolvedValueOnce('soft-ask-needed');
+    let resolvePrompt!: () => void;
+    mockTriggerSystemPrompt.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolvePrompt = resolve;
+      })
+    );
+    const latestProps = () =>
+      mockOrderSuccessView.mock.calls.at(-1)?.[0] as
+        | {
+            isPermissionFlowActive?: boolean;
+            onPermissionGrant: () => void;
+            showPermissionModal?: boolean;
+          }
+        | undefined;
+
+    jest.useFakeTimers();
+    try {
+      render(<OrderSuccessScreen />);
+      await act(async () => {
+        jest.advanceTimersByTime(1600);
+      });
+
+      expect(latestProps()?.showPermissionModal).toBe(true);
+      expect(latestProps()?.isPermissionFlowActive).toBe(true);
+
+      act(() => {
+        void latestProps()?.onPermissionGrant();
+      });
+      expect(latestProps()?.showPermissionModal).toBe(false);
+      expect(latestProps()?.isPermissionFlowActive).toBe(true);
+
+      await act(async () => {
+        resolvePrompt();
+      });
+      expect(latestProps()?.isPermissionFlowActive).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('passes a document preview handler when the order id is available', () => {

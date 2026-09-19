@@ -230,11 +230,21 @@ export function useQuizRewardedBadge({
             session.settled = true;
             unlockBadge(userId, eventId, eventTitle);
             setJustEarned(true);
-            finish();
+            // The ad can still be on screen: keep fullscreen ownership and
+            // the CLOSED listener until dismissal, otherwise an interstitial
+            // whose load completes in this interval presents over the
+            // rewarded ad.
           }
         ),
         rewardedAd.addAdEventListener(mobileAds.AdEventType.CLOSED, () => {
-          if (isCurrent()) finish();
+          // CLOSED releases ownership even after EARNED_REWARD settled the
+          // session (isCurrent() would exclude it), so match the session
+          // by identity instead.
+          if (sessionRef.current !== session) {
+            cleanup();
+            return;
+          }
+          finish();
         }),
         rewardedAd.addAdEventListener(mobileAds.AdEventType.ERROR, () => {
           if (!isCurrent()) return;

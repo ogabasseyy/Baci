@@ -13,6 +13,12 @@ interface LaunchAdCardColors {
 interface LaunchAdCardProps {
   cardWidth: number;
   colors: LaunchAdCardColors;
+  /**
+   * Whether the sponsored card is currently viewable in the carousel. The
+   * native banner mounts only then; otherwise a same-size placeholder
+   * preserves list layout without requesting or refreshing offscreen.
+   */
+  isVisible: boolean;
   /** Configured placement this slot resolves from; used for event attribution. */
   placement: MobileAdBannerPlacementKey;
   /**
@@ -33,6 +39,7 @@ interface LaunchAdCardProps {
 export function LaunchAdCard({
   cardWidth,
   colors,
+  isVisible,
   onAdFailedToLoad,
   placement,
   unitId,
@@ -49,6 +56,22 @@ export function LaunchAdCard({
     return null;
   }
   if (!bannerModule || drawerOpen) return null;
+  if (!isVisible) {
+    return (
+      <View
+        accessibilityLabel="Sponsored advertisement"
+        style={[
+          styles.card,
+          {
+            width: cardWidth,
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          },
+        ]}
+        testID="launch-ad-card"
+      />
+    );
+  }
   const { BannerAd, BannerAdSize } = bannerModule;
 
   const handlePaid = (event: PaidEvent) => {

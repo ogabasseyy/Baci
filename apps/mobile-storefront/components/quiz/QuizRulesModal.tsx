@@ -1,6 +1,13 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, Text, View } from 'react-native';
+import {
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdSlot } from '@/components/ads/AdSlot';
 import { useTheme } from '@/hooks/useTheme';
@@ -56,7 +63,10 @@ export function QuizRulesModal({
         >
           <AdSlot placement="FOOTER_ANCHOR" />
         </View>
-        <View accessibilityViewIsModal style={styles.rulesSheet}>
+        <View
+          accessibilityViewIsModal
+          style={[styles.rulesSheet, { maxHeight: '75%' }]}
+        >
           <View style={styles.rulesHeader}>
             <View>
               <Text accessibilityRole="header" style={styles.rulesTitle}>
@@ -74,7 +84,7 @@ export function QuizRulesModal({
             </Pressable>
           </View>
 
-          <View style={styles.rulesList}>
+          <ScrollView style={styles.rulesList} testID="quiz-rules-list">
             <Text style={styles.ruleText}>
               1. You have {timePerQuestionSeconds} seconds for each question.
             </Text>
@@ -98,7 +108,7 @@ export function QuizRulesModal({
               earliest valid submission. There is no random draw or random
               tie-breaker.
             </Text>
-          </View>
+          </ScrollView>
 
           {requiresAcceptance ? (
             <Pressable

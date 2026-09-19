@@ -44,6 +44,18 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
   const { data: categories = [] } = useCategories();
 
+  // One page can author several HeroCarousel blocks, but HOME_STRIP is a
+  // single logical slot: concurrent owners would request together and
+  // split attribution. Only the first hero with slides owns it.
+  const heroAdOwnerIndex = suppressAds
+    ? -1
+    : (blocks || []).findIndex(
+        (block) =>
+          block.type === 'HeroCarousel' &&
+          Array.isArray((block as HeroCarouselBlock).props.slides) &&
+          (block as HeroCarouselBlock).props.slides.length > 0
+      );
+
   const selectedCategoryName = (() => {
     if (!selectedCategoryId) return 'Airtime';
     const cat = (categories as Category[]).find(
@@ -85,7 +97,9 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
                 <Hero
                   slides={slides}
                   autoplayDelay={heroBlock.props.autoplayDelay}
-                  trailingAdPlacement={suppressAds ? undefined : 'HOME_STRIP'}
+                  trailingAdPlacement={
+                    index === heroAdOwnerIndex ? 'HOME_STRIP' : undefined
+                  }
                 />
               );
             }

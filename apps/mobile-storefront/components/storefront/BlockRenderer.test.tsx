@@ -128,6 +128,33 @@ describe('BlockRenderer', () => {
     expect(screen.getByTestId('just-launched-ads-off')).toBeTruthy();
   });
 
+  it('gives HOME_STRIP to only the first hero when a page authors several', () => {
+    // Regression: every HeroCarousel block owned the same placement, so
+    // several banners requested concurrently with split attribution.
+    renderBlocks([
+      emptyHeroBlock,
+      configuredHeroBlock,
+      {
+        type: 'HeroCarousel',
+        props: {
+          id: 'second-hero',
+          slides: [
+            {
+              image: 'https://example.com/banner-2.jpg',
+              title: 'Second hero',
+              subtitle: 'More deals',
+              ctaText: 'Shop',
+              ctaLink: '/category/audio',
+            },
+          ],
+        },
+      } as Block,
+    ]);
+
+    expect(screen.getAllByTestId('hero-carousel-with-ad')).toHaveLength(1);
+    expect(screen.getAllByTestId('hero-carousel')).toHaveLength(1);
+  });
+
   it('renders no content for an unknown block type', () => {
     const { toJSON } = renderBlocks([
       { type: 'Mystery', props: { id: 'x' } } as unknown as Block,

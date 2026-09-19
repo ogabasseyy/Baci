@@ -58,6 +58,31 @@ describe('QuizRulesModal', () => {
     expect(banner.props.style).toEqual(expect.objectContaining({ top: 75 }));
   });
 
+  it('caps the sheet so it cannot cover the banner on compact screens', () => {
+    // Regression: the bottom-anchored sheet grows unbounded, so on short
+    // screens it paints over the top banner zone and hides the creative.
+    render(
+      <QuizRulesModal
+        eventTitle="Tonight quiz"
+        onClose={jest.fn()}
+        onConfirm={jest.fn()}
+        requiresAcceptance={false}
+        timePerQuestionSeconds={15}
+        visible
+      />
+    );
+
+    const sheet = screen.UNSAFE_getByProps({
+      accessibilityViewIsModal: true,
+    }) as unknown as {
+      props: { style: Record<string, unknown>[] };
+    };
+    expect(sheet.props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
+    );
+    expect(screen.getByTestId('quiz-rules-list')).toBeTruthy();
+  });
+
   it('shows rules without an acknowledgment when opened for reference', () => {
     const onClose = jest.fn();
     render(

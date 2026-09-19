@@ -20,6 +20,7 @@ jest.mock('@/stores/drawer-store', () => ({
 
 const props = {
   height: 120,
+  isVisible: true,
   placement: 'HOME_STRIP' as const,
   screenWidth: 390,
   unitId: 'test-hero-unit',
@@ -33,6 +34,20 @@ describe('HeroAdSlide', () => {
 
     // Assert
     expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
+    expect(screen.UNSAFE_getByType('BannerAd' as never)).toBeTruthy();
+  });
+
+  it('withholds the banner while the slide is offscreen', () => {
+    // Regression: the list eagerly renders its initial batch, so an
+    // offscreen slide must not construct its native banner. The same-size
+    // placeholder keeps paging layout stable.
+    // Arrange & Act
+    mockDrawerOpen = false;
+    render(<HeroAdSlide {...props} isVisible={false} />);
+
+    // Assert
+    expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
+    expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
   });
 
   it('suspends the home banner while the drawer is open', () => {

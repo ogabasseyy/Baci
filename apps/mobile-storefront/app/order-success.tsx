@@ -5,7 +5,7 @@
 
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Linking } from 'react-native';
+import { Alert, AppState, Linking } from 'react-native';
 import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
 import { ReceiptPreviewModal } from '@/components/receipts/ReceiptPreviewModal';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -54,6 +54,10 @@ export default function OrderSuccessScreen() {
   const { requestPermission, triggerSystemPrompt, markDenied } =
     usePermissionBooster();
   const [showPermissionModal, setShowPermissionModal] = useState(false);
+  // Mirrors permissionFlowActiveRef for render: the soft-ask modal closing
+  // on grant does NOT end the flow — the native system prompt is still in
+  // flight, and the success banner must stay unmounted underneath it.
+  const [isPermissionFlowActive, setPermissionFlowActive] = useState(false);
   // Tracks the notification permission flow (soft-ask modal through the
   // native prompt) independently of render state so the interstitial
   // cancellation predicate below always sees the current value.
@@ -113,7 +117,11 @@ export default function OrderSuccessScreen() {
         isCancelled: () =>
           interstitialCancelled ||
           permissionFlowActiveRef.current ||
-          receiptPreviewActiveRef.current,
+          receiptPreviewActiveRef.current ||
+          // A backgrounded shopper must never be greeted by the purchase
+          // ad on resume: presenting while inactive surfaces it only when
+          // the activity returns, outside the post-order moment.
+          AppState.currentState !== 'active',
       });
     }, 2500);
 
@@ -132,11 +140,13 @@ export default function OrderSuccessScreen() {
     // soft ask opens. Terminal non-modal results clear it immediately.
     const timerId = setTimeout(async () => {
       permissionFlowActiveRef.current = true;
+      setPermissionFlowActive(true);
       const result = await requestPermission('notifications');
       if (result === 'soft-ask-needed') {
         setShowPermissionModal(true);
       } else {
         permissionFlowActiveRef.current = false;
+        setPermissionFlowActive(false);
       }
     }, 1500);
 
@@ -149,11 +159,13 @@ export default function OrderSuccessScreen() {
     setShowPermissionModal(false);
     await triggerSystemPrompt('notifications');
     permissionFlowActiveRef.current = false;
+    setPermissionFlowActive(false);
   };
 
   const handlePermissionDeny = () => {
     setShowPermissionModal(false);
     permissionFlowActiveRef.current = false;
+    setPermissionFlowActive(false);
     markDenied('notifications');
   };
 
@@ -193,6 +205,7 @@ export default function OrderSuccessScreen() {
         isReceiptPreviewActive={
           receiptPreview.isLoading || receiptPreview.isOpen
         }
+        isPermissionFlowActive={isPermissionFlowActive}
         showPermissionModal={showPermissionModal}
       />
       <ReceiptPreviewModal

@@ -6,6 +6,12 @@ import { useDrawerStore } from '@/stores/drawer-store';
 
 interface HeroAdSlideProps {
   height: number;
+  /**
+   * Whether the sponsored item is currently viewable in the carousel. The
+   * native banner mounts only then; otherwise a same-size placeholder
+   * preserves paging layout without requesting or refreshing offscreen.
+   */
+  isVisible: boolean;
   /** Configured placement this slot resolves from; used for event attribution. */
   placement: MobileAdBannerPlacementKey;
   /**
@@ -24,6 +30,7 @@ interface HeroAdSlideProps {
  */
 export function HeroAdSlide({
   height,
+  isVisible,
   onAdFailedToLoad,
   placement,
   screenWidth,
@@ -43,6 +50,15 @@ export function HeroAdSlide({
     return null;
   }
   if (!bannerModule || drawerOpen) return null;
+  if (!isVisible) {
+    return (
+      <View
+        accessibilityLabel="Sponsored advertisement"
+        style={[styles.slide, { width: screenWidth, height }]}
+        testID="hero-ad-slide"
+      />
+    );
+  }
   const { BannerAd, BannerAdSize } = bannerModule;
 
   const handlePaid = (event: PaidEvent) => {

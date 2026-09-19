@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { act, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import * as placements from '@/config/mobile-ad-placements';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { getTemplateConfig } from '@/lib/templates';
@@ -199,6 +199,40 @@ describe('Hero trailing ad slide', () => {
     process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
   });
 
+  it('withholds the native banner until the ad slide is viewable', () => {
+    // Regression: the list eagerly renders its initial batch, so the
+    // second slide's banner must not request while offscreen.
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
+    const list = screen.getByTestId('hero-carousel-list');
+
+    expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
+    act(() => {
+      fireEvent(list, 'onViewableItemsChanged', {
+        changed: [],
+        viewableItems: [{ index: 1, isViewable: true, item: { kind: 'x' } }],
+      });
+    });
+    expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
+    act(() => {
+      fireEvent(list, 'onViewableItemsChanged', {
+        changed: [],
+        viewableItems: [
+          { index: 1, isViewable: true, item: { kind: 'hero-ad-slide' } },
+        ],
+      });
+    });
+    expect(screen.UNSAFE_getByType('BannerAd' as never)).toBeTruthy();
+    act(() => {
+      fireEvent(list, 'onViewableItemsChanged', {
+        changed: [],
+        viewableItems: [],
+      });
+    });
+    expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
+  });
+
   it('renders no ad slide without a placement', () => {
     process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
     renderCarousel();
@@ -250,6 +284,18 @@ describe('Hero trailing ad slide', () => {
     // sponsored slide so autoplay never rotates onto a blank hero page.
     process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
     renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
+    act(() => {
+      fireEvent(
+        screen.getByTestId('hero-carousel-list'),
+        'onViewableItemsChanged',
+        {
+          changed: [],
+          viewableItems: [
+            { index: 1, isViewable: true, item: { kind: 'hero-ad-slide' } },
+          ],
+        }
+      );
+    });
 
     expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
     const banner = screen.UNSAFE_getByType('BannerAd' as never);

@@ -29,6 +29,7 @@ export function OrderSuccessView({
   paymentMethod,
   reference,
   isDocumentLoading = false,
+  isPermissionFlowActive = false,
   isReceiptPreviewActive = false,
   showPermissionModal,
 }: OrderSuccessViewProps) {
@@ -273,10 +274,13 @@ export function OrderSuccessView({
                   </Text>
                 </Pressable>
               </View>
-              {/* The permission modal and the receipt preview each cover
-                  this screen; unmount the slot while either is visible so
-                  no obscured delivery is requested or attributed. */}
-              {showPermissionModal || isReceiptPreviewActive ? null : (
+              {/* The permission modal, the native system prompt behind it,
+                  and the receipt preview each cover this screen; unmount
+                  the slot while any of them is active so no obscured
+                  delivery is requested or attributed. */}
+              {showPermissionModal ||
+              isPermissionFlowActive ||
+              isReceiptPreviewActive ? null : (
                 <AdSlot placement="ORDER_SUCCESS_BANNER" />
               )}
             </View>

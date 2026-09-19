@@ -52,4 +52,26 @@ describe('applicablePriceKobo', () => {
       })
     ).toThrow(RangeError);
   });
+
+  it('rejects an offer price without an expiry instead of silently dropping it', () => {
+    // Arrange & Act & Assert
+    expect(() =>
+      applicablePriceKobo({
+        ...base,
+        now: new Date('2026-09-01T00:00:00.000Z'),
+        protectedOfferPriceKobo: 9_000_000,
+      })
+    ).toThrow(RangeError);
+  });
+
+  it('rejects an offer expiry without a price instead of silently dropping it', () => {
+    // Arrange & Act & Assert
+    expect(() =>
+      applicablePriceKobo({
+        ...base,
+        now: new Date('2026-09-01T00:00:00.000Z'),
+        protectedOfferExpiresAt: new Date('2026-09-10T00:00:00.000Z'),
+      })
+    ).toThrow(RangeError);
+  });
 });

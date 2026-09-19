@@ -10,15 +10,13 @@ import {
   isQuizDifficulty,
   type QuizDraftConfiguration,
 } from './quiz-admin-actions';
+import { resolveQuizAuthoringClosesAt } from './quiz-authoring-close-preview';
+import { isQuizAuthoringWindowAllowed } from './quiz-authoring-window-allowed';
 import { QuizPlanSummary } from './quiz-plan-summary';
 import { QuizPrizeProductPicker } from './quiz-prize-product-picker';
 import { QuizTopicInput } from './quiz-topic-input';
-import {
-  isQuizAuthoringWindowAllowed,
-  resolveQuizAuthoringClosesAt,
-  useQuizAuthoringSchedule,
-  useQuizAuthoringWindowSync,
-} from './use-quiz-authoring-window-sync';
+import { useQuizAuthoringSchedule } from './use-quiz-authoring-schedule';
+import { useQuizAuthoringWindowSync } from './use-quiz-authoring-window-sync';
 
 export function QuizAuthoringForm({
   disabled,

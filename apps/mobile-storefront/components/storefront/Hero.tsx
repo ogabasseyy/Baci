@@ -1,7 +1,7 @@
 /** Multi-tenant hero carousel with parallax, carousel, and standard variants. */
 import type { Href } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useWindowDimensions, View, type ViewToken } from 'react-native';
 import Animated, {
   useAnimatedScrollHandler,
   useSharedValue,
@@ -62,6 +62,22 @@ export function Hero({
   const scrollX = useSharedValue(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<Animated.FlatList<HeroRenderItem>>(null);
+  // The list eagerly renders its initial batch, so constructing the native
+  // banner on mount would request/refresh while the sponsored slide is
+  // offscreen. Mount it only while its item is actually viewable.
+  const [isAdVisible, setIsAdVisible] = useState(false);
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
+  const handleViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      setIsAdVisible(
+        viewableItems.some(
+          (entry) =>
+            entry.isViewable && isHeroAdSlide(entry.item as HeroRenderItem)
+        )
+      );
+    },
+    []
+  );
 
   // A missing or malformed placement must fail closed: the registry throws
   // for unconfigured production IDs, and that must never take down the home
@@ -125,6 +141,7 @@ export function Hero({
       return (
         <HeroAdSlide
           height={getHeroHeight()}
+          isVisible={isAdVisible}
           onAdFailedToLoad={() => setFailedPlacement(trailingAdPlacement)}
           placement={trailingAdPlacement}
           screenWidth={screenWidth}
@@ -170,7 +187,11 @@ export function Hero({
           index,
         })}
         data={renderSlides}
+        extraData={isAdVisible}
+        onViewableItemsChanged={handleViewableItemsChanged}
         renderItem={renderSlide}
+        testID="hero-carousel-list"
+        viewabilityConfig={viewabilityConfig.current}
         keyExtractor={(_, index) => index.toString()}
         horizontal
         pagingEnabled

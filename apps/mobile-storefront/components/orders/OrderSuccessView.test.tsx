@@ -209,6 +209,25 @@ describe('OrderSuccessView', () => {
     expect(screen.queryByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeNull();
   });
 
+  it('unmounts the banner while the native permission prompt is in flight', () => {
+    // Regression: granting the soft ask closes the modal before the native
+    // system prompt resolves; remounting here loads the banner underneath
+    // that prompt where the shopper cannot see or tap it.
+    const { rerender } = render(
+      <OrderSuccessView {...createProps()} isPermissionFlowActive={false} />
+    );
+    expect(screen.getByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeTruthy();
+
+    rerender(
+      <OrderSuccessView
+        {...createProps()}
+        isPermissionFlowActive={true}
+        showPermissionModal={false}
+      />
+    );
+    expect(screen.queryByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeNull();
+  });
+
   it('unmounts the banner while the receipt preview is active', () => {
     // Regression: an obscured ORDER_SUCCESS_BANNER must not load or report
     // impressions behind the full-screen receipt preview.

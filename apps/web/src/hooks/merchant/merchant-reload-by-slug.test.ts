@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadMerchantBySlug } from './merchant-slug-loader';
+import { reloadMerchantBySlug } from './merchant-reload-by-slug';
 import { fetchMerchantBySlug, fetchPrimaryDomain } from './queries';
 
 vi.mock('./queries', () => ({
@@ -7,7 +7,7 @@ vi.mock('./queries', () => ({
   fetchPrimaryDomain: vi.fn(),
 }));
 
-describe('merchant-slug-loader', () => {
+describe('merchant-reload-by-slug', () => {
   const setMerchant = vi.fn();
   const setLoading = vi.fn();
   const supabase = {} as never;
@@ -16,17 +16,17 @@ describe('merchant-slug-loader', () => {
     vi.clearAllMocks();
   });
 
-  it('loads the merchant and merges the primary domain', async () => {
+  it('reloads the merchant and settles loading', async () => {
     vi.mocked(fetchMerchantBySlug).mockResolvedValue({
       id: 'merchant-1',
       slug: 'acme',
     } as never);
     vi.mocked(fetchPrimaryDomain).mockResolvedValue('acme.com');
+    const getSupabase = vi.fn(async () => supabase);
 
-    await loadMerchantBySlug({
-      supabase,
+    await reloadMerchantBySlug({
+      getSupabase,
       slug: 'acme',
-      isCancelled: () => false,
       setMerchant,
       setLoading,
     });
@@ -37,35 +37,32 @@ describe('merchant-slug-loader', () => {
     expect(setLoading).toHaveBeenCalledWith(false);
   });
 
-  it('clears the merchant and settles loading when the fetch fails', async () => {
+  it('settles loading when the reload fetch fails', async () => {
     vi.mocked(fetchMerchantBySlug).mockRejectedValue(new Error('db down'));
+    const getSupabase = vi.fn(async () => supabase);
 
-    await loadMerchantBySlug({
-      supabase,
+    await reloadMerchantBySlug({
+      getSupabase,
       slug: 'acme',
-      isCancelled: () => false,
-      setMerchant,
-      setLoading,
-    });
-
-    expect(setMerchant).toHaveBeenCalledWith(null);
-    expect(setLoading).toHaveBeenCalledWith(false);
-  });
-
-  it('applies nothing after cancellation', async () => {
-    vi.mocked(fetchMerchantBySlug).mockResolvedValue({
-      id: 'merchant-1',
-    } as never);
-
-    await loadMerchantBySlug({
-      supabase,
-      slug: 'acme',
-      isCancelled: () => true,
       setMerchant,
       setLoading,
     });
 
     expect(setMerchant).not.toHaveBeenCalled();
-    expect(setLoading).not.toHaveBeenCalled();
+    expect(setLoading).toHaveBeenCalledWith(false);
+  });
+
+  it('settles loading when the lazy client fails to load', async () => {
+    const getSupabase = vi.fn().mockRejectedValue(new Error('chunk failed'));
+
+    await reloadMerchantBySlug({
+      getSupabase,
+      slug: 'acme',
+      setMerchant,
+      setLoading,
+    });
+
+    expect(fetchMerchantBySlug).not.toHaveBeenCalled();
+    expect(setLoading).toHaveBeenCalledWith(false);
   });
 });

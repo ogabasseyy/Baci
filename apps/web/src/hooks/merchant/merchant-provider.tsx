@@ -7,10 +7,8 @@ import { permissionGrantsAccess } from '@/lib/permission-grant';
 import { defaultStaffAccess } from './constants';
 import { fetchDashboardMerchantViaApi } from './fetch-dashboard-merchant-via-api';
 import { MerchantContext } from './merchant-context';
-import {
-  loadMerchantBySlug,
-  reloadMerchantBySlug,
-} from './merchant-slug-loader';
+import { reloadMerchantBySlug } from './merchant-reload-by-slug';
+import { loadMerchantBySlug } from './merchant-slug-loader';
 import { getSupabaseClient } from './merchant-supabase-client';
 import { getDemoMerchant } from './mock-data';
 import type {
@@ -178,7 +176,13 @@ export const MerchantProvider = ({
         logger.error({
           message: `Failed to load Supabase client: ${(error as Error).message}`,
         });
-        if (!cancelled) setLoading(false);
+        // A rejected client on a slug transition must not strand the
+        // previous merchant under the new slug: clear it exactly as the
+        // downstream loader does on fetch failure.
+        if (!cancelled) {
+          setMerchant(null);
+          setLoading(false);
+        }
       });
 
       return () => {

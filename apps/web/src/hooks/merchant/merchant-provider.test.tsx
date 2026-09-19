@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useMerchant } from '@/hooks/merchant/use-merchant';
@@ -62,6 +62,39 @@ describe('MerchantProvider slug loading', () => {
       expect(result.current.loading).toBe(false);
     });
     expect(result.current.merchant).toBeNull();
+    expect(fetchMerchantBySlug).not.toHaveBeenCalled();
+  });
+
+  it('clears the previous merchant when a slug transition meets a rejected client', async () => {
+    // Regression test: on slug change the provider intentionally keeps the
+    // old merchant while refetching — but when the lazy client chunk
+    // itself rejects, keeping it would render the old merchant (and its
+    // basePath) under the new slug with loading already false.
+    function Probe() {
+      const { merchant, loading } = useMerchant();
+      return <div>{loading ? 'loading' : (merchant?.id ?? 'none')}</div>;
+    }
+
+    const { rerender } = render(
+      <MerchantProvider slug="acme">
+        <Probe />
+      </MerchantProvider>
+    );
+    await waitFor(() => {
+      expect(screen.getByText('merchant-1')).toBeInTheDocument();
+    });
+
+    vi.mocked(getSupabaseClient).mockRejectedValue(new Error('chunk failed'));
+    vi.mocked(fetchMerchantBySlug).mockClear();
+    rerender(
+      <MerchantProvider slug="other">
+        <Probe />
+      </MerchantProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('none')).toBeInTheDocument();
+    });
     expect(fetchMerchantBySlug).not.toHaveBeenCalled();
   });
 });

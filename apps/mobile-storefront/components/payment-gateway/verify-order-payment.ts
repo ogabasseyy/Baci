@@ -70,34 +70,60 @@ async function fetchWithTimeout(
   }
 }
 
-async function checkTrackedOrderPaid(
+interface TrackedOrderRead {
+  order: TrackOrderData['order'];
+  customer: TrackOrderData['customer'] | null;
+  items: TrackOrderData['items'];
+}
+
+async function readTrackedOrder(
   orderId: string,
   trackingToken: string
-): Promise<OrderPaymentVerification> {
+): Promise<TrackedOrderRead | null> {
   try {
     const response = await fetchWithTimeout(
       `${TRACK_ORDER_API_BASE_URL}/api/storefront/orders/track-order?token=${encodeURIComponent(trackingToken)}&merchant_slug=${encodeURIComponent(TRACK_ORDER_MERCHANT_SLUG)}`,
       {}
     );
     if (!response.ok) {
-      return { paid: false };
+      return null;
     }
     const body: unknown = await response.json();
     const order = toTrackedOrder(body);
-    if (!order || order.id !== orderId || order.payment_status !== 'paid') {
-      return { paid: false };
+    if (!order || order.id !== orderId) {
+      return null;
     }
     return {
-      paid: true,
-      ...toTrackedCompletionAttribution(
-        order,
-        toTrackedCustomer(body),
-        toTrackedItems(body)
-      ),
+      order,
+      customer: toTrackedCustomer(body),
+      items: toTrackedItems(body),
     };
   } catch {
+    return null;
+  }
+}
+
+async function checkTrackedOrderPaid(
+  orderId: string,
+  trackingToken: string
+): Promise<
+  OrderPaymentVerification & { pending?: TrackedCompletionAttribution }
+> {
+  const read = await readTrackedOrder(orderId, trackingToken);
+  if (!read) {
     return { paid: false };
   }
+  const attribution = toTrackedCompletionAttribution(
+    read.order,
+    read.customer,
+    read.items
+  );
+  if (read.order.payment_status !== 'paid') {
+    // Unpaid now, but the projection already carries the checkout identity
+    // and breakdown the finalized path below would otherwise lose.
+    return { paid: false, pending: attribution };
+  }
+  return { paid: true, ...attribution };
 }
 
 interface VerifyReferenceResponse {
@@ -172,14 +198,27 @@ export async function verifyOrderPaymentForCompletion({
   if (!orderId) {
     return { paid: false };
   }
+  let pendingAttribution: TrackedCompletionAttribution | undefined;
   if (trackingToken) {
     const tracked = await checkTrackedOrderPaid(orderId, trackingToken);
     if (tracked.paid) {
       return tracked;
     }
+    pendingAttribution = tracked.pending;
   }
   if (reference) {
-    return checkReferenceSettled(orderId, reference);
+    const settled = await checkReferenceSettled(orderId, reference);
+    // The reference finalized payment after the lookup saw pending: retain
+    // the lookup's identity and breakdown so the durable claim is consumed
+    // whole. The verify total wins when finite (same order, same total).
+    if (settled.paid && pendingAttribution) {
+      return {
+        paid: true,
+        ...pendingAttribution,
+        total: settled.total ?? pendingAttribution.total,
+      };
+    }
+    return settled;
   }
   return { paid: false };
 }

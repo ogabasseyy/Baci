@@ -217,7 +217,15 @@ export function useCheckoutSubmit({
       const { order } = orderResponse;
       const orderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
-      if (selectedPayment === 'invoice') {
+      // A fully covered invoice selection comes back paid with nothing due:
+      // claiming invoice_generated would book a proforma conversion for an
+      // order that routes straight to paid completion. Only unpaid orders
+      // with a positive amount due generate a proforma.
+      const invoiceAmountDue = Number(orderResponse.amountDueToGateway);
+      const isUnpaidInvoiceOrder =
+        order.payment_status !== 'paid' &&
+        (!Number.isFinite(invoiceAmountDue) || invoiceAmountDue > 0);
+      if (selectedPayment === 'invoice' && isUnpaidInvoiceOrder) {
         // Chain behind the order-created emission so the funnel keeps
         // causal order even though creation is recorded fire-and-forget.
         await serializeAfterOrderCreated(order.id, async () => {

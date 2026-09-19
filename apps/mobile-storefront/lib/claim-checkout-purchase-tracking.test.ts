@@ -174,6 +174,64 @@ it('leaves no phantom claim when a timed-out write lands late', async () => {
   }
 });
 
+it('reconciles newer claims when a timed-out write lands after them', async () => {
+  jest.useFakeTimers();
+  try {
+    // The first write hangs until released manually: the caller times out,
+    // the queue is released, a newer claim succeeds — and only then does
+    // the stale write land, clobbering the newer envelope.
+    let releaseStaleWrite!: () => void;
+    let writeCalls = 0;
+    mockSetItem.mockImplementation((key: string, value: string) => {
+      writeCalls += 1;
+      if (writeCalls === 1) {
+        return new Promise<void>((resolve) => {
+          releaseStaleWrite = () => {
+            storage.set(key, value);
+            resolve();
+          };
+        });
+      }
+      storage.set(key, value);
+      return Promise.resolve();
+    });
+    const first = claimCheckoutPurchaseTracking('order-stale');
+    await jest.advanceTimersByTimeAsync(3000);
+    await expect(first).resolves.toBe(false);
+
+    // The maximum queue hold starts when the timed-out caller settles, so
+    // the release lands ~13s in: advance past it for the newer claim.
+    await jest.advanceTimersByTimeAsync(11000);
+    await expect(claimCheckoutPurchaseTracking('order-newer')).resolves.toBe(
+      true
+    );
+    expect(
+      parseStoredClaimsForTest(
+        storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY)
+      )
+    ).toContain('order-newer');
+
+    // The stale write lands after the newer claim: the rollback must drop
+    // the phantom original claim while restoring the newer one, so neither
+    // event can emit twice.
+    releaseStaleWrite();
+    await jest.advanceTimersByTimeAsync(1000);
+    const stored = parseStoredClaimsForTest(
+      storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY)
+    );
+    expect(stored).toContain('order-newer');
+    expect(stored).not.toContain('order-stale');
+    await expect(claimCheckoutPurchaseTracking('order-newer')).resolves.toBe(
+      false
+    );
+  } finally {
+    jest.useRealTimers();
+    mockSetItem.mockImplementation(async (key: string, value: string) => {
+      storage.set(key, value);
+    });
+  }
+});
+
 it('releases the queue when a write never settles', async () => {
   jest.useFakeTimers();
   try {

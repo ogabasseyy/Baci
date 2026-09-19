@@ -79,6 +79,66 @@ describe('verifyOrderPaymentForCompletion', () => {
     ).resolves.toEqual({ paid: true, total: 5000 });
   });
 
+  it('retains the pending lookup attribution after reference finalization', async () => {
+    const pendingGuestOrder = {
+      order: {
+        id: 'order-1',
+        order_number: 'ORD-1',
+        payment_status: 'pending',
+        total: 5750,
+        subtotal: 5000,
+        shipping_cost: 500,
+        discount_amount: 0,
+      },
+      customer: {
+        email: 'guest@example.com',
+        phone: '+2348123456789',
+      },
+      items: [
+        {
+          product_id: 'item-1',
+          product_name: 'Test Product',
+          quantity: 1,
+          unit_price: 5000,
+        },
+      ],
+    };
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(
+            JSON.stringify({ ...completedVerification, orderTotal: 5750 }),
+            { status: 200 }
+          )
+        : new Response(JSON.stringify(pendingGuestOrder), { status: 200 })
+    );
+
+    // The finalized conversion must keep the guest identity, line items,
+    // and nonzero shipping/tax the pending lookup already returned.
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({
+      paid: true,
+      customerEmail: 'guest@example.com',
+      customerPhone: '+2348123456789',
+      items: [
+        {
+          product_id: 'item-1',
+          quantity: 1,
+          price: 5000,
+          name: 'Test Product',
+        },
+      ],
+      shipping: 500,
+      subtotal: 5000,
+      tax: 250,
+      total: 5750,
+    });
+  });
+
   it('rejects a matching-reference redirect whose verification is pending', async () => {
     mockFetch((url: string) =>
       String(url).includes('/api/payments/verify')

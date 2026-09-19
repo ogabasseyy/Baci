@@ -14,6 +14,14 @@ export async function trackCreatedOrderOnce(
   return await serializeAfterOrderCreated(order.order.id, async () => {
     if (!(await claimCheckoutPurchaseTracking(order.order.id))) return;
 
+    // The server is authoritative when wallet/savings/quiz-voucher coverage
+    // changes the finalized method: attribute creation to it so creation and
+    // completion share one funnel (mirrors the web order_created fix).
+    const finalizedPaymentMethod =
+      typeof order.order.payment_method === 'string' &&
+      order.order.payment_method.trim() !== ''
+        ? order.order.payment_method
+        : undefined;
     trackCheckoutOrderCreated({
       itemCount: request.items.reduce(
         (count, item) => count + item.quantity,
@@ -22,7 +30,8 @@ export async function trackCreatedOrderOnce(
       orderId: order.order.id,
       orderNumber: order.order.order_number ?? 'N/A',
       durationMs: Date.now() - startTime,
-      paymentMethod: paymentMethod || request.payment_method,
+      paymentMethod:
+        finalizedPaymentMethod ?? paymentMethod ?? request.payment_method,
       paymentStatus: order.order.payment_status,
       shipping: request.shipping_fee,
       subtotal: request.subtotal,

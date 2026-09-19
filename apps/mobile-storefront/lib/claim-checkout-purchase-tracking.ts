@@ -82,6 +82,13 @@ function serializeTrackedOrderIds(claims: string[]): string {
 // *settlement*, not on the caller's timeout: a write that started must land
 // (or be rolled back) before the next claim reads, or the late write would
 // clobber claims written after the queue was released.
+// Claims this process successfully granted. A timed-out write that lands
+// late overwrites the envelope with its stale value, erasing claims granted
+// after the queue was released; the compensating rollback reconciles those
+// back instead of only removing the late claim. Union is idempotent, so
+// older grants kept in the stale value are unaffected.
+const grantedClaims = new Set<string>();
+
 let claimChain: Promise<void> = Promise.resolve();
 
 const CLAIM_STORAGE_TIMEOUT_MS = 3000;
@@ -112,17 +119,32 @@ async function readStoredClaims(): Promise<string[] | typeof STORAGE_TIMEOUT> {
 // A write that lands after its caller already timed out must not leave a
 // phantom claim: the caller suppressed the analytics event, so a replay
 // would see the persisted claim and skip the event forever. Remove exactly
-// the late claim (best effort, bounded waits, failures logged).
+// the late claim (best effort, bounded waits, failures logged) — but the
+// stale write also overwrites the envelope, erasing claims granted after
+// the queue was released. Reconcile those back from the in-process grant
+// set, or the erased events would emit again on replay.
 async function removeClaimAfterLateWrite(claim: string): Promise<void> {
   try {
     const stored = await readStoredClaims();
-    if (stored === STORAGE_TIMEOUT || !stored.includes(claim)) {
+    if (stored === STORAGE_TIMEOUT) {
+      return;
+    }
+    const reconciled = new Set(stored.filter((entry) => entry !== claim));
+    for (const granted of grantedClaims) {
+      reconciled.add(granted);
+    }
+    // Nothing to repair: the late claim never landed and no newer grants
+    // exist. Skip the write so a healthy store is never rewritten here.
+    if (
+      reconciled.size === stored.length &&
+      stored.every((entry) => reconciled.has(entry))
+    ) {
       return;
     }
     const written = await Promise.race([
       AsyncStorage.setItem(
         CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
-        serializeTrackedOrderIds(stored.filter((entry) => entry !== claim))
+        serializeTrackedOrderIds([...reconciled])
       ).then(() => true as const),
       storageTimeout(),
     ]);
@@ -202,6 +224,7 @@ async function performClaim(
         ),
       };
     }
+    grantedClaims.add(claim);
     return { claimed: true, settled };
   } catch (error) {
     log.error('Failed to persist checkout purchase tracking claims:', error);

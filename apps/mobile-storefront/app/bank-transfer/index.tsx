@@ -68,6 +68,16 @@ export default function BankTransferScreen() {
     accountName,
     trackingToken,
   } = routeData ?? {};
+  // Checkout attribution snapshot threaded through the wallet-funded route
+  // (see checkout-wallet-funded-bank-transfer): the completion below wins
+  // the durable claim, and the success screen cannot enrich it afterwards.
+  const {
+    customerEmail: routeCustomerEmail,
+    customerPhone: routeCustomerPhone,
+    subtotal: routeSubtotal,
+    shipping: routeShipping,
+    tax: routeTax,
+  } = walletRouteData ?? {};
   const intentId = walletRouteData?.intentId;
   const merchantId = walletRouteData?.merchantId;
   const merchantSlug = walletRouteData?.merchantSlug;
@@ -136,11 +146,16 @@ export default function BankTransferScreen() {
         // Snapshot the cart synchronously: the claim await below yields,
         // and the success route may clear the cart before it resolves.
         void trackCheckoutPaymentCompletedOnce({
+          ...(routeCustomerEmail && { customerEmail: routeCustomerEmail }),
+          ...(routeCustomerPhone && { customerPhone: routeCustomerPhone }),
           items: useCartStore.getState().items,
           orderId,
           orderNumber: orderNumber || orderId,
           paymentMethod: 'bank_transfer',
           reference: intent.id,
+          ...(routeShipping !== undefined && { shipping: routeShipping }),
+          ...(routeSubtotal !== undefined && { subtotal: routeSubtotal }),
+          ...(routeTax !== undefined && { tax: routeTax }),
           value: fundedTotal,
         });
       }

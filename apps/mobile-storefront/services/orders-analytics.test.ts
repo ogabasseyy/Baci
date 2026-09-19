@@ -85,6 +85,20 @@ describe('trackCreatedOrderOnce', () => {
     );
   });
 
+  it('attributes creation to the server-finalized method on full coverage', async () => {
+    mockClaim.mockResolvedValue(true);
+    const order = buildOrder();
+    (order.order as { payment_method: string }).payment_method = 'wallet';
+
+    await trackCreatedOrderOnce(order, buildRequest(), Date.now(), 'paystack');
+
+    expect(mockTrack).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentMethod: 'wallet',
+      })
+    );
+  });
+
   it('skips emission for a replayed order whose claim is taken', async () => {
     mockClaim.mockResolvedValue(false);
 

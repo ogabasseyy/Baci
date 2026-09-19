@@ -119,6 +119,7 @@ export async function finalizeCheckoutPayment({
     if (isBankTransfer && shouldCreateWalletFundedBankTransferOrder) {
       const startedWalletFundedBankTransfer =
         await startWalletFundedBankTransferCheckout({
+          attribution,
           isOrderInFlight,
           orderId: order.id,
           orderNumber,

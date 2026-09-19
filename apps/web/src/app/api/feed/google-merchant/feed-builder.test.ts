@@ -17,6 +17,7 @@ function product(overrides: Partial<FeedProduct> = {}): FeedProduct {
     price: 100,
     stock: 10,
     manage_stock: true,
+    condition: 'new',
     ...overrides,
   };
 }
@@ -905,7 +906,7 @@ describe('generateGoogleMerchantFeed — conditioned variants', () => {
       ],
       merchant({ gmc_variants_enabled: true }),
       BASE_URL,
-      defaultManifest
+      { 'prod-1': [manifestEntry({ variant_id: 'variant-black-512' })] }
     );
     const itemXml = extractItemXml(xml, 'variant-black-512');
 
@@ -1175,7 +1176,7 @@ describe('generateGoogleMerchantFeed — conditioned variants', () => {
     expect(silver256Item).not.toContain('product-main.jpg');
   });
 
-  it('falls back to product-level images when a variant has no scoped image set', () => {
+  it('does not substitute an unscoped image for a colour variant', () => {
     const xml = generateGoogleMerchantFeed(
       [
         product({
@@ -1198,9 +1199,7 @@ describe('generateGoogleMerchantFeed — conditioned variants', () => {
     );
     const itemXml = extractItemXml(xml, 'variant-green-128');
 
-    expect(itemXml).toContain(
-      '<g:image_link>https://cdn.example.com/products/test.jpg</g:image_link>'
-    );
+    expect(itemXml).toBe('');
   });
 
   it('emits sale pricing for conditioned variants when compare_at_price is present', () => {
@@ -1213,6 +1212,7 @@ describe('generateGoogleMerchantFeed — conditioned variants', () => {
           variants: [
             {
               id: 'variant-open-box-sale',
+              compare_at_price: 700000,
               condition: 'open_box',
               price_override: 640000,
               stock_quantity: 1,
@@ -1282,7 +1282,7 @@ describe('generateGoogleMerchantFeed — conditioned variants', () => {
     expect(xml).not.toContain('<g:condition>uk_used</g:condition>');
   });
 
-  it('skips zero-priced conditioned variants and falls back to the conservative family row', () => {
+  it('skips zero-priced conditioned variants without inventing a purchasable family row', () => {
     const xml = generateGoogleMerchantFeed(
       [
         product({
@@ -1304,10 +1304,10 @@ describe('generateGoogleMerchantFeed — conditioned variants', () => {
       defaultManifest
     );
 
-    expect((xml.match(/<item>/g) || []).length).toBe(1);
-    expect(xml).toContain('<g:id>prod-1</g:id>');
+    expect((xml.match(/<item>/g) || []).length).toBe(0);
+    expect(xml).not.toContain('<g:id>prod-1</g:id>');
     expect(xml).not.toContain('<g:id>variant-zero-priced</g:id>');
-    expect(xml).toContain('<g:price>700000.00 NGN</g:price>');
+    expect(xml).not.toContain('<g:price>700000.00 NGN</g:price>');
   });
 
   it('falls back to one conservative family row when conditioned variants exist but the rollout flag is disabled', () => {

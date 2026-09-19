@@ -33,6 +33,7 @@ import {
   verifyCdnImageWithTransformFallback,
   verifyRemoteImage,
 } from './lib/gmc-feed-verifier';
+import { appendOfferProductImages } from './lib/offer-product-images';
 
 // ---------- Config ----------
 
@@ -158,14 +159,19 @@ async function main() {
 
   // 2. Load active products (paginated — Supabase defaults to 1000 row limit)
   const PAGE_SIZE = 1000;
-  const products: { id: string; images: unknown }[] = [];
+  const products: {
+    id: string;
+    images: unknown;
+    condition?: string | null;
+    has_condition_offers?: boolean | null;
+  }[] = [];
   let offset = 0;
   let hasMore = true;
 
   while (hasMore) {
     const { data, error: productsError } = await supabase
       .from('products')
-      .select('id, images')
+      .select('id, images, condition, has_condition_offers')
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .range(offset, offset + PAGE_SIZE - 1);
@@ -191,6 +197,27 @@ async function main() {
       const classified = classifyFeedImageCandidate(candidate, storefrontBaseUrl);
       classifiedRows.push({ candidate, classified });
     }
+  }
+
+  // Condition offers can own imagery that is not duplicated on the parent
+  // product. Merge those URLs (merchant-scoped) into the same verified
+  // manifest so feed rows can resolve offer-specific images.
+  try {
+    classifiedRows.push(
+      ...(await appendOfferProductImages({
+        supabase,
+        products,
+        merchantId,
+        storefrontBaseUrl,
+        productRows: classifiedRows,
+      }))
+    );
+  } catch (err) {
+    console.error(
+      'Failed to fetch product offer images:',
+      err instanceof Error ? err.message : String(err)
+    );
+    process.exit(1);
   }
 
   console.log(`\nClassified ${classifiedRows.length} image candidates`);

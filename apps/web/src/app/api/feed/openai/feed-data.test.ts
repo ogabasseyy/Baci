@@ -20,6 +20,8 @@ interface ProductFixture {
   stock: number;
   stock_quantity: number;
   manage_stock: boolean;
+  condition?: string | null;
+  has_condition_offers?: boolean | null;
   average_rating?: number | null;
   review_count?: number | null;
   canonical_url?: string | null;
@@ -44,6 +46,14 @@ interface ReviewFixture {
   rating: number | string | null;
 }
 
+interface OfferFixture {
+  id: string;
+  product_id: string;
+  condition: string;
+  price: number;
+  images?: unknown;
+}
+
 interface ManifestFixture {
   product_id: string;
   variant_id?: string | null;
@@ -60,6 +70,7 @@ let nullCreatedAtProductsResult: {
   error: unknown;
 };
 let manifestResult: { data: ManifestFixture[] | null; error: unknown };
+let offersResult: { data: OfferFixture[] | null; error: unknown };
 let reviewsResult: {
   count?: number | null;
   data: ReviewFixture[] | null;
@@ -151,6 +162,19 @@ function createMockSupabase() {
               range: (from: number, to: number) => mockReviewsRange(from, to),
             };
             return query;
+          }),
+        };
+      }
+      if (table === 'product_offers') {
+        return {
+          select: () => ({
+            in: () => ({
+              eq: () => ({
+                order: () => ({
+                  order: () => Promise.resolve(offersResult),
+                }),
+              }),
+            }),
           }),
         };
       }
@@ -258,6 +282,7 @@ beforeEach(() => {
     error: null,
   };
   reviewsResult = { data: [], error: null };
+  offersResult = { data: [], error: null };
   reviewPageResults = [];
   mockManifestRange.mockImplementation(() => Promise.resolve(manifestResult));
   mockReviewsRange.mockImplementation(() =>
@@ -267,6 +292,102 @@ beforeEach(() => {
 });
 
 describe('getCachedOpenAIFeedData', () => {
+  it('attaches offers for products flagged with condition offers', async () => {
+    productsResult = {
+      data: [
+        {
+          id: 'prod-1',
+          name: 'Test Phone',
+          created_at: '2026-01-01T00:00:00.000Z',
+          description: 'A phone',
+          slug: 'test-phone',
+          price: 50000,
+          stock: 5,
+          stock_quantity: 5,
+          manage_stock: true,
+          has_condition_offers: true,
+          variants: [],
+        },
+      ],
+      error: null,
+    };
+    offersResult = {
+      data: [
+        {
+          id: 'offer-1',
+          product_id: 'prod-1',
+          condition: 'used',
+          price: 40000,
+          images: ['https://cdn.example.com/offer-used.jpg'],
+        },
+      ],
+      error: null,
+    };
+    const { getCachedOpenAIFeedData } = await import('./feed-data');
+    const result = await getCachedOpenAIFeedData('merchant-1');
+
+    expect(result.products).toHaveLength(1);
+    expect(result.products[0].offers).toEqual([
+      { images: ['https://cdn.example.com/offer-used.jpg'] },
+    ]);
+  });
+
+  it('drops non-emittable offers from image claims', async () => {
+    productsResult = {
+      data: [
+        {
+          id: 'prod-1',
+          name: 'Test Phone',
+          created_at: '2026-01-01T00:00:00.000Z',
+          description: 'A phone',
+          slug: 'test-phone',
+          price: 50000,
+          stock: 5,
+          stock_quantity: 5,
+          manage_stock: true,
+          condition: 'new',
+          has_condition_offers: true,
+          variants: [],
+        },
+      ],
+      error: null,
+    };
+    offersResult = {
+      data: [
+        {
+          id: 'offer-zero',
+          product_id: 'prod-1',
+          condition: 'used',
+          price: 0,
+          images: ['https://cdn.example.com/offer-zero.jpg'],
+        },
+        {
+          id: 'offer-same',
+          product_id: 'prod-1',
+          condition: 'new',
+          price: 40000,
+          images: ['https://cdn.example.com/offer-same.jpg'],
+        },
+        {
+          id: 'offer-good',
+          product_id: 'prod-1',
+          condition: 'used',
+          price: 40000,
+          images: ['https://cdn.example.com/offer-good.jpg'],
+        },
+      ],
+      error: null,
+    };
+    const { getCachedOpenAIFeedData } = await import('./feed-data');
+    const result = await getCachedOpenAIFeedData('merchant-1');
+
+    // Zero-price and same-condition offers render no rows, so they
+    // must not claim imagery either.
+    expect(result.products[0].offers).toEqual([
+      { images: ['https://cdn.example.com/offer-good.jpg'] },
+    ]);
+  });
+
   it('returns products with correct shape including manage_stock and variants', async () => {
     const { getCachedOpenAIFeedData } = await import('./feed-data');
     const result = await getCachedOpenAIFeedData('merchant-1');
@@ -315,6 +436,7 @@ describe('getCachedOpenAIFeedData', () => {
     expect(result.imageManifest?.['prod-1']).toEqual([
       {
         variant_id: null,
+        source_url: null,
         verified_url: 'https://cdn.example.com/manifest-front.jpg',
         verified_format: 'jpeg',
         status: 'verified',
@@ -323,6 +445,7 @@ describe('getCachedOpenAIFeedData', () => {
       },
       {
         variant_id: 'var-1',
+        source_url: null,
         verified_url: 'https://cdn.example.com/manifest-red.jpg',
         verified_format: 'jpeg',
         status: 'verified',

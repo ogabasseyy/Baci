@@ -74,6 +74,7 @@ describe('generateFacebookCatalogFeed', () => {
 
     expect(xml).toContain('<rss version="2.0"');
     expect(xml).toContain('<g:id>product-1</g:id>');
+    expect(xml).toContain('<g:item_group_id>product-1</g:item_group_id>');
     expect(xml).toContain('<g:title>Samsung Galaxy S26 Ultra</g:title>');
     expect(xml).toContain(
       '<g:description>Flagship phone &amp; charger bundle.</g:description>'
@@ -96,6 +97,31 @@ describe('generateFacebookCatalogFeed', () => {
     expect(xml).not.toContain('<image_link></image_link>');
   });
 
+  it('excludes offers that duplicate the parent condition', () => {
+    const xml = generateFacebookCatalogFeed(
+      [
+        {
+          ...baseProduct,
+          offers: [
+            {
+              id: 'offer-same',
+              condition: 'new',
+              price: 1_100_000,
+              stock_quantity: 2,
+            },
+          ],
+        },
+      ],
+      merchant,
+      'https://ogabassey.com',
+      imageManifest
+    );
+
+    expect(xml).not.toContain('offer-same');
+    const itemCount = (xml.match(/<item>/g) || []).length;
+    expect(itemCount).toBe(1);
+  });
+
   it('skips products without verified primary images', () => {
     const xml = generateFacebookCatalogFeed(
       [baseProduct],
@@ -108,7 +134,7 @@ describe('generateFacebookCatalogFeed', () => {
     expect(xml).not.toContain('<g:id>product-1</g:id>');
   });
 
-  it('keeps product ids stable while using sku-matrix default variant price and stock', () => {
+  it('exports the SKU id and retains the parent as its group id', () => {
     const product: FeedProduct = {
       ...baseProduct,
       id: 'sku-product',
@@ -137,8 +163,8 @@ describe('generateFacebookCatalogFeed', () => {
       }
     );
 
-    expect(xml).toContain('<g:id>sku-product</g:id>');
-    expect(xml).not.toContain('<g:id>variant-used-256</g:id>');
+    expect(xml).toContain('<g:item_group_id>sku-product</g:item_group_id>');
+    expect(xml).toContain('<g:id>variant-used-256</g:id>');
     expect(xml).toContain('<g:availability>in stock</g:availability>');
     expect(xml).toContain('<g:price>850000.00 NGN</g:price>');
     expect(xml).toContain('<g:condition>used</g:condition>');

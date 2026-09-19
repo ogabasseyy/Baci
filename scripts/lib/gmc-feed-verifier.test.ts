@@ -1,12 +1,33 @@
 import { type Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DestinationLookupFn as DnsLookupFn } from './remote-destination-gate';
+
+// Keeps DNS hermetic while proving the default-forwarding contract: when a
+// caller omits lookupFn, the gate must receive undefined (so it falls back
+// to the production resolver) rather than a stale closure. The mock records
+// what was forwarded and substitutes a public documentation IP.
+const forwardedLookups: Array<DestinationLookupFn | undefined> = [];
+vi.mock('./remote-destination-gate', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('./remote-destination-gate')>();
+  const publicLookup: DestinationLookupFn = async () => [
+    { address: '93.184.216.1', family: 4 },
+  ];
+  return {
+    ...actual,
+    resolvePinnedDestination: (url: string, lookupFn?: DestinationLookupFn) => {
+      forwardedLookups.push(lookupFn);
+      return actual.resolvePinnedDestination(url, lookupFn ?? publicLookup);
+    },
+  };
+});
 import {
   type FetchFn,
   buildCdnTransformImageUrl,
   getClassifiedImageVerificationUrl,
-  verifyCdnImage,
   verifyCdnImageWithTransformFallback,
   verifyRemoteImage,
 } from './gmc-feed-verifier';
+import { verifyCdnImage } from './cdn-image-verifier';
 
 /** Builds a partial Response matching only what verifyRemoteImage inspects. */
 function fakeResponse(props: {
@@ -17,160 +38,11 @@ function fakeResponse(props: {
   return props as unknown as Response;
 }
 
-// ---------- verifyCdnImage ----------
-describe('verifyCdnImage', () => {
-  const cdnBasePath = '/home/bassey/baci-cdn/public';
+/** Resolves every hostname to a public documentation IP. */
+const publicLookup: DnsLookupFn = async () => [
+  { address: '93.184.216.1', family: 4 },
+];
 
-  let existsSyncMock: Mock<(path: string) => boolean>;
-
-  beforeEach(() => {
-    existsSyncMock = vi.fn<(path: string) => boolean>();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('marks CDN JPG as verified when file exists', () => {
-    existsSyncMock.mockReturnValue(true);
-    const result = verifyCdnImage(
-      'https://cdn.ogabassey.com/core-assets/products/phone.jpg',
-      cdnBasePath,
-      existsSyncMock
-    );
-    expect(result.status).toBe('verified');
-    expect(result.verified_url).toBe(
-      'https://cdn.ogabassey.com/core-assets/products/phone.jpg'
-    );
-    expect(result.verified_format).toBe('jpeg');
-    expect(existsSyncMock).toHaveBeenCalledWith(
-      '/home/bassey/baci-cdn/public/core-assets/products/phone.jpg'
-    );
-  });
-
-  it('marks CDN JPG as missing when file does not exist', () => {
-    existsSyncMock.mockReturnValue(false);
-    const result = verifyCdnImage(
-      'https://cdn.ogabassey.com/core-assets/products/phone.jpg',
-      cdnBasePath,
-      existsSyncMock
-    );
-    expect(result.status).toBe('missing');
-    expect(result.verified_url).toBeNull();
-    expect(result.failure_reason).toContain('not found');
-  });
-
-  it('marks CDN PNG as verified when file exists', () => {
-    existsSyncMock.mockReturnValue(true);
-    const result = verifyCdnImage(
-      'https://cdn.ogabassey.com/core-assets/products/tablet.png',
-      cdnBasePath,
-      existsSyncMock
-    );
-    expect(result.status).toBe('verified');
-    expect(result.verified_format).toBe('png');
-  });
-
-  it('marks CDN WebP as verified when file exists', () => {
-    existsSyncMock.mockReturnValue(true);
-    const result = verifyCdnImage(
-      'https://cdn.ogabassey.com/core-assets/products/photo.webp',
-      cdnBasePath,
-      existsSyncMock
-    );
-    expect(result.status).toBe('verified');
-    expect(result.verified_format).toBe('webp');
-  });
-
-  it('verifies AVIF by checking sibling .jpg — marks verified when JPG exists', () => {
-    existsSyncMock.mockReturnValue(true);
-    const result = verifyCdnImage(
-      'https://cdn.ogabassey.com/core-assets/products/phone.avif',
-      cdnBasePath,
-      existsSyncMock
-    );
-    expect(result.status).toBe('verified');
-    expect(result.verified_url).toBe(
-      'https://cdn.ogabassey.com/core-assets/products/phone.jpg'
-    );
-    expect(result.verified_format).toBe('jpeg');
-    expect(existsSyncMock).toHaveBeenCalledWith(
-      '/home/bassey/baci-cdn/public/core-assets/products/phone.jpg'
-    );
-  });
-
-  it('marks AVIF as pending_derivative when sibling .jpg does not exist', () => {
-    existsSyncMock.mockReturnValue(false);
-    const result = verifyCdnImage(
-      'https://cdn.ogabassey.com/core-assets/products/phone.avif',
-      cdnBasePath,
-      existsSyncMock
-    );
-    expect(result.status).toBe('pending_derivative');
-    expect(result.verified_url).toBe(
-      'https://cdn.ogabassey.com/core-assets/products/phone.jpg'
-    );
-    expect(result.verified_format).toBe('jpeg');
-  });
-
-  it('handles AVIF CDN URL with query string — checks JPG path, drops query from URL', () => {
-    existsSyncMock.mockReturnValue(true);
-    const result = verifyCdnImage(
-      'https://cdn.ogabassey.com/core-assets/products/phone.avif?v=1',
-      cdnBasePath,
-      existsSyncMock
-    );
-    expect(result.status).toBe('verified');
-    expect(result.verified_url).toBe(
-      'https://cdn.ogabassey.com/core-assets/products/phone.jpg'
-    );
-    expect(result.verified_format).toBe('jpeg');
-    // Should check the filesystem path without query string
-    expect(existsSyncMock).toHaveBeenCalledWith(
-      '/home/bassey/baci-cdn/public/core-assets/products/phone.jpg'
-    );
-  });
-
-  it('returns invalid for malformed CDN URL', () => {
-    const result = verifyCdnImage(
-      'not-a-valid-url',
-      cdnBasePath,
-      existsSyncMock
-    );
-    expect(result.status).toBe('invalid');
-    expect(result.failure_reason).toContain('Invalid URL');
-    expect(existsSyncMock).not.toHaveBeenCalled();
-  });
-
-  it('normalizes path traversal attempts via URL parsing', () => {
-    // new URL() normalizes ../../ — the pathname becomes /etc/passwd
-    // which resolves to cdnBasePath/etc/passwd (within the CDN root)
-    existsSyncMock.mockReturnValue(false);
-    const result = verifyCdnImage(
-      'https://cdn.ogabassey.com/../../etc/passwd',
-      cdnBasePath,
-      existsSyncMock
-    );
-    // URL parser normalizes, so it's treated as a normal missing file
-    expect(result.status).toBe('missing');
-    expect(existsSyncMock).toHaveBeenCalledWith(
-      '/home/bassey/baci-cdn/public/etc/passwd'
-    );
-  });
-
-  it('handles nested CDN paths correctly', () => {
-    existsSyncMock.mockReturnValue(true);
-    const result = verifyCdnImage(
-      'https://cdn.ogabassey.com/core-assets/products/gaming/controller.jpg',
-      cdnBasePath,
-      existsSyncMock
-    );
-    expect(result.status).toBe('verified');
-    expect(existsSyncMock).toHaveBeenCalledWith(
-      '/home/bassey/baci-cdn/public/core-assets/products/gaming/controller.jpg'
-    );
-  });
-});
 
 // ---------- verifyCdnImageWithTransformFallback ----------
 describe('verifyCdnImageWithTransformFallback', () => {
@@ -205,7 +77,8 @@ describe('verifyCdnImageWithTransformFallback', () => {
       'https://cdn.ogabassey.com/core-assets/products/phone.avif',
       cdnBasePath,
       existsSyncMock,
-      fetchMock
+      fetchMock,
+      publicLookup
     );
 
     expect(result.status).toBe('verified');
@@ -229,7 +102,8 @@ describe('verifyCdnImageWithTransformFallback', () => {
       'https://cdn.ogabassey.com/core-assets/products/phone.avif',
       cdnBasePath,
       existsSyncMock,
-      fetchMock
+      fetchMock,
+      publicLookup
     );
 
     expect(result.status).toBe('verified');
@@ -253,7 +127,8 @@ describe('verifyCdnImageWithTransformFallback', () => {
       'https://cdn.ogabassey.com/core-assets/products/phone.avif',
       cdnBasePath,
       existsSyncMock,
-      fetchMock
+      fetchMock,
+      publicLookup
     );
 
     expect(result.status).toBe('pending_derivative');
@@ -276,12 +151,37 @@ describe('verifyCdnImageWithTransformFallback', () => {
       'https://cdn.ogabassey.com/core-assets/products/phone.avif',
       cdnBasePath,
       existsSyncMock,
-      fetchMock
+      fetchMock,
+      publicLookup
     );
 
     expect(result.status).toBe('pending_verification');
     expect(result.verified_url).toBeNull();
     expect(result.failure_reason).toContain('503');
+  });
+
+  it('forwards an omitted lookupFn to the gate default', async () => {
+    existsSyncMock.mockReturnValue(false);
+    fetchMock.mockResolvedValue(
+      fakeResponse({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'image/jpeg' }),
+      })
+    );
+
+    const result = await verifyCdnImageWithTransformFallback(
+      'https://cdn.ogabassey.com/core-assets/products/phone.avif',
+      cdnBasePath,
+      existsSyncMock,
+      fetchMock
+    );
+
+    expect(result.status).toBe('verified');
+    expect(result.verified_url).toBe(
+      'https://cdn.ogabassey.com/image/width=1200,quality=90,format=jpeg/core-assets/products/phone.avif'
+    );
+    expect(forwardedLookups[forwardedLookups.length - 1]).toBeUndefined();
   });
 });
 
@@ -312,6 +212,28 @@ describe('getClassifiedImageVerificationUrl', () => {
 
 // ---------- verifyRemoteImage ----------
 describe('verifyRemoteImage', () => {
+  it('rejects private destinations without issuing a request', async () => {
+    const fetchFn = vi.fn<FetchFn>();
+    const result = await verifyRemoteImage('http://169.254.169.254/latest/meta-data', fetchFn);
+    expect(result.status).toBe('invalid');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('rejects HTTP redirects instead of following them', async () => {
+    const fetchFn = vi.fn<FetchFn>().mockResolvedValue(
+      fakeResponse({ ok: false, status: 302, headers: new Headers({ location: 'http://127.0.0.1' }) })
+    );
+    const result = await verifyRemoteImage(
+      'https://images.example.com/phone.jpg',
+      fetchFn,
+      publicLookup
+    );
+    expect(result.status).toBe('invalid');
+    expect(fetchFn).toHaveBeenCalledWith(
+      'https://images.example.com/phone.jpg',
+      expect.objectContaining({ redirect: 'manual' })
+    );
+  });
   let fetchMock: Mock<FetchFn>;
 
   beforeEach(() => {
@@ -330,7 +252,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://ogabassey.com/game-covers/cyberpunk-2077.png',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('verified');
     expect(result.verified_url).toBe(
@@ -351,7 +274,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://ogabassey.com/game-covers/cyberpunk-2077.png',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('verified');
     expect(result.verified_format).toBe('png');
@@ -365,7 +289,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://example.com/photo.webp',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('verified');
     expect(result.verified_format).toBe('webp');
@@ -379,7 +304,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://ogabassey.com/missing-image.jpg',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('missing');
     expect(result.failure_reason).toContain('404');
@@ -393,7 +319,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://ogabassey.com/game-covers/temp-error.png',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('pending_verification');
     expect(result.failure_reason).toContain('503');
@@ -407,7 +334,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://example.com/photo.jpg',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('pending_verification');
     expect(result.failure_reason).toContain('429');
@@ -421,7 +349,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://example.com/photo.jpg',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('missing');
     expect(result.failure_reason).toContain('403');
@@ -431,7 +360,8 @@ describe('verifyRemoteImage', () => {
     fetchMock.mockRejectedValue(new Error('fetch failed'));
     const result = await verifyRemoteImage(
       'https://ogabassey.com/game-covers/timeout.png',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('pending_verification');
     expect(result.failure_reason).toContain('fetch failed');
@@ -445,7 +375,8 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://ogabassey.com/not-an-image',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('invalid');
     expect(result.failure_reason).toContain('text/html');
@@ -465,7 +396,8 @@ describe('verifyRemoteImage', () => {
       }));
     const result = await verifyRemoteImage(
       'https://example.com/photo.jpg',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('verified');
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -479,7 +411,8 @@ describe('verifyRemoteImage', () => {
     fetchMock.mockRejectedValue('string error');
     const result = await verifyRemoteImage(
       'https://example.com/photo.jpg',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('pending_verification');
     expect(result.failure_reason).toContain('string error');
@@ -493,9 +426,71 @@ describe('verifyRemoteImage', () => {
     }));
     const result = await verifyRemoteImage(
       'https://example.com/photo.avif',
-      fetchMock
+      fetchMock,
+      publicLookup
     );
     expect(result.status).toBe('invalid');
     expect(result.failure_reason).toContain('image/avif');
+  });
+
+  it('rejects hostnames that resolve to private addresses without fetching', async () => {
+    const fetchFn = vi.fn<FetchFn>();
+    const lookupFn: DnsLookupFn = async () => [{ address: '10.0.0.5', family: 4 }];
+    const result = await verifyRemoteImage(
+      'https://images.example.com/phone.jpg',
+      fetchFn,
+      lookupFn
+    );
+    expect(result.status).toBe('invalid');
+    expect(result.failure_reason).toContain('non-public address 10.0.0.5');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('rejects IPv4-mapped IPv6 resolutions by their embedded address', async () => {
+    const fetchFn = vi.fn<FetchFn>();
+    const lookupFn: DnsLookupFn = async () => [{ address: '::ffff:7f00:1', family: 6 }];
+    const result = await verifyRemoteImage(
+      'https://images.example.com/phone.jpg',
+      fetchFn,
+      lookupFn
+    );
+    expect(result.status).toBe('invalid');
+    expect(result.failure_reason).toContain('non-public address ::ffff:7f00:1');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('retries verification when DNS resolution fails', async () => {
+    const fetchFn = vi.fn<FetchFn>();
+    const lookupFn: DnsLookupFn = async () => {
+      throw new Error('ENOTFOUND images.example.com');
+    };
+    const result = await verifyRemoteImage(
+      'https://images.example.com/phone.jpg',
+      fetchFn,
+      lookupFn
+    );
+    expect(result.status).toBe('pending_verification');
+    expect(result.failure_reason).toContain('DNS resolution failed');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('fetches through the pinned dispatcher from the destination gate', async () => {
+    const seen: unknown[] = [];
+    const fetchFn = vi.fn<FetchFn>(async (input, init) => {
+      seen.push(init);
+      return fakeResponse({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'image/jpeg' }),
+      });
+    });
+    const result = await verifyRemoteImage(
+      'https://images.example.com/phone.jpg',
+      fetchFn,
+      publicLookup
+    );
+    expect(result.status).toBe('verified');
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(seen[0]).toMatchObject({ dispatcher: expect.anything() });
   });
 });

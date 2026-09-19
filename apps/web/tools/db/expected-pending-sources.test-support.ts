@@ -16,6 +16,18 @@ import { EXPECTED_SEARCH_PENDING_SOURCES } from './expected-search-pending-sourc
 import { EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES } from './expected-storefront-order-pending-sources.test-support';
 import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-outbox-pending-sources.test-fixture';
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
+import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
+
+const REDVAULT_PENDING_SOURCES = REDVAULT_PENDING_REPLAY_SOURCE_ROWS.split(
+  '\n'
+).map((row) => {
+  const [sha256, filename] = row.split(' ');
+  return {
+    repositoryPath: `supabase/migrations/${filename}`,
+    sha256,
+  };
+});
+
 export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
@@ -266,4 +278,5 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260911100000_add_storefront_comparison_revisions.sql',
     sha256: '4c4264dd85683ca3302fd0f8cea0b01a13c8730c44b85af52b53b53028de5517',
   },
+  ...REDVAULT_PENDING_SOURCES,
 ].sort((a, b) => a.repositoryPath.localeCompare(b.repositoryPath));

@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
+import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from './event-pipeline-shipping-credential-paths';
 
@@ -21,6 +22,27 @@ describe('event pipeline credential-path authority', () => {
     );
 
     expect(manifest.authority.credentialPaths).toEqual([
+      [
+        'apps/web/src/app/api/payments/initialize/route.ts',
+        'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
+        'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
+        'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
       [
         'apps/web/src/app/api/orders/route.ts',
         'apps/web/src/lib/order-notification-dispatch.ts',
@@ -264,8 +286,14 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/lib/agentic/jwt-signing-material.ts',
         'apps/web/src/env.ts',
       ],
+      [
+        'apps/web/src/lib/payments/file-inventory-confirmation-review.ts',
+        'apps/web/src/lib/supabase/admin.ts',
+        'apps/web/src/env.ts',
+      ],
       ...eventPipelineJumiaCredentialPaths,
       ...eventPipelineRepairPickupCredentialPaths,
+      ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
     ]);
   });

@@ -1,0 +1,8 @@
+
+ RUN  v4.1.9 /Users/mac/Baci-app/.worktrees/ogabassey-uba-redvault-phase-0/apps/web
+
+
+ Test Files  9 passed (9)
+      Tests  158 passed (158)
+   Start at  06:53:30
+   Duration  6.56s (transform 1.09s, setup 492ms, import 1.45s, tests 682ms, environment 3.19s)

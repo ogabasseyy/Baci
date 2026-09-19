@@ -47,6 +47,7 @@ const paymentGatewayParamsObject = z.object({
   paymentKind: z
     .enum(['order', 'vtu', 'wallet', 'savings_auth'])
     .default('order'),
+  paymentMethod: z.literal('uba_redvault').optional(),
   returnTo: sanitizedReturnTo,
   merchantId: trimmedOptionalString('Merchant id cannot be empty'),
   merchantSlug: trimmedOptionalString('Merchant slug cannot be empty'),
@@ -59,6 +60,18 @@ const paymentGatewayParamsObject = z.object({
 
 export const PaymentGatewayParamsSchema = paymentGatewayParamsObject
   .superRefine((data, ctx) => {
+    if (
+      data.paymentMethod === 'uba_redvault' &&
+      (data.gateway !== 'paystack' ||
+        data.paymentKind !== 'order' ||
+        !data.orderId)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Invalid UBA payment context',
+        path: ['paymentMethod'],
+      });
+    }
     if (data.paymentKind === 'vtu') {
       if (!data.utilityType) {
         ctx.addIssue({

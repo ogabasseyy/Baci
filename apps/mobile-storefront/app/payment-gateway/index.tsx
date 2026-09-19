@@ -3,11 +3,13 @@
  * Handles card payment checkout via Paystack, Korapay, and Juicyway
  */
 
+import { router } from 'expo-router';
 import { InvalidCheckoutView } from '@/components/payment-gateway/InvalidCheckoutView';
 import { PaymentErrorView } from '@/components/payment-gateway/PaymentErrorView';
 import { PaymentGatewayCheckoutView } from '@/components/payment-gateway/PaymentGatewayCheckoutView';
 import { PaymentProcessingView } from '@/components/payment-gateway/PaymentProcessingView';
 import { PaymentSuccessView } from '@/components/payment-gateway/PaymentSuccessView';
+import { RedvaultPendingView } from '@/components/payment-gateway/RedvaultPendingView';
 import { usePaymentGatewayController } from '@/components/payment-gateway/use-payment-gateway-controller';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -17,6 +19,14 @@ export default function PaymentGatewayScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const controller = usePaymentGatewayController();
+
+  // A pending/held REDVAULT capture may still be reconciled server-side, so
+  // this action must not return to the still-populated checkout (which would
+  // allow submitting the same cart again). Route to the order status view.
+  const handlePendingOrders = () => {
+    const pendingOrderId = controller.validatedParams.data?.orderId;
+    router.replace(pendingOrderId ? `/orders/${pendingOrderId}` : '/orders');
+  };
 
   const renderPaymentContent = () => {
     if (!controller.validatedParams.isValid) {
@@ -29,6 +39,16 @@ export default function PaymentGatewayScreen() {
       );
     }
 
+    if (controller.status === 'pending' || controller.status === 'held') {
+      return (
+        <RedvaultPendingView
+          colors={colors}
+          held={controller.status === 'held'}
+          onCheck={controller.handleRetry}
+          onViewOrders={handlePendingOrders}
+        />
+      );
+    }
     if (controller.status === 'processing') {
       return (
         <PaymentProcessingView

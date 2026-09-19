@@ -54,6 +54,12 @@ vi.mock('@/lib/payments/process-merchant-invoice-partial-payment', () => ({
     mockProcessMerchantInvoicePartialPayment(...args),
 }));
 
+const mockCaptureOrHoldRedvaultPayment = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/payments/redvault-capture-hold', () => ({
+  captureOrHoldRedvaultPayment: (...args: unknown[]) =>
+    mockCaptureOrHoldRedvaultPayment(...args),
+}));
+
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }));
@@ -253,6 +259,34 @@ describe('POST /api/payments/verify — finalizer outcomes', () => {
     mockProcessMerchantInvoicePartialPayment.mockResolvedValue({
       kind: 'none',
     });
+    mockCaptureOrHoldRedvaultPayment.mockResolvedValue({
+      kind: 'not_redvault',
+    });
+  });
+
+  it('returns a pending response instead of a paid signal for a held REDVAULT capture', async () => {
+    const supabase = buildSupabase({ completion: null });
+    mockCreateServiceClient.mockReturnValue(supabase);
+    mockCaptureOrHoldRedvaultPayment.mockResolvedValue({
+      duplicate: false,
+      kind: 'captured_held',
+      reason: 'provider_eligibility_evidence_unavailable',
+    });
+
+    const response = await POST(createRequest());
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({
+      code: 'REDVAULT_CAPTURE_HELD',
+      error: 'Payment capture is pending eligibility confirmation',
+      orderNumber: 'ORD-1',
+      status: 'pending',
+    });
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'complete_order_gateway_payment',
+      expect.anything()
+    );
+    expect(mockRunPaidOrderSideEffects).not.toHaveBeenCalled();
   });
 
   it('suppresses paid-order side effects and files reconciliation when the order is cancelled', async () => {

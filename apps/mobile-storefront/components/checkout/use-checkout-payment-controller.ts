@@ -19,6 +19,7 @@ import {
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import { calculateCommerce } from '@/lib/supabase';
 import type { WalletSelection } from '@/lib/wallet-payment-helpers';
+import { getRedvaultPaymentAvailability } from '@/services/redvault';
 import type { useCartStore } from '@/stores/cart-store';
 
 type CartItems = ReturnType<typeof useCartStore.getState>['items'];
@@ -55,9 +56,16 @@ export function useCheckoutPaymentController({
       paymentSettings.wallet_paystack_dva_enabled &&
       paymentSettings.wallet_order_auto_debit_enabled
   );
+  const [availability, setAvailability] = useState<{
+    merchantId: string;
+    available: boolean;
+  } | null>(null);
+  const redvaultAvailable =
+    availability?.merchantId === merchantId && availability.available;
   const availablePaymentMethods: PaymentMethodType[] = Array.from(
     new Set<PaymentMethodType>([
       ...enabledPaymentMethods,
+      ...(redvaultAvailable ? ['uba_redvault' as const] : []),
       'invoice',
       'payforme',
     ])
@@ -94,6 +102,20 @@ export function useCheckoutPaymentController({
     setPaymentTab(getPaymentTabForMethod(method));
   };
 
+  useEffect(() => {
+    let active = true;
+    void getRedvaultPaymentAvailability(merchantId)
+      .then((available) => {
+        if (active) setAvailability({ merchantId, available });
+      })
+      .catch(() => {
+        if (active) setAvailability({ merchantId, available: false });
+      });
+    return () => {
+      active = false;
+    };
+  }, [merchantId]);
+
   const resetPaymentSelection = () => {
     setSelectedPaymentState(null);
     setPaymentTab(null);
@@ -106,7 +128,13 @@ export function useCheckoutPaymentController({
   const currentTabMethods = availablePaymentMethods.filter(
     (method) => paymentTab && getPaymentTabForMethod(method) === paymentTab
   );
-  if (selectedPayment && !availablePaymentMethods.includes(selectedPayment)) {
+  if (
+    selectedPayment &&
+    selectedPayment !== 'uba_redvault' &&
+    !availablePaymentMethods.includes(selectedPayment)
+  ) {
+    setSelectedPaymentState(null);
+  } else if (selectedPayment === 'uba_redvault' && !redvaultAvailable) {
     setSelectedPaymentState(null);
   } else if (
     selectedPayment &&
@@ -213,6 +241,7 @@ export function useCheckoutPaymentController({
     orderTotals,
     paymentSettings,
     paymentTab,
+    redvaultAvailable,
     resetPaymentSelection,
     savings,
     selectedPayment,

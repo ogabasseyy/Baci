@@ -1,0 +1,22 @@
+import type { Database } from '@/types/supabase';
+export const EVENT_PIPELINE_FUNCTION_NAMES = [
+  'claim_event_deliveries_v1',
+  'cleanup_domain_event_pipeline_v1',
+  'dead_letter_ingress_event_v1',
+  'enqueue_domain_event_v1',
+  'finish_event_delivery_v1',
+  'get_domain_event_queue_metrics_v1',
+  'get_event_pipeline_operations_v1',
+  'is_event_ingress_capability_v1',
+  'list_event_pipeline_deliveries_v1',
+  'list_event_pipeline_ingress_failures_v1',
+  'read_domain_events_v1',
+  'record_analytics_domain_event_v1',
+  'record_event_worker_heartbeat_v1',
+  'record_platform_domain_event_v1',
+  'replay_event_deliveries_batch_v1',
+  'replay_event_delivery_v1',
+  'replay_ingress_dead_letter_v1',
+  'route_domain_event_v1',
+  'select_event_pipeline_replay_ids_v1',
+] as const satisfies readonly (keyof Database['public']['Functions'])[];

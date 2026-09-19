@@ -4,6 +4,8 @@ import type { CartItem } from '@/stores/cart-store';
 import { useCheckoutPaymentController } from './use-checkout-payment-controller';
 
 const mockCalculateCommerce = jest.fn();
+const mockGetRedvaultPaymentAvailability =
+  jest.fn<(...args: unknown[]) => Promise<boolean>>();
 let mockEnabledPaymentMethods = ['paystack', 'bank_transfer'];
 
 jest.mock('@/hooks/use-checkout-savings', () => ({
@@ -34,6 +36,11 @@ jest.mock('@/lib/supabase', () => ({
   calculateCommerce: (...args: unknown[]) => mockCalculateCommerce(...args),
 }));
 
+jest.mock('@/services/redvault', () => ({
+  getRedvaultPaymentAvailability: (...args: unknown[]) =>
+    mockGetRedvaultPaymentAvailability(...args),
+}));
+
 const items: CartItem[] = [
   {
     id: 'line-1',
@@ -51,6 +58,9 @@ describe('useCheckoutPaymentController selection', () => {
     mockEnabledPaymentMethods = ['paystack', 'bank_transfer'];
     mockCalculateCommerce.mockImplementation(() =>
       Promise.reject(new Error('offline'))
+    );
+    mockGetRedvaultPaymentAvailability.mockReturnValue(
+      new Promise<boolean>(() => undefined)
     );
   });
 
@@ -82,6 +92,73 @@ describe('useCheckoutPaymentController selection', () => {
     act(() => result.current.resetPaymentSelection());
     expect(result.current.paymentTab).toBeNull();
     expect(result.current.selectedPayment).toBeNull();
+  });
+
+  it('selects REDVAULT only after the server availability result succeeds', async () => {
+    mockGetRedvaultPaymentAvailability.mockResolvedValue(true);
+    const { result } = renderHook(() =>
+      useCheckoutPaymentController({
+        assuranceFee: 0,
+        deliveryFee: 5_000,
+        isAuthenticated: false,
+        items,
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        step: 'payment',
+        subtotal: 500_000,
+      })
+    );
+
+    await act(async () => undefined);
+    expect(result.current.redvaultAvailable).toBe(true);
+    act(() => result.current.setSelectedPayment('uba_redvault'));
+    expect(result.current.selectedPayment).toBe('uba_redvault');
+    expect(result.current.paymentTab).toBe('full');
+  });
+
+  it('hides stale availability immediately when the merchant changes', async () => {
+    mockGetRedvaultPaymentAvailability.mockResolvedValueOnce(true);
+    const { result, rerender } = renderHook(
+      ({ merchantId }: { merchantId: string }) =>
+        useCheckoutPaymentController({
+          assuranceFee: 0,
+          deliveryFee: 0,
+          isAuthenticated: false,
+          items,
+          merchantId,
+          merchantSlug: 'ogabassey',
+          step: 'payment',
+          subtotal: 500000,
+        }),
+      { initialProps: { merchantId: 'merchant-1' } }
+    );
+    await act(async () => undefined);
+    expect(result.current.redvaultAvailable).toBe(true);
+    act(() => result.current.setSelectedPayment('uba_redvault'));
+    expect(result.current.availablePaymentMethods).toContain('uba_redvault');
+    rerender({ merchantId: 'merchant-2' });
+    expect(result.current.redvaultAvailable).toBe(false);
+    expect(result.current.selectedPayment).toBeNull();
+  });
+
+  it('fails closed when availability rejects', async () => {
+    mockGetRedvaultPaymentAvailability.mockRejectedValueOnce(
+      new Error('offline')
+    );
+    const { result } = renderHook(() =>
+      useCheckoutPaymentController({
+        assuranceFee: 0,
+        deliveryFee: 0,
+        isAuthenticated: false,
+        items,
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        step: 'payment',
+        subtotal: 500000,
+      })
+    );
+    await act(async () => undefined);
+    expect(result.current.redvaultAvailable).toBe(false);
   });
 
   it('clears a selected instrument when it is no longer available', () => {

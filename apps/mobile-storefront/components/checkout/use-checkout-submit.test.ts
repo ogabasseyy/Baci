@@ -233,6 +233,25 @@ describe('useCheckoutSubmit', () => {
     });
   });
 
+  it('does not create a REDVAULT order without a review callback', async () => {
+    const params = createParams({
+      onRedvaultOrder: undefined,
+      selectedPayment: 'uba_redvault',
+    });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Unable to continue',
+      expect.stringMatching(/review is unavailable/i)
+    );
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+    expect(params.isOrderInFlight.current).toBe(false);
+  });
+
   afterEach(() => {
     jest.restoreAllMocks();
   });

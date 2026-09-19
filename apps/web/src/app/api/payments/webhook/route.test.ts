@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { redvaultCaptureCases } from './redvault-capture-cases.test-support';
 import { GET, POST } from './route';
 
 const mockConfirmAgenticPaystackDvaPayment = vi.hoisted(() => vi.fn());
@@ -15,6 +16,7 @@ const mockProcessWalletFundedOrderPayment = vi.hoisted(() => vi.fn());
 const mockRunPaidOrderSideEffects = vi.hoisted(() => vi.fn());
 const mockPersistMerchantWalletAssignmentEvent = vi.hoisted(() => vi.fn());
 const mockFailMerchantWalletAssignmentEvent = vi.hoisted(() => vi.fn());
+const mockCaptureOrHoldRedvaultPayment = vi.hoisted(() => vi.fn());
 
 // Mock environment variables
 vi.mock('@/env', () => ({
@@ -49,6 +51,10 @@ vi.mock('@/lib/payments/process-merchant-invoice-partial-payment', () => ({
 
 vi.mock('@/lib/payments/run-paid-order-side-effects', () => ({
   runPaidOrderSideEffects: mockRunPaidOrderSideEffects,
+}));
+vi.mock('@/lib/payments/redvault-capture-hold', () => ({
+  captureOrHoldRedvaultPayment: (...args: unknown[]) =>
+    mockCaptureOrHoldRedvaultPayment(...args),
 }));
 vi.mock('@/lib/persist-merchant-wallet-assignment-event', () => ({
   persistMerchantWalletAssignmentEvent:
@@ -490,6 +496,9 @@ describe('POST /api/payments/webhook', () => {
       kind: 'none',
     });
     mockProcessWalletFundedOrderPayment.mockResolvedValue({ kind: 'none' });
+    mockCaptureOrHoldRedvaultPayment.mockResolvedValue({
+      kind: 'not_redvault',
+    });
     mockRunPaidOrderSideEffects.mockResolvedValue({
       concurrentTakeoverSteps: [],
       failedSteps: [],
@@ -609,6 +618,116 @@ describe('POST /api/payments/webhook', () => {
       expect.anything()
     );
     expect(mockRunPaidOrderSideEffects).not.toHaveBeenCalled();
+  });
+
+  it.each(
+    redvaultCaptureCases
+  )('acknowledges $kind for a $transactionStatus transaction without completion or settlement', async ({
+    kind,
+    code,
+    error,
+    transactionStatus,
+  }) => {
+    const body = {
+      data: { reference: 'PSK-REDVAULT-HELD' },
+      event: 'charge.success',
+    };
+    const bodyString = JSON.stringify(body);
+    const request = createMockRequest(body, {
+      'x-paystack-signature': createSignature(
+        bodyString,
+        'test-paystack-secret'
+      ),
+    });
+    const { verifyTransaction } = await import('@/lib/paystack');
+    vi.mocked(verifyTransaction).mockResolvedValue({
+      data: {
+        amount: 100_000,
+        currency: 'NGN',
+        reference: 'PSK-REDVAULT-HELD',
+        status: 'success',
+      } as never,
+      success: true,
+    });
+    setupSuccessfulTransactionMocks(
+      {
+        amount: '1000',
+        gateway_reference: 'PSK-REDVAULT-HELD',
+        order_id: 'order-redvault-1',
+        status: transactionStatus,
+      },
+      transactionStatus === 'completed' ? { updatedTransaction: null } : {}
+    );
+    mockCaptureOrHoldRedvaultPayment.mockResolvedValue({
+      duplicate: false,
+      kind,
+      reason: 'provider_eligibility_evidence_unavailable',
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({
+      code,
+      error,
+      status: 'pending',
+    });
+    expect(mockServiceClient.rpc).not.toHaveBeenCalledWith(
+      'complete_order_gateway_payment',
+      expect.anything()
+    );
+    expect(mockServiceClient.rpc).not.toHaveBeenCalledWith(
+      'record_merchant_settlement',
+      expect.anything()
+    );
+  });
+
+  it('fails closed without settlement when REDVAULT capture persistence fails', async () => {
+    const body = {
+      data: { reference: 'PSK-REDVAULT-HOLD-ERROR' },
+      event: 'charge.success',
+    };
+    const bodyString = JSON.stringify(body);
+    const request = createMockRequest(body, {
+      'x-paystack-signature': createSignature(
+        bodyString,
+        'test-paystack-secret'
+      ),
+    });
+    const { verifyTransaction } = await import('@/lib/paystack');
+    vi.mocked(verifyTransaction).mockResolvedValue({
+      data: {
+        amount: 100_000,
+        currency: 'NGN',
+        reference: 'PSK-REDVAULT-HOLD-ERROR',
+        status: 'success',
+      } as never,
+      success: true,
+    });
+    setupSuccessfulTransactionMocks({
+      amount: '1000',
+      gateway_reference: 'PSK-REDVAULT-HOLD-ERROR',
+      order_id: 'order-redvault-hold-error',
+    });
+    mockCaptureOrHoldRedvaultPayment.mockRejectedValue(
+      new Error('redvault_capture_hold_rpc_missing')
+    );
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      code: 'ORDER_PAYMENT_COMPLETION_FAILED',
+      error: 'Order payment completion failed',
+    });
+    expect(mockServiceClient.rpc).not.toHaveBeenCalledWith(
+      'complete_order_gateway_payment',
+      expect.anything()
+    );
+    expect(mockServiceClient.rpc).not.toHaveBeenCalledWith(
+      'record_merchant_settlement',
+      expect.anything()
+    );
   });
 
   it('does not settle a completed DVA transaction whose locked invoice balance changed', async () => {

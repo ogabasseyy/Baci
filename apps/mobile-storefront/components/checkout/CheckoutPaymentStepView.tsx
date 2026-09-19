@@ -11,6 +11,7 @@ import {
   PaymentMethodSelector,
   type PaymentMethodSelectorProps,
 } from '@/components/checkout/PaymentMethodSelector';
+import { RedvaultPaymentChoice } from '@/components/checkout/redvault/RedvaultPaymentChoice';
 import type Colors from '@/constants/Colors';
 import { checkoutScreenViewStyles as styles } from './CheckoutScreenView.styles';
 
@@ -32,6 +33,7 @@ interface CheckoutPaymentStepViewProps {
   onSelectPayment: PaymentMethodSelectorProps['onSelectMethod'];
   onSelectPaymentTab: PaymentMethodSelectorProps['onSelectTab'];
   onWalletToggle: NonNullable<PaymentMethodSelectorProps['onWalletToggle']>;
+  redvaultAvailable: boolean;
   paymentTab: PaymentMethodSelectorProps['selectedTab'];
   savingsSelection: PaymentMethodSelectorProps['savingsSelection'];
   selectedPayment: PaymentMethodSelectorProps['selectedMethod'];
@@ -57,6 +59,7 @@ export function CheckoutPaymentStepView({
   onSelectPayment,
   onSelectPaymentTab,
   onWalletToggle,
+  redvaultAvailable,
   paymentTab,
   savingsSelection,
   selectedPayment,
@@ -147,6 +150,12 @@ export function CheckoutPaymentStepView({
         }
         paymentScrollRef={scrollRef}
         paymentScrollOffsetRef={scrollOffsetRef}
+      />
+      <RedvaultPaymentChoice
+        available={redvaultAvailable}
+        selected={selectedPayment === 'uba_redvault'}
+        status="idle"
+        onSelect={() => onSelectPayment('uba_redvault')}
       />
     </ScrollView>
   );

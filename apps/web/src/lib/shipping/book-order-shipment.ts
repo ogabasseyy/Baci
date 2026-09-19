@@ -20,6 +20,7 @@ import {
 } from '@/lib/shipping/international-quote-order-guard';
 import { toInternationalShipmentItemsFromOrder } from '@/lib/shipping/international-shipment-items';
 import {
+  assertShippableBookingItems,
   isShippingProviderCode,
   OrderShipmentBookingError,
   parseStoredQuoteRequest,
@@ -51,7 +52,7 @@ export async function bookOrderShipment(
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .select(
-      'id, customer_name, customer_email, customer_phone, shipping_fee, selected_quote_id, shipping_provider, shipping_funding_source, payment_method, payment_status, shipping_address, order_items(name, quantity, price, product_id, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions, commodity_code))'
+      'id, customer_name, customer_email, customer_phone, shipping_fee, selected_quote_id, shipping_provider, shipping_funding_source, payment_method, payment_status, shipping_address, order_items(name, quantity, price, fulfillment_data, product_id, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions, commodity_code))'
     )
     .eq('id', orderId)
     .eq('merchant_id', merchantId)
@@ -129,7 +130,6 @@ export async function bookOrderShipment(
       'QUOTE_NOT_FOUND'
     );
   }
-
   const bookingEconomics = await getShippingQuoteBookingEconomics(
     supabase,
     merchantId,
@@ -265,6 +265,7 @@ export async function bookOrderShipment(
           effectiveQuoteRequest.items
         )
       : toDomesticBookingItems(orderItems, effectiveQuoteRequest?.items);
+  assertShippableBookingItems(items);
   const result = await shippingService.bookShipment(
     shippingProvider,
     buildOrderShipmentBookingRequest({

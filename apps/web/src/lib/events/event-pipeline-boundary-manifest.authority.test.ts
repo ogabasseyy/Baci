@@ -55,6 +55,7 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/repair-notifications.ts',
       'apps/web/src/lib/shipping/persist-admin-gigl-quote.ts',
       'apps/web/src/lib/shipping/persist-refreshed-shipping-quote.ts',
+      'apps/web/src/lib/payments/resolve-order-gateway-completion.ts',
     ]);
     expect(manifest.authority.serviceImporters).toEqual([
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',

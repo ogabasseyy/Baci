@@ -3,7 +3,6 @@ import { isQuizMobileAdsAvailable } from '@/components/quiz/is-quiz-mobile-ads-a
 import { trackEvent } from '@/services/analytics-core';
 import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
 import {
-  hasOrderSuccessIdentity,
   maybeShowPostOrderInterstitial,
   resetPostOrderInterstitialForTests,
 } from './post-order-interstitial';
@@ -210,25 +209,5 @@ describe('maybeShowPostOrderInterstitial', () => {
     for (const listener of listeners.loaded) listener();
     await expect(attempt).resolves.toBe('shown');
     setAdsEnabled(ORIGINAL_ENV);
-  });
-});
-
-describe('hasOrderSuccessIdentity', () => {
-  it('accepts any single success identifier', () => {
-    // Arrange & Act & Assert
-    expect(hasOrderSuccessIdentity({ orderId: 'order-1' })).toBe(true);
-    expect(hasOrderSuccessIdentity({ orderNumber: 'B-1' })).toBe(true);
-    expect(hasOrderSuccessIdentity({ reference: 'ref-1' })).toBe(true);
-  });
-
-  it('rejects deep links and stale routes with no success identity', () => {
-    // Regression: presenting the interstitial without a completed order
-    // burns the once-per-session cap for nothing.
-    // Arrange & Act & Assert
-    expect(hasOrderSuccessIdentity({})).toBe(false);
-    expect(
-      hasOrderSuccessIdentity({ orderId: '  ', orderNumber: '', reference: '' })
-    ).toBe(false);
-    expect(hasOrderSuccessIdentity({ orderId: undefined })).toBe(false);
   });
 });

@@ -12,10 +12,8 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { usePermissionBooster } from '@/hooks/use-permission-booster';
 import { useReceiptPreview } from '@/hooks/use-receipt-preview';
-import {
-  hasOrderSuccessIdentity,
-  maybeShowPostOrderInterstitial,
-} from '@/lib/post-order-interstitial';
+import { hasOrderSuccessIdentity } from '@/lib/order-success-identity';
+import { maybeShowPostOrderInterstitial } from '@/lib/post-order-interstitial';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { SERVER_CONFIRMED_ORDER_NOTIFICATION_METHODS } from '@/services/payment-status';
 import { scheduleLocalNotification } from '@/services/push-notifications';

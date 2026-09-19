@@ -231,7 +231,12 @@ export function Hero({
         <View style={styles.dotsContainer} testID="hero-dots">
           {renderSlides.map((slide, index) => (
             <View
-              key={isHeroAdSlide(slide) ? 'hero-dot-ad' : slide.image}
+              // Index-qualified: merchant slides may legally reuse an image
+              // URL, and duplicate keys would desync the active indicator
+              // when the sponsored slide inserts or removes.
+              key={
+                isHeroAdSlide(slide) ? 'hero-dot-ad' : `${slide.image}-${index}`
+              }
               testID={currentIndex === index ? 'hero-dot-active' : 'hero-dot'}
               style={[styles.dot, currentIndex === index && styles.dotActive]}
             />

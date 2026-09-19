@@ -22,8 +22,6 @@ import { AdSlot } from '@/components/ads/AdSlot';
 import { BlockRenderer } from '@/components/storefront/BlockRenderer';
 import { FilterBar } from '@/components/storefront/FilterBar';
 import { HomeServiceCards } from '@/components/storefront/HomeServiceCards';
-import { findHeroAdOwnerBlockId } from '@/components/storefront/hero-ad-owner';
-import { findLaunchAdOwnerBlockId } from '@/components/storefront/launch-ad-owner';
 import { styles as gridStyles } from '@/components/storefront/ProductGrid.styles';
 import { ProductGridSkeleton } from '@/components/ui/Skeleton';
 import { palette } from '@/constants/Colors';
@@ -35,6 +33,7 @@ import type { Block, ProductGridBlock } from '@/types/blocks';
 import type { Product } from '@/types/product';
 import { HomeFeedEmptyState } from './HomeFeedEmptyState';
 import { HomeFeedListItemView } from './HomeFeedListItemView';
+import { findHomeFeedAdOwners } from './home-feed-ad-owners';
 import { useHomeProductFeed } from './use-home-product-feed';
 
 export type HomeFeedListItem =
@@ -118,20 +117,13 @@ export function HomeFeedList({
   const footerBlocks = hasPrimaryGrid
     ? blocks.slice(primaryProductGridIndex + 1)
     : [];
-  // HOME_STRIP is one logical slot for the whole page, but each slice
-  // renders its own BlockRenderer: elect the owner across both slices so a
-  // header hero and a footer hero cannot each claim it.
-  const heroAdOwnerBlockId = findHeroAdOwnerBlockId([
-    ...headerBlocks,
-    ...footerBlocks,
-  ]);
-  // PRODUCT_GRID_MPU is likewise one logical slot for the whole page: elect
-  // the owner across both slices so repeated JustLaunched blocks cannot each
-  // claim it.
-  const launchAdOwnerBlockId = findLaunchAdOwnerBlockId([
-    ...headerBlocks,
-    ...footerBlocks,
-  ]);
+  // HOME_STRIP and PRODUCT_GRID_MPU are each one logical slot for the
+  // whole page: elect the owners across both slices (see
+  // home-feed-ad-owners) so repeated blocks cannot each claim one slot.
+  const { heroAdOwnerBlockId, launchAdOwnerBlockId } = findHomeFeedAdOwners({
+    footerBlocks,
+    headerBlocks,
+  });
   const renderAfterCategoryRail = (block: Block) =>
     block.type === 'CategoryRail' ? (
       <HomeServiceCards placement="belowUtility" />

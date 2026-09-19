@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { JsonLd } from '@/components/seo/json-ld';
 import {
   OGABASSEY_DESCRIPTION,
+  OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL,
   OGABASSEY_HOME_URL,
   OGABASSEY_SOCIAL_IMAGE_URL,
   OGABASSEY_TITLE,
@@ -56,7 +57,16 @@ export async function OgabasseyStaticHomePageContent({
   const committedMobileLcpUrl = shellSlides?.[0]?.imageUrl ?? null;
   // Public immutable asset hints do not render shopping UI. Publication and
   // tenant checks remain in the request child (see the hero-shell contract).
-  if (committedMobileLcpUrl) {
+  // Single preload owner: the first-flush committed slot already emits a
+  // scanner-visible <link> for the committed URL, so re-emitting the flight
+  // hint for the same URL only duplicates it. Emit only when live slide-0
+  // rotated away from the committed constant — then the early hint covers
+  // a stale asset and the true LCP image still needs its hint. Origin
+  // preconnect stays covered by OgabasseyStaticResourceHints either way.
+  if (
+    committedMobileLcpUrl &&
+    committedMobileLcpUrl !== OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL
+  ) {
     preloadOgabasseyHomeHeroResources(committedMobileLcpUrl);
   }
   const paintCommittedHero =

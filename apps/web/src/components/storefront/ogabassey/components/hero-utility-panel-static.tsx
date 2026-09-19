@@ -1,9 +1,7 @@
 import { HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS } from './hero-mobile-geometry';
+import { STATIC_ACTIVE_WORD_INDEX } from './static-utility-constants';
 import { StaticUtilityOptionButton } from './static-utility-option-button';
-import {
-  STATIC_ACTIVE_WORD_INDEX,
-  StaticUtilityWords,
-} from './static-utility-words';
+import { StaticUtilityWords } from './static-utility-words';
 
 /**
  * Zero-JavaScript twin of {@link HeroUtilityPanel}'s first frame.

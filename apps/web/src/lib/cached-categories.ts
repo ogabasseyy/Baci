@@ -2,7 +2,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
 import { cache } from 'react';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
-import { createPriorityStorefrontReadFetch } from './storefront-public-read-fetch';
+import { createPriorityStorefrontReadFetch } from './storefront-priority-read-fetch';
 
 export interface CategoryNavItem {
   name: string;

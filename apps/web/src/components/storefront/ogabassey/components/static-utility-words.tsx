@@ -3,9 +3,9 @@
  * ("Airtime!" visible, the rest stacked invisibly): same elements, same
  * classes, same copy, so the activation swap is paint-only (no CLS).
  */
-const STATIC_UTILITY_WORDS = ['Airtime!', 'Data!', 'TV!', 'Power!', 'Gaming!'];
+import { STATIC_ACTIVE_WORD_INDEX } from './static-utility-constants';
 
-export const STATIC_ACTIVE_WORD_INDEX = 0;
+const STATIC_UTILITY_WORDS = ['Airtime!', 'Data!', 'TV!', 'Power!', 'Gaming!'];
 
 export function StaticUtilityWords({
   minWidthClass,

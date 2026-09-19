@@ -18,6 +18,8 @@
     "./receipt": "./src/receipt/index.ts",
     "./repairs": "./src/repairs/index.ts",
     "./storefront": "./src/storefront/index.ts",
+    "./storefront/launch-carousel": "./src/storefront/launch-carousel.ts",
+    "./storefront/prioritize-smartphone-products": "./src/storefront/prioritize-smartphone-products.ts",
     "./gmc-feed": "./src/gmc-feed/index.ts",
     "./test-fixtures/builder-ai-edit": "./src/test-fixtures/builder-ai-edit.ts"
   },

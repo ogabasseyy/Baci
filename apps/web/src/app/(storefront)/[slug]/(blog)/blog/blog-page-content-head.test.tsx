@@ -21,6 +21,14 @@ describe('BlogPageContent head and discovery', () => {
 
   it('renders guide collections after the blog listing', async () => {
     mockBuildBlogClusterCollections.mockReturnValue(clusterCollections);
+    mockGetCachedBlogListing.mockResolvedValueOnce(
+      buildListingResult({
+        merchant: {
+          ...merchant,
+          template_id: 'modern',
+        },
+      })
+    );
 
     render(
       await BlogPageContent({
@@ -84,6 +92,15 @@ describe('BlogPageContent head and discovery', () => {
   });
 
   it('uses the provided canonical URL for ItemList schema URLs', async () => {
+    mockGetCachedBlogListing.mockResolvedValueOnce(
+      buildListingResult({
+        merchant: {
+          ...merchant,
+          template_id: 'modern',
+        },
+      })
+    );
+
     render(
       await BlogPageContent({
         itemListSchemaUrl: 'https://example.com/blog/category/smartphones',
@@ -107,6 +124,7 @@ describe('BlogPageContent head and discovery', () => {
         merchant: {
           ...merchant,
           slug: 'ogabassey',
+          template_id: 'modern',
         },
         totalPosts: 50,
       })
@@ -136,6 +154,7 @@ describe('BlogPageContent head and discovery', () => {
           ...merchant,
           slug: 'ogabassey',
           custom_domain: 'example.com',
+          template_id: 'modern',
         },
       })
     );
@@ -186,6 +205,10 @@ describe('BlogPageContent head and discovery', () => {
   it('uses structured image variants and preserves listing pagination totals', async () => {
     mockGetCachedBlogListing.mockResolvedValueOnce(
       buildListingResult({
+        merchant: {
+          ...merchant,
+          template_id: 'modern',
+        },
         totalPosts: 50,
       })
     );

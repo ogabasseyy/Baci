@@ -4,7 +4,8 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
 
-export const preferredRegion = 'dub1';
+// Region pinning lives in vercel.json `regions` (dub1) — `preferredRegion`
+// is deprecated and removed.
 
 /**
  * Storefront OAuth Callback Handler

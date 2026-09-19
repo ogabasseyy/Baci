@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
+import { OgabasseyV2AboutUs } from '@/components/storefront/ogabassey/pages/about-us';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getMerchantByIdentifier } from '@/lib/cached-data';
 import { toTemplateMerchantData } from '@/lib/merchant-template-data';
 import {
@@ -8,7 +10,6 @@ import {
   getIndexableRobotsMetadata,
 } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
-import { getTemplate, type TemplateComponents } from '@/templates/registry';
 import type { MerchantAboutPage } from '@/types/about-page';
 import { ContentPageCrawlSummary } from '../content-page-crawl-summary';
 import { AboutPageClient } from '../pages/about/about-page-client';
@@ -80,51 +81,26 @@ async function AboutContent({ params }: PageProps) {
   const aboutPage = (merchant.about_page || {}) as MerchantAboutPage;
   const legacyAboutContent = merchant.pages?.about;
 
-  // Resolve template component server-side for SEO (H1 in SSR HTML)
-  const templateId = merchant.template_id;
-  if (templateId && templateId !== 'default' && templateId !== 'puck') {
-    const template = getTemplate(templateId);
-    if (template) {
-      // Resolve the component and its data inside try/catch, but construct
-      // the JSX outside it — try/catch cannot catch React render errors.
-      let templateAbout: {
-        AboutComponent: NonNullable<TemplateComponents['About']>;
-        merchantData: ReturnType<typeof toTemplateMerchantData>;
-      } | null = null;
-      try {
-        const components = await template.getComponents();
-        if (components.About) {
-          templateAbout = {
-            AboutComponent: components.About,
-            merchantData: toTemplateMerchantData(merchant),
-          };
-        }
-      } catch (error) {
-        console.error(
-          'Failed to load About component for template',
-          templateId,
-          ':',
-          error
-        );
-      }
-      if (templateAbout) {
-        const { AboutComponent, merchantData } = templateAbout;
-        return (
-          <>
-            <AboutComponent
-              merchant={merchantData}
-              storeSlug={merchant.slug}
-              isPreview={false}
-            />
-            <ContentPageCrawlSummary
-              kind="about"
-              merchantName={merchant.business_name}
-              businessType={merchant.business_type}
-            />
-          </>
-        );
-      }
-    }
+  // Resolve template component server-side for SEO (H1 in SSR HTML).
+  // The component is imported directly (only the Ogabassey template defines
+  // an About page), so there is no async module load to guard — construct
+  // the data, JSX stays outside as before.
+  const TemplateAbout =
+    merchant.template_id === OGABASSEY_TEMPLATE_ID ? OgabasseyV2AboutUs : null;
+  // Resolve the component data, but construct the JSX outside —
+  // try/catch cannot catch React render errors.
+  if (TemplateAbout) {
+    const merchantData = toTemplateMerchantData(merchant);
+    return (
+      <>
+        <TemplateAbout merchant={merchantData} />
+        <ContentPageCrawlSummary
+          kind="about"
+          merchantName={merchant.business_name}
+          businessType={merchant.business_type}
+        />
+      </>
+    );
   }
 
   // Fallback to default about page

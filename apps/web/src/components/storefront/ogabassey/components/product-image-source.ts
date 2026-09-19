@@ -3,6 +3,8 @@ interface ProductImageSourceResult {
   src: string;
 }
 
+// Card sizing lives in product-grid-image-sizes (one export per module).
+
 export function resolveProductImageSource(
   candidates: readonly (null | string | undefined)[],
   placeholder: string

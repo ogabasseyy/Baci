@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { asRoute } from '@/lib/routes';
 import { CarouselPlayToggle } from './carousel-play-toggle';
 import { CarouselProgressFill } from './carousel-progress-fill';
+import { HeroMobileControlsSkeleton } from './hero-mobile-controls-skeleton';
 import type { LaunchProductSlide } from './LaunchCarousel';
 import {
   MOBILE_HERO_IMAGE_QUALITY,
@@ -64,6 +65,12 @@ export function HeroMobileCarousel({
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   useEffect(() => {
+    // matchMedia is universal in browsers but absent in some test/SSR
+    // shells; a missing API must not crash the carousel (it only gates the
+    // decorative progress fill). Absent means "no preference expressed".
+    if (typeof window.matchMedia !== 'function') {
+      return;
+    }
     const query = window.matchMedia('(prefers-reduced-motion: reduce)');
     setPrefersReducedMotion(query.matches);
     const handleChange = (event: MediaQueryListEvent) => {
@@ -270,7 +277,12 @@ export function HeroMobileCarousel({
             />
           )}
         </div>
-      ) : null}
+      ) : (
+        // Single slide: no interactive controls, but the streaming reserve
+        // fallback bets on a multi-slide hero — keep its row slot (empty but
+        // sized) so the fallback-to-content swap moves nothing.
+        <HeroMobileControlsSkeleton invisible />
+      )}
     </div>
   );
 }

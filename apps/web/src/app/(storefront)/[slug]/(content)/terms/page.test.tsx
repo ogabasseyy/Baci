@@ -21,6 +21,12 @@ vi.mock('@/templates/registry', () => ({
   getTemplate: vi.fn(() => null),
 }));
 
+// The Terms page is imported directly by the route; stub it to keep the
+// heavy page module out of this test's module graph.
+vi.mock('@/components/storefront/ogabassey/pages/legal-dispute', () => ({
+  OgabasseyV2LegalDispute: vi.fn(() => null),
+}));
+
 vi.mock('../pages/terms/terms-page-client', () => ({
   TermsPageClient: vi.fn(() => null),
 }));

@@ -11,383 +11,31 @@ vi.mock('next/cache', () => ({
   cacheTag: vi.fn(),
 }));
 
-interface ProductFixture {
-  id: string;
-  name: string;
-  description: string;
-  slug: string;
-  price: number;
-  stock: number;
-  stock_quantity: number;
-  manage_stock: boolean;
-  condition?: string | null;
-  has_condition_offers?: boolean | null;
-  average_rating?: number | null;
-  review_count?: number | null;
-  canonical_url?: string | null;
-  category?: string | null;
-  category_slug?: string | null;
-  categories?: { name?: string | null; slug?: string | null } | null;
-  product_categories?: Array<{
-    categories?: { name?: string | null; slug?: string | null } | null;
-  }> | null;
-  created_at?: string | null;
-  variants: Array<{
-    id: string;
-    attributes: Record<string, string>;
-    stock_quantity: number;
-    sku: string;
-    primary_image: string;
-  }>;
-}
-
-interface ReviewFixture {
-  product_id: string | null;
-  rating: number | string | null;
-}
-
-interface OfferFixture {
-  id: string;
-  product_id: string;
-  condition: string;
-  price: number;
-  images?: unknown;
-}
-
-interface ManifestFixture {
-  product_id: string;
-  variant_id?: string | null;
-  verified_url: string | null;
-  verified_format: string | null;
-  status: string;
-  is_primary: boolean;
-  position: number;
-}
-
-let productsResult: { data: ProductFixture[] | null; error: unknown };
-let nullCreatedAtProductsResult: {
-  data: ProductFixture[] | null;
-  error: unknown;
-};
-let manifestResult: { data: ManifestFixture[] | null; error: unknown };
-let offersResult: { data: OfferFixture[] | null; error: unknown };
-let reviewsResult: {
-  count?: number | null;
-  data: ReviewFixture[] | null;
-  error: unknown;
-};
-let reviewPageResults: Array<{
-  count?: number | null;
-  data: ReviewFixture[] | null;
-  error: unknown;
-}>;
-const mockProductSelect = vi.fn();
-const mockProductsGt = vi.fn();
-const mockProductsIs = vi.fn();
-const mockProductsOr = vi.fn();
-const mockProductsNot = vi.fn();
-const mockProductsOrder = vi.fn();
-const mockProductsLimit = vi.fn();
-const mockManifestEq = vi.fn();
-const mockManifestIn = vi.fn();
-const mockManifestOrder = vi.fn();
-const mockManifestRange = vi.fn();
-const mockReviewSelect = vi.fn();
-const mockReviewsIn = vi.fn();
-const mockReviewsOrder = vi.fn();
-const mockReviewsRange = vi.fn();
-let productQueryMode: 'non_null' | 'null' = 'non_null';
-
-function createMockSupabase() {
-  return {
-    from: (table: string) => {
-      if (table === 'products') {
-        return {
-          select: mockProductSelect.mockImplementation(() => {
-            const query = {
-              eq: () => query,
-              not: (column: string, operator: string, value: unknown) => {
-                productQueryMode = 'non_null';
-                mockProductsNot(column, operator, value);
-                return query;
-              },
-              is: (column: string, value: unknown) => {
-                if (column === 'created_at' && value === null) {
-                  productQueryMode = 'null';
-                }
-                mockProductsIs(column, value);
-                return query;
-              },
-              gt: (column: string, value: string) => {
-                mockProductsGt(column, value);
-                return query;
-              },
-              or: (filter: string) => {
-                mockProductsOr(filter);
-                return query;
-              },
-              order: (
-                column: string,
-                options?: {
-                  ascending: boolean;
-                }
-              ) => {
-                mockProductsOrder(column, options);
-                return query;
-              },
-              limit: (value: number) => mockProductsLimit(value),
-            };
-            return query;
-          }),
-        };
-      }
-      if (table === 'product_reviews') {
-        return {
-          select: mockReviewSelect.mockImplementation(() => {
-            const query = {
-              eq: () => query,
-              in: (column: string, values: string[]) => {
-                mockReviewsIn(column, values);
-                return query;
-              },
-              order: (
-                column: string,
-                options?: {
-                  ascending: boolean;
-                }
-              ) => {
-                mockReviewsOrder(column, options);
-                return query;
-              },
-              range: (from: number, to: number) => mockReviewsRange(from, to),
-            };
-            return query;
-          }),
-        };
-      }
-      if (table === 'product_offers') {
-        return {
-          select: () => ({
-            in: () => ({
-              eq: () => ({
-                order: () => ({
-                  order: () => Promise.resolve(offersResult),
-                }),
-              }),
-            }),
-          }),
-        };
-      }
-      if (table === 'product_feed_images') {
-        return {
-          select: () => {
-            const query = {
-              eq: (column: string, value: unknown) => {
-                mockManifestEq(column, value);
-                return query;
-              },
-              in: (column: string, values: string[]) => {
-                mockManifestIn(column, values);
-                return query;
-              },
-              order: (
-                column: string,
-                options?: {
-                  ascending: boolean;
-                }
-              ) => {
-                mockManifestOrder(column, options);
-                return query;
-              },
-              range: (from: number, to: number) => mockManifestRange(from, to),
-            };
-            return query;
-          },
-        };
-      }
-      throw new Error(`Unexpected table: ${table}`);
-    },
-  };
-}
+import {
+  createMockSupabase,
+  harness,
+  mockManifestEq,
+  mockManifestIn,
+  mockManifestOrder,
+  mockProductSelect,
+  mockProductsGt,
+  mockProductsIs,
+  mockProductsLimit,
+  mockProductsOr,
+  mockProductsOrder,
+  mockReviewSelect,
+  mockReviewsIn,
+  mockReviewsOrder,
+  mockReviewsRange,
+  resetFeedDataHarness,
+} from './feed-data.test-helpers';
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  mockProductSelect.mockReset();
-  mockProductsOr.mockReset();
-  mockProductsNot.mockReset();
-  mockProductsIs.mockReset();
-  mockProductsGt.mockReset();
-  mockProductsOrder.mockReset();
-  mockProductsLimit.mockReset();
-  mockManifestEq.mockReset();
-  mockManifestIn.mockReset();
-  mockManifestOrder.mockReset();
-  mockManifestRange.mockReset();
-  mockReviewSelect.mockReset();
-  mockReviewsIn.mockReset();
-  mockReviewsOrder.mockReset();
-  mockReviewsRange.mockReset();
-  productQueryMode = 'non_null';
-  mockProductsLimit.mockImplementation(() =>
-    Promise.resolve(
-      productQueryMode === 'null' ? nullCreatedAtProductsResult : productsResult
-    )
-  );
-  productsResult = {
-    data: [
-      {
-        id: 'prod-1',
-        name: 'Test Phone',
-        created_at: '2026-01-01T00:00:00.000Z',
-        description: 'A phone',
-        slug: 'test-phone',
-        price: 50000,
-        stock: 5,
-        stock_quantity: 5,
-        manage_stock: true,
-        variants: [
-          {
-            id: 'var-1',
-            attributes: { color: 'Red' },
-            stock_quantity: 3,
-            sku: 'SKU-RED',
-            primary_image: 'https://cdn.example.com/red.jpg',
-          },
-        ],
-      },
-    ],
-    error: null,
-  };
-  nullCreatedAtProductsResult = { data: [], error: null };
-  manifestResult = {
-    data: [
-      {
-        product_id: 'prod-1',
-        verified_url: 'https://cdn.example.com/manifest-front.jpg',
-        verified_format: 'jpeg',
-        status: 'verified',
-        is_primary: true,
-        position: 0,
-      },
-      {
-        product_id: 'prod-1',
-        variant_id: 'var-1',
-        verified_url: 'https://cdn.example.com/manifest-red.jpg',
-        verified_format: 'jpeg',
-        status: 'verified',
-        is_primary: true,
-        position: 1,
-      },
-    ],
-    error: null,
-  };
-  reviewsResult = { data: [], error: null };
-  offersResult = { data: [], error: null };
-  reviewPageResults = [];
-  mockManifestRange.mockImplementation(() => Promise.resolve(manifestResult));
-  mockReviewsRange.mockImplementation(() =>
-    Promise.resolve(reviewPageResults.shift() ?? reviewsResult)
-  );
+  resetFeedDataHarness();
   mockCreateAnonClient.mockReturnValue(createMockSupabase());
 });
 
 describe('getCachedOpenAIFeedData', () => {
-  it('attaches offers for products flagged with condition offers', async () => {
-    productsResult = {
-      data: [
-        {
-          id: 'prod-1',
-          name: 'Test Phone',
-          created_at: '2026-01-01T00:00:00.000Z',
-          description: 'A phone',
-          slug: 'test-phone',
-          price: 50000,
-          stock: 5,
-          stock_quantity: 5,
-          manage_stock: true,
-          has_condition_offers: true,
-          variants: [],
-        },
-      ],
-      error: null,
-    };
-    offersResult = {
-      data: [
-        {
-          id: 'offer-1',
-          product_id: 'prod-1',
-          condition: 'used',
-          price: 40000,
-          images: ['https://cdn.example.com/offer-used.jpg'],
-        },
-      ],
-      error: null,
-    };
-    const { getCachedOpenAIFeedData } = await import('./feed-data');
-    const result = await getCachedOpenAIFeedData('merchant-1');
-
-    expect(result.products).toHaveLength(1);
-    expect(result.products[0].offers).toEqual([
-      { images: ['https://cdn.example.com/offer-used.jpg'] },
-    ]);
-  });
-
-  it('drops non-emittable offers from image claims', async () => {
-    productsResult = {
-      data: [
-        {
-          id: 'prod-1',
-          name: 'Test Phone',
-          created_at: '2026-01-01T00:00:00.000Z',
-          description: 'A phone',
-          slug: 'test-phone',
-          price: 50000,
-          stock: 5,
-          stock_quantity: 5,
-          manage_stock: true,
-          condition: 'new',
-          has_condition_offers: true,
-          variants: [],
-        },
-      ],
-      error: null,
-    };
-    offersResult = {
-      data: [
-        {
-          id: 'offer-zero',
-          product_id: 'prod-1',
-          condition: 'used',
-          price: 0,
-          images: ['https://cdn.example.com/offer-zero.jpg'],
-        },
-        {
-          id: 'offer-same',
-          product_id: 'prod-1',
-          condition: 'new',
-          price: 40000,
-          images: ['https://cdn.example.com/offer-same.jpg'],
-        },
-        {
-          id: 'offer-good',
-          product_id: 'prod-1',
-          condition: 'used',
-          price: 40000,
-          images: ['https://cdn.example.com/offer-good.jpg'],
-        },
-      ],
-      error: null,
-    };
-    const { getCachedOpenAIFeedData } = await import('./feed-data');
-    const result = await getCachedOpenAIFeedData('merchant-1');
-
-    // Zero-price and same-condition offers render no rows, so they
-    // must not claim imagery either.
-    expect(result.products[0].offers).toEqual([
-      { images: ['https://cdn.example.com/offer-good.jpg'] },
-    ]);
-  });
-
   it('returns products with correct shape including manage_stock and variants', async () => {
     const { getCachedOpenAIFeedData } = await import('./feed-data');
     const result = await getCachedOpenAIFeedData('merchant-1');
@@ -457,7 +105,7 @@ describe('getCachedOpenAIFeedData', () => {
 
   it('throws when the feed image manifest query fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    manifestResult = {
+    harness.manifestResult = {
       data: null,
       error: { message: 'manifest unavailable' },
     };
@@ -499,7 +147,7 @@ describe('getCachedOpenAIFeedData', () => {
   });
 
   it('prefers direct category_id relation over product_categories for canonical URL parity', async () => {
-    productsResult = {
+    harness.productsResult = {
       data: [
         {
           id: 'prod-1',
@@ -535,7 +183,7 @@ describe('getCachedOpenAIFeedData', () => {
   });
 
   it('returns empty products array when no products exist', async () => {
-    productsResult = { data: [], error: null };
+    harness.productsResult = { data: [], error: null };
     const { getCachedOpenAIFeedData } = await import('./feed-data');
     const result = await getCachedOpenAIFeedData('merchant-1');
 
@@ -593,7 +241,7 @@ describe('getCachedOpenAIFeedData', () => {
   });
 
   it('continues pagination across null created_at pages', async () => {
-    productsResult = { data: [], error: null };
+    harness.productsResult = { data: [], error: null };
     const nullFullPage = Array.from({ length: 1000 }, (_, index) => ({
       id: `prod-${index}`,
       name: `Phone ${index}`,
@@ -638,7 +286,7 @@ describe('getCachedOpenAIFeedData', () => {
 
   it('throws and logs when products query fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    productsResult = {
+    harness.productsResult = {
       data: null,
       error: { message: 'connection error' },
     };
@@ -659,7 +307,7 @@ describe('getCachedOpenAIFeedData', () => {
   });
 
   it('hydrates review_count and average_rating from approved review rows', async () => {
-    productsResult = {
+    harness.productsResult = {
       data: [
         {
           id: 'prod-1',
@@ -676,7 +324,7 @@ describe('getCachedOpenAIFeedData', () => {
       ],
       error: null,
     };
-    reviewsResult = {
+    harness.reviewsResult = {
       data: [
         { product_id: 'prod-1', rating: 4 },
         { product_id: 'prod-1', rating: 5 },
@@ -705,7 +353,7 @@ describe('getCachedOpenAIFeedData', () => {
   });
 
   it('paginates approved review rows before aggregating review signals', async () => {
-    productsResult = {
+    harness.productsResult = {
       data: [
         {
           id: 'prod-1',
@@ -722,7 +370,7 @@ describe('getCachedOpenAIFeedData', () => {
       ],
       error: null,
     };
-    reviewPageResults = [
+    harness.reviewPageResults = [
       {
         data: Array.from({ length: 1000 }, () => ({
           product_id: 'prod-1',
@@ -753,7 +401,7 @@ describe('getCachedOpenAIFeedData', () => {
   });
 
   it('continues paging when the server caps review rows below the requested page size', async () => {
-    productsResult = {
+    harness.productsResult = {
       data: [
         {
           id: 'prod-1',
@@ -770,7 +418,7 @@ describe('getCachedOpenAIFeedData', () => {
       ],
       error: null,
     };
-    reviewPageResults = [
+    harness.reviewPageResults = [
       {
         count: 5,
         data: [
@@ -813,7 +461,7 @@ describe('getCachedOpenAIFeedData', () => {
   });
 
   it('drops blank, null, non-finite, and out-of-range review ratings', async () => {
-    productsResult = {
+    harness.productsResult = {
       data: [
         {
           id: 'prod-1',
@@ -830,7 +478,7 @@ describe('getCachedOpenAIFeedData', () => {
       ],
       error: null,
     };
-    reviewPageResults = [
+    harness.reviewPageResults = [
       {
         data: [
           { product_id: 'prod-1', rating: '4' },
@@ -860,7 +508,7 @@ describe('getCachedOpenAIFeedData', () => {
   });
 
   it('marks review signals unknown when review hydration fails', async () => {
-    productsResult = {
+    harness.productsResult = {
       data: [
         {
           id: 'prod-1',
@@ -879,7 +527,7 @@ describe('getCachedOpenAIFeedData', () => {
       ],
       error: null,
     };
-    reviewsResult = {
+    harness.reviewsResult = {
       data: null,
       error: { message: 'reviews unavailable' },
     };

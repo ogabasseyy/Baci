@@ -183,6 +183,35 @@ describe('resolveLegacyFeedImages', () => {
     });
   });
 
+  it('falls back to product-level entries rather than a sibling image', () => {
+    expect(
+      resolveLegacyFeedImages(
+        product(),
+        variant(),
+        manifest([
+          {
+            variant_id: 'variant-2',
+            verified_url: 'https://cdn.example.com/sibling.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 0,
+          },
+          {
+            verified_url: 'https://cdn.example.com/manifest-front.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 1,
+          },
+        ])
+      )
+    ).toEqual({
+      image_link: 'https://cdn.example.com/manifest-front.jpg',
+      additional_image_links: [],
+    });
+  });
+
   it('excludes an offer-claimed variant primary image', () => {
     expect(
       resolveLegacyFeedImages(

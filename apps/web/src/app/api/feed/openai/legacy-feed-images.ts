@@ -22,12 +22,13 @@ function getManifestEntriesForProductVariant(
   const variantEntries = manifestEntries.filter(
     (entry) => entry.variant_id === variant.id
   );
-  // A variant primary the claims exclude is unusable: fall through to the
-  // product-level manifest primary (family fallback) instead of the raw
-  // product image.
-  return resolveGmcPrimaryImage(variantEntries, excludeUrls)
-    ? variantEntries
-    : manifestEntries;
+  // A variant primary the claims exclude is unusable: fall through to
+  // product-level entries only. Sibling-variant entries must not stand in
+  // for the product image, or the row would advertise another SKU's image.
+  if (resolveGmcPrimaryImage(variantEntries, excludeUrls)) {
+    return variantEntries;
+  }
+  return manifestEntries.filter((entry) => !entry.variant_id);
 }
 
 function getProductImageUrl(

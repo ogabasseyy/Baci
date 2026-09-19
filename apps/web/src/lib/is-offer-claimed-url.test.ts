@@ -42,6 +42,13 @@ describe('isOfferClaimedUrl', () => {
     ).toBe(false);
   });
 
+  it('rejects bare-relative claims that the backfill cannot resolve', () => {
+    const claimed = new Set(['images/used.jpg']);
+    expect(
+      isOfferClaimedUrl('https://cdn.example/images/used.jpg', claimed)
+    ).toBe(false);
+  });
+
   it('resolves dot segments in relative claims before comparing', () => {
     const claimed = new Set(['/images/../used.jpg']);
     expect(isOfferClaimedUrl('https://store.example/used.jpg', claimed)).toBe(

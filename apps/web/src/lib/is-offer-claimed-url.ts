@@ -13,18 +13,13 @@ function normalizedPath(value: string): string | null {
 }
 
 /**
- * Bare path references carry no scheme or authority to compare exactly.
- * Scheme-relative (`//host/path`) references keep their authority, so
- * they never match by path alone.
+ * Root-relative (`/path`) references mirror the backfill classifier, which
+ * only resolves paths beginning with `/`. Bare (`path`) and
+ * scheme-relative (`//host/path`) references never verify, so they must
+ * not exclude parent imagery by path alone.
  */
 function isRelativeReference(value: string): boolean {
-  if (value.length === 0 || value.startsWith('//')) return false;
-  try {
-    new URL(value);
-    return false;
-  } catch {
-    return true;
-  }
+  return value.startsWith('/') && !value.startsWith('//');
 }
 
 /**

@@ -207,7 +207,21 @@ export function usePaymentGatewayController() {
   const handleClose = () => {
     Alert.alert('Cancel Payment?', getCloseConfirmationMessage(paymentKind), [
       { text: 'Continue Payment', style: 'cancel' },
-      { text: 'Leave', style: 'destructive', onPress: () => router.back() },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: () => {
+          if (paymentMethod === 'uba_redvault') {
+            // The order is already initialized server-side with a live
+            // Paystack attempt. Route to the orders flow instead of back to
+            // the populated checkout so the shopper cannot place a second
+            // order while the first still reserves inventory.
+            router.replace('/orders');
+            return;
+          }
+          router.back();
+        },
+      },
     ]);
   };
   const eventHandlers = usePaymentGatewayEventHandlers({

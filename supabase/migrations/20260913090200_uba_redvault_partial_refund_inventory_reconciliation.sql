@@ -19,6 +19,7 @@ BEGIN
     OR v_order.shipping_status NOT IN ('pending', 'processing') OR v_order.cancelled_at IS NOT NULL
     OR v_order.shipment_id IS NOT NULL OR v_order.tracking_number IS NOT NULL
     OR v_order.shipped_at IS NOT NULL OR v_order.delivered_at IS NOT NULL
+    OR v_order.shipment_booking_lock_token IS NOT NULL
     OR EXISTS (SELECT 1 FROM public.shipments WHERE order_id = v_order.id) THEN
     RAISE EXCEPTION 'redvault_partial_refund_inventory_requires_review';
   END IF;
@@ -71,7 +72,9 @@ BEGIN
     v_fulfillment_data := jsonb_build_object('source', 'merchant_stock', 'reservationExpiresAt', NULL,
       'inventoryUnits', COALESCE(v_units_json, '[]'::jsonb), 'missingUnitCount',
       GREATEST(v_item.quantity - (SELECT count(*) FROM public.variant_inventory AS inventory
-        WHERE inventory.order_item_id = v_item.id AND inventory.status = 'reserved'), 0));
+        WHERE inventory.order_item_id = v_item.id AND inventory.status = 'reserved'), 0),
+      'fulfillmentQuantity', (SELECT count(*) FROM public.variant_inventory AS inventory
+        WHERE inventory.order_item_id = v_item.id AND inventory.status = 'reserved'));
     UPDATE public.order_items SET fulfillment_data = v_fulfillment_data WHERE id = v_item.id;
     PERFORM private.sync_serialized_stock(v_order.merchant_id, v_item.product_id);
   END LOOP;
@@ -146,7 +149,8 @@ BEGIN
       v_financial_state := 'refunded';
       IF v_order.shipping_status IN ('pending', 'processing') AND v_order.cancelled_at IS NULL
         AND v_order.shipment_id IS NULL AND v_order.tracking_number IS NULL AND v_order.shipped_at IS NULL
-        AND v_order.delivered_at IS NULL AND NOT EXISTS (SELECT 1 FROM public.shipments WHERE order_id = v_order.id)
+        AND v_order.delivered_at IS NULL AND v_order.shipment_booking_lock_token IS NULL
+        AND NOT EXISTS (SELECT 1 FROM public.shipments WHERE order_id = v_order.id)
         AND EXISTS (SELECT 1 FROM public.order_items WHERE order_id = v_order.id)
         AND NOT EXISTS (SELECT 1 FROM public.order_items AS item LEFT JOIN public.products AS product ON product.id = item.product_id
           LEFT JOIN public.product_variants AS variant ON variant.id = item.variant_id WHERE item.order_id = v_order.id

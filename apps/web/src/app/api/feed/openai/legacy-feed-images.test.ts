@@ -150,4 +150,20 @@ describe('resolveLegacyFeedImages', () => {
       additional_image_links: [],
     });
   });
+
+  it('excludes an offer-claimed variant primary image', () => {
+    expect(
+      resolveLegacyFeedImages(
+        product({
+          images: ['https://cdn.example.com/phone.jpg'],
+          offers: [{ images: ['/images/red.jpg'] }],
+        }),
+        variant({ primary_image: 'https://cdn.example.com/images/red.jpg' }),
+        {}
+      )
+    ).toEqual({
+      image_link: 'https://cdn.example.com/phone.jpg',
+      additional_image_links: [],
+    });
+  });
 });

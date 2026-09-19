@@ -3,7 +3,7 @@ import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
-import { isOfferClaimedUrl } from '@/lib/is-offer-claimed-image';
+import { isOfferClaimedUrl } from '@/lib/is-offer-claimed-url';
 import type { ImageManifestMap } from '../google-merchant/feed-builder';
 import type { OpenAIFeedVariant } from './feed-data';
 import type { Product } from './feed-types';

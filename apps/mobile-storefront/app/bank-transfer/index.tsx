@@ -198,7 +198,10 @@ export default function BankTransferScreen() {
             ? shortfall
             : 0;
         // First completion wins the durable claim; replays emit nothing.
+        // Snapshot the cart synchronously: the claim await below yields,
+        // and the success route may clear the cart before it resolves.
         void trackCheckoutPaymentCompletedOnce({
+          items: useCartStore.getState().items,
           orderId,
           orderNumber: orderNumber || orderId,
           paymentMethod: 'bank_transfer',

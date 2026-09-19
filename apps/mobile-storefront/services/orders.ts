@@ -218,12 +218,17 @@ export async function createOrder(
       response.headers.get('x-idempotency-replayed') === 'true' ||
       normalizedOrderResponse.idempotency?.replayed === true;
 
-    await trackCreatedOrderOnce(
+    // Analytics must never hold the order response hostage: a stalled
+    // native store would otherwise keep the shopper on the submitting state
+    // for an already-committed order (and invite a duplicate retry).
+    void trackCreatedOrderOnce(
       normalizedOrderResponse,
       request,
       startTime,
       options?.analyticsPaymentMethod
-    );
+    ).catch((error) => {
+      log.error('Failed to record order-created analytics:', error);
+    });
 
     return replayed
       ? { ...normalizedOrderResponse, idempotency: { replayed: true } }

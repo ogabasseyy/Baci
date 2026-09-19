@@ -217,6 +217,8 @@ export function usePaymentGatewayController() {
     beginPaymentCompletion,
     clearPendingLoadTimeout,
     clearPendingNavigation,
+    gateway,
+    orderId,
     paymentKind,
     reference,
     refs: gatewayRefs,

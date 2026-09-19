@@ -120,10 +120,14 @@ function OrderSuccessContent() {
   const isLoading = loading && Boolean(orderId);
   const hasValidatedOrder = Boolean(order);
   const hasRecoveryState = !isLoading && !hasValidatedOrder;
+  // Proforma presentation is for UNPAID invoice-method orders only: a paid
+  // invoice order renders the commercial (380) document, matching
+  // resolveInvoiceTypeCode.
   const isInvoice =
-    _type === 'invoice' ||
-    order?.payment_status === 'invoice' ||
-    order?.payment_method === 'invoice';
+    (_type === 'invoice' ||
+      order?.payment_status === 'invoice' ||
+      order?.payment_method === 'invoice') &&
+    order?.payment_status !== 'paid';
 
   const heading = hasValidatedOrder
     ? isInvoice

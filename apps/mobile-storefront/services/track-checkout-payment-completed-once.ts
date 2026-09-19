@@ -1,9 +1,12 @@
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
-import { useCartStore } from '@/stores/cart-store';
+import { type CartItem, useCartStore } from '@/stores/cart-store';
 import { trackCheckoutRoutePurchaseCompleted } from './tiktok-checkout-route-tracking';
 import { trackCheckoutPaymentCompleted } from './track-checkout-payment-completed';
 
 type CheckoutPaymentCompletionInput = {
+  // Snapshot callers whose cart may clear while the durable claim is
+  // written pass items synchronously so the purchase keeps its lines.
+  items?: CartItem[];
   orderId: string;
   orderNumber?: string;
   paymentMethod: string;
@@ -30,7 +33,7 @@ export async function trackCheckoutPaymentCompletedOnce(
   const total = input.value ?? 0;
   trackCheckoutPaymentCompleted(input);
   trackCheckoutRoutePurchaseCompleted({
-    items: useCartStore.getState().items,
+    items: input.items ?? useCartStore.getState().items,
     orderId: input.orderId,
     orderNumber: input.orderNumber || input.orderId,
     paymentMethod: input.paymentMethod,

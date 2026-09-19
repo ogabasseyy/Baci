@@ -1,5 +1,6 @@
 import { type Href, router } from 'expo-router';
 import type { WebViewNavigation } from 'react-native-webview';
+import { trackCheckoutPaymentFailed } from '@/services/analytics';
 import {
   isPaymentCancellationRedirect,
   isSessionPaymentCompletionRedirect,
@@ -15,6 +16,8 @@ interface PaymentGatewayEventHandlerInput {
   beginPaymentCompletion: () => void;
   clearPendingLoadTimeout: () => void;
   clearPendingNavigation: () => void;
+  gateway?: string;
+  orderId?: string;
   paymentKind?: string;
   reference?: string;
   refs: PaymentGatewayRefs;
@@ -31,6 +34,8 @@ export function createPaymentGatewayEventHandlers({
   beginPaymentCompletion,
   clearPendingLoadTimeout,
   clearPendingNavigation,
+  gateway,
+  orderId,
   paymentKind,
   reference,
   refs,
@@ -76,6 +81,12 @@ export function createPaymentGatewayEventHandlers({
       if (isPaymentCancellationRedirect(navState.url)) {
         setPaymentStatus('error');
         setErrorMessage('Payment was cancelled.');
+        // A cancelled provider page is a terminal failure, not abandonment.
+        trackCheckoutPaymentFailed(
+          'payment_gateway_cancelled',
+          orderId,
+          gateway
+        );
         if (paymentKind === PAYMENT_KINDS.SAVINGS_AUTH) {
           scheduleDelayedNavigation(() => {
             router.replace((returnTo || '/wallet/savings/start') as Href);
@@ -124,6 +135,12 @@ export function createPaymentGatewayEventHandlers({
       clearPendingLoadTimeout();
       setPaymentStatus('error');
       setErrorMessage(nativeEvent.description || 'Failed to load payment page');
+      // A broken provider page is a terminal failure, not abandonment.
+      trackCheckoutPaymentFailed(
+        'payment_gateway_load_error',
+        orderId,
+        gateway
+      );
     },
   };
 }

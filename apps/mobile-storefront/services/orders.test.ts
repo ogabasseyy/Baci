@@ -123,6 +123,14 @@ jest.mock('@/services/analytics', () => ({
   trackError: jest.fn(),
 }));
 
+const mockClaimCheckoutPurchaseTracking = jest.fn(
+  async (_orderId: string, _eventName?: string) => true
+);
+jest.mock('@/lib/claim-checkout-purchase-tracking', () => ({
+  claimCheckoutPurchaseTracking: (orderId: string, eventName?: string) =>
+    mockClaimCheckoutPurchaseTracking(orderId, eventName),
+}));
+
 jest.mock('@/lib/offline-queue', () => ({
   offlineQueue: { enqueue: jest.fn() },
 }));
@@ -216,6 +224,31 @@ async function createOrderWithItems(items: TestOrderItem[]) {
 }
 
 describe('createOrder — variant_attributes', () => {
+  it('returns the created order while the analytics claim is still pending', async () => {
+    let releaseClaim: ((claimed: boolean) => void) | undefined;
+    mockClaimCheckoutPurchaseTracking.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          releaseClaim = resolve;
+        })
+    );
+
+    const pending = createOrderWithItems([
+      {
+        id: 'prod-1',
+        product_id: 'prod-1',
+        name: 'Jar',
+        quantity: 1,
+        price: 5000,
+      },
+    ]);
+
+    // A stalled native store must not keep the shopper on the submitting
+    // state for an already-committed order.
+    await expect(pending).resolves.toBeUndefined();
+    releaseClaim?.(true);
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetchResponse.ok = true;

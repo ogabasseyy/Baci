@@ -31,20 +31,30 @@ jest.mock('@/lib/logger', () => ({
     warn: jest.fn(),
   }),
 }));
+const mockCartItems: unknown[] = [];
 jest.mock('@/stores/cart-store', () => ({
   useCartStore: Object.assign(() => ({ clearCart: jest.fn() }), {
-    getState: () => ({
-      items: [{ id: 'item-1', name: 'Jar', price: 470000, quantity: 1 }],
-    }),
+    getState: () => ({ items: mockCartItems }),
   }),
 }));
 
 const completedMock = trackCheckoutPaymentCompleted as jest.Mock;
 const purchaseMock = trackCheckoutRoutePurchaseCompleted as jest.Mock;
 
+const DEFAULT_CART_ITEM = {
+  id: 'item-1',
+  name: 'Jar',
+  price: 470000,
+  product_id: 'prod-1',
+  quantity: 1,
+  slug: 'jar',
+};
+
 describe('trackCheckoutPaymentCompletedOnce', () => {
   beforeEach(() => {
     storage.clear();
+    mockCartItems.length = 0;
+    mockCartItems.push({ ...DEFAULT_CART_ITEM });
     jest.clearAllMocks();
   });
 
@@ -85,6 +95,34 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
 
     expect(completedMock).toHaveBeenCalledTimes(1);
     expect(purchaseMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a synchronously snapshotted cart when clearing wins the race', async () => {
+    const snapshot = [
+      {
+        id: 'item-9',
+        name: 'Snapshot Jar',
+        price: 1000,
+        product_id: 'prod-9',
+        quantity: 2,
+        slug: 'snapshot-jar',
+      },
+    ];
+    // The success route clears the cart while the durable claim is written.
+    mockCartItems.length = 0;
+
+    await expect(
+      trackCheckoutPaymentCompletedOnce({
+        items: snapshot,
+        orderId: 'order-race',
+        paymentMethod: 'bank_transfer',
+        value: 2000,
+      })
+    ).resolves.toBe(true);
+
+    expect(purchaseMock).toHaveBeenCalledWith(
+      expect.objectContaining({ items: snapshot })
+    );
   });
 
   it('honours a claim persisted before the current session started', async () => {

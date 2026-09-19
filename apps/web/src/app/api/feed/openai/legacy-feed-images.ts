@@ -54,6 +54,12 @@ function getProductImageUrl(
     ? ''
     : parentFirstImage;
 
+  // A variant primary restored without the claim check would reintroduce
+  // offer-owned imagery the manifest copy just excluded.
+  if (isOfferClaimedUrl(variant?.primary_image, offerClaimedImageUrls)) {
+    return fallbackImage;
+  }
+
   return variant?.primary_image || fallbackImage;
 }
 

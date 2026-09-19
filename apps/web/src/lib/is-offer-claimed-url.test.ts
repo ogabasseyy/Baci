@@ -42,6 +42,16 @@ describe('isOfferClaimedUrl', () => {
     ).toBe(false);
   });
 
+  it('resolves dot segments in relative claims before comparing', () => {
+    const claimed = new Set(['/images/../used.jpg']);
+    expect(isOfferClaimedUrl('https://store.example/used.jpg', claimed)).toBe(
+      true
+    );
+    expect(
+      isOfferClaimedUrl('https://store.example/images/used.jpg', claimed)
+    ).toBe(false);
+  });
+
   it('does not match an absolute claim from another host by path alone', () => {
     const claimed = new Set(['https://other.example/images/used.jpg']);
     expect(

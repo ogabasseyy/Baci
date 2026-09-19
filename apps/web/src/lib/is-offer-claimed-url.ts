@@ -1,20 +1,29 @@
-/** Pathname of an absolute URL, or the path part of a relative reference. */
+/**
+ * Pathname with dot segments resolved and query/fragment stripped, so
+ * `/images/../used.jpg?v=2` and `https://cdn.example/images/used.jpg`
+ * compare equal. Relative references resolve against a dummy base purely
+ * to normalize dot segments; only the pathname is ever compared.
+ */
 function normalizedPath(value: string): string | null {
   try {
-    return new URL(value).pathname;
+    return new URL(value, 'http://localhost').pathname;
   } catch {
-    const path = value.split(/[?#]/, 1)[0];
-    return path.length > 0 ? path : null;
+    return null;
   }
 }
 
-/** Bare path references carry no scheme or authority to compare exactly. */
+/**
+ * Bare path references carry no scheme or authority to compare exactly.
+ * Scheme-relative (`//host/path`) references keep their authority, so
+ * they never match by path alone.
+ */
 function isRelativeReference(value: string): boolean {
+  if (value.length === 0 || value.startsWith('//')) return false;
   try {
     new URL(value);
     return false;
   } catch {
-    return value.length > 0;
+    return true;
   }
 }
 

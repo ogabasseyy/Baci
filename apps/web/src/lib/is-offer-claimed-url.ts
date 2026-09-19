@@ -28,13 +28,27 @@ function isRelativeReference(value: string): boolean {
 }
 
 /**
+ * Canonical absolute form for equivalent-spelling comparison: lowercase
+ * scheme and host, default ports dropped, dot segments resolved, and
+ * query/fragment stripped. Different hosts stay distinct, so the
+ * cross-host restriction holds.
+ */
+function canonicalAbsoluteUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Whether a single URL is claimed by an offer exclusion set: exact match,
- * or a relative offer claim resolving to the same path (query strings and
- * fragments ignored on both sides, since the backfill resolves both raw
- * forms to one shared verified resource). Raw product-image fallbacks
- * (which have no manifest entry) must use this so a relative claim still
- * excludes the equivalent absolute product URL. Absolute claims from
- * another host never match by path alone.
+ * canonically equivalent absolute match (case, default port, fragment, and
+ * dot-segment spellings), or a relative offer claim resolving to the same
+ * path. Raw product-image fallbacks (which have no manifest entry) must
+ * use this so a relative claim still excludes the equivalent absolute
+ * product URL. Absolute claims from another host never match.
  */
 export function isOfferClaimedUrl(
   url: string | null | undefined,
@@ -42,8 +56,17 @@ export function isOfferClaimedUrl(
 ): boolean {
   if (url == null || excludeUrls.size === 0) return false;
   const pathname = normalizedPath(url);
+  const canonical = canonicalAbsoluteUrl(url);
   for (const claim of excludeUrls) {
     if (claim === url) {
+      return true;
+    }
+    const claimCanonical = canonicalAbsoluteUrl(claim);
+    if (
+      claimCanonical != null &&
+      canonical != null &&
+      claimCanonical === canonical
+    ) {
       return true;
     }
     if (!isRelativeReference(claim)) {

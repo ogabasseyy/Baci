@@ -65,7 +65,10 @@ function resolveTikTokImages(
 
   return {
     primaryImageUrl,
-    additionalImageUrls: resolveGmcAdditionalImages(entries, excludeUrls),
+    additionalImageUrls: resolveGmcAdditionalImages(
+      entries,
+      excludeUrls
+    ).filter((url) => url !== primaryImageUrl),
   };
 }
 

@@ -36,21 +36,27 @@ function isVerifiedWithUrl(e: FeedImageManifestEntry): e is VerifiedEntry {
  * Returns the verified URL or null if no valid primary image exists.
  * When null, the feed builder must skip the entire product item.
  * Entries claimed by offers are excluded when provided, so offer-owned
- * imagery never leaks into the base product primary image.
+ * imagery never leaks into the base product primary image. When the
+ * flagged primary is claimed but other verified entries remain, the
+ * lowest-position safe entry is promoted instead of dropping the row;
+ * callers must keep the returned URL out of the additional-image list.
  */
 export function resolveGmcPrimaryImage(
   entries: FeedImageManifestEntry[],
   excludeUrls: ReadonlySet<string> = new Set()
 ): string | null {
-  const primary = entries
-    .filter(
-      (e): e is VerifiedEntry =>
-        e.is_primary &&
-        isVerifiedWithUrl(e) &&
-        !isOfferClaimedImage(e, excludeUrls)
-    )
+  const candidates = entries.filter(
+    (e): e is VerifiedEntry =>
+      isVerifiedWithUrl(e) && !isOfferClaimedImage(e, excludeUrls)
+  );
+  const primary = candidates
+    .filter((e) => e.is_primary)
     .sort((a, b) => a.position - b.position)[0];
-  return primary?.verified_url ?? null;
+  if (primary) {
+    return primary.verified_url;
+  }
+  const promoted = candidates.sort((a, b) => a.position - b.position)[0];
+  return promoted?.verified_url ?? null;
 }
 
 /**

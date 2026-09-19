@@ -33,7 +33,10 @@ function getOpenAIFeedImageUrls(
   if (manifestPrimaryImage) {
     return [
       manifestPrimaryImage,
-      ...resolveGmcAdditionalImages(manifestEntries, offerClaimedImageUrls),
+      ...resolveGmcAdditionalImages(
+        manifestEntries,
+        offerClaimedImageUrls
+      ).filter((url) => url !== manifestPrimaryImage),
     ];
   }
 

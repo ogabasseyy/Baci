@@ -107,9 +107,39 @@ describe('resolveGmcPrimaryImage', () => {
     expect(resolveGmcPrimaryImage(entries)).toBeNull();
   });
 
-  it('ignores non-primary entries', () => {
-    const entries = [verifiedEntry({ is_primary: false, position: 0 })];
-    expect(resolveGmcPrimaryImage(entries)).toBeNull();
+  it('promotes the lowest-position safe entry when no primary is available', () => {
+    const entries = [
+      verifiedEntry({
+        is_primary: false,
+        position: 2,
+        verified_url: 'https://cdn.example/second.jpg',
+      }),
+      verifiedEntry({
+        is_primary: false,
+        position: 1,
+        verified_url: 'https://cdn.example/first.jpg',
+      }),
+    ];
+    expect(resolveGmcPrimaryImage(entries)).toBe(
+      'https://cdn.example/first.jpg'
+    );
+  });
+
+  it('promotes a safe entry when the primary is claimed by offers', () => {
+    const entries = [
+      verifiedEntry({ verified_url: 'https://cdn.example/offer-used.jpg' }),
+      verifiedEntry({
+        is_primary: false,
+        position: 1,
+        verified_url: 'https://cdn.example/safe.jpg',
+      }),
+    ];
+    expect(
+      resolveGmcPrimaryImage(
+        entries,
+        new Set(['https://cdn.example/offer-used.jpg'])
+      )
+    ).toBe('https://cdn.example/safe.jpg');
   });
 
   it('selects the primary entry when mixed with additional entries', () => {

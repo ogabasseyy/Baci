@@ -93,6 +93,32 @@ describe('handleCheckoutSubmitError', () => {
     expect(router.push).toHaveBeenCalledWith('/orders');
   });
 
+  it('does not record order-creation conflicts as payment failures', () => {
+    const { trackCheckoutPaymentFailed } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutPaymentFailed: jest.Mock };
+    trackCheckoutPaymentFailed.mockClear();
+
+    handleCheckoutSubmitError(
+      new OrderError(
+        'Refresh checkout and start a new order',
+        'CHECKOUT_IDEMPOTENCY_CONFLICT'
+      ),
+      'paystack'
+    );
+    handleCheckoutSubmitError(
+      new OrderError(
+        'This checkout order can no longer be reused.',
+        'CHECKOUT_ORDER_NOT_REUSABLE'
+      ),
+      'paystack'
+    );
+
+    // Neither duplicate-submission nor stale-reusable-order conflicts
+    // declined a payment: the funnel must not see payment_failed.
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+  });
+
   it('lets the shopper start a replacement checkout after a cancelled non-reusable order', () => {
     const advanceCheckoutGeneration = jest.fn();
     const { useCartStore } = jest.requireMock('@/stores/cart-store') as {

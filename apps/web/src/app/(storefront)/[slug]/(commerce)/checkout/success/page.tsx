@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { AdUnit } from '@/components/storefront/ogabassey/components/AdUnit';
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { useCart } from '@/hooks/cart';
@@ -105,6 +105,12 @@ const orderSteps = [
 ];
 
 type CheckoutVerificationStatus = 'success' | 'pending' | 'failed';
+
+// A pending gateway response can settle shortly after the first verify
+// call: re-run verification on a bounded poll so the completed branch is
+// still reached without a manual refresh.
+const VERIFY_REPOLL_INTERVAL_MS = 3000;
+const VERIFY_REPOLL_MAX_ATTEMPTS = 20;
 
 interface VerifyCheckoutPaymentParams {
   merchantSlug: string | undefined;
@@ -325,6 +331,10 @@ function CheckoutSuccessContent() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
+  const statusRef = useRef<CheckoutVerificationStatus>('pending');
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler handles memoization
   useEffect(() => {
@@ -338,64 +348,90 @@ function CheckoutSuccessContent() {
       router.push(asRoute(getHref('/checkout')));
     };
 
-    verifyCheckoutPayment(
-      {
-        merchantSlug: merchantContext?.merchant?.slug,
-        orderId,
-        paymentMethod: paymentMethodParam,
-        reference,
-        trackingToken,
-      },
-      {
-        clearCart,
-        redirectToCheckout,
-        scheduleFailedRedirect: () => {
-          timerHandle.current = setTimeout(redirectToCheckout, 4000);
-        },
-        setIsVerifying,
-        setOrderNumber,
-        setPaymentMethod,
-        setStatus,
-        capturePaymentCompleted: (input) => {
-          captureCheckoutFunnelEventOnce(
-            CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
-            input.orderId,
-            buildCheckoutFunnelProperties({
-              channel: 'web',
-              currency: input.currency,
-              orderId: input.orderId,
-              orderNumber: input.orderNumber,
-              paymentIntent: getCheckoutPaymentIntent(input.paymentMethod),
-              paymentMethod: input.paymentMethod,
-              paymentStatus: 'paid',
-              reference: input.reference,
-              source: 'web_checkout',
-              total: input.total,
-            })
-          );
-        },
-        capturePaymentFailed: (input) => {
-          captureCheckoutFunnelEventOnce(
-            CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-            input.orderId || input.reference || 'unknown-order',
-            buildCheckoutFunnelProperties({
-              channel: 'web',
-              orderId: input.orderId ?? undefined,
-              orderNumber: input.orderNumber,
-              paymentIntent: input.paymentMethod
-                ? getCheckoutPaymentIntent(input.paymentMethod)
-                : undefined,
-              paymentMethod: input.paymentMethod ?? undefined,
-              reason: input.reason,
-              reference: input.reference ?? undefined,
-              source: 'web_checkout',
-            })
-          );
-        },
+    const verifyParams = {
+      merchantSlug: merchantContext?.merchant?.slug,
+      orderId,
+      paymentMethod: paymentMethodParam,
+      reference,
+      trackingToken,
+    };
+    let disposed = false;
+    let reverifyTimer: ReturnType<typeof setTimeout> | null = null;
+    let reverifyAttempts = 0;
+    const clearReverifyTimer = () => {
+      if (reverifyTimer !== null) {
+        clearTimeout(reverifyTimer);
+        reverifyTimer = null;
       }
-    );
+    };
+    const scheduleReverify = () => {
+      if (disposed || reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS) {
+        return;
+      }
+      reverifyTimer = setTimeout(() => {
+        reverifyTimer = null;
+        if (disposed || statusRef.current !== 'pending') {
+          return;
+        }
+        reverifyAttempts += 1;
+        void verifyCheckoutPayment(verifyParams, verifyHandlers);
+        scheduleReverify();
+      }, VERIFY_REPOLL_INTERVAL_MS);
+    };
+    const verifyHandlers: VerifyCheckoutPaymentHandlers = {
+      clearCart,
+      redirectToCheckout,
+      scheduleFailedRedirect: () => {
+        timerHandle.current = setTimeout(redirectToCheckout, 4000);
+      },
+      setIsVerifying,
+      setOrderNumber,
+      setPaymentMethod,
+      setStatus,
+      capturePaymentCompleted: (input) => {
+        captureCheckoutFunnelEventOnce(
+          CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+          input.orderId,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            currency: input.currency,
+            orderId: input.orderId,
+            orderNumber: input.orderNumber,
+            paymentIntent: getCheckoutPaymentIntent(input.paymentMethod),
+            paymentMethod: input.paymentMethod,
+            paymentStatus: 'paid',
+            reference: input.reference,
+            source: 'web_checkout',
+            total: input.total,
+          })
+        );
+      },
+      capturePaymentFailed: (input) => {
+        captureCheckoutFunnelEventOnce(
+          CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+          input.orderId || input.reference || 'unknown-order',
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            orderId: input.orderId ?? undefined,
+            orderNumber: input.orderNumber,
+            paymentIntent: input.paymentMethod
+              ? getCheckoutPaymentIntent(input.paymentMethod)
+              : undefined,
+            paymentMethod: input.paymentMethod ?? undefined,
+            reason: input.reason,
+            reference: input.reference ?? undefined,
+            source: 'web_checkout',
+          })
+        );
+      },
+    };
+
+    void verifyCheckoutPayment(verifyParams, verifyHandlers);
+    scheduleReverify();
 
     return () => {
+      disposed = true;
+      clearReverifyTimer();
       if (timerHandle.current !== null) {
         clearTimeout(timerHandle.current);
       }

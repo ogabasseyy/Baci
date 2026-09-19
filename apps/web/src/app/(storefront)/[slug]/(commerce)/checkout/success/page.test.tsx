@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
+import * as nextNavigation from 'next/navigation';
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CheckoutSuccessPage from '@/app/(storefront)/[slug]/(commerce)/checkout/success/page';
@@ -194,6 +195,68 @@ describe('checkout success page', () => {
       expect(screen.getByText(/ORD-2001/i)).toBeInTheDocument()
     );
     expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
+  });
+
+  it('re-verifies a pending gateway response until it settles paid', async () => {
+    // Pin a stable router identity so the verify effect runs once per
+    // mount (as in production): the shared mock returns a fresh object
+    // per render, which would re-trigger verification immediately and
+    // mask the single-shot gap this test regresses.
+    const useRouterSpy = vi
+      .spyOn(nextNavigation, 'useRouter')
+      .mockReturnValue({ push: mockPush } as never);
+    mockFetchWithCsrf
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          orderNumber: 'ORD-2001',
+          status: 'pending',
+          success: false,
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          finalizationOutcome: 'completed',
+          orderId: 'order-1',
+          orderNumber: 'ORD-2001',
+          orderTotal: 5750,
+          paymentMethod: 'paystack',
+          status: 'success',
+          success: true,
+        }),
+      });
+
+    render(<CheckoutSuccessPage />);
+
+    try {
+      // Still processing after the first read: no conversion yet.
+      await waitFor(() => expect(mockFetchWithCsrf).toHaveBeenCalled());
+      expect(
+        screen.getByRole('heading', { name: /order being processed/i })
+      ).toBeInTheDocument();
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_completed',
+        expect.anything(),
+        expect.anything()
+      );
+
+      // The bounded re-verification observes the settled payment without
+      // a manual refresh.
+      await waitFor(
+        () => {
+          expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+            'payment_completed',
+            'order-1',
+            expect.objectContaining({ payment_status: 'paid' })
+          );
+        },
+        { timeout: 8000 }
+      );
+      expect(mockFetchWithCsrf.mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      useRouterSpy.mockRestore();
+    }
   });
 
   it('keeps the cart intact when payment verification does not succeed', async () => {

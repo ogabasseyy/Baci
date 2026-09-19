@@ -3763,9 +3763,14 @@ export async function POST(request: NextRequest) {
             const emailResult = await sendEmail({
               to: customer_email,
               toName: customer_name,
+              // Derived from the payment/paid classification (same rule as
+              // the body and the Peppol type code, which share
+              // isPaidForImmediateEmail): the attachment block above may
+              // fail, leaving emailedInvoiceTypeCode undefined, and the
+              // subject must not flip to commercial on that failure.
               subject:
                 effectivePaymentMethod === 'invoice'
-                  ? `${emailedInvoiceTypeCode === '325' ? 'Proforma Invoice' : 'Invoice'} Generated - #${emailData.orderNumber}`
+                  ? `${emailDocumentKind === 'proforma' ? 'Proforma Invoice' : 'Invoice'} Generated - #${emailData.orderNumber}`
                   : `Order Confirmation - #${emailData.orderNumber}`,
               htmlContent,
               textContent,

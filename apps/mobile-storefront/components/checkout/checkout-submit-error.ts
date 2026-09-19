@@ -50,12 +50,15 @@ function pruneRejectedQuizVoucherLines(error: OrderError): void {
 }
 
 // Raised before an order exists or a provider flow starts: offline clients,
-// invalid carts, and expired sessions are not payment declines and must not
-// enter the funnel as payment_failed.
+// invalid carts, expired sessions, and order-creation conflicts (a reusable
+// order that changed, or a duplicate idempotent submission) are not payment
+// declines and must not enter the funnel as payment_failed.
 const PRE_ORDER_ERROR_CODES = new Set([
   'NETWORK_ERROR',
   'VALIDATION_ERROR',
   'AUTH_ERROR',
+  'CHECKOUT_IDEMPOTENCY_CONFLICT',
+  'CHECKOUT_ORDER_NOT_REUSABLE',
 ]);
 
 export function handleCheckoutSubmitError(

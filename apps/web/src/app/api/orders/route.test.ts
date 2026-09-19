@@ -6145,10 +6145,12 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       timeout: 1000,
     });
     expect(mockGenerateReceiptBlob).not.toHaveBeenCalled();
+    // Attachment failure must not flip the subject to commercial: the
+    // unpaid invoice body is already rendered as proforma content.
     expect(mockSendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'customer@example.com',
-        subject: expect.stringContaining('Invoice Generated'),
+        subject: expect.stringContaining('Proforma Invoice Generated'),
         attachments: undefined,
       })
     );

@@ -6,6 +6,9 @@ function isBlockedIpv4Octets(octets: number[]): boolean {
     (a === 100 && b >= 64 && b <= 127) ||
     // Benchmarking range is routed to internal test infrastructure.
     (a === 198 && (b === 18 || b === 19)) ||
+    // Deprecated 6to4 relay-anycast block (RFC 7526): the whole /24 is
+    // non-globally reachable, so no per-address exception applies.
+    (a === 192 && b === 88 && octets[2] === 99) ||
     // IETF protocol assignments (RFC 6890), including the NAT64
     // discovery range (RFC 7050): non-globally reachable, and no
     // global anycast origin lives in 192.0.0.0/24.

@@ -17,22 +17,33 @@ function createVariantsSupabase(
 
 describe('fetchFeedVariants', () => {
   it('aggregates variant rows across product batches', async () => {
+    const productIds = Array.from({ length: 51 }, (_, index) => `p${index}`);
+    const firstBatch = productIds.slice(0, 50).map((product_id) => ({
+      id: `v-${product_id}`,
+      product_id,
+      attributes: null,
+    }));
+    const secondBatch = [{ id: 'v-p50', product_id: 'p50', attributes: null }];
     const { supabase, rpc } = createVariantsSupabase([
-      {
-        data: [
-          { id: 'v1', product_id: 'p1', attributes: null },
-          { id: 'v2', product_id: 'p2', attributes: null },
-        ],
-      },
+      { data: firstBatch },
+      { data: secondBatch },
     ]);
 
-    const rows = await fetchFeedVariants(supabase, 'm1', ['p1', 'p2']);
+    const rows = await fetchFeedVariants(supabase, 'm1', productIds);
 
-    expect(rows.map((r) => r.id)).toEqual(['v1', 'v2']);
-    expect(rpc).toHaveBeenCalledWith('get_feed_product_variants', {
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenNthCalledWith(1, 'get_feed_product_variants', {
       p_merchant_id: 'm1',
-      p_product_ids: ['p1', 'p2'],
+      p_product_ids: productIds.slice(0, 50),
     });
+    expect(rpc).toHaveBeenNthCalledWith(2, 'get_feed_product_variants', {
+      p_merchant_id: 'm1',
+      p_product_ids: ['p50'],
+    });
+    expect(rows.map((r) => r.id)).toEqual([
+      ...firstBatch.map((r) => r.id),
+      'v-p50',
+    ]);
   });
 
   it('returns an empty list without calling the RPC for no products', async () => {

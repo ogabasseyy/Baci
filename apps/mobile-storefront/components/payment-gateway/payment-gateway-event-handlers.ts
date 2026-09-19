@@ -2,7 +2,7 @@ import { type Href, router } from 'expo-router';
 import type { WebViewNavigation } from 'react-native-webview';
 import {
   isPaymentCancellationRedirect,
-  isPaymentCompletionRedirect,
+  isSessionPaymentCompletionRedirect,
   PAYMENT_KINDS,
 } from './payment-gateway.helpers';
 import type {
@@ -16,6 +16,7 @@ interface PaymentGatewayEventHandlerInput {
   clearPendingLoadTimeout: () => void;
   clearPendingNavigation: () => void;
   paymentKind?: string;
+  reference?: string;
   refs: PaymentGatewayRefs;
   returnTo?: string;
   scheduleDelayedNavigation: (navigate: () => void) => void;
@@ -31,6 +32,7 @@ export function createPaymentGatewayEventHandlers({
   clearPendingLoadTimeout,
   clearPendingNavigation,
   paymentKind,
+  reference,
   refs,
   returnTo,
   scheduleDelayedNavigation,
@@ -64,7 +66,10 @@ export function createPaymentGatewayEventHandlers({
       ) {
         return;
       }
-      if (isPaymentCompletionRedirect(navState.url)) {
+      // Require the redirect to carry this session's provider reference when
+      // it carries one at all: an unrelated URL with a foreign trxref must
+      // not report success.
+      if (isSessionPaymentCompletionRedirect(navState.url, reference)) {
         beginPaymentCompletion();
         return;
       }
@@ -95,7 +100,7 @@ export function createPaymentGatewayEventHandlers({
         (paymentKind === PAYMENT_KINDS.VTU ||
           paymentKind === PAYMENT_KINDS.WALLET ||
           paymentKind === PAYMENT_KINDS.SAVINGS_AUTH) &&
-        isPaymentCompletionRedirect(request.url)
+        isSessionPaymentCompletionRedirect(request.url, reference)
       ) {
         if (
           refs.statusRef.current === 'processing' ||

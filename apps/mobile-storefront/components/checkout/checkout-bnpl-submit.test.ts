@@ -263,7 +263,37 @@ describe('submitBnplCheckout', () => {
     });
 
     expect(mockCreateOrder).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
     expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it('records payment start only after Klump initializes successfully', async () => {
+    const params = {
+      ...createParams(),
+      selectedPayment: 'klump' as const,
+    };
+    const mockFetch = global.fetch as jest.Mock;
+    mockFetch.mockImplementationOnce(async () => ({
+      ok: true,
+      json: async () => ({
+        success: true,
+        authorization_url: 'https://klump.example/pay',
+        reference: 'klump-ref-1',
+      }),
+    }));
+    mockBuildKlumpBnplRouteParams.mockReturnValue({
+      pathname: '/bnpl-checkout',
+    });
+
+    await submitBnplCheckout(params);
+
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledWith({
+      orderId: 'order-1',
+      orderNumber: 'BAC-001',
+      paymentMethod: 'klump',
+      value: 21500,
+    });
+    expect(mockRouterPush).toHaveBeenCalled();
   });
 
   it('preserves the existing checkout identity when the server rejects reuse', async () => {

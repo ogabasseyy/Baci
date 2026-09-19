@@ -118,6 +118,13 @@ interface VerifyCheckoutPaymentHandlers {
     paymentMethod: string;
     reference?: string;
   }) => void;
+  capturePaymentFailed: (input: {
+    orderId?: string | null;
+    orderNumber?: string;
+    paymentMethod?: string | null;
+    reference?: string | null;
+    reason: string;
+  }) => void;
 }
 
 /**
@@ -142,6 +149,7 @@ async function verifyCheckoutPayment(
     setPaymentMethod,
     setStatus,
     capturePaymentCompleted,
+    capturePaymentFailed,
   }: VerifyCheckoutPaymentHandlers
 ): Promise<void> {
   if (!reference) {
@@ -210,6 +218,13 @@ async function verifyCheckoutPayment(
     } else if (!response.ok) {
       console.error('Payment verification failed:', data);
       setStatus('failed');
+      capturePaymentFailed({
+        orderId,
+        orderNumber: data.orderNumber,
+        paymentMethod: data.paymentMethod || paymentMethod,
+        reference,
+        reason: 'verification_failed',
+      });
       scheduleFailedRedirect();
     } else if (data.success && data.status === 'success') {
       clearCart();
@@ -230,6 +245,14 @@ async function verifyCheckoutPayment(
       }
     } else if (data.status === 'failed' || data.status === 'cancelled') {
       setStatus('failed');
+      capturePaymentFailed({
+        orderId,
+        orderNumber: data.orderNumber,
+        paymentMethod: data.paymentMethod || paymentMethod,
+        reference,
+        reason:
+          data.status === 'cancelled' ? 'payment_cancelled' : 'payment_failed',
+      });
       scheduleFailedRedirect();
     } else {
       setStatus('pending');
@@ -325,6 +348,24 @@ function CheckoutSuccessContent() {
               paymentMethod: input.paymentMethod,
               paymentStatus: 'paid',
               reference: input.reference,
+              source: 'web_checkout',
+            })
+          );
+        },
+        capturePaymentFailed: (input) => {
+          captureCheckoutFunnelEventOnce(
+            CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+            input.orderId || input.reference || 'unknown-order',
+            buildCheckoutFunnelProperties({
+              channel: 'web',
+              orderId: input.orderId ?? undefined,
+              orderNumber: input.orderNumber,
+              paymentIntent: input.paymentMethod
+                ? getCheckoutPaymentIntent(input.paymentMethod)
+                : undefined,
+              paymentMethod: input.paymentMethod ?? undefined,
+              reason: input.reason,
+              reference: input.reference ?? undefined,
               source: 'web_checkout',
             })
           );

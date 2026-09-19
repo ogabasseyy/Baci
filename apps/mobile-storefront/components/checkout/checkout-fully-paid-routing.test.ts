@@ -5,6 +5,18 @@ jest.mock('expo-router', () => ({
   router: { replace: (...args: unknown[]) => mockRouterReplace(...args) },
 }));
 
+const mockTrackCheckoutPaymentCompleted = jest.fn();
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentCompleted: (...args: unknown[]) =>
+    mockTrackCheckoutPaymentCompleted(...args),
+}));
+
+const mockTrackCheckoutRoutePurchaseCompleted = jest.fn();
+jest.mock('@/services/tiktok-checkout-route-tracking', () => ({
+  trackCheckoutRoutePurchaseCompleted: (...args: unknown[]) =>
+    mockTrackCheckoutRoutePurchaseCompleted(...args),
+}));
+
 const mockClearAndPersistCheckoutCart = jest.fn(
   async (clearCart: () => void | Promise<void>) => {
     await clearCart();
@@ -34,7 +46,7 @@ describe('routeStoreCreditSuccess', () => {
     const setIsProcessing = jest.fn();
     const orderResponse = {
       amountDueToGateway: 0,
-      order: { payment_status: 'paid' },
+      order: { payment_status: 'paid', total: 25000 },
       savings: { amountUsed: 3000 },
       wallet: { amountUsed: 22000 },
     } as unknown as OrderResponse;
@@ -49,6 +61,19 @@ describe('routeStoreCreditSuccess', () => {
       trackingToken: 'tok',
     });
 
+    expect(mockTrackCheckoutPaymentCompleted).toHaveBeenCalledWith({
+      orderId: 'order-1',
+      orderNumber: 'BAC-001',
+      paymentMethod: 'wallet',
+      value: 25000,
+    });
+    expect(mockTrackCheckoutRoutePurchaseCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-1',
+        paymentMethod: 'wallet',
+        total: 25000,
+      })
+    );
     expect(clearCart).toHaveBeenCalled();
     expect(setIsProcessing).toHaveBeenCalledWith(false);
     expect(mockRouterReplace).toHaveBeenCalledWith({
@@ -75,10 +100,24 @@ describe('routeFullyPaidPrizeSuccess', () => {
       isOrderInFlight,
       orderId: 'order-9',
       orderNumber: 'BAC-009',
+      orderTotal: 19000,
       setIsProcessing,
       trackingToken: null,
     });
 
+    expect(mockTrackCheckoutPaymentCompleted).toHaveBeenCalledWith({
+      orderId: 'order-9',
+      orderNumber: 'BAC-009',
+      paymentMethod: 'quiz_voucher',
+      value: 19000,
+    });
+    expect(mockTrackCheckoutRoutePurchaseCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-9',
+        paymentMethod: 'quiz_voucher',
+        total: 19000,
+      })
+    );
     expect(clearCart).toHaveBeenCalled();
     expect(setIsProcessing).toHaveBeenCalledWith(false);
     expect(isOrderInFlight.current).toBe(false);

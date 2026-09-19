@@ -128,6 +128,7 @@ export default function BankTransferScreen() {
     orderId,
     orderNumber,
     amount,
+    orderTotal,
     bankName,
     accountNumber,
     accountName,
@@ -188,8 +189,15 @@ export default function BankTransferScreen() {
       // The funding intent is confirmed: record the conversion before the
       // success route clears the cart (purchase capture needs cart items).
       if (orderId) {
-        const fundedValue = Number(amount);
-        const fundedTotal = Number.isFinite(fundedValue) ? fundedValue : 0;
+        // Report the canonical full order value: `amount` is only the
+        // shortfall collected after existing wallet balance.
+        const requestedTotal = Number(orderTotal);
+        const shortfall = Number(amount);
+        const fundedTotal = Number.isFinite(requestedTotal)
+          ? requestedTotal
+          : Number.isFinite(shortfall)
+            ? shortfall
+            : 0;
         trackCheckoutPaymentCompleted({
           orderId,
           orderNumber: orderNumber || orderId,

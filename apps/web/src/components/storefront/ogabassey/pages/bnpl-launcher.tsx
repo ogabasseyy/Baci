@@ -59,6 +59,13 @@ const KLUMP_TRANSACTION_ID_KEYS = [
     'id',
 ] as const;
 
+function isNativeBnplWebView(): boolean {
+    return (
+        typeof window !== 'undefined' &&
+        Boolean(window.ReactNativeWebView)
+    );
+}
+
 function captureBnplPaymentCompleted({
     orderId,
     orderNumber,
@@ -72,6 +79,12 @@ function captureBnplPaymentCompleted({
     reference?: string;
     value?: number;
 }) {
+    // Inside a native BNPL WebView the native shell owns conversion
+    // attribution (with native-verified outcomes): emitting here would
+    // double-attribute every web completion event.
+    if (isNativeBnplWebView()) {
+        return;
+    }
     captureCheckoutFunnelEventOnce(
         CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
         orderId,
@@ -346,11 +359,42 @@ async function launchBnplPayment({
                 );
             }
 
-            captureBnplPaymentCompleted({
-                orderId,
-                paymentMethod: 'klump',
-                reference: klumpReference,
-            });
+            // The record call stores the transaction id but proves no
+            // settlement: only count the conversion when the order row is
+            // server-confirmed paid (the Klump webhook finalizes async).
+            // Navigation below proceeds regardless so the shopper is never
+            // stranded by a pending webhook.
+            try {
+                const orderSlug =
+                    merchantSlugParam ||
+                    contextMerchantSlug ||
+                    fallbackMerchantSlug;
+                const orderQuery = new URLSearchParams({
+                    merchant_slug: orderSlug,
+                });
+                if (trackingToken) {
+                    orderQuery.set('token', trackingToken);
+                }
+                const orderRes = await fetch(
+                    `/api/storefront/orders/${orderId}?${orderQuery.toString()}`
+                );
+                const orderData = (await orderRes.json()) as {
+                    payment_status?: string;
+                } | null;
+                if (
+                    orderRes.ok &&
+                    orderData?.payment_status === 'paid'
+                ) {
+                    captureBnplPaymentCompleted({
+                        orderId,
+                        paymentMethod: 'klump',
+                        reference: klumpReference,
+                    });
+                }
+            } catch {
+                // Verification unavailable: skip attribution rather than
+                // record an unverified conversion.
+            }
 
             const successQuery = new URLSearchParams({
                 orderId,
@@ -536,12 +580,16 @@ async function launchBnplPayment({
                 customerName: checkoutCustomerName,
                 customerPhone: checkoutCustomerPhone || '',
                 onSuccess: (data) => {
-                    captureBnplPaymentCompleted({
-                        orderId: order.id,
-                        paymentMethod: 'credpal',
-                        reference: data.order_no,
-                        value: Number(order.total),
-                    });
+                    // Accepted-but-pending applications are not paid
+                    // conversions; the success page verifies the outcome.
+                    if (data.status === 'success') {
+                        captureBnplPaymentCompleted({
+                            orderId: order.id,
+                            paymentMethod: 'credpal',
+                            reference: data.order_no,
+                            value: Number(order.total),
+                        });
+                    }
                     const successQuery = new URLSearchParams({
                         orderId: order.id,
                         reference: data.order_no,

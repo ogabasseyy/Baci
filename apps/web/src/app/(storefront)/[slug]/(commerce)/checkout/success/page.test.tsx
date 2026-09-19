@@ -142,6 +142,40 @@ describe('checkout success page', () => {
     );
   });
 
+  it.each([
+    { status: 'failed', reason: 'payment_failed' },
+    { status: 'cancelled', reason: 'payment_cancelled' },
+  ])('captures a failed conversion for a $status verification ($reason)', async ({
+    status,
+    reason,
+  }) => {
+    mockFetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        finalizationOutcome: 'completed',
+        orderId: 'order-1',
+        orderNumber: 'ORD-2001',
+        status,
+        success: false,
+      }),
+    });
+
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() =>
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_failed',
+        'txn-ref-123',
+        expect.objectContaining({ reason })
+      )
+    );
+    expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+      'payment_completed',
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
   it('does not count cancelled finalizations as paid conversions', async () => {
     mockFetchWithCsrf.mockResolvedValue({
       ok: true,

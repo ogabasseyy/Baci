@@ -89,6 +89,7 @@ export async function finalizeCheckoutPayment({
       isOrderInFlight,
       orderId: order.id,
       orderNumber,
+      orderTotal: order.total,
       setIsProcessing,
       trackingToken: order.tracking_token,
     });
@@ -135,6 +136,7 @@ export async function finalizeCheckoutPayment({
           isOrderInFlight,
           orderId: order.id,
           orderNumber,
+          orderTotal: order.total,
           setIsProcessing,
           trackingToken: order.tracking_token,
         });

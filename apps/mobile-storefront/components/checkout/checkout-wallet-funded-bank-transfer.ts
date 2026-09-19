@@ -13,6 +13,7 @@ interface StartWalletFundedBankTransferCheckoutParams {
   isOrderInFlight: MutableRefObject<boolean>;
   orderId: string;
   orderNumber: string;
+  orderTotal: number;
   setIsProcessing: (value: boolean) => void;
   trackingToken?: string | null;
 }
@@ -21,6 +22,7 @@ export function startWalletFundedBankTransferCheckout({
   isOrderInFlight,
   orderId,
   orderNumber,
+  orderTotal,
   setIsProcessing,
   trackingToken,
 }: StartWalletFundedBankTransferCheckoutParams) {
@@ -44,6 +46,7 @@ export function startWalletFundedBankTransferCheckout({
         isOrderInFlight,
         orderId,
         orderNumber,
+        orderTotal,
         response,
         setIsProcessing,
         trackingToken,
@@ -61,6 +64,7 @@ function routeToWalletFundedBankTransfer({
   isOrderInFlight,
   orderId,
   orderNumber,
+  orderTotal,
   response,
   setIsProcessing,
   trackingToken,
@@ -76,6 +80,7 @@ function routeToWalletFundedBankTransfer({
       accountNumber: response.account.accountNumber,
       amount: String(response.intent.expectedAmount),
       bankName: response.account.bankName,
+      orderTotal: String(orderTotal),
       intentId: response.intent.id,
       merchantId: CHECKOUT_MERCHANT_ID,
       merchantSlug: CHECKOUT_MERCHANT_SLUG,

@@ -24,10 +24,8 @@ import {
 import { createBNPLLoadTimers } from './bnpl-checkout-timers';
 import { createBNPLLoadHandlers } from './bnpl-load-handlers';
 import { createBNPLOpenWindowHandler } from './bnpl-open-window-handler';
-import {
-  handleBNPLWebViewError,
-  handleBNPLWebViewHttpError,
-} from './bnpl-webview-error-handlers';
+import { handleBNPLWebViewError } from './handle-bnpl-webview-error';
+import { handleBNPLWebViewHttpError } from './handle-bnpl-webview-http-error';
 
 type BNPLCheckoutParams = Parameters<typeof parseBNPLParams>[0];
 export type BNPLCheckoutStatus = 'loading' | 'ready' | 'success' | 'error';

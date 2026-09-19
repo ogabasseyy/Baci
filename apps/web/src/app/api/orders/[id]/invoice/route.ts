@@ -32,6 +32,7 @@ import {
   generateReceiptBlob,
   resolveReceiptLogoDataUri,
 } from '@/lib/receipt-pdf-generator';
+import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { createClient } from '@/lib/supabase/server';
 
 const paramsSchema = z.object({
@@ -522,18 +523,16 @@ export async function GET(
       : undefined;
     const amountPaid = Number(order.amount_paid || 0);
 
-    // Invoice-payment orders are proforma documents only while unpaid: once
-    // the order is paid it must download as a standard 380 commercial invoice.
-    const isProformaInvoice =
-      order.payment_method?.trim().toLowerCase() === 'invoice' && !isPaidOrder;
-
     // Build the invoice data structure
     const invoiceData: InvoiceData = {
       // Document identifiers
       invoice_number:
         order.order_number || `INV-${order.id.slice(0, 8).toUpperCase()}`,
-      invoice_type_code:
-        order.invoice_type_code || (isProformaInvoice ? '325' : '380'),
+      invoice_type_code: resolveInvoiceTypeCode({
+        paymentMethod: order.payment_method,
+        isPaid: isPaidOrder,
+        storedTypeCode: order.invoice_type_code,
+      }),
       issue_date: order.invoice_issue_date
         ? new Date(order.invoice_issue_date)
         : new Date(order.created_at),

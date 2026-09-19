@@ -86,6 +86,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
       isOrderInFlight,
       orderId: 'order-1',
       orderNumber: 'BAC-001',
+      orderTotal: 470000,
       setIsProcessing,
       trackingToken: 'tracking-token',
     });
@@ -103,6 +104,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
         intentId: '11111111-1111-4111-8111-111111111111',
         orderId: 'order-1',
         orderNumber: 'BAC-001',
+        orderTotal: '470000',
         trackingToken: 'tracking-token',
         walletFunded: 'true',
       }),
@@ -126,6 +128,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
       isOrderInFlight: { current: true },
       orderId: 'order-1',
       orderNumber: 'BAC-001',
+      orderTotal: 470000,
       setIsProcessing: jest.fn(),
     });
 
@@ -158,6 +161,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
       isOrderInFlight: { current: true },
       orderId: 'order-1',
       orderNumber: 'BAC-001',
+      orderTotal: 470000,
       setIsProcessing: jest.fn(),
     });
 

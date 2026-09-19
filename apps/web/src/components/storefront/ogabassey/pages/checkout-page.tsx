@@ -53,7 +53,7 @@ import { useCryptoPaymentInitializer } from './checkout/use-crypto-payment-initi
 import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
 import { persistPendingCheckoutOrder } from './checkout/persist-pending-checkout-order';
 import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
-import { useEffect, useId, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useCart } from '@/hooks/cart';
 import type { CartItem } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -162,6 +162,7 @@ import { isEligibleForWalletFundedBankTransfer } from './checkout/wallet-funded-
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
 import { useCheckoutStartFunnel } from './checkout/hooks/use-checkout-start-funnel';
+import { readCheckoutAttemptGeneration, rotateCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
 import { DeferredWalletTransferConsentDialog as WalletTransferConsentDialog } from './checkout/components/DeferredWalletTransferConsentDialog';
 
@@ -820,11 +821,12 @@ export const CheckoutPage: React.FC = () => {
     ? checkoutCartTotal
     : resumedOrder?.subtotal || checkoutCartTotal;
 
-  // Mount-scoped checkout attempt: remounting the page starts a new attempt,
-  // so a repeat purchase of the same cart in one session emits a fresh start.
-  const checkoutAttemptId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  // Session-persisted checkout attempt: rotates after every created order so
+  // a repeat purchase of the same cart emits a fresh start, while a reload
+  // mid-attempt keeps the same generation (unlike React useId, which is
+  // deterministic per rendered tree and collides after reload).
   useCheckoutStartFunnel({
-    attemptId: checkoutAttemptId,
+    attemptId: `gen-${readCheckoutAttemptGeneration()}`,
     currency: currencyCode,
     displayItems,
     effectiveCheckoutCartTotal,
@@ -1639,21 +1641,24 @@ export const CheckoutPage: React.FC = () => {
             });
             // Resumed orders bypass the standard submission instrumentation,
             // so record the conversion here to avoid an artificial drop-off.
-            captureCheckoutFunnelEventOnce(
-              CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
-              resumedOrder.id,
-              buildCheckoutFunnelProperties({
-                channel: 'web',
-                currency: currencyCode,
-                orderId: resumedOrder.id,
-                paymentIntent: getCheckoutPaymentIntent('credpal'),
-                paymentMethod: 'credpal',
-                paymentStatus: 'paid',
-                reference: data.order_no,
-                source: 'web_checkout',
-                total: resumedOrder.total,
-              })
-            );
+            // Accepted-but-pending applications are not paid conversions.
+            if (data.status === 'success') {
+              captureCheckoutFunnelEventOnce(
+                CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+                resumedOrder.id,
+                buildCheckoutFunnelProperties({
+                  channel: 'web',
+                  currency: currencyCode,
+                  orderId: resumedOrder.id,
+                  paymentIntent: getCheckoutPaymentIntent('credpal'),
+                  paymentMethod: 'credpal',
+                  paymentStatus: 'paid',
+                  reference: data.order_no,
+                  source: 'web_checkout',
+                  total: resumedOrder.total,
+                })
+              );
+            }
             clearCheckoutSession();
             const successQuery = new URLSearchParams({
               orderId: resumedOrder.id,
@@ -2098,6 +2103,12 @@ export const CheckoutPage: React.FC = () => {
         tracking_token?: string;
         /** Stamped orders.currency (returned by /api/orders and /api/orders/reuse). */
         currency?: string | null;
+        /**
+         * Server-authoritative method: the API rewrites this to
+         * wallet/store_credit/savings/quiz_voucher when credits or prizes
+         * cover the order, so it differs from the UI selection then.
+         */
+        payment_method?: string | null;
       };
       let walletResult: {
         amountUsed: number;
@@ -2300,6 +2311,9 @@ export const CheckoutPage: React.FC = () => {
       createdOrderId = order.id;
       createdOrderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
+      // A created order completes this checkout attempt: rotate the session
+      // generation so a repeat purchase emits a fresh checkout_started.
+      rotateCheckoutAttemptGeneration();
       orderChargeCurrency =
         typeof order.currency === 'string' && order.currency.trim()
           ? order.currency.trim().toUpperCase()
@@ -2383,17 +2397,10 @@ export const CheckoutPage: React.FC = () => {
         return;
       }
 
-      if (
-        paymentAmount > 0 &&
-        (paymentMethod === 'bank_transfer' ||
-          paymentMethod === 'paystack' ||
-          paymentMethod === 'korapay' ||
-          paymentMethod === 'juicyway' ||
-          paymentMethod === 'klump' ||
-          paymentMethod === 'credit_direct' ||
-          (paymentMethod === 'credpal' &&
-            Boolean(process.env.NEXT_PUBLIC_CREDPAL_KEY)))
-      ) {
+      // payment_started is emitted only once a provider flow actually opens
+      // (initialized DVA, provider URL, opened widget, confirmed transfer
+      // setup) — never speculatively before initialization runs.
+      const capturePaymentStarted = () => {
         captureClientEvent(
           CHECKOUT_FUNNEL_EVENTS.paymentStarted,
           buildCheckoutFunnelProperties({
@@ -2407,7 +2414,7 @@ export const CheckoutPage: React.FC = () => {
             total: paymentAmount,
           })
         );
-      }
+      };
 
       // Update local wallet balance if redemption occurred
       if (walletResult?.amountUsed) {
@@ -2422,6 +2429,9 @@ export const CheckoutPage: React.FC = () => {
       if (paymentAmount <= 0) {
         // Wallet/server-side credit covered the full amount and the order API
         // already marked the order paid: record the conversion before leaving.
+        // Attribute the server-returned method (wallet/store_credit/savings/
+        // quiz_voucher after full coverage), not the UI selection.
+        const zeroDuePaymentMethod = order.payment_method || paymentMethod;
         captureCheckoutFunnelEventOnce(
           CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
           order.id,
@@ -2430,8 +2440,8 @@ export const CheckoutPage: React.FC = () => {
             currency: orderChargeCurrency,
             orderId: order.id,
             orderNumber: createdOrderNumber,
-            paymentIntent: getCheckoutPaymentIntent(paymentMethod),
-            paymentMethod,
+            paymentIntent: getCheckoutPaymentIntent(zeroDuePaymentMethod),
+            paymentMethod: zeroDuePaymentMethod,
             paymentStatus: 'paid',
             source: 'web_checkout',
             total: order.total ?? total,
@@ -2486,6 +2496,7 @@ export const CheckoutPage: React.FC = () => {
             : ('fallback' as const);
 
         if (walletFundedOutcome === 'started') {
+          capturePaymentStarted();
           setIsProcessing(false);
           isOrderInFlightRef.current = false;
           return;
@@ -2507,7 +2518,12 @@ export const CheckoutPage: React.FC = () => {
           return;
         }
 
-        await handleBankTransfer(order, paymentAmount, billingAddress);
+        await handleBankTransfer(
+          order,
+          paymentAmount,
+          billingAddress,
+          capturePaymentStarted
+        );
         return;
       }
 
@@ -2560,6 +2576,7 @@ export const CheckoutPage: React.FC = () => {
 
         if (paymentResult.success && paymentResult.crypto_payment) {
           // Juicyway crypto payment - show wallet address modal
+          capturePaymentStarted();
           setCryptoPaymentData({
             address: paymentResult.crypto_payment.address,
             chain: paymentResult.crypto_payment.chain,
@@ -2579,10 +2596,12 @@ export const CheckoutPage: React.FC = () => {
           // NOTE: Don't clear cart here - it causes a flash of empty state
           // Cart will be cleared on the payment callback page after successful payment
           // (location.assign over `href =` — global assignment bails React Compiler)
+          capturePaymentStarted();
           window.location.assign(paymentResult.authorization_url);
           return;
         } else if (paymentResult.success && paymentResult.checkout_url) {
           // Juicyway uses checkout_url
+          capturePaymentStarted();
           window.location.assign(paymentResult.checkout_url);
           return;
         } else {
@@ -2591,6 +2610,7 @@ export const CheckoutPage: React.FC = () => {
       } else if (paymentMethod === 'credit_direct') {
         // Credit Direct BNPL - Client-side popup checkout
         // Note: BNPL typically uses full total (wallet credits may not apply)
+        capturePaymentStarted();
         await openCreditDirectCheckout({
           merchantSlug: merchant.slug || '',
           orderId: order.id,
@@ -2695,6 +2715,7 @@ export const CheckoutPage: React.FC = () => {
         }
 
         // Open CredPal popup
+        capturePaymentStarted();
         await openCredPalCheckout({
           key: credpalKey,
           amount: paymentAmount,
@@ -2869,7 +2890,8 @@ export const CheckoutPage: React.FC = () => {
   const handleBankTransfer = async (
     order: { id: string; currency?: string | null },
     paymentAmount: number,
-    billingAddress: DvaBillingAddress
+    billingAddress: DvaBillingAddress,
+    onDvaReady?: () => void
   ) => {
     if (!merchant) {
       isOrderInFlightRef.current = false;
@@ -2898,6 +2920,7 @@ export const CheckoutPage: React.FC = () => {
           reference: result.reference,
         });
         setDvaCountdown(3600);
+        onDvaReady?.();
         isOrderInFlightRef.current = false;
       })
       .catch((error: unknown) => {

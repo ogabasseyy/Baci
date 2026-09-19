@@ -117,13 +117,8 @@ export async function submitBnplCheckout({
     analyticsPaymentMethod: selectedPayment,
     checkoutGeneration,
   });
-  trackCheckoutPaymentStarted({
-    orderId: orderResponse.order.id,
-    orderNumber:
-      orderResponse.order.order_number || orderResponse.order.id.slice(0, 8),
-    paymentMethod: selectedPayment,
-    value: orderResponse.amountDueToGateway,
-  });
+  const createdOrderNumber =
+    orderResponse.order.order_number || orderResponse.order.id.slice(0, 8);
 
   if (selectedPayment === 'klump') {
     await initializeKlumpAndRoute({
@@ -135,9 +130,24 @@ export async function submitBnplCheckout({
       setIsProcessing,
       trackingToken: orderResponse.order.tracking_token,
     });
+    // Record the start only after the provider initialized: a timed-out or
+    // rejected initialize opens no Klump flow, so it must not count as one.
+    trackCheckoutPaymentStarted({
+      orderId: orderResponse.order.id,
+      orderNumber: createdOrderNumber,
+      paymentMethod: selectedPayment,
+      value: orderResponse.amountDueToGateway,
+    });
     isOrderInFlight.current = false;
     return;
   }
+
+  trackCheckoutPaymentStarted({
+    orderId: orderResponse.order.id,
+    orderNumber: createdOrderNumber,
+    paymentMethod: selectedPayment,
+    value: orderResponse.amountDueToGateway,
+  });
 
   isOrderInFlight.current = false;
   setIsProcessing(false);

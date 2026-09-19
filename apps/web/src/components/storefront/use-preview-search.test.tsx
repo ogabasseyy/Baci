@@ -1,4 +1,5 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, render, renderHook, waitFor } from '@testing-library/react';
+import type Fuse from 'fuse.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
 import { usePreviewSearch } from './use-preview-search';
@@ -122,6 +123,41 @@ describe('usePreviewSearch', () => {
     expect(
       result.current.fuse?.search('Sourdough').map((hit) => hit.item.id)
     ).toEqual(['p3']);
+  });
+
+  it('never exposes the previous catalog index to any committed render', async () => {
+    // Fresh evidence: rerender() flushes effects before asserting, so it
+    // cannot observe the stale frame the old effect-only clear painted.
+    // This probe records every render-phase value instead: the first
+    // render for the new catalog must already read null, before the
+    // rebuild effect has flushed.
+    const seen: Array<Fuse<Product> | null> = [];
+    function Probe({ catalog }: { catalog: Product[] }) {
+      const { fuse } = usePreviewSearch({
+        debouncedSearchQuery: 'Sourdough',
+        isPreviewMode: true,
+        products: catalog,
+      });
+      seen.push(fuse);
+      return null;
+    }
+    const catalogB = [buildProduct({ id: 'p3', name: 'Sourdough Crackers' })];
+    const { rerender } = render(<Probe catalog={products} />);
+
+    await waitFor(() => {
+      expect(seen[seen.length - 1]).not.toBeNull();
+    });
+    seen.length = 0;
+
+    rerender(<Probe catalog={catalogB} />);
+
+    await waitFor(() => {
+      expect(seen[seen.length - 1]).not.toBeNull();
+    });
+    // Every render committed for the new catalog saw a null index until
+    // the rebuild for that catalog finished — no stale frame painted.
+    expect(seen.length).toBeGreaterThan(1);
+    expect(seen.slice(0, -1).every((fuse) => fuse === null)).toBe(true);
   });
 
   it('keeps the warm index across query changes on the same catalog', async () => {

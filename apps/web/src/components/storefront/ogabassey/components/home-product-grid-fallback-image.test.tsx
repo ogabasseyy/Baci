@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { HomeProductGridFallbackImage } from './home-product-grid-fallback-image';
 
@@ -27,11 +27,10 @@ describe('HomeProductGridFallbackImage', () => {
     expect(container.querySelector('picture, img')).not.toBeNull();
   });
 
-  it('drops a failed AVIF tier so the JPEG fallback renders', async () => {
-    // Mirrors CdnFormatImage: when an AVIF-capable browser selects the
-    // AVIF source but the transform fails, <picture> would never retry
-    // the JPEG <img> — the card would stay broken until the deferred grid
-    // mounts. Dropping the failed source lets the in-tree fallback show.
+  it('marks the image for delegated AVIF recovery instead of hydrating a handler', async () => {
+    // The fallback is server-rendered zero-JS: AVIF-tier recovery runs in
+    // the already-client gate's capture-phase listener, scoped by
+    // data-avif-recover, so this module never joins the client payload.
     const avifSrcSet =
       'https://cdn.example.com/image/format=avif/phone-640.jpg 640w';
     vi.resetModules();
@@ -57,19 +56,10 @@ describe('HomeProductGridFallbackImage', () => {
     expect(
       container.querySelector('source[type="image/avif"]')
     ).not.toBeNull();
-
-    const image = container.querySelector('img');
-    expect(image).not.toBeNull();
-    Object.defineProperty(image as HTMLImageElement, 'currentSrc', {
-      configurable: true,
-      value: 'https://cdn.example.com/image/format=avif/phone-640.jpg',
-    });
-    fireEvent.error(image as HTMLImageElement);
-
-    expect(
-      container.querySelector('source[type="image/avif"]')
-    ).toBeNull();
-    expect(container.querySelector('img')).not.toBeNull();
+    expect(container.querySelector('img')).toHaveAttribute(
+      'data-avif-recover',
+      ''
+    );
     vi.doUnmock('@/lib/ogabassey-image-format-sources');
   });
 });

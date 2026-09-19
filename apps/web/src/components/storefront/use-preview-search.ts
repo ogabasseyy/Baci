@@ -38,6 +38,10 @@ export function usePreviewSearch({
   const [searchFailed, setSearchFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const prevProductsRef = useRef(products);
+  // Identity of the catalog the live index was built from. Compared
+  // during render (not just in the rebuild effect) so a catalog swap
+  // never paints a frame of the previous catalog's results.
+  const fuseProductsRef = useRef<Product[] | null>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt is a write-only re-trigger for retrySearch.
   useEffect(() => {
@@ -53,12 +57,14 @@ export function usePreviewSearch({
     // query change on the same catalog keeps the warm index — no flash.
     if (prevProductsRef.current !== products) {
       prevProductsRef.current = products;
+      fuseProductsRef.current = null;
       setFuse(null);
     }
     setSearchFailed(false);
     void import('fuse.js')
       .then(({ default: FuseImpl }) => {
         if (cancelled) return;
+        fuseProductsRef.current = products;
         setFuse(
           new FuseImpl(products, {
             keys: ['name', 'description', 'brand'],
@@ -70,6 +76,7 @@ export function usePreviewSearch({
       .catch((error: unknown) => {
         if (cancelled) return;
         console.error('Failed to load preview search:', error);
+        fuseProductsRef.current = null;
         setFuse(null);
         setSearchFailed(true);
       });
@@ -84,5 +91,14 @@ export function usePreviewSearch({
     setAttempt((count) => count + 1);
   }
 
-  return { fuse, searchFailed, retrySearch };
+  // Render-phase guard: the rebuild effect clears the stale index only
+  // after commit, so the first render for a new catalog would otherwise
+  // still return the previous index and paint one frame of stale
+  // results. An index built from another catalog reads as null — the
+  // documented null-index path (unfiltered current list) — until the
+  // rebuild for the current catalog finishes.
+  const liveFuse =
+    fuse !== null && fuseProductsRef.current === products ? fuse : null;
+
+  return { fuse: liveFuse, searchFailed, retrySearch };
 }

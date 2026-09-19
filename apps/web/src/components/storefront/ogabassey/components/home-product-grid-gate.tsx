@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { ReactNode, SyntheticEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useViewportActivation } from '@/components/storefront/use-viewport-activation';
 import type { Product } from '../types';
@@ -51,6 +51,33 @@ const loadDefaultGridModule = () => import('./HomeProductGrid');
 // is in flight, awaiting its completion (click/up/cancel). Mirrors
 // HeroUtilityPanelGate.
 const PRESS_SETTLE_TIMEOUT_MS = 500;
+
+/**
+ * Delegated AVIF recovery for the server-rendered fallback images. The
+ * fallback stays zero-JS, so the already-client gate catches `<img>`
+ * errors in capture phase (errors don't bubble) and drops the failed
+ * AVIF `<source>`, then re-resolves `<picture>` candidates so the
+ * already-in-tree JPEG fallback renders — the same recovery
+ * CdnFormatImage performs, without a client boundary in the fallback
+ * module. Scoped by `data-avif-recover` so the interactive grid's own
+ * images (which carry their own recovery) are never touched.
+ */
+function recoverFallbackAvifImage(event: SyntheticEvent) {
+  const img = event.target;
+  if (!(img instanceof HTMLImageElement)) return;
+  if (!img.hasAttribute('data-avif-recover')) return;
+  // Only the AVIF tier's own failure disables that tier: `currentSrc`
+  // names the tier the browser actually selected, and AVIF candidate
+  // URLs are the only ones carrying `format=avif`. A JPEG fallback
+  // failure has no further fallback here.
+  if (!img.currentSrc.includes('format=avif')) return;
+  img
+    .closest('picture')
+    ?.querySelector('source[type="image/avif"]')
+    ?.remove();
+  const src = img.getAttribute('src');
+  if (src !== null) img.setAttribute('src', src);
+}
 
 /**
  * Viewport gate for the homepage featured-products grid. Renders the static
@@ -246,11 +273,15 @@ export function HomeProductGridGate({
   const holdSwapForPress = Grid !== null && pressHeld;
 
   if (!isActive || !Grid || holdSwapForPress) {
-    return <div ref={ref}>{fallback}</div>;
+    return (
+      <div ref={ref} onErrorCapture={recoverFallbackAvifImage}>
+        {fallback}
+      </div>
+    );
   }
 
   return (
-    <div ref={ref}>
+    <div ref={ref} onErrorCapture={recoverFallbackAvifImage}>
       <Grid {...gridProps} replayLoadMore={pendingLoadMore} />
     </div>
   );

@@ -389,6 +389,55 @@ describe('usePaymentGatewayController', () => {
     alertSpy.mockRestore();
   });
 
+  it('routes non-redvault exits back when leaving the gateway', () => {
+    let leavePress: (() => void) | undefined;
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((_title, _message, buttons) => {
+        leavePress = buttons?.find(
+          (button) => button.text === 'Leave'
+        )?.onPress;
+      });
+    const { result } = renderHook(() => usePaymentGatewayController());
+
+    act(() => {
+      result.current.handleClose();
+    });
+    act(() => {
+      leavePress?.();
+    });
+
+    expect(router.back).toHaveBeenCalledTimes(1);
+    expect(router.replace).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
+  it('routes redvault exits to the orders flow instead of checkout', () => {
+    mockSearchParams = { ...orderParams, paymentMethod: 'uba_redvault' };
+    let leavePress: (() => void) | undefined;
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((_title, _message, buttons) => {
+        leavePress = buttons?.find(
+          (button) => button.text === 'Leave'
+        )?.onPress;
+      });
+    const { result } = renderHook(() => usePaymentGatewayController());
+
+    act(() => {
+      result.current.handleClose();
+    });
+    act(() => {
+      leavePress?.();
+    });
+
+    expect(router.replace).toHaveBeenCalledWith('/orders');
+    expect(router.back).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
   it('uses an empty order id when delayed order navigation has no orderId', async () => {
     jest.useFakeTimers();
     mockSearchParams = {

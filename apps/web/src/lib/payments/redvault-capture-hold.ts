@@ -27,6 +27,7 @@ export async function captureOrHoldRedvaultPayment({
   gatewayResponse,
   orderId,
   reference,
+  rpcClient,
   supabase,
   transactionId,
 }: {
@@ -34,6 +35,7 @@ export async function captureOrHoldRedvaultPayment({
   gatewayResponse: Record<string, unknown>;
   orderId: string;
   reference: string;
+  rpcClient: RedvaultCaptureHoldRpcClient;
   supabase: SupabaseClient;
   transactionId: string;
 }): Promise<RedvaultCaptureHoldOutcome> {
@@ -51,7 +53,6 @@ export async function captureOrHoldRedvaultPayment({
     return { kind: 'not_redvault' };
   }
 
-  const rpcClient = supabase as unknown as RedvaultCaptureHoldRpcClient;
   const { data, error } = await rpcClient.rpc(
     'capture_or_hold_uba_redvault_payment',
     {

@@ -85,9 +85,16 @@ BEGIN
           AND order_item_id = (v_unit->>'orderItemId')::uuid
           AND unit_ordinal = (v_unit->>'unitOrdinal')::integer FOR UPDATE;
       IF NOT FOUND THEN RAISE EXCEPTION 'redvault_refund_unit_not_found'; END IF;
-      IF EXISTS (SELECT 1 FROM private.uba_redvault_refund_line_allocations
-        WHERE application_id = v_application.id AND order_item_id = v_allocation.order_item_id
-          AND unit_ordinal = v_allocation.unit_ordinal AND released_at IS NULL) THEN
+      -- Refund links are released only when the refund fails, so an unreleased
+      -- link with a non-failed refund covers both an in-flight reservation and
+      -- an already-processed refund: neither may reserve the unit again, while
+      -- failed refunds stay retryable.
+      IF EXISTS (SELECT 1 FROM private.uba_redvault_refund_line_allocations AS link
+        JOIN private.uba_redvault_refunds AS refund ON refund.id = link.refund_id
+        WHERE link.application_id = v_application.id
+          AND link.order_item_id = v_allocation.order_item_id
+          AND link.unit_ordinal = v_allocation.unit_ordinal
+          AND link.released_at IS NULL AND refund.state <> 'failed') THEN
         RAISE EXCEPTION 'redvault_refund_unit_already_reserved';
       END IF;
       v_amount := v_amount + (v_allocation.unit_price_kobo - v_allocation.allocation_kobo);

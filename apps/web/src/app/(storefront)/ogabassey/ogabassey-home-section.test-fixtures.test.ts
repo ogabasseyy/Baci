@@ -3,9 +3,9 @@ import {
   createSectionCategories,
   createSectionProduct,
   mockSectionMerchant,
-} from './ogabassey-home-section-test-fixtures';
+} from './ogabassey-home-section.test-fixtures';
 
-describe('ogabassey-home-section-test-fixtures', () => {
+describe('ogabassey-home-section.test-fixtures', () => {
   it('provides a published merchant with identity fields', () => {
     expect(mockSectionMerchant.is_published).toBe(true);
     expect(mockSectionMerchant.business_name).not.toBe('');
@@ -14,9 +14,9 @@ describe('ogabassey-home-section-test-fixtures', () => {
 
   it('builds products with overridable defaults', () => {
     expect(createSectionProduct().slug).toBe('iphone-17-pro-max');
-    expect(
-      createSectionProduct({ slug: 'tecno-spark-40-pro' }).slug
-    ).toBe('tecno-spark-40-pro');
+    expect(createSectionProduct({ slug: 'tecno-spark-40-pro' }).slug).toBe(
+      'tecno-spark-40-pro'
+    );
   });
 
   it('builds categories with slugs', () => {

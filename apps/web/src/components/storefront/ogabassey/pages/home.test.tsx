@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
@@ -79,6 +79,13 @@ describe('OgabasseyHomePage', () => {
     expect(screen.getByText(/^Ad unit/)).toBeInTheDocument();
     // The grid arrives through the viewport gate (async module load once the
     // section activates), so await it; the static fallback holds its place.
+    // jsdom never fires LCP/intersection, so drive the gate's designed
+    // shopper-interaction trigger directly.
+    fireEvent(window, new window.Event('pointerdown'));
+    // Complete the press: the gate holds the fallback mounted while a press
+    // is in flight so the tap lands on the pressed link — a bare
+    // pointerdown with no completing click would hold the fallback forever.
+    fireEvent(window, new window.Event('click'));
     expect(await screen.findByText(/^Product grid/)).toBeInTheDocument();
   });
 
@@ -89,6 +96,11 @@ describe('OgabasseyHomePage', () => {
 
     expect(screen.queryByText(/^Hero/)).not.toBeInTheDocument();
     expect(screen.getByText(/^Ad unit/)).toBeInTheDocument();
+    fireEvent(window, new window.Event('pointerdown'));
+    // Complete the press: the gate holds the fallback mounted while a press
+    // is in flight so the tap lands on the pressed link — a bare
+    // pointerdown with no completing click would hold the fallback forever.
+    fireEvent(window, new window.Event('click'));
     expect(await screen.findByText(/^Product grid/)).toBeInTheDocument();
   });
 
@@ -163,6 +175,13 @@ describe('OgabasseyHomePage', () => {
     );
 
     // The gate loads the grid module asynchronously after activation.
+    // jsdom never fires LCP/intersection, so drive the gate's designed
+    // shopper-interaction trigger directly.
+    fireEvent(window, new window.Event('pointerdown'));
+    // Complete the press: the gate holds the fallback mounted while a press
+    // is in flight so the tap lands on the pressed link — a bare
+    // pointerdown with no completing click would hold the fallback forever.
+    fireEvent(window, new window.Event('click'));
     await waitFor(() => {
       expect(mockHomeProductGrid).toHaveBeenCalledWith(
         expect.objectContaining({

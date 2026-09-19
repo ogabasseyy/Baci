@@ -3,7 +3,7 @@ import {
   buildOrganizationGraphSchema,
   type OgabasseyMerchant,
 } from './ogabassey-home-organization-schema';
-import { mockSectionMerchant } from './ogabassey-home-section-test-fixtures';
+import { mockSectionMerchant } from './ogabassey-home-section.test-fixtures';
 
 function merchantWith(
   overrides: Partial<typeof mockSectionMerchant>

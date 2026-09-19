@@ -152,7 +152,9 @@ export async function getCachedNavigationCategories(
 
   // Fail loud on purpose: a transient read must never be persisted as an
   // empty nav. The boundary below catches this OUTSIDE the cache scope.
-  return fetchNavigationCategoriesUncached(merchantId);
+  // Awaited (not merely returned) so the async 'use cache' function
+  // contains an await expression per lint/suspicious/useAwait.
+  return await fetchNavigationCategoriesUncached(merchantId);
 }
 
 /**

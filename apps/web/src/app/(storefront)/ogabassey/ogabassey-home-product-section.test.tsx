@@ -8,7 +8,7 @@ import {
 import {
   createSectionProduct,
   mockSectionMerchant,
-} from './ogabassey-home-section-test-fixtures';
+} from './ogabassey-home-section.test-fixtures';
 
 vi.mock('@/lib/cached-data', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;

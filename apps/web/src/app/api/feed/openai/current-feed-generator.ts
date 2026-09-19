@@ -3,7 +3,7 @@ import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
-import { isOfferClaimedUrl } from '@/lib/is-offer-claimed-image';
+import { isOfferClaimedUrl } from '@/lib/is-offer-claimed-url';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { stripHtmlTags } from '@/lib/sanitize-core';
 import {

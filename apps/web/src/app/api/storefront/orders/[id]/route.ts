@@ -255,6 +255,7 @@ export async function GET(
         id: order.id,
         order_number: order.order_number,
         short_id: order.order_number,
+        currency: order.currency,
         subtotal: order.subtotal,
         tax_amount: order.tax_amount ?? 0,
         discount_amount: order.discount_amount ?? 0,

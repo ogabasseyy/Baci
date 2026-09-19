@@ -47,6 +47,19 @@ export function createPaymentGatewayEventHandlers({
 }: PaymentGatewayEventHandlerInput) {
   const isTerminalStatus = () => terminalStatuses.has(refs.statusRef.current);
 
+  // Attempt-scoped failure marker: duplicate provider callbacks for the
+  // same failed attempt must not inflate terminal failures. Set
+  // synchronously on first emission (status refs only mirror on render)
+  // and reset only by Retry.
+  let failureRecorded = false;
+  const recordPaymentFailure = (reason: string) => {
+    if (failureRecorded) {
+      return;
+    }
+    failureRecorded = true;
+    trackCheckoutPaymentFailed(reason, orderId, gateway);
+  };
+
   return {
     handleLoadEnd: () => {
       clearPendingLoadTimeout();
@@ -82,11 +95,7 @@ export function createPaymentGatewayEventHandlers({
         setPaymentStatus('error');
         setErrorMessage('Payment was cancelled.');
         // A cancelled provider page is a terminal failure, not abandonment.
-        trackCheckoutPaymentFailed(
-          'payment_gateway_cancelled',
-          orderId,
-          gateway
-        );
+        recordPaymentFailure('payment_gateway_cancelled');
         if (paymentKind === PAYMENT_KINDS.SAVINGS_AUTH) {
           scheduleDelayedNavigation(() => {
             router.replace((returnTo || '/wallet/savings/start') as Href);
@@ -95,6 +104,7 @@ export function createPaymentGatewayEventHandlers({
       }
     },
     handleRetry: () => {
+      failureRecorded = false;
       refs.vtuConfirmationTokenRef.current += 1;
       refs.savingsAuthorizationAbortRef.current?.abort();
       refs.savingsAuthorizationAbortRef.current = null;
@@ -136,11 +146,7 @@ export function createPaymentGatewayEventHandlers({
       setPaymentStatus('error');
       setErrorMessage(nativeEvent.description || 'Failed to load payment page');
       // A broken provider page is a terminal failure, not abandonment.
-      trackCheckoutPaymentFailed(
-        'payment_gateway_load_error',
-        orderId,
-        gateway
-      );
+      recordPaymentFailure('payment_gateway_load_error');
     },
   };
 }

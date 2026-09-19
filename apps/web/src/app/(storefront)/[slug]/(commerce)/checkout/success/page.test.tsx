@@ -326,6 +326,7 @@ describe('checkout success page', () => {
     mockFetchWithCsrf.mockResolvedValue({
       ok: true,
       json: async () => ({
+        currency: 'USD',
         finalizationOutcome: 'completed',
         orderId: 'order-1',
         orderNumber: 'ORD-2001',
@@ -341,7 +342,7 @@ describe('checkout success page', () => {
       expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
         'payment_completed',
         'order-1',
-        expect.objectContaining({ total: 21500 })
+        expect.objectContaining({ currency: 'USD', total: 21500 })
       )
     );
   });
@@ -356,6 +357,7 @@ describe('checkout success page', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({
+        currency: 'GHS',
         order_number: 'ORD-1001',
         payment_method: 'paystack',
         payment_status: 'paid',
@@ -369,7 +371,7 @@ describe('checkout success page', () => {
       expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
         'payment_completed',
         'order-123',
-        expect.objectContaining({ total: 470000 })
+        expect.objectContaining({ currency: 'GHS', total: 470000 })
       )
     );
   });

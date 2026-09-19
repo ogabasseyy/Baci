@@ -107,4 +107,60 @@ describe('createPaymentGatewayEventHandlers navigation', () => {
       'paystack'
     );
   });
+
+  it('emits a single failure for duplicate cancellation callbacks', () => {
+    const { handlers } = createHandlers('ref-123');
+    const cancelledUrl = 'https://checkout.paystack.com/orders?cancelled=true';
+
+    handlers.handleNavigationChange({ url: cancelledUrl } as never);
+    handlers.handleNavigationChange({ url: cancelledUrl } as never);
+
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits a single failure for duplicate load-error callbacks', () => {
+    const { trackCheckoutPaymentFailed: failedMock } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutPaymentFailed: jest.Mock };
+    failedMock.mockClear();
+    const { handlers } = createHandlers('ref-123');
+    const loadError = {
+      nativeEvent: {
+        description: 'net::ERR_FAILED',
+        url: 'https://checkout.paystack.com/orders?trxref=ref-123',
+      },
+    } as never;
+
+    handlers.handleWebViewError(loadError);
+    handlers.handleWebViewError(loadError);
+
+    expect(failedMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows a fresh failure after Retry', () => {
+    const { trackCheckoutPaymentFailed: failedMock } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutPaymentFailed: jest.Mock };
+    failedMock.mockClear();
+    const { handlers } = createHandlers('ref-123');
+
+    handlers.handleNavigationChange({
+      url: 'https://checkout.paystack.com/orders?cancelled=true',
+    } as never);
+    handlers.handleRetry();
+    handlers.handleWebViewError({
+      nativeEvent: {
+        description: 'net::ERR_FAILED',
+        url: 'https://checkout.paystack.com/orders?trxref=ref-123',
+      },
+    } as never);
+
+    expect(failedMock).toHaveBeenCalledTimes(2);
+    expect(failedMock).toHaveBeenNthCalledWith(
+      2,
+      'payment_gateway_load_error',
+      'order-1',
+      'paystack'
+    );
+  });
 });

@@ -43,6 +43,7 @@ import { asRoute } from '@/lib/routes';
  */
 
 type VerificationResponse = {
+  currency?: string;
   orderId?: string;
   orderNumber?: string;
   orderTotal?: number;
@@ -51,6 +52,14 @@ type VerificationResponse = {
   success?: boolean;
   finalizationOutcome?: string;
 };
+
+function normalizeCurrencyCode(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const normalized = value.trim().toUpperCase();
+  return normalized || undefined;
+}
 
 function isVerificationResponse(value: unknown): value is VerificationResponse {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -114,6 +123,7 @@ interface VerifyCheckoutPaymentHandlers {
   setPaymentMethod: (paymentMethod: string | null) => void;
   setStatus: (status: CheckoutVerificationStatus) => void;
   capturePaymentCompleted: (input: {
+    currency?: string;
     orderId: string;
     orderNumber?: string;
     paymentMethod: string;
@@ -176,12 +186,14 @@ async function verifyCheckoutPayment(
           }
           if (data.payment_status === 'paid') {
             const lookupTotal = Number(data.total);
+            const lookupCurrency = normalizeCurrencyCode(data.currency);
             capturePaymentCompleted({
               orderId,
               orderNumber: data.order_number || data.short_id,
               paymentMethod:
                 data.payment_method || paymentMethod || 'paid_order',
               ...(Number.isFinite(lookupTotal) ? { total: lookupTotal } : {}),
+              ...(lookupCurrency ? { currency: lookupCurrency } : {}),
             });
           }
         } else {
@@ -240,6 +252,7 @@ async function verifyCheckoutPayment(
       // active paid order, so only it counts as a paid conversion.
       if (verifiedOrderId && data.finalizationOutcome === 'completed') {
         const verifiedTotal = Number(data.orderTotal);
+        const verifiedCurrency = normalizeCurrencyCode(data.currency);
         capturePaymentCompleted({
           orderId: verifiedOrderId,
           orderNumber: data.orderNumber,
@@ -247,6 +260,7 @@ async function verifyCheckoutPayment(
             data.paymentMethod || paymentMethod || 'payment_gateway',
           reference,
           ...(Number.isFinite(verifiedTotal) ? { total: verifiedTotal } : {}),
+          ...(verifiedCurrency ? { currency: verifiedCurrency } : {}),
         });
       }
     } else if (data.status === 'failed' || data.status === 'cancelled') {
@@ -348,6 +362,7 @@ function CheckoutSuccessContent() {
             input.orderId,
             buildCheckoutFunnelProperties({
               channel: 'web',
+              currency: input.currency,
               orderId: input.orderId,
               orderNumber: input.orderNumber,
               paymentIntent: getCheckoutPaymentIntent(input.paymentMethod),

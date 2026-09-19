@@ -27,6 +27,15 @@ function parseTrackedOrderIds(raw: string | null): string[] {
 // letting that event emit twice.
 let claimChain: Promise<void> = Promise.resolve();
 
+const CLAIM_STORAGE_TIMEOUT_MS = 3000;
+const STORAGE_TIMEOUT = Symbol('claim-storage-timeout');
+
+function storageTimeout(): Promise<typeof STORAGE_TIMEOUT> {
+  return new Promise((resolve) => {
+    setTimeout(() => resolve(STORAGE_TIMEOUT), CLAIM_STORAGE_TIMEOUT_MS);
+  });
+}
+
 export function claimCheckoutPurchaseTracking(
   orderId: string,
   eventName = 'purchase'
@@ -49,18 +58,34 @@ async function performClaim(
     return false;
   }
   try {
-    const stored = parseTrackedOrderIds(
-      await AsyncStorage.getItem(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY)
-    );
+    // A wedged native store must not stall the checkout flow: bound every
+    // storage operation and treat a timeout as unavailable (skip the
+    // emission, let navigation proceed) rather than queueing forever.
+    const raw = await Promise.race([
+      AsyncStorage.getItem(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY),
+      storageTimeout(),
+    ]);
+    if (raw === STORAGE_TIMEOUT) {
+      log.error('Checkout purchase tracking store read timed out.');
+      return false;
+    }
+    const stored = parseTrackedOrderIds(raw);
     const claim =
       eventName === 'purchase' ? orderId : `${eventName}:${orderId}`;
     if (stored.includes(claim)) {
       return false;
     }
-    await AsyncStorage.setItem(
-      CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
-      JSON.stringify([...stored, claim])
-    );
+    const written = await Promise.race([
+      AsyncStorage.setItem(
+        CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
+        JSON.stringify([...stored, claim])
+      ).then(() => true as const),
+      storageTimeout(),
+    ]);
+    if (written === STORAGE_TIMEOUT) {
+      log.error('Checkout purchase tracking store write timed out.');
+      return false;
+    }
     return true;
   } catch (error) {
     log.error('Failed to persist checkout purchase tracking claims:', error);

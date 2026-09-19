@@ -3418,6 +3418,9 @@ export async function POST(request: NextRequest) {
             let attachments:
               | Array<{ name: string; content: string; mime_type: string }>
               | undefined;
+            // Resolved kind of the emailed invoice document (325 =
+            // proforma), hoisted for the subject line below.
+            let emailedInvoiceTypeCode: string | undefined;
             let backgroundSupabase: ReturnType<
               typeof createAdminClient
             > | null = null;
@@ -3672,10 +3675,13 @@ export async function POST(request: NextRequest) {
                 const arrayBuffer = await pdfBlob.arrayBuffer();
                 const base64Content =
                   Buffer.from(arrayBuffer).toString('base64');
+                emailedInvoiceTypeCode = peppolInvoiceData.invoice_type_code;
+                const documentFilePrefix =
+                  emailedInvoiceTypeCode === '325' ? 'proforma' : 'invoice';
 
                 attachments = [
                   {
-                    name: `invoice-${orderNum}.pdf`,
+                    name: `${documentFilePrefix}-${orderNum}.pdf`,
                     content: base64Content,
                     mime_type: 'application/pdf',
                   },
@@ -3737,7 +3743,7 @@ export async function POST(request: NextRequest) {
               toName: customer_name,
               subject:
                 effectivePaymentMethod === 'invoice'
-                  ? `Invoice Generated - #${emailData.orderNumber}`
+                  ? `${emailedInvoiceTypeCode === '325' ? 'Proforma Invoice' : 'Invoice'} Generated - #${emailData.orderNumber}`
                   : `Order Confirmation - #${emailData.orderNumber}`,
               htmlContent,
               textContent,

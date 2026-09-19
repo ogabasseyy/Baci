@@ -66,3 +66,23 @@ it('grants overlapping claims for different events without losing either', async
     async (key: string) => storage.get(key) ?? null
   );
 });
+
+it('fails closed when the store never settles instead of queuing forever', async () => {
+  jest.useFakeTimers();
+  try {
+    mockGetItem.mockImplementation(
+      () => new Promise<string | null>(() => undefined)
+    );
+    const pending = expect(
+      claimCheckoutPurchaseTracking('order-timeout')
+    ).resolves.toBe(false);
+
+    await jest.advanceTimersByTimeAsync(3000);
+    await pending;
+  } finally {
+    jest.useRealTimers();
+    mockGetItem.mockImplementation(
+      async (key: string) => storage.get(key) ?? null
+    );
+  }
+});

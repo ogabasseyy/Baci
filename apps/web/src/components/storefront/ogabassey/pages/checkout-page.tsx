@@ -512,9 +512,32 @@ async function requestDvaInitialization({
   throw new Error('DVA not returned by the gateway');
 }
 
-// Module-scope helper: probes the DVA reference server-side so "Confirm
+// Module-scope helper: probes DVA settlement server-side so "Confirm
 // Transfer Sent" only records a conversion for a detected transfer.
-async function verifyDvaTransferStatus(reference: string): Promise<boolean> {
+// Prefers the token-scoped order status: the settlement webhook marks the
+// ORDER paid after matching the transfer to the dedicated account, while
+// the DVA reference is a locally generated BAC-* value that was never
+// registered as a Paystack transaction (probing /transaction/verify with it
+// can only error for real DVA transfers).
+async function verifyDvaTransferStatus({
+  merchantSlug,
+  reference,
+  trackingToken,
+}: {
+  merchantSlug?: string;
+  reference: string;
+  trackingToken?: string | null;
+}): Promise<boolean> {
+  if (trackingToken && merchantSlug) {
+    const response = await fetch(
+      `/api/storefront/orders/track-order?token=${encodeURIComponent(trackingToken)}&merchant_slug=${encodeURIComponent(merchantSlug)}`
+    );
+    if (!response.ok) {
+      return false;
+    }
+    const result = await response.json().catch(() => null);
+    return result?.order?.payment_status === 'paid';
+  }
   const response = await fetch(
     `/api/payments/status?gateway=paystack&reference=${encodeURIComponent(reference)}`
   );
@@ -3096,7 +3119,11 @@ export const CheckoutPage: React.FC = () => {
     }
     const { orderId, orderNumber, reference, amount, trackingToken } = dvaData;
     setIsVerifyingDva(true);
-    verifyDvaTransferStatus(reference)
+    verifyDvaTransferStatus({
+      merchantSlug: merchant?.slug ?? undefined,
+      reference,
+      trackingToken,
+    })
       .then(async (confirmed) => {
         if (!confirmed) {
           toast({

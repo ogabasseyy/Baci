@@ -89,6 +89,22 @@ function serializeTrackedOrderIds(claims: string[]): string {
 // older grants kept in the stale value are unaffected.
 const grantedClaims = new Set<string>();
 
+// Persists an intended envelope merged with the in-process grant set, so a
+// slow writer cannot erase claims granted after its value was computed.
+// Only granted claims are merged: a read can observe a not-yet-removed
+// phantom, and merging observed-but-ungranted entries would resurrect it.
+// Grants imply emission happened, so they must persist unconditionally.
+function persistClaims(intended: string[]): Promise<void> {
+  const merged = new Set(intended);
+  for (const granted of grantedClaims) {
+    merged.add(granted);
+  }
+  return AsyncStorage.setItem(
+    CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
+    serializeTrackedOrderIds([...merged])
+  );
+}
+
 let claimChain: Promise<void> = Promise.resolve();
 
 const CLAIM_STORAGE_TIMEOUT_MS = 3000;
@@ -159,10 +175,9 @@ async function removeClaimAfterLateWrite(claim: string): Promise<void> {
     if (reconciled === null) {
       return;
     }
-    const rollbackWrite = AsyncStorage.setItem(
-      CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
-      serializeTrackedOrderIds(reconciled)
-    );
+    // Unioned at call time with the best-known set, so grants committed
+    // after this value was computed still survive its landing.
+    const rollbackWrite = persistClaims(reconciled);
     const written = await Promise.race([
       rollbackWrite.then(() => true as const),
       storageTimeout(),
@@ -196,13 +211,7 @@ async function reconcileStoredClaims(): Promise<void> {
     if (reconciled === null) {
       return;
     }
-    await Promise.race([
-      AsyncStorage.setItem(
-        CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
-        serializeTrackedOrderIds(reconciled)
-      ),
-      storageTimeout(),
-    ]);
+    await Promise.race([persistClaims(reconciled), storageTimeout()]);
   } catch (error) {
     log.error('Failed to reconcile checkout purchase claims:', error);
   }
@@ -255,10 +264,7 @@ async function performClaim(
     if (stored.includes(claim)) {
       return { claimed: false, settled };
     }
-    const write = AsyncStorage.setItem(
-      CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
-      serializeTrackedOrderIds([...stored, claim])
-    );
+    const write = persistClaims([...stored, claim]);
     const written = await Promise.race([
       write.then(() => true as const),
       storageTimeout(),

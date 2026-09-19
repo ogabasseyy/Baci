@@ -23,10 +23,82 @@ jest.mock('expo-router', () => ({
   },
 }));
 
+function mockPaidCryptoVerification(total = 49875) {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/api/payments/verify')) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          status: 'pending',
+          error: 'still pending',
+        }),
+        { status: 400 }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        order: {
+          id: 'order-123',
+          order_number: 'ORD-123',
+          payment_status: 'paid',
+          subtotal: 45000,
+          shipping_cost: 1500,
+          discount_amount: 0,
+          total,
+        },
+        customer: {
+          name: 'Guest Buyer',
+          email: 'guest@example.com',
+          phone: '+2348098765432',
+        },
+        items: [
+          {
+            id: 'line-1',
+            product_id: 'prod-1',
+            product_name: 'Jar',
+            quantity: 2,
+            unit_price: 22500,
+            total_price: 45000,
+            product_image: null,
+          },
+        ],
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+}
+
+function mockPendingCryptoVerification() {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/api/payments/verify')) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          status: 'pending',
+          error: 'still pending',
+        }),
+        { status: 400 }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        order: {
+          id: 'order-123',
+          order_number: 'ORD-123',
+          payment_status: 'pending',
+          total: 49875,
+        },
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+}
+
 describe('createPaymentGatewayMessageHandler crypto success', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockTrackCheckoutPaymentCompletedOnce.mockReset();
+    mockPaidCryptoVerification();
   });
   it('routes crypto success with sanitized fallback params', async () => {
     const {
@@ -35,7 +107,7 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
       markPaymentCompletionStarted,
       scheduleDelayedNavigation,
       setSuccessStatus,
-    } = createHandler();
+    } = createHandler({ trackingToken: 'track-token-123' });
 
     await sendMessage(handler, { type: 'crypto_success' });
 
@@ -55,6 +127,7 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
         orderNumber: 'ORD-123',
         paymentMethod: 'crypto',
         reference: 'ref-123',
+        trackingToken: 'track-token-123',
       },
     });
   });
@@ -88,6 +161,7 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
       .mockReturnValueOnce(false);
     const { clearCart, handler, setSuccessStatus } = createHandler({
       markPaymentCompletionStarted,
+      trackingToken: 'track-token-123',
     });
 
     await sendMessage(handler, { type: 'crypto_success' });
@@ -98,16 +172,97 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
     expect(clearCart).toHaveBeenCalledTimes(1);
     expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(1);
     expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith({
+      customerEmail: 'guest@example.com',
+      customerPhone: '+2348098765432',
+      items: [expect.objectContaining({ product_id: 'prod-1', quantity: 2 })],
       orderId: 'order-123',
       orderNumber: 'ORD-123',
       paymentMethod: 'crypto',
       reference: 'ref-123',
-      value: 0,
+      shipping: 1500,
+      subtotal: 45000,
+      tax: 3375,
+      value: 49875,
     });
   });
 
+  it('consumes the claim with guest attribution, shipping, and VAT', async () => {
+    // Arrange: a guest Juicyway checkout whose tracked order is already
+    // paid (total = 45000 subtotal + 1500 shipping + 3375 VAT).
+    const { handler } = createHandler({
+      amount: 5000,
+      gateway: 'juicyway',
+      orderTotal: 49875,
+      trackingToken: 'track-token-123',
+    });
+
+    // Act
+    await sendMessage(handler, { type: 'crypto_success' });
+
+    // Assert: the durable claim keeps the checkout identity and breakdown.
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerEmail: 'guest@example.com',
+        customerPhone: '+2348098765432',
+        items: [expect.objectContaining({ product_id: 'prod-1', quantity: 2 })],
+        orderId: 'order-123',
+        paymentMethod: 'juicyway',
+        shipping: 1500,
+        subtotal: 45000,
+        tax: 3375,
+        value: 49875,
+      })
+    );
+  });
+
+  it('skips the conversion when crypto settlement is still pending', async () => {
+    // Arrange: a crypto callback whose order is not paid yet.
+    mockPendingCryptoVerification();
+    const { clearCart, handler, scheduleDelayedNavigation } = createHandler({
+      trackingToken: 'track-token-123',
+    });
+
+    // Act
+    await sendMessage(handler, { type: 'crypto_success' });
+
+    // Assert: no paid conversion, but the shopper still reaches success
+    // (settlement polling may complete the order once the webhook lands).
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(clearCart).toHaveBeenCalledTimes(1);
+    expect(scheduleDelayedNavigation).toHaveBeenCalledTimes(1);
+    const scheduledNavigation = scheduleDelayedNavigation.mock.calls[0]?.[0];
+    scheduledNavigation?.();
+    expect(router.replace).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/order-success' })
+    );
+  });
+
   it('reports the canonical order total for crypto success', async () => {
-    const { handler } = createHandler({ amount: 5000, orderTotal: 21500 });
+    // Arrange: the paid tracked order carries the breakdown but no total,
+    // so the claim falls back to the canonical order total (not the
+    // gateway residual after wallet/savings credits).
+    global.fetch = jest.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            order: {
+              id: 'order-123',
+              order_number: 'ORD-123',
+              payment_status: 'paid',
+              subtotal: 20000,
+              shipping_cost: 1500,
+              discount_amount: 0,
+            },
+          }),
+          { status: 200 }
+        )
+    ) as unknown as typeof fetch;
+    const { handler } = createHandler({
+      amount: 5000,
+      orderTotal: 21500,
+      trackingToken: 'track-token-123',
+    });
 
     await sendMessage(handler, { type: 'crypto_success' });
 
@@ -115,6 +270,8 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
       expect.objectContaining({
         orderId: 'order-123',
         reference: 'ref-123',
+        subtotal: 20000,
+        shipping: 1500,
         value: 21500,
       })
     );

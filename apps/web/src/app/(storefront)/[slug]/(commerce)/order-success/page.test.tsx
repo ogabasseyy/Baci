@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderSuccessPage from '@/app/(storefront)/[slug]/(commerce)/order-success/page';
 
@@ -6,6 +6,7 @@ const mockSearchParams = vi.fn();
 const mockFetch = vi.fn();
 let mockMerchant = { slug: 'test-store', country: 'NG' };
 const mockGoogleCustomerReviews = vi.hoisted(() => vi.fn());
+const mockCaptureCheckoutFunnelEventOnce = vi.hoisted(() => vi.fn());
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => mockSearchParams(),
@@ -44,6 +45,11 @@ vi.mock('@/components/analytics/google-customer-reviews', () => ({
     mockGoogleCustomerReviews(props);
     return null;
   },
+}));
+
+vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
+  captureCheckoutFunnelEventOnce: (...args: unknown[]) =>
+    mockCaptureCheckoutFunnelEventOnce(...args),
 }));
 
 describe('storefront order success page', () => {
@@ -190,6 +196,200 @@ describe('storefront order success page', () => {
         /we have prepared your proforma invoice and sent it to your email/i
       )
     ).toBeInTheDocument();
+  });
+
+  // Timer advances and promise drains must run inside act() so React
+  // applies the fetch/settle state updates under fake timers.
+  const flushMicrotasks = async () => {
+    await act(async () => {
+      for (let i = 0; i < 6; i += 1) {
+        await Promise.resolve();
+      }
+    });
+  };
+  const advanceTimers = async (ms: number) => {
+    await act(async () => {
+      vi.advanceTimersByTime(ms);
+      await Promise.resolve();
+    });
+  };
+
+  it('captures the pending-to-paid CredPal transition', async () => {
+    vi.useFakeTimers();
+    try {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-123',
+          reference: 'credpal-ref-1',
+          type: 'credpal',
+          credpalStatus: 'pending',
+          trackingToken: 'track-token-123',
+        })
+      );
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            id: 'order-123',
+            order_number: 'ORD-123',
+            tracking_token: 'track-token-123',
+            customer_email: 'buyer@example.com',
+            items: [],
+            subtotal: 45000,
+            shipping_cost: 1500,
+            total: 49875,
+            payment_method: 'credpal',
+            payment_status: 'pending',
+          }),
+        })
+        .mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            id: 'order-123',
+            order_number: 'ORD-123',
+            tracking_token: 'track-token-123',
+            customer_email: 'buyer@example.com',
+            items: [],
+            subtotal: 45000,
+            shipping_cost: 1500,
+            total: 49875,
+            payment_method: 'credpal',
+            payment_status: 'paid',
+          }),
+        });
+
+      render(<OrderSuccessPage />);
+      await flushMicrotasks();
+
+      // Still pending after the first read: no conversion yet.
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
+
+      // The settlement poll observes the webhook-paid order.
+      await advanceTimers(3000);
+      await flushMicrotasks();
+
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-123',
+        expect.objectContaining({
+          payment_method: 'credpal',
+          payment_status: 'paid',
+          reference: 'credpal-ref-1',
+          total: 49875,
+        })
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/storefront/orders/order-123?merchant_slug=test-store&token=track-token-123'
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('captures the pending-to-paid Klump transition', async () => {
+    vi.useFakeTimers();
+    try {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-1',
+          reference: 'BAC-ABCD12345678',
+          type: 'klump',
+          trackingToken: 'tok-123',
+        })
+      );
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            id: 'order-1',
+            order_number: 'ORD-1',
+            tracking_token: 'tok-123',
+            customer_email: 'buyer@example.com',
+            items: [],
+            subtotal: 20000,
+            shipping_cost: 0,
+            total: 20000,
+            payment_method: 'klump',
+            payment_status: 'pending',
+          }),
+        })
+        .mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            id: 'order-1',
+            order_number: 'ORD-1',
+            tracking_token: 'tok-123',
+            customer_email: 'buyer@example.com',
+            items: [],
+            subtotal: 20000,
+            shipping_cost: 0,
+            total: 20000,
+            payment_method: 'klump',
+            payment_status: 'paid',
+          }),
+        });
+
+      render(<OrderSuccessPage />);
+      await flushMicrotasks();
+
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
+
+      await advanceTimers(3000);
+      await flushMicrotasks();
+
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-1',
+        expect.objectContaining({
+          payment_method: 'klump',
+          payment_status: 'paid',
+          reference: 'BAC-ABCD12345678',
+          total: 20000,
+        })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not capture while a BNPL approval is still pending', async () => {
+    vi.useFakeTimers();
+    try {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-123',
+          reference: 'credpal-ref-1',
+          type: 'credpal',
+          credpalStatus: 'pending',
+          trackingToken: 'track-token-123',
+        })
+      );
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: 'order-123',
+          order_number: 'ORD-123',
+          tracking_token: 'track-token-123',
+          customer_email: 'buyer@example.com',
+          items: [],
+          subtotal: 45000,
+          shipping_cost: 1500,
+          total: 49875,
+          payment_method: 'credpal',
+          payment_status: 'pending',
+        }),
+      });
+
+      render(<OrderSuccessPage />);
+      await flushMicrotasks();
+      await advanceTimers(3000);
+      await flushMicrotasks();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('renders commercial copy for a paid invoice-method order', async () => {

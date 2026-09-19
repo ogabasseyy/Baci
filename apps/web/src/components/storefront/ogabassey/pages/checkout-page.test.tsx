@@ -4627,24 +4627,22 @@ describe('CheckoutPage', () => {
       .spyOn(globalThis, 'fetch')
       .mockImplementation(async (input) => {
         const url = String(input);
-        if (url.startsWith('/api/payments/status')) {
+        if (url.startsWith('/api/storefront/orders/track-order')) {
+          // Authoritative settlement state: the webhook marks the ORDER
+          // paid after matching the transfer to the dedicated account. The
+          // BAC-* DVA reference is never a Paystack transaction.
+          expect(url).toContain('token=track-1');
+          expect(url).toContain('merchant_slug=ogabassey');
           return {
             ok: true,
-            json: async () =>
-              transferDetected
-                ? {
-                    success: true,
-                    gateway: 'paystack',
-                    status: 'success',
-                    is_confirmed: true,
-                  }
-                : {
-                    success: true,
-                    gateway: 'paystack',
-                    status: 'pending',
-                    is_confirmed: false,
-                    is_pending: true,
-                  },
+            json: async () => ({
+              order: {
+                id: 'order-dva',
+                order_number: 'ORD-DVA',
+                payment_status: transferDetected ? 'paid' : 'pending',
+                total: 5000,
+              },
+            }),
           } as Response;
         }
         if (url === '/api/payments/initialize') {
@@ -4723,7 +4721,7 @@ describe('CheckoutPage', () => {
     fireEvent.click(confirmButton);
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('/api/payments/status')
+        expect.stringContaining('/api/storefront/orders/track-order')
       );
     });
     await new Promise((resolve) => setTimeout(resolve, 50));

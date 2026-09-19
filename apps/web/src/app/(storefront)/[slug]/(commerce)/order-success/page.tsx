@@ -1,5 +1,9 @@
 'use client';
 
+import {
+  buildCheckoutFunnelProperties,
+  CHECKOUT_FUNNEL_EVENTS,
+} from '@baci/shared/contracts';
 import { ArrowRight, CheckCircle, Download, Loader2, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -7,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { useCurrencyWithCountry } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
+import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { asRoute } from '@/lib/routes';
 
 interface OrderData {
@@ -41,6 +46,60 @@ import { useAuthSafe } from '@/contexts/auth-context';
 
 // Default to 5 days for delivery logic if not available
 const DELIVERY_ESTIMATE_MS = 5 * 24 * 60 * 60 * 1000;
+
+// CredPal and Klump approve asynchronously: the launcher navigates here
+// while the order is still pending, so the success path polls the
+// token-scoped order until the provider webhook marks it paid. Bounded so
+// a guest waiting on a slow approval is never stuck polling forever.
+const PENDING_BNPL_TYPES = ['credpal', 'klump'] as const;
+type PendingBnplType = (typeof PENDING_BNPL_TYPES)[number];
+const BNPL_SETTLEMENT_POLL_INTERVAL_MS = 3000;
+const BNPL_SETTLEMENT_POLL_MAX_ATTEMPTS = 20;
+
+function isPendingBnplType(value: string | null): value is PendingBnplType {
+  return (
+    value !== null && (PENDING_BNPL_TYPES as readonly string[]).includes(value)
+  );
+}
+
+function capturePendingBnplSettlement({
+  orderId,
+  orderNumber,
+  paymentMethod,
+  reference,
+  total,
+}: {
+  orderId: string;
+  orderNumber?: string;
+  paymentMethod: string;
+  reference?: string;
+  total?: number;
+}): void {
+  // Inside a native BNPL WebView the native shell owns conversion
+  // attribution (with native-verified outcomes): emitting here would
+  // double-attribute every web completion event.
+  if (
+    typeof window !== 'undefined' &&
+    (window as { ReactNativeWebView?: unknown }).ReactNativeWebView
+  ) {
+    return;
+  }
+  captureCheckoutFunnelEventOnce(
+    CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+    orderId,
+    buildCheckoutFunnelProperties({
+      channel: 'web',
+      orderId,
+      orderNumber,
+      paymentIntent: 'installments',
+      paymentMethod,
+      paymentStatus: 'paid',
+      reference,
+      source: 'web_checkout',
+      total,
+    })
+  );
+}
 
 async function fetchOrderData(
   orderId: string,
@@ -78,6 +137,8 @@ function OrderSuccessContent() {
   // the email through so the order fetch below can still authenticate.
   const lookupEmail = searchParams.get('email');
   const _type = searchParams.get('type'); // Reserved for future use
+  const bnplType = isPendingBnplType(_type) ? _type : null;
+  const bnplReference = searchParams.get('reference');
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath;
   const merchant = merchantContext?.merchant;
@@ -115,6 +176,77 @@ function OrderSuccessContent() {
       }
     );
   }, [orderId, merchant?.slug, orderToken, lookupEmail]);
+
+  // Pending BNPL approvals settle via webhook after navigation: keep
+  // polling the token-scoped order until it reads paid, then capture the
+  // conversion the launcher deliberately skipped. Revisits/refreshes are
+  // safe: capture is once-guarded per order.
+  const orderPaymentStatus = order?.payment_status;
+  const needsSettlementPoll =
+    bnplType !== null &&
+    Boolean(orderId && orderToken) &&
+    !loading &&
+    orderPaymentStatus !== 'paid';
+  useEffect(() => {
+    if (!needsSettlementPoll || !orderId || !bnplType) {
+      return;
+    }
+    let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const stop = () => {
+      if (timer !== undefined) {
+        clearInterval(timer);
+        timer = undefined;
+      }
+    };
+    const pollSettlement = async () => {
+      attempts += 1;
+      const data = await fetchOrderData(
+        orderId,
+        merchant?.slug,
+        orderToken,
+        null
+      );
+      if (cancelled) {
+        return;
+      }
+      if (data) {
+        setOrder(data);
+      }
+      if (
+        data?.payment_status === 'paid' ||
+        attempts >= BNPL_SETTLEMENT_POLL_MAX_ATTEMPTS
+      ) {
+        stop();
+      }
+    };
+    timer = setInterval(() => {
+      void pollSettlement();
+    }, BNPL_SETTLEMENT_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      stop();
+    };
+  }, [needsSettlementPoll, orderId, orderToken, merchant?.slug, bnplType]);
+
+  // Captures the pending-to-paid BNPL transition observed on this path
+  // (including an already-paid first read the launcher's single check may
+  // have raced). Immediate-paid launcher captures dedupe via the
+  // once-guard, so this never double-counts within a session.
+  useEffect(() => {
+    if (!bnplType || !orderId || order?.payment_status !== 'paid' || !order) {
+      return;
+    }
+    const settledTotal = Number(order.total);
+    capturePendingBnplSettlement({
+      orderId,
+      orderNumber: order.order_number || order.short_id,
+      paymentMethod: order.payment_method || bnplType,
+      reference: bnplReference ?? undefined,
+      ...(Number.isFinite(settledTotal) ? { total: settledTotal } : {}),
+    });
+  }, [bnplType, orderId, order, bnplReference]);
 
   // Without an order id there is nothing to fetch, so we are never loading.
   const isLoading = loading && Boolean(orderId);

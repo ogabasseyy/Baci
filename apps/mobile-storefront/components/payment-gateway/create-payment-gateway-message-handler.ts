@@ -7,6 +7,7 @@ import {
   PAYMENT_KINDS,
   type PaymentKind,
 } from './payment-gateway.helpers';
+import { verifyOrderPaymentForCompletion } from './verify-order-payment';
 
 const getTrimmedString = (value: unknown) =>
   typeof value === 'string' ? value.trim() : '';
@@ -206,14 +207,33 @@ export function createPaymentGatewayMessageHandler({
       // Prefer the canonical order total: `amount` is only the residual due
       // at the gateway after wallet/savings credits.
       const cryptoPurchaseTotal = orderTotal ?? amount ?? 0;
-      // First completion wins the durable claim; replays emit nothing.
-      await trackCheckoutPaymentCompletedOnce({
+      // A crypto callback proves association, not settlement: read the
+      // token-scoped tracked order before claiming so the durable claim is
+      // consumed with the checkout identity and breakdown (guests have no
+      // cached identity and later polling cannot enrich the claim).
+      const cryptoVerification = await verifyOrderPaymentForCompletion({
         orderId: cryptoOrderId,
-        orderNumber: getTrimmedString(orderNumber) || cryptoOrderId,
-        paymentMethod: getTrimmedString(gateway) || 'crypto',
         reference: cryptoReference,
-        value: cryptoPurchaseTotal,
+        trackingToken,
       });
+      if (cryptoVerification.paid) {
+        // First completion wins the durable claim; replays emit nothing.
+        // Unverified orders still navigate to success, where settlement
+        // polling may complete them once the webhook marks them paid.
+        await trackCheckoutPaymentCompletedOnce({
+          customerEmail: cryptoVerification.customerEmail,
+          customerPhone: cryptoVerification.customerPhone,
+          items: cryptoVerification.items,
+          orderId: cryptoOrderId,
+          orderNumber: getTrimmedString(orderNumber) || cryptoOrderId,
+          paymentMethod: getTrimmedString(gateway) || 'crypto',
+          reference: cryptoReference,
+          shipping: cryptoVerification.shipping,
+          subtotal: cryptoVerification.subtotal,
+          tax: cryptoVerification.tax,
+          value: cryptoVerification.total ?? cryptoPurchaseTotal,
+        });
+      }
       await clearCart();
       scheduleDelayedNavigation(() => {
         router.replace({

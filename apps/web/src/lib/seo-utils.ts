@@ -25,7 +25,6 @@ import {
 } from './checkout/payment-gateway-availability';
 import { collectProductSchemaSpecProperties } from './collect-product-schema-spec-properties';
 import { generateStorefrontSlug } from './generate-storefront-slug';
-import { getStorefrontProductPath } from './get-storefront-product-path';
 import {
   isExternalPlaceholderImageUrl,
   PLACEHOLDER_IMAGE,
@@ -128,23 +127,13 @@ export function buildProductUrl(
 }
 
 /**
- * Generates the full product URL path from product data
- * Convenience function combining slug generation and URL building
+ * Generates the full product URL path from product data.
+ * Sourced from the dependency-free `product-url` module so hot client paths
+ * can import it without pulling the sanitize toolchain.
  */
-export function getProductUrl(product: {
-  slug?: string;
-  name: string;
-  category?: string | null;
-  categories?: { name?: string; slug?: string } | null;
-  category_slug?: string | null;
-  categorySlug?: string;
-  canonical_url?: string | null;
-  condition?: 'new' | 'used' | string;
-  condition_detail?: string;
-  id: string;
-}): Route {
-  return getStorefrontProductPath(product);
-}
+import { getProductUrl } from './product-url';
+
+export { getProductUrl };
 
 export function getValidatedProductUrl(
   product: Parameters<typeof getProductUrl>[0],

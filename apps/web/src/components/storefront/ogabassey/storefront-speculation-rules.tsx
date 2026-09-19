@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { safeJsonLdStringify } from '@/lib/sanitize-json-ld';
+import { safeJsonLdStringify } from '@/lib/json-ld-script-escape';
 import { buildStorefrontSpeculationRules } from '@/lib/storefront/speculation-rules';
 
 interface StorefrontSpeculationRulesProps {

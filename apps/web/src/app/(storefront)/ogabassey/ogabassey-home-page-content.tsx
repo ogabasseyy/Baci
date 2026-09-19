@@ -11,6 +11,7 @@ import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { resolveMerchantContextIdentifier } from '@/lib/storefront-route-identifier';
 import { OgabasseyHomeDynamicContent } from './ogabassey-home-dynamic-content';
+import { OgabasseyHomeHeroReserveFallback } from './ogabassey-home-hero-reserve-fallback';
 import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
 import { OgabasseyHomeRecoveryHero } from './ogabassey-home-recovery-hero';
 
@@ -92,7 +93,13 @@ export async function OgabasseyHomePageContent({
         <h1 className="sr-only">{OGABASSEY_TITLE}</h1>
       )}
       {!requestMerchantShellSlides ? (
-        <Suspense fallback={null}>
+        <Suspense
+          fallback={
+            <OgabasseyHomeHeroReserveFallback
+              omitMobileCarousel={omitMobileCarousel}
+            />
+          }
+        >
           <OgabasseyHomeRecoveryHero
             merchant={merchant}
             omitMobileCarousel={omitMobileCarousel}

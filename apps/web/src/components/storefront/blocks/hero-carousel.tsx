@@ -1,7 +1,6 @@
 'use client';
 
 import Autoplay from 'embla-carousel-autoplay';
-import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -62,12 +61,7 @@ export function HeroCarousel({
               className="h-full relative overflow-hidden"
             >
               {/* Parallax Background - Elite 2025 Standard */}
-              <motion.div
-                className="absolute inset-0 w-[110%]"
-                style={{
-                  x: '-5%', // Centering the slightly larger image
-                }}
-              >
+              <div className="absolute inset-0 w-[110%] -translate-x-[5%]">
                 <Image
                   src={slide.image}
                   alt={slide.title}
@@ -77,23 +71,11 @@ export function HeroCarousel({
                   sizes="(max-width: 768px) 100vw, 100vw"
                 />
                 <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent" />
-              </motion.div>
+              </div>
 
               {/* Elite Content Overlay */}
               <div className="absolute inset-0 flex flex-col items-center justify-end pb-24 text-center text-white px-4 z-10">
-                <motion.div
-                  initial={{ opacity: 0, y: 40, scale: 0.95 }}
-                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{
-                    type: 'spring',
-                    stiffness: 100,
-                    damping: 20,
-                    mass: 1,
-                    delay: 0.1,
-                  }}
-                  viewport={{ once: true }}
-                  className="max-w-4xl"
-                >
+                <div className="max-w-4xl motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-10 motion-safe:zoom-in-95 motion-safe:duration-500">
                   <h1 className="text-5xl md:text-8xl font-black tracking-tighter mb-6 drop-shadow-2xl">
                     {slide.title}
                   </h1>
@@ -109,7 +91,7 @@ export function HeroCarousel({
                       {slide.ctaText}
                     </Link>
                   </Button>
-                </motion.div>
+                </div>
               </div>
             </CarouselItem>
           ))}

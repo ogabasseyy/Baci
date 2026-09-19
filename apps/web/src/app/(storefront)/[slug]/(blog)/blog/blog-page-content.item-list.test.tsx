@@ -5,7 +5,7 @@ import {
   buildListingResult,
   merchant,
   mockGetCachedBlogListing,
-  mockGetTemplate,
+  mockOgabasseyV2Blog,
   mockTemplateBlogRenderer,
   postsPayload,
   resetBlogPageContentMocks,
@@ -30,6 +30,15 @@ describe('BlogPageContent ItemList schema', () => {
   });
 
   it('passes an ItemList schema for crawlable blog listing entities', async () => {
+    mockGetCachedBlogListing.mockResolvedValueOnce(
+      buildListingResult({
+        merchant: {
+          ...merchant,
+          template_id: 'modern',
+        },
+      })
+    );
+
     const { container } = render(
       await BlogPageContent({
         params: Promise.resolve({ slug: 'test-store' }),
@@ -58,6 +67,10 @@ describe('BlogPageContent ItemList schema', () => {
   it('omits ItemList schema when the blog listing has no posts', async () => {
     mockGetCachedBlogListing.mockResolvedValueOnce(
       buildListingResult({
+        merchant: {
+          ...merchant,
+          template_id: 'modern',
+        },
         posts: [],
         totalPosts: 0,
       })
@@ -79,6 +92,7 @@ describe('BlogPageContent ItemList schema', () => {
         merchant: {
           ...merchant,
           store_url: 'http://localhost:3000/ogabassey',
+          template_id: 'modern',
         },
         totalPosts: 25,
       })
@@ -110,6 +124,15 @@ describe('BlogPageContent ItemList schema', () => {
   });
 
   it('uses filtered URLs instead of clean category canonicals for searched category listings', async () => {
+    mockGetCachedBlogListing.mockResolvedValueOnce(
+      buildListingResult({
+        merchant: {
+          ...merchant,
+          template_id: 'modern',
+        },
+      })
+    );
+
     const { container } = render(
       await BlogPageContent({
         isCleanCategoryRoute: true,
@@ -131,6 +154,15 @@ describe('BlogPageContent ItemList schema', () => {
   });
 
   it('keeps the clean category ItemList canonical for blank searches', async () => {
+    mockGetCachedBlogListing.mockResolvedValueOnce(
+      buildListingResult({
+        merchant: {
+          ...merchant,
+          template_id: 'modern',
+        },
+      })
+    );
+
     const { container } = render(
       await BlogPageContent({
         isCleanCategoryRoute: true,
@@ -161,6 +193,10 @@ describe('BlogPageContent ItemList schema', () => {
 
     mockGetCachedBlogListing.mockResolvedValueOnce(
       buildListingResult({
+        merchant: {
+          ...merchant,
+          template_id: 'modern',
+        },
         posts,
         totalPosts: posts.length,
       })
@@ -194,11 +230,7 @@ describe('BlogPageContent ItemList schema', () => {
   });
 
   it('omits ItemList schema for template search results when the template may hide entries', async () => {
-    mockGetTemplate.mockReturnValue({
-      getComponents: async () => ({
-        Blog: () => <div>Template component</div>,
-      }),
-    });
+    mockOgabasseyV2Blog.mockImplementation(() => <div>Template component</div>);
 
     render(
       await BlogPageContent({

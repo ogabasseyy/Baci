@@ -53,7 +53,7 @@ function UtilityOptionButton({
   const baseClass =
     tone === 'mobile'
       ? 'bg-gray-100 text-gray-600'
-      : 'bg-gray-50 text-gray-600 group-hover:bg-primary group-hover:text-white';
+      : 'bg-gray-50 text-gray-600 group-hover:bg-primary group-hover:text-primary-foreground';
   const activeClass =
     option.id === 'betting' && tone === 'mobile'
       ? 'bg-primary/10 text-primary'

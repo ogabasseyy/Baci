@@ -2,23 +2,21 @@ import { getOgabasseyImageFormatProps } from '@/lib/ogabassey-image-format-sourc
 import { HOME_PRODUCT_GRID_CARD_IMAGE_SIZES } from './product-grid-image-sizes';
 
 /**
- * Server-rendered twin of the interactive card's `CdnFormatImage`: the same
+ * Server-rendered twin of the interactive card's image: the same
  * `getImageProps` inputs (src, fill, shared sizes ladder, lazy, low
  * priority) through the same per-format helper, emitting the same
- * `<picture>` + AVIF `<source>` + `<img>` DOM. The browser therefore picks
- * byte-identical candidates before the gate swap and after, so the
- * below-fold product image is fetched once and served from cache —
- * the previous hand-rolled jpeg `<img>` used a different URL than the
- * card's AVIF tier and caused a second fetch on swap.
+ * `<img>` URL the card's JPEG tier uses — so the below-fold product
+ * image is already cached when the gate swaps.
  *
- * Absolute fill mirrors CdnFormatImage `fill` (no CLS). Non-CDN sources
- * have no AVIF tier and render the same plain `<img>` the card renders.
+ * Absolute fill mirrors CdnFormatImage `fill` (no CLS).
  *
- * Deliberately zero-JS (no 'use client'): AVIF-tier recovery is delegated
- * to the already-client `HomeProductGridGate` via a capture-phase error
- * listener scoped by `data-avif-recover`. Giving this module its own
- * client boundary would pull it and the format-sources graph into the
- * initial client payload just to cover a rare AVIF-transform failure.
+ * Deliberately a plain `<img>` with NO AVIF `<source>` tier and zero JS
+ * (no 'use client'): an AVIF tier would need recovery for failed
+ * transforms, and no client recovery can cover failures that fire before
+ * hydration — or no-JS readers at all, for whom this SSR fallback is the
+ * entire product image. A failed AVIF source would leave those cards
+ * permanently broken; the JPEG `<img>` always renders. The post-swap
+ * interactive card keeps its own AVIF tier with client recovery.
  */
 export function HomeProductGridFallbackImage({
   alt,
@@ -27,7 +25,7 @@ export function HomeProductGridFallbackImage({
   alt: string;
   src: string;
 }) {
-  const { avifSource, imgProps } = getOgabasseyImageFormatProps({
+  const { imgProps } = getOgabasseyImageFormatProps({
     alt,
     fetchPriority: 'low',
     fill: true,
@@ -36,15 +34,14 @@ export function HomeProductGridFallbackImage({
     src,
   });
 
-  // biome-ignore lint/performance/noImgElement: intentional — per-format
-  // <picture> tiers require a raw <img>; props come from getImageProps so
-  // this stays next/image-equivalent, matching CdnFormatImage.
-  const img = (
+  // biome-ignore lint/performance/noImgElement: intentional — props come
+  // from getImageProps so this stays next/image-equivalent, matching
+  // CdnFormatImage's JPEG tier.
+  return (
     <img
       {...imgProps}
       alt={alt}
       className="ogabassey-home-product-card__image"
-      data-avif-recover=""
       decoding="async"
       loading="lazy"
       style={{
@@ -55,20 +52,5 @@ export function HomeProductGridFallbackImage({
         width: '100%',
       }}
     />
-  );
-
-  if (!avifSource) {
-    return img;
-  }
-
-  return (
-    <picture style={{ display: 'contents' }}>
-      <source
-        sizes={avifSource.sizes}
-        srcSet={avifSource.srcSet}
-        type="image/avif"
-      />
-      {img}
-    </picture>
   );
 }

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { getProductUrl } from './product-url';
-import { getProductUrl as canonicalGetProductUrl } from './seo-utils';
 
 const PRODUCTS = [
   {
@@ -23,14 +22,24 @@ const PRODUCTS = [
 ];
 
 describe('getProductUrl (lightweight split)', () => {
-  it('matches the canonical seo-utils implementation exactly', () => {
-    for (const product of PRODUCTS) {
-      expect(getProductUrl(product)).toBe(canonicalGetProductUrl(product));
-    }
-  });
-
   it('prefers category paths and falls back to product slugs', () => {
     expect(getProductUrl(PRODUCTS[0])).toBe('/smartphones/tecno-spark-40-pro');
     expect(getProductUrl(PRODUCTS[3])).toContain('no-slug-at-all');
+  });
+
+  it('routes category objects through the category slug', () => {
+    // Category-object input (no top-level slug): the product slug derives
+    // from the name under the category's slug.
+    expect(getProductUrl(PRODUCTS[1])).toBe(
+      '/premium-laptops/dell-alienware-m18-r2'
+    );
+  });
+
+  it('honors the canonical URL path when present', () => {
+    expect(getProductUrl(PRODUCTS[2])).toBe('/deals/generic-item');
+  });
+
+  it('falls back to the product collection for slugless items', () => {
+    expect(getProductUrl(PRODUCTS[3])).toBe('/products/no-slug-at-all');
   });
 });

@@ -177,7 +177,7 @@ describe('HomeProductGridStaticFallback', () => {
     expect(renderedSrc).toContain('width=');
   });
 
-  it('renders the same <picture> + AVIF tier the interactive card renders (single-fetch swap parity)', () => {
+  it('renders an AVIF-free <img> so the fallback can never break pre-hydration', () => {
     const cdnProduct: Product = {
       ...baseProduct,
       image:
@@ -188,48 +188,27 @@ describe('HomeProductGridStaticFallback', () => {
       <HomeProductGridStaticFallback basePath="" products={[cdnProduct]} />
     );
 
-    // Same DOM shape CdnFormatImage emits: <picture> wrapper, an explicit
-    // AVIF <source>, and the universally decodable <img> fallback.
-    const picture = container.querySelector(
-      '.ogabassey-home-product-card picture'
-    );
-    expect(picture).not.toBeNull();
-    const source = picture?.querySelector('source[type="image/avif"]');
-    expect(source).not.toBeNull();
-    const avifSrcSet = source?.getAttribute('srcset') ?? '';
-    const imgSrcSet =
-      picture
-        ?.querySelector('img')
-        ?.getAttribute('srcset') ?? '';
-    expect(avifSrcSet).not.toBe('');
-    expect(imgSrcSet).not.toBe('');
-    // The AVIF tier is the fallback tier rewritten to format=avif only:
-    // identical candidate ladders apart from the format token, so the
-    // browser fetches once and the post-swap card hits the same cache keys.
-    expect(avifSrcSet).toContain('format=avif');
-    expect(imgSrcSet).not.toContain('format=avif');
-    const avifCandidates = avifSrcSet.split(/,\s+/);
-    const imgCandidates = imgSrcSet.split(/,\s+/);
-    expect(avifCandidates).toHaveLength(imgCandidates.length);
-    for (const [index, avifCandidate] of avifCandidates.entries()) {
-      const [avifUrl, ...avifDescriptors] = avifCandidate.trim().split(/\s+/);
-      const [imgUrl, ...imgDescriptors] = (
-        imgCandidates[index] ?? ''
+    // No AVIF <source>: a failed AVIF transform fires before any client
+    // recovery can attach (and never for no-JS readers), permanently
+    // breaking those cards. The universally decodable JPEG <img> always
+    // renders; the post-swap interactive card keeps its own AVIF tier.
+    expect(
+      container.querySelector(
+        '.ogabassey-home-product-card source[type="image/avif"]'
       )
-        .trim()
-        .split(/\s+/);
-      expect(avifDescriptors).toEqual(imgDescriptors);
-      expect(avifUrl).toBe(
-        imgUrl.replace('format=jpeg', 'format=avif')
-      );
-    }
-    // Both tiers share the interactive card's sizes ladder (shared const —
-    // byte-identical candidate selection before and after the gate swap).
-    expect(source?.getAttribute('sizes')).toBe(
+    ).toBeNull();
+    const img = container.querySelector(
+      '.ogabassey-home-product-card img'
+    );
+    expect(img).not.toBeNull();
+    const imgSrcSet = img?.getAttribute('srcset') ?? '';
+    expect(imgSrcSet).not.toBe('');
+    expect(imgSrcSet).not.toContain('format=avif');
+    // The <img> still shares the interactive card's sizes ladder and the
+    // resized JPEG tier, so the post-swap card hits the same cache keys
+    // for the fallback candidates.
+    expect(img?.getAttribute('sizes')).toBe(
       HOME_PRODUCT_GRID_CARD_IMAGE_SIZES
     );
-    expect(
-      picture?.querySelector('img')?.getAttribute('sizes')
-    ).toBe(HOME_PRODUCT_GRID_CARD_IMAGE_SIZES);
   });
 });

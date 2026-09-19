@@ -1,11 +1,5 @@
-import {
-  normalizeNegotiationCustomerEmail,
-  normalizePhoneToE164,
-} from '@baci/shared/lib';
-
-export function normalizeOptionalEmail(email?: string | null): string | null {
-  return normalizeNegotiationCustomerEmail(email);
-}
+import { normalizePhoneToE164 } from '@baci/shared/lib';
+import { normalizeOptionalEmail } from './negotiation-email-normalization';
 
 export function getContactValidationError({
   allowMissingContact = false,

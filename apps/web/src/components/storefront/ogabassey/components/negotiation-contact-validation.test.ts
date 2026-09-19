@@ -1,22 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  getContactValidationError,
-  normalizeOptionalEmail,
-} from './negotiation-contact-validation';
+import { getContactValidationError } from './negotiation-contact-validation';
 
 describe('negotiation contact validation', () => {
-  it('normalizes optional email addresses for storage', () => {
-    expect(normalizeOptionalEmail('  Buyer@Example.COM  ')).toBe(
-      'buyer@example.com'
-    );
-    expect(normalizeOptionalEmail('')).toBeNull();
-  });
-
-  it('rejects invalid or overlong email addresses', () => {
-    expect(normalizeOptionalEmail('a@b@c.com')).toBeNull();
-    expect(normalizeOptionalEmail(`${'a'.repeat(250)}@x.com`)).toBeNull();
-  });
-
   it('returns the submit-time contact validation message', () => {
     expect(
       getContactValidationError({ email: 'not an email', phone: '' })

@@ -127,10 +127,12 @@ export async function reconcileNextRedvaultRefund({
 > {
   const claim = await store.claimNextReconciliation();
   if (!claim) return { kind: 'idle' };
-  const providerReference = claim.refund.providerReference;
-  if (!providerReference) {
-    throw new Error('REDVAULT reconciliation claim has no provider reference');
-  }
+  // Indeterminate submissions may carry no provider reference (provider
+  // timeout, non-2xx, or unverifiable response). Resolve those through the
+  // original capture reference, which the provider lookup accepts, so the
+  // refund stays recoverable instead of stranding in needs_reconciliation.
+  const providerReference =
+    claim.refund.providerReference ?? claim.refund.attemptReference;
   const outcome = await provider.lookup({
     providerReference,
     expectedAmountKobo: claim.refund.amountKobo,

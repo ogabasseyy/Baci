@@ -180,10 +180,7 @@ export class RedvaultRefundStore {
       return null;
     const row = readSingleRefundRow(result.data);
     const refund = readRefund(row);
-    if (
-      typeof row.reconciliation_claim_token !== 'string' ||
-      !refund.providerReference
-    ) {
+    if (typeof row.reconciliation_claim_token !== 'string') {
       throw new Error('REDVAULT reconciliation RPC returned an invalid claim');
     }
     return {

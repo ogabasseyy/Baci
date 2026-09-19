@@ -14,9 +14,13 @@ const claimed = {
 };
 
 describe('REDVAULT refund operator worker', () => {
-  it('does not contact the provider for a claim with no provider reference', async () => {
-    const lookup = vi.fn();
-    const reconcile = vi.fn();
+  it('resolves a claim with no provider reference through the capture reference', async () => {
+    const lookup = vi
+      .fn()
+      .mockResolvedValue({ kind: 'pending', providerStatus: 'pending' });
+    const reconcile = vi
+      .fn()
+      .mockResolvedValue({ ...claimed, state: 'processing' });
 
     await expect(
       reconcileNextRedvaultRefund({
@@ -29,11 +33,21 @@ describe('REDVAULT refund operator worker', () => {
           reconcile,
         },
       })
-    ).rejects.toThrow(
-      'REDVAULT reconciliation claim has no provider reference'
-    );
-    expect(lookup).not.toHaveBeenCalled();
-    expect(reconcile).not.toHaveBeenCalled();
+    ).resolves.toEqual({
+      kind: 'pending',
+      refund: { ...claimed, state: 'processing' },
+    });
+    expect(lookup).toHaveBeenCalledWith({
+      providerReference: claimed.attemptReference,
+      expectedAmountKobo: claimed.amountKobo,
+      expectedCaptureReference: claimed.attemptReference,
+      expectedCurrency: 'NGN',
+    });
+    expect(reconcile).toHaveBeenCalledWith({
+      id: claimed.id,
+      providerStatus: 'pending',
+      reconciliationClaimToken: 'claim-1',
+    });
   });
 
   it('does not resend a response-loss refund after its durable processing claim', async () => {

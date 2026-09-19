@@ -143,6 +143,25 @@ describe('computeRedvaultOrderQuote', () => {
     expect(quote.lines[0].condition).toBe('used');
     expect(quote.groups[0].condition).toBe('used');
   });
+  it('binds authoritative variant attributes from the pricing RPC', async () => {
+    const quote = await computeRedvaultOrderQuote({
+      ...input,
+      items: [{ ...input.items[0], variant_id: 'v1' }],
+      supabase: client({}, [
+        {
+          attributes: { color: 'red', storage: '128GB', rank: 3 },
+          condition: 'new',
+          id: 'v1',
+          product_id: productId,
+          price_override: null,
+        },
+      ]) as never,
+    });
+    expect(quote.lines[0].variantAttributes).toEqual({
+      color: 'red',
+      storage: '128GB',
+    });
+  });
   it('mirrors persisted tax column fallbacks for null category and rate', async () => {
     const quote = await computeRedvaultOrderQuote({
       ...input,

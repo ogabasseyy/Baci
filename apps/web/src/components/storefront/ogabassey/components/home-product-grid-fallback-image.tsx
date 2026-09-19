@@ -1,5 +1,9 @@
+'use client';
+
+import { useState } from 'react';
+import type { ReactEventHandler } from 'react';
 import { getOgabasseyImageFormatProps } from '@/lib/ogabassey-image-format-sources';
-import { HOME_PRODUCT_GRID_CARD_IMAGE_SIZES } from './product-image-source';
+import { HOME_PRODUCT_GRID_CARD_IMAGE_SIZES } from './product-grid-image-sizes';
 
 /**
  * Server-rendered twin of the interactive card's `CdnFormatImage`: the same
@@ -13,6 +17,12 @@ import { HOME_PRODUCT_GRID_CARD_IMAGE_SIZES } from './product-image-source';
  *
  * Absolute fill mirrors CdnFormatImage `fill` (no CLS). Non-CDN sources
  * have no AVIF tier and render the same plain `<img>` the card renders.
+ *
+ * AVIF recovery mirrors CdnFormatImage: when an AVIF-capable browser
+ * selects the AVIF tier but the transform fails, `<picture>` would never
+ * retry the JPEG `<img>` — the card would stay broken until the deferred
+ * grid mounts. The `<img>` error handler drops the failed AVIF `<source>`
+ * so the already-in-tree JPEG fallback renders, exactly like the twin.
  */
 export function HomeProductGridFallbackImage({
   alt,
@@ -29,6 +39,22 @@ export function HomeProductGridFallbackImage({
     sizes: HOME_PRODUCT_GRID_CARD_IMAGE_SIZES,
     src,
   });
+  const [failedAvifSrcSet, setFailedAvifSrcSet] = useState<string | null>(
+    null
+  );
+  const isAvifDisabled =
+    avifSource !== null && failedAvifSrcSet === avifSource.srcSet;
+
+  const handleError: ReactEventHandler<HTMLImageElement> = (event) => {
+    const img = event.currentTarget;
+    // Only the AVIF tier's own failure disables that tier: `currentSrc`
+    // names the tier the browser actually selected, and AVIF candidate
+    // URLs are the only ones carrying `format=avif`. A JPEG fallback
+    // failure (or an already-disabled tier) has no further fallback here.
+    if (avifSource && img.currentSrc.includes('format=avif')) {
+      setFailedAvifSrcSet(avifSource.srcSet);
+    }
+  };
 
   // biome-ignore lint/performance/noImgElement: intentional — per-format
   // <picture> tiers require a raw <img>; props come from getImageProps so
@@ -40,6 +66,7 @@ export function HomeProductGridFallbackImage({
       className="ogabassey-home-product-card__image"
       decoding="async"
       loading="lazy"
+      onError={handleError}
       style={{
         ...imgProps.style,
         height: '100%',
@@ -50,7 +77,7 @@ export function HomeProductGridFallbackImage({
     />
   );
 
-  if (!avifSource) {
+  if (!avifSource || isAvifDisabled) {
     return img;
   }
 

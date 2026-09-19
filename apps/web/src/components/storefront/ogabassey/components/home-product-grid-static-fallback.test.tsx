@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
-import { HOME_PRODUCT_GRID_CARD_IMAGE_SIZES } from './product-image-source';
+import { HOME_PRODUCT_GRID_CARD_IMAGE_SIZES } from './product-grid-image-sizes';
 import { HomeProductGridStaticFallback } from './home-product-grid-static-fallback';
 
 // The global setup mocks next/image's getImageProps as a raw-src passthrough
@@ -91,8 +91,10 @@ describe('HomeProductGridStaticFallback', () => {
 
   it('reserves an inert load-more row when the catalog exceeds the initial count', () => {
     // Geometry twin of the interactive grid's row (same wrapper/pill/count
-    // classes) so the gate swap inserts no new boxes; inert, so the dead
-    // control takes no tab stop and stays out of the accessibility tree.
+    // classes) so the gate swap inserts no new boxes; aria-hidden plus a
+    // handler-free tabIndex=-1 control, so the dead control takes no tab
+    // stop and stays out of the accessibility tree while taps still
+    // dispatch click for gate capture and replay.
     const { container } = render(
       <HomeProductGridStaticFallback
         basePath=""
@@ -104,7 +106,7 @@ describe('HomeProductGridStaticFallback', () => {
     const row = container.querySelector(
       '[data-ogabassey-home-products-more="true"]'
     );
-    expect(row).toHaveAttribute('inert');
+    expect(row).toHaveAttribute('aria-hidden', 'true');
     expect(row?.className).toContain('mt-8 flex flex-col items-center gap-2');
     expect(screen.getByText('Showing 1 of 2 products')).toBeInTheDocument();
     // Themed (not hardcoded red): non-red merchant palettes keep their

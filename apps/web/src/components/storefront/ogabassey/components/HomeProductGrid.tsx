@@ -47,6 +47,12 @@ interface HomeProductGridProps {
   title?: string;
   showViewAll?: boolean;
   initialDisplayCount?: number;
+  /**
+   * Replays a load-more tap captured on the static fallback before this
+   * grid mounted: the first page expands by one page on mount so the tap
+   * is not lost. One-shot — read only in the initial state.
+   */
+  replayLoadMore?: boolean;
   inlineAdBreakpoints?: number[];
   loadInteractionBindings?: () => Promise<ProductGridInteractionBindingsModule>;
   loadInteractiveCard?: () => Promise<ProductGridItemModule>;
@@ -84,13 +90,16 @@ export function HomeProductGrid({
   title = 'Featured Products',
   showViewAll = true,
   initialDisplayCount = 8,
+  replayLoadMore = false,
   inlineAdBreakpoints = [8, 16],
   loadInteractionBindings,
   loadInteractiveCard,
   loadPreviewCatalog,
 }: HomeProductGridProps) {
   const [displayCount, setDisplayCount] = useState(
-    Math.max(1, initialDisplayCount)
+    () =>
+      Math.max(1, initialDisplayCount) +
+      (replayLoadMore ? PRODUCTS_PER_PAGE : 0)
   );
   const [prevInitialDisplayCount, setPrevInitialDisplayCount] = useState(
     initialDisplayCount

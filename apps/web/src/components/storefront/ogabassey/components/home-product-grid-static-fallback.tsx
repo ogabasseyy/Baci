@@ -161,14 +161,23 @@ export function HomeProductGridStaticFallback({
       )}
 
       {hasMoreProducts && (
+        // aria-hidden + handler-free tabIndex=-1 (not inert): the control
+        // takes no tab stop and stays out of the accessibility tree, but
+        // taps still dispatch click so the gate can capture and replay a
+        // pre-resolution load-more tap after the grid mounts. `inert`
+        // would suppress the click entirely and the tap would be lost.
         <div
           className="mt-8 flex flex-col items-center gap-2"
-          inert
+          aria-hidden="true"
           data-ogabassey-home-products-more="true"
         >
-          <span className="px-8 py-3 bg-store-primary text-store-primary-text font-semibold rounded-xl">
+          <button
+            type="button"
+            tabIndex={-1}
+            className="px-8 py-3 bg-store-primary text-store-primary-text font-semibold rounded-xl cursor-pointer"
+          >
             Load More Products
-          </span>
+          </button>
           <span className="ogabassey-home-products__count">
             Showing {visibleProducts.length} of {prioritizedProducts.length}{' '}
             products

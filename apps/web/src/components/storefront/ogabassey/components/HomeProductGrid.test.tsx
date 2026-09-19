@@ -128,6 +128,25 @@ describe('HomeProductGrid', () => {
     );
   });
 
+  it('replays a fallback load-more tap by expanding the first page on mount', () => {
+    // The gate captures a load-more tap that landed before this grid
+    // mounted and replays it here, so the shopper is not asked to tap
+    // a second time for the products they already requested.
+    render(
+      <HomeProductGrid
+        storeSlug="test-store"
+        products={Array.from({ length: 13 }, (_, index) =>
+          createTestProduct(index + 1)
+        )}
+        replayLoadMore
+      />
+    );
+
+    expect(screen.getAllByRole('article')).toHaveLength(13);
+    expect(screen.getByText('Product 13')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument();
+  });
+
   it('renders the critical product-grid shell classes used by the homepage CSS partition', () => {
     render(<HomeProductGrid storeSlug="test-store" products={[createTestProduct(1)]} />);
 

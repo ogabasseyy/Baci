@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
 import { HomeProductGridGate } from './home-product-grid-gate';
+import { HomeProductGridStaticFallback } from './home-product-grid-static-fallback';
 
 const mocks = vi.hoisted(() => ({
   // The gate defers to the post-LCP signal; resolve immediately so timing
@@ -101,6 +102,83 @@ describe('HomeProductGridGate tap gestures', () => {
     });
 
     expect(screen.getByTestId('interactive-grid')).toBeInTheDocument();
+  });
+
+  it('replays a pre-resolution load-more tap into the mounted grid', async () => {
+    // The fallback load-more control is handler-free: the tap only reaches
+    // the gate's activation listener. Without capture, the mounted grid
+    // would still show eight products and the shopper would have to tap
+    // again. The gate records the tap and replays it via prop on swap.
+    const products = Array.from({ length: 10 }, (_, index) => ({
+      ...stubProduct,
+      id: `product-${index + 1}`,
+      name: `Phone ${index + 1}`,
+      slug: `phone-${index + 1}`,
+    }));
+    const loader = vi.fn(() =>
+      Promise.resolve({
+        HomeProductGrid: ({
+          replayLoadMore,
+        }: {
+          replayLoadMore?: boolean;
+        }) => (
+          <div
+            data-testid="interactive-grid"
+            data-replay-load-more={String(Boolean(replayLoadMore))}
+          />
+        ),
+        // The stub only models the replay prop; the full grid contract is
+        // pinned by HomeProductGrid.test.tsx.
+      } as never)
+    );
+    render(
+      <HomeProductGridGate
+        fallback={
+          <HomeProductGridStaticFallback
+            basePath=""
+            products={products}
+            initialDisplayCount={8}
+          />
+        }
+        loadGridModule={loader}
+        products={products}
+        timeoutMs={10000}
+      />
+    );
+
+    const moreButton = document.querySelector(
+      '[data-ogabassey-home-products-more="true"] button'
+    );
+    expect(moreButton).not.toBeNull();
+    await act(async () => {
+      fireEvent.pointerDown(moreButton!);
+      await Promise.resolve();
+    });
+    // Loaded but held: the fallback (and its control) stays mounted.
+    expect(
+      screen.queryByTestId('interactive-grid')
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.pointerUp(window);
+      await Promise.resolve();
+    });
+    expect(
+      screen.queryByTestId('interactive-grid')
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(moreButton!);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('interactive-grid')).toHaveAttribute(
+      'data-replay-load-more',
+      'true'
+    );
   });
 
   it('swaps on a cancelled press without holding the fallback', async () => {

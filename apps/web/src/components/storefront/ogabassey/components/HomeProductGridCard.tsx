@@ -9,10 +9,8 @@ import { getProductUrl } from '@/lib/product-url';
 import { asRoute } from '@/lib/routes';
 import type { Product } from '../types';
 import { getProductConditionClass } from './product-condition-class';
-import {
-  HOME_PRODUCT_GRID_CARD_IMAGE_SIZES,
-  resolveProductImageSource,
-} from './product-image-source';
+import { HOME_PRODUCT_GRID_CARD_IMAGE_SIZES } from './product-grid-image-sizes';
+import { resolveProductImageSource } from './product-image-source';
 import { ProductRatingRow } from './ProductRatingRow';
 
 interface HomeProductGridCardProps {

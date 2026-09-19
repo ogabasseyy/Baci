@@ -18,6 +18,12 @@ export interface HomeProductGridGateGridProps {
   showViewAll?: boolean;
   initialDisplayCount?: number;
   inlineAdBreakpoints?: number[];
+  /**
+   * When true, the grid replays one pending "load more" expansion on mount.
+   * Set by the gate when a compressed load-more press arrived while the
+   * interactive module was still loading.
+   */
+  replayLoadMore?: boolean;
 }
 
 interface HomeProductGridGateProps extends HomeProductGridGateGridProps {
@@ -85,6 +91,9 @@ export function HomeProductGridGate({
   // this, a cached-fast chunk swaps between pointerdown and click and the
   // first tap is swallowed. Same contract as HeroUtilityPanelGate.
   const [pressHeld, setPressHeld] = useState(false);
+  // A load-more tap captured on the fallback before the grid mounted.
+  // Replayed once via the grid's replay prop so the tap is not lost.
+  const [pendingLoadMore, setPendingLoadMore] = useState(false);
   const [settleEpoch, setSettleEpoch] = useState(0);
   const pointerDownRef = useRef(false);
 
@@ -123,10 +132,20 @@ export function HomeProductGridGate({
     };
 
     // The completing click lands on the still-mounted fallback link and
-    // navigates natively; releasing here lets the swap commit after it.
-    const handleClick = () => {
+    // navigates natively; releasing here lets the swap commit after it. A
+    // click on the load-more row additionally records the action for
+    // replay: the fallback control is handler-free, so without capture
+    // the tap would activate the grid but show no more products.
+    const handleClick = (event: MouseEvent) => {
       pointerDownRef.current = false;
       setPressHeld(false);
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest('[data-ogabassey-home-products-more="true"]')
+      ) {
+        setPendingLoadMore(true);
+      }
       retryAfterFailure();
     };
 
@@ -232,7 +251,7 @@ export function HomeProductGridGate({
 
   return (
     <div ref={ref}>
-      <Grid {...gridProps} />
+      <Grid {...gridProps} replayLoadMore={pendingLoadMore} />
     </div>
   );
 }

@@ -90,6 +90,61 @@ describe('usePreviewSearch', () => {
     ).toEqual(['p1']);
   });
 
+  it('clears a stale index while rebuilding for a new catalog', async () => {
+    // A catalog swap with the query held must not keep searching the old
+    // index: until the rebuild finishes, the grid falls back to the
+    // unfiltered current list instead of rendering the prior catalog.
+    const catalogB = [buildProduct({ id: 'p3', name: 'Sourdough Crackers' })];
+    const { result, rerender } = renderHook(
+      ({ catalog }: { catalog: Product[] }) =>
+        usePreviewSearch({
+          debouncedSearchQuery: 'Sourdough',
+          isPreviewMode: true,
+          products: catalog,
+        }),
+      { initialProps: { catalog: products } }
+    );
+
+    await waitFor(() => {
+      expect(result.current.fuse).not.toBeNull();
+    });
+    expect(
+      result.current.fuse?.search('Sourdough').map((hit) => hit.item.id)
+    ).toEqual(['p1']);
+
+    rerender({ catalog: catalogB });
+    // The rebuild is still in flight: the old index is gone immediately.
+    expect(result.current.fuse).toBeNull();
+
+    await waitFor(() => {
+      expect(result.current.fuse).not.toBeNull();
+    });
+    expect(
+      result.current.fuse?.search('Sourdough').map((hit) => hit.item.id)
+    ).toEqual(['p3']);
+  });
+
+  it('keeps the warm index across query changes on the same catalog', async () => {
+    const { result, rerender } = renderHook(
+      ({ query }: { query: string }) =>
+        usePreviewSearch({
+          debouncedSearchQuery: query,
+          isPreviewMode: true,
+          products,
+        }),
+      { initialProps: { query: 'Sourdough' } }
+    );
+
+    await waitFor(() => {
+      expect(result.current.fuse).not.toBeNull();
+    });
+
+    rerender({ query: 'Olive' });
+    // Same catalog: no unfiltered flash while the already-built index
+    // answers the new query.
+    expect(result.current.fuse).not.toBeNull();
+  });
+
   it('exposes a recoverable failure instead of an unhandled rejection', async () => {
     fuseImportState.shouldFail = true;
     const { result } = renderHook(() =>

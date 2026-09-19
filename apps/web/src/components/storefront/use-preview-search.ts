@@ -1,5 +1,5 @@
 import type Fuse from 'fuse.js';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Product } from '@/lib/products';
 
 export interface PreviewSearchIndex {
@@ -37,6 +37,7 @@ export function usePreviewSearch({
   const [fuse, setFuse] = useState<Fuse<Product> | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const prevProductsRef = useRef(products);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt is a write-only re-trigger for retrySearch.
   useEffect(() => {
@@ -46,6 +47,14 @@ export function usePreviewSearch({
       return;
     }
     let cancelled = false;
+    // A catalog swap must not keep searching the previous index while the
+    // rebuild is in flight: clear it so the grid falls back to the
+    // unfiltered CURRENT list (the documented null-index path). A mere
+    // query change on the same catalog keeps the warm index — no flash.
+    if (prevProductsRef.current !== products) {
+      prevProductsRef.current = products;
+      setFuse(null);
+    }
     setSearchFailed(false);
     void import('fuse.js')
       .then(({ default: FuseImpl }) => {

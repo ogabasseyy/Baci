@@ -1114,6 +1114,76 @@ describe('CheckoutPage', () => {
     }
   });
 
+  it.each([
+    { gateway: 'credpal', open: () => openCredPalCheckout },
+    { gateway: 'credit_direct', open: () => openCreditDirectCheckout },
+  ])(
+    'emits payment_started once the resumed $gateway widget opens',
+    async ({ gateway, open }) => {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams({
+          orderId: 'ord-1',
+          gateway,
+          trackingToken: 'tok-123',
+        }) as unknown as ReturnType<typeof useSearchParams>
+      );
+      const fetchMock = vi
+        .spyOn(globalThis, 'fetch')
+        .mockImplementation(async (input) => {
+          if (String(input).startsWith('/api/storefront/orders/ord-1')) {
+            return {
+              ok: true,
+              json: async () => ({
+                id: 'ord-1',
+                short_id: 'ORD-1',
+                subtotal: 1000,
+                shipping_cost: 0,
+                total: 1000,
+                customer_name: 'Ada Buyer',
+                customer_email: 'ada@example.com',
+                customer_phone: '+2348123456789',
+                tracking_token: 'tok-123',
+                shipping_address: { address: '', city: '', state: '' },
+                items: [],
+              }),
+            } as Response;
+          }
+          return {
+            ok: true,
+            json: async () => ({ states: [], locations: [] }),
+            text: async () => '',
+          } as Response;
+        });
+
+      try {
+        render(<CheckoutPage />);
+
+        // The default widget mocks resolve without firing callbacks, which
+        // models a successfully opened provider flow.
+        await waitFor(() => {
+          expect(open()).toHaveBeenCalled();
+        });
+        await waitFor(() => {
+          expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+            'payment_started',
+            'ord-1',
+            expect.objectContaining({
+              payment_method: gateway,
+              total: 1000,
+            })
+          );
+        });
+        expect(
+          mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+            ([event]) => event === 'payment_started'
+          )
+        ).toHaveLength(1);
+      } finally {
+        fetchMock.mockRestore();
+      }
+    }
+  );
+
   it('hands fresh Credit Direct success to server verification before cleanup', async () => {
     const clearCart = vi.fn();
     const clearCheckoutSession = vi.fn();

@@ -1621,6 +1621,29 @@ export const CheckoutPage: React.FC = () => {
     try {
       const paymentAmount = resumedOrder.total;
 
+      // Resumed orders bypass the standard submission instrumentation, so
+      // emit the funnel start here once the provider widget opens. Both
+      // open* helpers throw on initialization failure, so reaching the call
+      // below the await means the flow opened. Once semantics keep the
+      // auto-trigger plus a manual retry to a single start per order.
+      const captureResumedPaymentStarted = (
+        gateway: 'credpal' | 'credit_direct'
+      ) => {
+        captureCheckoutFunnelEventOnce(
+          CHECKOUT_FUNNEL_EVENTS.paymentStarted,
+          resumedOrder.id,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            currency: currencyCode,
+            orderId: resumedOrder.id,
+            paymentIntent: getCheckoutPaymentIntent(gateway),
+            paymentMethod: gateway,
+            source: 'web_checkout',
+            total: paymentAmount,
+          })
+        );
+      };
+
       // For CredPal, use the inline checkout widget (statically imported —
       // dynamic `import()` expressions bail React Compiler)
       if (preferredGateway === 'credpal') {
@@ -1688,6 +1711,7 @@ export const CheckoutPage: React.FC = () => {
             setIsProcessing(false);
           },
         });
+        captureResumedPaymentStarted('credpal');
         return;
       }
 
@@ -1766,6 +1790,7 @@ export const CheckoutPage: React.FC = () => {
             }
           },
         });
+        captureResumedPaymentStarted('credit_direct');
         return;
       }
     } catch (error) {

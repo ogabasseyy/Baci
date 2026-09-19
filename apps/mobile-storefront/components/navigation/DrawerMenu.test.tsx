@@ -2,6 +2,14 @@ import { act, render, screen } from '@testing-library/react-native';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { DrawerMenu } from './DrawerMenu';
 
+// No navigator exists here: stub the router surface DrawerMenu touches and
+// report the route focused (AdSlot unmounts on unfocused routes).
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn() },
+  usePathname: () => '/',
+  useIsFocused: () => true,
+}));
+
 let mockIsOpen = true;
 let mockTimingCallbacks: Array<(finished?: boolean) => void> = [];
 

@@ -57,6 +57,7 @@ jest.mock('expo-router', () => ({
     push: (...args: unknown[]) => mockRouterPush(...args),
     replace: (...args: unknown[]) => mockRouterReplace(...args),
   },
+  useIsFocused: () => true,
 }));
 
 jest.mock('@tanstack/react-query', () => ({

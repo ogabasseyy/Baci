@@ -3,6 +3,7 @@ import { SearchOverlay } from './SearchOverlay';
 
 jest.mock('expo-router', () => ({
   useRouter: jest.fn(() => ({ push: jest.fn() })),
+  useIsFocused: () => true,
 }));
 
 jest.mock('react-native-reanimated', () => {

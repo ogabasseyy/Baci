@@ -210,13 +210,16 @@ describe('QuizAdminClient', () => {
       screen.getByRole('combobox', { name: 'Launch timing' }),
       'scheduled'
     );
-    await user.clear(screen.getByLabelText('Scheduled start'));
+    await user.clear(screen.getByLabelText(/scheduled start/i));
     await user.type(
-      screen.getByLabelText('Scheduled start'),
+      screen.getByLabelText(/scheduled start/i),
       '2020-01-01T09:00'
     );
-    await user.clear(screen.getByLabelText('Universal end'));
-    await user.type(screen.getByLabelText('Universal end'), '2020-01-01T09:05');
+    await user.clear(screen.getByLabelText(/universal end/i));
+    await user.type(
+      screen.getByLabelText(/universal end/i),
+      '2020-01-01T09:05'
+    );
 
     expect(
       screen.getByRole('button', { name: /generate draft/i })
@@ -234,13 +237,16 @@ describe('QuizAdminClient', () => {
       screen.getByRole('combobox', { name: 'Launch timing' }),
       'scheduled'
     );
-    await user.clear(screen.getByLabelText('Scheduled start'));
+    await user.clear(screen.getByLabelText(/scheduled start/i));
     await user.type(
-      screen.getByLabelText('Scheduled start'),
+      screen.getByLabelText(/scheduled start/i),
       '2027-08-06T09:00'
     );
-    await user.clear(screen.getByLabelText('Universal end'));
-    await user.type(screen.getByLabelText('Universal end'), '2027-08-06T09:05');
+    await user.clear(screen.getByLabelText(/universal end/i));
+    await user.type(
+      screen.getByLabelText(/universal end/i),
+      '2027-08-06T09:05'
+    );
     await user.click(screen.getByRole('button', { name: /generate draft/i }));
     await user.click(
       await screen.findByRole('checkbox', {

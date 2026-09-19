@@ -13,9 +13,13 @@ interface MockPage {
 function createManifestSupabase(pages: MockPage[]) {
   let call = 0;
   const ranges: Array<{ from: number; to: number }> = [];
+  const inCalls: Array<{ column: string; ids: string[] }> = [];
   const query = {
     eq: () => query,
-    in: () => query,
+    in: (column: string, ids: string[]) => {
+      inCalls.push({ column, ids });
+      return query;
+    },
     order: () => query,
     range: (from: number, to: number) => {
       ranges.push({ from, to });
@@ -34,7 +38,7 @@ function createManifestSupabase(pages: MockPage[]) {
     from: (table: string) =>
       table === 'product_feed_images' ? { select: () => query } : {},
   } as unknown as SupabaseClient;
-  return { supabase, ranges };
+  return { supabase, ranges, inCalls };
 }
 
 const manifestRow = (product_id: string, position: number): ManifestRow => ({
@@ -73,6 +77,26 @@ describe('fetchVerifiedImageManifestRows', () => {
 
     expect(rows).toHaveLength(1001);
     expect(ranges.map((r) => r.from)).toEqual([0, 1000]);
+  });
+
+  it('merges rows across product batches above the batch size', async () => {
+    const productIds = Array.from({ length: 251 }, (_, index) => `p${index}`);
+    const { supabase, inCalls } = createManifestSupabase([
+      { data: [manifestRow('p0', 0)] },
+      { data: [manifestRow('p250', 0)] },
+    ]);
+
+    const rows = await fetchVerifiedImageManifestRows(
+      supabase,
+      'm1',
+      productIds
+    );
+
+    expect(inCalls).toEqual([
+      { column: 'product_id', ids: productIds.slice(0, 250) },
+      { column: 'product_id', ids: ['p250'] },
+    ]);
+    expect(rows.map((r) => r.product_id)).toEqual(['p0', 'p250']);
   });
 
   it('returns an empty list for no products without querying', async () => {

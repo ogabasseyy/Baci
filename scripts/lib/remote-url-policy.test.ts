@@ -102,6 +102,15 @@ describe('validateRemoteUrl host classification', () => {
     );
   });
 
+  it('blocks deprecated 6to4 relay destinations', () => {
+    for (const host of ['192.88.99.0', '192.88.99.1', '192.88.99.255']) {
+      expect(validateRemoteUrl(url(host))).toBeNull();
+    }
+    expect(validateRemoteUrl(url('192.88.100.1'))?.toString()).toBe(
+      url('192.88.100.1')
+    );
+  });
+
   it('blocks benchmark-network destinations', () => {
     for (const host of ['198.18.0.1', '198.19.255.255']) {
       expect(validateRemoteUrl(url(host))).toBeNull();

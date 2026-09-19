@@ -7,7 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Linking } from 'react-native';
 import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
-import { useJuicywaySettlementCompletion } from '@/components/orders/use-juicyway-settlement-completion';
+import { useSettlementCompletion } from '@/components/orders/use-settlement-completion';
 import { ReceiptPreviewModal } from '@/components/receipts/ReceiptPreviewModal';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -55,10 +55,11 @@ export default function OrderSuccessScreen() {
     paymentMethod === 'invoice' && orderId ? orderId : null
   );
   const isPaidOrder = paidCheckOrder?.payment_status === 'paid';
-  // Juicyway settlement is detected asynchronously after the shopper taps
-  // "I've Sent the Payment": complete the funnel only once the server
-  // confirms this order paid.
-  useJuicywaySettlementCompletion({
+  // Asynchronous settlement (Juicyway on-chain detection, standard bank
+  // transfers) is confirmed after the shopper leaves checkout: poll the
+  // server-confirmed order state and complete the funnel only once this
+  // order is paid.
+  useSettlementCompletion({
     orderId,
     orderNumber,
     paymentMethod,

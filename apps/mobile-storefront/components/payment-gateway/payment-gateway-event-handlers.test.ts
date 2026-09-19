@@ -14,6 +14,7 @@ function createRefs(): PaymentGatewayRefs {
     loadTimeoutRef: { current: null },
     navigationTimeoutRef: { current: null },
     paymentCompletionStartedRef: { current: false },
+    paymentFailureRecordedRef: { current: false },
     savingsAuthorizationAbortRef: { current: null },
     statusRef: { current: 'ready' },
     vtuConfirmationTokenRef: { current: 0 },
@@ -21,7 +22,7 @@ function createRefs(): PaymentGatewayRefs {
   } as unknown as PaymentGatewayRefs;
 }
 
-function createHandlers(reference?: string) {
+function createHandlers(reference?: string, refs = createRefs()) {
   const beginPaymentCompletion = jest.fn();
   const handlers = createPaymentGatewayEventHandlers({
     beginPaymentCompletion,
@@ -31,7 +32,7 @@ function createHandlers(reference?: string) {
     orderId: 'order-1',
     paymentKind: 'order',
     reference,
-    refs: createRefs(),
+    refs,
     returnTo: undefined,
     scheduleDelayedNavigation: jest.fn(),
     scheduleLoadTimeout: jest.fn(),
@@ -116,6 +117,25 @@ describe('createPaymentGatewayEventHandlers navigation', () => {
     handlers.handleNavigationChange({ url: cancelledUrl } as never);
 
     expect(trackCheckoutPaymentFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it('dedupes a duplicate failure after the factory is recreated on rerender', () => {
+    const { trackCheckoutPaymentFailed: failedMock } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutPaymentFailed: jest.Mock };
+    failedMock.mockClear();
+    // One shared controller refs object across two factory instances models
+    // the rerender that follows the first setPaymentStatus('error').
+    const refs = createRefs();
+    const cancelledUrl = 'https://checkout.paystack.com/orders?cancelled=true';
+    createHandlers('ref-123', refs).handlers.handleNavigationChange({
+      url: cancelledUrl,
+    } as never);
+    createHandlers('ref-123', refs).handlers.handleNavigationChange({
+      url: cancelledUrl,
+    } as never);
+
+    expect(failedMock).toHaveBeenCalledTimes(1);
   });
 
   it('emits a single failure for duplicate load-error callbacks', () => {

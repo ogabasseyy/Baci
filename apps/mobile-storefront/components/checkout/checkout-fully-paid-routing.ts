@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react';
 import type { StoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 import type { OrderResponse } from '@/services/orders';
+import type { CheckoutCompletionAttribution } from '@/services/track-checkout-payment-completed-once';
 import { clearAndPersistCheckoutCart } from './checkout-cart-persistence';
 
 /**
@@ -10,6 +11,7 @@ import { clearAndPersistCheckoutCart } from './checkout-cart-persistence';
  * store-credit amounts used so the receipt can show them.
  */
 export async function routeStoreCreditSuccess({
+  attribution,
   clearCart,
   orderId,
   orderNumber,
@@ -18,6 +20,7 @@ export async function routeStoreCreditSuccess({
   setIsProcessing,
   trackingToken,
 }: {
+  attribution?: CheckoutCompletionAttribution;
   clearCart: () => void | Promise<void>;
   orderId: string;
   orderNumber: string;
@@ -31,6 +34,7 @@ export async function routeStoreCreditSuccess({
   const paidTotal = orderResponse.order.total;
   // First completion wins the durable claim; replays emit nothing.
   await trackCheckoutPaymentCompletedOnce({
+    ...attribution,
     orderId,
     orderNumber,
     paymentMethod,
@@ -60,6 +64,7 @@ export async function routeStoreCreditSuccess({
  * order would fail or wrongly start a payment for a free prize.
  */
 export async function routeFullyPaidPrizeSuccess({
+  attribution,
   clearCart,
   isOrderInFlight,
   orderId,
@@ -68,6 +73,7 @@ export async function routeFullyPaidPrizeSuccess({
   setIsProcessing,
   trackingToken,
 }: {
+  attribution?: CheckoutCompletionAttribution;
   clearCart: () => void | Promise<void>;
   isOrderInFlight: MutableRefObject<boolean>;
   orderId: string;
@@ -80,6 +86,7 @@ export async function routeFullyPaidPrizeSuccess({
   // before the cart is cleared (purchase capture needs items).
   // First completion wins the durable claim; replays emit nothing.
   await trackCheckoutPaymentCompletedOnce({
+    ...attribution,
     orderId,
     orderNumber,
     paymentMethod: 'quiz_voucher',

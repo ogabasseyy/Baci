@@ -125,6 +125,34 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
     );
   });
 
+  it('carries guest identity and the canonical breakdown into the purchase', async () => {
+    await expect(
+      trackCheckoutPaymentCompletedOnce({
+        customerEmail: 'guest@example.com',
+        customerPhone: '+2348123456789',
+        orderId: 'order-guest',
+        orderNumber: 'BAC-GUEST',
+        paymentMethod: 'wallet',
+        shipping: 1500,
+        subtotal: 45000,
+        tax: 3375,
+        value: 49875,
+      })
+    ).resolves.toBe(true);
+
+    expect(purchaseMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerEmail: 'guest@example.com',
+        customerPhone: '+2348123456789',
+        orderId: 'order-guest',
+        shipping: 1500,
+        subtotal: 45000,
+        tax: 3375,
+        total: 49875,
+      })
+    );
+  });
+
   it('honours a claim persisted before the current session started', async () => {
     storage.set(
       'checkout-purchase-tracking-v1',

@@ -3,18 +3,13 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable } from 'react-native';
 import { BankTransferView } from '@/components/bank-transfer/BankTransferView';
+import { validateBankTransferParams } from '@/components/bank-transfer/validate-bank-transfer-params';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { WALLET_FUNDING_POLLING } from '@/constants/wallet-funding';
 import { useWalletFundingPolling } from '@/hooks/use-wallet-funding-polling';
 import { setClipboardString } from '@/lib/clipboard';
 import type { WalletOrderFundingIntent } from '@/lib/order-wallet-funding-intent';
-import {
-  type BankTransferParams,
-  BankTransferParamsSchema,
-  type WalletFundedBankTransferParams,
-  WalletFundedBankTransferParamsSchema,
-} from '@/schemas/bank-transfer-params';
 import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 
@@ -47,66 +42,6 @@ function getWalletFundedRemainingAmount(
     return intent.remainingAmount;
   }
   return Math.max(intent.expectedAmount - intent.fundedAmount, 0);
-}
-
-type ValidatedBankTransferParams =
-  | {
-      data: BankTransferParams;
-      error: null;
-      isValid: true;
-      mode: 'legacy';
-    }
-  | {
-      data: WalletFundedBankTransferParams;
-      error: null;
-      isValid: true;
-      mode: 'wallet_funded';
-    }
-  | {
-      data: null;
-      error: string;
-      isValid: false;
-      mode: 'legacy' | 'wallet_funded';
-    };
-
-function validateBankTransferParams(
-  params: Record<string, string>
-): ValidatedBankTransferParams {
-  // `intentId` is a legacy deep-link fallback; an explicit walletFunded flag wins.
-  const isWalletFunded =
-    params.walletFunded === 'true' ||
-    (params.walletFunded === undefined && Boolean(params.intentId));
-  if (isWalletFunded) {
-    const result = WalletFundedBankTransferParamsSchema.safeParse(params);
-    return result.success
-      ? {
-          data: result.data,
-          error: null,
-          isValid: true,
-          mode: 'wallet_funded' as const,
-        }
-      : {
-          data: null,
-          error: result.error.issues[0]?.message || 'Invalid parameters',
-          isValid: false,
-          mode: 'wallet_funded' as const,
-        };
-  }
-  const result = BankTransferParamsSchema.safeParse(params);
-  if (!result.success) {
-    return {
-      data: null,
-      error: result.error.issues[0]?.message || 'Invalid parameters',
-      isValid: false,
-      mode: 'legacy' as const,
-    };
-  }
-  return {
-    data: result.data,
-    error: null,
-    isValid: true,
-    mode: 'legacy',
-  };
 }
 
 export default function BankTransferScreen() {

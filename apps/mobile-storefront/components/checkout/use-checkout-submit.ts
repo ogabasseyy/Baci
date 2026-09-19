@@ -242,6 +242,15 @@ export function useCheckoutSubmit({
       }
 
       await finalizeCheckoutPayment({
+        attribution: {
+          customerEmail,
+          customerPhone,
+          items: itemsSnapshot,
+          shipping: snapshot.deliveryFee,
+          subtotal: snapshot.subtotal,
+          tax: snapshot.taxAmount,
+          userId: customer?.id,
+        },
         clearCart,
         customerEmail,
         customerName,

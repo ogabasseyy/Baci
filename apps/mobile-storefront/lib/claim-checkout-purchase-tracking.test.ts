@@ -86,3 +86,63 @@ it('fails closed when the store never settles instead of queuing forever', async
     );
   }
 });
+
+it('leaves no phantom claim when a timed-out write lands late', async () => {
+  jest.useFakeTimers();
+  try {
+    // Writes land after the three-second caller timeout: the caller
+    // reports failure, but the write still commits afterwards.
+    mockSetItem.mockImplementation(
+      (key: string, value: string) =>
+        new Promise<void>((resolve) => {
+          setTimeout(() => {
+            storage.set(key, value);
+            resolve();
+          }, 3500);
+        })
+    );
+    const first = claimCheckoutPurchaseTracking('order-late');
+    await jest.advanceTimersByTimeAsync(3000);
+    await expect(first).resolves.toBe(false);
+
+    // The late write lands, the compensating rollback removes exactly that
+    // claim, and the queue is released: a replay claims successfully and
+    // the event is emitted exactly once.
+    await jest.advanceTimersByTimeAsync(8000);
+    expect(
+      parseStoredClaimsForTest(
+        storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY)
+      )
+    ).not.toContain('order-late');
+    // With the store healthy again, the replay claims successfully: no
+    // phantom claim survived the timed-out write.
+    mockSetItem.mockImplementation(async (key: string, value: string) => {
+      storage.set(key, value);
+    });
+    await expect(claimCheckoutPurchaseTracking('order-late')).resolves.toBe(
+      true
+    );
+  } finally {
+    jest.useRealTimers();
+    mockSetItem.mockImplementation(async (key: string, value: string) => {
+      storage.set(key, value);
+    });
+  }
+});
+
+function parseStoredClaimsForTest(raw: string | undefined): string[] {
+  if (!raw) {
+    return [];
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (value): value is string =>
+            typeof value === 'string' && value.length > 0
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}

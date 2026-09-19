@@ -4,6 +4,7 @@ import type { PaymentMethodType } from '@/components/checkout/PaymentMethodSelec
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { OrderError, type OrderResponse } from '@/services/orders';
+import type { CheckoutCompletionAttribution } from '@/services/track-checkout-payment-completed-once';
 import { clearAndPersistCheckoutCart } from './checkout-cart-persistence';
 import {
   routeFullyPaidPrizeSuccess,
@@ -23,6 +24,7 @@ import {
 const PAYMENT_INIT_TIMEOUT_MS = 10_000;
 
 interface FinalizeCheckoutPaymentParams {
+  attribution?: CheckoutCompletionAttribution;
   clearCart: () => void | Promise<void>;
   customerEmail: string;
   customerName: string;
@@ -39,6 +41,7 @@ interface FinalizeCheckoutPaymentParams {
 }
 
 export async function finalizeCheckoutPayment({
+  attribution,
   clearCart,
   customerEmail,
   customerName,
@@ -62,6 +65,7 @@ export async function finalizeCheckoutPayment({
   // selected method is irrelevant and starting a payment flow for ₦0 is wrong.
   if (fullyPaidStoreCreditPaymentMethod) {
     await routeStoreCreditSuccess({
+      attribution,
       clearCart,
       orderId: order.id,
       orderNumber,
@@ -85,6 +89,7 @@ export async function finalizeCheckoutPayment({
     // routeFullyPaidPrizeSuccess reports the actual voucher method (not the
     // stale UI selection), so the success screen shows paid/completed copy.
     await routeFullyPaidPrizeSuccess({
+      attribution,
       clearCart,
       isOrderInFlight,
       orderId: order.id,

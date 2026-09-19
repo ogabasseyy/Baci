@@ -866,6 +866,12 @@ describe('GET /api/orders/[id]/invoice', () => {
         invoiceTypeCode: '325',
       })
     );
+    expect(response.headers.get('Content-Disposition')).toContain(
+      'filename="proforma-ORD-1001.pdf"'
+    );
+    expect(response.headers.get('Content-Disposition')).toContain(
+      "filename*=UTF-8''proforma-ORD-1001.pdf"
+    );
   });
 
   it('returns 500 when the order payment account lookup fails', async () => {

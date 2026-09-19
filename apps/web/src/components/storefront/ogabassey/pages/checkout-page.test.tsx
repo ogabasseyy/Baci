@@ -1115,11 +1115,39 @@ describe('CheckoutPage', () => {
   });
 
   it.each([
-    { gateway: 'credpal', open: () => openCredPalCheckout },
-    { gateway: 'credit_direct', open: () => openCreditDirectCheckout },
+    {
+      gateway: 'credpal',
+      openWidget: async () => {
+        // The default CredPal mock resolves without firing callbacks, which
+        // models a successfully opened widget (its opener rejects on init
+        // failure instead of resolving).
+        await waitFor(() => {
+          expect(openCredPalCheckout).toHaveBeenCalled();
+        });
+      },
+    },
+    {
+      gateway: 'credit_direct',
+      openWidget: async () => {
+        // Credit Direct's opener swallows init failures into onError, so
+        // only invoking the real popup callback models an opened flow.
+        await waitFor(() => {
+          expect(openCreditDirectCheckout).toHaveBeenCalled();
+        });
+        const options = vi.mocked(openCreditDirectCheckout).mock.calls.at(
+          -1
+        )?.[0];
+        await act(async () => {
+          await options?.onPopup?.({
+            checkoutTransactionId: 'cd-popup-1',
+            sessionId: 'signed-session-1',
+          });
+        });
+      },
+    },
   ])(
-    'emits payment_started once the resumed $gateway widget opens',
-    async ({ gateway, open }) => {
+    'emits payment_started once the resumed $gateway flow opens',
+    async ({ gateway, openWidget }) => {
       vi.mocked(useSearchParams).mockReturnValue(
         new URLSearchParams({
           orderId: 'ord-1',
@@ -1158,11 +1186,7 @@ describe('CheckoutPage', () => {
       try {
         render(<CheckoutPage />);
 
-        // The default widget mocks resolve without firing callbacks, which
-        // models a successfully opened provider flow.
-        await waitFor(() => {
-          expect(open()).toHaveBeenCalled();
-        });
+        await openWidget();
         await waitFor(() => {
           expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
             'payment_started',
@@ -1183,6 +1207,71 @@ describe('CheckoutPage', () => {
       }
     }
   );
+
+  it('skips payment_started when resumed Credit Direct initialization fails', async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams({
+        orderId: 'ord-1',
+        gateway: 'credit_direct',
+        trackingToken: 'tok-123',
+      }) as unknown as ReturnType<typeof useSearchParams>
+    );
+    // Mirror the opener's catch-and-resolve contract: init failure reaches
+    // onError without ever opening a popup.
+    vi.mocked(openCreditDirectCheckout).mockImplementationOnce(
+      async ({ onError }) => {
+        onError?.('Failed to initialize Credit Direct');
+      }
+    );
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        if (String(input).startsWith('/api/storefront/orders/ord-1')) {
+          return {
+            ok: true,
+            json: async () => ({
+              id: 'ord-1',
+              short_id: 'ORD-1',
+              subtotal: 1000,
+              shipping_cost: 0,
+              total: 1000,
+              customer_name: 'Ada Buyer',
+              customer_email: 'ada@example.com',
+              customer_phone: '+2348123456789',
+              tracking_token: 'tok-123',
+              shipping_address: { address: '', city: '', state: '' },
+              items: [],
+            }),
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({ states: [], locations: [] }),
+          text: async () => '',
+        } as Response;
+      });
+
+    try {
+      render(<CheckoutPage />);
+
+      await waitFor(() => {
+        expect(openCreditDirectCheckout).toHaveBeenCalled();
+      });
+      // Let the error path settle, then assert no start was recorded.
+      await waitFor(() => {
+        expect(toast).toHaveBeenCalledWith(
+          expect.objectContaining({ title: 'Payment Failed' })
+        );
+      });
+      expect(
+        mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+          ([event]) => event === 'payment_started'
+        )
+      ).toHaveLength(0);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
 
   it('hands fresh Credit Direct success to server verification before cleanup', async () => {
     const clearCart = vi.fn();

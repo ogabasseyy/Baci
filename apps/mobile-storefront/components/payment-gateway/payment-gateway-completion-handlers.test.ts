@@ -83,9 +83,64 @@ function createInput(
   };
 }
 
+function mockPaidVerification(total = 5000) {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/api/payments/verify')) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'success',
+          finalizationOutcome: 'completed',
+          orderId: 'order-1',
+          orderTotal: total,
+        }),
+        { status: 200 }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        order: {
+          id: 'order-1',
+          order_number: 'ORD-1',
+          payment_status: 'paid',
+          total,
+        },
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+}
+
+function mockPendingVerification() {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/api/payments/verify')) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          status: 'pending',
+          error: 'still pending',
+        }),
+        { status: 400 }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        order: {
+          id: 'order-1',
+          order_number: 'ORD-1',
+          payment_status: 'pending',
+          total: 5000,
+        },
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+}
+
 describe('createPaymentGatewayCompletionHandlers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPaidVerification();
   });
 
   it('completes an order payment, clears the cart, and navigates to success', async () => {
@@ -122,6 +177,7 @@ describe('createPaymentGatewayCompletionHandlers', () => {
 
   it('reports the canonical order total instead of the gateway residual', async () => {
     // Arrange
+    mockPaidVerification(21500);
     const { input } = createInput({ amount: 5000, orderTotal: 21500 });
     const { beginPaymentCompletion } =
       createPaymentGatewayCompletionHandlers(input);
@@ -135,6 +191,25 @@ describe('createPaymentGatewayCompletionHandlers', () => {
         orderId: 'order-1',
         value: 21500,
       })
+    );
+  });
+
+  it('skips the conversion when server verification is still pending', async () => {
+    // Arrange: a matching-reference redirect whose order is not paid yet.
+    mockPendingVerification();
+    const { input } = createInput();
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: no paid conversion, but the shopper still reaches success
+    // (settlement polling may complete the order once the webhook lands).
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.clearCart).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/order-success' })
     );
   });
 

@@ -12,6 +12,7 @@ import type {
   PaymentStatusSetter,
 } from './payment-gateway-controller.types';
 import { handleVtuConfirmation } from './use-vtu-payment-completion';
+import { verifyOrderPaymentForCompletion } from './verify-order-payment';
 
 interface PaymentGatewayCompletionHandlerInput
   extends Partial<PaymentGatewayParams> {
@@ -147,14 +148,25 @@ export function createPaymentGatewayCompletionHandlers({
       // Prefer the canonical order total: `amount` is only the residual due
       // at the gateway after wallet/savings credits.
       const purchaseTotal = orderTotal ?? amount ?? 0;
-      // First completion wins the durable claim; replays emit nothing.
-      await trackCheckoutPaymentCompletedOnce({
+      // A completion-looking redirect proves association, not settlement:
+      // only a server-confirmed paid order records the conversion here.
+      // Unverified orders still navigate to success, where settlement
+      // polling may complete them once the webhook marks them paid.
+      const verification = await verifyOrderPaymentForCompletion({
         orderId,
-        orderNumber: orderNumber || orderId,
-        paymentMethod: gateway || 'payment_gateway',
+        trackingToken,
         reference,
-        value: purchaseTotal,
       });
+      if (verification.paid) {
+        // First completion wins the durable claim; replays emit nothing.
+        await trackCheckoutPaymentCompletedOnce({
+          orderId,
+          orderNumber: orderNumber || orderId,
+          paymentMethod: gateway || 'payment_gateway',
+          reference,
+          value: verification.total ?? purchaseTotal,
+        });
+      }
     }
     await clearCart();
     scheduleDelayedNavigation(() => {

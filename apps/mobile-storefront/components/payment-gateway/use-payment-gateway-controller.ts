@@ -56,6 +56,7 @@ export function usePaymentGatewayController() {
   const webViewRef = useRef<WebView>(null);
   const copiedGatewayTextRef = useRef<string | null>(null);
   const paymentCompletionStartedRef = useRef(false);
+  const paymentFailureRecordedRef = useRef(false);
   const savingsAuthorizationAbortRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
   const vtuConfirmationTokenRef = useRef(0);
@@ -74,6 +75,7 @@ export function usePaymentGatewayController() {
     loadTimeoutRef,
     navigationTimeoutRef,
     paymentCompletionStartedRef,
+    paymentFailureRecordedRef,
     savingsAuthorizationAbortRef,
     statusRef,
     vtuConfirmationTokenRef,

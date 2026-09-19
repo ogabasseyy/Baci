@@ -751,7 +751,7 @@ export async function GET(
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': buildPdfContentDisposition(
-          'invoice',
+          invoiceData.invoice_type_code === '325' ? 'proforma' : 'invoice',
           invoiceData.invoice_number
         ),
         'Cache-Control': 'no-cache',

@@ -48,15 +48,18 @@ export function createPaymentGatewayEventHandlers({
   const isTerminalStatus = () => terminalStatuses.has(refs.statusRef.current);
 
   // Attempt-scoped failure marker: duplicate provider callbacks for the
-  // same failed attempt must not inflate terminal failures. Set
-  // synchronously on first emission (status refs only mirror on render)
-  // and reset only by Retry.
-  let failureRecorded = false;
+  // same failed attempt must not inflate terminal failures. The marker
+  // lives in a controller ref (not a factory local) because the controller
+  // recreates this factory on every render — e.g. after the first failure
+  // sets status to error — and a local would reset, letting a late
+  // duplicate callback emit payment_failed again. Set synchronously on
+  // first emission (status refs only mirror on render) and reset only by
+  // Retry.
   const recordPaymentFailure = (reason: string) => {
-    if (failureRecorded) {
+    if (refs.paymentFailureRecordedRef.current) {
       return;
     }
-    failureRecorded = true;
+    refs.paymentFailureRecordedRef.current = true;
     trackCheckoutPaymentFailed(reason, orderId, gateway);
   };
 
@@ -104,7 +107,7 @@ export function createPaymentGatewayEventHandlers({
       }
     },
     handleRetry: () => {
-      failureRecorded = false;
+      refs.paymentFailureRecordedRef.current = false;
       refs.vtuConfirmationTokenRef.current += 1;
       refs.savingsAuthorizationAbortRef.current?.abort();
       refs.savingsAuthorizationAbortRef.current = null;

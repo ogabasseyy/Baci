@@ -1622,10 +1622,12 @@ export const CheckoutPage: React.FC = () => {
       const paymentAmount = resumedOrder.total;
 
       // Resumed orders bypass the standard submission instrumentation, so
-      // emit the funnel start here once the provider widget opens. Both
-      // open* helpers throw on initialization failure, so reaching the call
-      // below the await means the flow opened. Once semantics keep the
-      // auto-trigger plus a manual retry to a single start per order.
+      // emit the funnel start here once the provider flow opens. CredPal's
+      // opener throws on initialization failure, so reaching the call below
+      // its await means the widget opened; Credit Direct's opener swallows
+      // failures into onError instead, so its start fires from onPopup.
+      // Once semantics keep the auto-trigger plus a manual retry to a
+      // single start per order.
       const captureResumedPaymentStarted = (
         gateway: 'credpal' | 'credit_direct'
       ) => {
@@ -1770,6 +1772,10 @@ export const CheckoutPage: React.FC = () => {
             setIsProcessing(false);
           },
           onPopup: async ({ checkoutTransactionId, sessionId }) => {
+            // The opener swallows initialization failures into onError
+            // instead of rejecting, so only a real popup opening proves the
+            // provider flow started.
+            captureResumedPaymentStarted('credit_direct');
             writeCreditDirectPopupMarker(
               resumedOrder.id,
               checkoutTransactionId || sessionId
@@ -1790,7 +1796,6 @@ export const CheckoutPage: React.FC = () => {
             }
           },
         });
-        captureResumedPaymentStarted('credit_direct');
         return;
       }
     } catch (error) {

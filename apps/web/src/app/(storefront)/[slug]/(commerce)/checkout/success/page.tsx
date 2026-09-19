@@ -45,6 +45,7 @@ import { asRoute } from '@/lib/routes';
 type VerificationResponse = {
   orderId?: string;
   orderNumber?: string;
+  orderTotal?: number;
   paymentMethod?: string;
   status?: 'success' | 'pending' | 'failed' | 'cancelled';
   success?: boolean;
@@ -117,6 +118,7 @@ interface VerifyCheckoutPaymentHandlers {
     orderNumber?: string;
     paymentMethod: string;
     reference?: string;
+    total?: number;
   }) => void;
   capturePaymentFailed: (input: {
     orderId?: string | null;
@@ -173,11 +175,13 @@ async function verifyCheckoutPayment(
             setPaymentMethod(data.payment_method);
           }
           if (data.payment_status === 'paid') {
+            const lookupTotal = Number(data.total);
             capturePaymentCompleted({
               orderId,
               orderNumber: data.order_number || data.short_id,
               paymentMethod:
                 data.payment_method || paymentMethod || 'paid_order',
+              ...(Number.isFinite(lookupTotal) ? { total: lookupTotal } : {}),
             });
           }
         } else {
@@ -235,12 +239,14 @@ async function verifyCheckoutPayment(
       // order_skipped outcomes alike: only a completed finalization leaves an
       // active paid order, so only it counts as a paid conversion.
       if (verifiedOrderId && data.finalizationOutcome === 'completed') {
+        const verifiedTotal = Number(data.orderTotal);
         capturePaymentCompleted({
           orderId: verifiedOrderId,
           orderNumber: data.orderNumber,
           paymentMethod:
             data.paymentMethod || paymentMethod || 'payment_gateway',
           reference,
+          ...(Number.isFinite(verifiedTotal) ? { total: verifiedTotal } : {}),
         });
       }
     } else if (data.status === 'failed' || data.status === 'cancelled') {
@@ -349,6 +355,7 @@ function CheckoutSuccessContent() {
               paymentStatus: 'paid',
               reference: input.reference,
               source: 'web_checkout',
+              total: input.total,
             })
           );
         },

@@ -837,6 +837,37 @@ describe('GET /api/orders/[id]/invoice', () => {
     );
   });
 
+  it('skips Peppol artifacts for unpaid invoice proforma documents', async () => {
+    vi.mocked(createClient).mockReturnValue(
+      createSupabaseMock({
+        order: {
+          ...orderResult,
+          data: {
+            ...(orderResult.data as Record<string, unknown>),
+            payment_method: 'invoice',
+            payment_status: 'unpaid',
+            invoice_type_code: '380',
+          },
+        },
+      }) as unknown as ReturnType<typeof createClient>
+    );
+
+    const response = await GET(
+      new NextRequest(`http://localhost/api/orders/${ORDER_ID}/invoice`),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(generatePeppolInvoiceXml).not.toHaveBeenCalled();
+    expect(vi.mocked(generateReceiptBlob).mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({
+        complianceNote: undefined,
+        documentKind: 'proforma_invoice',
+        invoiceTypeCode: '325',
+      })
+    );
+  });
+
   it('returns 500 when the order payment account lookup fails', async () => {
     vi.mocked(createClient).mockReturnValue(
       createSupabaseMock({

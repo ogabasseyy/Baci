@@ -127,6 +127,7 @@ export function PaymentStep({
         CHECKOUT_FUNNEL_EVENTS.paymentMethodSelected,
         buildCheckoutFunnelProperties({
           channel: 'web',
+          currency,
           paymentIntent: getCheckoutPaymentIntent(method),
           paymentMethod: method,
           source: 'web_checkout',

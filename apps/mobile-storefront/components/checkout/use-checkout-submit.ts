@@ -15,6 +15,7 @@ import {
   repriceCartItems,
 } from '@/services/cart-reprice';
 import { createOrder } from '@/services/orders';
+import { serializeAfterOrderCreated } from '@/services/serialize-after-order-created';
 import { useCartStore } from '@/stores/cart-store';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
 import {
@@ -151,11 +152,12 @@ export function useCheckoutSubmit({
       // RPC marks the pre-reserved order paid (it keys payment_status off
       // p_payment_method — 'pod'/'pay_on_delivery' → pending, else → paid). With
       // POD the prize order would be left pending while the cart is cleared.
+      // Pay-for-me keeps its own persisted identity (like web checkout):
+      // collapsing it to 'invoice' would misclassify its documents as
+      // proforma. The server defaults it to pending, matching invoice flow.
       const paymentMethodForOrder = isVoucherOnlyCart
         ? 'card'
-        : selectedPayment === 'payforme'
-          ? 'invoice'
-          : selectedPayment;
+        : selectedPayment;
       const isBNPL =
         selectedPayment === 'credpal' ||
         selectedPayment === 'credit_direct' ||
@@ -214,19 +216,28 @@ export function useCheckoutSubmit({
       const { order } = orderResponse;
       const orderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
-      if (
-        selectedPayment === 'invoice' &&
-        (await claimCheckoutPurchaseTracking(order.id, 'invoice_generated'))
-      ) {
-        trackCheckoutInvoiceGenerated({
-          itemCount: itemsSnapshot.reduce(
-            (count, item) => count + item.quantity,
-            0
-          ),
-          orderId: order.id,
-          orderNumber,
-          paymentMethod: 'invoice',
-          total: order.total,
+      if (selectedPayment === 'invoice') {
+        // Chain behind the order-created emission so the funnel keeps
+        // causal order even though creation is recorded fire-and-forget.
+        await serializeAfterOrderCreated(order.id, async () => {
+          if (
+            !(await claimCheckoutPurchaseTracking(
+              order.id,
+              'invoice_generated'
+            ))
+          ) {
+            return;
+          }
+          trackCheckoutInvoiceGenerated({
+            itemCount: itemsSnapshot.reduce(
+              (count, item) => count + item.quantity,
+              0
+            ),
+            orderId: order.id,
+            orderNumber,
+            paymentMethod: 'invoice',
+            total: order.total,
+          });
         });
       }
 

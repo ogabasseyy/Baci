@@ -322,6 +322,58 @@ describe('checkout success page', () => {
     }
   });
 
+  it('carries the canonical total into verified completion events', async () => {
+    mockFetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        finalizationOutcome: 'completed',
+        orderId: 'order-1',
+        orderNumber: 'ORD-2001',
+        orderTotal: 21500,
+        status: 'success',
+        success: true,
+      }),
+    });
+
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() =>
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-1',
+        expect.objectContaining({ total: 21500 })
+      )
+    );
+  });
+
+  it('carries the looked-up total into paid-order completion events', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        trackingToken: 'track-token-123',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        order_number: 'ORD-1001',
+        payment_method: 'paystack',
+        payment_status: 'paid',
+        total: 470000,
+      }),
+    });
+
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() =>
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-123',
+        expect.objectContaining({ total: 470000 })
+      )
+    );
+  });
+
   it('fetches invoice order details with merchant slug and tracking token', async () => {
     mockSearchParams.mockReturnValue(
       new URLSearchParams({

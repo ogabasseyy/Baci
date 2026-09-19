@@ -21,9 +21,29 @@ function parseTrackedOrderIds(raw: string | null): string[] {
   }
 }
 
-export async function claimCheckoutPurchaseTracking(
+// Serializes concurrent claims so overlapping read-modify-write cycles
+// cannot interleave: without it two claims in flight read the same stored
+// array and the last write silently drops the first claim (lost update),
+// letting that event emit twice.
+let claimChain: Promise<void> = Promise.resolve();
+
+export function claimCheckoutPurchaseTracking(
   orderId: string,
   eventName = 'purchase'
+): Promise<boolean> {
+  const run = claimChain.then(() => performClaim(orderId, eventName));
+  // performClaim catches everything, so the chain never rejects and later
+  // claims always get their turn.
+  claimChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
+async function performClaim(
+  orderId: string,
+  eventName: string
 ): Promise<boolean> {
   if (!orderId) {
     return false;

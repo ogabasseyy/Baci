@@ -1,6 +1,7 @@
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import { trackCheckoutOrderCreated } from '@/services/analytics';
 import type { CreateOrderRequest, OrderResponse } from './orders.schemas';
+import { serializeAfterOrderCreated } from './serialize-after-order-created';
 
 export async function trackCreatedOrderOnce(
   order: OrderResponse,
@@ -8,18 +9,25 @@ export async function trackCreatedOrderOnce(
   startTime: number,
   paymentMethod?: string
 ): Promise<void> {
-  if (!(await claimCheckoutPurchaseTracking(order.order.id))) return;
+  // Later emissions for this order chain behind this write (see
+  // serializeAfterOrderCreated) so the funnel keeps causal order.
+  return await serializeAfterOrderCreated(order.order.id, async () => {
+    if (!(await claimCheckoutPurchaseTracking(order.order.id))) return;
 
-  trackCheckoutOrderCreated({
-    itemCount: request.items.reduce((count, item) => count + item.quantity, 0),
-    orderId: order.order.id,
-    orderNumber: order.order.order_number ?? 'N/A',
-    durationMs: Date.now() - startTime,
-    paymentMethod: paymentMethod || request.payment_method,
-    paymentStatus: order.order.payment_status,
-    shipping: request.shipping_fee,
-    subtotal: request.subtotal,
-    tax: request.tax_amount,
-    total: order.order.total,
+    trackCheckoutOrderCreated({
+      itemCount: request.items.reduce(
+        (count, item) => count + item.quantity,
+        0
+      ),
+      orderId: order.order.id,
+      orderNumber: order.order.order_number ?? 'N/A',
+      durationMs: Date.now() - startTime,
+      paymentMethod: paymentMethod || request.payment_method,
+      paymentStatus: order.order.payment_status,
+      shipping: request.shipping_fee,
+      subtotal: request.subtotal,
+      tax: request.tax_amount,
+      total: order.order.total,
+    });
   });
 }

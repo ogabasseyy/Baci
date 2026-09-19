@@ -15,6 +15,15 @@ describe('order success content helpers', () => {
     });
   });
 
+  it('returns receipt messaging for paid invoice orders', () => {
+    expect(getOrderSuccessTone('invoice', true)).toMatchObject({
+      documentLabel: 'View Receipt',
+      eyebrow: 'Order confirmed',
+      nextDocumentTitle: 'Receipt',
+      title: 'Order Confirmed',
+    });
+  });
+
   it('returns payment request messaging for pay-for-me orders', () => {
     expect(getOrderSuccessTone('payforme')).toMatchObject({
       documentLabel: 'View / Download Invoice',

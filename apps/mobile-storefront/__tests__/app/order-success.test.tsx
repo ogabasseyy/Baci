@@ -65,6 +65,11 @@ jest.mock('@/hooks/use-receipt-preview', () => ({
   }),
 }));
 
+let mockPaidCheckOrder: { payment_status?: string } | null = null;
+jest.mock('@/hooks/use-receipts', () => ({
+  useReceiptDetail: () => ({ data: mockPaidCheckOrder }),
+}));
+
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (selector: (state: { customer: null }) => unknown) =>
     selector({ customer: null }),
@@ -184,5 +189,35 @@ describe('OrderSuccessScreen', () => {
     latestProps?.onViewDocument?.();
 
     expect(mockOpenPreviewByOrderId).toHaveBeenCalledWith('order-1');
+  });
+
+  it('reports unpaid for invoice orders without a paid receipt', () => {
+    mockSearchParams = {
+      orderId: 'order-9',
+      paymentMethod: 'invoice',
+    };
+    mockPaidCheckOrder = { payment_status: 'unpaid' };
+    render(<OrderSuccessScreen />);
+
+    const latestProps = mockOrderSuccessView.mock.calls.at(-1)?.[0] as
+      | { isPaid?: boolean }
+      | undefined;
+    expect(latestProps?.isPaid).toBe(false);
+    mockPaidCheckOrder = null;
+  });
+
+  it('reports paid for externally settled invoice orders', () => {
+    mockSearchParams = {
+      orderId: 'order-9',
+      paymentMethod: 'invoice',
+    };
+    mockPaidCheckOrder = { payment_status: 'paid' };
+    render(<OrderSuccessScreen />);
+
+    const latestProps = mockOrderSuccessView.mock.calls.at(-1)?.[0] as
+      | { isPaid?: boolean }
+      | undefined;
+    expect(latestProps?.isPaid).toBe(true);
+    mockPaidCheckOrder = null;
   });
 });

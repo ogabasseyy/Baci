@@ -79,6 +79,7 @@ import {
   generateReceiptBlob,
   resolveReceiptLogoDataUri,
 } from '@/lib/receipt-pdf-generator';
+import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { sanitizeLikePattern, sanitizeSearchQuery } from '@/lib/sanitize-core';
 import { toInternationalQuoteValidationItemsFromOrder } from '@/lib/shipping/international-shipment-items';
@@ -734,6 +735,8 @@ function buildImmediatePeppolInvoiceData(input: {
   orderSubtotal: number;
   orderTotal: number;
   paymentAccount: ReceiptOrder['virtual_account'];
+  paymentMethod?: string;
+  isPaid?: boolean;
   shippingAddress: OrderCreateInput['shipping_address'];
 }): InvoiceData {
   const taxAmount = Number(input.order.tax_amount || 0);
@@ -837,7 +840,13 @@ function buildImmediatePeppolInvoiceData(input: {
 
   return {
     invoice_number: input.orderNumber,
-    invoice_type_code: '380',
+    // Same classification as the invoice download route: unpaid invoice
+    // orders are proforma (325), everything else stays commercial (380).
+    invoice_type_code: resolveInvoiceTypeCode({
+      paymentMethod: input.paymentMethod,
+      isPaid: input.isPaid ?? false,
+      storedTypeCode: undefined,
+    }),
     issue_date: issueDate,
     due_date: getImmediateInvoiceDueDate(input.order),
     currency,
@@ -3591,20 +3600,29 @@ export async function POST(request: NextRequest) {
                   orderSubtotal,
                   orderTotal,
                   paymentAccount: invoiceVirtualAccount,
+                  paymentMethod: effectivePaymentMethod,
+                  isPaid:
+                    String(
+                      order.payment_status || payment_status || ''
+                    ).toLowerCase() === 'paid',
                   shippingAddress: shippingAddressForOrder,
                 });
                 let peppolInvoiceXml: string | null = null;
 
-                try {
-                  peppolInvoiceXml =
-                    generatePeppolInvoiceXml(peppolInvoiceData);
-                } catch (peppolError) {
-                  logger.error({
-                    message: 'Failed to generate Peppol UBL invoice XML',
-                    orderId: order.id,
-                    orderNumber: orderNum,
-                    error: peppolError,
-                  });
+                // Peppol UBL is a commercial-invoice artifact: proforma
+                // (325) documents carry no Peppol XML or compliance note.
+                if (peppolInvoiceData.invoice_type_code !== '325') {
+                  try {
+                    peppolInvoiceXml =
+                      generatePeppolInvoiceXml(peppolInvoiceData);
+                  } catch (peppolError) {
+                    logger.error({
+                      message: 'Failed to generate Peppol UBL invoice XML',
+                      orderId: order.id,
+                      orderNumber: orderNum,
+                      error: peppolError,
+                    });
+                  }
                 }
 
                 let logoDataUri: string | null = null;
@@ -3637,7 +3655,10 @@ export async function POST(request: NextRequest) {
                       ? PEPPOL_BIS_BILLING_COMPLIANCE_NOTE
                       : undefined,
                     documentDate: peppolInvoiceData.issue_date,
-                    documentKind: 'invoice',
+                    documentKind:
+                      peppolInvoiceData.invoice_type_code === '325'
+                        ? 'proforma_invoice'
+                        : 'invoice',
                     dueDate: peppolInvoiceData.due_date,
                     firsCsid: peppolInvoiceData.firs_csid,
                     firsIrn: peppolInvoiceData.firs_irn,

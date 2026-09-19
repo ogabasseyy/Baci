@@ -132,7 +132,7 @@ export async function finalizeCheckoutPayment({
         });
       if (startedWalletFundedBankTransfer) {
         // The transfer setup succeeded: record the start now, never before.
-        trackCheckoutPaymentStarted({
+        await trackCheckoutPaymentStarted({
           orderId: order.id,
           orderNumber,
           paymentMethod: selectedPayment,
@@ -254,7 +254,7 @@ async function initializeGatewayAndRoute({
   }
 
   // The provider initialized: record the start now, never speculatively.
-  trackCheckoutPaymentStarted({
+  await trackCheckoutPaymentStarted({
     orderId,
     orderNumber,
     paymentMethod: selectedPayment,

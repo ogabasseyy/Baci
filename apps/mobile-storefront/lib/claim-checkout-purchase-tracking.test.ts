@@ -39,3 +39,30 @@ it('does not re-track a persisted claim after process memory is gone', async () 
   );
   await expect(claimCheckoutPurchaseTracking('order-1')).resolves.toBe(false);
 });
+
+it('grants overlapping claims for different events without losing either', async () => {
+  // Slow the store so both claims are in flight together; without
+  // serialization the second read lands before the first write and one
+  // claim is silently dropped (lost update).
+  mockGetItem.mockImplementation(async (key: string) => {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return storage.get(key) ?? null;
+  });
+
+  const [created, invoiced] = await Promise.all([
+    claimCheckoutPurchaseTracking('order-9', 'order_created'),
+    claimCheckoutPurchaseTracking('order-9', 'invoice_generated'),
+  ]);
+
+  expect(created).toBe(true);
+  expect(invoiced).toBe(true);
+  await expect(
+    claimCheckoutPurchaseTracking('order-9', 'order_created')
+  ).resolves.toBe(false);
+  await expect(
+    claimCheckoutPurchaseTracking('order-9', 'invoice_generated')
+  ).resolves.toBe(false);
+  mockGetItem.mockImplementation(
+    async (key: string) => storage.get(key) ?? null
+  );
+});

@@ -1,7 +1,9 @@
 const FALLBACK_DELIVERY_ESTIMATE = 'Shared after order confirmation';
 
-export function getOrderSuccessTone(paymentMethod?: string) {
-  if (paymentMethod === 'invoice') {
+export function getOrderSuccessTone(paymentMethod?: string, isPaid = false) {
+  // A paid invoice order is a commercial invoice/receipt, not a proforma:
+  // match the web success page, which keys proforma copy off unpaid state.
+  if (paymentMethod === 'invoice' && !isPaid) {
     return {
       documentLabel: 'View / Download Proforma Invoice',
       eyebrow: 'Proforma invoice ready',

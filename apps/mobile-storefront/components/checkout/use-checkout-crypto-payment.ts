@@ -141,7 +141,7 @@ async function runCryptoPaymentInitialization({
     }
 
     // The provider initialized with a wallet address: record the start now.
-    trackCheckoutPaymentStarted({
+    await trackCheckoutPaymentStarted({
       orderId: order.id,
       orderNumber: order.order_number || order.id.slice(0, 8).toUpperCase(),
       paymentMethod: 'juicyway',

@@ -51,4 +51,14 @@ describe('resolveInvoiceTypeCode', () => {
       })
     ).toBe('380');
   });
+
+  it('keeps unpaid pay-for-me orders out of proforma classification', () => {
+    expect(
+      resolveInvoiceTypeCode({
+        paymentMethod: 'payforme',
+        isPaid: false,
+        storedTypeCode: '380',
+      })
+    ).toBe('380');
+  });
 });

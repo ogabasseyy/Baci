@@ -132,7 +132,7 @@ export async function submitBnplCheckout({
     });
     // Record the start only after the provider initialized: a timed-out or
     // rejected initialize opens no Klump flow, so it must not count as one.
-    trackCheckoutPaymentStarted({
+    await trackCheckoutPaymentStarted({
       orderId: orderResponse.order.id,
       orderNumber: createdOrderNumber,
       paymentMethod: selectedPayment,
@@ -142,7 +142,7 @@ export async function submitBnplCheckout({
     return;
   }
 
-  trackCheckoutPaymentStarted({
+  await trackCheckoutPaymentStarted({
     orderId: orderResponse.order.id,
     orderNumber: createdOrderNumber,
     paymentMethod: selectedPayment,

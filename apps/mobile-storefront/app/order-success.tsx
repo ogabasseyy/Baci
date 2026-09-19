@@ -12,6 +12,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { usePermissionBooster } from '@/hooks/use-permission-booster';
 import { useReceiptPreview } from '@/hooks/use-receipt-preview';
+import { useReceiptDetail } from '@/hooks/use-receipts';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { SERVER_CONFIRMED_ORDER_NOTIFICATION_METHODS } from '@/services/payment-status';
 import { scheduleLocalNotification } from '@/services/push-notifications';
@@ -46,6 +47,13 @@ export default function OrderSuccessScreen() {
   const customer = useAuthStore((s) => s.customer);
   const orderNotificationScheduledRef = useRef(false);
   const receiptPreview = useReceiptPreview();
+  // An invoice order paid externally after checkout must not keep showing
+  // proforma copy when the shopper returns: resolve the authoritative paid
+  // state for invoice-method orders (guests keep the method-based tone).
+  const { data: paidCheckOrder } = useReceiptDetail(
+    paymentMethod === 'invoice' && orderId ? orderId : null
+  );
+  const isPaidOrder = paidCheckOrder?.payment_status === 'paid';
 
   const { requestPermission, triggerSystemPrompt, markDenied } =
     usePermissionBooster();
@@ -128,6 +136,7 @@ export default function OrderSuccessScreen() {
         deliveryEstimate={deliveryEstimate}
         isDark={colorScheme === 'dark'}
         isDocumentLoading={receiptPreview.isLoading}
+        isPaid={isPaidOrder}
         onContinueShopping={handleContinueShopping}
         onLeaveGoogleReview={handleLeaveGoogleReview}
         onPermissionDeny={handlePermissionDeny}

@@ -128,4 +128,26 @@ describe('generateCurrentOpenAIProductFeed offer images', () => {
 
     expect(parsed.media).toEqual([]);
   });
+
+  it('excludes a relative-claimed absolute product image from the raw fallback', () => {
+    const [line] = generateCurrentOpenAIProductFeed(
+      [
+        product({
+          images: [
+            'https://cdn.example.com/images/used.jpg',
+            'https://cdn.example.com/phone.jpg',
+          ],
+          offers: [{ images: ['/images/used.jpg'] }],
+        }),
+      ],
+      merchant,
+      'https://ogabassey.com',
+      {}
+    );
+    const parsed = parseLine(line);
+
+    expect(parsed.media).toEqual([
+      { type: 'image', url: 'https://cdn.example.com/phone.jpg' },
+    ]);
+  });
 });

@@ -90,7 +90,12 @@ function createUpdateChain(
 }
 
 function createProductsChain(
-  data: Array<{ manage_stock: boolean | null; slug: string }> | null = [],
+  data: Array<{
+    id?: string;
+    inventory_tracking_policy?: string | null;
+    manage_stock: boolean | null;
+    slug: string;
+  }> | null = [],
   error: unknown = null
 ) {
   const chain: {
@@ -107,11 +112,27 @@ function createProductsChain(
   return chain;
 }
 
+function createVariantsChain() {
+  const chain: {
+    eq: ReturnType<typeof vi.fn>;
+    in: ReturnType<typeof vi.fn>;
+    returns: ReturnType<typeof vi.fn>;
+    select: ReturnType<typeof vi.fn>;
+  } = {
+    eq: vi.fn(() => chain),
+    in: vi.fn(() => chain),
+    returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+    select: vi.fn(() => chain),
+  };
+  return chain;
+}
+
 function createSupabaseWithUpdateChains(
   chains: ReturnType<typeof createUpdateChain>[],
   productsChain: ReturnType<typeof createProductsChain> = createProductsChain([
-    { manage_stock: true, slug: 'product-1-slug' },
-  ])
+    { id: 'product-1', manage_stock: true, slug: 'product-1-slug' },
+  ]),
+  variantsChain = createVariantsChain()
 ) {
   const update = vi.fn(() => {
     const chain = chains.shift();
@@ -125,6 +146,9 @@ function createSupabaseWithUpdateChains(
     from: vi.fn((table: string) => {
       if (table === 'products') {
         return productsChain;
+      }
+      if (table === 'product_variants') {
+        return variantsChain;
       }
       if (table !== 'checkout_sessions') {
         throw new Error(`Unexpected table ${table}`);
@@ -585,7 +609,7 @@ describe('finalizeAgenticCheckoutPayment', () => {
     const markerChain = createUpdateChain({ session_id: 'agentic_session_1' });
     const finalChain = createUpdateChain({ session_id: 'agentic_session_1' });
     const productsChain = createProductsChain([
-      { manage_stock: true, slug: 'phone-slug' },
+      { id: 'product-1', manage_stock: true, slug: 'phone-slug' },
     ]);
     const supabase = createSupabaseWithUpdateChains(
       [claimChain, markerChain, finalChain],
@@ -605,7 +629,9 @@ describe('finalizeAgenticCheckoutPayment', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(productsChain.select).toHaveBeenCalledWith('slug, manage_stock');
+    expect(productsChain.select).toHaveBeenCalledWith(
+      'id, slug, manage_stock, inventory_tracking_policy'
+    );
     expect(productsChain.in).toHaveBeenCalledWith('id', ['product-1']);
     expect(revalidateProductSlugs).toHaveBeenCalledExactlyOnceWith(
       'merchant-1',
@@ -681,7 +707,12 @@ describe('finalizeAgenticCheckoutPayment', () => {
     const markerChain = createUpdateChain({ session_id: 'agentic_session_1' });
     const finalChain = createUpdateChain({ session_id: 'agentic_session_1' });
     const productsChain = createProductsChain([
-      { manage_stock: false, slug: 'unlimited-phone' },
+      {
+        id: 'product-1',
+        inventory_tracking_policy: 'off',
+        manage_stock: false,
+        slug: 'unlimited-phone',
+      },
     ]);
     const supabase = createSupabaseWithUpdateChains(
       [claimChain, markerChain, finalChain],

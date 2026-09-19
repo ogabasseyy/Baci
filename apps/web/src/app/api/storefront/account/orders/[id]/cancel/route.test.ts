@@ -46,11 +46,11 @@ function makeRequest(body?: unknown) {
 
 const params = Promise.resolve({ id: ORDER_ID });
 
-function authOk() {
+function authOk(supabase: unknown = { rpc: mockRpc }) {
   mockAuthenticateApiRequest.mockResolvedValue({
     user: { id: 'user-1' },
     error: null,
-    supabase: { rpc: mockRpc },
+    supabase,
   });
 }
 

@@ -1,3 +1,5 @@
+import { isPublicVariantPurchasable } from './is-public-variant-purchasable';
+import { getEffectiveStock } from './product-stock';
 import {
   appendCountryContext,
   getCountryShoppingContext,
@@ -6,6 +8,7 @@ import {
 import { getSeoProductName } from './storefront-product-slug-disambiguation';
 
 interface ProductPriceSeoVariant {
+  inventory_tracking_policy?: string | null;
   price_override?: number | null;
   stock_quantity?: number | null;
 }
@@ -19,6 +22,7 @@ interface ProductPriceSeoOffer {
 export interface ProductPriceSeoProduct {
   name: string;
   slug?: string | null;
+  has_variants?: boolean | null;
   price?: number | null;
   base_price?: number | null;
   sale_price?: number | null;
@@ -82,12 +86,46 @@ function hasAdvertisableStock(
     : stockQuantity > 0;
 }
 
+function hasAdvertisableChildStock(
+  product: ProductPriceSeoProduct,
+  stockQuantity: number | null | undefined
+) {
+  // An unmanaged parent (including legacy null values) has unlimited stock.
+  // Its child quantities are informational and must not hide a purchasable
+  // variant or offer from the advertised price range.
+  if (product.manage_stock === false || product.manage_stock === null) {
+    return true;
+  }
+
+  if (stockQuantity === undefined) {
+    return true;
+  }
+
+  if (stockQuantity === null) {
+    const parentStock = product.stock_quantity ?? product.stock;
+    return parentStock === undefined || parentStock === null
+      ? true
+      : getEffectiveStock(product) > 0;
+  }
+
+  return stockQuantity > 0;
+}
+
 export function getProductPriceRange(
   product: ProductPriceSeoProduct
 ): ProductPriceRange | null {
   const candidates: number[] = [];
 
-  if (hasAdvertisableStock(product, product.stock_quantity ?? product.stock)) {
+  const variants = (product.variants ?? []).filter(
+    (variant): variant is ProductPriceSeoVariant => Boolean(variant)
+  );
+  const hasSelectableVariants =
+    product.has_variants === true && variants.length > 0;
+
+  if (
+    !hasSelectableVariants &&
+    hasAdvertisableStock(product, product.stock_quantity ?? product.stock)
+  ) {
     addPriceCandidate(
       candidates,
       toFinitePrice(product.sale_price) ??
@@ -95,22 +133,29 @@ export function getProductPriceRange(
         product.base_price
     );
   }
-  const variants = (product.variants ?? []).filter(
-    (variant): variant is ProductPriceSeoVariant => Boolean(variant)
-  );
   if (variants.length === 0) {
     addPriceCandidate(candidates, product.min_variant_price);
     addPriceCandidate(candidates, product.max_variant_price);
   }
 
   for (const variant of variants) {
-    if (hasAdvertisableStock(product, variant.stock_quantity)) {
-      addPriceCandidate(candidates, variant.price_override);
+    const isSerialized =
+      variant.inventory_tracking_policy === 'serialized_strict' ||
+      variant.inventory_tracking_policy === 'serialized_then_unlimited';
+    if (
+      isSerialized
+        ? isPublicVariantPurchasable(product, variant)
+        : hasAdvertisableChildStock(product, variant.stock_quantity)
+    ) {
+      // A nullable override inherits the parent product price at checkout.
+      // Keep that inherited amount in the advertised range without adding the
+      // parent as a separate selectable SKU.
+      addPriceCandidate(candidates, variant.price_override ?? product.price);
     }
   }
 
   for (const offer of (product.offers ?? []).filter(isActiveOffer)) {
-    if (hasAdvertisableStock(product, offer?.stock_quantity)) {
+    if (hasAdvertisableChildStock(product, offer?.stock_quantity)) {
       addPriceCandidate(candidates, offer?.price);
     }
   }

@@ -27,7 +27,7 @@ const PETROCK_DIRECT_WORKER_REQUIRED_ENV = [
   'ZEPTOMAIL_TOKEN',
 ] as const;
 
-function hasPetrockDirectWorkerEnv(env: NodeJS.ProcessEnv) {
+function hasPetrockDirectWorkerEnv(env: Partial<NodeJS.ProcessEnv>) {
   return PETROCK_DIRECT_WORKER_REQUIRED_ENV.every(
     (name) => Boolean(env[name]?.trim())
   );
@@ -66,7 +66,7 @@ export async function runPetrockReconciliationCli({
   logger = console,
   runJob = runPetrockReconciliation,
 }: {
-  env?: NodeJS.ProcessEnv;
+  env?: Partial<NodeJS.ProcessEnv>;
   logger?: CliLogger;
   runJob?: typeof runPetrockReconciliation;
 } = {}): Promise<number> {

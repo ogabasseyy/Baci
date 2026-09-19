@@ -2,10 +2,7 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceRoleKey } from '@/env';
 import { hasPermission } from '@/lib/api-auth';
-import {
-  revalidateProductSlugs,
-  revalidateProducts,
-} from '@/lib/cache-revalidation';
+import { revalidateProducts } from '@/lib/cache-revalidation';
 import { getCountryByCode } from '@/lib/countries';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { deriveProductVariantWriteProjections } from '@/lib/derive-product-variant-projections';
@@ -34,19 +31,21 @@ import { sanitizeHtml } from '@/lib/sanitize';
 import { sanitizeText } from '@/lib/sanitize-core';
 import { sanitizeSchemaMarkup } from '@/lib/sanitize-json-ld';
 import { scheduleProductImageTransformsPrewarm } from '@/lib/schedule-product-image-prewarm';
+import { scheduleProductMutationPurge } from '@/lib/schedule-product-mutation-purge';
 import {
   generateMetaDescription,
   generateProductSchema,
   generateProductSlug,
   generateSlug,
 } from '@/lib/seo-utils';
-import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 import {
   resolveProductPurgeCategorySegmentForRow,
   type StorefrontProductPurgeEntry,
 } from '@/lib/storefront-product-purge-urls';
 import { createClient } from '@/lib/supabase/server';
 import { formatZodErrors, updateProductSchema } from '@/schemas/products';
+
+const PREDELETE_BLOG_POST_ID_LIMIT = 256;
 
 export async function GET(
   _request: NextRequest,
@@ -945,17 +944,13 @@ export async function PUT(
           categorySegment: previousCategorySegment,
         });
       }
-      // Bust the per-slug Next product caches for every slug being purged
-      // (old + new on a rename) BEFORE the edge purge — a CF MISS would
-      // otherwise refill from the stale Next-cached snapshot until TTL.
-      revalidateProductSlugs(
+      scheduleProductMutationPurge({
+        supabase,
         merchantId,
-        productPurgeEntries.map((entry) => entry.slug)
-      );
-      scheduleStorefrontProductPurge(
-        merchantContext.merchantSlug,
-        productPurgeEntries
-      );
+        merchantSlug: merchantContext.merchantSlug,
+        productIds: [updatedProduct.id],
+        entries: productPurgeEntries,
+      });
     } catch (purgeError) {
       console.warn('Skipped Cloudflare product purge after update', {
         purgeError,
@@ -1028,11 +1023,46 @@ export async function DELETE(
     const { data: productToDelete, error: preReadError } = await supabase
       .from('products')
       .select(
-        'slug, name, category, categories:category_id(slug, is_active), product_categories(category_id, categories(slug, is_active))'
+        'id, slug, name, category, categories:category_id(slug, is_active), product_categories(category_id, categories(slug, is_active))'
       )
       .eq('id', id)
       .eq('merchant_id', merchantId)
       .maybeSingle();
+
+    if (!preReadError && !productToDelete) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
+
+    // Capture relationship IDs BEFORE the delete cascades join rows. Resolve
+    // the published slugs after the mutation commits so the delete handler
+    // does not paginate/join blog content on its critical path.
+    let linkedBlogPostIds: string[] = [];
+    let incompleteBlogSnapshot = false;
+    try {
+      const { data: linkedPosts, error: linkedPostsError } = await supabase
+        .from('blog_post_products')
+        .select('blog_post_id')
+        .eq('merchant_id', merchantId)
+        .eq('product_id', id)
+        .limit(PREDELETE_BLOG_POST_ID_LIMIT + 1);
+      if (linkedPostsError) throw linkedPostsError;
+      incompleteBlogSnapshot =
+        (linkedPosts?.length ?? 0) > PREDELETE_BLOG_POST_ID_LIMIT;
+      linkedBlogPostIds = (linkedPosts ?? [])
+        .map((row) => (row as { blog_post_id?: unknown }).blog_post_id)
+        .filter(
+          (blogPostId): blogPostId is string =>
+            typeof blogPostId === 'string' && blogPostId.trim().length > 0
+        )
+        .map((blogPostId) => blogPostId.trim());
+    } catch (linkedPostsError) {
+      incompleteBlogSnapshot = true;
+      console.warn('Could not snapshot linked blog post IDs before delete', {
+        merchantId,
+        productId: id,
+        linkedPostsError,
+      });
+    }
 
     // Keep the delete itself lean — the purge inputs were pre-read above.
     const { error: deleteError } = await supabase
@@ -1059,6 +1089,7 @@ export async function DELETE(
     // schedule the same way revalidateBlogPosts does.
     try {
       const deletedProduct = productToDelete as {
+        id?: string | null;
         slug?: string | null;
         name?: string | null;
         category?: string | null;
@@ -1070,10 +1101,7 @@ export async function DELETE(
         // addressable by id, so fall back to the deleted row's id
         // (`/products/<id>`) when the slug is missing.
         const purgeSlug = deletedProduct.slug?.trim() || id;
-        // Bust the deleted slug's Next cache tag before the edge purge so a
-        // post-purge MISS cannot serve a stale "product still exists" page.
-        revalidateProductSlugs(merchantId, [purgeSlug]);
-        scheduleStorefrontProductPurge(merchantContext.merchantSlug, [
+        const purgeEntries: StorefrontProductPurgeEntry[] = [
           {
             slug: purgeSlug,
             categorySegment: resolveProductPurgeCategorySegmentForRow({
@@ -1084,23 +1112,33 @@ export async function DELETE(
               product_categories: deletedProduct.product_categories,
             }),
           },
-        ]);
+        ];
+        scheduleProductMutationPurge({
+          supabase,
+          merchantId,
+          merchantSlug: merchantContext.merchantSlug,
+          productIds: [id],
+          entries: purgeEntries,
+          blogPostIds: linkedBlogPostIds,
+          purgeWholeStorefront: incompleteBlogSnapshot,
+        });
       } else {
-        // The pre-read errored or came back null, yet the delete above
-        // succeeded — the storefront still has the deleted product's page cached
-        // and would keep serving a 200 for it until the raised edge TTL expires.
-        // We no longer know its slug or category, so schedule a MINIMAL id-based
-        // fallback purge (`/`, `/products`, `/products/<id>`): the id path always
-        // resolves the PDP fallback, and over-purging a possibly-nonexistent id
-        // is harmless (caches self-heal) versus leaving a deleted 200 live.
+        // The pre-read failed, but deletion committed. Its old slug/category
+        // are unknown, so evict the hostname rather than leaving canonical
+        // product or cross-category article URLs cached after the cascade.
         console.warn(
-          'Product purge pre-read missing after delete; scheduling id-based fallback purge',
+          'Product purge pre-read failed after delete; scheduling complete fallback purge',
           { id, preReadError }
         );
-        revalidateProductSlugs(merchantId, [id]);
-        scheduleStorefrontProductPurge(merchantContext.merchantSlug, [
-          { slug: id, categorySegment: null },
-        ]);
+        scheduleProductMutationPurge({
+          supabase,
+          merchantId,
+          merchantSlug: merchantContext.merchantSlug,
+          productIds: [id],
+          entries: [{ slug: id, categorySegment: null }],
+          blogPostIds: linkedBlogPostIds,
+          purgeWholeStorefront: true,
+        });
       }
     } catch (purgeError) {
       console.warn('Skipped Cloudflare product purge after delete', {

@@ -23,7 +23,7 @@ const CANCELLATION_IDENTITY =
 
 type ProofOptions = {
   databaseUrl: string;
-  environment: NodeJS.ProcessEnv;
+  environment: Partial<NodeJS.ProcessEnv>;
   psqlBin: string;
   repositoryRoot: string;
 };
@@ -35,7 +35,7 @@ type ProofSession = ReturnType<
 type ProofDependencies = {
   createMarker?: () => string;
   createSession?: (options: {
-    environment: NodeJS.ProcessEnv;
+    environment: Partial<NodeJS.ProcessEnv>;
     psqlBin: string;
     spawnProcess?: typeof spawn;
   }) => ProofSession;

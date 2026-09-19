@@ -170,6 +170,8 @@ describe('commitBumpaProducts', () => {
         { slug: 'imported-phone', id: 'existing-product', category: 'Phones' },
         { slug: 'fresh-phone-2', category: 'Phones' },
       ],
+      nextProductSlugs: ['imported-phone', 'fresh-phone-2'],
+      supabase,
     });
   });
 
@@ -218,6 +220,8 @@ describe('commitBumpaProducts', () => {
     expect(mockRevalidateProductsReliable).toHaveBeenCalledWith('merchant-1', {
       merchantSlug: 'ogabassey',
       products: [{ slug: 'imported-phone', category: 'Phones' }],
+      nextProductSlugs: ['imported-phone'],
+      supabase,
     });
     expect(consoleSpy).toHaveBeenCalled();
     // Restore so the suppressed console.error doesn't leak into later tests
@@ -266,10 +270,9 @@ describe('commitBumpaProducts', () => {
     // The lookup failure must not break the import: revalidation STILL runs,
     // just degraded to Next-cache-only (no merchantSlug means no Cloudflare
     // purge is attempted).
-    expect(mockRevalidateProductsReliable).toHaveBeenCalledWith(
-      'merchant-1',
-      undefined
-    );
+    expect(mockRevalidateProductsReliable).toHaveBeenCalledWith('merchant-1', {
+      nextProductSlugs: ['imported-phone'],
+    });
     expect(warnSpy).toHaveBeenCalledWith(
       'Failed to resolve merchant slug for import Cloudflare product purge (degrading to Next-cache-only revalidation):',
       expect.objectContaining({
@@ -332,6 +335,8 @@ describe('commitBumpaProducts', () => {
     expect(mockRevalidateProductsReliable).toHaveBeenCalledWith('merchant-1', {
       merchantSlug: 'ogabassey',
       products: [{ slug: 'phone-one', category: 'Phones' }],
+      nextProductSlugs: ['phone-one'],
+      supabase,
     });
   });
 

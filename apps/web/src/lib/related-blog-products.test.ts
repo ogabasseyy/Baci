@@ -11,9 +11,19 @@ describe('related blog products', () => {
     expect(RELATED_BLOG_PRODUCTS_SELECT).toContain(
       'categories:category_id!inner(slug)'
     );
+    expect(RELATED_BLOG_PRODUCTS_SELECT).toContain(
+      'price, compare_at_price, min_variant_price, max_variant_price, stock, stock_quantity, manage_stock'
+    );
+    expect(RELATED_BLOG_PRODUCTS_SELECT).toContain('has_condition_offers');
+    expect(RELATED_BLOG_PRODUCTS_SELECT).toContain('has_variants');
     expect(RELATED_BLOG_PRODUCT_LINKS_SELECT).toContain(
       'products!blog_post_products_product_id_fkey'
     );
+    expect(RELATED_BLOG_PRODUCT_LINKS_SELECT).toContain(
+      'price, compare_at_price, min_variant_price, max_variant_price, stock, stock_quantity, manage_stock'
+    );
+    expect(RELATED_BLOG_PRODUCT_LINKS_SELECT).toContain('has_condition_offers');
+    expect(RELATED_BLOG_PRODUCT_LINKS_SELECT).toContain('has_variants');
     expect(RELATED_BLOG_PRODUCTS_SELECT).not.toMatch(/\bcategory_slug\b/);
   });
 
@@ -23,6 +33,9 @@ describe('related blog products', () => {
         {
           id: 'product-1',
           name: 'Laptop',
+          price: 150000,
+          manage_stock: true,
+          stock: 3,
           slug: 'laptop',
           categories: { slug: 'laptops' },
         },
@@ -31,6 +44,9 @@ describe('related blog products', () => {
       {
         id: 'product-1',
         name: 'Laptop',
+        price: 150000,
+        manage_stock: true,
+        stock: 3,
         slug: 'laptop',
         category_slug: 'laptops',
       },

@@ -405,39 +405,6 @@ describe('POST /api/products/bulk-update', () => {
     expect(revalidateOrder).toBeLessThan(purgeOrder);
   });
 
-  it('schedules a Cloudflare purge for the affected updated products', async () => {
-    const { POST } = await import('./route');
-    productUpdateSelectRows = [
-      {
-        id: 'product-1',
-        slug: 'updated-product',
-        category: 'Electronics',
-        status: 'active',
-        categories: null,
-        product_categories: [],
-      },
-    ];
-
-    const res = await POST(
-      makeRequest({
-        changes: [
-          {
-            type: 'update',
-            productId: 'product-1',
-            newPrice: 150,
-            details: { name: 'Updated Product', price: 150 },
-          },
-        ],
-      })
-    );
-
-    expect(res.status).toBe(200);
-    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-      'ogabassey',
-      [{ slug: 'updated-product', categorySegment: 'electronics' }]
-    );
-  });
-
   it('falls back to the product id for the purge target when the row slug is null', async () => {
     const { POST } = await import('./route');
     productUpdateSelectRows = [

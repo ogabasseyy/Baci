@@ -1,47 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { NormalizedImportedProduct } from '@/lib/imports/bumpa/bumpa-types';
+import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { revalidateProductsReliable } from '@/lib/revalidate-products-reliable';
 import { generateProductSlug } from '@/lib/seo-utils';
 import type { InternalRevalidateProductEntry } from '@/schemas/internal-revalidate-products-route';
+import { boundImportPurgeEntries } from './bound-import-purge-entries';
 import {
   type CommitProgressCallback,
   createCommitProgress,
 } from './import-commit-progress';
-
-// The internal revalidate-products contract caps `products` at 1000 entries
-// (`internalRevalidateProductsBodySchema`). A bulk import can exceed that, so
-// past the cap we collapse to one representative entry per distinct category
-// (see `boundImportPurgeEntries`) rather than dropping the purge — which would
-// otherwise 400 the HTTP fallback and lose the slug-set revalidation too.
-const INTERNAL_REVALIDATE_PRODUCTS_MAX_ENTRIES = 1000;
-
-/**
- * Keep the import's purge entries within the internal route's 1000-entry cap.
- * Under the cap, pass them through unchanged. Over it, collapse to ONE entry per
- * distinct category: a large import is past the listings-only fan-out threshold,
- * where the per-PDP URLs are skipped anyway, so only the distinct category
- * listings (which these representatives still carry) need evicting.
- */
-function boundImportPurgeEntries(
-  entries: readonly InternalRevalidateProductEntry[]
-): InternalRevalidateProductEntry[] {
-  if (entries.length <= INTERNAL_REVALIDATE_PRODUCTS_MAX_ENTRIES) {
-    return [...entries];
-  }
-  const byCategory = new Map<string, InternalRevalidateProductEntry>();
-  for (const entry of entries) {
-    const key = (entry.categorySlug || entry.category || '')
-      .trim()
-      .toLowerCase();
-    if (!byCategory.has(key)) {
-      byCategory.set(key, entry);
-    }
-  }
-  return Array.from(byCategory.values()).slice(
-    0,
-    INTERNAL_REVALIDATE_PRODUCTS_MAX_ENTRIES
-  );
-}
 
 interface CommitBumpaProductsInput {
   supabase: SupabaseClient;
@@ -52,6 +19,7 @@ interface CommitBumpaProductsInput {
 }
 
 interface ExistingProductRecord {
+  category?: string | null;
   id: string;
   slug: string | null;
   external_id: string | null;
@@ -105,7 +73,7 @@ export async function commitBumpaProducts({
     const end = start + pageSize - 1;
     const { data, error } = await supabase
       .from('products')
-      .select('id, slug, external_id, external_source')
+      .select('id, slug, category, external_id, external_source')
       .eq('merchant_id', merchantId)
       .order('id', { ascending: true })
       .range(start, end);
@@ -137,6 +105,7 @@ export async function commitBumpaProducts({
 
   let createdProducts = 0;
   let updatedProducts = 0;
+  let hasCategoryMove = false;
   // Accumulate the changed/created products so the reliable revalidation can also
   // evict their public storefront URLs from Cloudflare (the slug/category are in
   // hand at write time). Created rows carry no id (the insert does not RETURN one
@@ -184,6 +153,17 @@ export async function commitBumpaProducts({
       };
 
       if (existingProduct) {
+        if (
+          existingProduct.category !== undefined &&
+          normalizeStorefrontCategoryValue(existingProduct.category) !==
+            normalizeStorefrontCategoryValue(product.category)
+        ) {
+          // Category-fallback blog rails are derived from the post-update
+          // category. A move also invalidates the old category's rail, so use
+          // the bounded hostname purge rather than trying to reconstruct every
+          // old fallback article from the import payload.
+          hasCategoryMove = true;
+        }
         const { error: updateError } = await supabase
           .from('products')
           .update(payload)
@@ -256,11 +236,29 @@ export async function commitBumpaProducts({
         }
         const merchantSlug = merchantRow?.slug ?? null;
         const purgeProducts = boundImportPurgeEntries(changedProducts);
+        const nextProductSlugs = Array.from(
+          new Set(
+            changedProducts
+              .map((product) => product.slug?.trim())
+              .filter((slug): slug is string => Boolean(slug))
+          )
+        );
+        const purgeWholeStorefront =
+          hasCategoryMove || purgeProducts.length < changedProducts.length;
+        const revalidationOptions = {
+          ...(merchantSlug && purgeProducts.length > 0
+            ? {
+                merchantSlug,
+                products: purgeProducts,
+                supabase,
+                ...(purgeWholeStorefront ? { purgeWholeStorefront: true } : {}),
+              }
+            : {}),
+          nextProductSlugs,
+        };
         await revalidateProductsReliable(
           merchantId,
-          merchantSlug && purgeProducts.length > 0
-            ? { merchantSlug, products: purgeProducts }
-            : undefined
+          nextProductSlugs.length > 0 ? revalidationOptions : undefined
         );
       } catch (error) {
         console.error(

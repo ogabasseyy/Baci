@@ -11,6 +11,7 @@ interface ScheduleNewProductCachesArgs {
   name: string;
   category: string | null | undefined;
   images: Record<string, unknown>[];
+  blogPostSlugs?: readonly string[];
 }
 
 export function scheduleNewProductCaches({
@@ -21,11 +22,12 @@ export function scheduleNewProductCaches({
   name,
   category,
   images,
+  blogPostSlugs = [],
 }: ScheduleNewProductCachesArgs) {
   revalidateProducts(merchantId, slug);
   try {
     const purgeSlug = slug.trim() || productId;
-    scheduleStorefrontProductPurge(merchantSlug, [
+    const purgeEntries = [
       {
         slug: purgeSlug,
         categorySegment: resolveProductPurgeCategorySegment({
@@ -34,7 +36,14 @@ export function scheduleNewProductCaches({
           category,
         }),
       },
-    ]);
+    ];
+    if (blogPostSlugs.length > 0) {
+      scheduleStorefrontProductPurge(merchantSlug, purgeEntries, {
+        blogPostSlugs,
+      });
+    } else {
+      scheduleStorefrontProductPurge(merchantSlug, purgeEntries);
+    }
   } catch (purgeError) {
     console.warn('Skipped Cloudflare product purge after create', {
       purgeError,

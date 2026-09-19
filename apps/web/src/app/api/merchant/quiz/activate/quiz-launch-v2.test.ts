@@ -1,4 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
+
+const { mockExpireProductBlogCache, mockReservationPurge } = vi.hoisted(() => ({
+  mockExpireProductBlogCache: vi.fn(),
+  mockReservationPurge: vi.fn(),
+}));
+vi.mock('@/lib/schedule-reservation-product-purge', () => ({
+  scheduleReservationProductPurge: mockReservationPurge,
+}));
+
+vi.mock('@/lib/expire-product-blog-cache', () => ({
+  expireProductBlogCache: mockExpireProductBlogCache,
+}));
+
 import { launchMerchantQuizDraftV2 } from './quiz-launch-v2';
 
 const baseInput = {
@@ -85,6 +98,13 @@ describe('launchMerchantQuizDraftV2', () => {
       p_starts_at: expect.any(String),
       p_time_per_question_seconds: 10,
       p_time_zone: 'Africa/Lagos',
+    });
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');
+    expect(mockReservationPurge).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      sourceId: baseInput.eventId,
+      source: 'quiz',
+      supabase: { rpc },
     });
   });
 

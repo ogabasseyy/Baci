@@ -115,6 +115,7 @@ async function renderBlogPostContent({
     : baseUrl;
   const authorId = authorSlug ? `${baseUrl}#author-${authorSlug}` : undefined;
   const structuredData = buildBlogPostStructuredData({
+    catalogPrices: { products: relatedProducts, currencySource: merchant },
     author: {
       id: authorId,
       image: post.author_image_url ?? undefined,
@@ -182,6 +183,10 @@ async function renderBlogPostContent({
         <BlogPostBody
           basePath={basePath}
           baseUrl={baseUrl}
+          currencySource={{
+            country: merchant.country,
+            payout_currency: merchant.payout_currency,
+          }}
           content={content}
           locale={locale}
           // Draft preview must keep draft-to-draft links intact: the dead-link

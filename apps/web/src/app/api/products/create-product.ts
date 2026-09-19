@@ -21,6 +21,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { createProductSchema, formatZodErrors } from '@/schemas/products';
 import { buildProductImagesInput } from './build-product-images-input';
+import { scheduleNewProductBlogPurgeAfterResponse } from './schedule-new-product-blog-purge-after-response';
 import { scheduleNewProductCaches } from './schedule-new-product-caches';
 
 const EMBEDDING_GENERATION_TIMEOUT_MS = 10_000;
@@ -277,6 +278,17 @@ export async function createProduct(request: NextRequest) {
       category: body.category,
       images: resolvedImages,
     });
+    if (body.status === 'active')
+      scheduleNewProductBlogPurgeAfterResponse({
+        category: body.category,
+        merchantId,
+        merchantSlug: merchantContext.merchantSlug,
+        name: body.name,
+        productId: product.id,
+        slug,
+        status: body.status,
+        supabase,
+      });
     return NextResponse.json({ product }, { status: 201 });
   } catch (error) {
     console.error('Unexpected error in POST /api/products:', error);

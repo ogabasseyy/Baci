@@ -3223,11 +3223,11 @@ describe('POST /api/orders — product cache revalidation after order creation',
         if (table !== 'products') {
           return original;
         }
-        // Only the slug-revalidation lookup selects exactly 'slug' — the
-        // pre-existing tax/negotiation product lookup selects other columns
-        // and must keep resolving via the default chain.
+        // The cache-revalidation lookup selects the compact id/slug/policy
+        // projection; the pre-existing tax/negotiation product lookup selects
+        // other columns and must keep resolving via the default chain.
         const select = vi.fn((columns: string) =>
-          columns === 'slug'
+          columns.startsWith('id, slug, manage_stock')
             ? {
                 eq: vi.fn().mockReturnThis(),
                 in: vi.fn().mockReturnThis(),

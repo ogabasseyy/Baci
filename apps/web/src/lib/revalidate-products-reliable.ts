@@ -1,13 +1,17 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAppUrl, getInternalApiSecret } from '@/env';
+import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
 import {
   revalidateProductSlugs,
   revalidateProducts,
 } from '@/lib/cache-revalidation';
+import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import {
   buildInternalProductPurgeEntries,
   collectResolvedProductSlugs,
 } from '@/lib/internal-product-purge-entries';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
+import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import type { InternalRevalidateProductEntry } from '@/schemas/internal-revalidate-products-route';
 
 interface RevalidateProductsReliableOptions {
@@ -28,7 +32,15 @@ interface RevalidateProductsReliableOptions {
   merchantSlug?: string;
   /** Products whose public URLs should also be evicted from Cloudflare. */
   products?: readonly InternalRevalidateProductEntry[];
+  /** Every product slug whose per-slug Next cache must be invalidated. */
+  nextProductSlugs?: readonly string[];
+  /** Optional merchant-scoped client for linked blog purge enrichment. */
+  supabase?: SupabaseClient;
+  /** Evict every public storefront document for structural/high-cardinality changes. */
+  purgeWholeStorefront?: boolean;
 }
+
+const INTERNAL_REVALIDATION_PRODUCT_SLUG_LIMIT = 10_000;
 
 /**
  * Revalidate a merchant's product caches reliably from ANY execution context.
@@ -50,23 +62,92 @@ export async function revalidateProductsReliable(
   merchantId: string,
   options: RevalidateProductsReliableOptions = {}
 ): Promise<void> {
-  const { merchantSlug, products } = options;
-  const shouldPurge = Boolean(merchantSlug && products && products.length > 0);
+  const {
+    merchantSlug,
+    products,
+    nextProductSlugs: requestedNextProductSlugs,
+    supabase,
+    purgeWholeStorefront,
+  } = options;
+  const nextProductSlugs = Array.from(
+    new Set(
+      (requestedNextProductSlugs ?? [])
+        .map((slug) => slug.trim())
+        .filter((slug) => slug.length > 0)
+    )
+  );
+  const shouldPurgeProducts = Boolean(
+    merchantSlug && !purgeWholeStorefront && products && products.length > 0
+  );
 
   try {
-    revalidateProducts(merchantId);
+    if (revalidateProducts(merchantId) === false) {
+      throw new Error('Product cache revalidation requires a request context');
+    }
     // In-process revalidation succeeded (we had a Next store context), so the
     // Cloudflare purge can be scheduled in-process too (scheduleStorefrontProductPurge
     // is guarded and never throws). Return before the HTTP fallback.
     // Per-slug Next cache busting needs only merchantId — run it for every
     // products-carrying call, decoupled from the merchant-slug-gated Cloudflare
     // purge (a failed slug lookup must not skip the Next-layer bust).
-    if (products && products.length > 0) {
-      revalidateProductSlugs(merchantId, collectResolvedProductSlugs(products));
+    if ((products && products.length > 0) || nextProductSlugs.length > 0) {
+      let resolvedSlugs =
+        nextProductSlugs.length > 0
+          ? nextProductSlugs
+          : products
+            ? collectResolvedProductSlugs(products)
+            : [];
+      let purgeEntries = buildInternalProductPurgeEntries(products ?? []);
+      let blogPostSlugs: string[] = [];
+
+      if (
+        supabase &&
+        products &&
+        products.length > 0 &&
+        !purgeWholeStorefront
+      ) {
+        try {
+          const enriched = await enrichProductPurgeEntries(
+            supabase,
+            merchantId,
+            products
+          );
+          resolvedSlugs = Array.from(
+            new Set([...resolvedSlugs, ...enriched.resolvedSlugs])
+          );
+          purgeEntries = enriched.entries;
+          blogPostSlugs = enriched.blogPostSlugs;
+        } catch (error) {
+          console.warn(
+            'Failed to enrich in-process product purge (continuing with caller hints)',
+            { merchantId, error }
+          );
+        }
+      }
+
+      revalidateProductSlugs(merchantId, resolvedSlugs);
+
+      if (shouldPurgeProducts && merchantSlug) {
+        // Expire the merchant-scoped related-blog enrichment before the edge
+        // purge so a MISS cannot repopulate an article with stale product data.
+        expireProductBlogCache(merchantId);
+        if (blogPostSlugs.length > 0) {
+          scheduleStorefrontProductPurge(merchantSlug, purgeEntries, {
+            blogPostSlugs,
+          });
+        } else {
+          scheduleStorefrontProductPurge(merchantSlug, purgeEntries);
+        }
+      }
     }
-    if (shouldPurge && merchantSlug && products) {
-      const purgeEntries = buildInternalProductPurgeEntries(products);
-      scheduleStorefrontProductPurge(merchantSlug, purgeEntries);
+
+    if (purgeWholeStorefront && merchantSlug) {
+      // Hostname-wide purges can immediately refill any cached article rail.
+      // Hard-expire the merchant-scoped enrichment first, just as the
+      // per-product path does, so structural/import purges cannot re-seed the
+      // edge with a stale product snapshot.
+      expireProductBlogCache(merchantId);
+      scheduleStorefrontHostnamePurge(merchantSlug);
     }
     return;
   } catch {
@@ -91,30 +172,58 @@ export async function revalidateProductsReliable(
   }
 
   try {
-    const response = await (options.fetchImpl ?? fetch)(
-      new URL('/api/internal/revalidate-products', baseUrl),
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${secret}`,
-          'Content-Type': 'application/json',
-        },
-        // Forward `products` whenever available — even without a resolved
-        // merchantSlug — so the route can still bust the per-slug Next caches;
-        // the route gates only the Cloudflare purge on merchantSlug.
-        body: JSON.stringify({
-          merchantId,
-          ...(merchantSlug ? { merchantSlug } : {}),
-          ...(products && products.length > 0 ? { products } : {}),
-        }),
-        signal: AbortSignal.timeout(options.timeoutMs ?? 5000),
-      }
-    );
-    if (!response.ok) {
-      console.error(
-        'Internal product revalidation endpoint returned non-2xx; relying on cacheLife self-heal',
-        { merchantId, status: response.status }
+    const slugChunks: readonly (readonly string[] | undefined)[] =
+      nextProductSlugs.length > 0
+        ? Array.from(
+            {
+              length: Math.ceil(
+                nextProductSlugs.length /
+                  INTERNAL_REVALIDATION_PRODUCT_SLUG_LIMIT
+              ),
+            },
+            (_, index) =>
+              nextProductSlugs.slice(
+                index * INTERNAL_REVALIDATION_PRODUCT_SLUG_LIMIT,
+                (index + 1) * INTERNAL_REVALIDATION_PRODUCT_SLUG_LIMIT
+              )
+          )
+        : [undefined];
+
+    for (const [chunkIndex, productSlugChunk] of slugChunks.entries()) {
+      const response = await (options.fetchImpl ?? fetch)(
+        new URL('/api/internal/revalidate-products', baseUrl),
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${secret}`,
+            'Content-Type': 'application/json',
+          },
+          // The endpoint accepts at most 10,000 slugs. Keep products,
+          // merchantSlug, and the whole-storefront flag on the first request
+          // so follow-up chunks only perform the per-slug invalidation and do
+          // not repeat a potentially expensive edge purge.
+          body: JSON.stringify({
+            merchantId,
+            ...(chunkIndex === 0 && merchantSlug ? { merchantSlug } : {}),
+            ...(chunkIndex === 0 && products && products.length > 0
+              ? { products }
+              : {}),
+            ...(productSlugChunk && productSlugChunk.length > 0
+              ? { productSlugs: productSlugChunk }
+              : {}),
+            ...(chunkIndex === 0 && purgeWholeStorefront
+              ? { purgeWholeStorefront: true }
+              : {}),
+          }),
+          signal: AbortSignal.timeout(options.timeoutMs ?? 5000),
+        }
       );
+      if (!response.ok) {
+        console.error(
+          'Internal product revalidation endpoint returned non-2xx; relying on cacheLife self-heal',
+          { merchantId, status: response.status }
+        );
+      }
     }
   } catch (error) {
     console.error(

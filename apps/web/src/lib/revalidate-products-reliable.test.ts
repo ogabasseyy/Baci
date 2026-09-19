@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockRevalidateProducts = vi.fn();
 const mockRevalidateProductSlugs = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
+const mockScheduleStorefrontHostnamePurge = vi.fn();
+const mockEnrichProductPurgeEntries = vi.fn();
+const mockExpireProductBlogCache = vi.fn();
 
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
@@ -12,6 +15,18 @@ vi.mock('@/lib/cache-revalidation', () => ({
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mockScheduleStorefrontProductPurge(...args),
+}));
+vi.mock('@/lib/expire-product-blog-cache', () => ({
+  expireProductBlogCache: (...args: unknown[]) =>
+    mockExpireProductBlogCache(...args),
+}));
+vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
+    mockScheduleStorefrontHostnamePurge(...args),
+}));
+vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
+  enrichProductPurgeEntries: (...args: unknown[]) =>
+    mockEnrichProductPurgeEntries(...args),
 }));
 vi.mock('@/env', () => ({
   getAppUrl: () => 'https://app.usebaci.com',
@@ -64,6 +79,22 @@ describe('revalidateProductsReliable', () => {
 
     expect(mockRevalidateProducts).toHaveBeenCalledWith('merchant-1');
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('uses the remote route when local revalidation returns false', async () => {
+    mockRevalidateProducts.mockReturnValue(false);
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true });
+    await revalidateProductsReliable('merchant-1', {
+      fetchImpl,
+      merchantSlug: 'ogabassey',
+      products: [{ id: 'product-1', slug: 'phone' }],
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toMatchObject({
+      products: [{ id: 'product-1', slug: 'phone' }],
+      merchantSlug: 'ogabassey',
+    });
   });
 
   it('falls back to the internal Bearer endpoint when in-process revalidation throws (no store context)', async () => {
@@ -153,6 +184,7 @@ describe('revalidateProductsReliable', () => {
       'ogabassey',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
     );
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');
   });
 
   it('busts the per-slug Next product caches BEFORE scheduling the in-process purge (F3 parity)', async () => {
@@ -201,52 +233,6 @@ describe('revalidateProductsReliable', () => {
         { slug: 'product-0', categorySegment: 'smartphones' },
         { slug: 'product-50', categorySegment: 'smartphones' },
       ])
-    );
-  });
-
-  it('forwards merchantSlug + products in the HTTP fallback body', async () => {
-    mockRevalidateProducts.mockImplementation(() => {
-      throw new Error('no store');
-    });
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: true } as Response);
-    const products = [{ slug: 'iphone-15', category: 'Smartphones' }];
-
-    await revalidateProductsReliable('merchant-1', {
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-      merchantSlug: 'ogabassey',
-      products,
-    });
-
-    const [, init] = fetchImpl.mock.calls[0];
-    expect((init as RequestInit).body).toBe(
-      JSON.stringify({
-        merchantId: 'merchant-1',
-        merchantSlug: 'ogabassey',
-        products,
-      })
-    );
-    // The HTTP route schedules the purge, not the in-process helper.
-    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-  });
-
-  it('forwards products WITHOUT merchantSlug in the HTTP fallback body', async () => {
-    mockRevalidateProducts.mockImplementation(() => {
-      throw new Error('no store');
-    });
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: true } as Response);
-    const products = [{ slug: 'iphone-15', category: 'Smartphones' }];
-
-    // Merchant-slug lookup failed upstream: the fallback must still forward the
-    // product entries so the internal route can bust the per-slug Next caches
-    // (the route gates only the Cloudflare purge on merchantSlug).
-    await revalidateProductsReliable('merchant-1', {
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-      products,
-    });
-
-    const [, init] = fetchImpl.mock.calls[0];
-    expect((init as RequestInit).body).toBe(
-      JSON.stringify({ merchantId: 'merchant-1', products })
     );
   });
 

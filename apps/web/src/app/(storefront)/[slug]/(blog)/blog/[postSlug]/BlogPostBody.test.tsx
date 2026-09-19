@@ -104,6 +104,7 @@ describe('BlogPostBody', () => {
     expect(screen.getByText('Android')).toBeInTheDocument();
     expect(screen.getByText('Google')).toBeInTheDocument();
     expect(mockResolveBlogPostContent).toHaveBeenCalledWith(content, {
+      catalogPrices: { products: [], currencySource: undefined },
       basePath: '/ogabassey',
       baseUrl: 'https://usebaci.com',
       fallbackImageAlt: 'Pixel 9 Review',
@@ -173,6 +174,7 @@ describe('BlogPostBody', () => {
     expect(mockResolveBlogPostContent).toHaveBeenCalledWith(
       '<p>Legacy HTML body</p>',
       {
+        catalogPrices: { products: [], currencySource: undefined },
         basePath: '/ogabassey',
         baseUrl: 'https://usebaci.com',
         fallbackImageAlt: 'Pixel 9 Review',

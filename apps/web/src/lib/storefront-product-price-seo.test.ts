@@ -66,6 +66,23 @@ describe('getProductPriceRange', () => {
     });
   });
 
+  it('excludes the parent price when selectable variants are required', () => {
+    const range = getProductPriceRange({
+      name: 'Galaxy S25',
+      has_variants: true,
+      price: 150000,
+      manage_stock: true,
+      stock: 5,
+      variants: [{ price_override: 175000, stock_quantity: 2 }],
+    });
+
+    expect(range).toEqual({
+      min: 175000,
+      max: 175000,
+      hasRange: false,
+    });
+  });
+
   it('uses the active sale price without treating base price as a range', () => {
     const range = getProductPriceRange({
       name: 'Samsung Galaxy A57',

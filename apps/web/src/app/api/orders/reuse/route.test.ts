@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './route';
 
+const mockReservationPurge = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/schedule-reused-order-inventory-purge', () => ({
+  scheduleReusedOrderInventoryPurge: mockReservationPurge,
+}));
+
 vi.mock('next/headers', () => ({
   cookies: vi.fn(),
 }));
@@ -61,6 +66,11 @@ describe('POST /api/orders/reuse', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
+    expect(mockReservationPurge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'e6e2e46c-5e3c-40c1-b0ae-832d6d20f0a2',
+      })
+    );
     expect(data).toEqual({
       order: {
         id: 'order-123',

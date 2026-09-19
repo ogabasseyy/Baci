@@ -4,8 +4,10 @@ import {
   getMerchantIdForApiUser,
 } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { isInventoryTrackedProduct } from '@/lib/is-inventory-tracked-product';
 import { logger } from '@/lib/logger';
 import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
+import { scheduleOrderProductBlogPurgeAfterResponse } from '@/lib/schedule-order-product-blog-purge-after-response';
 import { merchantOrderCancellationSchema } from '@/schemas/orders';
 
 /**
@@ -98,7 +100,7 @@ export async function POST(
     try {
       const { data: orderItems, error: orderItemsError } = await supabase
         .from('order_items')
-        .select('product_id')
+        .select('product_id, variant_id')
         .eq('order_id', id);
       if (orderItemsError) throw orderItemsError;
       const productIds = Array.from(
@@ -111,12 +113,79 @@ export async function POST(
       if (productIds.length > 0) {
         const { data: products, error: productsError } = await supabase
           .from('products')
-          .select('slug, manage_stock')
+          .select('id, slug, manage_stock, inventory_tracking_policy')
           .eq('merchant_id', merchantId)
           .in('id', productIds);
-        if (productsError) throw productsError;
-        const trackedProducts = (products ?? []).filter(
-          (product) => product.manage_stock === true
+        if (productsError) {
+          scheduleOrderProductBlogPurgeAfterResponse({
+            merchantId,
+            productIds,
+            supabase,
+          });
+          throw productsError;
+        }
+        const productsNeedingVariantLookup = new Set(
+          (products ?? [])
+            .filter((product) => !isInventoryTrackedProduct(product))
+            .map((product) => product.id)
+        );
+        const variantIds = Array.from(
+          new Set(
+            (orderItems ?? [])
+              .filter((item) =>
+                productsNeedingVariantLookup.has(item.product_id)
+              )
+              .map((item) => item.variant_id)
+              .filter((variantId): variantId is string => Boolean(variantId))
+          )
+        );
+        const serializedVariantProductIds = new Set<string>();
+        let variantPolicyLookupFailed = false;
+        if (variantIds.length > 0) {
+          const { data: variants, error: variantsError } = await supabase
+            .from('product_variants')
+            .select('id, product_id, inventory_tracking_policy')
+            .eq('merchant_id', merchantId)
+            .in('id', variantIds);
+          if (variantsError) {
+            variantPolicyLookupFailed = true;
+            // A variant projection failure must not suppress cache invalidation
+            // for the parent product. The parent policy is still authoritative;
+            // serialized child coverage is best-effort for this side effect.
+            logger.error({
+              error: variantsError,
+              merchantId,
+              orderId: id,
+              message:
+                'Failed to resolve variant inventory policies after cancellation',
+            });
+          } else {
+            for (const variant of variants ?? []) {
+              if (
+                isInventoryTrackedProduct(
+                  { id: variant.product_id, manage_stock: false },
+                  [variant]
+                )
+              ) {
+                serializedVariantProductIds.add(variant.product_id);
+              }
+            }
+          }
+        }
+        const trackedProducts = (products ?? []).filter((product) =>
+          variantPolicyLookupFailed &&
+          productsNeedingVariantLookup.has(product.id)
+            ? true
+            : isInventoryTrackedProduct(product, [
+                ...(serializedVariantProductIds.has(product.id)
+                  ? [
+                      {
+                        product_id: product.id,
+                        inventory_tracking_policy: 'serialized_strict',
+                      },
+                    ]
+                  : []),
+              ])
         );
         if (trackedProducts.length > 0) {
           productCacheRevalidation.revalidateProducts(merchantId, undefined, {
@@ -126,6 +195,11 @@ export async function POST(
             merchantId,
             trackedProducts.map((product) => product.slug)
           );
+          scheduleOrderProductBlogPurgeAfterResponse({
+            merchantId,
+            productIds: trackedProducts.map((product) => product.id),
+            supabase,
+          });
         }
       }
     } catch (error) {

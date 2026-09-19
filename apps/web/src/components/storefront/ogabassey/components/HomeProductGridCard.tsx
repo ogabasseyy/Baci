@@ -17,12 +17,19 @@ interface HomeProductGridCardProps {
   product: Product;
   basePath?: string;
   deferImageLoading?: boolean;
+  /**
+   * Render the fallback's JPEG tier instead of the AVIF tier: set for
+   * cards the static fallback already rendered, so the swap reuses the
+   * fetched bytes instead of downloading the AVIF tier.
+   */
+  disableAvifTier?: boolean;
 }
 
 export function HomeProductGridCard({
   product,
   basePath = '',
   deferImageLoading = false,
+  disableAvifTier = false,
 }: HomeProductGridCardProps) {
   const { ref: imageViewportRef, isActive: isImageViewportActive } =
     useViewportActivation<HTMLDivElement>({
@@ -81,6 +88,7 @@ export function HomeProductGridCard({
             sizes={HOME_PRODUCT_GRID_CARD_IMAGE_SIZES}
             loading="lazy"
             fetchPriority="low"
+            disableAvifTier={disableAvifTier}
             className="ogabassey-home-product-card__image"
           />
         ) : (

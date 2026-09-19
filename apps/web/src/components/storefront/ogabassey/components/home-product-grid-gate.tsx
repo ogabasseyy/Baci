@@ -24,6 +24,12 @@ export interface HomeProductGridGateGridProps {
    * interactive module was still loading.
    */
   replayLoadMore?: boolean;
+  /**
+   * See HomeProductGrid.matchFallbackImageTier. Always true from the gate:
+   * the static fallback commits before the grid module can load, so the
+   * initial slice it rendered is already fetched in the JPEG tier.
+   */
+  matchFallbackImageTier?: boolean;
 }
 
 interface HomeProductGridGateProps extends HomeProductGridGateGridProps {
@@ -251,7 +257,11 @@ export function HomeProductGridGate({
 
   return (
     <div ref={ref}>
-      <Grid {...gridProps} replayLoadMore={pendingLoadMore} />
+      <Grid
+        {...gridProps}
+        replayLoadMore={pendingLoadMore}
+        matchFallbackImageTier
+      />
     </div>
   );
 }

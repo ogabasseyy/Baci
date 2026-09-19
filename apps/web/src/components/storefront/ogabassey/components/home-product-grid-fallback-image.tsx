@@ -15,8 +15,10 @@ import { HOME_PRODUCT_GRID_CARD_IMAGE_SIZES } from './product-grid-image-sizes';
  * transforms, and no client recovery can cover failures that fire before
  * hydration — or no-JS readers at all, for whom this SSR fallback is the
  * entire product image. A failed AVIF source would leave those cards
- * permanently broken; the JPEG `<img>` always renders. The post-swap
- * interactive card keeps its own AVIF tier with client recovery.
+ * permanently broken; the JPEG `<img>` always renders. After the swap the
+ * grid keeps this JPEG tier for the fallback-rendered slice (no
+ * format-changing refetch); load-more cards mount fresh with the AVIF
+ * tier and client recovery.
  */
 export function HomeProductGridFallbackImage({
   alt,

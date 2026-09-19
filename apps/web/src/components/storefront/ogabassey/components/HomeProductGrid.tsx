@@ -53,6 +53,14 @@ interface HomeProductGridProps {
    * is not lost. One-shot — read only in the initial state.
    */
   replayLoadMore?: boolean;
+  /**
+   * The static fallback rendered the initial slice before this grid
+   * mounted: those cards keep the fallback's JPEG tier (no AVIF source)
+   * so the swap reuses the already-fetched bytes. Cards expanded later
+   * via load-more were never fallback-rendered and keep the AVIF tier.
+   * Set by the gate, whose fallback always commits first.
+   */
+  matchFallbackImageTier?: boolean;
   inlineAdBreakpoints?: number[];
   loadInteractionBindings?: () => Promise<ProductGridInteractionBindingsModule>;
   loadInteractiveCard?: () => Promise<ProductGridItemModule>;
@@ -91,6 +99,7 @@ export function HomeProductGrid({
   showViewAll = true,
   initialDisplayCount = 8,
   replayLoadMore = false,
+  matchFallbackImageTier = false,
   inlineAdBreakpoints = [8, 16],
   loadInteractionBindings,
   loadInteractiveCard,
@@ -226,6 +235,9 @@ export function HomeProductGrid({
                   product={product}
                   deferImageLoading={
                     index >= SERVER_RENDERED_HOME_PRODUCT_IMAGES
+                  }
+                  disableAvifTier={
+                    matchFallbackImageTier && index < initialDisplayCount
                   }
                 />
               ) : (

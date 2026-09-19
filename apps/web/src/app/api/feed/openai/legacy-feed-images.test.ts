@@ -151,6 +151,38 @@ describe('resolveLegacyFeedImages', () => {
     });
   });
 
+  it('falls back to the product manifest primary when the variant primary is claimed', () => {
+    expect(
+      resolveLegacyFeedImages(
+        product({
+          images: ['https://cdn.example.com/phone.jpg'],
+          offers: [{ images: ['https://cdn.example.com/manifest-red.jpg'] }],
+        }),
+        variant(),
+        manifest([
+          {
+            variant_id: 'variant-1',
+            verified_url: 'https://cdn.example.com/manifest-red.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 0,
+          },
+          {
+            verified_url: 'https://cdn.example.com/manifest-front.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 1,
+          },
+        ])
+      )
+    ).toEqual({
+      image_link: 'https://cdn.example.com/manifest-front.jpg',
+      additional_image_links: [],
+    });
+  });
+
   it('excludes an offer-claimed variant primary image', () => {
     expect(
       resolveLegacyFeedImages(

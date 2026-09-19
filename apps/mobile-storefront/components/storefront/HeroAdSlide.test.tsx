@@ -18,6 +18,11 @@ jest.mock('@/stores/drawer-store', () => ({
     selector({ isOpen: mockDrawerOpen }),
 }));
 
+let mockIsFocused = true;
+jest.mock('expo-router', () => ({
+  useIsFocused: () => mockIsFocused,
+}));
+
 const props = {
   height: 120,
   isVisible: true,
@@ -62,6 +67,21 @@ describe('HeroAdSlide', () => {
       expect(toJSON()).toBeNull();
     } finally {
       mockDrawerOpen = false;
+    }
+  });
+
+  it('unmounts the banner when the route is not focused', () => {
+    // Regression: a pushed route keeps this screen mounted, so an
+    // unfocused route must not own or refresh the banner behind it.
+    // Arrange & Act
+    mockIsFocused = false;
+    try {
+      const { toJSON } = render(<HeroAdSlide {...props} />);
+
+      // Assert
+      expect(toJSON()).toBeNull();
+    } finally {
+      mockIsFocused = true;
     }
   });
 });

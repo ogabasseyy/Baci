@@ -1,3 +1,4 @@
+import { useIsFocused } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import type { PaidEvent } from 'react-native-google-mobile-ads';
 import type { MobileAdBannerPlacementKey } from '@/config/mobile-ad-placements';
@@ -47,6 +48,9 @@ export function LaunchAdCard({
   // Like AdSlot: suspend while the navigation drawer is open so the card
   // never loads or refreshes under the drawer backdrop.
   const drawerOpen = useDrawerStore((state) => state.isOpen);
+  // Like AdSlot: a pushed route keeps this screen mounted, so an unfocused
+  // route must not own or refresh the banner behind the new screen.
+  const isFocused = useIsFocused();
   let bannerModule: typeof import('react-native-google-mobile-ads') | null =
     null;
   try {
@@ -55,7 +59,7 @@ export function LaunchAdCard({
   } catch {
     return null;
   }
-  if (!bannerModule || drawerOpen) return null;
+  if (!bannerModule || drawerOpen || !isFocused) return null;
   if (!isVisible) {
     return (
       <View

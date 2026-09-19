@@ -75,6 +75,7 @@ jest.mock('expo-linear-gradient', () => {
 
 jest.mock('expo-router', () => ({
   router: { push: jest.fn() },
+  useIsFocused: () => true,
 }));
 
 jest.mock('@/hooks/useTheme', () => ({

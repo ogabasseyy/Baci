@@ -96,6 +96,7 @@ jest.mock('react-native', () => {
 });
 jest.mock('expo-router', () => ({
   router: { push: (path: string) => mockPush(path) },
+  useIsFocused: () => true,
 }));
 jest.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({
@@ -257,7 +258,7 @@ describe('JustLaunchedCarousel', () => {
       isError: false,
     });
 
-    render(<JustLaunchedCarousel />);
+    render(<JustLaunchedCarousel adPlacement="PRODUCT_GRID_MPU" />);
 
     const markers: string[] = [];
     const walk = (node: unknown): void => {
@@ -302,7 +303,7 @@ describe('JustLaunchedCarousel', () => {
       isError: false,
     });
 
-    render(<JustLaunchedCarousel />);
+    render(<JustLaunchedCarousel adPlacement="PRODUCT_GRID_MPU" />);
     showAdCard();
 
     expect(screen.getByTestId('launch-ad-card')).toBeTruthy();
@@ -325,7 +326,7 @@ describe('JustLaunchedCarousel', () => {
       isError: false,
     });
 
-    render(<JustLaunchedCarousel />);
+    render(<JustLaunchedCarousel adPlacement="PRODUCT_GRID_MPU" />);
 
     expect(screen.getByTestId('launch-ad-card')).toBeTruthy();
     expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
@@ -333,6 +334,23 @@ describe('JustLaunchedCarousel', () => {
     expect(screen.UNSAFE_getByType('BannerAd' as never)).toBeTruthy();
     hideAdCard();
     expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
+    delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
+  });
+
+  it('renders no sponsored card without an explicit placement even when ads are enabled', () => {
+    // Regression: an undefined placement must stay disabled — a default
+    // that converts it back to PRODUCT_GRID_MPU lets repeated blocks own
+    // one logical slot despite the page-level owner election.
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    mockUseProducts.mockReturnValue({
+      products: [xiaomi, a27],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JustLaunchedCarousel />);
+
+    expect(screen.queryByTestId('launch-ad-card')).toBeNull();
     delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
   });
 

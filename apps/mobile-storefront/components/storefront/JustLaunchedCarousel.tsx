@@ -42,7 +42,7 @@ function isLaunchAdCard(item: LaunchRenderItem): item is LaunchAdCardItem {
 
 export function JustLaunchedCarousel({
   suppressAds = false,
-  adPlacement = 'PRODUCT_GRID_MPU',
+  adPlacement,
 }: {
   /**
    * While true (e.g. search obscures the feed) the sponsored card is
@@ -51,8 +51,9 @@ export function JustLaunchedCarousel({
   suppressAds?: boolean;
   /**
    * Placement the sponsored card owns. Page composition passes the slot
-   * only to the single elected launch block; when undefined no sponsored
-   * card renders so repeated blocks cannot own one logical slot twice.
+   * only to the single elected launch block. Undefined disables the card
+   * entirely — it must stay undefined (not default back to the placement)
+   * so repeated blocks cannot own one logical slot twice.
    */
   adPlacement?: MobileAdBannerPlacementKey;
 } = {}) {

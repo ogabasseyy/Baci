@@ -1,3 +1,4 @@
+import { useIsFocused } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import type { PaidEvent } from 'react-native-google-mobile-ads';
 import type { MobileAdBannerPlacementKey } from '@/config/mobile-ad-placements';
@@ -39,6 +40,9 @@ export function HeroAdSlide({
   // Like AdSlot: suspend while the navigation drawer is open so the home
   // banner never loads or refreshes under the drawer backdrop.
   const drawerOpen = useDrawerStore((state) => state.isOpen);
+  // Like AdSlot: a pushed route keeps this screen mounted, so an unfocused
+  // route must not own or refresh the banner behind the new screen.
+  const isFocused = useIsFocused();
   // Builds without the Google Mobile Ads native module (e.g. Expo Go) throw
   // on require; render nothing rather than crashing the home feed.
   let bannerModule: typeof import('react-native-google-mobile-ads') | null =
@@ -49,7 +53,7 @@ export function HeroAdSlide({
   } catch {
     return null;
   }
-  if (!bannerModule || drawerOpen) return null;
+  if (!bannerModule || drawerOpen || !isFocused) return null;
   if (!isVisible) {
     return (
       <View

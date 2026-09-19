@@ -233,6 +233,9 @@ describe('BlogPostBody', () => {
       expect(
         screen.getByTestId('safe-html').getAttribute('class')
       ).not.toContain('img:first-of-type');
+      expect(screen.getByTestId('safe-html').className).not.toMatch(
+        /\[&_a\]:text-/
+      );
     });
 
     it('does NOT render the Table of Contents for legacy HTML', async () => {

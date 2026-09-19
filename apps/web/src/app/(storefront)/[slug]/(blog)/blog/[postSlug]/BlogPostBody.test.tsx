@@ -148,6 +148,9 @@ describe('BlogPostBody', () => {
     expect(screen.getByTestId('blog-post-legacy-content').innerHTML).toContain(
       'Legacy caption'
     );
+    expect(
+      screen.getByTestId('blog-post-legacy-content').className
+    ).not.toMatch(/\[&_a\]:text-/);
 
     const encodedTitle = encodeURIComponent('Pixel 9 Review');
     const encodedShareUrl = encodeURIComponent(

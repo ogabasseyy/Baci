@@ -162,7 +162,7 @@ export async function BlogPostBody({
             trustedPriorityImageSources={legacyPriorityImageSources}
             normalizeHeadingHierarchy={true}
             normalizeSeoAnchors={true}
-            className="prose dark:prose-invert prose-baci max-w-none w-full [&_a]:text-store-primary!"
+            className="prose dark:prose-invert prose-baci max-w-none w-full"
           />
         )}
       </div>

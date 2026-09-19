@@ -9,11 +9,9 @@ import { isAuthSessionMissingError } from '@supabase/supabase-js';
 import type { CartItem } from '@/hooks/cart';
 import type { createClient } from '@/lib/supabase/client';
 import { toNegotiationCartLine } from './negotiation-modal-cart';
-import {
-  getContactValidationError,
-  NegotiationValidationError,
-  normalizeOptionalEmail,
-} from './negotiation-modal-validation';
+import { getContactValidationError } from './negotiation-contact-validation';
+import { normalizeOptionalEmail } from './negotiation-email-normalization';
+import { NegotiationValidationError } from './negotiation-validation-error';
 
 const SESSION_KEY = 'ogabassey_guest_session';
 

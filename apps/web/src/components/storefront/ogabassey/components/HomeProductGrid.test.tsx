@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestProduct } from './HomeProductGrid.test-utils';
@@ -53,13 +53,16 @@ vi.mock('./HomeProductGridCard', () => ({
   HomeProductGridCard: ({
     product,
     deferImageLoading,
+    disableAvifTier,
   }: {
     product: { name: string };
     deferImageLoading?: boolean;
+    disableAvifTier?: boolean;
   }) => (
     <article
       data-card-variant="static"
       data-defer-image-loading={String(Boolean(deferImageLoading))}
+      data-disable-avif-tier={String(Boolean(disableAvifTier))}
     >
       {product.name}
     </article>
@@ -126,6 +129,59 @@ describe('HomeProductGrid', () => {
     expect(screen.getByText('Showing 8 of 13 products')).toHaveClass(
       'ogabassey-home-products__count'
     );
+  });
+
+  it('replays a fallback load-more tap by expanding the first page on mount', () => {
+    // The gate captures a load-more tap that landed before this grid
+    // mounted and replays it here, so the shopper is not asked to tap
+    // a second time for the products they already requested.
+    render(
+      <HomeProductGrid
+        storeSlug="test-store"
+        products={Array.from({ length: 13 }, (_, index) =>
+          createTestProduct(index + 1)
+        )}
+        replayLoadMore
+      />
+    );
+
+    expect(screen.getAllByRole('article')).toHaveLength(13);
+    expect(screen.getByText('Product 13')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps the fallback-rendered images on the JPEG tier after the swap', async () => {
+    // The default fallback renders real images for the first two cards
+    // only (placeholders below): those two must not select the AVIF tier
+    // or the browser downloads them a second time. Placeholder and
+    // load-more cards keep AVIF.
+    render(
+      <HomeProductGrid
+        storeSlug="test-store"
+        products={Array.from({ length: 13 }, (_, index) =>
+          createTestProduct(index + 1)
+        )}
+        matchFallbackImageTier
+      />
+    );
+
+    const initialCards = screen.getAllByRole('article');
+    expect(initialCards).toHaveLength(8);
+    expect(initialCards[0]).toHaveAttribute('data-disable-avif-tier', 'true');
+    expect(initialCards[1]).toHaveAttribute('data-disable-avif-tier', 'true');
+    for (const card of initialCards.slice(2)) {
+      expect(card).toHaveAttribute('data-disable-avif-tier', 'false');
+    }
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /load more/i }));
+    });
+
+    const expandedCards = screen.getAllByRole('article');
+    expect(expandedCards).toHaveLength(13);
+    for (const card of expandedCards.slice(8)) {
+      expect(card).toHaveAttribute('data-disable-avif-tier', 'false');
+    }
   });
 
   it('renders the critical product-grid shell classes used by the homepage CSS partition', () => {

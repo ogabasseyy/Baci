@@ -25,7 +25,9 @@ function createSupabaseStub() {
   return {
     client: {
       from,
-    } as unknown as Parameters<typeof createMerchantUpdate>[0]['supabase'],
+    } as unknown as Awaited<
+      ReturnType<Parameters<typeof createMerchantUpdate>[0]['getSupabase']>
+    >,
     from,
     update,
     eq: query.eq,
@@ -39,7 +41,7 @@ describe('createMerchantUpdate', () => {
     const setMerchant = vi.fn();
     const reloadMerchant = vi.fn();
     const updateMerchant = createMerchantUpdate({
-      supabase: supabase.client,
+      getSupabase: async () => supabase.client,
       userId: 'owner-1',
       staffAccess: ownerAccess,
       activeMerchantId: merchant.id,
@@ -71,7 +73,7 @@ describe('createMerchantUpdate', () => {
     // Arrange
     const supabase = createSupabaseStub();
     const updateMerchant = createMerchantUpdate({
-      supabase: supabase.client,
+      getSupabase: async () => supabase.client,
       userId: 'owner-1',
       staffAccess: ownerAccess,
       activeMerchantId: null,
@@ -93,7 +95,7 @@ describe('createMerchantUpdate', () => {
     const setMerchant = vi.fn();
     const reloadMerchant = vi.fn();
     const updateMerchant = createMerchantUpdate({
-      supabase: supabase.client,
+      getSupabase: async () => supabase.client,
       userId: 'owner-1',
       staffAccess: ownerAccess,
       activeMerchantId: merchant.id,

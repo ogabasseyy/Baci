@@ -1,9 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import {
   baseShellSnapshot,
   baseShellSnapshotWithoutCategories,
   createDeferred,
+  getStorefrontNavigationCategories,
   getStorefrontShellSnapshot,
   getStorefrontShellSnapshotBase,
   mockOgabasseyStorefrontLayout,
@@ -45,7 +47,14 @@ describe('storefront layout', () => {
       expect(getStorefrontShellSnapshotBase).toHaveBeenCalledWith('ogabassey');
     });
     expect(getStorefrontShellSnapshot).toHaveBeenCalledWith(
-      baseShellSnapshotWithoutCategories
+      baseShellSnapshotWithoutCategories,
+      {
+        merchantId: OGABASSEY_MERCHANT_ID,
+        categories: expect.any(Promise),
+      }
+    );
+    expect(getStorefrontNavigationCategories).toHaveBeenCalledWith(
+      OGABASSEY_MERCHANT_ID
     );
 
     await Promise.resolve();

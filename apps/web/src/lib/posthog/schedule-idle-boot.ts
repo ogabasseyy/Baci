@@ -25,6 +25,19 @@ export interface ScheduleIdleBootOptions {
 }
 
 /**
+ * Which trigger fired the idle-boot callback:
+ * - `idle`: a browser idle period (or the setTimeout stand-in when
+ *   `requestIdleCallback` is unavailable),
+ * - `interaction`: the first `pointerdown` / `keydown`,
+ * - `timeout`: the `timeoutMs` hard fallback.
+ *
+ * Callers use this to shed deeper deferrals when the user is already
+ * engaging — e.g. PostHog skips its LCP wait on `interaction` so autocapture
+ * hears the follow-up clicks instead of losing them to the LCP window.
+ */
+export type IdleBootReason = 'idle' | 'interaction' | 'timeout';
+
+/**
  * Runs `callback` exactly once, deferred off the initial critical path, on the
  * earliest of:
  * - a browser idle period (`requestIdleCallback`, itself bounded by `timeoutMs`),
@@ -47,9 +60,14 @@ export interface ScheduleIdleBootOptions {
  * SSR-safe: when there is no `window`, it returns a no-op canceller and never
  * invokes `callback`. Returns a canceller that stops any pending boot and
  * detaches all listeners; calling it after the callback already ran is a no-op.
+ *
+ * The callback receives the {@link IdleBootReason} that fired it, so callers
+ * can skip deeper deferrals (e.g. an LCP wait) when an early interaction
+ * means the user is already engaging. Zero-argument callbacks keep working:
+ * the reason is simply ignored.
  */
 export function scheduleIdleBoot(
-  callback: () => void,
+  callback: (reason: IdleBootReason) => void,
   { timeoutMs = DEFAULT_IDLE_BOOT_TIMEOUT_MS }: ScheduleIdleBootOptions = {}
 ): () => void {
   if (typeof window === 'undefined') {
@@ -86,18 +104,24 @@ export function scheduleIdleBoot(
     window.removeEventListener('load', handleWindowLoad);
 
     for (const eventName of FIRST_INTERACTION_EVENTS) {
-      window.removeEventListener(eventName, run);
+      window.removeEventListener(eventName, handleFirstInteraction);
     }
   }
 
-  function run(): void {
+  function run(reason: IdleBootReason): void {
     if (settled) {
       return;
     }
 
     settled = true;
     teardown();
-    callback();
+    callback(reason);
+  }
+
+  // Stable reference: the same function object is added and removed, so
+  // teardown actually detaches the interaction listeners.
+  function handleFirstInteraction(): void {
+    run('interaction');
   }
 
   function cancel(): void {
@@ -115,13 +139,13 @@ export function scheduleIdleBoot(
     }
 
     if (typeof window.requestIdleCallback === 'function') {
-      idleCallbackId = window.requestIdleCallback(run, {
+      idleCallbackId = window.requestIdleCallback(() => run('idle'), {
         timeout: timeoutMs > 0 ? timeoutMs : 1000,
       });
       return;
     }
 
-    idleCallbackId = window.setTimeout(run, 0);
+    idleCallbackId = window.setTimeout(() => run('idle'), 0);
   }
 
   function handleWindowLoad(): void {
@@ -136,11 +160,14 @@ export function scheduleIdleBoot(
     armed = true;
 
     if (timeoutMs > 0) {
-      timeoutId = window.setTimeout(run, timeoutMs);
+      timeoutId = window.setTimeout(() => run('timeout'), timeoutMs);
     }
 
     for (const eventName of FIRST_INTERACTION_EVENTS) {
-      window.addEventListener(eventName, run, { once: true, passive: true });
+      window.addEventListener(eventName, handleFirstInteraction, {
+        once: true,
+        passive: true,
+      });
     }
 
     if (document.readyState === 'complete') {

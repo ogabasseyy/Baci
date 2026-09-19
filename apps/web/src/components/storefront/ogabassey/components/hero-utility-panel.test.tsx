@@ -54,8 +54,18 @@ describe('HeroUtilityPanel', () => {
       vi.advanceTimersByTime(2500);
     });
 
-    expect(screen.queryByText(/data!/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/airtime!/i)[0]).toBeInTheDocument();
+    // All words stay mounted (stacked grid cells size the box to the longest
+    // word once, so rotation never resizes it): inactive words are present
+    // but visually hidden, the active word is visible.
+    for (const word of screen.getAllByText(/data!/i)) {
+      expect(word).toHaveClass('invisible');
+      expect(word).toHaveAttribute('aria-hidden', 'true');
+    }
+    const activeWords = screen.getAllByText(/airtime!/i);
+    expect(activeWords.length).toBeGreaterThan(0);
+    for (const word of activeWords) {
+      expect(word).not.toHaveClass('invisible');
+    }
 
     fireEvent.click(screen.getAllByRole('button', { name: /data/i })[0]);
 
@@ -78,7 +88,14 @@ describe('HeroUtilityPanel', () => {
     render(<HeroUtilityPanel />);
     fireEvent.keyDown(window, { key: 'Tab' });
     act(() => { vi.advanceTimersByTime(2500); });
-    expect(screen.getAllByText('Data!')[0]).toBeInTheDocument();
+    // Rotation swaps visibility, not DOM presence: the newly active word is
+    // shown, the previous one hides — while the stacked box keeps its size.
+    for (const word of screen.getAllByText('Data!')) {
+      expect(word).not.toHaveClass('invisible');
+    }
+    for (const word of screen.getAllByText('Airtime!')) {
+      expect(word).toHaveClass('invisible');
+    }
     fireEvent.click(screen.getAllByRole('button', { name: /airtime/i })[0]);
     act(() => { vi.advanceTimersByTime(5000); });
     expect(screen.getAllByText('Airtime!')[0]).toBeInTheDocument();
@@ -97,8 +114,14 @@ describe('HeroUtilityPanel', () => {
     render(<HeroUtilityPanel />);
     fireEvent.keyDown(window, { key: 'Tab' });
     act(() => { vi.advanceTimersByTime(10000); });
-    expect(screen.queryByText('Data!')).not.toBeInTheDocument();
-    expect(screen.getAllByText('Airtime!')[0]).toBeInTheDocument();
+    for (const word of screen.getAllByText('Data!')) {
+      expect(word).toHaveClass('invisible');
+    }
+    const activeWords = screen.getAllByText('Airtime!');
+    expect(activeWords.length).toBeGreaterThan(0);
+    for (const word of activeWords) {
+      expect(word).not.toHaveClass('invisible');
+    }
   });
 
   it('cleans up its timer and engagement listeners on unmount', () => {
@@ -109,5 +132,17 @@ describe('HeroUtilityPanel', () => {
     expect(vi.getTimerCount()).toBe(0);
     fireEvent.keyDown(window, { key: 'Tab' });
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('opens the replayed tab modal on mount when a fallback tap is pending', () => {
+    render(<HeroUtilityPanel pendingUtilityTab="tv" />);
+
+    expect(screen.getByTestId('utility-modal')).toHaveTextContent('tv');
+  });
+
+  it('keeps the modal closed on mount without a pending fallback tap', () => {
+    render(<HeroUtilityPanel />);
+
+    expect(screen.queryByTestId('utility-modal')).not.toBeInTheDocument();
   });
 });

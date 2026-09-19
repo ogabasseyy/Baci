@@ -153,6 +153,15 @@ describe('BlogPageContent listing redirects', () => {
   });
 
   it('keeps searched category query listings on the noindex query route', async () => {
+    mockGetCachedBlogListing.mockResolvedValueOnce(
+      buildListingResult({
+        merchant: {
+          ...merchant,
+          template_id: 'modern',
+        },
+      })
+    );
+
     render(
       await BlogPageContent({
         params: Promise.resolve({ slug: 'ogabassey' }),
@@ -171,7 +180,12 @@ describe('BlogPageContent listing redirects', () => {
 
   it('keeps category query listings when the clean category slug is reserved', async () => {
     mockGetCachedBlogListing.mockResolvedValueOnce({
-      ...buildListingResult(),
+      ...buildListingResult({
+        merchant: {
+          ...merchant,
+          template_id: 'modern',
+        },
+      }),
       categories: ['Product'],
     });
 

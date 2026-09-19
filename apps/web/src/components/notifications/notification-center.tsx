@@ -4,10 +4,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { CheckCheck, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import {
-  LoadingSpinner,
-  NotificationBell,
-} from '@/components/ui/animated-icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +11,8 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { NotificationBell } from '@/components/ui/notification-bell';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNotifications } from '@/hooks/use-notifications';
 import { notificationActionUrl } from '@/lib/notification-action-url';

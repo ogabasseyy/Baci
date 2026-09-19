@@ -11,10 +11,13 @@ import {
   type StorefrontAppearance,
 } from '@/components/storefront/storefront-appearance';
 import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-storefront';
+import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
+import { getStorefrontNavigationCategories } from '@/lib/cached-categories';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { buildStoreUrl } from '@/lib/store-url';
 import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-banner-metadata';
 import { isValidMerchantIdentifier } from '@/lib/validation';
+import { isOgabasseyHomeIdentifier } from './(home)/is-ogabassey-home-identifier';
 import { getStorefrontSeoDescription } from './seo-helpers';
 import { StorefrontPprStaticShell } from './storefront-ppr-static-shell';
 import { StorefrontShellFrame } from './storefront-shell-frame';
@@ -25,12 +28,9 @@ import {
 import { StorefrontThemeFrame } from './storefront-theme-frame';
 
 // Run storefront SSR next to the Supabase primary (AWS eu-west-1 / Dublin) so
-// every render's DB round-trips stay intra-region. Neither `vercel.json`
-// `regions` nor the project's serverlessFunctionRegion is honored for Next.js
-// App Router functions — `preferredRegion` is the only mechanism the framework
-// builder bakes into the function config. Inherited by storefront PAGE routes;
-// route handlers + sibling layouts export it individually.
-export const preferredRegion = 'dub1';
+// every render's DB round-trips stay intra-region. Region pinning lives in
+// vercel.json `regions` (dub1); per-route `preferredRegion` is deprecated and
+// removed — the project-level pin is the supported mechanism.
 
 const STORE_NOT_FOUND_METADATA: Metadata = {
   title: 'Store Not Found',
@@ -165,7 +165,19 @@ export async function StorefrontLayoutContent(props: {
 
   const appearance = resolveStorefrontAppearance(slug);
 
-  const shellSnapshotBase = await getStorefrontShellSnapshotBase(slug);
+  // Start the merchant read and, for the known OgaBassey home tenant, the
+  // navigation read together: the merchant id is a committed constant, so
+  // the categories fetch need not wait for merchant resolution. Same cache
+  // key as the snapshot's own call, so a match dedupes to one fetch; the
+  // snapshot revalidates the id before adopting the early result.
+  const shellSnapshotBasePromise = getStorefrontShellSnapshotBase(slug);
+  const eagerCategories = isOgabasseyHomeIdentifier(slug)
+    ? {
+        merchantId: OGABASSEY_MERCHANT_ID,
+        categories: getStorefrontNavigationCategories(OGABASSEY_MERCHANT_ID),
+      }
+    : null;
+  const shellSnapshotBase = await shellSnapshotBasePromise;
 
   if (!shellSnapshotBase) {
     notFound();
@@ -184,7 +196,10 @@ export async function StorefrontLayoutContent(props: {
     );
   }
 
-  const shellSnapshot = await getStorefrontShellSnapshot(shellSnapshotBase);
+  const shellSnapshot = await getStorefrontShellSnapshot(
+    shellSnapshotBase,
+    eagerCategories
+  );
 
   if (!shellSnapshot) {
     notFound();

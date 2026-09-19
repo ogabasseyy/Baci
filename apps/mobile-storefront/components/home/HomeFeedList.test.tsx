@@ -297,6 +297,14 @@ describe('HomeFeedList', () => {
     expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
   });
 
+  it('withholds the in-feed slot when the page has no product grid', () => {
+    // Regression: a page configured without a ProductGrid intentionally
+    // renders only authored blocks, so the grid placement must not request
+    // with no product feed behind it.
+    renderList({ primaryProductGridIndex: -1 });
+    expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
+  });
+
   it('withholds the in-feed slot while loading or fatally errored', () => {
     // Regression: the footer renders alongside the empty state, so the
     // placement must not request below a skeleton or retry error with no

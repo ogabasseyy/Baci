@@ -381,6 +381,61 @@ describe('useQuizWaitingRoom', () => {
     expect(result.current.isFullscreenAdActive).toBe(false);
   });
 
+  it('holds the start transition until a presented interstitial closes', async () => {
+    // Regression: an interstitial that loads with just over 30 seconds left
+    // must not let live play start behind it — the timed window would burn
+    // under the full-screen ad. The boundary start waits for onClosed.
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-23T11:59:00.000Z'));
+    mockMaybeShowQuizStartInterstitial.mockClear();
+    mockMaybeShowQuizStartInterstitial.mockResolvedValueOnce('shown');
+    const onStart = jest.fn();
+    const { result } = renderHook(() =>
+      useQuizWaitingRoom({
+        event: event(),
+        onExit: jest.fn(),
+        onStart,
+        refresh: jest.fn(async () => [
+          event({
+            serverNow: '2026-08-23T12:00:01.000Z',
+            status: 'active',
+          }),
+        ]),
+      })
+    );
+    await act(async () => {
+      for (let flush = 0; flush < 10; flush += 1) {
+        await Promise.resolve();
+      }
+    });
+    expect(result.current.isFullscreenAdActive).toBe(true);
+    // The jest AppState starts non-active, which would mask the start
+    // branch entirely: foreground like production before the boundary.
+    const appStateListener = jest
+      .mocked(AppState.addEventListener)
+      .mock.calls.at(-1)?.[1] as (state: AppStateStatus) => void;
+    await act(async () => {
+      appStateListener('active');
+      await Promise.resolve();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(61_000);
+      for (let flush = 0; flush < 10; flush += 1) {
+        await Promise.resolve();
+      }
+    });
+    // Start boundary reached while the ad owns the screen: held, not fired.
+    expect(onStart).not.toHaveBeenCalled();
+    const onClosed =
+      mockMaybeShowQuizStartInterstitial.mock.calls.at(-1)?.[0]?.onClosed;
+    await act(async () => {
+      onClosed?.();
+      await Promise.resolve();
+    });
+    expect(onStart).toHaveBeenCalledWith('event-1', true);
+    expect(result.current.isFullscreenAdActive).toBe(false);
+  });
+
   it('cancels the pending pre-quiz ad when the countdown expires before start', async () => {
     // Refresh latency must not reopen the late-ad defect: once the local
     // countdown reaches zero the loaded ad is abandoned even though the

@@ -231,11 +231,13 @@ export function HomeFeedList({
         launchAdOwnerBlockId={launchAdOwnerBlockId}
       />
       {/* The footer renders alongside the empty state: while the feed is
-          initially loading or fatally errored the slot would request below
-          a skeleton or retry error with no resolved product feed. */}
+          initially loading, fatally errored, or configured without a
+          product grid at all, the slot would request a product-grid
+          placement with no resolved product feed. */}
       {isSearchOpen ||
       shouldShowInitialLoading ||
-      shouldShowFatalError ? null : (
+      shouldShowFatalError ||
+      !hasPrimaryGrid ? null : (
         <AdSlot placement="PRODUCT_GRID_IN_FEED" />
       )}
     </View>

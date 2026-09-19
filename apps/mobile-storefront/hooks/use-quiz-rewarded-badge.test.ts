@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 
 const mockUnlockBadge = jest.fn();
 const mockUseQuizMobileAds = jest.fn();
@@ -14,6 +15,14 @@ jest.mock('@/config/quiz-mobile-ads', () => ({
 }));
 jest.mock('@/hooks/use-quiz-mobile-ads', () => ({
   useQuizMobileAds: (input: unknown) => mockUseQuizMobileAds(input),
+}));
+let mockRewardedPlacementEnabled = true;
+jest.mock('@/config/mobile-ad-placements', () => ({
+  getMobileAdUnitId: () => ({
+    enabled: mockRewardedPlacementEnabled,
+    format: 'rewarded',
+    unitId: 'test-rewarded-unit',
+  }),
 }));
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (selector: (state: unknown) => unknown) =>
@@ -379,5 +388,55 @@ describe('useQuizRewardedBadge', () => {
 
     expect(mockAd.show).not.toHaveBeenCalled();
     expect(result.current.isWatching).toBe(false);
+  });
+
+  it('withholds the offer while the global placement is disabled', () => {
+    // Regression: the legacy quiz gate alone must not keep offering
+    // rewarded ads while the REWARDED placement is off.
+    mockRewardedPlacementEnabled = false;
+    try {
+      const { result } = renderHook(() =>
+        useQuizRewardedBadge({
+          eventId: 'event-1',
+          eventTitle: 'Today Quiz',
+          remainingSeconds: 120,
+          status: 'scheduled',
+          userId: 'user-1',
+        })
+      );
+
+      expect(result.current.available).toBe(false);
+    } finally {
+      mockRewardedPlacementEnabled = true;
+    }
+  });
+
+  it('abandons a pending load when the app backgrounds before presentation', () => {
+    // Regression: backgrounding after tapping Watch must not present on
+    // resume over whatever the shopper sees; ownership releases silently.
+    const { result } = renderHook(() =>
+      useQuizRewardedBadge({
+        eventId: 'event-1',
+        eventTitle: 'Today Quiz',
+        remainingSeconds: 120,
+        status: 'scheduled',
+        userId: 'user-1',
+      })
+    );
+
+    act(() => result.current.watchAd());
+    expect(result.current.isWatching).toBe(true);
+    const listener = jest
+      .mocked(AppState.addEventListener)
+      .mock.calls.at(-1)?.[1] as (state: AppStateStatus) => void;
+    act(() => {
+      listener('background');
+    });
+
+    expect(result.current.isWatching).toBe(false);
+    expect(result.current.watchFailed).toBe(false);
+    expect(mockSetQuizRewardedFlowActive).toHaveBeenLastCalledWith(false);
+    act(() => listeners.get(RewardedAdEventType.LOADED)?.());
+    expect(mockAd.show).not.toHaveBeenCalled();
   });
 });

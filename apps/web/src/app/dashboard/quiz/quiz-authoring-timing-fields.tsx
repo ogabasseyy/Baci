@@ -1,3 +1,4 @@
+import { QUIZ_DEFAULT_TIME_ZONE } from '@baci/shared';
 import { clampNumberInput } from './quiz-admin-actions';
 
 interface QuizAuthoringTimingFieldsProps {
@@ -61,7 +62,7 @@ export function QuizAuthoringTimingFields({
       ) : (
         <>
           <label className="grid gap-2 text-sm font-medium">
-            Scheduled start
+            Scheduled start ({QUIZ_DEFAULT_TIME_ZONE})
             <input
               className="h-11 rounded-md border bg-background px-3"
               type="datetime-local"
@@ -70,7 +71,7 @@ export function QuizAuthoringTimingFields({
             />
           </label>
           <label className="grid gap-2 text-sm font-medium">
-            Universal end
+            Universal end ({QUIZ_DEFAULT_TIME_ZONE})
             <input
               className="h-11 rounded-md border bg-background px-3"
               type="datetime-local"

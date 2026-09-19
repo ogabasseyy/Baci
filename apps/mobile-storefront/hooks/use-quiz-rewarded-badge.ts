@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
+import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
 import { getQuizMobileAdsConfig } from '@/config/quiz-mobile-ads';
 import { useQuizMobileAds } from '@/hooks/use-quiz-mobile-ads';
 import { setQuizRewardedFlowActive } from '@/lib/quiz-start-interstitial';
@@ -74,6 +76,28 @@ export function useQuizRewardedBadge({
   const [isWatching, setIsWatching] = useState(false);
   const [watchFailed, setWatchFailed] = useState(false);
   const [justEarned, setJustEarned] = useState(false);
+  const appStateRef = useRef(AppState.currentState);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      appStateRef.current = nextState;
+      if (nextState !== 'background' && nextState !== 'inactive') return;
+      // A pending rewarded load must not present on resume over whatever
+      // the shopper sees: abandon it like a dismissal, without failure UI.
+      // Presented ads stay owned by their CLOSED handler.
+      const session = sessionRef.current;
+      if (!session || session.presented) return;
+      session.settled = true;
+      session.cleanups.forEach((unsubscribe) => {
+        unsubscribe();
+      });
+      session.cleanups = [];
+      sessionRef.current = null;
+      setQuizRewardedFlowActive(false);
+      setIsWatching(false);
+    });
+    return () => subscription.remove();
+  }, []);
   const identityKey = `${userId ?? ''}:${eventId}`;
   const identityRef = useRef(identityKey);
   const generationRef = useRef(0);
@@ -97,17 +121,26 @@ export function useQuizRewardedBadge({
     status === 'scheduled' &&
     remainingSeconds > MINIMUM_REMAINING_SECONDS &&
     Boolean(userId);
+  // The global placement gate governs REWARDED too: the legacy quiz gate
+  // alone must not keep offering rewarded ads while the placement is off.
+  let rewardedPlacementEnabled = false;
+  try {
+    rewardedPlacementEnabled = getMobileAdUnitId('REWARDED').enabled === true;
+  } catch {
+    rewardedPlacementEnabled = false;
+  }
   // The earned confirmation outlives eligibility: once the reward lands the
   // shopper keeps seeing it even as the countdown runs under 90 seconds.
   const available =
-    justEarned ||
-    (isEligible &&
-      !dismissed &&
-      !isUnlocked &&
-      adState.enabled &&
-      adState.initialized &&
-      adState.canRequestAds &&
-      Boolean(adState.rewardedUnitId));
+    rewardedPlacementEnabled &&
+    (justEarned ||
+      (isEligible &&
+        !dismissed &&
+        !isUnlocked &&
+        adState.enabled &&
+        adState.initialized &&
+        adState.canRequestAds &&
+        Boolean(adState.rewardedUnitId)));
 
   // The composite identity intentionally owns the ad session lifetime.
   // biome-ignore lint/correctness/useExhaustiveDependencies: account/event identity is the session boundary
@@ -205,7 +238,9 @@ export function useQuizRewardedBadge({
       sessionRef.current === session &&
       !session.settled &&
       session.generation === generationRef.current &&
-      session.identityKey === identityRef.current;
+      session.identityKey === identityRef.current &&
+      appStateRef.current !== 'background' &&
+      appStateRef.current !== 'inactive';
 
     try {
       const rewardedAd = mobileAds.RewardedAd.createForAdRequest(

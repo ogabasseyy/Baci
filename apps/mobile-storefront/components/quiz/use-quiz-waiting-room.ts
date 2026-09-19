@@ -70,6 +70,10 @@ export function useQuizWaitingRoom({
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFullscreenAdActive, setIsFullscreenAdActive] = useState(false);
+  const isFullscreenAdActiveRef = useRef(false);
+  // A start boundary that lands while the interstitial owns the screen waits
+  // here until the ad closes instead of starting timed play behind it.
+  const pendingStartRef = useRef<QuizEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const eventRef = useRef(initialEvent);
   const offsetRef = useRef(offsetMs);
@@ -113,6 +117,13 @@ export function useQuizWaitingRoom({
       appStateRef.current === 'active' &&
       (nextEvent.status === 'active' || nextEvent.status === 'open')
     ) {
+      // Starting live play behind a presented interstitial would burn the
+      // shopper's timed window under a full-screen ad: hold the transition
+      // until the ad closes (flushed in its onClosed handler below).
+      if (isFullscreenAdActiveRef.current) {
+        pendingStartRef.current = nextEvent;
+        return;
+      }
       startedRef.current = true;
       onStartRef.current(nextEvent.id, true);
     }
@@ -185,10 +196,21 @@ export function useQuizWaitingRoom({
           getRemainingSeconds(eventRef.current, offsetRef.current) <=
             QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS,
         onClosed: () => {
-          if (mounted) setIsFullscreenAdActive(false);
+          if (!mounted) return;
+          isFullscreenAdActiveRef.current = false;
+          setIsFullscreenAdActive(false);
+          const pendingStart = pendingStartRef.current;
+          pendingStartRef.current = null;
+          if (pendingStart && !startedRef.current && !stoppedRef.current) {
+            startedRef.current = true;
+            onStartRef.current(pendingStart.id, true);
+          }
         },
       }).then((outcome) => {
-        if (mounted && outcome === 'shown') setIsFullscreenAdActive(true);
+        if (mounted && outcome === 'shown') {
+          isFullscreenAdActiveRef.current = true;
+          setIsFullscreenAdActive(true);
+        }
       });
     }
     const tick = () => {

@@ -32,6 +32,20 @@ describe('QuizAuthoringTimingFields', () => {
     expect(screen.queryByLabelText(/universal live window/i)).toBeNull();
   });
 
+  it('labels the scheduled walls with the policy timezone', () => {
+    // Arrange & Act: the offset-free values are Lagos wall clocks, so the
+    // labels must say so for admins outside Africa/Lagos.
+    render(<QuizAuthoringTimingFields {...props} />);
+
+    // Assert
+    expect(
+      screen.getByLabelText(/scheduled start \(africa\/lagos\)/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/universal end \(africa\/lagos\)/i)
+    ).toBeInTheDocument();
+  });
+
   it('edits the live window and switches modes in immediate mode', () => {
     // Arrange & Act
     render(<QuizAuthoringTimingFields {...props} timingKind="immediate" />);

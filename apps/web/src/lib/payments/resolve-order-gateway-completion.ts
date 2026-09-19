@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { completeOrderGatewayPayment } from './complete-order-gateway-payment';
 import { fileInventoryConfirmationFailureReview } from './file-inventory-confirmation-review';
 import { captureOrHoldRedvaultPayment } from './redvault-capture-hold';
@@ -49,11 +50,21 @@ export async function resolveOrderGatewayCompletion({
           });
           return { ok: false as const, outcome: capture };
         }
+        // Approval moves money and must not ride the route's service-role
+        // client: verification context + approval run through the
+        // short-lived scoped route client (merchant-bound authenticated
+        // claims), which those RPCs accept alongside service_role.
+        const redvaultScopedClient = createStorefrontOrderRpcClient({
+          fallbackClient: supabase,
+          hasCanonicalDeliveryMetadata: false,
+          merchantId,
+          userId: null,
+        });
         const approved = await verifyAndCompleteRedvaultPayment({
           merchantId,
           orderId,
           reference,
-          supabase,
+          supabase: redvaultScopedClient,
           transactionId,
         });
         if (approved) {

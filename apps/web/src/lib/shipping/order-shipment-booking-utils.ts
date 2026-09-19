@@ -157,6 +157,22 @@ export function toDomesticBookingItems(
     .filter((item) => item.quantity > 0);
 }
 
+/**
+ * Fail closed when refunds release every serialized unit before booking:
+ * the post-filtered collection can be empty even though the order still
+ * holds items. Never send the provider an invalid empty-items booking for
+ * a still-paid order.
+ */
+export function assertShippableBookingItems(items: ShipmentItem[]): void {
+  if (items.length === 0) {
+    throw new OrderShipmentBookingError(
+      'All order items have been refunded; there is nothing left to ship.',
+      400,
+      'NO_SHIPPABLE_ITEMS'
+    );
+  }
+}
+
 export function quotedShipmentItemWeight(item: {
   product?: {
     weight_value?: number | string | null;

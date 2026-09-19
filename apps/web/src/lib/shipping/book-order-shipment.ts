@@ -20,6 +20,7 @@ import {
 } from '@/lib/shipping/international-quote-order-guard';
 import { toInternationalShipmentItemsFromOrder } from '@/lib/shipping/international-shipment-items';
 import {
+  assertShippableBookingItems,
   isShippingProviderCode,
   OrderShipmentBookingError,
   parseStoredQuoteRequest,
@@ -129,7 +130,6 @@ export async function bookOrderShipment(
       'QUOTE_NOT_FOUND'
     );
   }
-
   const bookingEconomics = await getShippingQuoteBookingEconomics(
     supabase,
     merchantId,
@@ -265,6 +265,7 @@ export async function bookOrderShipment(
           effectiveQuoteRequest.items
         )
       : toDomesticBookingItems(orderItems, effectiveQuoteRequest?.items);
+  assertShippableBookingItems(items);
   const result = await shippingService.bookShipment(
     shippingProvider,
     buildOrderShipmentBookingRequest({

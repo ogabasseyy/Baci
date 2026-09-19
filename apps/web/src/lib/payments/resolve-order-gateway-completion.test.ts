@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { resolveOrderGatewayCompletion } from './resolve-order-gateway-completion';
 
 const mocks = vi.hoisted(() => ({
@@ -6,6 +7,10 @@ const mocks = vi.hoisted(() => ({
   verify: vi.fn(),
   complete: vi.fn(),
   fileReview: vi.fn(),
+  scopedClient: { __scopedRouteClient: true },
+}));
+vi.mock('@/lib/checkout/storefront-order-rpc-client', () => ({
+  createStorefrontOrderRpcClient: vi.fn(),
 }));
 vi.mock('./redvault-capture-hold', () => ({
   captureOrHoldRedvaultPayment: mocks.capture,
@@ -38,6 +43,9 @@ const held = {
 describe('gateway completion routing', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(createStorefrontOrderRpcClient).mockReturnValue(
+      mocks.scopedClient as never
+    );
     mocks.capture.mockResolvedValue(held);
   });
   it('never falls through to ordinary completion for unverified REDVAULT', async () => {
@@ -113,6 +121,27 @@ describe('gateway completion routing', () => {
       outcome: { kind: 'capture_hold_failed' },
     });
     expect(mocks.complete).not.toHaveBeenCalled();
+  });
+  it('runs REDVAULT approval through the scoped route client, not the service client', async () => {
+    mocks.verify.mockResolvedValue({
+      kind: 'approved',
+      duplicate: false,
+      inventoryConfirmed: true,
+      completion: { order_updated: true },
+    });
+    await resolveOrderGatewayCompletion(input);
+    expect(createStorefrontOrderRpcClient).toHaveBeenCalledWith(
+      expect.objectContaining({ merchantId: 'merchant', userId: null })
+    );
+    expect(mocks.verify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant',
+        transactionId: 'transaction',
+      })
+    );
+    const passedClient = mocks.verify.mock.calls[0][0].supabase;
+    expect(passedClient).toBe(mocks.scopedClient);
+    expect(passedClient).not.toBe(input.supabase);
   });
   it('preserves ordinary gateway completion', async () => {
     mocks.capture.mockResolvedValue({ kind: 'not_redvault' });

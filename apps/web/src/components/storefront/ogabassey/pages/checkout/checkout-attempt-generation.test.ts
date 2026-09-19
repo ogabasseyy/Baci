@@ -44,6 +44,11 @@ describe('checkout attempt generation', () => {
     try {
       expect(readCheckoutAttemptGeneration()).toBe(0);
       expect(rotateCheckoutAttemptGeneration()).toBe(1);
+      // The failed write must persist in memory so the next attempt keeps
+      // a fresh generation instead of repeating 1.
+      expect(readCheckoutAttemptGeneration()).toBe(1);
+      expect(rotateCheckoutAttemptGeneration()).toBe(2);
+      expect(readCheckoutAttemptGeneration()).toBe(2);
     } finally {
       if (storageDescriptor) {
         Object.defineProperty(window, 'sessionStorage', storageDescriptor);

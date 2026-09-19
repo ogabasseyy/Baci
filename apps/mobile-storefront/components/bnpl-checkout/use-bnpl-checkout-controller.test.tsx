@@ -452,6 +452,50 @@ describe('useBNPLCheckoutController', () => {
     });
   });
 
+  it('defers Klump returns to settlement polling instead of completing', async () => {
+    jest.useFakeTimers();
+    mockRouteParams = {
+      gateway: 'klump',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+      trackingToken: 'track-token-123',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'navigation',
+            url: 'https://usebaci.com/ogabassey/order-success?reference=klump_tx_1',
+          }),
+        },
+      });
+    });
+
+    // The transaction-ID return proves nothing about settlement: no
+    // completion, but the shopper still reaches success with the token so
+    // settlement polling can confirm payment later.
+    expect(result.current.status).toBe('success');
+    expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+    expect(mockClearCart).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(router.replace).toHaveBeenCalledWith({
+      pathname: '/order-success',
+      params: {
+        orderId: 'order-123',
+        paymentMethod: 'klump',
+        reference: 'klump_tx_1',
+        trackingToken: 'track-token-123',
+      },
+    });
+  });
+
   it('records paid attribution for approved CredPal redirects', async () => {
     jest.useFakeTimers();
     mockRouteParams = {
@@ -529,5 +573,50 @@ describe('useBNPLCheckoutController', () => {
       'order-123',
       'credit_direct'
     );
+  });
+
+  it('dedupes duplicate failure callbacks after rerender until Retry', async () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+    };
+    const { result, rerender } = renderControllerHook();
+    const errorMessage = {
+      nativeEvent: {
+        data: JSON.stringify({
+          type: 'navigation',
+          url: 'https://usebaci.com/ogabassey/checkout?error=declined',
+        }),
+      },
+    } as Parameters<typeof result.current.handleWebViewMessage>[0];
+
+    await act(async () => {
+      result.current.handleWebViewMessage(errorMessage);
+    });
+    // The error status triggers a rerender; a repeated provider callback
+    // for the same URL must not emit a second payment_failed.
+    rerender({});
+    await act(async () => {
+      result.current.handleWebViewMessage(errorMessage);
+    });
+    act(() => {
+      result.current.handleWebViewError({
+        description: 'net::ERR_FAILED',
+        url: 'https://pay.example/x',
+      });
+    });
+
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledTimes(1);
+
+    // Retry opens a fresh attempt: the next failure is recorded again.
+    act(() => {
+      result.current.handleRetry();
+    });
+    await act(async () => {
+      result.current.handleWebViewMessage(errorMessage);
+    });
+
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledTimes(2);
   });
 });

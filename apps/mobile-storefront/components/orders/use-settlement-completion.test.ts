@@ -56,18 +56,33 @@ describe('useSettlementCompletion', () => {
           id: 'order-settle-1',
           order_number: 'ORD-SETTLE-1',
           payment_status: 'pending',
-          subtotal: 24000,
-          shipping_cost: 1000,
-          total: 25000,
+          subtotal: 100000,
+          shipping_cost: 0,
+          discount_amount: 0,
+          total: 100000,
         }),
-        trackedResponse({
-          id: 'order-settle-1',
-          order_number: 'ORD-SETTLE-1',
-          payment_status: 'paid',
-          subtotal: 24000,
-          shipping_cost: 1000,
-          total: 25000,
-        }),
+        {
+          ...trackedResponse({
+            id: 'order-settle-1',
+            order_number: 'ORD-SETTLE-1',
+            payment_status: 'paid',
+            subtotal: 100000,
+            shipping_cost: 0,
+            discount_amount: 0,
+            total: 107500,
+          }),
+          items: [
+            {
+              id: 'line-1',
+              product_id: 'prod-1',
+              product_name: 'iPhone 15 Pro',
+              quantity: 1,
+              unit_price: 100000,
+              total_price: 100000,
+              product_image: null,
+            },
+          ],
+        },
       ]);
 
       renderHook(() => useSettlementCompletion(baseParams));
@@ -79,12 +94,21 @@ describe('useSettlementCompletion', () => {
         expect(mockTrackCompleted).toHaveBeenCalledWith({
           customerEmail: 'ada@example.com',
           customerPhone: '+2348123456789',
+          items: [
+            {
+              product_id: 'prod-1',
+              quantity: 1,
+              price: 100000,
+              name: 'iPhone 15 Pro',
+            },
+          ],
           orderId: 'order-settle-1',
           orderNumber: 'ORD-SETTLE-1',
           paymentMethod: 'juicyway',
-          shipping: 1000,
-          subtotal: 24000,
-          value: 25000,
+          shipping: 0,
+          subtotal: 100000,
+          tax: 7500,
+          value: 107500,
         })
       );
       expect(mockTrackCompleted).toHaveBeenCalledTimes(1);
@@ -118,6 +142,48 @@ describe('useSettlementCompletion', () => {
 
       expect(fetchCalls()).toBe(3);
       expect(mockTrackCompleted).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('polls pending CredPal orders to completion after approval', async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetchSequence([
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'pending',
+          total: 5000,
+        }),
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'paid',
+          subtotal: 5000,
+          shipping_cost: 0,
+          discount_amount: 0,
+          total: 5000,
+        }),
+      ]);
+
+      renderHook(() =>
+        useSettlementCompletion({ ...baseParams, paymentMethod: 'credpal' })
+      );
+      await jest.advanceTimersByTimeAsync(0);
+      expect(mockTrackCompleted).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(1000);
+
+      await waitFor(() =>
+        expect(mockTrackCompleted).toHaveBeenCalledWith(
+          expect.objectContaining({
+            orderId: 'order-settle-1',
+            paymentMethod: 'credpal',
+            value: 5000,
+          })
+        )
+      );
     } finally {
       jest.useRealTimers();
     }

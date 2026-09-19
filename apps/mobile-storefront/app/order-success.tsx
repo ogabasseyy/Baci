@@ -7,6 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Linking } from 'react-native';
 import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
+import { useGuestInvoicePaidState } from '@/components/orders/use-invoice-paid-state';
 import { useSettlementCompletion } from '@/components/orders/use-settlement-completion';
 import { ReceiptPreviewModal } from '@/components/receipts/ReceiptPreviewModal';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -47,14 +48,31 @@ export default function OrderSuccessScreen() {
   } = useLocalSearchParams<Record<string, string>>();
   const customer = useAuthStore((s) => s.customer);
   const orderNotificationScheduledRef = useRef(false);
-  const receiptPreview = useReceiptPreview();
   // An invoice order paid externally after checkout must not keep showing
   // proforma copy when the shopper returns: resolve the authoritative paid
   // state for invoice-method orders (guests keep the method-based tone).
   const { data: paidCheckOrder } = useReceiptDetail(
     paymentMethod === 'invoice' && orderId ? orderId : null
   );
-  const isPaidOrder = paidCheckOrder?.payment_status === 'paid';
+  const receiptPaidOrder = paidCheckOrder?.payment_status === 'paid';
+  // Guests have no authenticated receipt query: resolve their paid state
+  // through the tracking token so externally-paid invoices stop showing
+  // proforma copy on return.
+  const guestInvoicePaid = useGuestInvoicePaidState({
+    orderId,
+    paymentMethod,
+    trackingToken,
+    skip: receiptPaidOrder,
+  });
+  const isPaidOrder = receiptPaidOrder || guestInvoicePaid;
+  // The proforma action opens this same preview: stamp the explicit kind so
+  // the generated artifact and modal chrome read as a proforma, matching
+  // the web success page (unpaid invoice orders only — paid orders keep the
+  // commercial receipt even if this screen was reached via invoice).
+  const isProformaDocument = paymentMethod === 'invoice' && !isPaidOrder;
+  const receiptPreview = useReceiptPreview({
+    documentKind: isProformaDocument ? 'proforma' : undefined,
+  });
   // Asynchronous settlement (Juicyway on-chain detection, standard bank
   // transfers) is confirmed after the shopper leaves checkout: poll the
   // server-confirmed order state and complete the funnel only once this
@@ -163,6 +181,7 @@ export default function OrderSuccessScreen() {
         visible={receiptPreview.isOpen}
         html={receiptPreview.html}
         isPaid={receiptPreview.isPaid}
+        documentType={isProformaDocument ? 'proforma' : undefined}
         onClose={receiptPreview.closePreview}
       />
     </>

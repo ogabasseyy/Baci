@@ -9,14 +9,20 @@ import { useWalletFundingPolling } from './use-wallet-funding-polling';
 export interface WalletFundedTransferSession {
   account: WalletFundingAccountResponse;
   checkoutFingerprint: string;
+  currency: string;
   intent: WalletOrderFundingIntent;
   orderId: string;
+  orderNumber?: string;
   trackingToken?: string;
 }
 
 export interface WalletFundedOrderPaidPayload {
   checkoutFingerprint: string;
+  currency: string;
   orderId: string;
+  orderNumber?: string;
+  // Server-confirmed canonical order total from the completed intent.
+  total: number;
   trackingToken?: string;
 }
 
@@ -34,9 +40,11 @@ export type WalletFundedTransferStartOutcome =
 
 interface StartArgs {
   checkoutFingerprint: string;
+  currency: string;
   merchantId: string;
   merchantSlug?: string;
   orderId: string;
+  orderNumber?: string;
   trackingToken?: string;
 }
 
@@ -78,9 +86,14 @@ export function useWalletFundedBankTransfer({
       if (!current) {
         return;
       }
+      // The polling hook fires this at most once, only when the intent
+      // reaches server-confirmed `completed`: the order is paid.
       onOrderPaid({
         checkoutFingerprint: current.checkoutFingerprint,
+        currency: current.intent.currency,
         orderId: current.orderId,
+        orderNumber: current.orderNumber,
+        total: current.intent.targetOrderAmount,
         trackingToken: current.trackingToken,
       });
     },
@@ -95,9 +108,11 @@ export function useWalletFundedBankTransfer({
 
   const start = async ({
     checkoutFingerprint,
+    currency,
     merchantId: startMerchantId,
     merchantSlug: startMerchantSlug,
     orderId,
+    orderNumber,
     trackingToken,
   }: StartArgs): Promise<WalletFundedTransferStartOutcome> => {
     const result = await startWalletFundedBankTransfer({
@@ -121,8 +136,10 @@ export function useWalletFundedBankTransfer({
     setSession({
       account: result.account,
       checkoutFingerprint,
+      currency,
       intent: result.intent,
       orderId,
+      orderNumber,
       trackingToken,
     });
     return 'started';

@@ -35,9 +35,53 @@ it('tracks the first observed order id and ignores a later replay of the same or
 it('does not re-track a persisted claim after process memory is gone', async () => {
   storage.set(
     CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
-    JSON.stringify(['order-1'])
+    JSON.stringify({ version: 2, claims: ['order-1'] })
   );
   await expect(claimCheckoutPurchaseTracking('order-1')).resolves.toBe(false);
+});
+
+it('migrates legacy bare purchase claims so upgrades cannot double-emit completion', async () => {
+  // Pre-namespacing checkouts stored the native purchase under the bare
+  // order id: reopening that order after the upgrade must not grant a
+  // fresh payment_completed claim.
+  storage.set(
+    CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
+    JSON.stringify(['order-legacy'])
+  );
+  await expect(
+    claimCheckoutPurchaseTracking('order-legacy', 'payment_completed')
+  ).resolves.toBe(false);
+});
+
+it('does not let a new order_created bare claim suppress its completion', async () => {
+  // Current code stores bare ids for order_created, so bare-id matching at
+  // claim time would suppress every new completion. The migration must only
+  // apply to the unversioned upgrade layout, not to fresh bare claims.
+  await expect(claimCheckoutPurchaseTracking('order-new')).resolves.toBe(true);
+  await expect(
+    claimCheckoutPurchaseTracking('order-new', 'payment_completed')
+  ).resolves.toBe(true);
+  await expect(
+    claimCheckoutPurchaseTracking('order-new', 'payment_completed')
+  ).resolves.toBe(false);
+});
+
+it('persists the versioned envelope on the first post-upgrade write', async () => {
+  storage.set(
+    CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
+    JSON.stringify(['order-legacy'])
+  );
+  await expect(claimCheckoutPurchaseTracking('order-fresh')).resolves.toBe(
+    true
+  );
+
+  const stored = parseStoredClaimsForTest(
+    storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY)
+  );
+  expect(stored).toContain('order-fresh');
+  expect(stored).toContain('payment_completed:order-legacy');
+  const raw = storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY) ?? '';
+  expect(JSON.parse(raw)).toMatchObject({ version: 2 });
 });
 
 it('grants overlapping claims for different events without losing either', async () => {
@@ -130,14 +174,45 @@ it('leaves no phantom claim when a timed-out write lands late', async () => {
   }
 });
 
+it('releases the queue when a write never settles', async () => {
+  jest.useFakeTimers();
+  try {
+    // Reads succeed but writes hang forever: the first caller still fails
+    // closed at three seconds, and the next claim gets its turn instead of
+    // queueing behind the hung write.
+    mockSetItem.mockImplementation(() => new Promise<void>(() => undefined));
+    const first = claimCheckoutPurchaseTracking('order-hung');
+    await jest.advanceTimersByTimeAsync(3000);
+    await expect(first).resolves.toBe(false);
+
+    const second = claimCheckoutPurchaseTracking('order-next');
+    await jest.advanceTimersByTimeAsync(15000);
+    // The store is wedged so this claim also fails closed — the point is it
+    // resolves at all instead of waiting on the hung write forever.
+    await expect(second).resolves.toBe(false);
+  } finally {
+    jest.useRealTimers();
+    mockSetItem.mockImplementation(async (key: string, value: string) => {
+      storage.set(key, value);
+    });
+  }
+});
+
 function parseStoredClaimsForTest(raw: string | undefined): string[] {
   if (!raw) {
     return [];
   }
   try {
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter(
+    const entries =
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      !Array.isArray(parsed) &&
+      'claims' in parsed
+        ? parsed.claims
+        : parsed;
+    return Array.isArray(entries)
+      ? entries.filter(
           (value): value is string =>
             typeof value === 'string' && value.length > 0
         )

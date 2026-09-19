@@ -103,8 +103,27 @@ function mockPaidVerification(total = 5000) {
           id: 'order-1',
           order_number: 'ORD-1',
           payment_status: 'paid',
+          subtotal: 45000,
+          shipping_cost: 1500,
+          discount_amount: 0,
           total,
         },
+        customer: {
+          name: 'Ada Buyer',
+          email: 'ada@example.com',
+          phone: '+2348123456789',
+        },
+        items: [
+          {
+            id: 'line-1',
+            product_id: 'prod-1',
+            product_name: 'Jar',
+            quantity: 1,
+            unit_price: 45000,
+            total_price: 45000,
+            product_image: null,
+          },
+        ],
       }),
       { status: 200 }
     );
@@ -171,6 +190,32 @@ describe('createPaymentGatewayCompletionHandlers', () => {
           reference: 'ref-1',
           trackingToken: 'track-1',
         }),
+      })
+    );
+  });
+
+  it('forwards tracked identity, breakdown, and items on direct completion', async () => {
+    // Arrange: the server already marks the order paid (total = 45000 +
+    // 1500 shipping + 3375 VAT).
+    mockPaidVerification(49875);
+    const { input } = createInput({ amount: 5000, orderTotal: 49875 });
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: the durable claim is consumed with full attribution.
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        items: [expect.objectContaining({ product_id: 'prod-1', quantity: 1 })],
+        orderId: 'order-1',
+        shipping: 1500,
+        subtotal: 45000,
+        tax: 3375,
+        value: 49875,
       })
     );
   });

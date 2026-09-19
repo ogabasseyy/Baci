@@ -4,6 +4,11 @@ import {
   TRACK_ORDER_API_BASE_URL,
   TRACK_ORDER_MERCHANT_SLUG,
 } from '@/components/track-order/track-order.config';
+import { getSession } from '@/lib/supabase';
+import {
+  type TrackedCompletionAttribution,
+  toTrackedCompletionAttribution,
+} from '@/lib/tracked-order-completion';
 
 const VERIFY_TIMEOUT_MS = 15_000;
 
@@ -13,9 +18,8 @@ interface VerifyOrderPaymentInput {
   reference?: string;
 }
 
-export interface OrderPaymentVerification {
+export interface OrderPaymentVerification extends TrackedCompletionAttribution {
   paid: boolean;
-  total?: number;
 }
 
 function finiteOrUndefined(value: unknown): number | undefined {
@@ -32,6 +36,25 @@ function toTrackedOrder(value: unknown): TrackOrderData['order'] | null {
     return null;
   }
   return order as TrackOrderData['order'];
+}
+
+function toTrackedCustomer(value: unknown): TrackOrderData['customer'] | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const customer = (value as { customer?: unknown }).customer;
+  if (!customer || typeof customer !== 'object') {
+    return null;
+  }
+  return customer as TrackOrderData['customer'];
+}
+
+function toTrackedItems(value: unknown): TrackOrderData['items'] {
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+  const items = (value as { items?: unknown }).items;
+  return Array.isArray(items) ? (items as TrackOrderData['items']) : [];
 }
 
 async function fetchWithTimeout(
@@ -59,11 +82,19 @@ async function checkTrackedOrderPaid(
     if (!response.ok) {
       return { paid: false };
     }
-    const order = toTrackedOrder(await response.json());
+    const body: unknown = await response.json();
+    const order = toTrackedOrder(body);
     if (!order || order.id !== orderId || order.payment_status !== 'paid') {
       return { paid: false };
     }
-    return { paid: true, total: finiteOrUndefined(order.total) };
+    return {
+      paid: true,
+      ...toTrackedCompletionAttribution(
+        order,
+        toTrackedCustomer(body),
+        toTrackedItems(body)
+      ),
+    };
   } catch {
     return { paid: false };
   }
@@ -88,11 +119,24 @@ async function checkReferenceSettled(
   reference: string
 ): Promise<OrderPaymentVerification> {
   try {
+    // The verify route enforces CSRF protection, which accepts Bearer
+    // authentication for native callers. Guests have no session and rely
+    // on the tracking-token lookup above (a proof-bound GET with no CSRF
+    // requirement) instead.
+    let accessToken: string | null = null;
+    try {
+      accessToken = (await getSession())?.access_token ?? null;
+    } catch {
+      accessToken = null;
+    }
     const response = await fetchWithTimeout(
       `${CHECKOUT_API_BASE_URL}/api/payments/verify`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
         body: JSON.stringify({ reference }),
       }
     );

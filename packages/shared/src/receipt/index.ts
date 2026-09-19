@@ -21,6 +21,7 @@ export {
 } from './receipt-money';
 export { sanitizeSvg } from './sanitize-svg';
 export type {
+  ReceiptDocumentKind,
   ReceiptFulfillmentDetails,
   ReceiptMerchant,
   ReceiptOptions,

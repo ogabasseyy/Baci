@@ -46,6 +46,19 @@ describe('resolveBNPLNavigationUrlEffect', () => {
     });
   });
 
+  it('treats every Klump return as pending until the tracked order settles', () => {
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://shop.example.com/order-success?reference=klump_tx_1',
+        { gateway: 'klump' }
+      )
+    ).toEqual({
+      isPending: true,
+      reference: 'klump_tx_1',
+      status: 'success',
+    });
+  });
+
   it('returns to the app for checkout cancellation URLs', () => {
     expect(
       resolveBNPLNavigationUrlEffect(

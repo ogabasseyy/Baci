@@ -20,10 +20,11 @@ interface ReceiptPreviewModalProps {
   html: string;
   onClose: () => void;
   isPaid: boolean;
-  // Whether the document is a paid receipt or an unpaid invoice. Controls the
-  // title/share labels independently of `isPaid` (which only drives the accent),
-  // because a utility record is always a "receipt" regardless of vend status.
-  documentType?: 'receipt' | 'invoice';
+  // Whether the document is a paid receipt, an unpaid invoice, or a proforma.
+  // Controls the title/share labels independently of `isPaid` (which only
+  // drives the accent), because a utility record is always a "receipt"
+  // regardless of vend status.
+  documentType?: 'receipt' | 'invoice' | 'proforma';
   // Plain-text fallback shared when PDF generation/sharing is unavailable.
   shareText?: string;
 }
@@ -32,11 +33,15 @@ interface ReceiptPreviewModalProps {
 // supported by React Compiler inside component bodies. Never rejects.
 const shareReceiptPdf = async (
   html: string,
-  documentType: 'receipt' | 'invoice',
+  documentType: 'receipt' | 'invoice' | 'proforma',
   shareText?: string
 ) => {
   const dialogTitle =
-    documentType === 'invoice' ? 'Share Invoice' : 'Share Receipt';
+    documentType === 'proforma'
+      ? 'Share Proforma Invoice'
+      : documentType === 'invoice'
+        ? 'Share Invoice'
+        : 'Share Receipt';
   let pdfUri: string | null = null;
   try {
     // Dynamic import: avoids crash if native modules aren't linked yet
@@ -142,9 +147,11 @@ export function ReceiptPreviewModal({
             </Pressable>
           </View>
           <Text style={[styles.headerTitle, { color: colors.text }]}>
-            {resolvedDocumentType === 'invoice'
-              ? 'Invoice Preview'
-              : 'Receipt Preview'}
+            {resolvedDocumentType === 'proforma'
+              ? 'Proforma Invoice Preview'
+              : resolvedDocumentType === 'invoice'
+                ? 'Invoice Preview'
+                : 'Receipt Preview'}
           </Text>
           <View style={styles.headerRight} />
         </View>

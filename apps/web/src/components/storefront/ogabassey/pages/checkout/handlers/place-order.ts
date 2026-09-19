@@ -476,6 +476,13 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
     const { order, wallet: walletResult, amountDueToGateway } = orderData;
     createdOrderId = order.id;
     createdOrderNumber = order.order_number || order.id.slice(0, 8).toUpperCase();
+    // Attribute creation to the server-finalized method (see checkout-page):
+    // wallet/savings/voucher full coverage changes the authoritative method.
+    const finalizedPaymentMethod =
+      typeof order.payment_method === 'string' &&
+      order.payment_method.trim() !== ''
+        ? order.payment_method
+        : paymentMethod;
     captureCheckoutFunnelEventOnce(
       CHECKOUT_FUNNEL_EVENTS.orderCreated,
       createdOrderId,
@@ -485,8 +492,8 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
         itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
         orderId: createdOrderId,
         orderNumber: createdOrderNumber,
-        paymentIntent: getCheckoutPaymentIntent(paymentMethod),
-        paymentMethod,
+        paymentIntent: getCheckoutPaymentIntent(finalizedPaymentMethod),
+        paymentMethod: finalizedPaymentMethod,
         paymentStatus: order.payment_status || 'unpaid',
         shipping: deliveryCost,
         source: 'web_checkout',

@@ -65,6 +65,20 @@ export function useBNPLCheckoutController({
   const [prevBnplUrl, setPrevBnplUrl] = useState(bnplUrl);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const hasReturnedToAppRef = useRef(false);
+  // Attempt-scoped failure marker: duplicate provider error redirects and
+  // late load-error callbacks for the same attempt must emit a single
+  // payment_failed. A ref (not state) so the guard holds synchronously
+  // across rerenders; reset only by Retry.
+  const failureRecordedRef = useRef(false);
+  const recordCheckoutFailure = (
+    reason: 'bnpl_provider_error' | 'bnpl_load_error'
+  ) => {
+    if (failureRecordedRef.current) {
+      return;
+    }
+    failureRecordedRef.current = true;
+    trackCheckoutPaymentFailed(reason, orderId, gateway);
+  };
   const statusRef = useRef<BNPLCheckoutStatus>('loading');
   if (bnplUrl !== prevBnplUrl) {
     setPrevBnplUrl(bnplUrl);
@@ -117,6 +131,7 @@ export function useBNPLCheckoutController({
   const handleNavigationUrl = async (url: string) => {
     const effect = resolveBNPLNavigationUrlEffect(url, {
       apiBaseUrl,
+      gateway,
       merchantDomain,
       merchantSlug,
     });
@@ -156,7 +171,7 @@ export function useBNPLCheckoutController({
     }
     // Terminal provider error redirect: capture the failure so declined or
     // broken BNPL attempts are distinguishable from abandonment.
-    trackCheckoutPaymentFailed('bnpl_provider_error', orderId, gateway);
+    recordCheckoutFailure('bnpl_provider_error');
     setCheckoutStatus(effect.status);
     setErrorMessage(effect.errorMessage);
   };
@@ -188,6 +203,7 @@ export function useBNPLCheckoutController({
 
   const handleRetry = () => {
     clearPendingLoadTimeout();
+    failureRecordedRef.current = false;
     setCheckoutStatus('loading');
     setErrorMessage(null);
     setCurrentUrl(bnplUrl);
@@ -267,7 +283,7 @@ export function useBNPLCheckoutController({
   ) => {
     // Terminal WebView load failure: capture it like a provider error
     // redirect so broken BNPL attempts are not counted as abandonment.
-    trackCheckoutPaymentFailed('bnpl_load_error', orderId, gateway);
+    recordCheckoutFailure('bnpl_load_error');
     handleBNPLWebViewError(
       error,
       clearPendingLoadTimeout,

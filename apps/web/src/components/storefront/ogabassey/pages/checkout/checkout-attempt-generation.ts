@@ -10,36 +10,54 @@
 
 const CHECKOUT_ATTEMPT_GENERATION_KEY = 'baci:checkout-attempt-generation';
 
-function readStoredGeneration(): number {
-  if (typeof window === 'undefined') return 0;
+/**
+ * In-memory fallback engaged only when sessionStorage persistence throws
+ * (for example Safari private browsing). Without it a failed write would be
+ * silently dropped and the next rotation would re-read the stale stored
+ * value, repeating an attempt generation.
+ */
+let memoryGeneration: number | null = null;
+
+function readStoredGeneration(): number | null {
+  if (typeof window === 'undefined') return null;
   try {
     const raw = window.sessionStorage.getItem(
       CHECKOUT_ATTEMPT_GENERATION_KEY
     );
-    const parsed = raw === null ? 0 : Number.parseInt(raw, 10);
+    if (raw === null) return 0;
+    const parsed = Number.parseInt(raw, 10);
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
   } catch {
-    return 0;
+    return null;
   }
 }
 
-function writeStoredGeneration(generation: number): void {
+function writeStoredGeneration(generation: number): boolean {
   try {
     window.sessionStorage.setItem(
       CHECKOUT_ATTEMPT_GENERATION_KEY,
       String(generation)
     );
+    return true;
   } catch {
-    // Storage unavailable: callers fall back to the in-memory generation.
+    return false;
   }
 }
 
 export function readCheckoutAttemptGeneration(): number {
-  return readStoredGeneration();
+  if (memoryGeneration !== null) return memoryGeneration;
+  return readStoredGeneration() ?? 0;
 }
 
 export function rotateCheckoutAttemptGeneration(): number {
-  const next = readStoredGeneration() + 1;
-  writeStoredGeneration(next);
+  const next = readCheckoutAttemptGeneration() + 1;
+  // Server-side rotation has no per-request store; return without engaging
+  // the module-level fallback so concurrent requests cannot share state.
+  if (typeof window === 'undefined') return next;
+  if (writeStoredGeneration(next)) {
+    memoryGeneration = null;
+  } else {
+    memoryGeneration = next;
+  }
   return next;
 }

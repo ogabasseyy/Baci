@@ -863,7 +863,25 @@ export const CheckoutPage: React.FC = () => {
   const walletFundedTransfer = useWalletFundedBankTransfer({
     merchantId: merchant?.id,
     merchantSlug: merchant?.slug ?? undefined,
-    onOrderPaid: ({ checkoutFingerprint, orderId, trackingToken }) => {
+    onOrderPaid: ({ checkoutFingerprint, currency, orderId, orderNumber, total, trackingToken }) => {
+      // The intent reached server-confirmed `completed`: record the paid
+      // conversion before redirecting, or the funnel stalls at the start
+      // stage for every auto-debited transfer.
+      captureCheckoutFunnelEventOnce(
+        CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+        orderId,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency,
+          orderId,
+          ...(orderNumber ? { orderNumber } : {}),
+          paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+          paymentMethod,
+          paymentStatus: 'paid',
+          source: 'web_checkout',
+          total,
+        })
+      );
       clearPendingCheckoutOrder();
       void clearCheckoutIdempotencyKey(checkoutFingerprint);
       clearCheckoutSession();
@@ -897,6 +915,22 @@ export const CheckoutPage: React.FC = () => {
     onReady: (payment) => {
       setShowCryptoSelector(false);
       setCryptoPaymentData(payment);
+      // The normal Juicyway flow returns after opening the selector, so the
+      // generic initialization branch below is unreachable for it: the start
+      // fires here once address initialization succeeds.
+      captureCheckoutFunnelEventOnce(
+        CHECKOUT_FUNNEL_EVENTS.paymentStarted,
+        payment.orderId,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency: pendingCryptoOrder?.orderCurrency ?? 'NGN',
+          orderId: payment.orderId,
+          paymentIntent: getCheckoutPaymentIntent('juicyway'),
+          paymentMethod: 'juicyway',
+          source: 'web_checkout',
+          total: pendingCryptoOrder?.amount,
+        })
+      );
     },
     onError: (error) => toast({
       title: 'Crypto Payment Failed',
@@ -921,6 +955,43 @@ export const CheckoutPage: React.FC = () => {
     intervalId: null,
     attempts: 0,
   });
+
+  // Records the paid conversion for a server-confirmed Juicyway payment,
+  // then runs the shared success cleanup and redirect.
+  const completeCryptoPayment = () => {
+    if (!cryptoPaymentData) {
+      return;
+    }
+    captureCheckoutFunnelEventOnce(
+      CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+      cryptoPaymentData.orderId,
+      buildCheckoutFunnelProperties({
+        channel: 'web',
+        currency: pendingCryptoOrder?.orderCurrency ?? 'NGN',
+        orderId: cryptoPaymentData.orderId,
+        paymentIntent: getCheckoutPaymentIntent('juicyway'),
+        paymentMethod: 'juicyway',
+        paymentStatus: 'paid',
+        reference: cryptoPaymentData.reference,
+        source: 'web_checkout',
+        total: pendingCryptoOrder?.amount,
+      })
+    );
+    setIsVerifyingCrypto(false);
+    setCryptoVerificationStatus('confirmed');
+    clearPendingCheckoutOrder();
+    clearCheckoutSession();
+    clearCart();
+    const successQuery = new URLSearchParams({
+      type: 'crypto',
+      orderId: cryptoPaymentData.orderId,
+      reference: cryptoPaymentData.reference,
+    });
+    if (cryptoPaymentData.trackingToken) {
+      successQuery.set('trackingToken', cryptoPaymentData.trackingToken);
+    }
+    router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
+  };
 
   const verifyCryptoPayment = async () => {
     // Use paymentId for verification (from the capture response)
@@ -982,20 +1053,7 @@ export const CheckoutPage: React.FC = () => {
     const initialStatus = await checkPaymentStatus();
 
     if (initialStatus === 'confirmed') {
-      setIsVerifyingCrypto(false);
-      setCryptoVerificationStatus('confirmed');
-      clearPendingCheckoutOrder();
-      clearCheckoutSession();
-      clearCart();
-      const successQuery = new URLSearchParams({
-        type: 'crypto',
-        orderId: cryptoPaymentData.orderId,
-        reference: cryptoPaymentData.reference,
-      });
-      if (cryptoPaymentData.trackingToken) {
-        successQuery.set('trackingToken', cryptoPaymentData.trackingToken);
-      }
-      router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
+      completeCryptoPayment();
       return;
     }
 
@@ -1029,20 +1087,7 @@ export const CheckoutPage: React.FC = () => {
           clearInterval(pollingRef.current.intervalId);
           pollingRef.current.intervalId = null;
         }
-        setIsVerifyingCrypto(false);
-        setCryptoVerificationStatus('confirmed');
-        clearPendingCheckoutOrder();
-        clearCheckoutSession();
-        clearCart();
-        const successQuery = new URLSearchParams({
-          type: 'crypto',
-          orderId: cryptoPaymentData.orderId,
-          reference: cryptoPaymentData.reference,
-        });
-        if (cryptoPaymentData.trackingToken) {
-          successQuery.set('trackingToken', cryptoPaymentData.trackingToken);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
+        completeCryptoPayment();
       } else if (status === 'failed') {
         if (pollingRef.current.intervalId) {
           clearInterval(pollingRef.current.intervalId);
@@ -2356,6 +2401,15 @@ export const CheckoutPage: React.FC = () => {
         typeof order.currency === 'string' && order.currency.trim()
           ? order.currency.trim().toUpperCase()
           : currencyCode;
+      // The server is authoritative when wallet, savings, or a quiz voucher
+      // fully covers an order placed under another selection: attribute
+      // creation to the finalized method so creation and completion share
+      // one funnel instead of straddling proforma_invoice and pay_now.
+      const finalizedPaymentMethod =
+        typeof order.payment_method === 'string' &&
+        order.payment_method.trim() !== ''
+          ? order.payment_method
+          : paymentMethod;
       captureCheckoutFunnelEventOnce(
         CHECKOUT_FUNNEL_EVENTS.orderCreated,
         order.id,
@@ -2365,8 +2419,8 @@ export const CheckoutPage: React.FC = () => {
           itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
           orderId: order.id,
           orderNumber: createdOrderNumber,
-          paymentIntent: getCheckoutPaymentIntent(paymentMethod),
-          paymentMethod,
+          paymentIntent: getCheckoutPaymentIntent(finalizedPaymentMethod),
+          paymentMethod: finalizedPaymentMethod,
           paymentStatus: order.payment_status || 'unpaid',
           shipping: deliveryCost,
           source: 'web_checkout',
@@ -2526,9 +2580,11 @@ export const CheckoutPage: React.FC = () => {
           })
             ? await walletFundedTransfer.start({
                 checkoutFingerprint,
+                currency: orderChargeCurrency,
                 merchantId: merchant.id,
                 merchantSlug: merchant.slug ?? undefined,
                 orderId: order.id,
+                orderNumber: createdOrderNumber,
                 trackingToken: order.tracking_token,
               })
             : ('fallback' as const);
@@ -2648,7 +2704,8 @@ export const CheckoutPage: React.FC = () => {
       } else if (paymentMethod === 'credit_direct') {
         // Credit Direct BNPL - Client-side popup checkout
         // Note: BNPL typically uses full total (wallet credits may not apply)
-        capturePaymentStarted();
+        // The opener swallows init failures into onError, so the start fires
+        // from onPopup: only a real popup opening proves the flow started.
         await openCreditDirectCheckout({
           merchantSlug: merchant.slug || '',
           orderId: order.id,
@@ -2714,6 +2771,7 @@ export const CheckoutPage: React.FC = () => {
             isOrderInFlightRef.current = false;
           },
           onPopup: async ({ checkoutTransactionId, sessionId }) => {
+            capturePaymentStarted();
             writeCreditDirectPopupMarker(
               order.id,
               checkoutTransactionId || sessionId
@@ -2752,8 +2810,9 @@ export const CheckoutPage: React.FC = () => {
           return;
         }
 
-        // Open CredPal popup
-        capturePaymentStarted();
+        // Open CredPal popup. The opener throws on script/SDK init failure,
+        // so the start fires from the widget's load confirmation instead of
+        // before initialization: a failed load records only the failure.
         await openCredPalCheckout({
           key: credpalKey,
           amount: paymentAmount,
@@ -2761,6 +2820,9 @@ export const CheckoutPage: React.FC = () => {
           customerEmail,
           customerName: `${firstName} ${lastName}`.trim(),
           customerPhone,
+          onLoad: () => {
+            capturePaymentStarted();
+          },
           onSuccess: async (data) => {
             console.log('CredPal success:', data);
             // Accepted-but-pending applications are not paid conversions, but

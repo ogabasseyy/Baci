@@ -158,12 +158,21 @@ export function createPaymentGatewayCompletionHandlers({
         reference,
       });
       if (verification.paid) {
+        // The tracked order already carries the checkout identity,
+        // breakdown, and line items: forward them so the durable claim is
+        // consumed with full attribution (later polling cannot enrich it).
         // First completion wins the durable claim; replays emit nothing.
         await trackCheckoutPaymentCompletedOnce({
+          customerEmail: verification.customerEmail,
+          customerPhone: verification.customerPhone,
+          items: verification.items,
           orderId,
           orderNumber: orderNumber || orderId,
           paymentMethod: gateway || 'payment_gateway',
           reference,
+          shipping: verification.shipping,
+          subtotal: verification.subtotal,
+          tax: verification.tax,
           value: verification.total ?? purchaseTotal,
         });
       }

@@ -1,5 +1,12 @@
 import { describe, expect, it, jest } from '@jest/globals';
+import { getSession } from '@/lib/supabase';
 import { verifyOrderPaymentForCompletion } from './verify-order-payment';
+
+jest.mock('@/lib/supabase', () => ({
+  getSession: jest.fn(async () => null),
+}));
+
+const mockGetSession = jest.mocked(getSession);
 
 function mockFetch(handler: (url: string) => Response) {
   global.fetch = jest.fn(async (url: string) =>
@@ -134,6 +141,33 @@ describe('verifyOrderPaymentForCompletion', () => {
         reference: 'ref-1',
       })
     ).resolves.toEqual({ paid: false });
+  });
+
+  it('sends the native Bearer [REDACTED] when a session exists', async () => {
+    mockGetSession.mockResolvedValueOnce({
+      access_token: 'native-token-1',
+    } as never);
+    const fetchMock = mockFetch(
+      () => new Response(JSON.stringify(completedVerification), { status: 200 })
+    );
+
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: true, total: 5000 });
+
+    const verifyCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes('/api/payments/verify')
+    );
+    expect(verifyCall?.[1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer native-token-1',
+        }),
+      })
+    );
   });
 
   it('reports unpaid when nothing verifiable is available', async () => {

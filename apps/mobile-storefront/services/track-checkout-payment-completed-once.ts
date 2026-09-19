@@ -1,7 +1,10 @@
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
-import { type CartItem, useCartStore } from '@/stores/cart-store';
+import { useCartStore } from '@/stores/cart-store';
 import { serializeAfterOrderCreated } from './serialize-after-order-created';
-import { trackCheckoutRoutePurchaseCompleted } from './tiktok-checkout-route-tracking';
+import {
+  type CheckoutTrackingItem,
+  trackCheckoutRoutePurchaseCompleted,
+} from './tiktok-checkout-route-tracking';
 import { trackCheckoutPaymentCompleted } from './track-checkout-payment-completed';
 
 export interface CheckoutCompletionAttribution {
@@ -12,8 +15,9 @@ export interface CheckoutCompletionAttribution {
   customerPhone?: string;
   userId?: string;
   // Snapshot callers whose cart may clear before the deferred completion
-  // runs pass items synchronously so the purchase keeps its lines.
-  items?: CartItem[];
+  // runs pass items synchronously so the purchase keeps its lines. Cart
+  // items satisfy this shape; tracked-order lines are mapped to it.
+  items?: CheckoutTrackingItem[];
   // Canonical order breakdown. Callers that know only the grand total omit
   // these and the purchase keeps total with zero shipping/tax; callers with
   // the snapshot/track-order breakdown must pass it so analytics dimensions

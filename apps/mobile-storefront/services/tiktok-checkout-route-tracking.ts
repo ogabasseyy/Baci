@@ -8,7 +8,7 @@ import {
   trackOrderCompleted,
 } from '@/services/analytics';
 
-interface CheckoutTrackingItem {
+export interface CheckoutTrackingItem {
   name?: string;
   negotiatedPrice?: number | null;
   price?: number;

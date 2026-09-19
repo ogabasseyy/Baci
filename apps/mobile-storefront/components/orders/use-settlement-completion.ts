@@ -4,6 +4,7 @@ import {
   TRACK_ORDER_API_BASE_URL,
   TRACK_ORDER_MERCHANT_SLUG,
 } from '@/components/track-order/track-order.config';
+import { toTrackedCompletionAttribution } from '@/lib/tracked-order-completion';
 import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 
 // Asynchronous settlement methods: the shopper can reach success before the
@@ -17,6 +18,12 @@ const SETTLEMENT_POLL_METHODS = new Set([
   'bank_transfer',
   'paystack',
   'korapay',
+  // Accepted-but-pending CredPal applications skip inline completion and
+  // settle asynchronously after approval.
+  'credpal',
+  // Klump returns carry no settlement proof, so every Klump checkout
+  // defers completion to the tracked order.
+  'klump',
 ]);
 
 const SETTLEMENT_LOOKUP_TIMEOUT_MS = 15_000;
@@ -54,10 +61,19 @@ function toTrackedCustomer(value: unknown): TrackOrderData['customer'] | null {
   return customer as TrackOrderData['customer'];
 }
 
+function toTrackedItems(value: unknown): TrackOrderData['items'] {
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+  const items = (value as { items?: unknown }).items;
+  return Array.isArray(items) ? (items as TrackOrderData['items']) : [];
+}
+
 async function fetchSettlementState(
   trackingToken: string,
   signal: AbortSignal
 ): Promise<{
+  body: unknown;
   order: TrackOrderData['order'] | null;
   customer: TrackOrderData['customer'] | null;
 }> {
@@ -66,15 +82,14 @@ async function fetchSettlementState(
     { signal }
   );
   if (!response.ok) {
-    return { order: null, customer: null };
+    return { body: null, order: null, customer: null };
   }
   const body: unknown = await response.json();
-  return { order: toTrackedOrder(body), customer: toTrackedCustomer(body) };
-}
-
-function finiteOrUndefined(value: unknown): number | undefined {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : undefined;
+  return {
+    body,
+    order: toTrackedOrder(body),
+    customer: toTrackedCustomer(body),
+  };
 }
 
 // Settlement-confirmed completion for asynchronous mobile payments. Only a
@@ -115,7 +130,7 @@ export function useSettlementCompletion({
         SETTLEMENT_LOOKUP_TIMEOUT_MS
       );
       try {
-        const { order, customer } = await fetchSettlementState(
+        const { body, order, customer } = await fetchSettlementState(
           trackingToken,
           controller.signal
         );
@@ -123,18 +138,18 @@ export function useSettlementCompletion({
           return;
         }
         if (order && order.id === orderId && order.payment_status === 'paid') {
-          const total = finiteOrUndefined(order.total);
-          const subtotal = finiteOrUndefined(order.subtotal);
-          const shipping = finiteOrUndefined(order.shipping_cost);
+          const { total: verifiedTotal, ...attribution } =
+            toTrackedCompletionAttribution(
+              order,
+              customer,
+              toTrackedItems(body)
+            );
           await trackCheckoutPaymentCompletedOnce({
-            customerEmail: customer?.email || undefined,
-            customerPhone: customer?.phone || undefined,
+            ...attribution,
             orderId,
             orderNumber: orderNumber || order.order_number || orderId,
             paymentMethod,
-            ...(shipping !== undefined ? { shipping } : {}),
-            ...(subtotal !== undefined ? { subtotal } : {}),
-            ...(total !== undefined ? { value: total } : {}),
+            value: verifiedTotal,
           });
           return;
         }

@@ -133,7 +133,7 @@ async function fetchNavigationCategoriesUncached(
  * Uses unstable_cache for cross-request caching with 5-minute TTL
  * Should be called from server components with ISR
  */
-export function getCachedNavigationCategories(
+export async function getCachedNavigationCategories(
   merchantId: string
 ): Promise<CategoryNavItem[]> {
   // PR4a: local `'use cache'`, not the framework remote handler. Top-level

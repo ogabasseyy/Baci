@@ -1,5 +1,6 @@
 import { act, render, renderHook, waitFor } from '@testing-library/react';
 import type Fuse from 'fuse.js';
+import { createElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
 import { usePreviewSearch } from './use-preview-search';
@@ -142,14 +143,16 @@ describe('usePreviewSearch', () => {
       return null;
     }
     const catalogB = [buildProduct({ id: 'p3', name: 'Sourdough Crackers' })];
-    const { rerender } = render(<Probe catalog={products} />);
+    // createElement (not JSX): this suite stays a .ts module so the
+    // extension-preserving colocated-test contract keeps matching it.
+    const { rerender } = render(createElement(Probe, { catalog: products }));
 
     await waitFor(() => {
       expect(seen[seen.length - 1]).not.toBeNull();
     });
     seen.length = 0;
 
-    rerender(<Probe catalog={catalogB} />);
+    rerender(createElement(Probe, { catalog: catalogB }));
 
     await waitFor(() => {
       expect(seen[seen.length - 1]).not.toBeNull();

@@ -1,9 +1,7 @@
 import { router } from 'expo-router';
 import type { MutableRefObject } from 'react';
 import { PAYMENT_CLIPBOARD_BRIDGE } from '@/constants/payment-clipboard-bridge';
-import { trackCheckoutPaymentCompleted } from '@/services/analytics';
-import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
-import { useCartStore } from '@/stores/cart-store';
+import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 import {
   isPlainRecord,
   PAYMENT_KINDS,
@@ -208,22 +206,13 @@ export function createPaymentGatewayMessageHandler({
       // Prefer the canonical order total: `amount` is only the residual due
       // at the gateway after wallet/savings credits.
       const cryptoPurchaseTotal = orderTotal ?? amount ?? 0;
-      trackCheckoutPaymentCompleted({
-        orderId: cryptoOrderId,
-        orderNumber: getTrimmedString(orderNumber),
-        paymentMethod: getTrimmedString(gateway) || 'crypto',
-        reference: cryptoReference,
-        value: cryptoPurchaseTotal,
-      });
-      trackCheckoutRoutePurchaseCompleted({
-        items: useCartStore.getState().items,
+      // First completion wins the durable claim; replays emit nothing.
+      await trackCheckoutPaymentCompletedOnce({
         orderId: cryptoOrderId,
         orderNumber: getTrimmedString(orderNumber) || cryptoOrderId,
         paymentMethod: getTrimmedString(gateway) || 'crypto',
-        shipping: 0,
-        subtotal: cryptoPurchaseTotal,
-        tax: 0,
-        total: cryptoPurchaseTotal,
+        reference: cryptoReference,
+        value: cryptoPurchaseTotal,
       });
       await clearCart();
       scheduleDelayedNavigation(() => {

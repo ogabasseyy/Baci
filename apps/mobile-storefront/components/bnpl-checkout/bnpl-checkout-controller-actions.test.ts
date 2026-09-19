@@ -16,7 +16,32 @@ describe('resolveBNPLNavigationUrlEffect', () => {
         'https://shop.example.com/order-success?reference=ref_123'
       )
     ).toEqual({
+      isPending: false,
       reference: 'ref_123',
+      status: 'success',
+    });
+  });
+
+  it('marks accepted-but-pending CredPal results as non-paid success', () => {
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://shop.example.com/order-success?type=credpal&credpalStatus=pending'
+      )
+    ).toEqual({
+      isPending: true,
+      reference: null,
+      status: 'success',
+    });
+  });
+
+  it('treats approved CredPal results as paid success', () => {
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://shop.example.com/order-success?type=credpal&credpalStatus=success'
+      )
+    ).toEqual({
+      isPending: false,
+      reference: null,
       status: 'success',
     });
   });

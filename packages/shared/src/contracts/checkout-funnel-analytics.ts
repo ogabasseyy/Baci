@@ -103,6 +103,10 @@ export function getCheckoutPaymentIntent(
     case 'juicyway':
     case 'bank_transfer':
     case 'paypal':
+    case 'wallet':
+    case 'store_credit':
+    case 'savings':
+    case 'quiz_voucher':
       return 'pay_now';
     default:
       return undefined;

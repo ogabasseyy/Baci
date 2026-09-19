@@ -6,12 +6,14 @@ import {
 } from './create-payment-gateway-message-handler.test-utils';
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
 
-const mockTrackCheckoutPaymentCompleted = jest.fn();
+const mockTrackCheckoutPaymentCompletedOnce = jest.fn(
+  async (_input: unknown) => true
+);
 const mockTrackOrderCompleted = jest.fn();
 
 jest.mock('@/services/analytics', () => ({
-  trackCheckoutPaymentCompleted: (...args: unknown[]) =>
-    mockTrackCheckoutPaymentCompleted(...args),
+  trackCheckoutPaymentCompletedOnce: (input: unknown) =>
+    mockTrackCheckoutPaymentCompletedOnce(input),
   trackOrderCompleted: (...args: unknown[]) => mockTrackOrderCompleted(...args),
 }));
 
@@ -24,7 +26,7 @@ jest.mock('expo-router', () => ({
 describe('createPaymentGatewayMessageHandler crypto success', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockTrackCheckoutPaymentCompleted.mockReset();
+    mockTrackCheckoutPaymentCompletedOnce.mockReset();
   });
   it('routes crypto success with sanitized fallback params', async () => {
     const {
@@ -94,8 +96,8 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
     expect(markPaymentCompletionStarted).toHaveBeenCalledTimes(2);
     expect(setSuccessStatus).toHaveBeenCalledTimes(1);
     expect(clearCart).toHaveBeenCalledTimes(1);
-    expect(mockTrackCheckoutPaymentCompleted).toHaveBeenCalledTimes(1);
-    expect(mockTrackCheckoutPaymentCompleted).toHaveBeenCalledWith({
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith({
       orderId: 'order-123',
       orderNumber: 'ORD-123',
       paymentMethod: 'crypto',
@@ -109,7 +111,7 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
 
     await sendMessage(handler, { type: 'crypto_success' });
 
-    expect(mockTrackCheckoutPaymentCompleted).toHaveBeenCalledWith(
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
       expect.objectContaining({
         orderId: 'order-123',
         reference: 'ref-123',

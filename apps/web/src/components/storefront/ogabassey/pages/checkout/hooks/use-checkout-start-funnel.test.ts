@@ -36,6 +36,29 @@ describe('useCheckoutStartFunnel', () => {
     );
   });
 
+  it('does not re-emit when the generation rotates after order creation', () => {
+    const { rerender } = renderHook(
+      ({ attemptId, hydrated }: { attemptId: string; hydrated: boolean }) =>
+        useCheckoutStartFunnel({
+          attemptId,
+          displayItems: items,
+          effectiveCheckoutCartTotal: 21500,
+          effectiveItemSubtotal: 20000,
+          isHydrated: hydrated,
+          merchantId: 'merchant-1',
+        }),
+      { initialProps: { attemptId: 'gen-1', hydrated: true } }
+    );
+
+    expect(captureCheckoutFunnelEventOnce).toHaveBeenCalledTimes(1);
+
+    // Post-order rerender: generation already rotated, but the completed
+    // attempt must not emit a second start for the same cart.
+    rerender({ attemptId: 'gen-2', hydrated: false });
+
+    expect(captureCheckoutFunnelEventOnce).toHaveBeenCalledTimes(1);
+  });
+
   it('scopes the dedupe key to the checkout attempt', () => {
     renderHook(() =>
       useCheckoutStartFunnel({

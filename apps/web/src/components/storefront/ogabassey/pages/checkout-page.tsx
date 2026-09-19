@@ -821,6 +821,11 @@ export const CheckoutPage: React.FC = () => {
     ? checkoutCartTotal
     : resumedOrder?.subtotal || checkoutCartTotal;
 
+  // Set once an order is created for this attempt: post-creation rerenders
+  // (pending-order persist, widget state) must not re-emit checkout_started
+  // for the same attempt just because the generation already rotated.
+  // Declared before the funnel hook below, which reads it.
+  const [checkoutOrderCreated, setCheckoutOrderCreated] = useState(false);
   // Session-persisted checkout attempt: rotates after every created order so
   // a repeat purchase of the same cart emits a fresh start, while a reload
   // mid-attempt keeps the same generation (unlike React useId, which is
@@ -831,7 +836,7 @@ export const CheckoutPage: React.FC = () => {
     displayItems,
     effectiveCheckoutCartTotal,
     effectiveItemSubtotal,
-    isHydrated,
+    isHydrated: isHydrated && !checkoutOrderCreated,
     merchantId: merchant?.id,
   });
 
@@ -2312,8 +2317,11 @@ export const CheckoutPage: React.FC = () => {
       createdOrderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
       // A created order completes this checkout attempt: rotate the session
-      // generation so a repeat purchase emits a fresh checkout_started.
+      // generation so a repeat purchase emits a fresh checkout_started, and
+      // suppress further starts for this attempt (post-creation rerenders
+      // must not re-emit just because the generation already rotated).
       rotateCheckoutAttemptGeneration();
+      setCheckoutOrderCreated(true);
       orderChargeCurrency =
         typeof order.currency === 'string' && order.currency.trim()
           ? order.currency.trim().toUpperCase()
@@ -2725,25 +2733,27 @@ export const CheckoutPage: React.FC = () => {
           customerPhone,
           onSuccess: async (data) => {
             console.log('CredPal success:', data);
-            if (data.status !== 'success') {
-              return;
+            // Accepted-but-pending applications are not paid conversions, but
+            // the shopper must still reach the success experience: cleanup and
+            // navigation run for both outcomes, capture only for success.
+            if (data.status === 'success') {
+              captureCheckoutFunnelEventOnce(
+                CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+                order.id,
+                buildCheckoutFunnelProperties({
+                  channel: 'web',
+                  currency: orderChargeCurrency,
+                  orderId: order.id,
+                  orderNumber: createdOrderNumber,
+                  paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+                  paymentMethod,
+                  paymentStatus: 'paid',
+                  reference: data.order_no,
+                  source: 'web_checkout',
+                  total: paymentAmount,
+                })
+              );
             }
-            captureCheckoutFunnelEventOnce(
-              CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
-              order.id,
-              buildCheckoutFunnelProperties({
-                channel: 'web',
-                currency: orderChargeCurrency,
-                orderId: order.id,
-                orderNumber: createdOrderNumber,
-                paymentIntent: getCheckoutPaymentIntent(paymentMethod),
-                paymentMethod,
-                paymentStatus: 'paid',
-                reference: data.order_no,
-                source: 'web_checkout',
-                total: paymentAmount,
-              })
-            );
             clearPendingCheckoutOrder();
             await clearCheckoutIdempotencyKey(checkoutFingerprint);
             clearCheckoutSession();
@@ -2753,6 +2763,10 @@ export const CheckoutPage: React.FC = () => {
               orderId: order.id,
               credpalRef: data.order_no,
             });
+            if (data.status) {
+              // Lets native hosts skip paid attribution for pending results.
+              successQuery.set('credpalStatus', data.status);
+            }
             if (order.tracking_token) {
               successQuery.set('trackingToken', order.tracking_token);
             }

@@ -15,8 +15,7 @@ import {
   type WalletFundedBankTransferParams,
   WalletFundedBankTransferParamsSchema,
 } from '@/schemas/bank-transfer-params';
-import { trackCheckoutPaymentCompleted } from '@/services/analytics';
-import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
+import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 
 const copyToClipboard = async (text: string) => {
@@ -198,22 +197,13 @@ export default function BankTransferScreen() {
           : Number.isFinite(shortfall)
             ? shortfall
             : 0;
-        trackCheckoutPaymentCompleted({
+        // First completion wins the durable claim; replays emit nothing.
+        void trackCheckoutPaymentCompletedOnce({
           orderId,
           orderNumber: orderNumber || orderId,
           paymentMethod: 'bank_transfer',
           reference: intent.id,
           value: fundedTotal,
-        });
-        trackCheckoutRoutePurchaseCompleted({
-          items: useCartStore.getState().items,
-          orderId,
-          orderNumber: orderNumber || orderId,
-          paymentMethod: 'bank_transfer',
-          shipping: 0,
-          subtotal: fundedTotal,
-          tax: 0,
-          total: fundedTotal,
         });
       }
       void routeToOrderSuccess({ successReference: intent.id });

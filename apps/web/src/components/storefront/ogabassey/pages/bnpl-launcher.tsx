@@ -595,6 +595,10 @@ async function launchBnplPayment({
                         reference: data.order_no,
                         type: 'credpal',
                     });
+                    if (data.status) {
+                        // Lets native hosts skip paid attribution for pending results.
+                        successQuery.set('credpalStatus', data.status);
+                    }
                     if (order.tracking_token) {
                         successQuery.set('trackingToken', order.tracking_token);
                     }

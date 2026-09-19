@@ -4,6 +4,7 @@
 export { trackCheckoutInvoiceGenerated } from './track-checkout-invoice-generated';
 export { trackCheckoutOrderCreated } from './track-checkout-order-created';
 export { trackCheckoutPaymentCompleted } from './track-checkout-payment-completed';
+export { trackCheckoutPaymentCompletedOnce } from './track-checkout-payment-completed-once';
 export { trackCheckoutPaymentFailed } from './track-checkout-payment-failed';
 export { trackCheckoutPaymentMethodSelected } from './track-checkout-payment-method-selected';
 export { trackCheckoutPaymentStarted } from './track-checkout-payment-started';

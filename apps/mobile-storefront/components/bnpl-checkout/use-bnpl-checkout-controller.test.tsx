@@ -9,8 +9,17 @@ import {
 import { act, renderHook } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
+import {
+  trackCheckoutPaymentCompletedOnce,
+  trackCheckoutPaymentFailed,
+} from '@/services/analytics';
 import { BNPL_UNTRUSTED_POPUP_MESSAGE } from './bnpl-checkout.helpers';
 import { useBNPLCheckoutController } from './use-bnpl-checkout-controller';
+
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentCompletedOnce: jest.fn(async () => true),
+  trackCheckoutPaymentFailed: jest.fn(),
+}));
 
 const mockClearCart = jest.fn();
 let mockRouteParams: Record<string, string> = {
@@ -401,5 +410,124 @@ describe('useBNPLCheckoutController', () => {
 
     expect(result.current.status).toBe('error');
     expect(result.current.errorMessage).toBe(BNPL_UNTRUSTED_POPUP_MESSAGE);
+  });
+
+  it('skips paid attribution for pending CredPal redirects but still navigates', async () => {
+    jest.useFakeTimers();
+    mockRouteParams = {
+      gateway: 'credpal',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+      trackingToken: 'track-token-123',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'navigation',
+            url: 'https://usebaci.com/ogabassey/order-success?type=credpal&orderId=order-123&credpalStatus=pending',
+          }),
+        },
+      });
+    });
+
+    expect(result.current.status).toBe('success');
+    expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+    expect(mockClearCart).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(router.replace).toHaveBeenCalledWith({
+      pathname: '/order-success',
+      params: {
+        orderId: 'order-123',
+        paymentMethod: 'credpal',
+        trackingToken: 'track-token-123',
+      },
+    });
+  });
+
+  it('records paid attribution for approved CredPal redirects', async () => {
+    jest.useFakeTimers();
+    mockRouteParams = {
+      gateway: 'credpal',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+      trackingToken: 'track-token-123',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'navigation',
+            url: 'https://usebaci.com/ogabassey/order-success?type=credpal&orderId=order-123&credpalStatus=success',
+          }),
+        },
+      });
+    });
+
+    expect(result.current.status).toBe('success');
+    expect(trackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(1);
+    expect(trackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-123' })
+    );
+  });
+
+  it('emits payment_failed for terminal provider error redirects', async () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'navigation',
+            url: 'https://usebaci.com/ogabassey/checkout?error=declined',
+          }),
+        },
+      });
+    });
+
+    expect(result.current.status).toBe('error');
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
+      'bnpl_provider_error',
+      'order-123',
+      'credit_direct'
+    );
+    expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+  });
+
+  it('emits payment_failed for terminal WebView load failures', () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+    };
+    const { result } = renderControllerHook();
+
+    act(() => {
+      result.current.handleWebViewError({
+        description: 'net::ERR_FAILED',
+        url: 'https://pay.example/x',
+      });
+    });
+
+    expect(result.current.status).toBe('error');
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
+      'bnpl_load_error',
+      'order-123',
+      'credit_direct'
+    );
   });
 });

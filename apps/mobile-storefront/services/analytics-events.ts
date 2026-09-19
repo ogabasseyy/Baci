@@ -19,6 +19,7 @@ export {
   trackCheckoutInvoiceGenerated,
   trackCheckoutOrderCreated,
   trackCheckoutPaymentCompleted,
+  trackCheckoutPaymentCompletedOnce,
   trackCheckoutPaymentFailed,
   trackCheckoutPaymentMethodSelected,
   trackCheckoutPaymentStarted,

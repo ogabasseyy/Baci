@@ -13,6 +13,15 @@ describe('checkout funnel analytics contract', () => {
     expect(getCheckoutPaymentIntent('unknown_method')).toBeUndefined();
   });
 
+  it.each([
+    ['wallet'],
+    ['store_credit'],
+    ['savings'],
+    ['quiz_voucher'],
+  ])('maps the fully credited settlement method %s to pay_now', (method) => {
+    expect(getCheckoutPaymentIntent(method)).toBe('pay_now');
+  });
+
   it('keeps the event names and shared properties stable across clients', () => {
     expect(CHECKOUT_FUNNEL_EVENTS).toMatchObject({
       checkoutStarted: 'checkout_started',

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WebView, WebViewNavigation } from 'react-native-webview';
-import { trackCheckoutPaymentCompleted } from '@/services/analytics';
-import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
+import {
+  trackCheckoutPaymentCompletedOnce,
+  trackCheckoutPaymentFailed,
+} from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 import type { BNPLShouldStartLoadRequest } from './BNPLCheckoutWebView';
 import {
@@ -133,22 +135,14 @@ export function useBNPLCheckoutController({
         return;
       }
       setCheckoutStatus('success');
-      if (orderId) {
-        trackCheckoutPaymentCompleted({
+      // Accepted-but-pending provider results still reach the success
+      // experience below, but are not paid conversions: skip attribution.
+      if (orderId && !effect.isPending) {
+        await trackCheckoutPaymentCompletedOnce({
           orderId,
           paymentMethod: gateway || 'bnpl',
           reference: effect.reference || undefined,
           value: amount ? Number(amount) : undefined,
-        });
-        trackCheckoutRoutePurchaseCompleted({
-          items: useCartStore.getState().items,
-          orderId,
-          orderNumber: orderId,
-          paymentMethod: gateway || 'bnpl',
-          shipping: 0,
-          subtotal: amount ? Number(amount) : 0,
-          tax: 0,
-          total: amount ? Number(amount) : 0,
         });
       }
       await clearCart();
@@ -160,6 +154,9 @@ export function useBNPLCheckoutController({
       });
       return;
     }
+    // Terminal provider error redirect: capture the failure so declined or
+    // broken BNPL attempts are distinguishable from abandonment.
+    trackCheckoutPaymentFailed('bnpl_provider_error', orderId, gateway);
     setCheckoutStatus(effect.status);
     setErrorMessage(effect.errorMessage);
   };
@@ -267,13 +264,17 @@ export function useBNPLCheckoutController({
 
   const handleWebViewError = (
     error: Parameters<typeof handleBNPLWebViewError>[0]
-  ) =>
+  ) => {
+    // Terminal WebView load failure: capture it like a provider error
+    // redirect so broken BNPL attempts are not counted as abandonment.
+    trackCheckoutPaymentFailed('bnpl_load_error', orderId, gateway);
     handleBNPLWebViewError(
       error,
       clearPendingLoadTimeout,
       () => setCheckoutStatus('error'),
       setErrorMessage
     );
+  };
 
   return {
     amount,

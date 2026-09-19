@@ -98,12 +98,8 @@ export async function finalizeCheckoutPayment({
   }
 
   if (selectedPayment === 'juicyway') {
-    trackCheckoutPaymentStarted({
-      orderId: order.id,
-      orderNumber,
-      paymentMethod: selectedPayment,
-      value: orderResponse.amountDueToGateway,
-    });
+    // The crypto selector opens next; payment_started is recorded once the
+    // provider initializes (see runCryptoPaymentInitialization), never here.
     setPendingOrder({
       order,
       orderResponse,
@@ -124,12 +120,6 @@ export async function finalizeCheckoutPayment({
   const isBankTransfer = selectedPayment === 'bank_transfer';
 
   if (isOnlinePayment || isBankTransfer) {
-    trackCheckoutPaymentStarted({
-      orderId: order.id,
-      orderNumber,
-      paymentMethod: selectedPayment,
-      value: orderResponse.amountDueToGateway,
-    });
     if (isBankTransfer && shouldCreateWalletFundedBankTransferOrder) {
       const startedWalletFundedBankTransfer =
         await startWalletFundedBankTransferCheckout({
@@ -141,6 +131,13 @@ export async function finalizeCheckoutPayment({
           trackingToken: order.tracking_token,
         });
       if (startedWalletFundedBankTransfer) {
+        // The transfer setup succeeded: record the start now, never before.
+        trackCheckoutPaymentStarted({
+          orderId: order.id,
+          orderNumber,
+          paymentMethod: selectedPayment,
+          value: orderResponse.amountDueToGateway,
+        });
         runPostOrderSideEffects();
         return;
       }
@@ -256,6 +253,13 @@ async function initializeGatewayAndRoute({
     );
   }
 
+  // The provider initialized: record the start now, never speculatively.
+  trackCheckoutPaymentStarted({
+    orderId,
+    orderNumber,
+    paymentMethod: selectedPayment,
+    value: orderResponse.amountDueToGateway,
+  });
   setIsProcessing(false);
   if (isBankTransfer) {
     router.push({

@@ -1,10 +1,8 @@
 import { router } from 'expo-router';
 import type { MutableRefObject } from 'react';
 import type { StoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
-import { trackCheckoutPaymentCompleted } from '@/services/analytics';
+import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 import type { OrderResponse } from '@/services/orders';
-import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
-import { useCartStore } from '@/stores/cart-store';
 import { clearAndPersistCheckoutCart } from './checkout-cart-persistence';
 
 /**
@@ -31,21 +29,12 @@ export async function routeStoreCreditSuccess({
   // Fully-paid orders bypass the gateway completion handlers: record the
   // conversion here before the cart is cleared (purchase capture needs items).
   const paidTotal = orderResponse.order.total;
-  trackCheckoutPaymentCompleted({
+  // First completion wins the durable claim; replays emit nothing.
+  await trackCheckoutPaymentCompletedOnce({
     orderId,
     orderNumber,
     paymentMethod,
     value: paidTotal,
-  });
-  trackCheckoutRoutePurchaseCompleted({
-    items: useCartStore.getState().items,
-    orderId,
-    orderNumber,
-    paymentMethod,
-    shipping: 0,
-    subtotal: paidTotal,
-    tax: 0,
-    total: paidTotal,
   });
   await clearAndPersistCheckoutCart(clearCart);
   setIsProcessing(false);
@@ -89,21 +78,12 @@ export async function routeFullyPaidPrizeSuccess({
 }) {
   // Prize orders bypass every completion handler: record the conversion here
   // before the cart is cleared (purchase capture needs items).
-  trackCheckoutPaymentCompleted({
+  // First completion wins the durable claim; replays emit nothing.
+  await trackCheckoutPaymentCompletedOnce({
     orderId,
     orderNumber,
     paymentMethod: 'quiz_voucher',
     value: orderTotal,
-  });
-  trackCheckoutRoutePurchaseCompleted({
-    items: useCartStore.getState().items,
-    orderId,
-    orderNumber,
-    paymentMethod: 'quiz_voucher',
-    shipping: 0,
-    subtotal: orderTotal,
-    tax: 0,
-    total: orderTotal,
   });
   await clearAndPersistCheckoutCart(clearCart);
   setIsProcessing(false);

@@ -9,6 +9,7 @@ import { sanitizeBNPLDocumentUrl } from './bnpl-checkout-navigation';
 
 type BNPLNavigationEffect =
   | {
+      isPending: boolean;
       reference?: string | null;
       status: 'success';
     }
@@ -53,12 +54,23 @@ type BNPLPopupTargetAction =
       type: 'load';
     };
 
+export function extractBNPLProviderStatus(url: string): string | null {
+  try {
+    return new URL(url).searchParams.get('credpalStatus');
+  } catch {
+    return null;
+  }
+}
+
 export function resolveBNPLNavigationUrlEffect(
   url: string,
   options: BNPLNavigationEffectOptions = {}
 ): BNPLNavigationEffect | null {
   if (url.includes('/order-success') || url.includes('success=true')) {
     return {
+      // Accepted-but-pending provider results (CredPal `pending`) reach the
+      // same success page but are not paid conversions.
+      isPending: extractBNPLProviderStatus(url) === 'pending',
       reference: extractReferenceFromUrl(url),
       status: 'success',
     };

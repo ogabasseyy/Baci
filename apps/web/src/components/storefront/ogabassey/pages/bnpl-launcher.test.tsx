@@ -520,7 +520,7 @@ describe('BnplLauncher', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
-        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&trackingToken=track-order-token'
+        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=success&trackingToken=track-order-token'
       );
     });
     expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
@@ -548,7 +548,7 @@ describe('BnplLauncher', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
-        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&trackingToken=track-order-token'
+        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=pending&trackingToken=track-order-token'
       );
     });
     expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(

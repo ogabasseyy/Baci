@@ -1,9 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
-import { trackCheckoutPaymentCompleted } from '@/services/analytics';
-import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
-import { useCartStore } from '@/stores/cart-store';
+import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
 import {
   beginSavingsAuthorizationCompletion,
@@ -149,22 +147,13 @@ export function createPaymentGatewayCompletionHandlers({
       // Prefer the canonical order total: `amount` is only the residual due
       // at the gateway after wallet/savings credits.
       const purchaseTotal = orderTotal ?? amount ?? 0;
-      trackCheckoutPaymentCompleted({
+      // First completion wins the durable claim; replays emit nothing.
+      await trackCheckoutPaymentCompletedOnce({
         orderId,
         orderNumber: orderNumber || orderId,
         paymentMethod: gateway || 'payment_gateway',
         reference,
         value: purchaseTotal,
-      });
-      trackCheckoutRoutePurchaseCompleted({
-        items: useCartStore.getState().items,
-        orderId,
-        orderNumber: orderNumber || orderId,
-        paymentMethod: gateway || 'payment_gateway',
-        shipping: 0,
-        subtotal: purchaseTotal,
-        tax: 0,
-        total: purchaseTotal,
       });
     }
     await clearCart();

@@ -304,6 +304,7 @@ jest.mock('@/services/analytics', () => ({
   trackCheckoutInvoiceGenerated: jest.fn(),
   trackCheckoutOrderCreated: jest.fn(),
   trackCheckoutPaymentCompleted: jest.fn(),
+  trackCheckoutPaymentCompletedOnce: jest.fn(() => Promise.resolve(true)),
   trackCheckoutPaymentFailed: jest.fn(),
   trackCheckoutPaymentMethodSelected: jest.fn(),
   trackCheckoutPaymentStarted: jest.fn(),

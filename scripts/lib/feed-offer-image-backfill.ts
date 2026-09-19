@@ -74,6 +74,9 @@ export async function appendOfferImageCandidates(
         .in('product_id', productIds.slice(start, start + PRODUCT_ID_CHUNK_SIZE))
         .eq('merchant_id', merchantId)
         .eq('status', 'active')
+        // Deterministic (condition, id) winner like the storefront RPC, so
+        // persisted imagery tracks the same offer the PDP would select.
+        .order('condition', { ascending: true })
         .order('id', { ascending: true })
         .range(offerOffset, offerOffset + OFFER_PAGE_SIZE - 1);
 

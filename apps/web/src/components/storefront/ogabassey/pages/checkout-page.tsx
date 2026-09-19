@@ -777,6 +777,10 @@ export const CheckoutPage: React.FC = () => {
     orderId: string;
     trackingToken?: string;
     amount: number;
+    /** Full order total: `amount` is only the residual due at the gateway
+     * after wallet/savings credits, but purchase revenue is the whole order.
+     */
+    total: number;
     /** Stamped order currency (authoritative for payment initialization). */
     orderCurrency: string;
     customerEmail: string;
@@ -1014,7 +1018,7 @@ export const CheckoutPage: React.FC = () => {
         paymentStatus: 'paid',
         reference: cryptoPaymentData.reference,
         source: 'web_checkout',
-        total: pendingCryptoOrder?.amount,
+        total: pendingCryptoOrder?.total ?? pendingCryptoOrder?.amount,
       })
     );
     setIsVerifyingCrypto(false);
@@ -2668,6 +2672,7 @@ export const CheckoutPage: React.FC = () => {
             orderId: order.id,
             trackingToken: order.tracking_token,
             amount: paymentAmount,
+            total,
             orderCurrency: orderChargeCurrency,
             customerEmail,
             customerName: `${firstName} ${lastName}`.trim(),

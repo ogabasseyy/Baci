@@ -3,6 +3,7 @@ import type { WebView, WebViewNavigation } from 'react-native-webview';
 import {
   trackCheckoutPaymentCompletedOnce,
   trackCheckoutPaymentFailed,
+  trackCheckoutPaymentStarted,
 } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 import type { BNPLShouldStartLoadRequest } from './BNPLCheckoutWebView';
@@ -206,9 +207,39 @@ export function useBNPLCheckoutController({
   const handleClose = () =>
     getAppNavigation().showCancelAlert(returnToAppFromProviderExit);
 
+  // The start is recorded only once the launcher confirms the provider
+  // flow opened: initialization failures before that point (order lookup,
+  // SDK load, popup creation) must not count as a start. A ref (not state)
+  // so duplicate opened signals cannot double-emit.
+  const paymentStartRecordedRef = useRef(false);
+  const handleProviderOpenedMessage = ({
+    gateway: openedGateway,
+    orderId: openedOrderId,
+  }: {
+    gateway?: string;
+    orderId?: string;
+  }) => {
+    if (paymentStartRecordedRef.current || !orderId) {
+      return;
+    }
+    if (openedGateway && gateway && openedGateway !== gateway) {
+      return;
+    }
+    if (openedOrderId && openedOrderId !== orderId) {
+      return;
+    }
+    paymentStartRecordedRef.current = true;
+    void trackCheckoutPaymentStarted({
+      orderId,
+      paymentMethod: gateway || 'bnpl',
+      value: amount ? Number(amount) : undefined,
+    });
+  };
+
   const handleWebViewMessage = (event: BNPLWebViewMessageEvent) =>
     createBNPLWebViewMessageHandler({
       onCloseMessage: returnToAppFromProviderExit,
+      onProviderOpenedMessage: handleProviderOpenedMessage,
       onNavigationMessage: (url) => {
         if (
           !shouldHandleBNPLNavigationMessage({

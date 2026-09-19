@@ -78,6 +78,29 @@ describe('createBNPLWebViewMessageHandler', () => {
     expect(onCloseMessage).toHaveBeenCalledTimes(1);
   });
 
+  it('delegates provider-opened messages to the controller', () => {
+    const onProviderOpenedMessage = jest.fn();
+    const handler = createBNPLWebViewMessageHandler({
+      onProviderOpenedMessage,
+    });
+
+    handler({
+      nativeEvent: {
+        data: JSON.stringify({
+          type: 'bnpl_provider_opened',
+          gateway: 'credpal',
+          orderId: 'order-1',
+        }),
+      },
+    });
+
+    expect(onProviderOpenedMessage).toHaveBeenCalledTimes(1);
+    expect(onProviderOpenedMessage).toHaveBeenCalledWith({
+      gateway: 'credpal',
+      orderId: 'order-1',
+    });
+  });
+
   it('logs navigation messages and delegates URL handling to the controller', () => {
     process.env.NODE_ENV = 'development';
     (globalThis as typeof globalThis & { __DEV__?: boolean }).__DEV__ = true;

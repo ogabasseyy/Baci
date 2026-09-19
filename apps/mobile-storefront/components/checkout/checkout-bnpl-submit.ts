@@ -142,12 +142,11 @@ export async function submitBnplCheckout({
     return;
   }
 
-  await trackCheckoutPaymentStarted({
-    orderId: orderResponse.order.id,
-    orderNumber: createdOrderNumber,
-    paymentMethod: selectedPayment,
-    value: orderResponse.amountDueToGateway,
-  });
+  // No start here: the provider is initialized later inside the BNPL
+  // checkout launcher, where lookup, SDK loading, or popup creation can
+  // still fail. The launcher confirms the opened flow back over the
+  // WebView bridge and the checkout controller records the start then
+  // (the Klump branch above keeps its post-initialization start).
 
   isOrderInFlight.current = false;
   setIsProcessing(false);

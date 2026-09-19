@@ -42,10 +42,12 @@ function toTrackingItems(
 }
 
 // Derives the authoritative purchase attribution from a server look-up.
-// Tax is not exposed by the track-order projection, so it is derived from
-// the canonical identity total = subtotal + shipping − discount + tax and
-// only kept when every input is finite and the result is non-negative;
-// otherwise it stays undefined and the caller default applies.
+// The projection carries the authoritative tax amount: prefer it. Without
+// it, tax is derived from the canonical identity total = subtotal +
+// shipping + gift wrap − discount + tax, so every total component must be
+// present — otherwise a gift-wrapped order would report tax + wrapping fee
+// as tax. Only kept when the result is non-negative; otherwise it stays
+// undefined and the caller default applies.
 export function toTrackedCompletionAttribution(
   order: TrackOrderData['order'] | null,
   customer: TrackOrderData['customer'] | null,
@@ -58,14 +60,23 @@ export function toTrackedCompletionAttribution(
   const subtotal = finiteOrUndefined(order.subtotal);
   const shipping = finiteOrUndefined(order.shipping_cost);
   const discount = finiteOrUndefined(order.discount_amount);
+  // Null means the projection did not carry the component (Number(null)
+  // is 0, which would corrupt the derivation), so coalesce to undefined.
+  const authoritativeTax = finiteOrUndefined(order.tax_amount ?? undefined);
+  const giftWrap = finiteOrUndefined(order.gift_wrapping_fee ?? undefined);
   let tax: number | undefined;
-  if (
+  if (authoritativeTax !== undefined && authoritativeTax >= 0) {
+    tax = authoritativeTax;
+  } else if (
     total !== undefined &&
     subtotal !== undefined &&
     shipping !== undefined &&
     discount !== undefined
   ) {
-    const derived = total - subtotal - shipping + discount;
+    // Legacy projections predate gift-wrapping: assume no wrapping fee
+    // only when the field is absent entirely.
+    const wrap = giftWrap ?? 0;
+    const derived = total - subtotal - shipping - wrap + discount;
     if (Number.isFinite(derived) && derived >= 0) {
       tax = derived;
     }

@@ -3408,8 +3408,21 @@ export async function POST(request: NextRequest) {
           paymentLink,
         };
 
-        const htmlContent = generateOrderConfirmationEmail(emailData);
-        const textContent = generateOrderConfirmationText(emailData);
+        // Same classification as the invoice download route and Peppol
+        // subject: unpaid invoice-method orders are proforma (325)
+        // quotations, so the body must use quotation semantics too.
+        const emailDocumentKind =
+          effectivePaymentMethod === 'invoice' && !isPaidForImmediateEmail
+            ? ('proforma' as const)
+            : ('confirmation' as const);
+        const htmlContent = generateOrderConfirmationEmail({
+          ...emailData,
+          documentKind: emailDocumentKind,
+        });
+        const textContent = generateOrderConfirmationText({
+          ...emailData,
+          documentKind: emailDocumentKind,
+        });
 
         const replyToEmail =
           merchant.support_email ||

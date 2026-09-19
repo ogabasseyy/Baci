@@ -12,6 +12,7 @@ import { Alert } from 'react-native';
 import {
   trackCheckoutPaymentCompletedOnce,
   trackCheckoutPaymentFailed,
+  trackCheckoutPaymentStarted,
 } from '@/services/analytics';
 import { BNPL_UNTRUSTED_POPUP_MESSAGE } from './bnpl-checkout.helpers';
 import { useBNPLCheckoutController } from './use-bnpl-checkout-controller';
@@ -19,6 +20,7 @@ import { useBNPLCheckoutController } from './use-bnpl-checkout-controller';
 jest.mock('@/services/analytics', () => ({
   trackCheckoutPaymentCompletedOnce: jest.fn(async () => true),
   trackCheckoutPaymentFailed: jest.fn(),
+  trackCheckoutPaymentStarted: jest.fn(async () => undefined),
 }));
 
 const mockClearCart = jest.fn();
@@ -88,6 +90,84 @@ describe('useBNPLCheckoutController', () => {
 
     unmount();
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('records the start when the launcher confirms the provider opened', async () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      orderId: 'order-123',
+      amount: '21500',
+      trackingToken: 'track-token-123',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'bnpl_provider_opened',
+            gateway: 'credit_direct',
+            orderId: 'order-123',
+          }),
+        },
+      });
+    });
+
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledWith({
+      orderId: 'order-123',
+      paymentMethod: 'credit_direct',
+      value: 21500,
+    });
+  });
+
+  it('records a single start for duplicate provider-opened signals', async () => {
+    mockRouteParams = {
+      gateway: 'credpal',
+      orderId: 'order-123',
+      amount: '21500',
+    };
+    const { result } = renderControllerHook();
+    const message = {
+      nativeEvent: {
+        data: JSON.stringify({
+          type: 'bnpl_provider_opened',
+          gateway: 'credpal',
+          orderId: 'order-123',
+        }),
+      },
+    };
+
+    await act(async () => {
+      result.current.handleWebViewMessage(message);
+    });
+    await act(async () => {
+      result.current.handleWebViewMessage(message);
+    });
+
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores provider-opened signals for a different order', async () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      orderId: 'order-123',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'bnpl_provider_opened',
+            gateway: 'credit_direct',
+            orderId: 'order-other',
+          }),
+        },
+      });
+    });
+
+    expect(trackCheckoutPaymentStarted).not.toHaveBeenCalled();
   });
 
   it('reloads the active checkout document when retrying the same BNPL URL', () => {

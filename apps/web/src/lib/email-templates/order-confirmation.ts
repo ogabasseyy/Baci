@@ -19,6 +19,12 @@ interface OrderConfirmationData extends MerchantRegistrationInfo {
   merchantName: string;
   merchantUrl: string;
   currency?: string;
+  /**
+   * Unpaid invoice-method orders are proforma (325) quotations, not
+   * confirmed purchases: the body must use quotation semantics to match
+   * the "Proforma Invoice Generated" subject.
+   */
+  documentKind?: 'confirmation' | 'proforma';
 }
 
 /**
@@ -28,6 +34,7 @@ interface OrderConfirmationData extends MerchantRegistrationInfo {
 export function generateOrderConfirmationEmail(
   data: OrderConfirmationData
 ): string {
+  const isProforma = data.documentKind === 'proforma';
   const itemsHtml = data.items
     .map(
       (item) => `
@@ -52,7 +59,7 @@ export function generateOrderConfirmationEmail(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Order Confirmation #${escapeHtmlText(data.orderNumber)}</title>
+  <title>${isProforma ? `Proforma Invoice #${escapeHtmlText(data.orderNumber)}` : `Order Confirmation #${escapeHtmlText(data.orderNumber)}`}</title>
   <style>
     @media only screen and (max-width: 600px) {
       .container { width: 100% !important; padding: 20px !important; }
@@ -85,8 +92,8 @@ export function generateOrderConfirmationEmail(
                 </tr>
                 <tr>
                   <td colspan="2" style="padding-top: 30px;">
-                    <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; line-height: 1.2;">Order #${escapeHtmlText(data.orderNumber)} Confirmed</h1>
-                    <p style="margin: 10px 0 0 0; color: #cbd5e1; font-size: 16px;">Thank you for your purchase</p>
+                    <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; line-height: 1.2;">${isProforma ? `Proforma Invoice #${escapeHtmlText(data.orderNumber)}` : `Order #${escapeHtmlText(data.orderNumber)} Confirmed`}</h1>
+                    <p style="margin: 10px 0 0 0; color: #cbd5e1; font-size: 16px;">${isProforma ? 'A quotation for your review — no payment taken yet' : 'Thank you for your purchase'}</p>
                   </td>
                 </tr>
               </table>
@@ -98,7 +105,7 @@ export function generateOrderConfirmationEmail(
             <td style="padding: 40px 40px 20px 40px;">
               <p style="margin: 0; font-size: 16px; color: #334155; line-height: 1.6;">Hi <strong>${escapeHtmlText(data.customerName)}</strong>,</p>
               <p style="margin: 16px 0 0 0; font-size: 16px; color: #475569; line-height: 1.6;">
-                We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable).
+                ${isProforma ? 'This proforma invoice is a quotation for the items below. Your order will be processed once payment is received — please share it with your procurement team or pay using the invoice link.' : "We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable)."}
               </p>
             </td>
           </tr>
@@ -169,7 +176,7 @@ export function generateOrderConfirmationEmail(
           <tr>
             <td align="center" style="padding: 0 40px 40px 40px;">
               <a href="${escapeHtmlAttribute(sanitizeUrl(data.merchantUrl))}" style="background-color: #0f172a; color: #ffffff; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.2);">
-                View Order
+                ${isProforma ? 'View Proforma Invoice' : 'View Order'}
               </a>
             </td>
           </tr>
@@ -209,6 +216,7 @@ export function generateOrderConfirmationEmail(
 export function generateOrderConfirmationText(
   data: OrderConfirmationData
 ): string {
+  const isProforma = data.documentKind === 'proforma';
   const itemsText = data.items
     .map(
       (item) =>
@@ -217,11 +225,15 @@ export function generateOrderConfirmationText(
     .join('\n');
 
   return `
-Order Confirmed!
+${isProforma ? 'Proforma Invoice' : 'Order Confirmed!'}
 
 Hi ${data.customerName},
 
-Your order has been confirmed and will be shipped soon.
+${
+  isProforma
+    ? 'This proforma invoice is a quotation, not a confirmed order. Your order will be processed once payment is received.'
+    : 'Your order has been confirmed and will be shipped soon.'
+}
 
 Order Number: #${data.orderNumber}
 
@@ -238,7 +250,11 @@ ${data.shippingAddress.city}, ${data.shippingAddress.state}
 Phone: ${data.shippingAddress.phone}
 
 What's next?
-You'll receive a shipping confirmation email with tracking information once your order is on its way.
+${
+  isProforma
+    ? 'Complete payment using your invoice link to confirm this order.'
+    : "You'll receive a shipping confirmation email with tracking information once your order is on its way."
+}
 
 Visit Store: ${data.merchantUrl}
 

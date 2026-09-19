@@ -5841,6 +5841,12 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
         ],
       })
     );
+    // The body must match the proforma subject: quotation semantics, not
+    // confirmed-order copy (the template module is mocked here, so assert
+    // the wiring; copy is covered in order-confirmation.test.ts).
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ documentKind: 'proforma' })
+    );
 
     // Assert DVA generation was automatically triggered
     expect(mockGeneratePaymentAccount).toHaveBeenCalledWith(

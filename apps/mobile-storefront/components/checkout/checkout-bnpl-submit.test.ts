@@ -225,12 +225,10 @@ describe('submitBnplCheckout', () => {
     );
     expect(params.isOrderInFlight.current).toBe(false);
     expect(params.setIsProcessing).toHaveBeenCalledWith(false);
-    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledWith({
-      orderId: 'order-1',
-      orderNumber: 'BAC-001',
-      paymentMethod: 'credit_direct',
-      value: 21500,
-    });
+    // No start before navigation: the provider initializes later inside
+    // the launcher, and the checkout controller records the start only
+    // once the launcher confirms the flow opened.
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
     expect(mockRouterPush).toHaveBeenCalledWith({
       pathname: '/bnpl-checkout',
       params: expect.objectContaining({

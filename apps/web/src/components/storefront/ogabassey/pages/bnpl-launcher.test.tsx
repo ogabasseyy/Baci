@@ -590,6 +590,37 @@ describe('BnplLauncher', () => {
     expect(screen.queryByText('Payment cancelled.')).not.toBeInTheDocument();
   });
 
+  it('posts a provider-opened signal when the CredPal widget loads', async () => {
+    const postMessage = vi.fn();
+    (window as TestReactNativeWebViewWindow).ReactNativeWebView = {
+      postMessage,
+    };
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'credpal',
+        merchant_slug: 'test-store',
+        trackingToken: 'tok-123',
+      })
+    );
+    mockOpenCredPalCheckout.mockImplementation(({ onLoad }) => {
+      onLoad();
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'credpal',
+          orderId: 'order-1',
+          type: 'bnpl_provider_opened',
+        })
+      );
+    });
+  });
+
   it('keeps the web CredPal cancellation fallback when no native bridge exists', async () => {
     mockSearchParams.mockReturnValue(
       new URLSearchParams({
@@ -1148,6 +1179,51 @@ describe('BnplLauncher', () => {
     }
   );
 
+  it('passes the verified total and currency into the Klump conversion', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+        klump_callback: '1',
+        transaction_id: 'klump-txn-123',
+      })
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: 'order-1',
+          payment_status: 'paid',
+          total: 20000,
+          currency: 'NGN',
+        }),
+      })
+    );
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(
+        '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+      );
+    });
+    expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+      'payment_completed',
+      'order-1',
+      expect.objectContaining({
+        payment_method: 'klump',
+        payment_status: 'paid',
+        reference: 'BAC-ABCD12345678',
+        total: 20000,
+        currency: 'NGN',
+      })
+    );
+  });
+
   it('shows an error state and does not redirect when order fetch fails', async () => {
     vi.stubGlobal(
       'fetch',
@@ -1338,6 +1414,51 @@ describe('BnplLauncher', () => {
       expect(mockOpenCreditDirectCheckout).not.toHaveBeenCalled();
     });
 
+    it('passes the verified total and currency into the Credit Direct conversion', async () => {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-1',
+          gateway: 'credit_direct',
+          merchant_slug: 'test-store',
+          creditDirectCompletion: 'txn-sdk-success',
+          trackingToken: 'tok-123',
+        })
+      );
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            id: 'order-1',
+            payment_status: 'bnpl_approved',
+            total: 42000,
+            currency: 'NGN',
+          }),
+        })
+      );
+
+      render(<BnplLauncher />);
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith(
+          '/order-success?orderId=order-1&reference=txn-sdk-success&type=credit_direct&trackingToken=tok-123'
+        );
+      });
+      // The first capture must carry revenue: the once-guard suppresses
+      // the richer order-success lookup that follows.
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-1',
+        expect.objectContaining({
+          payment_method: 'credit_direct',
+          payment_status: 'paid',
+          reference: 'txn-sdk-success',
+          total: 42000,
+          currency: 'NGN',
+        })
+      );
+    });
+
     it('shows the cancelled state without clearing checkout recovery', async () => {
       seedPopupMarker('order-1', 'txn-123');
       seedCheckoutRecoveryState();
@@ -1384,6 +1505,41 @@ describe('BnplLauncher', () => {
 
       expect(readCreditDirectPopupMarker('order-1')?.transactionId).toBe(
         'txn-999'
+      );
+    });
+
+    it('posts a provider-opened signal when the Credit Direct popup opens', async () => {
+      const postMessage = vi.fn();
+      (window as TestReactNativeWebViewWindow).ReactNativeWebView = {
+        postMessage,
+      };
+      let capturedOnPopup:
+        | ((reference: {
+            checkoutTransactionId: string | null;
+            sessionId: string;
+          }) => Promise<void>)
+        | undefined;
+      mockOpenCreditDirectCheckout.mockImplementation(({ onPopup }) => {
+        capturedOnPopup = onPopup;
+        return Promise.resolve();
+      });
+
+      render(<BnplLauncher />);
+
+      await waitFor(() => {
+        expect(mockOpenCreditDirectCheckout).toHaveBeenCalled();
+      });
+      await capturedOnPopup?.({
+        checkoutTransactionId: 'txn-999',
+        sessionId: 'signed-session-1',
+      });
+
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'credit_direct',
+          orderId: 'order-1',
+          type: 'bnpl_provider_opened',
+        })
       );
     });
 

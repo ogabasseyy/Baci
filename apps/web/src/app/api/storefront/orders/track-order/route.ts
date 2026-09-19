@@ -54,6 +54,8 @@ interface TrackedOrder {
   subtotal: number;
   shipping_cost: number;
   discount_amount: number | null;
+  tax_amount?: number | null;
+  gift_wrapping_fee?: number | null;
   total: number;
   currency?: string | null;
   created_at: string;
@@ -259,6 +261,8 @@ export async function GET(request: NextRequest) {
         subtotal: order.subtotal,
         shipping_cost: order.shipping_cost,
         discount_amount: order.discount_amount,
+        tax_amount: order.tax_amount ?? null,
+        gift_wrapping_fee: order.gift_wrapping_fee ?? null,
         total: order.total,
         currency: order.currency || 'NGN',
       },

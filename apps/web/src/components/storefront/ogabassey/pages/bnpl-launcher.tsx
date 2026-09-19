@@ -72,12 +72,14 @@ function captureBnplPaymentCompleted({
     paymentMethod,
     reference,
     value,
+    currency,
 }: {
     orderId: string;
     orderNumber?: string;
     paymentMethod: string;
     reference?: string;
     value?: number;
+    currency?: string;
 }) {
     // Inside a native BNPL WebView the native shell owns conversion
     // attribution (with native-verified outcomes): emitting here would
@@ -90,6 +92,7 @@ function captureBnplPaymentCompleted({
         orderId,
         buildCheckoutFunnelProperties({
             channel: 'web',
+            ...(currency ? { currency } : {}),
             orderId,
             orderNumber,
             paymentIntent:
@@ -217,6 +220,32 @@ function hasPendingKlumpRedirect(expectedRedirectUrl: string) {
 
         clearPendingKlumpRedirect();
         return false;
+    } catch {
+        return false;
+    }
+}
+
+function notifyNativeBnplProviderOpened(
+    gateway: NativeBNPLBridgeGateway,
+    orderId: string
+) {
+    // Confirms the provider flow actually opened: the native shell records
+    // payment_started from this signal, so initialization failures (order
+    // lookup, SDK load, popup creation) never produce a start.
+    const bridge = window.ReactNativeWebView;
+    if (typeof bridge?.postMessage !== 'function') {
+        return false;
+    }
+
+    try {
+        bridge.postMessage(
+            JSON.stringify({
+                gateway,
+                orderId,
+                type: 'bnpl_provider_opened',
+            })
+        );
+        return true;
     } catch {
         return false;
     }
@@ -380,15 +409,32 @@ async function launchBnplPayment({
                 );
                 const orderData = (await orderRes.json()) as {
                     payment_status?: string;
+                    total?: unknown;
+                    currency?: unknown;
                 } | null;
                 if (
                     orderRes.ok &&
                     orderData?.payment_status === 'paid'
                 ) {
+                    // Pass the verified row into the first capture: the
+                    // once-guard would otherwise suppress the richer
+                    // order-success lookup, leaving the conversion valueless.
+                    const klumpTotal = Number(orderData.total);
+                    const klumpCurrency =
+                        typeof orderData.currency === 'string' &&
+                        orderData.currency.trim()
+                            ? orderData.currency.trim()
+                            : undefined;
                     captureBnplPaymentCompleted({
                         orderId,
                         paymentMethod: 'klump',
                         reference: klumpReference,
+                        ...(Number.isFinite(klumpTotal)
+                            ? { value: klumpTotal }
+                            : {}),
+                        ...(klumpCurrency
+                            ? { currency: klumpCurrency }
+                            : {}),
                     });
                 }
             } catch {
@@ -505,6 +551,9 @@ async function launchBnplPayment({
                     setCreditDirectPopupMarker(marker);
                 },
                 onPopup: async ({ checkoutTransactionId, sessionId }) => {
+                    // The popup opened: confirm the provider flow to native
+                    // before persisting anything else.
+                    notifyNativeBnplProviderOpened('credit_direct', order.id);
                     writeCreditDirectPopupMarker(
                         order.id,
                         checkoutTransactionId || sessionId
@@ -579,6 +628,12 @@ async function launchBnplPayment({
                 customerEmail: checkoutCustomerEmail || '',
                 customerName: checkoutCustomerName,
                 customerPhone: checkoutCustomerPhone || '',
+                onLoad: () => {
+                    // The widget loaded: confirm the provider flow to
+                    // native so the start is recorded only for opened
+                    // checkouts.
+                    notifyNativeBnplProviderOpened('credpal', order.id);
+                },
                 onSuccess: (data) => {
                     // Accepted-but-pending applications are not paid
                     // conversions; the success page verifies the outcome.
@@ -931,6 +986,9 @@ export function BnplLauncher({ merchantSlug = 'ogabassey' }: BnplLauncherProps) 
         lookupEmail,
     });
 
+    const cdConfirmedTotal = creditDirectVerification.confirmedOrder?.total;
+    const cdConfirmedCurrency =
+        creditDirectVerification.confirmedOrder?.currency;
     useEffect(() => {
         if (
             creditDirectVerification.phase !== 'confirmed' ||
@@ -951,10 +1009,19 @@ export function BnplLauncher({ merchantSlug = 'ogabassey' }: BnplLauncherProps) 
             reference: creditDirectPopupMarker.transactionId,
             type: 'credit_direct',
         });
+        // Pass the verified row into the first capture: the once-guard
+        // would otherwise suppress the richer order-success lookup,
+        // leaving the conversion valueless.
         captureBnplPaymentCompleted({
             orderId,
             paymentMethod: 'credit_direct',
             reference: creditDirectPopupMarker.transactionId,
+            ...(cdConfirmedTotal !== undefined
+                ? { value: cdConfirmedTotal }
+                : {}),
+            ...(cdConfirmedCurrency
+                ? { currency: cdConfirmedCurrency }
+                : {}),
         });
         if (trackingToken) {
             successQuery.set('trackingToken', trackingToken);
@@ -977,6 +1044,8 @@ export function BnplLauncher({ merchantSlug = 'ogabassey' }: BnplLauncherProps) 
         );
     }, [
         creditDirectVerification.phase,
+        cdConfirmedTotal,
+        cdConfirmedCurrency,
         creditDirectPopupMarker,
         orderId,
         trackingToken,

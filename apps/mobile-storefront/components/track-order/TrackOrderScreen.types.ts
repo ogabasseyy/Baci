@@ -33,6 +33,8 @@ export interface TrackOrderData {
     subtotal: number;
     shipping_cost: number;
     discount_amount: number;
+    tax_amount?: number | null;
+    gift_wrapping_fee?: number | null;
     total: number;
     currency: string;
   };

@@ -72,4 +72,39 @@ describe('toTrackedCompletionAttribution', () => {
   it('returns empty attribution without an order', () => {
     expect(toTrackedCompletionAttribution(null, customer, [])).toEqual({});
   });
+
+  it('prefers the authoritative tax amount from the projection', () => {
+    const attribution = toTrackedCompletionAttribution(
+      orderWith({ tax_amount: 7500, gift_wrapping_fee: 0 }),
+      customer,
+      []
+    );
+
+    expect(attribution.tax).toBe(7500);
+  });
+
+  it('excludes gift wrapping when deriving settlement tax', () => {
+    // total = 100000 subtotal + 0 shipping + 2500 gift wrap + 7500 tax.
+    const attribution = toTrackedCompletionAttribution(
+      orderWith({
+        total: 110000,
+        gift_wrapping_fee: 2500,
+        tax_amount: null,
+      }),
+      customer,
+      []
+    );
+
+    expect(attribution.tax).toBe(7500);
+  });
+
+  it('derives tax for legacy projections without wrapping fields', () => {
+    const attribution = toTrackedCompletionAttribution(
+      orderWith({}),
+      customer,
+      []
+    );
+
+    expect(attribution.tax).toBe(7500);
+  });
 });

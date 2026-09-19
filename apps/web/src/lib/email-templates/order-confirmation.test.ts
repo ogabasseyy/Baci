@@ -87,6 +87,32 @@ describe('Order confirmation email', () => {
       expect(text).toContain('Widget');
       expect(text).toContain('11,500');
     });
+
+    it('uses quotation semantics for proforma documents', () => {
+      const payload = { ...baseOrderData, documentKind: 'proforma' as const };
+      const html = generateOrderConfirmationEmail(payload);
+      const text = generateOrderConfirmationText(payload);
+
+      expect(html).toContain('Proforma Invoice #ORD-001');
+      expect(html).not.toContain('Order #ORD-001 Confirmed');
+      expect(html).toContain('no payment taken yet');
+      expect(html).toContain('will be processed once payment is received');
+      expect(html).toContain('View Proforma Invoice');
+      expect(text).toContain('Proforma Invoice');
+      expect(text).not.toContain('Order Confirmed!');
+      expect(text).toContain('a quotation, not a confirmed order');
+      expect(text).not.toContain('will be shipped soon');
+    });
+
+    it('keeps confirmation semantics by default', () => {
+      const html = generateOrderConfirmationEmail(baseOrderData);
+      const text = generateOrderConfirmationText(baseOrderData);
+
+      expect(html).toContain('Order #ORD-001 Confirmed');
+      expect(html).not.toContain('Proforma Invoice');
+      expect(text).toContain('Order Confirmed!');
+      expect(text).toContain('will be shipped soon');
+    });
   });
 
   describe('currency formatting', () => {

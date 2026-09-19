@@ -137,6 +137,24 @@ describe('GET /api/storefront/orders/track-order', () => {
     });
   });
 
+  it('exposes tax and gift-wrapping components for settlement attribution', async () => {
+    mockAnonClient.rpc.mockResolvedValue({
+      data: [makeTrackedOrder({ tax_amount: 750, gift_wrapping_fee: 250 })],
+      error: null,
+    });
+
+    const request = new NextRequest(
+      'https://example.com/api/storefront/orders/track-order?token=track-token-123&merchant_slug=test-store'
+    );
+
+    const response = await GET(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.order.tax_amount).toBe(750);
+    expect(data.order.gift_wrapping_fee).toBe(250);
+  });
+
   it('keeps the customer timeline free of processing when the raw status is processing', async () => {
     mockAnonClient.rpc.mockResolvedValue({
       data: [

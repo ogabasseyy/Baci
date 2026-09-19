@@ -19,13 +19,13 @@ import {
 import {
   loadDefaultInteractionBindingsModule,
   loadDefaultInteractiveCardModule,
-  STATIC_BINDINGS,
-} from './home-product-grid-deferred-modules';
+} from './home-product-grid-interaction-loaders';
 import type {
   PreviewCatalogModule,
   ProductGridInteractionBindingsModule,
   ProductGridItemModule,
-} from './home-product-grid-deferred-modules';
+} from './home-product-grid-interaction-loaders';
+import { STATIC_BINDINGS } from './home-product-grid-static-bindings';
 import { useFallbackSwapPage } from './home-product-grid-fallback-swap';
 import { HomeProductGridCard } from './HomeProductGridCard';
 import { hasRealProducts, useHomePreviewCatalog } from './useHomePreviewCatalog';

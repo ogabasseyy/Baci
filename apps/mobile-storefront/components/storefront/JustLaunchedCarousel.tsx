@@ -5,7 +5,7 @@ import {
   OGABASSEY_PINNED_LAUNCH_SLUGS,
   selectLaunchProducts,
 } from '@baci/shared/storefront';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -121,17 +121,18 @@ export function JustLaunchedCarousel({
   // offscreen. Mount it only while its item is actually viewable.
   const [isAdVisible, setIsAdVisible] = useState(false);
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
-  const handleViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      setIsAdVisible(
-        viewableItems.some(
-          (entry) =>
-            entry.isViewable && isLaunchAdCard(entry.item as LaunchRenderItem)
-        )
-      );
-    },
-    []
-  );
+  const handleViewableItemsChanged = ({
+    viewableItems,
+  }: {
+    viewableItems: ViewToken[];
+  }) => {
+    setIsAdVisible(
+      viewableItems.some(
+        (entry) =>
+          entry.isViewable && isLaunchAdCard(entry.item as LaunchRenderItem)
+      )
+    );
+  };
   useEffect(() => {
     // Consent resolving (or a load failure) inserts or removes the card at
     // index 1 under a scrolled list; shift the offset by one slot so the

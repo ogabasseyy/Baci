@@ -3,7 +3,8 @@
  * interest is never spendable — callers must pass purchasing power, not
  * ledger balances.
  */
-import { assertKobo, assertPositiveKobo } from './kobo-validators';
+import { assertKobo } from './assert-kobo';
+import { assertPositiveKobo } from './assert-positive-kobo';
 
 export function isReady(
   spendableKobo: number,

@@ -2,7 +2,7 @@
  * Spendable purchasing power: confirmed principal plus verified paid
  * interest. Pending interest is never spendable.
  */
-import { assertKobo } from './kobo-validators';
+import { assertKobo } from './assert-kobo';
 
 export function purchasingPowerKobo(
   principalKobo: number,

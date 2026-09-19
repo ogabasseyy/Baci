@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const CLOCK_TICK_MS = 15_000;
 
@@ -18,5 +18,5 @@ export function useQuizAuthoringClock(): () => void {
     );
     return () => clearInterval(timer);
   }, []);
-  return useCallback(() => setClockTick((tick) => tick + 1), []);
+  return () => setClockTick((tick) => tick + 1);
 }

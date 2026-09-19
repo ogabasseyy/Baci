@@ -1,6 +1,6 @@
 /** Multi-tenant hero carousel with parallax, carousel, and standard variants. */
 import type { Href } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWindowDimensions, View, type ViewToken } from 'react-native';
 import Animated, {
   useAnimatedScrollHandler,
@@ -67,17 +67,18 @@ export function Hero({
   // offscreen. Mount it only while its item is actually viewable.
   const [isAdVisible, setIsAdVisible] = useState(false);
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
-  const handleViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      setIsAdVisible(
-        viewableItems.some(
-          (entry) =>
-            entry.isViewable && isHeroAdSlide(entry.item as HeroRenderItem)
-        )
-      );
-    },
-    []
-  );
+  const handleViewableItemsChanged = ({
+    viewableItems,
+  }: {
+    viewableItems: ViewToken[];
+  }) => {
+    setIsAdVisible(
+      viewableItems.some(
+        (entry) =>
+          entry.isViewable && isHeroAdSlide(entry.item as HeroRenderItem)
+      )
+    );
+  };
 
   // A missing or malformed placement must fail closed: the registry throws
   // for unconfigured production IDs, and that must never take down the home

@@ -3,7 +3,8 @@
  * quoted device price.
  */
 import { activationThresholdKobo } from './activation-threshold-kobo';
-import { assertKobo, assertPositiveKobo } from './kobo-validators';
+import { assertKobo } from './assert-kobo';
+import { assertPositiveKobo } from './assert-positive-kobo';
 
 export function isActivated(
   confirmedContributionKobo: number,

@@ -2,7 +2,7 @@
  * Activation threshold: 5% of the quoted device price, rounded up. Pure
  * math only: no provider calls, no storage, no network.
  */
-import { assertPositiveKobo } from './kobo-validators';
+import { assertPositiveKobo } from './assert-positive-kobo';
 import {
   ACTIVATION_RATIO_DENOMINATOR,
   ACTIVATION_RATIO_NUMERATOR,

@@ -1,9 +1,7 @@
 import z from 'zod';
-import {
-  isoDateTimeSchema,
-  koboAmountSchema,
-  nullableStringSchema,
-} from './event-primitives';
+import { isoDateTimeSchema } from './iso-datetime-schema';
+import { koboAmountSchema } from './kobo-amount-schema';
+import { nullableStringSchema } from './nullable-string-schema';
 
 /**
  * Bank-transfer inflow success webhook event.

@@ -6,7 +6,8 @@
  * Decides only from confirmed amounts, never from pending accrual or
  * client claims.
  */
-import { assertPositiveKobo, assertValidDate } from './kobo-validators';
+import { assertPositiveKobo } from './assert-positive-kobo';
+import { assertValidDate } from './assert-valid-date';
 
 export function applicablePriceKobo(args: {
   guaranteedPriceKobo: number;

@@ -12,10 +12,8 @@ export { activationThresholdKobo } from './activation-threshold-kobo';
 export { applicablePriceKobo } from './applicable-price-kobo';
 export { isActivated } from './plan-activation';
 export type { PlanMaturityStatus } from './plan-maturity-status';
-export {
-  addCalendarMonthsClamped,
-  maturityStatus,
-} from './plan-maturity-status';
+export { maturityStatus } from './plan-maturity-status';
+export { addCalendarMonthsClamped } from './add-calendar-months-clamped';
 export { isReady } from './plan-readiness';
 export { purchasingPowerKobo } from './purchasing-power-kobo';
 export {

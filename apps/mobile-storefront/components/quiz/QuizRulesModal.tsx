@@ -84,7 +84,10 @@ export function QuizRulesModal({
             </Pressable>
           </View>
 
-          <ScrollView style={styles.rulesList} testID="quiz-rules-list">
+          <ScrollView
+            contentContainerStyle={styles.rulesList}
+            testID="quiz-rules-list"
+          >
             <Text style={styles.ruleText}>
               1. You have {timePerQuestionSeconds} seconds for each question.
             </Text>

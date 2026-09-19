@@ -194,4 +194,76 @@ describe('isolated REDVAULT Paystack refund transport', () => {
     expect(await provider.submit(input)).toEqual({ kind: 'indeterminate' });
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it.each([
+    ['processed'],
+    ['failed'],
+  ])('resolves a single capture-reference match to %s', async (status) => {
+    const { fetcher, provider } = setup({
+      status: true,
+      data: [
+        {
+          amount: 9500,
+          currency: 'NGN',
+          id: 124,
+          status,
+          transaction: { reference: 'RV-capture' },
+        },
+      ],
+    });
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: 'RV-capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+      })
+    ).resolves.toEqual({ kind: status, providerStatus: status });
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://api.paystack.co/refund?transaction=RV-capture&perPage=100',
+      expect.objectContaining({ method: 'GET', body: undefined })
+    );
+  });
+  it.each([
+    [[]],
+    [[{ amount: 9500, currency: 'NGN' }]],
+  ])('stays pending when the capture reference has no usable match %j', async (rows) => {
+    const { provider } = setup({ status: true, data: rows });
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: 'RV-capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+      })
+    ).resolves.toEqual({ kind: 'pending', providerStatus: 'pending' });
+  });
+  it('stays pending on ambiguous sibling refunds instead of resolving the wrong one', async () => {
+    const row = (id: number, status: string) => ({
+      amount: 9500,
+      currency: 'NGN',
+      id,
+      status,
+      transaction: { reference: 'RV-capture' },
+    });
+    const { provider } = setup({
+      status: true,
+      data: [row(124, 'processed'), row(125, 'pending')],
+    });
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: 'RV-capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+      })
+    ).resolves.toEqual({ kind: 'pending', providerStatus: 'pending' });
+  });
+  it('rejects capture-reference injection before requesting', async () => {
+    const { fetcher, provider } = setup(null);
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: '../capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+      })
+    ).rejects.toThrow('invalid identifier');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
 });

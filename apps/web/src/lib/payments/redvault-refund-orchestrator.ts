@@ -31,6 +31,15 @@ export interface RedvaultRefundReconciliationProvider {
     | { kind: 'processed'; providerStatus: string }
     | { kind: 'failed'; providerStatus: string }
   >;
+  lookupByCaptureReference(input: {
+    captureReference: string;
+    expectedAmountKobo: number;
+    expectedCurrency: string;
+  }): Promise<
+    | { kind: 'pending'; providerStatus: string }
+    | { kind: 'processed'; providerStatus: string }
+    | { kind: 'failed'; providerStatus: string }
+  >;
 }
 
 export async function processNextRedvaultRefund({
@@ -128,17 +137,23 @@ export async function reconcileNextRedvaultRefund({
   const claim = await store.claimNextReconciliation();
   if (!claim) return { kind: 'idle' };
   // Indeterminate submissions may carry no provider reference (provider
-  // timeout, non-2xx, or unverifiable response). Resolve those through the
-  // original capture reference, which the provider lookup accepts, so the
-  // refund stays recoverable instead of stranding in needs_reconciliation.
-  const providerReference =
-    claim.refund.providerReference ?? claim.refund.attemptReference;
-  const outcome = await provider.lookup({
-    providerReference,
-    expectedAmountKobo: claim.refund.amountKobo,
-    expectedCaptureReference: claim.refund.attemptReference,
-    expectedCurrency: 'NGN',
-  });
+  // timeout, non-2xx, or unverifiable response). Resolve those through a
+  // provider operation that lists refunds by the original capture reference
+  // instead of the numeric refund-ID endpoint, so the refund stays
+  // recoverable instead of stranding in needs_reconciliation.
+  const providerReference = claim.refund.providerReference;
+  const outcome = providerReference
+    ? await provider.lookup({
+        providerReference,
+        expectedAmountKobo: claim.refund.amountKobo,
+        expectedCaptureReference: claim.refund.attemptReference,
+        expectedCurrency: 'NGN',
+      })
+    : await provider.lookupByCaptureReference({
+        captureReference: claim.refund.attemptReference,
+        expectedAmountKobo: claim.refund.amountKobo,
+        expectedCurrency: 'NGN',
+      });
   const refund = await store.reconcile({
     id: claim.refund.id,
     providerStatus: outcome.providerStatus,

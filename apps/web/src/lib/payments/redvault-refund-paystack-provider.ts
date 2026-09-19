@@ -24,6 +24,10 @@ export function createRedvaultPaystackRefundProvider({
   getSecret: () => string | undefined;
 }): RedvaultRefundProvider & RedvaultRefundReconciliationProvider {
   async function request(path: string, body?: Record<string, unknown>) {
+    const envelope = await requestEnvelope(path, body);
+    return envelope?.status === true ? record(envelope.data) : null;
+  }
+  async function requestEnvelope(path: string, body?: Record<string, unknown>) {
     try {
       const secret = getSecret();
       if (!secret) return null;
@@ -40,10 +44,15 @@ export function createRedvaultPaystackRefundProvider({
       });
       if (!response.ok) return null;
       const envelope = record(await response.json());
-      return envelope?.status === true ? record(envelope.data) : null;
+      return envelope?.status === true ? envelope : null;
     } catch {
       return null;
     }
+  }
+  async function requestList(path: string) {
+    const envelope = await requestEnvelope(path);
+    const data = envelope?.data;
+    return Array.isArray(data) ? data : null;
   }
   return {
     async submit({ amountKobo, originalCaptureReference }) {
@@ -109,6 +118,51 @@ export function createRedvaultPaystackRefundProvider({
         data.status === 'pending' ||
         data.status === 'processing' ||
         data.status === 'needs-attention'
+      ) {
+        return { kind: 'pending', providerStatus: 'pending' };
+      }
+      throw new Error('REDVAULT refund lookup unknown status');
+    },
+    async lookupByCaptureReference({
+      captureReference,
+      expectedAmountKobo,
+      expectedCurrency,
+    }) {
+      // Reference-less indeterminate submissions have no numeric refund ID
+      // for the fetch-refund endpoint. List refunds for the original capture
+      // reference instead (Paystack supports filtering the list by
+      // transaction), then match client-side. Zero or ambiguous matches stay
+      // pending so reconciliation retries later rather than resolving the
+      // wrong sibling refund.
+      if (!/^[A-Za-z0-9.=_-]{1,100}$/.test(captureReference))
+        throw new Error('REDVAULT refund lookup invalid identifier');
+      const rows = await requestList(
+        `?transaction=${encodeURIComponent(captureReference)}&perPage=100`
+      );
+      const matches = (rows ?? []).filter((row) => {
+        const candidate = record(row);
+        if (!candidate) return false;
+        const transaction = record(candidate.transaction);
+        const transactionMatches = transaction
+          ? transaction.reference === captureReference
+          : candidate.transaction === captureReference;
+        return (
+          transactionMatches &&
+          candidate.amount === expectedAmountKobo &&
+          candidate.currency === expectedCurrency
+        );
+      });
+      if (matches.length !== 1) {
+        return { kind: 'pending', providerStatus: 'pending' };
+      }
+      const match = record(matches[0]);
+      const status = String(match?.status);
+      if (status === 'processed' || status === 'failed')
+        return { kind: status, providerStatus: status };
+      if (
+        status === 'pending' ||
+        status === 'processing' ||
+        status === 'needs-attention'
       ) {
         return { kind: 'pending', providerStatus: 'pending' };
       }

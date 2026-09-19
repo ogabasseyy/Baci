@@ -15,7 +15,8 @@ const claimed = {
 
 describe('REDVAULT refund operator worker', () => {
   it('resolves a claim with no provider reference through the capture reference', async () => {
-    const lookup = vi
+    const lookup = vi.fn();
+    const lookupByCaptureReference = vi
       .fn()
       .mockResolvedValue({ kind: 'pending', providerStatus: 'pending' });
     const reconcile = vi
@@ -24,7 +25,7 @@ describe('REDVAULT refund operator worker', () => {
 
     await expect(
       reconcileNextRedvaultRefund({
-        provider: { lookup },
+        provider: { lookup, lookupByCaptureReference },
         store: {
           claimNextReconciliation: vi.fn().mockResolvedValue({
             reconciliationClaimToken: 'claim-1',
@@ -37,10 +38,10 @@ describe('REDVAULT refund operator worker', () => {
       kind: 'pending',
       refund: { ...claimed, state: 'processing' },
     });
-    expect(lookup).toHaveBeenCalledWith({
-      providerReference: claimed.attemptReference,
+    expect(lookup).not.toHaveBeenCalled();
+    expect(lookupByCaptureReference).toHaveBeenCalledWith({
+      captureReference: claimed.attemptReference,
       expectedAmountKobo: claimed.amountKobo,
-      expectedCaptureReference: claimed.attemptReference,
       expectedCurrency: 'NGN',
     });
     expect(reconcile).toHaveBeenCalledWith({
@@ -162,6 +163,7 @@ describe('REDVAULT refund operator worker', () => {
       kind: 'processed',
       providerStatus: 'processed',
     });
+    const lookupByCaptureReference = vi.fn();
     const reconcile = vi.fn().mockResolvedValue({
       ...claimed,
       providerReference: 'provider-refund-1',
@@ -170,7 +172,7 @@ describe('REDVAULT refund operator worker', () => {
     });
     await expect(
       reconcileNextRedvaultRefund({
-        provider: { lookup },
+        provider: { lookup, lookupByCaptureReference },
         store: {
           claimNextReconciliation: vi.fn().mockResolvedValue({
             reconciliationClaimToken: 'claim-1',
@@ -210,6 +212,7 @@ describe('REDVAULT refund operator worker', () => {
             kind: 'failed',
             providerStatus: 'failed',
           }),
+          lookupByCaptureReference: vi.fn(),
         },
         store: {
           claimNextReconciliation: vi.fn().mockResolvedValue({

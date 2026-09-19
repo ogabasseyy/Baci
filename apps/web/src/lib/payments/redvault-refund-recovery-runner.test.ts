@@ -8,6 +8,7 @@ const logger = () => ({ error: vi.fn(), info: vi.fn() });
 
 const provider = {
   lookup: vi.fn(),
+  lookupByCaptureReference: vi.fn(),
   submit: vi.fn(),
 };
 

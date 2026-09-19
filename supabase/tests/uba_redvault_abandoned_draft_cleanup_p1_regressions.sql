@@ -64,19 +64,17 @@ BEGIN
     RAISE EXCEPTION 'fresh draft was touched, got %', v_state;
   END IF;
 
-  -- P1: the protected path releases the fenced reservation (idempotent).
+  -- P1: the batch UPDATE above already released the fenced reservation
+  -- through the row trigger (round-9), so the protected RPC is a no-op
+  -- leftover release (idempotent) and the unit stays available.
   v_receipt := public.cancel_abandoned_uba_redvault_draft(v_order_stale, 72);
-  IF COALESCE((v_receipt->>'releasedUnitCount')::integer, -1) <> 1 THEN
-    RAISE EXCEPTION 'fenced unit was not released: %', v_receipt;
+  IF COALESCE((v_receipt->>'releasedUnitCount')::integer, -1) <> 0 THEN
+    RAISE EXCEPTION 'release was not idempotent: %', v_receipt;
   END IF;
   SELECT status INTO v_status FROM public.variant_inventory
   WHERE id = 'a0000000-0000-4000-8000-000000000041';
   IF v_status <> 'available' THEN
     RAISE EXCEPTION 'unit not available, got %', v_status;
-  END IF;
-  v_receipt := public.cancel_abandoned_uba_redvault_draft(v_order_stale, 72);
-  IF COALESCE((v_receipt->>'releasedUnitCount')::integer, -1) <> 0 THEN
-    RAISE EXCEPTION 'release was not idempotent: %', v_receipt;
   END IF;
 
   -- P1: cancelling a fresh draft outside the protected path still raises.

@@ -1,8 +1,10 @@
--- Round-8 P1 regression: indeterminate refund submissions (provider timeout,
--- non-2xx, or unverifiable response) park in needs_reconciliation without a
--- provider reference, yet stay recoverable: the reconciliation claim selects
--- them for lookup through the original capture reference, and reconcile
--- resolves them back to processing/failed so reserve v2 is unblocked.
+-- Round-8 P1 regression (round-9 contract): indeterminate refund submissions
+-- (provider timeout, non-2xx, or unverifiable response) park in
+-- needs_reconciliation without a provider reference, yet stay recoverable:
+-- the reconciliation claim selects them for lookup through the original
+-- capture reference; a nonterminal lookup keeps them in needs_reconciliation
+-- with a cleared lease so they are claimed again, and a terminal lookup
+-- finalizes them so reserve v2 is unblocked.
 BEGIN;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 
@@ -17,6 +19,7 @@ DECLARE
   v_discount uuid := 'f0000000-0000-4000-8000-000000000031';
   v_hash text := '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
   v_claim_id uuid;
+  v_claim_id_first uuid;
   v_token uuid;
   v_attempt_ref text;
   v_state text;
@@ -73,20 +76,37 @@ BEGIN
     RAISE EXCEPTION 'claim did not carry the capture reference: %', v_attempt_ref;
   END IF;
 
-  -- A pending lookup returns the refund to processing.
+  -- A pending (nonterminal) lookup keeps the reference-less row in
+  -- needs_reconciliation with a cleared lease so it is claimed again.
   PERFORM public.reconcile_uba_redvault_refund(v_claim_id, v_token, 'pending');
   SELECT state INTO v_state FROM private.uba_redvault_refunds WHERE id = v_claim_id;
-  IF v_state <> 'processing' THEN
-    RAISE EXCEPTION 'reconcile did not return to processing, got %', v_state;
+  IF v_state <> 'needs_reconciliation' THEN
+    RAISE EXCEPTION 'pending lookup moved the row to %, expected needs_reconciliation', v_state;
   END IF;
-
-  -- A failed lookup finalizes the sibling, clearing the reserve v2 block.
   SELECT id, reconciliation_claim_token INTO v_claim_id, v_token
   FROM public.claim_next_uba_redvault_refund_reconciliation();
+  IF v_claim_id NOT IN (v_refund_a, v_refund_b) THEN
+    RAISE EXCEPTION 'row was not re-claimable, got %', v_claim_id;
+  END IF;
+  v_claim_id_first := v_claim_id;
+
+  -- A failed lookup finalizes the row, clearing the reserve v2 block.
   PERFORM public.reconcile_uba_redvault_refund(v_claim_id, v_token, 'failed');
   SELECT state INTO v_state FROM private.uba_redvault_refunds WHERE id = v_claim_id;
   IF v_state <> 'failed' THEN
     RAISE EXCEPTION 'reconcile did not finalize, got %', v_state;
+  END IF;
+
+  -- The sibling follows the same path.
+  SELECT id, reconciliation_claim_token INTO v_claim_id, v_token
+  FROM public.claim_next_uba_redvault_refund_reconciliation();
+  IF v_claim_id NOT IN (v_refund_a, v_refund_b) OR v_claim_id = v_claim_id_first THEN
+    RAISE EXCEPTION 'sibling was not claimed, got %', v_claim_id;
+  END IF;
+  PERFORM public.reconcile_uba_redvault_refund(v_claim_id, v_token, 'failed');
+  SELECT state INTO v_state FROM private.uba_redvault_refunds WHERE id = v_claim_id;
+  IF v_state <> 'failed' THEN
+    RAISE EXCEPTION 'sibling reconcile did not finalize, got %', v_state;
   END IF;
   SELECT count(*) INTO v_count FROM private.uba_redvault_refunds
   WHERE attempt_id = v_attempt AND state = 'needs_reconciliation';

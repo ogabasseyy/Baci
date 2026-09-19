@@ -76,12 +76,12 @@ function isBlockedIpv6Literal(host: string): boolean {
   // translation, discard) is not a real origin.
   if ((g0 & 0xe000) !== 0x2000) return true;
   // Carve-outs inside global unicast that never originate traffic.
-  if (g0 === 0x2001 && (g1 & 0xfff0) === 0x0010) return true; // 2001:10::/28 ORCHIDv1
-  if (g0 === 0x2001 && (g1 & 0xfff0) === 0x0020) return true; // 2001:20::/28 ORCHIDv2 (RFC 7343)
-  if (g0 === 0x2001 && (g1 & 0xfff0) === 0x0030) return true; // 2001:30::/28 DRIP DET (RFC 9374)
-  if (g0 === 0x2001 && g1 === 0x0000) return true; // 2001::/32 Teredo
+  // IETF Protocol Assignments 2001::/23 as a whole: Teredo, benchmarking,
+  // ORCHIDv1/v2, DRIP DET, and the unassigned remainder are non-globally
+  // reachable. The only explicitly global suballocation retained is the
+  // AMT relay-anycast 2001:3::/32 (RFC 7450).
+  if (g0 === 0x2001 && (g1 & 0xfe00) === 0x0000 && g1 !== 0x0003) return true;
   if (g0 === 0x2002) return true; // 2002::/16 6to4
-  if (g0 === 0x2001 && g1 === 0x0002) return true; // 2001:2::/48 benchmarking
   if (g0 === 0x2001 && g1 === 0x0db8) return true; // 2001:db8::/32 documentation
   if (g0 === 0x3fff && (g1 & 0xf000) === 0x0000) return true; // 3fff::/20 documentation
   return false;

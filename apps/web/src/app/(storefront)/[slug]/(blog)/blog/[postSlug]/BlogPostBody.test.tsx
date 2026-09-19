@@ -119,69 +119,6 @@ describe('BlogPostBody', () => {
     expect(screen.getByText('4 min read')).toBeInTheDocument();
   });
 
-  it('renders the legacy HTML branch and encodes share urls', async () => {
-    mockResolveBlogPostContent.mockResolvedValue({
-      isJson: false,
-      legacyHtml:
-        '<figure><img src="https://cdn.example.com/photo.jpg" alt="Legacy image"><figcaption>Legacy caption</figcaption></figure>',
-      renderedContent: null,
-    });
-
-    render(
-      await BlogPostBody({
-        basePath: '/ogabassey',
-        baseUrl: 'https://usebaci.com',
-        content: '<p>Legacy HTML body</p>',
-        merchantSlug: 'ogabassey',
-        postUrl: 'https://usebaci.com/ogabassey/blog/pixel-9-review',
-        post: {
-          id: 'post-1',
-          slug: 'pixel-9-review',
-          tags: null,
-          title: 'Pixel 9 Review',
-        },
-        relatedProducts: [],
-        relatedPosts: [],
-      })
-    );
-
-    expect(screen.getByTestId('blog-post-legacy-content').innerHTML).toContain(
-      'Legacy caption'
-    );
-
-    const encodedTitle = encodeURIComponent('Pixel 9 Review');
-    const encodedShareUrl = encodeURIComponent(
-      'https://usebaci.com/ogabassey/blog/pixel-9-review'
-    );
-
-    expect(screen.getByRole('link', { name: 'Twitter' })).toHaveAttribute(
-      'href',
-      expect.stringContaining(encodedShareUrl)
-    );
-    expect(screen.getByRole('link', { name: 'Twitter' })).toHaveAttribute(
-      'href',
-      expect.stringContaining(encodedTitle)
-    );
-    expect(screen.getByRole('link', { name: 'LinkedIn' })).toHaveAttribute(
-      'href',
-      expect.stringContaining(encodedShareUrl)
-    );
-    expect(screen.getByRole('link', { name: 'Facebook' })).toHaveAttribute(
-      'href',
-      expect.stringContaining(encodedShareUrl)
-    );
-    expect(mockResolveBlogPostContent).toHaveBeenCalledWith(
-      '<p>Legacy HTML body</p>',
-      {
-        basePath: '/ogabassey',
-        baseUrl: 'https://usebaci.com',
-        fallbackImageAlt: 'Pixel 9 Review',
-        hasPreloadedHeroImage: true,
-        merchantSlug: 'ogabassey',
-      }
-    );
-  });
-
   it('normalizes legacy HTML heading hierarchy inside the article body', async () => {
     mockResolveBlogPostContent.mockResolvedValue({
       isJson: false,

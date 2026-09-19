@@ -14,10 +14,10 @@ import {
   View,
   type ViewToken,
 } from 'react-native';
+import { JustLaunchedSkeleton } from '@/components/storefront/JustLaunchedSkeleton';
 import { LaunchAdCard } from '@/components/storefront/LaunchAdCard';
 import { LaunchProductCard } from '@/components/storefront/LaunchProductCard';
 import { nextOffsetAfterAdToggle } from '@/components/storefront/launch-ad-offset';
-import { Skeleton } from '@/components/ui/Skeleton';
 import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { usePinnedLaunchProducts } from '@/hooks/use-pinned-launch-products';
@@ -158,44 +158,11 @@ export function JustLaunchedCarousel({
   // recent feed resolves first. Error and empty states still render nothing.
   if (isLoading || isPinnedLoading) {
     return (
-      <View style={styles.container}>
-        <Text
-          accessibilityRole="header"
-          style={[styles.heading, { color: colors.text }]}
-        >
-          {SECTION_TITLE}
-        </Text>
-        <View style={styles.list}>
-          {[0, 1].map((key) => (
-            <View
-              key={key}
-              style={[
-                styles.card,
-                {
-                  width: cardWidth,
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.imageWrap,
-                  { backgroundColor: colors.background },
-                ]}
-              >
-                <Skeleton width="100%" height={140} borderRadius={8} />
-              </View>
-              <View style={styles.info}>
-                <Skeleton width="40%" height={10} />
-                <Skeleton style={styles.skeletonGap} width="85%" height={16} />
-                <Skeleton style={styles.skeletonGap} width="55%" height={14} />
-                <Skeleton style={styles.skeletonGap} width="35%" height={13} />
-              </View>
-            </View>
-          ))}
-        </View>
-      </View>
+      <JustLaunchedSkeleton
+        cardWidth={cardWidth}
+        colors={colors}
+        title={SECTION_TITLE}
+      />
     );
   }
 
@@ -282,29 +249,5 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: 16,
     gap: LAUNCH_LIST_GAP,
-  },
-  card: {
-    height: 168,
-    flexDirection: 'row',
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
-
-  imageWrap: {
-    width: '42%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 8,
-  },
-  info: {
-    flex: 1,
-    padding: 14,
-    justifyContent: 'center',
-    gap: 2,
-  },
-  skeletonGap: {
-    marginTop: 6,
   },
 });

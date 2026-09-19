@@ -3,6 +3,7 @@ import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
+import { isOfferClaimedUrl } from '@/lib/is-offer-claimed-image';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { stripHtmlTags } from '@/lib/sanitize-core';
 import {
@@ -43,7 +44,7 @@ function getOpenAIFeedImageUrls(
     product.images
       ?.map((image) => (typeof image === 'string' ? image : image.url))
       .filter(isString)
-      .filter((url) => !offerClaimedImageUrls.has(url)) || []
+      .filter((url) => !isOfferClaimedUrl(url, offerClaimedImageUrls)) || []
   );
 }
 

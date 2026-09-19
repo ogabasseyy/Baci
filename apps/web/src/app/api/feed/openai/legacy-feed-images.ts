@@ -3,6 +3,7 @@ import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
+import { isOfferClaimedUrl } from '@/lib/is-offer-claimed-image';
 import type { ImageManifestMap } from '../google-merchant/feed-builder';
 import type { OpenAIFeedVariant } from './feed-data';
 import type { Product } from './feed-types';
@@ -46,7 +47,10 @@ function getProductImageUrl(
       : parentFirstImageRaw?.url || '';
   // The raw fallback must not restore an offer-owned URL the manifest
   // path just excluded.
-  const fallbackImage = offerClaimedImageUrls.has(parentFirstImage)
+  const fallbackImage = isOfferClaimedUrl(
+    parentFirstImage,
+    offerClaimedImageUrls
+  )
     ? ''
     : parentFirstImage;
 
@@ -72,7 +76,8 @@ function getAdditionalImageLinks(
     .map((img) => (typeof img === 'string' ? img : img.url))
     .filter(
       (url): url is string =>
-        typeof url === 'string' && !offerClaimedImageUrls.has(url)
+        typeof url === 'string' &&
+        !isOfferClaimedUrl(url, offerClaimedImageUrls)
     );
 }
 

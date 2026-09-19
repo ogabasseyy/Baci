@@ -19,6 +19,29 @@ function isRelativeReference(value: string): boolean {
 }
 
 /**
+ * Whether a single URL is claimed by an offer exclusion set: exact match,
+ * or a relative offer claim resolving to the same path. Raw product-image
+ * fallbacks (which have no manifest entry) must use this so a relative
+ * claim still excludes the equivalent absolute product URL.
+ */
+export function isOfferClaimedUrl(
+  url: string | null | undefined,
+  excludeUrls: ReadonlySet<string>
+): boolean {
+  if (url == null || excludeUrls.size === 0) return false;
+  const pathname = urlPathname(url);
+  for (const claim of excludeUrls) {
+    if (claim === url) {
+      return true;
+    }
+    if (isRelativeReference(claim) && claim === pathname) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Whether a manifest entry's URL is claimed by an offer exclusion set.
  * Shared by parent-level and sibling fallbacks so offer-owned imagery is
  * filtered identically everywhere. Besides exact matches, a relative
@@ -31,21 +54,8 @@ export function isOfferClaimedImage(
   entry: FeedImageManifestEntry,
   excludeUrls: ReadonlySet<string>
 ): boolean {
-  if (excludeUrls.size === 0) return false;
-  const sourcePath =
-    entry.source_url != null ? urlPathname(entry.source_url) : null;
-  const verifiedPath =
-    entry.verified_url != null ? urlPathname(entry.verified_url) : null;
-  for (const claim of excludeUrls) {
-    if (claim === entry.source_url || claim === entry.verified_url) {
-      return true;
-    }
-    if (
-      isRelativeReference(claim) &&
-      (claim === sourcePath || claim === verifiedPath)
-    ) {
-      return true;
-    }
-  }
-  return false;
+  return (
+    isOfferClaimedUrl(entry.source_url, excludeUrls) ||
+    isOfferClaimedUrl(entry.verified_url, excludeUrls)
+  );
 }

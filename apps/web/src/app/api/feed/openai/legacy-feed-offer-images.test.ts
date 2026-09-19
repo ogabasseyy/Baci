@@ -132,4 +132,27 @@ describe('generateOpenAIFeed offer images', () => {
     expect(parsed.image_link).toBe('');
     expect(parsed.additional_image_links).toEqual([]);
   });
+
+  it('excludes a relative-claimed absolute product image from raw fallbacks', () => {
+    const [line] = generateOpenAIFeed(
+      [
+        product({
+          images: [
+            'https://cdn.example.com/images/used.jpg',
+            'https://cdn.example.com/phone.jpg',
+          ],
+          offers: [{ images: ['/images/used.jpg'] }],
+        }),
+      ],
+      merchant,
+      'https://ogabassey.com',
+      {}
+    );
+    const parsed = parseLine(line);
+
+    expect(parsed.image_link).toBe('');
+    expect(parsed.additional_image_links).toEqual([
+      'https://cdn.example.com/phone.jpg',
+    ]);
+  });
 });

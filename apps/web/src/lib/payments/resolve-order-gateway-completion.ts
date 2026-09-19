@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { completeOrderGatewayPayment } from './complete-order-gateway-payment';
-import { fileInventoryConfirmationFailureReview } from './file-inventory-confirmation-review';
+import { fileRedvaultInventoryConfirmationReview } from './file-redvault-inventory-confirmation-review';
 import { captureOrHoldRedvaultPayment } from './redvault-capture-hold';
 import { verifyAndCompleteRedvaultPayment } from './verify-and-complete-redvault-payment';
 
@@ -51,12 +51,13 @@ export async function resolveOrderGatewayCompletion({
         gateway === 'paystack'
       ) {
         if (capture.kind === 'capture_evidence_review') {
-          await fileInventoryConfirmationFailureReview({
+          await fileRedvaultInventoryConfirmationReview({
             gatewayReference: reference,
             merchantId,
             metadata: { reason: capture.reason },
             orderId,
             reason: `REDVAULT capture evidence requires review: ${capture.reason}`,
+            supabase: redvaultScopedClient,
             transactionId,
           });
           return { ok: false as const, outcome: capture };
@@ -88,12 +89,13 @@ export async function resolveOrderGatewayCompletion({
             redvaultInventoryConfirmed: approved.inventoryConfirmed,
           };
         }
-        await fileInventoryConfirmationFailureReview({
+        await fileRedvaultInventoryConfirmationReview({
           gatewayReference: reference,
           merchantId,
           metadata: { reason: capture.reason },
           orderId,
           reason: `REDVAULT capture held: ${capture.reason}`,
+          supabase: redvaultScopedClient,
           transactionId,
         });
       }

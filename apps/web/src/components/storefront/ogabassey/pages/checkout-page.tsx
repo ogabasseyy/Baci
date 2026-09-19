@@ -255,6 +255,20 @@ const SHIPPING_RATE_REJECTION_CODES = new Set([
   'SHIPPING_RATE_CONDITION_UNMET',
 ]);
 
+/**
+ * Server payment methods that prove the server actually finalized coverage
+ * to value (mirrors /api/orders responseOrder): only these may override the
+ * UI gateway in funnel attribution. Anything else (notably the persisted
+ * `card` normalization) keeps the shopper-selected gateway so creation and
+ * start/completion share one method.
+ */
+const COVERAGE_FINALIZED_METHODS = new Set([
+  'store_credit',
+  'savings',
+  'wallet',
+  'quiz_voucher',
+]);
+
 interface ResumedOrderFormFields {
   firstName: string;
   lastName: string;
@@ -756,6 +770,10 @@ export const CheckoutPage: React.FC = () => {
     bank_name: string;
     bank_code: string;
     amount: number;
+    /** Full order total: `amount` is only the residual due at the DVA
+     * after wallet credits, but purchase revenue is the whole order.
+     */
+    total: number;
     reference: string;
     orderId?: string;
     orderNumber?: string;
@@ -2445,15 +2463,23 @@ export const CheckoutPage: React.FC = () => {
         typeof order.currency === 'string' && order.currency.trim()
           ? order.currency.trim().toUpperCase()
           : currencyCode;
-      // The server is authoritative when wallet, savings, or a quiz voucher
-      // fully covers an order placed under another selection: attribute
-      // creation to the finalized method so creation and completion share
-      // one funnel instead of straddling proforma_invoice and pay_now.
-      const finalizedPaymentMethod =
-        typeof order.payment_method === 'string' &&
-        order.payment_method.trim() !== ''
-          ? order.payment_method
-          : paymentMethod;
+      // The server is authoritative only when it actually finalized
+      // coverage to wallet/savings/voucher for an order placed under
+      // another selection: attribute creation to the finalized method so
+      // creation and completion share one funnel instead of straddling
+      // proforma_invoice and pay_now. Any other server value (notably the
+      // persisted `card` normalization for ordinary Paystack/Korapay
+      // checkouts) must not override the UI gateway, or creation splits
+      // from the paystack/korapay start/completion events.
+      const serverPaymentMethod =
+        typeof order.payment_method === 'string'
+          ? order.payment_method.trim()
+          : '';
+      const finalizedPaymentMethod = COVERAGE_FINALIZED_METHODS.has(
+        serverPaymentMethod
+      )
+        ? serverPaymentMethod
+        : paymentMethod;
       captureCheckoutFunnelEventOnce(
         CHECKOUT_FUNNEL_EVENTS.orderCreated,
         order.id,
@@ -2672,7 +2698,8 @@ export const CheckoutPage: React.FC = () => {
             orderId: order.id,
             trackingToken: order.tracking_token,
             amount: paymentAmount,
-            total,
+            // Canonical row total first (same rule as order_created).
+            total: order.total ?? total,
             orderCurrency: orderChargeCurrency,
             customerEmail,
             customerName: `${firstName} ${lastName}`.trim(),
@@ -2887,7 +2914,9 @@ export const CheckoutPage: React.FC = () => {
                   paymentStatus: 'paid',
                   reference: data.order_no,
                   source: 'web_checkout',
-                  total: paymentAmount,
+                  // paymentAmount is only the residual sent to CredPal
+                  // after wallet credits; revenue is the full order total.
+                  total: order.total ?? paymentAmount,
                 })
               );
             }
@@ -3044,6 +3073,7 @@ export const CheckoutPage: React.FC = () => {
       currency?: string | null;
       order_number?: string | null;
       tracking_token?: string | null;
+      total?: number | null;
     },
     paymentAmount: number,
     billingAddress: DvaBillingAddress,
@@ -3073,6 +3103,9 @@ export const CheckoutPage: React.FC = () => {
         setDvaData({
           ...result.dva,
           amount: paymentAmount,
+          // Canonical row total first (same rule as order_created):
+          // the client-computed total can lag the server row.
+          total: order.total ?? total,
           reference: result.reference,
           orderId: order.id,
           orderNumber: order.order_number ?? undefined,
@@ -3122,7 +3155,14 @@ export const CheckoutPage: React.FC = () => {
     if (!dvaData || !dvaData.orderId || isVerifyingDva) {
       return;
     }
-    const { orderId, orderNumber, reference, amount, trackingToken } = dvaData;
+    const {
+      orderId,
+      orderNumber,
+      reference,
+      amount,
+      total: dvaTotal,
+      trackingToken,
+    } = dvaData;
     setIsVerifyingDva(true);
     verifyDvaTransferStatus({
       merchantSlug: merchant?.slug ?? undefined,
@@ -3159,7 +3199,7 @@ export const CheckoutPage: React.FC = () => {
             paymentStatus: 'paid',
             reference,
             source: 'web_checkout',
-            total: amount,
+            total: dvaTotal ?? amount,
           })
         );
         clearPendingCheckoutOrder();

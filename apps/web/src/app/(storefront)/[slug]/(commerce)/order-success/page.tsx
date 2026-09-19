@@ -193,14 +193,21 @@ function OrderSuccessContent() {
     }
     let cancelled = false;
     let attempts = 0;
-    let timer: ReturnType<typeof setInterval> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const stop = () => {
       if (timer !== undefined) {
-        clearInterval(timer);
+        clearTimeout(timer);
         timer = undefined;
       }
     };
+    // Serialized: the next poll is scheduled only after the current fetch
+    // settles, so a slow older pending response can never arrive after a
+    // newer paid response and overwrite the settled order (which would
+    // also suppress the completion capture).
     const pollSettlement = async () => {
+      if (cancelled) {
+        return;
+      }
       attempts += 1;
       const data = await fetchOrderData(
         orderId,
@@ -218,10 +225,15 @@ function OrderSuccessContent() {
         data?.payment_status === 'paid' ||
         attempts >= BNPL_SETTLEMENT_POLL_MAX_ATTEMPTS
       ) {
-        stop();
+        return;
       }
+      timer = setTimeout(() => {
+        timer = undefined;
+        void pollSettlement();
+      }, BNPL_SETTLEMENT_POLL_INTERVAL_MS);
     };
-    timer = setInterval(() => {
+    timer = setTimeout(() => {
+      timer = undefined;
       void pollSettlement();
     }, BNPL_SETTLEMENT_POLL_INTERVAL_MS);
     return () => {
@@ -252,14 +264,14 @@ function OrderSuccessContent() {
   const isLoading = loading && Boolean(orderId);
   const hasValidatedOrder = Boolean(order);
   const hasRecoveryState = !isLoading && !hasValidatedOrder;
-  // Proforma presentation is for UNPAID invoice-method orders only: a paid
-  // invoice order renders the commercial (380) document, matching
-  // resolveInvoiceTypeCode.
-  const isInvoice =
-    (_type === 'invoice' ||
-      order?.payment_status === 'invoice' ||
-      order?.payment_method === 'invoice') &&
-    order?.payment_status !== 'paid';
+  // Invoice-method detection stays true after payment so a paid invoice
+  // order keeps its commercial (380) document action; proforma
+  // presentation is unpaid-only, matching resolveInvoiceTypeCode.
+  const isInvoiceMethod =
+    _type === 'invoice' ||
+    order?.payment_status === 'invoice' ||
+    order?.payment_method === 'invoice';
+  const isInvoice = isInvoiceMethod && order?.payment_status !== 'paid';
 
   const heading = hasValidatedOrder
     ? isInvoice
@@ -373,13 +385,15 @@ function OrderSuccessContent() {
               </Link>
             )}
 
-            {isInvoice && (
+            {isInvoiceMethod && (
               <Link
                 href={asRoute(getHref('/receipts'))}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-store-border bg-store-background px-6 py-4 font-bold text-store-background-text transition-colors hover:bg-store-secondary"
               >
                 <Download size={18} />
-                Download Proforma Invoice PDF
+                {isInvoice
+                  ? 'Download Proforma Invoice PDF'
+                  : 'Download Commercial Invoice PDF'}
               </Link>
             )}
 

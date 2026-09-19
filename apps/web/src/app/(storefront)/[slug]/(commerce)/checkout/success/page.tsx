@@ -364,19 +364,28 @@ function CheckoutSuccessContent() {
         reverifyTimer = null;
       }
     };
-    const scheduleReverify = () => {
+    // Serialized: the next attempt is scheduled only after the current
+    // verification settles, so a slow older response can never arrive
+    // after a newer success and overwrite the terminal state (or schedule
+    // a redirect after payment was confirmed).
+    const runVerificationPass = () => {
       if (disposed || reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS) {
         return;
       }
-      reverifyTimer = setTimeout(() => {
-        reverifyTimer = null;
-        if (disposed || statusRef.current !== 'pending') {
+      reverifyAttempts += 1;
+      void verifyCheckoutPayment(verifyParams, verifyHandlers).finally(() => {
+        if (
+          disposed ||
+          statusRef.current !== 'pending' ||
+          reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS
+        ) {
           return;
         }
-        reverifyAttempts += 1;
-        void verifyCheckoutPayment(verifyParams, verifyHandlers);
-        scheduleReverify();
-      }, VERIFY_REPOLL_INTERVAL_MS);
+        reverifyTimer = setTimeout(() => {
+          reverifyTimer = null;
+          runVerificationPass();
+        }, VERIFY_REPOLL_INTERVAL_MS);
+      });
     };
     const verifyHandlers: VerifyCheckoutPaymentHandlers = {
       clearCart,
@@ -426,8 +435,7 @@ function CheckoutSuccessContent() {
       },
     };
 
-    void verifyCheckoutPayment(verifyParams, verifyHandlers);
-    scheduleReverify();
+    runVerificationPass();
 
     return () => {
       disposed = true;

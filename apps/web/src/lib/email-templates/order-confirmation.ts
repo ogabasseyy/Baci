@@ -25,6 +25,13 @@ interface OrderConfirmationData extends MerchantRegistrationInfo {
    * the "Proforma Invoice Generated" subject.
    */
   documentKind?: 'confirmation' | 'proforma';
+  /**
+   * Order-specific resume/payment URL (e.g.
+   * `${merchantUrl}/checkout/resume/${orderId}`). The proforma CTA must
+   * point here — not at the storefront homepage — so customers can view
+   * and pay the quoted invoice from the email.
+   */
+  paymentLink?: string;
 }
 
 /**
@@ -35,6 +42,10 @@ export function generateOrderConfirmationEmail(
   data: OrderConfirmationData
 ): string {
   const isProforma = data.documentKind === 'proforma';
+  // The proforma CTA must open the order-specific resume/payment page so
+  // customers can view and pay the quote; the homepage is not a document.
+  const ctaHref =
+    isProforma && data.paymentLink ? data.paymentLink : data.merchantUrl;
   const itemsHtml = data.items
     .map(
       (item) => `
@@ -175,7 +186,7 @@ export function generateOrderConfirmationEmail(
           <!-- CTA -->
           <tr>
             <td align="center" style="padding: 0 40px 40px 40px;">
-              <a href="${escapeHtmlAttribute(sanitizeUrl(data.merchantUrl))}" style="background-color: #0f172a; color: #ffffff; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.2);">
+              <a href="${escapeHtmlAttribute(sanitizeUrl(ctaHref))}" style="background-color: #0f172a; color: #ffffff; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.2);">
                 ${isProforma ? 'View Proforma Invoice' : 'View Order'}
               </a>
             </td>
@@ -252,7 +263,9 @@ Phone: ${data.shippingAddress.phone}
 What's next?
 ${
   isProforma
-    ? 'Complete payment using your invoice link to confirm this order.'
+    ? data.paymentLink
+      ? `Complete payment using your invoice link to confirm this order:\n${data.paymentLink}`
+      : 'Complete payment using your invoice link to confirm this order.'
     : "You'll receive a shipping confirmation email with tracking information once your order is on its way."
 }
 

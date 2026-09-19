@@ -50,15 +50,24 @@ function pruneRejectedQuizVoucherLines(error: OrderError): void {
 }
 
 // Raised before an order exists or a provider flow starts: offline clients,
-// invalid carts, expired sessions, and order-creation conflicts (a reusable
-// order that changed, or a duplicate idempotent submission) are not payment
-// declines and must not enter the funnel as payment_failed.
+// invalid carts, expired sessions, order-creation conflicts (a reusable
+// order that changed, or a duplicate idempotent submission), and every
+// createOrder transport/server failure (timeouts, exhausted retries, 5xx,
+// unparseable responses, merchant lookups) are not payment declines and must
+// not enter the funnel as payment_failed. Only codes raised after an
+// order/payment attempt actually started (e.g. PAYMENT_INIT_ERROR) record a
+// funnel payment failure.
 const PRE_ORDER_ERROR_CODES = new Set([
   'NETWORK_ERROR',
   'VALIDATION_ERROR',
   'AUTH_ERROR',
   'CHECKOUT_IDEMPOTENCY_CONFLICT',
   'CHECKOUT_ORDER_NOT_REUSABLE',
+  'TIMEOUT_ERROR',
+  'RETRY_EXHAUSTED',
+  'SERVER_ERROR',
+  'UNKNOWN_ERROR',
+  'NOT_FOUND',
 ]);
 
 export function handleCheckoutSubmitError(
@@ -143,11 +152,10 @@ export function handleCheckoutSubmitError(
     error instanceof Error ? error.message : 'Unknown error',
     { step: 'place_order', paymentMethod: selectedPayment }
   );
-  trackCheckoutPaymentFailed(
-    error instanceof Error ? error.name : 'unknown_error',
-    undefined,
-    selectedPayment
-  );
+  // A non-OrderError (e.g. an ordinary throw from the preceding
+  // repriceCartItems call) carries no evidence that an order or payment
+  // attempt started, so it must not enter the funnel as payment_failed —
+  // payment-stage failures arrive as OrderError codes instead.
   Alert.alert('Error', 'Failed to place order. Please try again.', [
     { text: 'OK' },
   ]);

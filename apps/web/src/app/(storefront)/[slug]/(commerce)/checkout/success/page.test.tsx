@@ -259,6 +259,70 @@ describe('checkout success page', () => {
     }
   });
 
+  it('does not start a second verification while one is in flight', async () => {
+    // Same stable-router pin as above: production runs the effect once
+    // per mount.
+    const useRouterSpy = vi
+      .spyOn(nextNavigation, 'useRouter')
+      .mockReturnValue({ push: mockPush } as never);
+    let releaseFirst!: (value: unknown) => void;
+    const firstGate = new Promise((resolve) => {
+      releaseFirst = resolve as (value: unknown) => void;
+    });
+    mockFetchWithCsrf
+      .mockImplementationOnce(() =>
+        firstGate.then(() => ({
+          ok: true,
+          json: async () => ({
+            orderNumber: 'ORD-2001',
+            status: 'pending',
+            success: false,
+          }),
+        }))
+      )
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          finalizationOutcome: 'completed',
+          orderId: 'order-1',
+          orderNumber: 'ORD-2001',
+          orderTotal: 5750,
+          paymentMethod: 'paystack',
+          status: 'success',
+          success: true,
+        }),
+      });
+
+    try {
+      render(<CheckoutSuccessPage />);
+      await waitFor(() => expect(mockFetchWithCsrf).toHaveBeenCalled());
+
+      // Wait past the re-verify interval while the first request is
+      // still in flight: no concurrent second request may start.
+      await new Promise((resolve) => setTimeout(resolve, 4100));
+      expect(mockFetchWithCsrf).toHaveBeenCalledTimes(1);
+
+      // The slow first response settles pending; only then does the
+      // next attempt start and observe the paid order.
+      releaseFirst(undefined);
+      await waitFor(
+        () => {
+          expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+            'payment_completed',
+            'order-1',
+            expect.objectContaining({ payment_status: 'paid' })
+          );
+        },
+        { timeout: 8000 }
+      );
+      expect(
+        screen.queryByRole('heading', { name: /order being processed/i })
+      ).not.toBeInTheDocument();
+    } finally {
+      useRouterSpy.mockRestore();
+    }
+  });
+
   it('keeps the cart intact when payment verification does not succeed', async () => {
     mockFetchWithCsrf.mockResolvedValue({
       ok: true,

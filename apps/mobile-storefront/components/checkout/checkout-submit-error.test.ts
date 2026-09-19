@@ -259,6 +259,66 @@ describe('handleCheckoutSubmitError', () => {
     );
   });
 
+  it.each([
+    ['TIMEOUT_ERROR'],
+    ['RETRY_EXHAUSTED'],
+    ['SERVER_ERROR'],
+    ['UNKNOWN_ERROR'],
+    ['NOT_FOUND'],
+  ])('does not record order-API %s failures as payment failures', (code) => {
+    const { trackCheckoutPaymentFailed, trackError } = jest.requireMock(
+      '@/services/analytics'
+    ) as {
+      trackCheckoutPaymentFailed: jest.Mock;
+      trackError: jest.Mock;
+    };
+    trackCheckoutPaymentFailed.mockClear();
+    trackError.mockClear();
+
+    handleCheckoutSubmitError(
+      new OrderError('order API failure', code),
+      'paystack' as Parameters<typeof handleCheckoutSubmitError>[1]
+    );
+
+    // The order API failed before an order or payment attempt existed.
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+    expect(trackError).toHaveBeenCalledWith(
+      'checkout_failed',
+      'order API failure',
+      expect.objectContaining({ errorCode: code })
+    );
+  });
+
+  it('does not record a repricing failure as a payment failure', () => {
+    const { trackCheckoutPaymentFailed, trackError } = jest.requireMock(
+      '@/services/analytics'
+    ) as {
+      trackCheckoutPaymentFailed: jest.Mock;
+      trackError: jest.Mock;
+    };
+    trackCheckoutPaymentFailed.mockClear();
+    trackError.mockClear();
+
+    // repriceCartItems throws ordinary errors before any order or payment
+    // attempt starts; the fallback branch must not invent a payment decline.
+    handleCheckoutSubmitError(
+      new Error('reprice lookup failed'),
+      'paystack' as Parameters<typeof handleCheckoutSubmitError>[1]
+    );
+
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+    expect(trackError).toHaveBeenCalledWith(
+      'checkout_failed',
+      'reprice lookup failed',
+      expect.objectContaining({ step: 'place_order' })
+    );
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Error',
+      'Failed to place order. Please try again.',
+      expect.any(Array)
+    );
+  });
+
   it('records post-order payment failures', () => {
     const { trackCheckoutPaymentFailed } = jest.requireMock(
       '@/services/analytics'

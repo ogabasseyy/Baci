@@ -3779,6 +3779,266 @@ describe('CheckoutPage', () => {
     window.localStorage.clear();
   });
 
+  it('records the full order total for CredPal completion after wallet credits', async () => {
+    vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
+    vi.mocked(useCart).mockReturnValue({
+      cart: [
+        {
+          id: 'item-1',
+          name: 'Test Product',
+          price: 5000,
+          quantity: 1,
+          image: '',
+          slug: 'test-product',
+        },
+      ],
+      cartTotal: 5000,
+      clearCart: vi.fn(),
+      isHydrated: true,
+    } as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        slug: 'ogabassey',
+        business_name: 'Test Store',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+        country: 'NG',
+        feature_settings: { credpal_enabled: true },
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    vi.mocked(usePersistedForm).mockReturnValue({
+      values: {
+        firstName: 'Ada',
+        lastName: 'Buyer',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        newAddressStreet: '2 Olaide Tomori Street',
+        newAddressState: 'Lagos',
+        newAddressCity: 'Ikeja',
+        currentStep: 'delivery',
+        completedSteps: { contact: true, delivery: false },
+      },
+      setValue: vi.fn(),
+      setValues: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as ReturnType<typeof usePersistedForm>);
+
+    let capturedOnSuccess:
+      | ((data: {
+          status: 'success' | 'pending';
+          order_no: string;
+        }) => Promise<void>)
+      | undefined;
+    vi.mocked(openCredPalCheckout).mockImplementation(async (config) => {
+      capturedOnSuccess = config.onSuccess as typeof capturedOnSuccess;
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url === '/api/orders') {
+          return {
+            ok: true,
+            json: async () => ({
+              // Wallet credits cover all but 750: the CredPal widget
+              // opens on the residual while revenue stays the full total.
+              amountDueToGateway: 750,
+              order: {
+                id: 'order-cred-1',
+                order_number: 'ORD-CRED-1',
+                tracking_token: 'track-cred-1',
+                total: 5750,
+              },
+              wallet: null,
+            }),
+            text: async () => '',
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({ states: ['Lagos'], locations: [] }),
+          text: async () => '',
+        } as Response;
+      });
+
+    try {
+      render(<CheckoutPage />);
+      fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /continue to payment/i })
+      );
+      // CredPal lives under the installments tab.
+      fireEvent.click(
+        await screen.findByRole('button', { name: /pay in installments/i })
+      );
+      const credpalRadio = (
+        await screen.findAllByRole('radio', { name: /credpal/i })
+      ).find((radio) => radio.getAttribute('value') === 'credpal');
+      expect(credpalRadio).toBeDefined();
+      fireEvent.click(credpalRadio as HTMLInputElement);
+      const placeOrderButton = screen
+        .getAllByRole('button', { name: /place order/i })
+        .find((button) => !button.hasAttribute('disabled'));
+      fireEvent.click(placeOrderButton as HTMLButtonElement);
+
+      await waitFor(() => {
+        expect(openCredPalCheckout).toHaveBeenCalled();
+      });
+      await capturedOnSuccess?.({
+        status: 'success',
+        order_no: 'CP-123',
+      });
+
+      // Server-confirmed completion records the FULL order total, not
+      // the 750 residual the widget opened with.
+      await waitFor(() => {
+        expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+          'payment_completed',
+          'order-cred-1',
+          expect.objectContaining({
+            payment_method: 'credpal',
+            payment_status: 'paid',
+            reference: 'CP-123',
+            total: 5750,
+          })
+        );
+      });
+    } finally {
+      fetchMock.mockRestore();
+      window.localStorage.clear();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it.each(['paystack', 'korapay'])(
+    'attributes order_created to the selected %s gateway despite card normalization',
+    async (gateway) => {
+      window.localStorage.clear();
+      vi.mocked(useCart).mockReturnValue({
+        cart: [
+          {
+            id: 'item-1',
+            name: 'Test Product',
+            price: 5000,
+            quantity: 1,
+            image: '',
+            slug: 'test-product',
+          },
+        ],
+        cartTotal: 5000,
+        clearCart: vi.fn(),
+        isHydrated: true,
+      } as unknown as ReturnType<typeof useCart>);
+      vi.mocked(useMerchantSafe).mockReturnValue({
+        merchant: {
+          id: 'merchant-1',
+          slug: 'ogabassey',
+          business_name: 'Test Store',
+          vat_registration_status: 'registered',
+          vat_rate: 7.5,
+          country: 'NG',
+          paystack_subaccount_code: 'ACCT_test',
+          feature_settings: {
+            paystack_enabled: true,
+            korapay_enabled: true,
+          },
+        },
+        basePath: '/ogabassey',
+      } as unknown as ReturnType<typeof useMerchantSafe>);
+      vi.mocked(usePersistedForm).mockReturnValue({
+        values: {
+          firstName: 'Ada',
+          lastName: 'Buyer',
+          customerEmail: 'ada@example.com',
+          customerPhone: '+2348123456789',
+          newAddressStreet: '2 Olaide Tomori Street',
+          newAddressState: 'Lagos',
+          newAddressCity: 'Ikeja',
+          currentStep: 'delivery',
+          completedSteps: { contact: true, delivery: false },
+        },
+        setValue: vi.fn(),
+        setValues: vi.fn(),
+        clear: vi.fn(),
+      } as unknown as ReturnType<typeof usePersistedForm>);
+
+      const fetchMock = vi
+        .spyOn(globalThis, 'fetch')
+        .mockImplementation(async (input) => {
+          const url = String(input);
+          if (url === '/api/payments/initialize') {
+            return {
+              ok: true,
+              json: async () => ({
+                success: true,
+                authorization_url: 'https://checkout.example/test',
+                reference: 'reference',
+              }),
+              text: async () => '',
+            } as Response;
+          }
+          if (url === '/api/orders') {
+            return {
+              ok: true,
+              json: async () => ({
+                amountDueToGateway: 5750,
+                order: {
+                  id: 'order-123',
+                  order_number: 'ORD-123',
+                  tracking_token: 'track-123',
+                  // The server persists ordinary card checkouts as
+                  // `card`: creation must still use the selected gateway
+                  // so it shares a funnel with start/completion.
+                  payment_method: 'card',
+                  payment_status: 'unpaid',
+                },
+                wallet: null,
+              }),
+              text: async () => '',
+            } as Response;
+          }
+          return {
+            ok: true,
+            json: async () => ({ states: ['Lagos'], locations: [] }),
+            text: async () => '',
+          } as Response;
+        });
+
+      try {
+        render(<CheckoutPage />);
+        fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+        fireEvent.click(
+          screen.getByRole('button', { name: /continue to payment/i })
+        );
+        const gatewayRadio = (
+          await screen.findAllByRole('radio', { name: new RegExp(gateway, 'i') })
+        ).find((radio) => radio.getAttribute('value') === gateway);
+        expect(gatewayRadio).toBeDefined();
+        fireEvent.click(gatewayRadio as HTMLInputElement);
+        const placeOrderButton = screen
+          .getAllByRole('button', { name: /place order/i })
+          .find((button) => !button.hasAttribute('disabled'));
+        fireEvent.click(placeOrderButton as HTMLButtonElement);
+
+        await waitFor(() => {
+          expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+            'order_created',
+            'order-123',
+            expect.objectContaining({
+              payment_method: gateway,
+              payment_intent: 'pay_now',
+            })
+          );
+        });
+      } finally {
+        fetchMock.mockRestore();
+        window.localStorage.clear();
+      }
+    }
+  );
+
   it('clears the idempotency key when the order is no longer reusable', async () => {
     const scrollSpy = vi
       .spyOn(window, 'scrollTo')
@@ -4907,6 +5167,158 @@ describe('CheckoutPage', () => {
       );
     });
     fetchMock.mockRestore();
+  });
+
+  it('records the full order total for DVA completion after wallet credits', async () => {
+    const completedEvents: unknown[][] = [];
+    mockCaptureCheckoutFunnelEventOnce.mockImplementation(
+      (...args: unknown[]) => {
+        if (args[0] === 'payment_completed') completedEvents.push(args);
+      }
+    );
+    const routerPush = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: routerPush,
+      back: vi.fn(),
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    const merchant = {
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      business_name: 'Test Store',
+      country: 'NG',
+      vat_registration_status: 'registered',
+      vat_rate: 7.5,
+      paystack_subaccount_code: 'ACCT_test123',
+      feature_settings: {
+        bank_transfer_enabled: true,
+        wallet_paystack_dva_enabled: true,
+      },
+    };
+    const paymentForm = {
+      values: {
+        firstName: 'Ada',
+        lastName: 'Buyer',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        newAddressStreet: '2 Olaide Tomori Street',
+        newAddressState: 'Lagos',
+        newAddressCity: 'Ikeja',
+        currentStep: 'payment',
+        completedSteps: { contact: true, delivery: true },
+      },
+      setValue: vi.fn(),
+      setValues: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as ReturnType<typeof usePersistedForm>;
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.startsWith('/api/storefront/orders/track-order')) {
+          return {
+            ok: true,
+            json: async () => ({
+              order: {
+                id: 'order-dva',
+                order_number: 'ORD-DVA',
+                payment_status: 'paid',
+                total: 5750,
+              },
+            }),
+          } as Response;
+        }
+        if (url === '/api/payments/initialize') {
+          return {
+            ok: true,
+            json: async () => ({
+              success: true,
+              dva: {
+                account_number: '1234567890',
+                account_name: 'Test',
+                bank_name: 'Test Bank',
+              },
+              reference: 'dva-ref-1',
+            }),
+          } as Response;
+        }
+        if (url === '/api/orders') {
+          return {
+            ok: true,
+            json: async () => ({
+              // Wallet credits cover all but 750: the DVA receives the
+              // residual while revenue stays the full total.
+              amountDueToGateway: 750,
+              order: {
+                id: 'order-dva',
+                order_number: 'ORD-DVA',
+                total: 5750,
+                payment_status: 'pending',
+                tracking_token: 'track-1',
+              },
+              wallet: null,
+            }),
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({ states: [], locations: [] }),
+        } as Response;
+      });
+    vi.mocked(useCart).mockReturnValue({
+      cart: [
+        {
+          id: 'item-1',
+          name: 'Test Product',
+          price: 5000,
+          quantity: 1,
+          image: '',
+          slug: 'test-product',
+        },
+      ],
+      cartTotal: 5000,
+      clearCart: vi.fn(),
+      isHydrated: true,
+    } as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant,
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    vi.mocked(usePersistedForm).mockReturnValue(paymentForm);
+
+    try {
+      render(<CheckoutPage />);
+      fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+      const paymentRadio = screen
+        .getAllByRole('radio', { name: /bank transfer/i })
+        .find((radio) => radio.getAttribute('value') === 'bank_transfer');
+      expect(paymentRadio).toBeDefined();
+      fireEvent.click(paymentRadio as HTMLInputElement);
+      fireEvent.click(
+        screen
+          .getAllByRole('button', { name: /place order/i })
+          .find((button) => !button.hasAttribute('disabled')) as HTMLButtonElement
+      );
+      fireEvent.click(
+        await screen.findByRole('button', { name: /confirm transfer sent/i })
+      );
+
+      // The confirmed transfer records the FULL order total, not the
+      // 750 residual the DVA received.
+      await waitFor(() => {
+        expect(completedEvents).toHaveLength(1);
+      });
+      expect(completedEvents[0]?.[2]).toEqual(
+        expect.objectContaining({
+          payment_method: 'bank_transfer',
+          payment_status: 'paid',
+          reference: 'dva-ref-1',
+          total: 5750,
+        })
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   it('routes pending CredPal applications to success without a paid conversion', async () => {

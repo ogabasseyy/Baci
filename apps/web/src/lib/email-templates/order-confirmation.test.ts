@@ -177,4 +177,40 @@ describe('Order confirmation email', () => {
       expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     });
   });
+
+  describe('proforma CTA destination', () => {
+    const proformaPayload = {
+      ...baseOrderData,
+      documentKind: 'proforma' as const,
+      paymentLink: 'https://testshop.usebaci.com/checkout/resume/order-123',
+    };
+
+    it('points the View Proforma Invoice anchor at the order payment link', () => {
+      const html = generateOrderConfirmationEmail(proformaPayload);
+
+      expect(html).toContain('View Proforma Invoice');
+      expect(html).toContain(
+        'href="https://testshop.usebaci.com/checkout/resume/order-123"'
+      );
+    });
+
+    it('includes the payment link in the plain-text next steps', () => {
+      const text = generateOrderConfirmationText(proformaPayload);
+
+      expect(text).toContain(
+        'https://testshop.usebaci.com/checkout/resume/order-123'
+      );
+    });
+
+    it('keeps the confirmation CTA on the storefront homepage', () => {
+      const html = generateOrderConfirmationEmail({
+        ...baseOrderData,
+        paymentLink: 'https://testshop.usebaci.com/checkout/resume/order-123',
+      });
+
+      expect(html).toContain('View Order');
+      expect(html).toContain('href="https://testshop.usebaci.com/"');
+      expect(html).not.toContain('checkout/resume/order-123');
+    });
+  });
 });

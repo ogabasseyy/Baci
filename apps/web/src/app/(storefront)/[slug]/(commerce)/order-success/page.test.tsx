@@ -352,6 +352,88 @@ describe('storefront order success page', () => {
     }
   });
 
+  it('serializes settlement polls and never applies stale pending over paid', async () => {
+    vi.useFakeTimers();
+    try {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-123',
+          reference: 'credpal-ref-1',
+          type: 'credpal',
+          credpalStatus: 'pending',
+          trackingToken: 'track-token-123',
+        })
+      );
+      const pendingOrder = {
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        items: [],
+        subtotal: 45000,
+        shipping_cost: 1500,
+        total: 49875,
+        payment_method: 'credpal',
+        payment_status: 'pending',
+      };
+      const paidOrder = { ...pendingOrder, payment_status: 'paid' };
+      let releaseFirstPoll!: (value: unknown) => void;
+      const firstPollGate = new Promise((resolve) => {
+        releaseFirstPoll = resolve as (value: unknown) => void;
+      });
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => pendingOrder,
+        })
+        .mockImplementationOnce(() =>
+          firstPollGate.then(() => ({
+            ok: true,
+            json: async () => pendingOrder,
+          }))
+        )
+        .mockResolvedValue({
+          ok: true,
+          json: async () => paidOrder,
+        });
+
+      render(<OrderSuccessPage />);
+      await flushMicrotasks();
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
+
+      // First poll starts on schedule…
+      await advanceTimers(3000);
+      await flushMicrotasks();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      // …but while it is still in flight, later intervals must not
+      // start concurrent polls (each would resolve pending and could
+      // overwrite the paid order observed next).
+      await advanceTimers(6000);
+      await flushMicrotasks();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      // The slow poll settles pending; only then does the next poll
+      // start and observe the paid order.
+      releaseFirstPoll(undefined);
+      await flushMicrotasks();
+      await advanceTimers(3000);
+      await flushMicrotasks();
+
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-123',
+        expect.objectContaining({
+          payment_method: 'credpal',
+          payment_status: 'paid',
+          total: 49875,
+        })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not capture while a BNPL approval is still pending', async () => {
     vi.useFakeTimers();
     try {
@@ -423,5 +505,10 @@ describe('storefront order success page', () => {
     expect(
       screen.queryByRole('link', { name: /download proforma invoice pdf/i })
     ).toBeNull();
+    // The paid invoice order keeps a document action, now rendered as
+    // the commercial (380) invoice rather than disappearing entirely.
+    expect(
+      screen.getByRole('link', { name: /download commercial invoice pdf/i })
+    ).toBeInTheDocument();
   });
 });

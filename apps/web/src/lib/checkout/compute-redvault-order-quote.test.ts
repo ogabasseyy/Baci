@@ -62,6 +62,19 @@ describe('computeRedvaultOrderQuote', () => {
       vatRateBp: 750,
     });
   });
+  it('trims catalog brand and name to match snapshot binding', async () => {
+    const quote = await computeRedvaultOrderQuote({
+      ...input,
+      supabase: client({
+        brand: '  Samsung ',
+        name: ' Galaxy S24\n',
+      }) as never,
+    });
+    expect(quote.lines[0]).toMatchObject({
+      brand: 'Samsung',
+      name: 'Galaxy S24',
+    });
+  });
   it.each([
     null,
     '',

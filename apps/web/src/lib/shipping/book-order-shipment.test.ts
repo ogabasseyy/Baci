@@ -316,6 +316,31 @@ describe('bookOrderShipment', () => {
     ).rejects.toThrow('no items');
   });
 
+  it('throws NO_SHIPPABLE_ITEMS when every surviving item quantity is zero', async () => {
+    const supabase = createMockSupabase({
+      order: {
+        data: {
+          ...validOrder,
+          order_items: [
+            {
+              name: 'Widget',
+              quantity: 2,
+              price: 5000,
+              fulfillment_data: { fulfillmentQuantity: 0 },
+            },
+          ],
+        },
+        error: null,
+      },
+      quote: { data: validQuote, error: null },
+      merchant: { data: validMerchant, error: null },
+    });
+
+    await expect(
+      bookOrderShipment(supabase, 'merchant-1', 'order-1')
+    ).rejects.toThrow('nothing left to ship');
+  });
+
   it('throws QUOTE_NOT_FOUND when quote does not exist', async () => {
     const supabase = createMockSupabase({
       order: { data: validOrder, error: null },

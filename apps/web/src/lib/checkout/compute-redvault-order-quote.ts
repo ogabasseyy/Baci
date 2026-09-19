@@ -91,6 +91,17 @@ function asKobo(value: number | string | null): number {
   return kobo;
 }
 
+/**
+ * Mirror private.validate_redvault_snapshot, which compares quote lines
+ * against NULLIF(trim(catalog), ''): emit the trimmed catalog text (empty
+ * collapses to null) so padded catalog data cannot fail snapshot binding.
+ */
+function snapshotCatalogText(value: string | null): string | null {
+  if (value === null) return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
 function stableAttributes(value: Record<string, string> | null): string {
   return JSON.stringify(
     Object.entries(value ?? {}).sort(([left], [right]) =>
@@ -186,10 +197,10 @@ export async function computeRedvaultOrderQuote({
           'Variant does not belong to requested product'
         );
       return {
-        brand: product.brand,
+        brand: snapshotCatalogText(product.brand),
         condition: variant?.condition ?? product.condition,
         itemId: `line-${index + 1}`,
-        name: product.name,
+        name: snapshotCatalogText(product.name),
         persistedItemOrder: index + 1,
         productId: product.id,
         quantity: item.quantity,

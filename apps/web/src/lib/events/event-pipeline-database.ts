@@ -7,6 +7,7 @@ import {
 } from '@/lib/events/event-pipeline-frozen-authority-sources';
 import { eventPipelineJumiaCredentialPaths } from '@/lib/events/event-pipeline-jumia-credential-paths';
 import { eventPipelineLegacySdkImporters } from '@/lib/events/event-pipeline-legacy-sdk-importers';
+import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from '@/lib/events/event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from '@/lib/events/event-pipeline-shipping-credential-paths';
 import {
@@ -153,6 +154,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       ...eventPipelineCredentialPaths,
       ...eventPipelineJumiaCredentialPaths,
       ...eventPipelineRepairPickupCredentialPaths,
+      ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
     ],
     factoryModules: [

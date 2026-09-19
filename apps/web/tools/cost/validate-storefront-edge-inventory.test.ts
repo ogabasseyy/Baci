@@ -75,7 +75,7 @@ describe('validateStorefrontEdgeInventory', () => {
     // Assert
     expect(result).toEqual({
       inventorySha256:
-        '5ff0ebf19225bb208aa930264759c9c00aa22da4e37e6becc0ff2d2ea1ac7aa8',
+        'cae0ef0d28be9cfcd098348b69730675b3e05c15c45844945da223e87d65c79f',
       rowCount: 554,
       storefrontEntrypointCount: 76,
     });

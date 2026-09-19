@@ -4,9 +4,9 @@ import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import type {
   QuizAnswerKeyReview,
+  QuizDraftConfiguration,
   QuizLaunchInput,
 } from './quiz-admin-actions';
-import type { QuizDraftConfiguration } from './quiz-authoring-form';
 
 function timingSummary(configuration: QuizDraftConfiguration): string {
   if (configuration.timingKind === 'scheduled') {

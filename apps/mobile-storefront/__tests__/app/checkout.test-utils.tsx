@@ -254,7 +254,7 @@ jest.mock('@/hooks/use-merchant', () => ({
   useMerchant: () => mockUseMerchant(),
 }));
 
-jest.mock('@/lib/supabase', () => ({
+jest.mock('@/lib/commerce-brain', () => ({
   calculateCommerce: jest.fn(
     (
       _name: string,
@@ -276,6 +276,9 @@ jest.mock('@/lib/supabase', () => ({
       });
     }
   ),
+}));
+
+jest.mock('@/lib/supabase', () => ({
   supabase: {
     from: jest.fn(() => ({
       eq: jest.fn(() => ({

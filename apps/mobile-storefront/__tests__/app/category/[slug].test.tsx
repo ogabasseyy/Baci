@@ -10,6 +10,7 @@ interface MockFlashListProps {
 
 interface MockCategoryFlashListProps extends MockFlashListProps {
   onEndReached?: () => void;
+  ListFooterComponent?: React.ComponentType | (() => React.ReactNode);
   refreshControl?: {
     props: {
       onRefresh?: () => Promise<void> | void;
@@ -131,6 +132,17 @@ jest.mock('@/hooks', () => ({
   useProducts: () => mockUseProducts(),
 }));
 
+jest.mock('@/components/ads/AdSlot', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+  return {
+    AdSlot: ({ placement }: { placement: string }) =>
+      React.createElement(View, { testID: `ad-slot-${placement}` }),
+  };
+});
+
 jest.mock('@/components/storefront/ProductCard', () => ({
   ProductCard: ({
     product,
@@ -159,6 +171,10 @@ jest.mock('@/components/storefront/ProductCard', () => ({
 describe('CategoryScreen', () => {
   const getFlashListProps = () =>
     mockFlashList.mock.calls[0]?.[0] as MockCategoryFlashListProps | undefined;
+  const getLatestFlashListProps = () =>
+    mockFlashList.mock.calls.at(-1)?.[0] as
+      | MockCategoryFlashListProps
+      | undefined;
   const setProductsState = ({
     error = null,
     hasMore = false,
@@ -326,5 +342,51 @@ describe('CategoryScreen', () => {
     fireEvent.press(screen.getByLabelText('Open test-product'));
 
     expect(mockRouterPush).toHaveBeenCalledWith('/product/test-product');
+  });
+
+  it('withholds the category MPU until the category resolves successfully', () => {
+    // Regression: FlashList renders the footer alongside the empty
+    // component, so the MPU requested under invalid/loading/error states.
+    const footerElement = () => {
+      const Footer = getLatestFlashListProps()?.ListFooterComponent as
+        | (() => React.ReactNode)
+        | undefined;
+      expect(Footer).toBeDefined();
+      return Footer?.() ?? null;
+    };
+
+    render(<CategoryScreen />);
+    const shown = footerElement() as { props?: { placement?: string } } | null;
+    expect(shown).not.toBeNull();
+    expect(shown?.props?.placement).toBe('PRODUCT_GRID_MPU');
+
+    mockUseLocalSearchParams.mockReturnValue({ slug: '' });
+    setProductsState({ products: [] });
+    render(<CategoryScreen />);
+    expect(footerElement()).toBeNull();
+  });
+
+  it.each([
+    { name: 'loading', state: { isLoading: true, products: [] } },
+    {
+      name: 'error',
+      state: { error: 'Failed to load products', products: [] },
+    },
+    { name: 'unresolved slug', state: { products: [] } },
+  ])('withholds the category MPU while $name', ({ state }) => {
+    if ('error' in state && state.error) {
+      setProductsState({ error: state.error, products: [] });
+    } else if ('isLoading' in state && state.isLoading) {
+      setProductsState({ isLoading: true, products: [] });
+    } else {
+      mockUseCategories.mockReturnValue({ data: [], isLoading: false });
+      setProductsState({ products: [] });
+    }
+    render(<CategoryScreen />);
+
+    const Footer = getLatestFlashListProps()?.ListFooterComponent as
+      | (() => React.ReactNode)
+      | undefined;
+    expect(Footer?.() ?? null).toBeNull();
   });
 });

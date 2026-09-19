@@ -18,10 +18,11 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Animated, { type ScrollHandlerProcessed } from 'react-native-reanimated';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { BlockRenderer } from '@/components/storefront/BlockRenderer';
 import { FilterBar } from '@/components/storefront/FilterBar';
 import { HomeServiceCards } from '@/components/storefront/HomeServiceCards';
-import { ProductCard } from '@/components/storefront/ProductCard';
+import { findHeroAdOwnerBlockId } from '@/components/storefront/hero-ad-owner';
 import { styles as gridStyles } from '@/components/storefront/ProductGrid.styles';
 import { ProductGridSkeleton } from '@/components/ui/Skeleton';
 import { palette } from '@/constants/Colors';
@@ -32,10 +33,10 @@ import { getTemplateConfig } from '@/lib/templates';
 import type { Block, ProductGridBlock } from '@/types/blocks';
 import type { Product } from '@/types/product';
 import { HomeFeedEmptyState } from './HomeFeedEmptyState';
-import { homeFeedStyles } from './home-feed.styles';
+import { HomeFeedListItemView } from './HomeFeedListItemView';
 import { useHomeProductFeed } from './use-home-product-feed';
 
-type HomeFeedListItem =
+export type HomeFeedListItem =
   | { kind: 'product'; product: Product }
   | { kind: 'product-list-end'; id: string };
 
@@ -116,6 +117,13 @@ export function HomeFeedList({
   const footerBlocks = hasPrimaryGrid
     ? blocks.slice(primaryProductGridIndex + 1)
     : [];
+  // HOME_STRIP is one logical slot for the whole page, but each slice
+  // renders its own BlockRenderer: elect the owner across both slices so a
+  // header hero and a footer hero cannot each claim it.
+  const heroAdOwnerBlockId = findHeroAdOwnerBlockId([
+    ...headerBlocks,
+    ...footerBlocks,
+  ]);
   const renderAfterCategoryRail = (block: Block) =>
     block.type === 'CategoryRail' ? (
       <HomeServiceCards placement="belowUtility" />
@@ -136,39 +144,15 @@ export function HomeFeedList({
     item: HomeFeedListItem;
     index: number;
     target?: string;
-  }) => {
-    if (item.kind === 'product-list-end') {
-      return (
-        <View
-          testID="home-feed-product-end-sentinel"
-          style={homeFeedStyles.productEndSentinel}
-          onLayout={target === 'Cell' ? handleProductDataEndReached : undefined}
-        />
-      );
-    }
-
-    const productIndex = index;
-    if (currentVariant === 'grid') {
-      return (
-        <View
-          style={[
-            homeFeedStyles.productWrapper,
-            productIndex % 2 === 0
-              ? homeFeedStyles.productLeft
-              : homeFeedStyles.productRight,
-          ]}
-        >
-          <ProductCard product={item.product} variant="grid" />
-        </View>
-      );
-    }
-
-    return (
-      <View style={homeFeedStyles.fullWidthCell}>
-        <ProductCard product={item.product} variant={currentVariant} />
-      </View>
-    );
-  };
+  }) => (
+    <HomeFeedListItemView
+      item={item}
+      index={index}
+      target={target}
+      currentVariant={currentVariant}
+      onProductDataEndReached={handleProductDataEndReached}
+    />
+  );
 
   const handleEndReached = () => {
     // Backup trigger for layouts without post-grid blocks; the sentinel handles
@@ -200,6 +184,10 @@ export function HomeFeedList({
         onCategorySelect={onCategorySelect}
         blockWrapperStyle={blockWrapperStyle}
         renderAfterBlock={renderAfterCategoryRail}
+        // Search covers the feed with a full-screen scrim; withhold the
+        // home ad placements so no obscured delivery is requested.
+        suppressAds={isSearchOpen}
+        heroAdOwnerBlockId={heroAdOwnerBlockId}
       />
       {hasPrimaryGrid ? (
         <>
@@ -237,7 +225,10 @@ export function HomeFeedList({
         onCategorySelect={onCategorySelect}
         blockWrapperStyle={blockWrapperStyle}
         renderAfterBlock={renderAfterCategoryRail}
+        suppressAds={isSearchOpen}
+        heroAdOwnerBlockId={heroAdOwnerBlockId}
       />
+      {isSearchOpen ? null : <AdSlot placement="PRODUCT_GRID_IN_FEED" />}
     </View>
   );
 

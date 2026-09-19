@@ -25,6 +25,16 @@ jest.mock('@/components/checkout/checkout-identity', () => ({
   },
 }));
 
+jest.mock('@/components/ads/AdSlot', () => {
+  const React = jest.requireActual<typeof import('react')>('react');
+  const { View } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    AdSlot: ({ placement }: { placement: string }) =>
+      React.createElement(View, { testID: `ad-slot-${placement}` }),
+  };
+});
+
 jest.mock('react-native-reanimated', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
@@ -168,5 +178,25 @@ describe('CartLoadedView', () => {
 
     expect(onBulkNegotiate).toHaveBeenCalledTimes(1);
     expect(onNegotiateTotal).not.toHaveBeenCalled();
+  });
+
+  it('renders the footer ad only when no modal covers the cart', () => {
+    // Regression: an obscured CART_MPU must not load behind the identity
+    // or negotiation-warning modals.
+    const { rerender, props } = renderView();
+
+    expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
+
+    rerender(<CartLoadedView {...props} isIdentityModalOpen />);
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+    rerender(
+      <CartLoadedView
+        {...props}
+        isIdentityModalOpen={false}
+        showNegotiateWarning
+      />
+    );
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
   });
 });

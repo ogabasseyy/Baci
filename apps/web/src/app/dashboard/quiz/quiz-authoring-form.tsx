@@ -8,29 +8,17 @@ import {
   clampNumber,
   clampNumberInput,
   isQuizDifficulty,
+  type QuizDraftConfiguration,
 } from './quiz-admin-actions';
+import { resolveQuizAuthoringClosesAt } from './quiz-authoring-close-preview';
+import { QuizAuthoringTimingFields } from './quiz-authoring-timing-fields';
+import { isQuizAuthoringWindowAllowed } from './quiz-authoring-window-allowed';
 import { QuizPlanSummary } from './quiz-plan-summary';
 import { QuizPrizeProductPicker } from './quiz-prize-product-picker';
 import { QuizTopicInput } from './quiz-topic-input';
-
-export type QuizDraftConfiguration = {
-  difficulty: 'easy' | 'standard' | 'hard';
-  liveWindowMinutes: number;
-  mode: 'test' | 'live';
-  prizeProduct: QuizPrizeProduct;
-  questionCountPerTopic: number;
-  scheduledEnd: string;
-  scheduledStart: string;
-  timePerQuestionSeconds: number;
-  timingKind: 'immediate' | 'scheduled';
-  title: string;
-  topics: string[];
-};
-
-function localDatetime(date: Date): string {
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
+import { useQuizAuthoringClock } from './use-quiz-authoring-clock';
+import { useQuizAuthoringSchedule } from './use-quiz-authoring-schedule';
+import { useQuizAuthoringWindowSync } from './use-quiz-authoring-window-sync';
 
 export function QuizAuthoringForm({
   disabled,
@@ -45,7 +33,6 @@ export function QuizAuthoringForm({
   isGenerating: boolean;
   onGenerate: (configuration: QuizDraftConfiguration) => void;
 }) {
-  const now = new Date();
   const [title, setTitle] = useState('Daily Phone Quiz');
   const [topics, setTopics] = useState([
     'iPhone buying advice',
@@ -64,23 +51,44 @@ export function QuizAuthoringForm({
   );
   const [mode, setMode] = useState<'test' | 'live'>('test');
   const [timingKind, setTimingKind] = useState<'immediate' | 'scheduled'>(
-    'immediate'
+    'scheduled'
   );
-  const [scheduledStart, setScheduledStart] = useState(
-    localDatetime(new Date(now.getTime() + 3_600_000))
-  );
-  const [scheduledEnd, setScheduledEnd] = useState(
-    localDatetime(new Date(now.getTime() + 3_900_000))
-  );
+  const { scheduledEnd, scheduledStart, setScheduledEnd, setScheduledStart } =
+    useQuizAuthoringSchedule(Date.now());
+  // The admin owns Universal end once they edit it; until then it tracks the
+  // scheduled start plus the expected play time from the quiz summary.
+  const [endTouched, setEndTouched] = useState(false);
   const questionCount = topics.length * clampNumber(Number(perTopic), 1, 20);
-  const closesAt =
-    timingKind === 'scheduled' && scheduledEnd
-      ? new Date(scheduledEnd).toLocaleString()
-      : `About ${windowMinutes} minute${windowMinutes === '1' ? '' : 's'} after launch`;
-  const timingValid =
-    timingKind === 'immediate' ||
-    (Boolean(scheduledStart && scheduledEnd) &&
-      Date.parse(scheduledEnd) > Date.parse(scheduledStart));
+  const timePerQuestionSeconds = clampNumber(Number(time), 5, 60);
+  useQuizAuthoringWindowSync({
+    endTouched,
+    mode,
+    questionCount,
+    scheduledStart,
+    setScheduledEnd,
+    timePerQuestionSeconds,
+  });
+  const closesAt = resolveQuizAuthoringClosesAt({
+    scheduledEnd,
+    timingKind,
+    windowMinutes,
+  });
+  // Generation requires an interval activation will accept: a manually
+  // shrunk window outside the launch bounds wastes the AI draft request.
+  // Validity reads Date.now() fresh every render; the clock tick rerenders
+  // anyway, so when the scheduled start passes the button disables and the
+  // timing alert appears without any further interaction.
+  const retickClock = useQuizAuthoringClock();
+  const liveWindowMinutes = clampNumber(Number(windowMinutes), 1, 120);
+  const timingValid = isQuizAuthoringWindowAllowed({
+    liveWindowMinutes,
+    mode,
+    questionCount,
+    scheduledEnd,
+    scheduledStart,
+    timePerQuestionSeconds,
+    timingKind,
+  });
   const canSubmit =
     !disabled &&
     !isGenerating &&
@@ -90,9 +98,29 @@ export function QuizAuthoringForm({
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!prizeProduct || !canSubmit) return;
+    // Render-time validation goes stale while the page sits open; recheck
+    // the current clock before spending the AI request on an expired start.
+    if (
+      !isQuizAuthoringWindowAllowed({
+        liveWindowMinutes,
+        mode,
+        nowMs: Date.now(),
+        questionCount,
+        scheduledEnd,
+        scheduledStart,
+        timePerQuestionSeconds,
+        timingKind,
+      })
+    ) {
+      // The start passed inside the tick window with the button still
+      // enabled: rerender so validity re-reads the clock and the admin is
+      // told to choose a future start instead of clicking into silence.
+      retickClock();
+      return;
+    }
     onGenerate({
       difficulty,
-      liveWindowMinutes: clampNumber(Number(windowMinutes), 1, 120),
+      liveWindowMinutes,
       mode,
       prizeProduct,
       questionCountPerTopic: clampNumber(Number(perTopic), 1, 20),
@@ -186,67 +214,26 @@ export function QuizAuthoringForm({
             onChange={setTopics}
             topics={topics}
           />
-          <label className="grid gap-2 text-sm font-medium">
-            Launch timing
-            <select
-              className="h-11 rounded-md border bg-background px-3"
-              value={timingKind}
-              onChange={(event) =>
-                setTimingKind(
-                  event.target.value === 'scheduled' ? 'scheduled' : 'immediate'
-                )
-              }
-            >
-              <option value="immediate">Launch immediately after review</option>
-              <option value="scheduled">
-                Schedule a universal start and end
-              </option>
-            </select>
-          </label>
-          {timingKind === 'immediate' ? (
-            <label className="grid gap-2 text-sm font-medium">
-              Universal live window (minutes)
-              <input
-                className="h-11 rounded-md border bg-background px-3"
-                min={1}
-                max={120}
-                type="number"
-                value={windowMinutes}
-                onBlur={() =>
-                  setWindowMinutes(clampNumberInput(windowMinutes, 1, 120))
-                }
-                onChange={(event) => setWindowMinutes(event.target.value)}
-              />
-            </label>
-          ) : (
-            <>
-              <label className="grid gap-2 text-sm font-medium">
-                Scheduled start
-                <input
-                  className="h-11 rounded-md border bg-background px-3"
-                  type="datetime-local"
-                  value={scheduledStart}
-                  onChange={(event) => setScheduledStart(event.target.value)}
-                />
-              </label>
-              <label className="grid gap-2 text-sm font-medium">
-                Universal end
-                <input
-                  className="h-11 rounded-md border bg-background px-3"
-                  type="datetime-local"
-                  value={scheduledEnd}
-                  onChange={(event) => setScheduledEnd(event.target.value)}
-                />
-              </label>
-            </>
-          )}
+          <QuizAuthoringTimingFields
+            timingKind={timingKind}
+            onTimingKindChange={setTimingKind}
+            windowMinutes={windowMinutes}
+            onWindowMinutesChange={setWindowMinutes}
+            scheduledStart={scheduledStart}
+            onScheduledStartChange={setScheduledStart}
+            scheduledEnd={scheduledEnd}
+            onScheduledEndChange={(value) => {
+              setEndTouched(true);
+              setScheduledEnd(value);
+            }}
+          />
         </div>
       </fieldset>
       <div className="mt-5">
         <QuizPlanSummary
           closesAt={closesAt}
           questionCount={questionCount}
-          timePerQuestionSeconds={clampNumber(Number(time), 5, 60)}
+          timePerQuestionSeconds={timePerQuestionSeconds}
         />
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
@@ -256,7 +243,8 @@ export function QuizAuthoringForm({
       </p>
       {!timingValid ? (
         <p className="mt-2 text-sm text-destructive" role="alert">
-          Universal end must be after the scheduled start.
+          Universal end must be after the scheduled start and inside the allowed
+          window for this quiz.
         </p>
       ) : null}
       <button

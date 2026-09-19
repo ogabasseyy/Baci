@@ -5,8 +5,10 @@ import type {
   MerchantQuizActivationInput,
   MerchantQuizGenerationResponse,
 } from '@/schemas/quiz';
-import type { QuizLaunchInput } from './quiz-admin-actions';
-import type { QuizDraftConfiguration } from './quiz-authoring-form';
+import type {
+  QuizDraftConfiguration,
+  QuizLaunchInput,
+} from './quiz-admin-actions';
 import { QuizLaunchDialog } from './quiz-launch-dialog';
 import { QuestionReview } from './quiz-question-review';
 

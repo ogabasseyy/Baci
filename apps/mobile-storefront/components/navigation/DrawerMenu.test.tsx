@@ -1,8 +1,25 @@
 import { act, render, screen } from '@testing-library/react-native';
+import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { DrawerMenu } from './DrawerMenu';
 
 let mockIsOpen = true;
 let mockTimingCallbacks: Array<(finished?: boolean) => void> = [];
+
+jest.mock('@/hooks/use-mobile-ads-readiness', () => ({
+  useMobileAdsReadiness: jest.fn(() => ({
+    canRequestAds: true,
+    initialized: true,
+  })),
+}));
+
+const mockUseMobileAdsReadiness = jest.mocked(useMobileAdsReadiness);
+
+jest.mock('react-native-google-mobile-ads', () => ({
+  BannerAd: 'BannerAd',
+  BannerAdSize: {
+    ANCHORED_ADAPTIVE_BANNER: 'anchored-adaptive-banner',
+  },
+}));
 
 // Mock SafeAreaProvider / useSafeAreaInsets cleanly
 jest.mock('react-native-safe-area-context', () => ({
@@ -143,6 +160,20 @@ describe('DrawerMenu', () => {
     expect(
       screen.queryByRole('image', { name: 'Decorative technology backdrop' })
     ).toBeNull();
+  });
+
+  it('mounts the footer ad only while the drawer is open', () => {
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    mockIsOpen = true;
+    const { unmount } = render(<DrawerMenu />);
+    expect(screen.queryByTestId('ad-slot-footer-anchor')).not.toBeNull();
+    unmount();
+
+    mockIsOpen = false;
+    render(<DrawerMenu />);
+    expect(screen.queryByTestId('ad-slot-footer-anchor')).toBeNull();
+    expect(mockUseMobileAdsReadiness).toHaveBeenCalled();
+    delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
   });
 
   it('keeps the decorative backdrop mounted until the close animation finishes', async () => {

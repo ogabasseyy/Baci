@@ -10,6 +10,7 @@ import {
   getQuotePreference,
   getShippingProviderForMethod,
   requiresQuote,
+  resolveDoorDeliveryQuoteId,
 } from './checkout-step-helpers';
 
 const baseQuote: ShippingQuote = {
@@ -200,5 +201,27 @@ describe('checkout-step-helpers', () => {
         false
       )
     ).toBe(true);
+  });
+
+  it('replaces a stale air quote with the road quote when falling back to door', () => {
+    // Regression: an Airport-selected GoFaster quote must not survive a
+    // fallback to door — door pricing treats it as zero while the order
+    // builder could still send its ID.
+    expect(
+      resolveDoorDeliveryQuoteId([baseQuote, goFasterQuote], 'gofaster-quote')
+    ).toBe('quote-1');
+    expect(
+      resolveDoorDeliveryQuoteId(
+        [baseQuote, stationPickupQuote],
+        'station-quote'
+      )
+    ).toBe('quote-1');
+    expect(
+      resolveDoorDeliveryQuoteId([baseQuote, goFasterQuote], 'quote-1')
+    ).toBe('quote-1');
+    expect(resolveDoorDeliveryQuoteId([goFasterQuote], 'gofaster-quote')).toBe(
+      ''
+    );
+    expect(resolveDoorDeliveryQuoteId([], '')).toBe('');
   });
 });

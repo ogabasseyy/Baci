@@ -8,13 +8,11 @@ import {
   activateQuizEvent,
   generateQuizDraft,
   type QuizAnswerKeyReview,
+  type QuizDraftConfiguration,
   type QuizLaunchInput,
 } from './quiz-admin-actions';
 import { QuizAdminResult } from './quiz-admin-result';
-import {
-  QuizAuthoringForm,
-  type QuizDraftConfiguration,
-} from './quiz-authoring-form';
+import { QuizAuthoringForm } from './quiz-authoring-form';
 import { quizDatetimeLocalToIso } from './quiz-datetime-local';
 
 export function QuizAdminClient({

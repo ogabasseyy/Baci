@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { getQuizMobileAdsConfig } from '@/config/quiz-mobile-ads';
 import { useQuizMobileAds } from '@/hooks/use-quiz-mobile-ads';
+import { setQuizRewardedFlowActive } from '@/lib/quiz-start-interstitial';
 import { isAdultDateOfBirth } from '@/schemas/date-of-birth';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQuizBadgeStore } from '@/stores/quiz-badge-store';
 
 const MINIMUM_REMAINING_SECONDS = 90;
+
+// Matches the interstitial settlement timers: a load that never resolves
+// must not hold fullscreen ownership forever.
+const REWARDED_AD_LOAD_TIMEOUT_MS = 30_000;
 
 export interface UseQuizRewardedBadgeOptions {
   eventId: string;
@@ -19,8 +24,10 @@ export interface QuizRewardedBadgeState {
   available: boolean;
   dismiss: () => void;
   isWatching: boolean;
+  justEarned: boolean;
   roomBlocked: false;
   watchAd: () => void;
+  watchFailed: boolean;
 }
 
 interface RewardedAdInstance {
@@ -65,6 +72,8 @@ export function useQuizRewardedBadge({
 }: UseQuizRewardedBadgeOptions): QuizRewardedBadgeState {
   const [dismissed, setDismissed] = useState(false);
   const [isWatching, setIsWatching] = useState(false);
+  const [watchFailed, setWatchFailed] = useState(false);
+  const [justEarned, setJustEarned] = useState(false);
   const identityKey = `${userId ?? ''}:${eventId}`;
   const identityRef = useRef(identityKey);
   const generationRef = useRef(0);
@@ -88,14 +97,17 @@ export function useQuizRewardedBadge({
     status === 'scheduled' &&
     remainingSeconds > MINIMUM_REMAINING_SECONDS &&
     Boolean(userId);
+  // The earned confirmation outlives eligibility: once the reward lands the
+  // shopper keeps seeing it even as the countdown runs under 90 seconds.
   const available =
-    isEligible &&
-    !dismissed &&
-    !isUnlocked &&
-    adState.enabled &&
-    adState.initialized &&
-    adState.canRequestAds &&
-    Boolean(adState.rewardedUnitId);
+    justEarned ||
+    (isEligible &&
+      !dismissed &&
+      !isUnlocked &&
+      adState.enabled &&
+      adState.initialized &&
+      adState.canRequestAds &&
+      Boolean(adState.rewardedUnitId));
 
   // The composite identity intentionally owns the ad session lifetime.
   // biome-ignore lint/correctness/useExhaustiveDependencies: account/event identity is the session boundary
@@ -103,8 +115,12 @@ export function useQuizRewardedBadge({
     generationRef.current += 1;
     setDismissed(false);
     setIsWatching(false);
+    setWatchFailed(false);
+    setJustEarned(false);
+    setQuizRewardedFlowActive(false);
     return () => {
       generationRef.current += 1;
+      setQuizRewardedFlowActive(false);
       const session = sessionRef.current;
       if (!session) return;
       session.settled = true;
@@ -118,6 +134,8 @@ export function useQuizRewardedBadge({
 
   useEffect(() => {
     const session = sessionRef.current;
+    // A presented ad owns its reward: the countdown crossing 90 seconds
+    // mid-watch must not swallow the earned badge.
     if (isEligible || !session || session.presented) return;
     session.settled = true;
     session.cleanups.forEach((unsubscribe) => {
@@ -125,6 +143,10 @@ export function useQuizRewardedBadge({
     });
     session.cleanups = [];
     sessionRef.current = null;
+    // Release rewarded ownership like finish/dismiss: without this, a
+    // concurrently loading quiz-start interstitial stays skipped even though
+    // the rewarded flow no longer exists.
+    setQuizRewardedFlowActive(false);
     setIsWatching(false);
   }, [isEligible]);
 
@@ -138,16 +160,27 @@ export function useQuizRewardedBadge({
       session.cleanups = [];
       sessionRef.current = null;
     }
+    setQuizRewardedFlowActive(false);
     setIsWatching(false);
+    setWatchFailed(false);
+    setJustEarned(false);
     setDismissed(true);
   };
 
   const watchAd = () => {
     if (!available || !userId || !adState.rewardedUnitId || isWatching) return;
     const mobileAds = loadMobileAdsModule();
-    if (!mobileAds) return;
+    if (!mobileAds) {
+      // Native ads module missing (e.g. Expo Go): say so instead of a dead tap.
+      setWatchFailed(true);
+      return;
+    }
 
+    setWatchFailed(false);
     setIsWatching(true);
+    // Claim full-screen ownership synchronously so an interstitial LOADED
+    // event landing before the rerender still defers to the rewarded ad.
+    setQuizRewardedFlowActive(true);
     const session: RewardedAdSession = {
       cleanups: [],
       generation: generationRef.current,
@@ -165,6 +198,7 @@ export function useQuizRewardedBadge({
     const finish = () => {
       cleanup();
       if (sessionRef.current === session) sessionRef.current = null;
+      setQuizRewardedFlowActive(false);
       setIsWatching(false);
     };
     const isCurrent = () =>
@@ -183,7 +217,10 @@ export function useQuizRewardedBadge({
           () => {
             if (!isCurrent()) return;
             session.presented = true;
-            void rewardedAd.show().catch(finish);
+            void rewardedAd.show().catch(() => {
+              if (isCurrent()) setWatchFailed(true);
+              finish();
+            });
           }
         ),
         rewardedAd.addAdEventListener(
@@ -192,22 +229,56 @@ export function useQuizRewardedBadge({
             if (!isCurrent()) return;
             session.settled = true;
             unlockBadge(userId, eventId, eventTitle);
-            setDismissed(true);
-            finish();
+            setJustEarned(true);
+            // The ad can still be on screen: keep fullscreen ownership and
+            // the CLOSED listener until dismissal, otherwise an interstitial
+            // whose load completes in this interval presents over the
+            // rewarded ad.
           }
         ),
         rewardedAd.addAdEventListener(mobileAds.AdEventType.CLOSED, () => {
-          if (isCurrent()) finish();
+          // CLOSED releases ownership even after EARNED_REWARD settled the
+          // session (isCurrent() would exclude it), so match the session
+          // by identity instead.
+          if (sessionRef.current !== session) {
+            cleanup();
+            return;
+          }
+          finish();
         }),
         rewardedAd.addAdEventListener(mobileAds.AdEventType.ERROR, () => {
-          if (isCurrent()) finish();
+          if (!isCurrent()) return;
+          setWatchFailed(true);
+          finish();
         }),
       ];
       rewardedAd.load();
+      const loadTimeout = setTimeout(() => {
+        // A hung load (neither LOADED nor ERROR) must fail like an SDK
+        // error: the offer shows its retry state and fullscreen ownership
+        // releases so the interstitial path unblocks. Presented ads are
+        // owned by their CLOSED/EARNED_REWARD handlers instead.
+        if (!isCurrent() || session.presented) return;
+        setWatchFailed(true);
+        finish();
+      }, REWARDED_AD_LOAD_TIMEOUT_MS);
+      session.cleanups.push(() => clearTimeout(loadTimeout));
     } catch {
+      // Synchronous setup failures (e.g. uninitialized native SDK) must
+      // surface the same failure state as async ERROR / show() rejections,
+      // otherwise the tap looks like a dead button on the unchanged offer.
+      if (isCurrent()) setWatchFailed(true);
       finish();
     }
   };
 
-  return { available, dismiss, isWatching, roomBlocked: false, watchAd };
+  return {
+    available,
+    dismiss,
+    isWatching,
+    justEarned,
+    roomBlocked: false,
+    watchAd,
+    watchFailed,
+  };
 }

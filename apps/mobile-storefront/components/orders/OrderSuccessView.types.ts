@@ -5,6 +5,17 @@ export interface OrderSuccessViewProps {
   deliveryEstimate?: string;
   isDark: boolean;
   isDocumentLoading?: boolean;
+  /**
+   * While true the notification permission flow is in progress — including
+   * the native system prompt after the soft-ask modal closes — so the
+   * banner slot stays unmounted underneath it.
+   */
+  isPermissionFlowActive?: boolean;
+  /**
+   * While true the receipt preview is loading or open full-screen, so the
+   * banner slot is withheld to avoid obscured delivery.
+   */
+  isReceiptPreviewActive?: boolean;
   onContinueShopping: () => void;
   onLeaveGoogleReview: () => void;
   onPermissionDeny: () => void;

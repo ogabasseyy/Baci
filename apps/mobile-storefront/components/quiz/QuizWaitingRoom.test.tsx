@@ -22,6 +22,35 @@ jest.mock('@/hooks/useTheme', () => ({
   }),
 }));
 
+jest.mock('@/components/ads/AdSlot', () => {
+  const React = jest.requireActual<typeof import('react')>('react');
+  const { View } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    AdSlot: ({ placement }: { placement: string }) =>
+      React.createElement(View, { testID: `ad-slot-${placement}` }),
+  };
+});
+
+function countTestIdOccurrences(testID: string): number {
+  let count = 0;
+  const walk = (node: unknown): void => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    const record = node as {
+      children?: unknown;
+      props?: { testID?: unknown };
+    };
+    if (record.props?.testID === testID) count += 1;
+    if (record.children !== undefined) walk(record.children);
+  };
+  walk(screen.toJSON());
+  return count;
+}
+
 const scheduled: QuizEvent = {
   endsAt: '2099-01-01T01:10:00.000Z',
   id: 'event-1',
@@ -51,9 +80,7 @@ describe('QuizWaitingRoom', () => {
     expect(
       screen.getByLabelText('Waiting room for Noon Quiz').props.edges
     ).toBeUndefined();
-    const scrollView = screen.getByLabelText(
-      'Scrollable SuperQuiz waiting room'
-    );
+    const scrollView = screen.getByLabelText('Scrollable waiting room');
     expect(scrollView.props.keyboardShouldPersistTaps).toBe('handled');
     expect(scrollView.props.showsVerticalScrollIndicator).toBe(false);
     expect(scrollView.props.contentContainerStyle).toEqual(
@@ -61,5 +88,41 @@ describe('QuizWaitingRoom', () => {
     );
     fireEvent.press(screen.getByRole('button', { name: 'Leave waiting room' }));
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the rules without an acceptance gate', () => {
+    render(
+      <QuizWaitingRoom
+        event={scheduled}
+        onExit={jest.fn()}
+        onStart={jest.fn()}
+        refresh={jest.fn(async () => [scheduled])}
+      />
+    );
+    fireEvent.press(screen.getByRole('button', { name: 'View rules' }));
+    expect(screen.getByRole('header', { name: 'How to play' })).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Close rules' }));
+    expect(screen.queryByRole('header', { name: 'How to play' })).toBeNull();
+  });
+
+  it('keeps a single footer ad slot while the rules modal is open', () => {
+    // Regression: the waiting-room FOOTER_ANCHOR must unmount while the
+    // modal's own slot is visible so only one banner request is live.
+    // The modal renders in a separate root outside query traversal, so
+    // count across the full rendered tree instead of getAllByTestId.
+    render(
+      <QuizWaitingRoom
+        event={scheduled}
+        onExit={jest.fn()}
+        onStart={jest.fn()}
+        refresh={jest.fn(async () => [scheduled])}
+      />
+    );
+    expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(1);
+    fireEvent.press(screen.getByRole('button', { name: 'View rules' }));
+    expect(screen.getByRole('header', { name: 'How to play' })).toBeTruthy();
+    expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(1);
+    fireEvent.press(screen.getByRole('button', { name: 'Close rules' }));
+    expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(1);
   });
 });

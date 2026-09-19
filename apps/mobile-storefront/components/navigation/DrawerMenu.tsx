@@ -10,7 +10,6 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import Animated, {
@@ -23,15 +22,17 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { useShallow } from 'zustand/react/shallow';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { GadgetPattern } from '@/components/storefront/GadgetPattern';
 import { Logo } from '@/components/ui/Logo';
 import { useColorScheme } from '@/components/useColorScheme';
-import Colors, { BRAND, SPACING } from '@/constants/Colors';
+import Colors, { BRAND } from '@/constants/Colors';
 import { getOptionalGestureHandlerRuntime } from '@/lib/optional-gesture-handler';
 import { useAuthStore } from '@/stores/auth-store';
 import { useDrawerStore } from '@/stores/drawer-store';
 import { getDrawerMenuShadowStyles } from './DrawerMenu.shadows';
 import styles from './DrawerMenu.styles';
+import { DrawerMenuFooter } from './DrawerMenuFooter';
 import { DrawerMenuItems } from './DrawerMenuItems';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -258,40 +259,29 @@ export function DrawerMenu() {
             pathname={pathname}
             onNavigate={handleNavigate}
           />
+          {/* Mounted only while the drawer is open: the drawer stays mounted
+          (translated off-screen) when closed, and an always-mounted slot
+          would request and attribute impressions nobody can see. */}
+          {isOpen ? (
+            <AdSlot placement="FOOTER_ANCHOR" visibleWhileDrawerOpen />
+          ) : null}
 
           {/* Footer */}
-          <View
-            style={[
-              styles.footer,
-              {
-                paddingBottom: insets.bottom + SPACING.md,
-                borderTopColor: colors.border,
-                backgroundColor: colors.muted,
-              },
-            ]}
-          >
-            <Pressable
-              style={[
-                styles.authButton,
-                drawerShadowStyles.authButton,
-                { backgroundColor: colors.foreground },
-              ]}
-              onPress={isAuthenticated ? handleSignOut : handleSignIn}
-              accessibilityLabel={
-                isAuthenticated ? 'Sign out' : 'Login or Register'
-              }
-              accessibilityRole="button"
-            >
-              <Text
-                style={[styles.authButtonText, { color: colors.background }]}
-              >
-                {isAuthenticated ? 'Sign Out' : 'Login / Register'}
-              </Text>
-            </Pressable>
-            <Text style={[styles.versionText, { color: colors.textSecondary }]}>
-              v{appVersion} • &copy; {currentYear} Ogabassey
-            </Text>
-          </View>
+          <DrawerMenuFooter
+            appVersion={appVersion}
+            authButtonShadowStyle={drawerShadowStyles.authButton}
+            bottomInset={insets.bottom}
+            colors={{
+              background: colors.background,
+              border: colors.border,
+              foreground: colors.foreground,
+              muted: colors.muted,
+              textSecondary: colors.textSecondary,
+            }}
+            currentYear={currentYear}
+            isAuthenticated={isAuthenticated}
+            onAuthPress={isAuthenticated ? handleSignOut : handleSignIn}
+          />
         </Animated.View>
       </GestureDetector>
     </View>

@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { ProductCard } from '@/components/storefront/ProductCard';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -95,11 +96,31 @@ export default function CategoryScreen() {
     </View>
   );
 
+  // The MPU mounts only on a valid, successfully resolved category: while
+  // the slug is invalid or unresolved, products are loading, or the fetch
+  // errored, FlashList renders the footer alongside the empty component and
+  // the slot would request under an invalid/loading/error message.
+  const canShowCategoryMpu =
+    isValidSlug &&
+    !categoriesLoading &&
+    Boolean(categoryId) &&
+    !isLoading &&
+    !error;
+
   const renderFooter = () => {
-    if (!hasMore) return null;
+    if (!canShowCategoryMpu) return null;
+    // The MPU renders independently of pagination: categories that fit in the
+    // initial page (or finish loading) must still show the placement.
+    // AdSlot renders nothing while ads are disabled or misconfigured.
+    if (!hasMore) {
+      return <AdSlot placement="PRODUCT_GRID_MPU" />;
+    }
     return (
-      <View style={styles.footer}>
-        <ActivityIndicator size="small" color={BRAND.primary} />
+      <View>
+        <AdSlot placement="PRODUCT_GRID_MPU" />
+        <View style={styles.footer}>
+          <ActivityIndicator size="small" color={BRAND.primary} />
+        </View>
       </View>
     );
   };

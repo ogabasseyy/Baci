@@ -14,6 +14,20 @@ const QUIZ_GENERATE_ENDPOINT = '/api/merchant/quiz/generate';
 // not throttled by the expensive Gemma-generation rate-limit bucket.
 const QUIZ_ACTIVATE_ENDPOINT = '/api/merchant/quiz/activate';
 
+export type QuizDraftConfiguration = {
+  difficulty: 'easy' | 'standard' | 'hard';
+  liveWindowMinutes: number;
+  mode: 'test' | 'live';
+  prizeProduct: QuizPrizeProduct;
+  questionCountPerTopic: number;
+  scheduledEnd: string;
+  scheduledStart: string;
+  timePerQuestionSeconds: number;
+  timingKind: 'immediate' | 'scheduled';
+  title: string;
+  topics: string[];
+};
+
 export function topicsFromTextarea(value: string): string[] {
   return value
     .split(/\n|,/)

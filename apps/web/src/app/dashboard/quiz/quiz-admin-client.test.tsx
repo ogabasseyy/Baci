@@ -94,6 +94,12 @@ describe('QuizAdminClient', () => {
     });
     const user = userEvent.setup();
     render(<QuizAdminClient initialPrizeProducts={[prize]} />);
+    // Scheduled timing is the form default; this flow covers the immediate
+    // activation payload.
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Launch timing' }),
+      'immediate'
+    );
     await user.click(screen.getByRole('button', { name: /generate draft/i }));
     await user.click(
       await screen.findByRole('checkbox', {
@@ -194,7 +200,9 @@ describe('QuizAdminClient', () => {
   });
 
   it('rejects stale scheduled dates before posting an activation request', async () => {
-    mockApiPost.mockResolvedValueOnce(generated);
+    // Regression: expired starts disable draft generation (activation
+    // rejects starts that are not in the future), so no generate request
+    // is ever posted for them.
     const user = userEvent.setup();
     render(<QuizAdminClient initialPrizeProducts={[prize]} />);
 
@@ -209,23 +217,11 @@ describe('QuizAdminClient', () => {
     );
     await user.clear(screen.getByLabelText('Universal end'));
     await user.type(screen.getByLabelText('Universal end'), '2020-01-01T09:05');
-    await user.click(screen.getByRole('button', { name: /generate draft/i }));
-    await user.click(
-      await screen.findByRole('checkbox', {
-        name: /reviewed every correct answer/i,
-      })
-    );
-    await user.click(screen.getByRole('button', { name: /launch quiz/i }));
-    await user.click(
-      within(screen.getByRole('dialog')).getByRole('button', {
-        name: /launch quiz/i,
-      })
-    );
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      /choose a valid future start/i
-    );
-    expect(mockApiPost).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole('button', { name: /generate draft/i })
+    ).toBeDisabled();
+    expect(mockApiPost).not.toHaveBeenCalled();
   });
 
   it('preserves Lagos wall-clock schedule times in the activation payload', async () => {

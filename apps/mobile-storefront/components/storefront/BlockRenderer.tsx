@@ -9,6 +9,7 @@ import type {
   ProductGridBlock,
 } from '@/types/blocks';
 import { Hero, type HeroSlide } from './Hero';
+import { findHeroAdOwnerBlockId } from './hero-ad-owner';
 import { JustLaunchedCarousel } from './JustLaunchedCarousel';
 import ProductGrid from './ProductGrid';
 import { UtilityPanel } from './UtilityPanel';
@@ -26,6 +27,18 @@ interface BlockRendererProps {
   onCategorySelect: (id: string | null) => void;
   blockWrapperStyle?: StyleProp<ViewStyle>;
   renderAfterBlock?: (block: Block, index: number) => React.ReactNode;
+  /**
+   * While true (e.g. search obscures the feed) the hero and launch ad
+   * placements are withheld so no invisible delivery is requested.
+   */
+  suppressAds?: boolean;
+  /**
+   * Page-level HOME_STRIP owner elected across all feed slices. The feed
+   * renders one BlockRenderer per slice, so a slice-local election would
+   * let a header hero and a footer hero each claim the same placement.
+   * When omitted, this slice elects its own first eligible hero.
+   */
+  heroAdOwnerBlockId?: string | null;
 }
 
 export const BlockRenderer: React.FC<BlockRendererProps> = ({
@@ -34,9 +47,21 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
   onCategorySelect,
   blockWrapperStyle,
   renderAfterBlock,
+  suppressAds = false,
+  heroAdOwnerBlockId,
 }) => {
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
   const { data: categories = [] } = useCategories();
+
+  // One page can author several HeroCarousel blocks, but HOME_STRIP is a
+  // single logical slot: concurrent owners would request together and
+  // split attribution. The page-level owner wins when provided; otherwise
+  // this slice elects its own first eligible hero.
+  const sliceOwnerBlockId = suppressAds
+    ? null
+    : findHeroAdOwnerBlockId(blocks || []);
+  const pageOwnerBlockId =
+    heroAdOwnerBlockId !== undefined ? heroAdOwnerBlockId : sliceOwnerBlockId;
 
   const selectedCategoryName = (() => {
     if (!selectedCategoryId) return 'Airtime';
@@ -79,11 +104,18 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
                 <Hero
                   slides={slides}
                   autoplayDelay={heroBlock.props.autoplayDelay}
+                  trailingAdPlacement={
+                    !suppressAds &&
+                    pageOwnerBlockId !== null &&
+                    heroBlock.props.id === pageOwnerBlockId
+                      ? 'HOME_STRIP'
+                      : undefined
+                  }
                 />
               );
             }
             case 'JustLaunched':
-              return <JustLaunchedCarousel />;
+              return <JustLaunchedCarousel suppressAds={suppressAds} />;
             case 'CategoryRail':
               return (
                 <UtilityPanel

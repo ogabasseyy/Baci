@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { FlatList, Pressable, Text, View } from 'react-native';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { CheckoutIdentityModal } from '@/components/checkout/checkout-identity';
 import { PatternedBackground } from '@/components/storefront/PatternedBackground';
 import type Colors from '@/constants/Colors';
@@ -178,18 +179,28 @@ export default function CartLoadedView({
           />
         )}
         ListFooterComponent={
-          <View style={styles.secureBadgeInside}>
-            <Ionicons
-              name="shield-checkmark-outline"
-              size={14}
-              color={colors.textSecondary}
-            />
-            <Text
-              style={[styles.secureBadgeText, { color: colors.textSecondary }]}
-            >
-              Secure Checkout
-            </Text>
-          </View>
+          <>
+            {/* Either modal covers this screen; unmount the slot while one
+                is visible so no obscured delivery is requested. */}
+            {isIdentityModalOpen || showNegotiateWarning ? null : (
+              <AdSlot placement="CART_MPU" />
+            )}
+            <View style={styles.secureBadgeInside}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={14}
+                color={colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.secureBadgeText,
+                  { color: colors.textSecondary },
+                ]}
+              >
+                Secure Checkout
+              </Text>
+            </View>
+          </>
         }
       />
 

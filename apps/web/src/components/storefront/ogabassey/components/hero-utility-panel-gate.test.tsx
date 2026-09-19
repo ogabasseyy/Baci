@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeroUtilityPanelGate } from './hero-utility-panel-gate';
+import { HeroUtilityPanelStatic } from './hero-utility-panel-static';
 import {
   echoPanelLoader,
   fireViewportApproach,
@@ -157,7 +158,7 @@ describe('HeroUtilityPanelGate', () => {
     // tapped option and replays it so the shopper does not have to tap twice.
     const echoLoader = echoPanelLoader();
     render(
-      <HeroUtilityPanelGate
+      <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />}
         loadPanelModule={echoLoader as never}
         timeoutMs={1000}
       />
@@ -184,7 +185,7 @@ describe('HeroUtilityPanelGate', () => {
   it('activates without a replay for taps outside the fallback options', async () => {
     const echoLoader = echoPanelLoader();
     render(
-      <HeroUtilityPanelGate
+      <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />}
         loadPanelModule={echoLoader as never}
         timeoutMs={1000}
       />

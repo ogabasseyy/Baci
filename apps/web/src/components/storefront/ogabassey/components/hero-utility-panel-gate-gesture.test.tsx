@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeroUtilityPanelGate } from './hero-utility-panel-gate';
+import { HeroUtilityPanelStatic } from './hero-utility-panel-static';
 import {
   echoPanelLoader,
   fireViewportApproach,
@@ -33,7 +34,7 @@ describe('HeroUtilityPanelGate tap gestures', () => {
   it('replays a completed click on a fallback option', async () => {
     const echoLoader = echoPanelLoader();
     render(
-      <HeroUtilityPanelGate
+      <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />}
         loadPanelModule={echoLoader as never}
         timeoutMs={1000}
       />
@@ -62,7 +63,7 @@ describe('HeroUtilityPanelGate tap gestures', () => {
     // completing click still lands on the pressed option and replays it.
     const echoLoader = echoPanelLoader();
     render(
-      <HeroUtilityPanelGate
+      <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />}
         loadPanelModule={echoLoader as never}
         timeoutMs={1000}
       />
@@ -98,7 +99,7 @@ describe('HeroUtilityPanelGate tap gestures', () => {
     // before completion, so the panel mounts with no replay.
     const echoLoader = echoPanelLoader();
     render(
-      <HeroUtilityPanelGate
+      <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />}
         loadPanelModule={echoLoader as never}
         timeoutMs={1000}
       />
@@ -131,7 +132,7 @@ describe('HeroUtilityPanelGate tap gestures', () => {
     // targets the removed node) never fires — losing the first action.
     const echoLoader = echoPanelLoader();
     render(
-      <HeroUtilityPanelGate
+      <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />}
         loadPanelModule={echoLoader as never}
         timeoutMs={1000}
       />
@@ -193,7 +194,7 @@ describe('HeroUtilityPanelGate tap gestures', () => {
     // focus) must not wedge the loaded panel on the fallback forever.
     const echoLoader = echoPanelLoader();
     render(
-      <HeroUtilityPanelGate
+      <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />}
         loadPanelModule={echoLoader as never}
         timeoutMs={1000}
       />
@@ -244,7 +245,7 @@ describe('HeroUtilityPanelGate tap gestures', () => {
         })
     );
     render(
-      <HeroUtilityPanelGate
+      <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />}
         loadPanelModule={deferredLoader as never}
         timeoutMs={1000}
       />

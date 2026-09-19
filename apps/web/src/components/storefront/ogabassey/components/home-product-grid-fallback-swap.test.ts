@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   FALLBACK_RENDERED_IMAGE_COUNT,
   PRODUCTS_PER_PAGE,
-  useFallbackSwapPage,
-} from './home-product-grid-fallback-swap';
+} from './home-product-grid-constants';
+import { useFallbackSwapPage } from './home-product-grid-fallback-swap';
 
 describe('useFallbackSwapPage', () => {
   it('starts on the initial slice without a replay', () => {

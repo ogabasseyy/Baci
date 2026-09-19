@@ -147,7 +147,7 @@ describe('HomeProductGridGate tap gestures', () => {
     );
 
     const moreButton = document.querySelector(
-      '[data-ogabassey-home-products-more="true"] button'
+      '[data-ogabassey-home-products-more="true"]'
     );
     expect(moreButton).not.toBeNull();
     await act(async () => {
@@ -178,6 +178,63 @@ describe('HomeProductGridGate tap gestures', () => {
     expect(screen.getByTestId('interactive-grid')).toHaveAttribute(
       'data-replay-load-more',
       'true'
+    );
+  });
+
+  it('ignores taps on the load-more status text', async () => {
+    // The replay marker lives on the button: a tap on the "Showing N of
+    // M" label activates the grid without expanding it.
+    const products = Array.from({ length: 10 }, (_, index) => ({
+      ...stubProduct,
+      id: `product-${index + 1}`,
+      name: `Phone ${index + 1}`,
+      slug: `phone-${index + 1}`,
+    }));
+    const loader = vi.fn(() =>
+      Promise.resolve({
+        HomeProductGrid: ({
+          replayLoadMore,
+        }: {
+          replayLoadMore?: boolean;
+        }) => (
+          <div
+            data-testid="interactive-grid"
+            data-replay-load-more={String(Boolean(replayLoadMore))}
+          />
+        ),
+      } as never)
+    );
+    render(
+      <HomeProductGridGate
+        fallback={
+          <HomeProductGridStaticFallback
+            basePath=""
+            products={products}
+            initialDisplayCount={8}
+          />
+        }
+        loadGridModule={loader}
+        products={products}
+        timeoutMs={10000}
+      />
+    );
+
+    const statusText = screen.getByText('Showing 8 of 10 products');
+    await act(async () => {
+      fireEvent.pointerDown(statusText);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(statusText);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('interactive-grid')).toHaveAttribute(
+      'data-replay-load-more',
+      'false'
     );
   });
 

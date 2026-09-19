@@ -5,7 +5,7 @@ import { getProductUrl } from '@/lib/product-url';
 import type { Product } from '../types';
 import { getProductConditionClass } from './product-condition-class';
 import { resolveProductImageSource } from './product-image-source';
-import { FALLBACK_RENDERED_IMAGE_COUNT } from './home-product-grid-fallback-swap';
+import { FALLBACK_RENDERED_IMAGE_COUNT } from './home-product-grid-constants';
 import { HomeProductGridFallbackImage } from './home-product-grid-fallback-image';
 import { ProductRatingRow } from './ProductRatingRow';
 
@@ -171,11 +171,11 @@ export function HomeProductGridStaticFallback({
         <div
           className="mt-8 flex flex-col items-center gap-2"
           aria-hidden="true"
-          data-ogabassey-home-products-more="true"
         >
           <button
             type="button"
             tabIndex={-1}
+            data-ogabassey-home-products-more="true"
             className="px-8 py-3 bg-store-primary text-store-primary-text font-semibold rounded-xl cursor-pointer"
           >
             Load More Products

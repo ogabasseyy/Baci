@@ -14,17 +14,19 @@ import type {
 import { DeferredAdUnit } from './deferred-ad-unit';
 import {
   FALLBACK_RENDERED_IMAGE_COUNT,
+  PRODUCTS_PER_PAGE,
+} from './home-product-grid-constants';
+import {
   loadDefaultInteractionBindingsModule,
   loadDefaultInteractiveCardModule,
-  PRODUCTS_PER_PAGE,
   STATIC_BINDINGS,
-  useFallbackSwapPage,
-} from './home-product-grid-fallback-swap';
+} from './home-product-grid-deferred-modules';
 import type {
   PreviewCatalogModule,
   ProductGridInteractionBindingsModule,
   ProductGridItemModule,
-} from './home-product-grid-fallback-swap';
+} from './home-product-grid-deferred-modules';
+import { useFallbackSwapPage } from './home-product-grid-fallback-swap';
 import { HomeProductGridCard } from './HomeProductGridCard';
 import { hasRealProducts, useHomePreviewCatalog } from './useHomePreviewCatalog';
 import { useActivationFocusRestore } from './use-activation-focus-restore';

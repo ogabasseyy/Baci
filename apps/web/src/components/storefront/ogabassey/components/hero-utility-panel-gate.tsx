@@ -1,19 +1,25 @@
 'use client';
 
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useViewportActivation } from '@/components/storefront/use-viewport-activation';
 import type {
   HeroUtilityPanelProps,
   UtilityTab,
 } from './hero-utility-panel';
-import { HeroUtilityPanelStatic } from './hero-utility-panel-static';
 
 interface HeroUtilityPanelModule {
   HeroUtilityPanel: ComponentType<HeroUtilityPanelProps>;
 }
 
 interface HeroUtilityPanelGateProps {
+  /**
+   * Server-rendered static twin shown until activation. Passed from the
+   * server Hero (mirrors HomeProductGridGate.fallback) so the static
+   * modules never join this client boundary's graph — only serialized
+   * markup crosses it.
+   */
+  fallback: ReactNode;
   /**
    * Test seam (mirrors HomeProductGridGate.loadGridModule). Production loads
    * the interactive panel — its lucide icons and modal boundary — on demand.
@@ -80,6 +86,7 @@ function isUtilityTab(value: string | null): value is UtilityTab {
  * viewport/key activation but before the chunk arrives still replays.
  */
 export function HeroUtilityPanelGate({
+  fallback,
   loadPanelModule = loadDefaultPanelModule,
   timeoutMs = 8000,
 }: HeroUtilityPanelGateProps) {
@@ -282,7 +289,7 @@ export function HeroUtilityPanelGate({
         aria-hidden="true"
         data-ogabassey-hero-utility-gate="true"
       >
-        <HeroUtilityPanelStatic />
+        {fallback}
       </div>
     );
   }

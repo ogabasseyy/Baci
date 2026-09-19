@@ -1,6 +1,7 @@
 import { act, render } from '@testing-library/react';
 import { vi } from 'vitest';
 import { HeroUtilityPanelGate } from './hero-utility-panel-gate';
+import { HeroUtilityPanelStatic } from './hero-utility-panel-static';
 
 let observerCallback: IntersectionObserverCallback | null = null;
 
@@ -39,7 +40,7 @@ export function renderGate(loadPanelModule?: () => Promise<never>) {
       })
     );
   const utils = render(
-    <HeroUtilityPanelGate loadPanelModule={loader as never} timeoutMs={1000} />
+    <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />} loadPanelModule={loader as never} timeoutMs={1000} />
   );
   return { loader: loader as ReturnType<typeof vi.fn>, ...utils };
 }

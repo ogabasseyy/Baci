@@ -110,7 +110,11 @@ export function HomeProductGridGate({
   // across the swap.
   const { capture: captureFocusBeforeSwap } = useActivationFocusRestore(
     ref,
-    Grid !== null
+    // The committed swap only: a grid that resolves mid-press must not
+    // restore focus onto the still-mounted fallback (clearing the pending
+    // target), or the completing click unmounts the focused node and focus
+    // drops to the document instead of the interactive twin.
+    Grid !== null && !pressHeld
   );
 
   useEffect(() => {

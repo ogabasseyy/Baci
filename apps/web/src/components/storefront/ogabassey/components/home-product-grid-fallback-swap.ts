@@ -1,22 +1,8 @@
-import type React from 'react';
 import { useState } from 'react';
-import type {
-  ProductGridInteractionBindingsValue,
-  ProductGridParticle,
-} from './ProductGridInteractionBindings';
-import type { ProductGridItemProps } from './ProductGridItem';
-import type { Product } from '../types';
-
-/**
- * How many leading fallback cards render a real `<img>`. Single source of
- * truth shared by the static fallback default and the swap-tier predicate
- * below: the remaining cards render the same placeholder shell the
- * interactive card shows pre-activation, so below-fold product images
- * never compete with LCP for bandwidth.
- */
-export const FALLBACK_RENDERED_IMAGE_COUNT = 2;
-
-export const PRODUCTS_PER_PAGE = 20;
+import {
+  FALLBACK_RENDERED_IMAGE_COUNT,
+  PRODUCTS_PER_PAGE,
+} from './home-product-grid-constants';
 
 /**
  * Sole primary export: page + image-tier state for the static-fallback →
@@ -61,46 +47,3 @@ export function useFallbackSwapPage({
 
   return { displayCount, setDisplayCount, isFallbackTierIndex } as const;
 }
-
-export interface ProductGridInteractionBindingsModule {
-  ProductGridInteractionBindings: React.ComponentType<{
-    children: (
-      bindings: ProductGridInteractionBindingsValue
-    ) => React.ReactNode;
-  }>;
-}
-
-export interface ProductGridItemModule {
-  ProductGridItem: React.ComponentType<ProductGridItemProps>;
-}
-
-export interface PreviewCatalogModule {
-  products: Product[];
-}
-
-// Module-scope so the dynamic import() expressions stay outside component
-// bodies (React Compiler cannot lower import expressions). The deferred
-// interactive layer loads on first grid activation only.
-export const loadDefaultInteractionBindingsModule = () =>
-  import('./ProductGridInteractionBindings');
-
-export const loadDefaultInteractiveCardModule = () =>
-  import('./ProductGridItem');
-
-const NO_PARTICLES: ProductGridParticle[] = [];
-
-/** Pre-activation bindings: inert until the interactive modules resolve. */
-export const STATIC_BINDINGS: ProductGridInteractionBindingsValue = {
-  isAdded: () => false,
-  getCartQuantity: () => 0,
-  isWishlisted: () => false,
-  onAddToCart: (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  },
-  onToggleWishlist: (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  },
-  particles: NO_PARTICLES,
-};

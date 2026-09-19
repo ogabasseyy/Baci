@@ -103,16 +103,20 @@ describe('HomeProductGridStaticFallback', () => {
       />
     );
 
-    const row = container.querySelector(
-      '[data-ogabassey-home-products-more="true"]'
+    // The replay marker lives on the button itself: taps on the status
+    // label must not expand the grid after activation.
+    const control = screen.getByText('Load More Products');
+    expect(control).toHaveAttribute(
+      'data-ogabassey-home-products-more',
+      'true'
     );
+    const row = control.closest('div');
     expect(row).toHaveAttribute('aria-hidden', 'true');
     expect(row?.className).toContain('mt-8 flex flex-col items-center gap-2');
     expect(screen.getByText('Showing 1 of 2 products')).toBeInTheDocument();
     // Themed (not hardcoded red): non-red merchant palettes keep their
     // configured colors on the fallback control, matching the interactive
     // twin's store-primary button.
-    const control = screen.getByText('Load More Products');
     expect(control.className).toContain('bg-store-primary');
     expect(control.className).toContain('text-store-primary-text');
   });

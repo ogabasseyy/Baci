@@ -58,6 +58,9 @@ export default function OrderSuccessScreen() {
   // on grant does NOT end the flow — the native system prompt is still in
   // flight, and the success banner must stay unmounted underneath it.
   const [isPermissionFlowActive, setPermissionFlowActive] = useState(false);
+  // While a presented post-order interstitial owns the full screen the
+  // success banner stays unmounted; cleared when the interstitial closes.
+  const [isFullscreenAdActive, setFullscreenAdActive] = useState(false);
   // Tracks the notification permission flow (soft-ask modal through the
   // native prompt) independently of render state so the interstitial
   // cancellation predicate below always sees the current value.
@@ -122,6 +125,13 @@ export default function OrderSuccessScreen() {
           // ad on resume: presenting while inactive surfaces it only when
           // the activity returns, outside the post-order moment.
           AppState.currentState !== 'active',
+        onClosed: () => {
+          if (!interstitialCancelled) setFullscreenAdActive(false);
+        },
+      }).then((outcome) => {
+        if (!interstitialCancelled && outcome === 'shown') {
+          setFullscreenAdActive(true);
+        }
       });
     }, 2500);
 
@@ -206,6 +216,7 @@ export default function OrderSuccessScreen() {
           receiptPreview.isLoading || receiptPreview.isOpen
         }
         isPermissionFlowActive={isPermissionFlowActive}
+        isFullscreenAdActive={isFullscreenAdActive}
         showPermissionModal={showPermissionModal}
       />
       <ReceiptPreviewModal

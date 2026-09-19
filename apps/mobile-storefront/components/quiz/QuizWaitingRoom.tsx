@@ -114,8 +114,15 @@ export function QuizWaitingRoom({
         </View>
         {/* The rules modal mounts its own FOOTER_ANCHOR slot; unmount this
             one while it is visible so only one banner request is live per
-            logical placement and delivery attributes to the visible screen. */}
-        {rulesVisible ? null : <AdSlot placement="FOOTER_ANCHOR" />}
+            logical placement and delivery attributes to the visible screen.
+            A presented pre-quiz interstitial or rewarded ad likewise owns
+            the full screen: withhold the banner until it closes so nothing
+            requests or refreshes while completely obscured. */}
+        {rulesVisible ||
+        waitingRoom.isFullscreenAdActive ||
+        rewardedBadge.isWatching ? null : (
+          <AdSlot placement="FOOTER_ANCHOR" />
+        )}
       </ScrollView>
       <QuizRulesModal
         eventTitle={currentEvent.title}

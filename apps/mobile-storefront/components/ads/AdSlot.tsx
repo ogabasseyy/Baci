@@ -1,3 +1,4 @@
+import { useIsFocused } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { PaidEvent } from 'react-native-google-mobile-ads';
@@ -35,7 +36,9 @@ function getAdErrorCode(error: Error): string {
  * placements never request in parallel, and keeps the native module behind
  * a lazy require so builds without Google Mobile Ads keep working.
  * Consent readiness gates the request so banners never fire before consent
- * is gathered and the under-age request configuration is applied.
+ * is gathered and the under-age request configuration is applied. Route
+ * focus gates mounting so a consent/SDK initialization that resolves after
+ * navigation cannot request an ad on a hidden stack screen.
  */
 export function AdSlot({
   placement,
@@ -57,10 +60,15 @@ export function AdSlot({
     enabled: config?.enabled === true,
   });
   const drawerOpen = useDrawerStore((state) => state.isOpen);
+  // A pushed route keeps the previous screen mounted: without this gate a
+  // consent/SDK initialization resolving after navigation would mount a
+  // native banner and request an ad on the hidden screen.
+  const isFocused = useIsFocused();
   if (
     config?.enabled !== true ||
     !readiness.canRequestAds ||
     loadFailed ||
+    !isFocused ||
     (drawerOpen && !visibleWhileDrawerOpen)
   ) {
     return null;

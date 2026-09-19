@@ -16,6 +16,11 @@ export interface OrderSuccessViewProps {
    * banner slot is withheld to avoid obscured delivery.
    */
   isReceiptPreviewActive?: boolean;
+  /**
+   * While true a presented post-order interstitial owns the full screen, so
+   * the banner slot stays unmounted until it closes.
+   */
+  isFullscreenAdActive?: boolean;
   onContinueShopping: () => void;
   onLeaveGoogleReview: () => void;
   onPermissionDeny: () => void;

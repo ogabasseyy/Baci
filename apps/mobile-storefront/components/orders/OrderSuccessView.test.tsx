@@ -241,4 +241,19 @@ describe('OrderSuccessView', () => {
     );
     expect(screen.queryByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeNull();
   });
+
+  it('unmounts the banner while a fullscreen ad owns the screen', () => {
+    // Regression: the delayed post-order interstitial presents over this
+    // screen, so the banner must not request or refresh while obscured
+    // underneath it.
+    const { rerender } = render(
+      <OrderSuccessView {...createProps()} isFullscreenAdActive={false} />
+    );
+    expect(screen.getByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeTruthy();
+
+    rerender(
+      <OrderSuccessView {...createProps()} isFullscreenAdActive={true} />
+    );
+    expect(screen.queryByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeNull();
+  });
 });

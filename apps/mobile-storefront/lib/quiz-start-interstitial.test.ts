@@ -118,6 +118,33 @@ describe('maybeShowQuizStartInterstitial', () => {
     setAdsEnabled(ORIGINAL_ENV);
   });
 
+  it('keeps the attempt owned through presentation past the load deadline', async () => {
+    // Regression: a load finishing just before the 30s deadline must cancel
+    // it — otherwise the timer settles the attempt as skipped while show()
+    // can still complete, releasing the session cap for a later visit.
+    jest.useFakeTimers();
+    try {
+      setAdsEnabled('true');
+      mockInterstitialShow.mockImplementationOnce(
+        () => new Promise<void>(() => {})
+      );
+      // Never settles by design: show() stays pending past the deadline so
+      // the test proves the owned attempt is never released by the timer.
+      void maybeShowQuizStartInterstitial();
+      await flushConsentGate();
+      expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
+      for (const listener of listeners.loaded) listener();
+      await jest.advanceTimersByTimeAsync(31_000);
+      // Still owned: no second load may start while presentation is pending.
+      await expect(maybeShowQuizStartInterstitial()).resolves.toBe('skipped');
+      expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
+      expect(mockInterstitialShow).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+      setAdsEnabled(ORIGINAL_ENV);
+    }
+  });
+
   it('skips when loading errors', async () => {
     setAdsEnabled('true');
     const attempt = maybeShowQuizStartInterstitial();

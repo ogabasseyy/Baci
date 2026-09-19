@@ -53,6 +53,11 @@ export interface PostOrderInterstitialOptions {
    * unrelated screen after the shopper leaves order success.
    */
   isCancelled?: () => boolean;
+  /**
+   * Invoked when a presented interstitial closes so hosts can remount
+   * banner slots withheld while the full-screen ad owned the screen.
+   */
+  onClosed?: () => void;
 }
 
 // biome-ignore lint/suspicious/useAwait: async wraps the early 'skipped' returns in the declared Promise.
@@ -126,8 +131,22 @@ export async function maybeShowPostOrderInterstitial(
       const interstitial = mobileAds.InterstitialAd.createForAdRequest(
         config.unitId
       );
+      // The deadline below guards the load phase only: once LOADED fires the
+      // attempt is owned through presentation, so a load finishing just
+      // before the deadline must not settle as skipped while show() can
+      // still complete (which would release the session cap for a later
+      // visit without recording it).
+      let loadTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+        loadTimer = null;
+        for (const unsubscribe of cleanups) unsubscribe();
+        finish('skipped');
+      }, 30_000);
       const cleanups = [
         interstitial.addAdEventListener(mobileAds.AdEventType.LOADED, () => {
+          if (loadTimer !== null) {
+            clearTimeout(loadTimer);
+            loadTimer = null;
+          }
           // The shopper may have left order success while the ad was
           // loading; presenting now would surface it on an unrelated screen.
           if (options.isCancelled?.()) {
@@ -155,15 +174,12 @@ export async function maybeShowPostOrderInterstitial(
             payload as unknown as PaidEvent
           )
         ),
-        interstitial.addAdEventListener(mobileAds.AdEventType.CLOSED, () =>
-          finish(didShowThisSession ? 'shown' : 'skipped')
-        ),
+        interstitial.addAdEventListener(mobileAds.AdEventType.CLOSED, () => {
+          options.onClosed?.();
+          finish(didShowThisSession ? 'shown' : 'skipped');
+        }),
       ];
       interstitial.load();
-      setTimeout(() => {
-        for (const unsubscribe of cleanups) unsubscribe();
-        finish('skipped');
-      }, 30_000);
     } catch {
       finish('skipped');
     }

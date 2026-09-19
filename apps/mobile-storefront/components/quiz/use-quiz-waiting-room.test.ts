@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
-import { AppState } from 'react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
 import { useQuizWaitingRoom } from './use-quiz-waiting-room';
@@ -312,6 +312,73 @@ describe('useQuizWaitingRoom', () => {
     expect(isCancelled?.()).toBe(true);
     rerender({ suspended: false });
     expect(isCancelled?.()).toBe(false);
+  });
+
+  it('cancels the pending pre-quiz ad while the app is inactive', async () => {
+    // Regression: backgrounding the app while the interstitial loads must
+    // abandon the presentation so the ad cannot surface on resume over
+    // whatever the shopper sees; foregrounding re-arms it.
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-23T11:59:00.000Z'));
+    mockMaybeShowQuizStartInterstitial.mockClear();
+    // Foregrounding re-fetches: keep the scheduled event alive so only the
+    // app-state predicate (not a vanished quiz) drives cancellation.
+    const liveEvent = event();
+    renderHook(() =>
+      useQuizWaitingRoom({
+        event: liveEvent,
+        onExit: jest.fn(),
+        onStart: jest.fn(),
+        refresh: jest.fn(async () => [liveEvent]),
+      })
+    );
+    expect(mockMaybeShowQuizStartInterstitial).toHaveBeenCalledTimes(1);
+    const isCancelled =
+      mockMaybeShowQuizStartInterstitial.mock.calls[0]?.[0]?.isCancelled;
+    expect(typeof isCancelled).toBe('function');
+    expect(isCancelled?.()).toBe(false);
+    const listener = jest
+      .mocked(AppState.addEventListener)
+      .mock.calls.at(-1)?.[1] as (state: AppStateStatus) => void;
+    await act(async () => {
+      listener('background');
+      await Promise.resolve();
+    });
+    expect(isCancelled?.()).toBe(true);
+    await act(async () => {
+      listener('active');
+      await Promise.resolve();
+    });
+    expect(isCancelled?.()).toBe(false);
+  });
+
+  it('reports fullscreen ownership while the pre-quiz ad is presented', async () => {
+    // Regression: the waiting-room banner must stay unmounted underneath a
+    // presented interstitial, and remount once it closes.
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-23T11:59:00.000Z'));
+    mockMaybeShowQuizStartInterstitial.mockClear();
+    mockMaybeShowQuizStartInterstitial.mockResolvedValueOnce('shown');
+    const { result } = renderHook(() =>
+      useQuizWaitingRoom({
+        event: event(),
+        onExit: jest.fn(),
+        onStart: jest.fn(),
+        refresh: jest.fn(async () => []),
+      })
+    );
+    expect(result.current.isFullscreenAdActive).toBe(false);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.isFullscreenAdActive).toBe(true);
+    const onClosed =
+      mockMaybeShowQuizStartInterstitial.mock.calls[0]?.[0]?.onClosed;
+    expect(typeof onClosed).toBe('function');
+    act(() => {
+      onClosed?.();
+    });
+    expect(result.current.isFullscreenAdActive).toBe(false);
   });
 
   it('cancels the pending pre-quiz ad when the countdown expires before start', async () => {

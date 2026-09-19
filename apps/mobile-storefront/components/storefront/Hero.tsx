@@ -19,6 +19,7 @@ import { FashionSlide } from './FashionSlide';
 import { ELITE_HEIGHT, getHeroStyles } from './Hero.styles';
 import { HeroAdSlide } from './HeroAdSlide';
 import { CAROUSEL_HEIGHT, STANDARD_HEIGHT } from './hero-slide-dimensions';
+import { nextOffsetAfterAdToggle } from './launch-ad-offset';
 import { StandardSlide } from './StandardSlide';
 
 export interface HeroSlide {
@@ -103,14 +104,34 @@ export function Hero({
   // by placement so a placement change re-arms the slot.
   const [failedPlacement, setFailedPlacement] =
     useState<MobileAdBannerPlacementKey | null>(null);
-  const renderSlides: HeroRenderItem[] =
+  const isAdSlideShown =
     adUnitConfig.enabled &&
     adUnitConfig.format === 'banner' &&
     adsReadiness.canRequestAds &&
     failedPlacement !== trailingAdPlacement &&
-    slides.length > 0
-      ? [slides[0], { kind: 'hero-ad-slide' } as const, ...slides.slice(1)]
-      : slides;
+    slides.length > 0;
+  const renderSlides: HeroRenderItem[] = isAdSlideShown
+    ? [slides[0], { kind: 'hero-ad-slide' } as const, ...slides.slice(1)]
+    : slides;
+  const wasAdSlideShownRef = useRef(isAdSlideShown);
+  useEffect(() => {
+    // Consent resolving (or a load failure) inserts or removes the slide at
+    // index 1 under a scrolled carousel; shift the offset by one page so the
+    // visible hero stays put instead of being replaced by the ad (or
+    // jumping back on removal). currentIndex tracks the same page.
+    const target = nextOffsetAfterAdToggle({
+      adSlotWidth: screenWidth,
+      insertionOffset: screenWidth,
+      isAdShown: isAdSlideShown,
+      scrollOffset: currentIndex * screenWidth,
+      wasAdShown: wasAdSlideShownRef.current,
+    });
+    wasAdSlideShownRef.current = isAdSlideShown;
+    if (target !== null) {
+      flatListRef.current?.scrollToOffset({ offset: target, animated: false });
+      setCurrentIndex((index) => index + (isAdSlideShown ? 1 : -1));
+    }
+  }, [isAdSlideShown, currentIndex, screenWidth]);
 
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -211,6 +232,7 @@ export function Hero({
           {renderSlides.map((slide, index) => (
             <View
               key={isHeroAdSlide(slide) ? 'hero-dot-ad' : slide.image}
+              testID={currentIndex === index ? 'hero-dot-active' : 'hero-dot'}
               style={[styles.dot, currentIndex === index && styles.dotActive]}
             />
           ))}

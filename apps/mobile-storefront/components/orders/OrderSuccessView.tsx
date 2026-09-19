@@ -31,6 +31,7 @@ export function OrderSuccessView({
   isDocumentLoading = false,
   isPermissionFlowActive = false,
   isReceiptPreviewActive = false,
+  isFullscreenAdActive = false,
   showPermissionModal,
 }: OrderSuccessViewProps) {
   const resolvedDeliveryEstimate =
@@ -275,12 +276,14 @@ export function OrderSuccessView({
                 </Pressable>
               </View>
               {/* The permission modal, the native system prompt behind it,
-                  and the receipt preview each cover this screen; unmount
-                  the slot while any of them is active so no obscured
-                  delivery is requested or attributed. */}
+                  the receipt preview, and a presented post-order
+                  interstitial each cover this screen; unmount the slot
+                  while any of them is active so no obscured delivery is
+                  requested or attributed. */}
               {showPermissionModal ||
               isPermissionFlowActive ||
-              isReceiptPreviewActive ? null : (
+              isReceiptPreviewActive ||
+              isFullscreenAdActive ? null : (
                 <AdSlot placement="ORDER_SUCCESS_BANNER" />
               )}
             </View>

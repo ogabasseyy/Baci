@@ -308,6 +308,50 @@ describe('Hero trailing ad slide', () => {
     process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
   });
 
+  it('keeps the visible hero in place when the ad slide inserts late', () => {
+    // Regression: consent resolving after the carousel advanced must not
+    // replace the shopper's current hero with the inserted ad slide — the
+    // offset shifts by one page and the active dot follows the same slide.
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
+    mockedGetTemplateConfig.mockReset();
+    mockedGetTemplateConfig.mockReturnValue({
+      ...baseTemplate,
+      heroVariant: 'carousel',
+    });
+    const secondSlide: HeroSlide = { ...slide, title: 'Second slide' };
+    mockUseMobileAdsReadiness.mockReturnValueOnce({
+      canRequestAds: false,
+      initialized: false,
+    });
+    const { rerender } = render(
+      <Hero slides={[slide, secondSlide]} trailingAdPlacement="HOME_STRIP" />
+    );
+    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
+    act(() => {
+      fireEvent(
+        screen.getByTestId('hero-carousel-list'),
+        'onMomentumScrollEnd',
+        {
+          nativeEvent: { contentOffset: { x: 400 } },
+        }
+      );
+    });
+
+    // The one-shot denial is consumed by the first render; the default
+    // mock grants consent from here on.
+    rerender(
+      <Hero slides={[slide, secondSlide]} trailingAdPlacement="HOME_STRIP" />
+    );
+
+    expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
+    const dots = screen.getByTestId('hero-dots');
+    const dotIds = dots.children.map((child) =>
+      typeof child === 'string' ? child : child.props.testID
+    );
+    expect(dotIds).toEqual(['hero-dot', 'hero-dot', 'hero-dot-active']);
+    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
+  });
+
   it('places the ad slide second, not last', () => {
     process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
     mockedGetTemplateConfig.mockReset();

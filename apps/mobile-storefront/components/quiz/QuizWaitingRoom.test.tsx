@@ -1,7 +1,23 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
+import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
 import { QuizWaitingRoom } from './QuizWaitingRoom';
+
+jest.mock('@/lib/quiz-start-interstitial', () => ({
+  maybeShowQuizStartInterstitial: jest.fn(async () => 'skipped'),
+  setQuizRewardedFlowActive: jest.fn(),
+}));
+
+const mockMaybeShowQuizStartInterstitial = jest.mocked(
+  maybeShowQuizStartInterstitial
+);
 
 jest.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({
@@ -123,6 +139,32 @@ describe('QuizWaitingRoom', () => {
     expect(screen.getByRole('header', { name: 'How to play' })).toBeTruthy();
     expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(1);
     fireEvent.press(screen.getByRole('button', { name: 'Close rules' }));
+    expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(1);
+  });
+
+  it('withholds the footer slot while a fullscreen ad owns the screen', async () => {
+    // Regression: a presented pre-quiz interstitial covers the lobby, so
+    // FOOTER_ANCHOR must unmount until it closes instead of requesting
+    // underneath it.
+    mockMaybeShowQuizStartInterstitial.mockResolvedValueOnce('shown');
+    render(
+      <QuizWaitingRoom
+        event={scheduled}
+        onExit={jest.fn()}
+        onStart={jest.fn()}
+        refresh={jest.fn(async () => [scheduled])}
+      />
+    );
+    expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(1);
+    await waitFor(() => {
+      expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(0);
+    });
+    const onClosed =
+      mockMaybeShowQuizStartInterstitial.mock.calls.at(-1)?.[0]?.onClosed;
+    expect(typeof onClosed).toBe('function');
+    act(() => {
+      onClosed?.();
+    });
     expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(1);
   });
 });

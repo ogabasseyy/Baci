@@ -23,6 +23,7 @@ import { BlockRenderer } from '@/components/storefront/BlockRenderer';
 import { FilterBar } from '@/components/storefront/FilterBar';
 import { HomeServiceCards } from '@/components/storefront/HomeServiceCards';
 import { findHeroAdOwnerBlockId } from '@/components/storefront/hero-ad-owner';
+import { findLaunchAdOwnerBlockId } from '@/components/storefront/launch-ad-owner';
 import { styles as gridStyles } from '@/components/storefront/ProductGrid.styles';
 import { ProductGridSkeleton } from '@/components/ui/Skeleton';
 import { palette } from '@/constants/Colors';
@@ -124,6 +125,13 @@ export function HomeFeedList({
     ...headerBlocks,
     ...footerBlocks,
   ]);
+  // PRODUCT_GRID_MPU is likewise one logical slot for the whole page: elect
+  // the owner across both slices so repeated JustLaunched blocks cannot each
+  // claim it.
+  const launchAdOwnerBlockId = findLaunchAdOwnerBlockId([
+    ...headerBlocks,
+    ...footerBlocks,
+  ]);
   const renderAfterCategoryRail = (block: Block) =>
     block.type === 'CategoryRail' ? (
       <HomeServiceCards placement="belowUtility" />
@@ -188,6 +196,7 @@ export function HomeFeedList({
         // home ad placements so no obscured delivery is requested.
         suppressAds={isSearchOpen}
         heroAdOwnerBlockId={heroAdOwnerBlockId}
+        launchAdOwnerBlockId={launchAdOwnerBlockId}
       />
       {hasPrimaryGrid ? (
         <>
@@ -227,8 +236,16 @@ export function HomeFeedList({
         renderAfterBlock={renderAfterCategoryRail}
         suppressAds={isSearchOpen}
         heroAdOwnerBlockId={heroAdOwnerBlockId}
+        launchAdOwnerBlockId={launchAdOwnerBlockId}
       />
-      {isSearchOpen ? null : <AdSlot placement="PRODUCT_GRID_IN_FEED" />}
+      {/* The footer renders alongside the empty state: while the feed is
+          initially loading or fatally errored the slot would request below
+          a skeleton or retry error with no resolved product feed. */}
+      {isSearchOpen ||
+      shouldShowInitialLoading ||
+      shouldShowFatalError ? null : (
+        <AdSlot placement="PRODUCT_GRID_IN_FEED" />
+      )}
     </View>
   );
 

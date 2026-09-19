@@ -30,6 +30,11 @@ type RefreshEvents = () => Promise<QuizEvent[]>;
 export interface QuizWaitingRoomState {
   error: string | null;
   event: QuizEvent;
+  /**
+   * While true a presented pre-quiz interstitial owns the full screen, so
+   * banner slots must stay unmounted until it closes.
+   */
+  isFullscreenAdActive: boolean;
   isRefreshing: boolean;
   remainingSeconds: number;
 }
@@ -64,6 +69,7 @@ export function useQuizWaitingRoom({
     getRemainingSeconds(initialEvent, offsetMs)
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isFullscreenAdActive, setIsFullscreenAdActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const eventRef = useRef(initialEvent);
   const offsetRef = useRef(offsetMs);
@@ -170,8 +176,19 @@ export function useQuizWaitingRoom({
           startedRef.current ||
           stoppedRef.current ||
           suspendedRef.current ||
+          // A backgrounded app must never present on LOADED: the ad would
+          // surface only when the shopper resumes, over whatever they see.
+          // Mirrors the countdown tick guard below: only background/inactive
+          // cancel, so transient states never abandon the load.
+          appStateRef.current === 'background' ||
+          appStateRef.current === 'inactive' ||
           getRemainingSeconds(eventRef.current, offsetRef.current) <=
             QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS,
+        onClosed: () => {
+          if (mounted) setIsFullscreenAdActive(false);
+        },
+      }).then((outcome) => {
+        if (mounted && outcome === 'shown') setIsFullscreenAdActive(true);
       });
     }
     const tick = () => {
@@ -219,5 +236,11 @@ export function useQuizWaitingRoom({
     };
   }, []);
 
-  return { error, event, isRefreshing, remainingSeconds };
+  return {
+    error,
+    event,
+    isFullscreenAdActive,
+    isRefreshing,
+    remainingSeconds,
+  };
 }

@@ -297,6 +297,24 @@ describe('HomeFeedList', () => {
     expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
   });
 
+  it('withholds the in-feed slot while loading or fatally errored', () => {
+    // Regression: the footer renders alongside the empty state, so the
+    // placement must not request below a skeleton or retry error with no
+    // successfully resolved product feed.
+    mockUseHomeProductFeed.mockReturnValue(
+      feed({ feedProducts: [], shouldShowInitialLoading: true })
+    );
+    const { unmount } = renderList();
+    expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
+    unmount();
+
+    mockUseHomeProductFeed.mockReturnValue(
+      feed({ feedProducts: [], shouldShowFatalError: true })
+    );
+    renderList();
+    expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
+  });
+
   it('builds a RefreshControl with the header offset and theme color', () => {
     const onRefresh = jest.fn();
     renderList({ onRefresh });

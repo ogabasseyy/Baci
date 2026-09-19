@@ -40,6 +40,11 @@ jest.mock('@/stores/drawer-store', () => ({
     selector({ isOpen: mockDrawerOpen }),
 }));
 
+let mockIsFocused = true;
+jest.mock('expo-router', () => ({
+  useIsFocused: () => mockIsFocused,
+}));
+
 const ORIGINAL_ENV = process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
 
 function setAdsEnabled(value: string | undefined) {
@@ -131,6 +136,21 @@ describe('AdSlot', () => {
       expect(screen.getByTestId('ad-slot-footer-anchor')).toBeTruthy();
     } finally {
       mockDrawerOpen = false;
+      setAdsEnabled(ORIGINAL_ENV);
+    }
+  });
+
+  it('renders nothing when the route is not focused so hidden screens cannot request', () => {
+    // Regression: a pushed route keeps the previous screen mounted, so a
+    // consent/SDK initialization resolving after navigation must not mount
+    // a banner on the hidden screen.
+    setAdsEnabled('true');
+    mockIsFocused = false;
+    try {
+      const { toJSON } = render(<AdSlot placement="CART_MPU" />);
+      expect(toJSON()).toBeNull();
+    } finally {
+      mockIsFocused = true;
       setAdsEnabled(ORIGINAL_ENV);
     }
   });

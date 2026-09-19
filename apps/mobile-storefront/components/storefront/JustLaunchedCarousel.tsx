@@ -18,7 +18,10 @@ import { JustLaunchedSkeleton } from '@/components/storefront/JustLaunchedSkelet
 import { LaunchAdCard } from '@/components/storefront/LaunchAdCard';
 import { LaunchProductCard } from '@/components/storefront/LaunchProductCard';
 import { nextOffsetAfterAdToggle } from '@/components/storefront/launch-ad-offset';
-import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
+import {
+  getMobileAdUnitId,
+  type MobileAdBannerPlacementKey,
+} from '@/config/mobile-ad-placements';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { usePinnedLaunchProducts } from '@/hooks/use-pinned-launch-products';
 import { useProducts } from '@/hooks/use-products';
@@ -39,12 +42,19 @@ function isLaunchAdCard(item: LaunchRenderItem): item is LaunchAdCardItem {
 
 export function JustLaunchedCarousel({
   suppressAds = false,
+  adPlacement = 'PRODUCT_GRID_MPU',
 }: {
   /**
    * While true (e.g. search obscures the feed) the sponsored card is
    * withheld so no invisible delivery is requested or attributed.
    */
   suppressAds?: boolean;
+  /**
+   * Placement the sponsored card owns. Page composition passes the slot
+   * only to the single elected launch block; when undefined no sponsored
+   * card renders so repeated blocks cannot own one logical slot twice.
+   */
+  adPlacement?: MobileAdBannerPlacementKey;
 } = {}) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
@@ -89,10 +99,12 @@ export function JustLaunchedCarousel({
   let adUnitConfig: ReturnType<typeof getMobileAdUnitId> = {
     enabled: false as const,
   };
-  try {
-    adUnitConfig = getMobileAdUnitId('PRODUCT_GRID_MPU');
-  } catch {
-    adUnitConfig = { enabled: false as const };
+  if (adPlacement) {
+    try {
+      adUnitConfig = getMobileAdUnitId(adPlacement);
+    } catch {
+      adUnitConfig = { enabled: false as const };
+    }
   }
   // Consent readiness gates the sponsored card: the native banner must never
   // be constructed before UMP consent is gathered. All hooks stay above the
@@ -187,7 +199,7 @@ export function JustLaunchedCarousel({
           colors={colors}
           isVisible={isAdVisible}
           onAdFailedToLoad={() => setAdLoadFailed(true)}
-          placement="PRODUCT_GRID_MPU"
+          placement={adPlacement ?? 'PRODUCT_GRID_MPU'}
           unitId={
             adUnitConfig.enabled ? adUnitConfig.unitId : 'unused-ad-unit-id'
           }

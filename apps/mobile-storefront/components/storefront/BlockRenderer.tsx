@@ -11,6 +11,7 @@ import type {
 import { Hero, type HeroSlide } from './Hero';
 import { findHeroAdOwnerBlockId } from './hero-ad-owner';
 import { JustLaunchedCarousel } from './JustLaunchedCarousel';
+import { findLaunchAdOwnerBlockId } from './launch-ad-owner';
 import ProductGrid from './ProductGrid';
 import { UtilityPanel } from './UtilityPanel';
 
@@ -39,6 +40,13 @@ interface BlockRendererProps {
    * When omitted, this slice elects its own first eligible hero.
    */
   heroAdOwnerBlockId?: string | null;
+  /**
+   * Page-level PRODUCT_GRID_MPU owner elected across all feed slices, for
+   * the same reason: repeated JustLaunched blocks must not each claim the
+   * same logical placement. When omitted, this slice elects its own first
+   * eligible launch block.
+   */
+  launchAdOwnerBlockId?: string | null;
 }
 
 export const BlockRenderer: React.FC<BlockRendererProps> = ({
@@ -49,6 +57,7 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
   renderAfterBlock,
   suppressAds = false,
   heroAdOwnerBlockId,
+  launchAdOwnerBlockId,
 }) => {
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
   const { data: categories = [] } = useCategories();
@@ -62,6 +71,18 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
     : findHeroAdOwnerBlockId(blocks || []);
   const pageOwnerBlockId =
     heroAdOwnerBlockId !== undefined ? heroAdOwnerBlockId : sliceOwnerBlockId;
+
+  // PRODUCT_GRID_MPU is likewise one logical slot: every authored
+  // JustLaunched block would otherwise own it concurrently. The page-level
+  // owner wins when provided; otherwise this slice elects its own first
+  // eligible launch block.
+  const sliceLaunchOwnerBlockId = suppressAds
+    ? null
+    : findLaunchAdOwnerBlockId(blocks || []);
+  const pageLaunchOwnerBlockId =
+    launchAdOwnerBlockId !== undefined
+      ? launchAdOwnerBlockId
+      : sliceLaunchOwnerBlockId;
 
   const selectedCategoryName = (() => {
     if (!selectedCategoryId) return 'Airtime';
@@ -114,8 +135,21 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
                 />
               );
             }
-            case 'JustLaunched':
-              return <JustLaunchedCarousel suppressAds={suppressAds} />;
+            case 'JustLaunched': {
+              const launchBlock = block as Block & { props: { id: string } };
+              return (
+                <JustLaunchedCarousel
+                  suppressAds={suppressAds}
+                  adPlacement={
+                    !suppressAds &&
+                    pageLaunchOwnerBlockId !== null &&
+                    launchBlock.props.id === pageLaunchOwnerBlockId
+                      ? 'PRODUCT_GRID_MPU'
+                      : undefined
+                  }
+                />
+              );
+            }
             case 'CategoryRail':
               return (
                 <UtilityPanel

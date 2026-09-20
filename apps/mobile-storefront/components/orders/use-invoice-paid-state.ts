@@ -36,6 +36,12 @@ export function useGuestInvoicePaidState({
 }): boolean {
   const [isPaid, setIsPaid] = useState(false);
   useEffect(() => {
+    // The paid flag belongs to one lookup identity: same-route navigation
+    // or a new deep link can swap a paid guest invoice for a different
+    // unpaid one on the mounted route, and the new lookup must not
+    // inherit the previous order's paid presentation (receipt/commercial
+    // copy for an unpaid order).
+    setIsPaid(false);
     if (skip || paymentMethod !== 'invoice' || !orderId || !trackingToken) {
       return;
     }

@@ -148,6 +148,49 @@ describe('useBNPLCheckoutController', () => {
     expect(trackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
   });
 
+  it('records a fresh start for the retried attempt after open then failure', async () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      orderId: 'order-123',
+      amount: '21500',
+    };
+    const { result } = renderControllerHook();
+    const openedMessage = {
+      nativeEvent: {
+        data: JSON.stringify({
+          type: 'bnpl_provider_opened',
+          gateway: 'credit_direct',
+          orderId: 'order-123',
+        }),
+      },
+    };
+
+    // First attempt opens (start recorded) then fails at load.
+    await act(async () => {
+      result.current.handleWebViewMessage(openedMessage);
+    });
+    act(() => {
+      result.current.handleWebViewError({
+        description: 'net::ERR_FAILED',
+        url: 'https://pay.example/x',
+      });
+    });
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBe('error');
+
+    // Retry must reset the start guard alongside the failure guard, so
+    // the reopened provider flow emits its own start to match any later
+    // failure instead of producing an unmatched payment_failed.
+    act(() => {
+      result.current.handleRetry();
+    });
+    await act(async () => {
+      result.current.handleWebViewMessage(openedMessage);
+    });
+
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledTimes(2);
+  });
+
   it('ignores provider-opened signals for a different order', async () => {
     mockRouteParams = {
       gateway: 'credit_direct',
@@ -721,6 +764,52 @@ describe('useBNPLCheckoutController', () => {
       'credit_direct'
     );
     expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+  });
+
+  it('fails the checkout when an allowed redirect target returns an HTTP error', () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+    };
+    const { result } = renderControllerHook('ogabassey.com');
+    const providerUrl =
+      'https://ogabassey.com/checkout/bnpl?gateway=credit_direct&orderId=order-123';
+
+    let shouldStart = false;
+    act(() => {
+      shouldStart = result.current.handleShouldStartLoadWithRequest({
+        canGoBack: false,
+        canGoForward: false,
+        isTopFrame: true,
+        loading: true,
+        lockIdentifier: 1,
+        navigationType: 'other',
+        title: 'BNPL checkout',
+        url: providerUrl,
+      } as never);
+    });
+    expect(shouldStart).toBe(true);
+
+    // The accepted top-frame navigation became the document: its HTTP
+    // failure must not be misclassified as a subresource error against
+    // the stale launcher URL.
+    act(() => {
+      result.current.handleWebViewHttpError({
+        nativeEvent: {
+          description: 'Not Found',
+          statusCode: 404,
+          url: providerUrl,
+        },
+      } as never);
+    });
+
+    expect(result.current.status).toBe('error');
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
+      'bnpl_load_error',
+      'order-123',
+      'credit_direct'
+    );
   });
 
   it('ignores subresource HTTP errors while the document loads', () => {

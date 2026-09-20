@@ -138,7 +138,12 @@ function OrderSuccessContent() {
   const lookupEmail = searchParams.get('email');
   const _type = searchParams.get('type'); // Reserved for future use
   const bnplType = isPendingBnplType(_type) ? _type : null;
-  const bnplReference = searchParams.get('reference');
+  // The standard CredPal pending redirect carries the provider
+  // transaction as `credpalRef` (see the place-order CredPal handler),
+  // not `reference`: accept the alias so the later settlement capture
+  // can reconcile the deferred conversion to the provider transaction.
+  const bnplReference =
+    searchParams.get('reference') || searchParams.get('credpalRef');
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath;
   const merchant = merchantContext?.merchant;

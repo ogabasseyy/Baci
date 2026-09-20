@@ -434,6 +434,66 @@ describe('storefront order success page', () => {
     }
   });
 
+  it('captures the CredPal reference from the credpalRef query key', async () => {
+    vi.useFakeTimers();
+    try {
+      // The standard CredPal pending redirect carries the provider
+      // transaction as credpalRef, not reference.
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-123',
+          type: 'credpal',
+          credpalRef: 'CP-99',
+          credpalStatus: 'pending',
+          trackingToken: 'track-token-123',
+        })
+      );
+      const pendingOrder = {
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        items: [],
+        subtotal: 45000,
+        shipping_cost: 1500,
+        total: 49875,
+        payment_method: 'credpal',
+        payment_status: 'pending',
+      };
+      const paidOrder = { ...pendingOrder, payment_status: 'paid' };
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => pendingOrder,
+        })
+        .mockResolvedValue({
+          ok: true,
+          json: async () => paidOrder,
+        });
+
+      render(<OrderSuccessPage />);
+      await flushMicrotasks();
+      await advanceTimers(3000);
+      await flushMicrotasks();
+      await advanceTimers(3000);
+      await flushMicrotasks();
+
+      // The deferred conversion must reconcile to the provider
+      // transaction, not emit without a reference.
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-123',
+        expect.objectContaining({
+          payment_method: 'credpal',
+          payment_status: 'paid',
+          reference: 'CP-99',
+        })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not capture while a BNPL approval is still pending', async () => {
     vi.useFakeTimers();
     try {

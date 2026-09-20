@@ -49,6 +49,39 @@ describe('useGuestInvoicePaidState', () => {
     expect(result.current).toBe(false);
   });
 
+  it('resets paid when the route swaps to a different unpaid invoice', async () => {
+    mockTrackedOrder('paid', 'order-inv-1');
+
+    const { result, rerender } = renderHook(
+      ({
+        orderId,
+        trackingToken,
+      }: {
+        orderId: string;
+        trackingToken: string;
+      }) =>
+        useGuestInvoicePaidState({
+          ...baseParams,
+          orderId,
+          trackingToken,
+        }),
+      { initialProps: { orderId: 'order-inv-1', trackingToken: 'track-inv-1' } }
+    );
+    await waitFor(() => expect(result.current).toBe(true));
+
+    // Same-route navigation to another invoice: the pending lookup must
+    // clear the previous order's paid flag instead of presenting the
+    // unpaid order as paid.
+    mockTrackedOrder('pending', 'order-inv-2');
+    rerender({ orderId: 'order-inv-2', trackingToken: 'track-inv-2' });
+
+    await waitFor(() => expect(result.current).toBe(false));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('track-order?token=track-inv-2'),
+      expect.anything()
+    );
+  });
+
   it('skips the lookup when the receipt query already confirmed paid', () => {
     const fetchSpy = jest.fn(async () => new Response('{}', { status: 200 }));
     global.fetch = fetchSpy as unknown as typeof fetch;

@@ -94,6 +94,19 @@ export function useBNPLCheckoutController({
     trackCheckoutPaymentFailed(reason, orderId, gateway);
   };
   const statusRef = useRef<BNPLCheckoutStatus>('loading');
+  // Main-document URL for HTTP-error classification. A ref (not the
+  // currentUrl state, which feeds the WebView source and must not be
+  // rewritten here): allowed top-frame navigations return true without
+  // touching state, and server redirects never reach should-start-load —
+  // without this tracking a provider/identity document that 404s/500s is
+  // misclassified as a subresource failure and load-end marks it ready.
+  const documentUrlRef = useRef(bnplUrl);
+  const trackDocumentUrl = (url: unknown) => {
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+      return;
+    }
+    documentUrlRef.current = url;
+  };
   if (bnplUrl !== prevBnplUrl) {
     setPrevBnplUrl(bnplUrl);
     if (bnplUrl) {
@@ -204,8 +217,13 @@ export function useBNPLCheckoutController({
     setErrorMessage(effect.errorMessage);
   };
 
-  const handleNavigationChange = (navState: WebViewNavigation) =>
-    handleNavigationUrl(navState.url);
+  const handleNavigationChange = (navState: WebViewNavigation) => {
+    // navState.url is always the top-level document (server redirects
+    // never reach should-start-load), so it is the freshest main-document
+    // signal for HTTP-error classification.
+    trackDocumentUrl(navState.url);
+    return handleNavigationUrl(navState.url);
+  };
 
   const handleClose = () =>
     getAppNavigation().showCancelAlert(returnToAppFromProviderExit);
@@ -262,6 +280,10 @@ export function useBNPLCheckoutController({
   const handleRetry = () => {
     clearPendingLoadTimeout();
     failureRecordedRef.current = false;
+    // A new attempt must emit its own payment_started: without this reset
+    // a retried provider flow that opens and fails again produces an
+    // unmatched payment_failed and corrupts retry funnel measurements.
+    paymentStartRecordedRef.current = false;
     setCheckoutStatus('loading');
     setErrorMessage(null);
     setCurrentUrl(bnplUrl);
@@ -314,6 +336,12 @@ export function useBNPLCheckoutController({
       requestUrl: request.url,
     });
     if (decision.shouldStart) {
+      // An accepted top-frame navigation becomes the document: a later
+      // HTTP error on this URL is a main-document failure. Subresource
+      // (non-top-frame) and blank/popup URLs are never tracked.
+      if (request.isTopFrame !== false) {
+        trackDocumentUrl(request.url);
+      }
       return true;
     }
 
@@ -366,7 +394,7 @@ export function useBNPLCheckoutController({
     // a later load-end mark the checkout ready. Subresource failures only
     // log inside the handler.
     handleBNPLWebViewHttpError(event, {
-      documentUrl: currentUrl || bnplUrl,
+      documentUrl: documentUrlRef.current || currentUrl || bnplUrl,
       onMainDocumentError: (message) => {
         recordCheckoutFailure('bnpl_load_error');
         clearPendingLoadTimeout();

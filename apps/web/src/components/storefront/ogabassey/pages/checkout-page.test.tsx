@@ -3909,4 +3909,118 @@ describe('CheckoutPage', () => {
     expect(body).not.toHaveProperty('discount_code');
     fetchMock.mockRestore();
   });
+
+  it('retains a stored REDVAULT fence when switching payment methods', async () => {
+    mockCheckoutSubmissionState();
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        slug: 'ogabassey',
+        business_name: 'OgaBassey',
+        country: 'NG',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+        feature_settings: {
+          pay_on_delivery_enabled: true,
+        },
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    const clearPendingCheckoutOrder = vi.fn();
+    vi.mocked(usePersistedState).mockReturnValue([
+      {
+        orderId: 'order-redvault',
+        orderNumber: 'ORD-RV',
+        trackingToken: 'track-rv',
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348000000000',
+        checkoutFingerprint: 'fp',
+        paymentMethod: 'uba_redvault',
+        amountDueToGateway: 5000,
+        createdAt: new Date().toISOString(),
+      },
+      vi.fn(),
+      clearPendingCheckoutOrder,
+    ] as unknown as ReturnType<typeof usePersistedState>);
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.startsWith('/api/payments/redvault/availability')) {
+          return Response.json({ available: true, reason: 'reviewed' });
+        }
+        return Response.json({ states: ['Lagos'], locations: [] });
+      });
+
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /continue to payment/i })
+    );
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /pay on delivery/i })
+    );
+    fireEvent.click(await screen.findByRole('radio', { name: /pay with uba/i }));
+
+    // Only the submit-time resolver (which validates server state) may
+    // clear a REDVAULT fence — the method switch must retain it so an
+    // indeterminate init cannot orphan a capturing order.
+    expect(clearPendingCheckoutOrder).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+
+  it('still clears a non-REDVAULT snapshot when switching methods', async () => {
+    mockCheckoutSubmissionState();
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        slug: 'ogabassey',
+        business_name: 'OgaBassey',
+        country: 'NG',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+        feature_settings: {
+          pay_on_delivery_enabled: true,
+        },
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    const clearPendingCheckoutOrder = vi.fn();
+    vi.mocked(usePersistedState).mockReturnValue([
+      {
+        orderId: 'order-card',
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348000000000',
+        checkoutFingerprint: 'fp',
+        paymentMethod: 'card',
+        amountDueToGateway: 5000,
+        createdAt: new Date().toISOString(),
+      },
+      vi.fn(),
+      clearPendingCheckoutOrder,
+    ] as unknown as ReturnType<typeof usePersistedState>);
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.startsWith('/api/payments/redvault/availability')) {
+          return Response.json({ available: true, reason: 'reviewed' });
+        }
+        return Response.json({ states: ['Lagos'], locations: [] });
+      });
+
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /continue to payment/i })
+    );
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /pay with uba/i })
+    );
+
+    expect(clearPendingCheckoutOrder).toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
 });

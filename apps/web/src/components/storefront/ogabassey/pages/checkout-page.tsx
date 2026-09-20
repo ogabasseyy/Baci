@@ -1214,7 +1214,13 @@ export const CheckoutPage: React.FC = () => {
       nextMethod !== paymentMethod &&
       (nextMethod === 'uba_redvault' || paymentMethod === 'uba_redvault')
     ) {
-      clearPendingCheckoutOrder();
+      // Retain a stored REDVAULT fence: after an indeterminate init the
+      // order may be persisted and capturing, so only the submit-time
+      // resolver (which validates server state and blocks a second order
+      // while unresolved) may clear it — never the method switch itself.
+      if (pendingCheckoutOrder?.paymentMethod !== 'uba_redvault') {
+        clearPendingCheckoutOrder();
+      }
       setRedvaultSummary(null);
       setRedvaultStatus('idle');
       setRedvaultOrderReady(null);

@@ -17,8 +17,10 @@ const RETRY_AFTER_SECONDS = String(RATE_LIMIT_WINDOW_MINUTES * 60);
  * Lets an authenticated storefront customer cancel their own order while it is
  * still unpaid and not yet shipped. Serves both web (cookie) and mobile (Bearer)
  * via authenticateApiRequest. The state transition + restock + instrument
- * voiding happen atomically in the cancel_order_as_customer RPC; the email is
- * best-effort.
+ * voiding happen atomically in the cancel_order_as_customer RPC (or the
+ * REDVAULT-scoped cancel_uba_redvault_order_as_customer RPC, which additionally
+ * runs under the protected write path and releases the fenced reservation);
+ * the email is best-effort.
  */
 export async function POST(
   request: NextRequest,
@@ -77,8 +79,22 @@ export async function POST(
     );
   }
 
-  // 4. Perform the cancellation via the SECURITY DEFINER RPC.
-  const { data, error } = await auth.supabase.rpc('cancel_order_as_customer', {
+  // 4. Perform the cancellation via the SECURITY DEFINER RPC. REDVAULT
+  // orders cancel through the scoped RPC: the generic one cannot write a
+  // REDVAULT row (protected-path guard) and would leak the fenced units.
+  // An unreadable row falls through to the generic RPC, which enforces
+  // ownership itself.
+  const { data: orderRow } = await auth.supabase
+    .from('orders')
+    .select('payment_method')
+    .eq('id', id)
+    .maybeSingle();
+  const cancelRpc =
+    (orderRow as { payment_method?: string } | null)?.payment_method ===
+    'uba_redvault'
+      ? 'cancel_uba_redvault_order_as_customer'
+      : 'cancel_order_as_customer';
+  const { data, error } = await auth.supabase.rpc(cancelRpc, {
     p_order_id: id,
     p_reason: parsed.data.reason ?? null,
   });
@@ -101,7 +117,7 @@ export async function POST(
       );
     }
     logger.error({
-      message: 'cancel_order_as_customer RPC failed',
+      message: `${cancelRpc} RPC failed`,
       orderId: id,
       error,
     });

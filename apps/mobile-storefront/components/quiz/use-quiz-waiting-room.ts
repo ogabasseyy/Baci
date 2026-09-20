@@ -1,16 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
-import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
-import { flushPendingQuizStart } from './quiz-pending-start';
 import { calculateQuizServerClockOffset } from './use-quiz-server-clock';
 import { useQuizStartHold } from './use-quiz-start-hold';
+import { useQuizStartInterstitialRequest } from './use-quiz-start-interstitial-request';
 
 const CLOCK_TICK_MS = 250;
 const BOUNDARY_REFRESH_MIN_INTERVAL_MS = 1_000;
-// Minimum countdown remaining (at lobby open) for the pre-quiz interstitial.
-// Below this the ad could eat into live play, so it is skipped.
-const QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS = 30;
 
 function getRemainingMs(event: QuizEvent, offsetMs: number): number {
   if (!event.startsAt) return 0;
@@ -193,57 +189,22 @@ export function useQuizWaitingRoom({
     stoppedRef,
   });
 
+  useQuizStartInterstitialRequest({
+    appStateRef,
+    getRemainingSeconds: () =>
+      getRemainingSeconds(eventRef.current, offsetRef.current),
+    isFullscreenAdActiveRef,
+    isStartBlockedRef,
+    onStartRef,
+    pendingStartRef,
+    setIsFullscreenAdActive,
+    startedRef,
+    stoppedRef,
+    suspendedRef,
+  });
+
   useEffect(() => {
     let mounted = true;
-    // Fire-and-forget: the lobby countdown keeps ticking underneath and play
-    // never waits on the ad. The load is abandoned if the shopper moves into
-    // live play, the lobby unmounts, the rules modal suspends the lobby, or
-    // the countdown reaches the safety margin while the load is in flight. The request requires strictly more
-    // than 30 seconds, so presentation cancels at 30 or below: a whole
-    // "30" on screen can be as little as 29.001 real seconds.
-    if (
-      getRemainingSeconds(eventRef.current, offsetRef.current) >
-      QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS
-    ) {
-      void maybeShowQuizStartInterstitial({
-        isCancelled: () =>
-          !mounted ||
-          startedRef.current ||
-          stoppedRef.current ||
-          suspendedRef.current ||
-          // A backgrounded app must never present on LOADED: the ad would
-          // surface only when the shopper resumes, over whatever they see.
-          // Mirrors the countdown tick guard below: only background/inactive
-          // cancel, so transient states never abandon the load.
-          appStateRef.current === 'background' ||
-          appStateRef.current === 'inactive' ||
-          getRemainingSeconds(eventRef.current, offsetRef.current) <=
-            QUIZ_START_INTERSTITIAL_MIN_REMAINING_SECONDS,
-        onClosed: () => {
-          if (!mounted) return;
-          isFullscreenAdActiveRef.current = false;
-          setIsFullscreenAdActive(false);
-          // A native dismissal while the app is inactive must not start
-          // timed play in the background: retain the pending transition
-          // until the foreground refresh re-validates it on resume.
-          if (appStateRef.current !== 'active') return;
-          // Likewise while a rewarded ad or the rules modal covers the
-          // lobby: the hold hook flushes when the covering flag clears.
-          if (isStartBlockedRef.current) return;
-          flushPendingQuizStart({
-            onStartRef,
-            pendingStartRef,
-            startedRef,
-            stoppedRef,
-          });
-        },
-      }).then((outcome) => {
-        if (mounted && outcome === 'shown') {
-          isFullscreenAdActiveRef.current = true;
-          setIsFullscreenAdActive(true);
-        }
-      });
-    }
     const tick = () => {
       if (
         !mounted ||

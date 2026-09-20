@@ -45,6 +45,13 @@ export interface QuizStartInterstitialOptions {
    * banner slots withheld while the full-screen ad owned the screen.
    */
   onClosed?: () => void;
+  /**
+   * Invoked synchronously when LOADED claims the attempt and presentation
+   * begins, before the show() bridge round-trip resolves. Hosts claim
+   * fullscreen ownership here so a start boundary landing in that window
+   * holds instead of starting behind the presenting ad.
+   */
+  onPresenting?: () => void;
 }
 
 export async function maybeShowQuizStartInterstitial(
@@ -195,6 +202,12 @@ export async function maybeShowQuizStartInterstitial(
             loadTimer = null;
           }
           try {
+            // Claim host ownership synchronously: show() resolves over a
+            // native bridge round-trip after presentation begins, and a
+            // start boundary landing in that window must already see the
+            // presenting ad. Inside try so a host throw degrades to an
+            // owned-presentation failure instead of a stuck attempt.
+            options.onPresenting?.();
             void interstitial
               .show()
               .then(() => finish('shown'), failOwnedPresentation);

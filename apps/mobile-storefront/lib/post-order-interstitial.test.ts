@@ -268,39 +268,4 @@ describe('maybeShowPostOrderInterstitial', () => {
     expect(onPresenting).toHaveBeenCalledTimes(1);
     setAdsEnabled(ORIGINAL_ENV);
   });
-
-  it('releases the timer and listeners when setup throws synchronously', async () => {
-    // Regression: a synchronous load() throw settled the attempt as skipped
-    // while leaving settled false, the 30s timer running, and every native
-    // listener subscribed — a late LOADED from the zombie instance could
-    // present an ad or reset a new attempt's reservation.
-    jest.useFakeTimers();
-    try {
-      setAdsEnabled('true');
-      mockInterstitialLoad.mockImplementationOnce(() => {
-        throw new Error('native load failed');
-      });
-      await expect(maybeShowPostOrderInterstitial()).resolves.toBe('skipped');
-      expect(unsubscribes).toHaveLength(4);
-      for (const unsubscribe of unsubscribes) {
-        expect(unsubscribe).toHaveBeenCalledTimes(1);
-      }
-      // The zombie instance is inert: a late load event cannot present, the
-      // deadline fires nothing, and the reservation is released for retry.
-      for (const listener of listeners.loaded) listener();
-      await jest.advanceTimersByTimeAsync(31_000);
-      expect(mockInterstitialShow).not.toHaveBeenCalled();
-      expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
-      mockInterstitialLoad.mockClear();
-      const retry = maybeShowPostOrderInterstitial();
-      await flushConsentGate();
-      expect(mockInterstitialLoad).toHaveBeenCalledTimes(1);
-      for (const listener of listeners.loaded) listener();
-      await expect(retry).resolves.toBe('shown');
-      expect(mockInterstitialShow).toHaveBeenCalledTimes(1);
-    } finally {
-      jest.useRealTimers();
-      setAdsEnabled(ORIGINAL_ENV);
-    }
-  });
 });

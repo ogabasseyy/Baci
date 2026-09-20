@@ -5,7 +5,7 @@ import { LaunchAdCard } from './LaunchAdCard';
 jest.mock('react-native-google-mobile-ads', () => ({
   BannerAd: 'BannerAd',
   BannerAdSize: {
-    ANCHORED_ADAPTIVE_BANNER: 'anchored-adaptive-banner',
+    INLINE_ADAPTIVE_BANNER: 'inline-adaptive-banner',
   },
 }));
 jest.mock('@/services/analytics-core', () => ({
@@ -46,6 +46,19 @@ describe('LaunchAdCard', () => {
     expect(screen.UNSAFE_getByType('BannerAd' as never)).toBeTruthy();
   });
 
+  it('sizes the banner to the card width instead of the full screen', () => {
+    // Regression: an anchored creative resolves for the full screen width
+    // and clips horizontally under the card width, padding, and overflow.
+    // Arrange & Act
+    render(<LaunchAdCard {...props} />);
+
+    // Assert
+    const banner = screen.UNSAFE_getByType('BannerAd' as never) as {
+      props: { size?: unknown };
+    };
+    expect(banner.props.size).toBe('inline-adaptive-banner');
+  });
+
   it('withholds the banner while the card is offscreen', () => {
     // Regression: the list eagerly renders its initial batch, so an
     // offscreen card must not construct its native banner. The same-size
@@ -59,31 +72,35 @@ describe('LaunchAdCard', () => {
     expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
   });
 
-  it('suspends the carousel ad while the drawer is open', () => {
-    // Regression: the carousel stays mounted behind the drawer backdrop,
-    // so an obscured card must not load or refresh there.
+  it('keeps the fixed-size placeholder while the drawer is open', () => {
+    // Regression: the carousel still carries the ad sentinel and offset,
+    // so suspension must withhold the banner without collapsing the child
+    // (which would jump the visible product when the drawer closes).
     // Arrange & Act
     mockDrawerOpen = true;
     try {
-      const { toJSON } = render(<LaunchAdCard {...props} />);
+      render(<LaunchAdCard {...props} />);
 
       // Assert
-      expect(toJSON()).toBeNull();
+      expect(screen.getByTestId('launch-ad-card')).toBeTruthy();
+      expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
     } finally {
       mockDrawerOpen = false;
     }
   });
 
-  it('unmounts the card when the route is not focused', () => {
+  it('keeps the fixed-size placeholder when the route is not focused', () => {
     // Regression: a pushed route keeps this screen mounted, so an
-    // unfocused route must not own or refresh the banner behind it.
+    // unfocused route withholds the banner but must not collapse the
+    // card the scrolled carousel still accounts for.
     // Arrange & Act
     mockIsFocused = false;
     try {
-      const { toJSON } = render(<LaunchAdCard {...props} />);
+      render(<LaunchAdCard {...props} />);
 
       // Assert
-      expect(toJSON()).toBeNull();
+      expect(screen.getByTestId('launch-ad-card')).toBeTruthy();
+      expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
     } finally {
       mockIsFocused = true;
     }

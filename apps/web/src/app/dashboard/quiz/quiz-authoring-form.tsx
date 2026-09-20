@@ -120,6 +120,7 @@ export function QuizAuthoringForm({
     }
     onGenerate({
       difficulty,
+      endTouched,
       liveWindowMinutes,
       mode,
       prizeProduct,

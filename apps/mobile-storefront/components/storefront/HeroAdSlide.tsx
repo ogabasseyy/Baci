@@ -53,8 +53,12 @@ export function HeroAdSlide({
   } catch {
     return null;
   }
-  if (!bannerModule || drawerOpen || !isFocused) return null;
-  if (!isVisible) {
+  if (!bannerModule) return null;
+  // Drawer, focus, and viewability all withhold the native banner but keep
+  // the fixed-size placeholder mounted: the carousel still carries the ad
+  // slide and its page offset, so unmounting the child would jump the
+  // visible hero when the overlay lifts.
+  if (!isVisible || drawerOpen || !isFocused) {
     return (
       <View
         accessibilityLabel="Sponsored advertisement"

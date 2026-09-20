@@ -55,31 +55,35 @@ describe('HeroAdSlide', () => {
     expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
   });
 
-  it('suspends the home banner while the drawer is open', () => {
-    // Regression: the feed stays mounted behind the drawer backdrop, so
-    // an obscured banner must not load or refresh there.
+  it('keeps the fixed-size placeholder while the drawer is open', () => {
+    // Regression: the carousel still carries the ad slide and page offset,
+    // so suspension must withhold the banner without collapsing the child
+    // (which would jump the visible hero when the drawer closes).
     // Arrange & Act
     mockDrawerOpen = true;
     try {
-      const { toJSON } = render(<HeroAdSlide {...props} />);
+      render(<HeroAdSlide {...props} />);
 
       // Assert
-      expect(toJSON()).toBeNull();
+      expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
+      expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
     } finally {
       mockDrawerOpen = false;
     }
   });
 
-  it('unmounts the banner when the route is not focused', () => {
+  it('keeps the fixed-size placeholder when the route is not focused', () => {
     // Regression: a pushed route keeps this screen mounted, so an
-    // unfocused route must not own or refresh the banner behind it.
+    // unfocused route withholds the banner but must not collapse the
+    // slide the carousel still accounts for.
     // Arrange & Act
     mockIsFocused = false;
     try {
-      const { toJSON } = render(<HeroAdSlide {...props} />);
+      render(<HeroAdSlide {...props} />);
 
       // Assert
-      expect(toJSON()).toBeNull();
+      expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
+      expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
     } finally {
       mockIsFocused = true;
     }

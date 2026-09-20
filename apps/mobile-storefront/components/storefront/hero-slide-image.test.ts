@@ -1,10 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
-import {
-  getCoverHeroImageSource,
-  getHeroImageSource,
-  heroImageProps,
-} from './hero-slide-image';
+import { heroImageProps } from './hero-image-props';
+import { getHeroImageSource } from './hero-slide-image';
 
 jest.mock('@/lib/safe-bounded-image-source', () => ({
   createSafeBoundedImageSource: jest.fn((options: unknown) => ({
@@ -24,7 +21,7 @@ describe('hero-slide-image', () => {
   it('builds bounded sources with and without cover fit', () => {
     // Arrange & Act
     getHeroImageSource('https://example.com/a.jpg', 390, 220);
-    getCoverHeroImageSource('https://example.com/b.jpg', 390, 450);
+    getHeroImageSource('https://example.com/b.jpg', 390, 450, 'cover');
 
     // Assert
     expect(mockCreateSource).toHaveBeenNthCalledWith(1, {

@@ -25,6 +25,7 @@ interface CartLoadedViewProps {
   hasNonNegotiableCartItem: boolean;
   insetsTop: number;
   isIdentityModalOpen: boolean;
+  isPriceChangeModalOpen: boolean;
   itemCount: number;
   items: CartItem[];
   onCloseIdentityModal: () => void;
@@ -69,6 +70,7 @@ export default function CartLoadedView({
   hasNonNegotiableCartItem,
   insetsTop,
   isIdentityModalOpen,
+  isPriceChangeModalOpen,
   itemCount,
   items,
   onCloseIdentityModal,
@@ -180,9 +182,11 @@ export default function CartLoadedView({
         )}
         ListFooterComponent={
           <>
-            {/* Either modal covers this screen; unmount the slot while one
-                is visible so no obscured delivery is requested. */}
-            {isIdentityModalOpen || showNegotiateWarning ? null : (
+            {/* Any modal covers this screen; unmount the slot while one is
+                visible so no obscured delivery is requested. */}
+            {isIdentityModalOpen ||
+            isPriceChangeModalOpen ||
+            showNegotiateWarning ? null : (
               <AdSlot placement="CART_MPU" />
             )}
             <View style={styles.secureBadgeInside}>

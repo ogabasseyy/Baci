@@ -3,9 +3,12 @@ import { isQuizMobileAdsAvailable } from '@/components/quiz/is-quiz-mobile-ads-a
 import { trackEvent } from '@/services/analytics-core';
 import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
 import {
+  resetQuizFullscreenOwnershipForTests,
+  setQuizRewardedFlowActive,
+} from './quiz-fullscreen-ownership';
+import {
   maybeShowQuizStartInterstitial,
   resetQuizStartInterstitialForTests,
-  setQuizRewardedFlowActive,
 } from './quiz-start-interstitial';
 
 jest.mock('@/services/analytics-core', () => ({
@@ -76,6 +79,7 @@ function setAdsEnabled(value: string | undefined) {
   mockInitializeQuizMobileAds.mockClear();
   mockTrackEvent.mockClear();
   resetQuizStartInterstitialForTests();
+  resetQuizFullscreenOwnershipForTests();
   if (value === undefined) {
     delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
   } else {

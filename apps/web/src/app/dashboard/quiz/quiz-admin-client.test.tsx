@@ -130,6 +130,49 @@ describe('QuizAdminClient', () => {
     expect(screen.getByText('Quiz launched')).toBeInTheDocument();
   });
 
+  it('resyncs the auto-derived end from the generated count before activation', async () => {
+    // Regression: Gemma may return a different count than requested (the
+    // schema allows 1–50), and activation validates the window against the
+    // actual questions. The form requests 2 questions but the draft below
+    // carries 10 x 10s = 100s of play: the scheduled end must resync to
+    // ~100s (not the requested-based 60s) so activation accepts it.
+    const tenQuestions = {
+      ...generated,
+      questions: Array.from({ length: 10 }, () => generated.questions[0]),
+    };
+    mockApiPost.mockResolvedValueOnce(tenQuestions).mockResolvedValueOnce({
+      event: { ...generated.event, status: 'active' },
+    });
+    const user = userEvent.setup();
+    render(<QuizAdminClient initialPrizeProducts={[prize]} />);
+    await user.click(screen.getByRole('button', { name: /generate draft/i }));
+    await user.click(
+      await screen.findByRole('checkbox', {
+        name: /reviewed every correct answer/i,
+      })
+    );
+    await user.click(screen.getByRole('button', { name: /launch quiz/i }));
+    const dialog = screen.getByRole('dialog');
+    await user.click(
+      within(dialog).getByRole('button', { name: /launch quiz/i })
+    );
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(2));
+    const [, payload] = mockApiPost.mock.calls.at(-1) as [
+      unknown,
+      {
+        timing: { endsAt: string; kind: string; startsAt: string };
+      },
+    ];
+    expect(payload.timing.kind).toBe('scheduled');
+    const spanSeconds =
+      (Date.parse(payload.timing.endsAt) -
+        Date.parse(payload.timing.startsAt)) /
+      1000;
+    expect(spanSeconds).toBeGreaterThan(60);
+    expect(spanSeconds).toBeGreaterThanOrEqual(100);
+    expect(spanSeconds).toBeLessThanOrEqual(160);
+  });
+
   it('uses the launch policy for a live selection instead of test rules', async () => {
     mockApiPost.mockResolvedValueOnce(generated).mockResolvedValueOnce({
       event: { ...generated.event, status: 'active' },

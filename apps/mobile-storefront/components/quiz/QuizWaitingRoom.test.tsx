@@ -6,13 +6,13 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
+import { Modal } from 'react-native';
 import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
 import { QuizWaitingRoom } from './QuizWaitingRoom';
 
 jest.mock('@/lib/quiz-start-interstitial', () => ({
   maybeShowQuizStartInterstitial: jest.fn(async () => 'skipped'),
-  setQuizRewardedFlowActive: jest.fn(),
 }));
 
 const mockMaybeShowQuizStartInterstitial = jest.mocked(
@@ -126,7 +126,7 @@ describe('QuizWaitingRoom', () => {
     // modal's own slot is visible so only one banner request is live.
     // The modal renders in a separate root outside query traversal, so
     // count across the full rendered tree instead of getAllByTestId.
-    render(
+    const { UNSAFE_getByType } = render(
       <QuizWaitingRoom
         event={scheduled}
         onExit={jest.fn()}
@@ -139,6 +139,12 @@ describe('QuizWaitingRoom', () => {
     expect(screen.getByRole('header', { name: 'How to play' })).toBeTruthy();
     expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(1);
     fireEvent.press(screen.getByRole('button', { name: 'Close rules' }));
+    // The base slot stays withheld through dismissal; only onDismiss proves
+    // the modal-owned slot is gone.
+    expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(0);
+    act(() => {
+      UNSAFE_getByType(Modal).props.onDismiss();
+    });
     expect(countTestIdOccurrences('ad-slot-FOOTER_ANCHOR')).toBe(1);
   });
 

@@ -59,8 +59,12 @@ export function LaunchAdCard({
   } catch {
     return null;
   }
-  if (!bannerModule || drawerOpen || !isFocused) return null;
-  if (!isVisible) {
+  if (!bannerModule) return null;
+  // Drawer, focus, and viewability all withhold the native banner but keep
+  // the fixed-size placeholder mounted: the carousel still carries the ad
+  // sentinel and its scroll offset, so unmounting the child would clamp the
+  // list and jump the visible product when the overlay lifts.
+  if (!isVisible || drawerOpen || !isFocused) {
     return (
       <View
         accessibilityLabel="Sponsored advertisement"
@@ -119,7 +123,10 @@ export function LaunchAdCard({
           })
         }
         onPaid={handlePaid}
-        size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+        // Inline adaptive sizes to the card width: an anchored creative
+        // resolves for the full screen width and would clip horizontally
+        // under the card's 82%-of-window width, padding, and overflow.
+        size={BannerAdSize.INLINE_ADAPTIVE_BANNER}
         unitId={unitId}
       />
     </View>

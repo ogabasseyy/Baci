@@ -1,7 +1,7 @@
 import type { RefObject } from 'react';
 import { useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
-import { setQuizRewardedFlowActive } from '@/lib/quiz-start-interstitial';
+import { setQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 
 interface AbandonableRewardedSession {
   cleanups: Array<() => void>;

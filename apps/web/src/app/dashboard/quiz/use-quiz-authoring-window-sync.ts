@@ -1,12 +1,5 @@
-import { QUIZ_DEFAULT_TIME_ZONE } from '@baci/shared';
 import { useEffect } from 'react';
-import { resolveQuizAuthoringWindowSeconds } from './quiz-authoring-window-seconds';
-import {
-  quizDatetimeLocalToIso,
-  quizInstantToDatetimeLocal,
-} from './quiz-datetime-local';
-
-const MINUTE_MS = 60_000;
+import { resyncQuizAuthoringScheduledEnd } from './quiz-authoring-scheduled-end';
 
 export interface QuizAuthoringWindowSyncInput {
   endTouched: boolean;
@@ -33,26 +26,22 @@ export function useQuizAuthoringWindowSync({
   setScheduledEnd,
   timePerQuestionSeconds,
 }: QuizAuthoringWindowSyncInput): void {
-  const expectedPlaySeconds = resolveQuizAuthoringWindowSeconds({
-    mode,
-    questionCount,
-    timePerQuestionSeconds,
-  });
   useEffect(() => {
     if (endTouched) return;
-    const startIso = quizDatetimeLocalToIso(
+    const synced = resyncQuizAuthoringScheduledEnd({
+      mode,
+      questionCount,
       scheduledStart,
-      QUIZ_DEFAULT_TIME_ZONE
-    );
-    const startMs = startIso ? Date.parse(startIso) : Number.NaN;
-    if (!Number.isFinite(startMs)) return;
-    const syncedEndMs =
-      Math.ceil((startMs + expectedPlaySeconds * 1000) / MINUTE_MS) * MINUTE_MS;
-    const synced = quizInstantToDatetimeLocal(
-      syncedEndMs,
-      QUIZ_DEFAULT_TIME_ZONE
-    );
+      timePerQuestionSeconds,
+    });
     if (!synced) return;
     setScheduledEnd((current) => (current === synced ? current : synced));
-  }, [endTouched, expectedPlaySeconds, scheduledStart, setScheduledEnd]);
+  }, [
+    endTouched,
+    mode,
+    questionCount,
+    scheduledStart,
+    setScheduledEnd,
+    timePerQuestionSeconds,
+  ]);
 }

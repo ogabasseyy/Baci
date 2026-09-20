@@ -5,6 +5,7 @@ import { getMobileAdUnitId } from '@/config/mobile-ad-placements';
 import { trackEvent } from '@/services/analytics-core';
 import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
 import { trackInterstitialPaidEvent } from './interstitial-paid-event';
+import { isQuizRewardedFlowActive } from './quiz-fullscreen-ownership';
 
 /**
  * Pre-quiz interstitial, shown when the waiting room opens and capped to one
@@ -14,24 +15,18 @@ import { trackInterstitialPaidEvent } from './interstitial-paid-event';
  * unavailable.
  */
 let didShowThisSession = false;
-// A load in progress already holds the session cap: a second invocation
-// while the first ad is still loading must not create a second
-// interstitial, or overlapping lobby visits could present two ads.
-let loadInFlight = false;
-// Set while the quiz rewarded-badge flow owns the full screen. The rewarded
-// hook sets this synchronously on tap (before any rerender), so a
-// late-arriving interstitial LOADED event can never present over — or
-// under — the rewarded ad.
-let rewardedFlowActive = false;
-
-export function setQuizRewardedFlowActive(active: boolean): void {
-  rewardedFlowActive = active;
-}
+// Attempt lifecycle: 'idle' (session cap free), 'loading' (reservation held
+// while consent/SDK init and the ad load are in flight, so overlapping lobby
+// visits must not create a second interstitial), 'owned' (LOADED fired and
+// the attempt is claimed through presentation, so a load finishing just
+// before the deadline cannot release the cap and allow a second
+// presentation in the same session).
+type QuizStartAttemptState = 'idle' | 'loading' | 'owned';
+let attemptState: QuizStartAttemptState = 'idle';
 
 export function resetQuizStartInterstitialForTests(): void {
   didShowThisSession = false;
-  loadInFlight = false;
-  rewardedFlowActive = false;
+  attemptState = 'idle';
 }
 
 export function wasQuizStartInterstitialShown(): boolean {
@@ -52,14 +47,19 @@ export interface QuizStartInterstitialOptions {
   onClosed?: () => void;
 }
 
-// biome-ignore lint/suspicious/useAwait: async wraps the early 'skipped' returns in the declared Promise.
 export async function maybeShowQuizStartInterstitial(
   options: QuizStartInterstitialOptions = {}
 ): Promise<'shown' | 'skipped'> {
-  if (didShowThisSession) {
+  if (didShowThisSession || attemptState !== 'idle') {
     return 'skipped';
   }
+  // Reserve the session cap synchronously: the consent/SDK initialization
+  // below awaits, and a second invocation arriving during that window must
+  // see the reservation instead of loading a second interstitial.
+  attemptState = 'loading';
+
   if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
+    attemptState = 'idle';
     return 'skipped';
   }
 
@@ -67,9 +67,11 @@ export async function maybeShowQuizStartInterstitial(
   try {
     config = getMobileAdUnitId('QUIZ_START_INTERSTITIAL');
   } catch {
+    attemptState = 'idle';
     return 'skipped';
   }
   if (!config.enabled || config.format !== 'interstitial') {
+    attemptState = 'idle';
     return 'skipped';
   }
 
@@ -77,13 +79,16 @@ export async function maybeShowQuizStartInterstitial(
   // gathered and the protective under-age configuration is applied.
   try {
     if (!isQuizMobileAdsAvailable()) {
+      attemptState = 'idle';
       return 'skipped';
     }
     const { canRequestAds } = await initializeQuizMobileAds();
     if (!canRequestAds) {
+      attemptState = 'idle';
       return 'skipped';
     }
   } catch {
+    attemptState = 'idle';
     return 'skipped';
   }
 
@@ -92,22 +97,50 @@ export async function maybeShowQuizStartInterstitial(
     mobileAds =
       require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads');
   } catch {
+    attemptState = 'idle';
     return 'skipped';
   }
   if (!mobileAds) {
+    attemptState = 'idle';
     return 'skipped';
   }
 
-  if (loadInFlight) {
+  // Recheck the cap after the awaited initialization: a finished attempt
+  // must not be followed by a second presentation in the same session.
+  if (didShowThisSession) {
+    attemptState = 'idle';
     return 'skipped';
   }
 
   return new Promise<'shown' | 'skipped'>((resolve) => {
     let settled = false;
+    let loadTimer: ReturnType<typeof setTimeout> | null = null;
+    const cleanups: Array<() => void> = [];
+    // Pre-presentation exits release the loading reservation without
+    // consuming the session cap: a failed, cancelled, timed-out, or
+    // rewarded-preempted load must leave a later lobby visit able to show
+    // the interstitial.
+    const abandon = () => {
+      if (settled) return;
+      settled = true;
+      if (loadTimer !== null) {
+        clearTimeout(loadTimer);
+        loadTimer = null;
+      }
+      for (const unsubscribe of cleanups) unsubscribe();
+      attemptState = 'idle';
+      resolve('skipped');
+    };
+    // Presentation claims the session cap even when it ends as 'skipped':
+    // once LOADED fires the attempt is owned through show()/close.
     const finish = (outcome: 'shown' | 'skipped') => {
       if (settled) return;
       settled = true;
-      loadInFlight = false;
+      if (loadTimer !== null) {
+        clearTimeout(loadTimer);
+        loadTimer = null;
+      }
+      attemptState = 'owned';
       if (outcome === 'shown') {
         didShowThisSession = true;
         trackEvent('mobile_ad_impression', {
@@ -119,33 +152,34 @@ export async function maybeShowQuizStartInterstitial(
     };
 
     try {
-      loadInFlight = true;
       const interstitial = mobileAds.InterstitialAd.createForAdRequest(
         config.unitId
       );
-      // The deadline below guards the load phase only: once LOADED fires the
-      // attempt is owned through presentation, so a load finishing just
-      // before the deadline must not settle as skipped while show() can
-      // still complete (which would release the session cap for a later
-      // visit without recording it).
-      let loadTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      // The deadline below guards the load phase only (see finish): a load
+      // that never completes releases the reservation for a later visit.
+      loadTimer = setTimeout(() => {
         loadTimer = null;
-        for (const unsubscribe of cleanups) unsubscribe();
-        finish('skipped');
+        abandon();
       }, 30_000);
-      const cleanups = [
+      cleanups.push(
         interstitial.addAdEventListener(mobileAds.AdEventType.LOADED, () => {
-          if (loadTimer !== null) {
-            clearTimeout(loadTimer);
-            loadTimer = null;
-          }
+          // A LOADED racing a fired deadline must not present: the deadline
+          // already abandoned the attempt and unsubscribed this listener.
+          if (settled) return;
           // The lobby may have moved into live play (or unmounted) while the
           // ad was loading; presenting now would steal timed-question time or
           // surface an ad on an unrelated screen. The rewarded-badge flow
           // likewise owns the full screen while loading or presented.
-          if (options.isCancelled?.() || rewardedFlowActive) {
-            finish('skipped');
+          if (options.isCancelled?.() || isQuizRewardedFlowActive()) {
+            abandon();
             return;
+          }
+          // Claim the session cap before presenting: from here the attempt
+          // is owned through show()/close even if presentation fails.
+          attemptState = 'owned';
+          if (loadTimer !== null) {
+            clearTimeout(loadTimer);
+            loadTimer = null;
           }
           try {
             void interstitial.show().then(
@@ -157,7 +191,7 @@ export async function maybeShowQuizStartInterstitial(
           }
         }),
         interstitial.addAdEventListener(mobileAds.AdEventType.ERROR, () =>
-          finish('skipped')
+          abandon()
         ),
         interstitial.addAdEventListener(mobileAds.AdEventType.PAID, (payload) =>
           trackInterstitialPaidEvent(
@@ -171,11 +205,12 @@ export async function maybeShowQuizStartInterstitial(
         interstitial.addAdEventListener(mobileAds.AdEventType.CLOSED, () => {
           options.onClosed?.();
           finish(didShowThisSession ? 'shown' : 'skipped');
-        }),
-      ];
+        })
+      );
       interstitial.load();
     } catch {
-      finish('skipped');
+      attemptState = 'idle';
+      resolve('skipped');
     }
   });
 }

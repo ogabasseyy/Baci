@@ -95,6 +95,7 @@ function renderView(
     hasNonNegotiableCartItem: false,
     insetsTop: 16,
     isIdentityModalOpen: false,
+    isPriceChangeModalOpen: false,
     itemCount: 1,
     items: [item],
     onBulkNegotiate: jest.fn(),
@@ -181,8 +182,8 @@ describe('CartLoadedView', () => {
   });
 
   it('renders the footer ad only when no modal covers the cart', () => {
-    // Regression: an obscured CART_MPU must not load behind the identity
-    // or negotiation-warning modals.
+    // Regression: an obscured CART_MPU must not load behind the identity,
+    // price-change, or negotiation-warning modals.
     const { rerender, props } = renderView();
 
     expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
@@ -194,6 +195,16 @@ describe('CartLoadedView', () => {
       <CartLoadedView
         {...props}
         isIdentityModalOpen={false}
+        isPriceChangeModalOpen
+      />
+    );
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+    rerender(
+      <CartLoadedView
+        {...props}
+        isIdentityModalOpen={false}
+        isPriceChangeModalOpen={false}
         showNegotiateWarning
       />
     );

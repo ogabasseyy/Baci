@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { AdSlot } from '@/components/ads/AdSlot';
 import { useQuizRewardedBadge } from '@/hooks/use-quiz-rewarded-badge';
@@ -9,6 +9,7 @@ import { QuizRewardedBadgeOffer } from './QuizRewardedBadgeOffer';
 import { QuizRulesModal } from './QuizRulesModal';
 import { formatQuizClock, formatRemainingTime } from './QuizScreen.utils';
 import { createQuizWaitingRoomStyles } from './QuizWaitingRoom.styles';
+import { QUIZ_MODAL_DISMISS_FALLBACK_MS } from './quiz-modal-dismiss';
 import {
   type QuizWaitingRoomState,
   useQuizWaitingRoom,
@@ -35,15 +36,36 @@ export function QuizWaitingRoom({
   const styles = createQuizWaitingRoomStyles(colors);
   const userId = useAuthStore((state) => state.user?.id ?? null);
   const [rulesVisible, setRulesVisible] = useState(false);
+  // iOS keeps the native rules modal rendered through its dismissal
+  // animation. Track dismissal separately so the base slot stays withheld
+  // until the modal-owned slot is actually gone.
+  const [rulesDismissed, setRulesDismissed] = useState(true);
   const waitingRoom: QuizWaitingRoomState = useQuizWaitingRoom({
     event,
     onEventsUpdated,
     onExit,
     onStart,
     refresh,
-    // A pending interstitial must never present over the rules modal.
-    suspended: rulesVisible,
+    // A pending interstitial must never present over the rules modal or its
+    // dismissal animation.
+    suspended: rulesVisible || !rulesDismissed,
   });
+
+  useEffect(() => {
+    if (rulesVisible || rulesDismissed) return undefined;
+    const fallback = setTimeout(
+      () => setRulesDismissed(true),
+      QUIZ_MODAL_DISMISS_FALLBACK_MS
+    );
+    return () => clearTimeout(fallback);
+  }, [rulesVisible, rulesDismissed]);
+  const openRules = () => {
+    setRulesDismissed(false);
+    setRulesVisible(true);
+  };
+  const closeRules = () => {
+    setRulesVisible(false);
+  };
   const currentEvent = waitingRoom.event;
   const timePerQuestion = currentEvent.timePerQuestionSeconds ?? 10;
   const rewardedBadge = useQuizRewardedBadge({
@@ -98,7 +120,7 @@ export function QuizWaitingRoom({
           <Pressable
             accessibilityLabel="View quiz rules"
             accessibilityRole="button"
-            onPress={() => setRulesVisible(true)}
+            onPress={openRules}
             style={styles.primaryButton}
           >
             <Text style={styles.primaryButtonText}>View rules</Text>
@@ -119,6 +141,7 @@ export function QuizWaitingRoom({
             the full screen: withhold the banner until it closes so nothing
             requests or refreshes while completely obscured. */}
         {rulesVisible ||
+        !rulesDismissed ||
         waitingRoom.isFullscreenAdActive ||
         rewardedBadge.isWatching ? null : (
           <AdSlot placement="FOOTER_ANCHOR" />
@@ -126,8 +149,9 @@ export function QuizWaitingRoom({
       </ScrollView>
       <QuizRulesModal
         eventTitle={currentEvent.title}
-        onClose={() => setRulesVisible(false)}
-        onConfirm={() => setRulesVisible(false)}
+        onClose={closeRules}
+        onConfirm={closeRules}
+        onDismissed={() => setRulesDismissed(true)}
         requiresAcceptance={false}
         timePerQuestionSeconds={timePerQuestion}
         visible={rulesVisible}

@@ -199,6 +199,10 @@ export function useQuizWaitingRoom({
           if (!mounted) return;
           isFullscreenAdActiveRef.current = false;
           setIsFullscreenAdActive(false);
+          // A native dismissal while the app is inactive must not start
+          // timed play in the background: retain the pending transition
+          // until the foreground refresh re-validates it on resume.
+          if (appStateRef.current !== 'active') return;
           const pendingStart = pendingStartRef.current;
           pendingStartRef.current = null;
           if (pendingStart && !startedRef.current && !stoppedRef.current) {

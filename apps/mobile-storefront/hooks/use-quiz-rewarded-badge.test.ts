@@ -34,7 +34,7 @@ jest.mock('@/stores/quiz-badge-store', () => ({
 }));
 
 const mockSetQuizRewardedFlowActive = jest.fn();
-jest.mock('@/lib/quiz-start-interstitial', () => ({
+jest.mock('@/lib/quiz-fullscreen-ownership', () => ({
   setQuizRewardedFlowActive: (active: boolean) =>
     mockSetQuizRewardedFlowActive(active),
 }));

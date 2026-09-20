@@ -436,6 +436,67 @@ describe('useQuizWaitingRoom', () => {
     expect(result.current.isFullscreenAdActive).toBe(false);
   });
 
+  it('retains a pending start when the interstitial closes while backgrounded', async () => {
+    // Regression: a native dismissal while the app is inactive must not
+    // start timed play in the background — the pending transition waits for
+    // the foreground refresh to re-validate it on resume.
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-23T11:59:00.000Z'));
+    mockMaybeShowQuizStartInterstitial.mockClear();
+    mockMaybeShowQuizStartInterstitial.mockResolvedValueOnce('shown');
+    const onStart = jest.fn();
+    renderHook(() =>
+      useQuizWaitingRoom({
+        event: event(),
+        onExit: jest.fn(),
+        onStart,
+        refresh: jest.fn(async () => [
+          event({
+            serverNow: '2026-08-23T12:00:01.000Z',
+            status: 'active',
+          }),
+        ]),
+      })
+    );
+    await act(async () => {
+      for (let flush = 0; flush < 10; flush += 1) {
+        await Promise.resolve();
+      }
+    });
+    const appStateListener = jest
+      .mocked(AppState.addEventListener)
+      .mock.calls.at(-1)?.[1] as (state: AppStateStatus) => void;
+    await act(async () => {
+      appStateListener('active');
+      await Promise.resolve();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(61_000);
+      for (let flush = 0; flush < 10; flush += 1) {
+        await Promise.resolve();
+      }
+    });
+    expect(onStart).not.toHaveBeenCalled();
+    await act(async () => {
+      appStateListener('background');
+      await Promise.resolve();
+    });
+    const onClosed =
+      mockMaybeShowQuizStartInterstitial.mock.calls.at(-1)?.[0]?.onClosed;
+    await act(async () => {
+      onClosed?.();
+      await Promise.resolve();
+    });
+    expect(onStart).not.toHaveBeenCalled();
+    await act(async () => {
+      appStateListener('active');
+      for (let flush = 0; flush < 10; flush += 1) {
+        await Promise.resolve();
+      }
+    });
+    expect(onStart).toHaveBeenCalledWith('event-1', true);
+  });
+
   it('cancels the pending pre-quiz ad when the countdown expires before start', async () => {
     // Refresh latency must not reopen the late-ad defect: once the local
     // countdown reaches zero the loaded ad is abandoned even though the

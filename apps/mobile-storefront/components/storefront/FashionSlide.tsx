@@ -5,8 +5,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { palette, withAlpha } from '@/constants/Colors';
 import type { HeroSlide } from './Hero';
 import type { HeroVariantStyles } from './HeroSlideShared';
+import { heroImageProps } from './hero-image-props';
 import { CAROUSEL_HEIGHT } from './hero-slide-dimensions';
-import { getCoverHeroImageSource, heroImageProps } from './hero-slide-image';
+import { getHeroImageSource } from './hero-slide-image';
 
 interface FashionSlideProps {
   item: HeroSlide;
@@ -21,10 +22,11 @@ export function FashionSlide({ item, screenWidth, styles }: FashionSlideProps) {
       style={[styles.slide, { width: screenWidth, height: CAROUSEL_HEIGHT }]}
     >
       <Image
-        source={getCoverHeroImageSource(
+        source={getHeroImageSource(
           item.image,
           screenWidth,
-          CAROUSEL_HEIGHT
+          CAROUSEL_HEIGHT,
+          'cover'
         )}
         style={StyleSheet.absoluteFill}
         contentFit="cover"

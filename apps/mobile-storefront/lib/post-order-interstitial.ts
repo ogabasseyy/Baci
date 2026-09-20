@@ -12,14 +12,18 @@ import { trackInterstitialPaidEvent } from './interstitial-paid-event';
  * disabled, on web, or when the native ads module is unavailable.
  */
 let didShowThisSession = false;
-// A load in progress already holds the session cap: a second invocation
-// while the first ad is still loading must not create a second
-// interstitial, or a rapid remount could present two ads.
-let loadInFlight = false;
+// Attempt lifecycle: 'idle' (session cap free), 'loading' (reservation held
+// while consent/SDK init and the ad load are in flight, so a second
+// invocation in this state must not create a second interstitial), 'owned'
+// (LOADED fired and the attempt is claimed through presentation, so a load
+// finishing just before the deadline cannot release the cap and allow a
+// second presentation in the same session).
+type PostOrderAttemptState = 'idle' | 'loading' | 'owned';
+let attemptState: PostOrderAttemptState = 'idle';
 
 export function resetPostOrderInterstitialForTests(): void {
   didShowThisSession = false;
-  loadInFlight = false;
+  attemptState = 'idle';
 }
 
 export function wasPostOrderInterstitialShown(): boolean {
@@ -40,7 +44,6 @@ export interface PostOrderInterstitialOptions {
   onClosed?: () => void;
 }
 
-// biome-ignore lint/suspicious/useAwait: async wraps the early 'skipped' returns in the declared Promise.
 export async function maybeShowPostOrderInterstitial(
   options: PostOrderInterstitialOptions = {}
 ): Promise<'shown' | 'skipped'> {
@@ -57,7 +60,16 @@ export async function maybeShowPostOrderInterstitial(
   } catch {
     return 'skipped';
   }
+  if (didShowThisSession || attemptState !== 'idle') {
+    return 'skipped';
+  }
+  // Reserve the session cap synchronously: the consent/SDK initialization
+  // below awaits, and a second invocation arriving during that window must
+  // see the reservation instead of loading a second interstitial.
+  attemptState = 'loading';
+
   if (!config.enabled || config.format !== 'interstitial') {
+    attemptState = 'idle';
     return 'skipped';
   }
 
@@ -65,13 +77,16 @@ export async function maybeShowPostOrderInterstitial(
   // gathered and the protective under-age configuration is applied.
   try {
     if (!isQuizMobileAdsAvailable()) {
+      attemptState = 'idle';
       return 'skipped';
     }
     const { canRequestAds } = await initializeQuizMobileAds();
     if (!canRequestAds) {
+      attemptState = 'idle';
       return 'skipped';
     }
   } catch {
+    attemptState = 'idle';
     return 'skipped';
   }
 
@@ -80,22 +95,49 @@ export async function maybeShowPostOrderInterstitial(
     mobileAds =
       require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads');
   } catch {
+    attemptState = 'idle';
     return 'skipped';
   }
   if (!mobileAds) {
+    attemptState = 'idle';
     return 'skipped';
   }
 
-  if (loadInFlight) {
+  // Recheck the cap after the awaited initialization: a finished attempt
+  // must not be followed by a second presentation in the same session.
+  if (didShowThisSession) {
+    attemptState = 'idle';
     return 'skipped';
   }
 
   return new Promise<'shown' | 'skipped'>((resolve) => {
     let settled = false;
+    let loadTimer: ReturnType<typeof setTimeout> | null = null;
+    const cleanups: Array<() => void> = [];
+    // Pre-presentation exits release the loading reservation without
+    // consuming the session cap: a failed, cancelled, or timed-out load
+    // must leave a later order-success visit able to show the interstitial.
+    const abandon = () => {
+      if (settled) return;
+      settled = true;
+      if (loadTimer !== null) {
+        clearTimeout(loadTimer);
+        loadTimer = null;
+      }
+      for (const unsubscribe of cleanups) unsubscribe();
+      attemptState = 'idle';
+      resolve('skipped');
+    };
+    // Presentation claims the session cap even when it ends as 'skipped':
+    // once LOADED fires the attempt is owned through show()/close.
     const finish = (outcome: 'shown' | 'skipped') => {
       if (settled) return;
       settled = true;
-      loadInFlight = false;
+      if (loadTimer !== null) {
+        clearTimeout(loadTimer);
+        loadTimer = null;
+      }
+      attemptState = 'owned';
       if (outcome === 'shown') {
         didShowThisSession = true;
         trackEvent('mobile_ad_impression', {
@@ -107,31 +149,32 @@ export async function maybeShowPostOrderInterstitial(
     };
 
     try {
-      loadInFlight = true;
       const interstitial = mobileAds.InterstitialAd.createForAdRequest(
         config.unitId
       );
-      // The deadline below guards the load phase only: once LOADED fires the
-      // attempt is owned through presentation, so a load finishing just
-      // before the deadline must not settle as skipped while show() can
-      // still complete (which would release the session cap for a later
-      // visit without recording it).
-      let loadTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      // The deadline below guards the load phase only (see finish): a load
+      // that never completes releases the reservation for a later visit.
+      loadTimer = setTimeout(() => {
         loadTimer = null;
-        for (const unsubscribe of cleanups) unsubscribe();
-        finish('skipped');
+        abandon();
       }, 30_000);
-      const cleanups = [
+      cleanups.push(
         interstitial.addAdEventListener(mobileAds.AdEventType.LOADED, () => {
-          if (loadTimer !== null) {
-            clearTimeout(loadTimer);
-            loadTimer = null;
-          }
+          // A LOADED racing a fired deadline must not present: the deadline
+          // already abandoned the attempt and unsubscribed this listener.
+          if (settled) return;
           // The shopper may have left order success while the ad was
           // loading; presenting now would surface it on an unrelated screen.
           if (options.isCancelled?.()) {
-            finish('skipped');
+            abandon();
             return;
+          }
+          // Claim the session cap before presenting: from here the attempt
+          // is owned through show()/close even if presentation fails.
+          attemptState = 'owned';
+          if (loadTimer !== null) {
+            clearTimeout(loadTimer);
+            loadTimer = null;
           }
           try {
             void interstitial.show().then(
@@ -143,7 +186,7 @@ export async function maybeShowPostOrderInterstitial(
           }
         }),
         interstitial.addAdEventListener(mobileAds.AdEventType.ERROR, () =>
-          finish('skipped')
+          abandon()
         ),
         interstitial.addAdEventListener(mobileAds.AdEventType.PAID, (payload) =>
           trackInterstitialPaidEvent(
@@ -157,11 +200,12 @@ export async function maybeShowPostOrderInterstitial(
         interstitial.addAdEventListener(mobileAds.AdEventType.CLOSED, () => {
           options.onClosed?.();
           finish(didShowThisSession ? 'shown' : 'skipped');
-        }),
-      ];
+        })
+      );
       interstitial.load();
     } catch {
-      finish('skipped');
+      attemptState = 'idle';
+      resolve('skipped');
     }
   });
 }

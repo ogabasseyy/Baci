@@ -5,8 +5,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { palette, RADIUS, SPACING, withAlpha } from '@/constants/Colors';
 import type { HeroSlide } from './Hero';
 import type { HeroVariantStyles } from './HeroSlideShared';
+import { heroImageProps } from './hero-image-props';
 import { STANDARD_HEIGHT } from './hero-slide-dimensions';
-import { getCoverHeroImageSource, heroImageProps } from './hero-slide-image';
+import { getHeroImageSource } from './hero-slide-image';
 
 interface StandardSlideProps {
   item: HeroSlide;
@@ -28,10 +29,11 @@ export function StandardSlide({
       ]}
     >
       <Image
-        source={getCoverHeroImageSource(
+        source={getHeroImageSource(
           item.image,
           screenWidth,
-          STANDARD_HEIGHT
+          STANDARD_HEIGHT,
+          'cover'
         )}
         style={[StyleSheet.absoluteFill, { borderRadius: RADIUS.xl }]}
         contentFit="cover"

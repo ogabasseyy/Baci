@@ -221,6 +221,7 @@ export default function CartScreen() {
         hasNonNegotiableCartItem={hasNonNegotiableCartItem}
         insetsTop={insets.top}
         isIdentityModalOpen={isIdentityModalOpen}
+        isPriceChangeModalOpen={priceChanges.length > 0}
         itemCount={itemCount}
         items={items}
         onBulkNegotiate={openTotalNegotiation}

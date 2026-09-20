@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getQuizMobileAdsConfig } from '@/config/quiz-mobile-ads';
 import { useQuizMobileAds } from '@/hooks/use-quiz-mobile-ads';
-import { setQuizRewardedFlowActive } from '@/lib/quiz-start-interstitial';
+import { setQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 import { isAdultDateOfBirth } from '@/schemas/date-of-birth';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQuizBadgeStore } from '@/stores/quiz-badge-store';

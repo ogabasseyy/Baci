@@ -17,6 +17,7 @@ interface QuizRulesModalProps {
   eventTitle: string;
   onClose: () => void;
   onConfirm: () => void;
+  onDismissed?: () => void;
   requiresAcceptance: boolean;
   timePerQuestionSeconds: number;
   visible: boolean;
@@ -26,6 +27,7 @@ export function QuizRulesModal({
   eventTitle,
   onClose,
   onConfirm,
+  onDismissed,
   requiresAcceptance,
   timePerQuestionSeconds,
   visible,
@@ -42,6 +44,7 @@ export function QuizRulesModal({
   return (
     <Modal
       animationType="slide"
+      onDismiss={onDismissed}
       onRequestClose={onClose}
       presentationStyle="overFullScreen"
       transparent

@@ -5,6 +5,7 @@ import { QuizAdminResult } from './quiz-admin-result';
 
 const configuration = {
   difficulty: 'standard' as const,
+  endTouched: false,
   liveWindowMinutes: 5,
   mode: 'test' as const,
   prizeProduct: {

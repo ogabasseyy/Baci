@@ -27,9 +27,9 @@
 -- multi-row statement touches products in opposite orders, and FOR UPDATE
 -- upgrades conflict with the preexisting foreign-key locks on moved
 -- offers, so recomputation serializes on a transaction-scoped advisory
--- lock per product instead. A parent product update (condition,
--- variant_model, flag) recomputes too, since eligibility can change with
--- no offer event at all. Reactivation is intentionally one-way: restored
+-- lock per product instead. A parent product update recomputes too,
+-- filtered to condition, variant_model, and flag changes, since
+-- eligibility can change with no offer event at all. Reactivation is intentionally one-way: restored
 -- `verified` rows would require re-verification the trigger cannot
 -- perform, so reactivated URLs wait for the backfill like any newly
 -- added image (fail-closed).
@@ -257,14 +257,18 @@ DECLARE
 BEGIN
   -- Eligibility can change with no offer event (condition, matrix, or
   -- flag flip), so parent updates recompute the same keep-set.
+  -- Transition tables cannot combine with an UPDATE OF column list, so
+  -- the trigger fires on every parent update and filters to relevant
+  -- column changes here.
   FOR v_target IN
-    SELECT DISTINCT t.merchant_id, t.product_id
-    FROM (
-      SELECT old_products.merchant_id, old_products.id FROM old_products
-      UNION ALL
-      SELECT new_products.merchant_id, new_products.id FROM new_products
-    ) AS t(merchant_id, product_id)
-    ORDER BY t.product_id
+    SELECT DISTINCT new_products.merchant_id, new_products.id AS product_id
+    FROM new_products
+    JOIN old_products ON old_products.id = new_products.id
+    WHERE new_products.condition IS DISTINCT FROM old_products.condition
+      OR new_products.variant_model IS DISTINCT FROM old_products.variant_model
+      OR new_products.has_condition_offers
+        IS DISTINCT FROM old_products.has_condition_offers
+    ORDER BY new_products.id
   LOOP
     PERFORM public.lock_feed_manifest_product(v_target.product_id);
     PERFORM public.stale_orphaned_feed_manifest_rows(
@@ -303,8 +307,7 @@ EXECUTE FUNCTION public.stale_feed_manifest_on_offer_delete();
 DROP TRIGGER IF EXISTS products_stale_feed_manifest
   ON public.products;
 CREATE TRIGGER products_stale_feed_manifest
-AFTER UPDATE OF condition, variant_model, has_condition_offers
-  ON public.products
+AFTER UPDATE ON public.products
 REFERENCING OLD TABLE AS old_products NEW TABLE AS new_products
 FOR EACH STATEMENT
 EXECUTE FUNCTION public.stale_feed_manifest_on_product_update();

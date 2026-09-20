@@ -274,6 +274,6 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260920200000_stale_feed_manifest_on_offer_change.sql',
-    sha256: '17c4bfb6632189aaffee0b2ab0594c36c660795133223e9f52a3901c6fa875fc',
+    sha256: '552e410429f99a1d0c1c3624a128fe1401ba43f92b24ee14eaa2fc9f45e837c4',
   },
 ].sort((a, b) => a.repositoryPath.localeCompare(b.repositoryPath));

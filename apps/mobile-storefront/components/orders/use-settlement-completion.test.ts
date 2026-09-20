@@ -210,6 +210,60 @@ describe('useSettlementCompletion', () => {
     }
   });
 
+  it('keeps polling juicyway past the standard budget until the provider window ends', async () => {
+    jest.useFakeTimers();
+    try {
+      // On-chain confirmation can take up to ~30 minutes: settlement at
+      // attempt 25 (past the old 18-attempt budget) must still record
+      // completion under juicyway's default budget.
+      const responses = Array.from({ length: 24 }, () =>
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'pending',
+          total: 100000,
+        })
+      );
+      responses.push(
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'paid',
+          subtotal: 100000,
+          shipping_cost: 0,
+          discount_amount: 0,
+          total: 100000,
+        })
+      );
+      const fetchCalls = mockFetchSequence(responses);
+
+      renderHook(() =>
+        useSettlementCompletion({
+          ...baseParams,
+          maxAttempts: undefined,
+          pollIntervalMs: undefined,
+        })
+      );
+      for (let attempt = 0; attempt < 24; attempt += 1) {
+        await jest.advanceTimersByTimeAsync(10_000);
+      }
+
+      await waitFor(() =>
+        expect(mockTrackCompleted).toHaveBeenCalledWith(
+          expect.objectContaining({
+            orderId: 'order-settle-1',
+            paymentMethod: 'juicyway',
+            value: 100000,
+          })
+        )
+      );
+      expect(fetchCalls()).toBe(25);
+      expect(mockTrackCompleted).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('skips the lookup for synchronous methods and missing tokens', () => {
     const fetchSpy = jest.fn(async () => new Response('{}', { status: 200 }));
     global.fetch = fetchSpy as unknown as typeof fetch;

@@ -26,10 +26,10 @@ interface OrderConfirmationData extends MerchantRegistrationInfo {
    */
   documentKind?: 'confirmation' | 'proforma';
   /**
-   * Order-specific resume/payment URL (e.g.
-   * `${merchantUrl}/checkout/resume/${orderId}`). The proforma CTA must
-   * point here — not at the storefront homepage — so customers can view
-   * and pay the quoted invoice from the email.
+   * Order-specific tracking URL (see buildOrderTrackingLink: the
+   * /track-order page auto-resolves the token or order id plus email
+   * pair). The proforma CTA must point here — not at the storefront
+   * homepage — so customers can view the quoted invoice from the email.
    */
   paymentLink?: string;
 }

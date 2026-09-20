@@ -182,7 +182,7 @@ describe('Order confirmation email', () => {
     const proformaPayload = {
       ...baseOrderData,
       documentKind: 'proforma' as const,
-      paymentLink: 'https://testshop.usebaci.com/checkout/resume/order-123',
+      paymentLink: 'https://testshop.usebaci.com/track-order?token=track-123',
     };
 
     it('points the View Proforma Invoice anchor at the order payment link', () => {
@@ -190,7 +190,7 @@ describe('Order confirmation email', () => {
 
       expect(html).toContain('View Proforma Invoice');
       expect(html).toContain(
-        'href="https://testshop.usebaci.com/checkout/resume/order-123"'
+        'href="https://testshop.usebaci.com/track-order?token=track-123"'
       );
     });
 
@@ -198,19 +198,19 @@ describe('Order confirmation email', () => {
       const text = generateOrderConfirmationText(proformaPayload);
 
       expect(text).toContain(
-        'https://testshop.usebaci.com/checkout/resume/order-123'
+        'https://testshop.usebaci.com/track-order?token=track-123'
       );
     });
 
     it('keeps the confirmation CTA on the storefront homepage', () => {
       const html = generateOrderConfirmationEmail({
         ...baseOrderData,
-        paymentLink: 'https://testshop.usebaci.com/checkout/resume/order-123',
+        paymentLink: 'https://testshop.usebaci.com/track-order?token=track-123',
       });
 
       expect(html).toContain('View Order');
       expect(html).toContain('href="https://testshop.usebaci.com/"');
-      expect(html).not.toContain('checkout/resume/order-123');
+      expect(html).not.toContain('track-order?token=track-123');
     });
   });
 });

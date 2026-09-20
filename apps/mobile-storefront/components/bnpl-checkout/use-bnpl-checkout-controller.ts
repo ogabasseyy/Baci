@@ -6,7 +6,10 @@ import {
   trackCheckoutPaymentStarted,
 } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
-import type { BNPLShouldStartLoadRequest } from './BNPLCheckoutWebView';
+import type {
+  BNPLShouldStartLoadRequest,
+  BNPLWebViewHttpErrorEvent,
+} from './BNPLCheckoutWebView';
 import {
   BNPL_UNTRUSTED_POPUP_MESSAGE,
   buildBNPLCheckoutUrl,
@@ -351,6 +354,28 @@ export function useBNPLCheckoutController({
     );
   };
 
+  const handleWebViewHttpError = (event: BNPLWebViewHttpErrorEvent) => {
+    // Late callbacks arriving after success must not flip a paid checkout
+    // back to error (same guard as load errors above).
+    if (statusRef.current === 'success') {
+      return;
+    }
+    // A 4xx/5xx on the tracked document means the launch page itself is
+    // an unusable provider error page: transition to error (surfacing
+    // retry UI) and record the attempt-scoped failure instead of letting
+    // a later load-end mark the checkout ready. Subresource failures only
+    // log inside the handler.
+    handleBNPLWebViewHttpError(event, {
+      documentUrl: currentUrl || bnplUrl,
+      onMainDocumentError: (message) => {
+        recordCheckoutFailure('bnpl_load_error');
+        clearPendingLoadTimeout();
+        setCheckoutStatus('error');
+        setErrorMessage(message);
+      },
+    });
+  };
+
   return {
     amount,
     bnplUrl,
@@ -365,7 +390,7 @@ export function useBNPLCheckoutController({
     handleRetry,
     handleShouldStartLoadWithRequest,
     handleWebViewError,
-    handleWebViewHttpError: handleBNPLWebViewHttpError,
+    handleWebViewHttpError,
     handleWebViewMessage,
     status,
     validatedParams,

@@ -295,6 +295,79 @@ it('reconciles again when the rollback write lands after a newer grant', async (
   }
 });
 
+it('reconciles a rollback that lands within its timeout after a newer grant', async () => {
+  jest.useFakeTimers();
+  try {
+    // Write #1 (the claim) hangs until released manually; write #3 (its
+    // compensating rollback) is slow but lands inside its own three-second
+    // race. Every other write lands immediately.
+    let releaseStaleWrite!: () => void;
+    let writeCalls = 0;
+    mockSetItem.mockImplementation((key: string, value: string) => {
+      writeCalls += 1;
+      if (writeCalls === 1) {
+        return new Promise<void>((resolve) => {
+          releaseStaleWrite = () => {
+            storage.set(key, value);
+            resolve();
+          };
+        });
+      }
+      if (writeCalls === 3) {
+        return new Promise<void>((resolve) => {
+          setTimeout(() => {
+            storage.set(key, value);
+            resolve();
+          }, 1000);
+        });
+      }
+      storage.set(key, value);
+      return Promise.resolve();
+    });
+    const first = claimCheckoutPurchaseTracking('order-prompt-stale');
+    await jest.advanceTimersByTimeAsync(3000);
+    await expect(first).resolves.toBe(false);
+
+    // Queue released; a newer claim succeeds on the old envelope.
+    await jest.advanceTimersByTimeAsync(11000);
+    await expect(
+      claimCheckoutPurchaseTracking('order-prompt-newer')
+    ).resolves.toBe(true);
+
+    // The stale claim write lands and its rollback starts, but the
+    // rollback write needs a second to land — meanwhile a third claim is
+    // granted on the still-stale read.
+    releaseStaleWrite();
+    await jest.advanceTimersByTimeAsync(500);
+    await expect(
+      claimCheckoutPurchaseTracking('order-prompt-third')
+    ).resolves.toBe(true);
+
+    // The rollback lands after the third grant but before its own
+    // three-second timeout, erasing it: the settlement-attached
+    // reconciliation must restore the third grant without resurrecting
+    // the phantom stale claim.
+    await jest.advanceTimersByTimeAsync(2000);
+    const stored = parseStoredClaimsForTest(
+      storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY)
+    );
+    expect(stored).toContain('order-prompt-newer');
+    expect(stored).toContain('order-prompt-third');
+    expect(stored).not.toContain('order-prompt-stale');
+    await expect(
+      claimCheckoutPurchaseTracking('order-prompt-newer')
+    ).resolves.toBe(false);
+    await expect(
+      claimCheckoutPurchaseTracking('order-prompt-third')
+    ).resolves.toBe(false);
+  } finally {
+    jest.useRealTimers();
+    mockSetItem.mockImplementation(async (key: string, value: string) => {
+      storage.set(key, value);
+    });
+  }
+});
+
 it('releases the queue when a write never settles', async () => {
   jest.useFakeTimers();
   try {

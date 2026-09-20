@@ -16,6 +16,7 @@ import {
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
+import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
 import {
   revalidateProductSlugs,
   revalidateProducts,
@@ -3384,7 +3385,21 @@ export async function POST(request: NextRequest) {
           price: item.price || 0,
         }));
 
-        const paymentLink = `${merchantUrl}/checkout/resume/${order.id}`;
+        // The emailed CTA must resolve to a served page: prefer the token
+        // lookup, falling back to the order id plus email pair (both
+        // auto-resolve on /track-order). There is no /checkout/resume
+        // route — linking it shipped a 404.
+        const paymentLink = buildOrderTrackingLink(
+          merchantUrl,
+          {
+            id: order.id,
+            tracking_token:
+              typeof order.tracking_token === 'string'
+                ? order.tracking_token
+                : null,
+          },
+          customer_email
+        );
 
         const emailData = {
           orderNumber: orderNum,

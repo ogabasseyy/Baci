@@ -184,15 +184,19 @@ async function removeClaimAfterLateWrite(claim: string): Promise<void> {
     ]);
     if (written === STORAGE_TIMEOUT) {
       log.error('Checkout purchase tracking claim rollback timed out.');
-      // The rollback may still land after newer grants and erase them, the
-      // same way the original late write did: reconcile once more on
-      // landing. No further compensation — the residual needs consecutive
-      // stalls at every level to matter.
-      void rollbackWrite.then(
-        () => reconcileStoredClaims().catch(() => undefined),
-        () => undefined
-      );
     }
+    // The rollback value was computed before it landed: a newer grant
+    // committed in between is erased however promptly the write settles,
+    // not only when it misses its own timeout — so reconcile on every
+    // settlement, not just the timeout branch. reconcileStoredClaims is a
+    // read plus a conditional write (skipped when the store is healthy),
+    // and union is idempotent, so the extra pass is safe. No further
+    // compensation — the residual needs consecutive stalls at every
+    // level to matter.
+    void rollbackWrite.then(
+      () => reconcileStoredClaims().catch(() => undefined),
+      () => undefined
+    );
   } catch (error) {
     log.error('Failed to roll back late checkout purchase claim:', error);
   }

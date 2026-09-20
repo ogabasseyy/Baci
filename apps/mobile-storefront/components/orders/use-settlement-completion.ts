@@ -29,6 +29,11 @@ const SETTLEMENT_POLL_METHODS = new Set([
 const SETTLEMENT_LOOKUP_TIMEOUT_MS = 15_000;
 const SETTLEMENT_POLL_INTERVAL_MS = 10_000;
 const SETTLEMENT_MAX_ATTEMPTS = 18;
+// Juicyway confirms on-chain with an advertised 5–30 minute window
+// (see the crypto payment fixtures), so its budget spans ~30 minutes at
+// the standard interval instead of stopping after ~3. Other methods keep
+// the short budget: their webhooks settle in seconds.
+const JUICYWAY_SETTLEMENT_MAX_ATTEMPTS = 180;
 
 interface SettlementCompletionParams {
   orderId?: string;
@@ -102,7 +107,9 @@ export function useSettlementCompletion({
   paymentMethod,
   trackingToken,
   pollIntervalMs = SETTLEMENT_POLL_INTERVAL_MS,
-  maxAttempts = SETTLEMENT_MAX_ATTEMPTS,
+  maxAttempts = paymentMethod === 'juicyway'
+    ? JUICYWAY_SETTLEMENT_MAX_ATTEMPTS
+    : SETTLEMENT_MAX_ATTEMPTS,
 }: SettlementCompletionParams): void {
   useEffect(() => {
     if (

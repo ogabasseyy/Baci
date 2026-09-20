@@ -369,7 +369,17 @@ function CheckoutSuccessContent() {
     // after a newer success and overwrite the terminal state (or schedule
     // a redirect after payment was confirmed).
     const runVerificationPass = () => {
-      if (disposed || reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS) {
+      // Gate the pass itself on the terminal status: setStatus('success')
+      // only schedules the React update, so the settling promise's
+      // finally can still observe a stale 'pending' ref and arm another
+      // timer. Without this check that timer performs an extra
+      // verification after success, and a transient failure could flip a
+      // paid order to failed (payment_failed + checkout redirect).
+      if (
+        disposed ||
+        statusRef.current !== 'pending' ||
+        reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS
+      ) {
         return;
       }
       reverifyAttempts += 1;

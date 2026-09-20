@@ -323,6 +323,53 @@ describe('checkout success page', () => {
     }
   });
 
+  it('does not verify again after success even when a timer was armed', async () => {
+    // Same stable-router pin as above: production runs the effect once
+    // per mount.
+    const useRouterSpy = vi
+      .spyOn(nextNavigation, 'useRouter')
+      .mockReturnValue({ push: mockPush } as never);
+    mockFetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        finalizationOutcome: 'completed',
+        orderId: 'order-1',
+        orderNumber: 'ORD-2001',
+        orderTotal: 5750,
+        paymentMethod: 'paystack',
+        status: 'success',
+        success: true,
+      }),
+    });
+
+    try {
+      render(<CheckoutSuccessPage />);
+      await waitFor(() => {
+        expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+          'payment_completed',
+          'order-1',
+          expect.objectContaining({ payment_status: 'paid' })
+        );
+      });
+      expect(mockFetchWithCsrf).toHaveBeenCalledTimes(1);
+
+      // setStatus('success') only schedules the React update, so the
+      // settling pass can arm one more timer against a stale ref. Past
+      // the re-verify interval that timer must find the terminal status
+      // and stop — never a second verification (a transient failure
+      // there would flip the paid order to failed).
+      await new Promise((resolve) => setTimeout(resolve, 4100));
+      expect(mockFetchWithCsrf).toHaveBeenCalledTimes(1);
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_failed',
+        expect.anything(),
+        expect.anything()
+      );
+    } finally {
+      useRouterSpy.mockRestore();
+    }
+  });
+
   it('keeps the cart intact when payment verification does not succeed', async () => {
     mockFetchWithCsrf.mockResolvedValue({
       ok: true,

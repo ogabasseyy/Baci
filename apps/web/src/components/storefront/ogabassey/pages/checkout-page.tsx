@@ -2589,26 +2589,34 @@ export const CheckoutPage: React.FC = () => {
       // Special case: If wallet fully covers the order, no payment gateway needed
       // Order API already marks it as paid, just redirect to success
       if (paymentAmount <= 0) {
-        // Wallet/server-side credit covered the full amount and the order API
-        // already marked the order paid: record the conversion before leaving.
-        // Attribute the server-returned method (wallet/store_credit/savings/
-        // quiz_voucher after full coverage), not the UI selection.
-        const zeroDuePaymentMethod = order.payment_method || paymentMethod;
-        captureCheckoutFunnelEventOnce(
-          CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
-          order.id,
-          buildCheckoutFunnelProperties({
-            channel: 'web',
-            currency: orderChargeCurrency,
-            orderId: order.id,
-            orderNumber: createdOrderNumber,
-            paymentIntent: getCheckoutPaymentIntent(zeroDuePaymentMethod),
-            paymentMethod: zeroDuePaymentMethod,
-            paymentStatus: 'paid',
-            source: 'web_checkout',
-            total: order.total ?? total,
-          })
-        );
+        // Nothing is due at a gateway, but a conversion requires the
+        // authoritative paid status: zero due without server-finalized
+        // coverage (e.g. a 100% discount, where the API leaves the order
+        // unpaid) must not fabricate a paid payment_completed — no
+        // provider or server payment confirmation occurred.
+        if (order.payment_status === 'paid') {
+          // Wallet/server-side credit covered the full amount and the order
+          // API already marked the order paid: record the conversion before
+          // leaving. Attribute the server-returned method
+          // (wallet/store_credit/savings/quiz_voucher after full coverage),
+          // not the UI selection.
+          const zeroDuePaymentMethod = order.payment_method || paymentMethod;
+          captureCheckoutFunnelEventOnce(
+            CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+            order.id,
+            buildCheckoutFunnelProperties({
+              channel: 'web',
+              currency: orderChargeCurrency,
+              orderId: order.id,
+              orderNumber: createdOrderNumber,
+              paymentIntent: getCheckoutPaymentIntent(zeroDuePaymentMethod),
+              paymentMethod: zeroDuePaymentMethod,
+              paymentStatus: 'paid',
+              source: 'web_checkout',
+              total: order.total ?? total,
+            })
+          );
+        }
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
         clearCheckoutSession();

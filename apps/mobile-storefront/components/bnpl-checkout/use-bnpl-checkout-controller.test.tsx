@@ -694,6 +694,57 @@ describe('useBNPLCheckoutController', () => {
     );
   });
 
+  it('fails the checkout when the launch document returns an HTTP error', () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+    };
+    const { result } = renderControllerHook();
+
+    act(() => {
+      result.current.handleWebViewHttpError({
+        nativeEvent: {
+          description: 'Internal Server Error',
+          statusCode: 500,
+          url: result.current.bnplUrl,
+        },
+      } as never);
+    });
+
+    // The provider error page is unusable: surface retry UI and record
+    // the attempt-scoped failure instead of letting load-end mark ready.
+    expect(result.current.status).toBe('error');
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
+      'bnpl_load_error',
+      'order-123',
+      'credit_direct'
+    );
+    expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+  });
+
+  it('ignores subresource HTTP errors while the document loads', () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+    };
+    const { result } = renderControllerHook();
+
+    act(() => {
+      result.current.handleWebViewHttpError({
+        nativeEvent: {
+          description: 'Not Found',
+          statusCode: 404,
+          url: 'https://cdn.example/assets/banner.png',
+        },
+      } as never);
+    });
+
+    expect(result.current.status).not.toBe('error');
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+  });
+
   it('ignores late errors arriving after successful completion', async () => {
     mockRouteParams = {
       gateway: 'credit_direct',

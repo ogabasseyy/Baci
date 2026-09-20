@@ -90,7 +90,7 @@ export function renderReceiptDocument(params: ReceiptDocumentParams): string {
       <div class="doc-meta">
         <div class="doc-title">${docTitle}</div>
         <div class="doc-number">#${escapeHtml(order.order_number)}</div>
-        <div class="doc-date">${dateStr} &middot; ${timeStr}</div>
+        <div class="doc-date">${timeStr ? `${dateStr} &middot; ${timeStr}` : dateStr}</div>
         <div class="status-badge">${statusConfig.label}</div>
       </div>
     </div>

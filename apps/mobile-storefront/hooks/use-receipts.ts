@@ -1,3 +1,4 @@
+import { compareReceiptListDesc } from '@baci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { withSupabaseRetry } from '@/lib/api';
 import { CONFIG } from '@/lib/config';
@@ -96,7 +97,12 @@ export function useReceipts(userId: string | undefined) {
         log.warn('Receipt list validation warning:', result.error.message);
       }
 
-      return mapped as ReceiptListItem[];
+      // File backdated invoices by the same issue → transaction → creation
+      // date the receipt card renders; the database pre-sort above cannot
+      // express that fallback.
+      const receipts = mapped as ReceiptListItem[];
+      receipts.sort(compareReceiptListDesc);
+      return receipts;
     },
     staleTime: 1000 * 60 * 2,
     enabled: !!userId && !!activeMerchantId,

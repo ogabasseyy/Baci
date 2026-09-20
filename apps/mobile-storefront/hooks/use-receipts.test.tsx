@@ -164,6 +164,56 @@ describe('useReceipts', () => {
     ]);
   });
 
+  it('files a backdated invoice by its issue date, not its transaction date', async () => {
+    const { useReceipts } = await import('@/hooks/use-receipts');
+    mockOrder.mockResolvedValue({
+      data: [
+        {
+          amount_paid: 95000,
+          created_at: '2026-04-02T10:00:00.000Z',
+          transaction_date: '2026-04-02T10:00:00.000Z',
+          invoice_issue_date: null,
+          currency: 'NGN',
+          id: 'order-april',
+          order_items: [],
+          order_number: 'ORD-3002',
+          payment_status: 'paid',
+          total: 95000,
+        },
+        {
+          amount_paid: 150000,
+          created_at: '2026-03-05T10:00:00.000Z',
+          transaction_date: '2026-03-05T10:00:00.000Z',
+          invoice_issue_date: '2026-09-12',
+          currency: 'NGN',
+          id: 'order-backdated',
+          order_items: [],
+          order_number: 'ORD-3001',
+          payment_status: 'paid',
+          total: 150000,
+        },
+      ],
+      error: null,
+    });
+
+    function Probe() {
+      useReceipts('auth-user-1');
+      return <View testID="probe" />;
+    }
+
+    render(<Probe />);
+    const options = mockUseQuery.mock.calls[0]?.[0] as QueryOptions;
+    const receipts = (await options.queryFn()) as Array<{ id: string }>;
+
+    // The receipt card renders the September issue date first, so the invoice
+    // issued in September must file above the April receipt even though its
+    // transaction is older.
+    expect(receipts.map((receipt) => receipt.id)).toEqual([
+      'order-backdated',
+      'order-april',
+    ]);
+  });
+
   it('does not query receipts when the authenticated user scope is missing', async () => {
     const { useReceipts } = await import('@/hooks/use-receipts');
 

@@ -1,3 +1,4 @@
+import { compareReceiptListDesc } from '@baci/shared/receipt';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { sanitizePublicOrder } from '@/lib/public-fulfillment-sanitizer';
@@ -237,6 +238,11 @@ export async function GET(request: NextRequest) {
         }),
       };
     });
+
+    // The database pre-sort above cannot express the display-date fallback
+    // (Supabase orders by column), so file backdated invoices by the same
+    // issue → transaction → creation date the receipt list renders.
+    transformedOrders.sort(compareReceiptListDesc);
 
     return NextResponse.json({
       orders: sanitizePublicOrder(transformedOrders),

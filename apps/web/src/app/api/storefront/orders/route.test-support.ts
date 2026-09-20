@@ -72,6 +72,7 @@ export function createSupabaseMock(input?: {
       order_number: string;
       created_at: string;
       transaction_date?: string | null;
+      invoice_issue_date?: string | null;
       total: number;
       subtotal: number;
       shipping_fee: number;

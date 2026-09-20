@@ -115,6 +115,7 @@ export function generateReceiptHtml(
   const formatMoney = createMoneyFormatter(currencyCode);
 
   const orderDate = new Date(order.transaction_date ?? order.created_at);
+  const hasIssueDate = Boolean(order.invoice_issue_date);
   const dateStr = order.invoice_issue_date
     ? formatReceiptCalendarDate(order.invoice_issue_date)
     : orderDate.toLocaleDateString('en-GB', {
@@ -123,11 +124,17 @@ export function generateReceiptHtml(
         year: 'numeric',
         timeZone: 'Africa/Lagos',
       });
-  const timeStr = orderDate.toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Africa/Lagos',
-  });
+  // A persisted issue date is a legal calendar date with no time component.
+  // Pairing it with the Lagos transaction time mixes two different moments
+  // for backdated invoices and two timezones for non-Nigerian merchants, so
+  // render the issue date without a time.
+  const timeStr = hasIssueDate
+    ? ''
+    : orderDate.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Africa/Lagos',
+      });
 
   const storeName =
     merchant.legal_entity_name || merchant.business_name || 'Store';

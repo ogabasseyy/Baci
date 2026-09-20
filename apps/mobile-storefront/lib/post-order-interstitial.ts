@@ -178,6 +178,10 @@ export async function maybeShowPostOrderInterstitial(
         loadTimer = null;
         abandon();
       }, 30_000);
+      // Store each unsubscribe before registering the next listener: a
+      // multi-argument push() evaluates every registration first, so a
+      // throw partway through would strand installed listeners that
+      // abandon() can no longer release.
       cleanups.push(
         interstitial.addAdEventListener(mobileAds.AdEventType.LOADED, () => {
           // A LOADED racing a fired deadline must not present: the deadline
@@ -208,10 +212,14 @@ export async function maybeShowPostOrderInterstitial(
           } catch {
             failOwnedPresentation();
           }
-        }),
+        })
+      );
+      cleanups.push(
         interstitial.addAdEventListener(mobileAds.AdEventType.ERROR, () =>
           abandon()
-        ),
+        )
+      );
+      cleanups.push(
         interstitial.addAdEventListener(mobileAds.AdEventType.PAID, (payload) =>
           trackInterstitialPaidEvent(
             'POST_ORDER_INTERSTITIAL',
@@ -220,7 +228,9 @@ export async function maybeShowPostOrderInterstitial(
             // full-screen ads (verified in the installed v16 sources).
             payload as unknown as PaidEvent
           )
-        ),
+        )
+      );
+      cleanups.push(
         interstitial.addAdEventListener(mobileAds.AdEventType.CLOSED, () => {
           // Dismissal ends the owned attempt: no further SDK events can
           // arrive, so release every listener (including this one) instead
@@ -232,8 +242,11 @@ export async function maybeShowPostOrderInterstitial(
       );
       interstitial.load();
     } catch {
-      attemptState = 'idle';
-      resolve('skipped');
+      // A synchronous setup throw (createForAdRequest, addAdEventListener,
+      // or load) must release the timer and any installed listeners exactly
+      // like a load error; abandon() is settled-guarded and safe when
+      // nothing was installed yet.
+      abandon();
     }
   });
 }

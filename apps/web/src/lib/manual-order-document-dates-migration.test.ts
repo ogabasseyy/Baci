@@ -93,18 +93,18 @@ describe('review transaction date sync migration', () => {
       'CREATE OR REPLACE FUNCTION public.update_transaction_review_details('
     );
     expect(reviewSyncMigration).toContain(
-      'WHEN transaction_date IS DISTINCT FROM p_transaction_date'
-    );
-    expect(reviewSyncMigration).toContain(
       '(p_transaction_date AT TIME ZONE v_transaction_time_zone)::date'
     );
   });
 
-  it('marks review-set dates explicit without touching cost-only reviews', () => {
+  it('compares calendar days so cost-only edits preserve the date block', () => {
+    // The editor re-serializes the field as reviewer-local midnight on every
+    // save, so instant comparison would clobber dates on cost-only edits.
     expect(reviewSyncMigration).toContain(
-      'invoice_issue_date_generated = CASE'
+      'transaction_date AT TIME ZONE v_transaction_time_zone'
     );
-    expect(reviewSyncMigration).toContain('tax_point_date_generated = CASE');
+    expect(reviewSyncMigration).toContain('WHEN v_day_changed THEN false');
+    expect(reviewSyncMigration).toContain('ELSE transaction_date');
     expect(reviewSyncMigration).toContain('ELSE invoice_issue_date_generated');
     expect(reviewSyncMigration).toContain('ELSE tax_point_date_generated');
   });

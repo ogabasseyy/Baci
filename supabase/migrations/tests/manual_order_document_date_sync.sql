@@ -26,6 +26,7 @@ DECLARE
   v_tax date;
   v_issue_gen boolean;
   v_tax_gen boolean;
+  v_txn timestamptz;
 BEGIN
   -- Replay checks run as the database owner, but several order triggers
   -- still require a request identity. Mirror the quiz fixture claims.
@@ -209,7 +210,11 @@ BEGIN
     RAISE EXCEPTION 'review edit did not mark generated dates explicit';
   END IF;
 
-  -- 4. Cost-only reviews (unchanged transaction) leave dates and flags alone.
+  -- 4. Cost-only reviews preserve the whole date block. Mirrors the real UI
+  -- path: a Lagos reviewer sees Jun 10 for the stored instant, leaves the
+  -- date field untouched, and the editor re-serializes it as Lagos midnight
+  -- (2026-06-09T23:00:00Z) -- a different instant for the same calendar day.
+  -- The Auckland-selected Jun 11 dates, flags, and stored instant must survive.
   PERFORM public.update_transaction_review_details(
     p_merchant_id := v_merchant_id,
     p_order_id := v_manual_order_id,
@@ -218,8 +223,8 @@ BEGIN
     p_variant_id := NULL,
     p_cost_price := 125000,
     p_supplier_name := 'Sync Test Supplier',
-    p_transaction_date := '2026-06-10T12:30:00Z',
-    p_client_timezone := 'Pacific/Auckland',
+    p_transaction_date := '2026-06-09T23:00:00Z',
+    p_client_timezone := 'Africa/Lagos',
     p_update_product_default := false,
     p_unit_index := NULL,
     p_identifier_type := NULL,
@@ -227,12 +232,14 @@ BEGIN
   );
 
   SELECT invoice_issue_date, tax_point_date,
-         invoice_issue_date_generated, tax_point_date_generated
-  INTO v_issue, v_tax, v_issue_gen, v_tax_gen
+         invoice_issue_date_generated, tax_point_date_generated,
+         transaction_date
+  INTO v_issue, v_tax, v_issue_gen, v_tax_gen, v_txn
   FROM public.orders
   WHERE id = v_manual_order_id;
   IF v_issue <> '2026-06-11' OR v_tax <> '2026-06-11'
-     OR v_issue_gen IS DISTINCT FROM false OR v_tax_gen IS DISTINCT FROM false THEN
+     OR v_issue_gen IS DISTINCT FROM false OR v_tax_gen IS DISTINCT FROM false
+     OR v_txn <> '2026-06-10T12:30:00Z' THEN
     RAISE EXCEPTION 'cost-only review disturbed document dates: % / %', v_issue, v_tax;
   END IF;
 END;

@@ -24,6 +24,7 @@ SECURITY INVOKER
 SET search_path TO 'public'
 AS $$
 DECLARE
+  v_day_changed boolean := false;
   v_identifier_type text := NULLIF(btrim(COALESCE(p_identifier_type, '')), '');
   v_identifier_value text := NULLIF(btrim(COALESCE(p_identifier_value, '')), '');
   v_order_item_product_id uuid;
@@ -202,33 +203,42 @@ BEGIN
   END IF;
 
   -- A transaction review is an explicit human date correction: when the
-  -- transaction moves, both document dates follow the reviewer's selected
-  -- calendar day (client timezone, defaulting to Africa/Lagos above) and
-  -- their provenance becomes explicit. Manual orders carry explicit
-  -- (FALSE-flag) device-local dates that the sync trigger must preserve, so
-  -- without this the receipt would keep showing the original day.
+  -- reviewer changes the calendar day, the transaction and both document
+  -- dates follow the reviewer's selected day (client timezone, defaulting to
+  -- Africa/Lagos above) and their provenance becomes explicit. Manual orders
+  -- carry explicit (FALSE-flag) device-local dates that the sync trigger must
+  -- preserve, so without this the receipt would keep showing the original day.
+  -- Compare calendar days, not instants: the editor always re-serializes the
+  -- date field as reviewer-local midnight, so the instant normally differs
+  -- even for cost-only edits. When the day is unchanged the whole date block
+  -- (including the stored instant) is preserved as-is.
+  SELECT (
+    transaction_date AT TIME ZONE v_transaction_time_zone
+  )::date IS DISTINCT FROM (
+    p_transaction_date AT TIME ZONE v_transaction_time_zone
+  )::date
+  INTO v_day_changed
+  FROM public.orders
+  WHERE id = p_order_id
+    AND merchant_id = p_merchant_id;
+
   UPDATE public.orders
-  SET transaction_date = p_transaction_date,
+  SET transaction_date = CASE
+        WHEN v_day_changed THEN p_transaction_date ELSE transaction_date END,
       invoice_issue_date = CASE
-        WHEN transaction_date IS DISTINCT FROM p_transaction_date
+        WHEN v_day_changed
         THEN (p_transaction_date AT TIME ZONE v_transaction_time_zone)::date
         ELSE invoice_issue_date
       END,
       tax_point_date = CASE
-        WHEN transaction_date IS DISTINCT FROM p_transaction_date
+        WHEN v_day_changed
         THEN (p_transaction_date AT TIME ZONE v_transaction_time_zone)::date
         ELSE tax_point_date
       END,
       invoice_issue_date_generated = CASE
-        WHEN transaction_date IS DISTINCT FROM p_transaction_date
-        THEN false
-        ELSE invoice_issue_date_generated
-      END,
+        WHEN v_day_changed THEN false ELSE invoice_issue_date_generated END,
       tax_point_date_generated = CASE
-        WHEN transaction_date IS DISTINCT FROM p_transaction_date
-        THEN false
-        ELSE tax_point_date_generated
-      END
+        WHEN v_day_changed THEN false ELSE tax_point_date_generated END
   WHERE id = p_order_id
     AND merchant_id = p_merchant_id;
 

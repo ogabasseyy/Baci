@@ -246,6 +246,40 @@ describe('Order confirmation email', () => {
       expect(text).toContain('please contact TestShop for payment details');
     });
 
+    it('directs HTML readers to the merchant when no account was assigned', () => {
+      const html = generateOrderConfirmationEmail(proformaPayload);
+
+      // Without a DVA the payment-details block is omitted: the HTML
+      // intro must not promise details "in this email" but match the
+      // text fallback so the reader still has a payable path.
+      expect(html).not.toContain('payment details in this email');
+      expect(html).toContain('contact TestShop for payment details');
+    });
+
+    it('charges only the outstanding balance after partial credit', () => {
+      const payload = {
+        ...proformaPayload,
+        total: 11500,
+        amountDue: 1500,
+        virtualAccount: {
+          bankName: 'Wema Bank',
+          accountNumber: '1234567890',
+          accountName: 'OgaBassey-Test',
+        },
+      };
+      const html = generateOrderConfirmationEmail(payload);
+      const text = generateOrderConfirmationText(payload);
+
+      // 10000 of credit already applied: instructing the full 11500
+      // would overcharge the customer.
+      expect(html).toContain('Transfer <strong>₦1,500.00</strong>');
+      expect(html).not.toContain('Transfer <strong>₦11,500.00</strong>');
+      expect(text).toContain('Complete your bank transfer of ₦1,500.00');
+      expect(text).not.toContain(
+        'Complete your bank transfer of ₦11,500.00'
+      );
+    });
+
     it('keeps the confirmation CTA on the storefront homepage', () => {
       const html = generateOrderConfirmationEmail({
         ...baseOrderData,

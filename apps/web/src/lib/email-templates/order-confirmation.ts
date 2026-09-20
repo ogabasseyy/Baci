@@ -44,6 +44,13 @@ interface OrderConfirmationData extends MerchantRegistrationInfo {
     accountNumber: string;
     accountName: string;
   };
+  /**
+   * Outstanding balance the transfer instructions charge: the full total
+   * minus credit already applied (wallet/savings/partial payment),
+   * matching the attached PDF's balance. Defaults to the full total for
+   * callers without partial coverage.
+   */
+  amountDue?: number;
 }
 
 /**
@@ -59,6 +66,9 @@ export function generateOrderConfirmationEmail(
   // take payment, so payment travels by bank transfer (details below).
   const ctaHref =
     isProforma && data.paymentLink ? data.paymentLink : data.merchantUrl;
+  // Transfer instructions charge the outstanding balance only: credit
+  // already applied must not be charged again (P1 overpayment guard).
+  const transferAmount = data.amountDue ?? data.total;
   const proformaPaymentHtml =
     isProforma && data.virtualAccount
       ? `
@@ -68,7 +78,7 @@ export function generateOrderConfirmationEmail(
               <div style="background-color: #fefce8; border-radius: 8px; padding: 24px; border: 1px solid #fde68a;">
                 <h3 style="margin: 0 0 12px 0; font-size: 14px; text-transform: uppercase; color: #92400e; letter-spacing: 0.5px;">💳 Complete Your Bank Transfer</h3>
                 <p style="margin: 0 0 12px 0; font-size: 14px; color: #78350f; line-height: 1.6;">
-                  Transfer <strong>${formatEmailMoney(data.total, data.currency)}</strong> to the dedicated account below. Your order is confirmed automatically once payment is received.
+                  Transfer <strong>${formatEmailMoney(transferAmount, data.currency)}</strong> to the dedicated account below. Your order is confirmed automatically once payment is received.
                 </p>
                 <table border="0" cellpadding="0" cellspacing="0" width="100%">
                   <tr>
@@ -159,7 +169,7 @@ export function generateOrderConfirmationEmail(
             <td style="padding: 40px 40px 20px 40px;">
               <p style="margin: 0; font-size: 16px; color: #334155; line-height: 1.6;">Hi <strong>${escapeHtmlText(data.customerName)}</strong>,</p>
               <p style="margin: 16px 0 0 0; font-size: 16px; color: #475569; line-height: 1.6;">
-                ${isProforma ? 'This proforma invoice is a quotation for the items below. Your order will be processed once payment is received — please share it with your procurement team and complete your bank transfer using the payment details in this email.' : "We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable)."}
+                ${isProforma ? `This proforma invoice is a quotation for the items below. Your order will be processed once payment is received — please share it with your procurement team and ${data.virtualAccount ? 'complete your bank transfer using the payment details in this email' : `contact ${escapeHtmlText(data.merchantName)} for payment details`}.` : "We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable)."}
               </p>
             </td>
           </tr>
@@ -281,9 +291,10 @@ export function generateOrderConfirmationText(
   // The tracking link shows status only and cannot take payment: the next
   // steps must route payment through the bank-transfer details (or the
   // merchant when no account was assigned), never through the link.
+  const transferAmount = data.amountDue ?? data.total;
   const proformaNextSteps = [
     data.virtualAccount
-      ? `Complete your bank transfer of ${formatEmailMoney(data.total, data.currency)} using the payment details above — your order is confirmed automatically once payment is received.`
+      ? `Complete your bank transfer of ${formatEmailMoney(transferAmount, data.currency)} using the payment details above — your order is confirmed automatically once payment is received.`
       : `No payment account was assigned to this quote yet — please contact ${data.merchantName} for payment details.`,
     data.paymentLink ? `Track its status here:\n${data.paymentLink}` : null,
   ]

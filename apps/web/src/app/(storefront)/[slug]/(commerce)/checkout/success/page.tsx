@@ -111,6 +111,15 @@ type CheckoutVerificationStatus = 'success' | 'pending' | 'failed';
 // still reached without a manual refresh.
 const VERIFY_REPOLL_INTERVAL_MS = 3000;
 const VERIFY_REPOLL_MAX_ATTEMPTS = 20;
+// Verify-route finalization outcomes returned non-OK after the provider
+// captured the money (mirrors finalizeOrderGatewayPayment kinds): never
+// payment failures — the reverify loop keeps polling for completion.
+const CAPTURED_PAYMENT_FINALIZATION_OUTCOMES = new Set([
+  'completion_failed',
+  'inventory_cleanup_failed',
+  'inventory_failed',
+  'review_failed',
+]);
 
 interface VerifyCheckoutPaymentParams {
   merchantSlug: string | undefined;
@@ -238,16 +247,34 @@ async function verifyCheckoutPayment(
       setStatus('pending');
       setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
     } else if (!response.ok) {
-      console.error('Payment verification failed:', data);
-      setStatus('failed');
-      capturePaymentFailed({
-        orderId,
-        orderNumber: data.orderNumber,
-        paymentMethod: data.paymentMethod || paymentMethod,
-        reference,
-        reason: 'verification_failed',
-      });
-      scheduleFailedRedirect();
+      if (
+        typeof data.finalizationOutcome === 'string' &&
+        CAPTURED_PAYMENT_FINALIZATION_OUTCOMES.has(data.finalizationOutcome)
+      ) {
+        // Order/inventory finalization failed after the provider captured
+        // the money: the payment is not failed — reconciliation or the
+        // next reverify pass can still complete it — so stay pending
+        // instead of recording payment_failed and redirecting away.
+        console.warn(
+          'Payment captured but finalization failed; awaiting completion:',
+          data.finalizationOutcome
+        );
+        setStatus('pending');
+        setOrderNumber(
+          data.orderNumber || reference.slice(0, 8).toUpperCase()
+        );
+      } else {
+        console.error('Payment verification failed:', data);
+        setStatus('failed');
+        capturePaymentFailed({
+          orderId,
+          orderNumber: data.orderNumber,
+          paymentMethod: data.paymentMethod || paymentMethod,
+          reference,
+          reason: 'verification_failed',
+        });
+        scheduleFailedRedirect();
+      }
     } else if (data.success && data.status === 'success') {
       clearCart();
       setStatus('success');

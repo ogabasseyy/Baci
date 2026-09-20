@@ -3461,6 +3461,10 @@ export async function POST(request: NextRequest) {
             // email body (rendered after provisioning below) can include
             // the bank-transfer payment instructions.
             let invoiceVirtualAccount: ReceiptOrder['virtual_account'] = null;
+            // Amount already covered by credit/partial payment, hoisted so
+            // the email instructs only the outstanding balance (same rule
+            // as the attached PDF) instead of the full purchase price.
+            let invoiceAmountPaid = 0;
             let backgroundSupabase: ReturnType<
               typeof createAdminClient
             > | null = null;
@@ -3567,6 +3571,7 @@ export async function POST(request: NextRequest) {
                   Number(order.amount_paid || 0),
                   savingsAmountUsed + walletAmountUsed
                 );
+                invoiceAmountPaid = amountPaid;
                 const invoiceOrder = {
                   ...invoiceTimingOrder,
                   amount_paid: amountPaid,
@@ -3788,14 +3793,20 @@ export async function POST(request: NextRequest) {
                   bankName: invoiceVirtualAccount.bank_name,
                 }
               : undefined;
+            // Outstanding balance for the transfer instructions (same rule
+            // as the attached PDF): credit already applied must not be
+            // charged again.
+            const emailAmountDue = Math.max(orderTotal - invoiceAmountPaid, 0);
             const htmlContent = generateOrderConfirmationEmail({
               ...emailData,
               documentKind: emailDocumentKind,
+              amountDue: emailAmountDue,
               virtualAccount: emailVirtualAccount,
             });
             const textContent = generateOrderConfirmationText({
               ...emailData,
               documentKind: emailDocumentKind,
+              amountDue: emailAmountDue,
               virtualAccount: emailVirtualAccount,
             });
             const emailResult = await sendEmail({

@@ -778,6 +778,9 @@ export const CheckoutPage: React.FC = () => {
     orderId?: string;
     orderNumber?: string;
     trackingToken?: string | null;
+    /** Originating checkout fingerprint: scopes post-confirm idempotency
+     * cleanup so another tab's newer checkout keeps its recovery key. */
+    checkoutFingerprint?: string;
   } | null>(null);
   const [isVerifyingDva, setIsVerifyingDva] = useState(false);
   const [isInitializingDva, setIsInitializingDva] = useState(false);
@@ -2235,6 +2238,10 @@ export const CheckoutPage: React.FC = () => {
     let createdOrderId: string | undefined;
     let createdOrderNumber = '';
     let orderChargeCurrency = currencyCode;
+    // Set only when a provider flow actually opens. Pre-payment browser
+    // failures (blocked session storage, invoice/POD branches that never
+    // start a payment) must not be attributed as payment_failed.
+    let paymentStarted = false;
 
     try {
       let order: {
@@ -2563,6 +2570,7 @@ export const CheckoutPage: React.FC = () => {
       // (initialized DVA, provider URL, opened widget, confirmed transfer
       // setup) — never speculatively before initialization runs.
       const capturePaymentStarted = () => {
+        paymentStarted = true;
         captureClientEvent(
           CHECKOUT_FUNNEL_EVENTS.paymentStarted,
           buildCheckoutFunnelProperties({
@@ -2694,7 +2702,8 @@ export const CheckoutPage: React.FC = () => {
           order,
           paymentAmount,
           billingAddress,
-          capturePaymentStarted
+          capturePaymentStarted,
+          checkoutFingerprint
         );
         return;
       }
@@ -3040,7 +3049,7 @@ export const CheckoutPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Checkout error:', error);
-      if (createdOrderId) {
+      if (createdOrderId && paymentStarted) {
         captureClientEvent(
           CHECKOUT_FUNNEL_EVENTS.paymentFailed,
           buildCheckoutFunnelProperties({
@@ -3085,7 +3094,8 @@ export const CheckoutPage: React.FC = () => {
     },
     paymentAmount: number,
     billingAddress: DvaBillingAddress,
-    onDvaReady?: () => void
+    onDvaReady?: () => void,
+    checkoutFingerprint?: string
   ) => {
     if (!merchant) {
       isOrderInFlightRef.current = false;
@@ -3118,6 +3128,7 @@ export const CheckoutPage: React.FC = () => {
           orderId: order.id,
           orderNumber: order.order_number ?? undefined,
           trackingToken: order.tracking_token,
+          checkoutFingerprint,
         });
         setDvaCountdown(3600);
         onDvaReady?.();
@@ -3170,6 +3181,7 @@ export const CheckoutPage: React.FC = () => {
       amount,
       total: dvaTotal,
       trackingToken,
+      checkoutFingerprint: dvaCheckoutFingerprint,
     } = dvaData;
     setIsVerifyingDva(true);
     verifyDvaTransferStatus({
@@ -3211,7 +3223,7 @@ export const CheckoutPage: React.FC = () => {
           })
         );
         clearPendingCheckoutOrder();
-        await clearCheckoutIdempotencyKey();
+        await clearCheckoutIdempotencyKey(dvaCheckoutFingerprint);
         clearCheckoutSession();
         setDvaData(null);
         const successQuery = new URLSearchParams({

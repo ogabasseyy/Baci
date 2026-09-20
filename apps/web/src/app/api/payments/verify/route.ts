@@ -327,16 +327,28 @@ async function verifyPaymentReference(reference: string) {
       outcome: finalizeOutcome.kind,
       reference: parsedReference.data,
     });
+    // Tag the finalization outcome: the provider already captured the
+    // money, so callers must treat these as pending (reconciliation or a
+    // later reverify can still complete), never as payment failures.
     return NextResponse.json(
-      { error: 'Failed to finalize order' },
+      {
+        error: 'Failed to finalize order',
+        finalizationOutcome: finalizeOutcome.kind,
+      },
       { status: 500 }
     );
   }
 
   if (finalizeOutcome.kind === 'inventory_failed') {
-    return NextResponse.json(finalizeOutcome.payload, {
-      status: finalizeOutcome.status,
-    });
+    return NextResponse.json(
+      {
+        ...finalizeOutcome.payload,
+        finalizationOutcome: finalizeOutcome.kind,
+      },
+      {
+        status: finalizeOutcome.status,
+      }
+    );
   }
 
   if (finalizeOutcome.kind === 'inventory_cleanup_failed') {
@@ -344,6 +356,7 @@ async function verifyPaymentReference(reference: string) {
       {
         code: 'INVENTORY_CONFIRMATION_CLEANUP_FAILED',
         error: 'Inventory confirmation cleanup failed',
+        finalizationOutcome: finalizeOutcome.kind,
       },
       { status: 500 }
     );

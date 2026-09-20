@@ -5858,6 +5858,11 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
         },
       })
     );
+    // Transfer instructions charge the outstanding balance (no credit
+    // applied in this fixture, so the full order total).
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ amountDue: 1000 })
+    );
 
     // Assert DVA generation was automatically triggered
     expect(mockGeneratePaymentAccount).toHaveBeenCalledWith(

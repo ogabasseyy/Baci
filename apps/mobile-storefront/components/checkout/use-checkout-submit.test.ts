@@ -621,4 +621,54 @@ describe('useCheckoutSubmit', () => {
     expect(setIsProcessing).not.toHaveBeenCalled();
     expect(params.isOrderInFlight.current).toBe(false);
   });
+
+  it('preserves the payforme method so the server dispatches the payment request', async () => {
+    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    const params = createParams({ selectedPayment: 'payforme' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    // Pay for Me keeps its own persisted identity (never collapsed to
+    // invoice): the server keys its explicit dispatch branch — payment
+    // request email plus transfer details — off this stored method.
+    expect(mockBuildCheckoutOrderRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethodForOrder: 'payforme' })
+    );
+    expect(mockCreateOrder).toHaveBeenCalled();
+  });
+
+  it('threads the committed order id into post-creation init failures', async () => {
+    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    const initError = new Error('provider init threw');
+    const { finalizeCheckoutPayment } = jest.requireMock(
+      './checkout-payment-finalization'
+    ) as { finalizeCheckoutPayment: jest.Mock };
+    finalizeCheckoutPayment.mockImplementation(() => {
+      throw initError;
+    });
+    const { handleCheckoutSubmitError } = jest.requireMock(
+      './checkout-submit-error'
+    ) as { handleCheckoutSubmitError: jest.Mock };
+    const params = createParams({ selectedPayment: 'paystack' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    // createOrder committed order-1 before finalization threw: the error
+    // path must carry the id so the funnel failure joins to the order.
+    expect(mockCreateOrder).toHaveBeenCalled();
+    expect(handleCheckoutSubmitError).toHaveBeenCalledWith(
+      initError,
+      'paystack',
+      'order-1'
+    );
+    expect(params.isOrderInFlight.current).toBe(false);
+  });
 });

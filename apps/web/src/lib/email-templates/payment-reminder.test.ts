@@ -87,6 +87,72 @@ describe('Payment reminder email', () => {
     });
   });
 
+  describe('payable CTA', () => {
+    const accountPayload = {
+      ...basePayload,
+      virtualAccount: {
+        bankName: 'Wema Bank',
+        accountNumber: '1234567890',
+        accountName: 'OgaBassey-Test',
+      },
+    };
+
+    it('labels the tracking link honestly and makes transfer instructions explicit', () => {
+      const html = generatePaymentReminderEmail(accountPayload);
+      const text = generatePaymentReminderText(accountPayload);
+
+      // The link opens order tracking (status only): it must not promise
+      // one-click payment, and the actual payment path — the transfer —
+      // must name the balance due.
+      expect(html).not.toContain('Complete Payment');
+      expect(html).not.toContain('just one click');
+      expect(html).toContain('Track Your Order');
+      expect(html).toContain('https://pay.test/link');
+      expect(html).toContain('Transfer <strong>₦15,000.00</strong>');
+      expect(html).toContain('1234567890');
+      expect(text).not.toContain('Complete your payment here');
+      expect(text).toContain('Track your order here: https://pay.test/link');
+      expect(text).toContain(
+        'Complete your bank transfer of ₦15,000.00'
+      );
+      expect(text).toContain('Account Number: 1234567890');
+    });
+
+    it('directs readers without an assigned account to the merchant', () => {
+      const html = generatePaymentReminderEmail({
+        ...basePayload,
+        supportEmail: 'help@testshop.com',
+      });
+      const text = generatePaymentReminderText(basePayload);
+
+      expect(html).not.toContain('Complete Payment');
+      expect(html).toContain('Track Your Order');
+      expect(html).toContain('How to pay');
+      expect(html).toContain('mailto:help@testshop.com');
+      expect(html).toContain('arrange payment of ₦15,000.00');
+      expect(text).toContain('How to pay:');
+      expect(text).toContain(
+        'Please contact TestShop to arrange payment'
+      );
+    });
+
+    it('suppresses the naira account block for foreign-currency orders', () => {
+      const html = generatePaymentReminderEmail({
+        ...accountPayload,
+        currency: 'USD',
+      });
+      const text = generatePaymentReminderText({
+        ...accountPayload,
+        currency: 'USD',
+      });
+
+      expect(html).not.toContain('1234567890');
+      expect(html).toContain('How to pay');
+      expect(text).not.toContain('Account Number: 1234567890');
+      expect(text).toContain('How to pay:');
+    });
+  });
+
   describe('mailto fallback', () => {
     it('derives a clean host (no protocol/path) when supportEmail is absent', () => {
       const html = generatePaymentReminderEmail({

@@ -339,6 +339,7 @@ interface BnplLaunchParams {
     fallbackMerchantSlug: string;
     pendingOrderSnapshot: ReturnType<typeof readPendingOrderSnapshot>;
     paymentLaunchKeyRef: { current: string | null };
+    providerOpenedLaunchKeyRef: { current: string | null };
     klumpSuccessRedirectRef: { current: boolean };
     router: ReturnType<typeof useRouter>;
     setStatus: (status: 'loading' | 'processing' | 'error') => void;
@@ -366,6 +367,7 @@ async function launchBnplPayment({
     fallbackMerchantSlug,
     pendingOrderSnapshot,
     paymentLaunchKeyRef,
+    providerOpenedLaunchKeyRef,
     klumpSuccessRedirectRef,
     router,
     setStatus,
@@ -538,14 +540,13 @@ async function launchBnplPayment({
                 throw new Error('Invalid order total for Credit Direct checkout.');
             }
 
-            if (
-                !tryStartPaymentLaunch(
-                    paymentLaunchKeyRef,
-                    `credit-direct:${order.id}:${order.tracking_token || trackingToken || ''}`
-                )
-            ) {
+            const launchKey = `credit-direct:${order.id}:${order.tracking_token || trackingToken || ''}`;
+            if (!tryStartPaymentLaunch(paymentLaunchKeyRef, launchKey)) {
                 return;
             }
+            // New attempt: a later SDK error bridges to native only once
+            // onPopup proves this attempt's provider flow opened.
+            providerOpenedLaunchKeyRef.current = null;
 
             await openCreditDirectCheckout({
                 merchantSlug: slug,
@@ -583,6 +584,7 @@ async function launchBnplPayment({
                 onPopup: async ({ checkoutTransactionId, sessionId }) => {
                     // The popup opened: confirm the provider flow to native
                     // before persisting anything else.
+                    providerOpenedLaunchKeyRef.current = launchKey;
                     notifyNativeBnplProviderOpened('credit_direct', order.id);
                     writeCreditDirectPopupMarker(
                         order.id,
@@ -626,7 +628,12 @@ async function launchBnplPayment({
                 onError: (error) => {
                     clearCreditDirectPopupMarker(order.id);
                     setCreditDirectPopupMarker(null);
+                    // Bridge only when this attempt opened: a pre-popup SDK
+                    // failure has no native payment_started to match, so
+                    // bridging it would record an unmatched payment_failed.
+                    // Unopened failures fall through to the local error UI.
                     if (
+                        providerOpenedLaunchKeyRef.current === launchKey &&
                         notifyNativeBnplProviderError(
                             'credit_direct',
                             order.id,
@@ -652,14 +659,13 @@ async function launchBnplPayment({
                 throw new Error('Invalid order total for CredPal checkout.');
             }
 
-            if (
-                !tryStartPaymentLaunch(
-                    paymentLaunchKeyRef,
-                    `credpal:${order.id}:${order.tracking_token || trackingToken || ''}`
-                )
-            ) {
+            const launchKey = `credpal:${order.id}:${order.tracking_token || trackingToken || ''}`;
+            if (!tryStartPaymentLaunch(paymentLaunchKeyRef, launchKey)) {
                 return;
             }
+            // New attempt: a later SDK error bridges to native only once
+            // onLoad proves this attempt's provider flow opened.
+            providerOpenedLaunchKeyRef.current = null;
 
             await openCredPalCheckout({
                 key: getCredPalKey(),
@@ -672,6 +678,7 @@ async function launchBnplPayment({
                     // The widget loaded: confirm the provider flow to
                     // native so the start is recorded only for opened
                     // checkouts.
+                    providerOpenedLaunchKeyRef.current = launchKey;
                     notifyNativeBnplProviderOpened('credpal', order.id);
                 },
                 onSuccess: (data) => {
@@ -710,7 +717,10 @@ async function launchBnplPayment({
                     setErrorMessage('Payment cancelled.');
                 },
                 onError: (error) => {
+                    // Bridge only when this attempt opened (same
+                    // unmatched-start guard as Credit Direct).
                     if (
+                        providerOpenedLaunchKeyRef.current === launchKey &&
                         notifyNativeBnplProviderError(
                             'credpal',
                             order.id,
@@ -892,6 +902,7 @@ export function BnplLauncher({ merchantSlug = 'ogabassey' }: BnplLauncherProps) 
     );
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const paymentLaunchKeyRef = useRef<string | null>(null);
+    const providerOpenedLaunchKeyRef = useRef<string | null>(null);
     const lastLaunchRequestKeyRef = useRef<string | null>(null);
     const confirmedCleanupKeyRef = useRef<string | null>(null);
     const klumpSuccessRedirectRef = useRef(false);
@@ -995,6 +1006,7 @@ export function BnplLauncher({ merchantSlug = 'ogabassey' }: BnplLauncherProps) 
             fallbackMerchantSlug: merchantSlug,
             pendingOrderSnapshot,
             paymentLaunchKeyRef,
+            providerOpenedLaunchKeyRef,
             klumpSuccessRedirectRef,
             router,
             setStatus,

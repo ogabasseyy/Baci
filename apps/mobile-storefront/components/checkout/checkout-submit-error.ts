@@ -76,15 +76,16 @@ const PRE_ORDER_ERROR_CODES = new Set([
 
 export function handleCheckoutSubmitError(
   error: unknown,
-  selectedPayment: PaymentMethodType
+  selectedPayment: PaymentMethodType,
+  // Committed order id when createOrder succeeded before the failure
+  // (e.g. a provider-init throw): threading it lets the funnel failure
+  // serialize behind order_created and join to the order instead of
+  // arriving first with an undefined id.
+  orderId?: string
 ) {
   if (error instanceof OrderError) {
     if (!PRE_ORDER_ERROR_CODES.has(error.code)) {
-      void trackCheckoutPaymentFailed(
-        error.code,
-        undefined,
-        selectedPayment
-      );
+      void trackCheckoutPaymentFailed(error.code, orderId, selectedPayment);
     }
     trackError('checkout_failed', error.message, {
       step: 'place_order',

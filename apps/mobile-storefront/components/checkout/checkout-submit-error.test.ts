@@ -338,4 +338,25 @@ describe('handleCheckoutSubmitError', () => {
       'paystack'
     );
   });
+
+  it('threads the committed order id into post-creation init failures', () => {
+    const { trackCheckoutPaymentFailed } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutPaymentFailed: jest.Mock };
+    trackCheckoutPaymentFailed.mockClear();
+
+    // createOrder committed order-9 before Paystack init timed out: the
+    // failure must carry the id so it serializes behind order_created.
+    handleCheckoutSubmitError(
+      new OrderError('init timed out', 'PAYMENT_INIT_TIMEOUT'),
+      'paystack' as Parameters<typeof handleCheckoutSubmitError>[1],
+      'order-9'
+    );
+
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
+      'PAYMENT_INIT_TIMEOUT',
+      'order-9',
+      'paystack'
+    );
+  });
 });

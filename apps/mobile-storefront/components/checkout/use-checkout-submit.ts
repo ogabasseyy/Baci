@@ -115,6 +115,11 @@ export function useCheckoutSubmit({
     isOrderInFlight.current = true;
     setIsProcessing(true);
 
+    // Set once createOrder commits: post-creation provider-init failures
+    // (PAYMENT_INIT_ERROR/TIMEOUT) must carry the order id so the funnel
+    // failure serializes behind order_created and joins to the order.
+    let createdOrderId: string | undefined;
+
     try {
       if (itemsSnapshot.length > 0) {
         const reprice = await repriceCartItems(itemsSnapshot, merchantId);
@@ -215,6 +220,7 @@ export function useCheckoutSubmit({
         }
       );
       const { order } = orderResponse;
+      createdOrderId = order.id;
       const orderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
       // A fully covered invoice selection comes back paid with nothing due:
@@ -298,7 +304,7 @@ export function useCheckoutSubmit({
           // the original checkout error.
         }
       }
-      handleCheckoutSubmitError(error, selectedPayment);
+      handleCheckoutSubmitError(error, selectedPayment, createdOrderId);
     } finally {
       setIsProcessing(false);
       isOrderInFlight.current = false;

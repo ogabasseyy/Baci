@@ -3375,6 +3375,11 @@ export async function POST(request: NextRequest) {
       !idempotencyReplayed &&
       (isPayOnDelivery(effectivePaymentMethod) ||
         effectivePaymentMethod === 'invoice' ||
+        // Pay for Me keeps its distinct stored method (never collapsed to
+        // invoice), so it needs its own dispatch branch: without this the
+        // requester gets no payment document to forward to their payer,
+        // and mobile suppresses its local notification as server-confirmed.
+        effectivePaymentMethod === 'payforme' ||
         isWalletFullyPaid ||
         isQuizVoucherFullyPaid);
     if (shouldSendImmediateOrderNotifications) {
@@ -3428,11 +3433,17 @@ export async function POST(request: NextRequest) {
 
         // Same classification as the invoice download route and Peppol
         // subject: unpaid invoice-method orders are proforma (325)
-        // quotations, so the body must use quotation semantics too.
+        // quotations, so the body must use quotation semantics too. Unpaid
+        // Pay for Me orders are payment requests: same transfer
+        // instructions, but request (not quotation) semantics under their
+        // own document kind.
         const emailDocumentKind =
           effectivePaymentMethod === 'invoice' && !isPaidForImmediateEmail
             ? ('proforma' as const)
-            : ('confirmation' as const);
+            : effectivePaymentMethod === 'payforme' &&
+                !isPaidForImmediateEmail
+              ? ('payment_request' as const)
+              : ('confirmation' as const);
         // NOTE: htmlContent/textContent are rendered inside after(), after
         // DVA provisioning, so the proforma body can include the
         // bank-transfer payment instructions.
@@ -3469,9 +3480,16 @@ export async function POST(request: NextRequest) {
               typeof createAdminClient
             > | null = null;
 
-            if (effectivePaymentMethod === 'invoice') {
+            if (
+              effectivePaymentMethod === 'invoice' ||
+              effectivePaymentMethod === 'payforme'
+            ) {
               try {
-                // Auto-generate Dedicated Virtual Account (DVA) for automatic confirmation
+                // Auto-generate Dedicated Virtual Account (DVA) for automatic confirmation.
+                // Pay for Me shares the invoice provisioning path so the
+                // request email carries transfer details the requester can
+                // forward to their payer; document classification stays
+                // distinct (payment_request, never proforma).
                 const nameParts = (customer_name || 'Customer')
                   .trim()
                   .split(' ');
@@ -3831,7 +3849,9 @@ export async function POST(request: NextRequest) {
               subject:
                 effectivePaymentMethod === 'invoice'
                   ? `${emailDocumentKind === 'proforma' ? 'Proforma Invoice' : 'Invoice'} Generated - #${emailData.orderNumber}`
-                  : `Order Confirmation - #${emailData.orderNumber}`,
+                  : effectivePaymentMethod === 'payforme'
+                    ? `Payment Request - #${emailData.orderNumber}`
+                    : `Order Confirmation - #${emailData.orderNumber}`,
               htmlContent,
               textContent,
               replyTo: replyToEmail,

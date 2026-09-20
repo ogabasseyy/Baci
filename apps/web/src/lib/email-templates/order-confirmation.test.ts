@@ -304,6 +304,61 @@ describe('Order confirmation email', () => {
       expect(text).toContain('please contact TestShop for payment details');
     });
 
+    it('omits transfer instructions when nothing is due', () => {
+      // A 100% discount leaves amountDue at 0: instructing a ₦0.00
+      // transfer (which can never confirm the order) is an impossible
+      // next step, so the quote states that no payment is due instead.
+      const payload = {
+        ...proformaPayload,
+        total: 11500,
+        amountDue: 0,
+        virtualAccount: {
+          bankName: 'Wema Bank',
+          accountNumber: '1234567890',
+          accountName: 'OgaBassey-Test',
+        },
+      };
+      const html = generateOrderConfirmationEmail(payload);
+      const text = generateOrderConfirmationText(payload);
+
+      expect(html).not.toContain('Complete Your Bank Transfer');
+      expect(html).not.toContain('1234567890');
+      expect(html).toContain('No payment is due on this quote');
+      expect(text).not.toContain('Payment Details (bank transfer)');
+      expect(text).not.toContain('Complete your bank transfer');
+      expect(text).toContain('No payment is due on this quote');
+    });
+
+    it('renders payment requests with request semantics and transfer instructions', () => {
+      // Pay for Me keeps its distinct document kind (never proforma) while
+      // sharing the transfer-instruction mechanics: the requester forwards
+      // these details to their payer.
+      const payload = {
+        ...proformaPayload,
+        documentKind: 'payment_request' as const,
+        virtualAccount: {
+          bankName: 'Wema Bank',
+          accountNumber: '1234567890',
+          accountName: 'OgaBassey-Test',
+        },
+      };
+      const html = generateOrderConfirmationEmail(payload);
+      const text = generateOrderConfirmationText(payload);
+
+      expect(html).toContain('Payment Request #ORD-001');
+      expect(html).toContain('Share the transfer details with your payer');
+      expect(html).toContain('Complete Your Bank Transfer');
+      expect(html).toContain('1234567890');
+      expect(html).toContain('View Payment Request');
+      expect(html).not.toContain('Proforma Invoice');
+      expect(html).not.toContain('procurement team');
+      expect(text).toContain('Payment Request');
+      expect(text).toContain('Share the transfer details with your payer');
+      expect(text).toContain('Payment Details (bank transfer)');
+      expect(text).toContain('Account Number: 1234567890');
+      expect(text).not.toContain('Proforma Invoice');
+    });
+
     it('keeps the confirmation CTA on the storefront homepage', () => {
       const html = generateOrderConfirmationEmail({
         ...baseOrderData,

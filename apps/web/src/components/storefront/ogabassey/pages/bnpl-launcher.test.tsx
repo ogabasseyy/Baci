@@ -471,7 +471,7 @@ describe('BnplLauncher', () => {
     expect(screen.queryByText('Provider declined')).not.toBeInTheDocument();
   });
 
-  it('bridges a Credit Direct SDK failure to React Native without rendering error UI', async () => {
+  it('keeps a pre-popup Credit Direct SDK failure local instead of bridging it', async () => {
     const postMessage = vi.fn();
     Object.defineProperty(window, 'ReactNativeWebView', {
       configurable: true,
@@ -484,6 +484,44 @@ describe('BnplLauncher', () => {
 
     render(<BnplLauncher />);
 
+    // No popup ever opened, so no native payment_started exists to match:
+    // the failure must stay local instead of bridging an unmatched error.
+    expect(await screen.findByText('Credit Direct unavailable')).toBeInTheDocument();
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.stringContaining('bnpl_provider_error')
+    );
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.stringContaining('bnpl_provider_opened')
+    );
+  });
+
+  it('bridges an opened-then-failed Credit Direct attempt to React Native', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockOpenCreditDirectCheckout.mockImplementation(({ onPopup, onError }) => {
+      void onPopup({
+        checkoutTransactionId: 'cd-popup-bridge-1',
+        sessionId: 'signed-session-bridge-1',
+      }).then(() => {
+        onError('Credit Direct unavailable');
+      });
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'credit_direct',
+          orderId: 'order-1',
+          type: 'bnpl_provider_opened',
+        })
+      );
+    });
     await waitFor(() => {
       expect(postMessage).toHaveBeenCalledWith(
         JSON.stringify({

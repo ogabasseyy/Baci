@@ -259,9 +259,11 @@ describe('useCheckoutSubmit recovery', () => {
       await result.current(address);
     });
 
+    // createOrder threw before committing: no order id is threaded.
     expect(handleCheckoutSubmitError).toHaveBeenCalledWith(
       checkoutError,
-      'paystack'
+      'paystack',
+      undefined
     );
   });
 

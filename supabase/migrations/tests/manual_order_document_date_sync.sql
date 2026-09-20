@@ -248,6 +248,12 @@ $$ LANGUAGE plpgsql;
 -- 5. Historical rows (pre-migration shape: recording-day dates stamped by
 -- update_order_tax_totals, NULL provenance). The manual row must be repaired
 -- to the merchant-timezone day; the non-manual row stays untouched by design.
+-- The DO-block route-context claims above revert at block exit, and the
+-- before-insert route-context trigger raises 42501 without a trusted
+-- context, so mint the service_role bypass exactly like the storefront
+-- replay fixtures (cf. gigl_tracking_order_status_generation.sql).
+SET LOCAL ROLE service_role;
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO public.merchants (id, email, business_name, slug, country)
 VALUES (
   'b0000000-0000-0000-0000-000000000001',
@@ -279,6 +285,7 @@ INSERT INTO public.orders (
   150000, 150000, 'paid', 'pending', 'storefront',
   '2026-03-04T23:30:00Z', '2026-03-04', '2026-03-04', NULL, NULL
 );
+RESET ROLE;
 
 -- Re-apply the backfill migration itself (idempotent by construction) so this
 -- check exercises its exact statements rather than a copy.

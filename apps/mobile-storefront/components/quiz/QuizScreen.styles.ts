@@ -1,20 +1,6 @@
 import { StyleSheet } from 'react-native';
 import { createQuizQuestionStyles } from './QuizQuestion.styles';
-
-export type QuizThemeColors = {
-  background: string;
-  border: string;
-  card: string;
-  error: string;
-  muted: string;
-  primary: string;
-  primaryLowOpacity: string;
-  primaryForeground: string;
-  success: string;
-  text: string;
-  textSecondary: string;
-  warning: string;
-};
+import type { QuizThemeColors } from './quiz-theme';
 
 export function createQuizStyles(colors: QuizThemeColors) {
   return {

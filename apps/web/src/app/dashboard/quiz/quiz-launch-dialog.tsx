@@ -1,16 +1,29 @@
 'use client';
 
+import { QUIZ_DEFAULT_TIME_ZONE } from '@baci/shared';
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import type {
   QuizAnswerKeyReview,
+  QuizDraftConfiguration,
   QuizLaunchInput,
 } from './quiz-admin-actions';
-import type { QuizDraftConfiguration } from './quiz-authoring-form';
+import { quizDatetimeLocalToIso } from './quiz-datetime-local';
+
+function formatPolicyInstant(value: string): string {
+  // The offset-free field value is a policy-zone wall clock, not a
+  // browser-local instant: derive the instant in the policy zone first so an
+  // admin outside Africa/Lagos sees the time that will actually activate.
+  const iso = quizDatetimeLocalToIso(value, QUIZ_DEFAULT_TIME_ZONE);
+  if (!iso) return value;
+  return new Date(iso).toLocaleString(undefined, {
+    timeZone: QUIZ_DEFAULT_TIME_ZONE,
+  });
+}
 
 function timingSummary(configuration: QuizDraftConfiguration): string {
   if (configuration.timingKind === 'scheduled') {
-    return `${new Date(configuration.scheduledStart).toLocaleString()} to ${new Date(configuration.scheduledEnd).toLocaleString()}`;
+    return `${formatPolicyInstant(configuration.scheduledStart)} to ${formatPolicyInstant(configuration.scheduledEnd)} (${QUIZ_DEFAULT_TIME_ZONE})`;
   }
   return `Immediately, closing ${configuration.liveWindowMinutes} minutes later`;
 }

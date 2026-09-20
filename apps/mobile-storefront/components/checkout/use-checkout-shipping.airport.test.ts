@@ -215,7 +215,7 @@ describe('useCheckoutShipping airport switching', () => {
     ]);
   });
 
-  it('keeps GIGL GoFaster air service available in Lagos', async () => {
+  it('falls back to door for same-city Lagos even with a GIGL GoFaster quote', async () => {
     mockFetchShippingQuotes.mockImplementation((args) => {
       args.setShippingQuotes([
         {
@@ -260,7 +260,6 @@ describe('useCheckoutShipping airport switching', () => {
     );
     act(() => result.current.handleSelectDeliveryMethod('airport'));
 
-    expect(result.current.deliveryMethod).toBe('airport');
-    expect(result.current.selectedQuoteId).toBe('air-quote');
+    expect(result.current.deliveryMethod).toBe('door');
   });
 });

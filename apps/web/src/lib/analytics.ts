@@ -1,6 +1,7 @@
 'use client';
 
 import type { Product } from '@/lib/products';
+import { facebookCatalogEvent } from './facebook-catalog-event';
 
 // Types for analytics events
 interface EcommerceItem {
@@ -85,7 +86,7 @@ function sendFBEvent(eventName: string, params?: object) {
   if (typeof window === 'undefined' || !window.fbq) return;
 
   if (params) {
-    window.fbq('track', eventName, params);
+    window.fbq('track', eventName, facebookCatalogEvent(params));
   } else {
     window.fbq('track', eventName);
   }

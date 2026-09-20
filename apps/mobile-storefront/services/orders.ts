@@ -293,5 +293,3 @@ export async function getCustomerOrders(customerId: string) {
 
   return data || [];
 }
-
-export { createOrderWithOfflineSupport } from './orders-offline';

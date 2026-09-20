@@ -19,6 +19,7 @@ interface ReceiptPreviewModalProps {
   visible: boolean;
   html: string;
   onClose: () => void;
+  onDismissed?: () => void;
   isPaid: boolean;
   // Whether the document is a paid receipt or an unpaid invoice. Controls the
   // title/share labels independently of `isPaid` (which only drives the accent),
@@ -90,6 +91,7 @@ export function ReceiptPreviewModal({
   visible,
   html,
   onClose,
+  onDismissed,
   isPaid,
   documentType,
   shareText,
@@ -114,6 +116,7 @@ export function ReceiptPreviewModal({
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
+      onDismiss={onDismissed}
       onRequestClose={onClose}
     >
       <View style={[styles.container, { backgroundColor: colors.background }]}>

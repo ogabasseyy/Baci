@@ -50,6 +50,10 @@ const mockProductsOrder = vi.fn();
 const mockProductsLimit = vi.fn();
 let productQueryMode: 'non_null' | 'null' = 'non_null';
 
+const offersChain = (result: unknown) => ({
+  order: () => ({ order: () => Promise.resolve(result) }),
+});
+
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -233,7 +237,7 @@ beforeEach(() => {
   mockManifestRange.mockImplementation(() => ({
     overrideTypes: () => Promise.resolve(manifestResult),
   }));
-  mockOffersStatusEq.mockImplementation(() => Promise.resolve(offersResult));
+  mockOffersStatusEq.mockImplementation(() => offersChain(offersResult));
   mockRpc.mockResolvedValue(variantRpcResult);
   mockCreateAnonClient.mockReturnValue(createMockSupabase());
 });
@@ -814,7 +818,7 @@ describe('getCachedGoogleMerchantFeedData', () => {
       ],
       error: null,
     };
-    mockOffersStatusEq.mockResolvedValue(offersResult);
+    mockOffersStatusEq.mockImplementation(() => offersChain(offersResult));
 
     const { getCachedGoogleMerchantFeedData } = await import('./feed-data');
     const result = await getCachedGoogleMerchantFeedData(
@@ -829,6 +833,8 @@ describe('getCachedGoogleMerchantFeedData', () => {
         condition: 'used',
         price: 420000,
         stock_quantity: 3,
+        images: undefined,
+        compare_at_price: null,
       },
     ]);
   });
@@ -844,7 +850,7 @@ describe('getCachedGoogleMerchantFeedData', () => {
       error: null,
     };
     mockOffersStatusEq.mockImplementation((_status: string, ids: string[]) =>
-      Promise.resolve({
+      offersChain({
         data: ids.slice(0, 1).map((id) => ({
           id: `offer-${id}`,
           product_id: id,
@@ -873,6 +879,8 @@ describe('getCachedGoogleMerchantFeedData', () => {
         condition: 'used',
         price: 420000,
         stock_quantity: 3,
+        images: undefined,
+        compare_at_price: null,
       },
     ]);
     expect(
@@ -883,6 +891,8 @@ describe('getCachedGoogleMerchantFeedData', () => {
         condition: 'used',
         price: 420000,
         stock_quantity: 3,
+        images: undefined,
+        compare_at_price: null,
       },
     ]);
   });
@@ -900,7 +910,7 @@ describe('getCachedGoogleMerchantFeedData', () => {
       error: null,
     };
     offersResult = { data: null, error: { message: 'offers error' } };
-    mockOffersStatusEq.mockResolvedValue(offersResult);
+    mockOffersStatusEq.mockImplementation(() => offersChain(offersResult));
 
     const { getCachedGoogleMerchantFeedData } = await import('./feed-data');
 

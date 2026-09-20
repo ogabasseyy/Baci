@@ -9,6 +9,28 @@ import type { MerchantReceiptInfo } from '@/types/receipt';
 const log = createLogger('Receipts');
 const MERCHANT_SLUG = CONFIG.MERCHANT_SLUG || 'ogabassey';
 
+function normalizeLegacyBrandColors(data: unknown): unknown {
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    return data;
+  }
+  const brandColors = (data as Record<string, unknown>).brand_colors;
+  if (
+    brandColors === null ||
+    typeof brandColors !== 'object' ||
+    Array.isArray(brandColors)
+  ) {
+    return data;
+  }
+  const colors = brandColors as Record<string, unknown>;
+  if (colors.accent !== undefined || colors.primary === undefined) {
+    return data;
+  }
+  return {
+    ...(data as Record<string, unknown>),
+    brand_colors: { ...colors, accent: colors.primary },
+  };
+}
+
 export function useMerchantReceiptInfo() {
   return useQuery<MerchantReceiptInfo>({
     queryKey: ['merchant_receipt_info', MERCHANT_SLUG],
@@ -28,7 +50,13 @@ export function useMerchantReceiptInfo() {
       if (error) throw error;
       if (!data) throw new Error('Merchant not found');
 
-      const result = MerchantReceiptInfoSchema.safeParse(data);
+      // Legacy merchant rows may store brand_colors with only `primary`
+      // (the JSONB column is unconstrained). The renderer falls back to
+      // the primary color when `accent` is absent, so normalize the
+      // legacy shape before validating instead of failing the query.
+      const result = MerchantReceiptInfoSchema.safeParse(
+        normalizeLegacyBrandColors(data)
+      );
       if (!result.success) {
         log.warn(
           'Merchant receipt info validation warning:',

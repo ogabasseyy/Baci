@@ -125,6 +125,52 @@ describe('useMerchantReceiptInfo', () => {
     await expect(options.queryFn()).rejects.toThrow();
   });
 
+  it('normalizes legacy brand colors missing accent to primary', async () => {
+    const { useMerchantReceiptInfo } = await import(
+      '@/hooks/use-merchant-receipt-info'
+    );
+    mockReceiptRpcMaybeSingle.mockResolvedValue({
+      data: {
+        business_name: 'OgaBassey',
+        logo_url: null,
+        email: 'support@example.com',
+        phone: null,
+        support_email: null,
+        support_phone: null,
+        business_address: null,
+        cac_rc_number: null,
+        tax_identification_number: null,
+        legal_entity_name: null,
+        brand_colors: { primary: '#111111' },
+        vat_registration_status: null,
+        vat_rate: null,
+        bank_code: null,
+        bank_name: 'Test Bank',
+        bank_account_number: '0123456789',
+        bank_account_name: 'OgaBassey Ltd',
+        social_media: null,
+        pages: null,
+      },
+      error: null,
+    });
+
+    function Probe() {
+      useMerchantReceiptInfo();
+      return <View testID="probe" />;
+    }
+
+    render(<Probe />);
+    const options = mockUseQuery.mock.calls[0]?.[0] as QueryOptions;
+    const info = (await options.queryFn()) as {
+      brand_colors: unknown;
+    };
+
+    expect(info.brand_colors).toEqual({
+      primary: '#111111',
+      accent: '#111111',
+    });
+  });
+
   it('throws when the RPC returns no merchant row', async () => {
     const { useMerchantReceiptInfo } = await import(
       '@/hooks/use-merchant-receipt-info'

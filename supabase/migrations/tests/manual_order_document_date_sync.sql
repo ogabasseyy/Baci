@@ -237,4 +237,72 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- 5. Historical rows (pre-migration shape: recording-day dates stamped by
+-- update_order_tax_totals, NULL provenance). The manual row must be repaired
+-- to the merchant-timezone day; the non-manual row stays untouched by design.
+INSERT INTO public.merchants (id, email, business_name, slug, country)
+VALUES (
+  'b0000000-0000-0000-0000-000000000001',
+  'manual-date-historical@example.com',
+  'Manual Date Historical',
+  'manual-date-historical',
+  'NG'
+);
+
+INSERT INTO public.orders (
+  id, merchant_id, order_number, customer_name, customer_email,
+  total, subtotal, payment_status, shipping_status, source,
+  transaction_date, invoice_issue_date, tax_point_date,
+  invoice_issue_date_generated, tax_point_date_generated
+) VALUES (
+  'b0000000-0000-0000-0000-000000000003',
+  'b0000000-0000-0000-0000-000000000001',
+  'HISTORICAL-MANUAL-DATE',
+  'Historical Manual',
+  'manual-date-historical@example.com',
+  150000, 150000, 'paid', 'pending', 'physical',
+  '2026-03-04T23:30:00Z', '2026-03-04', '2026-03-04', NULL, NULL
+), (
+  'b0000000-0000-0000-0000-000000000004',
+  'b0000000-0000-0000-0000-000000000001',
+  'HISTORICAL-STOREFRONT-DATE',
+  'Historical Storefront',
+  'manual-date-historical@example.com',
+  150000, 150000, 'paid', 'pending', 'storefront',
+  '2026-03-04T23:30:00Z', '2026-03-04', '2026-03-04', NULL, NULL
+);
+
+-- Re-apply the backfill migration itself (idempotent by construction) so this
+-- check exercises its exact statements rather than a copy.
+\ir ../20260912150000_backfill_manual_order_document_dates.sql
+
+DO $$
+DECLARE
+  v_issue date;
+  v_tax date;
+  v_issue_gen boolean;
+  v_tax_gen boolean;
+BEGIN
+  SELECT invoice_issue_date, tax_point_date,
+         invoice_issue_date_generated, tax_point_date_generated
+  INTO v_issue, v_tax, v_issue_gen, v_tax_gen
+  FROM public.orders
+  WHERE id = 'b0000000-0000-0000-0000-000000000003';
+  IF v_issue <> '2026-03-05' OR v_tax <> '2026-03-05'
+     OR v_issue_gen IS DISTINCT FROM true OR v_tax_gen IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'backfill did not repair historical manual dates: % / %', v_issue, v_tax;
+  END IF;
+
+  SELECT invoice_issue_date, tax_point_date,
+         invoice_issue_date_generated, tax_point_date_generated
+  INTO v_issue, v_tax, v_issue_gen, v_tax_gen
+  FROM public.orders
+  WHERE id = 'b0000000-0000-0000-0000-000000000004';
+  IF v_issue <> '2026-03-04' OR v_tax <> '2026-03-04'
+     OR v_issue_gen IS NOT NULL OR v_tax_gen IS NOT NULL THEN
+    RAISE EXCEPTION 'backfill touched a non-manual historical row: % / %', v_issue, v_tax;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
 ROLLBACK;

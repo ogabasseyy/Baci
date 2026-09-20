@@ -24,14 +24,27 @@ AS $$
 $$;
 
 -- The new provenance columns are NULL for every pre-existing row, which would
--- make the backfill below a no-op. A NULL date cannot be an explicit override,
--- so record NULL-dated rows as generated (mirroring the order_items trigger);
--- rows with non-NULL dates keep NULL provenance and stay untouched.
+-- make the backfill below a no-op. Two shapes are safe to record as generated:
+-- NULL dates (mirroring the order_items trigger), and manual-origin rows whose
+-- non-NULL dates were stamped as the recording day by update_order_tax_totals
+-- (the released app never sent document dates, so these are never human
+-- picks). Manual channels mirror the mobile-admin new-order CHANNELS plus the
+-- legacy 'manual'/'staff_entry' markers; all other non-NULL dates keep NULL
+-- provenance and stay untouched.
 UPDATE public.orders
 SET
-  invoice_issue_date_generated = CASE WHEN invoice_issue_date IS NULL THEN true ELSE invoice_issue_date_generated END,
-  tax_point_date_generated = CASE WHEN tax_point_date IS NULL THEN true ELSE tax_point_date_generated END
-WHERE invoice_issue_date IS NULL OR tax_point_date IS NULL;
+  invoice_issue_date_generated = CASE
+    WHEN invoice_issue_date IS NULL THEN true
+    WHEN source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') THEN true
+    ELSE invoice_issue_date_generated
+  END,
+  tax_point_date_generated = CASE
+    WHEN tax_point_date IS NULL THEN true
+    WHEN source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') THEN true
+    ELSE tax_point_date_generated
+  END
+WHERE invoice_issue_date IS NULL OR tax_point_date IS NULL
+   OR source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga');
 
 -- Rows without recorded provenance are intentionally left untouched. Date
 -- equality cannot distinguish a generated date from an explicit override.

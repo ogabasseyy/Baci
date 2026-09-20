@@ -43,6 +43,12 @@ describe('manual order document date migration', () => {
   it('initializes provenance for NULL-dated rows before the backfill', () => {
     expect(migration).toContain('invoice_issue_date IS NULL THEN true');
     expect(migration).toContain('tax_point_date IS NULL THEN true');
+    // Historical manual rows carry system-stamped recording-day dates (the
+    // released app never sent document dates), so manual origins join the
+    // generated set; other explicit dates stay untouched.
+    expect(migration).toContain(
+      "WHEN source IN ('manual', 'staff_entry', 'physical'"
+    );
     // The init must run first: without it the backfill WHERE clause (IS TRUE
     // over NULL-for-all-rows columns) would update no pre-existing orders.
     expect(

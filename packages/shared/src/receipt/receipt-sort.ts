@@ -23,7 +23,7 @@ function parseReceiptSortValue(value: string): number {
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
 }
 
-export function selectReceiptSortTimestamp(order: ReceiptSortable): number {
+function selectReceiptSortTimestamp(order: ReceiptSortable): number {
   const value =
     order.invoice_issue_date || order.transaction_date || order.created_at;
   if (!value) return Number.NEGATIVE_INFINITY;
@@ -35,5 +35,8 @@ export function compareReceiptListDesc(
   a: ReceiptSortable,
   b: ReceiptSortable
 ): number {
-  return selectReceiptSortTimestamp(b) - selectReceiptSortTimestamp(a);
+  const aTimestamp = selectReceiptSortTimestamp(a);
+  const bTimestamp = selectReceiptSortTimestamp(b);
+  if (aTimestamp === bTimestamp) return 0;
+  return bTimestamp - aTimestamp;
 }

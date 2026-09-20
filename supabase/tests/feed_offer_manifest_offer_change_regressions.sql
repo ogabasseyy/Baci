@@ -32,33 +32,37 @@ BEGIN
   VALUES
     (v_product, v_merchant, 'Offer Phone', 100, 'offer-phone', 'active',
       '["https://cdn.example.com/base.jpg"]'),
-    (v_product_two, v_merchant, 'Offer Phone Two', 120, 'offer-phone-two', 'active', '[]'),
+    (v_product_two, v_merchant, 'Offer Phone Two', 120, 'offer-phone-two', 'active',
+      '["https://cdn.example.com/overlap-base.jpg"]'),
     (v_product_other_merchant, v_merchant_two, 'Offer Phone Other', 130, 'offer-phone-other', 'active', '[]');
+  -- One offer per (product, condition): the unique offer key forbids more.
   INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, status, images)
   VALUES
     (v_offer_retire, v_product, v_merchant, 'used', 50, 'active',
-      '["https://cdn.example.com/retired.jpg"]'),
+      '["https://cdn.example.com/retired.jpg", "https://cdn.example.com/variant-offer.jpg"]'),
     (v_offer_swap, v_product, v_merchant, 'refurbished', 60, 'active',
       '["https://cdn.example.com/swap-old.jpg"]'),
     (v_offer_shared_a, v_product, v_merchant, 'open_box', 70, 'active',
       '["https://cdn.example.com/shared.jpg"]'),
     (v_offer_shared_b, v_product, v_merchant, 'new', 80, 'active',
       '["https://cdn.example.com/shared.jpg"]'),
-    (v_offer_overlap, v_product, v_merchant, 'used', 55, 'active',
-      '["https://cdn.example.com/base.jpg"]'),
-    (v_offer_shapes, v_product, v_merchant, 'refurbished', 65, 'active',
+    (v_offer_overlap, v_product_two, v_merchant, 'used', 55, 'active',
+      '["https://cdn.example.com/overlap-base.jpg"]'),
+    (v_offer_shapes, v_product_two, v_merchant, 'refurbished', 65, 'active',
       '["  https://cdn.example.com/shaped.jpg  ", 123, {"url": 456}, "   ", {"url": "https://cdn.example.com/obj.jpg"}, null]');
+  -- Single primary per (merchant, product, variant bucket); unique
+  -- (merchant, product, source_url) across variant scopes.
   INSERT INTO public.product_feed_images
     (merchant_id, product_id, variant_id, source_url, verified_url, verified_format, status, is_primary, position)
   VALUES
-    (v_merchant, v_product, NULL, 'https://cdn.example.com/base.jpg', 'https://cdn.example.com/base.jpg', 'jpeg', 'verified', true, 0),
+    (v_merchant, v_product, NULL, 'https://cdn.example.com/base.jpg', 'https://cdn.example.com/base.jpg', 'jpeg', 'verified', false, 0),
     (v_merchant, v_product, NULL, 'https://cdn.example.com/retired.jpg', 'https://cdn.example.com/retired.jpg', 'jpeg', 'verified', true, 1),
     (v_merchant, v_product, NULL, 'https://cdn.example.com/swap-old.jpg', 'https://cdn.example.com/swap-old.jpg', 'jpeg', 'verified', false, 2),
     (v_merchant, v_product, NULL, 'https://cdn.example.com/shared.jpg', 'https://cdn.example.com/shared.jpg', 'jpeg', 'verified', false, 3),
-    (v_merchant, v_product, NULL, 'https://cdn.example.com/shaped.jpg', 'https://cdn.example.com/shaped.jpg', 'jpeg', 'verified', false, 4),
-    (v_merchant, v_product, NULL, 'https://cdn.example.com/obj.jpg', 'https://cdn.example.com/obj.jpg', 'jpeg', 'verified', false, 5),
-    (v_merchant, v_product, v_variant, 'https://cdn.example.com/retired.jpg', 'https://cdn.example.com/retired.jpg', 'jpeg', 'verified', false, 0),
-    (v_merchant, v_product_two, NULL, 'https://cdn.example.com/other.jpg', 'https://cdn.example.com/other.jpg', 'jpeg', 'verified', true, 0),
+    (v_merchant, v_product, v_variant, 'https://cdn.example.com/variant-offer.jpg', 'https://cdn.example.com/variant-offer.jpg', 'jpeg', 'verified', false, 0),
+    (v_merchant, v_product_two, NULL, 'https://cdn.example.com/overlap-base.jpg', 'https://cdn.example.com/overlap-base.jpg', 'jpeg', 'verified', true, 0),
+    (v_merchant, v_product_two, NULL, 'https://cdn.example.com/shaped.jpg', 'https://cdn.example.com/shaped.jpg', 'jpeg', 'verified', false, 1),
+    (v_merchant, v_product_two, NULL, 'https://cdn.example.com/obj.jpg', 'https://cdn.example.com/obj.jpg', 'jpeg', 'verified', false, 2),
     (v_merchant_two, v_product_other_merchant, NULL, 'https://cdn.example.com/retired.jpg', 'https://cdn.example.com/retired.jpg', 'jpeg', 'verified', true, 0);
 
   -- Extractor parity with extractImageCandidates: trims, skips blanks and
@@ -87,23 +91,38 @@ BEGIN
     RAISE EXCEPTION 'deactivation must stale the retired row and clear primary';
   END IF;
 
-  -- Sibling imagery (including padded-string and { url } shapes claimed
-  -- while their offer stays active) survives the same recompute.
+  -- Sibling imagery on the same product survives the same recompute.
   SELECT count(*) INTO v_count
   FROM public.product_feed_images
   WHERE merchant_id = v_merchant AND product_id = v_product
     AND variant_id IS NULL AND status = 'verified';
-  IF v_count <> 5 THEN
-    RAISE EXCEPTION 'recompute must keep the five surviving rows, got %', v_count;
+  IF v_count <> 3 THEN
+    RAISE EXCEPTION 'recompute must keep the three surviving rows, got %', v_count;
   END IF;
 
-  -- Variant-scoped rows belong to the image-generation pipeline.
+  -- Variant-scoped rows belong to the image-generation pipeline, even
+  -- when their URL was claimed only by the retired offer.
   SELECT status INTO v_status
   FROM public.product_feed_images
   WHERE merchant_id = v_merchant AND product_id = v_product
     AND variant_id = v_variant;
   IF v_status IS DISTINCT FROM 'verified' THEN
     RAISE EXCEPTION 'variant-scoped rows must never be touched';
+  END IF;
+
+  -- Other products and merchants are untouched by the recompute.
+  SELECT count(*) INTO v_count
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product_two
+    AND status = 'verified';
+  IF v_count <> 3 THEN
+    RAISE EXCEPTION 'sibling product rows must be untouched, got %', v_count;
+  END IF;
+  SELECT status INTO v_status
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant_two AND product_id = v_product_other_merchant;
+  IF v_status IS DISTINCT FROM 'verified' THEN
+    RAISE EXCEPTION 'other merchant rows must be untouched';
   END IF;
 
   -- Image replacement stales only the retired URL.
@@ -136,39 +155,42 @@ BEGIN
   IF v_status IS DISTINCT FROM 'stale' THEN
     RAISE EXCEPTION 'shared url must stale once no active offer references it';
   END IF;
+  SELECT count(*) INTO v_count
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product
+    AND variant_id IS NULL AND status = 'stale';
+  IF v_count <> 3 THEN
+    RAISE EXCEPTION 'all three retired rows must end stale, got %', v_count;
+  END IF;
 
-  -- URLs overlapping the parent product images are never orphaned.
+  -- URLs overlapping the parent product images are never orphaned, and
+  -- padded-string plus { url } shapes stay claimed while their offer
+  -- stays active through the same recompute.
   UPDATE public.product_offers SET status = 'inactive' WHERE id = v_offer_overlap;
   SELECT status INTO v_status
   FROM public.product_feed_images
-  WHERE merchant_id = v_merchant AND product_id = v_product
-    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/base.jpg';
+  WHERE merchant_id = v_merchant AND product_id = v_product_two
+    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/overlap-base.jpg';
   IF v_status IS DISTINCT FROM 'verified' THEN
     RAISE EXCEPTION 'product-image overlap must survive offer deactivation';
+  END IF;
+  SELECT count(*) INTO v_count
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product_two
+    AND source_url IN ('https://cdn.example.com/shaped.jpg', 'https://cdn.example.com/obj.jpg')
+    AND status = 'verified';
+  IF v_count <> 2 THEN
+    RAISE EXCEPTION 'shaped urls must stay claimed while their offer is active, got %', v_count;
   END IF;
 
   -- Shape-parity cleanup: padded and object urls stale with their offer.
   UPDATE public.product_offers SET status = 'inactive' WHERE id = v_offer_shapes;
   SELECT count(*) INTO v_count
   FROM public.product_feed_images
-  WHERE merchant_id = v_merchant AND product_id = v_product
+  WHERE merchant_id = v_merchant AND product_id = v_product_two
     AND variant_id IS NULL AND status = 'stale';
-  IF v_count <> 5 THEN
-    RAISE EXCEPTION 'all five retired rows must end stale, got %', v_count;
-  END IF;
-
-  -- Cross-product and cross-merchant isolation.
-  SELECT status INTO v_status
-  FROM public.product_feed_images
-  WHERE merchant_id = v_merchant AND product_id = v_product_two;
-  IF v_status IS DISTINCT FROM 'verified' THEN
-    RAISE EXCEPTION 'sibling product rows must be untouched';
-  END IF;
-  SELECT status INTO v_status
-  FROM public.product_feed_images
-  WHERE merchant_id = v_merchant_two AND product_id = v_product_other_merchant;
-  IF v_status IS DISTINCT FROM 'verified' THEN
-    RAISE EXCEPTION 'other merchant rows must be untouched';
+  IF v_count <> 2 THEN
+    RAISE EXCEPTION 'both shaped rows must end stale, got %', v_count;
   END IF;
 END;
 $$;

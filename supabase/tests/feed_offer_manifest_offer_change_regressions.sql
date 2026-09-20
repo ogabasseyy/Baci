@@ -15,6 +15,9 @@ DECLARE
   v_product_other_merchant uuid := '84100000-0000-4000-8000-000000000003';
   v_product_swap uuid := '84100000-0000-4000-8000-000000000004';
   v_product_shared uuid := '84100000-0000-4000-8000-000000000005';
+  v_product_parent uuid := '84100000-0000-4000-8000-000000000006';
+  v_product_derivative uuid := '84100000-0000-4000-8000-000000000007';
+  v_product_unflagged uuid := '84100000-0000-4000-8000-000000000008';
   v_variant uuid := '84200000-0000-4000-8000-000000000001';
   v_offer_retire uuid := '84300000-0000-4000-8000-000000000001';
   v_offer_keeper uuid := '84300000-0000-4000-8000-000000000002';
@@ -27,6 +30,9 @@ DECLARE
   v_offer_swapper uuid := '84300000-0000-4000-8000-000000000009';
   v_offer_dedup_winner uuid := '84300000-0000-4000-8000-00000000000a';
   v_offer_dedup_loser uuid := '84300000-0000-4000-8000-00000000000b';
+  v_offer_morph uuid := '84300000-0000-4000-8000-00000000000c';
+  v_offer_avifswap uuid := '84300000-0000-4000-8000-00000000000d';
+  v_offer_flagoff uuid := '84300000-0000-4000-8000-00000000000e';
   v_status text;
   v_is_primary boolean;
   v_count integer;
@@ -35,15 +41,18 @@ BEGIN
   VALUES
     (v_merchant, 'offer-manifest@example.com', 'Offer Manifest', 'offer-manifest'),
     (v_merchant_two, 'offer-manifest-two@example.com', 'Offer Manifest Two', 'offer-manifest-two');
-  INSERT INTO public.products (id, merchant_id, name, price, slug, status, condition, images)
+  INSERT INTO public.products (id, merchant_id, name, price, slug, status, condition, has_condition_offers, images)
   VALUES
-    (v_product, v_merchant, 'Offer Phone', 100, 'offer-phone', 'active', NULL,
+    (v_product, v_merchant, 'Offer Phone', 100, 'offer-phone', 'active', NULL, true,
       '["https://cdn.example.com/base.jpg"]'),
-    (v_product_two, v_merchant, 'Offer Phone Two', 120, 'offer-phone-two', 'active', 'new',
+    (v_product_two, v_merchant, 'Offer Phone Two', 120, 'offer-phone-two', 'active', 'new', true,
       '["https://cdn.example.com/overlap-base.jpg"]'),
-    (v_product_other_merchant, v_merchant_two, 'Offer Phone Other', 130, 'offer-phone-other', 'active', NULL, '[]'),
-    (v_product_swap, v_merchant, 'Offer Phone Swap', 140, 'offer-phone-swap', 'active', NULL, '[]'),
-    (v_product_shared, v_merchant, 'Offer Phone Shared', 150, 'offer-phone-shared', 'active', NULL, '[]');
+    (v_product_other_merchant, v_merchant_two, 'Offer Phone Other', 130, 'offer-phone-other', 'active', NULL, false, '[]'),
+    (v_product_swap, v_merchant, 'Offer Phone Swap', 140, 'offer-phone-swap', 'active', NULL, true, '[]'),
+    (v_product_shared, v_merchant, 'Offer Phone Shared', 150, 'offer-phone-shared', 'active', NULL, true, '[]'),
+    (v_product_parent, v_merchant, 'Offer Phone Parent', 160, 'offer-phone-parent', 'active', NULL, true, '[]'),
+    (v_product_derivative, v_merchant, 'Offer Phone Derivative', 170, 'offer-phone-derivative', 'active', NULL, true, '[]'),
+    (v_product_unflagged, v_merchant, 'Offer Phone Unflagged', 180, 'offer-phone-unflagged', 'active', NULL, false, '[]');
   -- One offer per (product, condition): the unique offer key forbids more.
   INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, status, images)
   VALUES
@@ -70,7 +79,13 @@ BEGIN
     (v_offer_dedup_winner, v_product_swap, v_merchant, 'open_box', 70, 'active',
       '["https://cdn.example.com/win.jpg"]'),
     (v_offer_dedup_loser, v_product_swap, v_merchant, 'refurbished', 75, 'active',
-      '["https://cdn.example.com/lose.jpg"]');
+      '["https://cdn.example.com/lose.jpg"]'),
+    (v_offer_morph, v_product_parent, v_merchant, 'used', 60, 'active',
+      '["https://cdn.example.com/morph.jpg"]'),
+    (v_offer_avifswap, v_product_derivative, v_merchant, 'used', 60, 'active',
+      '["https://cdn.example.com/photo.avif"]'),
+    (v_offer_flagoff, v_product_unflagged, v_merchant, 'used', 60, 'active',
+      '["https://cdn.example.com/flagoff.jpg"]');
   -- Single primary per (merchant, product, variant bucket); unique
   -- (merchant, product, source_url) across variant scopes.
   INSERT INTO public.product_feed_images
@@ -89,6 +104,9 @@ BEGIN
     (v_merchant, v_product_swap, NULL, 'https://cdn.example.com/swap-old.jpg', 'https://cdn.example.com/swap-old.jpg', 'jpeg', 'verified', false, 0),
     (v_merchant, v_product_swap, NULL, 'https://cdn.example.com/win.jpg', 'https://cdn.example.com/win.jpg', 'jpeg', 'verified', false, 1),
     (v_merchant, v_product_swap, NULL, 'https://cdn.example.com/lose.jpg', 'https://cdn.example.com/lose.jpg', 'jpeg', 'verified', false, 2),
+    (v_merchant, v_product_parent, NULL, 'https://cdn.example.com/morph.jpg', 'https://cdn.example.com/morph.jpg', 'jpeg', 'verified', false, 0),
+    (v_merchant, v_product_derivative, NULL, 'https://cdn.example.com/photo.avif', 'https://cdn.example.com/photo.jpg', 'jpeg', 'verified', false, 0),
+    (v_merchant, v_product_unflagged, NULL, 'https://cdn.example.com/flagoff.jpg', 'https://cdn.example.com/flagoff.jpg', 'jpeg', 'verified', false, 0),
     (v_merchant_two, v_product_other_merchant, NULL, 'https://cdn.example.com/retired.jpg', 'https://cdn.example.com/retired.jpg', 'jpeg', 'verified', true, 0);
 
   -- Extractor parity with extractImageCandidates: trims, skips blanks and
@@ -167,6 +185,14 @@ BEGIN
     AND status = 'verified';
   IF v_count <> 1 THEN
     RAISE EXCEPTION 'shared product rows must be untouched, got %', v_count;
+  END IF;
+  SELECT count(*) INTO v_count
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant
+    AND product_id IN (v_product_parent, v_product_derivative, v_product_unflagged)
+    AND status = 'verified';
+  IF v_count <> 3 THEN
+    RAISE EXCEPTION 'transition product rows must be untouched, got %', v_count;
   END IF;
   SELECT status INTO v_status
   FROM public.product_feed_images
@@ -290,6 +316,55 @@ BEGIN
     AND variant_id IS NULL AND source_url = 'https://cdn.example.com/overlap-base.jpg';
   IF v_status IS DISTINCT FROM 'verified' THEN
     RAISE EXCEPTION 'product-image overlap must stay verified after cleanup';
+  END IF;
+
+  -- A parent condition change re-eligibilizes with no offer event: the
+  -- used offer becomes same-as-parent and its row must stale.
+  SELECT status INTO v_status
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product_parent
+    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/morph.jpg';
+  IF v_status IS DISTINCT FROM 'verified' THEN
+    RAISE EXCEPTION 'morph row must start verified';
+  END IF;
+  UPDATE public.products SET condition = 'used' WHERE id = v_product_parent;
+  SELECT status INTO v_status
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product_parent
+    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/morph.jpg';
+  IF v_status IS DISTINCT FROM 'stale' THEN
+    RAISE EXCEPTION 'parent condition change must stale the ineligible row';
+  END IF;
+
+  -- Swapping onto the row's own verified derivative keeps it verified,
+  -- mirroring the offer resolver's verified_url match.
+  UPDATE public.product_offers
+  SET images = '["https://cdn.example.com/photo.jpg"]'
+  WHERE id = v_offer_avifswap;
+  SELECT status INTO v_status
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product_derivative
+    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/photo.avif';
+  IF v_status IS DISTINCT FROM 'verified' THEN
+    RAISE EXCEPTION 'verified-url match must survive the swap';
+  END IF;
+
+  -- Offers on unflagged parents are never claimed, so their rows stale
+  -- on the next recompute even while the offer stays active.
+  SELECT status INTO v_status
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product_unflagged
+    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/flagoff.jpg';
+  IF v_status IS DISTINCT FROM 'verified' THEN
+    RAISE EXCEPTION 'flagoff row must start verified';
+  END IF;
+  UPDATE public.product_offers SET price = 61 WHERE id = v_offer_flagoff;
+  SELECT status INTO v_status
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product_unflagged
+    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/flagoff.jpg';
+  IF v_status IS DISTINCT FROM 'stale' THEN
+    RAISE EXCEPTION 'unflagged parent offers must not protect rows';
   END IF;
 
   -- One-time repair path: an existing orphan with no referencing offer

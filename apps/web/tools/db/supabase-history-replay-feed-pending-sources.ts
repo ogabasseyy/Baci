@@ -1,4 +1,4 @@
 // Pending replay rows for the public catalog feed migrations extracted from
 // the main replay-source manifest as it grew.
 export const FEED_PENDING_REPLAY_SOURCE_ROWS = `06b8543596df16e6fa5fb5d24c6c2ef7418d34845c9189853a3187f34883b7a2 20260918000000_public_active_product_offers.sql
-5971c7e3c934e947a013734536da09fde2171fbb41a88dab21904867e481ab97 20260920200000_stale_feed_manifest_on_offer_change.sql`;
+17c4bfb6632189aaffee0b2ab0594c36c660795133223e9f52a3901c6fa875fc 20260920200000_stale_feed_manifest_on_offer_change.sql`;

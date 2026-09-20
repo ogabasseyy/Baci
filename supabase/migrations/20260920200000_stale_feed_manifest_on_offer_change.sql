@@ -12,19 +12,27 @@
 --
 -- Keep-set mirrors the backfill source set exactly: the parent product's
 -- own images plus images of ELIGIBLE active sibling offers, using the
--- same predicate as getEligibleConditionOffers (positive price, valid
--- listing condition different from the parent, first per normalized
--- condition by (condition, id)). A status-only predicate would protect
--- imagery the feeds no longer claim. Variant-scoped rows belong to the
--- image-generation pipeline and are never touched (mirrors
+-- same predicate as getEligibleConditionOffers (flagged non-matrix
+-- parent, positive price, valid listing condition different from the
+-- parent, first per normalized condition by (condition, id)). A
+-- status-only predicate would protect imagery the feeds no longer claim.
+-- Matches consider verified_url as well as source_url, mirroring
+-- resolveOfferFeedImages, so an offer swapped onto its own derivative
+-- keeps rendering. Variant-scoped rows belong to the image-generation
+-- pipeline and are never touched (mirrors
 -- scripts/lib/persist-feed-manifest.ts).
 --
--- Concurrent retirements sharing a product serialize on the parent row:
--- without this, two transactions retiring different siblings can each
--- see the other's pre-image as still active and both skip the stale.
--- Reactivation is intentionally one-way: restored `verified` rows would
--- require re-verification the trigger cannot perform, so reactivated
--- URLs wait for the backfill like any newly added image (fail-closed).
+-- Statement-level triggers collect every affected product once and lock
+-- in deterministic product order: row-level locking can deadlock when a
+-- multi-row statement touches products in opposite orders, and FOR UPDATE
+-- upgrades conflict with the preexisting foreign-key locks on moved
+-- offers, so recomputation serializes on a transaction-scoped advisory
+-- lock per product instead. A parent product update (condition,
+-- variant_model, flag) recomputes too, since eligibility can change with
+-- no offer event at all. Reactivation is intentionally one-way: restored
+-- `verified` rows would require re-verification the trigger cannot
+-- perform, so reactivated URLs wait for the backfill like any newly
+-- added image (fail-closed).
 
 CREATE OR REPLACE FUNCTION public.feed_manifest_image_urls(images jsonb)
 RETURNS SETOF text
@@ -98,10 +106,6 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-  IF p_product_id IS NOT NULL THEN
-    PERFORM 1 FROM public.products WHERE id = p_product_id FOR UPDATE;
-  END IF;
-
   UPDATE public.product_feed_images AS manifest
   SET status = 'stale',
     is_primary = false,
@@ -111,47 +115,49 @@ BEGIN
     AND manifest.variant_id IS NULL
     AND manifest.status <> 'stale'
     AND NOT EXISTS (
-      SELECT 1
-      FROM public.products AS product
-      WHERE product.id = manifest.product_id
-        AND manifest.source_url IN (
-          SELECT public.feed_manifest_image_urls(product.images)
-        )
-    )
-    AND NOT EXISTS (
-      SELECT 1
-      FROM (
-        SELECT ranked.images
-        FROM (
-          SELECT
-            o.images,
-            ROW_NUMBER() OVER (
-              PARTITION BY public.feed_listing_condition(o.condition)
-              ORDER BY o.condition, o.id
-            ) AS rn
-          FROM public.product_offers AS o
-          JOIN public.products AS parent ON parent.id = o.product_id
-          WHERE o.merchant_id = manifest.merchant_id
-            AND o.product_id = manifest.product_id
-            AND o.status = 'active'
-            AND o.price > 0
-            AND public.feed_listing_condition(o.condition) IS NOT NULL
-            AND (
-              -- A null parent defaults to new, matching the storefront PDP
-              -- rule; a non-null but unmappable parent excludes nothing.
-              (
-                parent.condition IS NOT NULL
-                AND public.feed_listing_condition(parent.condition) IS NULL
-              )
-              OR public.feed_listing_condition(o.condition)
-                <> COALESCE(public.feed_listing_condition(parent.condition), 'new')
-            )
-        ) AS ranked
-        WHERE ranked.rn = 1
-      ) AS eligible
-      WHERE manifest.source_url IN (
+      WITH claims(url) AS (
+        SELECT public.feed_manifest_image_urls(product.images)
+        FROM public.products AS product
+        WHERE product.id = manifest.product_id
+        UNION ALL
         SELECT public.feed_manifest_image_urls(eligible.images)
+        FROM (
+          SELECT ranked.images
+          FROM (
+            SELECT
+              o.images,
+              ROW_NUMBER() OVER (
+                PARTITION BY public.feed_listing_condition(o.condition)
+                ORDER BY o.condition, o.id
+              ) AS rn
+            FROM public.product_offers AS o
+            JOIN public.products AS parent ON parent.id = o.product_id
+            WHERE o.merchant_id = manifest.merchant_id
+              AND o.product_id = manifest.product_id
+              AND o.status = 'active'
+              AND o.price > 0
+              AND parent.has_condition_offers IS TRUE
+              AND parent.variant_model IS DISTINCT FROM 'sku_matrix'
+              AND public.feed_listing_condition(o.condition) IS NOT NULL
+              AND (
+                -- A null parent defaults to new, matching the storefront
+                -- PDP rule; a non-null but unmappable parent excludes
+                -- nothing.
+                (
+                  parent.condition IS NOT NULL
+                  AND public.feed_listing_condition(parent.condition) IS NULL
+                )
+                OR public.feed_listing_condition(o.condition)
+                  <> COALESCE(public.feed_listing_condition(parent.condition), 'new')
+              )
+          ) AS ranked
+          WHERE ranked.rn = 1
+        ) AS eligible
       )
+      SELECT 1
+      FROM claims
+      WHERE claims.url = manifest.source_url
+        OR claims.url = manifest.verified_url
     );
 END;
 $$;
@@ -159,52 +165,151 @@ $$;
 REVOKE ALL ON FUNCTION public.stale_orphaned_feed_manifest_rows(uuid, uuid)
   FROM PUBLIC, anon, authenticated, service_role;
 
-CREATE OR REPLACE FUNCTION public.stale_feed_manifest_on_offer_change()
+CREATE OR REPLACE FUNCTION public.lock_feed_manifest_product(
+  p_product_id uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  -- Transaction-scoped, pooler-safe, and disjoint from every row lock, so
+  -- concurrent recomputes serialize without lock-upgrade cycles.
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    hashtextextended(concat('feed-manifest:', p_product_id::text), 0)
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.lock_feed_manifest_product(uuid)
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.stale_feed_manifest_on_offer_update()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
-  v_old_product_id uuid := CASE WHEN TG_OP <> 'INSERT' THEN OLD.product_id END;
-  v_new_product_id uuid := CASE WHEN TG_OP <> 'DELETE' THEN NEW.product_id END;
-  v_old_merchant_id uuid := CASE WHEN TG_OP <> 'INSERT' THEN OLD.merchant_id END;
-  v_new_merchant_id uuid := CASE WHEN TG_OP <> 'DELETE' THEN NEW.merchant_id END;
   v_target record;
 BEGIN
   -- An offer move between products can orphan URLs on the old product;
-  -- recompute both sides like the cache-invalidation trigger, locking in
-  -- deterministic product order.
+  -- recompute both sides. One ordered pass per statement keeps
+  -- multi-row updates deadlock-free.
   FOR v_target IN
     SELECT DISTINCT t.merchant_id, t.product_id
     FROM (
-      VALUES
-        (v_old_merchant_id, v_old_product_id),
-        (v_new_merchant_id, v_new_product_id)
+      SELECT old_offers.merchant_id, old_offers.product_id FROM old_offers
+      UNION ALL
+      SELECT new_offers.merchant_id, new_offers.product_id FROM new_offers
     ) AS t(merchant_id, product_id)
-    WHERE t.product_id IS NOT NULL
     ORDER BY t.product_id
   LOOP
+    PERFORM public.lock_feed_manifest_product(v_target.product_id);
     PERFORM public.stale_orphaned_feed_manifest_rows(
       v_target.merchant_id,
       v_target.product_id
     );
   END LOOP;
-  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+  RETURN NULL;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.stale_feed_manifest_on_offer_change()
+REVOKE ALL ON FUNCTION public.stale_feed_manifest_on_offer_update()
   FROM PUBLIC, anon, authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.stale_feed_manifest_on_offer_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_target record;
+BEGIN
+  FOR v_target IN
+    SELECT DISTINCT old_offers.merchant_id, old_offers.product_id
+    FROM old_offers
+    ORDER BY old_offers.product_id
+  LOOP
+    PERFORM public.lock_feed_manifest_product(v_target.product_id);
+    PERFORM public.stale_orphaned_feed_manifest_rows(
+      v_target.merchant_id,
+      v_target.product_id
+    );
+  END LOOP;
+  RETURN NULL;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.stale_feed_manifest_on_offer_delete()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.stale_feed_manifest_on_product_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_target record;
+BEGIN
+  -- Eligibility can change with no offer event (condition, matrix, or
+  -- flag flip), so parent updates recompute the same keep-set.
+  FOR v_target IN
+    SELECT DISTINCT t.merchant_id, t.product_id
+    FROM (
+      SELECT old_products.merchant_id, old_products.id FROM old_products
+      UNION ALL
+      SELECT new_products.merchant_id, new_products.id FROM new_products
+    ) AS t(merchant_id, product_id)
+    ORDER BY t.product_id
+  LOOP
+    PERFORM public.lock_feed_manifest_product(v_target.product_id);
+    PERFORM public.stale_orphaned_feed_manifest_rows(
+      v_target.merchant_id,
+      v_target.product_id
+    );
+  END LOOP;
+  RETURN NULL;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.stale_feed_manifest_on_product_update()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+-- Superseded row-level flow from the unmerged revision; never deployed.
 DROP TRIGGER IF EXISTS product_offers_stale_feed_manifest
   ON public.product_offers;
-CREATE TRIGGER product_offers_stale_feed_manifest
-AFTER UPDATE OR DELETE ON public.product_offers
-FOR EACH ROW
-EXECUTE FUNCTION public.stale_feed_manifest_on_offer_change();
+DROP FUNCTION IF EXISTS public.stale_feed_manifest_on_offer_change();
+
+DROP TRIGGER IF EXISTS product_offers_stale_feed_manifest_update
+  ON public.product_offers;
+CREATE TRIGGER product_offers_stale_feed_manifest_update
+AFTER UPDATE ON public.product_offers
+REFERENCING OLD TABLE AS old_offers NEW TABLE AS new_offers
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.stale_feed_manifest_on_offer_update();
+
+DROP TRIGGER IF EXISTS product_offers_stale_feed_manifest_delete
+  ON public.product_offers;
+CREATE TRIGGER product_offers_stale_feed_manifest_delete
+AFTER DELETE ON public.product_offers
+REFERENCING OLD TABLE AS old_offers
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.stale_feed_manifest_on_offer_delete();
+
+DROP TRIGGER IF EXISTS products_stale_feed_manifest
+  ON public.products;
+CREATE TRIGGER products_stale_feed_manifest
+AFTER UPDATE OF condition, variant_model, has_condition_offers
+  ON public.products
+REFERENCING OLD TABLE AS old_products NEW TABLE AS new_products
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.stale_feed_manifest_on_product_update();
 
 -- One-time repair for rows orphaned before this trigger existed. Deleted
 -- offers leave no future event, so without this the fix would apply only
--- to subsequent changes; the trigger keeps the table converged after.
+-- to subsequent changes; the triggers keep the table converged after.
 SELECT public.stale_orphaned_feed_manifest_rows(NULL, NULL);

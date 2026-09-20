@@ -52,6 +52,29 @@ const imageManifest = {
 };
 
 describe('generateFacebookCatalogFeed condition offers', () => {
+  it('emits the canonical storefront condition in offer links', () => {
+    const xml = generateFacebookCatalogFeed(
+      [
+        {
+          ...baseProduct,
+          offers: [
+            {
+              id: 'offer-refurb',
+              condition: 'refurbished',
+              price: 1_000_000,
+              stock_quantity: 2,
+            },
+          ],
+        },
+      ],
+      merchant,
+      'https://ogabassey.com',
+      imageManifest
+    );
+    expect(xml).toContain('offer-refurb');
+    expect(xml).toContain('condition=open_box');
+    expect(xml).not.toContain('condition=refurbished');
+  });
   it('excludes offers that duplicate the parent condition', () => {
     const xml = generateFacebookCatalogFeed(
       [

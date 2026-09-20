@@ -1,4 +1,7 @@
-import { toGoogleListingCondition } from '@baci/shared/lib';
+import {
+  normalizeCanonicalProductCondition,
+  toGoogleListingCondition,
+} from '@baci/shared/lib';
 import { buildFeedDescription } from '@/app/api/feed/google-merchant/build-feed-description';
 import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
 import { getEligibleConditionOffers } from '@/lib/eligible-condition-offers';
@@ -265,7 +268,10 @@ export function generateFacebookCatalogFeed(
         );
         if (!offerImages) return '';
         const url = new URL(productUrl);
-        url.searchParams.set('condition', offer.condition);
+        url.searchParams.set(
+          'condition',
+          normalizeCanonicalProductCondition(offer.condition) || offer.condition
+        );
         return buildItemXml({
           ...baseArgs,
           ...offerImages,

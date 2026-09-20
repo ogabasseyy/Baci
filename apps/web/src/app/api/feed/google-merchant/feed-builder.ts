@@ -6,7 +6,10 @@ import { buildBaseItemXml } from './build-base-feed-item';
  * All image URLs come exclusively from the `product_feed_images` manifest.
  */
 
-import { toGoogleListingCondition } from '@baci/shared/lib';
+import {
+  normalizeCanonicalProductCondition,
+  toGoogleListingCondition,
+} from '@baci/shared/lib';
 import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
 import { getEligibleConditionOffers } from '@/lib/eligible-condition-offers';
 import type { FeedImageManifestEntry } from '@/lib/gmc-feed-images';
@@ -244,7 +247,7 @@ export function generateGoogleMerchantFeed(
           `        <g:item_group_id>${escapeXml(product.id)}</g:item_group_id>`,
           `        <g:title>${escapeXml(product.name)}</g:title>`,
           `        <g:description>${escapeXml(description)}</g:description>`,
-          `        <g:link>${escapeXml(`${productUrl}?condition=${offer.condition}`)}</g:link>`,
+          `        <g:link>${escapeXml(`${productUrl}?condition=${normalizeCanonicalProductCondition(offer.condition) || offer.condition}`)}</g:link>`,
           `        <g:canonical_link>${escapeXml(productUrl)}</g:canonical_link>`,
           `        <g:image_link>${escapeXml(offerImages.imageUrl)}</g:image_link>`,
           offerImages.additionalImagesXml,

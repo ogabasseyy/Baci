@@ -59,6 +59,32 @@ const defaultManifest: Record<string, FeedImageManifestEntry[]> = {
 };
 
 describe('generateGoogleMerchantFeed — condition offers', () => {
+  it('emits the canonical storefront condition in offer links', () => {
+    const xml = generateGoogleMerchantFeed(
+      [
+        product({
+          condition: 'new',
+          has_condition_offers: true,
+          offers: [
+            {
+              id: 'offer-refurb',
+              condition: 'refurbished',
+              price: 80000,
+              stock_quantity: 2,
+            },
+          ],
+        }),
+      ],
+      merchant(),
+      BASE_URL,
+      defaultManifest
+    );
+    // The PDP normalizes refurbished to open_box before offer resolution,
+    // so the landing parameter must already be canonical.
+    expect(xml).toContain('<g:id>offer-refurb</g:id>');
+    expect(xml).toContain('?condition=open_box</g:link>');
+    expect(xml).not.toContain('?condition=refurbished</g:link>');
+  });
   it('excludes offers that duplicate the parent condition', () => {
     const xml = generateGoogleMerchantFeed(
       [

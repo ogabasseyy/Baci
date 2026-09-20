@@ -9,8 +9,11 @@ export function collectOfferClaimedImageUrls(
 ): Set<string> {
   const claimed = new Set<string>();
   for (const offer of offers ?? []) {
-    const images = Array.isArray(offer.images) ? offer.images : [offer.images];
-    for (const image of images) {
+    // Array-only, like the backfill extractor and the offer-image resolver:
+    // a singleton shape can never verify, so claiming it would only remove
+    // the base image while the offer row resolves nothing.
+    if (!Array.isArray(offer.images)) continue;
+    for (const image of offer.images) {
       const url =
         typeof image === 'string'
           ? image

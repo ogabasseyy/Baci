@@ -104,7 +104,7 @@ const defaultLedgers: CredentialReaderLedgers = {
     'scripts-tmp/upload-game-covers.ts':
       'c54726f6a965a6f318d36d6168e5528cd3722f5db30feff63492ba9d0a482738',
     'scripts/backfill-feed-images.ts':
-      '8c69e1588d0e4443f892b0eb946b70f43de42fe72e80ee3a7d18079e3fdc25e6',
+      '5d7d0985d0405ba52fda69c2b40b2a4e7b099d2554d8f807f993cd8b927f4d45',
   },
   testSupportReaderHashes: {
     'apps/web/src/lib/events/event-pipeline-service-role-test-client.ts':

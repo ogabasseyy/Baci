@@ -35,6 +35,7 @@ const listeners: Record<string, Listener[]> = {
   loaded: [],
   paid: [],
 };
+const unsubscribes: ReturnType<typeof jest.fn>[] = [];
 
 const mockInterstitialShow = jest.fn<(...args: unknown[]) => Promise<void>>(
   async () => undefined
@@ -54,7 +55,9 @@ jest.mock('react-native-google-mobile-ads', () => ({
     createForAdRequest: () => ({
       addAdEventListener: (type: string, listener: Listener) => {
         listeners[type]?.push(listener);
-        return jest.fn();
+        const unsubscribe = jest.fn();
+        unsubscribes.push(unsubscribe);
+        return unsubscribe;
       },
       load: (...args: unknown[]) => mockInterstitialLoad(...args),
       show: (...args: unknown[]) => mockInterstitialShow(...args),
@@ -74,6 +77,7 @@ const ORIGINAL_ENV = process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
 
 function setAdsEnabled(value: string | undefined) {
   for (const key of Object.keys(listeners)) listeners[key] = [];
+  unsubscribes.length = 0;
   mockInterstitialLoad.mockClear();
   mockInterstitialShow.mockClear();
   mockInitializeQuizMobileAds.mockClear();
@@ -228,6 +232,43 @@ describe('maybeShowQuizStartInterstitial', () => {
     );
     for (const listener of listeners.loaded) listener();
     await expect(attempt).resolves.toBe('shown');
+    setAdsEnabled(ORIGINAL_ENV);
+  });
+
+  it('unsubscribes every listener when the presented interstitial closes', async () => {
+    // Regression: the close path settled without releasing native
+    // subscriptions, leaking listeners after every dismissal.
+    setAdsEnabled('true');
+    const onClosed = jest.fn();
+    const attempt = maybeShowQuizStartInterstitial({ onClosed });
+    await flushConsentGate();
+    for (const listener of listeners.loaded) listener();
+    await expect(attempt).resolves.toBe('shown');
+    expect(unsubscribes).toHaveLength(4);
+    for (const unsubscribe of unsubscribes) {
+      expect(unsubscribe).not.toHaveBeenCalled();
+    }
+    for (const listener of listeners.closed) listener();
+    for (const unsubscribe of unsubscribes) {
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    }
+    expect(onClosed).toHaveBeenCalledTimes(1);
+    setAdsEnabled(ORIGINAL_ENV);
+  });
+
+  it('unsubscribes every listener when an owned presentation fails', async () => {
+    // Regression: a rejected show() settled the owned attempt without
+    // releasing listeners, and no CLOSED ever arrives to clean up.
+    setAdsEnabled('true');
+    mockInterstitialShow.mockRejectedValueOnce(new Error('dismissed'));
+    const attempt = maybeShowQuizStartInterstitial();
+    await flushConsentGate();
+    for (const listener of listeners.loaded) listener();
+    await expect(attempt).resolves.toBe('skipped');
+    expect(unsubscribes).toHaveLength(4);
+    for (const unsubscribe of unsubscribes) {
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    }
     setAdsEnabled(ORIGINAL_ENV);
   });
 });

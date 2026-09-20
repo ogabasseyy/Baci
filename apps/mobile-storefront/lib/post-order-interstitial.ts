@@ -114,6 +114,12 @@ export async function maybeShowPostOrderInterstitial(
     let settled = false;
     let loadTimer: ReturnType<typeof setTimeout> | null = null;
     const cleanups: Array<() => void> = [];
+    // Idempotent release: dismissal and owned-presentation failure both
+    // land here, and CLOSED can race an already-settled show().
+    const unsubscribeAll = () => {
+      for (const unsubscribe of cleanups) unsubscribe();
+      cleanups.length = 0;
+    };
     // Pre-presentation exits release the loading reservation without
     // consuming the session cap: a failed, cancelled, or timed-out load
     // must leave a later order-success visit able to show the interstitial.
@@ -124,7 +130,7 @@ export async function maybeShowPostOrderInterstitial(
         clearTimeout(loadTimer);
         loadTimer = null;
       }
-      for (const unsubscribe of cleanups) unsubscribe();
+      unsubscribeAll();
       attemptState = 'idle';
       resolve('skipped');
     };
@@ -146,6 +152,13 @@ export async function maybeShowPostOrderInterstitial(
         });
       }
       resolve(outcome);
+    };
+    // An owned attempt whose presentation fails never produces CLOSED, so
+    // no dismissal will arrive to release its listeners; unsubscribe now
+    // while the session cap stays consumed.
+    const failOwnedPresentation = () => {
+      unsubscribeAll();
+      finish('skipped');
     };
 
     try {
@@ -177,12 +190,11 @@ export async function maybeShowPostOrderInterstitial(
             loadTimer = null;
           }
           try {
-            void interstitial.show().then(
-              () => finish('shown'),
-              () => finish('skipped')
-            );
+            void interstitial
+              .show()
+              .then(() => finish('shown'), failOwnedPresentation);
           } catch {
-            finish('skipped');
+            failOwnedPresentation();
           }
         }),
         interstitial.addAdEventListener(mobileAds.AdEventType.ERROR, () =>
@@ -198,6 +210,10 @@ export async function maybeShowPostOrderInterstitial(
           )
         ),
         interstitial.addAdEventListener(mobileAds.AdEventType.CLOSED, () => {
+          // Dismissal ends the owned attempt: no further SDK events can
+          // arrive, so release every listener (including this one) instead
+          // of leaving native subscriptions installed after dismissal.
+          unsubscribeAll();
           options.onClosed?.();
           finish(didShowThisSession ? 'shown' : 'skipped');
         })

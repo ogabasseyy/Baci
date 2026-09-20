@@ -3,6 +3,7 @@ import { render } from '@testing-library/react-native';
 import type React from 'react';
 import { Alert } from 'react-native';
 import type { PaymentSettings } from '@/hooks/useMerchantPaymentSettings';
+import './checkout.commerce-brain.test-utils';
 import './checkout.component-mocks.test-utils';
 import { createCheckoutFetchMock } from './checkout.fetch.test-utils';
 
@@ -252,30 +253,6 @@ jest.mock('@/hooks/useMerchantPaymentSettings', () => {
 
 jest.mock('@/hooks/use-merchant', () => ({
   useMerchant: () => mockUseMerchant(),
-}));
-
-jest.mock('@/lib/commerce-brain', () => ({
-  calculateCommerce: jest.fn(
-    (
-      _name: string,
-      params: {
-        assuranceFee: number;
-        shippingFee: number;
-        subtotal: number;
-        taxRate: number;
-      }
-    ) => {
-      const taxAmount = Math.round(params.subtotal * params.taxRate);
-      return Promise.resolve({
-        taxAmount,
-        total:
-          params.subtotal +
-          params.shippingFee +
-          params.assuranceFee +
-          taxAmount,
-      });
-    }
-  ),
 }));
 
 jest.mock('@/lib/supabase', () => ({

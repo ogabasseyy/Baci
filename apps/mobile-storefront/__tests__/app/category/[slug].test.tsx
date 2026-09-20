@@ -383,6 +383,19 @@ describe('CategoryScreen', () => {
     expect(shown?.props?.placement).toBe('PRODUCT_GRID_MPU');
   });
 
+  it('withholds the category MPU when the resolved category is empty', () => {
+    // Regression: a successful query returning zero products renders the
+    // "No products found" state, so the footer must not request a
+    // product-grid placement with no product feed.
+    setProductsState({ products: [] });
+    render(<CategoryScreen />);
+
+    const Footer = getLatestFlashListProps()?.ListFooterComponent as
+      | (() => React.ReactNode)
+      | undefined;
+    expect(Footer?.() ?? null).toBeNull();
+  });
+
   it.each([
     { name: 'loading', state: { isLoading: true, products: [] } },
     {

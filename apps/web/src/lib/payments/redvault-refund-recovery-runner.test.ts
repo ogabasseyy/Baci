@@ -192,6 +192,7 @@ describe('REDVAULT refund recovery runner', () => {
 
     expect(store.reconcile).toHaveBeenCalledWith({
       id: 'refund-1',
+      providerReference: '123',
       providerStatus: 'processed',
       reconciliationClaimToken: 'fenced-claim-token',
     });

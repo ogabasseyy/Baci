@@ -16,6 +16,12 @@ function refundId(value: unknown): string | null {
     : null;
 }
 
+// Clock-skew allowance when correlating a provider record's creation time
+// against the local submission: NTP drift between hosts is bounded well
+// below this, while an earlier sibling submission is older by at least a
+// full worker cycle.
+const SUBMISSION_SKEW_TOLERANCE_MS = 5 * 60 * 1_000;
+
 export function createRedvaultPaystackRefundProvider({
   fetcher = fetch,
   getSecret,
@@ -127,42 +133,72 @@ export function createRedvaultPaystackRefundProvider({
       captureReference,
       expectedAmountKobo,
       expectedCurrency,
+      knownProviderReferences,
+      submittedAt,
     }) {
       // Reference-less indeterminate submissions have no numeric refund ID
       // for the fetch-refund endpoint. List refunds for the original capture
       // reference instead (Paystack supports filtering the list by
-      // transaction), then match client-side. Zero or ambiguous matches stay
-      // pending so reconciliation retries later rather than resolving the
-      // wrong sibling refund.
+      // transaction), then match client-side. Only a unique NEW provider
+      // record resolves terminally: matches carrying an already-persisted
+      // provider ID belong to an earlier sibling submission (identically
+      // priced serialized units share amount and currency), and provider
+      // records created before the local submission cannot be this refund.
+      // Anything else stays pending so reconciliation retries later rather
+      // than finalizing off the wrong provider record.
       if (!/^[A-Za-z0-9.=_-]{1,100}$/.test(captureReference))
         throw new Error('REDVAULT refund lookup invalid identifier');
+      const known = new Set(
+        (knownProviderReferences ?? []).filter(
+          (reference): reference is string =>
+            typeof reference === 'string' && reference.length > 0
+        )
+      );
+      const submittedMs =
+        typeof submittedAt === 'string' ? Date.parse(submittedAt) : Number.NaN;
       const rows = await requestList(
         `?transaction=${encodeURIComponent(captureReference)}&perPage=100`
       );
-      const matches = (rows ?? []).filter((row) => {
+      const matches: { providerReference: string; status: string }[] = [];
+      for (const row of rows ?? []) {
         const candidate = record(row);
-        if (!candidate) return false;
+        if (!candidate) continue;
         const transaction = record(candidate.transaction);
         const transactionMatches = transaction
           ? transaction.reference === captureReference
           : candidate.transaction === captureReference;
-        return (
-          transactionMatches &&
-          candidate.amount === expectedAmountKobo &&
-          candidate.currency === expectedCurrency
-        );
-      });
+        if (
+          !transactionMatches ||
+          candidate.amount !== expectedAmountKobo ||
+          candidate.currency !== expectedCurrency
+        )
+          continue;
+        const providerReference = refundId(candidate.id);
+        if (!providerReference || known.has(providerReference)) continue;
+        if (Number.isFinite(submittedMs)) {
+          const createdMs = Date.parse(String(candidate.createdAt ?? ''));
+          if (
+            !Number.isFinite(createdMs) ||
+            createdMs < submittedMs - SUBMISSION_SKEW_TOLERANCE_MS
+          )
+            continue;
+        }
+        matches.push({ providerReference, status: String(candidate.status) });
+      }
       if (matches.length !== 1) {
         return { kind: 'pending', providerStatus: 'pending' };
       }
-      const match = record(matches[0]);
-      const status = String(match?.status);
-      if (status === 'processed' || status === 'failed')
-        return { kind: status, providerStatus: status };
+      const match = matches[0];
+      if (match.status === 'processed' || match.status === 'failed')
+        return {
+          kind: match.status,
+          providerReference: match.providerReference,
+          providerStatus: match.status,
+        };
       if (
-        status === 'pending' ||
-        status === 'processing' ||
-        status === 'needs-attention'
+        match.status === 'pending' ||
+        match.status === 'processing' ||
+        match.status === 'needs-attention'
       ) {
         return { kind: 'pending', providerStatus: 'pending' };
       }

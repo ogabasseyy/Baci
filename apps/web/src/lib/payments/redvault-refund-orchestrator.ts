@@ -35,10 +35,25 @@ export interface RedvaultRefundReconciliationProvider {
     captureReference: string;
     expectedAmountKobo: number;
     expectedCurrency: string;
+    /**
+     * Provider IDs already persisted on sibling local refunds for the same
+     * attempt. Matches carrying one of these IDs belong to an earlier
+     * submission, never to this refund.
+     */
+    knownProviderReferences: readonly string[];
+    /**
+     * ISO timestamp of the local submission. Provider records created
+     * before it (beyond clock skew) cannot be this refund.
+     */
+    submittedAt: string | null;
   }): Promise<
     | { kind: 'pending'; providerStatus: string }
-    | { kind: 'processed'; providerStatus: string }
-    | { kind: 'failed'; providerStatus: string }
+    | {
+        kind: 'processed';
+        providerReference: string;
+        providerStatus: string;
+      }
+    | { kind: 'failed'; providerReference: string; providerStatus: string }
   >;
 }
 
@@ -142,20 +157,34 @@ export async function reconcileNextRedvaultRefund({
   // instead of the numeric refund-ID endpoint, so the refund stays
   // recoverable instead of stranding in needs_reconciliation.
   const providerReference = claim.refund.providerReference;
-  const outcome = providerReference
-    ? await provider.lookup({
-        providerReference,
-        expectedAmountKobo: claim.refund.amountKobo,
-        expectedCaptureReference: claim.refund.attemptReference,
-        expectedCurrency: 'NGN',
-      })
-    : await provider.lookupByCaptureReference({
-        captureReference: claim.refund.attemptReference,
-        expectedAmountKobo: claim.refund.amountKobo,
-        expectedCurrency: 'NGN',
-      });
+  if (providerReference) {
+    const outcome = await provider.lookup({
+      providerReference,
+      expectedAmountKobo: claim.refund.amountKobo,
+      expectedCaptureReference: claim.refund.attemptReference,
+      expectedCurrency: 'NGN',
+    });
+    const refund = await store.reconcile({
+      id: claim.refund.id,
+      providerReference,
+      providerStatus: outcome.providerStatus,
+      reconciliationClaimToken: claim.reconciliationClaimToken,
+    });
+    return { kind: outcome.kind, refund };
+  }
+  const outcome = await provider.lookupByCaptureReference({
+    captureReference: claim.refund.attemptReference,
+    expectedAmountKobo: claim.refund.amountKobo,
+    expectedCurrency: 'NGN',
+    knownProviderReferences: claim.siblingProviderReferences,
+    submittedAt: claim.refund.submittedAt,
+  });
+  // Persist the matched provider record so later sibling recoveries exclude
+  // this ID instead of finalizing twice off one provider record.
   const refund = await store.reconcile({
     id: claim.refund.id,
+    providerReference:
+      outcome.kind === 'pending' ? undefined : outcome.providerReference,
     providerStatus: outcome.providerStatus,
     reconciliationClaimToken: claim.reconciliationClaimToken,
   });

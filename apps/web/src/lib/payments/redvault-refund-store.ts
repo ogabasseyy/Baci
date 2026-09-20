@@ -14,11 +14,13 @@ export type RedvaultRefund = {
   providerReference: string | null;
   providerStatus: string | null;
   state: RedvaultRefundState;
+  submittedAt: string | null;
 };
 
 export type RedvaultRefundReconciliationClaim = {
   reconciliationClaimToken: string;
   refund: RedvaultRefund;
+  siblingProviderReferences: string[];
 };
 
 export interface RedvaultRefundRpcClient {
@@ -61,6 +63,7 @@ function readRefund(value: unknown): RedvaultRefund {
     providerStatus:
       typeof row.provider_status === 'string' ? row.provider_status : null,
     state: row.state as RedvaultRefundState,
+    submittedAt: typeof row.submitted_at === 'string' ? row.submitted_at : null,
   };
 }
 
@@ -183,18 +186,28 @@ export class RedvaultRefundStore {
     if (typeof row.reconciliation_claim_token !== 'string') {
       throw new Error('REDVAULT reconciliation RPC returned an invalid claim');
     }
+    const siblingProviderReferences = Array.isArray(
+      row.sibling_provider_references
+    )
+      ? row.sibling_provider_references.filter(
+          (reference): reference is string => typeof reference === 'string'
+        )
+      : [];
     return {
       reconciliationClaimToken: row.reconciliation_claim_token,
       refund,
+      siblingProviderReferences,
     };
   }
 
   async reconcile(input: {
     id: string;
+    providerReference?: string;
     providerStatus: string;
     reconciliationClaimToken: string;
   }): Promise<RedvaultRefund> {
     const result = await this.client.rpc('reconcile_uba_redvault_refund', {
+      p_provider_reference: input.providerReference ?? null,
       p_provider_status: input.providerStatus,
       p_reconciliation_claim_token: input.reconciliationClaimToken,
       p_refund_id: input.id,

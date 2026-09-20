@@ -215,8 +215,14 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: 'RV-capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        knownProviderReferences: [],
+        submittedAt: null,
       })
-    ).resolves.toEqual({ kind: status, providerStatus: status });
+    ).resolves.toEqual({
+      kind: status,
+      providerReference: '124',
+      providerStatus: status,
+    });
     expect(fetcher).toHaveBeenCalledWith(
       'https://api.paystack.co/refund?transaction=RV-capture&perPage=100',
       expect.objectContaining({ method: 'GET', body: undefined })
@@ -232,6 +238,8 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: 'RV-capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        knownProviderReferences: [],
+        submittedAt: null,
       })
     ).resolves.toEqual({ kind: 'pending', providerStatus: 'pending' });
   });
@@ -252,6 +260,8 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: 'RV-capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        knownProviderReferences: [],
+        submittedAt: null,
       })
     ).resolves.toEqual({ kind: 'pending', providerStatus: 'pending' });
   });
@@ -262,8 +272,117 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: '../capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        knownProviderReferences: [],
+        submittedAt: null,
       })
     ).rejects.toThrow('invalid identifier');
     expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('stays pending when the only match is already persisted on a sibling', async () => {
+    const { provider } = setup({
+      status: true,
+      data: [
+        {
+          amount: 9500,
+          createdAt: '2026-09-19T20:00:01.000Z',
+          currency: 'NGN',
+          id: 124,
+          status: 'processed',
+          transaction: { reference: 'RV-capture' },
+        },
+      ],
+    });
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: 'RV-capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+        knownProviderReferences: ['124'],
+        submittedAt: '2026-09-19T20:00:00.000Z',
+      })
+    ).resolves.toEqual({ kind: 'pending', providerStatus: 'pending' });
+  });
+  it('resolves the unique new record when a sibling match is already persisted', async () => {
+    const { provider } = setup({
+      status: true,
+      data: [
+        {
+          amount: 9500,
+          createdAt: '2026-09-19T19:00:00.000Z',
+          currency: 'NGN',
+          id: 124,
+          status: 'processed',
+          transaction: { reference: 'RV-capture' },
+        },
+        {
+          amount: 9500,
+          createdAt: '2026-09-19T20:00:01.000Z',
+          currency: 'NGN',
+          id: 125,
+          status: 'processed',
+          transaction: { reference: 'RV-capture' },
+        },
+      ],
+    });
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: 'RV-capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+        knownProviderReferences: ['124'],
+        submittedAt: '2026-09-19T20:00:00.000Z',
+      })
+    ).resolves.toEqual({
+      kind: 'processed',
+      providerReference: '125',
+      providerStatus: 'processed',
+    });
+  });
+  it('stays pending when the match predates the local submission', async () => {
+    const { provider } = setup({
+      status: true,
+      data: [
+        {
+          amount: 9500,
+          createdAt: '2026-09-19T19:00:00.000Z',
+          currency: 'NGN',
+          id: 124,
+          status: 'processed',
+          transaction: { reference: 'RV-capture' },
+        },
+      ],
+    });
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: 'RV-capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+        knownProviderReferences: [],
+        submittedAt: '2026-09-19T20:00:00.000Z',
+      })
+    ).resolves.toEqual({ kind: 'pending', providerStatus: 'pending' });
+  });
+  it('stays pending when the match has no usable timestamp', async () => {
+    const { provider } = setup({
+      status: true,
+      data: [
+        {
+          amount: 9500,
+          currency: 'NGN',
+          id: 124,
+          status: 'processed',
+          transaction: { reference: 'RV-capture' },
+        },
+      ],
+    });
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: 'RV-capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+        knownProviderReferences: [],
+        submittedAt: '2026-09-19T20:00:00.000Z',
+      })
+    ).resolves.toEqual({ kind: 'pending', providerStatus: 'pending' });
   });
 });

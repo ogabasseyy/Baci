@@ -11,6 +11,7 @@ const claimed = {
   providerReference: null,
   providerStatus: null,
   state: 'processing' as const,
+  submittedAt: '2026-09-19T20:00:00.000Z',
 };
 
 describe('REDVAULT refund operator worker', () => {
@@ -30,6 +31,7 @@ describe('REDVAULT refund operator worker', () => {
           claimNextReconciliation: vi.fn().mockResolvedValue({
             reconciliationClaimToken: 'claim-1',
             refund: claimed,
+            siblingProviderReferences: ['124'],
           }),
           reconcile,
         },
@@ -43,10 +45,48 @@ describe('REDVAULT refund operator worker', () => {
       captureReference: claimed.attemptReference,
       expectedAmountKobo: claimed.amountKobo,
       expectedCurrency: 'NGN',
+      knownProviderReferences: ['124'],
+      submittedAt: claimed.submittedAt,
     });
     expect(reconcile).toHaveBeenCalledWith({
       id: claimed.id,
       providerStatus: 'pending',
+      reconciliationClaimToken: 'claim-1',
+    });
+  });
+
+  it('persists the matched provider reference from a capture-reference lookup', async () => {
+    const lookup = vi.fn();
+    const lookupByCaptureReference = vi.fn().mockResolvedValue({
+      kind: 'processed',
+      providerReference: '125',
+      providerStatus: 'processed',
+    });
+    const reconcile = vi
+      .fn()
+      .mockResolvedValue({ ...claimed, state: 'processed' });
+
+    await expect(
+      reconcileNextRedvaultRefund({
+        provider: { lookup, lookupByCaptureReference },
+        store: {
+          claimNextReconciliation: vi.fn().mockResolvedValue({
+            reconciliationClaimToken: 'claim-1',
+            refund: claimed,
+            siblingProviderReferences: ['124'],
+          }),
+          reconcile,
+        },
+      })
+    ).resolves.toEqual({
+      kind: 'processed',
+      refund: { ...claimed, state: 'processed' },
+    });
+    expect(lookup).not.toHaveBeenCalled();
+    expect(reconcile).toHaveBeenCalledWith({
+      id: claimed.id,
+      providerReference: '125',
+      providerStatus: 'processed',
       reconciliationClaimToken: 'claim-1',
     });
   });
@@ -193,6 +233,7 @@ describe('REDVAULT refund operator worker', () => {
     });
     expect(reconcile).toHaveBeenCalledWith({
       id: 'refund-1',
+      providerReference: 'provider-refund-1',
       providerStatus: 'processed',
       reconciliationClaimToken: 'claim-1',
     });
@@ -225,6 +266,7 @@ describe('REDVAULT refund operator worker', () => {
     ).resolves.toMatchObject({ kind: 'failed', refund: { state: 'failed' } });
     expect(reconcile).toHaveBeenCalledWith({
       id: 'refund-1',
+      providerReference: 'provider-refund-1',
       providerStatus: 'failed',
       reconciliationClaimToken: 'claim-1',
     });

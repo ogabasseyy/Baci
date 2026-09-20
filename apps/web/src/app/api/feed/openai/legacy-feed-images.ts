@@ -51,20 +51,21 @@ function getProductImageUrl(
     return manifestPrimaryImage;
   }
 
-  const parentFirstImageRaw = product.images?.[0];
-  const parentFirstImage =
-    typeof parentFirstImageRaw === 'string'
-      ? parentFirstImageRaw
-      : parentFirstImageRaw?.url || '';
-  // The raw fallback must not restore an offer-owned URL the manifest
-  // path just excluded.
-  const fallbackImage = isOfferClaimedImage(
-    { source_url: parentFirstImage, verified_url: parentFirstImage },
-    offerClaimedImageUrls,
-    manifestEntries
-  )
-    ? ''
-    : parentFirstImage;
+  const rawImages = (product.images ?? [])
+    .map((img) => (typeof img === 'string' ? img : img?.url))
+    .filter((url): url is string => typeof url === 'string' && url !== '');
+  // The raw fallback promotes the first unclaimed image: a claimed
+  // images[0] must not cost the row its primary when a safe later image
+  // exists. The composer already drops the primary from additional links.
+  const fallbackImage =
+    rawImages.find(
+      (url) =>
+        !isOfferClaimedImage(
+          { source_url: url, verified_url: url },
+          offerClaimedImageUrls,
+          manifestEntries
+        )
+    ) ?? '';
 
   // A variant primary restored without the claim check would reintroduce
   // offer-owned imagery the manifest copy just excluded.

@@ -1,12 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { chunkValues } from '@/lib/chunk-values';
 import type { FeedVariant } from './feed-builder';
-
-export const FEED_PRODUCT_VARIANTS_BATCH_SIZE = 50;
-// Keep variant hydration bounded: the smaller RPC batches reduce DB work per
-// call, while limited parallelism prevents cold public feeds from serializing
-// up to 200 round trips for max-size merchant catalogs.
-export const FEED_PRODUCT_VARIANTS_MAX_CONCURRENT_BATCHES = 4;
+import { FEED_FETCH_CONSTANTS } from './feed-fetch-constants';
 
 export interface FeedVariantRow {
   attributes: Record<string, unknown> | null;
@@ -26,18 +21,18 @@ export async function fetchFeedVariants(
 ): Promise<FeedVariantRow[]> {
   const variantBatches = chunkValues(
     productIds,
-    FEED_PRODUCT_VARIANTS_BATCH_SIZE
+    FEED_FETCH_CONSTANTS.VARIANTS_BATCH_SIZE
   );
   const variantRows: FeedVariantRow[] = [];
 
   for (
     let batchStart = 0;
     batchStart < variantBatches.length;
-    batchStart += FEED_PRODUCT_VARIANTS_MAX_CONCURRENT_BATCHES
+    batchStart += FEED_FETCH_CONSTANTS.VARIANTS_MAX_CONCURRENT_BATCHES
   ) {
     const batchWindow = variantBatches.slice(
       batchStart,
-      batchStart + FEED_PRODUCT_VARIANTS_MAX_CONCURRENT_BATCHES
+      batchStart + FEED_FETCH_CONSTANTS.VARIANTS_MAX_CONCURRENT_BATCHES
     );
     const batchResults = await Promise.all(
       batchWindow.map(async (batchProductIds, batchWindowIndex) => {

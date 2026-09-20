@@ -228,6 +228,25 @@ describe('resolveLegacyFeedImages', () => {
     });
   });
 
+  it('promotes the first unclaimed raw image when images[0] is claimed', () => {
+    expect(
+      resolveLegacyFeedImages(
+        product({
+          images: [
+            'https://cdn.example.com/claimed.jpg',
+            'https://cdn.example.com/safe.jpg',
+          ],
+          offers: [{ images: ['https://cdn.example.com/claimed.jpg'] }],
+        }),
+        undefined,
+        {}
+      )
+    ).toEqual({
+      image_link: 'https://cdn.example.com/safe.jpg',
+      additional_image_links: [],
+    });
+  });
+
   it('restricts product rows to product-level entries', () => {
     expect(
       resolveLegacyFeedImages(

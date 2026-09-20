@@ -5,15 +5,12 @@ import type {
   FeedVariant,
   ImageManifestMap,
 } from './feed-builder';
+import { FEED_FETCH_CONSTANTS } from './feed-fetch-constants';
 import {
   fetchActiveFeedProducts,
   type RawFeedProductRow,
 } from './fetch-active-feed-products';
-import {
-  FEED_PRODUCT_VARIANTS_BATCH_SIZE,
-  FEED_PRODUCT_VARIANTS_MAX_CONCURRENT_BATCHES,
-  fetchFeedVariants,
-} from './fetch-feed-variants';
+import { fetchFeedVariants } from './fetch-feed-variants';
 import {
   FEED_IMAGE_MANIFEST_MAX_CONCURRENT_BATCHES,
   fetchVerifiedImageManifestRows,
@@ -21,11 +18,11 @@ import {
 import { attachConditionOffers } from './hydrate-feed-condition-offers';
 import { normalizeFeedVariantPrice } from './normalize-feed-variant-price';
 
-export {
-  FEED_IMAGE_MANIFEST_MAX_CONCURRENT_BATCHES,
-  FEED_PRODUCT_VARIANTS_BATCH_SIZE,
-  FEED_PRODUCT_VARIANTS_MAX_CONCURRENT_BATCHES,
-};
+export const FEED_PRODUCT_VARIANTS_BATCH_SIZE =
+  FEED_FETCH_CONSTANTS.VARIANTS_BATCH_SIZE;
+export const FEED_PRODUCT_VARIANTS_MAX_CONCURRENT_BATCHES =
+  FEED_FETCH_CONSTANTS.VARIANTS_MAX_CONCURRENT_BATCHES;
+export { FEED_IMAGE_MANIFEST_MAX_CONCURRENT_BATCHES };
 
 export interface GoogleMerchantFeedData {
   custom_domain: string | null;

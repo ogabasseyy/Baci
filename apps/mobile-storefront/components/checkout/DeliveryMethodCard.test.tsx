@@ -39,16 +39,20 @@ describe('DeliveryMethodCard', () => {
     expect(screen.queryByText('By Air')).toBeNull();
   });
 
-  it('offers GIGL GoFaster air service for a Lagos address', () => {
+  it('hides By Air for a Lagos address even with a GIGL GoFaster quote', () => {
+    // Supersedes the pre-gate expectation: Lagos-origin addresses never
+    // offer airport delivery, not even with a GoFaster quote.
     render(
       <DeliveryMethodCard
         {...baseProps}
+        deliveryCity="Ikeja"
         deliveryState="Lagos"
         hasGiglGoFasterQuote
       />
     );
 
-    expect(screen.getByText('By Air')).toBeTruthy();
+    expect(screen.getByText('By Road')).toBeTruthy();
+    expect(screen.queryByText('By Air')).toBeNull();
   });
 
   it('offers door, airport, and GIGL pickup stations for a non-Lagos airport state', () => {

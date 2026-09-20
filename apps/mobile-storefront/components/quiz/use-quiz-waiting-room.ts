@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
+import { isQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 import type { QuizEvent } from '@/services/quiz-types';
 import { calculateQuizServerClockOffset } from './use-quiz-server-clock';
+import { useQuizStartHold } from './use-quiz-start-hold';
+import { useQuizStartInterstitialRequest } from './use-quiz-start-interstitial-request';
 
 const CLOCK_TICK_MS = 250;
 const BOUNDARY_REFRESH_MIN_INTERVAL_MS = 1_000;
@@ -26,6 +29,11 @@ type RefreshEvents = () => Promise<QuizEvent[]>;
 export interface QuizWaitingRoomState {
   error: string | null;
   event: QuizEvent;
+  /**
+   * While true a presented pre-quiz interstitial owns the full screen, so
+   * banner slots must stay unmounted until it closes.
+   */
+  isFullscreenAdActive: boolean;
   isRefreshing: boolean;
   remainingSeconds: number;
 }
@@ -36,12 +44,26 @@ export function useQuizWaitingRoom({
   onExit,
   onStart,
   refresh,
+  suspended = false,
+  isRewardedAdActive = false,
 }: {
   event: QuizEvent;
   onEventsUpdated?: (events: QuizEvent[]) => void;
   onExit: () => void;
   onStart: (eventId: string, termsAccepted: true) => void;
   refresh: RefreshEvents;
+  /**
+   * While true (e.g. the rules modal covers the lobby) a pending
+   * interstitial load is abandoned instead of presenting a full-screen ad
+   * over the modal.
+   */
+  suspended?: boolean;
+  /**
+   * While true (rewarded video or end card open) a start boundary waits in
+   * the pending-start path instead of starting timed play behind the
+   * full-screen ad; it flushes when the rewarded ad closes.
+   */
+  isRewardedAdActive?: boolean;
 }): QuizWaitingRoomState {
   const [event, setEvent] = useState(initialEvent);
   const [offsetMs, setOffsetMs] = useState(() =>
@@ -53,6 +75,14 @@ export function useQuizWaitingRoom({
     getRemainingSeconds(initialEvent, offsetMs)
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isFullscreenAdActive, setIsFullscreenAdActive] = useState(false);
+  const isFullscreenAdActiveRef = useRef(false);
+  // A start boundary that lands while the interstitial owns the screen waits
+  // here until the ad closes instead of starting timed play behind it.
+  const pendingStartRef = useRef<QuizEvent | null>(null);
+  // Combined covering flag (rewarded ad or rules modal): a boundary that
+  // lands while either covers the lobby waits in the pending-start path.
+  const isStartBlockedRef = useRef(isRewardedAdActive || suspended);
   const [error, setError] = useState<string | null>(null);
   const eventRef = useRef(initialEvent);
   const offsetRef = useRef(offsetMs);
@@ -68,6 +98,7 @@ export function useQuizWaitingRoom({
   );
   const startedRef = useRef(false);
   const stoppedRef = useRef(false);
+  const suspendedRef = useRef(suspended);
   const lastBoundaryRefreshAtRef = useRef(0);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
@@ -75,6 +106,7 @@ export function useQuizWaitingRoom({
   onEventsUpdatedRef.current = onEventsUpdated;
   onExitRef.current = onExit;
   onStartRef.current = onStart;
+  suspendedRef.current = suspended;
 
   const applyRefreshedEvent = (nextEvent: QuizEvent) => {
     eventRef.current = nextEvent;
@@ -94,6 +126,21 @@ export function useQuizWaitingRoom({
       appStateRef.current === 'active' &&
       (nextEvent.status === 'active' || nextEvent.status === 'open')
     ) {
+      // Starting live play behind a presented interstitial, a rewarded ad,
+      // or the rules modal would burn the shopper's timed window under a
+      // covering surface: hold the transition until it clears (flushed by
+      // the interstitial onClosed handler or the start-hold hook). The
+      // rewarded prop arrives via a passive effect after the tap, so also
+      // read the synchronously claimed ownership: a refresh resolving in
+      // that window must still hold.
+      if (
+        isFullscreenAdActiveRef.current ||
+        isStartBlockedRef.current ||
+        isQuizRewardedFlowActive()
+      ) {
+        pendingStartRef.current = nextEvent;
+        return;
+      }
       startedRef.current = true;
       onStartRef.current(nextEvent.id, true);
     }
@@ -138,6 +185,31 @@ export function useQuizWaitingRoom({
       }
     }
   };
+
+  useQuizStartHold({
+    appStateRef,
+    isFullscreenAdActiveRef,
+    isStartBlocked: isRewardedAdActive || suspended,
+    isStartBlockedRef,
+    onStartRef,
+    pendingStartRef,
+    startedRef,
+    stoppedRef,
+  });
+
+  useQuizStartInterstitialRequest({
+    appStateRef,
+    getRemainingSeconds: () =>
+      getRemainingSeconds(eventRef.current, offsetRef.current),
+    isFullscreenAdActiveRef,
+    isStartBlockedRef,
+    onStartRef,
+    pendingStartRef,
+    setIsFullscreenAdActive,
+    startedRef,
+    stoppedRef,
+    suspendedRef,
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -186,5 +258,11 @@ export function useQuizWaitingRoom({
     };
   }, []);
 
-  return { error, event, isRefreshing, remainingSeconds };
+  return {
+    error,
+    event,
+    isFullscreenAdActive,
+    isRefreshing,
+    remainingSeconds,
+  };
 }

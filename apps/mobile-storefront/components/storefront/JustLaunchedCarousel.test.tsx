@@ -1,127 +1,53 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  a27,
+  mockExpoImageModule,
+  mockImage,
+  mockPush,
+  mockReactNativeModule,
+  mockSkeletonModule,
+  mockThemeModule,
+  mockUseMobileAdsReadiness,
+  mockUsePinned,
+  mockUseProducts,
+  setupCarouselMocks,
+  xiaomi,
+} from './JustLaunchedCarousel-test-harness';
 
-const mockPush = jest.fn();
-const mockUseProducts = jest.fn();
-const mockUsePinned = jest.fn();
-const mockImage = jest.fn();
-jest.mock('expo-image', () => {
-  const React = jest.requireActual<typeof import('react')>('react');
-  return {
-    Image: (props: Record<string, unknown>) => {
-      mockImage(props);
-      return React.createElement('Image', props);
-    },
-  };
-});
-jest.mock('react-native', () => {
-  const React = jest.requireActual<typeof import('react')>('react');
-  const actual =
-    jest.requireActual<typeof import('react-native')>('react-native');
-  const mocked = Object.defineProperties(
-    {},
-    Object.getOwnPropertyDescriptors(actual)
-  );
-  Object.defineProperties(mocked, {
-    FlatList: {
-      configurable: true,
-      value: ({
-        data,
-        keyExtractor,
-        renderItem,
-      }: {
-        data: unknown[];
-        keyExtractor: (item: unknown, index: number) => string;
-        renderItem: (info: { item: unknown }) => React.ReactNode;
-      }) =>
-        React.createElement(
-          React.Fragment,
-          null,
-          data.map((item, index) =>
-            React.createElement(
-              React.Fragment,
-              { key: keyExtractor(item, index) },
-              renderItem({ item })
-            )
-          )
-        ),
-    },
-    PixelRatio: { configurable: true, value: { get: () => 2 } },
-    Pressable: {
-      configurable: true,
-      value: ({
-        children,
-        ...props
-      }: React.ComponentProps<typeof actual.View>) =>
-        React.createElement(
-          actual.View,
-          { ...props, accessible: true },
-          children
-        ),
-    },
-    useWindowDimensions: {
-      configurable: true,
-      value: () => ({ fontScale: 1, height: 800, scale: 2, width: 400 }),
-    },
-  });
-  return mocked;
-});
+jest.mock('@/hooks/use-mobile-ads-readiness', () => ({
+  useMobileAdsReadiness: mockUseMobileAdsReadiness,
+}));
+jest.mock('@/services/analytics-core', () => ({
+  trackEvent: jest.fn(),
+}));
+jest.mock('react-native-google-mobile-ads', () => ({
+  BannerAd: 'BannerAd',
+  BannerAdSize: {
+    ANCHORED_ADAPTIVE_BANNER: 'anchored-adaptive-banner',
+  },
+}));
+jest.mock('expo-image', () => mockExpoImageModule());
+jest.mock('react-native', () => mockReactNativeModule());
 jest.mock('expo-router', () => ({
   router: { push: (path: string) => mockPush(path) },
+  useIsFocused: () => true,
 }));
-jest.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    colors: {
-      card: '#ffffff',
-      background: '#ffffff',
-      text: '#000000',
-      textSecondary: '#666666',
-      primary: '#d62027',
-      border: '#cccccc',
-    },
-  }),
-}));
+jest.mock('@/hooks/useTheme', () => mockThemeModule());
 jest.mock('@/hooks/use-products', () => ({
   useProducts: () => mockUseProducts(),
 }));
 jest.mock('@/hooks/use-pinned-launch-products', () => ({
   usePinnedLaunchProducts: () => mockUsePinned(),
 }));
-jest.mock('@/components/ui/Skeleton', () => {
-  const { View } =
-    jest.requireActual<typeof import('react-native')>('react-native');
-  return {
-    Skeleton: () => <View accessibilityRole="progressbar" accessible />,
-  };
-});
+jest.mock('@/components/ui/Skeleton', () => mockSkeletonModule());
 
 import { PRODUCT_PLACEHOLDER_IMAGE } from '@/lib/product-normalization';
 import { JustLaunchedCarousel } from './JustLaunchedCarousel';
 
-const a27 = {
-  id: 'a27',
-  name: 'Samsung Galaxy A27 5G Preorder',
-  slug: 'samsung-galaxy-a27-5g',
-  price: 50000,
-  image: 'https://cdn.ogabassey.com/core-assets/products/a27.avif',
-};
-const xiaomi = {
-  id: 'xiaomi',
-  name: 'Xiaomi 17T',
-  slug: 'xiaomi-17t',
-  price: 800000,
-  image: 'https://cdn.ogabassey.com/core-assets/products/xiaomi.avif',
-};
-
 describe('JustLaunchedCarousel', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockUsePinned.mockReturnValue({ data: [], isLoading: false });
-    mockUseProducts.mockReturnValue({
-      products: [],
-      isLoading: false,
-      isError: false,
-    });
+    setupCarouselMocks();
   });
 
   it('renders pinned-first slides and navigates to the product on press', () => {

@@ -8,13 +8,12 @@ import {
   activateQuizEvent,
   generateQuizDraft,
   type QuizAnswerKeyReview,
+  type QuizDraftConfiguration,
   type QuizLaunchInput,
 } from './quiz-admin-actions';
 import { QuizAdminResult } from './quiz-admin-result';
-import {
-  QuizAuthoringForm,
-  type QuizDraftConfiguration,
-} from './quiz-authoring-form';
+import { QuizAuthoringForm } from './quiz-authoring-form';
+import { resyncQuizAuthoringScheduledEnd } from './quiz-authoring-scheduled-end';
 import { quizDatetimeLocalToIso } from './quiz-datetime-local';
 
 export function QuizAdminClient({
@@ -49,7 +48,31 @@ export function QuizAdminClient({
       title: next.title,
       topics: next.topics,
     })
-      .then(setResult)
+      .then((draft) => {
+        setResult(draft);
+        // Gemma may return a different count than requested (the schema
+        // allows 1–50 questions): an auto-synced end computed from the
+        // requested count would fail activation against the actual
+        // questions, so resync it from the generated count. A manually
+        // edited end is never rewritten.
+        const actualCount = draft.questions.length;
+        const requestedCount = next.topics.length * next.questionCountPerTopic;
+        if (
+          next.timingKind === 'scheduled' &&
+          !next.endTouched &&
+          actualCount !== requestedCount
+        ) {
+          const resynced = resyncQuizAuthoringScheduledEnd({
+            mode: next.mode,
+            questionCount: actualCount,
+            scheduledStart: next.scheduledStart,
+            timePerQuestionSeconds: next.timePerQuestionSeconds,
+          });
+          if (resynced && resynced !== next.scheduledEnd) {
+            setConfiguration({ ...next, scheduledEnd: resynced });
+          }
+        }
+      })
       .catch((cause: unknown) => {
         setConfiguration(null);
         setError(

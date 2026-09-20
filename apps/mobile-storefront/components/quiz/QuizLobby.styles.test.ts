@@ -1,5 +1,5 @@
 import { createQuizLobbyStyles } from './QuizLobby.styles';
-import type { QuizThemeColors } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 const colors: QuizThemeColors = {
   background: '#ffffff',

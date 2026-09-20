@@ -1,30 +1,27 @@
 /** Multi-tenant hero carousel with parallax, carousel, and standard variants. */
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { type Href, router } from 'expo-router';
+import type { Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { useWindowDimensions, View, type ViewToken } from 'react-native';
 import Animated, {
+  runOnJS,
   useAnimatedScrollHandler,
   useSharedValue,
 } from 'react-native-reanimated';
-import { palette, RADIUS, SPACING, withAlpha } from '@/constants/Colors';
+import {
+  getMobileAdUnitId,
+  type MobileAdBannerPlacementKey,
+} from '@/config/mobile-ad-placements';
+import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { useTheme } from '@/hooks/useTheme';
 import { CONFIG } from '@/lib/config';
-import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import { getTemplateConfig } from '@/lib/templates';
+import { EliteSlide } from './EliteSlide';
+import { FashionSlide } from './FashionSlide';
 import { ELITE_HEIGHT, getHeroStyles } from './Hero.styles';
-
-type ThemeColors = ReturnType<typeof useTheme>['colors'];
-
-const CAROUSEL_HEIGHT = 450;
-const STANDARD_HEIGHT = 220;
+import { HeroAdSlide } from './HeroAdSlide';
+import { CAROUSEL_HEIGHT, STANDARD_HEIGHT } from './hero-slide-dimensions';
+import { nextOffsetAfterAdToggle } from './launch-ad-offset';
+import { StandardSlide } from './StandardSlide';
 
 export interface HeroSlide {
   title: string;
@@ -37,170 +34,28 @@ export interface HeroSlide {
 interface HeroProps {
   slides?: HeroSlide[];
   autoplayDelay?: number;
+  /**
+   * Inserts one sponsored slide second (after the first CMS slide). The
+   * existing autoplay rotates onto it like any other slide. Ignored while
+   * ads are disabled.
+   */
+  trailingAdPlacement?: MobileAdBannerPlacementKey;
+}
+
+type HeroAdSlideItem = { kind: 'hero-ad-slide' };
+
+type HeroRenderItem = HeroSlide | HeroAdSlideItem;
+
+function isHeroAdSlide(item: HeroRenderItem): item is HeroAdSlideItem {
+  return 'kind' in item && item.kind === 'hero-ad-slide';
 }
 
 const DEFAULT_SLIDES: HeroSlide[] = [];
 
-// Default Blurhash for hero images (neutral gradient)
-const DEFAULT_HERO_BLURHASH = 'L6PZfSi_.AyE_3t7t7RjE1%MWBR*';
-
-// 2026 Best Practice: Common image props for offline caching
-const heroImageProps = {
-  placeholder: { blurhash: DEFAULT_HERO_BLURHASH },
-  transition: 300,
-  cachePolicy: 'memory-disk' as const, // Persist images for offline viewing
-  autoplay: false,
-};
-
-function getHeroImageSource(uri: string, width: number, height: number) {
-  return createSafeBoundedImageSource({ height, uri, width });
-}
-
-const getCoverHeroImageSource = (uri: string, width: number, height: number) =>
-  createSafeBoundedImageSource({ fit: 'cover', height, uri, width });
-
-const EliteSlide = ({
-  item,
-  screenWidth,
-  colors,
-  isDark,
-  styles,
-}: {
-  item: HeroSlide;
-  screenWidth: number;
-  colors: ThemeColors;
-  isDark: boolean;
-  styles: ReturnType<typeof getHeroStyles>;
-}) => {
-  const imageSource = getHeroImageSource(
-    item.image,
-    screenWidth * 0.5,
-    ELITE_HEIGHT
-  );
-
-  return (
-    <View style={[styles.eliteSlideContainer, { width: screenWidth }]}>
-      <View style={styles.eliteCard}>
-        {/* Background Image/Gradient - mocked as light gradient for now */}
-        <LinearGradient
-          colors={
-            isDark
-              ? [colors.card, colors.background]
-              : [colors.muted, colors.border]
-          }
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-
-        <View style={styles.eliteCardContent}>
-          <View style={styles.eliteTextColumn}>
-            <Text style={styles.eliteTitle} numberOfLines={2}>
-              {item.title}
-            </Text>
-            <Text style={styles.eliteSubtitle} numberOfLines={3}>
-              {item.subtitle}
-            </Text>
-            <Pressable
-              style={styles.eliteCta}
-              onPress={() => router.push(item.ctaLink)}
-              accessibilityLabel={item.ctaText}
-              accessibilityRole="button"
-            >
-              <Text style={styles.eliteCtaText}>{item.ctaText}</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.eliteImageColumn}>
-            <Image
-              source={imageSource}
-              style={styles.eliteProductImage}
-              contentFit="contain"
-              {...heroImageProps}
-            />
-          </View>
-        </View>
-      </View>
-    </View>
-  );
-};
-
-const FashionSlide = ({
-  item,
-  screenWidth,
-  styles,
-}: {
-  item: HeroSlide;
-  screenWidth: number;
-  styles: ReturnType<typeof getHeroStyles>;
-}) => (
-  <View style={[styles.slide, { width: screenWidth, height: CAROUSEL_HEIGHT }]}>
-    <Image
-      source={getCoverHeroImageSource(item.image, screenWidth, CAROUSEL_HEIGHT)}
-      style={StyleSheet.absoluteFill}
-      contentFit="cover"
-      {...heroImageProps}
-    />
-    <LinearGradient
-      colors={['transparent', withAlpha(palette.black, 0.8)]}
-      style={styles.gradient}
-    />
-    <View style={styles.fashionContent}>
-      <Text style={styles.fashionTitle}>{item.title}</Text>
-      <Pressable
-        style={styles.fashionCta}
-        onPress={() => router.push(item.ctaLink)}
-        accessibilityLabel={item.ctaText}
-        accessibilityRole="link"
-      >
-        <Text style={styles.fashionCtaText}>{item.ctaText} →</Text>
-      </Pressable>
-    </View>
-  </View>
-);
-
-const StandardSlide = ({
-  item,
-  screenWidth,
-  styles,
-}: {
-  item: HeroSlide;
-  screenWidth: number;
-  styles: ReturnType<typeof getHeroStyles>;
-}) => (
-  <View
-    style={[
-      styles.slide,
-      { width: screenWidth, height: STANDARD_HEIGHT, padding: SPACING.md },
-    ]}
-  >
-    <Image
-      source={getCoverHeroImageSource(item.image, screenWidth, STANDARD_HEIGHT)}
-      style={[StyleSheet.absoluteFill, { borderRadius: RADIUS.xl }]}
-      contentFit="cover"
-      {...heroImageProps}
-    />
-    <LinearGradient
-      colors={[withAlpha(palette.black, 0.7), 'transparent']}
-      style={[StyleSheet.absoluteFill, { borderRadius: RADIUS.xl }]}
-    />
-    <View style={styles.standardContent}>
-      <Text style={styles.standardTitle}>{item.title}</Text>
-      <Pressable
-        style={styles.standardCta}
-        onPress={() => router.push(item.ctaLink)}
-        accessibilityLabel={item.ctaText}
-        accessibilityRole="button"
-      >
-        <Text style={styles.standardCtaText}>{item.ctaText}</Text>
-      </Pressable>
-    </View>
-  </View>
-);
-
 export function Hero({
   slides = DEFAULT_SLIDES,
   autoplayDelay = 5000,
+  trailingAdPlacement,
 }: HeroProps) {
   const { colors, isDark } = useTheme();
   const styles = getHeroStyles(colors, isDark);
@@ -208,11 +63,90 @@ export function Hero({
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
   const scrollX = useSharedValue(0);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const flatListRef = useRef<Animated.FlatList<HeroSlide>>(null);
+  const flatListRef = useRef<Animated.FlatList<HeroRenderItem>>(null);
+  // The list eagerly renders its initial batch, so constructing the native
+  // banner on mount would request/refresh while the sponsored slide is
+  // offscreen. Mount it only while its item is actually viewable.
+  const [isAdVisible, setIsAdVisible] = useState(false);
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
+  const handleViewableItemsChanged = ({
+    viewableItems,
+  }: {
+    viewableItems: ViewToken[];
+  }) => {
+    setIsAdVisible(
+      viewableItems.some(
+        (entry) =>
+          entry.isViewable && isHeroAdSlide(entry.item as HeroRenderItem)
+      )
+    );
+  };
+
+  // A missing or malformed placement must fail closed: the registry throws
+  // for unconfigured production IDs, and that must never take down the home
+  // feed during render.
+  let adUnitConfig: ReturnType<typeof getMobileAdUnitId> = {
+    enabled: false as const,
+  };
+  if (trailingAdPlacement) {
+    try {
+      adUnitConfig = getMobileAdUnitId(trailingAdPlacement);
+    } catch {
+      adUnitConfig = { enabled: false as const };
+    }
+  }
+  // Consent readiness gates the sponsored slide: the native banner must
+  // never be constructed before UMP consent is gathered.
+  const adsReadiness = useMobileAdsReadiness({
+    enabled: adUnitConfig.enabled === true,
+  });
+  // A failed banner (no fill, network/load error) drops the sponsored slide
+  // so autoplay never rotates shoppers onto a full-height blank page. Keyed
+  // by placement so a placement change re-arms the slot.
+  const [failedPlacement, setFailedPlacement] =
+    useState<MobileAdBannerPlacementKey | null>(null);
+  const isAdSlideShown =
+    adUnitConfig.enabled &&
+    adUnitConfig.format === 'banner' &&
+    adsReadiness.canRequestAds &&
+    failedPlacement !== trailingAdPlacement &&
+    slides.length > 0;
+  const renderSlides: HeroRenderItem[] = isAdSlideShown
+    ? [slides[0], { kind: 'hero-ad-slide' } as const, ...slides.slice(1)]
+    : slides;
+  // Live JS mirror of the list offset: onMomentumScrollEnd only updates
+  // currentIndex after a fling settles, so a toggle landing mid-drag must
+  // compensate from the actual offset (like the launch carousel), not the
+  // last snapped page.
+  const scrollOffsetRef = useRef(0);
+  const recordScrollOffset = (offset: number) => {
+    scrollOffsetRef.current = offset;
+  };
+  const wasAdSlideShownRef = useRef(isAdSlideShown);
+  useEffect(() => {
+    // Consent resolving (or a load failure) inserts or removes the slide at
+    // index 1 under a scrolled carousel; shift the offset by one page so the
+    // visible hero stays put instead of being replaced by the ad (or
+    // jumping back on removal). The active dot follows the compensated
+    // offset because a programmatic scroll fires no momentum event.
+    const target = nextOffsetAfterAdToggle({
+      adSlotWidth: screenWidth,
+      insertionOffset: screenWidth,
+      isAdShown: isAdSlideShown,
+      scrollOffset: scrollOffsetRef.current,
+      wasAdShown: wasAdSlideShownRef.current,
+    });
+    wasAdSlideShownRef.current = isAdSlideShown;
+    if (target !== null) {
+      flatListRef.current?.scrollToOffset({ offset: target, animated: false });
+      setCurrentIndex(Math.round(target / screenWidth));
+    }
+  }, [isAdSlideShown, screenWidth]);
 
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollX.set(event.contentOffset.x);
+      runOnJS(recordScrollOffset)(event.contentOffset.x);
     },
   });
 
@@ -223,18 +157,33 @@ export function Hero({
   };
 
   useEffect(() => {
-    if (slides.length <= 1) return;
+    if (renderSlides.length <= 1) return;
     const interval = setInterval(() => {
-      const nextIndex = (currentIndex + 1) % slides.length;
+      const nextIndex = (currentIndex + 1) % renderSlides.length;
       flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
     }, autoplayDelay);
     return () => clearInterval(interval);
-  }, [currentIndex, slides.length, autoplayDelay]);
+  }, [currentIndex, renderSlides.length, autoplayDelay]);
 
   // Don't render if no slides available (prevents "New Collection" placeholder flash)
-  if (slides.length === 0) return null;
+  if (renderSlides.length === 0) return null;
 
-  const renderSlide = ({ item }: { item: HeroSlide }) => {
+  const renderSlide = ({ item }: { item: HeroRenderItem }) => {
+    if (isHeroAdSlide(item)) {
+      if (!trailingAdPlacement) return null;
+      return (
+        <HeroAdSlide
+          height={getHeroHeight()}
+          isVisible={isAdVisible}
+          onAdFailedToLoad={() => setFailedPlacement(trailingAdPlacement)}
+          placement={trailingAdPlacement}
+          screenWidth={screenWidth}
+          unitId={
+            adUnitConfig.enabled ? adUnitConfig.unitId : 'unused-ad-unit-id'
+          }
+        />
+      );
+    }
     switch (template.heroVariant) {
       case 'parallax':
         return (
@@ -270,8 +219,12 @@ export function Hero({
           offset: screenWidth * index,
           index,
         })}
-        data={slides}
+        data={renderSlides}
+        extraData={isAdVisible}
+        onViewableItemsChanged={handleViewableItemsChanged}
         renderItem={renderSlide}
+        testID="hero-carousel-list"
+        viewabilityConfig={viewabilityConfig.current}
         keyExtractor={(_, index) => index.toString()}
         horizontal
         pagingEnabled
@@ -285,11 +238,17 @@ export function Hero({
         scrollEventThrottle={16}
         bounces={false}
       />
-      {slides.length > 1 && (
-        <View style={styles.dotsContainer}>
-          {slides.map((_, index) => (
+      {renderSlides.length > 1 && (
+        <View style={styles.dotsContainer} testID="hero-dots">
+          {renderSlides.map((slide, index) => (
             <View
-              key={index}
+              // Index-qualified: merchant slides may legally reuse an image
+              // URL, and duplicate keys would desync the active indicator
+              // when the sponsored slide inserts or removes.
+              key={
+                isHeroAdSlide(slide) ? 'hero-dot-ad' : `${slide.image}-${index}`
+              }
+              testID={currentIndex === index ? 'hero-dot-active' : 'hero-dot'}
               style={[styles.dot, currentIndex === index && styles.dotActive]}
             />
           ))}

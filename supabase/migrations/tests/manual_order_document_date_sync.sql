@@ -321,9 +321,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- 6. Historical rows (pre-migration shape: recording-day dates stamped by
--- update_order_tax_totals, NULL provenance). The manual and proven-import
--- rows must be repaired to the merchant-timezone day; the unmarked
--- non-manual row stays untouched by design.
+-- update_order_tax_totals, NULL provenance). The manual, proven-import, and
+-- newly mapped-country rows must be repaired to the merchant-timezone day;
+-- the unmarked non-manual row stays untouched and the unknown-country row
+-- keeps its dates (safe no-op) by design.
 -- The DO-block route-context claims above revert at block exit, and the
 -- before-insert route-context trigger raises 42501 without a trusted
 -- context, so mint the service_role bypass exactly like the storefront
@@ -337,6 +338,18 @@ VALUES (
   'Manual Date Historical',
   'manual-date-historical',
   'NG'
+), (
+  'b0000000-0000-0000-0000-000000000006',
+  'manual-date-gb@example.com',
+  'Manual Date GB',
+  'manual-date-gb',
+  'GB'
+), (
+  'b0000000-0000-0000-0000-000000000007',
+  'manual-date-unknown@example.com',
+  'Manual Date Unknown',
+  'manual-date-unknown',
+  'XX'
 );
 
 INSERT INTO public.customers (id, merchant_id, email, full_name)
@@ -380,6 +393,24 @@ INSERT INTO public.orders (
   150000, 150000, 'paid', 'pending', 'online_store',
   '2026-03-04T23:30:00Z', '2026-06-01', '2026-06-01', NULL, NULL,
   NULL, 'bumpa', NULL
+), (
+  'b0000000-0000-0000-0000-000000000008',
+  'b0000000-0000-0000-0000-000000000006',
+  'HISTORICAL-GB-MANUAL',
+  'Historical GB',
+  'manual-date-gb@example.com',
+  150000, 150000, 'paid', 'pending', 'physical',
+  '2026-03-03T23:30:00Z', '2026-03-04', '2026-03-04', NULL, NULL,
+  NULL, NULL, NULL
+), (
+  'b0000000-0000-0000-0000-000000000009',
+  'b0000000-0000-0000-0000-000000000007',
+  'HISTORICAL-UNKNOWN-COUNTRY',
+  'Historical Unknown',
+  'manual-date-unknown@example.com',
+  150000, 150000, 'paid', 'pending', 'physical',
+  '2026-03-04T23:30:00Z', '2026-03-04', '2026-03-04', NULL, NULL,
+  NULL, NULL, NULL
 );
 RESET ROLE;
 
@@ -390,7 +421,9 @@ SELECT id, updated_at FROM public.orders
 WHERE id IN (
   'b0000000-0000-0000-0000-000000000003',
   'b0000000-0000-0000-0000-000000000004',
-  'b0000000-0000-0000-0000-000000000005'
+  'b0000000-0000-0000-0000-000000000005',
+  'b0000000-0000-0000-0000-000000000008',
+  'b0000000-0000-0000-0000-000000000009'
 );
 CREATE TEMPORARY TABLE backfill_customer_guard AS
 SELECT id, updated_at FROM public.customers
@@ -432,6 +465,26 @@ BEGIN
   IF v_issue <> '2026-03-05' OR v_tax <> '2026-03-05'
      OR v_issue_gen IS DISTINCT FROM true OR v_tax_gen IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'backfill did not repair historical import dates: % / %', v_issue, v_tax;
+  END IF;
+
+  SELECT invoice_issue_date, tax_point_date,
+         invoice_issue_date_generated, tax_point_date_generated
+  INTO v_issue, v_tax, v_issue_gen, v_tax_gen
+  FROM public.orders
+  WHERE id = 'b0000000-0000-0000-0000-000000000008';
+  IF v_issue <> '2026-03-03' OR v_tax <> '2026-03-03'
+     OR v_issue_gen IS DISTINCT FROM true OR v_tax_gen IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'backfill did not repair GB merchant dates: % / %', v_issue, v_tax;
+  END IF;
+
+  SELECT invoice_issue_date, tax_point_date,
+         invoice_issue_date_generated, tax_point_date_generated
+  INTO v_issue, v_tax, v_issue_gen, v_tax_gen
+  FROM public.orders
+  WHERE id = 'b0000000-0000-0000-0000-000000000009';
+  IF v_issue <> '2026-03-04' OR v_tax <> '2026-03-04'
+     OR v_issue_gen IS DISTINCT FROM true OR v_tax_gen IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'backfill disturbed unknown-country dates: % / %', v_issue, v_tax;
   END IF;
 
   -- 7. Re-applying the migration preserves the explicit physical fixture: a

@@ -37,6 +37,8 @@ describe('manual order document date migration', () => {
   it('derives the backfill timezone from merchant country', () => {
     expect(migration).toContain("WHEN 'GH' THEN 'Africa/Accra'");
     expect(migration).toContain("WHEN 'NG' THEN 'Africa/Lagos'");
+    expect(migration).toContain("WHEN 'US' THEN 'America/New_York'");
+    expect(migration).toContain("WHEN 'GB' THEN 'Europe/London'");
     expect(migration).toContain('ELSE NULL');
   });
 

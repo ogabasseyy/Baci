@@ -2,6 +2,10 @@ ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS invoice_issue_date_generated boolean,
   ADD COLUMN IF NOT EXISTS tax_point_date_generated boolean;
 
+-- Resolves the IANA timezone for every country in MERCHANT_COUNTRIES
+-- (packages/shared). Multi-zone countries map to their primary business
+-- zone as an approximation; unknown values stay NULL so date repairs
+-- safely skip them instead of stamping a wrong day.
 CREATE OR REPLACE FUNCTION public.manual_order_timezone(p_merchant_id uuid)
 RETURNS text
 LANGUAGE sql
@@ -9,12 +13,52 @@ STABLE
 SET search_path TO 'pg_catalog', 'public'
 AS $$
   SELECT CASE upper(COALESCE(m.country, ''))
+    WHEN 'AE' THEN 'Asia/Dubai'
+    WHEN 'UNITED ARAB EMIRATES' THEN 'Asia/Dubai'
+    WHEN 'AU' THEN 'Australia/Sydney'
+    WHEN 'AUSTRALIA' THEN 'Australia/Sydney'
+    WHEN 'BF' THEN 'Africa/Ouagadougou'
+    WHEN 'BURKINA FASO' THEN 'Africa/Ouagadougou'
+    WHEN 'BR' THEN 'America/Sao_Paulo'
+    WHEN 'BRAZIL' THEN 'America/Sao_Paulo'
+    WHEN 'CA' THEN 'America/Toronto'
+    WHEN 'CANADA' THEN 'America/Toronto'
+    WHEN 'CI' THEN 'Africa/Abidjan'
+    WHEN 'COTE D''IVOIRE' THEN 'Africa/Abidjan'
+    WHEN 'CÔTE D''IVOIRE' THEN 'Africa/Abidjan'
+    WHEN 'IVORY COAST' THEN 'Africa/Abidjan'
+    WHEN 'CM' THEN 'Africa/Douala'
+    WHEN 'CAMEROON' THEN 'Africa/Douala'
+    WHEN 'DE' THEN 'Europe/Berlin'
+    WHEN 'GERMANY' THEN 'Europe/Berlin'
+    WHEN 'EG' THEN 'Africa/Cairo'
+    WHEN 'EGYPT' THEN 'Africa/Cairo'
+    WHEN 'FR' THEN 'Europe/Paris'
+    WHEN 'FRANCE' THEN 'Europe/Paris'
+    WHEN 'GB' THEN 'Europe/London'
+    WHEN 'UK' THEN 'Europe/London'
+    WHEN 'UNITED KINGDOM' THEN 'Europe/London'
     WHEN 'GH' THEN 'Africa/Accra'
     WHEN 'GHANA' THEN 'Africa/Accra'
+    WHEN 'IN' THEN 'Asia/Kolkata'
+    WHEN 'INDIA' THEN 'Asia/Kolkata'
+    WHEN 'JP' THEN 'Asia/Tokyo'
+    WHEN 'JAPAN' THEN 'Asia/Tokyo'
     WHEN 'KE' THEN 'Africa/Nairobi'
     WHEN 'KENYA' THEN 'Africa/Nairobi'
     WHEN 'NG' THEN 'Africa/Lagos'
     WHEN 'NIGERIA' THEN 'Africa/Lagos'
+    WHEN 'RW' THEN 'Africa/Kigali'
+    WHEN 'RWANDA' THEN 'Africa/Kigali'
+    WHEN 'SN' THEN 'Africa/Dakar'
+    WHEN 'SENEGAL' THEN 'Africa/Dakar'
+    WHEN 'TZ' THEN 'Africa/Dar_es_Salaam'
+    WHEN 'TANZANIA' THEN 'Africa/Dar_es_Salaam'
+    WHEN 'UG' THEN 'Africa/Kampala'
+    WHEN 'UGANDA' THEN 'Africa/Kampala'
+    WHEN 'US' THEN 'America/New_York'
+    WHEN 'USA' THEN 'America/New_York'
+    WHEN 'UNITED STATES' THEN 'America/New_York'
     WHEN 'ZA' THEN 'Africa/Johannesburg'
     WHEN 'SOUTH AFRICA' THEN 'Africa/Johannesburg'
     ELSE NULL

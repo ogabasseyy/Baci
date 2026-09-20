@@ -72,6 +72,15 @@ export async function POST(request: Request) {
       ),
     });
 
+    // The VPS scheduler treats any 2xx as success: surface an execution
+    // failure (rather than a per-refund outcome) as a 500 so alerting
+    // fires instead of silently recording a failed pass as healthy.
+    if (
+      outcome.submission === 'transport_or_provider_error' ||
+      outcome.reconciliation === 'transport_or_provider_error'
+    ) {
+      return NextResponse.json({ success: false, ...outcome }, { status: 500 });
+    }
     return NextResponse.json({ success: true, ...outcome });
   } catch (error) {
     logger.error({

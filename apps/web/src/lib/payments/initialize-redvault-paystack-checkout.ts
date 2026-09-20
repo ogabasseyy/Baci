@@ -10,7 +10,6 @@ export function initializeRedvaultPaystackCheckout({
   merchantId,
   orderId,
   redirectUrl,
-  serviceClient,
   userId,
 }: {
   customerEmail: string;
@@ -18,14 +17,12 @@ export function initializeRedvaultPaystackCheckout({
   merchantId: string;
   orderId: string;
   redirectUrl: string;
-  serviceClient: Pick<SupabaseClient, 'rpc'>;
   userId: string | null;
 }) {
   const attemptAdapter = createRedvaultPaymentAttemptClient({
     customerEmail,
     fallbackClient,
     merchantId,
-    serviceClient,
     userId,
   });
 
@@ -35,6 +32,19 @@ export function initializeRedvaultPaystackCheckout({
     orderId,
     provider: {
       async initialize(input) {
+        // The split collects the base platform fee plus the frozen GIGL
+        // retained-shipping snapshot: settlement books both, so the
+        // provider charge must match or the ledger records money the
+        // platform never collected.
+        if (
+          !Number.isSafeInteger(input.retainedShippingKobo) ||
+          input.retainedShippingKobo < 0 ||
+          input.platformFeeKobo + input.retainedShippingKobo > input.amountKobo
+        ) {
+          throw new Error('REDVAULT split retention is invalid');
+        }
+        const transactionCharge =
+          input.platformFeeKobo + input.retainedShippingKobo;
         const paystack = await initializeTransaction({
           amount: input.amountKobo,
           callback_url: input.redirectUrl,
@@ -45,10 +55,11 @@ export function initializeRedvaultPaystackCheckout({
             merchant_id: merchantId,
             order_id: orderId,
             platform_fee_kobo: input.platformFeeKobo,
+            retained_shipping_kobo: input.retainedShippingKobo,
           },
           reference: input.reference,
           subaccount: input.paystackSubaccount,
-          transaction_charge: input.platformFeeKobo,
+          transaction_charge: transactionCharge,
           bearer: 'account',
         });
         if (!paystack.authorization_url) {

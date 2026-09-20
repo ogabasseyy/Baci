@@ -23,7 +23,6 @@ describe('createRedvaultPaymentAttemptClient', () => {
         customerEmail: 'customer@example.test',
         fallbackClient: { rpc } as never,
         merchantId: '11111111-1111-4111-8111-111111111111',
-        serviceClient: { rpc } as never,
         userId: null,
       })
     ).toThrow('REDVAULT is exclusive to Ogabassey');
@@ -80,16 +79,15 @@ describe('createRedvaultPaymentAttemptClient', () => {
           },
         ],
         error: null,
-      });
+      })
+      .mockResolvedValueOnce({ data: [], error: null });
     mocks.signScopedSupabaseJwt.mockReturnValue('scoped-token');
     mocks.createScopedClient.mockReturnValue({ rpc });
 
-    const serviceRpc = vi.fn().mockResolvedValue({ data: [], error: null });
     const adapter = createRedvaultPaymentAttemptClient({
       customerEmail: ' Customer@Example.test ',
       fallbackClient: { rpc: vi.fn() } as never,
       merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-      serviceClient: { rpc: serviceRpc } as never,
       userId: 'customer-id',
     });
 
@@ -141,7 +139,8 @@ describe('createRedvaultPaymentAttemptClient', () => {
     await expect(
       adapter.reconcileInitialization('attempt-1', 'void')
     ).resolves.toBeUndefined();
-    expect(serviceRpc).toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenNthCalledWith(
+      4,
       'reconcile_storefront_redvault_payment_attempt_initialization',
       {
         p_attempt_id: 'attempt-1',
@@ -149,6 +148,5 @@ describe('createRedvaultPaymentAttemptClient', () => {
         p_state: 'void',
       }
     );
-    expect(rpc).toHaveBeenCalledTimes(3);
   });
 });

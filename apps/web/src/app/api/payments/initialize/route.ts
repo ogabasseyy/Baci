@@ -1298,7 +1298,6 @@ export async function POST(request: NextRequest) {
         merchantId,
         orderId: data.order_id,
         redirectUrl: `${protocol}://${merchantWithPaystack.slug}.${rootDomain}/checkout/success`,
-        serviceClient: createAdminClient(),
         userId: redvaultCustomerAuth?.user?.id ?? null,
       });
 

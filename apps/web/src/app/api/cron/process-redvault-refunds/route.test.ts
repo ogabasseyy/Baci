@@ -82,6 +82,40 @@ describe('POST /api/cron/process-redvault-refunds', () => {
     expect(res.status).toBe(500);
   });
 
+  it.each([
+    {
+      reconciliation: 'idle',
+      submission: 'transport_or_provider_error',
+    },
+    {
+      reconciliation: 'transport_or_provider_error',
+      submission: 'idle',
+    },
+  ])('returns 500 when a pass reports an execution error %j', async (outcome) => {
+    mocks.runRedvaultRefundRecovery.mockResolvedValueOnce(outcome);
+
+    const res = await POST(makeRequest());
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ success: false, ...outcome });
+  });
+
+  it('returns 200 when passes report per-refund outcomes', async () => {
+    mocks.runRedvaultRefundRecovery.mockResolvedValueOnce({
+      reconciliation: 'indeterminate',
+      submission: 'processed',
+    });
+
+    const res = await POST(makeRequest());
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      reconciliation: 'indeterminate',
+      submission: 'processed',
+      success: true,
+    });
+  });
+
   it('refuses GET outside development', async () => {
     const res = await GET(
       new NextRequest('http://localhost:3000/api/cron/process-redvault-refunds')

@@ -40,6 +40,7 @@ describe('initializeRedvaultPaystackCheckout', () => {
         platformFeeKobo: 10000,
         redirectUrl: 'https://shop.example.test/checkout/success',
         reference: 'RV-attempt-1',
+        retainedShippingKobo: 0,
       });
       return initialized;
     });
@@ -54,7 +55,6 @@ describe('initializeRedvaultPaystackCheckout', () => {
         merchantId: 'merchant-1',
         orderId: 'order-1',
         redirectUrl: 'https://shop.example.test/checkout/success',
-        serviceClient: { rpc: vi.fn() } as never,
         userId: null,
       })
     ).resolves.toEqual({
@@ -62,6 +62,9 @@ describe('initializeRedvaultPaystackCheckout', () => {
     });
     expect(mocks.createAttemptClient).toHaveBeenCalledWith(
       expect.objectContaining({ merchantId: 'merchant-1', userId: null })
+    );
+    expect(mocks.createAttemptClient).not.toHaveBeenCalledWith(
+      expect.objectContaining({ serviceClient: expect.anything() })
     );
     expect(mocks.initializeTransaction).toHaveBeenCalledWith({
       amount: 500000,
@@ -77,12 +80,87 @@ describe('initializeRedvaultPaystackCheckout', () => {
         order_id: 'order-1',
         partnership: 'uba_redvault',
         platform_fee_kobo: 10000,
+        retained_shipping_kobo: 0,
       },
       reference: 'RV-attempt-1',
       subaccount: 'ACCT_reserved',
       transaction_charge: 10000,
       bearer: 'account',
     });
+  });
+
+  it('collects the frozen GIGL retention in the split charge', async () => {
+    mocks.createAttemptClient.mockReturnValue({ reserve: vi.fn() });
+    mocks.initializeCheckout.mockImplementation(async ({ provider }) =>
+      provider.initialize({
+        amountKobo: 500000,
+        authorizationMetadata: { partnership: 'uba_redvault' },
+        customerEmail: 'customer@example.test',
+        orderId: 'order-1',
+        paystackSubaccount: 'ACCT_reserved',
+        platformFeeKobo: 10000,
+        redirectUrl: 'https://shop.example.test/checkout/success',
+        reference: 'RV-attempt-1',
+        retainedShippingKobo: 20000,
+      })
+    );
+    mocks.initializeTransaction.mockResolvedValue({
+      authorization_url: 'https://paystack.test/checkout/1',
+    });
+
+    await initializeRedvaultPaystackCheckout({
+      customerEmail: 'customer@example.test',
+      fallbackClient: { rpc: vi.fn() } as never,
+      merchantId: 'merchant-1',
+      orderId: 'order-1',
+      redirectUrl: 'https://shop.example.test/checkout/success',
+      userId: null,
+    });
+
+    expect(mocks.initializeTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          platform_fee_kobo: 10000,
+          retained_shipping_kobo: 20000,
+        }),
+        transaction_charge: 30000,
+      })
+    );
+  });
+
+  it.each([
+    { retainedShippingKobo: -1 },
+    { retainedShippingKobo: 500001 },
+  ])('rejects an invalid split retention %j before calling Paystack', async ({
+    retainedShippingKobo,
+  }) => {
+    mocks.initializeTransaction.mockClear();
+    mocks.createAttemptClient.mockReturnValue({ reserve: vi.fn() });
+    mocks.initializeCheckout.mockImplementation(async ({ provider }) =>
+      provider.initialize({
+        amountKobo: 500000,
+        authorizationMetadata: { partnership: 'uba_redvault' },
+        customerEmail: 'customer@example.test',
+        orderId: 'order-1',
+        paystackSubaccount: 'ACCT_reserved',
+        platformFeeKobo: 10000,
+        redirectUrl: 'https://shop.example.test/checkout/success',
+        reference: 'RV-attempt-1',
+        retainedShippingKobo,
+      })
+    );
+
+    await expect(
+      initializeRedvaultPaystackCheckout({
+        customerEmail: 'customer@example.test',
+        fallbackClient: { rpc: vi.fn() } as never,
+        merchantId: 'merchant-1',
+        orderId: 'order-1',
+        redirectUrl: 'https://shop.example.test/checkout/success',
+        userId: null,
+      })
+    ).rejects.toThrow('REDVAULT split retention is invalid');
+    expect(mocks.initializeTransaction).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -123,7 +201,6 @@ describe('initializeRedvaultPaystackCheckout', () => {
         merchantId: 'merchant-1',
         orderId: 'order-1',
         redirectUrl: 'https://shop.example.test/checkout/success',
-        serviceClient: { rpc: vi.fn() } as never,
         userId: null,
       })
     ).resolves.toEqual(expected);

@@ -7,9 +7,12 @@ ALTER TABLE private.uba_redvault_refunds
   ADD COLUMN IF NOT EXISTS failure_code text,
   ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT pg_catalog.now();
 
-UPDATE private.uba_redvault_refunds SET state = 'pending' WHERE state = 'requested';
+-- Drop the 904 state check before rewriting rows: on any database where
+-- 904 committed with live `requested` refunds, the rewrite below would
+-- otherwise abort against the old permitted set.
 ALTER TABLE private.uba_redvault_refunds
   DROP CONSTRAINT IF EXISTS uba_redvault_refunds_state_check;
+UPDATE private.uba_redvault_refunds SET state = 'pending' WHERE state = 'requested';
 ALTER TABLE private.uba_redvault_refunds
   ADD CONSTRAINT uba_redvault_refunds_state_check
   CHECK (state IN ('pending', 'processing', 'failed', 'processed'));

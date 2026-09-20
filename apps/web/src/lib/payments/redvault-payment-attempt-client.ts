@@ -14,6 +14,7 @@ export type RedvaultReservedAttempt = {
   paystackSubaccount: string;
   platformFeeKobo: number;
   reference: string;
+  splitRetainedShippingKobo: number;
   state: 'created' | 'initializing' | 'initialized' | 'indeterminate';
 };
 
@@ -53,6 +54,21 @@ function parseReservedAttempt(value: unknown): RedvaultReservedAttempt | null {
     return null;
   }
 
+  // Only the claim RPCs carry the frozen split retention; reserve/record
+  // rows predate the column and never feed the provider split, so a
+  // missing value degrades to zero instead of failing the parse.
+  const splitRetained = row.split_retained_shipping_kobo;
+  if (
+    splitRetained !== undefined &&
+    splitRetained !== null &&
+    (typeof splitRetained !== 'number' ||
+      !Number.isSafeInteger(splitRetained) ||
+      splitRetained < 0 ||
+      splitRetained > row.amount_kobo)
+  ) {
+    return null;
+  }
+
   return {
     amountKobo: row.amount_kobo,
     authorizationUrl: row.authorization_url,
@@ -61,6 +77,8 @@ function parseReservedAttempt(value: unknown): RedvaultReservedAttempt | null {
     paystackSubaccount: row.paystack_subaccount_code,
     platformFeeKobo: row.platform_fee_kobo,
     reference: row.reference,
+    splitRetainedShippingKobo:
+      typeof splitRetained === 'number' ? splitRetained : 0,
     state: row.state,
   };
 }
@@ -104,13 +122,11 @@ export function createRedvaultPaymentAttemptClient({
   customerEmail,
   fallbackClient,
   merchantId,
-  serviceClient,
   userId,
 }: {
   customerEmail: string;
   fallbackClient: RedvaultAttemptRpcClient;
   merchantId: string;
-  serviceClient: RedvaultAttemptRpcClient;
   userId: string | null;
 }) {
   const client = createRedvaultAttemptContextClient({
@@ -176,9 +192,10 @@ export function createRedvaultPaymentAttemptClient({
       attemptId: string,
       state: 'indeterminate' | 'void'
     ): Promise<void> {
-      // Initialization recovery requires service_role: the scoped customer
-      // context must never rewrite another worker's ambiguous claim.
-      const { error } = await serviceClient.rpc(
+      // Recovery runs inside the customer's scoped route context: the RPC
+      // rebinds the attempt to the JWT customer, so checkout never mints a
+      // service-role client to reconcile its own ambiguous claim.
+      const { error } = await client.rpc(
         'reconcile_storefront_redvault_payment_attempt_initialization' as never,
         {
           p_attempt_id: attemptId,

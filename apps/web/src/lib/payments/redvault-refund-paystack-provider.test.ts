@@ -385,4 +385,127 @@ describe('isolated REDVAULT Paystack refund transport', () => {
       })
     ).resolves.toEqual({ kind: 'pending', providerStatus: 'pending' });
   });
+  it('binds a numeric provider transaction ID through fetch-transaction', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (String(url) === 'https://api.paystack.co/transaction/1641') {
+        return new Response(
+          JSON.stringify({ status: true, data: { reference: 'RV-capture' } }),
+          { status: 200 }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          status: true,
+          data: { ...data, status: 'processed', transaction: 1641 },
+        }),
+        { status: 200 }
+      );
+    });
+    const provider = createRedvaultPaystackRefundProvider({
+      fetcher,
+      getSecret: () => 'test-secret',
+    });
+
+    expect(await provider.submit(input)).toEqual({
+      kind: 'processed',
+      providerReference: '123',
+      providerStatus: 'processed',
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://api.paystack.co/transaction/1641',
+      expect.objectContaining({ method: 'GET', body: undefined })
+    );
+    expect(
+      await provider.lookup({
+        providerReference: '123',
+        expectedAmountKobo: 9500,
+        expectedCaptureReference: 'RV-capture',
+        expectedCurrency: 'NGN',
+      })
+    ).toEqual({ kind: 'processed', providerStatus: 'processed' });
+  });
+  it('holds a numeric transaction that resolves to another capture', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (String(url).startsWith('https://api.paystack.co/transaction/')) {
+        return new Response(
+          JSON.stringify({ status: true, data: { reference: 'RV-other' } }),
+          { status: 200 }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          status: true,
+          data: { ...data, status: 'processed', transaction: 1641 },
+        }),
+        { status: 200 }
+      );
+    });
+    const provider = createRedvaultPaystackRefundProvider({
+      fetcher,
+      getSecret: () => 'test-secret',
+    });
+
+    expect(await provider.submit(input)).toEqual({ kind: 'indeterminate' });
+    await expect(
+      provider.lookup({
+        providerReference: '123',
+        expectedAmountKobo: 9500,
+        expectedCaptureReference: 'RV-capture',
+        expectedCurrency: 'NGN',
+      })
+    ).rejects.toThrow('REDVAULT refund lookup unverified');
+  });
+  it('holds a numeric transaction the provider cannot resolve', async () => {
+    const { provider } = setup({
+      status: true,
+      data: { ...data, status: 'processed', transaction: 1641 },
+    });
+
+    // The single-response mock answers the transaction lookup with the
+    // refund payload, which carries no reference: unresolvable stays held.
+    expect(await provider.submit(input)).toEqual({ kind: 'indeterminate' });
+  });
+  it('resolves a numeric-transaction row in capture-reference recovery', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (String(url) === 'https://api.paystack.co/transaction/1641') {
+        return new Response(
+          JSON.stringify({ status: true, data: { reference: 'RV-capture' } }),
+          { status: 200 }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          status: true,
+          data: [
+            {
+              amount: 9500,
+              currency: 'NGN',
+              id: 124,
+              status: 'processed',
+              transaction: 1641,
+            },
+          ],
+        }),
+        { status: 200 }
+      );
+    });
+    const provider = createRedvaultPaystackRefundProvider({
+      fetcher,
+      getSecret: () => 'test-secret',
+    });
+
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: 'RV-capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+        knownProviderReferences: [],
+        submittedAt: null,
+      })
+    ).resolves.toEqual({
+      kind: 'processed',
+      providerReference: '124',
+      providerStatus: 'processed',
+    });
+  });
 });

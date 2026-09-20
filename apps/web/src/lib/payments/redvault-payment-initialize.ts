@@ -35,6 +35,7 @@ export type RedvaultCheckoutProvider = {
     platformFeeKobo: number;
     redirectUrl: string;
     reference: string;
+    retainedShippingKobo: number;
   }): Promise<{ authorizationUrl: string }>;
   probeInitialization(input: {
     reference: string;
@@ -75,6 +76,7 @@ export async function initializeRedvaultCheckout({
         platformFeeKobo: activeClaim.attempt.platformFeeKobo,
         redirectUrl,
         reference: activeClaim.attempt.reference,
+        retainedShippingKobo: activeClaim.attempt.splitRetainedShippingKobo,
       });
       if (!initialized.authorizationUrl) {
         throw new Error('REDVAULT provider returned no authorization URL');

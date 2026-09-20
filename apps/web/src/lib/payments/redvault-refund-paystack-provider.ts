@@ -30,14 +30,18 @@ export function createRedvaultPaystackRefundProvider({
   getSecret: () => string | undefined;
 }): RedvaultRefundProvider & RedvaultRefundReconciliationProvider {
   async function request(path: string, body?: Record<string, unknown>) {
-    const envelope = await requestEnvelope(path, body);
+    const envelope = await requestEnvelope('/refund', path, body);
     return envelope?.status === true ? record(envelope.data) : null;
   }
-  async function requestEnvelope(path: string, body?: Record<string, unknown>) {
+  async function requestEnvelope(
+    base: string,
+    path: string,
+    body?: Record<string, unknown>
+  ) {
     try {
       const secret = getSecret();
       if (!secret) return null;
-      const response = await fetcher(`https://api.paystack.co/refund${path}`, {
+      const response = await fetcher(`https://api.paystack.co${base}${path}`, {
         method: body ? 'POST' : 'GET',
         headers: {
           Authorization: `Bearer ${secret}`,
@@ -56,9 +60,33 @@ export function createRedvaultPaystackRefundProvider({
     }
   }
   async function requestList(path: string) {
-    const envelope = await requestEnvelope(path);
+    const envelope = await requestEnvelope('/refund', path);
     const data = envelope?.data;
     return Array.isArray(data) ? data : null;
+  }
+  // Live refund payloads identify `transaction` with the provider
+  // transaction ID (a number), not an expanded reference object. Resolve a
+  // numeric ID to its reference through the documented fetch-transaction
+  // endpoint so valid submissions stay bound to the original capture.
+  async function resolveTransactionReference(
+    value: unknown
+  ): Promise<string | null> {
+    if (typeof value === 'string') return value;
+    const expanded = record(value);
+    if (expanded && typeof expanded.reference === 'string') {
+      return expanded.reference;
+    }
+    if (
+      typeof value !== 'number' ||
+      !Number.isSafeInteger(value) ||
+      value <= 0
+    ) {
+      return null;
+    }
+    const envelope = await requestEnvelope('/transaction', `/${value}`);
+    if (envelope?.status !== true) return null;
+    const reference = record(envelope.data)?.reference;
+    return typeof reference === 'string' ? reference : null;
   }
   return {
     async submit({ amountKobo, originalCaptureReference }) {
@@ -74,10 +102,13 @@ export function createRedvaultPaystackRefundProvider({
         currency: 'NGN',
       });
       const providerReference = refundId(data?.id);
+      const transactionReference = data
+        ? await resolveTransactionReference(data.transaction)
+        : null;
       if (
         !data ||
         !providerReference ||
-        record(data.transaction)?.reference !== originalCaptureReference ||
+        transactionReference !== originalCaptureReference ||
         data.amount !== amountKobo ||
         data.currency !== 'NGN'
       )
@@ -110,10 +141,13 @@ export function createRedvaultPaystackRefundProvider({
       if (!/^[1-9][0-9]*$/.test(providerReference))
         throw new Error('REDVAULT refund lookup invalid identifier');
       const data = await request(`/${providerReference}`);
+      const transactionReference = data
+        ? await resolveTransactionReference(data.transaction)
+        : null;
       if (
         !data ||
         refundId(data.id) !== providerReference ||
-        record(data.transaction)?.reference !== expectedCaptureReference ||
+        transactionReference !== expectedCaptureReference ||
         data.amount !== expectedAmountKobo ||
         data.currency !== expectedCurrency
       )
@@ -163,16 +197,17 @@ export function createRedvaultPaystackRefundProvider({
       for (const row of rows ?? []) {
         const candidate = record(row);
         if (!candidate) continue;
-        const transaction = record(candidate.transaction);
-        const transactionMatches = transaction
-          ? transaction.reference === captureReference
-          : candidate.transaction === captureReference;
+        // Amount and currency filter first so the transaction-ID lookup
+        // below only fires for plausible rows.
         if (
-          !transactionMatches ||
           candidate.amount !== expectedAmountKobo ||
           candidate.currency !== expectedCurrency
         )
           continue;
+        const candidateReference = await resolveTransactionReference(
+          candidate.transaction
+        );
+        if (candidateReference !== captureReference) continue;
         const providerReference = refundId(candidate.id);
         if (!providerReference || known.has(providerReference)) continue;
         if (Number.isFinite(submittedMs)) {

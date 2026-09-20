@@ -9,6 +9,7 @@ const createdAttempt = {
   paystackSubaccount: 'ACCT_reserved',
   platformFeeKobo: 1900,
   reference: 'RV-reference-1',
+  splitRetainedShippingKobo: 0,
   state: 'created' as const,
 };
 
@@ -18,6 +19,12 @@ const freshAttempt = {
   ...createdAttempt,
   id: 'attempt-2',
   reference: 'RV-reference-2',
+};
+
+const giglAttempt = {
+  ...createdAttempt,
+  platformFeeKobo: 1900,
+  splitRetainedShippingKobo: 20000,
 };
 
 function createProvider(
@@ -85,6 +92,39 @@ describe('initializeRedvaultCheckout', () => {
     );
     expect(provider.probeInitialization).not.toHaveBeenCalled();
     expect(attemptAdapter.reconcileInitialization).not.toHaveBeenCalled();
+  });
+
+  it('passes the frozen GIGL retention to the provider split', async () => {
+    const attemptAdapter = {
+      claimInitialization: vi.fn().mockResolvedValue({
+        attempt: { ...giglAttempt, state: 'initializing' },
+        claimed: true,
+      }),
+      markIndeterminate: vi.fn(),
+      markInitialized: vi.fn().mockResolvedValue({
+        ...giglAttempt,
+        authorizationUrl: 'https://paystack.test/checkout/gigl',
+        state: 'initialized',
+      }),
+      reconcileInitialization: vi.fn(),
+      reserve: vi.fn().mockResolvedValue(giglAttempt),
+    };
+    const provider = createProvider();
+
+    await initializeRedvaultCheckout({
+      attemptAdapter,
+      customerEmail: 'customer@example.test',
+      orderId: 'order-1',
+      provider,
+      redirectUrl: 'https://shop.example.test/checkout/success',
+    });
+
+    expect(provider.initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platformFeeKobo: 1900,
+        retainedShippingKobo: 20000,
+      })
+    );
   });
 
   it('reuses a persisted initialized URL without another provider call', async () => {

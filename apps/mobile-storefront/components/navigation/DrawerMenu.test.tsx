@@ -11,6 +11,7 @@ jest.mock('expo-router', () => ({
 }));
 
 let mockIsOpen = true;
+let mockIsFullyOpen = false;
 let mockTimingCallbacks: Array<(finished?: boolean) => void> = [];
 
 jest.mock('@/hooks/use-mobile-ads-readiness', () => ({
@@ -96,10 +97,15 @@ jest.mock('react-native-reanimated', () => {
   };
 });
 
+function mockSetFullyOpen(fullyOpen: boolean): void {
+  mockIsFullyOpen = fullyOpen;
+}
 jest.mock('@/stores/drawer-store', () => ({
   useDrawerStore: () => ({
     isOpen: mockIsOpen,
+    isFullyOpen: mockIsFullyOpen,
     closeDrawer: jest.fn(),
+    setFullyOpen: mockSetFullyOpen,
   }),
 }));
 
@@ -149,6 +155,7 @@ jest.mock('@/components/storefront/GadgetPattern', () => {
 describe('DrawerMenu', () => {
   beforeEach(() => {
     mockIsOpen = true;
+    mockIsFullyOpen = false;
     mockTimingCallbacks = [];
   });
 
@@ -170,22 +177,42 @@ describe('DrawerMenu', () => {
     ).toBeNull();
   });
 
-  it('mounts the footer ad only while the drawer is open', () => {
+  it('mounts the footer ad only between the open and close animations', async () => {
+    // Regression: isOpen flips when the slide starts, so mounting on it
+    // would request and attribute impressions while the drawer is still
+    // off-screen; ownership transfers only on animation completion.
     process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
-    mockIsOpen = true;
-    const { unmount } = render(<DrawerMenu />);
-    expect(screen.queryByTestId('ad-slot-footer-anchor')).not.toBeNull();
-    unmount();
+    try {
+      mockIsOpen = true;
+      const view = render(<DrawerMenu />);
+      expect(screen.queryByTestId('ad-slot-footer-anchor')).toBeNull();
 
-    mockIsOpen = false;
-    render(<DrawerMenu />);
-    expect(screen.queryByTestId('ad-slot-footer-anchor')).toBeNull();
-    expect(mockUseMobileAdsReadiness).toHaveBeenCalled();
-    delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
+      await act(async () => {
+        mockTimingCallbacks.shift()?.(true);
+      });
+      view.rerender(<DrawerMenu />);
+      expect(screen.queryByTestId('ad-slot-footer-anchor')).not.toBeNull();
+
+      mockIsOpen = false;
+      view.rerender(<DrawerMenu />);
+      expect(screen.queryByTestId('ad-slot-footer-anchor')).not.toBeNull();
+
+      // The mocked shared values re-fire the effect on every render, so the
+      // close callback is last in the queue.
+      await act(async () => {
+        mockTimingCallbacks.at(-1)?.(true);
+      });
+      view.rerender(<DrawerMenu />);
+      expect(screen.queryByTestId('ad-slot-footer-anchor')).toBeNull();
+      expect(mockUseMobileAdsReadiness).toHaveBeenCalled();
+    } finally {
+      delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
+    }
   });
 
   it('keeps the decorative backdrop mounted until the close animation finishes', async () => {
     const view = render(<DrawerMenu />);
+    mockTimingCallbacks.length = 0;
 
     mockIsOpen = false;
     view.rerender(<DrawerMenu />);
@@ -205,6 +232,7 @@ describe('DrawerMenu', () => {
 
   it('keeps the decorative backdrop when the close animation is interrupted', () => {
     const view = render(<DrawerMenu />);
+    mockTimingCallbacks.length = 0;
 
     mockIsOpen = false;
     view.rerender(<DrawerMenu />);

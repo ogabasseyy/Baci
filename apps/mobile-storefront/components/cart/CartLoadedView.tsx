@@ -1,10 +1,12 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
+import { useEffect, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { AdSlot } from '@/components/ads/AdSlot';
 import { CheckoutIdentityModal } from '@/components/checkout/checkout-identity';
 import { PatternedBackground } from '@/components/storefront/PatternedBackground';
 import type Colors from '@/constants/Colors';
 import { palette, SPACING } from '@/constants/Colors';
+import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import type { CartItem } from '@/stores/cart-store';
 import CartCheckoutFooter from './CartCheckoutFooter';
 import CartItemCard from './CartItemCard';
@@ -102,6 +104,23 @@ export default function CartLoadedView({
   const hasAcceptedNegotiation = items.some(
     (item) => item.negotiationStatus === 'accepted'
   );
+  // iOS keeps the native negotiation modal rendered through its fade
+  // dismissal, while the close handler clears the flag synchronously. Hold
+  // the ad gate until the modal reports dismissal.
+  const [negotiateDismissed, setNegotiateDismissed] = useState(true);
+  useEffect(() => {
+    if (showNegotiateWarning) setNegotiateDismissed(false);
+  }, [showNegotiateWarning]);
+  useEffect(() => {
+    if (showNegotiateWarning || negotiateDismissed) return undefined;
+    const fallback = setTimeout(
+      () => setNegotiateDismissed(true),
+      MODAL_DISMISS_FALLBACK_MS
+    );
+    return () => clearTimeout(fallback);
+  }, [showNegotiateWarning, negotiateDismissed]);
+  const isNegotiateWarningCovering =
+    showNegotiateWarning || !negotiateDismissed;
 
   return (
     <View style={styles.container}>
@@ -186,7 +205,7 @@ export default function CartLoadedView({
                 visible so no obscured delivery is requested. */}
             {isIdentityModalOpen ||
             isPriceChangeModalOpen ||
-            showNegotiateWarning ? null : (
+            isNegotiateWarningCovering ? null : (
               <AdSlot placement="CART_MPU" />
             )}
             <View style={styles.secureBadgeInside}>
@@ -231,6 +250,7 @@ export default function CartLoadedView({
         pendingItem={pendingNegotiateItem}
         hasNonNegotiableCartItem={hasNonNegotiableCartItem}
         onClose={onCloseNegotiateWarning}
+        onDismissed={() => setNegotiateDismissed(true)}
         onNegotiateItem={onNegotiateItem}
         onBulkNegotiate={onBulkNegotiate}
         triggerHaptic={triggerHaptic}

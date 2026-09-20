@@ -35,9 +35,11 @@ jest.mock('@/services/analytics-core', () => ({
 }));
 
 let mockDrawerOpen = false;
+let mockDrawerFullyOpen = false;
 jest.mock('@/stores/drawer-store', () => ({
-  useDrawerStore: (selector: (state: { isOpen: boolean }) => boolean) =>
-    selector({ isOpen: mockDrawerOpen }),
+  useDrawerStore: (
+    selector: (state: { isOpen: boolean; isFullyOpen: boolean }) => boolean
+  ) => selector({ isOpen: mockDrawerOpen, isFullyOpen: mockDrawerFullyOpen }),
 }));
 
 let mockIsFocused = true;
@@ -124,6 +126,22 @@ describe('AdSlot', () => {
       expect(toJSON()).toBeNull();
     } finally {
       mockDrawerOpen = false;
+      setAdsEnabled(ORIGINAL_ENV);
+    }
+  });
+
+  it('suspends page slots until the drawer close animation completes', () => {
+    // Regression: isOpen flips when closing starts, but the drawer still
+    // covers the screen until the animation lands — page slots must stay
+    // unmounted through that window.
+    setAdsEnabled('true');
+    mockDrawerOpen = false;
+    mockDrawerFullyOpen = true;
+    try {
+      const { toJSON } = render(<AdSlot placement="CART_MPU" />);
+      expect(toJSON()).toBeNull();
+    } finally {
+      mockDrawerFullyOpen = false;
       setAdsEnabled(ORIGINAL_ENV);
     }
   });

@@ -45,9 +45,12 @@ export function LaunchAdCard({
   placement,
   unitId,
 }: LaunchAdCardProps) {
-  // Like AdSlot: suspend while the navigation drawer is open so the card
-  // never loads or refreshes under the drawer backdrop.
-  const drawerOpen = useDrawerStore((state) => state.isOpen);
+  // Like AdSlot: suspend while the navigation drawer covers the screen
+  // (open-start through close-complete) so the card never loads or
+  // refreshes under the drawer.
+  const drawerCovering = useDrawerStore(
+    (state) => state.isOpen || state.isFullyOpen
+  );
   // Like AdSlot: a pushed route keeps this screen mounted, so an unfocused
   // route must not own or refresh the banner behind the new screen.
   const isFocused = useIsFocused();
@@ -64,7 +67,7 @@ export function LaunchAdCard({
   // the fixed-size placeholder mounted: the carousel still carries the ad
   // sentinel and its scroll offset, so unmounting the child would clamp the
   // list and jump the visible product when the overlay lifts.
-  if (!isVisible || drawerOpen || !isFocused) {
+  if (!isVisible || drawerCovering || !isFocused) {
     return (
       <View
         accessibilityLabel="Sponsored advertisement"

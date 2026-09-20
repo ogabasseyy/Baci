@@ -13,9 +13,11 @@ jest.mock('@/services/analytics-core', () => ({
 }));
 
 let mockDrawerOpen = false;
+let mockDrawerFullyOpen = false;
 jest.mock('@/stores/drawer-store', () => ({
-  useDrawerStore: (selector: (state: { isOpen: boolean }) => boolean) =>
-    selector({ isOpen: mockDrawerOpen }),
+  useDrawerStore: (
+    selector: (state: { isOpen: boolean; isFullyOpen: boolean }) => boolean
+  ) => selector({ isOpen: mockDrawerOpen, isFullyOpen: mockDrawerFullyOpen }),
 }));
 
 let mockIsFocused = true;
@@ -86,6 +88,23 @@ describe('LaunchAdCard', () => {
       expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
     } finally {
       mockDrawerOpen = false;
+    }
+  });
+
+  it('withholds the banner until the drawer close animation completes', () => {
+    // Regression: isOpen flips when closing starts, but the drawer still
+    // covers the carousel until the animation lands.
+    // Arrange & Act
+    mockDrawerOpen = false;
+    mockDrawerFullyOpen = true;
+    try {
+      render(<LaunchAdCard {...props} />);
+
+      // Assert
+      expect(screen.getByTestId('launch-ad-card')).toBeTruthy();
+      expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
+    } finally {
+      mockDrawerFullyOpen = false;
     }
   });
 

@@ -15,6 +15,19 @@ jest.mock('@/lib/quiz-start-interstitial', () => ({
   maybeShowQuizStartInterstitial: jest.fn(async () => 'skipped'),
 }));
 
+let mockRewardedWatching = false;
+jest.mock('@/hooks/use-quiz-rewarded-badge', () => ({
+  useQuizRewardedBadge: () => ({
+    available: false,
+    dismiss: jest.fn(),
+    isWatching: mockRewardedWatching,
+    justEarned: false,
+    roomBlocked: false,
+    watchAd: jest.fn(),
+    watchFailed: false,
+  }),
+}));
+
 const mockMaybeShowQuizStartInterstitial = jest.mocked(
   maybeShowQuizStartInterstitial
 );
@@ -119,6 +132,28 @@ describe('QuizWaitingRoom', () => {
     expect(screen.getByRole('header', { name: 'How to play' })).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Close rules' }));
     expect(screen.queryByRole('header', { name: 'How to play' })).toBeNull();
+  });
+
+  it('holds the rules button while a rewarded ad is loading', () => {
+    // Regression: opening rules mid-load would let the rewarded LOADED
+    // callback present over the modal and its live banner.
+    mockRewardedWatching = true;
+    try {
+      render(
+        <QuizWaitingRoom
+          event={scheduled}
+          onExit={jest.fn()}
+          onStart={jest.fn()}
+          refresh={jest.fn(async () => [scheduled])}
+        />
+      );
+      const rulesButton = screen.getByRole('button', { name: 'View rules' });
+      expect(rulesButton.props.accessibilityState).toMatchObject({
+        disabled: true,
+      });
+    } finally {
+      mockRewardedWatching = false;
+    }
   });
 
   it('keeps a single footer ad slot while the rules modal is open', () => {

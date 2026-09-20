@@ -366,6 +366,23 @@ describe('CategoryScreen', () => {
     expect(footerElement()).toBeNull();
   });
 
+  it('shows the category MPU on the all-products page', () => {
+    // Regression: the supported 'all' slug intentionally resolves no
+    // category ID (unfiltered catalog fetch), so it must not be treated as
+    // an unresolved category that withholds the placement.
+    mockUseLocalSearchParams.mockReturnValue({ slug: 'all' });
+    mockUseCategories.mockReturnValue({ data: [], isLoading: false });
+    setProductsState();
+    render(<CategoryScreen />);
+
+    const Footer = getLatestFlashListProps()?.ListFooterComponent as
+      | (() => React.ReactNode)
+      | undefined;
+    const shown = Footer?.() as { props?: { placement?: string } } | null;
+    expect(shown).not.toBeNull();
+    expect(shown?.props?.placement).toBe('PRODUCT_GRID_MPU');
+  });
+
   it.each([
     { name: 'loading', state: { isLoading: true, products: [] } },
     {

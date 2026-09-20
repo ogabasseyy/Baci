@@ -59,7 +59,12 @@ export function AdSlot({
   const readiness = useMobileAdsReadiness({
     enabled: config?.enabled === true,
   });
-  const drawerOpen = useDrawerStore((state) => state.isOpen);
+  // The drawer covers the screen from open-start through close-complete:
+  // isOpen flips when an animation starts, isFullyOpen only after the open
+  // animation lands, so the union spans the full covering lifetime.
+  const drawerCovering = useDrawerStore(
+    (state) => state.isOpen || state.isFullyOpen
+  );
   // A pushed route keeps the previous screen mounted: without this gate a
   // consent/SDK initialization resolving after navigation would mount a
   // native banner and request an ad on the hidden screen.
@@ -69,7 +74,7 @@ export function AdSlot({
     !readiness.canRequestAds ||
     loadFailed ||
     !isFocused ||
-    (drawerOpen && !visibleWhileDrawerOpen)
+    (drawerCovering && !visibleWhileDrawerOpen)
   ) {
     return null;
   }

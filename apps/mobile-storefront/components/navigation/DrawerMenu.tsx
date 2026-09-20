@@ -1,7 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import Constants from 'expo-constants';
 import { router, usePathname } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import {
   Alert,
   BackHandler,
@@ -12,13 +12,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import Animated, {
-  Easing,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { interpolate, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { useShallow } from 'zustand/react/shallow';
@@ -34,17 +28,22 @@ import { getDrawerMenuShadowStyles } from './DrawerMenu.shadows';
 import styles from './DrawerMenu.styles';
 import { DrawerMenuFooter } from './DrawerMenuFooter';
 import { DrawerMenuItems } from './DrawerMenuItems';
+import { useDrawerMenuAnimation } from './use-drawer-menu-animation';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.85, 320);
-const ANIMATION_DURATION = 300;
 
 export function DrawerMenu() {
   const { Gesture, GestureDetector } = getOptionalGestureHandlerRuntime();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
-  const { isOpen, closeDrawer } = useDrawerStore(
-    useShallow((s) => ({ isOpen: s.isOpen, closeDrawer: s.closeDrawer }))
+  const { isOpen, isFullyOpen, closeDrawer, setFullyOpen } = useDrawerStore(
+    useShallow((s) => ({
+      isOpen: s.isOpen,
+      isFullyOpen: s.isFullyOpen,
+      closeDrawer: s.closeDrawer,
+      setFullyOpen: s.setFullyOpen,
+    }))
   );
   const { user, signOut } = useAuthStore(
     useShallow((s) => ({ user: s.user, signOut: s.signOut }))
@@ -58,38 +57,17 @@ export function DrawerMenu() {
 
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
   const currentYear = new Date().getFullYear();
-  const [shouldRenderPattern, setShouldRenderPattern] = useState(isOpen);
-
-  // Animation values
-  const translateX = useSharedValue(-DRAWER_WIDTH);
-  const backdropOpacity = useSharedValue(0);
-
-  useEffect(() => {
-    if (isOpen) {
-      setShouldRenderPattern(true);
-      translateX.set(
-        withTiming(0, {
-          duration: ANIMATION_DURATION,
-          easing: Easing.out(Easing.cubic),
-        })
-      );
-      backdropOpacity.set(withTiming(1, { duration: ANIMATION_DURATION }));
-    } else {
-      translateX.set(
-        withTiming(
-          -DRAWER_WIDTH,
-          {
-            duration: ANIMATION_DURATION,
-            easing: Easing.in(Easing.cubic),
-          },
-          (finished) => {
-            if (finished) scheduleOnRN(setShouldRenderPattern, false);
-          }
-        )
-      );
-      backdropOpacity.set(withTiming(0, { duration: ANIMATION_DURATION }));
-    }
-  }, [isOpen, translateX, backdropOpacity]);
+  const {
+    backdropAnimatedStyle,
+    backdropOpacity,
+    drawerAnimatedStyle,
+    shouldRenderPattern,
+    translateX,
+  } = useDrawerMenuAnimation({
+    drawerWidth: DRAWER_WIDTH,
+    isOpen,
+    setFullyOpen,
+  });
 
   // Android back button
   useEffect(() => {
@@ -129,16 +107,8 @@ export function DrawerMenu() {
         })
     : null;
 
-  const drawerAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.get() }],
-  }));
-
   // H4 fix: Use isOpen directly for style.pointerEvents since useDerivedValue
   // reads .value at render time (JS thread snapshot), not reactively during animation.
-
-  const backdropAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: backdropOpacity.get(),
-  }));
 
   const handleNavigate = (path: string) => {
     closeDrawer();
@@ -259,10 +229,10 @@ export function DrawerMenu() {
             pathname={pathname}
             onNavigate={handleNavigate}
           />
-          {/* Mounted only while the drawer is open: the drawer stays mounted
-          (translated off-screen) when closed, and an always-mounted slot
-          would request and attribute impressions nobody can see. */}
-          {isOpen ? (
+          {/* Mounted only while the drawer is fully open: isOpen flips when
+          the slide starts, so mounting on it would request and attribute
+          impressions while the drawer is still off-screen. */}
+          {isFullyOpen ? (
             <AdSlot placement="FOOTER_ANCHOR" visibleWhileDrawerOpen />
           ) : null}
 

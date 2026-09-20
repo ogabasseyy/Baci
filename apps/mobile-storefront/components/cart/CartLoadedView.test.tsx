@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
+import { Modal } from 'react-native';
 import Colors from '@/constants/Colors';
 import type { CartItem } from '@/stores/cart-store';
 import CartLoadedView from './CartLoadedView';
@@ -209,5 +210,23 @@ describe('CartLoadedView', () => {
       />
     );
     expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+  });
+
+  it('withholds the cart ad until the negotiation dismissal completes', () => {
+    // Regression: the close handler clears the flag synchronously while the
+    // iOS fade dismissal still covers the cart — CART_MPU must stay
+    // unmounted until onDismiss fires.
+    const { rerender, props, UNSAFE_getByType } = renderView({
+      showNegotiateWarning: true,
+    });
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+    rerender(<CartLoadedView {...props} showNegotiateWarning={false} />);
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+    act(() => {
+      UNSAFE_getByType(Modal).props.onDismiss();
+    });
+    expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
   });
 });

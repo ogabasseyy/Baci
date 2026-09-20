@@ -117,9 +117,14 @@ export function QuizWaitingRoom({
           {waitingRoom.error ? (
             <Text style={styles.error}>{waitingRoom.error}</Text>
           ) : null}
+          {/* While the rewarded ad loads, opening rules would let its LOADED
+              callback present over the modal — hold the button until the
+              watch settles. */}
           <Pressable
             accessibilityLabel="View quiz rules"
             accessibilityRole="button"
+            accessibilityState={{ disabled: rewardedBadge.isWatching }}
+            disabled={rewardedBadge.isWatching}
             onPress={openRules}
             style={styles.primaryButton}
           >

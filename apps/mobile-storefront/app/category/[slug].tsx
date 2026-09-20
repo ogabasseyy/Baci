@@ -99,11 +99,15 @@ export default function CategoryScreen() {
   // The MPU mounts only on a valid, successfully resolved category: while
   // the slug is invalid or unresolved, products are loading, or the fetch
   // errored, FlashList renders the footer alongside the empty component and
-  // the slot would request under an invalid/loading/error message.
+  // the slot would request under an invalid/loading/error message. The
+  // supported 'all' slug intentionally resolves no category ID (the catalog
+  // fetch is unfiltered), so it counts as resolved; unknown slugs stay
+  // withheld.
+  const isCategoryResolved = slug === 'all' || Boolean(categoryId);
   const canShowCategoryMpu =
     isValidSlug &&
     !categoriesLoading &&
-    Boolean(categoryId) &&
+    isCategoryResolved &&
     !isLoading &&
     !error;
 

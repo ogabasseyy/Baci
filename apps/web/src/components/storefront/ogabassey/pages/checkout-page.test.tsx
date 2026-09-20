@@ -2290,7 +2290,9 @@ describe('CheckoutPage', () => {
       await waitFor(() => {
         expect(juicywayPaymentStartedCalls()).toHaveLength(1);
       });
-      expect(juicywayPaymentStartedCalls()[0]?.[1]).toBe('order-juicy-1');
+      expect(juicywayPaymentStartedCalls()[0]?.[1]).toBe(
+        'order-juicy-1:juicy-ref-1'
+      );
       expect(juicywayPaymentStartedCalls()[0]?.[2]).toEqual(
         expect.objectContaining({
           payment_method: 'juicyway',
@@ -2454,7 +2456,7 @@ describe('CheckoutPage', () => {
       await waitFor(() => {
         expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
           'payment_failed',
-          'order-juicy-1',
+          'order-juicy-1:juicy-ref-1',
           expect.objectContaining({
             payment_method: 'juicyway',
             reason: 'juicyway_error',
@@ -2625,7 +2627,7 @@ describe('CheckoutPage', () => {
       await waitFor(() => {
         expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
           'payment_failed',
-          'order-juicy-1',
+          'order-juicy-1:juicy-ref-1',
           expect.objectContaining({
             payment_method: 'juicyway',
             reason: 'juicyway_error',

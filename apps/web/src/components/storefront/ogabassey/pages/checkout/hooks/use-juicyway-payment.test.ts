@@ -1,0 +1,161 @@
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  juicywayAttemptKey,
+  useJuicywayPayment,
+  type UseJuicywayPaymentOptions,
+} from './use-juicyway-payment';
+import type { CryptoChain } from '../types';
+
+const mockCaptureCheckoutFunnelEventOnce = vi.fn();
+vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
+  captureCheckoutFunnelEventOnce: (...args: unknown[]) =>
+    mockCaptureCheckoutFunnelEventOnce(...args),
+}));
+
+vi.mock('@/hooks/use-toast', () => ({
+  toast: vi.fn(),
+}));
+
+const pendingOrder = {
+  orderId: 'order-1',
+  trackingToken: 'track-1',
+  amount: 5750,
+  total: 5750,
+  orderCurrency: 'NGN',
+  customerEmail: 'ada@example.com',
+  customerName: 'Ada Buyer',
+  customerPhone: '+2348123456789',
+  billingAddress: {
+    line1: '2 Olaide Tomori Street',
+    city: 'Ikeja',
+    state: 'Lagos',
+    country: 'NG',
+  },
+  items: [{ name: 'Test Product', type: 'physical' as const }],
+};
+
+function createOptions(chain: CryptoChain): UseJuicywayPaymentOptions {
+  return {
+    merchantId: 'merchant-1',
+    pendingCryptoOrder: pendingOrder,
+    selectedCryptoChain: chain,
+    selectedCryptoCurrency: 'USDT',
+    setShowCryptoSelector: vi.fn(),
+    clearCheckoutSession: vi.fn(),
+    clearPendingCheckoutOrder: vi.fn(),
+    clearCart: vi.fn(),
+    routerPush: vi.fn(),
+    getHref: (path: string) => `/ogabassey${path}`,
+  };
+}
+
+function initResponse(reference: string, paymentId: string, chain = 'TRX') {
+  return Response.json({
+    success: true,
+    reference,
+    session_id: `sess-${reference}`,
+    crypto_payment: {
+      address:
+        chain === 'TRX'
+          ? 'T7WHdR7vj4i3L4575w8V5hV8tKf9w2Q3xY'
+          : '0x1234567890abcdef1234567890abcdef12345678',
+      chain,
+      currency: 'USDT',
+      amount: 575000,
+      crypto_amount: '5.0',
+      payment_id: paymentId,
+      confirmation_time: '10 minutes',
+    },
+  });
+}
+
+describe('useJuicywayPayment', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it('keys the lifecycle per attempt so a retry re-emits after a failed attempt', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(initResponse('ref-1', 'pay-1'))
+      .mockResolvedValueOnce(Response.json({ is_failed: true }))
+      .mockResolvedValueOnce(initResponse('ref-2', 'pay-2', 'ETH'))
+      .mockResolvedValueOnce(Response.json({ is_failed: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { result, rerender } = renderHook(
+      ({ chain }: { chain: CryptoChain }) =>
+        useJuicywayPayment(createOptions(chain)),
+      { initialProps: { chain: 'TRX' as CryptoChain } }
+    );
+
+    // Attempt 1 opens (new reference) then fails verification.
+    await act(async () => {
+      await result.current.initializeCryptoPayment();
+    });
+    expect(result.current.cryptoPaymentData?.reference).toBe('ref-1');
+    await act(async () => {
+      await result.current.verifyCryptoPayment();
+    });
+    expect(result.current.cryptoVerificationStatus).toBe('failed');
+
+    // Retry on another network mints a new reference; its lifecycle
+    // must not be suppressed by the first attempt's claims.
+    act(() => {
+      result.current.dismissCryptoModal();
+    });
+    rerender({ chain: 'ETH' });
+    await act(async () => {
+      await result.current.initializeCryptoPayment();
+    });
+    expect(result.current.cryptoPaymentData?.reference).toBe('ref-2');
+    await act(async () => {
+      await result.current.verifyCryptoPayment();
+    });
+
+    const startedKeys = mockCaptureCheckoutFunnelEventOnce.mock.calls
+      .filter(([event]) => event === 'payment_started')
+      .map(([, key]) => key);
+    const failedKeys = mockCaptureCheckoutFunnelEventOnce.mock.calls
+      .filter(([event]) => event === 'payment_failed')
+      .map(([, key]) => key);
+    expect(startedKeys).toEqual(['order-1:ref-1', 'order-1:ref-2']);
+    expect(failedKeys).toEqual(['order-1:ref-1', 'order-1:ref-2']);
+  });
+
+  it('keeps the completion order-keyed', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(initResponse('ref-1', 'pay-1'))
+      .mockResolvedValueOnce(Response.json({ is_confirmed: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() =>
+      useJuicywayPayment(createOptions('TRX'))
+    );
+
+    await act(async () => {
+      await result.current.initializeCryptoPayment();
+    });
+    await act(async () => {
+      await result.current.verifyCryptoPayment();
+    });
+
+    expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+      'payment_completed',
+      'order-1',
+      expect.objectContaining({
+        payment_method: 'juicyway',
+        payment_status: 'paid',
+        reference: 'ref-1',
+      })
+    );
+  });
+
+  it('falls back to the payment id when the reference is empty', () => {
+    expect(juicywayAttemptKey('order-1', '', 'pay-1')).toBe('order-1:pay-1');
+    expect(juicywayAttemptKey('order-1', 'ref-1', 'pay-1')).toBe(
+      'order-1:ref-1'
+    );
+  });
+});

@@ -49,8 +49,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { resolveMerchantDeliveryMethod } from './checkout/resolve-merchant-delivery-method';
 import { buildCheckoutBillingAddress } from './checkout/build-checkout-billing-address';
-import { useCryptoPaymentInitializer } from './checkout/use-crypto-payment-initializer';
 import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
+import {
+  useJuicywayPayment,
+  type JuicywayPendingOrder,
+} from './checkout/hooks/use-juicyway-payment';
 import { persistPendingCheckoutOrder } from './checkout/persist-pending-checkout-order';
 import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
 import { useEffect, useState, useRef } from 'react';
@@ -62,7 +65,6 @@ import type {
   CryptoChain,
   CryptoCurrency,
   DeliveryMethod,
-  CryptoPaymentData,
   DvaData,
   PaymentMethod,
   PendingCryptoOrder,
@@ -721,21 +723,6 @@ export const CheckoutPage: React.FC = () => {
   const isContactValid = isHydrated ? rawIsContactValid : false;
 
 
-  // Crypto payment modal state
-  const [cryptoPaymentData, setCryptoPaymentData] = useState<{
-    address: string;
-    chain: string;
-    currency: string;
-    amount: number;
-    confirmation_time: string;
-    orderId: string;
-    trackingToken?: string;
-    reference: string;
-    sessionId: string; // Payment session ID (from initialization)
-    paymentId: string; // Payment ID (from capture) - used for verification via GET /payments/{id}
-    qrcode?: string;
-  } | null>(null);
-
   // Dedicated Virtual Account (DVA) state
   const [dvaData, setDvaData] = useState<{
     account_number: string;
@@ -761,36 +748,39 @@ export const CheckoutPage: React.FC = () => {
   const [isInitializingDva, setIsInitializingDva] = useState(false);
   const [dvaCountdown, setDvaCountdown] = useState(3600); // 1 hour in seconds
 
-  // Crypto payment verification state
-  const [isVerifyingCrypto, setIsVerifyingCrypto] = useState(false);
-  const [cryptoVerificationStatus, setCryptoVerificationStatus] = useState<'idle' | 'checking' | 'confirmed' | 'pending' | 'failed'>('idle');
-
   // Crypto selection state (before payment is initialized)
   const [showCryptoSelector, setShowCryptoSelector] = useState(false);
-  const [selectedCryptoChain, setSelectedCryptoChain] = useState<'TRX' | 'ETH' | 'MATIC' | 'AVAXC'>('TRX');
-  const [selectedCryptoCurrency, setSelectedCryptoCurrency] = useState<'USDT' | 'USDC'>('USDT');
-  const [pendingCryptoOrder, setPendingCryptoOrder] = useState<{
-    orderId: string;
-    trackingToken?: string;
-    amount: number;
-    /** Full order total: `amount` is only the residual due at the gateway
-     * after wallet/savings credits, but purchase revenue is the whole order.
-     */
-    total: number;
-    /** Stamped order currency (authoritative for payment initialization). */
-    orderCurrency: string;
-    customerEmail: string;
-    customerName: string;
-    customerPhone: string;
-    billingAddress: {
-      line1: string;
-      city: string;
-      state: string;
-      country: string;
-      zip_code?: string;
-    };
-    items: Array<{ name: string; type: 'physical' | 'digital' }>;
-  } | null>(null);
+  const [selectedCryptoChain, setSelectedCryptoChain] = useState<CryptoChain>('TRX');
+  const [selectedCryptoCurrency, setSelectedCryptoCurrency] = useState<CryptoCurrency>('USDT');
+  const [pendingCryptoOrder, setPendingCryptoOrder] =
+    useState<JuicywayPendingOrder | null>(null);
+
+  // Juicyway deposit lifecycle (initialization, verification polling,
+  // completion/failure analytics, cleanup, navigation).
+  const {
+    cryptoPaymentData,
+    setCryptoPaymentData,
+    isVerifyingCrypto,
+    cryptoVerificationStatus,
+    isInitializingCrypto,
+    initializeCryptoPayment,
+    verifyCryptoPayment,
+    dismissCryptoModal,
+    cancelCryptoInitialization,
+  } = useJuicywayPayment({
+    merchantId: merchant?.id,
+    pendingCryptoOrder,
+    selectedCryptoChain,
+    selectedCryptoCurrency,
+    setShowCryptoSelector,
+    clearCheckoutSession,
+    clearPendingCheckoutOrder,
+    clearCart,
+    routerPush: (url: string) => {
+      router.push(asRoute(url));
+    },
+    getHref,
+  });
 
   // Mobile app order resume state
   // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
@@ -951,227 +941,6 @@ export const CheckoutPage: React.FC = () => {
     }
   };
 
-  const cryptoInitializer = useCryptoPaymentInitializer({
-    onReady: (payment) => {
-      setShowCryptoSelector(false);
-      setCryptoPaymentData(payment);
-      // The normal Juicyway flow returns after opening the selector, so the
-      // generic initialization branch below is unreachable for it: the start
-      // fires here once address initialization succeeds.
-      captureCheckoutFunnelEventOnce(
-        CHECKOUT_FUNNEL_EVENTS.paymentStarted,
-        payment.orderId,
-        buildCheckoutFunnelProperties({
-          channel: 'web',
-          currency: pendingCryptoOrder?.orderCurrency ?? 'NGN',
-          orderId: payment.orderId,
-          paymentIntent: getCheckoutPaymentIntent('juicyway'),
-          paymentMethod: 'juicyway',
-          source: 'web_checkout',
-          total: pendingCryptoOrder?.amount,
-        })
-      );
-    },
-    onError: (error) => toast({
-      title: 'Crypto Payment Failed',
-      description: error instanceof Error ? error.message : 'Failed to initialize crypto payment',
-      variant: 'destructive',
-    }),
-  });
-  const initializeCryptoPayment = async () => {
-    if (!pendingCryptoOrder || !merchant) return;
-    await cryptoInitializer.initialize({
-      merchantId: merchant.id,
-      pendingOrder: pendingCryptoOrder,
-      chain: selectedCryptoChain,
-      currency: selectedCryptoCurrency,
-      orderCurrency: pendingCryptoOrder.orderCurrency,
-    }).catch(() => undefined);
-  };
-
-  // Verify crypto payment status by polling the API
-  // Uses a ref to track polling state to avoid stale closure issues
-  const pollingRef = useRef<{ intervalId: NodeJS.Timeout | null; attempts: number }>({
-    intervalId: null,
-    attempts: 0,
-  });
-
-  // Records the paid conversion for a server-confirmed Juicyway payment,
-  // then runs the shared success cleanup and redirect.
-  const completeCryptoPayment = () => {
-    if (!cryptoPaymentData) {
-      return;
-    }
-    captureCheckoutFunnelEventOnce(
-      CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
-      cryptoPaymentData.orderId,
-      buildCheckoutFunnelProperties({
-        channel: 'web',
-        currency: pendingCryptoOrder?.orderCurrency ?? 'NGN',
-        orderId: cryptoPaymentData.orderId,
-        paymentIntent: getCheckoutPaymentIntent('juicyway'),
-        paymentMethod: 'juicyway',
-        paymentStatus: 'paid',
-        reference: cryptoPaymentData.reference,
-        source: 'web_checkout',
-        total: pendingCryptoOrder?.total ?? pendingCryptoOrder?.amount,
-      })
-    );
-    setIsVerifyingCrypto(false);
-    setCryptoVerificationStatus('confirmed');
-    clearPendingCheckoutOrder();
-    clearCheckoutSession();
-    clearCart();
-    const successQuery = new URLSearchParams({
-      type: 'crypto',
-      orderId: cryptoPaymentData.orderId,
-      reference: cryptoPaymentData.reference,
-    });
-    if (cryptoPaymentData.trackingToken) {
-      successQuery.set('trackingToken', cryptoPaymentData.trackingToken);
-    }
-    router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-  };
-
-  // Records an attempt-scoped failure for a terminally failed Juicyway
-  // verification, closing the payment_started recorded when the deposit
-  // address initialized. The Once guard dedupes verification retries
-  // per order.
-  const failCryptoPayment = (reason: string) => {
-    if (!cryptoPaymentData) {
-      return;
-    }
-    captureCheckoutFunnelEventOnce(
-      CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-      cryptoPaymentData.orderId,
-      buildCheckoutFunnelProperties({
-        channel: 'web',
-        currency: pendingCryptoOrder?.orderCurrency ?? 'NGN',
-        orderId: cryptoPaymentData.orderId,
-        paymentIntent: getCheckoutPaymentIntent('juicyway'),
-        paymentMethod: 'juicyway',
-        reason,
-        reference: cryptoPaymentData.reference,
-        source: 'web_checkout',
-        total: pendingCryptoOrder?.total ?? pendingCryptoOrder?.amount,
-      })
-    );
-    setIsVerifyingCrypto(false);
-    setCryptoVerificationStatus('failed');
-  };
-
-  const verifyCryptoPayment = async () => {
-    // Use paymentId for verification (from the capture response)
-    // Fall back to sessionId if paymentId is not available
-    const verificationId = cryptoPaymentData?.paymentId || cryptoPaymentData?.sessionId;
-
-    if (!verificationId) {
-      console.error('No payment ID or session ID available for verification');
-      failCryptoPayment('juicyway_error');
-      return;
-    }
-
-    setIsVerifyingCrypto(true);
-    setCryptoVerificationStatus('checking');
-    pollingRef.current.attempts = 0;
-
-    const checkPaymentStatus = async (): Promise<'confirmed' | 'failed' | 'pending'> => {
-      try {
-        // Use payment_id parameter for GET /payments/{id} endpoint
-        const response = await fetch(
-          `/api/payments/status?gateway=juicyway&payment_id=${verificationId}`
-        );
-
-        if (!response.ok) {
-          // Try to parse error, but handle JSON parse failures gracefully
-          let errorData = {};
-          try {
-            errorData = await response.json();
-          } catch {
-            errorData = { message: `HTTP ${response.status}: ${response.statusText}` };
-          }
-          console.error('Payment status check failed:', {
-            status: response.status,
-            statusText: response.statusText,
-            paymentId: verificationId,
-            error: errorData,
-          });
-          return 'pending'; // Treat API errors as pending, not failed
-        }
-
-        const result = await response.json();
-
-        if (result.is_confirmed) {
-          return 'confirmed';
-        }
-
-        if (result.is_failed) {
-          return 'failed';
-        }
-
-        return 'pending';
-      } catch (error) {
-        console.error('Payment verification error:', error);
-        return 'pending';
-      }
-    };
-
-    // Initial check
-    const initialStatus = await checkPaymentStatus();
-
-    if (initialStatus === 'confirmed') {
-      completeCryptoPayment();
-      return;
-    }
-
-    if (initialStatus === 'failed') {
-      failCryptoPayment('juicyway_error');
-      return;
-    }
-
-    // Start polling
-    setCryptoVerificationStatus('pending');
-
-    pollingRef.current.intervalId = setInterval(async () => {
-      pollingRef.current.attempts++;
-      const maxAttempts = 30; // 5 minutes (30 * 10 seconds)
-
-      if (pollingRef.current.attempts >= maxAttempts) {
-        if (pollingRef.current.intervalId) {
-          clearInterval(pollingRef.current.intervalId);
-          pollingRef.current.intervalId = null;
-        }
-        setIsVerifyingCrypto(false);
-        setCryptoVerificationStatus('pending');
-        return;
-      }
-
-      const status = await checkPaymentStatus();
-
-      if (status === 'confirmed') {
-        if (pollingRef.current.intervalId) {
-          clearInterval(pollingRef.current.intervalId);
-          pollingRef.current.intervalId = null;
-        }
-        completeCryptoPayment();
-      } else if (status === 'failed') {
-        if (pollingRef.current.intervalId) {
-          clearInterval(pollingRef.current.intervalId);
-          pollingRef.current.intervalId = null;
-        }
-        failCryptoPayment('juicyway_error');
-      }
-    }, 10000); // Poll every 10 seconds
-  };
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current.intervalId) {
-        clearInterval(pollingRef.current.intervalId);
-      }
-    };
-  }, []);
 
   // Prefer the persisted fee on resume (deep-link URLs omit giftWrappingCost).
   const giftWrappingCost =
@@ -3280,12 +3049,12 @@ export const CheckoutPage: React.FC = () => {
           selectedCryptoCurrency={selectedCryptoCurrency}
           selectedCryptoChain={selectedCryptoChain}
           supportedChains={cryptoChainSupport[selectedCryptoCurrency]}
-          isInitializingCrypto={cryptoInitializer.isInitializing}
-          onCurrencyChange={(currency) => { cryptoInitializer.cancel(); handleCryptoCurrencyChange(currency); }}
-          onChainChange={(chain) => { cryptoInitializer.cancel(); setSelectedCryptoChain(chain); }}
+          isInitializingCrypto={isInitializingCrypto}
+          onCurrencyChange={(currency) => { cancelCryptoInitialization(); handleCryptoCurrencyChange(currency); }}
+          onChainChange={(chain) => { cancelCryptoInitialization(); setSelectedCryptoChain(chain); }}
           onInitialize={initializeCryptoPayment}
           onClose={() => {
-            cryptoInitializer.cancel();
+            cancelCryptoInitialization();
             setShowCryptoSelector(false);
             setPendingCryptoOrder(null);
             isOrderInFlightRef.current = false;
@@ -3310,9 +3079,7 @@ export const CheckoutPage: React.FC = () => {
                 onClick={() => {
                   // Just close the modal - don't clear cart or redirect
                   // User can retry or choose a different payment method
-                  setCryptoPaymentData(null);
-                  setCryptoVerificationStatus('idle');
-                  setIsVerifyingCrypto(false);
+                  dismissCryptoModal();
                 }}
                 className="size-8 rounded-lg bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
               >
@@ -3462,8 +3229,7 @@ export const CheckoutPage: React.FC = () => {
                       'Are you sure you want to close? If you\'ve already sent payment, your order will still be processed once the payment is detected.'
                     );
                     if (confirmed) {
-                      setCryptoPaymentData(null);
-                      setCryptoVerificationStatus('idle');
+                      dismissCryptoModal();
                     }
                   }}
                   className="w-full py-2.5 text-gray-500 text-sm font-medium hover:text-gray-700 transition-colors"

@@ -51,6 +51,10 @@ interface SubmitBnplCheckoutParams {
   liveWalletSelection: WalletSelection | undefined;
   checkoutGeneration: string;
   mobileCheckoutIdempotencyRef: MutableRefObject<MobileCheckoutIdempotencyState | null>;
+  /** Called with the committed order id right after createOrder, so the
+   * outer submit can thread it into failure handling when a nested
+   * provider init (e.g. Klump) throws after the order exists. */
+  onOrderCreated?: (orderId: string) => void;
   paymentMethodForOrder: string;
   paymentSettings: Parameters<typeof getKlumpDisabledReason>[0];
   selectedPayment: PaymentMethodType;
@@ -72,6 +76,7 @@ export async function submitBnplCheckout({
   liveSavingsSelection,
   liveWalletSelection,
   checkoutGeneration,
+  onOrderCreated,
   paymentMethodForOrder,
   paymentSettings,
   selectedPayment,
@@ -117,6 +122,7 @@ export async function submitBnplCheckout({
     analyticsPaymentMethod: selectedPayment,
     checkoutGeneration,
   });
+  onOrderCreated?.(orderResponse.order.id);
   const createdOrderNumber =
     orderResponse.order.order_number || orderResponse.order.id.slice(0, 8);
 

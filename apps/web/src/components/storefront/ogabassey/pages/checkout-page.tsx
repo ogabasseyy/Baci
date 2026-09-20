@@ -1058,6 +1058,33 @@ export const CheckoutPage: React.FC = () => {
     router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
   };
 
+  // Records an attempt-scoped failure for a terminally failed Juicyway
+  // verification, closing the payment_started recorded when the deposit
+  // address initialized. The Once guard dedupes verification retries
+  // per order.
+  const failCryptoPayment = (reason: string) => {
+    if (!cryptoPaymentData) {
+      return;
+    }
+    captureCheckoutFunnelEventOnce(
+      CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+      cryptoPaymentData.orderId,
+      buildCheckoutFunnelProperties({
+        channel: 'web',
+        currency: pendingCryptoOrder?.orderCurrency ?? 'NGN',
+        orderId: cryptoPaymentData.orderId,
+        paymentIntent: getCheckoutPaymentIntent('juicyway'),
+        paymentMethod: 'juicyway',
+        reason,
+        reference: cryptoPaymentData.reference,
+        source: 'web_checkout',
+        total: pendingCryptoOrder?.total ?? pendingCryptoOrder?.amount,
+      })
+    );
+    setIsVerifyingCrypto(false);
+    setCryptoVerificationStatus('failed');
+  };
+
   const verifyCryptoPayment = async () => {
     // Use paymentId for verification (from the capture response)
     // Fall back to sessionId if paymentId is not available
@@ -1065,7 +1092,7 @@ export const CheckoutPage: React.FC = () => {
 
     if (!verificationId) {
       console.error('No payment ID or session ID available for verification');
-      setCryptoVerificationStatus('failed');
+      failCryptoPayment('juicyway_error');
       return;
     }
 
@@ -1123,8 +1150,7 @@ export const CheckoutPage: React.FC = () => {
     }
 
     if (initialStatus === 'failed') {
-      setIsVerifyingCrypto(false);
-      setCryptoVerificationStatus('failed');
+      failCryptoPayment('juicyway_error');
       return;
     }
 
@@ -1158,8 +1184,7 @@ export const CheckoutPage: React.FC = () => {
           clearInterval(pollingRef.current.intervalId);
           pollingRef.current.intervalId = null;
         }
-        setIsVerifyingCrypto(false);
-        setCryptoVerificationStatus('failed');
+        failCryptoPayment('juicyway_error');
       }
     }, 10000); // Poll every 10 seconds
   };
@@ -2727,7 +2752,8 @@ export const CheckoutPage: React.FC = () => {
           paymentAmount,
           billingAddress,
           capturePaymentStarted,
-          checkoutFingerprint
+          checkoutFingerprint,
+          () => paymentStarted
         );
         return;
       }
@@ -2988,20 +3014,26 @@ export const CheckoutPage: React.FC = () => {
           },
           onError: (error) => {
             console.error('CredPal error:', error);
-            captureClientEvent(
-              CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-              buildCheckoutFunnelProperties({
-                channel: 'web',
-                currency: orderChargeCurrency,
-                orderId: order.id,
-                orderNumber: createdOrderNumber,
-                paymentIntent: getCheckoutPaymentIntent(paymentMethod),
-                paymentMethod,
-                reason: 'credpal_error',
-                source: 'web_checkout',
-                total: paymentAmount,
-              })
-            );
+            // Widget setup failures invoke onError before onLoad: only
+            // attribute a payment failure when the widget already proved
+            // the provider flow started (same per-attempt gate as Credit
+            // Direct). Unopened failures keep the toast + retry below.
+            if (paymentStarted) {
+              captureClientEvent(
+                CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+                buildCheckoutFunnelProperties({
+                  channel: 'web',
+                  currency: orderChargeCurrency,
+                  orderId: order.id,
+                  orderNumber: createdOrderNumber,
+                  paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+                  paymentMethod,
+                  reason: 'credpal_error',
+                  source: 'web_checkout',
+                  total: paymentAmount,
+                })
+              );
+            }
             toast({
               title: 'CredPal Failed',
               description: error.message || 'CredPal checkout failed. Please try again.',
@@ -3124,7 +3156,11 @@ export const CheckoutPage: React.FC = () => {
     paymentAmount: number,
     billingAddress: DvaBillingAddress,
     onDvaReady?: () => void,
-    checkoutFingerprint?: string
+    checkoutFingerprint?: string,
+    // Proves the provider flow opened (same per-attempt flag as the BNPL
+    // gates): initialization failures before a DVA is ready keep the
+    // error UI but must not emit an unmatched payment_failed.
+    didPaymentStart?: () => boolean
   ) => {
     if (!merchant) {
       isOrderInFlightRef.current = false;
@@ -3165,22 +3201,24 @@ export const CheckoutPage: React.FC = () => {
       })
       .catch((error: unknown) => {
         console.error('DVA initialization error:', error);
-        captureClientEvent(
-          CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-          buildCheckoutFunnelProperties({
-            channel: 'web',
-            currency:
-              typeof order.currency === 'string' && order.currency.trim()
-                ? order.currency.trim().toUpperCase()
-                : currencyCode,
-            orderId: order.id,
-            paymentMethod: 'bank_transfer',
-            paymentIntent: getCheckoutPaymentIntent('bank_transfer'),
-            reason: 'bank_transfer_error',
-            source: 'web_checkout',
-            total: paymentAmount,
-          })
-        );
+        if (didPaymentStart?.()) {
+          captureClientEvent(
+            CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+            buildCheckoutFunnelProperties({
+              channel: 'web',
+              currency:
+                typeof order.currency === 'string' && order.currency.trim()
+                  ? order.currency.trim().toUpperCase()
+                  : currencyCode,
+              orderId: order.id,
+              paymentMethod: 'bank_transfer',
+              paymentIntent: getCheckoutPaymentIntent('bank_transfer'),
+              reason: 'bank_transfer_error',
+              source: 'web_checkout',
+              total: paymentAmount,
+            })
+          );
+        }
         toast({
           title: 'Bank Transfer Failed',
           description:

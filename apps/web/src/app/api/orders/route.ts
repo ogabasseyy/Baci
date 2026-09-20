@@ -1076,6 +1076,116 @@ export async function GET(request: NextRequest) {
 // CSRF exemption: This endpoint is called by unauthenticated storefront guests during checkout.
 // Guest users do not have CSRF tokens. Abuse is mitigated by rate limiting in proxy.ts,
 // Zod validates input shape, while the SECURITY DEFINER RPC enforces merchant + item authorization server-side.
+
+interface InvoiceMethodDvaProvisioningInput {
+  supabase: Parameters<typeof persistPaystackDvaAssignment>[0];
+  customerEmail: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  merchantPhone: string | null;
+  // Pre-resolved issue timestamp: the invoice caller shares its timing
+  // object here so the DVA expiry and the PDF due date derive from the
+  // identical instant (no "two nows" drift).
+  order: { id: string; createdAt: string };
+  orderCurrency: string;
+  /** Invoice keeps its exact legacy log messages; payforme logs its own. */
+  orderLabel: 'invoice' | 'payforme';
+}
+
+/**
+ * Provisions a Paystack DVA for an invoice-method order (invoice or Pay
+ * for Me) and persists the assignment. Throws propagate to the caller so
+ * the email catch can still render with the pre-derived credited
+ * balance; provisioning failures and persistence failures log and
+ * return null (merchant-contact fallback). The caller chooses the
+ * Supabase client: invoice keeps the pre-existing admin client, while
+ * Pay for Me must pass the request-scoped client — the reservation goes
+ * through the proof-bound RPC (same pattern as payments/initialize) and
+ * never crosses a service-role boundary (AGENTS.md).
+ */
+async function provisionInvoiceMethodDva({
+  supabase,
+  customerEmail,
+  customerName,
+  customerPhone,
+  merchantPhone,
+  order,
+  orderCurrency,
+  orderLabel,
+}: InvoiceMethodDvaProvisioningInput): Promise<
+  ReceiptOrder['virtual_account']
+> {
+  const nameParts = (customerName || 'Customer').trim().split(' ');
+  const firstName = nameParts[0] || 'Customer';
+  const lastName = nameParts.slice(1).join(' ') || 'User';
+
+  // Paystack DVAs settle in NGN only: provisioning for a
+  // foreign-currency quote would print a naira account beside
+  // a dollar amount and risk a rejected transfer, so non-NGN
+  // orders skip provisioning (null result) and fall
+  // through to merchant-contact instructions.
+  const dvaResult =
+    orderCurrency === 'NGN'
+      ? await generatePaymentAccount({
+          email: customerEmail || `${order.id}@orders.usebaci.com`,
+          firstName,
+          lastName,
+          phone: customerPhone || merchantPhone || '08000000000',
+          orderId: order.id,
+        })
+      : null;
+
+  if (dvaResult?.success) {
+    const generatedVirtualAccount = {
+      account_number: dvaResult.data.account_number,
+      bank_name: dvaResult.data.bank_name,
+      account_name: dvaResult.data.account_name,
+    };
+
+    const persistenceFailure = await persistPaystackDvaAssignment(supabase, {
+      accountName: dvaResult.data.account_name,
+      accountNumber: dvaResult.data.account_number,
+      bankName: dvaResult.data.bank_name,
+      customerEmail: customerEmail || `${order.id}@orders.usebaci.com`,
+      expiresAt: getImmediateInvoiceDueDate({
+        created_at: order.createdAt,
+      }).toISOString(),
+      orderId: order.id,
+    });
+
+    if (persistenceFailure) {
+      logger.error({
+        message:
+          orderLabel === 'invoice'
+            ? 'Failed to store auto-generated invoice DVA'
+            : 'Failed to store auto-generated payforme DVA',
+        orderId: order.id,
+      });
+      return null;
+    }
+    logger.info({
+      message:
+        orderLabel === 'invoice'
+          ? 'Stored auto-generated invoice DVA successfully'
+          : 'Stored auto-generated payforme DVA successfully',
+      orderId: order.id,
+      accountNumber: dvaResult.data.account_number,
+    });
+    return generatedVirtualAccount;
+  }
+  if (dvaResult) {
+    logger.error({
+      message:
+        orderLabel === 'invoice'
+          ? 'Auto-generation of invoice DVA failed'
+          : 'Auto-generation of payforme DVA failed',
+      orderId: order.id,
+      error: dvaResult.error,
+    });
+  }
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Optional auth: supports web cookies and mobile Bearer tokens, but still
@@ -3440,8 +3550,7 @@ export async function POST(request: NextRequest) {
         const emailDocumentKind =
           effectivePaymentMethod === 'invoice' && !isPaidForImmediateEmail
             ? ('proforma' as const)
-            : effectivePaymentMethod === 'payforme' &&
-                !isPaidForImmediateEmail
+            : effectivePaymentMethod === 'payforme' && !isPaidForImmediateEmail
               ? ('payment_request' as const)
               : ('confirmation' as const);
         // NOTE: htmlContent/textContent are rendered inside after(), after
@@ -3486,21 +3595,8 @@ export async function POST(request: NextRequest) {
               typeof createAdminClient
             > | null = null;
 
-            if (
-              effectivePaymentMethod === 'invoice' ||
-              effectivePaymentMethod === 'payforme'
-            ) {
+            if (effectivePaymentMethod === 'invoice') {
               try {
-                // Auto-generate Dedicated Virtual Account (DVA) for automatic confirmation.
-                // Pay for Me shares the invoice provisioning path so the
-                // request email carries transfer details the requester can
-                // forward to their payer; document classification stays
-                // distinct (payment_request, never proforma).
-                const nameParts = (customer_name || 'Customer')
-                  .trim()
-                  .split(' ');
-                const firstName = nameParts[0] || 'Customer';
-                const lastName = nameParts.slice(1).join(' ') || 'User';
                 const invoiceTimingOrder = {
                   ...(order as Record<string, unknown>),
                   created_at:
@@ -3528,73 +3624,26 @@ export async function POST(request: NextRequest) {
                 }
                 const invoiceItems = persistedInvoiceItems;
 
-                // Paystack DVAs settle in NGN only: provisioning for a
-                // foreign-currency quote would print a naira account beside
-                // a dollar amount and risk a rejected transfer, so non-NGN
-                // invoice orders skip provisioning (null result) and fall
-                // through to merchant-contact instructions.
-                const dvaResult =
-                  orderCurrency === 'NGN'
-                    ? await generatePaymentAccount({
-                        email:
-                          customer_email ||
-                          `${order.id}@orders.usebaci.com`,
-                        firstName,
-                        lastName,
-                        phone:
-                          customer_phone || merchant.phone || '08000000000',
-                        orderId: order.id,
-                      })
-                    : null;
-
-                if (dvaResult && dvaResult.success) {
-                  const generatedVirtualAccount = {
-                    account_number: dvaResult.data.account_number,
-                    bank_name: dvaResult.data.bank_name,
-                    account_name: dvaResult.data.account_name,
-                  };
-
-                  // System-owned DVA/reminder records are written after the
-                  // validated order exists; customers do not own these tables
-                  // through RLS, so the server-only admin client is scoped to
-                  // this post-response side effect and order.id.
-                  backgroundSupabase ??= createAdminClient();
-                  const persistenceFailure = await persistPaystackDvaAssignment(
-                    backgroundSupabase,
-                    {
-                      accountName: dvaResult.data.account_name,
-                      accountNumber: dvaResult.data.account_number,
-                      bankName: dvaResult.data.bank_name,
-                      customerEmail:
-                        customer_email || `${order.id}@orders.usebaci.com`,
-                      expiresAt:
-                        getImmediateInvoiceDueDate(
-                          invoiceTimingOrder
-                        ).toISOString(),
-                      orderId: order.id,
-                    }
-                  );
-
-                  if (persistenceFailure) {
-                    logger.error({
-                      message: 'Failed to store auto-generated invoice DVA',
-                      orderId: order.id,
-                    });
-                  } else {
-                    invoiceVirtualAccount = generatedVirtualAccount;
-                    logger.info({
-                      message: 'Stored auto-generated invoice DVA successfully',
-                      orderId: order.id,
-                      accountNumber: dvaResult.data.account_number,
-                    });
-                  }
-                } else if (dvaResult) {
-                  logger.error({
-                    message: 'Auto-generation of invoice DVA failed',
-                    orderId: order.id,
-                    error: dvaResult.error,
-                  });
-                }
+                // System-owned DVA/reminder records are written after the
+                // validated order exists; customers do not own these tables
+                // through RLS, so the server-only admin client is scoped to
+                // this post-response side effect and order.id.
+                // (Pre-existing invoice path; Pay for Me provisions through
+                // its own service-role-free block below.)
+                backgroundSupabase ??= createAdminClient();
+                invoiceVirtualAccount = await provisionInvoiceMethodDva({
+                  supabase: backgroundSupabase,
+                  customerEmail: customer_email,
+                  customerName: customer_name,
+                  customerPhone: customer_phone ?? null,
+                  merchantPhone: merchant.phone,
+                  order: {
+                    id: order.id,
+                    createdAt: invoiceTimingOrder.created_at,
+                  },
+                  orderCurrency,
+                  orderLabel: 'invoice',
+                });
 
                 const fulfillment = getOrderFulfillmentDetails(
                   order as Record<string, unknown>
@@ -3809,6 +3858,42 @@ export async function POST(request: NextRequest) {
                     'Failed to generate invoice PDF or log initial reminder',
                   orderId: order.id,
                   error: err,
+                });
+              }
+            }
+
+            if (effectivePaymentMethod === 'payforme') {
+              // Pay for Me must never touch the service-role client
+              // (AGENTS.md), so it provisions through the proof-bound
+              // reservation RPC on the request-scoped client — the same
+              // pattern as payments/initialize — and skips the
+              // invoice-only artifacts (persisted items, PDF, reminders)
+              // that require privileged reads. The email below still
+              // carries the transfer details the requester forwards to
+              // their payer.
+              try {
+                invoiceVirtualAccount = await provisionInvoiceMethodDva({
+                  supabase,
+                  customerEmail: customer_email,
+                  customerName: customer_name,
+                  customerPhone: customer_phone ?? null,
+                  merchantPhone: merchant.phone,
+                  order: {
+                    id: order.id,
+                    createdAt:
+                      typeof order.created_at === 'string'
+                        ? order.created_at
+                        : new Date().toISOString(),
+                  },
+                  orderCurrency,
+                  orderLabel: 'payforme',
+                });
+              } catch (error) {
+                logger.error({
+                  message:
+                    'Failed to provision Pay for Me DVA; sending request email without transfer details',
+                  orderId: order.id,
+                  error: error instanceof Error ? error.message : error,
                 });
               }
             }

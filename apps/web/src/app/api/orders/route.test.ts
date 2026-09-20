@@ -101,6 +101,28 @@ vi.mock('@/lib/paystack', () => ({
   generatePaymentAccount: mockGeneratePaymentAccount,
 }));
 
+const mockPersistPaystackDvaAssignment = vi.hoisted(() => vi.fn());
+vi.mock(
+  '@/lib/payments/persist-paystack-dva-assignment',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@/lib/payments/persist-paystack-dva-assignment')
+      >();
+    // Default passthrough preserves the legacy RPC-less doubles every
+    // invoice test relies on; individual tests override per-case (e.g. the
+    // Pay for Me reservation, whose proof-bound RPC needs a live key).
+    mockPersistPaystackDvaAssignment.mockImplementation(
+      (...args: Parameters<typeof actual.persistPaystackDvaAssignment>) =>
+        actual.persistPaystackDvaAssignment(...args)
+    );
+    return {
+      ...actual,
+      persistPaystackDvaAssignment: mockPersistPaystackDvaAssignment,
+    };
+  }
+);
+
 vi.mock('@/lib/receipt-pdf-generator', () => ({
   generateReceiptBlob: mockGenerateReceiptBlob,
   resolveReceiptLogoDataUri: mockResolveReceiptLogoDataUri,
@@ -6088,7 +6110,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
 
   it('dispatches a payment request email with transfer details for payforme orders', async () => {
     const supabase = buildMockSupabase();
-    const { backgroundSupabase } = createBackgroundSupabaseMock({
+    const { accountUpsert, backgroundSupabase } = createBackgroundSupabaseMock({
       orderItemsResponses: [
         { data: [], error: null },
         {
@@ -6119,6 +6141,9 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     });
 
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+    // The proof-bound reservation RPC needs a live service key, so stand
+    // in a successful reservation and assert the client it was given.
+    mockPersistPaystackDvaAssignment.mockResolvedValueOnce(null);
 
     supabase.from = vi.fn((_table: string) => {
       return {
@@ -6208,6 +6233,16 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
         subject: expect.stringContaining('Payment Request - #'),
       })
     );
+    // Service-role boundary: the DVA reservation goes through the
+    // request-scoped client (proof-bound RPC in production), never the
+    // admin client — and the invoice-only artifacts are skipped.
+    expect(mockPersistPaystackDvaAssignment).toHaveBeenCalledWith(
+      supabase,
+      expect.objectContaining({ orderId: 'order-id' })
+    );
+    expect(accountUpsert).not.toHaveBeenCalled();
+    expect(backgroundSupabase.from).not.toHaveBeenCalledWith('order_items');
+    expect(backgroundSupabase.from).not.toHaveBeenCalledWith('order_reminders');
   });
 
   it('emails a paid commercial invoice when wallet covers an invoice-method order in full', async () => {

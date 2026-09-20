@@ -1,0 +1,236 @@
+import { jest } from '@jest/globals';
+import { router } from 'expo-router';
+import { trackCheckoutPaymentStarted } from '@/services/analytics';
+import type { OrderResponse } from '@/services/orders';
+import {
+  type InitializeGatewayAndRouteParams,
+  initializeGatewayAndRoute,
+} from './checkout-payment-initialize';
+
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn() },
+}));
+
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentStarted: jest.fn(),
+}));
+
+jest.mock('@/services/orders', () => ({
+  OrderError: class extends Error {
+    code: string;
+
+    constructor(message: string, code: string) {
+      super(message);
+      this.name = 'OrderError';
+      this.code = code;
+    }
+  },
+}));
+
+const mockRouterPush = router.push as jest.Mock;
+const mockTrackCheckoutPaymentStarted =
+  trackCheckoutPaymentStarted as jest.Mock;
+
+const orderResponse: OrderResponse = {
+  amountDueToGateway: 5750,
+  order: {
+    created_at: '2026-09-20T12:00:00.000Z',
+    id: 'order-1',
+    order_number: 'ORD-1',
+    payment_status: 'pending',
+    shipping_status: 'pending',
+    total: 5750,
+  },
+  wallet: null,
+};
+
+function createParams(
+  overrides: Partial<InitializeGatewayAndRouteParams> = {}
+): InitializeGatewayAndRouteParams {
+  return {
+    customerEmail: 'ada@example.com',
+    customerName: 'Ada Buyer',
+    customerPhone: '+2348123456789',
+    orderId: 'order-1',
+    orderNumber: 'ORD-1',
+    orderResponse,
+    selectedPayment: 'paystack',
+    setIsProcessing: jest.fn(),
+    trackingToken: null,
+    ...overrides,
+  };
+}
+
+function mockInitResponse(payload: unknown) {
+  global.fetch = jest.fn(async () => ({
+    ok: true,
+    json: async () => payload,
+  })) as unknown as typeof fetch;
+}
+
+describe('initializeGatewayAndRoute', () => {
+  let originalFetch: typeof global.fetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('routes a card payment after recording the start', async () => {
+    mockInitResponse({
+      success: true,
+      reference: 'ref-1',
+      authorization_url: 'https://pay.example/authorize',
+    });
+    const params = createParams();
+
+    await initializeGatewayAndRoute(params);
+
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
+    expect(params.setIsProcessing).toHaveBeenCalledWith(false);
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/payment-gateway',
+      params: expect.objectContaining({
+        authorizationUrl: 'https://pay.example/authorize',
+        reference: 'ref-1',
+      }),
+    });
+  });
+
+  it('accepts checkout_url when authorization_url is absent', async () => {
+    mockInitResponse({
+      success: true,
+      reference: 'ref-1',
+      checkout_url: 'https://pay.example/checkout',
+    });
+
+    await initializeGatewayAndRoute(createParams());
+
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/payment-gateway',
+      params: expect.objectContaining({
+        authorizationUrl: 'https://pay.example/checkout',
+      }),
+    });
+  });
+
+  it('rejects a success envelope without a reference before emitting the start', async () => {
+    mockInitResponse({
+      success: true,
+      authorization_url: 'https://pay.example/authorize',
+    });
+
+    await expect(
+      initializeGatewayAndRoute(createParams())
+    ).rejects.toMatchObject({
+      name: 'OrderError',
+      code: 'PAYMENT_INIT_ERROR',
+      message: expect.stringContaining('payment reference'),
+    });
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it('rejects a card envelope without an authorization URL before emitting the start', async () => {
+    mockInitResponse({ success: true, reference: 'ref-1' });
+
+    await expect(
+      initializeGatewayAndRoute(createParams())
+    ).rejects.toMatchObject({
+      name: 'OrderError',
+      code: 'PAYMENT_INIT_ERROR',
+      message: expect.stringContaining('authorization URL'),
+    });
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it('routes a bank transfer with the validated DVA account', async () => {
+    mockInitResponse({
+      success: true,
+      reference: 'ref-dva-1',
+      dva: {
+        bank_name: 'Test Bank',
+        account_number: '0123456789',
+        account_name: 'Ada Buyer',
+      },
+    });
+
+    await initializeGatewayAndRoute(
+      createParams({ selectedPayment: 'bank_transfer' })
+    );
+
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/bank-transfer',
+      params: expect.objectContaining({
+        reference: 'ref-dva-1',
+        bankName: 'Test Bank',
+        accountNumber: '0123456789',
+        accountName: 'Ada Buyer',
+      }),
+    });
+  });
+
+  it('accepts the legacy virtual_account envelope for bank transfer', async () => {
+    mockInitResponse({
+      success: true,
+      reference: 'ref-dva-1',
+      virtual_account: {
+        bank_name: 'Test Bank',
+        account_number: '0123456789',
+        account_name: 'Ada Buyer',
+      },
+    });
+
+    await initializeGatewayAndRoute(
+      createParams({ selectedPayment: 'bank_transfer' })
+    );
+
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/bank-transfer',
+      params: expect.objectContaining({
+        bankName: 'Test Bank',
+        accountNumber: '0123456789',
+        accountName: 'Ada Buyer',
+      }),
+    });
+  });
+
+  it.each([
+    ['missing account entirely', {}],
+    [
+      'missing bank name',
+      { account_number: '0123456789', account_name: 'Ada' },
+    ],
+    ['missing account number', { bank_name: 'Test Bank', account_name: 'Ada' }],
+    [
+      'missing account name',
+      { bank_name: 'Test Bank', account_number: '0123456789' },
+    ],
+    [
+      'blank account number',
+      { bank_name: 'Test Bank', account_number: '  ', account_name: 'Ada' },
+    ],
+  ])('rejects a bank-transfer envelope with a %s before emitting the start', async (_label, dva) => {
+    mockInitResponse({ success: true, reference: 'ref-dva-1', dva });
+
+    await expect(
+      initializeGatewayAndRoute(
+        createParams({
+          selectedPayment: 'bank_transfer',
+        })
+      )
+    ).rejects.toMatchObject({
+      name: 'OrderError',
+      code: 'PAYMENT_INIT_ERROR',
+      message: expect.stringContaining('virtual account details'),
+    });
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+});

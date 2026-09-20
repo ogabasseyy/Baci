@@ -15,7 +15,8 @@ const mockRepriceCartItems = jest.fn() as jest.MockedFunction<
 >;
 const mockCreateOrder =
   jest.fn<typeof import('@/services/orders').createOrder>();
-const mockSubmitBnplCheckout = jest.fn();
+const mockSubmitBnplCheckout =
+  jest.fn<typeof import('./checkout-bnpl-submit').submitBnplCheckout>();
 const mockBuildCheckoutOrderRequest = jest.fn();
 const mockValidateCheckoutSubmission =
   jest.fn<
@@ -83,7 +84,11 @@ jest.mock('@/hooks/use-merchant', () => ({
 }));
 
 jest.mock('./checkout-bnpl-submit', () => ({
-  submitBnplCheckout: (...args: unknown[]) => mockSubmitBnplCheckout(...args),
+  submitBnplCheckout: (
+    ...args: Parameters<
+      typeof import('./checkout-bnpl-submit').submitBnplCheckout
+    >
+  ) => mockSubmitBnplCheckout(...args),
 }));
 
 jest.mock('./checkout-order-builders', () => ({
@@ -641,6 +646,34 @@ describe('useCheckoutSubmit', () => {
     expect(mockCreateOrder).toHaveBeenCalled();
   });
 
+  it('threads the nested Klump order id into init failures', async () => {
+    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    const initError = new Error('klump init failed');
+    mockSubmitBnplCheckout.mockImplementation((params) => {
+      params.onOrderCreated?.('order-klump-1');
+      throw initError;
+    });
+    const { handleCheckoutSubmitError } = jest.requireMock(
+      './checkout-submit-error'
+    ) as { handleCheckoutSubmitError: jest.Mock };
+    const params = createParams({ selectedPayment: 'klump' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    // The nested BNPL submit committed order-klump-1 before Klump init
+    // threw: the outer catch must report with that identity.
+    expect(handleCheckoutSubmitError).toHaveBeenCalledWith(
+      initError,
+      'klump',
+      'order-klump-1'
+    );
+    expect(params.isOrderInFlight.current).toBe(false);
+  });
+
   it('threads the committed order id into post-creation init failures', async () => {
     mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
     const initError = new Error('provider init threw');
@@ -670,5 +703,34 @@ describe('useCheckoutSubmit', () => {
       'order-1'
     );
     expect(params.isOrderInFlight.current).toBe(false);
+  });
+
+  it('attributes completion to the auth user id, not the customer-row id', async () => {
+    // The server conversion payload joins on external_id: the signed-in
+    // auth identity wins cross-device matching, never the storefront
+    // customer row.
+    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    const { finalizeCheckoutPayment } = jest.requireMock(
+      './checkout-payment-finalization'
+    ) as { finalizeCheckoutPayment: jest.Mock };
+    const params = createParams({
+      customer: { email: 'customer@example.com', id: 'customer-row-1' },
+      isAuthenticated: true,
+      selectedPayment: 'paystack',
+      user: { id: 'auth-user-1' },
+    });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockCreateOrder).toHaveBeenCalled();
+    expect(finalizeCheckoutPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attribution: expect.objectContaining({ userId: 'auth-user-1' }),
+      })
+    );
   });
 });

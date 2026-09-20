@@ -67,6 +67,7 @@ export function useCheckoutSubmit({
   setPendingOrder,
   setShowCryptoSelection,
   setStep,
+  user,
   walletBalance,
   walletFundedBankTransferOptionEnabled,
   walletSelection,
@@ -184,6 +185,12 @@ export function useCheckoutSubmit({
           liveWalletSelection,
           checkoutGeneration: checkoutGenerationSnapshot,
           mobileCheckoutIdempotencyRef,
+          // The Klump path creates its order inside the nested submit:
+          // capture the id so a nested init failure still reports with
+          // the committed order identity.
+          onOrderCreated: (nestedOrderId) => {
+            createdOrderId = nestedOrderId;
+          },
           paymentMethodForOrder,
           paymentSettings,
           selectedPayment,
@@ -259,7 +266,10 @@ export function useCheckoutSubmit({
         attribution: buildCheckoutCompletionAttribution({
           customerEmail,
           customerPhone,
-          userId: customer?.id,
+          // Auth identity, not the storefront customer-row id: the server
+          // conversion payload joins on external_id for cross-device ad
+          // matching, and the cached auth identity must win.
+          userId: user?.id ?? undefined,
           items: itemsSnapshot,
           snapshot,
         }),

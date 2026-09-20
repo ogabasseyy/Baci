@@ -13,6 +13,10 @@ import {
 
 const PAYMENT_INIT_TIMEOUT_MS = 10_000;
 
+function trimmedOrEmpty(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 export interface InitializeGatewayAndRouteParams {
   customerEmail: string;
   customerName: string;
@@ -96,6 +100,43 @@ export async function initializeGatewayAndRoute({
     );
   }
 
+  // A version-skewed `{ success: true }` envelope can arrive without the
+  // fields the destination schemas require (reference, authorization URL,
+  // or a complete DVA account). The route would reject those params, so no
+  // provider flow actually opened: validate before emitting the start.
+  const reference = trimmedOrEmpty(initData.reference);
+  if (!reference) {
+    throw new OrderError(
+      'Payment initialization response is missing the payment reference',
+      'PAYMENT_INIT_ERROR'
+    );
+  }
+  const bankName =
+    trimmedOrEmpty(initData.dva?.bank_name) ||
+    trimmedOrEmpty(initData.virtual_account?.bank_name);
+  const accountNumber =
+    trimmedOrEmpty(initData.dva?.account_number) ||
+    trimmedOrEmpty(initData.virtual_account?.account_number);
+  const accountName =
+    trimmedOrEmpty(initData.dva?.account_name) ||
+    trimmedOrEmpty(initData.virtual_account?.account_name);
+  const authorizationUrl =
+    trimmedOrEmpty(initData.authorization_url) ||
+    trimmedOrEmpty(initData.checkout_url);
+  if (isBankTransfer) {
+    if (!bankName || !accountNumber || !accountName) {
+      throw new OrderError(
+        'Payment initialization response is missing the virtual account details',
+        'PAYMENT_INIT_ERROR'
+      );
+    }
+  } else if (!authorizationUrl) {
+    throw new OrderError(
+      'Payment initialization response is missing the authorization URL',
+      'PAYMENT_INIT_ERROR'
+    );
+  }
+
   // The provider initialized: record the start now, never speculatively.
   await trackCheckoutPaymentStarted({
     orderId,
@@ -110,18 +151,11 @@ export async function initializeGatewayAndRoute({
       params: {
         orderId,
         orderNumber,
-        reference: initData.reference,
+        reference,
         amount: String(orderResponse.amountDueToGateway),
-        bankName:
-          initData.dva?.bank_name || initData.virtual_account?.bank_name || '',
-        accountNumber:
-          initData.dva?.account_number ||
-          initData.virtual_account?.account_number ||
-          '',
-        accountName:
-          initData.dva?.account_name ||
-          initData.virtual_account?.account_name ||
-          '',
+        bankName,
+        accountNumber,
+        accountName,
         ...(trackingToken && { trackingToken }),
       },
     });
@@ -134,8 +168,8 @@ export async function initializeGatewayAndRoute({
       orderId,
       orderNumber,
       gateway: selectedPayment,
-      authorizationUrl: initData.authorization_url || initData.checkout_url,
-      reference: initData.reference,
+      authorizationUrl,
+      reference,
       amount: String(orderResponse.amountDueToGateway),
       // Canonical order total for revenue-accurate purchase reporting; the
       // gateway `amount` above is only the residual due after credits.

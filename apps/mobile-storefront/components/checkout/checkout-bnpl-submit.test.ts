@@ -268,6 +268,31 @@ describe('submitBnplCheckout', () => {
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
+  it('reports the nested order id when Klump init fails after creation', async () => {
+    const onOrderCreated = jest.fn();
+    const params = {
+      ...createParams(),
+      selectedPayment: 'klump' as const,
+      onOrderCreated,
+    };
+    const mockFetch = global.fetch as jest.Mock;
+    mockFetch.mockImplementationOnce(async () => ({
+      ok: true,
+      json: async (): Promise<unknown> => {
+        throw new SyntaxError('Unexpected token < in JSON');
+      },
+    }));
+
+    await expect(submitBnplCheckout(params)).rejects.toMatchObject({
+      code: 'PAYMENT_INIT_ERROR',
+    });
+
+    // The order committed before init threw: the outer submit threads
+    // this id into failure handling so payment_failed joins the order.
+    expect(onOrderCreated).toHaveBeenCalledWith('order-1');
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
+  });
+
   it('records payment start only after Klump initializes successfully', async () => {
     const params = {
       ...createParams(),

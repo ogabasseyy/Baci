@@ -286,6 +286,75 @@ describe('storefront order success page', () => {
     }
   });
 
+  it('labels the deferred BNPL completion with the stamped order currency', async () => {
+    vi.useFakeTimers();
+    try {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-123',
+          reference: 'credpal-ref-1',
+          type: 'credpal',
+          credpalStatus: 'pending',
+          trackingToken: 'track-token-123',
+        })
+      );
+      // Order stamped USD while the merchant prices in NGN.
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            id: 'order-123',
+            order_number: 'ORD-123',
+            tracking_token: 'track-token-123',
+            customer_email: 'buyer@example.com',
+            items: [],
+            subtotal: 45000,
+            shipping_cost: 1500,
+            total: 49875,
+            currency: 'USD',
+            payment_method: 'credpal',
+            payment_status: 'pending',
+          }),
+        })
+        .mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            id: 'order-123',
+            order_number: 'ORD-123',
+            tracking_token: 'track-token-123',
+            customer_email: 'buyer@example.com',
+            items: [],
+            subtotal: 45000,
+            shipping_cost: 1500,
+            total: 49875,
+            currency: 'USD',
+            payment_method: 'credpal',
+            payment_status: 'paid',
+          }),
+        });
+
+      render(<OrderSuccessPage />);
+      await flushMicrotasks();
+
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
+
+      await advanceTimers(3000);
+      await flushMicrotasks();
+
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-123',
+        expect.objectContaining({
+          currency: 'USD',
+          payment_method: 'credpal',
+          payment_status: 'paid',
+        })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('captures the pending-to-paid Klump transition', async () => {
     vi.useFakeTimers();
     try {

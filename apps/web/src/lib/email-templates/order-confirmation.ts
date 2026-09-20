@@ -65,10 +65,10 @@ export function generateOrderConfirmationEmail(
 ): string {
   const isProforma = data.documentKind === 'proforma';
   const isPaymentRequest = data.documentKind === 'payment_request';
-  // The proforma/request CTA opens the order-specific tracking page so
-  // customers can view the quote; the tracking page shows status only
-  // and cannot take payment, so payment travels by bank transfer
-  // (details below).
+  // The proforma/request CTA opens the order-specific tracking page,
+  // which shows status only and cannot take payment (the quote itself
+  // travels as the attached PDF): label it as tracking, never as the
+  // document. Payment travels by bank transfer (details below).
   const ctaHref =
     (isProforma || isPaymentRequest) && data.paymentLink
       ? data.paymentLink
@@ -89,9 +89,7 @@ export function generateOrderConfirmationEmail(
     ? data.virtualAccount
     : undefined;
   const proformaPaymentHtml =
-    (isProforma || isPaymentRequest) &&
-    proformaVirtualAccount &&
-    hasAmountDue
+    (isProforma || isPaymentRequest) && proformaVirtualAccount && hasAmountDue
       ? `
           <!-- Payment Instructions -->
           <tr>
@@ -270,7 +268,7 @@ export function generateOrderConfirmationEmail(
           <tr>
             <td align="center" style="padding: 0 40px 40px 40px;">
               <a href="${escapeHtmlAttribute(sanitizeUrl(ctaHref))}" style="background-color: #0f172a; color: #ffffff; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.2);">
-                ${isProforma ? 'View Proforma Invoice' : isPaymentRequest ? 'View Payment Request' : 'View Order'}
+                ${isProforma || isPaymentRequest ? 'Track Order Status' : 'View Order'}
               </a>
             </td>
           </tr>
@@ -372,9 +370,7 @@ Subtotal: ${formatEmailMoney(data.subtotal, data.currency)}
 Shipping: ${formatEmailMoney(data.shippingFee, data.currency)}
 Total: ${formatEmailMoney(data.total, data.currency)}
 ${
-  (isProforma || isPaymentRequest) &&
-  proformaVirtualAccount &&
-  hasAmountDue
+  (isProforma || isPaymentRequest) && proformaVirtualAccount && hasAmountDue
     ? `
 Payment Details (bank transfer):
 Bank: ${proformaVirtualAccount.bankName}

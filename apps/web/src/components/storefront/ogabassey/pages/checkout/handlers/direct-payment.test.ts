@@ -194,7 +194,7 @@ describe('executeResumedDirectPayment', () => {
         await callArgs.onSuccess({ order_no: 'credpal-ref-123' });
 
         expect(defaultOpts.routerPush).toHaveBeenCalledWith(
-          '/test-store/order-success?orderId=order-123&type=credpal&trackingToken=track-token-123',
+          '/test-store/order-success?orderId=order-123&type=credpal&trackingToken=track-token-123&reference=credpal-ref-123',
         );
       });
 
@@ -663,7 +663,7 @@ describe('executeResumedDirectPayment', () => {
       callArgs.onLoad();
       expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
         'payment_started',
-        'order-123',
+        expect.stringMatching(/^order-123:/),
         expect.objectContaining({
           payment_method: 'credpal',
           currency: 'NGN',
@@ -687,7 +687,7 @@ describe('executeResumedDirectPayment', () => {
       callArgs.onError({ message: 'declined' });
       expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
         'payment_failed',
-        'order-123',
+        expect.stringMatching(/^order-123:/),
         expect.objectContaining({
           payment_method: 'credpal',
           reason: 'credpal_error',
@@ -715,14 +715,14 @@ describe('executeResumedDirectPayment', () => {
       });
       expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
         'payment_started',
-        'order-123',
+        expect.stringMatching(/^order-123:/),
         expect.objectContaining({ payment_method: 'credit_direct' })
       );
 
       callArgs.onError('declined');
       expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
         'payment_failed',
-        'order-123',
+        expect.stringMatching(/^order-123:/),
         expect.objectContaining({
           payment_method: 'credit_direct',
           reason: 'credit_direct_error',
@@ -740,7 +740,7 @@ describe('executeResumedDirectPayment', () => {
       callArgs.onLoad();
       expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
         'payment_started',
-        'order-123',
+        expect.stringMatching(/^order-123:/),
         expect.objectContaining({ currency: 'USD' })
       );
 
@@ -769,7 +769,7 @@ describe('executeResumedDirectPayment', () => {
       callArgs.onLoad();
       expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
         'payment_started',
-        'order-123',
+        expect.stringMatching(/^order-123:/),
         expect.objectContaining({ currency: 'GHS' })
       );
     });
@@ -789,7 +789,45 @@ describe('executeResumedDirectPayment', () => {
         expect.anything()
       );
       expect(defaultOpts.clearCheckoutSession).toHaveBeenCalled();
-      expect(defaultOpts.routerPush).toHaveBeenCalled();
+      // The accepted-pending redirect still forwards the provider
+      // reference so the success page can attribute the deferred
+      // pending-to-paid completion.
+      expect(defaultOpts.routerPush).toHaveBeenCalledWith(
+        expect.stringContaining('reference=credpal-ref-123')
+      );
+    });
+
+    it('keys the resumed lifecycle per attempt so a retry re-emits after an opened failure', async () => {
+      await executeResumedDirectPayment(defaultOpts);
+      const firstAttempt =
+        mockOpenCredPalCheckout.mock.calls[0][0];
+
+      firstAttempt.onLoad();
+      firstAttempt.onError({ message: 'declined' });
+
+      const firstStartKey = mockCaptureCheckoutFunnelEventOnce.mock.calls.find(
+        ([event]) => event === 'payment_started'
+      )?.[1];
+      expect(firstStartKey).toMatch(/^order-123:/);
+      // The failure closes the same attempt it opened.
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_failed',
+        firstStartKey,
+        expect.objectContaining({ reason: 'credpal_error' })
+      );
+
+      // Retry: a new invocation mints a new attempt key, so its start
+      // re-emits instead of being suppressed by the failed attempt.
+      await executeResumedDirectPayment(defaultOpts);
+      const secondAttempt =
+        mockOpenCredPalCheckout.mock.calls[1][0];
+      secondAttempt.onLoad();
+
+      const startedKeys = mockCaptureCheckoutFunnelEventOnce.mock.calls
+        .filter(([event]) => event === 'payment_started')
+        .map(([, key]) => key);
+      expect(startedKeys).toHaveLength(2);
+      expect(startedKeys[0]).not.toBe(startedKeys[1]);
     });
   });
 });

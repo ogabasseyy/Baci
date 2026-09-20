@@ -97,7 +97,8 @@ describe('Order confirmation email', () => {
       expect(html).not.toContain('Order #ORD-001 Confirmed');
       expect(html).toContain('no payment taken yet');
       expect(html).toContain('will be processed once payment is received');
-      expect(html).toContain('View Proforma Invoice');
+      expect(html).toContain('Track Order Status');
+      expect(html).not.toContain('View Proforma Invoice');
       expect(text).toContain('Proforma Invoice');
       expect(text).not.toContain('Order Confirmed!');
       expect(text).toContain('a quotation, not a confirmed order');
@@ -185,13 +186,23 @@ describe('Order confirmation email', () => {
       paymentLink: 'https://testshop.usebaci.com/track-order?token=track-123',
     };
 
-    it('points the View Proforma Invoice anchor at the order payment link', () => {
-      const html = generateOrderConfirmationEmail(proformaPayload);
+    it('labels the tracking anchor as status tracking on both deferred variants', () => {
+      // The CTA resolves to the status-only tracking page (the quote
+      // travels as the attached PDF): the label must not promise the
+      // document on either variant.
+      for (const documentKind of ['proforma', 'payment_request'] as const) {
+        const html = generateOrderConfirmationEmail({
+          ...proformaPayload,
+          documentKind,
+        });
 
-      expect(html).toContain('View Proforma Invoice');
-      expect(html).toContain(
-        'href="https://testshop.usebaci.com/track-order?token=track-123"'
-      );
+        expect(html).toContain('Track Order Status');
+        expect(html).not.toContain('View Proforma Invoice');
+        expect(html).not.toContain('View Payment Request');
+        expect(html).toContain(
+          'href="https://testshop.usebaci.com/track-order?token=track-123"'
+        );
+      }
     });
 
     it('includes the payment link in the plain-text next steps', () => {
@@ -275,9 +286,7 @@ describe('Order confirmation email', () => {
       expect(html).toContain('Transfer <strong>₦1,500.00</strong>');
       expect(html).not.toContain('Transfer <strong>₦11,500.00</strong>');
       expect(text).toContain('Complete your bank transfer of ₦1,500.00');
-      expect(text).not.toContain(
-        'Complete your bank transfer of ₦11,500.00'
-      );
+      expect(text).not.toContain('Complete your bank transfer of ₦11,500.00');
     });
 
     it('falls back to merchant contact for foreign-currency quotes', () => {
@@ -349,7 +358,8 @@ describe('Order confirmation email', () => {
       expect(html).toContain('Share the transfer details with your payer');
       expect(html).toContain('Complete Your Bank Transfer');
       expect(html).toContain('1234567890');
-      expect(html).toContain('View Payment Request');
+      expect(html).toContain('Track Order Status');
+      expect(html).not.toContain('View Payment Request');
       expect(html).not.toContain('Proforma Invoice');
       expect(html).not.toContain('procurement team');
       expect(text).toContain('Payment Request');

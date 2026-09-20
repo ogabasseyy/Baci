@@ -27,6 +27,7 @@ interface OrderData {
   payment_method?: string;
   shipping_status?: string;
   merchant_id?: string;
+  currency?: string;
   items: Array<{
     id: string;
     product_name?: string;
@@ -68,12 +69,14 @@ function capturePendingBnplSettlement({
   paymentMethod,
   reference,
   total,
+  currency,
 }: {
   orderId: string;
   orderNumber?: string;
   paymentMethod: string;
   reference?: string;
   total?: number;
+  currency?: string;
 }): void {
   // Inside a native BNPL WebView the native shell owns conversion
   // attribution (with native-verified outcomes): emitting here would
@@ -89,6 +92,7 @@ function capturePendingBnplSettlement({
     orderId,
     buildCheckoutFunnelProperties({
       channel: 'web',
+      currency,
       orderId,
       orderNumber,
       paymentIntent: 'installments',
@@ -267,12 +271,19 @@ function OrderSuccessContent() {
       return;
     }
     const settledTotal = Number(order.total);
+    // Stamped order currency: a merchant that changed payout currency
+    // after the order must not relabel this deferred completion.
+    const settledCurrency =
+      typeof order.currency === 'string' && order.currency.trim()
+        ? order.currency.trim().toUpperCase()
+        : undefined;
     capturePendingBnplSettlement({
       orderId,
       orderNumber: order.order_number || order.short_id,
       paymentMethod: order.payment_method || bnplType,
       reference: bnplReference ?? undefined,
       ...(Number.isFinite(settledTotal) ? { total: settledTotal } : {}),
+      ...(settledCurrency ? { currency: settledCurrency } : {}),
     });
   }, [bnplType, orderId, order, bnplReference]);
 

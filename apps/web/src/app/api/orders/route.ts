@@ -3591,6 +3591,11 @@ export async function POST(request: NextRequest) {
               Number(order.amount_paid || 0),
               savingsAmountUsed + walletAmountUsed
             );
+            // Outstanding balance for the transfer instructions (same rule
+            // as the attached PDF): credit already applied must not be
+            // charged again. Computed before provisioning so fully
+            // discounted orders skip DVA creation entirely.
+            const emailAmountDue = Math.max(orderTotal - invoiceAmountPaid, 0);
             let backgroundSupabase: ReturnType<
               typeof createAdminClient
             > | null = null;
@@ -3630,20 +3635,25 @@ export async function POST(request: NextRequest) {
                 // this post-response side effect and order.id.
                 // (Pre-existing invoice path; Pay for Me provisions through
                 // its own service-role-free block below.)
-                backgroundSupabase ??= createAdminClient();
-                invoiceVirtualAccount = await provisionInvoiceMethodDva({
-                  supabase: backgroundSupabase,
-                  customerEmail: customer_email,
-                  customerName: customer_name,
-                  customerPhone: customer_phone ?? null,
-                  merchantPhone: merchant.phone,
-                  order: {
-                    id: order.id,
-                    createdAt: invoiceTimingOrder.created_at,
-                  },
-                  orderCurrency,
-                  orderLabel: 'invoice',
-                });
+                // A zero-due order has nothing to transfer: skip
+                // provisioning so the PDF and later receipt lookups carry
+                // no virtual account for an impossible payment.
+                if (emailAmountDue > 0) {
+                  backgroundSupabase ??= createAdminClient();
+                  invoiceVirtualAccount = await provisionInvoiceMethodDva({
+                    supabase: backgroundSupabase,
+                    customerEmail: customer_email,
+                    customerName: customer_name,
+                    customerPhone: customer_phone ?? null,
+                    merchantPhone: merchant.phone,
+                    order: {
+                      id: order.id,
+                      createdAt: invoiceTimingOrder.created_at,
+                    },
+                    orderCurrency,
+                    orderLabel: 'invoice',
+                  });
+                }
 
                 const fulfillment = getOrderFulfillmentDetails(
                   order as Record<string, unknown>
@@ -3861,12 +3871,6 @@ export async function POST(request: NextRequest) {
                 });
               }
             }
-
-            // Outstanding balance for the transfer instructions (same rule
-            // as the attached PDF): credit already applied must not be
-            // charged again. Computed before provisioning so a fully
-            // discounted order skips DVA creation entirely.
-            const emailAmountDue = Math.max(orderTotal - invoiceAmountPaid, 0);
 
             if (effectivePaymentMethod === 'payforme') {
               // Pay for Me must never touch the service-role client

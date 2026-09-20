@@ -754,6 +754,8 @@ export const CheckoutPage: React.FC = () => {
     /** Originating checkout fingerprint: scopes post-confirm idempotency
      * cleanup so another tab's newer checkout keeps its recovery key. */
     checkoutFingerprint?: string;
+    /** Normalized stamped order currency for completion labeling. */
+    orderCurrency?: string;
   } | null>(null);
   const [isVerifyingDva, setIsVerifyingDva] = useState(false);
   const [isInitializingDva, setIsInitializingDva] = useState(false);
@@ -2969,6 +2971,14 @@ export const CheckoutPage: React.FC = () => {
     }
 
     setIsInitializingDva(true);
+    // Stamped order currency is authoritative; fall back to the
+    // merchant-resolved code only if the row value is ever absent. Stored
+    // on the modal state so completion labels the same currency even if
+    // the merchant changes payout currency before the shopper confirms.
+    const stampedDvaCurrency =
+      typeof order.currency === 'string' && order.currency.trim()
+        ? order.currency.trim().toUpperCase()
+        : currencyCode;
     await requestDvaInitialization({
       merchantId: merchant.id,
       orderId: order.id,
@@ -2976,12 +2986,7 @@ export const CheckoutPage: React.FC = () => {
       customerName: `${firstName} ${lastName}`.trim(),
       customerPhone,
       billingAddress,
-      // Stamped order currency is authoritative; fall back to the
-      // merchant-resolved code only if the row value is ever absent.
-      orderCurrency:
-        typeof order.currency === 'string' && order.currency.trim()
-          ? order.currency.trim().toUpperCase()
-          : currencyCode,
+      orderCurrency: stampedDvaCurrency,
     })
       .then((result) => {
         setDvaData({
@@ -2995,6 +3000,7 @@ export const CheckoutPage: React.FC = () => {
           orderNumber: order.order_number ?? undefined,
           trackingToken: order.tracking_token,
           checkoutFingerprint,
+          orderCurrency: stampedDvaCurrency,
         });
         setDvaCountdown(3600);
         onDvaReady?.();
@@ -3050,6 +3056,7 @@ export const CheckoutPage: React.FC = () => {
       total: dvaTotal,
       trackingToken,
       checkoutFingerprint: dvaCheckoutFingerprint,
+      orderCurrency: dvaOrderCurrency,
     } = dvaData;
     setIsVerifyingDva(true);
     verifyDvaTransferStatus({
@@ -3072,10 +3079,9 @@ export const CheckoutPage: React.FC = () => {
           orderId,
           buildCheckoutFunnelProperties({
             channel: 'web',
-            // Component-scope merchant currency (same fallback the DVA
-            // initialization used); the stamped order currency is not
-            // retained on the modal state.
-            currency: currencyCode,
+            // Stamped currency retained from initialization: matches the
+            // start even if the merchant changed payout currency since.
+            currency: dvaOrderCurrency ?? currencyCode,
             itemCount: confirmedItems.reduce(
               (count, item) => count + item.quantity,
               0

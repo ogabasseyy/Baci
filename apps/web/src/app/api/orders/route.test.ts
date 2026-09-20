@@ -6108,6 +6108,135 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     );
   });
 
+  it('skips invoice DVA provisioning when a discounted order has zero due', async () => {
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 0,
+            subtotal: 0,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+          },
+        ],
+        error: null,
+      },
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock({
+      orderItemsResponses: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+
+    supabase.from = vi.fn((_table: string) => {
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        in: vi.fn().mockReturnThis(),
+        returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+        overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+        insert: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn().mockReturnThis(),
+        // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+        then: (resolve: any) => Promise.resolve().then(resolve),
+      };
+    }) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'invoice',
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    // A 100%-discounted invoice has nothing due: no DVA is provisioned
+    // or persisted, so the PDF and receipt carry no transfer instructions
+    // for an impossible payment.
+    expect(mockGeneratePaymentAccount).not.toHaveBeenCalled();
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentKind: 'proforma',
+        amountDue: 0,
+        virtualAccount: undefined,
+      })
+    );
+    expect(backgroundSupabase.from).not.toHaveBeenCalledWith(
+      'order_payment_accounts'
+    );
+  });
+
   it('dispatches a payment request email with transfer details for payforme orders', async () => {
     const supabase = buildMockSupabase();
     const { accountUpsert, backgroundSupabase } = createBackgroundSupabaseMock({

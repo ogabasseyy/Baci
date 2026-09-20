@@ -91,8 +91,11 @@ export async function executeResumedDirectPayment({
     // Direct swallows init failures into `onError` — so each start fires
     // from its own opened signal (`onLoad` / `onPopup`). Errors before
     // that signal keep the toast + retry without a funnel event; once
-    // opened, an error closes the attempt. Once semantics keep the
-    // auto-trigger plus a manual retry to a single start per order.
+    // opened, an error closes the attempt. Each helper invocation is one
+    // provider attempt: the lifecycle is keyed per attempt (not per
+    // order) so an opened-then-failed attempt does not suppress the
+    // retry's fresh start/failure pair.
+    const resumedAttemptKey = `${resumedOrder.id}:${crypto.randomUUID()}`;
     let resumedBnplOpened = false;
     const captureResumedPaymentStarted = (
       gateway: 'credpal' | 'credit_direct'
@@ -100,7 +103,7 @@ export async function executeResumedDirectPayment({
       resumedBnplOpened = true;
       captureCheckoutFunnelEventOnce(
         CHECKOUT_FUNNEL_EVENTS.paymentStarted,
-        resumedOrder.id,
+        resumedAttemptKey,
         buildCheckoutFunnelProperties({
           channel: 'web',
           currency: resumedCurrency,
@@ -121,7 +124,7 @@ export async function executeResumedDirectPayment({
       }
       captureCheckoutFunnelEventOnce(
         CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-        resumedOrder.id,
+        resumedAttemptKey,
         buildCheckoutFunnelProperties({
           channel: 'web',
           currency: resumedCurrency,
@@ -188,6 +191,10 @@ export async function executeResumedDirectPayment({
           if (resumedOrder.tracking_token) {
             successQuery.set('trackingToken', resumedOrder.tracking_token);
           }
+          // Forward the provider reference on every outcome (success and
+          // accepted-pending): the success page attributes its deferred
+          // pending-to-paid completion to this reference.
+          successQuery.set('reference', data.order_no);
           routerPush(getHref(`/order-success?${successQuery.toString()}`));
         },
         onLoad: () => {

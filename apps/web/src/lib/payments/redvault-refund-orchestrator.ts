@@ -17,6 +17,13 @@ export interface RedvaultRefundProvider {
   submit(input: {
     amountKobo: number;
     originalCaptureReference: string;
+    /**
+     * Durable local refund identity (the refund row id) the provider must
+     * echo on the created record. Reference-less recovery correlates on it,
+     * so a lost submit response can still be matched to exactly its own
+     * provider record instead of any same-amount record in the window.
+     */
+    correlationKey: string;
   }): Promise<RedvaultRefundProviderResult>;
 }
 
@@ -35,6 +42,13 @@ export interface RedvaultRefundReconciliationProvider {
     captureReference: string;
     expectedAmountKobo: number;
     expectedCurrency: string;
+    /**
+     * Durable local refund identity echoed on the provider record at submit
+     * time. Timing and amount alone cannot establish identity — an
+     * untracked manual same-amount refund in the window would match — so a
+     * candidate resolves terminally only when it carries this key.
+     */
+    expectedCorrelationKey: string;
     /**
      * Provider IDs already persisted on sibling local refunds for the same
      * attempt. Matches carrying one of these IDs belong to an earlier
@@ -83,6 +97,7 @@ export async function processNextRedvaultRefund({
     outcome = await provider.submit({
       amountKobo: refund.amountKobo,
       originalCaptureReference: refund.attemptReference,
+      correlationKey: refund.id,
     });
   } catch {
     return {
@@ -176,6 +191,7 @@ export async function reconcileNextRedvaultRefund({
     captureReference: claim.refund.attemptReference,
     expectedAmountKobo: claim.refund.amountKobo,
     expectedCurrency: 'NGN',
+    expectedCorrelationKey: claim.refund.id,
     knownProviderReferences: claim.siblingProviderReferences,
     submittedAt: claim.refund.submittedAt,
   });

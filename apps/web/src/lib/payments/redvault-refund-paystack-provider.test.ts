@@ -7,7 +7,11 @@ import {
   createTestRedvaultPaystackRefundProvider,
 } from './redvault-refund-paystack-provider';
 
-const input = { amountKobo: 9500, originalCaptureReference: 'RV-capture' };
+const input = {
+  amountKobo: 9500,
+  originalCaptureReference: 'RV-capture',
+  correlationKey: 'refund-1',
+};
 const data = {
   id: 123,
   status: 'pending',
@@ -205,6 +209,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
           amount: 9500,
           currency: 'NGN',
           id: 124,
+          merchant_note: 'refund-1',
           status,
           transaction: { reference: 'RV-capture' },
         },
@@ -215,6 +220,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: 'RV-capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        expectedCorrelationKey: 'refund-1',
         knownProviderReferences: [],
         submittedAt: null,
       })
@@ -238,6 +244,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: 'RV-capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        expectedCorrelationKey: 'refund-1',
         knownProviderReferences: [],
         submittedAt: null,
       })
@@ -260,6 +267,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: 'RV-capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        expectedCorrelationKey: 'refund-1',
         knownProviderReferences: [],
         submittedAt: null,
       })
@@ -272,6 +280,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: '../capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        expectedCorrelationKey: 'refund-1',
         knownProviderReferences: [],
         submittedAt: null,
       })
@@ -297,6 +306,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: 'RV-capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        expectedCorrelationKey: 'refund-1',
         knownProviderReferences: ['124'],
         submittedAt: '2026-09-19T20:00:00.000Z',
       })
@@ -319,6 +329,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
           createdAt: '2026-09-19T20:00:01.000Z',
           currency: 'NGN',
           id: 125,
+          merchant_note: 'refund-1',
           status: 'processed',
           transaction: { reference: 'RV-capture' },
         },
@@ -329,6 +340,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: 'RV-capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        expectedCorrelationKey: 'refund-1',
         knownProviderReferences: ['124'],
         submittedAt: '2026-09-19T20:00:00.000Z',
       })
@@ -357,6 +369,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: 'RV-capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        expectedCorrelationKey: 'refund-1',
         knownProviderReferences: [],
         submittedAt: '2026-09-19T20:00:00.000Z',
       })
@@ -380,6 +393,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: 'RV-capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        expectedCorrelationKey: 'refund-1',
         knownProviderReferences: [],
         submittedAt: '2026-09-19T20:00:00.000Z',
       })
@@ -481,6 +495,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
               amount: 9500,
               currency: 'NGN',
               id: 124,
+              merchant_note: 'refund-1',
               status: 'processed',
               transaction: 1641,
             },
@@ -499,6 +514,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         captureReference: 'RV-capture',
         expectedAmountKobo: 9500,
         expectedCurrency: 'NGN',
+        expectedCorrelationKey: 'refund-1',
         knownProviderReferences: [],
         submittedAt: null,
       })
@@ -507,5 +523,132 @@ describe('isolated REDVAULT Paystack refund transport', () => {
       providerReference: '124',
       providerStatus: 'processed',
     });
+  });
+  it('echoes the correlation key on submit for reference-less recovery', async () => {
+    const { fetcher, provider } = setup({ status: true, data });
+    expect(await provider.submit(input)).toEqual({
+      kind: 'accepted_pending',
+      providerReference: '123',
+      providerStatus: 'pending',
+    });
+    const [, init] = fetcher.mock.calls[0] as unknown as [
+      string,
+      { body?: string },
+    ];
+    expect(JSON.parse(String(init?.body))).toEqual(
+      expect.objectContaining({ merchant_note: 'refund-1' })
+    );
+  });
+  it('holds a submit without a correlation key', async () => {
+    const { fetcher, provider } = setup({ status: true, data });
+    expect(await provider.submit({ ...input, correlationKey: '' })).toEqual({
+      kind: 'indeterminate',
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('stays pending when the sole same-amount match carries another identity', async () => {
+    // A manual dashboard refund created after the local submission matches
+    // on amount, currency, capture, and timing — but not on identity.
+    const { provider } = setup({
+      status: true,
+      data: [
+        {
+          amount: 9500,
+          createdAt: '2026-09-19T20:00:01.000Z',
+          currency: 'NGN',
+          id: 124,
+          merchant_note: 'manual dashboard refund',
+          status: 'processed',
+          transaction: { reference: 'RV-capture' },
+        },
+      ],
+    });
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: 'RV-capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+        expectedCorrelationKey: 'refund-1',
+        knownProviderReferences: [],
+        submittedAt: '2026-09-19T20:00:00.000Z',
+      })
+    ).resolves.toEqual({ kind: 'pending', providerStatus: 'pending' });
+  });
+  it('resolves the echoed note through the fetch-refund fallback', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (String(url) === 'https://api.paystack.co/refund/124') {
+        return new Response(
+          JSON.stringify({
+            status: true,
+            data: { id: 124, merchant_note: 'refund-1' },
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          status: true,
+          data: [
+            {
+              amount: 9500,
+              currency: 'NGN',
+              id: 124,
+              status: 'processed',
+              transaction: { reference: 'RV-capture' },
+            },
+          ],
+        }),
+        { status: 200 }
+      );
+    });
+    const provider = createRedvaultPaystackRefundProvider({
+      fetcher,
+      getSecret: () => 'test-secret',
+    });
+
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: 'RV-capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+        expectedCorrelationKey: 'refund-1',
+        knownProviderReferences: [],
+        submittedAt: null,
+      })
+    ).resolves.toEqual({
+      kind: 'processed',
+      providerReference: '124',
+      providerStatus: 'processed',
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://api.paystack.co/refund/124',
+      expect.objectContaining({ method: 'GET', body: undefined })
+    );
+  });
+  it('stays pending without an expected correlation key', async () => {
+    const { fetcher, provider } = setup({
+      status: true,
+      data: [
+        {
+          amount: 9500,
+          currency: 'NGN',
+          id: 124,
+          merchant_note: 'refund-1',
+          status: 'processed',
+          transaction: { reference: 'RV-capture' },
+        },
+      ],
+    });
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: 'RV-capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+        expectedCorrelationKey: '',
+        knownProviderReferences: [],
+        submittedAt: null,
+      })
+    ).resolves.toEqual({ kind: 'pending', providerStatus: 'pending' });
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });

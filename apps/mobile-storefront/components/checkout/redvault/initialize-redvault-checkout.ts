@@ -13,11 +13,37 @@ export class RedvaultInitializationError extends Error {
   }
 }
 
-export async function initializeRedvaultCheckout(
-  input: RedvaultReviewInput,
-  isActive: () => boolean = () => true
-) {
-  const checkout = RedvaultCheckoutSchema.parse(input.orderResponse);
+export type InitializeRedvaultCheckoutByIdInput = {
+  orderId: string;
+  customerEmail: string;
+  customerName: string;
+  customerPhone: string;
+  amount?: string;
+  trackingToken?: string;
+  isActive?: () => boolean;
+  /**
+   * Post-initialization side effects (account sync). Runs after the hosted
+   * checkout is confirmed, mirroring the review flow's success callback.
+   */
+  onReady?: () => Promise<void>;
+};
+
+/**
+ * Initializes (or replays) a REDVAULT hosted checkout for a known order id
+ * without a review payload. Used when resubmission discovers a live fenced
+ * order: server-side init replays the existing authorization URL instead of
+ * opening a second checkout.
+ */
+export async function initializeRedvaultCheckoutById({
+  orderId,
+  customerEmail,
+  customerName,
+  customerPhone,
+  amount,
+  trackingToken,
+  isActive = () => true,
+  onReady,
+}: InitializeRedvaultCheckoutByIdInput) {
   const headers = await getCheckoutAuthorizationHeaders();
   if (!isActive()) return 'pending' as const;
   const response = await fetch(
@@ -28,10 +54,10 @@ export async function initializeRedvaultCheckout(
       headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({
         merchant_id: CHECKOUT_MERCHANT_ID,
-        order_id: checkout.order.id,
-        customer_email: input.customerEmail,
-        customer_name: input.customerName,
-        customer_phone: input.customerPhone,
+        order_id: orderId,
+        customer_email: customerEmail,
+        customer_name: customerName,
+        customer_phone: customerPhone,
         payment_method: 'uba_redvault',
         gateway: 'paystack',
       }),
@@ -69,16 +95,33 @@ export async function initializeRedvaultCheckout(
   router.push({
     pathname: '/payment-gateway',
     params: {
-      orderId: checkout.order.id,
+      orderId,
       gateway: 'paystack',
       paymentMethod: 'uba_redvault',
       authorizationUrl: body.authorization_url,
       reference: body.reference,
-      amount: String(checkout.order.total),
-      ...(checkout.order.tracking_token
-        ? { trackingToken: checkout.order.tracking_token }
-        : {}),
+      ...(amount !== undefined ? { amount } : {}),
+      ...(trackingToken ? { trackingToken } : {}),
     },
   });
+  if (onReady) {
+    await onReady();
+  }
   return 'ready' as const;
+}
+
+export async function initializeRedvaultCheckout(
+  input: RedvaultReviewInput,
+  isActive: () => boolean = () => true
+) {
+  const checkout = RedvaultCheckoutSchema.parse(input.orderResponse);
+  return await initializeRedvaultCheckoutById({
+    orderId: checkout.order.id,
+    customerEmail: input.customerEmail,
+    customerName: input.customerName,
+    customerPhone: input.customerPhone,
+    amount: String(checkout.order.total),
+    trackingToken: checkout.order.tracking_token ?? undefined,
+    isActive,
+  });
 }

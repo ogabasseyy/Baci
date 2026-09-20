@@ -45,6 +45,7 @@ describe('REDVAULT refund operator worker', () => {
       captureReference: claimed.attemptReference,
       expectedAmountKobo: claimed.amountKobo,
       expectedCurrency: 'NGN',
+      expectedCorrelationKey: claimed.id,
       knownProviderReferences: ['124'],
       submittedAt: claimed.submittedAt,
     });

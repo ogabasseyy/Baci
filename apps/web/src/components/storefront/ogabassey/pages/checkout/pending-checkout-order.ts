@@ -86,6 +86,12 @@ export interface ResolvePendingCheckoutOrderOptions {
   fetchImpl?: typeof fetch;
 }
 
+export interface FencedCheckoutOrderIdentity {
+  orderId: string;
+  orderNumber?: string;
+  trackingToken?: string;
+}
+
 export interface ResolvePendingCheckoutOrderResult {
   reusableOrder: {
     order: ReusedCheckoutOrder;
@@ -94,6 +100,18 @@ export interface ResolvePendingCheckoutOrderResult {
   clearStoredOrder: boolean;
   /** Stored REDVAULT order still unresolved: do not open a second order with another method. */
   redvaultUnresolved?: boolean;
+  /**
+   * The fenced order already committed money. The caller must clear the cart
+   * (and the fence) and route to the completed order instead of creating
+   * another order from the unchanged cart.
+   */
+  paidOrder?: FencedCheckoutOrderIdentity;
+  /**
+   * An ordinary pending order blocks REDVAULT entry. The caller must cancel
+   * it (it may still hold a payable hosted payment) before starting the
+   * REDVAULT lane.
+   */
+  ordinaryPendingOrder?: FencedCheckoutOrderIdentity;
 }
 
 const NON_REUSABLE_SHIPPING_STATUSES = new Set([
@@ -148,6 +166,85 @@ function shouldClearStoredOrder(status: number): boolean {
   return status === 404;
 }
 
+// Terminal, but money committed: clearing the fence is correct, yet the
+// caller must NOT recreate from the unchanged cart — that would charge the
+// shopper twice for the same merchandise.
+const PAID_PAYMENT_STATUSES = new Set(['paid', 'bnpl_approved']);
+const PAID_SHIPPING_STATUSES = new Set([
+  'processing',
+  'shipped',
+  'out_for_delivery',
+  'delivered',
+  'completed',
+]);
+
+type FencedOrderState = {
+  id?: string;
+  order_number?: string;
+  total?: number | string;
+  payment_status?: string;
+  shipping_status?: string;
+};
+
+function isPaidOrderState(order: FencedOrderState): boolean {
+  return (
+    PAID_PAYMENT_STATUSES.has(order.payment_status || '') ||
+    PAID_SHIPPING_STATUSES.has(order.shipping_status || '')
+  );
+}
+
+function isNonReusableOrderState(order: FencedOrderState): boolean {
+  return (
+    !order?.id ||
+    NON_REUSABLE_PAYMENT_STATUSES.has(order.payment_status || '') ||
+    NON_REUSABLE_SHIPPING_STATUSES.has(order.shipping_status || '')
+  );
+}
+
+function paidOrderIdentity(
+  snapshot: PendingCheckoutOrderSnapshot,
+  order: FencedOrderState
+): FencedCheckoutOrderIdentity {
+  return {
+    orderId: snapshot.orderId,
+    orderNumber: order.order_number || snapshot.orderNumber,
+    trackingToken: snapshot.trackingToken,
+  };
+}
+
+/**
+ * Validates a stored order against the server through the tracking-token
+ * fenced lookup. Returns the order state, or null when the server no longer
+ * has the row (safe to clear and recreate). Any other failure throws so the
+ * caller fails closed instead of opening a second order blind.
+ */
+async function fetchFencedOrderState({
+  fetchImpl,
+  merchantSlug,
+  pendingOrder,
+}: {
+  fetchImpl: typeof fetch;
+  merchantSlug?: string | null;
+  pendingOrder: PendingCheckoutOrderSnapshot;
+}): Promise<FencedOrderState | null> {
+  const fencedParams = new URLSearchParams({
+    tracking_token: pendingOrder.trackingToken || '',
+  });
+  if (merchantSlug) {
+    fencedParams.set('merchant_slug', merchantSlug);
+  }
+  const fencedResponse = await fetchImpl(
+    `/api/storefront/orders/${pendingOrder.orderId}?${fencedParams.toString()}`
+  );
+  if (!fencedResponse.ok) {
+    if (shouldClearStoredOrder(fencedResponse.status)) {
+      return null;
+    }
+    throw new Error('Failed to validate pending checkout order');
+  }
+  return (await fencedResponse.json()) as FencedOrderState;
+}
+
 export async function resolvePendingCheckoutOrder({
   pendingOrder,
   merchantId,
@@ -161,9 +258,47 @@ export async function resolvePendingCheckoutOrder({
   fetchImpl = fetch,
 }: ResolvePendingCheckoutOrderOptions): Promise<ResolvePendingCheckoutOrderResult> {
   if (paymentMethod === 'uba_redvault') {
+    // Entering the REDVAULT lane with a stored ordinary order: the REDVAULT
+    // fingerprint is separately prefixed, so without this check the next
+    // submission would take a different idempotency identity and create a
+    // second inventory-reserving order while the first hosted payment may
+    // remain payable. Surface the ordinary order so the caller cancels it
+    // before starting the REDVAULT lane.
+    if (!pendingOrder || pendingOrder.paymentMethod === 'uba_redvault') {
+      return {
+        reusableOrder: null,
+        clearStoredOrder: pendingOrder?.paymentMethod === 'uba_redvault',
+      };
+    }
+    if (!pendingOrder.trackingToken || !pendingOrder.orderId) {
+      return { reusableOrder: null, clearStoredOrder: true };
+    }
+    const enteringOrder = await fetchFencedOrderState({
+      fetchImpl,
+      merchantSlug,
+      pendingOrder,
+    });
+    if (!enteringOrder) {
+      return { reusableOrder: null, clearStoredOrder: true };
+    }
+    if (isPaidOrderState(enteringOrder)) {
+      return {
+        reusableOrder: null,
+        clearStoredOrder: true,
+        paidOrder: paidOrderIdentity(pendingOrder, enteringOrder),
+      };
+    }
+    if (isNonReusableOrderState(enteringOrder)) {
+      return { reusableOrder: null, clearStoredOrder: true };
+    }
     return {
       reusableOrder: null,
-      clearStoredOrder: pendingOrder?.paymentMethod === 'uba_redvault',
+      clearStoredOrder: false,
+      ordinaryPendingOrder: {
+        orderId: pendingOrder.orderId,
+        orderNumber: enteringOrder.order_number || pendingOrder.orderNumber,
+        trackingToken: pendingOrder.trackingToken,
+      },
     };
   }
   if (pendingOrder?.paymentMethod === 'uba_redvault') {
@@ -172,31 +307,25 @@ export async function resolvePendingCheckoutOrder({
     if (!pendingOrder.trackingToken || !pendingOrder.orderId) {
       return { reusableOrder: null, clearStoredOrder: true };
     }
-    const fencedParams = new URLSearchParams({
-      tracking_token: pendingOrder.trackingToken,
+    const fencedOrder = await fetchFencedOrderState({
+      fetchImpl,
+      merchantSlug,
+      pendingOrder,
     });
-    if (merchantSlug) {
-      fencedParams.set('merchant_slug', merchantSlug);
+    if (!fencedOrder) {
+      return { reusableOrder: null, clearStoredOrder: true };
     }
-    const fencedResponse = await fetchImpl(
-      `/api/storefront/orders/${pendingOrder.orderId}?${fencedParams.toString()}`
-    );
-    if (!fencedResponse.ok) {
-      if (shouldClearStoredOrder(fencedResponse.status)) {
-        return { reusableOrder: null, clearStoredOrder: true };
-      }
-      throw new Error('Failed to validate pending checkout order');
+    // A paid fence clears but must NOT recreate: the webhook may have marked
+    // the order paid after the browser closed, so the cart is unchanged and
+    // recreating would charge the shopper twice for the same merchandise.
+    if (isPaidOrderState(fencedOrder)) {
+      return {
+        reusableOrder: null,
+        clearStoredOrder: true,
+        paidOrder: paidOrderIdentity(pendingOrder, fencedOrder),
+      };
     }
-    const fencedOrder = (await fencedResponse.json()) as {
-      id?: string;
-      payment_status?: string;
-      shipping_status?: string;
-    };
-    if (
-      !fencedOrder?.id ||
-      NON_REUSABLE_PAYMENT_STATUSES.has(fencedOrder.payment_status || '') ||
-      NON_REUSABLE_SHIPPING_STATUSES.has(fencedOrder.shipping_status || '')
-    ) {
+    if (isNonReusableOrderState(fencedOrder)) {
       return { reusableOrder: null, clearStoredOrder: true };
     }
     return {
@@ -222,38 +351,27 @@ export async function resolvePendingCheckoutOrder({
     return { reusableOrder: null, clearStoredOrder: true };
   }
 
-  const orderParams = new URLSearchParams({
-    tracking_token: pendingOrder.trackingToken,
+  const existingOrder = await fetchFencedOrderState({
+    fetchImpl,
+    merchantSlug,
+    pendingOrder,
   });
 
-  if (merchantSlug) {
-    orderParams.set('merchant_slug', merchantSlug);
+  if (!existingOrder) {
+    return { reusableOrder: null, clearStoredOrder: true };
   }
 
-  const orderResponse = await fetchImpl(
-    `/api/storefront/orders/${pendingOrder.orderId}?${orderParams.toString()}`
-  );
-
-  if (!orderResponse.ok) {
-    if (shouldClearStoredOrder(orderResponse.status)) {
-      return { reusableOrder: null, clearStoredOrder: true };
-    }
-
-    throw new Error('Failed to validate pending checkout order');
+  // Same paid-fence rule as the REDVAULT branch: the stored order committed
+  // money, so route to it instead of recreating from the unchanged cart.
+  if (isPaidOrderState(existingOrder)) {
+    return {
+      reusableOrder: null,
+      clearStoredOrder: true,
+      paidOrder: paidOrderIdentity(pendingOrder, existingOrder),
+    };
   }
 
-  const existingOrder = (await orderResponse.json()) as {
-    id?: string;
-    total?: number | string;
-    payment_status?: string;
-    shipping_status?: string;
-  };
-
-  if (
-    !existingOrder?.id ||
-    NON_REUSABLE_PAYMENT_STATUSES.has(existingOrder.payment_status || '') ||
-    NON_REUSABLE_SHIPPING_STATUSES.has(existingOrder.shipping_status || '')
-  ) {
+  if (isNonReusableOrderState(existingOrder)) {
     return { reusableOrder: null, clearStoredOrder: true };
   }
 

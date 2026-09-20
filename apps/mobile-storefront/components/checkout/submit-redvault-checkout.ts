@@ -14,7 +14,7 @@ type SubmitRedvaultCheckoutInput = Readonly<{
   customerEmail: string;
   customerName: string;
   customerPhone: string;
-  onInitializationSuccess: () => void;
+  onInitializationSuccess: () => void | Promise<void>;
   onRedvaultOrder: RedvaultCallback | undefined;
   orderResponse: CreateOrderResult;
   saveTracking?: typeof saveRedvaultPurchaseTrackingContext;
@@ -40,6 +40,9 @@ export async function submitRedvaultCheckout({
     orderId: orderResponse.order.id,
     checkoutGeneration,
     createdAt: new Date().toISOString(),
+    ...(orderResponse.order.tracking_token
+      ? { trackingToken: orderResponse.order.tracking_token }
+      : {}),
   });
   await saveTracking(orderResponse.order.id, trackingContext);
   onRedvaultOrder?.({

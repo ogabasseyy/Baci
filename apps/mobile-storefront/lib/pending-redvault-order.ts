@@ -5,6 +5,12 @@ export type PersistedRedvaultOrder = {
   orderId: string;
   checkoutGeneration: string;
   createdAt: string;
+  /**
+   * Order-bound proof for sessionless validation/cancellation. Records
+   * written before this field existed stay valid; guests holding one cannot
+   * resolve the fence and fail closed until it clears another way.
+   */
+  trackingToken?: string;
 };
 
 export type ValidatePersistedRedvaultOrder = (
@@ -29,6 +35,18 @@ const TERMINAL_SHIPPING_STATUSES = new Set([
   'cancelled',
 ]);
 
+// Terminal, but money committed: the fence clears yet checkout must NOT
+// resume with the unchanged cart — that would open a second order for
+// merchandise already paid for.
+const PAID_PAYMENT_STATUSES = new Set(['paid', 'bnpl_approved']);
+const PAID_SHIPPING_STATUSES = new Set([
+  'processing',
+  'shipped',
+  'out_for_delivery',
+  'delivered',
+  'completed',
+]);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -46,6 +64,9 @@ function readRecord(record: unknown): PersistedRedvaultOrder | null {
     orderId: record.orderId,
     checkoutGeneration: record.checkoutGeneration,
     createdAt: record.createdAt,
+    ...(typeof record.trackingToken === 'string' && record.trackingToken
+      ? { trackingToken: record.trackingToken }
+      : {}),
   };
 }
 
@@ -75,7 +96,7 @@ export async function clearPersistedRedvaultOrder(): Promise<void> {
 }
 
 export type ResolvePersistedRedvaultOrderResult =
-  | { readonly blocked: false }
+  | { readonly blocked: false; readonly paidOrderId?: string }
   | { readonly blocked: true; readonly orderId: string };
 
 /**
@@ -83,7 +104,9 @@ export type ResolvePersistedRedvaultOrderResult =
  * REDVAULT lane uses a suffixed idempotency identity, so without this check
  * a relaunched app would open a second order while the first still fences
  * inventory (and may capture). Returns blocked while the server order is
- * unresolved; clears and releases once it is terminal. The old order is
+ * unresolved; clears and releases once it is terminal. A paid fence clears
+ * but reports paidOrderId so the caller routes to the completed order
+ * instead of resuming checkout with the unchanged cart. The old order is
  * validated against the server even when the cart generation rotated: its
  * Paystack URL can still capture funds, so the fence clears only once the
  * server order is terminal. Validation failures throw, failing closed like
@@ -107,6 +130,13 @@ export async function resolvePersistedRedvaultOrder({
     typeof orderState?.shipping_status === 'string'
       ? orderState.shipping_status
       : '';
+  if (
+    PAID_PAYMENT_STATUSES.has(paymentStatus) ||
+    PAID_SHIPPING_STATUSES.has(shippingStatus)
+  ) {
+    await clearPersistedRedvaultOrder();
+    return { blocked: false, paidOrderId: persisted.orderId };
+  }
   if (
     TERMINAL_PAYMENT_STATUSES.has(paymentStatus) ||
     TERMINAL_SHIPPING_STATUSES.has(shippingStatus)

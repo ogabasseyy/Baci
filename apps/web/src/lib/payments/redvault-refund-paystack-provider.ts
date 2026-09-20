@@ -89,17 +89,24 @@ export function createRedvaultPaystackRefundProvider({
     return typeof reference === 'string' ? reference : null;
   }
   return {
-    async submit({ amountKobo, originalCaptureReference }) {
+    async submit({ amountKobo, originalCaptureReference, correlationKey }) {
       if (
         !Number.isSafeInteger(amountKobo) ||
         amountKobo <= 0 ||
-        !/^[A-Za-z0-9.=_-]{1,100}$/.test(originalCaptureReference)
+        !/^[A-Za-z0-9.=_-]{1,100}$/.test(originalCaptureReference) ||
+        typeof correlationKey !== 'string' ||
+        correlationKey.length < 1 ||
+        correlationKey.length > 100
       )
         return { kind: 'indeterminate' };
+      // Echo the durable local refund identity on the provider record so a
+      // lost submit response stays correlatable: lookup matches this note
+      // instead of trusting amount and timing alone.
       const data = await request('', {
         transaction: originalCaptureReference,
         amount: amountKobo,
         currency: 'NGN',
+        merchant_note: correlationKey,
       });
       const providerReference = refundId(data?.id);
       const transactionReference = data
@@ -167,6 +174,7 @@ export function createRedvaultPaystackRefundProvider({
       captureReference,
       expectedAmountKobo,
       expectedCurrency,
+      expectedCorrelationKey,
       knownProviderReferences,
       submittedAt,
     }) {
@@ -174,14 +182,17 @@ export function createRedvaultPaystackRefundProvider({
       // for the fetch-refund endpoint. List refunds for the original capture
       // reference instead (Paystack supports filtering the list by
       // transaction), then match client-side. Only a unique NEW provider
-      // record resolves terminally: matches carrying an already-persisted
-      // provider ID belong to an earlier sibling submission (identically
-      // priced serialized units share amount and currency), and provider
-      // records created before the local submission cannot be this refund.
-      // Anything else stays pending so reconciliation retries later rather
-      // than finalizing off the wrong provider record.
+      // record carrying this refund's echoed correlation key resolves
+      // terminally: timing and amount alone cannot establish identity (an
+      // untracked manual same-amount refund in the window would match), so
+      // anything without the key stays pending for operator review.
       if (!/^[A-Za-z0-9.=_-]{1,100}$/.test(captureReference))
         throw new Error('REDVAULT refund lookup invalid identifier');
+      if (
+        typeof expectedCorrelationKey !== 'string' ||
+        expectedCorrelationKey.length < 1
+      )
+        return { kind: 'pending', providerStatus: 'pending' };
       const known = new Set(
         (knownProviderReferences ?? []).filter(
           (reference): reference is string =>
@@ -218,6 +229,22 @@ export function createRedvaultPaystackRefundProvider({
           )
             continue;
         }
+        // Identity, not timing: only the record carrying this refund's
+        // echoed correlation key can be this submission. The list shape may
+        // omit notes, so resolve a missing note through the fetch-refund
+        // endpoint (same per-candidate pattern as the transaction lookup).
+        let merchantNote =
+          typeof candidate.merchant_note === 'string'
+            ? candidate.merchant_note
+            : null;
+        if (merchantNote === null) {
+          const fetched = await request(`/${providerReference}`);
+          merchantNote =
+            typeof fetched?.merchant_note === 'string'
+              ? fetched.merchant_note
+              : null;
+        }
+        if (merchantNote !== expectedCorrelationKey) continue;
         matches.push({ providerReference, status: String(candidate.status) });
       }
       if (matches.length !== 1) {

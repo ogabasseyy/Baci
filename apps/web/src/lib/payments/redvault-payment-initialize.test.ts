@@ -15,6 +15,11 @@ const createdAttempt = {
 
 const staleAttempt = { ...createdAttempt, state: 'initializing' as const };
 
+const indeterminateAttempt = {
+  ...createdAttempt,
+  state: 'indeterminate' as const,
+};
+
 const freshAttempt = {
   ...createdAttempt,
   id: 'attempt-2',
@@ -384,5 +389,195 @@ describe('initializeRedvaultCheckout', () => {
     expect(provider.initialize).not.toHaveBeenCalled();
     expect(attemptAdapter.reconcileInitialization).not.toHaveBeenCalled();
     expect(attemptAdapter.markIndeterminate).not.toHaveBeenCalled();
+  });
+
+  it('retries an indeterminate attempt after the provider confirms the reference never landed', async () => {
+    const attemptAdapter = {
+      claimInitialization: vi.fn().mockResolvedValue({
+        attempt: { ...freshAttempt, state: 'initializing' },
+        claimed: true,
+      }),
+      markIndeterminate: vi.fn(),
+      markInitialized: vi.fn().mockResolvedValue({
+        ...freshAttempt,
+        authorizationUrl: 'https://paystack.test/checkout/retry',
+        state: 'initialized',
+      }),
+      reconcileInitialization: vi.fn().mockResolvedValue(undefined),
+      reserve: vi
+        .fn()
+        .mockResolvedValueOnce(indeterminateAttempt)
+        .mockResolvedValueOnce(freshAttempt),
+    };
+    const provider = createProvider({
+      probeInitialization: vi.fn().mockResolvedValue({ status: 'not_found' }),
+    });
+
+    await expect(
+      initializeRedvaultCheckout({
+        attemptAdapter,
+        customerEmail: 'customer@example.test',
+        orderId: 'order-1',
+        provider,
+        redirectUrl: 'https://shop.example.test/checkout/success',
+      })
+    ).resolves.toEqual({
+      authorizationUrl: 'https://paystack.test/checkout/retry',
+      reference: 'RV-reference-2',
+      status: 'initialized',
+    });
+    expect(provider.probeInitialization).toHaveBeenCalledWith({
+      reference: 'RV-reference-1',
+    });
+    expect(attemptAdapter.reconcileInitialization).toHaveBeenCalledWith(
+      'attempt-1',
+      'void'
+    );
+    expect(provider.initialize).toHaveBeenCalledTimes(1);
+  });
+
+  it('voids an indeterminate attempt backed by an unrecoverable provider transaction', async () => {
+    const attemptAdapter = {
+      claimInitialization: vi.fn().mockResolvedValue({
+        attempt: { ...freshAttempt, state: 'initializing' },
+        claimed: true,
+      }),
+      markIndeterminate: vi.fn(),
+      markInitialized: vi.fn().mockResolvedValue({
+        ...freshAttempt,
+        authorizationUrl: 'https://paystack.test/checkout/retry',
+        state: 'initialized',
+      }),
+      reconcileInitialization: vi.fn().mockResolvedValue(undefined),
+      reserve: vi
+        .fn()
+        .mockResolvedValueOnce(indeterminateAttempt)
+        .mockResolvedValueOnce(freshAttempt),
+    };
+    const provider = createProvider({
+      probeInitialization: vi.fn().mockResolvedValue({ status: 'unpaid' }),
+    });
+
+    await expect(
+      initializeRedvaultCheckout({
+        attemptAdapter,
+        customerEmail: 'customer@example.test',
+        orderId: 'order-1',
+        provider,
+        redirectUrl: 'https://shop.example.test/checkout/success',
+      })
+    ).resolves.toEqual({
+      authorizationUrl: 'https://paystack.test/checkout/retry',
+      reference: 'RV-reference-2',
+      status: 'initialized',
+    });
+    expect(attemptAdapter.reconcileInitialization).toHaveBeenCalledWith(
+      'attempt-1',
+      'void'
+    );
+  });
+
+  it('keeps an indeterminate attempt parked when the provider settled it', async () => {
+    const attemptAdapter = {
+      claimInitialization: vi.fn(),
+      markIndeterminate: vi.fn(),
+      markInitialized: vi.fn(),
+      reconcileInitialization: vi.fn(),
+      reserve: vi.fn().mockResolvedValue(indeterminateAttempt),
+    };
+    const provider = createProvider(
+      {
+        probeInitialization: vi.fn().mockResolvedValue({ status: 'paid' }),
+      },
+      vi.fn()
+    );
+
+    await expect(
+      initializeRedvaultCheckout({
+        attemptAdapter,
+        customerEmail: 'customer@example.test',
+        orderId: 'order-1',
+        provider,
+        redirectUrl: 'https://shop.example.test/checkout/success',
+      })
+    ).resolves.toEqual({
+      authorizationUrl: null,
+      status: 'pending_reconciliation',
+    });
+    expect(provider.initialize).not.toHaveBeenCalled();
+    expect(attemptAdapter.reconcileInitialization).not.toHaveBeenCalled();
+  });
+
+  it('parks an indeterminate attempt when the probe itself fails', async () => {
+    const attemptAdapter = {
+      claimInitialization: vi.fn(),
+      markIndeterminate: vi.fn(),
+      markInitialized: vi.fn(),
+      reconcileInitialization: vi.fn(),
+      reserve: vi.fn().mockResolvedValue(indeterminateAttempt),
+    };
+    const provider = createProvider(
+      {
+        probeInitialization: vi
+          .fn()
+          .mockRejectedValue(new Error('provider timeout')),
+      },
+      vi.fn()
+    );
+
+    await expect(
+      initializeRedvaultCheckout({
+        attemptAdapter,
+        customerEmail: 'customer@example.test',
+        orderId: 'order-1',
+        provider,
+        redirectUrl: 'https://shop.example.test/checkout/success',
+      })
+    ).resolves.toEqual({
+      authorizationUrl: null,
+      status: 'pending_reconciliation',
+    });
+    expect(provider.initialize).not.toHaveBeenCalled();
+    expect(attemptAdapter.reconcileInitialization).not.toHaveBeenCalled();
+  });
+
+  it('replays the winner after losing an indeterminate void race', async () => {
+    const attemptAdapter = {
+      claimInitialization: vi.fn(),
+      markIndeterminate: vi.fn(),
+      markInitialized: vi.fn(),
+      reconcileInitialization: vi
+        .fn()
+        .mockRejectedValue(new Error('redvault_attempt_not_recoverable')),
+      reserve: vi
+        .fn()
+        .mockResolvedValueOnce(indeterminateAttempt)
+        .mockResolvedValueOnce({
+          ...freshAttempt,
+          authorizationUrl: 'https://paystack.test/checkout/winner',
+          state: 'initialized',
+        }),
+    };
+    const provider = createProvider(
+      {
+        probeInitialization: vi.fn().mockResolvedValue({ status: 'not_found' }),
+      },
+      vi.fn()
+    );
+
+    await expect(
+      initializeRedvaultCheckout({
+        attemptAdapter,
+        customerEmail: 'customer@example.test',
+        orderId: 'order-1',
+        provider,
+        redirectUrl: 'https://shop.example.test/checkout/success',
+      })
+    ).resolves.toEqual({
+      authorizationUrl: 'https://paystack.test/checkout/winner',
+      reference: 'RV-reference-2',
+      status: 'initialized',
+    });
+    expect(provider.initialize).not.toHaveBeenCalled();
   });
 });

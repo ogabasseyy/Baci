@@ -12,6 +12,7 @@ import { createOrder } from '@/services/orders';
 import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { useCartStore } from '@/stores/cart-store';
 import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
+import { attachRedvaultGuestOrderAfterSignup } from './attach-redvault-guest-order';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
 import {
   buildCheckoutOrderRequest,
@@ -27,7 +28,11 @@ import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
 import { isBnplPayment } from './is-bnpl-payment';
-import { resolveCheckoutRedvaultFence } from './resolve-checkout-redvault-fence';
+import {
+  resolveCheckoutRedvaultFence,
+  routeToPaidFenceOrder,
+} from './resolve-checkout-redvault-fence';
+import { resolveRedvaultFenceForResubmit } from './resolve-redvault-resubmit-fence';
 import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
 import { runFinalizeCheckoutPayment } from './run-finalize-checkout-payment';
 import { submitRedvaultCheckout } from './submit-redvault-checkout';
@@ -109,11 +114,56 @@ export function useCheckoutSubmit({
       );
       return;
     }
-    // REDVAULT submits replay the same suffixed identity, so only other
-    // methods must resolve a persisted fence first: after an app kill the
-    // in-memory review is gone while the order still fences inventory.
+    // Hoisted for fence resolution: the REDVAULT resubmit path replays a
+    // live fenced order (which needs the customer identity) before any new
+    // order is created below.
+    const customerEmail = customer?.email || address.email;
+    const customerPhone = address.phone;
+    const customerName = `${address.firstName} ${address.lastName}`;
     if (selectedPayment !== 'uba_redvault') {
-      if (!(await resolveCheckoutRedvaultFence())) {
+      // After an app kill the in-memory review is gone while the order
+      // still fences inventory (and may capture): validate first.
+      const fence = await resolveCheckoutRedvaultFence();
+      if (!fence.proceed) {
+        return;
+      }
+      if (fence.paidOrderId) {
+        await routeToPaidFenceOrder({
+          clearCart,
+          orderId: fence.paidOrderId,
+          orderNumber: fence.paidOrderNumber,
+          trackingToken: fence.paidTrackingToken,
+        });
+        return;
+      }
+    } else {
+      // REDVAULT submits must resolve the fence too: a restarted app may
+      // resubmit with a changed cart or checkout generation, which derives
+      // a different suffixed idempotency key and would otherwise open a
+      // second inventory-reserving order while the first may still capture.
+      const disposition = await resolveRedvaultFenceForResubmit({
+        attemptGuestAttach:
+          !isAuthenticated && saveDetails && accountPassword.length >= 6,
+        clearCart,
+        customerEmail,
+        customerName,
+        customerPhone,
+        onInitializationSuccess: async () => {
+          // Awaited: the resubmit flow attaches the guest order after this
+          // resolves, so the signup must be complete first.
+          await runCheckoutPostOrderSideEffects({
+            accountPassword,
+            address,
+            customerEmail,
+            customerId: customer?.id,
+            isAuthenticated,
+            saveAsDefaultAddress,
+            saveDetails,
+            selectedSavedAddressId,
+          });
+        },
+      });
+      if (disposition !== 'proceed') {
         return;
       }
     }
@@ -139,9 +189,6 @@ export function useCheckoutSubmit({
           walletSelection,
         });
       trackCheckoutStep('review');
-      const customerEmail = customer?.email || address.email;
-      const customerPhone = address.phone;
-      const customerName = `${address.firstName} ${address.lastName}`;
       const paymentMethodForOrder = isVoucherOnlyCart
         ? 'card'
         : selectedPayment === 'payforme'
@@ -205,8 +252,8 @@ export function useCheckoutSubmit({
           customerEmail,
           customerName,
           customerPhone,
-          onInitializationSuccess: () => {
-            void runCheckoutPostOrderSideEffects({
+          onInitializationSuccess: async () => {
+            await runCheckoutPostOrderSideEffects({
               accountPassword,
               address,
               customerEmail,
@@ -216,6 +263,17 @@ export function useCheckoutSubmit({
               saveDetails,
               selectedSavedAddressId,
             });
+            // A guest signup above changed the auth identity after the
+            // application was created with a null user_id: attach it so an
+            // interrupted checkout can still replay or verify under the new
+            // session.
+            if (
+              !isAuthenticated &&
+              saveDetails &&
+              accountPassword.length >= 6
+            ) {
+              await attachRedvaultGuestOrderAfterSignup({ orderId: order.id });
+            }
           },
           onRedvaultOrder,
           orderResponse,

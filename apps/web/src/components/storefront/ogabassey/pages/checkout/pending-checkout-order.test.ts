@@ -39,9 +39,33 @@ describe('pending-checkout-order', () => {
       ).toContain('/api/storefront/orders/redvault-order');
     }
   });
-  it('clears a stored REDVAULT order once it reaches a definitive state', async () => {
+  it('reports a paid REDVAULT fence so the caller routes instead of recreating', async () => {
     const fetchImpl = vi.fn(async () => Response.json({
-      id: 'redvault-order', payment_status: 'paid', shipping_status: 'processing',
+      id: 'redvault-order', order_number: 'RV-1', payment_status: 'paid', shipping_status: 'processing',
+    }));
+    const result = await resolvePendingCheckoutOrder({
+      pendingOrder: {
+        orderId: 'redvault-order', merchantId: 'merchant',
+        customerEmail: 'ada@example.com', customerPhone: '', checkoutFingerprint: 'fingerprint',
+        amountDueToGateway: 117.5, createdAt: '2026-09-12', paymentMethod: 'uba_redvault',
+        trackingToken: 'track-redvault',
+      },
+      merchantId: 'merchant', customerEmail: 'ada@example.com',
+      checkoutFingerprint: 'fingerprint', paymentMethod: 'card', shippingProvider: null, fetchImpl,
+    });
+    expect(result).toEqual({
+      reusableOrder: null,
+      clearStoredOrder: true,
+      paidOrder: {
+        orderId: 'redvault-order',
+        orderNumber: 'RV-1',
+        trackingToken: 'track-redvault',
+      },
+    });
+  });
+  it('clears a stored REDVAULT order once it reaches a non-paid terminal state', async () => {
+    const fetchImpl = vi.fn(async () => Response.json({
+      id: 'redvault-order', payment_status: 'unpaid', shipping_status: 'cancelled',
     }));
     const result = await resolvePendingCheckoutOrder({
       pendingOrder: {
@@ -55,7 +79,58 @@ describe('pending-checkout-order', () => {
     });
     expect(result).toEqual({ reusableOrder: null, clearStoredOrder: true });
   });
-  it('preserves an ordinary pending snapshot when REDVAULT bypasses reuse', async () => {
+  it('surfaces an ordinary pending order for cancellation before REDVAULT entry', async () => {
+    const fetchImpl = vi.fn(async () => Response.json({
+      id: 'ordinary-order', order_number: 'ORD-1', payment_status: 'unpaid', shipping_status: 'pending',
+    }));
+    const result = await resolvePendingCheckoutOrder({
+      pendingOrder: {
+        orderId: 'ordinary-order', merchantId: 'merchant',
+        customerEmail: 'ada@example.com', customerPhone: '', checkoutFingerprint: 'fingerprint',
+        amountDueToGateway: 117.5, createdAt: '2026-09-12', paymentMethod: 'card',
+        trackingToken: 'track-ordinary',
+      },
+      merchantId: 'merchant', customerEmail: 'ada@example.com',
+      checkoutFingerprint: 'fingerprint', paymentMethod: 'uba_redvault', shippingProvider: null, fetchImpl,
+    });
+
+    expect(result).toEqual({
+      reusableOrder: null,
+      clearStoredOrder: false,
+      ordinaryPendingOrder: {
+        orderId: 'ordinary-order',
+        orderNumber: 'ORD-1',
+        trackingToken: 'track-ordinary',
+      },
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+  it('reports a paid ordinary order instead of opening a REDVAULT duplicate', async () => {
+    const fetchImpl = vi.fn(async () => Response.json({
+      id: 'ordinary-order', payment_status: 'paid', shipping_status: 'processing',
+    }));
+    const result = await resolvePendingCheckoutOrder({
+      pendingOrder: {
+        orderId: 'ordinary-order', merchantId: 'merchant',
+        customerEmail: 'ada@example.com', customerPhone: '', checkoutFingerprint: 'fingerprint',
+        amountDueToGateway: 117.5, createdAt: '2026-09-12', paymentMethod: 'card',
+        trackingToken: 'track-ordinary',
+      },
+      merchantId: 'merchant', customerEmail: 'ada@example.com',
+      checkoutFingerprint: 'fingerprint', paymentMethod: 'uba_redvault', shippingProvider: null, fetchImpl,
+    });
+
+    expect(result).toEqual({
+      reusableOrder: null,
+      clearStoredOrder: true,
+      paidOrder: {
+        orderId: 'ordinary-order',
+        orderNumber: undefined,
+        trackingToken: 'track-ordinary',
+      },
+    });
+  });
+  it('clears an ordinary snapshot REDVAULT cannot validate before entry', async () => {
     const fetchImpl = vi.fn();
     const result = await resolvePendingCheckoutOrder({
       pendingOrder: {
@@ -67,7 +142,7 @@ describe('pending-checkout-order', () => {
       checkoutFingerprint: 'fingerprint', paymentMethod: 'uba_redvault', shippingProvider: null, fetchImpl,
     });
 
-    expect(result).toEqual({ reusableOrder: null, clearStoredOrder: false });
+    expect(result).toEqual({ reusableOrder: null, clearStoredOrder: true });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
   it('maps payment methods to persisted order values', () => {
@@ -473,8 +548,8 @@ describe('pending-checkout-order', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['paid', 'bnpl_approved', 'refunded'])(
-    'clears a locally pending order when payment status is %s',
+  it.each(['paid', 'bnpl_approved'])(
+    'reports a paid order when payment status is %s instead of recreating',
     async (paymentStatus) => {
       const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce({
         ok: true,
@@ -507,10 +582,54 @@ describe('pending-checkout-order', () => {
         fetchImpl,
       });
 
-      expect(result).toEqual({ reusableOrder: null, clearStoredOrder: true });
+      expect(result).toEqual({
+        reusableOrder: null,
+        clearStoredOrder: true,
+        paidOrder: {
+          orderId: 'order-123',
+          orderNumber: 'ORD-123',
+          trackingToken: 'tracking-token-123',
+        },
+      });
       expect(fetchImpl).toHaveBeenCalledTimes(1);
     }
   );
+
+  it('clears a locally pending order when payment status is refunded', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        payment_status: 'refunded',
+        shipping_status: 'pending',
+        total: 1000,
+      }),
+    } as Response);
+
+    const result = await resolvePendingCheckoutOrder({
+      pendingOrder: {
+        orderId: 'order-123',
+        orderNumber: 'ORD-123',
+        trackingToken: 'tracking-token-123',
+        merchantId: 'merchant-1',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        checkoutFingerprint: 'fingerprint-1',
+        amountDueToGateway: 1000,
+        createdAt: '2026-05-28T00:00:00.000Z',
+      },
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      customerEmail: 'ada@example.com',
+      checkoutFingerprint: 'fingerprint-1',
+      paymentMethod: 'credit_direct',
+      shippingProvider: 'GIGL',
+      fetchImpl,
+    });
+
+    expect(result).toEqual({ reusableOrder: null, clearStoredOrder: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 
   it('clears the stored order when the fingerprint no longer matches', async () => {
     const result = await resolvePendingCheckoutOrder({

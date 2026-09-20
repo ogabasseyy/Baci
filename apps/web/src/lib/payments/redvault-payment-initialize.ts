@@ -42,6 +42,10 @@ export type RedvaultCheckoutProvider = {
   }): Promise<RedvaultInitializationProbe>;
 };
 
+type RedvaultInitializationResult =
+  | { authorizationUrl: string; reference: string; status: 'initialized' }
+  | { authorizationUrl: null; status: 'pending_reconciliation' };
+
 export async function initializeRedvaultCheckout({
   attemptAdapter,
   customerEmail,
@@ -54,10 +58,29 @@ export async function initializeRedvaultCheckout({
   orderId: string;
   provider: RedvaultCheckoutProvider;
   redirectUrl: string;
-}): Promise<
-  | { authorizationUrl: string; reference: string; status: 'initialized' }
-  | { authorizationUrl: null; status: 'pending_reconciliation' }
-> {
+}): Promise<RedvaultInitializationResult> {
+  // A failed probe must park the checkout, never 500 it: the provider may
+  // be briefly unreachable (or answer malformed) while the attempt is
+  // perfectly recoverable.
+  const probeSafely = async (
+    reference: string
+  ): Promise<RedvaultInitializationProbe> => {
+    try {
+      const probe = await provider.probeInitialization({ reference });
+      if (
+        !probe ||
+        (probe.status !== 'paid' &&
+          probe.status !== 'not_found' &&
+          probe.status !== 'unpaid' &&
+          probe.status !== 'unknown')
+      ) {
+        return { status: 'unknown' };
+      }
+      return probe;
+    } catch {
+      return { status: 'unknown' };
+    }
+  };
   const initializeWithClaim = async (activeClaim: {
     attempt: RedvaultReservedAttempt;
   }): Promise<
@@ -99,6 +122,73 @@ export async function initializeRedvaultCheckout({
     }
   };
 
+  // Runs the normal fresh path once after an ambiguous claim was voided
+  // (reserve skips voided attempts). Bounded: a fresh indeterminate parks
+  // for the next request instead of probing recursively.
+  const initializeFreshReplacement =
+    async (): Promise<RedvaultInitializationResult> => {
+      const fresh = await attemptAdapter.reserve(orderId);
+      if (fresh.state === 'initialized' && fresh.authorizationUrl) {
+        return {
+          authorizationUrl: fresh.authorizationUrl,
+          reference: fresh.reference,
+          status: 'initialized',
+        };
+      }
+      if (fresh.state === 'indeterminate') {
+        return { authorizationUrl: null, status: 'pending_reconciliation' };
+      }
+      const freshClaim = await attemptAdapter.claimInitialization(fresh.id);
+      if (
+        freshClaim.attempt.state === 'initialized' &&
+        freshClaim.attempt.authorizationUrl
+      ) {
+        return {
+          authorizationUrl: freshClaim.attempt.authorizationUrl,
+          reference: freshClaim.attempt.reference,
+          status: 'initialized',
+        };
+      }
+      if (!freshClaim.claimed) {
+        return { authorizationUrl: null, status: 'pending_reconciliation' };
+      }
+      return initializeWithClaim(freshClaim);
+    };
+
+  // The normal error path parks attempts here (network timeout, lost
+  // response, unpersisted URL). Probing is read-only, so unlike the
+  // reclaimed-lease path it needs no claim first: only the follow-up
+  // void runs under the adapter, and a lost void race re-reads once.
+  const reconcileIndeterminateAttempt = async (stale: {
+    id: string;
+    reference: string;
+  }): Promise<RedvaultInitializationResult> => {
+    const probe = await probeSafely(stale.reference);
+    if (probe.status === 'paid' || probe.status === 'unknown') {
+      // Paid: the hosted checkout settled without a persisted URL and
+      // capture correlates by reference through the verify flow. Unknown:
+      // the provider could not be reached. Stay parked either way.
+      return { authorizationUrl: null, status: 'pending_reconciliation' };
+    }
+    // Not found: the POST never landed, so nothing can strand. Unpaid: a
+    // hosted transaction exists but its URL is unrecoverable. Either way
+    // void the ambiguous claim and run the fresh path once.
+    try {
+      await attemptAdapter.reconcileInitialization(stale.id, 'void');
+    } catch {
+      const reread = await attemptAdapter.reserve(orderId);
+      if (reread.state === 'initialized' && reread.authorizationUrl) {
+        return {
+          authorizationUrl: reread.authorizationUrl,
+          reference: reread.reference,
+          status: 'initialized',
+        };
+      }
+      return { authorizationUrl: null, status: 'pending_reconciliation' };
+    }
+    return initializeFreshReplacement();
+  };
+
   const attempt = await attemptAdapter.reserve(orderId);
 
   if (attempt.state === 'initialized' && attempt.authorizationUrl) {
@@ -109,7 +199,7 @@ export async function initializeRedvaultCheckout({
     };
   }
   if (attempt.state === 'indeterminate') {
-    return { authorizationUrl: null, status: 'pending_reconciliation' };
+    return reconcileIndeterminateAttempt(attempt);
   }
 
   const claim = await attemptAdapter.claimInitialization(attempt.id);
@@ -132,9 +222,7 @@ export async function initializeRedvaultCheckout({
   // original POST may have reached Paystack before the worker died, so the
   // fixed reference is reconciled before anything is reissued. Only a
   // confirmed-missing provider transaction is safe to initialize again.
-  const probe = await provider.probeInitialization({
-    reference: claim.attempt.reference,
-  });
+  const probe = await probeSafely(claim.attempt.reference);
   if (probe.status === 'unknown') {
     return { authorizationUrl: null, status: 'pending_reconciliation' };
   }
@@ -154,33 +242,7 @@ export async function initializeRedvaultCheckout({
 
   // The provider holds an unpaid transaction for this reference, but its
   // authorization URL is unrecoverable. Void the ambiguous claim and run
-  // the normal fresh path once with a replacement reference (reserve skips
-  // voided attempts).
+  // the normal fresh path once with a replacement reference.
   await attemptAdapter.reconcileInitialization(claim.attempt.id, 'void');
-  const fresh = await attemptAdapter.reserve(orderId);
-  if (fresh.state === 'initialized' && fresh.authorizationUrl) {
-    return {
-      authorizationUrl: fresh.authorizationUrl,
-      reference: fresh.reference,
-      status: 'initialized',
-    };
-  }
-  if (fresh.state === 'indeterminate') {
-    return { authorizationUrl: null, status: 'pending_reconciliation' };
-  }
-  const freshClaim = await attemptAdapter.claimInitialization(fresh.id);
-  if (
-    freshClaim.attempt.state === 'initialized' &&
-    freshClaim.attempt.authorizationUrl
-  ) {
-    return {
-      authorizationUrl: freshClaim.attempt.authorizationUrl,
-      reference: freshClaim.attempt.reference,
-      status: 'initialized',
-    };
-  }
-  if (!freshClaim.claimed) {
-    return { authorizationUrl: null, status: 'pending_reconciliation' };
-  }
-  return initializeWithClaim(freshClaim);
+  return initializeFreshReplacement();
 }

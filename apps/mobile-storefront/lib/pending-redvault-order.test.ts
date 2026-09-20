@@ -55,7 +55,7 @@ describe('resolvePersistedRedvaultOrder', () => {
     expect(storage.has(KEY)).toBe(true);
   });
 
-  it('clears and releases once the order is terminal', async () => {
+  it('reports a paid fence so the caller routes instead of resuming checkout', async () => {
     const { resolvePersistedRedvaultOrder } = await load();
     seed({
       orderId: 'order-rv',
@@ -64,6 +64,23 @@ describe('resolvePersistedRedvaultOrder', () => {
     });
     const validateOrder = jest.fn(async () => ({
       order: { payment_status: 'paid', shipping_status: 'processing' },
+    }));
+
+    const result = await resolvePersistedRedvaultOrder({ validateOrder });
+
+    expect(result).toEqual({ blocked: false, paidOrderId: 'order-rv' });
+    expect(storage.has(KEY)).toBe(false);
+  });
+
+  it('clears and releases once the order is refunded', async () => {
+    const { resolvePersistedRedvaultOrder } = await load();
+    seed({
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-one',
+      createdAt: new Date().toISOString(),
+    });
+    const validateOrder = jest.fn(async () => ({
+      order: { payment_status: 'refunded', shipping_status: 'pending' },
     }));
 
     const result = await resolvePersistedRedvaultOrder({ validateOrder });
@@ -107,7 +124,7 @@ describe('resolvePersistedRedvaultOrder', () => {
     expect(storage.has(KEY)).toBe(true);
   });
 
-  it('clears a rotated-generation record once the old order is terminal', async () => {
+  it('reports a paid rotated-generation record for routing', async () => {
     const { resolvePersistedRedvaultOrder } = await load();
     seed({
       orderId: 'order-rv',
@@ -120,7 +137,7 @@ describe('resolvePersistedRedvaultOrder', () => {
 
     const result = await resolvePersistedRedvaultOrder({ validateOrder });
 
-    expect(result).toEqual({ blocked: false });
+    expect(result).toEqual({ blocked: false, paidOrderId: 'order-rv' });
     expect(validateOrder).toHaveBeenCalledWith('order-rv');
     expect(storage.has(KEY)).toBe(false);
   });
@@ -172,5 +189,35 @@ describe('persist/clear round-trip', () => {
     await expect(readPersistedRedvaultOrder()).resolves.toEqual(record);
     await clearPersistedRedvaultOrder();
     await expect(readPersistedRedvaultOrder()).resolves.toBeNull();
+  });
+
+  it('round-trips the tracking token for sessionless validation', async () => {
+    const { persistPendingRedvaultOrder, readPersistedRedvaultOrder } =
+      await load();
+    const record = {
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-one',
+      createdAt: new Date().toISOString(),
+      trackingToken: 'track-rv',
+    };
+
+    await persistPendingRedvaultOrder(record);
+
+    await expect(readPersistedRedvaultOrder()).resolves.toEqual(record);
+  });
+
+  it('reads legacy records persisted without a token', async () => {
+    const { readPersistedRedvaultOrder } = await load();
+    seed({
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-one',
+      createdAt: new Date().toISOString(),
+    });
+
+    await expect(readPersistedRedvaultOrder()).resolves.toEqual({
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-one',
+      createdAt: expect.any(String),
+    });
   });
 });

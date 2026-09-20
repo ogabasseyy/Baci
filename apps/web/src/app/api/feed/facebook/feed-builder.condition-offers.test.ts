@@ -75,6 +75,36 @@ describe('generateFacebookCatalogFeed condition offers', () => {
     expect(xml).toContain('condition=open_box');
     expect(xml).not.toContain('condition=refurbished');
   });
+  it('restricts base images to product-level entries', () => {
+    const xml = generateFacebookCatalogFeed(
+      [{ ...baseProduct }],
+      merchant,
+      'https://ogabassey.com',
+      {
+        'product-1': [
+          {
+            variant_id: 'variant-1',
+            verified_url: 'https://cdn.example.com/variant-1.jpg',
+            verified_format: 'jpeg',
+            status: 'verified' as const,
+            is_primary: true,
+            position: 0,
+          },
+          {
+            verified_url: 'https://cdn.example.com/product-1.jpg',
+            verified_format: 'jpeg',
+            status: 'verified' as const,
+            is_primary: false,
+            position: 1,
+          },
+        ],
+      }
+    );
+    expect(xml).toContain(
+      '<g:image_link>https://cdn.example.com/product-1.jpg</g:image_link>'
+    );
+    expect(xml).not.toContain('variant-1.jpg');
+  });
   it('qualifies the grouped base id so it differs from the group id', () => {
     const xml = generateFacebookCatalogFeed(
       [

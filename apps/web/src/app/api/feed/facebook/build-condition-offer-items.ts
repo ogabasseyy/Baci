@@ -140,13 +140,18 @@ export function buildConditionOfferItems(args: {
     product.condition == null
       ? 'new'
       : toGoogleListingCondition(product.condition);
+  // Base-condition rows use product-level imagery only: variant-scoped
+  // rows belong to another SKU and must not leak into the base item.
+  const productLevelEntries = manifestEntries.filter(
+    (entry) => !entry.variant_id
+  );
   const primaryImageUrl = resolveGmcPrimaryImage(
-    manifestEntries,
+    productLevelEntries,
     offerClaimedImageUrls
   );
 
   const additionalImagesXml = resolveGmcAdditionalImages(
-    manifestEntries,
+    productLevelEntries,
     offerClaimedImageUrls
   )
     .filter((url) => url !== primaryImageUrl)

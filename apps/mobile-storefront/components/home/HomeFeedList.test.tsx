@@ -1,65 +1,18 @@
-import { jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import type { Block } from '@/types/blocks';
-import type { Product } from '@/types/product';
-import { HomeFeedList } from './HomeFeedList';
-import { useHomeProductFeed } from './use-home-product-feed';
+import {
+  feed,
+  GRID_BLOCKS,
+  mockBlockRendererModule,
+  mockFlashListModule,
+  mockScrollToOffset,
+  mockUseHomeProductFeed,
+  product,
+  setupHomeFeedMocks,
+} from './HomeFeedList-test-harness';
 
-const mockScrollToOffset = jest.fn();
-
-type MockHomeFeedListItem =
-  | { kind: 'product'; product: Product }
-  | { kind: 'product-list-end'; id: string };
-
-jest.mock('@shopify/flash-list', () => {
-  const React = jest.requireActual('react') as typeof import('react');
-  const { View } = jest.requireActual(
-    'react-native'
-  ) as typeof import('react-native');
-  const FlashList = React.forwardRef(
-    (props: Record<string, unknown>, ref: React.Ref<unknown>) => {
-      React.useImperativeHandle(ref, () => ({
-        scrollToOffset: mockScrollToOffset,
-      }));
-      const {
-        data = [],
-        renderItem,
-        ListHeaderComponent,
-        ListFooterComponent,
-        ListEmptyComponent,
-        ...rest
-      } = props as {
-        data?: MockHomeFeedListItem[];
-        renderItem?: (info: {
-          item: MockHomeFeedListItem;
-          index: number;
-          target: 'Cell';
-        }) => React.ReactNode;
-        ListHeaderComponent?: React.ReactNode;
-        ListFooterComponent?: React.ReactNode;
-        ListEmptyComponent?: React.ReactNode;
-      };
-      return React.createElement(
-        View,
-        { testID: 'home-feed-list', ...rest },
-        ListHeaderComponent,
-        data.length === 0
-          ? ListEmptyComponent
-          : data.map((item, index) =>
-              React.createElement(
-                React.Fragment,
-                {
-                  key: item.kind === 'product' ? item.product.id : item.id,
-                },
-                renderItem?.({ item, index, target: 'Cell' })
-              )
-            ),
-        ListFooterComponent
-      );
-    }
-  );
-  return { __esModule: true, FlashList };
-});
+jest.mock('@shopify/flash-list', () => mockFlashListModule());
 
 jest.mock('./use-home-product-feed', () => ({
   useHomeProductFeed: jest.fn(),
@@ -69,31 +22,9 @@ jest.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ colors: { text: '#000000' } }),
 }));
 
-const mockBlockRenderer = jest.fn();
-
-jest.mock('@/components/storefront/BlockRenderer', () => {
-  const { View, Text } = jest.requireActual(
-    'react-native'
-  ) as typeof import('react-native');
-  return {
-    BlockRenderer: (props: {
-      blocks: Block[];
-      suppressAds?: boolean;
-      heroAdOwnerBlockId?: string | null;
-    }) => {
-      mockBlockRenderer(props);
-      return (
-        <View
-          testID={
-            props.suppressAds ? 'block-renderer-ads-off' : 'block-renderer'
-          }
-        >
-          <Text>{props.blocks.length}</Text>
-        </View>
-      );
-    },
-  };
-});
+jest.mock('@/components/storefront/BlockRenderer', () =>
+  mockBlockRendererModule()
+);
 
 jest.mock('@/components/ads/AdSlot', () => {
   const React = jest.requireActual('react') as typeof import('react');
@@ -118,7 +49,7 @@ jest.mock('@/components/storefront/ProductCard', () => {
     'react-native'
   ) as typeof import('react-native');
   return {
-    ProductCard: ({ product }: { product: Product }) => (
+    ProductCard: ({ product }: { product: { id: string } }) => (
       <View testID="product-card" accessibilityLabel={product.id} />
     ),
   };
@@ -137,50 +68,6 @@ jest.mock('@/components/ui/Skeleton', () => {
   ) as typeof import('react-native');
   return { ProductGridSkeleton: () => <View testID="grid-skeleton" /> };
 });
-
-const mockUseHomeProductFeed = useHomeProductFeed as jest.MockedFunction<
-  typeof useHomeProductFeed
->;
-
-function product(id: string): Product {
-  return {
-    id,
-    name: `Product ${id}`,
-    slug: `product-${id}`,
-    price: 1000,
-    image: `https://cdn.example.com/${id}.jpg`,
-    images: [`https://cdn.example.com/${id}.jpg`],
-  };
-}
-
-function feed(
-  overrides: Partial<ReturnType<typeof useHomeProductFeed>> = {}
-): ReturnType<typeof useHomeProductFeed> {
-  return {
-    feedProducts: [product('p1'), product('p2')],
-    isLoading: false,
-    isError: false,
-    isFetching: false,
-    isRetrying: false,
-    hasMore: true,
-    loadMore: jest.fn(),
-    isLoadingMore: false,
-    currentVariant: 'grid',
-    filterBarProps: {} as ReturnType<
-      typeof useHomeProductFeed
-    >['filterBarProps'],
-    handleRetry: jest.fn(),
-    shouldShowInitialLoading: false,
-    shouldShowFatalError: false,
-    feedResetKey: 'reset-1',
-    ...overrides,
-  };
-}
-
-const GRID_BLOCKS = [
-  { type: 'CategoryRail', props: { id: 'rail' } },
-  { type: 'ProductGrid', props: { id: 'grid', title: 'Shop the collection' } },
-] as unknown as Block[];
 
 function renderList(props: Partial<Parameters<typeof HomeFeedList>[0]> = {}) {
   return render(
@@ -203,9 +90,10 @@ function renderList(props: Partial<Parameters<typeof HomeFeedList>[0]> = {}) {
   );
 }
 
+import { HomeFeedList } from './HomeFeedList';
+
 beforeEach(() => {
-  jest.clearAllMocks();
-  mockUseHomeProductFeed.mockReturnValue(feed());
+  setupHomeFeedMocks();
 });
 
 describe('HomeFeedList', () => {
@@ -242,93 +130,6 @@ describe('HomeFeedList', () => {
     screen.getByTestId('home-feed-list').props.onEndReached();
 
     expect(loadMore).not.toHaveBeenCalled();
-  });
-
-  it('renders home ad placements while the search overlay is closed', () => {
-    renderList({ isSearchOpen: false });
-
-    expect(screen.getAllByTestId('block-renderer')).toHaveLength(2);
-    expect(screen.getByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeTruthy();
-  });
-
-  it('elects one hero ad owner across the header and footer slices', () => {
-    // Regression: each slice renders its own BlockRenderer, so per-slice
-    // elections would let a header hero and a footer hero each claim
-    // HOME_STRIP and request it concurrently.
-    const hero = (id: string) =>
-      ({
-        type: 'HeroCarousel',
-        props: {
-          id,
-          slides: [
-            {
-              ctaLink: `/deals/${id}`,
-              ctaText: 'Shop',
-              image: `https://example.com/${id}.jpg`,
-              subtitle: 'Available now',
-              title: id,
-            },
-          ],
-        },
-      }) as unknown as Block;
-    renderList({
-      blocks: [
-        hero('header-hero'),
-        { type: 'ProductGrid', props: { id: 'grid' } },
-        hero('footer-hero'),
-      ] as unknown as Block[],
-      primaryProductGridIndex: 1,
-    });
-
-    const owners = mockBlockRenderer.mock.calls.map(
-      (call) =>
-        (call[0] as { heroAdOwnerBlockId?: string | null }).heroAdOwnerBlockId
-    );
-    expect(owners).toEqual(['header-hero', 'header-hero']);
-  });
-
-  it('suppresses home ad placements while the search overlay is open', () => {
-    // Regression: search covers the feed with a full-screen scrim, so the
-    // block placements and the in-feed slot must unmount while it is open.
-    renderList({ isSearchOpen: true });
-
-    expect(screen.getAllByTestId('block-renderer-ads-off')).toHaveLength(2);
-    expect(screen.queryByTestId('block-renderer')).toBeNull();
-    expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
-  });
-
-  it('withholds the in-feed slot when the page has no product grid', () => {
-    // Regression: a page configured without a ProductGrid intentionally
-    // renders only authored blocks, so the grid placement must not request
-    // with no product feed behind it.
-    renderList({ primaryProductGridIndex: -1 });
-    expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
-  });
-
-  it('withholds the in-feed slot while loading or fatally errored', () => {
-    // Regression: the footer renders alongside the empty state, so the
-    // placement must not request below a skeleton or retry error with no
-    // successfully resolved product feed.
-    mockUseHomeProductFeed.mockReturnValue(
-      feed({ feedProducts: [], shouldShowInitialLoading: true })
-    );
-    const { unmount } = renderList();
-    expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
-    unmount();
-
-    mockUseHomeProductFeed.mockReturnValue(
-      feed({ feedProducts: [], shouldShowFatalError: true })
-    );
-    renderList();
-    expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
-  });
-
-  it('withholds the in-feed slot when the feed resolves empty', () => {
-    // Regression: a successful query or active filter can return zero
-    // products — the placement must not request below the empty state.
-    mockUseHomeProductFeed.mockReturnValue(feed({ feedProducts: [] }));
-    renderList();
-    expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
   });
 
   it('builds a RefreshControl with the header offset and theme color', () => {

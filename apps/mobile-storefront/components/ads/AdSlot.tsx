@@ -10,6 +10,7 @@ import { BRAND } from '@/constants/Colors';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { trackEvent } from '@/services/analytics-core';
 import { useDrawerStore } from '@/stores/drawer-store';
+import { useUIStore } from '@/stores/ui-store';
 
 type AdSlotProps = {
   placement: MobileAdBannerPlacementKey;
@@ -66,11 +67,16 @@ export function AdSlot({
   // consent/SDK initialization resolving after navigation would mount a
   // native banner and request an ad on the hidden screen.
   const isFocused = useIsFocused();
+  // The chat modal is a full-screen native modal that leaves the Expo
+  // route focused, so focus alone cannot suspend banners behind chat —
+  // including drawer-owned slots, which chat covers too.
+  const isChatOpen = useUIStore((state) => state.isChatOpen);
   if (
     config?.enabled !== true ||
     !readiness.canRequestAds ||
     loadFailed ||
     !isFocused ||
+    isChatOpen ||
     (drawerCovering && !visibleWhileDrawerOpen)
   ) {
     return null;

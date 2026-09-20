@@ -33,7 +33,7 @@ import type { Block, ProductGridBlock } from '@/types/blocks';
 import type { Product } from '@/types/product';
 import { HomeFeedEmptyState } from './HomeFeedEmptyState';
 import { HomeFeedListItemView } from './HomeFeedListItemView';
-import { findHomeFeedAdOwners } from './home-feed-ad-owners';
+import { getHomeFeedSlices } from './home-feed-ad-owners';
 import { useHomeProductFeed } from './use-home-product-feed';
 
 export type HomeFeedListItem =
@@ -111,19 +111,16 @@ export function HomeFeedList({
   }, [feedResetKey]);
 
   const numColumns = currentVariant === 'grid' ? 2 : 1;
-  const headerBlocks = hasPrimaryGrid
-    ? blocks.slice(0, primaryProductGridIndex)
-    : blocks;
-  const footerBlocks = hasPrimaryGrid
-    ? blocks.slice(primaryProductGridIndex + 1)
-    : [];
   // HOME_STRIP and PRODUCT_GRID_MPU are each one logical slot for the
-  // whole page: elect the owners across both slices (see
-  // home-feed-ad-owners) so repeated blocks cannot each claim one slot.
-  const { heroAdOwnerBlockId, launchAdOwnerBlockId } = findHomeFeedAdOwners({
+  // whole page: slice page-unique blocks and elect the owners across both
+  // slices (see home-feed-ad-owners) so repeated blocks cannot each claim
+  // one slot.
+  const {
     footerBlocks,
     headerBlocks,
-  });
+    heroAdOwnerBlockId,
+    launchAdOwnerBlockId,
+  } = getHomeFeedSlices({ blocks, hasPrimaryGrid, primaryProductGridIndex });
   const renderAfterCategoryRail = (block: Block) =>
     block.type === 'CategoryRail' ? (
       <HomeServiceCards placement="belowUtility" />

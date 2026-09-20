@@ -6,6 +6,7 @@ import { resolveBannerAdModule } from '@/components/ads/banner-ad-module';
 import type { MobileAdBannerPlacementKey } from '@/config/mobile-ad-placements';
 import { trackEvent } from '@/services/analytics-core';
 import { useDrawerStore } from '@/stores/drawer-store';
+import { useUIStore } from '@/stores/ui-store';
 
 interface LaunchAdCardColors {
   border: string;
@@ -54,6 +55,8 @@ export function LaunchAdCard({
   // Like AdSlot: a pushed route keeps this screen mounted, so an unfocused
   // route must not own or refresh the banner behind the new screen.
   const isFocused = useIsFocused();
+  // Like AdSlot: the full-screen chat modal leaves the route focused.
+  const isChatOpen = useUIStore((state) => state.isChatOpen);
   const bannerModule = resolveBannerAdModule();
   useEffect(() => {
     // A missing native module (e.g. Expo Go) is a load failure like any
@@ -62,11 +65,12 @@ export function LaunchAdCard({
     if (!bannerModule) onAdFailedToLoad?.();
   }, [bannerModule, onAdFailedToLoad]);
   if (!bannerModule) return null;
-  // Drawer, focus, and viewability all withhold the native banner but keep
-  // the fixed-size placeholder mounted: the carousel still carries the ad
-  // sentinel and its scroll offset, so unmounting the child would clamp the
-  // list and jump the visible product when the overlay lifts.
-  if (!isVisible || drawerCovering || !isFocused) {
+  // Drawer, focus, chat, and viewability all withhold the native banner
+  // but keep the fixed-size placeholder mounted: the carousel still
+  // carries the ad sentinel and its scroll offset, so unmounting the
+  // child would clamp the list and jump the visible product when the
+  // overlay lifts.
+  if (!isVisible || drawerCovering || !isFocused || isChatOpen) {
     return (
       <View
         accessibilityLabel="Sponsored advertisement"

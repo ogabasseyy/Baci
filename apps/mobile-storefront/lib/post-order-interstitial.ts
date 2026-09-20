@@ -42,6 +42,13 @@ export interface PostOrderInterstitialOptions {
    * banner slots withheld while the full-screen ad owned the screen.
    */
   onClosed?: () => void;
+  /**
+   * Invoked synchronously when LOADED claims the attempt and presentation
+   * begins, before the show() bridge round-trip resolves. Hosts withhold
+   * banner slots here so no impression is recorded underneath the
+   * presenting ad.
+   */
+  onPresenting?: () => void;
 }
 
 export async function maybeShowPostOrderInterstitial(
@@ -190,6 +197,11 @@ export async function maybeShowPostOrderInterstitial(
             loadTimer = null;
           }
           try {
+            // Withhold host banners synchronously: show() resolves over a
+            // native bridge round-trip after presentation begins. Inside
+            // try so a host throw degrades to an owned-presentation
+            // failure instead of a stuck attempt.
+            options.onPresenting?.();
             void interstitial
               .show()
               .then(() => finish('shown'), failOwnedPresentation);

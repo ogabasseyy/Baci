@@ -47,6 +47,12 @@ jest.mock('expo-router', () => ({
   useIsFocused: () => mockIsFocused,
 }));
 
+let mockIsChatOpen = false;
+jest.mock('@/stores/ui-store', () => ({
+  useUIStore: (selector: (state: { isChatOpen: boolean }) => boolean) =>
+    selector({ isChatOpen: mockIsChatOpen }),
+}));
+
 const ORIGINAL_ENV = process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
 
 function setAdsEnabled(value: string | undefined) {
@@ -173,6 +179,25 @@ describe('AdSlot', () => {
       expect(toJSON()).toBeNull();
     } finally {
       mockIsFocused = true;
+      setAdsEnabled(ORIGINAL_ENV);
+    }
+  });
+
+  it('suspends slots behind the chat modal even while the route stays focused', () => {
+    // Regression: the full-screen chat modal leaves the Expo route
+    // focused, so focus alone cannot stop banners refreshing behind chat
+    // — including drawer-owned slots, which chat covers too.
+    setAdsEnabled('true');
+    mockIsChatOpen = true;
+    try {
+      const { toJSON } = render(<AdSlot placement="CART_MPU" />);
+      expect(toJSON()).toBeNull();
+      const { toJSON: drawerOwned } = render(
+        <AdSlot placement="FOOTER_ANCHOR" visibleWhileDrawerOpen />
+      );
+      expect(drawerOwned()).toBeNull();
+    } finally {
+      mockIsChatOpen = false;
       setAdsEnabled(ORIGINAL_ENV);
     }
   });

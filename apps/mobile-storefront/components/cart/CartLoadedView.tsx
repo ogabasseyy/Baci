@@ -8,6 +8,7 @@ import type Colors from '@/constants/Colors';
 import { palette, SPACING } from '@/constants/Colors';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import type { CartItem } from '@/stores/cart-store';
+import { useUIStore } from '@/stores/ui-store';
 import CartCheckoutFooter from './CartCheckoutFooter';
 import CartItemCard from './CartItemCard';
 import NegotiationWarningModal from './NegotiationWarningModal';
@@ -121,6 +122,26 @@ export default function CartLoadedView({
   }, [showNegotiateWarning, negotiateDismissed]);
   const isNegotiateWarningCovering =
     showNegotiateWarning || !negotiateDismissed;
+  // The root-level negotiation modal outlives the warning that precedes
+  // it — and direct negotiation bypasses the warning entirely — so the
+  // slot must stay suppressed for the actual negotiation flow too. The
+  // modal reports no dismissal, so the fallback bound covers its fade.
+  const isNegotiationModalOpen = useUIStore(
+    (state) => state.isNegotiationModalOpen
+  );
+  const [negotiationDismissed, setNegotiationDismissed] = useState(true);
+  useEffect(() => {
+    if (isNegotiationModalOpen) setNegotiationDismissed(false);
+  }, [isNegotiationModalOpen]);
+  useEffect(() => {
+    if (isNegotiationModalOpen || negotiationDismissed) return undefined;
+    const fallback = setTimeout(
+      () => setNegotiationDismissed(true),
+      MODAL_DISMISS_FALLBACK_MS
+    );
+    return () => clearTimeout(fallback);
+  }, [isNegotiationModalOpen, negotiationDismissed]);
+  const isNegotiationCovering = isNegotiationModalOpen || !negotiationDismissed;
 
   return (
     <View style={styles.container}>
@@ -205,7 +226,8 @@ export default function CartLoadedView({
                 visible so no obscured delivery is requested. */}
             {isIdentityModalOpen ||
             isPriceChangeModalOpen ||
-            isNegotiateWarningCovering ? null : (
+            isNegotiateWarningCovering ||
+            isNegotiationCovering ? null : (
               <AdSlot placement="CART_MPU" />
             )}
             <View style={styles.secureBadgeInside}>

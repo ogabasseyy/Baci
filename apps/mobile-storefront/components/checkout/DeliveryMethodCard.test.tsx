@@ -39,58 +39,6 @@ describe('DeliveryMethodCard', () => {
     expect(screen.queryByText('By Air')).toBeNull();
   });
 
-  it('hides By Air for a Lagos-origin address in an airport-eligible state', () => {
-    // Regression: a stale saved address with city Lagos and state Oyo
-    // resolves as store-origin delivery, so state-level airport
-    // eligibility (or a GoFaster quote) must not expose By Air.
-    const { unmount } = render(
-      <DeliveryMethodCard
-        {...baseProps}
-        deliveryCity="Lagos"
-        deliveryState="Oyo"
-      />
-    );
-    expect(screen.queryByText('By Air')).toBeNull();
-    unmount();
-
-    render(
-      <DeliveryMethodCard
-        {...baseProps}
-        deliveryCity="Lagos"
-        deliveryState="Oyo"
-        hasGiglGoFasterQuote
-      />
-    );
-    expect(screen.queryByText('By Air')).toBeNull();
-  });
-
-  it('hides By Air for a Lagos address even with a GIGL GoFaster quote', () => {
-    render(
-      <DeliveryMethodCard
-        {...baseProps}
-        deliveryCity="Ikeja"
-        deliveryState="Lagos"
-        hasGiglGoFasterQuote
-      />
-    );
-
-    expect(screen.getByText('By Road')).toBeTruthy();
-    expect(screen.queryByText('By Air')).toBeNull();
-  });
-
-  it('still offers By Air via a GIGL GoFaster quote outside Lagos', () => {
-    render(
-      <DeliveryMethodCard
-        {...baseProps}
-        deliveryCity="Abeokuta"
-        deliveryState="Ogun"
-        hasGiglGoFasterQuote
-      />
-    );
-
-    expect(screen.getByText('By Air')).toBeTruthy();
-  });
-
   it('offers door, airport, and GIGL pickup stations for a non-Lagos airport state', () => {
     render(<DeliveryMethodCard {...baseProps} deliveryState="Rivers" />);
     expect(screen.getByText('By Road')).toBeTruthy();

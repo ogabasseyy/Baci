@@ -3,7 +3,9 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
 import { Modal } from 'react-native';
 import Colors from '@/constants/Colors';
+import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import type { CartItem } from '@/stores/cart-store';
+import { useUIStore } from '@/stores/ui-store';
 import CartLoadedView from './CartLoadedView';
 
 jest.mock('@/components/ui/SafeImage', () => ({
@@ -228,5 +230,41 @@ describe('CartLoadedView', () => {
       UNSAFE_getByType(Modal).props.onDismiss();
     });
     expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
+  });
+
+  it('withholds the cart ad while the negotiation modal is open', () => {
+    // Regression: direct negotiation bypasses the warning modal, and
+    // warning-confirmed negotiation outlives the warning's dismissal
+    // gate — CART_MPU must stay suppressed for the actual flow and
+    // through its fade.
+    jest.useFakeTimers();
+    try {
+      useUIStore.getState().closeNegotiation();
+      const { unmount } = renderView();
+      expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
+
+      act(() => {
+        useUIStore.getState().openNegotiation({
+          type: 'single',
+          productName: 'iPhone 13 Pro',
+          currentPrice: 500000,
+        });
+      });
+      expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+      act(() => {
+        useUIStore.getState().closeNegotiation();
+      });
+      expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+      act(() => {
+        jest.advanceTimersByTime(MODAL_DISMISS_FALLBACK_MS);
+      });
+      expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
+      unmount();
+    } finally {
+      useUIStore.getState().closeNegotiation();
+      jest.useRealTimers();
+    }
   });
 });

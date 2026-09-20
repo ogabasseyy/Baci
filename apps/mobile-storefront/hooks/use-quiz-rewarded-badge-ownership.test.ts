@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 import { RewardedAdEventType } from 'react-native-google-mobile-ads';
 import {
-  type GateProps,
   mockAuthCustomer,
   mockPlacementState,
   mockSetQuizRewardedFlowActive,
@@ -62,7 +61,7 @@ jest.mock('react-native-google-mobile-ads', () => ({
 
 import { useQuizRewardedBadge } from './use-quiz-rewarded-badge';
 
-describe('useQuizRewardedBadge', () => {
+describe('useQuizRewardedBadge fullscreen ownership', () => {
   beforeEach(() => {
     listeners.clear();
     mockAuthCustomer.date_of_birth = null;
@@ -77,86 +76,7 @@ describe('useQuizRewardedBadge', () => {
     });
   });
 
-  it('offers only while more than 90 seconds remain in a scheduled room', () => {
-    const { result, rerender } = renderHook<
-      ReturnType<typeof useQuizRewardedBadge>,
-      GateProps
-    >(
-      ({ eventId, eventTitle, remainingSeconds, status, userId }: GateProps) =>
-        useQuizRewardedBadge({
-          eventId,
-          eventTitle,
-          remainingSeconds,
-          status,
-          userId,
-        }),
-      {
-        initialProps: {
-          eventId: 'event-1',
-          eventTitle: 'Today Quiz',
-          remainingSeconds: 91,
-          status: 'scheduled',
-          userId: 'user-1',
-        },
-      }
-    );
-
-    expect(result.current.available).toBe(true);
-    rerender({
-      eventId: 'event-1',
-      eventTitle: 'Today Quiz',
-      remainingSeconds: 90,
-      status: 'scheduled',
-      userId: 'user-1',
-    });
-    expect(result.current.available).toBe(false);
-    rerender({
-      eventId: 'event-1',
-      eventTitle: 'Today Quiz',
-      remainingSeconds: 120,
-      status: 'active',
-      userId: 'user-1',
-    });
-    expect(result.current.available).toBe(false);
-  });
-
-  it('does not request or initialize ads while the shopper is unauthenticated', () => {
-    mockUseQuizMobileAds.mockClear();
-    const { result } = renderHook(() =>
-      useQuizRewardedBadge({
-        eventId: 'event-1',
-        eventTitle: 'Today Quiz',
-        remainingSeconds: 120,
-        status: 'scheduled',
-        userId: null,
-      })
-    );
-
-    expect(result.current.available).toBe(false);
-    expect(mockUseQuizMobileAds).toHaveBeenCalledWith(
-      expect.objectContaining({ requested: false })
-    );
-  });
-
-  it('passes the verified adult status into rewarded-ad initialization', () => {
-    mockAuthCustomer.date_of_birth = '2000-01-01';
-
-    renderHook(() =>
-      useQuizRewardedBadge({
-        eventId: 'event-1',
-        eventTitle: 'Today Quiz',
-        remainingSeconds: 120,
-        status: 'scheduled',
-        userId: 'user-1',
-      })
-    );
-
-    expect(mockUseQuizMobileAds).toHaveBeenCalledWith(
-      expect.objectContaining({ ageVerified: true })
-    );
-  });
-
-  it('grants only when the ad emits EARNED_REWARD', () => {
+  it('flags a retryable failure when the ad errors', () => {
     const { result } = renderHook(() =>
       useQuizRewardedBadge({
         eventId: 'event-1',
@@ -167,59 +87,83 @@ describe('useQuizRewardedBadge', () => {
       })
     );
 
+    expect(result.current.watchFailed).toBe(false);
     act(() => result.current.watchAd());
+    act(() => listeners.get('error')?.());
+    expect(result.current.watchFailed).toBe(true);
+    expect(result.current.isWatching).toBe(false);
     expect(mockUnlockBadge).not.toHaveBeenCalled();
-    act(() => listeners.get('closed')?.());
-    expect(mockUnlockBadge).not.toHaveBeenCalled();
+    act(() => result.current.watchAd());
+    expect(result.current.watchFailed).toBe(false);
+    expect(result.current.isWatching).toBe(true);
+  });
 
+  it('claims and releases interstitial ownership around the rewarded flow', () => {
+    // Regression: the interstitial must defer while the rewarded ad is
+    // loading or presented so the two full-screen placements never race.
+    const { result } = renderHook(() =>
+      useQuizRewardedBadge({
+        eventId: 'event-1',
+        eventTitle: 'Today Quiz',
+        remainingSeconds: 120,
+        status: 'scheduled',
+        userId: 'user-1',
+      })
+    );
+
+    mockSetQuizRewardedFlowActive.mockClear();
+    act(() => result.current.watchAd());
+    expect(mockSetQuizRewardedFlowActive).toHaveBeenCalledWith(true);
+    act(() => listeners.get('closed')?.());
+    expect(mockSetQuizRewardedFlowActive).toHaveBeenCalledWith(false);
+    expect(result.current.isWatching).toBe(false);
+  });
+
+  it('holds fullscreen ownership after EARNED_REWARD until the ad closes', () => {
+    // Regression: the reward fires while the ad is still on screen, so
+    // releasing here lets a quiz-start interstitial present over it.
+    const { result } = renderHook(() =>
+      useQuizRewardedBadge({
+        eventId: 'event-1',
+        eventTitle: 'Today Quiz',
+        remainingSeconds: 120,
+        status: 'scheduled',
+        userId: 'user-1',
+      })
+    );
+
+    mockSetQuizRewardedFlowActive.mockClear();
     act(() => result.current.watchAd());
     act(() =>
       listeners.get(RewardedAdEventType.EARNED_REWARD)?.({ amount: 1 })
     );
-    expect(mockUnlockBadge).toHaveBeenCalledWith(
-      'user-1',
-      'event-1',
-      'Today Quiz'
-    );
+    expect(mockUnlockBadge).toHaveBeenCalledTimes(1);
     expect(result.current.justEarned).toBe(true);
-    expect(result.current.available).toBe(true);
-    act(() => result.current.dismiss());
-    expect(result.current.justEarned).toBe(false);
-    expect(result.current.available).toBe(false);
-  });
-
-  it('does not block the room when the user dismisses the offer', () => {
-    const { result } = renderHook(() =>
-      useQuizRewardedBadge({
-        eventId: 'event-1',
-        eventTitle: 'Today Quiz',
-        remainingSeconds: 120,
-        status: 'scheduled',
-        userId: 'user-1',
-      })
-    );
-
-    act(() => result.current.dismiss());
-    expect(result.current.available).toBe(false);
-    expect(result.current.roomBlocked).toBe(false);
-  });
-
-  it('does not show a rewarded ad if it finishes loading after dismissal', () => {
-    const { result } = renderHook(() =>
-      useQuizRewardedBadge({
-        eventId: 'event-1',
-        eventTitle: 'Today Quiz',
-        remainingSeconds: 120,
-        status: 'scheduled',
-        userId: 'user-1',
-      })
-    );
-
-    act(() => result.current.watchAd());
-    act(() => result.current.dismiss());
-    act(() => listeners.get(RewardedAdEventType.LOADED)?.());
-
-    expect(mockAd.show).not.toHaveBeenCalled();
+    expect(result.current.isWatching).toBe(true);
+    expect(mockSetQuizRewardedFlowActive).not.toHaveBeenCalledWith(false);
+    act(() => listeners.get('closed')?.());
+    expect(mockSetQuizRewardedFlowActive).toHaveBeenCalledWith(false);
     expect(result.current.isWatching).toBe(false);
+  });
+
+  it('withholds the offer while the global placement is disabled', () => {
+    // Regression: the legacy quiz gate alone must not keep offering
+    // rewarded ads while the REWARDED placement is off.
+    mockPlacementState.enabled = false;
+    try {
+      const { result } = renderHook(() =>
+        useQuizRewardedBadge({
+          eventId: 'event-1',
+          eventTitle: 'Today Quiz',
+          remainingSeconds: 120,
+          status: 'scheduled',
+          userId: 'user-1',
+        })
+      );
+
+      expect(result.current.available).toBe(false);
+    } finally {
+      mockPlacementState.enabled = true;
+    }
   });
 });

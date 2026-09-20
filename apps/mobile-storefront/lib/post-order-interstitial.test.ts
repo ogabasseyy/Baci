@@ -251,4 +251,21 @@ describe('maybeShowPostOrderInterstitial', () => {
     }
     setAdsEnabled(ORIGINAL_ENV);
   });
+
+  it('notifies the host synchronously when presentation begins', async () => {
+    // Regression: show() resolves over a native bridge round-trip after
+    // presentation begins; the host must withhold banners in the LOADED
+    // handler rather than after the helper promise resolves.
+    setAdsEnabled('true');
+    mockInterstitialShow.mockImplementationOnce(
+      () => new Promise<void>(() => {})
+    );
+    const onPresenting = jest.fn();
+    void maybeShowPostOrderInterstitial({ onPresenting });
+    await flushConsentGate();
+    for (const listener of listeners.loaded) listener();
+    expect(mockInterstitialShow).toHaveBeenCalledTimes(1);
+    expect(onPresenting).toHaveBeenCalledTimes(1);
+    setAdsEnabled(ORIGINAL_ENV);
+  });
 });

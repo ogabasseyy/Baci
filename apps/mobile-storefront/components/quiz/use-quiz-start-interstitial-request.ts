@@ -1,6 +1,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { useEffect } from 'react';
 import type { AppStateStatus } from 'react-native';
+import { isQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
 import { flushPendingQuizStart } from './quiz-pending-start';
@@ -74,7 +75,9 @@ export function useQuizStartInterstitialRequest({
           if (appStateRef.current !== 'active') return;
           // Likewise while a rewarded ad or the rules modal covers the
           // lobby: the hold hook flushes when the covering flag clears.
-          if (isStartBlockedRef.current) return;
+          // The rewarded prop lags the tap by a passive effect, so read
+          // the synchronously claimed ownership too.
+          if (isStartBlockedRef.current || isQuizRewardedFlowActive()) return;
           flushPendingQuizStart({
             onStartRef,
             pendingStartRef,
@@ -105,7 +108,7 @@ export function useQuizStartInterstitialRequest({
         isFullscreenAdActiveRef.current = false;
         setIsFullscreenAdActive(false);
         if (appStateRef.current !== 'active') return;
-        if (isStartBlockedRef.current) return;
+        if (isStartBlockedRef.current || isQuizRewardedFlowActive()) return;
         flushPendingQuizStart({
           onStartRef,
           pendingStartRef,

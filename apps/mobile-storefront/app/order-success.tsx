@@ -146,10 +146,18 @@ export default function OrderSuccessScreen() {
         onClosed: () => {
           if (!interstitialCancelled) setFullscreenAdActive(false);
         },
+        onPresenting: () => {
+          // show() resolves over a native bridge round-trip after
+          // presentation begins; withhold the banner synchronously here
+          // so it cannot request or record an impression underneath the
+          // presenting interstitial.
+          if (!interstitialCancelled) setFullscreenAdActive(true);
+        },
       }).then((outcome) => {
-        if (!interstitialCancelled && outcome === 'shown') {
-          setFullscreenAdActive(true);
-        }
+        if (interstitialCancelled) return;
+        // A failed presentation never produces CLOSED: release the
+        // synchronously claimed withhold since no dismissal will arrive.
+        setFullscreenAdActive(outcome === 'shown');
       });
     }, 2500);
 

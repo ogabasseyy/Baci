@@ -1,43 +1,18 @@
-import { jest } from '@jest/globals';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { FlatList } from 'react-native';
-import * as placements from '@/config/mobile-ad-placements';
-import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { render } from '@testing-library/react-native';
 import { getTemplateConfig } from '@/lib/templates';
-import type { HeroSlide } from './Hero';
-import { Hero } from './Hero';
+import {
+  baseTemplate,
+  mockExpoImageModule,
+  mockImage,
+  mockThemeModule,
+  mockUseMobileAdsReadiness,
+  slide,
+} from './Hero-test-harness';
 
 jest.mock('@/hooks/use-mobile-ads-readiness', () => ({
-  useMobileAdsReadiness: jest.fn(() => ({
-    canRequestAds: true,
-    initialized: true,
-  })),
+  useMobileAdsReadiness: mockUseMobileAdsReadiness,
 }));
-
-const mockUseMobileAdsReadiness = jest.mocked(useMobileAdsReadiness);
-
-function renderedMarkerOrder(): string[] {
-  const markers: string[] = [];
-  const walk = (node: unknown): void => {
-    if (!node || typeof node !== 'object') return;
-    if (Array.isArray(node)) {
-      node.forEach(walk);
-      return;
-    }
-    const record = node as {
-      children?: unknown;
-      props?: { accessibilityLabel?: unknown; testID?: unknown };
-    };
-    const testID = record.props?.testID;
-    const label = record.props?.accessibilityLabel;
-    if (typeof testID === 'string') markers.push(testID);
-    else if (typeof label === 'string') markers.push(label);
-    if (record.children !== undefined) walk(record.children);
-  };
-  walk(screen.toJSON());
-  return markers;
-}
-
 jest.mock('react-native-google-mobile-ads', () => ({
   BannerAd: 'BannerAd',
   BannerAdSize: {
@@ -47,56 +22,24 @@ jest.mock('react-native-google-mobile-ads', () => ({
 jest.mock('@/services/analytics-core', () => ({
   trackEvent: jest.fn(),
 }));
-
-const mockImage = jest.fn();
-
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   __esModule: true,
   default: () => ({ fontScale: 1, height: 800, scale: 2, width: 400 }),
 }));
-
-jest.mock('expo-image', () => {
-  const React = jest.requireActual<typeof import('react')>('react');
-  const { View } =
-    jest.requireActual<typeof import('react-native')>('react-native');
-
-  return {
-    Image: (props: Record<string, unknown>) => {
-      mockImage(props);
-      return React.createElement(View, { ...props, testID: 'hero-image' });
-    },
-  };
-});
-
+jest.mock('expo-image', () => mockExpoImageModule());
 jest.mock('expo-linear-gradient', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
   return { LinearGradient: View };
 });
-
 jest.mock('expo-router', () => ({
   router: { push: jest.fn() },
   useIsFocused: () => true,
 }));
-
-jest.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    colors: {
-      background: '#ffffff',
-      border: '#dddddd',
-      card: '#ffffff',
-      muted: '#f2f2f2',
-      text: '#111111',
-      textSecondary: '#666666',
-    },
-    isDark: false,
-  }),
-}));
-
+jest.mock('@/hooks/useTheme', () => mockThemeModule());
 jest.mock('@/lib/config', () => ({
   CONFIG: { BUSINESS_TYPE: 'electronics', TEMPLATE_ID: 'test' },
 }));
-
 jest.mock('@/lib/templates', () => ({
   getTemplateConfig: jest.fn(),
 }));
@@ -105,23 +48,6 @@ const mockedGetTemplateConfig = getTemplateConfig as jest.MockedFunction<
   typeof getTemplateConfig
 >;
 
-const slide: HeroSlide = {
-  ctaLink: '/category/phones',
-  ctaText: 'Shop now',
-  image: 'https://cdn.ogabassey.com/core-assets/products/hero.avif',
-  subtitle: 'Available now',
-  title: 'Featured phones',
-};
-
-const baseTemplate = {
-  borderRadius: 'md' as const,
-  cardVariant: 'grid' as const,
-  categoryStyle: 'pill' as const,
-  features: {},
-  headerStyle: 'standard' as const,
-  spacing: 'compact' as const,
-};
-
 function renderHero(heroVariant: 'parallax' | 'carousel' | 'standard') {
   mockedGetTemplateConfig.mockReturnValue({
     ...baseTemplate,
@@ -129,6 +55,8 @@ function renderHero(heroVariant: 'parallax' | 'carousel' | 'standard') {
   });
   return render(<Hero slides={[slide]} />);
 }
+
+import { Hero } from './Hero';
 
 describe('Hero bounded image sources', () => {
   beforeEach(() => {
@@ -176,268 +104,5 @@ describe('Hero bounded image sources', () => {
         },
       })
     );
-  });
-});
-
-describe('Hero trailing ad slide', () => {
-  const ORIGINAL_FLAG = process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
-
-  function renderCarousel(
-    extraProps: { trailingAdPlacement?: 'HOME_STRIP' } = {}
-  ) {
-    mockedGetTemplateConfig.mockReset();
-    mockedGetTemplateConfig.mockReturnValue({
-      ...baseTemplate,
-      heroVariant: 'carousel',
-    });
-    return render(<Hero slides={[slide]} {...extraProps} />);
-  }
-
-  it('appends a sponsored slide after the CMS slides when enabled', () => {
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
-    renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
-
-    expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
-  });
-
-  it('withholds the native banner until the ad slide is viewable', () => {
-    // Regression: the list eagerly renders its initial batch, so the
-    // second slide's banner must not request while offscreen.
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
-    renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
-    const list = screen.getByTestId('hero-carousel-list');
-
-    expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
-    act(() => {
-      fireEvent(list, 'onViewableItemsChanged', {
-        changed: [],
-        viewableItems: [{ index: 1, isViewable: true, item: { kind: 'x' } }],
-      });
-    });
-    expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
-    act(() => {
-      fireEvent(list, 'onViewableItemsChanged', {
-        changed: [],
-        viewableItems: [
-          { index: 1, isViewable: true, item: { kind: 'hero-ad-slide' } },
-        ],
-      });
-    });
-    expect(screen.UNSAFE_getByType('BannerAd' as never)).toBeTruthy();
-    act(() => {
-      fireEvent(list, 'onViewableItemsChanged', {
-        changed: [],
-        viewableItems: [],
-      });
-    });
-    expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
-  });
-
-  it('renders no ad slide without a placement', () => {
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
-    renderCarousel();
-
-    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
-  });
-
-  it('renders no ad slide while ads are disabled', () => {
-    delete process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED;
-    renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
-
-    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
-  });
-
-  it('fails closed when the placement is misconfigured instead of crashing', () => {
-    // Regression: getMobileAdUnitId throws for unconfigured production IDs;
-    // the hero must omit the ad slide rather than take down the home feed.
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
-    const spy = jest
-      .spyOn(placements, 'getMobileAdUnitId')
-      .mockImplementation(() => {
-        throw new Error('[mobile-ads] misconfigured');
-      });
-    renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
-
-    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
-    expect(screen.getAllByTestId('hero-image')).toHaveLength(1);
-    spy.mockRestore();
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
-  });
-
-  it('withholds the ad slide until consent is ready', () => {
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
-    mockUseMobileAdsReadiness.mockReturnValueOnce({
-      canRequestAds: false,
-      initialized: false,
-    });
-    renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
-
-    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
-    expect(screen.getAllByTestId('hero-image')).toHaveLength(1);
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
-  });
-
-  it('drops the ad slide when the banner fails to load instead of keeping a blank page', () => {
-    // Regression: on no-fill or load error the carousel must remove the
-    // sponsored slide so autoplay never rotates onto a blank hero page.
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
-    renderCarousel({ trailingAdPlacement: 'HOME_STRIP' });
-    act(() => {
-      fireEvent(
-        screen.getByTestId('hero-carousel-list'),
-        'onViewableItemsChanged',
-        {
-          changed: [],
-          viewableItems: [
-            { index: 1, isViewable: true, item: { kind: 'hero-ad-slide' } },
-          ],
-        }
-      );
-    });
-
-    expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
-    const banner = screen.UNSAFE_getByType('BannerAd' as never);
-    act(() => {
-      (banner.props as { onAdFailedToLoad: () => void }).onAdFailedToLoad();
-    });
-
-    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
-    expect(screen.getAllByTestId('hero-image')).toHaveLength(1);
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
-  });
-
-  it('keeps the visible hero in place when the ad slide inserts late', () => {
-    // Regression: consent resolving after the carousel advanced must not
-    // replace the shopper's current hero with the inserted ad slide — the
-    // offset shifts by one page and the active dot follows the same slide.
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
-    mockedGetTemplateConfig.mockReset();
-    mockedGetTemplateConfig.mockReturnValue({
-      ...baseTemplate,
-      heroVariant: 'carousel',
-    });
-    const secondSlide: HeroSlide = { ...slide, title: 'Second slide' };
-    mockUseMobileAdsReadiness.mockReturnValueOnce({
-      canRequestAds: false,
-      initialized: false,
-    });
-    const { rerender } = render(
-      <Hero slides={[slide, secondSlide]} trailingAdPlacement="HOME_STRIP" />
-    );
-    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
-    act(() => {
-      // A settled fling always emits scroll events before momentum end. Drive
-      // the outer FlatList composite: the testID target is the inner list
-      // whose onScroll is VirtualizedList internals needing layout metrics.
-      screen
-        .UNSAFE_getByType(FlatList)
-        .props.onScroll({ nativeEvent: { contentOffset: { x: 400 } } });
-      fireEvent(
-        screen.getByTestId('hero-carousel-list'),
-        'onMomentumScrollEnd',
-        {
-          nativeEvent: { contentOffset: { x: 400 } },
-        }
-      );
-    });
-
-    // The one-shot denial is consumed by the first render; the default
-    // mock grants consent from here on.
-    rerender(
-      <Hero slides={[slide, secondSlide]} trailingAdPlacement="HOME_STRIP" />
-    );
-
-    expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
-    const dots = screen.getByTestId('hero-dots');
-    const dotIds = dots.children.map((child) =>
-      typeof child === 'string' ? child : child.props.testID
-    );
-    expect(dotIds).toEqual(['hero-dot', 'hero-dot', 'hero-dot-active']);
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
-  });
-
-  it('compensates from the live offset when the ad slide inserts mid-drag', () => {
-    // Regression: a toggle landing while the shopper drags must compensate
-    // from the list's actual offset, not the last snapped page — otherwise
-    // the carousel jumps to the preceding page.
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
-    mockedGetTemplateConfig.mockReset();
-    mockedGetTemplateConfig.mockReturnValue({
-      ...baseTemplate,
-      heroVariant: 'carousel',
-    });
-    const secondSlide: HeroSlide = { ...slide, title: 'Second slide' };
-    const thirdSlide: HeroSlide = { ...slide, title: 'Third slide' };
-    mockUseMobileAdsReadiness.mockReturnValueOnce({
-      canRequestAds: false,
-      initialized: false,
-    });
-    const { rerender } = render(
-      <Hero
-        slides={[slide, secondSlide, thirdSlide]}
-        trailingAdPlacement="HOME_STRIP"
-      />
-    );
-    expect(screen.queryByTestId('hero-ad-slide')).toBeNull();
-    const scroller = screen.UNSAFE_getByType(FlatList);
-    const list = screen.getByTestId('hero-carousel-list');
-    act(() => {
-      // Drive the outer composite (see above): the testID target's onScroll
-      // is VirtualizedList internals needing full layout metrics.
-      scroller.props.onScroll({ nativeEvent: { contentOffset: { x: 400 } } });
-      fireEvent(list, 'onMomentumScrollEnd', {
-        nativeEvent: { contentOffset: { x: 400 } },
-      });
-      // Mid-drag toward the third slide: no momentum end follows.
-      scroller.props.onScroll({ nativeEvent: { contentOffset: { x: 640 } } });
-    });
-
-    rerender(
-      <Hero
-        slides={[slide, secondSlide, thirdSlide]}
-        trailingAdPlacement="HOME_STRIP"
-      />
-    );
-
-    expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
-    const dots = screen.getByTestId('hero-dots');
-    const dotIds = dots.children.map((child) =>
-      typeof child === 'string' ? child : child.props.testID
-    );
-    expect(dotIds).toEqual([
-      'hero-dot',
-      'hero-dot',
-      'hero-dot',
-      'hero-dot-active',
-    ]);
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
-  });
-
-  it('places the ad slide second, not last', () => {
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = 'true';
-    mockedGetTemplateConfig.mockReset();
-    mockedGetTemplateConfig.mockReturnValue({
-      ...baseTemplate,
-      heroVariant: 'carousel',
-    });
-    const secondSlide: HeroSlide = { ...slide, title: 'Second slide' };
-    render(
-      <Hero slides={[slide, secondSlide]} trailingAdPlacement="HOME_STRIP" />
-    );
-
-    const markers = renderedMarkerOrder();
-    const adIndex = markers.indexOf('hero-ad-slide');
-    const imageIndexes = markers.reduce<number[]>((acc, marker, index) => {
-      if (marker === 'hero-image') acc.push(index);
-      return acc;
-    }, []);
-    expect(imageIndexes).toHaveLength(2);
-    expect(adIndex).toBeGreaterThan(imageIndexes[0]);
-    expect(adIndex).toBeLessThan(imageIndexes[1]);
-    process.env.EXPO_PUBLIC_MOBILE_ADS_ENABLED = ORIGINAL_FLAG;
   });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
+import { isQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 import type { QuizEvent } from '@/services/quiz-types';
 import { calculateQuizServerClockOffset } from './use-quiz-server-clock';
 import { useQuizStartHold } from './use-quiz-start-hold';
@@ -128,8 +129,15 @@ export function useQuizWaitingRoom({
       // Starting live play behind a presented interstitial, a rewarded ad,
       // or the rules modal would burn the shopper's timed window under a
       // covering surface: hold the transition until it clears (flushed by
-      // the interstitial onClosed handler or the start-hold hook).
-      if (isFullscreenAdActiveRef.current || isStartBlockedRef.current) {
+      // the interstitial onClosed handler or the start-hold hook). The
+      // rewarded prop arrives via a passive effect after the tap, so also
+      // read the synchronously claimed ownership: a refresh resolving in
+      // that window must still hold.
+      if (
+        isFullscreenAdActiveRef.current ||
+        isStartBlockedRef.current ||
+        isQuizRewardedFlowActive()
+      ) {
         pendingStartRef.current = nextEvent;
         return;
       }

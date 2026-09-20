@@ -25,6 +25,12 @@ jest.mock('expo-router', () => ({
   useIsFocused: () => mockIsFocused,
 }));
 
+let mockIsChatOpen = false;
+jest.mock('@/stores/ui-store', () => ({
+  useUIStore: (selector: (state: { isChatOpen: boolean }) => boolean) =>
+    selector({ isChatOpen: mockIsChatOpen }),
+}));
+
 const props = {
   height: 120,
   isVisible: true,
@@ -108,6 +114,23 @@ describe('HeroAdSlide', () => {
       expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
     } finally {
       mockIsFocused = true;
+    }
+  });
+
+  it('keeps the fixed-size placeholder while the chat modal is open', () => {
+    // Regression: the full-screen chat modal leaves the route focused,
+    // so chat needs its own gate — the banner withholds without
+    // collapsing the slide the carousel still accounts for.
+    // Arrange & Act
+    mockIsChatOpen = true;
+    try {
+      render(<HeroAdSlide {...props} />);
+
+      // Assert
+      expect(screen.getByTestId('hero-ad-slide')).toBeTruthy();
+      expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
+    } finally {
+      mockIsChatOpen = false;
     }
   });
 });

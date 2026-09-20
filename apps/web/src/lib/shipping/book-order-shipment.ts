@@ -6,6 +6,7 @@ import {
   isPayOnDeliveryPaymentMethod,
 } from '@/lib/shipping/assert-gigl-customer-checkout-prepaid';
 import { assertQuotePriceMatchesOrderFee } from '@/lib/shipping/assert-quote-price-matches-order-fee';
+import { assertShippableOrderState } from '@/lib/shipping/assert-shippable-order-state';
 import { attachBookingQuoteMetadata } from '@/lib/shipping/attach-booking-quote-metadata';
 import type { BookOrderRecord } from '@/lib/shipping/book-order-shipment-types';
 import { buildOrderShipmentBookingRequest } from '@/lib/shipping/build-order-shipment-booking-request';
@@ -107,24 +108,10 @@ export async function bookOrderShipment(
     });
   }
   const orderItems = typedOrder.order_items ?? [];
-  if (orderItems.length === 0) {
-    throw new OrderShipmentBookingError(
-      'Cannot book a shipment for an order with no items.',
-      400,
-      'MISSING_ORDER_ITEMS'
-    );
-  }
-  // A fully-refunded order must never reach provider booking: refund
-  // finalization deliberately leaves fulfillmentQuantity unset for
-  // review_required inventory, so the surviving-quantity fallback would
-  // otherwise report the original quantities as shippable.
-  if ((typedOrder.payment_status ?? '').trim().toLowerCase() === 'refunded') {
-    throw new OrderShipmentBookingError(
-      'This order was refunded and can no longer be shipped.',
-      400,
-      'ORDER_REFUNDED'
-    );
-  }
+  assertShippableOrderState({
+    items: orderItems,
+    paymentStatus: typedOrder.payment_status,
+  });
   const { data: storedQuote, error: quoteError } = await supabase
     .from('shipping_quotes')
     .select(

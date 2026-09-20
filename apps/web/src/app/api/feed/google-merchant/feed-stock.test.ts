@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { UNLIMITED_STOCK_QUANTITY } from './feed-constants';
+import { FEED_CONSTANTS } from './feed-constants';
 import { getFeedStockCount } from './feed-stock';
 
 const product = {
@@ -21,5 +21,5 @@ it('uses option stock for managed SKUs and unlimited stock otherwise', () => {
       { ...product, manage_stock: false },
       { stock_quantity: 0 }
     )
-  ).toBe(UNLIMITED_STOCK_QUANTITY);
+  ).toBe(FEED_CONSTANTS.UNLIMITED_STOCK_QUANTITY);
 });

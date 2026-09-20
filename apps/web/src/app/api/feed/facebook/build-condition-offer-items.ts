@@ -13,10 +13,7 @@ import {
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveOfferFeedImages } from '@/lib/resolve-offer-feed-images';
 import { escapeXml } from '@/lib/xml-utils';
-import {
-  FEED_TITLE_MAX_LENGTH as FACEBOOK_TITLE_MAX_LENGTH,
-  UNLIMITED_STOCK_QUANTITY,
-} from '../google-merchant/feed-constants';
+import { FEED_CONSTANTS } from '../google-merchant/feed-constants';
 import { getFeedStockCount } from '../google-merchant/feed-stock';
 import type { FeedProduct } from '../google-merchant/feed-types';
 
@@ -41,7 +38,7 @@ function isUnmanagedStock(manageStock: boolean | null | undefined): boolean {
 
 function getProductStockCount(product: FeedProduct): number {
   if (isUnmanagedStock(product.manage_stock)) {
-    return UNLIMITED_STOCK_QUANTITY;
+    return FEED_CONSTANTS.UNLIMITED_STOCK_QUANTITY;
   }
 
   return getEffectiveStock(product);
@@ -100,7 +97,7 @@ function buildItemXml(args: {
   const lines = [
     `        <g:id>${escapeXml(args.id)}</g:id>`,
     `        <g:item_group_id>${escapeXml(args.groupId || args.id)}</g:item_group_id>`,
-    `        <g:title>${escapeXml(truncate(args.title, FACEBOOK_TITLE_MAX_LENGTH))}</g:title>`,
+    `        <g:title>${escapeXml(truncate(args.title, FEED_CONSTANTS.TITLE_MAX_LENGTH))}</g:title>`,
     `        <g:description>${escapeXml(args.description)}</g:description>`,
     `        <g:availability>${args.availability}</g:availability>`,
     ...buildPriceLines({

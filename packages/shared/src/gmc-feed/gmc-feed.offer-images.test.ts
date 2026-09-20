@@ -19,4 +19,22 @@ describe('extractImageCandidates condition offers', () => {
       extractImageCandidates('product-1', [{ url: '  ' }, { url: '' }])
     ).toEqual([]);
   });
+
+  it('skips malformed non-string offer image entries without throwing', () => {
+    expect(
+      extractImageCandidates('product-1', [
+        { url: 123 },
+        { url: { nested: true } },
+        456,
+        { url: 'https://cdn.example.com/offers/used-phone.jpg' },
+      ] as never)
+    ).toEqual([
+      {
+        product_id: 'product-1',
+        source_url: 'https://cdn.example.com/offers/used-phone.jpg',
+        is_primary: true,
+        position: 0,
+      },
+    ]);
+  });
 });

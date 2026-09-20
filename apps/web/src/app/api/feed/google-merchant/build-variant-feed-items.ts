@@ -13,7 +13,7 @@ import {
   buildGoogleProductDetailXml,
 } from './build-product-detail-xml';
 import type { FeedProduct, FeedVariant } from './feed-builder';
-import { FEED_TITLE_MAX_LENGTH } from './feed-constants';
+import { FEED_CONSTANTS } from './feed-constants';
 import { getFeedStockCount } from './feed-stock';
 
 interface VariantFeedInput {
@@ -29,7 +29,9 @@ interface VariantFeedInput {
 
 const text = (value: unknown) =>
   typeof value === 'string' ? value.trim() : '';
-const canonicalAttributes = (variant: FeedVariant): Record<string, string> => {
+const canonicalAttributes = (
+  variant: FeedVariant
+): Record<string, string | number> => {
   const entries = Object.entries(variant.attributes || {});
   const normalizedEntries = entries.map(
     ([key, value]) =>
@@ -38,21 +40,25 @@ const canonicalAttributes = (variant: FeedVariant): Record<string, string> => {
           .trim()
           .toLowerCase()
           .replace(/[\s-]+/g, '_'),
-        text(value),
+        // Finite numbers survive for the detail builder, which formats
+        // capacities such as storage itself; anything else must be text.
+        typeof value === 'number' && Number.isFinite(value)
+          ? value
+          : text(value),
       ] as const
   );
   const normalized = Object.fromEntries(normalizedEntries);
-  const name = normalized.color || normalized.colour;
+  const name = text(normalized.color) || text(normalized.colour);
   const hex =
-    normalized.color_hex ||
-    normalized.colour_hex ||
-    normalized.colourhex ||
-    normalized.colorhex;
+    text(normalized.color_hex) ||
+    text(normalized.colour_hex) ||
+    text(normalized.colourhex) ||
+    text(normalized.colorhex);
   return {
     ...Object.fromEntries(
       normalizedEntries.filter(
         ([key, value]) =>
-          text(value) &&
+          (typeof value === 'number' || text(value)) &&
           ![
             'color',
             'colour',
@@ -121,8 +127,13 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
         .filter(
           (key) => !['gtin', 'mpn', 'variantid', 'variant_id'].includes(key)
         )
-        .sort())
-        url.searchParams.set(key, attributes[key]);
+        .sort()) {
+        // Links carry string merchandising values only; numerics survive
+        // in variant_attributes for the detail builder.
+        const value = attributes[key];
+        if (typeof value !== 'string') continue;
+        url.searchParams.set(key, value);
+      }
       const stock = getFeedStockCount(product, variant);
       const availability = stock > 0 ? 'in_stock' : 'out_of_stock';
       const titleKeys = [
@@ -146,7 +157,10 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
         product.name,
         ...[...titleKeys, ...remainingKeys]
           .map((key) => attributes[key])
-          .filter(Boolean),
+          .filter(
+            (value): value is string =>
+              typeof value === 'string' && value !== ''
+          ),
         variant.condition === 'open_box'
           ? 'Open Box'
           : condition === 'refurbished'
@@ -155,7 +169,7 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
               ? 'Used'
               : 'New',
       ].join(' - ');
-      const maxTitle = FEED_TITLE_MAX_LENGTH;
+      const maxTitle = FEED_CONSTANTS.TITLE_MAX_LENGTH;
       const boundedTitle =
         title.length > maxTitle
           ? `${title.slice(0, maxTitle - 3).trimEnd()}...`

@@ -266,8 +266,9 @@ async function main() {
 
   // 10. Bust the feed cache via the revalidation endpoint so the next
   //     feed request picks up the fresh manifest immediately.
-  //     Requires CRON_SECRET to match the deployed app's value.
-  await revalidateFeedCache({ storefrontBaseUrl, merchantId });
+  //     Requires CRON_SECRET to match the deployed app's value. The
+  //     helper targets the deployment origin, never the merchant domain.
+  await revalidateFeedCache({ merchantId });
 }
 
 main().catch((err) => {

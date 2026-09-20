@@ -208,4 +208,20 @@ describe('buildVariantFeedItems', () => {
     expect(xml).not.toContain('mpn=');
     expect(xml).toContain('<g:sale_price>20.00 NGN</g:sale_price>');
   });
+  it('preserves finite numeric attributes for product details', () => {
+    const xml = buildVariantFeedItems({
+      ...input,
+      variants: [
+        {
+          ...product.variants?.[0],
+          id: 'white-new',
+          attributes: { color: 'White', storage: 256 },
+        },
+      ],
+    });
+    expect(xml).toContain('Storage capacity');
+    expect(xml).toContain('256GB');
+    // Titles and links keep the ignore-non-strings contract.
+    expect(xml).not.toContain('storage=256');
+  });
 });

@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "a35d03938097ace1b22a4218963def8aeb67bb59",
+  "originMainSha": "e119a625ecd8762c4931c07904b82f012e73cbad",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "26b7bdbcb7989cf2395562c9bebaa2b8871d172f402208db9415b85acef17968",
-  "routingProxyInputSha256": "7641a67bb24e93638e1963cf977851100802fc279b58eb9b68f634934240c3f4",
+  "routeTreeSha256": "f380bc771ac25d0b867bf16790ff6eff01ea618c9e513a6d02f1cd5be29a91e2",
+  "routingProxyInputSha256": "0b784b21597c235ca2ec1f5011e1cf069a764044bf791c86fde64f1392ea6527",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1272,6 +1272,18 @@
       "routePattern": "/api/storefront/orders/{id}",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/orders/[id]/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/orders/[id]/cancel/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/orders/{id}/cancel",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/orders/[id]/cancel/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8246,5 +8258,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "af26d51e1d39173887eb40d147c1c200e929bd3b02f8d914d4379dd31c35f834"
+  "inventorySha256": "7d3fafc86d4d06c6c5002e89f6c5d8e711e58df99d33c86a4c27b81d586d590d"
 }

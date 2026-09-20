@@ -1,8 +1,6 @@
 import { Alert } from 'react-native';
 import { useMerchant } from '@/hooks/use-merchant';
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
-import { resolvePersistedRedvaultOrder } from '@/lib/pending-redvault-order';
-import { createStorefrontCustomerApiClient } from '@/lib/storefront-customer-api-client';
 import type { ShippingAddressInput } from '@/lib/validation';
 import {
   buildSavingsOrderFields,
@@ -10,13 +8,10 @@ import {
   getFullyPaidStoreCreditPaymentMethod,
 } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutStep } from '@/services/analytics';
-import {
-  pickChangedPriceById,
-  repriceCartItems,
-} from '@/services/cart-reprice';
 import { createOrder } from '@/services/orders';
 import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { useCartStore } from '@/stores/cart-store';
+import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
 import {
   buildCheckoutOrderRequest,
@@ -32,6 +27,8 @@ import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
 import { isBnplPayment } from './is-bnpl-payment';
+import { resolveCheckoutRedvaultFence } from './resolve-checkout-redvault-fence';
+import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
 import { runFinalizeCheckoutPayment } from './run-finalize-checkout-payment';
 import { submitRedvaultCheckout } from './submit-redvault-checkout';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
@@ -116,44 +113,15 @@ export function useCheckoutSubmit({
     // methods must resolve a persisted fence first: after an app kill the
     // in-memory review is gone while the order still fences inventory.
     if (selectedPayment !== 'uba_redvault') {
-      try {
-        const fenceClient = createStorefrontCustomerApiClient();
-        const fenced = await resolvePersistedRedvaultOrder({
-          validateOrder: (orderId) =>
-            fenceClient.fetchJson({
-              method: 'GET',
-              path: `/api/storefront/account/orders/${orderId}`,
-            }),
-        });
-        if (fenced.blocked) {
-          Alert.alert(
-            'Payment still processing',
-            'Your UBA payment is still being verified. Please wait for it to complete before paying another way.'
-          );
-          return;
-        }
-      } catch {
-        Alert.alert(
-          'Unable to verify pending payment',
-          'We could not check your pending UBA payment. Please try again.'
-        );
+      if (!(await resolveCheckoutRedvaultFence())) {
         return;
       }
     }
     isOrderInFlight.current = true;
     setIsProcessing(true);
     try {
-      if (itemsSnapshot.length > 0) {
-        const reprice = await repriceCartItems(itemsSnapshot, merchantId);
-        if (reprice.changes.length > 0) {
-          useCartStore.getState().repriceItems(pickChangedPriceById(reprice));
-          Alert.alert(
-            'Prices updated',
-            'Some prices changed since you added these items. Your cart has been updated to the latest prices — please review the new total and tap checkout again.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
+      if (await abortIfCartPricesStale(itemsSnapshot, merchantId)) {
+        return;
       }
       const snapshot = createCheckoutSnapshot(
         itemsSnapshot,
@@ -310,18 +278,11 @@ export function useCheckoutSubmit({
           selectedPayment === 'bank_transfer',
       });
     } catch (error) {
-      const cartStore = useCartStore.getState();
-      if (cartStore.items.length === 0) {
-        try {
-          await cartStore.restoreItems(
-            itemsSnapshot,
-            groupNegotiationSnapshot,
-            checkoutGenerationSnapshot
-          );
-        } catch (restoreError) {
-          void restoreError;
-        }
-      }
+      await restoreEmptiedCheckoutCart({
+        cartWideNegotiationActive: groupNegotiationSnapshot,
+        checkoutGeneration: checkoutGenerationSnapshot,
+        itemsSnapshot,
+      });
       handleCheckoutSubmitError(error, selectedPayment);
     } finally {
       setIsProcessing(false);

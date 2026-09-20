@@ -289,6 +289,12 @@ RESET ROLE;
 
 -- Re-apply the backfill migration itself (idempotent by construction) so this
 -- check exercises its exact statements rather than a copy.
+CREATE TEMPORARY TABLE backfill_updated_guard AS
+SELECT id, updated_at FROM public.orders
+WHERE id IN (
+  'b0000000-0000-0000-0000-000000000003',
+  'b0000000-0000-0000-0000-000000000004'
+);
 \ir ../20260912150000_backfill_manual_order_document_dates.sql
 
 DO $$
@@ -329,6 +335,17 @@ BEGIN
   IF v_issue <> '2026-06-11' OR v_tax <> '2026-06-11'
      OR v_issue_gen IS DISTINCT FROM false OR v_tax_gen IS DISTINCT FROM false THEN
     RAISE EXCEPTION 'migration replay clobbered explicit manual dates: % / %', v_issue, v_tax;
+  END IF;
+
+  -- 7. The backfill disables the updated_at trigger, so repaired rows keep
+  -- their original recency instead of looking modified at deploy time.
+  IF EXISTS (
+    SELECT 1
+    FROM public.orders AS o
+    JOIN backfill_updated_guard AS g ON g.id = o.id
+    WHERE o.updated_at IS DISTINCT FROM g.updated_at
+  ) THEN
+    RAISE EXCEPTION 'backfill bumped updated_at on historical rows';
   END IF;
 END;
 $$ LANGUAGE plpgsql;

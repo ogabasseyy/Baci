@@ -32,6 +32,9 @@ $$;
 -- legacy 'manual'/'staff_entry' markers; all other non-NULL dates keep NULL
 -- provenance and stay untouched. Each flag initializes only from NULL so
 -- re-applying this migration preserves explicit FALSE values (replay-safe).
+-- Preserve order recency while backfilling. This migration is
+-- transactional, so a failed UPDATE rolls back the temporary trigger state.
+ALTER TABLE public.orders DISABLE TRIGGER "update_orders_updated_at";
 UPDATE public.orders
 SET
   invoice_issue_date_generated = CASE
@@ -67,6 +70,7 @@ SET
   END
 WHERE transaction_date IS NOT NULL
   AND (invoice_issue_date_generated IS TRUE OR tax_point_date_generated IS TRUE);
+ALTER TABLE public.orders ENABLE TRIGGER "update_orders_updated_at";
 
 CREATE OR REPLACE FUNCTION public.mark_generated_manual_order_document_dates()
 RETURNS trigger

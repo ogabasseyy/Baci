@@ -426,10 +426,11 @@ describe('CartScreen price-change modal', () => {
     rerender(<CartScreen />);
     expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
 
-    // The price-change modal is the tree's only Modal wired with onDismiss.
-    const priceChangeModal = UNSAFE_getAllByType(Modal).find(
-      (modal) => typeof modal.props.onDismiss === 'function'
-    );
+    // CartScreen renders CartLoadedView (owning the negotiation modal) before
+    // the price-change modal, so the price modal is the last dismissable one.
+    const priceChangeModal = UNSAFE_getAllByType(Modal)
+      .filter((modal) => typeof modal.props.onDismiss === 'function')
+      .at(-1);
     act(() => {
       priceChangeModal?.props.onDismiss();
     });

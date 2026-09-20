@@ -5,6 +5,7 @@ import {
   clearRedvaultPurchaseTrackingContext,
   loadRedvaultPurchaseTrackingContext,
 } from '@/lib/claim-checkout-purchase-tracking';
+import { clearPersistedRedvaultOrder } from '@/lib/pending-redvault-order';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
 import { verifyRedvaultPayment } from '@/services/redvault';
 import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
@@ -163,6 +164,10 @@ export function createPaymentGatewayCompletionHandlers({
         // a tracking-context failure must never revert an already-verified
         // payment back to pending.
         try {
+          // The persisted fence must clear now: otherwise the next submit
+          // resolves this paid order, clears the new cart, and routes back
+          // here instead of placing the new purchase.
+          await clearPersistedRedvaultOrder();
           const trackingContext = await loadRedvaultPurchaseTrackingContext(
             orderId || ''
           );

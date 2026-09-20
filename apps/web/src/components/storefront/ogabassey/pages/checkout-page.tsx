@@ -2392,9 +2392,54 @@ export const CheckoutPage: React.FC = () => {
           trackingToken: stale.trackingToken,
         });
         if (staleCancel === 'live') {
-          raiseCheckoutError(
-            'Your previous UBA payment is still being processed. Please wait for it to complete before starting a new one.'
-          );
+          // The stored order already initialized (reload before following
+          // the redirect): reopen its persisted authorization URL instead
+          // of stranding the fenced order with no in-app path. The fence
+          // stays — it still references this live order.
+          setRedvaultStatus('pending');
+          let replayResult: Awaited<
+            ReturnType<typeof initializeRedvaultPayment>
+          >;
+          try {
+            replayResult = await initializeRedvaultPayment({
+              merchantId: merchant.id,
+              orderId: stale.orderId,
+              // REDVAULT rails are NGN-only (attempt CHECK + paystack
+              // gateway); the stamped order currency is authoritative
+              // server-side, so NGN is the only sendable value that can
+              // ever initialize here.
+              currency: 'NGN',
+              customerEmail,
+              customerName: `${firstName} ${lastName}`.trim(),
+              customerPhone,
+              billingAddress: buildCheckoutBillingAddress(
+                finalAddress,
+                finalCity,
+                finalState,
+                merchantCountry
+              ),
+            });
+          } catch {
+            setRedvaultStatus('error');
+            setIsProcessing(false);
+            isOrderInFlightRef.current = false;
+            raiseCheckoutError(
+              'We could not reopen your previous UBA payment. Please try again.'
+            );
+          }
+          if (replayResult.kind === 'pending_reconciliation') {
+            setIsProcessing(false);
+            isOrderInFlightRef.current = false;
+            return;
+          }
+          if (replayResult.kind === 'captured_held') {
+            setRedvaultStatus('held');
+            setIsProcessing(false);
+            isOrderInFlightRef.current = false;
+            return;
+          }
+          window.location.assign(replayResult.authorizationUrl);
+          return;
         }
         if (staleCancel === 'failed') {
           raiseCheckoutError(

@@ -56,6 +56,14 @@ jest.mock('@/services/tiktok-checkout-route-tracking', () => ({
     mockTrackCheckoutRoutePurchaseCompleted(...args),
 }));
 
+const mockClearPersistedRedvaultOrder =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
+
+jest.mock('@/lib/pending-redvault-order', () => ({
+  clearPersistedRedvaultOrder: (...args: unknown[]) =>
+    mockClearPersistedRedvaultOrder(...args),
+}));
+
 function createRefs(
   status: PaymentGatewayStatus = 'ready'
 ): PaymentGatewayRefs {
@@ -110,6 +118,7 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue(null);
     mockClaimCheckoutPurchaseTracking.mockResolvedValue(false);
     mockClearRedvaultPurchaseTrackingContext.mockResolvedValue(undefined);
+    mockClearPersistedRedvaultOrder.mockResolvedValue(undefined);
   });
 
   it('keeps a held REDVAULT payment pending without clearing the cart or routing to success', async () => {
@@ -134,6 +143,41 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     ).beginPaymentCompletion();
     expect(input.clearCart).toHaveBeenCalledTimes(1);
     expect(input.setPaymentStatus).toHaveBeenLastCalledWith('success');
+    expect(router.replace).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/order-success' })
+    );
+  });
+
+  it('clears the persisted REDVAULT fence after verified success', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue('success');
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+    expect(mockClearPersistedRedvaultOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the persisted REDVAULT fence while verification is pending', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue('pending');
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+    expect(mockClearPersistedRedvaultOrder).not.toHaveBeenCalled();
+  });
+
+  it('still completes REDVAULT success when fence cleanup rejects', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue('success');
+    mockClearPersistedRedvaultOrder.mockRejectedValue(
+      new Error('storage full')
+    );
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+    expect(input.clearCart).toHaveBeenCalledTimes(1);
+    expect(input.setPaymentStatus).toHaveBeenLastCalledWith('success');
+    expect(input.setErrorMessage).not.toHaveBeenCalled();
     expect(router.replace).toHaveBeenCalledWith(
       expect.objectContaining({ pathname: '/order-success' })
     );

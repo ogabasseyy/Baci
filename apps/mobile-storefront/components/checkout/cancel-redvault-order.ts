@@ -7,7 +7,6 @@ export type CancelRedvaultOrderResult =
   | 'live'
   | 'failed';
 
-const AUTH_REQUIRED_MESSAGE = 'Authentication required. Please sign in again.';
 const ORDER_NOT_FOUND_MESSAGE = 'Order not found';
 
 function isLiveCancelError(error: unknown): boolean {
@@ -19,10 +18,6 @@ function isLiveCancelError(error: unknown): boolean {
 
 function isNotFoundCancelError(error: unknown): boolean {
   return error instanceof Error && error.message === ORDER_NOT_FOUND_MESSAGE;
-}
-
-function isAuthRequiredCancelError(error: unknown): boolean {
-  return error instanceof Error && error.message === AUTH_REQUIRED_MESSAGE;
 }
 
 async function cancelViaAccountRoute({
@@ -50,8 +45,10 @@ async function cancelViaAccountRoute({
  * the guest RPC (`user_id IS NULL`) no longer matches. The account route is
  * retried before declaring the order gone — otherwise dismissal and resubmit
  * recovery would clear the fence while the order (and an indeterminate
- * provider attempt) stays live. `cancelled`/`gone` (either success value
- * means no live order remains) release the lane; `live` (409) means the
+ * provider attempt) stays live. Only an authenticated 404 proves absence;
+ * without a session the retry cannot run, so the result stays failed and
+ * the lane stays blocked. `cancelled`/`gone` (either success value means
+ * no live order remains) release the lane; `live` (409) means the
  * checkout is already initializing and must replay instead of duplicating.
  */
 export async function cancelRedvaultOrder({
@@ -82,16 +79,15 @@ export async function cancelRedvaultOrder({
     }
     // Guest route found nothing: the order may have been attached to the
     // shopper's account after signup. Retry authenticated before gone.
-    // No session means this shopper owns no attached order, so the guest
-    // 404 stands; any other account failure stays failed (never gone).
+    // Only an authenticated 404 proves absence: a missing session
+    // (sign-out preserves the fence) cannot rule out an attached live
+    // order, so it stays failed and keeps the lane blocked.
     try {
       await cancelViaAccountRoute({ orderId, reason });
       return 'cancelled';
     } catch (error) {
       if (isLiveCancelError(error)) return 'live';
-      if (isNotFoundCancelError(error) || isAuthRequiredCancelError(error)) {
-        return 'gone';
-      }
+      if (isNotFoundCancelError(error)) return 'gone';
       return 'failed';
     }
   }

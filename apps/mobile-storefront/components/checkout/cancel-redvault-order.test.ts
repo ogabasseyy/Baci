@@ -95,7 +95,7 @@ describe('cancelRedvaultOrder', () => {
     ).resolves.toBe('gone');
   });
 
-  it('reports gone on guest 404 when no session can own an attached order', async () => {
+  it('fails closed on guest 404 when the account retry has no session', async () => {
     mockFetchOnce(404, { error: 'Order not found' });
     mockCreateClient.mockReturnValue({
       fetchJson: jest.fn(async () => {
@@ -109,7 +109,7 @@ describe('cancelRedvaultOrder', () => {
         reason: 'r',
         trackingToken: 'track-rv',
       })
-    ).resolves.toBe('gone');
+    ).resolves.toBe('failed');
   });
 
   it('reports live when the account retry finds an initializing order', async () => {

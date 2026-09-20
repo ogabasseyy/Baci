@@ -30,17 +30,20 @@ $$;
 -- (the released app never sent document dates, so these are never human
 -- picks). Manual channels mirror the mobile-admin new-order CHANNELS plus the
 -- legacy 'manual'/'staff_entry' markers; all other non-NULL dates keep NULL
--- provenance and stay untouched.
+-- provenance and stay untouched. Each flag initializes only from NULL so
+-- re-applying this migration preserves explicit FALSE values (replay-safe).
 UPDATE public.orders
 SET
   invoice_issue_date_generated = CASE
     WHEN invoice_issue_date IS NULL THEN true
-    WHEN source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') THEN true
+    WHEN invoice_issue_date_generated IS NULL
+     AND source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') THEN true
     ELSE invoice_issue_date_generated
   END,
   tax_point_date_generated = CASE
     WHEN tax_point_date IS NULL THEN true
-    WHEN source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') THEN true
+    WHEN tax_point_date_generated IS NULL
+     AND source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') THEN true
     ELSE tax_point_date_generated
   END
 WHERE invoice_issue_date IS NULL OR tax_point_date IS NULL

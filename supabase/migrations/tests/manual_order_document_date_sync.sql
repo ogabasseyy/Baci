@@ -17,7 +17,8 @@ DECLARE
   v_run_id text := txid_current()::text;
   v_merchant_id uuid := gen_random_uuid();
   v_customer_id uuid := gen_random_uuid();
-  v_manual_order_id uuid := gen_random_uuid();
+  -- Fixed id so the post-replay block below can re-assert this row.
+  v_manual_order_id uuid := 'c0000000-0000-0000-0000-000000000001';
   v_legacy_order_id uuid := gen_random_uuid();
   v_item_id uuid := gen_random_uuid();
   v_legacy_item_id uuid := gen_random_uuid();
@@ -301,6 +302,19 @@ BEGIN
   IF v_issue <> '2026-03-04' OR v_tax <> '2026-03-04'
      OR v_issue_gen IS NOT NULL OR v_tax_gen IS NOT NULL THEN
     RAISE EXCEPTION 'backfill touched a non-manual historical row: % / %', v_issue, v_tax;
+  END IF;
+
+  -- 6. Re-applying the migration preserves the explicit physical fixture: a
+  -- Lagos recompute of its instant would yield Jun 10, so Jun 11 plus FALSE
+  -- flags proves the init left explicit provenance alone.
+  SELECT invoice_issue_date, tax_point_date,
+         invoice_issue_date_generated, tax_point_date_generated
+  INTO v_issue, v_tax, v_issue_gen, v_tax_gen
+  FROM public.orders
+  WHERE id = 'c0000000-0000-0000-0000-000000000001';
+  IF v_issue <> '2026-06-11' OR v_tax <> '2026-06-11'
+     OR v_issue_gen IS DISTINCT FROM false OR v_tax_gen IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'migration replay clobbered explicit manual dates: % / %', v_issue, v_tax;
   END IF;
 END;
 $$ LANGUAGE plpgsql;

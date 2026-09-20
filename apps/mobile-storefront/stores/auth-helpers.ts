@@ -3,8 +3,6 @@
  * main store file focused on state management and action definitions.
  */
 
-export { hydrateCustomer } from './auth-customer-hydration';
-
 /** Timeout (ms) for each Supabase query during initialization.
  *  Android on poor cellular can stall indefinitely without a client-side limit. */
 export const INIT_QUERY_TIMEOUT_MS = 10_000;

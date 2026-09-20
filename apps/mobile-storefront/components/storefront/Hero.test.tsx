@@ -1,56 +1,45 @@
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render } from '@testing-library/react-native';
 import { getTemplateConfig } from '@/lib/templates';
-import type { HeroSlide } from './Hero';
-import { Hero } from './Hero';
+import {
+  baseTemplate,
+  mockExpoImageModule,
+  mockImage,
+  mockThemeModule,
+  mockUseMobileAdsReadiness,
+  slide,
+} from './Hero-test-harness';
 
-const mockImage = jest.fn();
-
+jest.mock('@/hooks/use-mobile-ads-readiness', () => ({
+  useMobileAdsReadiness: mockUseMobileAdsReadiness,
+}));
+jest.mock('react-native-google-mobile-ads', () => ({
+  BannerAd: 'BannerAd',
+  BannerAdSize: {
+    LARGE_ANCHORED_ADAPTIVE_BANNER: 'large-anchored-adaptive-banner',
+  },
+}));
+jest.mock('@/services/analytics-core', () => ({
+  trackEvent: jest.fn(),
+}));
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   __esModule: true,
   default: () => ({ fontScale: 1, height: 800, scale: 2, width: 400 }),
 }));
-
-jest.mock('expo-image', () => {
-  const React = jest.requireActual<typeof import('react')>('react');
-  const { View } =
-    jest.requireActual<typeof import('react-native')>('react-native');
-
-  return {
-    Image: (props: Record<string, unknown>) => {
-      mockImage(props);
-      return React.createElement(View, { ...props, testID: 'hero-image' });
-    },
-  };
-});
-
+jest.mock('expo-image', () => mockExpoImageModule());
 jest.mock('expo-linear-gradient', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
   return { LinearGradient: View };
 });
-
 jest.mock('expo-router', () => ({
   router: { push: jest.fn() },
+  useIsFocused: () => true,
 }));
-
-jest.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    colors: {
-      background: '#ffffff',
-      border: '#dddddd',
-      card: '#ffffff',
-      muted: '#f2f2f2',
-      text: '#111111',
-      textSecondary: '#666666',
-    },
-    isDark: false,
-  }),
-}));
-
+jest.mock('@/hooks/useTheme', () => mockThemeModule());
 jest.mock('@/lib/config', () => ({
   CONFIG: { BUSINESS_TYPE: 'electronics', TEMPLATE_ID: 'test' },
 }));
-
 jest.mock('@/lib/templates', () => ({
   getTemplateConfig: jest.fn(),
 }));
@@ -59,23 +48,6 @@ const mockedGetTemplateConfig = getTemplateConfig as jest.MockedFunction<
   typeof getTemplateConfig
 >;
 
-const slide: HeroSlide = {
-  ctaLink: '/category/phones',
-  ctaText: 'Shop now',
-  image: 'https://cdn.ogabassey.com/core-assets/products/hero.avif',
-  subtitle: 'Available now',
-  title: 'Featured phones',
-};
-
-const baseTemplate = {
-  borderRadius: 'md' as const,
-  cardVariant: 'grid' as const,
-  categoryStyle: 'pill' as const,
-  features: {},
-  headerStyle: 'standard' as const,
-  spacing: 'compact' as const,
-};
-
 function renderHero(heroVariant: 'parallax' | 'carousel' | 'standard') {
   mockedGetTemplateConfig.mockReturnValue({
     ...baseTemplate,
@@ -83,6 +55,8 @@ function renderHero(heroVariant: 'parallax' | 'carousel' | 'standard') {
   });
   return render(<Hero slides={[slide]} />);
 }
+
+import { Hero } from './Hero';
 
 describe('Hero bounded image sources', () => {
   beforeEach(() => {

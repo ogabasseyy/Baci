@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { createQuizLobbyStyles } from './QuizLobby.styles';
 import { QuizLobbyEventCard } from './QuizLobbyEventCard';
-import type { QuizThemeColors } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 jest.mock('expo-image', () => {
   const React = jest.requireActual('react') as typeof import('react');

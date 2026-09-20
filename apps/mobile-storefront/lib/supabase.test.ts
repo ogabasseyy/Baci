@@ -233,7 +233,7 @@ describe('storefront supabase client config', () => {
       error: null,
     });
 
-    const { calculateCommerce } = await import('./supabase');
+    const { calculateCommerce } = await import('./commerce-brain');
 
     await expect(
       calculateCommerce('calculate_order', {
@@ -258,7 +258,7 @@ describe('storefront supabase client config', () => {
       )
     );
 
-    const { calculateCommerce } = await import('./supabase');
+    const { calculateCommerce } = await import('./commerce-brain');
 
     await expect(
       calculateCommerce('calculate_order', {

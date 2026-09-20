@@ -1,10 +1,14 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
+import { useEffect, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { CheckoutIdentityModal } from '@/components/checkout/checkout-identity';
 import { PatternedBackground } from '@/components/storefront/PatternedBackground';
 import type Colors from '@/constants/Colors';
 import { palette, SPACING } from '@/constants/Colors';
+import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import type { CartItem } from '@/stores/cart-store';
+import { useUIStore } from '@/stores/ui-store';
 import CartCheckoutFooter from './CartCheckoutFooter';
 import CartItemCard from './CartItemCard';
 import NegotiationWarningModal from './NegotiationWarningModal';
@@ -24,6 +28,7 @@ interface CartLoadedViewProps {
   hasNonNegotiableCartItem: boolean;
   insetsTop: number;
   isIdentityModalOpen: boolean;
+  isPriceChangeModalOpen: boolean;
   itemCount: number;
   items: CartItem[];
   onCloseIdentityModal: () => void;
@@ -68,6 +73,7 @@ export default function CartLoadedView({
   hasNonNegotiableCartItem,
   insetsTop,
   isIdentityModalOpen,
+  isPriceChangeModalOpen,
   itemCount,
   items,
   onCloseIdentityModal,
@@ -99,6 +105,43 @@ export default function CartLoadedView({
   const hasAcceptedNegotiation = items.some(
     (item) => item.negotiationStatus === 'accepted'
   );
+  // iOS keeps the native negotiation modal rendered through its fade
+  // dismissal, while the close handler clears the flag synchronously. Hold
+  // the ad gate until the modal reports dismissal.
+  const [negotiateDismissed, setNegotiateDismissed] = useState(true);
+  useEffect(() => {
+    if (showNegotiateWarning) setNegotiateDismissed(false);
+  }, [showNegotiateWarning]);
+  useEffect(() => {
+    if (showNegotiateWarning || negotiateDismissed) return undefined;
+    const fallback = setTimeout(
+      () => setNegotiateDismissed(true),
+      MODAL_DISMISS_FALLBACK_MS
+    );
+    return () => clearTimeout(fallback);
+  }, [showNegotiateWarning, negotiateDismissed]);
+  const isNegotiateWarningCovering =
+    showNegotiateWarning || !negotiateDismissed;
+  // The root-level negotiation modal outlives the warning that precedes
+  // it — and direct negotiation bypasses the warning entirely — so the
+  // slot must stay suppressed for the actual negotiation flow too. The
+  // modal reports no dismissal, so the fallback bound covers its fade.
+  const isNegotiationModalOpen = useUIStore(
+    (state) => state.isNegotiationModalOpen
+  );
+  const [negotiationDismissed, setNegotiationDismissed] = useState(true);
+  useEffect(() => {
+    if (isNegotiationModalOpen) setNegotiationDismissed(false);
+  }, [isNegotiationModalOpen]);
+  useEffect(() => {
+    if (isNegotiationModalOpen || negotiationDismissed) return undefined;
+    const fallback = setTimeout(
+      () => setNegotiationDismissed(true),
+      MODAL_DISMISS_FALLBACK_MS
+    );
+    return () => clearTimeout(fallback);
+  }, [isNegotiationModalOpen, negotiationDismissed]);
+  const isNegotiationCovering = isNegotiationModalOpen || !negotiationDismissed;
 
   return (
     <View style={styles.container}>
@@ -178,18 +221,31 @@ export default function CartLoadedView({
           />
         )}
         ListFooterComponent={
-          <View style={styles.secureBadgeInside}>
-            <Ionicons
-              name="shield-checkmark-outline"
-              size={14}
-              color={colors.textSecondary}
-            />
-            <Text
-              style={[styles.secureBadgeText, { color: colors.textSecondary }]}
-            >
-              Secure Checkout
-            </Text>
-          </View>
+          <>
+            {/* Any modal covers this screen; unmount the slot while one is
+                visible so no obscured delivery is requested. */}
+            {isIdentityModalOpen ||
+            isPriceChangeModalOpen ||
+            isNegotiateWarningCovering ||
+            isNegotiationCovering ? null : (
+              <AdSlot placement="CART_MPU" />
+            )}
+            <View style={styles.secureBadgeInside}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={14}
+                color={colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.secureBadgeText,
+                  { color: colors.textSecondary },
+                ]}
+              >
+                Secure Checkout
+              </Text>
+            </View>
+          </>
         }
       />
 
@@ -216,6 +272,7 @@ export default function CartLoadedView({
         pendingItem={pendingNegotiateItem}
         hasNonNegotiableCartItem={hasNonNegotiableCartItem}
         onClose={onCloseNegotiateWarning}
+        onDismissed={() => setNegotiateDismissed(true)}
         onNegotiateItem={onNegotiateItem}
         onBulkNegotiate={onBulkNegotiate}
         triggerHaptic={triggerHaptic}

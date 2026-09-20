@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import type { QuizThemeColors } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 export function createQuizRewardedBadgeOfferStyles(colors: QuizThemeColors) {
   return StyleSheet.create({
@@ -15,6 +15,11 @@ export function createQuizRewardedBadgeOfferStyles(colors: QuizThemeColors) {
       color: colors.textSecondary,
       fontSize: 13,
       lineHeight: 18,
+    },
+    error: {
+      color: colors.error,
+      fontSize: 13,
+      fontWeight: '700',
     },
     primaryButton: {
       alignItems: 'center',

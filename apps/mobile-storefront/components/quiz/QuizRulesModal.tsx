@@ -1,6 +1,15 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, Text, View } from 'react-native';
+import {
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { useTheme } from '@/hooks/useTheme';
 import { createQuizLobbyStyles } from './QuizLobby.styles';
 
@@ -8,6 +17,7 @@ interface QuizRulesModalProps {
   eventTitle: string;
   onClose: () => void;
   onConfirm: () => void;
+  onDismissed?: () => void;
   requiresAcceptance: boolean;
   timePerQuestionSeconds: number;
   visible: boolean;
@@ -17,12 +27,14 @@ export function QuizRulesModal({
   eventTitle,
   onClose,
   onConfirm,
+  onDismissed,
   requiresAcceptance,
   timePerQuestionSeconds,
   visible,
 }: QuizRulesModalProps) {
   const { colors } = useTheme();
   const styles = createQuizLobbyStyles(colors);
+  const insets = useSafeAreaInsets();
   const [accepted, setAccepted] = useState(false);
 
   useEffect(() => {
@@ -32,13 +44,32 @@ export function QuizRulesModal({
   return (
     <Modal
       animationType="slide"
+      onDismiss={onDismissed}
       onRequestClose={onClose}
       presentationStyle="overFullScreen"
       transparent
       visible={visible}
     >
       <View style={styles.modalBackdrop}>
-        <View accessibilityViewIsModal style={styles.rulesSheet}>
+        <View
+          testID="quiz-rules-modal-banner"
+          style={{
+            alignItems: 'center',
+            left: 0,
+            position: 'absolute',
+            right: 0,
+            // Below the status bar / display cutout: the overFullScreen
+            // modal draws under system chrome, so a fixed offset would hide
+            // the creative and its tap target on tall-inset devices.
+            top: insets.top + 16,
+          }}
+        >
+          <AdSlot placement="FOOTER_ANCHOR" />
+        </View>
+        <View
+          accessibilityViewIsModal
+          style={[styles.rulesSheet, { maxHeight: '75%' }]}
+        >
           <View style={styles.rulesHeader}>
             <View>
               <Text accessibilityRole="header" style={styles.rulesTitle}>
@@ -56,7 +87,10 @@ export function QuizRulesModal({
             </Pressable>
           </View>
 
-          <View style={styles.rulesList}>
+          <ScrollView
+            contentContainerStyle={styles.rulesList}
+            testID="quiz-rules-list"
+          >
             <Text style={styles.ruleText}>
               1. You have {timePerQuestionSeconds} seconds for each question.
             </Text>
@@ -80,7 +114,7 @@ export function QuizRulesModal({
               earliest valid submission. There is no random draw or random
               tie-breaker.
             </Text>
-          </View>
+          </ScrollView>
 
           {requiresAcceptance ? (
             <Pressable

@@ -47,8 +47,8 @@ describe('cancelRedvaultOrder', () => {
     expect(mockCreateClient).not.toHaveBeenCalled();
   });
 
-  it.each([200, 404])('treats HTTP %s as released', async (status) => {
-    mockFetchOnce(status, { success: true, cancelled: false });
+  it('treats HTTP 200 as released', async () => {
+    mockFetchOnce(200, { success: true, cancelled: false });
 
     await expect(
       cancelRedvaultOrder({
@@ -56,7 +56,98 @@ describe('cancelRedvaultOrder', () => {
         reason: 'r',
         trackingToken: 'track-rv',
       })
-    ).resolves.toBe(status === 200 ? 'cancelled' : 'gone');
+    ).resolves.toBe('cancelled');
+  });
+
+  it('retries the account route when the guest route 404s an attached order', async () => {
+    mockFetchOnce(404, { error: 'Order not found' });
+    const fetchJson = jest.fn(async () => ({ success: true, cancelled: true }));
+    mockCreateClient.mockReturnValue({ fetchJson });
+
+    await expect(
+      cancelRedvaultOrder({
+        orderId: 'order-rv',
+        reason: 'r',
+        trackingToken: 'track-rv',
+      })
+    ).resolves.toBe('cancelled');
+    expect(fetchJson).toHaveBeenCalledWith({
+      body: { reason: 'r' },
+      method: 'POST',
+      path: '/api/storefront/account/orders/order-rv/cancel',
+    });
+  });
+
+  it('reports gone only after the account retry also finds nothing', async () => {
+    mockFetchOnce(404, { error: 'Order not found' });
+    mockCreateClient.mockReturnValue({
+      fetchJson: jest.fn(async () => {
+        throw new Error('Order not found');
+      }),
+    });
+
+    await expect(
+      cancelRedvaultOrder({
+        orderId: 'order-rv',
+        reason: 'r',
+        trackingToken: 'track-rv',
+      })
+    ).resolves.toBe('gone');
+  });
+
+  it('reports gone on guest 404 when no session can own an attached order', async () => {
+    mockFetchOnce(404, { error: 'Order not found' });
+    mockCreateClient.mockReturnValue({
+      fetchJson: jest.fn(async () => {
+        throw new Error('Authentication required. Please sign in again.');
+      }),
+    });
+
+    await expect(
+      cancelRedvaultOrder({
+        orderId: 'order-rv',
+        reason: 'r',
+        trackingToken: 'track-rv',
+      })
+    ).resolves.toBe('gone');
+  });
+
+  it('reports live when the account retry finds an initializing order', async () => {
+    mockFetchOnce(404, { error: 'Order not found' });
+    const live = new Error('This order can no longer be cancelled') as Error & {
+      code?: string;
+    };
+    live.code = 'order_not_cancellable';
+    mockCreateClient.mockReturnValue({
+      fetchJson: jest.fn(async () => {
+        throw live;
+      }),
+    });
+
+    await expect(
+      cancelRedvaultOrder({
+        orderId: 'order-rv',
+        reason: 'r',
+        trackingToken: 'track-rv',
+      })
+    ).resolves.toBe('live');
+  });
+
+  it('reports failure when the account retry errors', async () => {
+    mockFetchOnce(404, { error: 'Order not found' });
+    mockCreateClient.mockReturnValue({
+      fetchJson: jest.fn(async () => {
+        throw new Error('network down');
+      }),
+    });
+
+    await expect(
+      cancelRedvaultOrder({
+        orderId: 'order-rv',
+        reason: 'r',
+        trackingToken: 'track-rv',
+      })
+    ).resolves.toBe('failed');
   });
 
   it('reports a live checkout on 409', async () => {
@@ -97,6 +188,18 @@ describe('cancelRedvaultOrder', () => {
       method: 'POST',
       path: '/api/storefront/account/orders/order-rv/cancel',
     });
+  });
+
+  it('releases the lane when the legacy account route finds nothing', async () => {
+    mockCreateClient.mockReturnValue({
+      fetchJson: jest.fn(async () => {
+        throw new Error('Order not found');
+      }),
+    });
+
+    await expect(
+      cancelRedvaultOrder({ orderId: 'order-rv', reason: 'r' })
+    ).resolves.toBe('gone');
   });
 
   it('maps the legacy non-cancellable code to live', async () => {

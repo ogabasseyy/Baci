@@ -25,8 +25,16 @@ describe('pending-checkout-order', () => {
       checkoutFingerprint: 'fingerprint', paymentMethod, shippingProvider: null, fetchImpl,
     });
     if (paymentMethod === 'uba_redvault') {
-      expect(result).toEqual({ reusableOrder: null, clearStoredOrder: true });
-      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        reusableOrder: null,
+        clearStoredOrder: false,
+        redvaultPendingOrder: {
+          orderId: 'redvault-order',
+          orderNumber: undefined,
+          trackingToken: 'track-redvault',
+        },
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
     } else {
       expect(result).toEqual({
         reusableOrder: null,

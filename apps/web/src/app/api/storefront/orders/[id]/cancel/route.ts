@@ -1,10 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
-import { sendOrderCancellationEmail } from '@/lib/order-cancellation-email';
 import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { createAnonClient } from '@/lib/supabase/anon';
-import { createServiceClient } from '@/lib/supabase/service';
 import { storefrontOrderCancellationSchema } from '@/schemas/storefront-order-cancellation';
 
 const orderIdSchema = z.uuid();
@@ -30,8 +28,14 @@ const guestCancelSchema = storefrontOrderCancellationSchema.extend({
  * cross-site attacker cannot mint the unguessable tracking token the body
  * must carry. Abuse is mitigated by IP rate limiting, Zod shape validation,
  * and the token-gated SECURITY DEFINER RPC (guest-owned rows only), which
- * performs the state transition + restock + instrument voiding atomically;
- * the email is best-effort.
+ * performs the state transition + restock + instrument voiding atomically.
+ *
+ * No notification email is sent here: the tracking-token RPC authorizes the
+ * transition, not a general backend client, so this endpoint deliberately
+ * constructs no service-role client and reaches no mail authority. Callers
+ * confirm the cancellation in-app from the response. If guest cancellation
+ * mail is ever required, enqueue it from inside the constrained RPC (or a
+ * dedicated outbox), not from this request graph.
  */
 export async function POST(
   request: NextRequest,
@@ -111,26 +115,6 @@ export async function POST(
   }
 
   const didCancel = data === true;
-
-  // Best-effort cancellation email. The order is already cancelled, so an
-  // email failure must NOT fail the request. Served through a service-role
-  // client because the anon caller cannot read the order for addressing.
-  if (didCancel) {
-    const emailResult = await sendOrderCancellationEmail({
-      supabase: createServiceClient(),
-      orderId: id,
-      cancelledBy: 'customer',
-      reason: parsed.data.reason,
-      refundAmount: 0,
-    });
-    if (!emailResult.success) {
-      logger.error({
-        message: 'Order cancelled but cancellation email failed',
-        orderId: id,
-        error: emailResult.error,
-      });
-    }
-  }
 
   return NextResponse.json({ success: true, cancelled: didCancel });
 }

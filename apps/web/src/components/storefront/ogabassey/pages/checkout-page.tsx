@@ -253,9 +253,13 @@ type CancelStaleCheckoutOrderResult =
  * order abandoned for REDVAULT, or a prepared REDVAULT order whose checkout
  * inputs changed. Authenticated shoppers use the account route; guests use
  * the tracking-token route (a guest without a token cannot prove ownership).
- * `cancelled`/`gone` (200/404 — either cancel response value means no live
- * order remains) release the lane; `live` (409) means the previous checkout
- * is already initializing and must replay instead of duplicating.
+ * An authenticated 404 falls back to the token route when a token is
+ * available: the stored order may predate the session (guest-owned), and
+ * declaring it gone would open a second order while it still holds
+ * inventory. `cancelled`/`gone` (200/404 — either cancel response value
+ * means no live order remains) release the lane; `live` (409) means the
+ * previous checkout is already initializing and must replay instead of
+ * duplicating.
  */
 async function cancelStaleCheckoutOrder({
   isAuthenticated,
@@ -278,9 +282,11 @@ async function cancelStaleCheckoutOrder({
         }
       );
       if (response.ok) return 'cancelled';
-      if (response.status === 404) return 'gone';
       if (response.status === 409) return 'live';
-      return 'failed';
+      if (response.status !== 404) return 'failed';
+      if (!trackingToken) return 'gone';
+      // Account route found nothing but a token is available: retry as a
+      // pre-session guest order before declaring the fence clear.
     }
     if (!trackingToken) return 'failed';
     const response = await fetch(`/api/storefront/orders/${orderId}/cancel`, {
@@ -2366,6 +2372,33 @@ export const CheckoutPage: React.FC = () => {
         if (ordinaryCancel === 'failed') {
           raiseCheckoutError(
             'We could not release your previous order. Please try again.'
+          );
+        }
+        clearPendingCheckoutOrder();
+      }
+
+      // Same-lane REDVAULT retry (reload or return from Paystack) with a
+      // still-pending stored order: the new fingerprint takes a new
+      // idempotency identity, so cancel the old order before submitting or
+      // the lane opens a second inventory-reserving order while the old
+      // hosted URL may still capture. An initializing order reports live
+      // and blocks instead of duplicating.
+      if (reusablePendingOrder.redvaultPendingOrder) {
+        const stale = reusablePendingOrder.redvaultPendingOrder;
+        const staleCancel = await cancelStaleCheckoutOrder({
+          isAuthenticated: !!user,
+          orderId: stale.orderId,
+          reason: 'Shopper restarted UBA payment',
+          trackingToken: stale.trackingToken,
+        });
+        if (staleCancel === 'live') {
+          raiseCheckoutError(
+            'Your previous UBA payment is still being processed. Please wait for it to complete before starting a new one.'
+          );
+        }
+        if (staleCancel === 'failed') {
+          raiseCheckoutError(
+            'We could not release your previous UBA payment. Please try again.'
           );
         }
         clearPendingCheckoutOrder();

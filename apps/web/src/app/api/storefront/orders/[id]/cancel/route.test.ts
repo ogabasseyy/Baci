@@ -2,10 +2,8 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockCheckRateLimit = vi.fn();
-const mockSendOrderCancellationEmail = vi.fn();
 const mockRpc = vi.fn();
 const mockCreateAnonClient = vi.fn();
-const mockCreateServiceClient = vi.fn();
 
 vi.mock('@/lib/rate-limit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
@@ -24,17 +22,8 @@ vi.mock('@/lib/rate-limit', () => ({
     }),
 }));
 
-vi.mock('@/lib/order-cancellation-email', () => ({
-  sendOrderCancellationEmail: (...args: unknown[]) =>
-    mockSendOrderCancellationEmail(...args),
-}));
-
 vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: (...args: unknown[]) => mockCreateAnonClient(...args),
-}));
-
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: (...args: unknown[]) => mockCreateServiceClient(...args),
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -68,8 +57,6 @@ beforeEach(() => {
     resetTime: Date.now() + 60_000,
   });
   mockCreateAnonClient.mockReturnValue({ rpc: mockRpc });
-  mockCreateServiceClient.mockReturnValue({ rpc: vi.fn() });
-  mockSendOrderCancellationEmail.mockResolvedValue({ success: true });
 });
 
 describe('POST /api/storefront/orders/[id]/cancel', () => {
@@ -107,7 +94,7 @@ describe('POST /api/storefront/orders/[id]/cancel', () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it('cancels through the token-gated RPC and emails best-effort', async () => {
+  it('cancels through the token-gated RPC with no privileged client', async () => {
     mockRpc.mockResolvedValue({ data: true, error: null });
 
     const res = await POST(
@@ -122,12 +109,12 @@ describe('POST /api/storefront/orders/[id]/cancel', () => {
       p_tracking_token: TRACKING_TOKEN,
       p_reason: 'changed lanes',
     });
-    expect(mockSendOrderCancellationEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ orderId: ORDER_ID, cancelledBy: 'customer' })
-    );
+    // No service-role client is constructed: the anon RPC is the only
+    // backend call, so no notification side effects can ride this graph.
+    expect(mockCreateAnonClient).toHaveBeenCalledTimes(1);
   });
 
-  it('reports an idempotent no-op without emailing', async () => {
+  it('reports an idempotent no-op', async () => {
     mockRpc.mockResolvedValue({ data: false, error: null });
 
     const res = await POST(makeRequest({ tracking_token: TRACKING_TOKEN }), {
@@ -136,7 +123,6 @@ describe('POST /api/storefront/orders/[id]/cancel', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ success: true, cancelled: false });
-    expect(mockSendOrderCancellationEmail).not.toHaveBeenCalled();
   });
 
   it('returns 404 when the token does not match', async () => {

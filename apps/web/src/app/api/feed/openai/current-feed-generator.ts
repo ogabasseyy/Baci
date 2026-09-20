@@ -24,7 +24,11 @@ function getOpenAIFeedImageUrls(
   product: Product,
   imageManifest: ImageManifestMap
 ): string[] {
-  const manifestEntries = imageManifest[product.id] || [];
+  // Product rows use product-level imagery only: variant-scoped rows
+  // belong to another SKU and must not leak into the parent row.
+  const manifestEntries = (imageManifest[product.id] || []).filter(
+    (entry) => !entry.variant_id
+  );
   const offerClaimedImageUrls = collectOfferClaimedImageUrls(product.offers);
   const manifestPrimaryImage = resolveGmcPrimaryImage(
     manifestEntries,

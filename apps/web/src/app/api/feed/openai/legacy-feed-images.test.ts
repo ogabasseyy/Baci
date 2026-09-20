@@ -227,4 +227,33 @@ describe('resolveLegacyFeedImages', () => {
       additional_image_links: [],
     });
   });
+
+  it('restricts product rows to product-level entries', () => {
+    expect(
+      resolveLegacyFeedImages(
+        product(),
+        undefined,
+        manifest([
+          {
+            variant_id: 'variant-1',
+            verified_url: 'https://cdn.example.com/variant-1.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 0,
+          },
+          {
+            verified_url: 'https://cdn.example.com/product-1.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: false,
+            position: 1,
+          },
+        ])
+      )
+    ).toEqual({
+      image_link: 'https://cdn.example.com/product-1.jpg',
+      additional_image_links: [],
+    });
+  });
 });

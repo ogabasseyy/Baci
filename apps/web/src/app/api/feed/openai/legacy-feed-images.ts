@@ -16,7 +16,7 @@ function getManifestEntriesForProductVariant(
 ) {
   const manifestEntries = imageManifest[product.id] || [];
   if (!variant) {
-    return manifestEntries;
+    return manifestEntries.filter((entry) => !entry.variant_id);
   }
 
   const variantEntries = manifestEntries.filter(

@@ -202,4 +202,36 @@ describe('generateCurrentOpenAIProductFeed', () => {
       currency: 'GHS',
     });
   });
+
+  it('restricts product media to product-level entries', () => {
+    const [line] = generateCurrentOpenAIProductFeed(
+      [product()],
+      merchant,
+      'https://ogabassey.com',
+      {
+        'product-1': [
+          {
+            variant_id: 'variant-1',
+            verified_url: 'https://cdn.example.com/variant-1.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 0,
+          },
+          {
+            verified_url: 'https://cdn.example.com/product-1.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: false,
+            position: 1,
+          },
+        ],
+      }
+    );
+    const parsed = parseLine(line);
+
+    expect(parsed.media).toEqual([
+      { type: 'image', url: 'https://cdn.example.com/product-1.jpg' },
+    ]);
+  });
 });

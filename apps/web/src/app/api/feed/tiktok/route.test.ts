@@ -138,18 +138,26 @@ describe('GET /api/feed/tiktok', () => {
       imageManifest: {
         'product-1': [
           {
-            verified_url: 'https://cdn.example.com/redmi-a7-front.jpg',
+            variant_id: 'variant-1',
+            verified_url: 'https://cdn.example.com/redmi-a7-variant.jpg',
             verified_format: 'jpeg',
             status: 'verified',
             is_primary: true,
             position: 0,
           },
           {
-            verified_url: 'https://cdn.example.com/redmi-a7-side.jpg',
+            verified_url: 'https://cdn.example.com/redmi-a7-front.jpg',
             verified_format: 'jpeg',
             status: 'verified',
             is_primary: false,
             position: 1,
+          },
+          {
+            verified_url: 'https://cdn.example.com/redmi-a7-side.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: false,
+            position: 2,
           },
         ],
       },
@@ -165,6 +173,7 @@ describe('GET /api/feed/tiktok', () => {
       '<image_link>https://cdn.example.com/redmi-a7-front.jpg</image_link>'
     );
     expect(text).not.toContain('redmi-a7-side.jpg');
+    expect(text).not.toContain('redmi-a7-variant.jpg');
   });
 
   it('ignores image claims from non-emittable offers', async () => {

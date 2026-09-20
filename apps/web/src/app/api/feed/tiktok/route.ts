@@ -57,7 +57,9 @@ function resolveTikTokImages(
   manifestEntries: ImageManifestMap[string] | undefined,
   excludeUrls: ReadonlySet<string> = new Set()
 ): ResolvedTikTokImages | null {
-  const entries = manifestEntries || [];
+  // Base rows use product-level imagery only: variant-scoped rows belong
+  // to another SKU and must not leak into the parent product row.
+  const entries = (manifestEntries || []).filter((entry) => !entry.variant_id);
   const primaryImageUrl = resolveGmcPrimaryImage(entries, excludeUrls);
   if (!primaryImageUrl) {
     return null;

@@ -94,6 +94,51 @@ describe('buildSettlementExecutor', () => {
     });
   });
 
+  it('routes REDVAULT split sales through the wallet-free direct settlement RPC', async () => {
+    const { rpc, supabase } = createSupabase();
+    const result = await buildSettlementExecutor({
+      allocatedGatewayFeeNgn: 250,
+      externalGatewayReference: 'PSK_REF_RV',
+      orderPaymentMethod: 'uba_redvault',
+      settlementGateway: 'paystack',
+      supabase,
+      transaction: { ...transaction, platform_fee: 99.5 },
+    })(stepContext);
+
+    expect(result).toEqual({
+      gateway_fee: 250,
+      gross_amount: 20_000,
+      platform_fee: 99.5,
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      'record_uba_redvault_direct_settlement',
+      expect.objectContaining({
+        p_gateway: 'paystack',
+        p_gateway_reference: 'PSK_REF_RV',
+        p_gross_amount: 20_000,
+        p_source_id: 'order-1',
+        p_source_type: 'order',
+      })
+    );
+  });
+
+  it('keeps the standard settlement RPC for non-REDVAULT methods', async () => {
+    const { rpc, supabase } = createSupabase();
+    await buildSettlementExecutor({
+      allocatedGatewayFeeNgn: 250,
+      externalGatewayReference: 'PSK_REF_CARD',
+      orderPaymentMethod: 'card',
+      settlementGateway: 'paystack',
+      supabase,
+      transaction: { ...transaction, platform_fee: 99.5 },
+    })(stepContext);
+
+    expect(rpc).toHaveBeenCalledWith(
+      'record_merchant_settlement',
+      expect.objectContaining({ p_gateway_reference: 'PSK_REF_CARD' })
+    );
+  });
+
   it('allows replay to be delegated to the idempotent settlement RPC', async () => {
     const { rpc, supabase } = createSupabase();
     const executor = buildSettlementExecutor({

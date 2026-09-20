@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import type { CheckoutStep } from '@/components/checkout/CheckoutStepper';
+import { clearPersistedRedvaultOrder } from '@/lib/pending-redvault-order';
 import { createStorefrontCustomerApiClient } from '@/lib/storefront-customer-api-client';
 import type { RedvaultReviewInput } from './redvault/RedvaultOrderReview';
 
@@ -26,6 +27,9 @@ export function useRedvaultReview({
           method: 'POST',
           path: `/api/storefront/account/orders/${redvaultReview.orderResponse.order.id}/cancel`,
         });
+        // The server released the fence: the persisted record must go too,
+        // or the next submit would re-validate a dead order.
+        await clearPersistedRedvaultOrder();
       } catch {
         Alert.alert(
           'Order still open',

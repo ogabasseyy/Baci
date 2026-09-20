@@ -41,6 +41,7 @@ const settlementArgsSchema = z.object({
     order_id: z.string().trim().min(1),
     platform_fee: moneyInputSchema.nullish(),
   }),
+  orderPaymentMethod: z.string().trim().nullish().optional(),
   orderShippingProvider: z.string().trim().nullish().optional(),
   orderShippingFundingSource: z
     .enum(['customer_checkout', 'merchant_wallet'])
@@ -72,6 +73,7 @@ export function buildSettlementExecutor(args: {
   settlementGateway: 'juicyway' | 'korapay' | 'paystack';
   supabase: ServiceRoleClient;
   transaction: PaidOrderSideEffectTransaction;
+  orderPaymentMethod?: string | null;
   orderShippingProvider?: string | null;
   orderShippingFundingSource?: 'customer_checkout' | 'merchant_wallet' | null;
   orderShippingRetainedAmount?: number | string | null;
@@ -192,9 +194,17 @@ export function buildSettlementExecutor(args: {
         : {}),
     };
 
+    // REDVAULT split sales pay the merchant share straight to the Paystack
+    // subaccount, so the standard RPC would double-pay by additionally
+    // crediting the Baci wallet. The direct variant records the same
+    // informational row with no wallet movement.
+    const isRedvaultDirectSettlement =
+      validatedArgs.orderPaymentMethod?.trim().toLowerCase() === 'uba_redvault';
     const settlementRpc = useGiglSettlementRpc
       ? 'record_merchant_settlement_gigl_v1'
-      : 'record_merchant_settlement';
+      : isRedvaultDirectSettlement
+        ? 'record_uba_redvault_direct_settlement'
+        : 'record_merchant_settlement';
     const { error } = await validatedArgs.supabase.rpc(settlementRpc, {
       p_description: `Order payment via ${validatedArgs.settlementGateway}`,
       p_gateway: validatedArgs.settlementGateway,

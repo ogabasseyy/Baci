@@ -1,4 +1,5 @@
 import { saveRedvaultPurchaseTrackingContext } from '@/lib/claim-checkout-purchase-tracking';
+import { persistPendingRedvaultOrder } from '@/lib/pending-redvault-order';
 import type { createOrder } from '@/services/orders';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 
@@ -9,6 +10,7 @@ type TrackingContext = Parameters<
 >[1];
 
 type SubmitRedvaultCheckoutInput = Readonly<{
+  checkoutGeneration: string;
   customerEmail: string;
   customerName: string;
   customerPhone: string;
@@ -20,6 +22,7 @@ type SubmitRedvaultCheckoutInput = Readonly<{
 }>;
 
 export async function submitRedvaultCheckout({
+  checkoutGeneration,
   customerEmail,
   customerName,
   customerPhone,
@@ -30,6 +33,14 @@ export async function submitRedvaultCheckout({
   trackingContext,
 }: SubmitRedvaultCheckoutInput) {
   await saveTracking(orderResponse.order.id, trackingContext);
+  // Durable fence: the in-memory review is lost on app kill, but the
+  // persisted record lets the next submit resolve this order before a
+  // different payment identity opens a second one.
+  await persistPendingRedvaultOrder({
+    orderId: orderResponse.order.id,
+    checkoutGeneration,
+    createdAt: new Date().toISOString(),
+  });
   onRedvaultOrder?.({
     orderResponse,
     customerEmail,

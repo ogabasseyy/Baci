@@ -38,6 +38,7 @@ export type RichPaidOrder = {
   merchant_id: string;
   order_items?: RichOrderItem[] | null;
   order_number?: string | null;
+  payment_method?: string | null;
   payment_status: PaymentStatus;
   shipping_address?: {
     address?: string | null;

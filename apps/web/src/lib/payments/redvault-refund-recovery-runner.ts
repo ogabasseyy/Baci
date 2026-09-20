@@ -9,6 +9,8 @@ import {
 import type { RedvaultRefundStore } from './redvault-refund-store';
 
 export const REDVAULT_TEST_REFUND_APPLY_GUARD = 'apply-redvault-test-refunds';
+export const REDVAULT_PRODUCTION_REFUND_APPLY_GUARD =
+  'apply-redvault-production-refunds';
 
 type RedvaultRefundRecoveryLogger = {
   error: (entry: Record<string, string>) => void;
@@ -131,7 +133,16 @@ export async function runRedvaultRefundRecovery({
     return { reconciliation: 'invalid_mode', submission: 'invalid_mode' };
   }
 
-  if (applyGuard !== REDVAULT_TEST_REFUND_APPLY_GUARD) {
+  // Each environment has its own explicit guard string so a test harness
+  // can never drive the live provider by accident, and production callers
+  // must opt in deliberately. Unknown environments are refused outright.
+  const expectedGuard =
+    providerEnvironment === 'production'
+      ? REDVAULT_PRODUCTION_REFUND_APPLY_GUARD
+      : providerEnvironment === 'test'
+        ? REDVAULT_TEST_REFUND_APPLY_GUARD
+        : null;
+  if (expectedGuard === null || applyGuard !== expectedGuard) {
     logger.error({
       event: 'redvault_refund_recovery',
       operation: 'apply',
@@ -140,18 +151,6 @@ export async function runRedvaultRefundRecovery({
     return {
       reconciliation: 'apply_guard_required',
       submission: 'apply_guard_required',
-    };
-  }
-
-  if (providerEnvironment !== 'test') {
-    logger.error({
-      event: 'redvault_refund_recovery',
-      operation: 'apply',
-      outcome: 'test_provider_required',
-    });
-    return {
-      reconciliation: 'test_provider_required',
-      submission: 'test_provider_required',
     };
   }
 

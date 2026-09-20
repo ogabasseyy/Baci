@@ -123,6 +123,21 @@ jest.mock('./checkout-submit-validation', () => ({
   ) => mockValidateCheckoutSubmission(input),
 }));
 
+const mockResolvePersistedRedvaultOrder = jest.fn(
+  async (_input: unknown): Promise<{ blocked: boolean; orderId?: string }> => ({
+    blocked: false,
+  })
+);
+
+jest.mock('@/lib/pending-redvault-order', () => ({
+  resolvePersistedRedvaultOrder: (input: unknown) =>
+    mockResolvePersistedRedvaultOrder(input),
+}));
+
+jest.mock('@/lib/storefront-customer-api-client', () => ({
+  createStorefrontCustomerApiClient: () => ({ fetchJson: jest.fn() }),
+}));
+
 const mockedUseCartStore = (
   jest.requireMock('@/stores/cart-store') as {
     useCartStore: jest.Mock & {
@@ -250,6 +265,48 @@ describe('useCheckoutSubmit', () => {
     );
     expect(mockCreateOrder).not.toHaveBeenCalled();
     expect(params.isOrderInFlight.current).toBe(false);
+  });
+
+  it('blocks a non-REDVAULT submit while a persisted REDVAULT fence is unresolved', async () => {
+    mockResolvePersistedRedvaultOrder.mockResolvedValueOnce({
+      blocked: true,
+      orderId: 'order-rv',
+    });
+    const params = createParams({ selectedPayment: 'paystack' });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockResolvePersistedRedvaultOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ checkoutGeneration: 'gen-1' })
+    );
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Payment still processing',
+      expect.stringMatching(/still being verified/i)
+    );
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+    expect(params.isOrderInFlight.current).toBe(false);
+  });
+
+  it('skips the fence check for REDVAULT submits (idempotent replay)', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    const params = createParams({
+      onRedvaultOrder: jest.fn(),
+      selectedPayment: 'uba_redvault',
+    });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockResolvePersistedRedvaultOrder).not.toHaveBeenCalled();
+    expect(mockCreateOrder).toHaveBeenCalled();
   });
 
   afterEach(() => {

@@ -1,6 +1,8 @@
 import { Alert } from 'react-native';
 import { useMerchant } from '@/hooks/use-merchant';
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import { resolvePersistedRedvaultOrder } from '@/lib/pending-redvault-order';
+import { createStorefrontCustomerApiClient } from '@/lib/storefront-customer-api-client';
 import type { ShippingAddressInput } from '@/lib/validation';
 import {
   buildSavingsOrderFields,
@@ -110,6 +112,35 @@ export function useCheckoutSubmit({
       );
       return;
     }
+    // REDVAULT submits replay the same suffixed identity, so only other
+    // methods must resolve a persisted fence first: after an app kill the
+    // in-memory review is gone while the order still fences inventory.
+    if (selectedPayment !== 'uba_redvault') {
+      try {
+        const fenceClient = createStorefrontCustomerApiClient();
+        const fenced = await resolvePersistedRedvaultOrder({
+          checkoutGeneration: checkoutGenerationSnapshot,
+          validateOrder: (orderId) =>
+            fenceClient.fetchJson({
+              method: 'GET',
+              path: `/api/storefront/account/orders/${orderId}`,
+            }),
+        });
+        if (fenced.blocked) {
+          Alert.alert(
+            'Payment still processing',
+            'Your UBA payment is still being verified. Please wait for it to complete before paying another way.'
+          );
+          return;
+        }
+      } catch {
+        Alert.alert(
+          'Unable to verify pending payment',
+          'We could not check your pending UBA payment. Please try again.'
+        );
+        return;
+      }
+    }
     isOrderInFlight.current = true;
     setIsProcessing(true);
     try {
@@ -203,6 +234,7 @@ export function useCheckoutSubmit({
         order.order_number || order.id.slice(0, 8).toUpperCase();
       if (selectedPayment === 'uba_redvault') {
         await submitRedvaultCheckout({
+          checkoutGeneration: checkoutGenerationSnapshot,
           customerEmail,
           customerName,
           customerPhone,

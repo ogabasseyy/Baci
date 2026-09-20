@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  REDVAULT_PRODUCTION_REFUND_APPLY_GUARD,
   REDVAULT_TEST_REFUND_APPLY_GUARD,
   runRedvaultRefundRecovery,
 } from './redvault-refund-recovery-runner';
@@ -132,7 +133,7 @@ describe('REDVAULT refund recovery runner', () => {
     });
   });
 
-  it('rejects a production provider declaration before any mutation', async () => {
+  it('rejects a production run carrying the test guard before any mutation', async () => {
     const audit = logger();
 
     await expect(
@@ -145,13 +146,33 @@ describe('REDVAULT refund recovery runner', () => {
         store,
       })
     ).resolves.toEqual({
-      reconciliation: 'test_provider_required',
-      submission: 'test_provider_required',
+      reconciliation: 'apply_guard_required',
+      submission: 'apply_guard_required',
     });
 
     expect(provider.submit).not.toHaveBeenCalled();
     expect(provider.lookup).not.toHaveBeenCalled();
     expect(store.claimNext).not.toHaveBeenCalled();
+  });
+
+  it('runs submission and reconciliation with the production guard', async () => {
+    const audit = logger();
+    store.claimNext.mockResolvedValueOnce(null);
+    store.claimNextReconciliation.mockResolvedValueOnce(null);
+
+    await expect(
+      runRedvaultRefundRecovery({
+        applyGuard: REDVAULT_PRODUCTION_REFUND_APPLY_GUARD,
+        logger: audit,
+        mode: 'apply',
+        provider,
+        providerEnvironment: 'production',
+        store,
+      })
+    ).resolves.toEqual({ reconciliation: 'idle', submission: 'idle' });
+
+    expect(store.claimNext).toHaveBeenCalledOnce();
+    expect(store.claimNextReconciliation).toHaveBeenCalledOnce();
   });
 
   it('passes the fenced reconciliation claim token to the durable store', async () => {

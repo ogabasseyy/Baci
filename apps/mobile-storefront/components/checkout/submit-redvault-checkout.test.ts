@@ -1,6 +1,17 @@
+import { persistPendingRedvaultOrder } from '@/lib/pending-redvault-order';
 import { submitRedvaultCheckout } from './submit-redvault-checkout';
 
+jest.mock('@/lib/pending-redvault-order', () => ({
+  persistPendingRedvaultOrder: jest.fn(),
+}));
+
+const mockPersist = persistPendingRedvaultOrder as jest.Mock;
+
 describe('submitRedvaultCheckout', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('persists tracking before opening the review callback', async () => {
     const onRedvaultOrder = jest.fn();
     const onInitializationSuccess = jest.fn();
@@ -9,6 +20,7 @@ describe('submitRedvaultCheckout', () => {
     const trackingContext = { total: 1000 } as never;
 
     await submitRedvaultCheckout({
+      checkoutGeneration: 'gen-1',
       customerEmail: 'customer@example.com',
       customerName: 'Customer Name',
       customerPhone: '08000000000',
@@ -20,6 +32,12 @@ describe('submitRedvaultCheckout', () => {
     });
 
     expect(mockSaveTracking).toHaveBeenCalledWith('order-1', trackingContext);
+    expect(mockPersist).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-1',
+        checkoutGeneration: 'gen-1',
+      })
+    );
     expect(onRedvaultOrder).toHaveBeenCalledWith({
       orderResponse,
       customerEmail: 'customer@example.com',

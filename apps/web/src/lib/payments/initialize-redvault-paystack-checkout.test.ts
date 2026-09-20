@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   createAttemptClient: vi.fn(),
   initializeCheckout: vi.fn(),
   initializeTransaction: vi.fn(),
+  verifyTransaction: vi.fn(),
 }));
 
 vi.mock('./redvault-payment-attempt-client', () => ({
@@ -14,6 +15,7 @@ vi.mock('./redvault-payment-initialize', () => ({
 }));
 vi.mock('../paystack', () => ({
   initializeTransaction: mocks.initializeTransaction,
+  verifyTransaction: mocks.verifyTransaction,
 }));
 
 import { initializeRedvaultPaystackCheckout } from './initialize-redvault-paystack-checkout';
@@ -52,6 +54,7 @@ describe('initializeRedvaultPaystackCheckout', () => {
         merchantId: 'merchant-1',
         orderId: 'order-1',
         redirectUrl: 'https://shop.example.test/checkout/success',
+        serviceClient: { rpc: vi.fn() } as never,
         userId: null,
       })
     ).resolves.toEqual({
@@ -80,5 +83,50 @@ describe('initializeRedvaultPaystackCheckout', () => {
       transaction_charge: 10000,
       bearer: 'account',
     });
+  });
+
+  it.each([
+    {
+      name: 'missing provider transaction',
+      verification: { success: false, error: 'not found', code: 'HTTP_404' },
+      expected: { status: 'not_found' },
+    },
+    {
+      name: 'paid provider transaction',
+      verification: { success: true, data: { status: 'success' } },
+      expected: { status: 'paid' },
+    },
+    {
+      name: 'unpaid provider transaction',
+      verification: { success: true, data: { status: 'pending' } },
+      expected: { status: 'unpaid' },
+    },
+    {
+      name: 'ambiguous provider failure',
+      verification: { success: false, error: 'boom', code: 'NETWORK_ERROR' },
+      expected: { status: 'unknown' },
+    },
+  ])('probes a stale claim as $expected.status for a $name', async ({
+    verification,
+    expected,
+  }) => {
+    mocks.createAttemptClient.mockReturnValue({ reserve: vi.fn() });
+    mocks.verifyTransaction.mockResolvedValue(verification);
+    mocks.initializeCheckout.mockImplementation(async ({ provider }) =>
+      provider.probeInitialization({ reference: 'RV-attempt-1' })
+    );
+
+    await expect(
+      initializeRedvaultPaystackCheckout({
+        customerEmail: 'customer@example.test',
+        fallbackClient: { rpc: vi.fn() } as never,
+        merchantId: 'merchant-1',
+        orderId: 'order-1',
+        redirectUrl: 'https://shop.example.test/checkout/success',
+        serviceClient: { rpc: vi.fn() } as never,
+        userId: null,
+      })
+    ).resolves.toEqual(expected);
+    expect(mocks.verifyTransaction).toHaveBeenCalledWith('RV-attempt-1');
   });
 });

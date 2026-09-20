@@ -280,7 +280,7 @@ describe('useCheckoutSubmit', () => {
     });
 
     expect(mockResolvePersistedRedvaultOrder).toHaveBeenCalledWith(
-      expect.objectContaining({ checkoutGeneration: 'gen-1' })
+      expect.objectContaining({ validateOrder: expect.any(Function) })
     );
     expect(Alert.alert).toHaveBeenCalledWith(
       'Payment still processing',

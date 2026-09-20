@@ -119,7 +119,6 @@ export function useCheckoutSubmit({
       try {
         const fenceClient = createStorefrontCustomerApiClient();
         const fenced = await resolvePersistedRedvaultOrder({
-          checkoutGeneration: checkoutGenerationSnapshot,
           validateOrder: (orderId) =>
             fenceClient.fetchJson({
               method: 'GET',

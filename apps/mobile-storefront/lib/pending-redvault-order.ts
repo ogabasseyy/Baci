@@ -83,24 +83,19 @@ export type ResolvePersistedRedvaultOrderResult =
  * REDVAULT lane uses a suffixed idempotency identity, so without this check
  * a relaunched app would open a second order while the first still fences
  * inventory (and may capture). Returns blocked while the server order is
- * unresolved; clears and releases once it is terminal. A record from a
- * rotated generation is inert: it can neither match this checkout's
- * identity nor be revived, so it clears without blocking. Validation
- * failures throw, failing closed like the web resolver.
+ * unresolved; clears and releases once it is terminal. The old order is
+ * validated against the server even when the cart generation rotated: its
+ * Paystack URL can still capture funds, so the fence clears only once the
+ * server order is terminal. Validation failures throw, failing closed like
+ * the web resolver.
  */
 export async function resolvePersistedRedvaultOrder({
-  checkoutGeneration,
   validateOrder,
 }: {
-  checkoutGeneration: string;
   validateOrder: ValidatePersistedRedvaultOrder;
 }): Promise<ResolvePersistedRedvaultOrderResult> {
   const persisted = await readPersistedRedvaultOrder();
   if (!persisted) return { blocked: false };
-  if (persisted.checkoutGeneration !== checkoutGeneration) {
-    await clearPersistedRedvaultOrder();
-    return { blocked: false };
-  }
   const validated = await validateOrder(persisted.orderId);
   const orderState =
     isRecord(validated) && isRecord(validated.order) ? validated.order : null;

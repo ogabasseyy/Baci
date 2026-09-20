@@ -31,10 +31,7 @@ describe('resolvePersistedRedvaultOrder', () => {
     const { resolvePersistedRedvaultOrder } = await load();
     const validateOrder = jest.fn();
 
-    const result = await resolvePersistedRedvaultOrder({
-      checkoutGeneration: 'gen-one',
-      validateOrder,
-    });
+    const result = await resolvePersistedRedvaultOrder({ validateOrder });
 
     expect(result).toEqual({ blocked: false });
     expect(validateOrder).not.toHaveBeenCalled();
@@ -51,10 +48,7 @@ describe('resolvePersistedRedvaultOrder', () => {
       order: { payment_status: 'unpaid', shipping_status: 'pending' },
     }));
 
-    const result = await resolvePersistedRedvaultOrder({
-      checkoutGeneration: 'gen-one',
-      validateOrder,
-    });
+    const result = await resolvePersistedRedvaultOrder({ validateOrder });
 
     expect(result).toEqual({ blocked: true, orderId: 'order-rv' });
     expect(validateOrder).toHaveBeenCalledWith('order-rv');
@@ -72,10 +66,7 @@ describe('resolvePersistedRedvaultOrder', () => {
       order: { payment_status: 'paid', shipping_status: 'processing' },
     }));
 
-    const result = await resolvePersistedRedvaultOrder({
-      checkoutGeneration: 'gen-one',
-      validateOrder,
-    });
+    const result = await resolvePersistedRedvaultOrder({ validateOrder });
 
     expect(result).toEqual({ blocked: false });
     expect(storage.has(KEY)).toBe(false);
@@ -92,31 +83,45 @@ describe('resolvePersistedRedvaultOrder', () => {
       order: { payment_status: 'cancelled', shipping_status: 'cancelled' },
     }));
 
-    const result = await resolvePersistedRedvaultOrder({
-      checkoutGeneration: 'gen-one',
-      validateOrder,
-    });
+    const result = await resolvePersistedRedvaultOrder({ validateOrder });
 
     expect(result).toEqual({ blocked: false });
     expect(storage.has(KEY)).toBe(false);
   });
 
-  it('drops a rotated-generation record without validating', async () => {
+  it('validates a rotated-generation record instead of dropping it', async () => {
     const { resolvePersistedRedvaultOrder } = await load();
     seed({
       orderId: 'order-rv',
       checkoutGeneration: 'gen-old',
       createdAt: new Date().toISOString(),
     });
-    const validateOrder = jest.fn();
+    const validateOrder = jest.fn(async () => ({
+      order: { payment_status: 'unpaid', shipping_status: 'pending' },
+    }));
 
-    const result = await resolvePersistedRedvaultOrder({
-      checkoutGeneration: 'gen-new',
-      validateOrder,
+    const result = await resolvePersistedRedvaultOrder({ validateOrder });
+
+    expect(result).toEqual({ blocked: true, orderId: 'order-rv' });
+    expect(validateOrder).toHaveBeenCalledWith('order-rv');
+    expect(storage.has(KEY)).toBe(true);
+  });
+
+  it('clears a rotated-generation record once the old order is terminal', async () => {
+    const { resolvePersistedRedvaultOrder } = await load();
+    seed({
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-old',
+      createdAt: new Date().toISOString(),
     });
+    const validateOrder = jest.fn(async () => ({
+      order: { payment_status: 'paid', shipping_status: 'processing' },
+    }));
+
+    const result = await resolvePersistedRedvaultOrder({ validateOrder });
 
     expect(result).toEqual({ blocked: false });
-    expect(validateOrder).not.toHaveBeenCalled();
+    expect(validateOrder).toHaveBeenCalledWith('order-rv');
     expect(storage.has(KEY)).toBe(false);
   });
 
@@ -125,10 +130,7 @@ describe('resolvePersistedRedvaultOrder', () => {
     storage.set(KEY, '{not-json');
     const validateOrder = jest.fn();
 
-    const result = await resolvePersistedRedvaultOrder({
-      checkoutGeneration: 'gen-one',
-      validateOrder,
-    });
+    const result = await resolvePersistedRedvaultOrder({ validateOrder });
 
     expect(result).toEqual({ blocked: false });
     expect(validateOrder).not.toHaveBeenCalled();
@@ -146,10 +148,7 @@ describe('resolvePersistedRedvaultOrder', () => {
     });
 
     await expect(
-      resolvePersistedRedvaultOrder({
-        checkoutGeneration: 'gen-one',
-        validateOrder,
-      })
+      resolvePersistedRedvaultOrder({ validateOrder })
     ).rejects.toThrow('network down');
     expect(storage.has(KEY)).toBe(true);
   });

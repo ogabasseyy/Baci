@@ -122,6 +122,52 @@ describe('buildSettlementExecutor', () => {
     );
   });
 
+  it('routes REDVAULT GIGL orders through the direct-split GIGL RPC', async () => {
+    const { rpc, supabase } = createSupabase();
+    const maybeSingle = vi.fn(async () => ({
+      data: { metadata: { retained_shipping_amount: 200 } },
+      error: null,
+    }));
+    const chain = {
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle,
+      neq: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+    };
+    const giglSupabase = {
+      ...supabase,
+      from: vi.fn(() => chain),
+    } as unknown as ServiceRoleClient;
+    const result = await buildSettlementExecutor({
+      allocatedGatewayFeeNgn: 250,
+      externalGatewayReference: 'PSK_REF_RV_GIGL',
+      orderPaymentMethod: 'uba_redvault',
+      orderShippingFundingSource: 'customer_checkout',
+      orderShippingProvider: 'GIGL',
+      orderShippingRetainedAmount: 200,
+      settlementGateway: 'paystack',
+      supabase: giglSupabase,
+      transaction: { ...transaction, platform_fee: 99.5 },
+    })(stepContext);
+
+    expect(result).toEqual({
+      commerce_platform_fee: 99.5,
+      gateway_fee: 250,
+      gross_amount: 20_000,
+      platform_fee: 99.5,
+      retained_shipping_amount: 200,
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      'record_uba_redvault_direct_settlement_gigl_v1',
+      expect.objectContaining({
+        p_gateway_reference: 'PSK_REF_RV_GIGL',
+        p_platform_fee: 99.5,
+        p_source_id: 'order-1',
+        p_source_type: 'order',
+      })
+    );
+  });
+
   it('keeps the standard settlement RPC for non-REDVAULT methods', async () => {
     const { rpc, supabase } = createSupabase();
     await buildSettlementExecutor({

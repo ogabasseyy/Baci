@@ -113,7 +113,7 @@ BEGIN
     (v_attempt_capc, v_application_capc, v_order_cap_cancelled, v_merchant, 'R11P1-CAPC', v_hash,
      150000, 'NGN', 'initialized'),
     (v_attempt_cust, v_application_cust, v_order_cust, v_merchant, 'R11P1-ATTEMPT-CUST', v_hash,
-     150000, 'NGN', 'initialized'),
+     150000, 'NGN', 'created'),
     (v_attempt_held, v_application_held, v_order_cust_held, v_merchant, 'R11P1-ATTEMPT-HELD', v_hash,
      150000, 'NGN', 'captured_held'),
     (v_attempt_refund, v_application_refund, v_order_cust_refund, v_merchant, 'R11P1-ATTEMPT-REF', v_hash,
@@ -170,6 +170,8 @@ BEGIN
 
   -- P1 (customer cancellation): an authenticated owner cancels a fresh
   -- unpaid REDVAULT draft through the protected path; the fence releases.
+  -- The draft never initialized: a live hosted URL blocks cancellation
+  -- (see the round-13 initialized-cancellation regression).
   PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
   PERFORM set_config('request.jwt.claim.sub', v_user::text, true);
   SELECT public.cancel_uba_redvault_order_as_customer(v_order_cust, 'changed my mind')

@@ -104,11 +104,13 @@ export function createRedvaultPaymentAttemptClient({
   customerEmail,
   fallbackClient,
   merchantId,
+  serviceClient,
   userId,
 }: {
   customerEmail: string;
   fallbackClient: RedvaultAttemptRpcClient;
   merchantId: string;
+  serviceClient: RedvaultAttemptRpcClient;
   userId: string | null;
 }) {
   const client = createRedvaultAttemptContextClient({
@@ -169,6 +171,22 @@ export function createRedvaultPaymentAttemptClient({
         );
       }
       return attempt;
+    },
+    async reconcileInitialization(
+      attemptId: string,
+      state: 'indeterminate' | 'void'
+    ): Promise<void> {
+      // Initialization recovery requires service_role: the scoped customer
+      // context must never rewrite another worker's ambiguous claim.
+      const { error } = await serviceClient.rpc(
+        'reconcile_storefront_redvault_payment_attempt_initialization' as never,
+        {
+          p_attempt_id: attemptId,
+          p_authorization_url: null,
+          p_state: state,
+        } as never
+      );
+      if (error) throw new Error(error.message);
     },
     async reserve(orderId: string): Promise<RedvaultReservedAttempt> {
       const { data, error } = await client.rpc(

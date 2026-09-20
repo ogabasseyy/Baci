@@ -197,13 +197,18 @@ export function buildSettlementExecutor(args: {
     // REDVAULT split sales pay the merchant share straight to the Paystack
     // subaccount, so the standard RPC would double-pay by additionally
     // crediting the Baci wallet. The direct variant records the same
-    // informational row with no wallet movement.
+    // informational row with no wallet movement. REDVAULT wins over GIGL:
+    // the GIGL wrapper delegates to the wallet-crediting primitive, so a
+    // GIGL-shipped split sale uses the direct-split GIGL variant that keeps
+    // the retained-shipping accounting without the wallet credit.
     const isRedvaultDirectSettlement =
       validatedArgs.orderPaymentMethod?.trim().toLowerCase() === 'uba_redvault';
-    const settlementRpc = useGiglSettlementRpc
-      ? 'record_merchant_settlement_gigl_v1'
-      : isRedvaultDirectSettlement
-        ? 'record_uba_redvault_direct_settlement'
+    const settlementRpc = isRedvaultDirectSettlement
+      ? useGiglSettlementRpc
+        ? 'record_uba_redvault_direct_settlement_gigl_v1'
+        : 'record_uba_redvault_direct_settlement'
+      : useGiglSettlementRpc
+        ? 'record_merchant_settlement_gigl_v1'
         : 'record_merchant_settlement';
     const { error } = await validatedArgs.supabase.rpc(settlementRpc, {
       p_description: `Order payment via ${validatedArgs.settlementGateway}`,

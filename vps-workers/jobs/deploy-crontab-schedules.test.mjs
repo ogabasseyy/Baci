@@ -172,6 +172,23 @@ describe('deploy crontab schedules', () => {
     );
   });
 
+  it('schedules the REDVAULT refund worker every five minutes', () => {
+    const deployScript = readDeployScript();
+
+    assert.match(
+      deployScript,
+      /\*\/5 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/process-redvault-refunds\.lock/
+    );
+    assert.match(
+      deployScript,
+      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/process-redvault-refunds/
+    );
+    assert.match(
+      deployScript,
+      />> \$REMOTE_DIR\/logs\/process-redvault-refunds\.log 2>&1/
+    );
+  });
+
   it('restarts the drain receiver after promotion before installing cleanup cron', () => {
     const deployScript = readDeployScript();
     const restartIndex = deployScript.indexOf(

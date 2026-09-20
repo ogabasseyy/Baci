@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import 'server-only';
-import { initializeTransaction } from '../paystack';
+import { initializeTransaction, verifyTransaction } from '../paystack';
 import { createRedvaultPaymentAttemptClient } from './redvault-payment-attempt-client';
 import { initializeRedvaultCheckout } from './redvault-payment-initialize';
 
@@ -10,6 +10,7 @@ export function initializeRedvaultPaystackCheckout({
   merchantId,
   orderId,
   redirectUrl,
+  serviceClient,
   userId,
 }: {
   customerEmail: string;
@@ -17,12 +18,14 @@ export function initializeRedvaultPaystackCheckout({
   merchantId: string;
   orderId: string;
   redirectUrl: string;
+  serviceClient: Pick<SupabaseClient, 'rpc'>;
   userId: string | null;
 }) {
   const attemptAdapter = createRedvaultPaymentAttemptClient({
     customerEmail,
     fallbackClient,
     merchantId,
+    serviceClient,
     userId,
   });
 
@@ -52,6 +55,20 @@ export function initializeRedvaultPaystackCheckout({
           throw new Error('REDVAULT Paystack checkout URL is missing');
         }
         return { authorizationUrl: paystack.authorization_url };
+      },
+      async probeInitialization({ reference }) {
+        const verification = await verifyTransaction(reference);
+        if (!verification.success) {
+          // Only a confirmed-missing provider transaction is safe to
+          // initialize again; any other failure stays ambiguous so the
+          // stale claim is held for reconciliation instead of reissued.
+          return verification.code === 'HTTP_404'
+            ? { status: 'not_found' as const }
+            : { status: 'unknown' as const };
+        }
+        return verification.data.status === 'success'
+          ? { status: 'paid' as const }
+          : { status: 'unpaid' as const };
       },
     },
     redirectUrl,

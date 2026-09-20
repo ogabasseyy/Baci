@@ -9,6 +9,7 @@ import type {
   QuizDraftConfiguration,
   QuizLaunchInput,
 } from './quiz-admin-actions';
+import { isQuizAuthoringWindowAllowed } from './quiz-authoring-window-allowed';
 import { QuizLaunchDialog } from './quiz-launch-dialog';
 import { QuestionReview } from './quiz-question-review';
 
@@ -55,6 +56,20 @@ export function QuizAdminResult({
       position,
     })),
   };
+  // Gemma may return a different count than requested, and activation
+  // validates the window against the generated questions — not the request.
+  // Revalidate here so immediate windows and manually edited ends that the
+  // generate-time resync leaves alone cannot reach the launch action with
+  // stale bounds.
+  const launchWindowCoversGenerated = isQuizAuthoringWindowAllowed({
+    liveWindowMinutes: configuration.liveWindowMinutes,
+    mode: configuration.mode,
+    questionCount: questions.length,
+    scheduledEnd: configuration.scheduledEnd,
+    scheduledStart: configuration.scheduledStart,
+    timePerQuestionSeconds: configuration.timePerQuestionSeconds,
+    timingKind: configuration.timingKind,
+  });
   return (
     <section className="rounded-lg border bg-card p-5 shadow-sm">
       <div className="flex flex-col gap-1">
@@ -105,9 +120,23 @@ export function QuizAdminResult({
               {activationError}
             </p>
           ) : null}
+          {!launchWindowCoversGenerated ? (
+            <p
+              className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+              role="alert"
+            >
+              The {questions.length} generated questions do not fit the
+              configured launch window. Update the timing and generate again.
+            </p>
+          ) : null}
           <button
             className="inline-flex h-11 w-fit items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-            disabled={!hasReviewed || isActivating || !onActivate}
+            disabled={
+              !hasReviewed ||
+              isActivating ||
+              !onActivate ||
+              !launchWindowCoversGenerated
+            }
             onClick={() => setShowDialog(true)}
             type="button"
           >

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { AdSlot } from '@/components/ads/AdSlot';
+import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import { useQuizRewardedBadge } from '@/hooks/use-quiz-rewarded-badge';
 import { useTheme } from '@/hooks/useTheme';
 import type { QuizEvent } from '@/services/quiz-types';
@@ -9,7 +10,6 @@ import { QuizRewardedBadgeOffer } from './QuizRewardedBadgeOffer';
 import { QuizRulesModal } from './QuizRulesModal';
 import { formatQuizClock, formatRemainingTime } from './QuizScreen.utils';
 import { createQuizWaitingRoomStyles } from './QuizWaitingRoom.styles';
-import { QUIZ_MODAL_DISMISS_FALLBACK_MS } from './quiz-modal-dismiss';
 import {
   type QuizWaitingRoomState,
   useQuizWaitingRoom,
@@ -55,7 +55,7 @@ export function QuizWaitingRoom({
     if (rulesVisible || rulesDismissed) return undefined;
     const fallback = setTimeout(
       () => setRulesDismissed(true),
-      QUIZ_MODAL_DISMISS_FALLBACK_MS
+      MODAL_DISMISS_FALLBACK_MS
     );
     return () => clearTimeout(fallback);
   }, [rulesVisible, rulesDismissed]);

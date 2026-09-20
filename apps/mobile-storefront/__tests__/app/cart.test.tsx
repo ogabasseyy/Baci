@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Modal, StyleSheet } from 'react-native';
 import CartScreen from '@/app/cart';
 import Colors from '@/constants/Colors';
 
@@ -71,6 +71,16 @@ jest.mock('@/components/checkout/checkout-entry-prefetch', () => ({
 jest.mock('@/components/cart/use-cart-reprice', () => ({
   useCartReprice: () => mockRepriceResult,
 }));
+
+jest.mock('@/components/ads/AdSlot', () => {
+  const React = jest.requireActual<typeof import('react')>('react');
+  const { View } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    AdSlot: ({ placement }: { placement: string }) =>
+      React.createElement(View, { testID: `ad-slot-${placement}` }),
+  };
+});
 
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(() => Promise.resolve()),
@@ -388,5 +398,41 @@ describe('CartScreen price-change modal', () => {
     fireEvent.press(screen.getByLabelText('Continue with updated prices'));
 
     expect(mockDismissPriceChanges).toHaveBeenCalledTimes(1);
+  });
+
+  it('withholds the cart ad until the price-change dismissal completes', () => {
+    // Regression: dismissPriceChanges empties priceChanges synchronously
+    // while the iOS fade dismissal still covers the screen — CART_MPU must
+    // stay unmounted until onDismiss fires.
+    mockRepriceResult = {
+      priceChanges: [
+        {
+          id: 'cart-1',
+          name: 'Lenovo ThinkPad E16 Gen 2',
+          oldPrice: 1428000,
+          newPrice: 1500000,
+        },
+      ],
+      dismissPriceChanges: mockDismissPriceChanges,
+    };
+
+    const { UNSAFE_getAllByType, rerender } = render(<CartScreen />);
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+    mockRepriceResult = {
+      priceChanges: [],
+      dismissPriceChanges: mockDismissPriceChanges,
+    };
+    rerender(<CartScreen />);
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+    // The price-change modal is the tree's only Modal wired with onDismiss.
+    const priceChangeModal = UNSAFE_getAllByType(Modal).find(
+      (modal) => typeof modal.props.onDismiss === 'function'
+    );
+    act(() => {
+      priceChangeModal?.props.onDismiss();
+    });
+    expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
   });
 });

@@ -35,10 +35,18 @@ jest.mock('@/components/orders/OrderSuccessView', () => ({
   },
 }));
 
+let capturedReceiptOnDismissed: (() => void) | undefined;
 jest.mock('@/components/receipts/ReceiptPreviewModal', () => ({
-  ReceiptPreviewModal: ({ visible }: { visible: boolean }) => {
+  ReceiptPreviewModal: ({
+    onDismissed,
+    visible,
+  }: {
+    onDismissed?: () => void;
+    visible: boolean;
+  }) => {
     const { View } =
       jest.requireActual<typeof import('react-native')>('react-native');
+    capturedReceiptOnDismissed = onDismissed;
     return visible ? <View testID="receipt-preview-modal" /> : null;
   },
 }));
@@ -55,12 +63,13 @@ jest.mock('@/hooks/use-permission-booster', () => ({
   }),
 }));
 
+const mockReceiptState = { isLoading: false, isOpen: false };
 jest.mock('@/hooks/use-receipt-preview', () => ({
   useReceiptPreview: () => ({
     closePreview: mockClosePreview,
     html: '',
-    isLoading: false,
-    isOpen: false,
+    isLoading: mockReceiptState.isLoading,
+    isOpen: mockReceiptState.isOpen,
     isPaid: false,
     openPreviewByOrderId: mockOpenPreviewByOrderId,
   }),
@@ -97,6 +106,9 @@ describe('OrderSuccessScreen', () => {
     jest.clearAllMocks();
     mockScheduleLocalNotification.mockResolvedValue(undefined);
     mockOrderSuccessView.mockClear();
+    mockReceiptState.isLoading = false;
+    mockReceiptState.isOpen = false;
+    capturedReceiptOnDismissed = undefined;
     mockSearchParams = {
       orderId: 'order-1',
       orderNumber: 'BAC-001',
@@ -271,5 +283,46 @@ describe('OrderSuccessScreen', () => {
     latestProps?.onViewDocument?.();
 
     expect(mockOpenPreviewByOrderId).toHaveBeenCalledWith('order-1');
+  });
+
+  it('holds receipt ownership until the sheet dismissal completes', async () => {
+    // Regression: closePreview clears the open state synchronously while
+    // the iOS slide dismissal still covers the screen — a late LOADED event
+    // must not present over the departing sheet and the banner must not
+    // remount underneath it.
+    const latestProps = () =>
+      mockOrderSuccessView.mock.calls.at(-1)?.[0] as
+        | { isReceiptPreviewActive?: boolean }
+        | undefined;
+
+    jest.useFakeTimers();
+    try {
+      mockReceiptState.isOpen = true;
+      const { rerender } = render(<OrderSuccessScreen />);
+      await act(async () => {
+        jest.advanceTimersByTime(2600);
+      });
+
+      expect(mockMaybeShowPostOrderInterstitial).toHaveBeenCalledTimes(1);
+      const isCancelled =
+        mockMaybeShowPostOrderInterstitial.mock.calls[0]?.[0]?.isCancelled;
+      expect(isCancelled?.()).toBe(true);
+      expect(latestProps()?.isReceiptPreviewActive).toBe(true);
+
+      mockReceiptState.isOpen = false;
+      rerender(<OrderSuccessScreen />);
+      expect(isCancelled?.()).toBe(true);
+      expect(latestProps()?.isReceiptPreviewActive).toBe(true);
+
+      await act(async () => {
+        capturedReceiptOnDismissed?.();
+      });
+      expect(isCancelled?.()).toBe(false);
+      expect(latestProps()?.isReceiptPreviewActive).toBe(false);
+    } finally {
+      jest.useRealTimers();
+      mockReceiptState.isOpen = false;
+      mockReceiptState.isLoading = false;
+    }
   });
 });

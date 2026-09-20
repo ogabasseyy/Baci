@@ -10,6 +10,7 @@ import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
 import { ReceiptPreviewModal } from '@/components/receipts/ReceiptPreviewModal';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import { usePermissionBooster } from '@/hooks/use-permission-booster';
 import { useReceiptPreview } from '@/hooks/use-receipt-preview';
 import { hasOrderSuccessIdentity } from '@/lib/order-success-identity';
@@ -66,8 +67,27 @@ export default function OrderSuccessScreen() {
   // Same for the receipt preview: a late LOADED event must never present
   // the interstitial over an explicit document-viewing action.
   const receiptPreviewActiveRef = useRef(false);
-  receiptPreviewActiveRef.current =
-    receiptPreview.isLoading || receiptPreview.isOpen;
+  // iOS keeps the native receipt sheet rendered through its slide
+  // dismissal, while closePreview clears the open state synchronously.
+  // Hold receipt ownership until the modal reports dismissal so a late
+  // LOADED event cannot present over the departing sheet and the banner
+  // cannot remount underneath it.
+  const [receiptDismissed, setReceiptDismissed] = useState(true);
+  useEffect(() => {
+    if (receiptPreview.isOpen) setReceiptDismissed(false);
+  }, [receiptPreview.isOpen]);
+  useEffect(() => {
+    if (receiptPreview.isOpen || receiptPreview.isLoading || receiptDismissed)
+      return undefined;
+    const fallback = setTimeout(
+      () => setReceiptDismissed(true),
+      MODAL_DISMISS_FALLBACK_MS
+    );
+    return () => clearTimeout(fallback);
+  }, [receiptPreview.isOpen, receiptPreview.isLoading, receiptDismissed]);
+  const isReceiptPreviewActive =
+    receiptPreview.isLoading || receiptPreview.isOpen || !receiptDismissed;
+  receiptPreviewActiveRef.current = isReceiptPreviewActive;
 
   useEffect(() => {
     const isServerConfirmedNotificationMethod =
@@ -210,9 +230,7 @@ export default function OrderSuccessScreen() {
         orderNumber={orderNumber}
         paymentMethod={paymentMethod}
         reference={reference}
-        isReceiptPreviewActive={
-          receiptPreview.isLoading || receiptPreview.isOpen
-        }
+        isReceiptPreviewActive={isReceiptPreviewActive}
         isPermissionFlowActive={isPermissionFlowActive}
         isFullscreenAdActive={isFullscreenAdActive}
         showPermissionModal={showPermissionModal}
@@ -222,6 +240,7 @@ export default function OrderSuccessScreen() {
         html={receiptPreview.html}
         isPaid={receiptPreview.isPaid}
         onClose={receiptPreview.closePreview}
+        onDismissed={() => setReceiptDismissed(true)}
       />
     </>
   );

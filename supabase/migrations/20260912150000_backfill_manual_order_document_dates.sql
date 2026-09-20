@@ -29,9 +29,12 @@ $$;
 -- non-NULL dates were stamped as the recording day by update_order_tax_totals
 -- (the released app never sent document dates, so these are never human
 -- picks). Manual channels mirror the mobile-admin new-order CHANNELS plus the
--- legacy 'manual'/'staff_entry' markers; all other non-NULL dates keep NULL
--- provenance and stay untouched. Each flag initializes only from NULL so
--- re-applying this migration preserves explicit FALSE values (replay-safe).
+-- legacy 'manual'/'staff_entry' markers. Proven-import rows (import_job_id or
+-- external_source markers) are included too: the totals trigger stamped their
+-- document dates as the import day while transaction_date kept the historical
+-- sale instant. All other non-NULL dates keep NULL provenance and stay
+-- untouched. Each flag initializes only from NULL so re-applying this
+-- migration preserves explicit FALSE values (replay-safe).
 -- Preserve order recency while backfilling. This migration is
 -- transactional, so a failed UPDATE rolls back the temporary trigger state.
 ALTER TABLE public.orders DISABLE TRIGGER "update_orders_updated_at";
@@ -40,17 +43,17 @@ SET
   invoice_issue_date_generated = CASE
     WHEN invoice_issue_date IS NULL THEN true
     WHEN invoice_issue_date_generated IS NULL
-     AND source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') THEN true
+     AND (source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') OR import_job_id IS NOT NULL OR external_source IS NOT NULL) THEN true
     ELSE invoice_issue_date_generated
   END,
   tax_point_date_generated = CASE
     WHEN tax_point_date IS NULL THEN true
     WHEN tax_point_date_generated IS NULL
-     AND source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') THEN true
+     AND (source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') OR import_job_id IS NOT NULL OR external_source IS NOT NULL) THEN true
     ELSE tax_point_date_generated
   END
 WHERE invoice_issue_date IS NULL OR tax_point_date IS NULL
-   OR source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga');
+   OR source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') OR import_job_id IS NOT NULL OR external_source IS NOT NULL;
 
 -- Rows without recorded provenance are intentionally left untouched. Date
 -- equality cannot distinguish a generated date from an explicit override.

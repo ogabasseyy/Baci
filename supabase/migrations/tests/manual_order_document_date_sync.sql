@@ -246,8 +246,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- 5. Historical rows (pre-migration shape: recording-day dates stamped by
--- update_order_tax_totals, NULL provenance). The manual row must be repaired
--- to the merchant-timezone day; the non-manual row stays untouched by design.
+-- update_order_tax_totals, NULL provenance). The manual and proven-import
+-- rows must be repaired to the merchant-timezone day; the unmarked
+-- non-manual row stays untouched by design.
 -- The DO-block route-context claims above revert at block exit, and the
 -- before-insert route-context trigger raises 42501 without a trusted
 -- context, so mint the service_role bypass exactly like the storefront
@@ -267,7 +268,8 @@ INSERT INTO public.orders (
   id, merchant_id, order_number, customer_name, customer_email,
   total, subtotal, payment_status, shipping_status, source,
   transaction_date, invoice_issue_date, tax_point_date,
-  invoice_issue_date_generated, tax_point_date_generated
+  invoice_issue_date_generated, tax_point_date_generated,
+  import_job_id, external_source
 ) VALUES (
   'b0000000-0000-0000-0000-000000000003',
   'b0000000-0000-0000-0000-000000000001',
@@ -275,7 +277,8 @@ INSERT INTO public.orders (
   'Historical Manual',
   'manual-date-historical@example.com',
   150000, 150000, 'paid', 'pending', 'physical',
-  '2026-03-04T23:30:00Z', '2026-03-04', '2026-03-04', NULL, NULL
+  '2026-03-04T23:30:00Z', '2026-03-04', '2026-03-04', NULL, NULL,
+  NULL, NULL
 ), (
   'b0000000-0000-0000-0000-000000000004',
   'b0000000-0000-0000-0000-000000000001',
@@ -283,7 +286,17 @@ INSERT INTO public.orders (
   'Historical Storefront',
   'manual-date-historical@example.com',
   150000, 150000, 'paid', 'pending', 'storefront',
-  '2026-03-04T23:30:00Z', '2026-03-04', '2026-03-04', NULL, NULL
+  '2026-03-04T23:30:00Z', '2026-03-04', '2026-03-04', NULL, NULL,
+  NULL, NULL
+), (
+  'b0000000-0000-0000-0000-000000000005',
+  'b0000000-0000-0000-0000-000000000001',
+  'HISTORICAL-WEBSITE-IMPORT',
+  'Historical Import',
+  'manual-date-historical@example.com',
+  150000, 150000, 'paid', 'pending', 'online_store',
+  '2026-03-04T23:30:00Z', '2026-06-01', '2026-06-01', NULL, NULL,
+  NULL, 'bumpa'
 );
 RESET ROLE;
 
@@ -293,7 +306,8 @@ CREATE TEMPORARY TABLE backfill_updated_guard AS
 SELECT id, updated_at FROM public.orders
 WHERE id IN (
   'b0000000-0000-0000-0000-000000000003',
-  'b0000000-0000-0000-0000-000000000004'
+  'b0000000-0000-0000-0000-000000000004',
+  'b0000000-0000-0000-0000-000000000005'
 );
 \ir ../20260912150000_backfill_manual_order_document_dates.sql
 
@@ -322,6 +336,16 @@ BEGIN
   IF v_issue <> '2026-03-04' OR v_tax <> '2026-03-04'
      OR v_issue_gen IS NOT NULL OR v_tax_gen IS NOT NULL THEN
     RAISE EXCEPTION 'backfill touched a non-manual historical row: % / %', v_issue, v_tax;
+  END IF;
+
+  SELECT invoice_issue_date, tax_point_date,
+         invoice_issue_date_generated, tax_point_date_generated
+  INTO v_issue, v_tax, v_issue_gen, v_tax_gen
+  FROM public.orders
+  WHERE id = 'b0000000-0000-0000-0000-000000000005';
+  IF v_issue <> '2026-03-05' OR v_tax <> '2026-03-05'
+     OR v_issue_gen IS DISTINCT FROM true OR v_tax_gen IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'backfill did not repair historical import dates: % / %', v_issue, v_tax;
   END IF;
 
   -- 6. Re-applying the migration preserves the explicit physical fixture: a

@@ -62,6 +62,7 @@ export function useBNPLCheckoutController({
     orderId,
     gateway,
     amount,
+    orderTotal,
     trackingToken,
     merchantSlug,
     customerEmail,
@@ -192,7 +193,16 @@ export function useBNPLCheckoutController({
           ...(shipping !== undefined && { shipping: Number(shipping) }),
           ...(subtotal !== undefined && { subtotal: Number(subtotal) }),
           ...(tax !== undefined && { tax: Number(tax) }),
-          value: amount ? Number(amount) : undefined,
+          // Revenue is the canonical order total, not the residual the
+          // provider charged after wallet/savings credit. This immediate
+          // path wins the durable claim, so understating here cannot be
+          // repaired by the later tracked-order poll. Older routes without
+          // orderTotal keep the charged amount.
+          value: orderTotal
+            ? Number(orderTotal)
+            : amount
+              ? Number(amount)
+              : undefined,
         });
       }
       await clearCart();

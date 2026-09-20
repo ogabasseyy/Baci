@@ -5847,6 +5847,17 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
       expect.objectContaining({ documentKind: 'proforma' })
     );
+    // The tracking link cannot take payment, so the provisioned DVA must
+    // reach the email body as bank-transfer payment instructions.
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        virtualAccount: {
+          accountName: 'OgaBassey-Test',
+          accountNumber: '1234567890',
+          bankName: 'Wema Bank',
+        },
+      })
+    );
 
     // Assert DVA generation was automatically triggered
     expect(mockGeneratePaymentAccount).toHaveBeenCalledWith(

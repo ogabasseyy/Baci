@@ -46,34 +46,60 @@ export function useGuestInvoicePaidState({
       return;
     }
     let cancelled = false;
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      GUEST_INVOICE_LOOKUP_TIMEOUT_MS
-    );
+    let activeController: AbortController | null = null;
     void (async () => {
-      try {
-        const response = await fetch(
-          `${TRACK_ORDER_API_BASE_URL}/api/storefront/orders/track-order?token=${encodeURIComponent(trackingToken)}&merchant_slug=${encodeURIComponent(TRACK_ORDER_MERCHANT_SLUG)}`,
-          { signal: controller.signal }
+      // A failed lookup (timeout, 5xx, transport) answers nothing about
+      // the order: retry once before accepting unpaid presentation, so a
+      // transient blip cannot strand a paid guest invoice on proforma
+      // copy. An ok response is authoritative either way and never
+      // retries.
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const controller = new AbortController();
+        activeController = controller;
+        const timeout = setTimeout(
+          () => controller.abort(),
+          GUEST_INVOICE_LOOKUP_TIMEOUT_MS
         );
-        if (!response.ok || cancelled) {
+        try {
+          const response = await fetch(
+            `${TRACK_ORDER_API_BASE_URL}/api/storefront/orders/track-order?token=${encodeURIComponent(trackingToken)}&merchant_slug=${encodeURIComponent(TRACK_ORDER_MERCHANT_SLUG)}`,
+            { signal: controller.signal }
+          );
+          if (cancelled) {
+            return;
+          }
+          if (!response.ok) {
+            continue;
+          }
+          const order = toTrackedOrder(await response.json());
+          if (cancelled) {
+            return;
+          }
+          if (
+            order &&
+            order.id === orderId &&
+            order.payment_status === 'paid'
+          ) {
+            setIsPaid(true);
+          }
           return;
+        } catch {
+          // Display stays proforma after retries exhaust; the shopper can
+          // still pay or retry.
+          if (cancelled || attempt >= 2) {
+            return;
+          }
+        } finally {
+          clearTimeout(timeout);
+          if (activeController === controller) {
+            activeController = null;
+          }
         }
-        const order = toTrackedOrder(await response.json());
-        if (order && order.id === orderId && order.payment_status === 'paid') {
-          setIsPaid(true);
-        }
-      } catch {
-        // Display stays proforma; the shopper can still pay or retry.
-      } finally {
-        clearTimeout(timeout);
       }
     })();
     return () => {
       cancelled = true;
-      controller.abort();
-      clearTimeout(timeout);
+      activeController?.abort();
     };
   }, [skip, orderId, paymentMethod, trackingToken]);
   return isPaid;

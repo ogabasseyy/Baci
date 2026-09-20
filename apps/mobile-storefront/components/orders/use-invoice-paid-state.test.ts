@@ -49,6 +49,47 @@ describe('useGuestInvoicePaidState', () => {
     expect(result.current).toBe(false);
   });
 
+  it('retries a failed lookup before accepting unpaid presentation', async () => {
+    const paidResponse = () =>
+      new Response(
+        JSON.stringify({
+          order: {
+            id: 'order-inv-1',
+            order_number: 'ORD-INV-1',
+            payment_status: 'paid',
+            total: 50000,
+          },
+        }),
+        { status: 200 }
+      );
+    // First attempt fails transiently (transport/timeout); the retry
+    // observes the externally-paid order.
+    global.fetch = jest
+      .fn<() => Promise<Response>>()
+      .mockRejectedValueOnce(new Error('network timeout'))
+      .mockResolvedValueOnce(paidResponse()) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useGuestInvoicePaidState(baseParams));
+
+    await waitFor(() => expect(result.current).toBe(true));
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('stays unpaid when the lookup keeps failing', async () => {
+    global.fetch = jest.fn(async () => {
+      throw new Error('network down');
+    }) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useGuestInvoicePaidState(baseParams));
+
+    await waitFor(() =>
+      expect((global.fetch as jest.Mock).mock.calls.length).toBe(2)
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(result.current).toBe(false);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
   it('resets paid when the route swaps to a different unpaid invoice', async () => {
     mockTrackedOrder('paid', 'order-inv-1');
 

@@ -3433,14 +3433,9 @@ export async function POST(request: NextRequest) {
           effectivePaymentMethod === 'invoice' && !isPaidForImmediateEmail
             ? ('proforma' as const)
             : ('confirmation' as const);
-        const htmlContent = generateOrderConfirmationEmail({
-          ...emailData,
-          documentKind: emailDocumentKind,
-        });
-        const textContent = generateOrderConfirmationText({
-          ...emailData,
-          documentKind: emailDocumentKind,
-        });
+        // NOTE: htmlContent/textContent are rendered inside after(), after
+        // DVA provisioning, so the proforma body can include the
+        // bank-transfer payment instructions.
 
         const replyToEmail =
           merchant.support_email ||
@@ -3462,6 +3457,10 @@ export async function POST(request: NextRequest) {
             // Resolved kind of the emailed invoice document (325 =
             // proforma), hoisted for the subject line below.
             let emailedInvoiceTypeCode: string | undefined;
+            // Auto-generated DVA for unpaid invoice orders, hoisted so the
+            // email body (rendered after provisioning below) can include
+            // the bank-transfer payment instructions.
+            let invoiceVirtualAccount: ReceiptOrder['virtual_account'] = null;
             let backgroundSupabase: ReturnType<
               typeof createAdminClient
             > | null = null;
@@ -3474,8 +3473,6 @@ export async function POST(request: NextRequest) {
                   .split(' ');
                 const firstName = nameParts[0] || 'Customer';
                 const lastName = nameParts.slice(1).join(' ') || 'User';
-                let invoiceVirtualAccount: ReceiptOrder['virtual_account'] =
-                  null;
                 const invoiceTimingOrder = {
                   ...(order as Record<string, unknown>),
                   created_at:
@@ -3780,6 +3777,27 @@ export async function POST(request: NextRequest) {
               }
             }
 
+            // Rendered here (not with emailData above) so the proforma
+            // body carries the provisioned DVA as bank-transfer payment
+            // instructions — the tracking link shows status only and
+            // cannot take payment.
+            const emailVirtualAccount = invoiceVirtualAccount
+              ? {
+                  accountName: invoiceVirtualAccount.account_name,
+                  accountNumber: invoiceVirtualAccount.account_number,
+                  bankName: invoiceVirtualAccount.bank_name,
+                }
+              : undefined;
+            const htmlContent = generateOrderConfirmationEmail({
+              ...emailData,
+              documentKind: emailDocumentKind,
+              virtualAccount: emailVirtualAccount,
+            });
+            const textContent = generateOrderConfirmationText({
+              ...emailData,
+              documentKind: emailDocumentKind,
+              virtualAccount: emailVirtualAccount,
+            });
             const emailResult = await sendEmail({
               to: customer_email,
               toName: customer_name,

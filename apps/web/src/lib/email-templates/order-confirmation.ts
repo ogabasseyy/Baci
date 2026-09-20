@@ -30,8 +30,20 @@ interface OrderConfirmationData extends MerchantRegistrationInfo {
    * /track-order page auto-resolves the token or order id plus email
    * pair). The proforma CTA must point here — not at the storefront
    * homepage — so customers can view the quoted invoice from the email.
+   * The tracking page shows status only: it cannot take payment, so the
+   * body must never promise payment through the link.
    */
   paymentLink?: string;
+  /**
+   * Dedicated virtual account assigned to an unpaid invoice order. The
+   * proforma body renders it as bank-transfer payment instructions —
+   * without these details the reader has no way to pay the quote.
+   */
+  virtualAccount?: {
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+  };
 }
 
 /**
@@ -42,10 +54,41 @@ export function generateOrderConfirmationEmail(
   data: OrderConfirmationData
 ): string {
   const isProforma = data.documentKind === 'proforma';
-  // The proforma CTA must open the order-specific resume/payment page so
-  // customers can view and pay the quote; the homepage is not a document.
+  // The proforma CTA opens the order-specific tracking page so customers
+  // can view the quote; the tracking page shows status only and cannot
+  // take payment, so payment travels by bank transfer (details below).
   const ctaHref =
     isProforma && data.paymentLink ? data.paymentLink : data.merchantUrl;
+  const proformaPaymentHtml =
+    isProforma && data.virtualAccount
+      ? `
+          <!-- Payment Instructions -->
+          <tr>
+            <td style="padding: 0 40px 8px 40px;">
+              <div style="background-color: #fefce8; border-radius: 8px; padding: 24px; border: 1px solid #fde68a;">
+                <h3 style="margin: 0 0 12px 0; font-size: 14px; text-transform: uppercase; color: #92400e; letter-spacing: 0.5px;">💳 Complete Your Bank Transfer</h3>
+                <p style="margin: 0 0 12px 0; font-size: 14px; color: #78350f; line-height: 1.6;">
+                  Transfer <strong>${formatEmailMoney(data.total, data.currency)}</strong> to the dedicated account below. Your order is confirmed automatically once payment is received.
+                </p>
+                <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td style="color: #92400e; padding: 4px 0; font-size: 14px;">Bank:</td>
+                    <td style="color: #1e293b; font-weight: 600; text-align: right; font-size: 14px;">${escapeHtmlText(data.virtualAccount.bankName)}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #92400e; padding: 4px 0; font-size: 14px;">Account Name:</td>
+                    <td style="color: #1e293b; font-weight: 600; text-align: right; font-size: 14px;">${escapeHtmlText(data.virtualAccount.accountName)}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #92400e; padding: 4px 0; font-size: 14px;">Account Number:</td>
+                    <td style="color: #1e293b; font-weight: 700; text-align: right; font-size: 16px;">${escapeHtmlText(data.virtualAccount.accountNumber)}</td>
+                  </tr>
+                </table>
+              </div>
+            </td>
+          </tr>
+  `
+      : '';
   const itemsHtml = data.items
     .map(
       (item) => `
@@ -116,7 +159,7 @@ export function generateOrderConfirmationEmail(
             <td style="padding: 40px 40px 20px 40px;">
               <p style="margin: 0; font-size: 16px; color: #334155; line-height: 1.6;">Hi <strong>${escapeHtmlText(data.customerName)}</strong>,</p>
               <p style="margin: 16px 0 0 0; font-size: 16px; color: #475569; line-height: 1.6;">
-                ${isProforma ? 'This proforma invoice is a quotation for the items below. Your order will be processed once payment is received — please share it with your procurement team or pay using the invoice link.' : "We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable)."}
+                ${isProforma ? 'This proforma invoice is a quotation for the items below. Your order will be processed once payment is received — please share it with your procurement team and complete your bank transfer using the payment details in this email.' : "We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable)."}
               </p>
             </td>
           </tr>
@@ -156,6 +199,7 @@ export function generateOrderConfirmationEmail(
               </div>
             </td>
           </tr>
+          ${proformaPaymentHtml}
 
           <!-- Addresses -->
           <tr>
@@ -234,6 +278,17 @@ export function generateOrderConfirmationText(
         `${item.name} x${item.quantity} - ${formatEmailMoney(item.price, data.currency)}`
     )
     .join('\n');
+  // The tracking link shows status only and cannot take payment: the next
+  // steps must route payment through the bank-transfer details (or the
+  // merchant when no account was assigned), never through the link.
+  const proformaNextSteps = [
+    data.virtualAccount
+      ? `Complete your bank transfer of ${formatEmailMoney(data.total, data.currency)} using the payment details above — your order is confirmed automatically once payment is received.`
+      : `No payment account was assigned to this quote yet — please contact ${data.merchantName} for payment details.`,
+    data.paymentLink ? `Track its status here:\n${data.paymentLink}` : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join('\n');
 
   return `
 ${isProforma ? 'Proforma Invoice' : 'Order Confirmed!'}
@@ -254,6 +309,15 @@ ${itemsText}
 Subtotal: ${formatEmailMoney(data.subtotal, data.currency)}
 Shipping: ${formatEmailMoney(data.shippingFee, data.currency)}
 Total: ${formatEmailMoney(data.total, data.currency)}
+${
+  isProforma && data.virtualAccount
+    ? `
+Payment Details (bank transfer):
+Bank: ${data.virtualAccount.bankName}
+Account Name: ${data.virtualAccount.accountName}
+Account Number: ${data.virtualAccount.accountNumber}`
+    : ''
+}
 
 Shipping Address:
 ${data.shippingAddress.address}
@@ -263,9 +327,7 @@ Phone: ${data.shippingAddress.phone}
 What's next?
 ${
   isProforma
-    ? data.paymentLink
-      ? `Complete payment using your invoice link to confirm this order:\n${data.paymentLink}`
-      : 'Complete payment using your invoice link to confirm this order.'
+    ? proformaNextSteps
     : "You'll receive a shipping confirmation email with tracking information once your order is on its way."
 }
 

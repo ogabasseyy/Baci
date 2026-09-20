@@ -54,6 +54,10 @@ export default function BankTransferScreen() {
 
   const validatedParams = validateBankTransferParams(params);
   const routeData = validatedParams.data;
+  const legacyRouteData =
+    validatedParams.isValid && validatedParams.mode === 'legacy'
+      ? validatedParams.data
+      : null;
   const walletRouteData =
     validatedParams.isValid && validatedParams.mode === 'wallet_funded'
       ? validatedParams.data
@@ -196,7 +200,12 @@ export default function BankTransferScreen() {
       return;
     }
     setIsLegacySubmitting(true);
-    void routeToOrderSuccess({});
+    // The legacy DVA route requires the provider reference: forward it so
+    // the deferred settlement capture can reconcile the conversion,
+    // mirroring the wallet-funded intent-id handoff.
+    void routeToOrderSuccess({
+      successReference: legacyRouteData?.reference,
+    });
   };
 
   return (

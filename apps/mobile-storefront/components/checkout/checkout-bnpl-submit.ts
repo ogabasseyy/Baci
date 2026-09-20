@@ -150,12 +150,18 @@ export async function submitBnplCheckout({
 
   isOrderInFlight.current = false;
   setIsProcessing(false);
+  // The provider charges the residual (`amount`), but completion revenue
+  // is the canonical order total: route it separately for attribution.
+  const canonicalOrderTotal = Number(orderResponse.order.total);
   router.push({
     pathname: '/bnpl-checkout',
     params: {
       orderId: orderResponse.order.id,
       gateway: selectedPayment,
       amount: String(orderResponse.amountDueToGateway),
+      ...(Number.isFinite(canonicalOrderTotal)
+        ? { orderTotal: canonicalOrderTotal.toFixed(2) }
+        : {}),
       customerEmail,
       customerName,
       customerPhone,

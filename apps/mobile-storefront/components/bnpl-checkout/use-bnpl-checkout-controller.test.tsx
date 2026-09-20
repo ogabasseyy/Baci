@@ -277,6 +277,39 @@ describe('useBNPLCheckoutController', () => {
     });
   });
 
+  it('attributes the full order total when credit partially covers a BNPL order', async () => {
+    mockRouteParams = {
+      gateway: 'credpal',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+      trackingToken: 'track-token-123',
+      // Wallet credit covered all but 750 of the 5750 order: the provider
+      // charges the residual, but revenue is the canonical total.
+      amount: '750',
+      orderTotal: '5750',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'navigation',
+            url: 'https://usebaci.com/ogabassey/order-success?reference=CP-1',
+          }),
+        },
+      });
+    });
+
+    expect(trackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-123',
+        paymentMethod: 'credpal',
+        value: 5750,
+      })
+    );
+  });
+
   it('does not trust merchantDomain route params for SPA success navigation messages', () => {
     mockRouteParams = {
       gateway: 'credit_direct',

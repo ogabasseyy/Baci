@@ -31,8 +31,12 @@ jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'light',
 }));
 
+let bankTransferViewProps: { onConfirmTransfer?: () => void } | undefined;
 jest.mock('@/components/bank-transfer/BankTransferView', () => ({
-  BankTransferView: () => null,
+  BankTransferView: (props: { onConfirmTransfer?: () => void }) => {
+    bankTransferViewProps = props;
+    return null;
+  },
 }));
 
 jest.mock('@/hooks/use-wallet-funding-polling', () => ({
@@ -123,6 +127,48 @@ describe('BankTransferScreen wallet-funded completion', () => {
     expect(mockRouterReplace).toHaveBeenCalledWith({
       pathname: '/order-success',
       params: expect.objectContaining({ orderId: 'order-1' }),
+    });
+  });
+});
+
+describe('BankTransferScreen legacy confirm', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    bankTransferViewProps = undefined;
+    mockRouteParams = {
+      accountName: 'Ada Lovelace',
+      accountNumber: '1234567890',
+      amount: '470000',
+      bankName: 'Paystack Bank',
+      orderId: 'order-1',
+      orderNumber: 'BAC-001',
+      reference: 'DVA-ref-9',
+      trackingToken: 'tracking-token',
+    };
+    ({ default: BankTransferScreen } = await import('./index'));
+  });
+
+  it('forwards the DVA reference to order success on confirm', async () => {
+    render(<BankTransferScreen />);
+    expect(bankTransferViewProps?.onConfirmTransfer).toBeDefined();
+
+    await act(async () => {
+      bankTransferViewProps?.onConfirmTransfer?.();
+    });
+
+    // The deferred settlement capture reconciles through the provider
+    // reference; dropping it strands the conversion like the old empty
+    // handoff did.
+    await waitFor(() => {
+      expect(mockRouterReplace).toHaveBeenCalledWith({
+        pathname: '/order-success',
+        params: expect.objectContaining({
+          orderId: 'order-1',
+          paymentMethod: 'bank_transfer',
+          reference: 'DVA-ref-9',
+          trackingToken: 'tracking-token',
+        }),
+      });
     });
   });
 });

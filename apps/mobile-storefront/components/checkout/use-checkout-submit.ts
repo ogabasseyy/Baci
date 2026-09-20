@@ -219,12 +219,11 @@ export function useCheckoutSubmit({
         order.order_number || order.id.slice(0, 8).toUpperCase();
       // A fully covered invoice selection comes back paid with nothing due:
       // claiming invoice_generated would book a proforma conversion for an
-      // order that routes straight to paid completion. Only unpaid orders
-      // with a positive amount due generate a proforma.
-      const invoiceAmountDue = Number(orderResponse.amountDueToGateway);
-      const isUnpaidInvoiceOrder =
-        order.payment_status !== 'paid' &&
-        (!Number.isFinite(invoiceAmountDue) || invoiceAmountDue > 0);
+      // order that routes straight to paid completion. Gate only on the
+      // authoritative unpaid state: a zero-total invoice (e.g. 100%
+      // discount) still generates and emails a proforma, so requiring a
+      // positive amount due would create a false funnel drop-off.
+      const isUnpaidInvoiceOrder = order.payment_status !== 'paid';
       if (selectedPayment === 'invoice' && isUnpaidInvoiceOrder) {
         // Chain behind the order-created emission so the funnel keeps
         // causal order even though creation is recorded fire-and-forget.

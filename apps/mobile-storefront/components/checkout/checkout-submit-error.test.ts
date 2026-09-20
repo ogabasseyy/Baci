@@ -265,6 +265,8 @@ describe('handleCheckoutSubmitError', () => {
     ['SERVER_ERROR'],
     ['UNKNOWN_ERROR'],
     ['NOT_FOUND'],
+    ['RESPONSE_PARSE_ERROR'],
+    ['RESPONSE_VALIDATION_ERROR'],
   ])('does not record order-API %s failures as payment failures', (code) => {
     const { trackCheckoutPaymentFailed, trackError } = jest.requireMock(
       '@/services/analytics'

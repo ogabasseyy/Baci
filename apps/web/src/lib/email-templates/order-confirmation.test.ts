@@ -202,6 +202,50 @@ describe('Order confirmation email', () => {
       );
     });
 
+    it('renders bank-transfer instructions the reader can act on', () => {
+      const html = generateOrderConfirmationEmail({
+        ...proformaPayload,
+        virtualAccount: {
+          bankName: 'Wema Bank',
+          accountNumber: '1234567890',
+          accountName: 'OgaBassey-Test',
+        },
+      });
+
+      // The tracking link cannot take payment: the reader pays by
+      // transfer, so the account details must be in the email itself.
+      expect(html).toContain('Complete Your Bank Transfer');
+      expect(html).toContain('Wema Bank');
+      expect(html).toContain('OgaBassey-Test');
+      expect(html).toContain('1234567890');
+      expect(html).not.toContain('pay using the invoice link');
+    });
+
+    it('routes text payment through the transfer details, not the link', () => {
+      const text = generateOrderConfirmationText({
+        ...proformaPayload,
+        virtualAccount: {
+          bankName: 'Wema Bank',
+          accountNumber: '1234567890',
+          accountName: 'OgaBassey-Test',
+        },
+      });
+
+      expect(text).toContain('Payment Details (bank transfer)');
+      expect(text).toContain('Account Number: 1234567890');
+      expect(text).toContain('Complete your bank transfer');
+      expect(text).not.toContain('Complete payment using your invoice link');
+    });
+
+    it('falls back to merchant contact when no account was assigned', () => {
+      const html = generateOrderConfirmationEmail(proformaPayload);
+      const text = generateOrderConfirmationText(proformaPayload);
+
+      expect(html).not.toContain('Complete Your Bank Transfer');
+      expect(text).not.toContain('Payment Details (bank transfer)');
+      expect(text).toContain('please contact TestShop for payment details');
+    });
+
     it('keeps the confirmation CTA on the storefront homepage', () => {
       const html = generateOrderConfirmationEmail({
         ...baseOrderData,

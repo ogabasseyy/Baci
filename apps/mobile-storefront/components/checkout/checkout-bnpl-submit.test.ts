@@ -238,6 +238,9 @@ describe('submitBnplCheckout', () => {
         merchantDomain: 'ogabassey.com',
         merchantSlug: 'ogabassey',
         orderId: 'order-1',
+        // Canonical total rides along for completion attribution while the
+        // provider charges the residual amount.
+        orderTotal: '21500.00',
         trackingToken: 'tracking-token',
       }),
     });

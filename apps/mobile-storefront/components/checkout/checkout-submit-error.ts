@@ -68,6 +68,10 @@ const PRE_ORDER_ERROR_CODES = new Set([
   'SERVER_ERROR',
   'UNKNOWN_ERROR',
   'NOT_FOUND',
+  // Malformed or version-skewed order API success payloads surface before
+  // any provider initialization, even when the server committed the order.
+  'RESPONSE_PARSE_ERROR',
+  'RESPONSE_VALIDATION_ERROR',
 ]);
 
 export function handleCheckoutSubmitError(

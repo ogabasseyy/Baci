@@ -458,6 +458,44 @@ describe('useCheckoutSubmit', () => {
     );
   });
 
+  it('emits invoice_generated for a zero-total unpaid invoice order', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    // A 100% discount zeroes the gateway amount while the order stays
+    // unpaid; the server still generates and emails the proforma.
+    mockCreateOrder.mockResolvedValue({
+      amountDueToGateway: 0,
+      order: {
+        created_at: '2026-07-09T12:00:00.000Z',
+        id: 'order-invoice-zero',
+        order_number: 'ORD-INV-0',
+        payment_status: 'pending',
+        shipping_status: 'pending',
+        total: 0,
+      },
+      wallet: null,
+    });
+    const { trackCheckoutInvoiceGenerated } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutInvoiceGenerated: jest.Mock };
+    const params = createParams({ selectedPayment: 'invoice' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(trackCheckoutInvoiceGenerated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-invoice-zero',
+        paymentMethod: 'invoice',
+      })
+    );
+  });
+
   it('skips invoice_generated when wallet coverage pays a selected invoice order in full', async () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],

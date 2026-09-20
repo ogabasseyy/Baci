@@ -13,6 +13,10 @@ export const BNPLParamsSchema = z.object({
   }),
   authorizationUrl: z.string().min(1).optional(),
   amount: moneyString('Amount must be a number'),
+  // Canonical order total for completion attribution. `amount` is the
+  // residual the provider charges after wallet/savings credit, but revenue
+  // is the full order — completions must not understate it.
+  orderTotal: moneyString('Order total must be a number'),
   customerEmail: z.email().optional(),
   customerName: z.string().optional(),
   customerPhone: z.string().optional(),

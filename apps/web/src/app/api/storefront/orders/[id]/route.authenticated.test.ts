@@ -87,6 +87,47 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
     ]);
   });
 
+  it('returns the stamped currency from an authenticated lookup', async () => {
+    // A signed-in shopper resuming an order after the merchant changes
+    // payout currency must still map the order's original currency.
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: { id: 'user-123' } },
+    });
+
+    const mockOrderQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          ...mockOrderData,
+          currency: 'USD',
+        },
+        error: null,
+      }),
+    };
+    const mockItemsQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
+    };
+    mockSupabaseClient.from.mockImplementation((table: string) => {
+      if (table === 'orders') return mockOrderQuery;
+      if (table === 'order_items') return mockItemsQuery;
+      return {};
+    });
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockOrderQuery.select.mock.calls[0][0]).toContain('currency');
+    expect(data.currency).toBe('USD');
+  });
+
   it('returns 404 when an authenticated order does not match the requested merchant slug', async () => {
     const request = new NextRequest(
       'http://localhost/api/storefront/orders/order-uuid-123?merchant_slug=other-store'

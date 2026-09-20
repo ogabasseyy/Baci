@@ -70,6 +70,7 @@ describe('resolveRedvaultCheckoutFence', () => {
         orderId: 'order-1',
         orderNumber: 'RV-1',
         trackingToken: 'track-1',
+        customerEmail: 'ada@example.com',
       },
     });
   });
@@ -93,6 +94,7 @@ describe('resolveRedvaultCheckoutFence', () => {
         orderId: 'order-1',
         orderNumber: 'RV-1',
         trackingToken: 'track-1',
+        customerEmail: 'ada@example.com',
       },
     });
   });
@@ -156,6 +158,7 @@ describe('resolveRedvaultCheckoutFence', () => {
         orderId: 'order-1',
         orderNumber: 'ORD-1',
         trackingToken: 'track-1',
+        customerEmail: 'ada@example.com',
       },
     });
   });

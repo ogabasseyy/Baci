@@ -98,6 +98,12 @@ export interface FencedCheckoutOrderIdentity {
   orderId: string;
   orderNumber?: string;
   trackingToken?: string;
+  /**
+   * Customer email persisted with the stored order. Replay and recovery
+   * paths must use this — not mutable form state — because the payment
+   * snapshot lookup rejects an email that disagrees with the order.
+   */
+  customerEmail: string;
 }
 
 export interface ResolvePendingCheckoutOrderResult {

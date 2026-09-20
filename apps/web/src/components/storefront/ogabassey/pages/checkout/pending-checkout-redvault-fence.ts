@@ -61,6 +61,7 @@ export function paidOrderIdentity(
     orderId: snapshot.orderId,
     orderNumber: order.order_number || snapshot.orderNumber,
     trackingToken: snapshot.trackingToken,
+    customerEmail: snapshot.customerEmail,
   };
 }
 
@@ -159,6 +160,7 @@ export async function resolveRedvaultCheckoutFence({
           orderId: pendingOrder.orderId,
           orderNumber: sameLaneOrder.order_number || pendingOrder.orderNumber,
           trackingToken: pendingOrder.trackingToken,
+          customerEmail: pendingOrder.customerEmail,
         },
       };
     }
@@ -196,6 +198,7 @@ export async function resolveRedvaultCheckoutFence({
         orderId: pendingOrder.orderId,
         orderNumber: enteringOrder.order_number || pendingOrder.orderNumber,
         trackingToken: pendingOrder.trackingToken,
+        customerEmail: pendingOrder.customerEmail,
       },
     };
   }

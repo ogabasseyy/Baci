@@ -32,6 +32,7 @@ describe('pending-checkout-order', () => {
           orderId: 'redvault-order',
           orderNumber: undefined,
           trackingToken: 'track-redvault',
+          customerEmail: 'ada@example.com',
         },
       });
       expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -68,6 +69,7 @@ describe('pending-checkout-order', () => {
         orderId: 'redvault-order',
         orderNumber: 'RV-1',
         trackingToken: 'track-redvault',
+        customerEmail: 'ada@example.com',
       },
     });
   });
@@ -109,6 +111,7 @@ describe('pending-checkout-order', () => {
         orderId: 'ordinary-order',
         orderNumber: 'ORD-1',
         trackingToken: 'track-ordinary',
+        customerEmail: 'ada@example.com',
       },
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -135,6 +138,7 @@ describe('pending-checkout-order', () => {
         orderId: 'ordinary-order',
         orderNumber: undefined,
         trackingToken: 'track-ordinary',
+        customerEmail: 'ada@example.com',
       },
     });
   });
@@ -597,6 +601,7 @@ describe('pending-checkout-order', () => {
           orderId: 'order-123',
           orderNumber: 'ORD-123',
           trackingToken: 'tracking-token-123',
+          customerEmail: 'ada@example.com',
         },
       });
       expect(fetchImpl).toHaveBeenCalledTimes(1);

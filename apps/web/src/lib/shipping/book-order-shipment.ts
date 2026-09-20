@@ -114,6 +114,17 @@ export async function bookOrderShipment(
       'MISSING_ORDER_ITEMS'
     );
   }
+  // A fully-refunded order must never reach provider booking: refund
+  // finalization deliberately leaves fulfillmentQuantity unset for
+  // review_required inventory, so the surviving-quantity fallback would
+  // otherwise report the original quantities as shippable.
+  if ((typedOrder.payment_status ?? '').trim().toLowerCase() === 'refunded') {
+    throw new OrderShipmentBookingError(
+      'This order was refunded and can no longer be shipped.',
+      400,
+      'ORDER_REFUNDED'
+    );
+  }
   const { data: storedQuote, error: quoteError } = await supabase
     .from('shipping_quotes')
     .select(

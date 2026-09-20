@@ -316,6 +316,32 @@ describe('bookOrderShipment', () => {
     ).rejects.toThrow('no items');
   });
 
+  it('throws ORDER_REFUNDED for a fully-refunded order before provider booking', async () => {
+    const supabase = createMockSupabase({
+      order: {
+        data: {
+          ...validOrder,
+          payment_status: 'refunded',
+          order_items: [
+            {
+              name: 'Widget',
+              quantity: 2,
+              price: 5000,
+              fulfillment_data: {},
+            },
+          ],
+        },
+        error: null,
+      },
+    });
+
+    // Missing fulfillmentQuantity would fall back to the original
+    // quantity; the refunded-payment guard must reject first.
+    await expect(
+      bookOrderShipment(supabase, 'merchant-1', 'order-1')
+    ).rejects.toThrow('was refunded and can no longer be shipped');
+  });
+
   it('throws NO_SHIPPABLE_ITEMS when every surviving item quantity is zero', async () => {
     const supabase = createMockSupabase({
       order: {

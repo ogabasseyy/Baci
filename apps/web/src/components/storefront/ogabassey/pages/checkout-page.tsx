@@ -112,7 +112,7 @@ import {
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
 import { checkoutFingerprintsMatch } from './checkout/checkout-fingerprints-match';
-import { fetchWithCsrf } from '@/lib/api-client';
+import { cancelStaleCheckoutOrder } from './checkout/cancel-stale-checkout-order';
 import {
   clearCheckoutIdempotencyKey,
   getCheckoutIdempotencyKey,
@@ -242,66 +242,7 @@ function raiseCheckoutError(message: string): never {
   throw new Error(message);
 }
 
-type CancelStaleCheckoutOrderResult =
-  | 'cancelled'
-  | 'gone'
-  | 'live'
-  | 'failed';
 
-/**
- * Cancels a stale checkout order before the lane recreates it: an ordinary
- * order abandoned for REDVAULT, or a prepared REDVAULT order whose checkout
- * inputs changed. Authenticated shoppers use the account route; guests use
- * the tracking-token route (a guest without a token cannot prove ownership).
- * An authenticated 404 falls back to the token route when a token is
- * available: the stored order may predate the session (guest-owned), and
- * declaring it gone would open a second order while it still holds
- * inventory. `cancelled`/`gone` (200/404 — either cancel response value
- * means no live order remains) release the lane; `live` (409) means the
- * previous checkout is already initializing and must replay instead of
- * duplicating.
- */
-async function cancelStaleCheckoutOrder({
-  isAuthenticated,
-  orderId,
-  reason,
-  trackingToken,
-}: {
-  isAuthenticated: boolean;
-  orderId: string;
-  reason: string;
-  trackingToken?: string;
-}): Promise<CancelStaleCheckoutOrderResult> {
-  try {
-    if (isAuthenticated) {
-      const response = await fetchWithCsrf(
-        `/api/storefront/account/orders/${orderId}/cancel`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ reason }),
-        }
-      );
-      if (response.ok) return 'cancelled';
-      if (response.status === 409) return 'live';
-      if (response.status !== 404) return 'failed';
-      if (!trackingToken) return 'gone';
-      // Account route found nothing but a token is available: retry as a
-      // pre-session guest order before declaring the fence clear.
-    }
-    if (!trackingToken) return 'failed';
-    const response = await fetch(`/api/storefront/orders/${orderId}/cancel`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tracking_token: trackingToken, reason }),
-    });
-    if (response.ok) return 'cancelled';
-    if (response.status === 404) return 'gone';
-    if (response.status === 409) return 'live';
-    return 'failed';
-  } catch {
-    return 'failed';
-  }
-}
 
 /**
  * /api/orders rejection codes raised by the merchant-shipping-rate money guard.
@@ -2409,7 +2350,10 @@ export const CheckoutPage: React.FC = () => {
               // server-side, so NGN is the only sendable value that can
               // ever initialize here.
               currency: 'NGN',
-              customerEmail,
+              // The email persisted with the stored order: the payment
+              // snapshot lookup rejects a current-form email the shopper
+              // edited after the order was initialized.
+              customerEmail: stale.customerEmail,
               customerName: `${firstName} ${lastName}`.trim(),
               customerPhone,
               billingAddress: buildCheckoutBillingAddress(

@@ -229,7 +229,8 @@ BEGIN
   IF v_fee <> 250 THEN
     RAISE EXCEPTION 'GIGL direct platform fee wrong, got %', v_fee;
   END IF;
-  IF v_net <> 1150.00 THEN
+  -- Account-borne gateway fee: net is gross minus platform fee (250) only.
+  IF v_net <> 1250.00 THEN
     RAISE EXCEPTION 'GIGL direct net wrong, got %', v_net;
   END IF;
   IF v_claimed IS NOT TRUE THEN

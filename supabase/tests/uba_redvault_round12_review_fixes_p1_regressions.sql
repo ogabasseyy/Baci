@@ -265,7 +265,9 @@ BEGIN
   END IF;
   SELECT net_amount, status INTO v_net, v_status FROM public.merchant_settlements
   WHERE id = v_settlement;
-  IF v_net <> 1400.00 THEN
+  -- Account-borne gateway fee (Bearer [REDACTED]'account'): recorded but not
+  -- deducted, so net is gross minus platform fee only.
+  IF v_net <> 1500.00 THEN
     RAISE EXCEPTION 'direct net wrong, got %', v_net;
   END IF;
   IF v_status <> 'settled' THEN
@@ -296,7 +298,8 @@ BEGIN
   INSERT INTO private.uba_redvault_refunds (id, attempt_id, state, refund_type, idempotency_key, amount_kobo)
   VALUES (v_refund_fee_b, v_attempt_fee, 'processed', 'merchandise_units', 'R12P1-FEE-B', 110000);
   SELECT net_amount INTO v_net FROM public.merchant_settlements WHERE id = v_settlement;
-  IF v_net <> 373.33 THEN
+  -- Proportional off the corrected original net: 1500 * (1 - 110000/150000).
+  IF v_net <> 400.00 THEN
     RAISE EXCEPTION 'direct partial reversal wrong, got %', v_net;
   END IF;
   SELECT upcoming_balance INTO v_upcoming FROM public.merchant_wallets WHERE id = v_wallet;

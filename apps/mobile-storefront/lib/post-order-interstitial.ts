@@ -232,8 +232,11 @@ export async function maybeShowPostOrderInterstitial(
       );
       interstitial.load();
     } catch {
-      attemptState = 'idle';
-      resolve('skipped');
+      // A synchronous setup throw (createForAdRequest, addAdEventListener,
+      // or load) must release the timer and any installed listeners exactly
+      // like a load error; abandon() is settled-guarded and safe when
+      // nothing was installed yet.
+      abandon();
     }
   });
 }

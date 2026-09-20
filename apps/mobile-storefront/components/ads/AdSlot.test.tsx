@@ -35,11 +35,11 @@ jest.mock('@/services/analytics-core', () => ({
 }));
 
 let mockDrawerOpen = false;
-let mockDrawerFullyOpen = false;
+let mockDrawerCovering = false;
 jest.mock('@/stores/drawer-store', () => ({
   useDrawerStore: (
-    selector: (state: { isOpen: boolean; isFullyOpen: boolean }) => boolean
-  ) => selector({ isOpen: mockDrawerOpen, isFullyOpen: mockDrawerFullyOpen }),
+    selector: (state: { isOpen: boolean; isCovering: boolean }) => boolean
+  ) => selector({ isOpen: mockDrawerOpen, isCovering: mockDrawerCovering }),
 }));
 
 let mockIsFocused = true;
@@ -121,27 +121,29 @@ describe('AdSlot', () => {
     // slots must unmount (no parallel requests, no hidden-slot impressions).
     setAdsEnabled('true');
     mockDrawerOpen = true;
+    mockDrawerCovering = true;
     try {
       const { toJSON } = render(<AdSlot placement="FOOTER_ANCHOR" />);
       expect(toJSON()).toBeNull();
     } finally {
       mockDrawerOpen = false;
+      mockDrawerCovering = false;
       setAdsEnabled(ORIGINAL_ENV);
     }
   });
 
-  it('suspends page slots until the drawer close animation completes', () => {
-    // Regression: isOpen flips when closing starts, but the drawer still
-    // covers the screen until the animation lands — page slots must stay
-    // unmounted through that window.
+  it('suspends page slots through an interrupted drawer opening', () => {
+    // Regression: closing before the opening animation completes leaves
+    // isOpen false while the drawer visibly slides away — page slots must
+    // stay unmounted until close-complete, not just while fully open.
     setAdsEnabled('true');
     mockDrawerOpen = false;
-    mockDrawerFullyOpen = true;
+    mockDrawerCovering = true;
     try {
       const { toJSON } = render(<AdSlot placement="CART_MPU" />);
       expect(toJSON()).toBeNull();
     } finally {
-      mockDrawerFullyOpen = false;
+      mockDrawerCovering = false;
       setAdsEnabled(ORIGINAL_ENV);
     }
   });
@@ -149,11 +151,13 @@ describe('AdSlot', () => {
   it('keeps the drawer-owned slot mounted while the drawer is open', () => {
     setAdsEnabled('true');
     mockDrawerOpen = true;
+    mockDrawerCovering = true;
     try {
       render(<AdSlot placement="FOOTER_ANCHOR" visibleWhileDrawerOpen />);
       expect(screen.getByTestId('ad-slot-footer-anchor')).toBeTruthy();
     } finally {
       mockDrawerOpen = false;
+      mockDrawerCovering = false;
       setAdsEnabled(ORIGINAL_ENV);
     }
   });

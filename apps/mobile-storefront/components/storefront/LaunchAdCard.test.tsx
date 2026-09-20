@@ -13,11 +13,11 @@ jest.mock('@/services/analytics-core', () => ({
 }));
 
 let mockDrawerOpen = false;
-let mockDrawerFullyOpen = false;
+let mockDrawerCovering = false;
 jest.mock('@/stores/drawer-store', () => ({
   useDrawerStore: (
-    selector: (state: { isOpen: boolean; isFullyOpen: boolean }) => boolean
-  ) => selector({ isOpen: mockDrawerOpen, isFullyOpen: mockDrawerFullyOpen }),
+    selector: (state: { isOpen: boolean; isCovering: boolean }) => boolean
+  ) => selector({ isOpen: mockDrawerOpen, isCovering: mockDrawerCovering }),
 }));
 
 let mockIsFocused = true;
@@ -80,6 +80,7 @@ describe('LaunchAdCard', () => {
     // (which would jump the visible product when the drawer closes).
     // Arrange & Act
     mockDrawerOpen = true;
+    mockDrawerCovering = true;
     try {
       render(<LaunchAdCard {...props} />);
 
@@ -88,15 +89,17 @@ describe('LaunchAdCard', () => {
       expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
     } finally {
       mockDrawerOpen = false;
+      mockDrawerCovering = false;
     }
   });
 
-  it('withholds the banner until the drawer close animation completes', () => {
-    // Regression: isOpen flips when closing starts, but the drawer still
-    // covers the carousel until the animation lands.
+  it('withholds the banner through an interrupted drawer opening', () => {
+    // Regression: closing before the opening animation completes leaves
+    // isOpen false while the drawer visibly slides away — the banner must
+    // stay withheld until close-complete.
     // Arrange & Act
     mockDrawerOpen = false;
-    mockDrawerFullyOpen = true;
+    mockDrawerCovering = true;
     try {
       render(<LaunchAdCard {...props} />);
 
@@ -104,7 +107,7 @@ describe('LaunchAdCard', () => {
       expect(screen.getByTestId('launch-ad-card')).toBeTruthy();
       expect(screen.UNSAFE_queryByType('BannerAd' as never)).toBeNull();
     } finally {
-      mockDrawerFullyOpen = false;
+      mockDrawerCovering = false;
     }
   });
 

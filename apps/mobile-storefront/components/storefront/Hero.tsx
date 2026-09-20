@@ -3,6 +3,7 @@ import type { Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { useWindowDimensions, View, type ViewToken } from 'react-native';
 import Animated, {
+  runOnJS,
   useAnimatedScrollHandler,
   useSharedValue,
 } from 'react-native-reanimated';
@@ -113,29 +114,39 @@ export function Hero({
   const renderSlides: HeroRenderItem[] = isAdSlideShown
     ? [slides[0], { kind: 'hero-ad-slide' } as const, ...slides.slice(1)]
     : slides;
+  // Live JS mirror of the list offset: onMomentumScrollEnd only updates
+  // currentIndex after a fling settles, so a toggle landing mid-drag must
+  // compensate from the actual offset (like the launch carousel), not the
+  // last snapped page.
+  const scrollOffsetRef = useRef(0);
+  const recordScrollOffset = (offset: number) => {
+    scrollOffsetRef.current = offset;
+  };
   const wasAdSlideShownRef = useRef(isAdSlideShown);
   useEffect(() => {
     // Consent resolving (or a load failure) inserts or removes the slide at
     // index 1 under a scrolled carousel; shift the offset by one page so the
     // visible hero stays put instead of being replaced by the ad (or
-    // jumping back on removal). currentIndex tracks the same page.
+    // jumping back on removal). The active dot follows the compensated
+    // offset because a programmatic scroll fires no momentum event.
     const target = nextOffsetAfterAdToggle({
       adSlotWidth: screenWidth,
       insertionOffset: screenWidth,
       isAdShown: isAdSlideShown,
-      scrollOffset: currentIndex * screenWidth,
+      scrollOffset: scrollOffsetRef.current,
       wasAdShown: wasAdSlideShownRef.current,
     });
     wasAdSlideShownRef.current = isAdSlideShown;
     if (target !== null) {
       flatListRef.current?.scrollToOffset({ offset: target, animated: false });
-      setCurrentIndex((index) => index + (isAdSlideShown ? 1 : -1));
+      setCurrentIndex(Math.round(target / screenWidth));
     }
-  }, [isAdSlideShown, currentIndex, screenWidth]);
+  }, [isAdSlideShown, screenWidth]);
 
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollX.set(event.contentOffset.x);
+      runOnJS(recordScrollOffset)(event.contentOffset.x);
     },
   });
 

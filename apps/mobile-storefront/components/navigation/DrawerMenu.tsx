@@ -37,14 +37,16 @@ export function DrawerMenu() {
   const { Gesture, GestureDetector } = getOptionalGestureHandlerRuntime();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
-  const { isOpen, isFullyOpen, closeDrawer, setFullyOpen } = useDrawerStore(
-    useShallow((s) => ({
-      isOpen: s.isOpen,
-      isFullyOpen: s.isFullyOpen,
-      closeDrawer: s.closeDrawer,
-      setFullyOpen: s.setFullyOpen,
-    }))
-  );
+  const { isOpen, isFullyOpen, closeDrawer, setCovering, setFullyOpen } =
+    useDrawerStore(
+      useShallow((s) => ({
+        isOpen: s.isOpen,
+        isFullyOpen: s.isFullyOpen,
+        closeDrawer: s.closeDrawer,
+        setCovering: s.setCovering,
+        setFullyOpen: s.setFullyOpen,
+      }))
+    );
   const { user, signOut } = useAuthStore(
     useShallow((s) => ({ user: s.user, signOut: s.signOut }))
   );
@@ -66,6 +68,7 @@ export function DrawerMenu() {
   } = useDrawerMenuAnimation({
     drawerWidth: DRAWER_WIDTH,
     isOpen,
+    setCovering,
     setFullyOpen,
   });
 

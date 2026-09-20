@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
+import { flushPendingQuizStart } from './quiz-pending-start';
+import { useQuizRewardedStartHold } from './use-quiz-rewarded-start-hold';
 import { calculateQuizServerClockOffset } from './use-quiz-server-clock';
 
 const CLOCK_TICK_MS = 250;
@@ -46,6 +48,7 @@ export function useQuizWaitingRoom({
   onStart,
   refresh,
   suspended = false,
+  isRewardedAdActive = false,
 }: {
   event: QuizEvent;
   onEventsUpdated?: (events: QuizEvent[]) => void;
@@ -58,6 +61,12 @@ export function useQuizWaitingRoom({
    * over the modal.
    */
   suspended?: boolean;
+  /**
+   * While true (rewarded video or end card open) a start boundary waits in
+   * the pending-start path instead of starting timed play behind the
+   * full-screen ad; it flushes when the rewarded ad closes.
+   */
+  isRewardedAdActive?: boolean;
 }): QuizWaitingRoomState {
   const [event, setEvent] = useState(initialEvent);
   const [offsetMs, setOffsetMs] = useState(() =>
@@ -74,6 +83,7 @@ export function useQuizWaitingRoom({
   // A start boundary that lands while the interstitial owns the screen waits
   // here until the ad closes instead of starting timed play behind it.
   const pendingStartRef = useRef<QuizEvent | null>(null);
+  const isRewardedAdActiveRef = useRef(isRewardedAdActive);
   const [error, setError] = useState<string | null>(null);
   const eventRef = useRef(initialEvent);
   const offsetRef = useRef(offsetMs);
@@ -117,10 +127,11 @@ export function useQuizWaitingRoom({
       appStateRef.current === 'active' &&
       (nextEvent.status === 'active' || nextEvent.status === 'open')
     ) {
-      // Starting live play behind a presented interstitial would burn the
-      // shopper's timed window under a full-screen ad: hold the transition
-      // until the ad closes (flushed in its onClosed handler below).
-      if (isFullscreenAdActiveRef.current) {
+      // Starting live play behind a presented interstitial or rewarded ad
+      // would burn the shopper's timed window under a full-screen ad: hold
+      // the transition until the ad closes (flushed in its onClosed handler
+      // below, or when the rewarded flag clears).
+      if (isFullscreenAdActiveRef.current || isRewardedAdActiveRef.current) {
         pendingStartRef.current = nextEvent;
         return;
       }
@@ -169,6 +180,17 @@ export function useQuizWaitingRoom({
     }
   };
 
+  useQuizRewardedStartHold({
+    appStateRef,
+    isFullscreenAdActiveRef,
+    isRewardedAdActive,
+    isRewardedAdActiveRef,
+    onStartRef,
+    pendingStartRef,
+    startedRef,
+    stoppedRef,
+  });
+
   useEffect(() => {
     let mounted = true;
     // Fire-and-forget: the lobby countdown keeps ticking underneath and play
@@ -203,12 +225,15 @@ export function useQuizWaitingRoom({
           // timed play in the background: retain the pending transition
           // until the foreground refresh re-validates it on resume.
           if (appStateRef.current !== 'active') return;
-          const pendingStart = pendingStartRef.current;
-          pendingStartRef.current = null;
-          if (pendingStart && !startedRef.current && !stoppedRef.current) {
-            startedRef.current = true;
-            onStartRef.current(pendingStart.id, true);
-          }
+          // Likewise while a rewarded ad owns the screen: the rewarded
+          // flag clearing flushes the pending transition instead.
+          if (isRewardedAdActiveRef.current) return;
+          flushPendingQuizStart({
+            onStartRef,
+            pendingStartRef,
+            startedRef,
+            stoppedRef,
+          });
         },
       }).then((outcome) => {
         if (mounted && outcome === 'shown') {

@@ -10,19 +10,21 @@ import { scheduleOnRN } from 'react-native-worklets';
 const ANIMATION_DURATION = 300;
 
 /**
- * Drives the drawer slide/backdrop animation and reports animation
- * completion to the drawer store. Ad ownership keys off the fully-open
- * latch (not isOpen, which flips when an animation starts) so the drawer
- * slot mounts only once visible and background slots resume only after the
- * close animation lands.
+ * Drives the drawer slide/backdrop animation and reports coverage to the
+ * drawer store. The drawer slot mounts on the fully-open latch (set only
+ * by a completed opening) while background slots suspend on the covering
+ * latch (open-start through close-complete, including interrupted
+ * openings).
  */
 export function useDrawerMenuAnimation({
   drawerWidth,
   isOpen,
+  setCovering,
   setFullyOpen,
 }: {
   drawerWidth: number;
   isOpen: boolean;
+  setCovering: (covering: boolean) => void;
   setFullyOpen: (fullyOpen: boolean) => void;
 }) {
   const [shouldRenderPattern, setShouldRenderPattern] = useState(isOpen);
@@ -31,6 +33,10 @@ export function useDrawerMenuAnimation({
 
   useEffect(() => {
     if (isOpen) {
+      // Coverage starts with the opening slide (not its completion) so an
+      // interrupted opening still suspends background slots through the
+      // close animation.
+      setCovering(true);
       setShouldRenderPattern(true);
       translateX.set(
         withTiming(
@@ -57,12 +63,20 @@ export function useDrawerMenuAnimation({
             if (!finished) return;
             scheduleOnRN(setShouldRenderPattern, false);
             scheduleOnRN(setFullyOpen, false);
+            scheduleOnRN(setCovering, false);
           }
         )
       );
       backdropOpacity.set(withTiming(0, { duration: ANIMATION_DURATION }));
     }
-  }, [isOpen, translateX, backdropOpacity, setFullyOpen, drawerWidth]);
+  }, [
+    isOpen,
+    translateX,
+    backdropOpacity,
+    setCovering,
+    setFullyOpen,
+    drawerWidth,
+  ]);
 
   const drawerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.get() }],

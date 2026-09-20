@@ -40,9 +40,7 @@ export function HeroAdSlide({
   // Like AdSlot: suspend while the navigation drawer covers the screen
   // (open-start through close-complete) so the home banner never loads or
   // refreshes under the drawer.
-  const drawerCovering = useDrawerStore(
-    (state) => state.isOpen || state.isFullyOpen
-  );
+  const drawerCovering = useDrawerStore((state) => state.isCovering);
   // Like AdSlot: a pushed route keeps this screen mounted, so an unfocused
   // route must not own or refresh the banner behind the new screen.
   const isFocused = useIsFocused();

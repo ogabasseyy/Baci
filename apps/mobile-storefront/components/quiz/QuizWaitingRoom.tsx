@@ -40,6 +40,10 @@ export function QuizWaitingRoom({
   // animation. Track dismissal separately so the base slot stays withheld
   // until the modal-owned slot is actually gone.
   const [rulesDismissed, setRulesDismissed] = useState(true);
+  // Mirrors the rewarded watch flag (declared below) so the waiting-room
+  // hook can hold a start boundary behind the rewarded ad: the transition
+  // effect below guarantees the flush runs even with no other renders.
+  const [rewardedWatching, setRewardedWatching] = useState(false);
   const waitingRoom: QuizWaitingRoomState = useQuizWaitingRoom({
     event,
     onEventsUpdated,
@@ -49,6 +53,7 @@ export function QuizWaitingRoom({
     // A pending interstitial must never present over the rules modal or its
     // dismissal animation.
     suspended: rulesVisible || !rulesDismissed,
+    isRewardedAdActive: rewardedWatching,
   });
 
   useEffect(() => {
@@ -75,6 +80,10 @@ export function QuizWaitingRoom({
     status: currentEvent.status,
     userId,
   });
+
+  useEffect(() => {
+    setRewardedWatching(rewardedBadge.isWatching);
+  }, [rewardedBadge.isWatching]);
 
   return (
     <View

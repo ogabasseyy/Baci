@@ -100,11 +100,16 @@ jest.mock('react-native-reanimated', () => {
 function mockSetFullyOpen(fullyOpen: boolean): void {
   mockIsFullyOpen = fullyOpen;
 }
+const mockSetCoveringCalls: boolean[] = [];
+function mockSetCovering(covering: boolean): void {
+  mockSetCoveringCalls.push(covering);
+}
 jest.mock('@/stores/drawer-store', () => ({
   useDrawerStore: () => ({
     isOpen: mockIsOpen,
     isFullyOpen: mockIsFullyOpen,
     closeDrawer: jest.fn(),
+    setCovering: mockSetCovering,
     setFullyOpen: mockSetFullyOpen,
   }),
 }));
@@ -157,6 +162,7 @@ describe('DrawerMenu', () => {
     mockIsOpen = true;
     mockIsFullyOpen = false;
     mockTimingCallbacks = [];
+    mockSetCoveringCalls.length = 0;
   });
 
   it('renders correctly with GadgetPattern background decoration', () => {

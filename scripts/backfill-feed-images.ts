@@ -27,13 +27,13 @@ import {
   extractImageCandidates,
 } from '../packages/shared/src/gmc-feed/index';
 import {
-  type VerificationResult,
-  getClassifiedImageVerificationUrl,
   isCdnUrl,
-  verifyCdnImageWithTransformFallback,
-  verifyRemoteImage,
+  verifyClassifiedImage,
 } from './lib/gmc-feed-verifier';
 import { appendOfferProductImages } from './lib/offer-product-images';
+import { persistFeedManifest } from './lib/persist-feed-manifest';
+import { revalidateFeedCache } from './lib/revalidate-feed-cache';
+import { runWithConcurrency } from './lib/run-with-concurrency';
 
 // ---------- Config ----------
 
@@ -52,63 +52,6 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !CDN_BASE_PATH) {
 // Narrow types after the guard — process.exit never returns
 const cdnBasePath: string = CDN_BASE_PATH;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-// ---------- Concurrency limiter ----------
-
-async function runWithConcurrency<T>(
-  tasks: Array<() => Promise<T>>,
-  limit: number
-): Promise<T[]> {
-  const results: T[] = [];
-  let index = 0;
-
-  async function worker() {
-    while (index < tasks.length) {
-      const i = index++;
-      results[i] = await tasks[i]();
-    }
-  }
-
-  const workers = Array.from({ length: Math.min(limit, tasks.length) }, () => worker());
-  await Promise.all(workers);
-  return results;
-}
-
-// ---------- Verification orchestrator ----------
-
-async function verifyClassifiedImage(
-  classified: ClassifiedImage,
-  cdnBasePath: string
-): Promise<VerificationResult> {
-  const url = getClassifiedImageVerificationUrl(classified);
-
-  // Already invalid — no verification needed
-  if (classified.status === 'invalid') {
-    return {
-      status: 'invalid',
-      verified_url: null,
-      verified_format: null,
-      failure_reason: classified.failure_reason,
-    };
-  }
-
-  // CDN-hosted: verify via filesystem
-  if (isCdnUrl(url)) {
-    return verifyCdnImageWithTransformFallback(url, cdnBasePath);
-  }
-
-  // Non-CDN absolute URL or absolutized relative path: verify via HTTP
-  if (url.startsWith('http')) {
-    return verifyRemoteImage(url);
-  }
-
-  return {
-    status: 'invalid',
-    verified_url: null,
-    verified_format: null,
-    failure_reason: `Cannot verify URL: ${url}`,
-  };
-}
 
 // ---------- Main ----------
 
@@ -294,104 +237,13 @@ async function main() {
   console.log(`  Missing: ${stats.missing}`);
   console.log(`  Invalid: ${stats.invalid}`);
 
-  // 6. Upsert in batches with retry
-  const BATCH_SIZE = 100;
-  const MAX_RETRIES = 3;
-  let upserted = 0;
-  let persistErrors = 0;
-  let failedRows = 0;
-
-  for (let i = 0; i < upsertRows.length; i += BATCH_SIZE) {
-    const batch = upsertRows.slice(i, i + BATCH_SIZE);
-    const batchNum = Math.floor(i / BATCH_SIZE);
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const { error: upsertError } = await supabase
-        .from('product_feed_images')
-        .upsert(batch, {
-          onConflict: 'merchant_id,product_id,source_url',
-          ignoreDuplicates: false,
-        });
-
-      if (!upsertError) {
-        upserted += batch.length;
-        break;
-      }
-
-      if (attempt < MAX_RETRIES - 1) {
-        const delay = 1000 * 2 ** attempt; // 1s, 2s, 4s
-        console.warn(`Batch ${batchNum} attempt ${attempt + 1} failed: ${upsertError.message} — retrying in ${delay}ms`);
-        await new Promise((r) => setTimeout(r, delay));
-      } else {
-        console.error(`Batch ${batchNum} failed after ${MAX_RETRIES} attempts: ${upsertError.message}`);
-        persistErrors++;
-        failedRows += batch.length;
-      }
-    }
-  }
-
-  console.log(`\nUpserted ${upserted}/${upsertRows.length} rows into product_feed_images (${failedRows} failed)`);
-
-  // 7. Mark stale product-level rows — (product_id, source_url) pairs no
-  // longer in the current product.images source set. Variant-scoped feed-only
-  // rows are owned by the image-generation pipeline.
-  const existingRows: { id: string; product_id: string; source_url: string }[] = [];
-  let staleOffset = 0;
-  let staleHasMore = true;
-  let existingError: unknown = null;
-
-  while (staleHasMore) {
-    const { data, error } = await supabase
-      .from('product_feed_images')
-      .select('id, product_id, source_url')
-      .eq('merchant_id', merchantId)
-      .is('variant_id', null)
-      .neq('status', 'stale')
-      .range(staleOffset, staleOffset + PAGE_SIZE - 1);
-
-    if (error) {
-      existingError = error;
-      existingRows.length = 0;
-      break;
-    }
-
-    existingRows.push(...(data || []));
-    staleHasMore = (data?.length ?? 0) === PAGE_SIZE;
-    staleOffset += PAGE_SIZE;
-  }
-
-  if (existingError) {
-    console.error(
-      'Failed to fetch existing rows for stale detection:',
-      existingError instanceof Error ? existingError.message : String(existingError)
-    );
-    persistErrors++;
-  } else {
-    const staleIds: string[] = [];
-    for (const row of existingRows) {
-      const key = `${row.product_id}::${row.source_url}`;
-      if (!currentPairs.has(key)) {
-        staleIds.push(row.id);
-      }
-    }
-
-    if (staleIds.length > 0) {
-      // Batch stale updates
-      for (let i = 0; i < staleIds.length; i += BATCH_SIZE) {
-        const batch = staleIds.slice(i, i + BATCH_SIZE);
-        const { error: staleError } = await supabase
-          .from('product_feed_images')
-          .update({ status: 'stale', is_primary: false, updated_at: new Date().toISOString() })
-          .in('id', batch);
-        if (staleError) {
-          console.error(`Stale update error:`, staleError.message);
-          persistErrors++;
-        }
-      }
-      console.log(`Marked ${staleIds.length} orphaned rows as stale`);
-    } else {
-      console.log('No stale rows found');
-    }
-  }
+  // 6+7. Persist rows and mark stale orphans (see lib/persist-feed-manifest).
+  const { persistErrors } = await persistFeedManifest({
+    supabase,
+    merchantId,
+    upsertRows,
+    currentPairs,
+  });
 
   // 8. Report pending derivatives
   if (pendingDerivativePaths.length > 0) {
@@ -415,33 +267,7 @@ async function main() {
   // 10. Bust the feed cache via the revalidation endpoint so the next
   //     feed request picks up the fresh manifest immediately.
   //     Requires CRON_SECRET to match the deployed app's value.
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    console.log('\nRevalidating feed cache...');
-    try {
-      const revalidateUrl = `${storefrontBaseUrl}/api/feed/google-merchant/revalidate`;
-      const res = await fetch(revalidateUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${cronSecret}`,
-        },
-        body: JSON.stringify({ merchant_id: merchantId }),
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (res.ok) {
-        console.log('  Feed cache revalidated successfully.');
-      } else {
-        console.warn(`  Revalidation returned ${res.status} — cache may be stale for up to 1 hour.`);
-      }
-    } catch (err) {
-      console.warn(`  Could not reach revalidation endpoint: ${(err as Error).message}`);
-      console.warn('  Feed cache may be stale for up to 1 hour.');
-    }
-  } else {
-    console.warn('\nCRON_SECRET not set — skipping feed cache revalidation.');
-    console.warn('Feed cache may be stale for up to 1 hour.');
-  }
+  await revalidateFeedCache({ storefrontBaseUrl, merchantId });
 }
 
 main().catch((err) => {

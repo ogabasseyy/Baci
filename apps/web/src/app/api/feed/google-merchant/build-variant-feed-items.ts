@@ -103,7 +103,8 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
       if (!resolveGmcPrimaryImage(entries) && !color(variant)) {
         const claimed = collectOfferClaimedImageUrls(product.offers);
         entries = manifest.filter(
-          (entry) => !entry.variant_id && !isOfferClaimedImage(entry, claimed)
+          (entry) =>
+            !entry.variant_id && !isOfferClaimedImage(entry, claimed, manifest)
         );
       }
       const image = resolveGmcPrimaryImage(entries);

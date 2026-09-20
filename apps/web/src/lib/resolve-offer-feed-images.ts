@@ -18,7 +18,8 @@ export function resolveOfferFeedImages(
   claimedUrls: ReadonlySet<string> = new Set()
 ) {
   let entries = manifest.filter(
-    (entry) => !entry.variant_id && !isOfferClaimedImage(entry, claimedUrls)
+    (entry) =>
+      !entry.variant_id && !isOfferClaimedImage(entry, claimedUrls, manifest)
   );
   if (images != null && !(Array.isArray(images) && images.length === 0)) {
     if (!Array.isArray(images)) return null;

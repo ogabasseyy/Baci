@@ -197,6 +197,13 @@ export function generateGoogleMerchantFeed(
         product.condition == null
           ? 'new'
           : toGoogleListingCondition(product.condition);
+      // Variant rows must carry an id that differs from their
+      // item_group_id: qualify the base-condition row once offers group it.
+      const hasConditionOffers = eligibleOffers.length > 0;
+      const baseItemId =
+        hasConditionOffers && parentCondition
+          ? `${product.id}-${parentCondition}`
+          : product.id;
       const baseItem =
         productLevelImages &&
         parentCondition &&
@@ -214,8 +221,8 @@ export function generateGoogleMerchantFeed(
               description,
               googleProductCategory: product.google_product_category,
               gtin: product.gtin,
-              id: product.id,
-              groupId: eligibleOffers.length > 0 ? product.id : undefined,
+              id: baseItemId,
+              groupId: hasConditionOffers ? product.id : undefined,
               imageUrl: productLevelImages.primaryImageUrl,
               mpn: product.mpn,
               price: product.price,

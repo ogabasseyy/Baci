@@ -160,6 +160,14 @@ export function buildConditionOfferItems(args: {
     .join('\n');
   const stockCount = getProductStockCount(product);
 
+  // Variant rows must carry an id that differs from their
+  // item_group_id: qualify the base-condition row once offers group it.
+  const hasConditionOffers = eligibleOffers.length > 0;
+  const baseItemId =
+    hasConditionOffers && parentCondition
+      ? `${product.id}-${parentCondition}`
+      : product.id;
+
   const baseArgs = {
     additionalImagesXml,
     availability: stockCount > 0 ? 'in stock' : 'out of stock',
@@ -170,7 +178,8 @@ export function buildConditionOfferItems(args: {
     description: buildFeedDescription(product),
     googleProductCategory: product.google_product_category,
     gtin: product.gtin,
-    id: product.id,
+    id: baseItemId,
+    groupId: hasConditionOffers ? product.id : undefined,
     imageUrl: primaryImageUrl || '',
     link: productUrl,
     mpn: product.mpn,

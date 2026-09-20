@@ -34,4 +34,38 @@ describe('isOfferClaimedImage', () => {
     expect(isOfferClaimedImage(verifiedEntry(), claimed)).toBe(false);
     expect(isOfferClaimedImage(verifiedEntry(), new Set())).toBe(false);
   });
+
+  it('excludes rows sharing the verified url of a claimed entry', () => {
+    const claimed = new Set(['https://cdn.example/phone.avif']);
+    const avifEntry = verifiedEntry({
+      source_url: 'https://cdn.example/phone.avif',
+      verified_url: 'https://cdn.example/phone.jpg',
+      is_primary: false,
+      position: 1,
+    });
+    const jpgSibling = verifiedEntry({
+      source_url: 'https://cdn.example/phone.jpg',
+      verified_url: 'https://cdn.example/phone.jpg',
+      is_primary: true,
+      position: 0,
+    });
+    const manifest = [avifEntry, jpgSibling];
+    // The sibling row shares no raw spelling with the AVIF claim, but it
+    // resolves to the same verified image the offer owns.
+    expect(isOfferClaimedImage(jpgSibling, claimed, manifest)).toBe(true);
+    expect(isOfferClaimedImage(verifiedEntry(), claimed, manifest)).toBe(false);
+  });
+
+  it('does not exclude shared verified urls without the manifest', () => {
+    const claimed = new Set(['https://cdn.example/phone.avif']);
+    expect(
+      isOfferClaimedImage(
+        verifiedEntry({
+          source_url: 'https://cdn.example/phone.jpg',
+          verified_url: 'https://cdn.example/phone.jpg',
+        }),
+        claimed
+      )
+    ).toBe(false);
+  });
 });

@@ -3,7 +3,7 @@ import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
-import { isOfferClaimedUrl } from '@/lib/is-offer-claimed-url';
+import { isOfferClaimedImage } from '@/lib/is-offer-claimed-image';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { stripHtmlTags } from '@/lib/sanitize-core';
 import {
@@ -47,7 +47,14 @@ function getOpenAIFeedImageUrls(
     product.images
       ?.map((image) => (typeof image === 'string' ? image : image.url))
       .filter(isString)
-      .filter((url) => !isOfferClaimedUrl(url, offerClaimedImageUrls)) || []
+      .filter(
+        (url) =>
+          !isOfferClaimedImage(
+            { source_url: url, verified_url: url },
+            offerClaimedImageUrls,
+            manifestEntries
+          )
+      ) || []
   );
 }
 

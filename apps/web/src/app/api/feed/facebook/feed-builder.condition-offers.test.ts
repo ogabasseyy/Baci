@@ -75,6 +75,29 @@ describe('generateFacebookCatalogFeed condition offers', () => {
     expect(xml).toContain('condition=open_box');
     expect(xml).not.toContain('condition=refurbished');
   });
+  it('qualifies the grouped base id so it differs from the group id', () => {
+    const xml = generateFacebookCatalogFeed(
+      [
+        {
+          ...baseProduct,
+          offers: [
+            {
+              id: 'offer-used',
+              condition: 'used',
+              price: 1_000_000,
+              stock_quantity: 2,
+            },
+          ],
+        },
+      ],
+      merchant,
+      'https://ogabassey.com',
+      imageManifest
+    );
+    expect(xml).toContain('<g:id>product-1-new</g:id>');
+    expect(xml).toContain('<g:item_group_id>product-1</g:item_group_id>');
+    expect(xml).not.toContain('<g:id>product-1</g:id>');
+  });
   it('excludes offers that duplicate the parent condition', () => {
     const xml = generateFacebookCatalogFeed(
       [

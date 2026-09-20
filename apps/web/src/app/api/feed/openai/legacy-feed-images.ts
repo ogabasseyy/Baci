@@ -3,7 +3,7 @@ import {
   resolveGmcAdditionalImages,
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
-import { isOfferClaimedUrl } from '@/lib/is-offer-claimed-url';
+import { isOfferClaimedImage } from '@/lib/is-offer-claimed-image';
 import type { ImageManifestMap } from '../google-merchant/feed-builder';
 import type { OpenAIFeedVariant } from './feed-data';
 import type { Product } from './feed-types';
@@ -37,13 +37,14 @@ function getProductImageUrl(
   imageManifest: ImageManifestMap = {}
 ) {
   const offerClaimedImageUrls = collectOfferClaimedImageUrls(product.offers);
+  const manifestEntries = getManifestEntriesForProductVariant(
+    imageManifest,
+    product,
+    variant,
+    offerClaimedImageUrls
+  );
   const manifestPrimaryImage = resolveGmcPrimaryImage(
-    getManifestEntriesForProductVariant(
-      imageManifest,
-      product,
-      variant,
-      offerClaimedImageUrls
-    ),
+    manifestEntries,
     offerClaimedImageUrls
   );
   if (manifestPrimaryImage) {
@@ -57,16 +58,26 @@ function getProductImageUrl(
       : parentFirstImageRaw?.url || '';
   // The raw fallback must not restore an offer-owned URL the manifest
   // path just excluded.
-  const fallbackImage = isOfferClaimedUrl(
-    parentFirstImage,
-    offerClaimedImageUrls
+  const fallbackImage = isOfferClaimedImage(
+    { source_url: parentFirstImage, verified_url: parentFirstImage },
+    offerClaimedImageUrls,
+    manifestEntries
   )
     ? ''
     : parentFirstImage;
 
   // A variant primary restored without the claim check would reintroduce
   // offer-owned imagery the manifest copy just excluded.
-  if (isOfferClaimedUrl(variant?.primary_image, offerClaimedImageUrls)) {
+  if (
+    isOfferClaimedImage(
+      {
+        source_url: variant?.primary_image ?? null,
+        verified_url: variant?.primary_image ?? null,
+      },
+      offerClaimedImageUrls,
+      manifestEntries
+    )
+  ) {
     return fallbackImage;
   }
 
@@ -79,13 +90,14 @@ function getAdditionalImageLinks(
   variant?: OpenAIFeedVariant
 ) {
   const offerClaimedImageUrls = collectOfferClaimedImageUrls(product.offers);
+  const manifestEntries = getManifestEntriesForProductVariant(
+    imageManifest,
+    product,
+    variant,
+    offerClaimedImageUrls
+  );
   const manifestAdditionalImages = resolveGmcAdditionalImages(
-    getManifestEntriesForProductVariant(
-      imageManifest,
-      product,
-      variant,
-      offerClaimedImageUrls
-    ),
+    manifestEntries,
     offerClaimedImageUrls
   );
   if (manifestAdditionalImages.length > 0) {
@@ -98,7 +110,11 @@ function getAdditionalImageLinks(
     .filter(
       (url): url is string =>
         typeof url === 'string' &&
-        !isOfferClaimedUrl(url, offerClaimedImageUrls)
+        !isOfferClaimedImage(
+          { source_url: url, verified_url: url },
+          offerClaimedImageUrls,
+          manifestEntries
+        )
     );
 }
 

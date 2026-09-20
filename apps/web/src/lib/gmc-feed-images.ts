@@ -47,7 +47,7 @@ export function resolveGmcPrimaryImage(
 ): string | null {
   const candidates = entries.filter(
     (e): e is VerifiedEntry =>
-      isVerifiedWithUrl(e) && !isOfferClaimedImage(e, excludeUrls)
+      isVerifiedWithUrl(e) && !isOfferClaimedImage(e, excludeUrls, entries)
   );
   const primary = candidates
     .filter((e) => e.is_primary)
@@ -74,7 +74,7 @@ export function resolveGmcAdditionalImages(
       (e): e is VerifiedEntry =>
         !e.is_primary &&
         isVerifiedWithUrl(e) &&
-        !isOfferClaimedImage(e, excludeUrls)
+        !isOfferClaimedImage(e, excludeUrls, entries)
     )
     .sort((a, b) => a.position - b.position)
     .map((e) => e.verified_url);

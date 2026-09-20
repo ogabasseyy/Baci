@@ -218,7 +218,8 @@ describe('generateGoogleMerchantFeed — condition offers', () => {
       BASE_URL,
       defaultManifest
     );
-    const baseItem = extractItemXml(xml, 'prod-1');
+    const baseItem = extractItemXml(xml, 'prod-1-new');
     expect(baseItem).toContain('<g:item_group_id>prod-1</g:item_group_id>');
+    expect(baseItem).not.toContain('<g:id>prod-1</g:id>');
   });
 });

@@ -689,8 +689,8 @@ describe('generateGoogleMerchantFeed — multi-condition offers', () => {
       BASE_URL,
       defaultManifest
     );
-    // Base item uses product id
-    expect(xml).toContain('<g:id>prod-1</g:id>');
+    // Grouped base item uses a qualified id distinct from the group
+    expect(xml).toContain('<g:id>prod-1-new</g:id>');
     // Offer item uses offer id
     expect(xml).toContain('<g:id>offer-1</g:id>');
     // Two <item> blocks total
@@ -1382,7 +1382,7 @@ describe('generateGoogleMerchantFeed — conditioned variants', () => {
     );
 
     expect((xml.match(/<item>/g) || []).length).toBe(2);
-    expect(xml).toContain('<g:id>prod-1</g:id>');
+    expect(xml).toContain('<g:id>prod-1-new</g:id>');
     expect(xml).toContain('<g:id>offer-used</g:id>');
   });
 });

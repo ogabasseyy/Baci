@@ -1,14 +1,14 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
-import { useQuizRewardedStartHold } from './use-quiz-rewarded-start-hold';
+import { useQuizStartHold } from './use-quiz-start-hold';
 
-describe('useQuizRewardedStartHold', () => {
-  it('flushes a held start when the rewarded ad closes', () => {
+describe('useQuizStartHold', () => {
+  it('flushes a held start when the covering flag clears', () => {
     const onStart = jest.fn();
     const refs = {
       appStateRef: { current: 'active' as const },
       isFullscreenAdActiveRef: { current: false },
-      isRewardedAdActiveRef: { current: true },
+      isStartBlockedRef: { current: true },
       onStartRef: { current: onStart },
       pendingStartRef: {
         current: { id: 'event-1' } as { id: string },
@@ -16,20 +16,20 @@ describe('useQuizRewardedStartHold', () => {
       startedRef: { current: false },
       stoppedRef: { current: false },
     };
-    const args = (isRewardedAdActive: boolean) =>
+    const args = (isStartBlocked: boolean) =>
       ({
         ...refs,
-        isRewardedAdActive,
-      }) as unknown as Parameters<typeof useQuizRewardedStartHold>[0];
+        isStartBlocked,
+      }) as unknown as Parameters<typeof useQuizStartHold>[0];
 
     const { rerender } = renderHook(
-      (props: { isRewardedAdActive: boolean }) =>
-        useQuizRewardedStartHold(args(props.isRewardedAdActive)),
-      { initialProps: { isRewardedAdActive: true } }
+      (props: { isStartBlocked: boolean }) =>
+        useQuizStartHold(args(props.isStartBlocked)),
+      { initialProps: { isStartBlocked: true } }
     );
     expect(onStart).not.toHaveBeenCalled();
 
-    rerender({ isRewardedAdActive: false });
+    rerender({ isStartBlocked: false });
     expect(onStart).toHaveBeenCalledWith('event-1', true);
     expect(refs.pendingStartRef.current).toBeNull();
   });
@@ -39,7 +39,7 @@ describe('useQuizRewardedStartHold', () => {
     const refs = {
       appStateRef: { current: 'active' as const },
       isFullscreenAdActiveRef: { current: true },
-      isRewardedAdActiveRef: { current: true },
+      isStartBlockedRef: { current: true },
       onStartRef: { current: onStart },
       pendingStartRef: {
         current: { id: 'event-1' } as { id: string },
@@ -47,18 +47,18 @@ describe('useQuizRewardedStartHold', () => {
       startedRef: { current: false },
       stoppedRef: { current: false },
     };
-    const args = (isRewardedAdActive: boolean) =>
+    const args = (isStartBlocked: boolean) =>
       ({
         ...refs,
-        isRewardedAdActive,
-      }) as unknown as Parameters<typeof useQuizRewardedStartHold>[0];
+        isStartBlocked,
+      }) as unknown as Parameters<typeof useQuizStartHold>[0];
 
     const { rerender } = renderHook(
-      (props: { isRewardedAdActive: boolean }) =>
-        useQuizRewardedStartHold(args(props.isRewardedAdActive)),
-      { initialProps: { isRewardedAdActive: true } }
+      (props: { isStartBlocked: boolean }) =>
+        useQuizStartHold(args(props.isStartBlocked)),
+      { initialProps: { isStartBlocked: true } }
     );
-    rerender({ isRewardedAdActive: false });
+    rerender({ isStartBlocked: false });
 
     expect(onStart).not.toHaveBeenCalled();
     expect(refs.pendingStartRef.current).not.toBeNull();

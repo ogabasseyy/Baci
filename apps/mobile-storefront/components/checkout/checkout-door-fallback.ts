@@ -44,11 +44,11 @@ export function resolveDeliveryFallback({
   if (
     (deliveryMethod !== 'door' && !hasResolvedDeliveryLocation) ||
     (deliveryMethod === 'airport' &&
-      !isAirportDeliveryEligible(watchedState) &&
-      (!isGiglGoFasterQuote(
-        findSelectedQuote(shippingQuotes, selectedQuoteId)
-      ) ||
-        isStoreOriginDelivery(watchedCity, watchedState))) ||
+      (isStoreOriginDelivery(watchedCity, watchedState) ||
+        (!isAirportDeliveryEligible(watchedState) &&
+          !isGiglGoFasterQuote(
+            findSelectedQuote(shippingQuotes, selectedQuoteId)
+          )))) ||
     (deliveryMethod === 'pickup_station' && !canUsePickupStation)
   ) {
     return {

@@ -1,6 +1,8 @@
 import { useIsFocused } from 'expo-router';
+import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { PaidEvent } from 'react-native-google-mobile-ads';
+import { resolveBannerAdModule } from '@/components/ads/banner-ad-module';
 import type { MobileAdBannerPlacementKey } from '@/config/mobile-ad-placements';
 import { trackEvent } from '@/services/analytics-core';
 import { useDrawerStore } from '@/stores/drawer-store';
@@ -52,14 +54,13 @@ export function LaunchAdCard({
   // Like AdSlot: a pushed route keeps this screen mounted, so an unfocused
   // route must not own or refresh the banner behind the new screen.
   const isFocused = useIsFocused();
-  let bannerModule: typeof import('react-native-google-mobile-ads') | null =
-    null;
-  try {
-    bannerModule =
-      require('react-native-google-mobile-ads') as typeof import('react-native-google-mobile-ads');
-  } catch {
-    return null;
-  }
+  const bannerModule = resolveBannerAdModule();
+  useEffect(() => {
+    // A missing native module (e.g. Expo Go) is a load failure like any
+    // other: report it so the carousel drops the card instead of showing a
+    // blank page and skewing offset compensation.
+    if (!bannerModule) onAdFailedToLoad?.();
+  }, [bannerModule, onAdFailedToLoad]);
   if (!bannerModule) return null;
   // Drawer, focus, and viewability all withhold the native banner but keep
   // the fixed-size placeholder mounted: the carousel still carries the ad

@@ -60,6 +60,21 @@ describe('resolveDeliveryFallback', () => {
     ).toEqual({ deliveryMethod: 'door', selectedQuoteId: 'road-1' });
   });
 
+  it('falls back a selected airport method for Lagos-origin delivery in an airport-eligible state', () => {
+    // Regression: a stale saved address with city Lagos and state Oyo is
+    // store-origin delivery — an already selected By Air method must not
+    // survive just because the state alone is airport-eligible.
+    expect(
+      resolveDeliveryFallback({
+        ...baseInput,
+        deliveryMethod: 'airport',
+        selectedQuoteId: 'gofaster-1',
+        watchedCity: 'Lagos',
+        watchedState: 'Oyo',
+      })
+    ).toEqual({ deliveryMethod: 'door', selectedQuoteId: 'road-1' });
+  });
+
   it('clears the selection when no road quote exists', () => {
     expect(
       resolveDeliveryFallback({

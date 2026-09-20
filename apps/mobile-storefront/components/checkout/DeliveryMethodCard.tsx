@@ -72,12 +72,13 @@ export function DeliveryMethodCard({
       isProviderPickup: false,
     },
   ];
-  // A provider GoFaster quote never re-enables By Air for same-city (Lagos
-  // origin) delivery — air-cargo within one city is not offered.
+  // Same-city (Lagos origin) delivery never offers By Air — air-cargo
+  // within one city is not offered — even when the state alone is
+  // airport-eligible (e.g. a stale saved address with city Lagos and state
+  // Oyo) or a provider GoFaster quote exists for the route.
   if (
-    isAirportDeliveryEligible(deliveryState) ||
-    (hasGiglGoFasterQuote &&
-      !isStoreOriginDelivery(deliveryCity, deliveryState))
+    !isStoreOriginDelivery(deliveryCity, deliveryState) &&
+    (isAirportDeliveryEligible(deliveryState) || hasGiglGoFasterQuote)
   ) {
     options.push({
       id: 'airport',

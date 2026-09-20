@@ -439,4 +439,40 @@ describe('useQuizRewardedBadge', () => {
     act(() => listeners.get(RewardedAdEventType.LOADED)?.());
     expect(mockAd.show).not.toHaveBeenCalled();
   });
+
+  it('credits a reward delivered while the app is inactive', () => {
+    // Regression: a presented rewarded ad that fires EARNED_REWARD during an
+    // inactive transition must still credit the badge; only pre-presentation
+    // loads are abandoned on backgrounding.
+    mockAd.show.mockResolvedValueOnce(undefined);
+    const { result } = renderHook(() =>
+      useQuizRewardedBadge({
+        eventId: 'event-1',
+        eventTitle: 'Today Quiz',
+        remainingSeconds: 120,
+        status: 'scheduled',
+        userId: 'user-1',
+      })
+    );
+
+    act(() => result.current.watchAd());
+    act(() => listeners.get(RewardedAdEventType.LOADED)?.());
+    expect(mockAd.show).toHaveBeenCalledTimes(1);
+    const listener = jest
+      .mocked(AppState.addEventListener)
+      .mock.calls.at(-1)?.[1] as (state: AppStateStatus) => void;
+    act(() => {
+      listener('inactive');
+    });
+    act(() =>
+      listeners.get(RewardedAdEventType.EARNED_REWARD)?.({ amount: 1 })
+    );
+
+    expect(mockUnlockBadge).toHaveBeenCalledWith(
+      'user-1',
+      'event-1',
+      'Today Quiz'
+    );
+    expect(result.current.justEarned).toBe(true);
+  });
 });

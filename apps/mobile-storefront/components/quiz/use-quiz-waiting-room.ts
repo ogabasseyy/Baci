@@ -3,8 +3,8 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
 import { flushPendingQuizStart } from './quiz-pending-start';
-import { useQuizRewardedStartHold } from './use-quiz-rewarded-start-hold';
 import { calculateQuizServerClockOffset } from './use-quiz-server-clock';
+import { useQuizStartHold } from './use-quiz-start-hold';
 
 const CLOCK_TICK_MS = 250;
 const BOUNDARY_REFRESH_MIN_INTERVAL_MS = 1_000;
@@ -83,7 +83,9 @@ export function useQuizWaitingRoom({
   // A start boundary that lands while the interstitial owns the screen waits
   // here until the ad closes instead of starting timed play behind it.
   const pendingStartRef = useRef<QuizEvent | null>(null);
-  const isRewardedAdActiveRef = useRef(isRewardedAdActive);
+  // Combined covering flag (rewarded ad or rules modal): a boundary that
+  // lands while either covers the lobby waits in the pending-start path.
+  const isStartBlockedRef = useRef(isRewardedAdActive || suspended);
   const [error, setError] = useState<string | null>(null);
   const eventRef = useRef(initialEvent);
   const offsetRef = useRef(offsetMs);
@@ -127,11 +129,11 @@ export function useQuizWaitingRoom({
       appStateRef.current === 'active' &&
       (nextEvent.status === 'active' || nextEvent.status === 'open')
     ) {
-      // Starting live play behind a presented interstitial or rewarded ad
-      // would burn the shopper's timed window under a full-screen ad: hold
-      // the transition until the ad closes (flushed in its onClosed handler
-      // below, or when the rewarded flag clears).
-      if (isFullscreenAdActiveRef.current || isRewardedAdActiveRef.current) {
+      // Starting live play behind a presented interstitial, a rewarded ad,
+      // or the rules modal would burn the shopper's timed window under a
+      // covering surface: hold the transition until it clears (flushed by
+      // the interstitial onClosed handler or the start-hold hook).
+      if (isFullscreenAdActiveRef.current || isStartBlockedRef.current) {
         pendingStartRef.current = nextEvent;
         return;
       }
@@ -180,11 +182,11 @@ export function useQuizWaitingRoom({
     }
   };
 
-  useQuizRewardedStartHold({
+  useQuizStartHold({
     appStateRef,
     isFullscreenAdActiveRef,
-    isRewardedAdActive,
-    isRewardedAdActiveRef,
+    isStartBlocked: isRewardedAdActive || suspended,
+    isStartBlockedRef,
     onStartRef,
     pendingStartRef,
     startedRef,
@@ -225,9 +227,9 @@ export function useQuizWaitingRoom({
           // timed play in the background: retain the pending transition
           // until the foreground refresh re-validates it on resume.
           if (appStateRef.current !== 'active') return;
-          // Likewise while a rewarded ad owns the screen: the rewarded
-          // flag clearing flushes the pending transition instead.
-          if (isRewardedAdActiveRef.current) return;
+          // Likewise while a rewarded ad or the rules modal covers the
+          // lobby: the hold hook flushes when the covering flag clears.
+          if (isStartBlockedRef.current) return;
           flushPendingQuizStart({
             onStartRef,
             pendingStartRef,

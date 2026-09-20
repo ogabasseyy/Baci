@@ -5,17 +5,17 @@ import type { QuizEvent } from '@/services/quiz-types';
 import { flushPendingQuizStart } from './quiz-pending-start';
 
 /**
- * Holds a quiz start boundary behind an open rewarded video or end card.
- * The waiting-room hook routes boundaries into the pending-start path while
- * the flag is set; this effect flushes the hold when the rewarded ad
- * closes. If the interstitial still owns the screen its onClosed handler
- * flushes instead.
+ * Holds a quiz start boundary behind a covering surface: an open rewarded
+ * video/end card or the rules modal. The waiting-room hook routes
+ * boundaries into the pending-start path while the combined flag is set;
+ * this effect flushes the hold when it clears. If the interstitial still
+ * owns the screen its onClosed handler flushes instead.
  */
-export function useQuizRewardedStartHold({
+export function useQuizStartHold({
   appStateRef,
   isFullscreenAdActiveRef,
-  isRewardedAdActive,
-  isRewardedAdActiveRef,
+  isStartBlocked,
+  isStartBlockedRef,
   onStartRef,
   pendingStartRef,
   startedRef,
@@ -23,19 +23,19 @@ export function useQuizRewardedStartHold({
 }: {
   appStateRef: MutableRefObject<AppStateStatus>;
   isFullscreenAdActiveRef: MutableRefObject<boolean>;
-  isRewardedAdActive: boolean;
-  isRewardedAdActiveRef: MutableRefObject<boolean>;
+  isStartBlocked: boolean;
+  isStartBlockedRef: MutableRefObject<boolean>;
   onStartRef: MutableRefObject<(eventId: string, termsAccepted: true) => void>;
   pendingStartRef: MutableRefObject<QuizEvent | null>;
   startedRef: MutableRefObject<boolean>;
   stoppedRef: MutableRefObject<boolean>;
 }): void {
   useEffect(() => {
-    const wasActive = isRewardedAdActiveRef.current;
-    isRewardedAdActiveRef.current = isRewardedAdActive;
+    const wasBlocked = isStartBlockedRef.current;
+    isStartBlockedRef.current = isStartBlocked;
     if (
-      wasActive &&
-      !isRewardedAdActive &&
+      wasBlocked &&
+      !isStartBlocked &&
       !isFullscreenAdActiveRef.current &&
       appStateRef.current === 'active'
     ) {
@@ -46,5 +46,5 @@ export function useQuizRewardedStartHold({
         stoppedRef,
       });
     }
-  }, [isRewardedAdActive]);
+  }, [isStartBlocked]);
 }

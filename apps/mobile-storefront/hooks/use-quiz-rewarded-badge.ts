@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { resolveRewardedAdModule } from '@/components/ads/rewarded-ad-module';
 import { getQuizMobileAdsConfig } from '@/config/quiz-mobile-ads';
 import { useQuizMobileAds } from '@/hooks/use-quiz-mobile-ads';
 import { setQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
@@ -32,37 +33,12 @@ export interface QuizRewardedBadgeState {
   watchFailed: boolean;
 }
 
-interface RewardedAdInstance {
-  addAdEventListener: (
-    event: string,
-    listener: (payload?: unknown) => void
-  ) => () => void;
-  load: () => void;
-  show: () => Promise<void>;
-}
-
-interface MobileAdsModule {
-  AdEventType: { CLOSED: string; ERROR: string };
-  RewardedAd: {
-    createForAdRequest: (unitId: string) => RewardedAdInstance;
-  };
-  RewardedAdEventType: { EARNED_REWARD: string; LOADED: string };
-}
-
 interface RewardedAdSession {
   cleanups: Array<() => void>;
   generation: number;
   identityKey: string;
   presented: boolean;
   settled: boolean;
-}
-
-function loadMobileAdsModule(): MobileAdsModule | null {
-  try {
-    return require('react-native-google-mobile-ads') as MobileAdsModule;
-  } catch {
-    return null;
-  }
 }
 
 export function useQuizRewardedBadge({
@@ -178,7 +154,7 @@ export function useQuizRewardedBadge({
 
   const watchAd = () => {
     if (!available || !userId || !adState.rewardedUnitId || isWatching) return;
-    const mobileAds = loadMobileAdsModule();
+    const mobileAds = resolveRewardedAdModule();
     if (!mobileAds) {
       // Native ads module missing (e.g. Expo Go): say so instead of a dead tap.
       setWatchFailed(true);
@@ -210,11 +186,18 @@ export function useQuizRewardedBadge({
       setQuizRewardedFlowActive(false);
       setIsWatching(false);
     };
-    const isCurrent = () =>
+    // Session identity without the app-state guard: presented sessions are
+    // deliberately retained across background/inactive transitions, so a
+    // reward delivered while inactive is still legitimate.
+    const isSessionLive = () =>
       sessionRef.current === session &&
       !session.settled &&
       session.generation === generationRef.current &&
-      session.identityKey === identityRef.current &&
+      session.identityKey === identityRef.current;
+    // Pre-presentation guard: a pending load must never present (or fail
+    // visibly) while the app is inactive.
+    const isCurrent = () =>
+      isSessionLive() &&
       appStateRef.current !== 'background' &&
       appStateRef.current !== 'inactive';
 
@@ -237,7 +220,7 @@ export function useQuizRewardedBadge({
         rewardedAd.addAdEventListener(
           mobileAds.RewardedAdEventType.EARNED_REWARD,
           () => {
-            if (!isCurrent()) return;
+            if (!isSessionLive()) return;
             session.settled = true;
             unlockBadge(userId, eventId, eventTitle);
             setJustEarned(true);

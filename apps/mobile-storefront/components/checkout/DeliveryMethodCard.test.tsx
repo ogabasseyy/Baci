@@ -39,6 +39,31 @@ describe('DeliveryMethodCard', () => {
     expect(screen.queryByText('By Air')).toBeNull();
   });
 
+  it('hides By Air for a Lagos-origin address in an airport-eligible state', () => {
+    // Regression: a stale saved address with city Lagos and state Oyo
+    // resolves as store-origin delivery, so state-level airport
+    // eligibility (or a GoFaster quote) must not expose By Air.
+    const { unmount } = render(
+      <DeliveryMethodCard
+        {...baseProps}
+        deliveryCity="Lagos"
+        deliveryState="Oyo"
+      />
+    );
+    expect(screen.queryByText('By Air')).toBeNull();
+    unmount();
+
+    render(
+      <DeliveryMethodCard
+        {...baseProps}
+        deliveryCity="Lagos"
+        deliveryState="Oyo"
+        hasGiglGoFasterQuote
+      />
+    );
+    expect(screen.queryByText('By Air')).toBeNull();
+  });
+
   it('hides By Air for a Lagos address even with a GIGL GoFaster quote', () => {
     render(
       <DeliveryMethodCard

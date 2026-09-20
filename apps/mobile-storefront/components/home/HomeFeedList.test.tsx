@@ -323,6 +323,14 @@ describe('HomeFeedList', () => {
     expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
   });
 
+  it('withholds the in-feed slot when the feed resolves empty', () => {
+    // Regression: a successful query or active filter can return zero
+    // products — the placement must not request below the empty state.
+    mockUseHomeProductFeed.mockReturnValue(feed({ feedProducts: [] }));
+    renderList();
+    expect(screen.queryByTestId('ad-slot-PRODUCT_GRID_IN_FEED')).toBeNull();
+  });
+
   it('builds a RefreshControl with the header offset and theme color', () => {
     const onRefresh = jest.fn();
     renderList({ onRefresh });

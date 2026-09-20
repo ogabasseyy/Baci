@@ -11,7 +11,16 @@ const migration = readFileSync(
 );
 
 // PostgreSQL behavioral checks run through the repository's Docker replay
-// workflow; this colocated Vitest suite has no database fixture or connection.
+// workflow (including supabase/migrations/tests/manual_order_document_date_sync.sql);
+// this colocated Vitest suite has no database fixture or connection.
+
+const reviewSyncMigration = readFileSync(
+  resolve(
+    import.meta.dirname,
+    '../../../../supabase/migrations/20260920160000_sync_review_transaction_date_to_document_dates.sql'
+  ),
+  'utf8'
+);
 
 describe('manual order document date migration', () => {
   it('synchronizes persisted document dates when transaction_date changes', () => {
@@ -66,5 +75,28 @@ describe('manual order document date migration', () => {
     expect(migration).toContain(
       '(invoice_issue_date_generated IS TRUE OR tax_point_date_generated IS TRUE)'
     );
+  });
+});
+
+describe('review transaction date sync migration', () => {
+  it('moves both document dates to the reviewer day on transaction edits', () => {
+    expect(reviewSyncMigration).toContain(
+      'CREATE OR REPLACE FUNCTION public.update_transaction_review_details('
+    );
+    expect(reviewSyncMigration).toContain(
+      'WHEN transaction_date IS DISTINCT FROM p_transaction_date'
+    );
+    expect(reviewSyncMigration).toContain(
+      '(p_transaction_date AT TIME ZONE v_transaction_time_zone)::date'
+    );
+  });
+
+  it('marks review-set dates explicit without touching cost-only reviews', () => {
+    expect(reviewSyncMigration).toContain(
+      'invoice_issue_date_generated = CASE'
+    );
+    expect(reviewSyncMigration).toContain('tax_point_date_generated = CASE');
+    expect(reviewSyncMigration).toContain('ELSE invoice_issue_date_generated');
+    expect(reviewSyncMigration).toContain('ELSE tax_point_date_generated');
   });
 });

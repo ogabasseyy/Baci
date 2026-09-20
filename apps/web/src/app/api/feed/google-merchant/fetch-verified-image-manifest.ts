@@ -1,10 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { chunkValues } from '@/lib/chunk-values';
+import { FEED_FETCH_CONSTANTS } from './feed-fetch-constants';
 
 const FEED_IMAGE_MANIFEST_PAGE_SIZE = 1000;
 // Keep PostgREST `in(...)` URL filters under common proxy limits.
 const FEED_IMAGE_MANIFEST_PRODUCT_BATCH_SIZE = 250;
-export const FEED_IMAGE_MANIFEST_MAX_CONCURRENT_BATCHES = 4;
 
 export type ManifestRow = {
   source_url?: string | null;
@@ -32,11 +32,11 @@ export async function fetchVerifiedImageManifestRows(
   for (
     let batchStart = 0;
     batchStart < manifestBatches.length;
-    batchStart += FEED_IMAGE_MANIFEST_MAX_CONCURRENT_BATCHES
+    batchStart += FEED_FETCH_CONSTANTS.MANIFEST_MAX_CONCURRENT_BATCHES
   ) {
     const batchWindow = manifestBatches.slice(
       batchStart,
-      batchStart + FEED_IMAGE_MANIFEST_MAX_CONCURRENT_BATCHES
+      batchStart + FEED_FETCH_CONSTANTS.MANIFEST_MAX_CONCURRENT_BATCHES
     );
     const batchResults = await Promise.all(
       batchWindow.map(async (batchProductIds, batchWindowIndex) => {

@@ -231,8 +231,12 @@ export async function submitNewOrder({
           total,
           transaction_date: orderDateIso,
           ...documentDates,
-          invoice_issue_date_generated: true,
-          tax_point_date_generated: true,
+          // The picker selection is explicit user intent, not a derived value:
+          // recomputing these dates from the UTC instant in the merchant
+          // timezone can shift the day when the device is ahead of the
+          // merchant near midnight, so the triggers must preserve them.
+          invoice_issue_date_generated: false,
+          tax_point_date_generated: false,
         },
       }
     );

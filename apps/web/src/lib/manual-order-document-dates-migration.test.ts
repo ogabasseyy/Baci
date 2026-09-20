@@ -31,6 +31,31 @@ describe('manual order document date migration', () => {
     expect(migration).toContain('ELSE NULL');
   });
 
+  it('initializes provenance for NULL-dated rows before the backfill', () => {
+    expect(migration).toContain('invoice_issue_date IS NULL THEN true');
+    expect(migration).toContain('tax_point_date IS NULL THEN true');
+    // The init must run first: without it the backfill WHERE clause (IS TRUE
+    // over NULL-for-all-rows columns) would update no pre-existing orders.
+    expect(
+      migration.indexOf(
+        'WHERE invoice_issue_date IS NULL OR tax_point_date IS NULL'
+      )
+    ).toBeLessThan(
+      migration.indexOf(
+        '(invoice_issue_date_generated IS TRUE OR tax_point_date_generated IS TRUE)'
+      )
+    );
+  });
+
+  it('clears provenance flags when explicit dates arrive with a transaction change', () => {
+    expect(migration).toContain(
+      'NEW.invoice_issue_date IS DISTINCT FROM OLD.invoice_issue_date'
+    );
+    expect(migration).toContain(
+      'NEW.tax_point_date IS DISTINCT FROM OLD.tax_point_date'
+    );
+  });
+
   it('preserves explicit dates while updating generated dates independently', () => {
     expect(migration).toContain(
       'invoice_issue_date = CASE\n    WHEN invoice_issue_date_generated IS TRUE'

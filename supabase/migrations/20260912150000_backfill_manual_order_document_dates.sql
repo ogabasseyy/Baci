@@ -23,6 +23,16 @@ AS $$
   WHERE m.id = p_merchant_id;
 $$;
 
+-- The new provenance columns are NULL for every pre-existing row, which would
+-- make the backfill below a no-op. A NULL date cannot be an explicit override,
+-- so record NULL-dated rows as generated (mirroring the order_items trigger);
+-- rows with non-NULL dates keep NULL provenance and stay untouched.
+UPDATE public.orders
+SET
+  invoice_issue_date_generated = CASE WHEN invoice_issue_date IS NULL THEN true ELSE invoice_issue_date_generated END,
+  tax_point_date_generated = CASE WHEN tax_point_date IS NULL THEN true ELSE tax_point_date_generated END
+WHERE invoice_issue_date IS NULL OR tax_point_date IS NULL;
+
 -- Rows without recorded provenance are intentionally left untouched. Date
 -- equality cannot distinguish a generated date from an explicit override.
 UPDATE public.orders
@@ -131,17 +141,34 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- A date changed in the same statement as the transaction is an explicit
+  -- override: keep it and clear its flag atomically so later transaction
+  -- updates cannot replace it.
   UPDATE public.orders
   SET
     invoice_issue_date = CASE
+      WHEN NEW.invoice_issue_date IS DISTINCT FROM OLD.invoice_issue_date
+      THEN NEW.invoice_issue_date
       WHEN invoice_issue_date_generated IS TRUE
       THEN (NEW.transaction_date AT TIME ZONE v_time_zone)::date
       ELSE invoice_issue_date
     END,
+    invoice_issue_date_generated = CASE
+      WHEN NEW.invoice_issue_date IS DISTINCT FROM OLD.invoice_issue_date
+      THEN false
+      ELSE invoice_issue_date_generated
+    END,
     tax_point_date = CASE
+      WHEN NEW.tax_point_date IS DISTINCT FROM OLD.tax_point_date
+      THEN NEW.tax_point_date
       WHEN tax_point_date_generated IS TRUE
       THEN (NEW.transaction_date AT TIME ZONE v_time_zone)::date
       ELSE tax_point_date
+    END,
+    tax_point_date_generated = CASE
+      WHEN NEW.tax_point_date IS DISTINCT FROM OLD.tax_point_date
+      THEN false
+      ELSE tax_point_date_generated
     END
   WHERE id = NEW.id;
 

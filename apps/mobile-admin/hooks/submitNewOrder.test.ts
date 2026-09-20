@@ -300,6 +300,32 @@ describe('submitNewOrder', () => {
     );
   });
 
+  it('marks picker document dates explicit so triggers preserve the local day', async () => {
+    // Device wall time just past local midnight: the UTC instant already falls
+    // on the previous day for devices ahead of UTC, but the selected calendar
+    // day stays authoritative and must not be recomputed from the instant.
+    const selectedOrderDate = new Date(2026, 2, 5, 0, 30);
+
+    await submitNewOrder(
+      createSubmitParams({
+        orderDate: selectedOrderDate,
+      })
+    );
+
+    expect(mocks.createManualOrderWithItems).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        order: expect.objectContaining({
+          transaction_date: selectedOrderDate.toISOString(),
+          invoice_issue_date: '2026-03-05',
+          tax_point_date: '2026-03-05',
+          invoice_issue_date_generated: false,
+          tax_point_date_generated: false,
+        }),
+      })
+    );
+  });
+
   it('preserves custom match status and selected variant attributes', async () => {
     await submitNewOrder(
       createSubmitParams({

@@ -795,7 +795,7 @@ describe('useBNPLCheckoutController', () => {
     expect(trackCheckoutPaymentFailed).toHaveBeenCalledTimes(1);
   });
 
-  it('emits payment_failed for terminal WebView load failures', () => {
+  it('emits payment_failed for terminal WebView load failures', async () => {
     mockRouteParams = {
       gateway: 'credit_direct',
       merchantSlug: 'ogabassey',
@@ -803,6 +803,17 @@ describe('useBNPLCheckoutController', () => {
     };
     const { result } = renderControllerHook();
 
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'bnpl_provider_opened',
+            gateway: 'credit_direct',
+            orderId: 'order-123',
+          }),
+        },
+      });
+    });
     act(() => {
       result.current.handleWebViewError({
         description: 'net::ERR_FAILED',
@@ -818,7 +829,7 @@ describe('useBNPLCheckoutController', () => {
     );
   });
 
-  it('fails the checkout when the launch document returns an HTTP error', () => {
+  it('shows error UI without payment_failed for pre-open load failures', () => {
     mockRouteParams = {
       gateway: 'credit_direct',
       merchantSlug: 'ogabassey',
@@ -826,6 +837,41 @@ describe('useBNPLCheckoutController', () => {
     };
     const { result } = renderControllerHook();
 
+    // Offline/DNS failure before the provider opened: no payment_started
+    // exists to match, so the funnel failure must not emit — but the
+    // shopper still gets the error UI with retry.
+    act(() => {
+      result.current.handleWebViewError({
+        description: 'net::ERR_INTERNET_DISCONNECTED',
+        url: 'https://pay.example/x',
+      });
+    });
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorMessage).toBeTruthy();
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+    expect(trackCheckoutPaymentStarted).not.toHaveBeenCalled();
+  });
+
+  it('fails the checkout when the launch document returns an HTTP error', async () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'bnpl_provider_opened',
+            gateway: 'credit_direct',
+            orderId: 'order-123',
+          }),
+        },
+      });
+    });
     act(() => {
       result.current.handleWebViewHttpError({
         nativeEvent: {
@@ -847,7 +893,33 @@ describe('useBNPLCheckoutController', () => {
     expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
   });
 
-  it('fails the checkout when an allowed redirect target returns an HTTP error', () => {
+  it('shows error UI without payment_failed for pre-open HTTP failures', () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+    };
+    const { result } = renderControllerHook();
+
+    // The launch document 500s before the provider opened: retry UI
+    // surfaces, but no funnel failure emits without a matching start.
+    act(() => {
+      result.current.handleWebViewHttpError({
+        nativeEvent: {
+          description: 'Internal Server Error',
+          statusCode: 500,
+          url: result.current.bnplUrl,
+        },
+      } as never);
+    });
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorMessage).toBeTruthy();
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+    expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+  });
+
+  it('fails the checkout when an allowed redirect target returns an HTTP error', async () => {
     mockRouteParams = {
       gateway: 'credit_direct',
       merchantSlug: 'ogabassey',
@@ -856,6 +928,18 @@ describe('useBNPLCheckoutController', () => {
     const { result } = renderControllerHook('ogabassey.com');
     const providerUrl =
       'https://ogabassey.com/checkout/bnpl?gateway=credit_direct&orderId=order-123';
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'bnpl_provider_opened',
+            gateway: 'credit_direct',
+            orderId: 'order-123',
+          }),
+        },
+      });
+    });
 
     let shouldStart = false;
     act(() => {

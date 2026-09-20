@@ -3472,10 +3472,16 @@ export async function POST(request: NextRequest) {
             // email body (rendered after provisioning below) can include
             // the bank-transfer payment instructions.
             let invoiceVirtualAccount: ReceiptOrder['virtual_account'] = null;
-            // Amount already covered by credit/partial payment, hoisted so
-            // the email instructs only the outstanding balance (same rule
-            // as the attached PDF) instead of the full purchase price.
-            let invoiceAmountPaid = 0;
+            // Amount already covered by credit/partial payment, derived
+            // BEFORE the fallible invoice work below: if persisted-item
+            // loading or DVA provisioning throws, the catch still renders
+            // the email, and a zero here would instruct the full price
+            // despite credit already applied (P1 overpayment guard — same
+            // rule as the attached PDF).
+            const invoiceAmountPaid = Math.max(
+              Number(order.amount_paid || 0),
+              savingsAmountUsed + walletAmountUsed
+            );
             let backgroundSupabase: ReturnType<
               typeof createAdminClient
             > | null = null;
@@ -3596,11 +3602,7 @@ export async function POST(request: NextRequest) {
                 const hasDeviceItem = invoiceItems.some((item) =>
                   isDeviceReceiptItemName(getOrderItemBaseName(item))
                 );
-                const amountPaid = Math.max(
-                  Number(order.amount_paid || 0),
-                  savingsAmountUsed + walletAmountUsed
-                );
-                invoiceAmountPaid = amountPaid;
+                const amountPaid = invoiceAmountPaid;
                 const invoiceOrder = {
                   ...invoiceTimingOrder,
                   amount_paid: amountPaid,

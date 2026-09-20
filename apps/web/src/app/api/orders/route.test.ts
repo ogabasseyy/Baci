@@ -6946,6 +6946,100 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       expect.any(Object)
     );
   });
+
+  it('instructs the credited balance when DVA provisioning throws for a partial-credit order', async () => {
+    const supabase = buildMockSupabase({
+      redeem_wallet_for_order: {
+        data: [
+          {
+            success: true,
+            redeemed_amount: 300,
+            new_balance: 700,
+            transaction_id: 'wallet-tx-1',
+          },
+        ],
+        error: null,
+      },
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+    // DVA provisioning throws (rather than returning a failure): the
+    // catch still renders the email, which must instruct 700 outstanding
+    // — not the full 1000 despite 300 of wallet credit applied.
+    mockGeneratePaymentAccount.mockRejectedValueOnce(
+      new Error('dva provider down')
+    );
+
+    supabase.from = vi.fn((_table: string) => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          id: MERCHANT_ID,
+          business_name: 'Test Merchant',
+          country: 'NG',
+          slug: 'test-merchant',
+          support_email: 'support@example.com',
+          email_sender_name: 'Test Store',
+          email: 'merchant@example.com',
+          vat_registration_status: 'registered',
+          vat_rate: 7.5,
+        },
+        error: null,
+      }),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: MERCHANT_ID,
+          business_name: 'Test Merchant',
+          country: 'NG',
+          slug: 'test-merchant',
+          support_email: 'support@example.com',
+          email_sender_name: 'Test Store',
+          email: 'merchant@example.com',
+          vat_registration_status: 'registered',
+          vat_rate: 7.5,
+        },
+        error: null,
+      }),
+      in: vi.fn().mockReturnThis(),
+      returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+      overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+      insert: vi.fn().mockResolvedValue({ error: null }),
+      update: vi.fn().mockReturnThis(),
+      // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+      then: (resolve: any) => Promise.resolve().then(resolve),
+    })) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'invoice',
+        use_wallet_credit: true,
+        wallet_amount: 300,
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ amountDue: 700 })
+    );
+  });
 });
 
 describe('POST /api/orders — discount code', () => {

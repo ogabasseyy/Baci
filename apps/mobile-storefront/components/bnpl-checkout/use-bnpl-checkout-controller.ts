@@ -412,7 +412,14 @@ export function useBNPLCheckoutController({
     if (statusRef.current === 'success') {
       return;
     }
-    recordCheckoutFailure('bnpl_load_error');
+    // Pre-open load failures (offline/DNS before the provider opens) keep
+    // the error UI below but must not emit a funnel failure: with no
+    // payment_started to match, that would be an unmatched pre-payment
+    // failure. The attempt-scoped marker stays clear so a later
+    // post-open failure still records.
+    if (paymentStartRecordedRef.current) {
+      recordCheckoutFailure('bnpl_load_error');
+    }
     handleBNPLWebViewError(
       error,
       clearPendingLoadTimeout,
@@ -435,7 +442,11 @@ export function useBNPLCheckoutController({
     handleBNPLWebViewHttpError(event, {
       documentUrl: documentUrlRef.current || currentUrl || bnplUrl,
       onMainDocumentError: (message) => {
-        recordCheckoutFailure('bnpl_load_error');
+        // Same pre-open guard as load errors: error UI always, funnel
+        // failure only with a matching payment_started.
+        if (paymentStartRecordedRef.current) {
+          recordCheckoutFailure('bnpl_load_error');
+        }
         clearPendingLoadTimeout();
         setCheckoutStatus('error');
         setErrorMessage(message);

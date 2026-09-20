@@ -136,6 +136,26 @@ describe('Payment reminder email', () => {
       );
     });
 
+    it('omits transfer instructions when no balance is due', () => {
+      // A fully discounted unpaid order still carries an assigned DVA:
+      // instructing a ₦0.00 transfer (which can never confirm the order)
+      // is an impossible next step.
+      const payload = {
+        ...accountPayload,
+        amountPaid: 20000,
+        balanceDue: 0,
+      };
+      const html = generatePaymentReminderEmail(payload);
+      const text = generatePaymentReminderText(payload);
+
+      expect(html).not.toContain('💳 Bank Transfer Option');
+      expect(html).not.toContain('1234567890');
+      expect(html).toContain('No payment is due on this order');
+      expect(text).not.toContain('Bank Transfer Option:');
+      expect(text).not.toContain('Account Number: 1234567890');
+      expect(text).toContain('No payment is due on this order');
+    });
+
     it('suppresses the naira account block for foreign-currency orders', () => {
       const html = generatePaymentReminderEmail({
         ...accountPayload,

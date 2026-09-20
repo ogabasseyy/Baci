@@ -62,8 +62,12 @@ export function generatePaymentReminderEmail(
   const supportContactEmail =
     data.supportEmail ||
     `support@${data.merchantUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '')}`;
+  // A zero balance (e.g. a fully discounted unpaid order) has nothing to
+  // transfer: same omission as the confirmation email — no ₦0.00
+  // instruction, just no-payment guidance.
+  const hasBalanceDue = data.balanceDue > 0;
 
-  const bankTransferHtml = reminderVirtualAccount
+  const bankTransferHtml = reminderVirtualAccount && hasBalanceDue
     ? `
     <div style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-radius: 12px; padding: 20px; margin-top: 24px; border: 1px solid #e2e8f0;">
       <div style="font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
@@ -90,7 +94,15 @@ export function generatePaymentReminderEmail(
       </div>
     </div>
   `
-    : `
+    : !hasBalanceDue
+      ? `
+    <div style="background: #f0fdf4; border-radius: 12px; padding: 20px; margin-top: 24px; border: 1px solid #bbf7d0;">
+      <div style="font-size: 14px; color: #166534;">
+        No payment is due on this order — please contact ${escapeHtmlText(data.merchantName)} if you have any questions.
+      </div>
+    </div>
+  `
+      : `
     <div style="background: #fffbeb; border-radius: 12px; padding: 20px; margin-top: 24px; border: 1px solid #fde68a;">
       <div style="font-size: 14px; font-weight: 600; color: #92400e; margin-bottom: 8px;">
         💬 How to pay
@@ -130,7 +142,7 @@ export function generatePaymentReminderEmail(
 
       <p style="color: #6b7280; font-size: 15px; margin: 0 0 24px 0;">
         We noticed your order <strong>#${escapeHtmlText(data.orderNumber)}</strong> is awaiting payment.
-        ${reminderVirtualAccount ? `Complete your bank transfer of ${formatEmailMoney(data.balanceDue, data.currency)} using the details below — your order is confirmed automatically once payment is received.` : `Please contact ${escapeHtmlText(data.merchantName)} to arrange payment.`}
+        ${!hasBalanceDue ? 'No payment is due on this order.' : reminderVirtualAccount ? `Complete your bank transfer of ${formatEmailMoney(data.balanceDue, data.currency)} using the details below — your order is confirmed automatically once payment is received.` : `Please contact ${escapeHtmlText(data.merchantName)} to arrange payment.`}
       </p>
 
       <!-- Order Summary Card -->
@@ -223,17 +235,22 @@ export function generatePaymentReminderText(data: PaymentReminderData): string {
   // Same NGN-only gate as the HTML body.
   const reminderVirtualAccount =
     data.currency.trim().toUpperCase() === 'NGN' ? data.virtualAccount : undefined;
+  // Same zero-balance omission as the HTML body.
+  const hasBalanceDue = data.balanceDue > 0;
 
-  const bankDetails = reminderVirtualAccount
-    ? `\n\nBank Transfer Option:\nTransfer ${formatEmailMoney(data.balanceDue, data.currency)} to the dedicated account below. Your order is confirmed automatically once payment is received.\nBank: ${reminderVirtualAccount.bankName}\nAccount Number: ${reminderVirtualAccount.accountNumber}\nAccount Name: ${reminderVirtualAccount.accountName}`
-    : `\n\nHow to pay:\nNo payment account is assigned to this order yet. Please contact ${data.merchantName}${data.supportEmail ? ` at ${data.supportEmail}` : ''} to arrange payment of ${formatEmailMoney(data.balanceDue, data.currency)}.`;
+  const bankDetails =
+    reminderVirtualAccount && hasBalanceDue
+      ? `\n\nBank Transfer Option:\nTransfer ${formatEmailMoney(data.balanceDue, data.currency)} to the dedicated account below. Your order is confirmed automatically once payment is received.\nBank: ${reminderVirtualAccount.bankName}\nAccount Number: ${reminderVirtualAccount.accountNumber}\nAccount Name: ${reminderVirtualAccount.accountName}`
+      : !hasBalanceDue
+        ? `\n\nNo payment is due on this order — please contact ${data.merchantName} if you have any questions.`
+        : `\n\nHow to pay:\nNo payment account is assigned to this order yet. Please contact ${data.merchantName}${data.supportEmail ? ` at ${data.supportEmail}` : ''} to arrange payment of ${formatEmailMoney(data.balanceDue, data.currency)}.`;
 
   return `
 Payment Reminder — Order #${data.orderNumber}
 
 Hi ${data.customerName},
 
-${reminderVirtualAccount ? `We noticed your order is awaiting payment. Complete your bank transfer of ${formatEmailMoney(data.balanceDue, data.currency)} using the details below — your order is confirmed automatically once payment is received.` : `We noticed your order is awaiting payment. Please contact ${data.merchantName} to arrange payment.`}
+${!hasBalanceDue ? 'We noticed your order is awaiting payment. No payment is due on this order.' : reminderVirtualAccount ? `We noticed your order is awaiting payment. Complete your bank transfer of ${formatEmailMoney(data.balanceDue, data.currency)} using the details below — your order is confirmed automatically once payment is received.` : `We noticed your order is awaiting payment. Please contact ${data.merchantName} to arrange payment.`}
 
 Order Details:
 ${itemsText}

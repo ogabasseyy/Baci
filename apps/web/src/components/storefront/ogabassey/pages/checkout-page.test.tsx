@@ -1619,11 +1619,52 @@ describe('CheckoutPage', () => {
         );
       });
       expect(paymentStartedCalls()).toHaveLength(0);
+      // Unmatched error (no popup ever opened): a failure toast for retry,
+      // but no payment_failed attribution — no payment attempt started.
       expect(
         mockCaptureClientEvent.mock.calls.some(
           ([event]) => event === 'payment_failed'
         )
-      ).toBe(true);
+      ).toBe(false);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('tracks payment_failed when Credit Direct errors after the popup opens', async () => {
+    const { fetchMock } = renderFreshBNPLCheckout({
+      featureSettings: { credit_direct_enabled: true },
+      orderId: 'order-cd-matched-error',
+    });
+
+    try {
+      await driveFreshBNPLPlaceOrder(/credit direct/i);
+
+      await waitFor(() => {
+        expect(openCreditDirectCheckout).toHaveBeenCalled();
+      });
+      const callArgs = vi.mocked(openCreditDirectCheckout).mock.calls[0]?.[0];
+      await act(async () => {
+        await callArgs?.onPopup?.({
+          checkoutTransactionId: 'cd-popup-matched-1',
+          sessionId: 'signed-session-matched-1',
+        });
+      });
+      await waitFor(() => {
+        expect(paymentStartedCalls()).toHaveLength(1);
+      });
+
+      await act(async () => {
+        callArgs?.onError?.('declined');
+      });
+
+      await waitFor(() => {
+        expect(
+          mockCaptureClientEvent.mock.calls.some(
+            ([event]) => event === 'payment_failed'
+          )
+        ).toBe(true);
+      });
     } finally {
       fetchMock.mockRestore();
     }
@@ -4162,6 +4203,134 @@ describe('CheckoutPage', () => {
     }
   });
 
+  it('records invoice_generated for a zero-due invoice order the server left unpaid', async () => {
+    window.localStorage.clear();
+    vi.mocked(useCart).mockReturnValue({
+      cart: [
+        {
+          id: 'item-1',
+          name: 'Test Product',
+          price: 5000,
+          quantity: 1,
+          image: '',
+          slug: 'test-product',
+        },
+      ],
+      cartTotal: 5000,
+      clearCart: vi.fn(),
+      isHydrated: true,
+    } as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        slug: 'ogabassey',
+        business_name: 'Test Store',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+        country: 'NG',
+        paystack_subaccount_code: 'ACCT_test',
+        feature_settings: {
+          paystack_enabled: true,
+        },
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    vi.mocked(usePersistedForm).mockReturnValue({
+      values: {
+        firstName: 'Ada',
+        lastName: 'Buyer',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        newAddressStreet: '2 Olaide Tomori Street',
+        newAddressState: 'Lagos',
+        newAddressCity: 'Ikeja',
+        currentStep: 'delivery',
+        completedSteps: { contact: true, delivery: false },
+      },
+      setValue: vi.fn(),
+      setValues: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as ReturnType<typeof usePersistedForm>);
+
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url === '/api/orders') {
+          return {
+            ok: true,
+            json: async () => ({
+              // A 100% discount zeroes the gateway amount while the order
+              // stays unpaid — yet the server still generates and emails a
+              // proforma for invoice-method orders.
+              amountDueToGateway: 0,
+              order: {
+                id: 'order-123',
+                order_number: 'ORD-123',
+                tracking_token: 'track-123',
+                payment_method: 'invoice',
+                payment_status: 'unpaid',
+                total: 0,
+              },
+              wallet: null,
+            }),
+            text: async () => '',
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({ states: ['Lagos'], locations: [] }),
+          text: async () => '',
+        } as Response;
+      });
+
+    try {
+      render(<CheckoutPage />);
+      fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /continue to payment/i })
+      );
+      fireEvent.click(
+        screen.getByRole('button', { name: /get a proforma invoice/i })
+      );
+      const invoiceRadio = (
+        await screen.findAllByRole('radio', { name: /get a proforma invoice/i })
+      ).find((radio) => radio.getAttribute('value') === 'invoice');
+      expect(invoiceRadio).toBeDefined();
+      fireEvent.click(invoiceRadio as HTMLInputElement);
+      // The invoice submit button shares its label with the invoice tab;
+      // the tab carries aria-pressed, the submit button does not.
+      const placeOrderButton = screen
+        .getAllByRole('button', { name: 'Get a Proforma Invoice' })
+        .find(
+          (button) =>
+            !button.hasAttribute('aria-pressed') &&
+            !button.hasAttribute('disabled')
+        );
+      expect(placeOrderButton).toBeDefined();
+      fireEvent.click(placeOrderButton as HTMLButtonElement);
+
+      await waitFor(() => {
+        expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+          'invoice_generated',
+          'order-123',
+          expect.objectContaining({
+            payment_method: 'invoice',
+            payment_status: 'unpaid',
+          })
+        );
+      });
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_completed',
+        expect.anything(),
+        expect.anything()
+      );
+    } finally {
+      fetchMock.mockRestore();
+      window.localStorage.clear();
+    }
+  });
+
   it('clears the idempotency key when the order is no longer reusable', async () => {
     const scrollSpy = vi
       .spyOn(window, 'scrollTo')
@@ -5872,6 +6041,13 @@ describe('CheckoutPage', () => {
         await waitFor(() => expect(openCreditDirectCheckout).toHaveBeenCalled());
         const options = vi.mocked(openCreditDirectCheckout).mock.calls.at(-1)?.[0];
         expect(options).toBeDefined();
+        // Matched error: the popup opened (payment_started), then failed.
+        await act(async () => {
+          await options?.onPopup?.({
+            checkoutTransactionId: 'cd-popup-tracked-1',
+            sessionId: 'signed-session-tracked-1',
+          });
+        });
         await act(async () => {
           options?.onError?.('declined');
         });

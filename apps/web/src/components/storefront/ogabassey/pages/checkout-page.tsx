@@ -2624,6 +2624,30 @@ export const CheckoutPage: React.FC = () => {
               total: order.total ?? total,
             })
           );
+        } else if (paymentMethod === 'invoice') {
+          // Zero due without paid coverage (e.g. a 100% discount): the
+          // server still generates and emails a proforma for
+          // invoice-method orders, so record the generation before the
+          // early return — otherwise the funnel shows a false drop-off.
+          captureCheckoutFunnelEventOnce(
+            CHECKOUT_FUNNEL_EVENTS.invoiceGenerated,
+            order.id,
+            buildCheckoutFunnelProperties({
+              channel: 'web',
+              currency: orderChargeCurrency,
+              itemCount: orderItems.reduce(
+                (count, item) => count + item.quantity,
+                0
+              ),
+              orderId: order.id,
+              orderNumber: createdOrderNumber,
+              paymentIntent: 'proforma_invoice',
+              paymentMethod: 'invoice',
+              paymentStatus: 'unpaid',
+              source: 'web_checkout',
+              total: order.total ?? total,
+            })
+          );
         }
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
@@ -2833,20 +2857,25 @@ export const CheckoutPage: React.FC = () => {
           },
           onError: (error) => {
             console.error('Credit Direct error:', error);
-            captureClientEvent(
-              CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-              buildCheckoutFunnelProperties({
-                channel: 'web',
-                currency: orderChargeCurrency,
-                orderId: order.id,
-                orderNumber: createdOrderNumber,
-                paymentIntent: getCheckoutPaymentIntent(paymentMethod),
-                paymentMethod,
-                reason: 'credit_direct_error',
-                source: 'web_checkout',
-                total: paymentAmount,
-              })
-            );
+            // The opener swallows SDK initialization failures into onError
+            // without opening a popup: only attribute a payment failure
+            // when onPopup already proved the provider flow started.
+            if (paymentStarted) {
+              captureClientEvent(
+                CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+                buildCheckoutFunnelProperties({
+                  channel: 'web',
+                  currency: orderChargeCurrency,
+                  orderId: order.id,
+                  orderNumber: createdOrderNumber,
+                  paymentIntent: getCheckoutPaymentIntent(paymentMethod),
+                  paymentMethod,
+                  reason: 'credit_direct_error',
+                  source: 'web_checkout',
+                  total: paymentAmount,
+                })
+              );
+            }
             toast({
               title: 'Credit Direct Failed',
               description: error || 'Credit Direct checkout failed. Please try again.',

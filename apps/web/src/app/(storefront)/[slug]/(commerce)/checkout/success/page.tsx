@@ -118,6 +118,7 @@ const CAPTURED_PAYMENT_FINALIZATION_OUTCOMES = new Set([
   'completion_failed',
   'inventory_cleanup_failed',
   'inventory_failed',
+  'order_fetch_failed',
   'review_failed',
 ]);
 

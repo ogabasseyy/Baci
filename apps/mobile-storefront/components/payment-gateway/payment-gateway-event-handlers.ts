@@ -60,7 +60,7 @@ export function createPaymentGatewayEventHandlers({
       return;
     }
     refs.paymentFailureRecordedRef.current = true;
-    trackCheckoutPaymentFailed(reason, orderId, gateway);
+    void trackCheckoutPaymentFailed(reason, orderId, gateway);
   };
 
   return {

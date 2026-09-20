@@ -280,6 +280,30 @@ describe('Order confirmation email', () => {
       );
     });
 
+    it('falls back to merchant contact for foreign-currency quotes', () => {
+      // Paystack DVAs settle in NGN only: a USD quote must not print a
+      // naira account beside a dollar amount, even if a stale account
+      // object is passed.
+      const payload = {
+        ...proformaPayload,
+        currency: 'USD',
+        virtualAccount: {
+          bankName: 'Wema Bank',
+          accountNumber: '1234567890',
+          accountName: 'OgaBassey-Test',
+        },
+      };
+      const html = generateOrderConfirmationEmail(payload);
+      const text = generateOrderConfirmationText(payload);
+
+      expect(html).not.toContain('Complete Your Bank Transfer');
+      expect(html).not.toContain('1234567890');
+      expect(html).toContain('contact TestShop for payment details');
+      expect(text).not.toContain('Payment Details (bank transfer)');
+      expect(text).not.toContain('Account Number: 1234567890');
+      expect(text).toContain('please contact TestShop for payment details');
+    });
+
     it('keeps the confirmation CTA on the storefront homepage', () => {
       const html = generateOrderConfirmationEmail({
         ...baseOrderData,

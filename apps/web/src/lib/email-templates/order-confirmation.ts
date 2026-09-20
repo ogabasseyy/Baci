@@ -69,8 +69,16 @@ export function generateOrderConfirmationEmail(
   // Transfer instructions charge the outstanding balance only: credit
   // already applied must not be charged again (P1 overpayment guard).
   const transferAmount = data.amountDue ?? data.total;
+  // Paystack DVAs settle in NGN only: a foreign-currency quote falls back
+  // to merchant-contact instructions even if a stale account object is
+  // passed — never print a naira account beside a dollar amount.
+  const dvaCurrencyCompatible =
+    !data.currency || data.currency.trim().toUpperCase() === 'NGN';
+  const proformaVirtualAccount = dvaCurrencyCompatible
+    ? data.virtualAccount
+    : undefined;
   const proformaPaymentHtml =
-    isProforma && data.virtualAccount
+    isProforma && proformaVirtualAccount
       ? `
           <!-- Payment Instructions -->
           <tr>
@@ -83,15 +91,15 @@ export function generateOrderConfirmationEmail(
                 <table border="0" cellpadding="0" cellspacing="0" width="100%">
                   <tr>
                     <td style="color: #92400e; padding: 4px 0; font-size: 14px;">Bank:</td>
-                    <td style="color: #1e293b; font-weight: 600; text-align: right; font-size: 14px;">${escapeHtmlText(data.virtualAccount.bankName)}</td>
+                    <td style="color: #1e293b; font-weight: 600; text-align: right; font-size: 14px;">${escapeHtmlText(proformaVirtualAccount.bankName)}</td>
                   </tr>
                   <tr>
                     <td style="color: #92400e; padding: 4px 0; font-size: 14px;">Account Name:</td>
-                    <td style="color: #1e293b; font-weight: 600; text-align: right; font-size: 14px;">${escapeHtmlText(data.virtualAccount.accountName)}</td>
+                    <td style="color: #1e293b; font-weight: 600; text-align: right; font-size: 14px;">${escapeHtmlText(proformaVirtualAccount.accountName)}</td>
                   </tr>
                   <tr>
                     <td style="color: #92400e; padding: 4px 0; font-size: 14px;">Account Number:</td>
-                    <td style="color: #1e293b; font-weight: 700; text-align: right; font-size: 16px;">${escapeHtmlText(data.virtualAccount.accountNumber)}</td>
+                    <td style="color: #1e293b; font-weight: 700; text-align: right; font-size: 16px;">${escapeHtmlText(proformaVirtualAccount.accountNumber)}</td>
                   </tr>
                 </table>
               </div>
@@ -169,7 +177,7 @@ export function generateOrderConfirmationEmail(
             <td style="padding: 40px 40px 20px 40px;">
               <p style="margin: 0; font-size: 16px; color: #334155; line-height: 1.6;">Hi <strong>${escapeHtmlText(data.customerName)}</strong>,</p>
               <p style="margin: 16px 0 0 0; font-size: 16px; color: #475569; line-height: 1.6;">
-                ${isProforma ? `This proforma invoice is a quotation for the items below. Your order will be processed once payment is received — please share it with your procurement team and ${data.virtualAccount ? 'complete your bank transfer using the payment details in this email' : `contact ${escapeHtmlText(data.merchantName)} for payment details`}.` : "We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable)."}
+                ${isProforma ? `This proforma invoice is a quotation for the items below. Your order will be processed once payment is received — please share it with your procurement team and ${proformaVirtualAccount ? 'complete your bank transfer using the payment details in this email' : `contact ${escapeHtmlText(data.merchantName)} for payment details`}.` : "We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable)."}
               </p>
             </td>
           </tr>
@@ -292,8 +300,15 @@ export function generateOrderConfirmationText(
   // steps must route payment through the bank-transfer details (or the
   // merchant when no account was assigned), never through the link.
   const transferAmount = data.amountDue ?? data.total;
+  // Same NGN-only gate as the HTML body: a foreign-currency quote falls
+  // back to merchant-contact instructions.
+  const dvaCurrencyCompatible =
+    !data.currency || data.currency.trim().toUpperCase() === 'NGN';
+  const proformaVirtualAccount = dvaCurrencyCompatible
+    ? data.virtualAccount
+    : undefined;
   const proformaNextSteps = [
-    data.virtualAccount
+    proformaVirtualAccount
       ? `Complete your bank transfer of ${formatEmailMoney(transferAmount, data.currency)} using the payment details above — your order is confirmed automatically once payment is received.`
       : `No payment account was assigned to this quote yet — please contact ${data.merchantName} for payment details.`,
     data.paymentLink ? `Track its status here:\n${data.paymentLink}` : null,
@@ -321,12 +336,12 @@ Subtotal: ${formatEmailMoney(data.subtotal, data.currency)}
 Shipping: ${formatEmailMoney(data.shippingFee, data.currency)}
 Total: ${formatEmailMoney(data.total, data.currency)}
 ${
-  isProforma && data.virtualAccount
+  isProforma && proformaVirtualAccount
     ? `
 Payment Details (bank transfer):
-Bank: ${data.virtualAccount.bankName}
-Account Name: ${data.virtualAccount.accountName}
-Account Number: ${data.virtualAccount.accountNumber}`
+Bank: ${proformaVirtualAccount.bankName}
+Account Name: ${proformaVirtualAccount.accountName}
+Account Number: ${proformaVirtualAccount.accountNumber}`
     : ''
 }
 

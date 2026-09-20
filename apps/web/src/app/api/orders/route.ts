@@ -3504,15 +3504,26 @@ export async function POST(request: NextRequest) {
                 }
                 const invoiceItems = persistedInvoiceItems;
 
-                const dvaResult = await generatePaymentAccount({
-                  email: customer_email || `${order.id}@orders.usebaci.com`,
-                  firstName,
-                  lastName,
-                  phone: customer_phone || merchant.phone || '08000000000',
-                  orderId: order.id,
-                });
+                // Paystack DVAs settle in NGN only: provisioning for a
+                // foreign-currency quote would print a naira account beside
+                // a dollar amount and risk a rejected transfer, so non-NGN
+                // invoice orders skip provisioning (null result) and fall
+                // through to merchant-contact instructions.
+                const dvaResult =
+                  orderCurrency === 'NGN'
+                    ? await generatePaymentAccount({
+                        email:
+                          customer_email ||
+                          `${order.id}@orders.usebaci.com`,
+                        firstName,
+                        lastName,
+                        phone:
+                          customer_phone || merchant.phone || '08000000000',
+                        orderId: order.id,
+                      })
+                    : null;
 
-                if (dvaResult.success) {
+                if (dvaResult && dvaResult.success) {
                   const generatedVirtualAccount = {
                     account_number: dvaResult.data.account_number,
                     bank_name: dvaResult.data.bank_name,
@@ -3553,7 +3564,7 @@ export async function POST(request: NextRequest) {
                       accountNumber: dvaResult.data.account_number,
                     });
                   }
-                } else {
+                } else if (dvaResult) {
                   logger.error({
                     message: 'Auto-generation of invoice DVA failed',
                     orderId: order.id,

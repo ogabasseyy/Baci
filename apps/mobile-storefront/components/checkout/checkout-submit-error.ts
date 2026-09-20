@@ -80,7 +80,11 @@ export function handleCheckoutSubmitError(
 ) {
   if (error instanceof OrderError) {
     if (!PRE_ORDER_ERROR_CODES.has(error.code)) {
-      trackCheckoutPaymentFailed(error.code, undefined, selectedPayment);
+      void trackCheckoutPaymentFailed(
+        error.code,
+        undefined,
+        selectedPayment
+      );
     }
     trackError('checkout_failed', error.message, {
       step: 'place_order',

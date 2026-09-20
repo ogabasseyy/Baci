@@ -5951,6 +5951,141 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     expect(supabase.from).not.toHaveBeenCalledWith('order_payment_accounts');
   });
 
+  it('skips invoice DVA provisioning for foreign-currency orders', async () => {
+    const supabase = buildMockSupabase();
+    const { backgroundSupabase } = createBackgroundSupabaseMock({
+      orderItemsResponses: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    // The stamped order currency is USD: Paystack DVAs settle in NGN
+    // only, so provisioning must be skipped even though the helper
+    // itself would succeed.
+    const baseFrom = backgroundSupabase.from;
+    backgroundSupabase.from = vi.fn((table: string) => {
+      if (table === 'orders') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi
+            .fn()
+            .mockResolvedValue({ data: { currency: 'USD' }, error: null }),
+        };
+      }
+      return baseFrom(table);
+    });
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+
+    supabase.from = vi.fn((_table: string) => {
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        in: vi.fn().mockReturnThis(),
+        returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+        overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+        insert: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn().mockReturnThis(),
+        // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+        then: (resolve: any) => Promise.resolve().then(resolve),
+      };
+    }) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'invoice',
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    // No NGN account is provisioned for the USD quote, so the email body
+    // falls back to merchant-contact instructions — and no DVA rows are
+    // persisted for the order.
+    expect(mockGeneratePaymentAccount).not.toHaveBeenCalled();
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentKind: 'proforma',
+        virtualAccount: undefined,
+      })
+    );
+    expect(backgroundSupabase.from).not.toHaveBeenCalledWith(
+      'order_payment_accounts'
+    );
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: expect.stringContaining('Proforma Invoice Generated'),
+      })
+    );
+  });
+
   it('emails a paid commercial invoice when wallet covers an invoice-method order in full', async () => {
     const finalizeSpy = vi.fn(() =>
       Promise.resolve({ data: null, error: null })

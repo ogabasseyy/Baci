@@ -92,7 +92,7 @@ export function useBNPLCheckoutController({
       return;
     }
     failureRecordedRef.current = true;
-    trackCheckoutPaymentFailed(reason, orderId, gateway);
+    void trackCheckoutPaymentFailed(reason, orderId, gateway);
   };
   const statusRef = useRef<BNPLCheckoutStatus>('loading');
   // Main-document URL for HTTP-error classification. A ref (not the

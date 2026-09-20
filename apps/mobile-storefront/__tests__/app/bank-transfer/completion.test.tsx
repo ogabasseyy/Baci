@@ -69,7 +69,7 @@ jest.mock('@/stores/cart-store', () => ({
   useCartStore: mockUseCartStore,
 }));
 
-let BankTransferScreen: typeof import('./index')['default'];
+let BankTransferScreen: typeof import('@/app/bank-transfer')['default'];
 
 describe('BankTransferScreen wallet-funded completion', () => {
   beforeEach(async () => {
@@ -94,7 +94,7 @@ describe('BankTransferScreen wallet-funded completion', () => {
       trackingToken: 'tracking-token',
       walletFunded: 'true',
     };
-    ({ default: BankTransferScreen } = await import('./index'));
+    ({ default: BankTransferScreen } = await import('@/app/bank-transfer'));
   });
 
   it('claims completion with the routed guest attribution and breakdown', async () => {
@@ -145,7 +145,7 @@ describe('BankTransferScreen legacy confirm', () => {
       reference: 'DVA-ref-9',
       trackingToken: 'tracking-token',
     };
-    ({ default: BankTransferScreen } = await import('./index'));
+    ({ default: BankTransferScreen } = await import('@/app/bank-transfer'));
   });
 
   it('forwards the DVA reference to order success on confirm', async () => {

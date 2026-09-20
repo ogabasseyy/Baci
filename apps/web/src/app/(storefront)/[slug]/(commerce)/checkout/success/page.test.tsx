@@ -320,6 +320,67 @@ describe('checkout success page', () => {
     }
   });
 
+  it('keeps polling through an order-fetch finalization failure', async () => {
+    const useRouterSpy = vi
+      .spyOn(nextNavigation, 'useRouter')
+      .mockReturnValue({ push: mockPush } as never);
+    mockFetchWithCsrf
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({
+          error: 'Failed to finalize order',
+          finalizationOutcome: 'order_fetch_failed',
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          finalizationOutcome: 'completed',
+          orderId: 'order-1',
+          orderNumber: 'ORD-2001',
+          orderTotal: 5750,
+          paymentMethod: 'paystack',
+          status: 'success',
+          success: true,
+        }),
+      });
+
+    render(<CheckoutSuccessPage />);
+
+    try {
+      // Atomic completion already made the order paid; only the rich-order
+      // fetch failed. The page stays pending without recording a payment
+      // failure, and the next pass observes the reconciled completion.
+      await waitFor(() => expect(mockFetchWithCsrf).toHaveBeenCalled());
+      expect(
+        screen.getByRole('heading', { name: /order being processed/i })
+      ).toBeInTheDocument();
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_failed',
+        expect.anything(),
+        expect.anything()
+      );
+
+      await waitFor(
+        () => {
+          expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+            'payment_completed',
+            'order-1',
+            expect.objectContaining({ payment_status: 'paid' })
+          );
+        },
+        { timeout: 8000 }
+      );
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_failed',
+        expect.anything(),
+        expect.anything()
+      );
+    } finally {
+      useRouterSpy.mockRestore();
+    }
+  });
+
   it('does not start a second verification while one is in flight', async () => {
     // Same stable-router pin as above: production runs the effect once
     // per mount.

@@ -17,9 +17,9 @@ function waitWithTimeout(tail: Promise<void>): Promise<void> {
 // Serializes same-order analytics emissions so the funnel keeps causal
 // order: order_created is emitted fire-and-forget on the order response
 // path, so later emissions for that order (invoice_generated,
-// payment_started, payment_completed) chain behind its write instead of
-// racing it. The wait is time-bounded — a stalled store delays followers
-// by at most the timeout, never suppresses them.
+// payment_started, payment_completed, payment_failed) chain behind its
+// write instead of racing it. The wait is time-bounded — a stalled store
+// delays followers by at most the timeout, never suppresses them.
 export function serializeAfterOrderCreated<T>(
   orderId: string,
   task: () => Promise<T> | T

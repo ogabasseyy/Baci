@@ -26,10 +26,8 @@ import {
   classifyFeedImageCandidate,
   extractImageCandidates,
 } from '../packages/shared/src/gmc-feed/index';
-import {
-  isCdnUrl,
-  verifyClassifiedImage,
-} from './lib/gmc-feed-verifier';
+import { isCdnUrl } from './lib/gmc-feed-verifier';
+import { verifyClassifiedImage } from './lib/verify-classified-image';
 import { appendOfferProductImages } from './lib/offer-product-images';
 import { persistFeedManifest } from './lib/persist-feed-manifest';
 import { revalidateFeedCache } from './lib/revalidate-feed-cache';

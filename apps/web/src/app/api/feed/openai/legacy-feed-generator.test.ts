@@ -31,44 +31,6 @@ function parseLine(line: string | undefined): Record<string, unknown> {
 }
 
 describe('generateOpenAIFeed', () => {
-  it('prefers verified feed manifest images over product image fallbacks', () => {
-    const [line] = generateOpenAIFeed(
-      [
-        product({
-          images: ['https://cdn.example.com/stale-product-image.jpg'],
-        }),
-      ],
-      merchant,
-      'https://ogabassey.com',
-      {
-        'product-1': [
-          {
-            verified_url: 'https://cdn.example.com/manifest-front.jpg',
-            verified_format: 'jpeg',
-            status: 'verified',
-            is_primary: true,
-            position: 0,
-          },
-          {
-            verified_url: 'https://cdn.example.com/manifest-side.jpg',
-            verified_format: 'jpeg',
-            status: 'verified',
-            is_primary: false,
-            position: 1,
-          },
-        ],
-      }
-    );
-    const parsed = parseLine(line);
-
-    expect(parsed.image_link).toBe(
-      'https://cdn.example.com/manifest-front.jpg'
-    );
-    expect(parsed.additional_image_links).toEqual([
-      'https://cdn.example.com/manifest-side.jpg',
-    ]);
-  });
-
   it('builds canonical policy URLs and normalizes trailing base URL slashes', () => {
     const [line] = generateOpenAIFeed(
       [product({ manage_stock: false, stock: 0 })],

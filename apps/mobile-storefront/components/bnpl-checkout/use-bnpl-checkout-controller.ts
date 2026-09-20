@@ -256,10 +256,39 @@ export function useBNPLCheckoutController({
       value: amount ? Number(amount) : undefined,
     });
   };
+  // Attempt-scoped failure bridged from the web launcher when an opened
+  // provider's SDK fails (decline or runtime error): without this the
+  // native funnel keeps the start from bnpl_provider_opened with no
+  // matching failure. Late callbacks after success are ignored, like
+  // provider error redirects.
+  const handleProviderErrorMessage = ({
+    gateway: errorGateway,
+    orderId: errorOrderId,
+    message,
+  }: {
+    gateway?: string;
+    orderId?: string;
+    message?: string;
+  }) => {
+    if (statusRef.current === 'success') {
+      return;
+    }
+    if (errorGateway && gateway && errorGateway !== gateway) {
+      return;
+    }
+    if (errorOrderId && errorOrderId !== orderId) {
+      return;
+    }
+    recordCheckoutFailure('bnpl_provider_error');
+    clearPendingLoadTimeout();
+    setCheckoutStatus('error');
+    setErrorMessage(message || 'The provider checkout failed.');
+  };
 
   const handleWebViewMessage = (event: BNPLWebViewMessageEvent) =>
     createBNPLWebViewMessageHandler({
       onCloseMessage: returnToAppFromProviderExit,
+      onProviderErrorMessage: handleProviderErrorMessage,
       onProviderOpenedMessage: handleProviderOpenedMessage,
       onNavigationMessage: (url) => {
         if (

@@ -434,6 +434,100 @@ describe('storefront order success page', () => {
     }
   });
 
+  it('does not capture a stale paid order under a navigated order id', async () => {
+    vi.useFakeTimers();
+    try {
+      const paidOrderA = {
+        id: 'order-A',
+        order_number: 'ORD-A',
+        tracking_token: 'track-A',
+        customer_email: 'buyer@example.com',
+        items: [],
+        subtotal: 1000,
+        shipping_cost: 0,
+        total: 1000,
+        payment_method: 'credpal',
+        payment_status: 'paid',
+      };
+      const paidOrderB = {
+        ...paidOrderA,
+        id: 'order-B',
+        order_number: 'ORD-B',
+        tracking_token: 'track-B',
+        total: 2000,
+      };
+      let releaseB!: (value: unknown) => void;
+      const gateB = new Promise((resolve) => {
+        releaseB = resolve as (value: unknown) => void;
+      });
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-A',
+          reference: 'ref-A',
+          type: 'credpal',
+          trackingToken: 'track-A',
+        })
+      );
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => paidOrderA,
+        })
+        .mockImplementationOnce(() =>
+          gateB.then(() => ({
+            ok: true,
+            json: async () => paidOrderB,
+          }))
+        )
+        .mockResolvedValue({
+          ok: true,
+          json: async () => paidOrderB,
+        });
+
+      const { rerender } = render(<OrderSuccessPage />);
+      await flushMicrotasks();
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-A',
+        expect.objectContaining({ order_number: 'ORD-A' })
+      );
+
+      // Same-route navigation to B while B's lookup is still in flight:
+      // `order` still holds paid A, which must not be captured under B
+      // (misattribution, and the once-guard would then suppress B's own
+      // correct capture).
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-B',
+          reference: 'ref-B',
+          type: 'credpal',
+          trackingToken: 'track-B',
+        })
+      );
+      rerender(<OrderSuccessPage />);
+      await flushMicrotasks();
+      expect(
+        mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+          (call) => call[1] === 'order-B'
+        )
+      ).toHaveLength(0);
+
+      // Once B's own lookup resolves paid, exactly one correct capture
+      // fires with B's details.
+      releaseB(undefined);
+      await flushMicrotasks();
+      const callsForB = mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+        (call) => call[1] === 'order-B'
+      );
+      expect(callsForB).toHaveLength(1);
+      expect(callsForB[0][2]).toEqual(
+        expect.objectContaining({ order_number: 'ORD-B', total: 2000 })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('captures the CredPal reference from the credpalRef query key', async () => {
     vi.useFakeTimers();
     try {

@@ -81,6 +81,7 @@ export default function OrderSuccessScreen() {
     orderId,
     orderNumber,
     paymentMethod,
+    reference,
     trackingToken,
   });
 

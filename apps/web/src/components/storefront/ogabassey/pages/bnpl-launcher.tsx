@@ -251,6 +251,36 @@ function notifyNativeBnplProviderOpened(
     }
 }
 
+function notifyNativeBnplProviderError(
+    gateway: NativeBNPLBridgeGateway,
+    orderId: string,
+    message: string
+) {
+    // The provider opened (payment_started recorded natively) and then its
+    // SDK failed: bridge the failure so the native funnel reaches
+    // recordCheckoutFailure instead of leaving an unmatched start. The
+    // native error view (with retry) replaces the WebView, so the caller
+    // defers its own error UI when the bridge lands.
+    const bridge = window.ReactNativeWebView;
+    if (typeof bridge?.postMessage !== 'function') {
+        return false;
+    }
+
+    try {
+        bridge.postMessage(
+            JSON.stringify({
+                gateway,
+                orderId,
+                message,
+                type: 'bnpl_provider_error',
+            })
+        );
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 function notifyNativeBnplClose(gateway: NativeBNPLBridgeGateway) {
     const bridge = window.ReactNativeWebView;
     if (typeof bridge?.postMessage !== 'function') {
@@ -596,6 +626,16 @@ async function launchBnplPayment({
                 onError: (error) => {
                     clearCreditDirectPopupMarker(order.id);
                     setCreditDirectPopupMarker(null);
+                    if (
+                        notifyNativeBnplProviderError(
+                            'credit_direct',
+                            order.id,
+                            error
+                        )
+                    ) {
+                        clearPaymentLaunch(paymentLaunchKeyRef);
+                        return;
+                    }
                     clearPaymentLaunch(paymentLaunchKeyRef);
                     console.error('Credit Direct Error:', error);
                     setStatus('error');
@@ -670,6 +710,16 @@ async function launchBnplPayment({
                     setErrorMessage('Payment cancelled.');
                 },
                 onError: (error) => {
+                    if (
+                        notifyNativeBnplProviderError(
+                            'credpal',
+                            order.id,
+                            error.message
+                        )
+                    ) {
+                        clearPaymentLaunch(paymentLaunchKeyRef);
+                        return;
+                    }
                     clearPaymentLaunch(paymentLaunchKeyRef);
                     setStatus('error');
                     setErrorMessage(error.message);

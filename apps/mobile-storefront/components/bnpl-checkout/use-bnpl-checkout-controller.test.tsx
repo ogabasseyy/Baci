@@ -714,6 +714,54 @@ describe('useBNPLCheckoutController', () => {
     expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
   });
 
+  it('matches an SDK failure to its opened provider via the bridged error', async () => {
+    mockRouteParams = {
+      gateway: 'credpal',
+      orderId: 'order-123',
+      amount: '21500',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'bnpl_provider_opened',
+            gateway: 'credpal',
+            orderId: 'order-123',
+          }),
+        },
+      });
+    });
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
+
+    // The opened widget's SDK then fails: the bridged error must reach
+    // the failure recorder (not strand the start) and surface retry UI.
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'bnpl_provider_error',
+            gateway: 'credpal',
+            orderId: 'order-123',
+            message: 'Provider declined the application',
+          }),
+        },
+      });
+    });
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorMessage).toBe(
+      'Provider declined the application'
+    );
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
+      'bnpl_provider_error',
+      'order-123',
+      'credpal'
+    );
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledTimes(1);
+  });
+
   it('emits payment_failed for terminal WebView load failures', () => {
     mockRouteParams = {
       gateway: 'credit_direct',

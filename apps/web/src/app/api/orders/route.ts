@@ -16,7 +16,10 @@ import {
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
-import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
+import {
+  buildOrderTrackingLink,
+  redactOrderTrackingLinkForLog,
+} from '@/lib/build-order-tracking-link';
 import {
   revalidateProductSlugs,
   revalidateProducts,
@@ -3748,14 +3751,16 @@ export async function POST(request: NextRequest) {
                   logger.error({
                     message: 'Failed to store initial invoice reminder',
                     orderId: order.id,
-                    paymentLink,
+                    // Never log the full URL: its query string carries the
+                    // tracking token and possibly the customer email.
+                    paymentLink: redactOrderTrackingLinkForLog(paymentLink),
                     error: reminderInsertError,
                   });
                 } else {
                   logger.info({
                     message: 'Stored initial invoice reminder successfully',
                     orderId: order.id,
-                    paymentLink,
+                    paymentLink: redactOrderTrackingLinkForLog(paymentLink),
                   });
                 }
 

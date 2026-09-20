@@ -2,7 +2,10 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { buildOrderTrackingLink } from './build-order-tracking-link';
+import {
+  buildOrderTrackingLink,
+  redactOrderTrackingLinkForLog,
+} from './build-order-tracking-link';
 
 const srcDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -37,6 +40,19 @@ describe('buildOrderTrackingLink', () => {
         '   '
       )
     ).toBe('https://testshop.usebaci.com/track-order?order_id=order-123');
+  });
+
+  it('redacts the token and email from logged links', () => {
+    expect(
+      redactOrderTrackingLinkForLog(
+        'https://testshop.usebaci.com/track-order?token=track-123'
+      )
+    ).toBe('https://testshop.usebaci.com/track-order?[redacted]');
+    expect(
+      redactOrderTrackingLinkForLog(
+        'https://testshop.usebaci.com/track-order?order_id=order-123&email=ada%40example.com'
+      )
+    ).toBe('https://testshop.usebaci.com/track-order?[redacted]');
   });
 
   it('points at a route that exists in the App Router tree', () => {

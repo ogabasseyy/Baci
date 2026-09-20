@@ -425,6 +425,80 @@ describe('BnplLauncher', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('bridges an opened CredPal SDK failure to React Native without rendering error UI', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'credpal',
+        merchant_slug: 'test-store',
+        trackingToken: 'tok-123',
+      })
+    );
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockOpenCredPalCheckout.mockImplementation(({ onLoad, onError }) => {
+      onLoad();
+      onError({ success: false, message: 'Provider declined' });
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    // Opened first (start recorded natively), then the SDK failure must
+    // reach the native failure recorder instead of stranding the start.
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'credpal',
+          orderId: 'order-1',
+          type: 'bnpl_provider_opened',
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'credpal',
+          orderId: 'order-1',
+          message: 'Provider declined',
+          type: 'bnpl_provider_error',
+        })
+      );
+    });
+    expect(screen.queryByText('Provider declined')).not.toBeInTheDocument();
+  });
+
+  it('bridges a Credit Direct SDK failure to React Native without rendering error UI', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockOpenCreditDirectCheckout.mockImplementation(({ onError }) => {
+      onError('Credit Direct unavailable');
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'credit_direct',
+          orderId: 'order-1',
+          message: 'Credit Direct unavailable',
+          type: 'bnpl_provider_error',
+        })
+      );
+    });
+    expect(
+      screen.queryByText('Credit Direct unavailable')
+    ).not.toBeInTheDocument();
+  });
+
   it('logs and continues when Credit Direct popup reference persistence fails', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockApiPost.mockRejectedValueOnce(new Error('Update failed'));

@@ -252,7 +252,18 @@ function OrderSuccessContent() {
   // have raced). Immediate-paid launcher captures dedupe via the
   // once-guard, so this never double-counts within a session.
   useEffect(() => {
-    if (!bnplType || !orderId || order?.payment_status !== 'paid' || !order) {
+    // Identity-gate the capture: same-route navigation to another order
+    // while the first lookup is in flight leaves the previous (possibly
+    // paid) order in state, and claiming for the new orderId from the
+    // stale order would both misattribute and — via the once-guard —
+    // suppress the correct capture when the new lookup resolves.
+    if (
+      !bnplType ||
+      !orderId ||
+      !order ||
+      order.id !== orderId ||
+      order.payment_status !== 'paid'
+    ) {
       return;
     }
     const settledTotal = Number(order.total);

@@ -39,6 +39,7 @@ interface SettlementCompletionParams {
   orderId?: string;
   orderNumber?: string;
   paymentMethod?: string;
+  reference?: string;
   trackingToken?: string;
   pollIntervalMs?: number;
   maxAttempts?: number;
@@ -105,6 +106,7 @@ export function useSettlementCompletion({
   orderId,
   orderNumber,
   paymentMethod,
+  reference,
   trackingToken,
   pollIntervalMs = SETTLEMENT_POLL_INTERVAL_MS,
   maxAttempts = paymentMethod === 'juicyway'
@@ -156,6 +158,11 @@ export function useSettlementCompletion({
             orderId,
             orderNumber: orderNumber || order.order_number || orderId,
             paymentMethod,
+            // This polling path wins the durable completion claim, so it
+            // must forward the route's provider reference: without it the
+            // deferred conversion cannot be reconciled to its transaction
+            // and the spent claim blocks any later richer capture.
+            ...(reference ? { reference } : {}),
             value: verifiedTotal,
           });
           return;
@@ -188,6 +195,7 @@ export function useSettlementCompletion({
     orderNumber,
     paymentMethod,
     pollIntervalMs,
+    reference,
     trackingToken,
   ]);
 }

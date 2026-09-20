@@ -17,6 +17,11 @@ interface BNPLWebViewMessageHandlerOptions {
     gateway?: string;
     orderId?: string;
   }) => void;
+  onProviderErrorMessage?: (input: {
+    gateway?: string;
+    orderId?: string;
+    message?: string;
+  }) => void;
 }
 
 function isProviderCloseSummary(summary: unknown) {
@@ -74,7 +79,8 @@ export function createBNPLWebViewMessageHandler(
         payload.type === 'bnpl_success' ||
         payload.type === 'bnpl_error' ||
         payload.type === 'bnpl_close' ||
-        payload.type === 'bnpl_provider_opened'
+        payload.type === 'bnpl_provider_opened' ||
+        payload.type === 'bnpl_provider_error'
       ) {
         logBNPLCheckoutDebug('webview message', payload);
         if (isBNPLCloseMessage(payload)) {
@@ -86,6 +92,15 @@ export function createBNPLWebViewMessageHandler(
           const orderId =
             typeof payload.orderId === 'string' ? payload.orderId : undefined;
           options.onProviderOpenedMessage?.({ gateway, orderId });
+        }
+        if (payload.type === 'bnpl_provider_error') {
+          const gateway =
+            typeof payload.gateway === 'string' ? payload.gateway : undefined;
+          const orderId =
+            typeof payload.orderId === 'string' ? payload.orderId : undefined;
+          const message =
+            typeof payload.message === 'string' ? payload.message : undefined;
+          options.onProviderErrorMessage?.({ gateway, orderId, message });
         }
       }
     } catch {

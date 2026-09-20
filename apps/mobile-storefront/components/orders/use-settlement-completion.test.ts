@@ -189,6 +189,56 @@ describe('useSettlementCompletion', () => {
     }
   });
 
+  it('forwards the route reference in a deferred pending-to-paid completion', async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetchSequence([
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'pending',
+          total: 25000,
+        }),
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'paid',
+          subtotal: 25000,
+          shipping_cost: 0,
+          discount_amount: 0,
+          total: 25000,
+        }),
+      ]);
+
+      renderHook(() =>
+        useSettlementCompletion({
+          ...baseParams,
+          paymentMethod: 'paystack',
+          reference: 'PSK-txn-9',
+        })
+      );
+      await jest.advanceTimersByTimeAsync(0);
+      expect(mockTrackCompleted).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(1000);
+
+      // The polling path wins the durable claim, so the provider
+      // reference must travel with it for reconciliation.
+      await waitFor(() =>
+        expect(mockTrackCompleted).toHaveBeenCalledWith(
+          expect.objectContaining({
+            orderId: 'order-settle-1',
+            paymentMethod: 'paystack',
+            reference: 'PSK-txn-9',
+            value: 25000,
+          })
+        )
+      );
+      expect(mockTrackCompleted).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('never attributes a different order returned for the token', async () => {
     jest.useFakeTimers();
     try {

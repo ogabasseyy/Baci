@@ -20,7 +20,7 @@ export const OGABASSEY_SOCIAL_IMAGE_URL = `${OGABASSEY_URL}/template-previews/og
  * unused preload fetch, deduped away when it still matches.
  */
 export const OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL =
-  'https://cdn.ogabassey.com/core-assets/products/premium-laptops/dell-alienware-m18-r2.jpg';
+  'https://cdn.ogabassey.com/core-assets/products/iphone-18-pro-max-black.avif';
 export const OGABASSEY_TWITTER_HANDLE = '@ogabasseyy';
 
 export const OGABASSEY_MERCHANT_ID = '6b5cb8a4-5575-456c-b936-8cdfae30db74';

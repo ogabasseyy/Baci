@@ -48,10 +48,10 @@ describe('OgabasseyHomeCommittedLcp', () => {
     expect(preload?.getAttribute('as')).toBe('image');
     expect(preload?.getAttribute('fetchpriority')).toBe('high');
     expect(preload?.getAttribute('href')).toContain(
-      'dell-alienware-m18-r2.jpg'
+      'iphone-18-pro-max-black.avif'
     );
     expect(OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL).toContain(
-      'dell-alienware-m18-r2.jpg'
+      'iphone-18-pro-max-black.avif'
     );
   });
 

@@ -50,8 +50,12 @@ describe('manual order document date migration', () => {
     expect(migration).toContain('invoice_issue_date_generated IS NULL');
     expect(migration).toContain('tax_point_date_generated IS NULL');
     expect(migration).toContain(
-      "AND source IN ('manual', 'staff_entry', 'physical'"
+      "AND (source IN ('manual', 'staff_entry', 'physical'"
     );
+    // Proven-import rows (import job/external source markers) join the
+    // generated set too: their dates were stamped as the import day.
+    expect(migration).toContain('OR import_job_id IS NOT NULL');
+    expect(migration).toContain('OR external_source IS NOT NULL');
     // The init must run first: without it the backfill WHERE clause (IS TRUE
     // over NULL-for-all-rows columns) would update no pre-existing orders.
     expect(

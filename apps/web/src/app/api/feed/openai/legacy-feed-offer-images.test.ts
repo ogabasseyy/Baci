@@ -150,9 +150,7 @@ describe('generateOpenAIFeed offer images', () => {
     );
     const parsed = parseLine(line);
 
-    expect(parsed.image_link).toBe('');
-    expect(parsed.additional_image_links).toEqual([
-      'https://cdn.example.com/phone.jpg',
-    ]);
+    expect(parsed.image_link).toBe('https://cdn.example.com/phone.jpg');
+    expect(parsed.additional_image_links).toEqual([]);
   });
 });

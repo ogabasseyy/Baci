@@ -30,6 +30,10 @@ const listeners: Record<string, Listener[]> = {
   paid: [],
 };
 const unsubscribes: ReturnType<typeof jest.fn>[] = [];
+// Failure injection: when nonzero, the Nth addAdEventListener call throws
+// to simulate a mid-registration native failure.
+let mockAddListenerThrowOnCall = 0;
+let mockAddListenerCalls = 0;
 
 const mockInterstitialShow = jest.fn<(...args: unknown[]) => Promise<void>>(
   async () => undefined
@@ -48,6 +52,10 @@ jest.mock('react-native-google-mobile-ads', () => ({
   InterstitialAd: {
     createForAdRequest: () => ({
       addAdEventListener: (type: string, listener: Listener) => {
+        mockAddListenerCalls += 1;
+        if (mockAddListenerThrowOnCall === mockAddListenerCalls) {
+          throw new Error('native subscribe failed');
+        }
         listeners[type]?.push(listener);
         const unsubscribe = jest.fn();
         unsubscribes.push(unsubscribe);
@@ -72,6 +80,8 @@ async function flushConsentGate(): Promise<void> {
 function setAdsEnabled(value: string | undefined) {
   for (const key of Object.keys(listeners)) listeners[key] = [];
   unsubscribes.length = 0;
+  mockAddListenerThrowOnCall = 0;
+  mockAddListenerCalls = 0;
   mockInterstitialLoad.mockClear();
   mockInterstitialShow.mockClear();
   mockInitializeQuizMobileAds.mockClear();
@@ -118,5 +128,19 @@ describe('maybeShowPostOrderInterstitial setup failure', () => {
       jest.useRealTimers();
       setAdsEnabled(ORIGINAL_ENV);
     }
+  });
+
+  it('releases installed listeners when a later registration throws', async () => {
+    // Regression: cleanups.push(a(), b(), ...) evaluates every registration
+    // before push runs, so a mid-list throw used to strand installed
+    // listeners that abandon() could not release.
+    setAdsEnabled('true');
+    mockAddListenerThrowOnCall = 3;
+    await expect(maybeShowPostOrderInterstitial()).resolves.toBe('skipped');
+    expect(unsubscribes).toHaveLength(2);
+    for (const unsubscribe of unsubscribes) {
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    }
+    setAdsEnabled(ORIGINAL_ENV);
   });
 });

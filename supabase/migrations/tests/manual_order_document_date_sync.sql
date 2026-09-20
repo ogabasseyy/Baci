@@ -20,8 +20,10 @@ DECLARE
   -- Fixed id so the post-replay block below can re-assert this row.
   v_manual_order_id uuid := 'c0000000-0000-0000-0000-000000000001';
   v_legacy_order_id uuid := gen_random_uuid();
+  v_explicit_order_id uuid := gen_random_uuid();
   v_item_id uuid := gen_random_uuid();
   v_legacy_item_id uuid := gen_random_uuid();
+  v_explicit_item_id uuid := gen_random_uuid();
   v_issue date;
   v_tax date;
   v_issue_gen boolean;
@@ -210,7 +212,80 @@ BEGIN
     RAISE EXCEPTION 'review edit did not mark generated dates explicit';
   END IF;
 
-  -- 4. Cost-only reviews preserve the whole date block. Mirrors the real UI
+  -- 4. Non-manual explicit overrides survive review day changes, while the
+  -- generated date on the same order still follows. The storefront invoice
+  -- was issued Mar 10 for a Mar 4 sale; correcting the sale day must not
+  -- rewrite the already-issued invoice.
+  INSERT INTO public.orders (
+    id,
+    merchant_id,
+    order_number,
+    customer_name,
+    customer_email,
+    total,
+    subtotal,
+    payment_status,
+    shipping_status,
+    source,
+    transaction_date,
+    invoice_issue_date,
+    tax_point_date,
+    invoice_issue_date_generated,
+    tax_point_date_generated
+  ) VALUES (
+    v_explicit_order_id,
+    v_merchant_id,
+    format('EXPLICIT-DATE-SYNC-%s', v_run_id),
+    'Manual Date Sync Customer',
+    format('manual-date-sync-customer-%s@example.com', v_run_id),
+    95000,
+    95000,
+    'paid',
+    'pending',
+    'storefront',
+    '2026-03-04T11:30:00Z',
+    '2026-03-10',
+    '2026-03-04',
+    false,
+    true
+  );
+
+  INSERT INTO public.order_items (id, order_id, name, quantity, price)
+  VALUES (v_explicit_item_id, v_explicit_order_id, 'Explicit Fixture Phone', 1, 95000);
+
+  PERFORM public.update_transaction_review_details(
+    p_merchant_id := v_merchant_id,
+    p_order_id := v_explicit_order_id,
+    p_order_item_id := v_explicit_item_id,
+    p_product_id := NULL,
+    p_variant_id := NULL,
+    p_cost_price := 80000,
+    p_supplier_name := 'Sync Test Supplier',
+    p_transaction_date := '2026-06-10T12:30:00Z',
+    p_client_timezone := 'Pacific/Auckland',
+    p_update_product_default := false,
+    p_unit_index := NULL,
+    p_identifier_type := NULL,
+    p_identifier_value := NULL
+  );
+
+  SELECT invoice_issue_date, tax_point_date,
+         invoice_issue_date_generated, tax_point_date_generated,
+         transaction_date
+  INTO v_issue, v_tax, v_issue_gen, v_tax_gen, v_txn
+  FROM public.orders
+  WHERE id = v_explicit_order_id;
+  IF v_txn <> '2026-06-10T12:30:00Z' THEN
+    RAISE EXCEPTION 'review edit did not move the transaction instant: %', v_txn;
+  END IF;
+  IF v_issue <> '2026-03-10' OR v_issue_gen IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'review edit rewrote the explicit invoice date: %', v_issue;
+  END IF;
+  IF v_tax <> '2026-06-11' OR v_tax_gen IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'review edit did not follow the reviewer day for the generated tax date: %', v_tax;
+  END IF;
+
+  -- 5. Cost-only reviews preserve the whole date block. Mirrors the real UI
   -- path: a Lagos reviewer sees Jun 10 for the stored instant, leaves the
   -- date field untouched, and the editor re-serializes it as Lagos midnight
   -- (2026-06-09T23:00:00Z) -- a different instant for the same calendar day.
@@ -245,7 +320,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 5. Historical rows (pre-migration shape: recording-day dates stamped by
+-- 6. Historical rows (pre-migration shape: recording-day dates stamped by
 -- update_order_tax_totals, NULL provenance). The manual and proven-import
 -- rows must be repaired to the merchant-timezone day; the unmarked
 -- non-manual row stays untouched by design.
@@ -264,12 +339,20 @@ VALUES (
   'NG'
 );
 
+INSERT INTO public.customers (id, merchant_id, email, full_name)
+VALUES (
+  'b0000000-0000-0000-0000-000000000002',
+  'b0000000-0000-0000-0000-000000000001',
+  'manual-date-historical@example.com',
+  'Historical Manual'
+);
+
 INSERT INTO public.orders (
   id, merchant_id, order_number, customer_name, customer_email,
   total, subtotal, payment_status, shipping_status, source,
   transaction_date, invoice_issue_date, tax_point_date,
   invoice_issue_date_generated, tax_point_date_generated,
-  import_job_id, external_source
+  import_job_id, external_source, customer_id
 ) VALUES (
   'b0000000-0000-0000-0000-000000000003',
   'b0000000-0000-0000-0000-000000000001',
@@ -278,7 +361,7 @@ INSERT INTO public.orders (
   'manual-date-historical@example.com',
   150000, 150000, 'paid', 'pending', 'physical',
   '2026-03-04T23:30:00Z', '2026-03-04', '2026-03-04', NULL, NULL,
-  NULL, NULL
+  NULL, NULL, 'b0000000-0000-0000-0000-000000000002'
 ), (
   'b0000000-0000-0000-0000-000000000004',
   'b0000000-0000-0000-0000-000000000001',
@@ -287,7 +370,7 @@ INSERT INTO public.orders (
   'manual-date-historical@example.com',
   150000, 150000, 'paid', 'pending', 'storefront',
   '2026-03-04T23:30:00Z', '2026-03-04', '2026-03-04', NULL, NULL,
-  NULL, NULL
+  NULL, NULL, NULL
 ), (
   'b0000000-0000-0000-0000-000000000005',
   'b0000000-0000-0000-0000-000000000001',
@@ -296,7 +379,7 @@ INSERT INTO public.orders (
   'manual-date-historical@example.com',
   150000, 150000, 'paid', 'pending', 'online_store',
   '2026-03-04T23:30:00Z', '2026-06-01', '2026-06-01', NULL, NULL,
-  NULL, 'bumpa'
+  NULL, 'bumpa', NULL
 );
 RESET ROLE;
 
@@ -309,6 +392,9 @@ WHERE id IN (
   'b0000000-0000-0000-0000-000000000004',
   'b0000000-0000-0000-0000-000000000005'
 );
+CREATE TEMPORARY TABLE backfill_customer_guard AS
+SELECT id, updated_at FROM public.customers
+WHERE id = 'b0000000-0000-0000-0000-000000000002';
 \ir ../20260912150000_backfill_manual_order_document_dates.sql
 
 DO $$
@@ -348,7 +434,7 @@ BEGIN
     RAISE EXCEPTION 'backfill did not repair historical import dates: % / %', v_issue, v_tax;
   END IF;
 
-  -- 6. Re-applying the migration preserves the explicit physical fixture: a
+  -- 7. Re-applying the migration preserves the explicit physical fixture: a
   -- Lagos recompute of its instant would yield Jun 10, so Jun 11 plus FALSE
   -- flags proves the init left explicit provenance alone.
   SELECT invoice_issue_date, tax_point_date,
@@ -361,7 +447,7 @@ BEGIN
     RAISE EXCEPTION 'migration replay clobbered explicit manual dates: % / %', v_issue, v_tax;
   END IF;
 
-  -- 7. The backfill disables the updated_at trigger, so repaired rows keep
+  -- 8. The backfill disables the updated_at trigger, so repaired rows keep
   -- their original recency instead of looking modified at deploy time.
   IF EXISTS (
     SELECT 1
@@ -370,6 +456,17 @@ BEGIN
     WHERE o.updated_at IS DISTINCT FROM g.updated_at
   ) THEN
     RAISE EXCEPTION 'backfill bumped updated_at on historical rows';
+  END IF;
+
+  -- 9. The backfill changes no order totals, so the paused customer-stats
+  -- trigger must leave linked customer timestamps (OCC tokens) untouched.
+  IF EXISTS (
+    SELECT 1
+    FROM public.customers AS c
+    JOIN backfill_customer_guard AS g ON g.id = c.id
+    WHERE c.updated_at IS DISTINCT FROM g.updated_at
+  ) THEN
+    RAISE EXCEPTION 'backfill churned linked customer timestamps';
   END IF;
 END;
 $$ LANGUAGE plpgsql;

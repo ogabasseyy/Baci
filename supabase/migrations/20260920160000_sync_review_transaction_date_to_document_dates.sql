@@ -26,6 +26,7 @@ AS $$
 DECLARE
   v_day_changed boolean := false;
   v_identifier_type text := NULLIF(btrim(COALESCE(p_identifier_type, '')), '');
+  v_is_manual_order boolean := false;
   v_identifier_value text := NULLIF(btrim(COALESCE(p_identifier_value, '')), '');
   v_order_item_product_id uuid;
   v_order_item_quantity integer;
@@ -203,11 +204,15 @@ BEGIN
   END IF;
 
   -- A transaction review is an explicit human date correction: when the
-  -- reviewer changes the calendar day, the transaction and both document
-  -- dates follow the reviewer's selected day (client timezone, defaulting to
-  -- Africa/Lagos above) and their provenance becomes explicit. Manual orders
-  -- carry explicit (FALSE-flag) device-local dates that the sync trigger must
-  -- preserve, so without this the receipt would keep showing the original day.
+  -- reviewer changes the calendar day, the transaction date follows the
+  -- reviewer's selected day (client timezone, defaulting to Africa/Lagos
+  -- above). Manual-origin orders derive their document dates from the same
+  -- picker selection, so both dates follow and stay explicit (FALSE);
+  -- without this the receipt would keep showing the original day. For
+  -- non-manual orders only generated (TRUE-flag) dates follow; explicit or
+  -- unknown-provenance dates (e.g. an already-issued invoice differing
+  -- from the sale day) are preserved so a sale-date correction cannot
+  -- silently rewrite them.
   -- Compare calendar days, not instants: the editor always re-serializes the
   -- date field as reviewer-local midnight, so the instant normally differs
   -- even for cost-only edits. When the day is unchanged the whole date block
@@ -216,8 +221,9 @@ BEGIN
     transaction_date AT TIME ZONE v_transaction_time_zone
   )::date IS DISTINCT FROM (
     p_transaction_date AT TIME ZONE v_transaction_time_zone
-  )::date
-  INTO v_day_changed
+  )::date,
+    source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga')
+  INTO v_day_changed, v_is_manual_order
   FROM public.orders
   WHERE id = p_order_id
     AND merchant_id = p_merchant_id;
@@ -227,18 +233,24 @@ BEGIN
         WHEN v_day_changed THEN p_transaction_date ELSE transaction_date END,
       invoice_issue_date = CASE
         WHEN v_day_changed
+         AND (v_is_manual_order OR invoice_issue_date_generated IS TRUE)
         THEN (p_transaction_date AT TIME ZONE v_transaction_time_zone)::date
         ELSE invoice_issue_date
       END,
       tax_point_date = CASE
         WHEN v_day_changed
+         AND (v_is_manual_order OR tax_point_date_generated IS TRUE)
         THEN (p_transaction_date AT TIME ZONE v_transaction_time_zone)::date
         ELSE tax_point_date
       END,
       invoice_issue_date_generated = CASE
-        WHEN v_day_changed THEN false ELSE invoice_issue_date_generated END,
+        WHEN v_day_changed
+         AND (v_is_manual_order OR invoice_issue_date_generated IS TRUE)
+        THEN false ELSE invoice_issue_date_generated END,
       tax_point_date_generated = CASE
-        WHEN v_day_changed THEN false ELSE tax_point_date_generated END
+        WHEN v_day_changed
+         AND (v_is_manual_order OR tax_point_date_generated IS TRUE)
+        THEN false ELSE tax_point_date_generated END
   WHERE id = p_order_id
     AND merchant_id = p_merchant_id;
 

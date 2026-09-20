@@ -114,11 +114,11 @@ export const EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260912150000_backfill_manual_order_document_dates.sql',
-    sha256: '073c953dfcd2c1e1f11379b98c58462c5335f28ddc121f2ab1f622ade5cb083a',
+    sha256: '916c3c32fdfbe8ef1a5ff5a3ea133dfd0a3c061d078f512805b5e3549b51c2cd',
   },
   {
     repositoryPath:
       'supabase/migrations/20260920160000_sync_review_transaction_date_to_document_dates.sql',
-    sha256: 'b636c7644f67aab517b436eb82cb66a4d73a342fd6b749dc46d9ac070194c32b',
+    sha256: '8ae2f2a178305f701484038e9c7fe43037baa1b1c2cb2db9fd6d09bccbbb0fa3',
   },
 ];

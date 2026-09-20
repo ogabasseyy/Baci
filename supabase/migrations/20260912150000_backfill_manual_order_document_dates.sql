@@ -37,7 +37,10 @@ $$;
 -- migration preserves explicit FALSE values (replay-safe).
 -- Preserve order recency while backfilling. This migration is
 -- transactional, so a failed UPDATE rolls back the temporary trigger state.
+-- The customer-stats trigger is paused too: the backfill changes no order
+-- totals, so recounting customers would only churn their OCC timestamps.
 ALTER TABLE public.orders DISABLE TRIGGER "update_orders_updated_at";
+ALTER TABLE public.orders DISABLE TRIGGER "update_customer_stats_trigger";
 UPDATE public.orders
 SET
   invoice_issue_date_generated = CASE
@@ -73,6 +76,7 @@ SET
   END
 WHERE transaction_date IS NOT NULL
   AND (invoice_issue_date_generated IS TRUE OR tax_point_date_generated IS TRUE);
+ALTER TABLE public.orders ENABLE TRIGGER "update_customer_stats_trigger";
 ALTER TABLE public.orders ENABLE TRIGGER "update_orders_updated_at";
 
 CREATE OR REPLACE FUNCTION public.mark_generated_manual_order_document_dates()

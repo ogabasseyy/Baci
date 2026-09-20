@@ -107,9 +107,19 @@ describe('review transaction date sync migration', () => {
     expect(reviewSyncMigration).toContain(
       'transaction_date AT TIME ZONE v_transaction_time_zone'
     );
-    expect(reviewSyncMigration).toContain('WHEN v_day_changed THEN false');
+    expect(reviewSyncMigration).toContain('WHEN v_day_changed');
     expect(reviewSyncMigration).toContain('ELSE transaction_date');
     expect(reviewSyncMigration).toContain('ELSE invoice_issue_date_generated');
     expect(reviewSyncMigration).toContain('ELSE tax_point_date_generated');
+  });
+
+  it('preserves explicit non-manual dates while manual dates follow the reviewer day', () => {
+    expect(reviewSyncMigration).toContain('v_is_manual_order');
+    expect(reviewSyncMigration).toContain(
+      'AND (v_is_manual_order OR invoice_issue_date_generated IS TRUE)'
+    );
+    expect(reviewSyncMigration).toContain(
+      'AND (v_is_manual_order OR tax_point_date_generated IS TRUE)'
+    );
   });
 });

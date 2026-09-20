@@ -75,4 +75,24 @@ describe('isOfferClaimedUrl', () => {
       isOfferClaimedUrl('https://cdn.example/images/used.jpg', claimed)
     ).toBe(false);
   });
+
+  it('decodes unreserved escapes before comparing claimed urls', () => {
+    const claimed = new Set(['/images/%75sed.jpg']);
+    expect(
+      isOfferClaimedUrl('https://cdn.example/images/used.jpg', claimed)
+    ).toBe(true);
+    expect(
+      isOfferClaimedUrl(
+        'https://cdn.example/images/%75sed.jpg',
+        new Set(['/images/used.jpg'])
+      )
+    ).toBe(true);
+  });
+
+  it('leaves reserved escapes encoded when comparing claimed urls', () => {
+    const claimed = new Set(['/images%2Fused.jpg']);
+    expect(
+      isOfferClaimedUrl('https://cdn.example/images/used.jpg', claimed)
+    ).toBe(false);
+  });
 });

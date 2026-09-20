@@ -20,7 +20,7 @@ import {
   classifyFeedImageCandidate,
   extractImageCandidates,
 } from '../../packages/shared/src/gmc-feed/index';
-import { getEligibleConditionOffers } from '../../packages/shared/src/lib/product-condition';
+import { getEligibleConditionOffers } from '../../packages/shared/src/lib/eligible-condition-offers';
 
 export interface OfferImageBackfillInput {
   supabase: SupabaseClient;

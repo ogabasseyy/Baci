@@ -1,12 +1,29 @@
+const UNRESERVED_PATH_CHARS = new Set(
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'
+);
+
 /**
- * Pathname with dot segments resolved and query/fragment stripped, so
- * `/images/../used.jpg?v=2` and `https://cdn.example/images/used.jpg`
- * compare equal. Relative references resolve against a dummy base purely
- * to normalize dot segments; only the pathname is ever compared.
+ * Decodes percent-encoded unreserved characters (`%75` → `u`) so
+ * equivalent spellings compare equal. Reserved escapes (`%2F`) stay
+ * encoded: decoding them would change the path structure.
+ */
+function decodeUnreservedEscapes(pathname: string): string {
+  return pathname.replace(/%([0-9A-Fa-f]{2})/g, (match, hex: string) => {
+    const char = String.fromCharCode(Number.parseInt(hex, 16));
+    return UNRESERVED_PATH_CHARS.has(char) ? char : match;
+  });
+}
+
+/**
+ * Pathname with dot segments resolved, unreserved escapes decoded, and
+ * query/fragment stripped, so `/images/../used.jpg?v=2` and
+ * `https://cdn.example/images/used.jpg` compare equal. Relative
+ * references resolve against a dummy base purely to normalize dot
+ * segments; only the pathname is ever compared.
  */
 function normalizedPath(value: string): string | null {
   try {
-    return new URL(value, 'http://localhost').pathname;
+    return decodeUnreservedEscapes(new URL(value, 'http://localhost').pathname);
   } catch {
     return null;
   }
@@ -24,14 +41,14 @@ function isRelativeReference(value: string): boolean {
 
 /**
  * Canonical absolute form for equivalent-spelling comparison: lowercase
- * scheme and host, default ports dropped, dot segments resolved, and
- * query/fragment stripped. Different hosts stay distinct, so the
- * cross-host restriction holds.
+ * scheme and host, default ports dropped, dot segments resolved,
+ * unreserved escapes decoded, and query/fragment stripped. Different
+ * hosts stay distinct, so the cross-host restriction holds.
  */
 function canonicalAbsoluteUrl(value: string): string | null {
   try {
     const parsed = new URL(value);
-    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+    return `${parsed.protocol}//${parsed.host}${decodeUnreservedEscapes(parsed.pathname)}`;
   } catch {
     return null;
   }

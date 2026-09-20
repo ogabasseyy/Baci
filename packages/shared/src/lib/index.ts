@@ -3,6 +3,7 @@ export * from './commerce-variant-axis';
 export * from './dedupe-by-id';
 export * from './delivery-metadata';
 export * from './derive-category-slug';
+export * from './eligible-condition-offers';
 export * from './fetch-with-timeout';
 export * from './filter-by-location-phrase';
 export * from './get-paystack-dva-account-number';

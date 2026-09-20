@@ -321,42 +321,73 @@ describe('handleCheckoutSubmitError', () => {
     );
   });
 
-  it('records post-order payment failures', () => {
+  it('records post-start payment failures', () => {
     const { trackCheckoutPaymentFailed } = jest.requireMock(
       '@/services/analytics'
     ) as { trackCheckoutPaymentFailed: jest.Mock };
     trackCheckoutPaymentFailed.mockClear();
 
+    // No current submit path raises a post-start code (verify/decline
+    // failures surface in later screens, not in the submit catch), so this
+    // locks the safety-net branch with a representative provider decline.
     handleCheckoutSubmitError(
-      new OrderError('provider declined', 'PAYMENT_INIT_ERROR'),
-      'paystack' as Parameters<typeof handleCheckoutSubmitError>[1]
-    );
-
-    expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
-      'PAYMENT_INIT_ERROR',
-      undefined,
-      'paystack'
-    );
-  });
-
-  it('threads the committed order id into post-creation init failures', () => {
-    const { trackCheckoutPaymentFailed } = jest.requireMock(
-      '@/services/analytics'
-    ) as { trackCheckoutPaymentFailed: jest.Mock };
-    trackCheckoutPaymentFailed.mockClear();
-
-    // createOrder committed order-9 before Paystack init timed out: the
-    // failure must carry the id so it serializes behind order_created.
-    handleCheckoutSubmitError(
-      new OrderError('init timed out', 'PAYMENT_INIT_TIMEOUT'),
+      new OrderError('card declined', 'PAYMENT_DECLINED'),
       'paystack' as Parameters<typeof handleCheckoutSubmitError>[1],
       'order-9'
     );
 
     expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
-      'PAYMENT_INIT_TIMEOUT',
+      'PAYMENT_DECLINED',
       'order-9',
       'paystack'
+    );
+  });
+
+  it('suppresses funnel failures for rejected provider initialization', () => {
+    const { trackCheckoutPaymentFailed, trackError } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutPaymentFailed: jest.Mock; trackError: jest.Mock };
+    trackCheckoutPaymentFailed.mockClear();
+    trackError.mockClear();
+
+    // createOrder committed order-9 before Paystack init rejected, but the
+    // initializer emits payment_started only on success: no flow opened, so
+    // the funnel failure would be unmatched. The diagnostic still fires.
+    handleCheckoutSubmitError(
+      new OrderError('Failed to initialize payment', 'PAYMENT_INIT_ERROR'),
+      'paystack' as Parameters<typeof handleCheckoutSubmitError>[1],
+      'order-9'
+    );
+
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+    expect(trackError).toHaveBeenCalledWith(
+      'checkout_failed',
+      'Failed to initialize payment',
+      expect.objectContaining({ errorCode: 'PAYMENT_INIT_ERROR' })
+    );
+  });
+
+  it('suppresses funnel failures for timed-out provider initialization', () => {
+    const { trackCheckoutPaymentFailed, trackError } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutPaymentFailed: jest.Mock; trackError: jest.Mock };
+    trackCheckoutPaymentFailed.mockClear();
+    trackError.mockClear();
+
+    handleCheckoutSubmitError(
+      new OrderError(
+        'Payment initialization timed out',
+        'PAYMENT_INIT_TIMEOUT'
+      ),
+      'klump' as Parameters<typeof handleCheckoutSubmitError>[1],
+      'order-9'
+    );
+
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+    expect(trackError).toHaveBeenCalledWith(
+      'checkout_failed',
+      'Payment initialization timed out',
+      expect.objectContaining({ errorCode: 'PAYMENT_INIT_TIMEOUT' })
     );
   });
 });

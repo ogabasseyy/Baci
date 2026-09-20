@@ -124,6 +124,57 @@ describe('useJuicywayPayment', () => {
     expect(failedKeys).toEqual(['order-1:ref-1', 'order-1:ref-2']);
   });
 
+  it('re-initializes a replacement session when retrying the same network after failure', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(initResponse('ref-1', 'pay-1'))
+      .mockResolvedValueOnce(Response.json({ is_failed: true }))
+      .mockResolvedValueOnce(initResponse('ref-2', 'pay-2'))
+      .mockResolvedValueOnce(Response.json({ is_failed: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { result, unmount } = renderHook(() =>
+      useJuicywayPayment(createOptions('TRX'))
+    );
+
+    // Attempt 1 opens then fails verification.
+    await act(async () => {
+      await result.current.initializeCryptoPayment();
+    });
+    expect(result.current.cryptoPaymentData?.reference).toBe('ref-1');
+    await act(async () => {
+      await result.current.verifyCryptoPayment();
+    });
+    expect(result.current.cryptoVerificationStatus).toBe('failed');
+
+    // Retry on the SAME network: the terminal failure must have evicted
+    // the cached session, so this mints a new reference instead of
+    // reusing the failed session's dead payment id.
+    act(() => {
+      result.current.dismissCryptoModal();
+    });
+    await act(async () => {
+      await result.current.initializeCryptoPayment();
+    });
+    expect(result.current.cryptoPaymentData?.reference).toBe('ref-2');
+    expect(
+      fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')
+    ).toHaveLength(2);
+    await act(async () => {
+      await result.current.verifyCryptoPayment();
+    });
+    expect(result.current.cryptoVerificationStatus).toBe('failed');
+
+    const startedKeys = mockCaptureCheckoutFunnelEventOnce.mock.calls
+      .filter(([event]) => event === 'payment_started')
+      .map(([, key]) => key);
+    const failedKeys = mockCaptureCheckoutFunnelEventOnce.mock.calls
+      .filter(([event]) => event === 'payment_failed')
+      .map(([, key]) => key);
+    expect(startedKeys).toEqual(['order-1:ref-1', 'order-1:ref-2']);
+    expect(failedKeys).toEqual(['order-1:ref-1', 'order-1:ref-2']);
+    unmount();
+  });
+
   it('keeps the completion order-keyed', async () => {
     const fetchMock = vi
       .fn()

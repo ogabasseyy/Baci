@@ -54,9 +54,9 @@ function pruneRejectedQuizVoucherLines(error: OrderError): void {
 // order that changed, or a duplicate idempotent submission), and every
 // createOrder transport/server failure (timeouts, exhausted retries, 5xx,
 // unparseable responses, merchant lookups) are not payment declines and must
-// not enter the funnel as payment_failed. Only codes raised after an
-// order/payment attempt actually started (e.g. PAYMENT_INIT_ERROR) record a
-// funnel payment failure.
+// not enter the funnel as payment_failed. Only codes raised after a payment
+// flow actually opened (i.e. after payment_started) record a funnel payment
+// failure.
 const PRE_ORDER_ERROR_CODES = new Set([
   'NETWORK_ERROR',
   'VALIDATION_ERROR',
@@ -74,6 +74,18 @@ const PRE_ORDER_ERROR_CODES = new Set([
   'RESPONSE_VALIDATION_ERROR',
 ]);
 
+// Provider initialization failures (rejected/timed-out Paystack, Korapay,
+// DVA, Klump, or crypto initialize calls, including malformed initialize
+// responses). The order already exists when these throw, but every
+// initializer emits payment_started only after a successful initialization,
+// so no payment flow opened and a funnel failure would be unmatched. The
+// diagnostic trackError below still fires; only the funnel event is
+// suppressed.
+const PRE_START_ERROR_CODES = new Set([
+  'PAYMENT_INIT_ERROR',
+  'PAYMENT_INIT_TIMEOUT',
+]);
+
 export function handleCheckoutSubmitError(
   error: unknown,
   selectedPayment: PaymentMethodType,
@@ -84,7 +96,10 @@ export function handleCheckoutSubmitError(
   orderId?: string
 ) {
   if (error instanceof OrderError) {
-    if (!PRE_ORDER_ERROR_CODES.has(error.code)) {
+    if (
+      !PRE_ORDER_ERROR_CODES.has(error.code) &&
+      !PRE_START_ERROR_CODES.has(error.code)
+    ) {
       void trackCheckoutPaymentFailed(error.code, orderId, selectedPayment);
     }
     trackError('checkout_failed', error.message, {

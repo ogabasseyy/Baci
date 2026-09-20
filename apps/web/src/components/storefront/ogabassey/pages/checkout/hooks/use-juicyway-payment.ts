@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   buildCheckoutFunnelProperties,
   CHECKOUT_FUNNEL_EVENTS,
@@ -13,8 +13,12 @@ import type {
   CryptoChain,
   CryptoCurrency,
   CryptoPaymentData,
+  CryptoVerificationStatus,
   PendingCryptoOrder,
 } from '../types';
+import { useJuicywayVerification } from './use-juicyway-verification';
+
+export type { CryptoVerificationStatus };
 
 export interface JuicywayPendingOrder extends PendingCryptoOrder {
   /** Full order total: `amount` is only the residual due at the gateway
@@ -24,13 +28,6 @@ export interface JuicywayPendingOrder extends PendingCryptoOrder {
   /** Stamped order currency (authoritative for payment initialization). */
   orderCurrency: string;
 }
-
-export type CryptoVerificationStatus =
-  | 'idle'
-  | 'checking'
-  | 'confirmed'
-  | 'pending'
-  | 'failed';
 
 export interface UseJuicywayPaymentOptions {
   merchantId?: string | null;
@@ -59,9 +56,9 @@ export function juicywayAttemptKey(
 
 /**
  * Owns the Juicyway deposit lifecycle: address initialization, deposit
- * modal state, verification polling, completion/failure analytics,
- * cleanup, and success navigation. Extracted from the checkout page
- * (Boy Scout Rule).
+ * modal state, completion/failure analytics, cleanup, and success
+ * navigation. Verification polling lives in use-juicyway-verification.
+ * Extracted from the checkout page (Boy Scout Rule).
  */
 export function useJuicywayPayment({
   merchantId,
@@ -77,9 +74,6 @@ export function useJuicywayPayment({
 }: UseJuicywayPaymentOptions) {
   const [cryptoPaymentData, setCryptoPaymentData] =
     useState<CryptoPaymentData | null>(null);
-  const [isVerifyingCrypto, setIsVerifyingCrypto] = useState(false);
-  const [cryptoVerificationStatus, setCryptoVerificationStatus] =
-    useState<CryptoVerificationStatus>('idle');
 
   const cryptoInitializer = useCryptoPaymentInitializer({
     onReady: (payment) => {
@@ -130,18 +124,9 @@ export function useJuicywayPayment({
       .catch(() => undefined);
   };
 
-  // Verify crypto payment status by polling the API
-  // Uses a ref to track polling state to avoid stale closure issues
-  const pollingRef = useRef<{
-    intervalId: NodeJS.Timeout | null;
-    attempts: number;
-  }>({
-    intervalId: null,
-    attempts: 0,
-  });
-
   // Records the paid conversion for a server-confirmed Juicyway payment,
-  // then runs the shared success cleanup and redirect.
+  // then runs the shared success cleanup and redirect. (The verification
+  // hook settles its checking state before invoking this.)
   const completeCryptoPayment = () => {
     if (!cryptoPaymentData) {
       return;
@@ -161,8 +146,6 @@ export function useJuicywayPayment({
         total: pendingCryptoOrder?.total ?? pendingCryptoOrder?.amount,
       })
     );
-    setIsVerifyingCrypto(false);
-    setCryptoVerificationStatus('confirmed');
     clearPendingCheckoutOrder();
     clearCheckoutSession();
     clearCart();
@@ -180,9 +163,21 @@ export function useJuicywayPayment({
   // Records an attempt-scoped failure for a terminally failed Juicyway
   // verification, closing the payment_started recorded when the deposit
   // address initialized. The attempt key pairs it with its own start.
+  // (The verification hook settles its checking state before invoking
+  // this.)
   const failCryptoPayment = (reason: string) => {
     if (!cryptoPaymentData) {
       return;
+    }
+    // The session's payment id is dead: evict it so a same-network retry
+    // initializes a replacement instead of reusing the failed session.
+    if (pendingCryptoOrder && merchantId) {
+      cryptoInitializer.evictSession({
+        merchantId,
+        pendingOrder: pendingCryptoOrder,
+        chain: selectedCryptoChain,
+        currency: selectedCryptoCurrency,
+      });
     }
     captureCheckoutFunnelEventOnce(
       CHECKOUT_FUNNEL_EVENTS.paymentFailed,
@@ -203,140 +198,27 @@ export function useJuicywayPayment({
         total: pendingCryptoOrder?.total ?? pendingCryptoOrder?.amount,
       })
     );
-    setIsVerifyingCrypto(false);
-    setCryptoVerificationStatus('failed');
   };
 
-  const verifyCryptoPayment = async () => {
-    // Use paymentId for verification (from the capture response)
-    // Fall back to sessionId if paymentId is not available
-    const verificationId =
-      cryptoPaymentData?.paymentId || cryptoPaymentData?.sessionId;
-
-    if (!verificationId) {
-      console.error('No payment ID or session ID available for verification');
-      failCryptoPayment('juicyway_error');
-      return;
-    }
-
-    setIsVerifyingCrypto(true);
-    setCryptoVerificationStatus('checking');
-    pollingRef.current.attempts = 0;
-
-    const checkPaymentStatus = async (): Promise<
-      'confirmed' | 'failed' | 'pending'
-    > => {
-      try {
-        // Use payment_id parameter for GET /payments/{id} endpoint
-        const response = await fetch(
-          `/api/payments/status?gateway=juicyway&payment_id=${verificationId}`
-        );
-
-        if (!response.ok) {
-          // Try to parse error, but handle JSON parse failures gracefully
-          let errorData = {};
-          try {
-            errorData = await response.json();
-          } catch {
-            errorData = { message: `HTTP ${response.status}: ${response.statusText}` };
-          }
-          console.error('Payment status check failed:', {
-            status: response.status,
-            statusText: response.statusText,
-            paymentId: verificationId,
-            error: errorData,
-          });
-          return 'pending'; // Treat API errors as pending, not failed
-        }
-
-        const result = await response.json();
-
-        if (result.is_confirmed) {
-          return 'confirmed';
-        }
-
-        if (result.is_failed) {
-          return 'failed';
-        }
-
-        return 'pending';
-      } catch (error) {
-        console.error('Payment verification error:', error);
-        return 'pending';
-      }
-    };
-
-    // Initial check
-    const initialStatus = await checkPaymentStatus();
-
-    if (initialStatus === 'confirmed') {
-      completeCryptoPayment();
-      return;
-    }
-
-    if (initialStatus === 'failed') {
-      failCryptoPayment('juicyway_error');
-      return;
-    }
-
-    // Start polling
-    setCryptoVerificationStatus('pending');
-
-    pollingRef.current.intervalId = setInterval(async () => {
-      pollingRef.current.attempts++;
-      const maxAttempts = 30; // 5 minutes (30 * 10 seconds)
-
-      if (pollingRef.current.attempts >= maxAttempts) {
-        if (pollingRef.current.intervalId) {
-          clearInterval(pollingRef.current.intervalId);
-          pollingRef.current.intervalId = null;
-        }
-        setIsVerifyingCrypto(false);
-        setCryptoVerificationStatus('pending');
-        return;
-      }
-
-      const status = await checkPaymentStatus();
-
-      if (status === 'confirmed') {
-        if (pollingRef.current.intervalId) {
-          clearInterval(pollingRef.current.intervalId);
-          pollingRef.current.intervalId = null;
-        }
-        completeCryptoPayment();
-      } else if (status === 'failed') {
-        if (pollingRef.current.intervalId) {
-          clearInterval(pollingRef.current.intervalId);
-          pollingRef.current.intervalId = null;
-        }
-        failCryptoPayment('juicyway_error');
-      }
-    }, 10000); // Poll every 10 seconds
-  };
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current.intervalId) {
-        clearInterval(pollingRef.current.intervalId);
-      }
-    };
-  }, []);
+  const verification = useJuicywayVerification({
+    target: cryptoPaymentData,
+    onConfirmed: completeCryptoPayment,
+    onTerminalFailure: failCryptoPayment,
+  });
 
   const dismissCryptoModal = () => {
     setCryptoPaymentData(null);
-    setCryptoVerificationStatus('idle');
-    setIsVerifyingCrypto(false);
+    verification.reset();
   };
 
   return {
     cryptoPaymentData,
     setCryptoPaymentData,
-    isVerifyingCrypto,
-    cryptoVerificationStatus,
+    isVerifyingCrypto: verification.isVerifying,
+    cryptoVerificationStatus: verification.status,
     isInitializingCrypto: cryptoInitializer.isInitializing,
     initializeCryptoPayment,
-    verifyCryptoPayment,
+    verifyCryptoPayment: verification.verify,
     dismissCryptoModal,
     cancelCryptoInitialization: cryptoInitializer.cancel,
   };

@@ -853,6 +853,78 @@ describe('useBNPLCheckoutController', () => {
     expect(trackCheckoutPaymentStarted).not.toHaveBeenCalled();
   });
 
+  it('shows error UI without payment_failed for a pre-open Klump load failure', () => {
+    mockRouteParams = {
+      gateway: 'klump',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+    };
+    const { result } = renderControllerHook();
+
+    // The launcher document fails before Klump's onOpen bridges: the
+    // submit records no eager start anymore, so neither funnel event may
+    // emit — but the shopper still gets the error UI with retry.
+    act(() => {
+      result.current.handleWebViewError({
+        description: 'net::ERR_INTERNET_DISCONNECTED',
+        url: 'https://pay.example/x',
+      });
+    });
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorMessage).toBeTruthy();
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+    expect(trackCheckoutPaymentStarted).not.toHaveBeenCalled();
+  });
+
+  it('records a fresh start when a retried Klump attempt reopens', async () => {
+    mockRouteParams = {
+      gateway: 'klump',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+      amount: '21500',
+    };
+    const { result } = renderControllerHook();
+    const openedMessage = {
+      nativeEvent: {
+        data: JSON.stringify({
+          type: 'bnpl_provider_opened',
+          gateway: 'klump',
+          orderId: 'order-123',
+        }),
+      },
+    };
+
+    // First attempt opens (start recorded) then fails at load.
+    await act(async () => {
+      result.current.handleWebViewMessage(openedMessage);
+    });
+    act(() => {
+      result.current.handleWebViewError({
+        description: 'net::ERR_FAILED',
+        url: 'https://pay.example/x',
+      });
+    });
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledWith({
+      orderId: 'order-123',
+      paymentMethod: 'klump',
+      value: 21500,
+    });
+    expect(result.current.status).toBe('error');
+
+    // Retry resets the start guard, so the reopened Klump flow emits its
+    // own start to match any later failure.
+    act(() => {
+      result.current.handleRetry();
+    });
+    await act(async () => {
+      result.current.handleWebViewMessage(openedMessage);
+    });
+
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledTimes(2);
+  });
+
   it('fails the checkout when the launch document returns an HTTP error', async () => {
     mockRouteParams = {
       gateway: 'credit_direct',

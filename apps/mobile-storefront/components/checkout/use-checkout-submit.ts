@@ -116,9 +116,10 @@ export function useCheckoutSubmit({
     isOrderInFlight.current = true;
     setIsProcessing(true);
 
-    // Set once createOrder commits: post-creation provider-init failures
-    // (PAYMENT_INIT_ERROR/TIMEOUT) must carry the order id so the funnel
-    // failure serializes behind order_created and joins to the order.
+    // Set once createOrder commits: post-creation failures that do record a
+    // funnel failure must carry the order id so the event serializes behind
+    // order_created and joins to the order. (Pre-start init failures are
+    // suppressed from the funnel; the id still threads through for them.)
     let createdOrderId: string | undefined;
 
     try {

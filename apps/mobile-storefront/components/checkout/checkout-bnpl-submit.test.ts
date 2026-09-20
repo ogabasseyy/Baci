@@ -287,13 +287,14 @@ describe('submitBnplCheckout', () => {
       code: 'PAYMENT_INIT_ERROR',
     });
 
-    // The order committed before init threw: the outer submit threads
-    // this id into failure handling so payment_failed joins the order.
+    // The order committed before init threw: the outer submit threads this
+    // id into failure handling (init failures stay out of the funnel, but
+    // the committed identity is still available to the error path).
     expect(onOrderCreated).toHaveBeenCalledWith('order-1');
     expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
   });
 
-  it('records payment start only after Klump initializes successfully', async () => {
+  it('defers the Klump start until the launcher bridges onOpen', async () => {
     const params = {
       ...createParams(),
       selectedPayment: 'klump' as const,
@@ -313,12 +314,11 @@ describe('submitBnplCheckout', () => {
 
     await submitBnplCheckout(params);
 
-    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledWith({
-      orderId: 'order-1',
-      orderNumber: 'BAC-001',
-      paymentMethod: 'klump',
-      value: 21500,
-    });
+    // A successful initialize only provides the launcher URL — the
+    // provider UI has not opened, so recording a start here would strand
+    // it unmatched when the WebView fails before Klump's onOpen. The
+    // checkout controller records the start from bnpl_provider_opened.
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
     expect(mockRouterPush).toHaveBeenCalled();
   });
 

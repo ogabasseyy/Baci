@@ -780,14 +780,13 @@ async function launchBnplPayment({
                 checkoutCustomerPhone
             );
 
-            if (
-                !tryStartPaymentLaunch(
-                    paymentLaunchKeyRef,
-                    `klump:${order.id}:${klumpReference}:${trackingToken}`
-                )
-            ) {
+            const launchKey = `klump:${order.id}:${klumpReference}:${trackingToken}`;
+            if (!tryStartPaymentLaunch(paymentLaunchKeyRef, launchKey)) {
                 return;
             }
+            // New attempt: a later SDK error bridges to native only once
+            // onOpen proves this attempt's provider flow opened.
+            providerOpenedLaunchKeyRef.current = null;
             clearPendingKlumpRedirect();
             klumpSuccessRedirectRef.current = false;
 
@@ -831,11 +830,32 @@ async function launchBnplPayment({
                     }, 0);
                 },
                 onLoad: () => undefined,
-                onOpen: () => undefined,
+                onOpen: () => {
+                    // The Klump widget opened: confirm the provider flow to
+                    // native so the start is recorded only for opened
+                    // checkouts.
+                    providerOpenedLaunchKeyRef.current = launchKey;
+                    notifyNativeBnplProviderOpened('klump', order.id);
+                },
                 onSuccess: () => {
                     klumpSuccessRedirectRef.current = true;
                 },
                 onError: (error) => {
+                    // Bridge only when this attempt opened (same
+                    // unmatched-start guard as Credit Direct and CredPal).
+                    if (
+                        providerOpenedLaunchKeyRef.current === launchKey &&
+                        notifyNativeBnplProviderError(
+                            'klump',
+                            order.id,
+                            error instanceof Error
+                                ? error.message
+                                : 'Klump checkout failed.'
+                        )
+                    ) {
+                        clearPaymentLaunch(paymentLaunchKeyRef);
+                        return;
+                    }
                     clearPaymentLaunch(paymentLaunchKeyRef);
                     setStatus('error');
                     setErrorMessage(

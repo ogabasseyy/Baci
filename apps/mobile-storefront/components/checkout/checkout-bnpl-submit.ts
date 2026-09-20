@@ -17,7 +17,6 @@ import type {
   SavingsSelection,
   WalletSelection,
 } from '@/lib/wallet-payment-helpers';
-import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { createOrder, OrderError } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
 import {
@@ -123,8 +122,6 @@ export async function submitBnplCheckout({
     checkoutGeneration,
   });
   onOrderCreated?.(orderResponse.order.id);
-  const createdOrderNumber =
-    orderResponse.order.order_number || orderResponse.order.id.slice(0, 8);
 
   if (selectedPayment === 'klump') {
     await initializeKlumpAndRoute({
@@ -136,14 +133,10 @@ export async function submitBnplCheckout({
       setIsProcessing,
       trackingToken: orderResponse.order.tracking_token,
     });
-    // Record the start only after the provider initialized: a timed-out or
-    // rejected initialize opens no Klump flow, so it must not count as one.
-    await trackCheckoutPaymentStarted({
-      orderId: orderResponse.order.id,
-      orderNumber: createdOrderNumber,
-      paymentMethod: selectedPayment,
-      value: orderResponse.amountDueToGateway,
-    });
+    // No start here: initialize only provides the Klump launcher URL — the
+    // provider UI has not opened. The launcher bridges Klump's onOpen over
+    // the WebView bridge and the checkout controller records the start
+    // then, like the other BNPL providers.
     isOrderInFlight.current = false;
     return;
   }
@@ -152,7 +145,7 @@ export async function submitBnplCheckout({
   // checkout launcher, where lookup, SDK loading, or popup creation can
   // still fail. The launcher confirms the opened flow back over the
   // WebView bridge and the checkout controller records the start then
-  // (the Klump branch above keeps its post-initialization start).
+  // (the Klump branch above follows the same bridge via onOpen).
 
   isOrderInFlight.current = false;
   setIsProcessing(false);

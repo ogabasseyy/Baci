@@ -1039,6 +1039,143 @@ describe('BnplLauncher', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('posts a provider-opened signal when the Klump widget opens', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+    // Constructing the widget must not signal opened: only onOpen proves
+    // the provider UI actually opened.
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.stringContaining('bnpl_provider_opened')
+    );
+
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onOpen?: () => void;
+    };
+    config.onOpen?.();
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'klump',
+          orderId: 'order-1',
+          type: 'bnpl_provider_opened',
+        })
+      );
+    });
+  });
+
+  it('bridges an opened-then-failed Klump attempt to React Native', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onOpen?: () => void;
+      onError?: (error: Error) => void;
+    };
+    config.onOpen?.();
+    config.onError?.(new Error('Klump declined the application'));
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'klump',
+          orderId: 'order-1',
+          type: 'bnpl_provider_opened',
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'klump',
+          orderId: 'order-1',
+          message: 'Klump declined the application',
+          type: 'bnpl_provider_error',
+        })
+      );
+    });
+    expect(
+      screen.queryByText('Klump declined the application')
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps a pre-open Klump SDK failure local instead of bridging it', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+
+    // onOpen never fired, so no native payment_started exists to match:
+    // the failure must stay local instead of bridging an unmatched error.
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onError?: (error: Error) => void;
+    };
+    config.onError?.(new Error('Klump unavailable'));
+
+    expect(await screen.findByText('Klump unavailable')).toBeInTheDocument();
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.stringContaining('bnpl_provider_error')
+    );
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.stringContaining('bnpl_provider_opened')
+    );
+  });
+
   it('marks Klump checkout cancelled when the stored SDK redirect belongs to a previous checkout', async () => {
     mockSearchParams.mockReturnValue(
       new URLSearchParams({

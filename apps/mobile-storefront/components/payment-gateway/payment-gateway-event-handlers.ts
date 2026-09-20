@@ -56,6 +56,12 @@ export function createPaymentGatewayEventHandlers({
   // first emission (status refs only mirror on render) and reset only by
   // Retry.
   const recordPaymentFailure = (reason: string) => {
+    // VTU, wallet, and savings-auth flows share this controller but have no
+    // checkout order or matching checkout start: their failures must not
+    // pollute the commerce funnel.
+    if (paymentKind !== PAYMENT_KINDS.ORDER) {
+      return;
+    }
     if (refs.paymentFailureRecordedRef.current) {
       return;
     }

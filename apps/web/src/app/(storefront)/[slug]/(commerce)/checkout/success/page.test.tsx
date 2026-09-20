@@ -177,6 +177,47 @@ describe('checkout success page', () => {
     );
   });
 
+  it('claims verification failures per attempt when one order retries with a new reference', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({ reference: 'ref-1', orderId: 'order-1' })
+    );
+    mockFetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        finalizationOutcome: 'completed',
+        orderId: 'order-1',
+        orderNumber: 'ORD-2001',
+        status: 'failed',
+        success: false,
+      }),
+    });
+
+    const { unmount } = render(<CheckoutSuccessPage />);
+    await waitFor(() =>
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_failed',
+        'order-1:ref-1',
+        expect.objectContaining({ reason: 'payment_failed' })
+      )
+    );
+
+    // Same order, new gateway reference: the retry lands as a fresh page
+    // load and its failed attempt claims a distinct failure instead of
+    // being suppressed by the first attempt's claim.
+    unmount();
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({ reference: 'ref-2', orderId: 'order-1' })
+    );
+    render(<CheckoutSuccessPage />);
+    await waitFor(() =>
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_failed',
+        'order-1:ref-2',
+        expect.objectContaining({ reason: 'payment_failed' })
+      )
+    );
+  });
+
   it('does not count cancelled finalizations as paid conversions', async () => {
     mockFetchWithCsrf.mockResolvedValue({
       ok: true,

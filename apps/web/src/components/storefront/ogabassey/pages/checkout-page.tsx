@@ -1755,26 +1755,56 @@ export const CheckoutPage: React.FC = () => {
     setIsProcessing(true);
     try {
       const paymentAmount = resumedOrder.total;
+      // The resumed order keeps the currency it was priced in: label its
+      // funnel events with the stamped order currency, not the merchant's
+      // current payout currency.
+      const resumedCurrency = resumedOrder.currency ?? currencyCode;
 
       // Resumed orders bypass the standard submission instrumentation, so
-      // emit the funnel start here once the provider flow opens. CredPal's
-      // opener throws on initialization failure, so reaching the call below
-      // its await means the widget opened; Credit Direct's opener swallows
-      // failures into onError instead, so its start fires from onPopup.
-      // Once semantics keep the auto-trigger plus a manual retry to a
-      // single start per order.
+      // emit the funnel start here once the provider flow opens. Neither
+      // opener proves that by resolving — CredPal resolves right after
+      // `checkout.open()`, before the SDK fires `onLoad`, and Credit
+      // Direct swallows init failures into `onError` — so each start fires
+      // from its own opened signal (`onLoad` / `onPopup`). Errors before
+      // that signal keep the toast + retry without a funnel event; once
+      // opened, an error closes the attempt. Once semantics keep the
+      // auto-trigger plus a manual retry to a single start per order.
+      let resumedBnplOpened = false;
       const captureResumedPaymentStarted = (
         gateway: 'credpal' | 'credit_direct'
       ) => {
+        resumedBnplOpened = true;
         captureCheckoutFunnelEventOnce(
           CHECKOUT_FUNNEL_EVENTS.paymentStarted,
           resumedOrder.id,
           buildCheckoutFunnelProperties({
             channel: 'web',
-            currency: currencyCode,
+            currency: resumedCurrency,
             orderId: resumedOrder.id,
             paymentIntent: getCheckoutPaymentIntent(gateway),
             paymentMethod: gateway,
+            source: 'web_checkout',
+            total: paymentAmount,
+          })
+        );
+      };
+      const captureResumedPaymentFailed = (
+        gateway: 'credpal' | 'credit_direct',
+        reason: string
+      ) => {
+        if (!resumedBnplOpened) {
+          return;
+        }
+        captureCheckoutFunnelEventOnce(
+          CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+          resumedOrder.id,
+          buildCheckoutFunnelProperties({
+            channel: 'web',
+            currency: resumedCurrency,
+            orderId: resumedOrder.id,
+            paymentIntent: getCheckoutPaymentIntent(gateway),
+            paymentMethod: gateway,
+            reason,
             source: 'web_checkout',
             total: paymentAmount,
           })
@@ -1813,7 +1843,7 @@ export const CheckoutPage: React.FC = () => {
                 resumedOrder.id,
                 buildCheckoutFunnelProperties({
                   channel: 'web',
-                  currency: currencyCode,
+                  currency: resumedCurrency,
                   orderId: resumedOrder.id,
                   paymentIntent: getCheckoutPaymentIntent('credpal'),
                   paymentMethod: 'credpal',
@@ -1836,7 +1866,13 @@ export const CheckoutPage: React.FC = () => {
               asRoute(getHref(`/order-success?${successQuery.toString()}`))
             );
           },
+          onLoad: () => {
+            // The opener resolves before the SDK loads: only a real load
+            // proves the provider flow started (same gate as fresh flow).
+            captureResumedPaymentStarted('credpal');
+          },
           onError: (error) => {
+            captureResumedPaymentFailed('credpal', 'credpal_error');
             toast({
               title: 'Payment Failed',
               description: error.message || 'CredPal payment failed',
@@ -1848,7 +1884,6 @@ export const CheckoutPage: React.FC = () => {
             setIsProcessing(false);
           },
         });
-        captureResumedPaymentStarted('credpal');
         return;
       }
 
@@ -1896,6 +1931,7 @@ export const CheckoutPage: React.FC = () => {
             );
           },
           onError: (error) => {
+            captureResumedPaymentFailed('credit_direct', 'credit_direct_error');
             toast({
               title: 'Payment Failed',
               description: error || 'Credit Direct payment failed',

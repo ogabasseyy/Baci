@@ -261,9 +261,7 @@ async function verifyCheckoutPayment(
           data.finalizationOutcome
         );
         setStatus('pending');
-        setOrderNumber(
-          data.orderNumber || reference.slice(0, 8).toUpperCase()
-        );
+        setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
       } else {
         console.error('Payment verification failed:', data);
         setStatus('failed');
@@ -454,9 +452,16 @@ function CheckoutSuccessContent() {
         );
       },
       capturePaymentFailed: (input) => {
+        // A retry reuses the order with a new gateway reference: claim the
+        // failure per attempt so a later failed attempt is not suppressed
+        // by the first one (same reference still dedupes on re-verify).
+        const failureKey =
+          input.orderId && input.reference
+            ? `${input.orderId}:${input.reference}`
+            : input.orderId || input.reference || 'unknown-order';
         captureCheckoutFunnelEventOnce(
           CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-          input.orderId || input.reference || 'unknown-order',
+          failureKey,
           buildCheckoutFunnelProperties({
             channel: 'web',
             orderId: input.orderId ?? undefined,

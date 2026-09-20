@@ -781,6 +781,247 @@ describe('CheckoutPage', () => {
     fetchMock.mockRestore();
   });
 
+  function resumedOrderPayload(currency: string) {
+    return {
+      id: 'ord-1',
+      short_id: 'ORD-1',
+      subtotal: 5000,
+      shipping_cost: 750,
+      tax_amount: 0,
+      discount_amount: 0,
+      gift_wrapping_fee: 0,
+      total: 5750,
+      currency,
+      customer_name: 'Ada Buyer',
+      customer_email: 'ada@example.com',
+      customer_phone: '+2348123456789',
+      tracking_token: 'tok-123',
+      items: [
+        {
+          id: 'item-1',
+          product_id: 'prod-1',
+          product_name: 'Test Product',
+          quantity: 1,
+          price: 5000,
+        },
+      ],
+    };
+  }
+
+  function mockResumeFetch(currency: string) {
+    return vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        if (String(input).startsWith('/api/storefront/orders/ord-1')) {
+          return {
+            ok: true,
+            json: async () => resumedOrderPayload(currency),
+            text: async () => '',
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({}),
+          text: async () => '',
+        } as Response;
+      });
+  }
+
+  it('records the resumed CredPal start only after the widget loads, and closes it on error', async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams({
+        orderId: 'ord-1',
+        gateway: 'credpal',
+        trackingToken: 'tok-123',
+      }) as unknown as ReturnType<typeof useSearchParams>
+    );
+    const fetchMock = mockResumeFetch('NGN');
+
+    try {
+      render(<CheckoutPage />);
+      await waitFor(() => {
+        expect(openCredPalCheckout).toHaveBeenCalled();
+      });
+      const config = vi.mocked(openCredPalCheckout).mock.calls[0]?.[0];
+      expect(config).toBeDefined();
+      const startedCalls = () =>
+        mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+          ([event]) => event === 'payment_started'
+        );
+
+      // The opener resolved but the widget never loaded: no start yet.
+      expect(startedCalls()).toHaveLength(0);
+
+      // Pre-load setup error: toast only, no funnel failure.
+      act(() => {
+        config?.onError?.({ success: false, message: 'setup failed' });
+      });
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_failed',
+        expect.anything(),
+        expect.anything()
+      );
+
+      // Load proves the provider flow opened: the start is recorded.
+      act(() => {
+        config?.onLoad?.();
+      });
+      await waitFor(() => {
+        expect(startedCalls()).toHaveLength(1);
+      });
+      expect(startedCalls()[0]?.[1]).toBe('ord-1');
+      expect(startedCalls()[0]?.[2]).toEqual(
+        expect.objectContaining({
+          payment_method: 'credpal',
+          currency: 'NGN',
+          total: 5750,
+        })
+      );
+
+      // Post-load error closes the recorded start.
+      act(() => {
+        config?.onError?.({ success: false, message: 'declined' });
+      });
+      await waitFor(() => {
+        expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+          'payment_failed',
+          'ord-1',
+          expect.objectContaining({
+            payment_method: 'credpal',
+            reason: 'credpal_error',
+          })
+        );
+      });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('closes a resumed Credit Direct start when the provider errors after popup', async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams({
+        orderId: 'ord-1',
+        gateway: 'credit_direct',
+        trackingToken: 'tok-123',
+      }) as unknown as ReturnType<typeof useSearchParams>
+    );
+    const fetchMock = mockResumeFetch('NGN');
+
+    try {
+      render(<CheckoutPage />);
+      await waitFor(() => {
+        expect(openCreditDirectCheckout).toHaveBeenCalled();
+      });
+      const config = vi.mocked(openCreditDirectCheckout).mock.calls[0]?.[0];
+      expect(config).toBeDefined();
+      const startedCalls = () =>
+        mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+          ([event]) => event === 'payment_started'
+        );
+
+      // Init failure swallowed into onError before any popup: toast only.
+      act(() => {
+        config?.onError?.('init failed');
+      });
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_failed',
+        expect.anything(),
+        expect.anything()
+      );
+
+      // Popup proves the provider flow opened: the start is recorded.
+      await act(async () => {
+        await config?.onPopup?.({
+          checkoutTransactionId: 'cd-tx-1',
+          sessionId: 'cd-sess-1',
+        });
+      });
+      await waitFor(() => {
+        expect(startedCalls()).toHaveLength(1);
+      });
+      expect(startedCalls()[0]?.[2]).toEqual(
+        expect.objectContaining({ payment_method: 'credit_direct' })
+      );
+
+      // Post-popup error closes the recorded start.
+      act(() => {
+        config?.onError?.('declined');
+      });
+      await waitFor(() => {
+        expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+          'payment_failed',
+          'ord-1',
+          expect.objectContaining({
+            payment_method: 'credit_direct',
+            reason: 'credit_direct_error',
+          })
+        );
+      });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('labels resumed BNPL events with the stamped order currency', async () => {
+    // Merchant still prices in NGN but the resumed order was stamped USD.
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams({
+        orderId: 'ord-1',
+        gateway: 'credpal',
+        trackingToken: 'tok-123',
+      }) as unknown as ReturnType<typeof useSearchParams>
+    );
+    const fetchMock = mockResumeFetch('USD');
+
+    try {
+      render(<CheckoutPage />);
+      await waitFor(() => {
+        expect(openCredPalCheckout).toHaveBeenCalled();
+      });
+      const config = vi.mocked(openCredPalCheckout).mock.calls[0]?.[0];
+
+      act(() => {
+        config?.onLoad?.();
+      });
+      await waitFor(() => {
+        expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+          'payment_started',
+          'ord-1',
+          expect.objectContaining({ currency: 'USD', total: 5750 })
+        );
+      });
+
+      await act(async () => {
+        await config?.onSuccess?.({
+          order_no: 'cp-1',
+          item: 'Test Product',
+          amount: 5750,
+          status: 'success',
+          channel: 'credpal',
+          customer: {
+            full_name: 'Ada Buyer',
+            email: 'ada@example.com',
+            phone_no: '+2348123456789',
+          },
+          created_at: '2026-09-20T12:00:00.000Z',
+        });
+      });
+      await waitFor(() => {
+        expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+          'payment_completed',
+          'ord-1',
+          expect.objectContaining({
+            currency: 'USD',
+            payment_status: 'paid',
+            reference: 'cp-1',
+          })
+        );
+      });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it('does not fetch a resumed order until a merchant slug is available', async () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
@@ -1146,11 +1387,14 @@ describe('CheckoutPage', () => {
     {
       gateway: 'credpal',
       openWidget: async () => {
-        // The default CredPal mock resolves without firing callbacks, which
-        // models a successfully opened widget (its opener rejects on init
-        // failure instead of resolving).
+        // The opener resolves before the SDK loads, so only invoking the
+        // real onLoad callback models an opened flow.
         await waitFor(() => {
           expect(openCredPalCheckout).toHaveBeenCalled();
+        });
+        const config = vi.mocked(openCredPalCheckout).mock.calls.at(-1)?.[0];
+        act(() => {
+          config?.onLoad?.();
         });
       },
     },

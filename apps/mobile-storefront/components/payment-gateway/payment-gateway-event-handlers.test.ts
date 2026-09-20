@@ -7,6 +7,10 @@ jest.mock('@/services/analytics', () => ({
   trackCheckoutPaymentFailed: jest.fn(),
 }));
 
+jest.mock('expo-router', () => ({
+  router: { replace: jest.fn() },
+}));
+
 function createRefs(): PaymentGatewayRefs {
   return {
     copiedGatewayTextRef: { current: null },
@@ -22,24 +26,29 @@ function createRefs(): PaymentGatewayRefs {
   } as unknown as PaymentGatewayRefs;
 }
 
-function createHandlers(reference?: string, refs = createRefs()) {
+function createHandlers(
+  reference?: string,
+  refs = createRefs(),
+  paymentKind = 'order'
+) {
   const beginPaymentCompletion = jest.fn();
+  const scheduleDelayedNavigation = jest.fn();
   const handlers = createPaymentGatewayEventHandlers({
     beginPaymentCompletion,
     clearPendingLoadTimeout: jest.fn(),
     clearPendingNavigation: jest.fn(),
     gateway: 'paystack',
     orderId: 'order-1',
-    paymentKind: 'order',
+    paymentKind,
     reference,
     refs,
     returnTo: undefined,
-    scheduleDelayedNavigation: jest.fn(),
+    scheduleDelayedNavigation,
     scheduleLoadTimeout: jest.fn(),
     setErrorMessage: jest.fn(),
     setPaymentStatus: jest.fn(),
   });
-  return { beginPaymentCompletion, handlers };
+  return { beginPaymentCompletion, handlers, scheduleDelayedNavigation };
 }
 
 describe('createPaymentGatewayEventHandlers navigation', () => {
@@ -182,5 +191,57 @@ describe('createPaymentGatewayEventHandlers navigation', () => {
       'order-1',
       'paystack'
     );
+  });
+});
+
+describe('createPaymentGatewayEventHandlers non-order kinds', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it.each([
+    'vtu',
+    'wallet',
+    'savings_auth',
+  ])('keeps a %s cancellation out of the checkout funnel', (paymentKind) => {
+    const { handlers } = createHandlers('ref-123', createRefs(), paymentKind);
+
+    handlers.handleNavigationChange({
+      url: 'https://checkout.paystack.com/orders?cancelled=true',
+    } as never);
+
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'vtu',
+    'wallet',
+    'savings_auth',
+  ])('keeps a %s load error out of the checkout funnel', (paymentKind) => {
+    const { handlers } = createHandlers('ref-123', createRefs(), paymentKind);
+
+    handlers.handleWebViewError({
+      nativeEvent: {
+        description: 'net::ERR_FAILED',
+        url: 'https://checkout.paystack.com/topup',
+      },
+    } as never);
+
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+  });
+
+  it('still returns a cancelled savings authorization to wallet setup', () => {
+    const { handlers, scheduleDelayedNavigation } = createHandlers(
+      'ref-123',
+      createRefs(),
+      'savings_auth'
+    );
+
+    handlers.handleNavigationChange({
+      url: 'https://checkout.paystack.com/orders?cancelled=true',
+    } as never);
+
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+    expect(scheduleDelayedNavigation).toHaveBeenCalledTimes(1);
   });
 });

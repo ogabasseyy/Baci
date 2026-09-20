@@ -71,6 +71,8 @@ export interface ResumedOrder {
   tax_amount?: number;
   discount_amount?: number;
   gift_wrapping_fee?: number;
+  /** Stamped orders.currency: the currency the order was priced in. */
+  currency?: string;
   id: string;
   short_id: string;
   subtotal: number;

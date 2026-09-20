@@ -13,10 +13,6 @@ import {
 import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
 import { getEligibleConditionOffers } from '@/lib/eligible-condition-offers';
 import type { FeedImageManifestEntry } from '@/lib/gmc-feed-images';
-import {
-  resolveGmcAdditionalImages,
-  resolveGmcPrimaryImage,
-} from '@/lib/gmc-feed-images';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { resolveOfferFeedImages } from '@/lib/resolve-offer-feed-images';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';
@@ -29,6 +25,7 @@ import {
 import { buildVariantFeedItems } from './build-variant-feed-items';
 import { getFeedStockCount } from './feed-stock';
 import type { FeedMerchant, FeedProduct, ImageManifestMap } from './feed-types';
+import { resolveFeedImages } from './resolve-feed-images';
 import { selectFeedFamilyVariant } from './select-feed-family-variant';
 
 export type {
@@ -38,11 +35,6 @@ export type {
   FeedVariant,
   ImageManifestMap,
 } from './feed-types';
-
-interface ResolvedFeedImages {
-  additionalImagesXml: string;
-  primaryImageUrl: string;
-}
 
 const VALID_GMC_CONDITIONS = new Set(['new', 'used', 'refurbished'] as const);
 
@@ -65,35 +57,6 @@ function isValidGmcUrl(url: string): boolean {
   } catch {
     return false;
   }
-}
-
-function buildAdditionalImagesXml(urls: string[]) {
-  return urls
-    .map(
-      (url) =>
-        `        <g:additional_image_link>${escapeXml(url)}</g:additional_image_link>`
-    )
-    .join('\n');
-}
-
-function resolveFeedImages(
-  entries: FeedImageManifestEntry[],
-  excludeUrls: ReadonlySet<string> = new Set()
-): ResolvedFeedImages | null {
-  const primaryImageUrl = resolveGmcPrimaryImage(entries, excludeUrls);
-
-  if (!primaryImageUrl) {
-    return null;
-  }
-
-  return {
-    primaryImageUrl,
-    additionalImagesXml: buildAdditionalImagesXml(
-      resolveGmcAdditionalImages(entries, excludeUrls).filter(
-        (url) => url !== primaryImageUrl
-      )
-    ),
-  };
 }
 
 function getProductLevelManifestEntries(entries: FeedImageManifestEntry[]) {

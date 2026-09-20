@@ -14,8 +14,10 @@ DECLARE
   v_product_two uuid := '84100000-0000-4000-8000-000000000002';
   v_product_other_merchant uuid := '84100000-0000-4000-8000-000000000003';
   v_product_swap uuid := '84100000-0000-4000-8000-000000000004';
+  v_product_shared uuid := '84100000-0000-4000-8000-000000000005';
   v_variant uuid := '84200000-0000-4000-8000-000000000001';
   v_offer_retire uuid := '84300000-0000-4000-8000-000000000001';
+  v_offer_keeper uuid := '84300000-0000-4000-8000-000000000002';
   v_offer_shared_a uuid := '84300000-0000-4000-8000-000000000003';
   v_offer_shared_b uuid := '84300000-0000-4000-8000-000000000004';
   v_offer_overlap uuid := '84300000-0000-4000-8000-000000000005';
@@ -35,22 +37,23 @@ BEGIN
     (v_merchant_two, 'offer-manifest-two@example.com', 'Offer Manifest Two', 'offer-manifest-two');
   INSERT INTO public.products (id, merchant_id, name, price, slug, status, condition, images)
   VALUES
-    -- 'legacy' is unmappable, so no parent-condition exclusion applies and
-    -- all three offers below stay eligible (distinct listing norms).
-    (v_product, v_merchant, 'Offer Phone', 100, 'offer-phone', 'active', 'legacy',
+    (v_product, v_merchant, 'Offer Phone', 100, 'offer-phone', 'active', NULL,
       '["https://cdn.example.com/base.jpg"]'),
     (v_product_two, v_merchant, 'Offer Phone Two', 120, 'offer-phone-two', 'active', 'new',
       '["https://cdn.example.com/overlap-base.jpg"]'),
     (v_product_other_merchant, v_merchant_two, 'Offer Phone Other', 130, 'offer-phone-other', 'active', NULL, '[]'),
-    (v_product_swap, v_merchant, 'Offer Phone Swap', 140, 'offer-phone-swap', 'active', NULL, '[]');
+    (v_product_swap, v_merchant, 'Offer Phone Swap', 140, 'offer-phone-swap', 'active', NULL, '[]'),
+    (v_product_shared, v_merchant, 'Offer Phone Shared', 150, 'offer-phone-shared', 'active', NULL, '[]');
   -- One offer per (product, condition): the unique offer key forbids more.
   INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, status, images)
   VALUES
     (v_offer_retire, v_product, v_merchant, 'used', 50, 'active',
       '["https://cdn.example.com/retired.jpg", "https://cdn.example.com/variant-offer.jpg"]'),
-    (v_offer_shared_a, v_product, v_merchant, 'open_box', 70, 'active',
+    (v_offer_keeper, v_product, v_merchant, 'open_box', 70, 'active',
+      '["https://cdn.example.com/keep.jpg"]'),
+    (v_offer_shared_a, v_product_shared, v_merchant, 'used', 70, 'active',
       '["https://cdn.example.com/shared.jpg"]'),
-    (v_offer_shared_b, v_product, v_merchant, 'new', 80, 'active',
+    (v_offer_shared_b, v_product_shared, v_merchant, 'open_box', 80, 'active',
       '["https://cdn.example.com/shared.jpg"]'),
     (v_offer_overlap, v_product_two, v_merchant, 'used', 55, 'active',
       '["https://cdn.example.com/overlap-base.jpg"]'),
@@ -75,8 +78,9 @@ BEGIN
   VALUES
     (v_merchant, v_product, NULL, 'https://cdn.example.com/base.jpg', 'https://cdn.example.com/base.jpg', 'jpeg', 'verified', false, 0),
     (v_merchant, v_product, NULL, 'https://cdn.example.com/retired.jpg', 'https://cdn.example.com/retired.jpg', 'jpeg', 'verified', true, 1),
-    (v_merchant, v_product, NULL, 'https://cdn.example.com/shared.jpg', 'https://cdn.example.com/shared.jpg', 'jpeg', 'verified', false, 2),
+    (v_merchant, v_product, NULL, 'https://cdn.example.com/keep.jpg', 'https://cdn.example.com/keep.jpg', 'jpeg', 'verified', false, 2),
     (v_merchant, v_product, v_variant, 'https://cdn.example.com/variant-offer.jpg', 'https://cdn.example.com/variant-offer.jpg', 'jpeg', 'verified', false, 0),
+    (v_merchant, v_product_shared, NULL, 'https://cdn.example.com/shared.jpg', 'https://cdn.example.com/shared.jpg', 'jpeg', 'verified', false, 0),
     (v_merchant, v_product_two, NULL, 'https://cdn.example.com/overlap-base.jpg', 'https://cdn.example.com/overlap-base.jpg', 'jpeg', 'verified', true, 0),
     (v_merchant, v_product_two, NULL, 'https://cdn.example.com/shaped.jpg', 'https://cdn.example.com/shaped.jpg', 'jpeg', 'verified', false, 1),
     (v_merchant, v_product_two, NULL, 'https://cdn.example.com/obj.jpg', 'https://cdn.example.com/obj.jpg', 'jpeg', 'verified', false, 2),
@@ -150,6 +154,20 @@ BEGIN
   IF v_count <> 5 THEN
     RAISE EXCEPTION 'sibling product rows must be untouched, got %', v_count;
   END IF;
+  SELECT count(*) INTO v_count
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product_swap
+    AND status = 'verified';
+  IF v_count <> 3 THEN
+    RAISE EXCEPTION 'swap product rows must be untouched, got %', v_count;
+  END IF;
+  SELECT count(*) INTO v_count
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product_shared
+    AND status = 'verified';
+  IF v_count <> 1 THEN
+    RAISE EXCEPTION 'shared product rows must be untouched, got %', v_count;
+  END IF;
   SELECT status INTO v_status
   FROM public.product_feed_images
   WHERE merchant_id = v_merchant_two AND product_id = v_product_other_merchant;
@@ -189,7 +207,7 @@ BEGIN
   UPDATE public.product_offers SET status = 'sold_out' WHERE id = v_offer_shared_a;
   SELECT status INTO v_status
   FROM public.product_feed_images
-  WHERE merchant_id = v_merchant AND product_id = v_product
+  WHERE merchant_id = v_merchant AND product_id = v_product_shared
     AND variant_id IS NULL AND source_url = 'https://cdn.example.com/shared.jpg';
   IF v_status IS DISTINCT FROM 'verified' THEN
     RAISE EXCEPTION 'shared url must survive while a sibling stays active';
@@ -197,7 +215,7 @@ BEGIN
   DELETE FROM public.product_offers WHERE id = v_offer_shared_b;
   SELECT status INTO v_status
   FROM public.product_feed_images
-  WHERE merchant_id = v_merchant AND product_id = v_product
+  WHERE merchant_id = v_merchant AND product_id = v_product_shared
     AND variant_id IS NULL AND source_url = 'https://cdn.example.com/shared.jpg';
   IF v_status IS DISTINCT FROM 'stale' THEN
     RAISE EXCEPTION 'shared url must stale once no active offer references it';
@@ -295,6 +313,13 @@ BEGIN
     AND variant_id IS NULL AND source_url = 'https://cdn.example.com/base.jpg';
   IF v_status IS DISTINCT FROM 'verified' THEN
     RAISE EXCEPTION 'repair must keep product-claimed rows verified';
+  END IF;
+  SELECT status INTO v_status
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product
+    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/keep.jpg';
+  IF v_status IS DISTINCT FROM 'verified' THEN
+    RAISE EXCEPTION 'repair must keep offer-claimed rows verified';
   END IF;
   SELECT status INTO v_status
   FROM public.product_feed_images

@@ -59,4 +59,43 @@ describe('REDVAULT refund request schema', () => {
       }).success
     ).toBe(false);
   });
+
+  it('rejects duplicate merchandise unit identities', () => {
+    const unit = {
+      orderItemId: '22222222-2222-4222-8222-222222222222',
+      unitOrdinal: 1,
+    };
+    const result = redvaultRefundRequestSchema.safeParse({
+      ...base,
+      type: 'merchandise_units',
+      units: [unit, { ...unit }],
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues).toContainEqual(
+      expect.objectContaining({
+        message: 'merchandise refunds reject duplicate unit identities',
+        path: ['units'],
+      })
+    );
+  });
+
+  it('accepts distinct merchandise unit identities', () => {
+    expect(
+      redvaultRefundRequestSchema.safeParse({
+        ...base,
+        type: 'merchandise_units',
+        units: [
+          {
+            orderItemId: '22222222-2222-4222-8222-222222222222',
+            unitOrdinal: 1,
+          },
+          {
+            orderItemId: '22222222-2222-4222-8222-222222222222',
+            unitOrdinal: 2,
+          },
+        ],
+      }).success
+    ).toBe(true);
+  });
 });

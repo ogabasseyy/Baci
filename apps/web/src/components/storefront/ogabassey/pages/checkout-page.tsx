@@ -1793,6 +1793,49 @@ export const CheckoutPage: React.FC = () => {
     if (paymentMethod === 'uba_redvault' && redvaultOrderReady) {
       setIsProcessing(true);
       setRedvaultStatus('pending');
+      // Guest signup establishes a session before initialization: the
+      // guest application was created with a null user_id, so the new
+      // account must adopt it first or every customer-bound recovery RPC
+      // rejects the changed identity and the live order can never replay
+      // its authorization URL. Signup failures stay tolerated (email may
+      // already exist); only an established session with a failed attach
+      // blocks payment, and the retry re-attempts the attach.
+      if (createAccount && !user && accountPassword.length >= 6) {
+        const supabase = createClient();
+        try {
+          await supabase.auth.signUp({
+            email: redvaultOrderReady.customerEmail,
+            password: accountPassword,
+            options: {
+              data: {
+                first_name: firstName,
+                last_name: lastName,
+                phone: redvaultOrderReady.customerPhone,
+                source: 'checkout',
+                signup_type: 'customer',
+              },
+            },
+          });
+        } catch (authError) {
+          console.error('Silent signup background error:', authError);
+        }
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session) {
+          const { error: attachError } = await supabase.rpc(
+            'attach_redvault_guest_application_to_customer',
+            { p_order_id: redvaultOrderReady.orderId }
+          );
+          if (attachError) {
+            console.error('Guest checkout attach error:', attachError);
+            setRedvaultStatus('error');
+            setIsProcessing(false);
+            isOrderInFlightRef.current = false;
+            return;
+          }
+        }
+      }
       let paymentResult: Awaited<ReturnType<typeof initializeRedvaultPayment>>;
       try {
         paymentResult = await initializeRedvaultPayment({
@@ -1821,26 +1864,6 @@ export const CheckoutPage: React.FC = () => {
         setIsProcessing(false);
         isOrderInFlightRef.current = false;
         return;
-      }
-      if (createAccount && !user && accountPassword.length >= 6) {
-        try {
-          const supabase = createClient();
-          await supabase.auth.signUp({
-            email: redvaultOrderReady.customerEmail,
-            password: accountPassword,
-            options: {
-              data: {
-                first_name: firstName,
-                last_name: lastName,
-                phone: redvaultOrderReady.customerPhone,
-                source: 'checkout',
-                signup_type: 'customer',
-              },
-            },
-          });
-        } catch (authError) {
-          console.error('Silent signup background error:', authError);
-        }
       }
       window.location.assign(paymentResult.authorizationUrl);
       return;
@@ -2389,6 +2412,25 @@ export const CheckoutPage: React.FC = () => {
         merchantCountry
       );
 
+      // Persist the fence before any early return: the REDVAULT review
+      // branch below returns before payment, so a reload mid-review would
+      // otherwise lose the snapshot and let a method switch open a second
+      // order while this one still reserves inventory.
+      const pendingSnapshot: PendingCheckoutOrderSnapshot = {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        trackingToken: order.tracking_token,
+        merchantId: merchant.id,
+        customerEmail,
+        customerPhone,
+        checkoutFingerprint,
+        paymentMethod: normalizedPaymentMethod,
+        amountDueToGateway,
+        createdAt: new Date().toISOString(),
+      };
+      persistPendingCheckoutOrder(pendingSnapshot);
+      setPendingCheckoutOrder(pendingSnapshot);
+
       if (paymentMethod === 'uba_redvault' && !redvaultOrderReady) {
         setRedvaultOrderReady({
           billingAddress,
@@ -2431,21 +2473,6 @@ export const CheckoutPage: React.FC = () => {
           console.error('Silent signup background error:', authError);
         }
       }
-
-      const pendingSnapshot: PendingCheckoutOrderSnapshot = {
-        orderId: order.id,
-        orderNumber: order.order_number,
-        trackingToken: order.tracking_token,
-        merchantId: merchant.id,
-        customerEmail,
-        customerPhone,
-        checkoutFingerprint,
-        paymentMethod: normalizedPaymentMethod,
-        amountDueToGateway,
-        createdAt: new Date().toISOString(),
-      };
-      persistPendingCheckoutOrder(pendingSnapshot);
-      setPendingCheckoutOrder(pendingSnapshot);
 
       const paymentAmount = amountDueToGateway ?? total;
 

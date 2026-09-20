@@ -31,6 +31,24 @@ export const redvaultRefundRequestSchema = z
         path: ['units'],
       });
     }
+    if (value.type === 'merchandise_units' && value.units !== undefined) {
+      const seen = new Set<string>();
+      const duplicate = value.units.some((unit) => {
+        const key = `${unit.orderItemId}:${unit.unitOrdinal}`;
+        if (seen.has(key)) {
+          return true;
+        }
+        seen.add(key);
+        return false;
+      });
+      if (duplicate) {
+        context.addIssue({
+          code: 'custom',
+          message: 'merchandise refunds reject duplicate unit identities',
+          path: ['units'],
+        });
+      }
+    }
   });
 
 export type RedvaultRefundRequest = z.infer<typeof redvaultRefundRequestSchema>;

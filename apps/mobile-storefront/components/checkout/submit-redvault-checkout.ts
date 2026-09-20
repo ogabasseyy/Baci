@@ -32,15 +32,16 @@ export async function submitRedvaultCheckout({
   saveTracking = saveRedvaultPurchaseTrackingContext,
   trackingContext,
 }: SubmitRedvaultCheckoutInput) {
-  await saveTracking(orderResponse.order.id, trackingContext);
-  // Durable fence: the in-memory review is lost on app kill, but the
-  // persisted record lets the next submit resolve this order before a
+  // Durable fence first: the in-memory review is lost on app kill, and
+  // an awaited tracking write ahead of this persist would leave a kill
+  // window where the next submit cannot discover this order before a
   // different payment identity opens a second one.
   await persistPendingRedvaultOrder({
     orderId: orderResponse.order.id,
     checkoutGeneration,
     createdAt: new Date().toISOString(),
   });
+  await saveTracking(orderResponse.order.id, trackingContext);
   onRedvaultOrder?.({
     orderResponse,
     customerEmail,

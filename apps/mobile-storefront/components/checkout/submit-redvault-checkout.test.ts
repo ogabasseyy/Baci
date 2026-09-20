@@ -12,7 +12,7 @@ describe('submitRedvaultCheckout', () => {
     jest.clearAllMocks();
   });
 
-  it('persists tracking before opening the review callback', async () => {
+  it('persists the fence before tracking and opening the review callback', async () => {
     const onRedvaultOrder = jest.fn();
     const onInitializationSuccess = jest.fn();
     const mockSaveTracking = jest.fn().mockResolvedValue(undefined);
@@ -37,6 +37,9 @@ describe('submitRedvaultCheckout', () => {
         orderId: 'order-1',
         checkoutGeneration: 'gen-1',
       })
+    );
+    expect(mockPersist.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSaveTracking.mock.invocationCallOrder[0]
     );
     expect(onRedvaultOrder).toHaveBeenCalledWith({
       orderResponse,

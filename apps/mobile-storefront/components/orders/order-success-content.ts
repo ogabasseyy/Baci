@@ -1,5 +1,14 @@
 const FALLBACK_DELIVERY_ESTIMATE = 'Shared after order confirmation';
 
+// Methods settled after checkout (an external payer or procurement team
+// pays later): the success screen must resolve the authoritative paid
+// state for these instead of trusting the checkout-time presentation.
+const DEFERRED_SETTLEMENT_METHODS = new Set(['invoice', 'payforme']);
+
+export function isDeferredSettlementMethod(paymentMethod?: string): boolean {
+  return !!paymentMethod && DEFERRED_SETTLEMENT_METHODS.has(paymentMethod);
+}
+
 export function getOrderSuccessTone(paymentMethod?: string, isPaid = false) {
   // A paid invoice order is a commercial invoice/receipt, not a proforma:
   // match the web success page, which keys proforma copy off unpaid state.
@@ -16,7 +25,9 @@ export function getOrderSuccessTone(paymentMethod?: string, isPaid = false) {
     };
   }
 
-  if (paymentMethod === 'payforme') {
+  // A settled Pay for Me order is a confirmed order with a receipt, not
+  // an open payment request: paid state wins over the request copy.
+  if (paymentMethod === 'payforme' && !isPaid) {
     return {
       documentLabel: 'View / Download Invoice',
       eyebrow: 'Payment request ready',

@@ -81,7 +81,7 @@ import {
   AddressAutocomplete,
   type PlaceDetails,
 } from '@/components/address-autocomplete';
-import { getCredPalKey, openCredPalCheckout } from '@/lib/credpal';
+import { openCredPalCheckout } from '@/lib/credpal';
 import { openCreditDirectCheckout } from '@/lib/credit-direct-client';
 import { asRoute } from '@/lib/routes';
 import { AUTO_FRACTION_OPTIONS } from '@/lib/currency';
@@ -122,10 +122,11 @@ import {
   getCheckoutIdempotencyKey,
 } from './checkout/checkout-idempotency';
 import { captureCreditDirectClientCompletion } from './checkout/credit-direct-client-completion';
+import { writeCreditDirectPopupMarker } from './checkout/credit-direct-popup-return';
 import {
-  type CreditDirectPopupMarker,
-  writeCreditDirectPopupMarker,
-} from './checkout/credit-direct-popup-return';
+  buildCreditDirectVerificationPath,
+  executeResumedDirectPayment,
+} from './checkout/handlers/direct-payment';
 import { persistCreditDirectPopupReference } from './checkout/persist-credit-direct-popup-reference';
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
@@ -195,34 +196,6 @@ interface InferredCheckoutAddressLocation {
 }
 
 const MANUAL_ADDRESS_LOCATION_DEBOUNCE_MS = 500;
-
-interface CreditDirectVerificationHandoff {
-  orderId: string;
-  merchantSlug: string;
-  completionMarker?: CreditDirectPopupMarker | null;
-  trackingToken?: string | null;
-  customerEmail?: string | null;
-}
-
-function buildCreditDirectVerificationPath({
-  orderId,
-  merchantSlug,
-  completionMarker,
-  trackingToken,
-  customerEmail,
-}: CreditDirectVerificationHandoff): string {
-  const query = new URLSearchParams({
-    orderId,
-    gateway: 'credit_direct',
-    merchant_slug: merchantSlug,
-  });
-  if (completionMarker) {
-    query.set('creditDirectCompletion', completionMarker.transactionId);
-  }
-  if (trackingToken) query.set('trackingToken', trackingToken);
-  if (customerEmail) query.set('email', customerEmail);
-  return `/checkout/bnpl?${query.toString()}`;
-}
 
 /**
  * Module-scope checkout helpers.
@@ -1748,231 +1721,23 @@ export const CheckoutPage: React.FC = () => {
     fetchTotals();
   }, [effectiveItemSubtotal, deliveryCost, taxRate]);
 
-  // Handler for direct payment execution (CredPal/Credit Direct)
+  // Thin caller: the resumed BNPL flow lives in the direct-payment
+  // handler (Boy Scout extraction); this just binds component state.
   const executeDirectPayment = async () => {
-    if (!resumedOrder || !preferredGateway) return;
-
-    setIsProcessing(true);
-    try {
-      const paymentAmount = resumedOrder.total;
-      // The resumed order keeps the currency it was priced in: label its
-      // funnel events with the stamped order currency, not the merchant's
-      // current payout currency.
-      const resumedCurrency = resumedOrder.currency ?? currencyCode;
-
-      // Resumed orders bypass the standard submission instrumentation, so
-      // emit the funnel start here once the provider flow opens. Neither
-      // opener proves that by resolving — CredPal resolves right after
-      // `checkout.open()`, before the SDK fires `onLoad`, and Credit
-      // Direct swallows init failures into `onError` — so each start fires
-      // from its own opened signal (`onLoad` / `onPopup`). Errors before
-      // that signal keep the toast + retry without a funnel event; once
-      // opened, an error closes the attempt. Once semantics keep the
-      // auto-trigger plus a manual retry to a single start per order.
-      let resumedBnplOpened = false;
-      const captureResumedPaymentStarted = (
-        gateway: 'credpal' | 'credit_direct'
-      ) => {
-        resumedBnplOpened = true;
-        captureCheckoutFunnelEventOnce(
-          CHECKOUT_FUNNEL_EVENTS.paymentStarted,
-          resumedOrder.id,
-          buildCheckoutFunnelProperties({
-            channel: 'web',
-            currency: resumedCurrency,
-            orderId: resumedOrder.id,
-            paymentIntent: getCheckoutPaymentIntent(gateway),
-            paymentMethod: gateway,
-            source: 'web_checkout',
-            total: paymentAmount,
-          })
-        );
-      };
-      const captureResumedPaymentFailed = (
-        gateway: 'credpal' | 'credit_direct',
-        reason: string
-      ) => {
-        if (!resumedBnplOpened) {
-          return;
-        }
-        captureCheckoutFunnelEventOnce(
-          CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-          resumedOrder.id,
-          buildCheckoutFunnelProperties({
-            channel: 'web',
-            currency: resumedCurrency,
-            orderId: resumedOrder.id,
-            paymentIntent: getCheckoutPaymentIntent(gateway),
-            paymentMethod: gateway,
-            reason,
-            source: 'web_checkout',
-            total: paymentAmount,
-          })
-        );
-      };
-
-      // For CredPal, use the inline checkout widget (statically imported —
-      // dynamic `import()` expressions bail React Compiler)
-      if (preferredGateway === 'credpal') {
-        const productNames = resumedOrder.items.map(item => item.product_name).join(', ') || 'Purchase';
-
-        await openCredPalCheckout({
-          key: getCredPalKey(),
-          amount: paymentAmount,
-          product: productNames,
-          customerEmail: resumedOrder.customer_email,
-          customerName: resumedOrder.customer_name,
-          customerPhone: resumedOrder.customer_phone,
-          onSuccess: async (data) => {
-            // Update order with payment reference
-            await fetch(`/api/orders/update-payment-ref`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                orderId: resumedOrder.id,
-                paymentRef: data.order_no,
-                gateway: 'credpal',
-              }),
-            });
-            // Resumed orders bypass the standard submission instrumentation,
-            // so record the conversion here to avoid an artificial drop-off.
-            // Accepted-but-pending applications are not paid conversions.
-            if (data.status === 'success') {
-              captureCheckoutFunnelEventOnce(
-                CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
-                resumedOrder.id,
-                buildCheckoutFunnelProperties({
-                  channel: 'web',
-                  currency: resumedCurrency,
-                  orderId: resumedOrder.id,
-                  paymentIntent: getCheckoutPaymentIntent('credpal'),
-                  paymentMethod: 'credpal',
-                  paymentStatus: 'paid',
-                  reference: data.order_no,
-                  source: 'web_checkout',
-                  total: resumedOrder.total,
-                })
-              );
-            }
-            clearCheckoutSession();
-            const successQuery = new URLSearchParams({
-              orderId: resumedOrder.id,
-              type: 'credpal',
-            });
-            if (resumedOrder.tracking_token) {
-              successQuery.set('trackingToken', resumedOrder.tracking_token);
-            }
-            router.push(
-              asRoute(getHref(`/order-success?${successQuery.toString()}`))
-            );
-          },
-          onLoad: () => {
-            // The opener resolves before the SDK loads: only a real load
-            // proves the provider flow started (same gate as fresh flow).
-            captureResumedPaymentStarted('credpal');
-          },
-          onError: (error) => {
-            captureResumedPaymentFailed('credpal', 'credpal_error');
-            toast({
-              title: 'Payment Failed',
-              description: error.message || 'CredPal payment failed',
-              variant: 'destructive',
-            });
-            setIsProcessing(false);
-          },
-          onClose: () => {
-            setIsProcessing(false);
-          },
-        });
-        return;
-      }
-
-      // For Credit Direct, use their checkout widget (statically imported —
-      // dynamic `import()` expressions bail React Compiler)
-      if (preferredGateway === 'credit_direct') {
-        await openCreditDirectCheckout({
-          merchantSlug: merchant?.slug || 'ogabassey',
-          orderId: resumedOrder.id,
-          trackingToken: resumedOrder.tracking_token ?? '',
-          amount: paymentAmount,
-          customerEmail: resumedOrder.customer_email,
-          customerPhone: resumedOrder.customer_phone,
-          customerName: resumedOrder.customer_name,
-          items: resumedOrder.items.map(item => ({
-            id: item.product_id,
-            name: item.product_name,
-            price: item.price,
-            quantity: item.quantity,
-          })),
-          onSuccess: ({ checkoutTransactionId, sessionId }) => {
-            const trackingToken =
-              resumedOrder.tracking_token || resumeTrackingToken;
-            const merchantSlug =
-              merchant?.slug || resumeMerchantSlug || 'ogabassey';
-            const completionMarker = captureCreditDirectClientCompletion({
-              orderId: resumedOrder.id,
-              checkoutTransactionId,
-              customerEmail: resumedOrder.customer_email,
-              sessionId,
-              trackingToken,
-            });
-            router.push(
-              asRoute(
-                getHref(
-                  buildCreditDirectVerificationPath({
-                    orderId: resumedOrder.id,
-                    merchantSlug,
-                    completionMarker,
-                    trackingToken,
-                    customerEmail: resumedOrder.customer_email,
-                  })
-                )
-              )
-            );
-          },
-          onError: (error) => {
-            captureResumedPaymentFailed('credit_direct', 'credit_direct_error');
-            toast({
-              title: 'Payment Failed',
-              description: error || 'Credit Direct payment failed',
-              variant: 'destructive',
-            });
-            setIsProcessing(false);
-          },
-          onClose: () => {
-            setIsProcessing(false);
-          },
-          onPopup: async ({ checkoutTransactionId, sessionId }) => {
-            // The opener swallows initialization failures into onError
-            // instead of rejecting, so only a real popup opening proves the
-            // provider flow started.
-            captureResumedPaymentStarted('credit_direct');
-            writeCreditDirectPopupMarker(
-              resumedOrder.id,
-              checkoutTransactionId || sessionId
-            );
-            if (!checkoutTransactionId) {
-              return;
-            }
-            try {
-              await persistCreditDirectPopupReference(
-                resumedOrder,
-                checkoutTransactionId
-              );
-            } catch (error) {
-              console.error(
-                'Failed to persist Credit Direct popup reference:',
-                error instanceof Error ? error.message : error
-              );
-            }
-          },
-        });
-        return;
-      }
-    } catch (error) {
-      console.error('Payment execution error:', error);
-      setIsProcessing(false);
-    }
+    await executeResumedDirectPayment({
+      resumedOrder,
+      preferredGateway,
+      merchantSlug: merchant?.slug,
+      merchantChargeCurrency: currencyCode,
+      resumeTrackingToken,
+      resumeMerchantSlug,
+      setIsProcessing,
+      clearCheckoutSession,
+      routerPush: (url: string) => {
+        router.push(asRoute(url));
+      },
+      getHref,
+    });
   };
 
   // Auto-trigger payment for resumed orders

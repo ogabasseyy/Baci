@@ -3862,6 +3862,12 @@ export async function POST(request: NextRequest) {
               }
             }
 
+            // Outstanding balance for the transfer instructions (same rule
+            // as the attached PDF): credit already applied must not be
+            // charged again. Computed before provisioning so a fully
+            // discounted order skips DVA creation entirely.
+            const emailAmountDue = Math.max(orderTotal - invoiceAmountPaid, 0);
+
             if (effectivePaymentMethod === 'payforme') {
               // Pay for Me must never touch the service-role client
               // (AGENTS.md), so it provisions through the proof-bound
@@ -3871,30 +3877,35 @@ export async function POST(request: NextRequest) {
               // that require privileged reads. The email below still
               // carries the transfer details the requester forwards to
               // their payer.
-              try {
-                invoiceVirtualAccount = await provisionInvoiceMethodDva({
-                  supabase,
-                  customerEmail: customer_email,
-                  customerName: customer_name,
-                  customerPhone: customer_phone ?? null,
-                  merchantPhone: merchant.phone,
-                  order: {
-                    id: order.id,
-                    createdAt:
-                      typeof order.created_at === 'string'
-                        ? order.created_at
-                        : new Date().toISOString(),
-                  },
-                  orderCurrency,
-                  orderLabel: 'payforme',
-                });
-              } catch (error) {
-                logger.error({
-                  message:
-                    'Failed to provision Pay for Me DVA; sending request email without transfer details',
-                  orderId: order.id,
-                  error: error instanceof Error ? error.message : error,
-                });
+              // A zero-due order has nothing to transfer: provisioning
+              // would persist a virtual account that receipt rendering
+              // shows as transfer instructions for an impossible payment.
+              if (emailAmountDue > 0) {
+                try {
+                  invoiceVirtualAccount = await provisionInvoiceMethodDva({
+                    supabase,
+                    customerEmail: customer_email,
+                    customerName: customer_name,
+                    customerPhone: customer_phone ?? null,
+                    merchantPhone: merchant.phone,
+                    order: {
+                      id: order.id,
+                      createdAt:
+                        typeof order.created_at === 'string'
+                          ? order.created_at
+                          : new Date().toISOString(),
+                    },
+                    orderCurrency,
+                    orderLabel: 'payforme',
+                  });
+                } catch (error) {
+                  logger.error({
+                    message:
+                      'Failed to provision Pay for Me DVA; sending request email without transfer details',
+                    orderId: order.id,
+                    error: error instanceof Error ? error.message : error,
+                  });
+                }
               }
             }
 
@@ -3909,10 +3920,6 @@ export async function POST(request: NextRequest) {
                   bankName: invoiceVirtualAccount.bank_name,
                 }
               : undefined;
-            // Outstanding balance for the transfer instructions (same rule
-            // as the attached PDF): credit already applied must not be
-            // charged again.
-            const emailAmountDue = Math.max(orderTotal - invoiceAmountPaid, 0);
             const htmlContent = generateOrderConfirmationEmail({
               ...emailData,
               documentKind: emailDocumentKind,

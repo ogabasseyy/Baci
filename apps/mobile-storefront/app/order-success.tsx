@@ -7,6 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Linking } from 'react-native';
 import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
+import { isDeferredSettlementMethod } from '@/components/orders/order-success-content';
 import { useGuestInvoicePaidState } from '@/components/orders/use-invoice-paid-state';
 import { useSettlementCompletion } from '@/components/orders/use-settlement-completion';
 import { ReceiptPreviewModal } from '@/components/receipts/ReceiptPreviewModal';
@@ -48,11 +49,12 @@ export default function OrderSuccessScreen() {
   } = useLocalSearchParams<Record<string, string>>();
   const customer = useAuthStore((s) => s.customer);
   const orderNotificationScheduledRef = useRef(false);
-  // An invoice order paid externally after checkout must not keep showing
-  // proforma copy when the shopper returns: resolve the authoritative paid
-  // state for invoice-method orders (guests keep the method-based tone).
+  // An invoice or Pay for Me order paid externally after checkout must not
+  // keep showing proforma/request copy when the shopper returns: resolve
+  // the authoritative paid state for deferred-settlement orders (guests
+  // keep the method-based tone until their lookup settles).
   const { data: paidCheckOrder } = useReceiptDetail(
-    paymentMethod === 'invoice' && orderId ? orderId : null
+    isDeferredSettlementMethod(paymentMethod) && orderId ? orderId : null
   );
   const receiptPaidOrder = paidCheckOrder?.payment_status === 'paid';
   // Guests have no authenticated receipt query: resolve their paid state

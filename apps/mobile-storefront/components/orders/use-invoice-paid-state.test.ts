@@ -134,4 +134,42 @@ describe('useGuestInvoicePaidState', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(result.current).toBe(false);
   });
+
+  it('resolves paid for a guest pay-for-me order settled externally', async () => {
+    mockTrackedOrder('paid');
+
+    const { result } = renderHook(() =>
+      useGuestInvoicePaidState({ ...baseParams, paymentMethod: 'payforme' })
+    );
+
+    await waitFor(() => expect(result.current).toBe(true));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('track-order?token=track-inv-1'),
+      expect.anything()
+    );
+  });
+
+  it('stays unpaid while the pay-for-me request is still open', async () => {
+    mockTrackedOrder('pending');
+
+    const { result } = renderHook(() =>
+      useGuestInvoicePaidState({ ...baseParams, paymentMethod: 'payforme' })
+    );
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(result.current).toBe(false);
+  });
+
+  it('skips the lookup for immediate-settlement methods', () => {
+    const fetchSpy = jest.fn(async () => new Response('{}', { status: 200 }));
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    const { result } = renderHook(() =>
+      useGuestInvoicePaidState({ ...baseParams, paymentMethod: 'paystack' })
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result.current).toBe(false);
+  });
 });

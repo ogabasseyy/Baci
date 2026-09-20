@@ -4,6 +4,7 @@ import {
   TRACK_ORDER_API_BASE_URL,
   TRACK_ORDER_MERCHANT_SLUG,
 } from '@/components/track-order/track-order.config';
+import { isDeferredSettlementMethod } from './order-success-content';
 
 const GUEST_INVOICE_LOOKUP_TIMEOUT_MS = 15_000;
 
@@ -18,11 +19,12 @@ function toTrackedOrder(value: unknown): TrackOrderData['order'] | null {
   return order as TrackOrderData['order'];
 }
 
-// Resolves the paid state for guest invoice orders. The authenticated
-// receipt-detail query is disabled without a signed-in user, so a guest
-// returning through the tracking token would otherwise always see proforma
-// copy even after external payment. A single token-scoped lookup is enough:
-// it serves the returning (already settled) shopper, not live polling.
+// Resolves the paid state for guest deferred-settlement orders (invoice,
+// Pay for Me). The authenticated receipt-detail query is disabled without
+// a signed-in user, so a guest returning through the tracking token would
+// otherwise always see proforma/request copy even after external payment.
+// A single token-scoped lookup is enough: it serves the returning
+// (already settled) shopper, not live polling.
 export function useGuestInvoicePaidState({
   orderId,
   paymentMethod,
@@ -42,7 +44,12 @@ export function useGuestInvoicePaidState({
     // inherit the previous order's paid presentation (receipt/commercial
     // copy for an unpaid order).
     setIsPaid(false);
-    if (skip || paymentMethod !== 'invoice' || !orderId || !trackingToken) {
+    if (
+      skip ||
+      !isDeferredSettlementMethod(paymentMethod) ||
+      !orderId ||
+      !trackingToken
+    ) {
       return;
     }
     let cancelled = false;

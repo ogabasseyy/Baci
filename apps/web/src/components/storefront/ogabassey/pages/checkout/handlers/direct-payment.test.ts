@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { executeDirectPayment } from './direct-payment';
-import type { ExecuteDirectPaymentOptions } from './direct-payment';
+import { executeResumedDirectPayment } from './direct-payment';
+import type { ExecuteResumedDirectPaymentOptions } from './direct-payment';
 import type { ResumedOrder } from '../types';
 
 // Mock toast
@@ -30,7 +30,13 @@ vi.mock('@/lib/api-client', () => ({
     fetch(input, init),
 }));
 
-describe('executeDirectPayment', () => {
+const mockCaptureCheckoutFunnelEventOnce = vi.fn();
+vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
+  captureCheckoutFunnelEventOnce: (...args: unknown[]) =>
+    mockCaptureCheckoutFunnelEventOnce(...args),
+}));
+
+describe('executeResumedDirectPayment', () => {
   const mockResumedOrder: ResumedOrder = {
     id: 'order-123',
     short_id: 'ORD-123',
@@ -58,10 +64,11 @@ describe('executeDirectPayment', () => {
     ],
   };
 
-  const defaultOpts: ExecuteDirectPaymentOptions = {
+  const defaultOpts: ExecuteResumedDirectPaymentOptions = {
     resumedOrder: mockResumedOrder,
     preferredGateway: 'credpal',
     merchantSlug: 'test-store',
+    merchantChargeCurrency: 'NGN',
     setIsProcessing: vi.fn(),
     clearCheckoutSession: vi.fn(),
     routerPush: vi.fn(),
@@ -84,7 +91,7 @@ describe('executeDirectPayment', () => {
 
   describe('Early Returns', () => {
     it('returns early if resumedOrder is null', async () => {
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         resumedOrder: null,
       });
@@ -92,7 +99,7 @@ describe('executeDirectPayment', () => {
     });
 
     it('returns early if preferredGateway is null', async () => {
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         preferredGateway: null,
       });
@@ -102,12 +109,12 @@ describe('executeDirectPayment', () => {
 
   describe('CredPal Payment', () => {
     it('sets processing to true before payment', async () => {
-      await executeDirectPayment(defaultOpts);
+      await executeResumedDirectPayment(defaultOpts);
       expect(defaultOpts.setIsProcessing).toHaveBeenCalledWith(true);
     });
 
     it('calls openCredPalCheckout with correct params', async () => {
-      await executeDirectPayment(defaultOpts);
+      await executeResumedDirectPayment(defaultOpts);
       expect(mockOpenCredPalCheckout).toHaveBeenCalledTimes(1);
       const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
       expect(callArgs.key).toBe('test-credpal-key');
@@ -132,7 +139,7 @@ describe('executeDirectPayment', () => {
           },
         ],
       };
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         resumedOrder: multiItemOrder,
       });
@@ -145,7 +152,7 @@ describe('executeDirectPayment', () => {
         ...mockResumedOrder,
         items: [],
       };
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         resumedOrder: orderWithNoItems,
       });
@@ -155,7 +162,7 @@ describe('executeDirectPayment', () => {
 
     describe('onSuccess callback', () => {
       it('calls update-payment-ref API with correct params', async () => {
-        await executeDirectPayment(defaultOpts);
+        await executeResumedDirectPayment(defaultOpts);
         const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
         await callArgs.onSuccess({ order_no: 'credpal-ref-123' });
 
@@ -174,7 +181,7 @@ describe('executeDirectPayment', () => {
       });
 
       it('clears checkout session after successful payment', async () => {
-        await executeDirectPayment(defaultOpts);
+        await executeResumedDirectPayment(defaultOpts);
         const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
         await callArgs.onSuccess({ order_no: 'credpal-ref-123' });
 
@@ -182,7 +189,7 @@ describe('executeDirectPayment', () => {
       });
 
       it('navigates to order success page with correct query params', async () => {
-        await executeDirectPayment(defaultOpts);
+        await executeResumedDirectPayment(defaultOpts);
         const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
         await callArgs.onSuccess({ order_no: 'credpal-ref-123' });
 
@@ -199,7 +206,7 @@ describe('executeDirectPayment', () => {
           }),
         ) as Mock;
 
-        await executeDirectPayment(defaultOpts);
+        await executeResumedDirectPayment(defaultOpts);
         const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
         await callArgs.onSuccess({ order_no: 'credpal-ref-123' });
 
@@ -210,7 +217,7 @@ describe('executeDirectPayment', () => {
 
     describe('onError callback', () => {
       it('shows toast with error message', async () => {
-        await executeDirectPayment(defaultOpts);
+        await executeResumedDirectPayment(defaultOpts);
         const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
         callArgs.onError({ message: 'Insufficient credit' });
 
@@ -222,7 +229,7 @@ describe('executeDirectPayment', () => {
       });
 
       it('uses default message when error.message is missing', async () => {
-        await executeDirectPayment(defaultOpts);
+        await executeResumedDirectPayment(defaultOpts);
         const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
         callArgs.onError({});
 
@@ -234,7 +241,7 @@ describe('executeDirectPayment', () => {
       });
 
       it('sets processing to false', async () => {
-        await executeDirectPayment(defaultOpts);
+        await executeResumedDirectPayment(defaultOpts);
         const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
         callArgs.onError({ message: 'Payment failed' });
 
@@ -244,7 +251,7 @@ describe('executeDirectPayment', () => {
 
     describe('onClose callback', () => {
       it('sets processing to false when modal is closed', async () => {
-        await executeDirectPayment(defaultOpts);
+        await executeResumedDirectPayment(defaultOpts);
         const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
         callArgs.onClose();
 
@@ -255,7 +262,7 @@ describe('executeDirectPayment', () => {
 
   describe('Credit Direct Payment', () => {
     it('calls openCreditDirectCheckout with correct params', async () => {
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         preferredGateway: 'credit_direct',
       });
@@ -268,7 +275,7 @@ describe('executeDirectPayment', () => {
     });
 
     it('maps item fields correctly', async () => {
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         preferredGateway: 'credit_direct',
       });
@@ -279,7 +286,7 @@ describe('executeDirectPayment', () => {
     });
 
     it('falls back to ogabassey slug when merchantSlug is empty', async () => {
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         preferredGateway: 'credit_direct',
         merchantSlug: '',
@@ -289,7 +296,7 @@ describe('executeDirectPayment', () => {
     });
 
     it('persists the popup transaction reference for webhook reconciliation', async () => {
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         preferredGateway: 'credit_direct',
       });
@@ -322,7 +329,7 @@ describe('executeDirectPayment', () => {
         text: async () => 'write failed',
       });
 
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         preferredGateway: 'credit_direct',
       });
@@ -346,7 +353,7 @@ describe('executeDirectPayment', () => {
 
     describe('onSuccess callback', () => {
       it('records separately labelled client completion evidence', async () => {
-        await executeDirectPayment({
+        await executeResumedDirectPayment({
           ...defaultOpts,
           preferredGateway: 'credit_direct',
         });
@@ -379,7 +386,7 @@ describe('executeDirectPayment', () => {
           tracking_token: undefined,
         };
 
-        await executeDirectPayment({
+        await executeResumedDirectPayment({
           ...defaultOpts,
           preferredGateway: 'credit_direct',
           resumedOrder: orderWithoutToken,
@@ -402,7 +409,7 @@ describe('executeDirectPayment', () => {
       });
 
       it('keeps checkout recovery state until server verification confirms payment', async () => {
-        await executeDirectPayment({
+        await executeResumedDirectPayment({
           ...defaultOpts,
           preferredGateway: 'credit_direct',
         });
@@ -416,7 +423,7 @@ describe('executeDirectPayment', () => {
       });
 
       it('navigates to server verification with recovery parameters', async () => {
-        await executeDirectPayment({
+        await executeResumedDirectPayment({
           ...defaultOpts,
           preferredGateway: 'credit_direct',
         });
@@ -434,7 +441,7 @@ describe('executeDirectPayment', () => {
 
     describe('onError callback', () => {
       it('shows toast with error message', async () => {
-        await executeDirectPayment({
+        await executeResumedDirectPayment({
           ...defaultOpts,
           preferredGateway: 'credit_direct',
         });
@@ -449,7 +456,7 @@ describe('executeDirectPayment', () => {
       });
 
       it('uses default message when error string is empty', async () => {
-        await executeDirectPayment({
+        await executeResumedDirectPayment({
           ...defaultOpts,
           preferredGateway: 'credit_direct',
         });
@@ -464,7 +471,7 @@ describe('executeDirectPayment', () => {
       });
 
       it('sets processing to false', async () => {
-        await executeDirectPayment({
+        await executeResumedDirectPayment({
           ...defaultOpts,
           preferredGateway: 'credit_direct',
         });
@@ -477,7 +484,7 @@ describe('executeDirectPayment', () => {
 
     describe('onClose callback', () => {
       it('sets processing to false when modal is closed', async () => {
-        await executeDirectPayment({
+        await executeResumedDirectPayment({
           ...defaultOpts,
           preferredGateway: 'credit_direct',
         });
@@ -492,7 +499,7 @@ describe('executeDirectPayment', () => {
   describe('Error Handling', () => {
     it('sets processing to false on credpal SDK error', async () => {
       mockOpenCredPalCheckout.mockRejectedValue(new Error('SDK error'));
-      await executeDirectPayment(defaultOpts);
+      await executeResumedDirectPayment(defaultOpts);
       expect(defaultOpts.setIsProcessing).toHaveBeenCalledWith(false);
       expect(console.error).toHaveBeenCalledWith(
         'Payment execution error:',
@@ -504,7 +511,7 @@ describe('executeDirectPayment', () => {
       mockOpenCreditDirectCheckout.mockRejectedValue(
         new Error('Credit Direct SDK error'),
       );
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         preferredGateway: 'credit_direct',
       });
@@ -520,7 +527,7 @@ describe('executeDirectPayment', () => {
         Promise.reject(new Error('Network error')),
       ) as Mock;
 
-      await executeDirectPayment(defaultOpts);
+      await executeResumedDirectPayment(defaultOpts);
       const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
 
       await expect(
@@ -533,7 +540,7 @@ describe('executeDirectPayment', () => {
         Promise.reject(new Error('Network error')),
       ) as Mock;
 
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         preferredGateway: 'credit_direct',
       });
@@ -566,7 +573,7 @@ describe('executeDirectPayment', () => {
           },
         ],
       };
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         resumedOrder: singleItemOrder,
       });
@@ -581,7 +588,7 @@ describe('executeDirectPayment', () => {
         shipping_cost: 0,
         total: 0,
       };
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         resumedOrder: zeroAmountOrder,
       });
@@ -609,7 +616,7 @@ describe('executeDirectPayment', () => {
           },
         ],
       };
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         preferredGateway: 'credit_direct',
         resumedOrder: itemsWithoutImages,
@@ -622,7 +629,7 @@ describe('executeDirectPayment', () => {
     });
 
     it('handles empty merchant slug for credpal', async () => {
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         merchantSlug: '',
       });
@@ -630,7 +637,7 @@ describe('executeDirectPayment', () => {
     });
 
     it('handles both resumedOrder and preferredGateway as null', async () => {
-      await executeDirectPayment({
+      await executeResumedDirectPayment({
         ...defaultOpts,
         resumedOrder: null,
         preferredGateway: null,
@@ -638,6 +645,151 @@ describe('executeDirectPayment', () => {
       expect(defaultOpts.setIsProcessing).not.toHaveBeenCalled();
       expect(mockOpenCredPalCheckout).not.toHaveBeenCalled();
       expect(mockOpenCreditDirectCheckout).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Funnel instrumentation', () => {
+    it('records the CredPal start only after the widget loads', async () => {
+      await executeResumedDirectPayment(defaultOpts);
+      const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
+
+      // Opener resolved, widget not loaded: no start yet.
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_started',
+        expect.anything(),
+        expect.anything()
+      );
+
+      callArgs.onLoad();
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_started',
+        'order-123',
+        expect.objectContaining({
+          payment_method: 'credpal',
+          currency: 'NGN',
+          total: 12000,
+        })
+      );
+    });
+
+    it('keeps pre-open CredPal errors out of the funnel but closes opened attempts', async () => {
+      await executeResumedDirectPayment(defaultOpts);
+      const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
+
+      callArgs.onError({ message: 'setup failed' });
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_failed',
+        expect.anything(),
+        expect.anything()
+      );
+
+      callArgs.onLoad();
+      callArgs.onError({ message: 'declined' });
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_failed',
+        'order-123',
+        expect.objectContaining({
+          payment_method: 'credpal',
+          reason: 'credpal_error',
+        })
+      );
+    });
+
+    it('keeps pre-popup Credit Direct errors out of the funnel but closes opened attempts', async () => {
+      await executeResumedDirectPayment({
+        ...defaultOpts,
+        preferredGateway: 'credit_direct',
+      });
+      const callArgs = mockOpenCreditDirectCheckout.mock.calls[0][0];
+
+      callArgs.onError('init failed');
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_failed',
+        expect.anything(),
+        expect.anything()
+      );
+
+      await callArgs.onPopup({
+        checkoutTransactionId: 'cd-popup-1',
+        sessionId: 'signed-session-1',
+      });
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_started',
+        'order-123',
+        expect.objectContaining({ payment_method: 'credit_direct' })
+      );
+
+      callArgs.onError('declined');
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_failed',
+        'order-123',
+        expect.objectContaining({
+          payment_method: 'credit_direct',
+          reason: 'credit_direct_error',
+        })
+      );
+    });
+
+    it('labels resumed events with the stamped order currency', async () => {
+      await executeResumedDirectPayment({
+        ...defaultOpts,
+        resumedOrder: { ...mockResumedOrder, currency: 'USD' },
+      });
+      const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
+
+      callArgs.onLoad();
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_started',
+        'order-123',
+        expect.objectContaining({ currency: 'USD' })
+      );
+
+      await callArgs.onSuccess({
+        order_no: 'credpal-ref-123',
+        status: 'success',
+      });
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-123',
+        expect.objectContaining({
+          currency: 'USD',
+          payment_status: 'paid',
+          reference: 'credpal-ref-123',
+        })
+      );
+    });
+
+    it('falls back to the merchant charge currency when the order has none stamped', async () => {
+      await executeResumedDirectPayment({
+        ...defaultOpts,
+        merchantChargeCurrency: 'GHS',
+      });
+      const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
+
+      callArgs.onLoad();
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_started',
+        'order-123',
+        expect.objectContaining({ currency: 'GHS' })
+      );
+    });
+
+    it('skips the completion event for accepted-but-pending CredPal applications', async () => {
+      await executeResumedDirectPayment(defaultOpts);
+      const callArgs = mockOpenCredPalCheckout.mock.calls[0][0];
+
+      await callArgs.onSuccess({
+        order_no: 'credpal-ref-123',
+        status: 'pending',
+      });
+
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_completed',
+        expect.anything(),
+        expect.anything()
+      );
+      expect(defaultOpts.clearCheckoutSession).toHaveBeenCalled();
+      expect(defaultOpts.routerPush).toHaveBeenCalled();
     });
   });
 });

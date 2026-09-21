@@ -1,19 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { captureOrHoldRedvaultPayment } from '@/lib/payments/redvault-capture-hold';
 
-function buildSupabase(paymentMethod = 'uba_redvault') {
-  const maybeSingle = vi.fn().mockResolvedValue({
-    data: { payment_method: paymentMethod },
-    error: null,
-  });
-  const eq = vi.fn().mockReturnValue({ maybeSingle });
-  const select = vi.fn().mockReturnValue({ eq });
-  const from = vi.fn().mockReturnValue({ select });
-  return { from, rpc: vi.fn() };
-}
-
-function buildRpcClient(data: unknown, error: unknown = null) {
-  return { rpc: vi.fn().mockResolvedValue({ data, error }) };
+function buildRpcClient(
+  captureData: unknown,
+  captureError: unknown = null,
+  paymentMethod: string | null = 'uba_redvault'
+) {
+  const rpc = vi
+    .fn()
+    .mockResolvedValueOnce({
+      data: paymentMethod === null ? [] : [{ payment_method: paymentMethod }],
+      error: null,
+    })
+    .mockResolvedValue({ data: captureData, error: captureError });
+  return { rpc };
 }
 
 const input = {
@@ -24,6 +24,7 @@ const input = {
     reference: 'RV-reference',
     status: 'success',
   },
+  merchantId: 'merchant-1',
   orderId: 'order-1',
   reference: 'RV-reference',
   transactionId: 'transaction-1',
@@ -31,7 +32,6 @@ const input = {
 
 describe('captureOrHoldRedvaultPayment', () => {
   it('returns the durable held result for a matching REDVAULT capture', async () => {
-    const supabase = buildSupabase();
     const rpcClient = buildRpcClient({
       duplicate: false,
       kind: 'captured_held',
@@ -42,7 +42,6 @@ describe('captureOrHoldRedvaultPayment', () => {
       captureOrHoldRedvaultPayment({
         ...input,
         rpcClient: rpcClient as never,
-        supabase: supabase as never,
       })
     ).resolves.toEqual({
       duplicate: false,
@@ -60,8 +59,7 @@ describe('captureOrHoldRedvaultPayment', () => {
     );
   });
 
-  it('invokes capture through the scoped RPC client, not the route client', async () => {
-    const supabase = buildSupabase();
+  it('classifies the order through the scoped RPC client, never a table read', async () => {
     const rpcClient = buildRpcClient({
       duplicate: false,
       kind: 'captured_held',
@@ -71,11 +69,14 @@ describe('captureOrHoldRedvaultPayment', () => {
     await captureOrHoldRedvaultPayment({
       ...input,
       rpcClient: rpcClient as never,
-      supabase: supabase as never,
     });
 
-    expect(rpcClient.rpc).toHaveBeenCalledTimes(1);
-    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(rpcClient.rpc).toHaveBeenNthCalledWith(
+      1,
+      'get_redvault_order_payment_method',
+      { p_merchant_id: 'merchant-1', p_order_id: 'order-1' }
+    );
+    expect(rpcClient.rpc).toHaveBeenCalledTimes(2);
   });
 
   it.each([
@@ -83,7 +84,6 @@ describe('captureOrHoldRedvaultPayment', () => {
     'capture_amount_mismatch',
     'capture_currency_mismatch',
   ])('keeps a %s capture held', async (reason) => {
-    const supabase = buildSupabase();
     const rpcClient = buildRpcClient({
       duplicate: false,
       kind: 'captured_held',
@@ -94,13 +94,11 @@ describe('captureOrHoldRedvaultPayment', () => {
       captureOrHoldRedvaultPayment({
         ...input,
         rpcClient: rpcClient as never,
-        supabase: supabase as never,
       })
     ).resolves.toMatchObject({ kind: 'captured_held', reason });
   });
 
   it('returns evidence review instead of a captured hold for non-success evidence', async () => {
-    const supabase = buildSupabase();
     const rpcClient = buildRpcClient({
       duplicate: false,
       kind: 'capture_evidence_review',
@@ -111,7 +109,6 @@ describe('captureOrHoldRedvaultPayment', () => {
       captureOrHoldRedvaultPayment({
         ...input,
         rpcClient: rpcClient as never,
-        supabase: supabase as never,
       })
     ).resolves.toEqual({
       duplicate: false,
@@ -121,7 +118,6 @@ describe('captureOrHoldRedvaultPayment', () => {
   });
 
   it('accepts an idempotent duplicate held receipt', async () => {
-    const supabase = buildSupabase();
     const rpcClient = buildRpcClient({
       duplicate: true,
       kind: 'captured_held',
@@ -132,47 +128,56 @@ describe('captureOrHoldRedvaultPayment', () => {
       captureOrHoldRedvaultPayment({
         ...input,
         rpcClient: rpcClient as never,
-        supabase: supabase as never,
       })
     ).resolves.toMatchObject({ duplicate: true, kind: 'captured_held' });
   });
 
   it('leaves non-REDVAULT payment paths unchanged', async () => {
-    const supabase = buildSupabase('paystack');
-    const rpcClient = buildRpcClient({ kind: 'not_redvault' });
+    const rpcClient = buildRpcClient(
+      { kind: 'not_redvault' },
+      null,
+      'paystack'
+    );
 
     await expect(
       captureOrHoldRedvaultPayment({
         ...input,
         rpcClient: rpcClient as never,
-        supabase: supabase as never,
       })
     ).resolves.toEqual({ kind: 'not_redvault' });
-    expect(rpcClient.rpc).not.toHaveBeenCalled();
+    expect(rpcClient.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when the order is missing or merchant-mismatched', async () => {
+    const rpcClient = buildRpcClient({ kind: 'captured_held' }, null, null);
+
+    await expect(
+      captureOrHoldRedvaultPayment({
+        ...input,
+        rpcClient: rpcClient as never,
+      })
+    ).rejects.toThrow('redvault_capture_hold_order_not_found');
+    expect(rpcClient.rpc).toHaveBeenCalledTimes(1);
   });
 
   it('fails closed when the capture RPC is unavailable', async () => {
-    const supabase = buildSupabase();
     const rpcClient = buildRpcClient(null, new Error('rpc unavailable'));
 
     await expect(
       captureOrHoldRedvaultPayment({
         ...input,
         rpcClient: rpcClient as never,
-        supabase: supabase as never,
       })
     ).rejects.toThrow('rpc unavailable');
   });
 
   it('rejects an ordinary-payment RPC result for a REDVAULT order', async () => {
-    const supabase = buildSupabase();
     const rpcClient = buildRpcClient({ kind: 'not_redvault' });
 
     await expect(
       captureOrHoldRedvaultPayment({
         ...input,
         rpcClient: rpcClient as never,
-        supabase: supabase as never,
       })
     ).rejects.toThrow('redvault_capture_hold_rpc_invalid_response');
   });

@@ -85,6 +85,18 @@ export async function resolveRedvaultFenceForResubmit({
       'Your UBA payment was already in progress, so we continued with your original order.'
     );
     try {
+      // Crash-window recovery: if the app was killed after a guest signup
+      // established the session but before the guest application was
+      // attached, the restart is authenticated while the persisted order
+      // is still guest-owned, and the replay below would be rejected for
+      // the identity mismatch. Attach idempotently first: it no-ops
+      // without a session or tracking token, and on failure restores the
+      // guest context (or throws definitively) instead of stranding the
+      // live checkout.
+      await attachRedvaultGuestOrderAfterSignup({
+        orderId: persisted.orderId,
+        trackingToken: persisted.trackingToken,
+      });
       const outcome = await initializeRedvaultCheckoutById({
         orderId: persisted.orderId,
         // Replay with the email the fenced order was created with: the

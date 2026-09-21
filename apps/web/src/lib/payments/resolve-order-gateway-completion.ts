@@ -26,9 +26,9 @@ export async function resolveOrderGatewayCompletion({
 }) {
   try {
     // Capture moves money and must not ride the route's service-role client:
-    // it runs through the short-lived scoped route client (merchant-bound
-    // authenticated claims), which the capture RPCs accept alongside
-    // service_role. The order read below keeps the route client.
+    // classification and capture run through the short-lived scoped route
+    // client (merchant-bound authenticated claims), which the REDVAULT
+    // RPCs accept alongside service_role.
     const redvaultScopedClient = createStorefrontOrderRpcClient({
       fallbackClient: supabase,
       hasCanonicalDeliveryMetadata: false,
@@ -38,10 +38,10 @@ export async function resolveOrderGatewayCompletion({
     const capture = await captureOrHoldRedvaultPayment({
       gateway,
       gatewayResponse,
+      merchantId,
       orderId,
       reference,
       rpcClient: redvaultScopedClient,
-      supabase,
       transactionId,
     });
     if (capture.kind !== 'not_redvault') {

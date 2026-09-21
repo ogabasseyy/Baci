@@ -162,6 +162,18 @@ describe('gateway completion routing', () => {
     expect(passedClient).toBe(mocks.scopedClient);
     expect(passedClient).not.toBe(input.supabase);
   });
+  it('runs REDVAULT classification through the scoped route client, not the service client', async () => {
+    mocks.verify.mockResolvedValue(null);
+    await resolveOrderGatewayCompletion(input);
+    expect(mocks.capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant',
+        orderId: 'order',
+        rpcClient: mocks.scopedClient,
+      })
+    );
+    expect(mocks.capture.mock.calls[0][0]).not.toHaveProperty('supabase');
+  });
   it('preserves ordinary gateway completion', async () => {
     mocks.capture.mockResolvedValue({ kind: 'not_redvault' });
     mocks.complete.mockResolvedValue({

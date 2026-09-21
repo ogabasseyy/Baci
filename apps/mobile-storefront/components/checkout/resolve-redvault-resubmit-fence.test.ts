@@ -193,12 +193,38 @@ describe('resolveRedvaultFenceForResubmit', () => {
         onInitializationSuccess,
       })
     ).resolves.toBe('handled');
+    // Crash recovery attaches before the replay; the fresh signup attaches
+    // again after its side effects. Both are idempotent.
+    expect(mockAttach).toHaveBeenCalledTimes(2);
+    expect(mockAttach).toHaveBeenNthCalledWith(1, {
+      orderId: 'order-rv',
+      trackingToken: 'track-rv',
+    });
+    expect(mockAttach).toHaveBeenNthCalledWith(2, {
+      orderId: 'order-rv',
+      trackingToken: 'track-rv',
+    });
+    const attachOrder = mockAttach.mock.invocationCallOrder;
+    expect(onInitializationSuccess.mock.invocationCallOrder[0]).toBeLessThan(
+      attachOrder[attachOrder.length - 1]
+    );
+  });
+
+  it('attaches before replaying so an interrupted signup cannot strand the checkout', async () => {
+    mockRead.mockResolvedValue(RECORD);
+    mockResolve.mockResolvedValue({ blocked: true, orderId: 'order-rv' });
+    mockCancel.mockResolvedValue('live');
+    mockInitById.mockResolvedValue('ready');
+
+    await expect(
+      resolveRedvaultFenceForResubmit({ ...INPUT, attemptGuestAttach: false })
+    ).resolves.toBe('handled');
     expect(mockAttach).toHaveBeenCalledWith({
       orderId: 'order-rv',
       trackingToken: 'track-rv',
     });
-    expect(onInitializationSuccess.mock.invocationCallOrder[0]).toBeLessThan(
-      mockAttach.mock.invocationCallOrder[0]
+    expect(mockAttach.mock.invocationCallOrder[0]).toBeLessThan(
+      mockInitById.mock.invocationCallOrder[0]
     );
   });
 

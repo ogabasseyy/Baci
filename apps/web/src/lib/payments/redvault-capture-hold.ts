@@ -25,31 +25,40 @@ export type RedvaultCaptureHoldOutcome =
 export async function captureOrHoldRedvaultPayment({
   gateway,
   gatewayResponse,
+  merchantId,
   orderId,
   reference,
   rpcClient,
-  supabase,
   transactionId,
 }: {
   gateway: 'juicyway' | 'korapay' | 'paystack';
   gatewayResponse: Record<string, unknown>;
+  merchantId: string;
   orderId: string;
   reference: string;
   rpcClient: RedvaultCaptureHoldRpcClient;
-  supabase: SupabaseClient;
   transactionId: string;
 }): Promise<RedvaultCaptureHoldOutcome> {
-  const { data: order, error: orderError } = await supabase
-    .from('orders')
-    .select('payment_method')
-    .eq('id', orderId)
-    .maybeSingle();
+  // Classification runs through the merchant-bound scoped client, never
+  // the route's service-role client: this module sits in user-facing
+  // verification call graphs, and the narrow RPC discloses only the
+  // payment method while enforcing the merchant binding.
+  const { data: classification, error: classificationError } =
+    await rpcClient.rpc('get_redvault_order_payment_method', {
+      p_merchant_id: merchantId,
+      p_order_id: orderId,
+    });
+  const paymentMethod = Array.isArray(classification)
+    ? classification[0]?.payment_method
+    : undefined;
 
-  if (orderError || !order) {
-    throw orderError ?? new Error('redvault_capture_hold_order_not_found');
+  if (classificationError || !paymentMethod) {
+    throw (
+      classificationError ?? new Error('redvault_capture_hold_order_not_found')
+    );
   }
 
-  if (order.payment_method !== 'uba_redvault') {
+  if (paymentMethod !== 'uba_redvault') {
     return { kind: 'not_redvault' };
   }
 

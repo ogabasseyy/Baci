@@ -29,6 +29,10 @@ beforeEach(() => {
   mockSetItem.mockClear();
 });
 
+afterEach(() => {
+  jest.useRealTimers();
+});
+
 it('treats freshly minted generations as code-point sorted without storage', async () => {
   const { registerMintedCheckoutGeneration } = loadRegistry();
   registerMintedCheckoutGeneration(generation);
@@ -57,4 +61,17 @@ it('fails closed when the stored marker set is malformed', async () => {
   await expect(
     loadSort().usesCodepointCheckoutItemSort(legacyGeneration)
   ).rejects.toThrow('Checkout recovery data is invalid');
+});
+
+it('fails closed instead of hanging behind a stuck persist', async () => {
+  jest.useFakeTimers();
+  const { enqueueCheckoutGenerationStorage } =
+    require('./checkout-generation-storage-queue') as typeof import('./checkout-generation-storage-queue');
+  enqueueCheckoutGenerationStorage(() => new Promise<never>(() => undefined));
+  const pending = loadSort().usesCodepointCheckoutItemSort(legacyGeneration);
+  const assertion = expect(pending).rejects.toThrow(
+    'Checkout storage read timed out'
+  );
+  await jest.advanceTimersByTimeAsync(5_000);
+  await assertion;
 });

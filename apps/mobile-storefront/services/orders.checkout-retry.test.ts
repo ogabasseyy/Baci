@@ -257,10 +257,9 @@ describe('createOrder checkout retry keys', () => {
         wallet_amount: 5000,
       })
     ).rejects.toThrow();
-    const snapshots = JSON.parse(
-      (await AsyncStorage.getItem('checkout-attempt-credit-v1')) ?? '{}'
-    ) as Record<string, unknown>;
-    expect(snapshots).not.toHaveProperty('cart-one');
+    await expect(
+      AsyncStorage.getItem('checkout-attempt-credit-v1:cart-one')
+    ).resolves.toBeNull();
 
     mockFetchResponse.ok = true;
     mockFetchResponse.status = 200;
@@ -287,10 +286,11 @@ describe('createOrder checkout retry keys', () => {
         wallet_amount: 5000,
       })
     ).rejects.toThrow();
-    const snapshots = JSON.parse(
-      (await AsyncStorage.getItem('checkout-attempt-credit-v1')) ?? '{}'
-    ) as Record<string, { wallet_amount?: number }>;
-    expect(snapshots['cart-one']?.wallet_amount).toBe(5000);
+    const retained = JSON.parse(
+      (await AsyncStorage.getItem('checkout-attempt-credit-v1:cart-one')) ??
+        '{}'
+    ) as { wallet_amount?: number };
+    expect(retained.wallet_amount).toBe(5000);
     mockFetchResponse.ok = true;
     mockFetchResponse.status = 200;
   });

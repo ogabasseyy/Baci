@@ -1,6 +1,9 @@
 import { CHECKOUT_GENERATION_STORAGE_KEY } from '@/config/checkout-storage';
 import { enqueueCheckoutGenerationStorage } from './checkout-generation-storage-queue';
-import { clearPersistedCheckoutGeneration } from './clear-persisted-checkout-generation';
+import {
+  clearPersistedCheckoutGeneration,
+  removeAbandonedCheckoutGenerationWrite,
+} from './clear-persisted-checkout-generation';
 import { persistCheckoutGeneration } from './persist-checkout-generation';
 import { readPersistedCheckoutGeneration } from './read-persisted-checkout-generation';
 
@@ -40,4 +43,16 @@ it('clears the stale generation even when a queued persist never settles', async
   expect(mockStorage.get(CHECKOUT_GENERATION_STORAGE_KEY)).toBeUndefined();
   releaseHung();
   await hung;
+});
+
+it('removes an abandoned write only when it still holds the durable key', async () => {
+  mockStorage.set(CHECKOUT_GENERATION_STORAGE_KEY, 'abandoned-generation');
+  await removeAbandonedCheckoutGenerationWrite('abandoned-generation');
+  expect(mockStorage.get(CHECKOUT_GENERATION_STORAGE_KEY)).toBeUndefined();
+
+  mockStorage.set(CHECKOUT_GENERATION_STORAGE_KEY, 'newer-generation');
+  await removeAbandonedCheckoutGenerationWrite('abandoned-generation');
+  expect(mockStorage.get(CHECKOUT_GENERATION_STORAGE_KEY)).toBe(
+    'newer-generation'
+  );
 });

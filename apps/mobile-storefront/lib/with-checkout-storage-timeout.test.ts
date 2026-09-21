@@ -19,3 +19,17 @@ it('rejects when the storage write never settles', async () => {
   await jest.advanceTimersByTimeAsync(5_000);
   await expectation;
 });
+
+it('reports a custom message for storage reads', async () => {
+  jest.useFakeTimers();
+  const hung = withCheckoutStorageTimeout(
+    new Promise(() => undefined),
+    5_000,
+    'Checkout storage read timed out'
+  );
+  const expectation = expect(hung).rejects.toThrow(
+    'Checkout storage read timed out'
+  );
+  await jest.advanceTimersByTimeAsync(5_000);
+  await expectation;
+});

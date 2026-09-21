@@ -48,6 +48,10 @@ describe('bugfix: checkout generation is durable before the order request', () =
   it('does not let an earlier generation write finish after a newer persist', async () => {
     const newer = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     let finishOlder!: () => void;
+    let olderEntered!: () => void;
+    const olderAtGate = new Promise<void>((resolve) => {
+      olderEntered = resolve;
+    });
     mockSetItem.mockImplementationOnce(
       (key: string, value: string) =>
         new Promise<void>((resolve) => {
@@ -55,12 +59,12 @@ describe('bugfix: checkout generation is durable before the order request', () =
             storage.set(key, value);
             resolve();
           };
+          olderEntered();
         })
     );
     const olderWrite = persistCheckoutGeneration(generation);
     const newerWrite = persistCheckoutGeneration(newer);
-    // Let the older queued write reach its gated storage call.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await olderAtGate;
     finishOlder();
     await Promise.all([olderWrite, newerWrite]);
     expect(storage.get('checkout-generation-v1')).toBe(newer);
@@ -104,9 +108,16 @@ describe('bugfix: checkout generation is durable before the order request', () =
   });
 
   it('swallows detached persist failures so first-item adds can finish', async () => {
-    mockSetItem.mockRejectedValueOnce(new Error('disk full'));
+    let writeAttempted!: () => void;
+    const writeEntered = new Promise<void>((resolve) => {
+      writeAttempted = resolve;
+    });
+    mockSetItem.mockImplementationOnce(async () => {
+      writeAttempted();
+      throw new Error('disk full');
+    });
     persistCheckoutGenerationDetached(generation);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await writeEntered;
     expect(mockSetItem).toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY } from '@/config/checkout-storage';
 import { enqueueCheckoutGenerationStorage } from '@/lib/checkout-generation-storage-queue';
 import { isMintedCheckoutGeneration } from '@/lib/minted-checkout-generations';
+import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 
 function parseGenerationSet(existing: string | null): string[] {
   if (existing === null) {
@@ -48,10 +49,20 @@ export function usesCodepointCheckoutItemSort(
   if (isMintedCheckoutGeneration(checkoutGeneration)) {
     return Promise.resolve(true);
   }
-  return enqueueCheckoutGenerationStorage(async () => {
-    const generations = parseGenerationSet(
-      await AsyncStorage.getItem(CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY)
-    );
-    return generations.includes(checkoutGeneration);
-  });
+  // Bound the wait behind a stuck persist: a hung store fails this attempt
+  // instead of blocking checkout forever. Guessing the sort on timeout
+  // could fork the idempotency key, so this fails closed and the queue
+  // drains itself once storage recovers.
+  return withCheckoutStorageTimeout(
+    enqueueCheckoutGenerationStorage(async () => {
+      const generations = parseGenerationSet(
+        await AsyncStorage.getItem(
+          CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY
+        )
+      );
+      return generations.includes(checkoutGeneration);
+    }),
+    undefined,
+    'Checkout storage read timed out'
+  );
 }

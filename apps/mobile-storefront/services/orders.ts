@@ -3,10 +3,6 @@ import Constants from 'expo-constants';
 import { DEFAULT_TIMEOUT, fetchWithRetry } from '@/lib/api';
 import { resolveApiBaseUrl } from '@/lib/api-url';
 import { assertQueuedCreateOrderSendOwner } from '@/lib/assert-queued-create-order-send-owner';
-import {
-  applyCheckoutCreditSnapshot,
-  releaseCheckoutCreditSnapshot,
-} from '@/lib/checkout-attempt-credit-snapshot';
 import { getCheckoutAttemptKey } from '@/lib/checkout-attempt-key';
 import { createLogger } from '@/lib/logger';
 import { resolveCheckoutAuthPartition } from '@/lib/resolve-checkout-auth-partition';
@@ -15,7 +11,6 @@ import {
   supabaseAuthStorage,
   supabaseAuthStorageKey,
 } from '@/lib/supabase';
-import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 import { trackEvent } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 import {
@@ -23,14 +18,17 @@ import {
   OrderError,
   throwOrderHttpError,
 } from './orders.errors';
-import { buildOrderPayload } from './orders.payload';
 import { parseOrderResponse } from './orders.response';
 import {
   type CreateOrderRequest,
   CreateOrderRequestSchema,
   type OrderResponse,
 } from './orders.schemas';
-import { resolveCheckoutAuth } from './orders-auth';
+import { resolveCheckoutAuth, validateCheckoutUser } from './orders-auth';
+import {
+  buildSnapshottedOrderPayload,
+  releaseCreditAfterDefinitiveRejection,
+} from './orders-credit-snapshot';
 import { getCheckoutStoredSession } from './orders-session';
 import { readCheckoutStoredSession } from './read-checkout-stored-session';
 
@@ -50,31 +48,6 @@ const API_URL = resolveApiBaseUrl(
 const MERCHANT_ID =
   Constants.expoConfig?.extra?.merchantId ||
   '6b5cb8a4-5575-456c-b936-8cdfae30db74';
-
-const CHECKOUT_USER_VALIDATION_TIMEOUT_MS = 4_000;
-
-async function validateCheckoutUser(accessToken: string) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<{
-    data: { user: null };
-    error: Error;
-  }>((resolve) => {
-    timer = setTimeout(
-      () =>
-        resolve({
-          data: { user: null },
-          error: new Error('Checkout user validation timed out'),
-        }),
-      CHECKOUT_USER_VALIDATION_TIMEOUT_MS
-    );
-  });
-
-  try {
-    return await Promise.race([supabase.auth.getUser(accessToken), timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
 
 async function checkNetwork(): Promise<boolean> {
   const state = await NetInfo.fetch();
@@ -139,15 +112,15 @@ export async function createOrder(
     error: authError,
   } =
     checkoutAuth.canValidateUser && session?.access_token
-      ? await validateCheckoutUser(session.access_token)
+      ? await validateCheckoutUser(supabase.auth, session.access_token)
       : { data: { user: null }, error: null };
 
-  const orderPayload = await applyCheckoutCreditSnapshot(
-    buildOrderPayload({
+  const orderPayload = await buildSnapshottedOrderPayload(
+    {
       merchantId: MERCHANT_ID,
       request: validatedRequest,
       ...(!authError && user?.id && { userId: user.id }),
-    }),
+    },
     checkoutGeneration
   );
 
@@ -244,26 +217,10 @@ export async function createOrder(
       : normalizedOrderResponse;
   } catch (error) {
     const mapped = mapCreateOrderException(error, startTime);
-    // Definitive rejections create no order, so drop the frozen credit choice
-    // and let the shopper's corrected retry snapshot fresh fields. Ambiguous
-    // outcomes (conflicts, timeouts, network and server errors) retain the
-    // snapshot so a lost-response retry reuses the same idempotency key.
-    if (
-      mapped.code === 'VALIDATION_ERROR' ||
-      mapped.code === 'AUTH_ERROR' ||
-      mapped.code === 'NOT_FOUND'
-    ) {
-      try {
-        await withCheckoutStorageTimeout(
-          releaseCheckoutCreditSnapshot(checkoutGeneration)
-        );
-      } catch (releaseError) {
-        log.warn(
-          'Failed to release credit snapshot after order rejection:',
-          releaseError
-        );
-      }
-    }
+    await releaseCreditAfterDefinitiveRejection(
+      mapped.code,
+      checkoutGeneration
+    );
     throw mapped;
   }
 }

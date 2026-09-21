@@ -22,11 +22,38 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 const generation = '46ed63d7-5f10-49f0-9456-9ff571bec43f';
 const otherGeneration = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
+function snapshotKey(id: string): string {
+  return `${CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY}:${id}`;
+}
+
+function gateFirstRead() {
+  let release!: (value: string | null) => void;
+  let entered!: () => void;
+  const enteredPromise = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  mockGetItem.mockImplementationOnce(
+    () =>
+      new Promise<string | null>((resolve) => {
+        release = resolve;
+        entered();
+      })
+  );
+  return {
+    entered: enteredPromise,
+    release: (value: string | null) => release(value),
+  };
+}
+
 beforeEach(() => {
   storage.clear();
   mockGetItem.mockClear();
   mockSetItem.mockClear();
   mockRemoveItem.mockClear();
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 it('freezes the first observed store-credit fields for a checkout generation', async () => {
@@ -72,14 +99,8 @@ it('drops credit fields that were absent from the first snapshot', async () => {
   });
 });
 
-it('serializes concurrent writes for different generations', async () => {
-  let releaseFirst!: (value: string | null) => void;
-  mockGetItem.mockImplementationOnce(
-    () =>
-      new Promise<string | null>((resolve) => {
-        releaseFirst = resolve;
-      })
-  );
+it('serializes concurrent applies for the same generation', async () => {
+  const gate = gateFirstRead();
 
   const first = applyCheckoutCreditSnapshot(
     { wallet_amount: 5000 },
@@ -87,55 +108,88 @@ it('serializes concurrent writes for different generations', async () => {
   );
   const second = applyCheckoutCreditSnapshot(
     { wallet_amount: 1000 },
+    generation
+  );
+  await gate.entered;
+  gate.release(null);
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  expect(firstResult.wallet_amount).toBe(5000);
+  expect(secondResult.wallet_amount).toBe(5000);
+  expect(
+    JSON.parse(storage.get(snapshotKey(generation)) ?? '{}') as {
+      wallet_amount?: number;
+    }
+  ).toEqual({ wallet_amount: 5000 });
+});
+
+it('lets other generations proceed while one apply is hung', async () => {
+  const gate = gateFirstRead();
+
+  const hung = applyCheckoutCreditSnapshot({ wallet_amount: 5000 }, generation);
+  await gate.entered;
+  const other = await applyCheckoutCreditSnapshot(
+    { wallet_amount: 1000 },
     otherGeneration
   );
-  // Let the first queued operation reach its gated storage read.
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  releaseFirst(null);
-  await Promise.all([first, second]);
 
-  const persisted = JSON.parse(
-    storage.get(CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY) ?? '{}'
-  ) as Record<string, { wallet_amount?: number }>;
-  expect(persisted[generation]?.wallet_amount).toBe(5000);
-  expect(persisted[otherGeneration]?.wallet_amount).toBe(1000);
+  expect(other.wallet_amount).toBe(1000);
+  expect(
+    JSON.parse(storage.get(snapshotKey(otherGeneration)) ?? '{}') as {
+      wallet_amount?: number;
+    }
+  ).toEqual({ wallet_amount: 1000 });
+  gate.release(null);
+  await hung;
 });
 
 it('releases snapshots without waiting for a hung queued apply', async () => {
-  let releaseHung!: (value: string | null) => void;
-  mockGetItem.mockImplementationOnce(
-    () =>
-      new Promise<string | null>((resolve) => {
-        releaseHung = resolve;
-      })
-  );
+  const gate = gateFirstRead();
+
   const hungApply = applyCheckoutCreditSnapshot(
     { wallet_amount: 5000 },
     generation
   );
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await gate.entered;
   await releaseCheckoutCreditSnapshot(otherGeneration);
-  releaseHung(null);
+  gate.release(null);
   await hungApply;
 });
 
-it('removes a finalized generation from the credit map', async () => {
+it('removes only the finalized generation snapshot', async () => {
   await applyCheckoutCreditSnapshot({ wallet_amount: 5000 }, generation);
   await applyCheckoutCreditSnapshot({ wallet_amount: 1000 }, otherGeneration);
   await releaseCheckoutCreditSnapshot(generation);
-  const persisted = JSON.parse(
-    storage.get(CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY) ?? '{}'
-  ) as Record<string, unknown>;
-  expect(persisted).not.toHaveProperty(generation);
-  expect(persisted).toHaveProperty(otherGeneration);
+  expect(storage.get(snapshotKey(generation))).toBeUndefined();
+  expect(
+    JSON.parse(storage.get(snapshotKey(otherGeneration)) ?? '{}') as {
+      wallet_amount?: number;
+    }
+  ).toEqual({ wallet_amount: 1000 });
 });
 
 it('fails closed when a stored generation snapshot is malformed', async () => {
   storage.set(
-    CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY,
-    JSON.stringify({ [generation]: { wallet_amount: '5000' } })
+    snapshotKey(generation),
+    JSON.stringify({ wallet_amount: '5000' })
   );
   await expect(
     applyCheckoutCreditSnapshot({ wallet_amount: 1000 }, generation)
   ).rejects.toThrow('Checkout recovery data is invalid');
+});
+
+it('fails a checkout attempt when the snapshot read never settles', async () => {
+  jest.useFakeTimers();
+  mockGetItem.mockImplementationOnce(
+    () => new Promise<string | null>(() => undefined)
+  );
+  const pending = applyCheckoutCreditSnapshot(
+    { wallet_amount: 5000 },
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  );
+  const assertion = expect(pending).rejects.toThrow(
+    'Checkout storage read timed out'
+  );
+  await jest.advanceTimersByTimeAsync(5_000);
+  await assertion;
 });

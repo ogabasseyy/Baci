@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY } from '@/config/checkout-storage';
 import { assertCheckoutRecoveryValue } from '@/lib/assert-checkout-recovery-value';
-import { createSerialAsyncQueue } from '@/lib/create-serial-async-queue';
+import { createKeyedSerialAsyncQueue } from '@/lib/create-serial-async-queue';
+import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 
 type CheckoutCreditSnapshot = {
   savings_amount?: number;
@@ -19,7 +20,13 @@ const CREDIT_KEYS = [
   'wallet_amount',
 ] as const;
 
-const enqueueCreditSnapshot = createSerialAsyncQueue();
+// Each generation owns its snapshot key, so concurrent checkouts for
+// different generations never share a read-modify-write cycle.
+const enqueueCreditSnapshot = createKeyedSerialAsyncQueue();
+
+function creditSnapshotKey(checkoutGeneration: string): string {
+  return `${CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY}:${checkoutGeneration}`;
+}
 
 function isCreditSnapshot(value: unknown): value is CheckoutCreditSnapshot {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -41,11 +48,11 @@ function isCreditSnapshot(value: unknown): value is CheckoutCreditSnapshot {
   });
 }
 
-function parseCreditMap(
+function parseCreditSnapshot(
   existing: string | null
-): Record<string, CheckoutCreditSnapshot> {
+): CheckoutCreditSnapshot | undefined {
   if (existing === null) {
-    return {};
+    return undefined;
   }
   let parsed: unknown;
   try {
@@ -55,23 +62,12 @@ function parseCreditMap(
       'Checkout recovery data is invalid. Please contact support.'
     );
   }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+  if (!isCreditSnapshot(parsed)) {
     throw new Error(
       'Checkout recovery data is invalid. Please contact support.'
     );
   }
-  const map: Record<string, CheckoutCreditSnapshot> = {};
-  for (const [generation, snapshot] of Object.entries(
-    parsed as Record<string, unknown>
-  )) {
-    if (!isCreditSnapshot(snapshot)) {
-      throw new Error(
-        'Checkout recovery data is invalid. Please contact support.'
-      );
-    }
-    map[generation] = snapshot;
-  }
-  return map;
+  return parsed;
 }
 
 function extractCheckoutCreditSnapshot(
@@ -106,53 +102,40 @@ function omitCreditFields<T extends Record<string, unknown>>(payload: T): T {
   return next;
 }
 
-async function readCreditMap() {
-  return parseCreditMap(
-    await AsyncStorage.getItem(CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY)
-  );
-}
-
-async function writeCreditMap(map: Record<string, CheckoutCreditSnapshot>) {
-  if (Object.keys(map).length === 0) {
-    await AsyncStorage.removeItem(CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY);
-    return;
-  }
-  await AsyncStorage.setItem(
-    CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY,
-    JSON.stringify(map)
-  );
-}
-
 export function applyCheckoutCreditSnapshot<T extends Record<string, unknown>>(
   payload: T,
   checkoutGeneration: string
 ): Promise<T> {
   assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
-  return enqueueCreditSnapshot(async () => {
-    const map = await readCreditMap();
-    const stored = map[checkoutGeneration];
-    if (stored) {
-      return { ...omitCreditFields(payload), ...stored };
-    }
-    map[checkoutGeneration] = extractCheckoutCreditSnapshot(payload);
-    await writeCreditMap(map);
-    return payload;
-  });
+  // Same-generation applies stay serialized so concurrent submits observe a
+  // single frozen choice. The wait is bounded: a hung store fails the
+  // attempt instead of wedging later checkouts, and the queue drains itself
+  // once storage recovers.
+  return withCheckoutStorageTimeout(
+    enqueueCreditSnapshot(checkoutGeneration, async () => {
+      const stored = parseCreditSnapshot(
+        await AsyncStorage.getItem(creditSnapshotKey(checkoutGeneration))
+      );
+      if (stored) {
+        return { ...omitCreditFields(payload), ...stored };
+      }
+      await AsyncStorage.setItem(
+        creditSnapshotKey(checkoutGeneration),
+        JSON.stringify(extractCheckoutCreditSnapshot(payload))
+      );
+      return payload;
+    }),
+    undefined,
+    'Checkout storage read timed out'
+  );
 }
 
 export async function releaseCheckoutCreditSnapshot(
   checkoutGeneration: string
 ): Promise<void> {
   assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
-  // Best-effort cleanup stays off the snapshot queue: callers bound it with
-  // a storage timeout, and a hung cleanup must never wedge later checkouts
-  // behind a poisoned tail. Generations are single-use, so a concurrent
-  // apply for the released ID can only re-create an identical entry from
-  // its frozen replay payload.
-  const map = await readCreditMap();
-  if (!(checkoutGeneration in map)) {
-    return;
-  }
-  delete map[checkoutGeneration];
-  await writeCreditMap(map);
+  // Best-effort cleanup deletes only this generation's key: it cannot drop
+  // another checkout's snapshot, and it never waits on the apply queue, so
+  // a hung apply cannot wedge payment completion.
+  await AsyncStorage.removeItem(creditSnapshotKey(checkoutGeneration));
 }

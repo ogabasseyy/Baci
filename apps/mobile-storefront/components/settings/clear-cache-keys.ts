@@ -9,7 +9,6 @@ import {
 import { QUERY_CACHE_STORAGE_KEY } from '@/lib/query-client';
 
 const CLEAR_CACHE_PRESERVED_KEYS = new Set([
-  CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY,
   CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
   CHECKOUT_GENERATION_STORAGE_KEY,
   CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY,
@@ -31,6 +30,7 @@ const CLEAR_CACHE_PRESERVED_PREFIXES = [
   'supabase',
   'baci:savings-reminder-',
   '@baci_storefront_push_opt_out_',
+  `${CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY}:`,
 ] as const;
 
 function isClearableCacheStorageKey(key: string): boolean {

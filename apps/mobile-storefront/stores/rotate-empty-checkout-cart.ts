@@ -1,5 +1,8 @@
 import { releaseCheckoutCreditSnapshot } from '@/lib/checkout-attempt-credit-snapshot';
-import { clearPersistedCheckoutGeneration } from '@/lib/clear-persisted-checkout-generation';
+import {
+  clearPersistedCheckoutGeneration,
+  removeAbandonedCheckoutGenerationWrite,
+} from '@/lib/clear-persisted-checkout-generation';
 import { createLogger } from '@/lib/logger';
 import { persistCheckoutGeneration } from '@/lib/persist-checkout-generation';
 import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
@@ -18,12 +21,20 @@ export async function rotateEmptyCheckoutCart(
 ) {
   const next = emptyCheckoutCart();
   apply(next);
+  const persistAttempt = persistCheckoutGeneration(next.checkoutGeneration);
   try {
-    await withCheckoutStorageTimeout(
-      persistCheckoutGeneration(next.checkoutGeneration)
-    );
+    await withCheckoutStorageTimeout(persistAttempt);
   } catch (error) {
     log.error('Failed to persist empty-cart checkout generation:', error);
+    // If the abandoned write eventually lands, invalidate what it wrote so
+    // a slow persist can never restore a stale generation behind us.
+    void persistAttempt.then(
+      () =>
+        removeAbandonedCheckoutGenerationWrite(next.checkoutGeneration).catch(
+          () => undefined
+        ),
+      () => undefined
+    );
     try {
       await withCheckoutStorageTimeout(clearPersistedCheckoutGeneration());
     } catch (clearError) {

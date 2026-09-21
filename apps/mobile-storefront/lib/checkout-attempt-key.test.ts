@@ -268,10 +268,14 @@ it('stores gateway-partition credit snapshots under the base generation', async 
     'cart-one:uba_redvault',
     { frozen: true }
   );
-  const snapshots = JSON.parse(
-    storage.get('checkout-attempt-credit-v1') ?? '{}'
-  ) as Record<string, unknown>;
-  expect(Object.keys(snapshots)).toEqual(['cart-one']);
+  expect(
+    JSON.parse(
+      storage.get('checkout-attempt-credit-v1:cart-one') ?? '{}'
+    ) as Record<string, unknown>
+  ).toEqual({ use_wallet_credit: true, wallet_amount: 5000 });
+  expect(
+    storage.get('checkout-attempt-credit-v1:cart-one:uba_redvault')
+  ).toBeUndefined();
 });
 
 it('resumes the same pending order when changing payment gateways', async () => {

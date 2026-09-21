@@ -1,7 +1,11 @@
 import { router } from 'expo-router';
 import { getCheckoutAuthorizationHeaders } from '@/services/redvault';
-import { initializeRedvaultCheckout } from './initialize-redvault-checkout';
+import {
+  initializeRedvaultCheckout,
+  initializeRedvaultCheckoutById,
+} from './initialize-redvault-checkout';
 import type { RedvaultReviewInput } from './RedvaultOrderReview';
+import { redvaultOrderResponse } from './redvault-order-review.test-utils';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('@/services/redvault', () => ({
@@ -24,6 +28,70 @@ it('rejects incomplete persisted summaries before requesting a payment', async (
     expect(getCheckoutAuthorizationHeaders).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(router.push).not.toHaveBeenCalled();
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+function mockSuccessfulInitialize() {
+  const originalFetch = global.fetch;
+  (getCheckoutAuthorizationHeaders as jest.Mock).mockResolvedValue({});
+  const fetchMock = jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      success: true,
+      authorization_url: 'https://checkout.paystack.com/test',
+      reference: 'RV-test',
+    }),
+  });
+  global.fetch = fetchMock;
+  return { originalFetch, fetchMock };
+}
+
+it('completes account sync before navigating to the gateway', async () => {
+  jest.clearAllMocks();
+  const { originalFetch } = mockSuccessfulInitialize();
+  const onReady = jest.fn(async () => undefined);
+  try {
+    await expect(
+      initializeRedvaultCheckoutById({
+        orderId: 'order-rv',
+        customerEmail: 'ada@example.com',
+        customerName: 'Ada',
+        customerPhone: '08012345678',
+        onReady,
+      })
+    ).resolves.toBe('ready');
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(router.push).toHaveBeenCalledTimes(1);
+    expect(onReady.mock.invocationCallOrder[0]).toBeLessThan(
+      (router.push as jest.Mock).mock.invocationCallOrder[0]
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+it('runs the review success callback before navigating on the fresh path', async () => {
+  jest.clearAllMocks();
+  const { originalFetch } = mockSuccessfulInitialize();
+  const onInitializationSuccess = jest.fn(async () => undefined);
+  try {
+    await expect(
+      initializeRedvaultCheckout({
+        orderResponse: redvaultOrderResponse,
+        customerEmail: 'ada@example.com',
+        customerName: 'Ada',
+        customerPhone: '08012345678',
+        onInitializationSuccess,
+      } as unknown as RedvaultReviewInput)
+    ).resolves.toBe('ready');
+    expect(onInitializationSuccess).toHaveBeenCalledTimes(1);
+    expect(router.push).toHaveBeenCalledTimes(1);
+    expect(onInitializationSuccess.mock.invocationCallOrder[0]).toBeLessThan(
+      (router.push as jest.Mock).mock.invocationCallOrder[0]
+    );
   } finally {
     global.fetch = originalFetch;
   }

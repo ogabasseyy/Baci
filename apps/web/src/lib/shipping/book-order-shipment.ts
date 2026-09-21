@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { shippingService } from '@/lib/shipping';
 import { resolveAdminGiglBookingContext } from '@/lib/shipping/admin-gigl-booking-context';
+import { assertCurrentOrderPaymentShippable } from '@/lib/shipping/assert-current-shippable-order-payment';
 import {
   assertGiglCustomerCheckoutPrepaid,
   isPayOnDeliveryPaymentMethod,
@@ -264,6 +265,10 @@ export async function bookOrderShipment(
         )
       : toDomesticBookingItems(orderItems, effectiveQuoteRequest?.items);
   assertShippableBookingItems(items);
+  // Fresh payment-state check serialized against refund finalization: the
+  // order snapshot above predates quote refresh and sender resolution, so
+  // a full refund could have landed since.
+  await assertCurrentOrderPaymentShippable(supabase, merchantId, orderId);
   const result = await shippingService.bookShipment(
     shippingProvider,
     buildOrderShipmentBookingRequest({

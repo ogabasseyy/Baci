@@ -11,6 +11,13 @@ export type PersistedRedvaultOrder = {
    * resolve the fence and fail closed until it clears another way.
    */
   trackingToken?: string;
+  /**
+   * Customer email the fenced order was created with. The server requires
+   * replayed initializations to match the order snapshot, so the mutable
+   * form email must not be submitted when it changed after an app restart.
+   * Records written before this field existed replay with the form email.
+   */
+  customerEmail?: string;
 };
 
 export type ValidatePersistedRedvaultOrder = (
@@ -66,6 +73,9 @@ function readRecord(record: unknown): PersistedRedvaultOrder | null {
     createdAt: record.createdAt,
     ...(typeof record.trackingToken === 'string' && record.trackingToken
       ? { trackingToken: record.trackingToken }
+      : {}),
+    ...(typeof record.customerEmail === 'string' && record.customerEmail
+      ? { customerEmail: record.customerEmail }
       : {}),
   };
 }

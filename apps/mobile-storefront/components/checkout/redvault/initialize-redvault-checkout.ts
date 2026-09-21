@@ -22,8 +22,11 @@ export type InitializeRedvaultCheckoutByIdInput = {
   trackingToken?: string;
   isActive?: () => boolean;
   /**
-   * Post-initialization side effects (account sync). Runs after the hosted
-   * checkout is confirmed, mirroring the review flow's success callback.
+   * Account-sync side effects (guest signup + application attach). Runs
+   * after the hosted checkout is confirmed but before gateway navigation:
+   * a signup that establishes a persistent session must be attached to the
+   * order before the app can be killed on the gateway screen, or the
+   * guest-owned attempt can never replay or verify under the new session.
    */
   onReady?: () => Promise<void>;
 };
@@ -92,6 +95,9 @@ export async function initializeRedvaultCheckoutById({
     throw new RedvaultInitializationError('indeterminate');
   }
   if (!isActive()) return 'pending' as const;
+  if (onReady) {
+    await onReady();
+  }
   router.push({
     pathname: '/payment-gateway',
     params: {
@@ -104,9 +110,6 @@ export async function initializeRedvaultCheckoutById({
       ...(trackingToken ? { trackingToken } : {}),
     },
   });
-  if (onReady) {
-    await onReady();
-  }
   return 'ready' as const;
 }
 
@@ -123,5 +126,12 @@ export async function initializeRedvaultCheckout(
     amount: String(checkout.order.total),
     trackingToken: checkout.order.tracking_token ?? undefined,
     isActive,
+    ...(input.onInitializationSuccess
+      ? {
+          onReady: async () => {
+            await input.onInitializationSuccess?.();
+          },
+        }
+      : {}),
   });
 }

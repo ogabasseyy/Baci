@@ -140,6 +140,7 @@ function createSupabase(
   };
 
   return {
+    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
     from: vi.fn((table: string) => {
       if (table === 'orders') return { select: vi.fn(() => orderSelect) };
       if (table === 'shipments') {

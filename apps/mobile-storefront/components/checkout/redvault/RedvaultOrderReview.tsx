@@ -76,16 +76,9 @@ function RedvaultOrderReviewContent({
       );
       if (!active.current) return;
       if (result === 'ready') {
-        // Awaited: guest account sync (including the application attach)
-        // must land before the review closes, or verification can run
-        // under the new session before the order is attached to it.
-        // Best-effort — the hosted checkout is already issued, so the
-        // review still closes when side effects fail.
-        try {
-          await input.onInitializationSuccess?.();
-        } catch {
-          // Side effects are best-effort; the review still closes.
-        }
+        // Account sync (including the application attach) already ran
+        // inside initialization, before gateway navigation — see
+        // initializeRedvaultCheckoutById — so the review only closes.
         onClose({ cancel: false });
       }
     } catch (error) {

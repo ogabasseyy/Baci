@@ -3,9 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockGetMerchantSender = vi.fn();
 const mockBookShipment = vi.fn();
 const mockResolveQuote = vi.fn();
+const mockAssertShippable = vi.fn();
 
 vi.mock('@/lib/shipping', () => ({
   shippingService: { bookShipment: mockBookShipment },
+}));
+
+vi.mock('@/lib/shipping/assert-current-shippable-order-payment', () => ({
+  assertCurrentOrderPaymentShippable: mockAssertShippable,
 }));
 
 vi.mock('@/lib/shipping/resolve-booking-merchant-sender', () => ({
@@ -61,6 +66,7 @@ const payload = {
 describe('executeDirectBookingAttempt', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAssertShippable.mockResolvedValue(undefined);
     mockGetMerchantSender.mockResolvedValue({ ok: true, sender });
     mockResolveQuote.mockResolvedValue(quote);
     mockBookShipment.mockResolvedValue({
@@ -90,6 +96,46 @@ describe('executeDirectBookingAttempt', () => {
       'GIGL',
       expect.objectContaining({ orderId: 'order-1', sender })
     );
+  });
+
+  it('verifies the payment state immediately before the provider booking', async () => {
+    await executeDirectBookingAttempt({
+      supabase: {} as never,
+      merchantId: 'merchant-1',
+      merchantBusinessName: 'Merchant Store',
+      orderId: 'order-1',
+      quote,
+      quotePayload: payload,
+      usesStoredInternationalSender: false,
+      expectedShippingFee: 2500,
+    });
+
+    expect(mockAssertShippable).toHaveBeenCalledWith(
+      expect.anything(),
+      'merchant-1',
+      'order-1'
+    );
+    expect(mockAssertShippable.mock.invocationCallOrder[0]).toBeLessThan(
+      mockBookShipment.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('skips the provider booking when the payment state check rejects', async () => {
+    mockAssertShippable.mockRejectedValue(new Error('order_refunded'));
+
+    await expect(
+      executeDirectBookingAttempt({
+        supabase: {} as never,
+        merchantId: 'merchant-1',
+        merchantBusinessName: 'Merchant Store',
+        orderId: 'order-1',
+        quote,
+        quotePayload: payload,
+        usesStoredInternationalSender: false,
+        expectedShippingFee: 2500,
+      })
+    ).rejects.toThrow('order_refunded');
+    expect(mockBookShipment).not.toHaveBeenCalled();
   });
 
   it('books an expired domestic quote with its refreshed request', async () => {

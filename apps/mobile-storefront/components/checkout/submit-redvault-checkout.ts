@@ -43,6 +43,7 @@ export async function submitRedvaultCheckout({
     ...(orderResponse.order.tracking_token
       ? { trackingToken: orderResponse.order.tracking_token }
       : {}),
+    ...(customerEmail ? { customerEmail } : {}),
   });
   await saveTracking(orderResponse.order.id, trackingContext);
   onRedvaultOrder?.({

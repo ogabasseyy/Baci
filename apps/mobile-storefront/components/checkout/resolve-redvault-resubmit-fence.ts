@@ -87,7 +87,10 @@ export async function resolveRedvaultFenceForResubmit({
     try {
       const outcome = await initializeRedvaultCheckoutById({
         orderId: persisted.orderId,
-        customerEmail,
+        // Replay with the email the fenced order was created with: the
+        // server requires it to match the order snapshot, and the form
+        // email may have changed after the app restarted.
+        customerEmail: persisted.customerEmail ?? customerEmail,
         customerName,
         customerPhone,
         ...(fencedState.total != null

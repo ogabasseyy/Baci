@@ -206,6 +206,22 @@ describe('persist/clear round-trip', () => {
     await expect(readPersistedRedvaultOrder()).resolves.toEqual(record);
   });
 
+  it('round-trips the customer email for snapshot-matched replays', async () => {
+    const { persistPendingRedvaultOrder, readPersistedRedvaultOrder } =
+      await load();
+    const record = {
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-one',
+      createdAt: new Date().toISOString(),
+      trackingToken: 'track-rv',
+      customerEmail: 'customer@example.com',
+    };
+
+    await persistPendingRedvaultOrder(record);
+
+    await expect(readPersistedRedvaultOrder()).resolves.toEqual(record);
+  });
+
   it('reads legacy records persisted without a token', async () => {
     const { readPersistedRedvaultOrder } = await load();
     seed({

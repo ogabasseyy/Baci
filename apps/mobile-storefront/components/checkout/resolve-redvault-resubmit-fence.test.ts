@@ -199,6 +199,49 @@ describe('resolveRedvaultFenceForResubmit', () => {
     );
   });
 
+  it('replays with the persisted email when the form email changed', async () => {
+    mockRead.mockResolvedValue({
+      ...RECORD,
+      customerEmail: 'original@example.com',
+    });
+    mockResolve.mockResolvedValue({ blocked: true, orderId: 'order-rv' });
+    mockCancel.mockResolvedValue('live');
+    mockInitById.mockResolvedValue('ready');
+
+    await expect(
+      resolveRedvaultFenceForResubmit({
+        ...INPUT,
+        customerEmail: 'edited@example.com',
+      })
+    ).resolves.toBe('handled');
+    expect(mockInitById).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-rv',
+        customerEmail: 'original@example.com',
+      })
+    );
+  });
+
+  it('falls back to the form email for legacy records without one', async () => {
+    mockRead.mockResolvedValue(RECORD);
+    mockResolve.mockResolvedValue({ blocked: true, orderId: 'order-rv' });
+    mockCancel.mockResolvedValue('live');
+    mockInitById.mockResolvedValue('ready');
+
+    await expect(
+      resolveRedvaultFenceForResubmit({
+        ...INPUT,
+        customerEmail: 'edited@example.com',
+      })
+    ).resolves.toBe('handled');
+    expect(mockInitById).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-rv',
+        customerEmail: 'edited@example.com',
+      })
+    );
+  });
+
   it('blocks when the previous order cannot be released', async () => {
     mockRead.mockResolvedValue(RECORD);
     mockResolve.mockResolvedValue({ blocked: true, orderId: 'order-rv' });

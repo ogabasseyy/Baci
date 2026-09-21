@@ -124,6 +124,23 @@ describe('gateway completion routing', () => {
     });
     expect(mocks.complete).not.toHaveBeenCalled();
   });
+  it('files a review when durable capture precedes an approval throw', async () => {
+    mocks.verify.mockRejectedValue(new Error('usage cap reached'));
+    expect(await resolveOrderGatewayCompletion(input)).toMatchObject({
+      ok: false,
+      outcome: { kind: 'capture_hold_failed' },
+    });
+    expect(mocks.complete).not.toHaveBeenCalled();
+    expect(mocks.fileReview).toHaveBeenCalledWith({
+      gatewayReference: 'RV-test',
+      merchantId: 'merchant',
+      metadata: { reason: held.reason, error: 'usage cap reached' },
+      orderId: 'order',
+      reason: `REDVAULT capture held approval failed: ${held.reason}`,
+      supabase: mocks.scopedClient,
+      transactionId: 'transaction',
+    });
+  });
   it('runs REDVAULT approval through the scoped route client, not the service client', async () => {
     mocks.verify.mockResolvedValue({
       kind: 'approved',

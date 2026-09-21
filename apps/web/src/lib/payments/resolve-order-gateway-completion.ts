@@ -66,13 +66,40 @@ export async function resolveOrderGatewayCompletion({
         // client: verification context + approval run through the
         // short-lived scoped route client (merchant-bound authenticated
         // claims), which those RPCs accept alongside service_role.
-        const approved = await verifyAndCompleteRedvaultPayment({
-          merchantId,
-          orderId,
-          reference,
-          supabase: redvaultScopedClient,
-          transactionId,
-        });
+        // Capture is already durable at this point, so an approval throw
+        // (usage cap, inventory confirmation) files the same ops review
+        // the non-throwing held path files before the outer catch
+        // converts it to capture_hold_failed — otherwise a Paystack
+        // transaction stuck pending has no durable work item.
+        let approved: Awaited<
+          ReturnType<typeof verifyAndCompleteRedvaultPayment>
+        >;
+        try {
+          approved = await verifyAndCompleteRedvaultPayment({
+            merchantId,
+            orderId,
+            reference,
+            supabase: redvaultScopedClient,
+            transactionId,
+          });
+        } catch (approvalError) {
+          await fileRedvaultInventoryConfirmationReview({
+            gatewayReference: reference,
+            merchantId,
+            metadata: {
+              reason: capture.reason,
+              error:
+                approvalError instanceof Error
+                  ? approvalError.message
+                  : 'REDVAULT approval threw',
+            },
+            orderId,
+            reason: `REDVAULT capture held approval failed: ${capture.reason}`,
+            supabase: redvaultScopedClient,
+            transactionId,
+          });
+          throw approvalError;
+        }
         if (approved) {
           const completion = approved.duplicate
             ? {

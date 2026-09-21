@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { shippingService } from '@/lib/shipping';
+import { assertCurrentOrderPaymentShippable } from '@/lib/shipping/assert-current-shippable-order-payment';
 import {
   isShippingProviderCode,
   OrderShipmentBookingError,
@@ -197,6 +198,10 @@ export async function executeDirectBookingAttempt(params: {
     instructions,
   };
 
+  // Fresh payment-state check serialized against refund finalization:
+  // the loaded order snapshot predates quote resolution, so a full refund
+  // could have landed since.
+  await assertCurrentOrderPaymentShippable(supabase, merchantId, orderId);
   onProviderAttempt?.();
   const result = await shippingService.bookShipment(
     quote.provider,

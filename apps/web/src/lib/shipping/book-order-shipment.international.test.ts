@@ -147,6 +147,7 @@ function createSupabase(
   quoteUpdate.eq.mockReturnValue(quoteUpdate);
 
   return {
+    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
     from: vi.fn((table: string) => {
       if (table === 'orders') return { select: vi.fn(() => ordersSelect) };
       if (table === 'shipping_quotes') {

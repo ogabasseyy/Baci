@@ -342,6 +342,36 @@ describe('bookOrderShipment', () => {
     ).rejects.toThrow('was refunded and can no longer be shipped');
   });
 
+  it('rejects a refund that finalized after the booking read', async () => {
+    const supabase = createMockSupabase({
+      order: {
+        data: { ...validOrder, payment_status: 'paid' },
+        error: null,
+      },
+      quote: { data: validQuote, error: null },
+      merchant: { data: validMerchant, error: null },
+    });
+    const rpc = supabase.rpc as unknown as ReturnType<typeof vi.fn>;
+    const originalRpc = rpc.getMockImplementation();
+    rpc.mockImplementation(async (fn: string, ...rest: unknown[]) => {
+      if (fn === 'assert_shippable_order_payment') {
+        return {
+          data: null,
+          error: { message: 'order_refunded_for_shipment' },
+        };
+      }
+      return (originalRpc as (...args: unknown[]) => Promise<unknown>)(
+        fn,
+        ...rest
+      );
+    });
+
+    await expect(
+      bookOrderShipment(supabase, 'merchant-1', 'order-1')
+    ).rejects.toThrow('was refunded and can no longer be shipped');
+    expect(shippingService.bookShipment).not.toHaveBeenCalled();
+  });
+
   it('throws NO_SHIPPABLE_ITEMS when every surviving item quantity is zero', async () => {
     const supabase = createMockSupabase({
       order: {

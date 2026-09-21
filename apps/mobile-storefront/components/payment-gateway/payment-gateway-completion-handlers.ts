@@ -5,7 +5,7 @@ import {
   clearRedvaultPurchaseTrackingContext,
   loadRedvaultPurchaseTrackingContext,
 } from '@/lib/claim-checkout-purchase-tracking';
-import { clearPersistedRedvaultOrder } from '@/lib/pending-redvault-order';
+import { clearPersistedRedvaultOrderWithRetry } from '@/lib/pending-redvault-order';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
 import { verifyRedvaultPayment } from '@/services/redvault';
 import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
@@ -160,14 +160,18 @@ export function createPaymentGatewayCompletionHandlers({
           return;
         }
         verifiedOrderNumber = outcome.orderNumber || orderNumber;
-        // Post-verification analytics and storage cleanup are best-effort:
-        // a tracking-context failure must never revert an already-verified
-        // payment back to pending.
+        // The persisted fence must clear now: otherwise the next submit
+        // resolves this paid order, clears the new cart, and routes back
+        // here instead of placing the new purchase. Retry transient
+        // storage failures before degrading to best-effort — verification
+        // already succeeded, so cleanup must never revert to pending.
         try {
-          // The persisted fence must clear now: otherwise the next submit
-          // resolves this paid order, clears the new cart, and routes back
-          // here instead of placing the new purchase.
-          await clearPersistedRedvaultOrder();
+          await clearPersistedRedvaultOrderWithRetry();
+        } catch {
+          // A fence that will not clear is left for the next resolver
+          // pass; the verified payment still succeeds below.
+        }
+        try {
           const trackingContext = await loadRedvaultPurchaseTrackingContext(
             orderId || ''
           );
@@ -183,7 +187,7 @@ export function createPaymentGatewayCompletionHandlers({
             await clearRedvaultPurchaseTrackingContext(orderId || '');
           }
         } catch {
-          // Verification already succeeded; ignore cleanup failures.
+          // Verification already succeeded; ignore analytics failures.
         }
       } catch {
         if (!isMountedRef.current) return;

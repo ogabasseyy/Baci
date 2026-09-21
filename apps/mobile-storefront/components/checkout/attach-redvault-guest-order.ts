@@ -1,18 +1,22 @@
 import { Alert } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { trackError } from '@/services/analytics';
+import { RedvaultInitializationError } from './redvault/redvault-initialization-error';
 
 /**
  * Attaches a guest REDVAULT checkout to the account created mid-checkout.
  * Guest signup establishes a session after the application was created with
  * a null user_id; without this step every customer-bound RPC rejects the
  * changed identity and the live order can neither replay nor verify. Runs
- * after the post-order side effects (which perform the signup) on both the
- * fresh review path and the resubmit-replay path.
+ * inside the initialization success callback on both the fresh review path
+ * and the resubmit-replay path, before gateway navigation.
  *
  * Recovery: when the attach fails under an established session, the new
  * identity can never verify the guest-owned attempt, so sign back out to
- * restore the guest context rather than stranding the payment.
+ * restore the guest context rather than stranding the payment. When the
+ * guest context cannot be restored, this throws a definitive error so the
+ * caller aborts gateway navigation instead of verifying under a foreign
+ * identity.
  *
  * The RPC requires the order's tracking token as order-bound proof; without
  * it there is nothing to prove with, so skip the attach and keep the guest
@@ -46,10 +50,31 @@ export async function attachRedvaultGuestOrderAfterSignup({
         ? attachError.message
         : 'Failed to attach guest REDVAULT order'
     );
+    // signOut reports failure as a resolved { error }, not a rejection,
+    // so inspect both the result and the session that remains: only a
+    // truly restored guest context may proceed to gateway navigation.
+    let guestRestored = false;
     try {
-      await supabase.auth.signOut();
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (!signOutError) {
+        const {
+          data: { session: restoredSession },
+        } = await supabase.auth.getSession();
+        guestRestored = !restoredSession;
+      }
     } catch {
-      // Best-effort: the alert below still explains the retry.
+      guestRestored = false;
+    }
+    if (!guestRestored) {
+      trackError(
+        'redvault_guest_attach_recovery',
+        'Guest context was not restored after a failed attach'
+      );
+      Alert.alert(
+        'Account sync failed',
+        'We could not restore your guest checkout. Please restart the app and try again.'
+      );
+      throw new RedvaultInitializationError('definitive');
     }
     Alert.alert(
       'Account sync failed',

@@ -254,3 +254,54 @@ describe('persist/clear round-trip', () => {
     });
   });
 });
+
+describe('clearPersistedRedvaultOrderWithRetry', () => {
+  function mockFlakyRemove(failures: number, removeMock = jest.fn()) {
+    jest.resetModules();
+    jest.doMock('@react-native-async-storage/async-storage', () => ({
+      getItem: async (key: string) => storage.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        storage.set(key, value);
+      },
+      removeItem: async (key: string) => {
+        removeMock(key);
+        if (removeMock.mock.calls.length <= failures) {
+          throw new Error('storage busy');
+        }
+        storage.delete(key);
+      },
+    }));
+    return removeMock;
+  }
+
+  it('retries transient removal failures until the fence clears', async () => {
+    const removeMock = mockFlakyRemove(2);
+    const { clearPersistedRedvaultOrderWithRetry } = await load();
+    seed({
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-one',
+      createdAt: new Date().toISOString(),
+    });
+
+    await clearPersistedRedvaultOrderWithRetry();
+
+    expect(removeMock).toHaveBeenCalledTimes(3);
+    expect(storage.has(KEY)).toBe(false);
+  });
+
+  it('throws the last error after exhausting attempts', async () => {
+    const removeMock = mockFlakyRemove(Number.POSITIVE_INFINITY);
+    const { clearPersistedRedvaultOrderWithRetry } = await load();
+    seed({
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-one',
+      createdAt: new Date().toISOString(),
+    });
+
+    await expect(clearPersistedRedvaultOrderWithRetry(2)).rejects.toThrow(
+      'storage busy'
+    );
+    expect(removeMock).toHaveBeenCalledTimes(2);
+    expect(storage.has(KEY)).toBe(true);
+  });
+});

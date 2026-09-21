@@ -24,7 +24,7 @@ const mockTrackError = trackError as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockSignOut.mockResolvedValue({});
+  mockSignOut.mockResolvedValue({ error: null });
 });
 
 describe('attachRedvaultGuestOrderAfterSignup', () => {
@@ -68,7 +68,9 @@ describe('attachRedvaultGuestOrderAfterSignup', () => {
   });
 
   it('signs back out when the attach reports not-attached without an error', async () => {
-    mockGetSession.mockResolvedValue({ data: { session: { user: {} } } });
+    mockGetSession
+      .mockResolvedValueOnce({ data: { session: { user: {} } } })
+      .mockResolvedValueOnce({ data: { session: null } });
     mockRpc.mockResolvedValue({ data: false, error: null });
 
     await attachRedvaultGuestOrderAfterSignup({
@@ -84,7 +86,9 @@ describe('attachRedvaultGuestOrderAfterSignup', () => {
   });
 
   it('signs back out to restore the guest context when the attach fails', async () => {
-    mockGetSession.mockResolvedValue({ data: { session: { user: {} } } });
+    mockGetSession
+      .mockResolvedValueOnce({ data: { session: { user: {} } } })
+      .mockResolvedValueOnce({ data: { session: null } });
     mockRpc.mockResolvedValue({ error: { message: 'identity_required' } });
 
     await attachRedvaultGuestOrderAfterSignup({
@@ -101,5 +105,39 @@ describe('attachRedvaultGuestOrderAfterSignup', () => {
       'Account sync failed',
       expect.any(String)
     );
+  });
+
+  it('aborts navigation when sign-out reports a returned error', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: { user: {} } } });
+    mockRpc.mockResolvedValue({ error: { message: 'identity_required' } });
+    mockSignOut.mockResolvedValue({ error: { message: 'sign-out failed' } });
+
+    await expect(
+      attachRedvaultGuestOrderAfterSignup({
+        orderId: 'order-rv',
+        trackingToken: 'track-rv',
+      })
+    ).rejects.toMatchObject({ kind: 'definitive' });
+    expect(mockTrackError).toHaveBeenCalledWith(
+      'redvault_guest_attach_recovery',
+      expect.any(String)
+    );
+    expect(mockAlert).toHaveBeenCalledWith(
+      'Account sync failed',
+      expect.any(String)
+    );
+  });
+
+  it('aborts navigation when the session survives sign-out', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: { user: {} } } });
+    mockRpc.mockResolvedValue({ data: false, error: null });
+
+    await expect(
+      attachRedvaultGuestOrderAfterSignup({
+        orderId: 'order-rv',
+        trackingToken: 'track-rv',
+      })
+    ).rejects.toMatchObject({ kind: 'definitive' });
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
   });
 });

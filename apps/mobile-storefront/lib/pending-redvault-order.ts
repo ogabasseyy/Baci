@@ -105,6 +105,27 @@ export async function clearPersistedRedvaultOrder(): Promise<void> {
   await AsyncStorage.removeItem(CHECKOUT_PENDING_REDVAULT_ORDER_STORAGE_KEY);
 }
 
+/**
+ * Clears the persisted fence, retrying transient storage failures. A paid
+ * fence left behind by a failed removal hijacks the next checkout (the
+ * resolver reports it as paidOrderId and the new cart is discarded), so
+ * post-verification cleanup retries before degrading to best-effort.
+ */
+export async function clearPersistedRedvaultOrderWithRetry(
+  attempts = 3
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await clearPersistedRedvaultOrder();
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 export type ResolvePersistedRedvaultOrderResult =
   | { readonly blocked: false; readonly paidOrderId?: string }
   | { readonly blocked: true; readonly orderId: string };

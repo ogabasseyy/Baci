@@ -6,12 +6,9 @@ import {
   CHECKOUT_MERCHANT_ID,
 } from '../checkout-screen.constants';
 import type { RedvaultReviewInput } from './RedvaultOrderReview';
+import { RedvaultInitializationError } from './redvault-initialization-error';
 
-export class RedvaultInitializationError extends Error {
-  constructor(readonly kind: 'definitive' | 'indeterminate') {
-    super('Unable to initialize UBA payment');
-  }
-}
+export { RedvaultInitializationError };
 
 export type InitializeRedvaultCheckoutByIdInput = {
   orderId: string;

@@ -19,8 +19,10 @@ DECLARE
   v_discount uuid := 'f0000000-0000-4000-8000-0000000000c1';
   v_wallet uuid := 'f1000000-0000-4000-8000-0000000000c1';
   v_product uuid := 'b0000000-0000-4000-8000-0000000000c1';
+  v_product_z uuid := 'b0000000-0000-4000-8000-0000000000c2';
   v_variant uuid := 'c0000000-0000-4000-8000-0000000000c1';
   v_item uuid := '20000000-0000-4000-8000-0000000000c1';
+  v_item_z uuid := '20000000-0000-4000-8000-0000000000c2';
   v_quote_gigl uuid := 'a2000000-0000-4000-8000-0000000000c1';
   v_hash text := 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
   v_policy jsonb := jsonb_build_object('bankCode', '058', 'issuerName', 'GTBank', 'verificationDomain', 'test',
@@ -55,8 +57,12 @@ BEGIN
         'usage_limits', jsonb_build_object(
           'usage_limit', 1000000, 'usage_limit_per_customer', 1000000))
   WHERE partnership = 'uba_redvault';
-  INSERT INTO public.products (id, merchant_id, name, price, has_variants, inventory_tracking_policy)
-  VALUES (v_product, v_merchant, 'Redvault P20 product', 150000, true, 'serialized_strict');
+  UPDATE public.merchants SET vat_registration_status = 'registered'
+  WHERE id = v_merchant;
+  INSERT INTO public.products (id, merchant_id, name, price, has_variants, inventory_tracking_policy, vat_category_code, vat_rate)
+  VALUES (v_product, v_merchant, 'Redvault P20 product', 150000, true, 'serialized_strict', 'S', 7.5);
+  INSERT INTO public.products (id, merchant_id, name, price, has_variants, inventory_tracking_policy, vat_category_code, vat_rate)
+  VALUES (v_product_z, v_merchant, 'Redvault P20 zero-rated', 50000, false, 'standard', 'Z', 0);
   INSERT INTO public.product_variants (id, product_id, merchant_id, inventory_tracking_policy, attributes)
   VALUES (v_variant, v_product, v_merchant, 'inherit', '{"color":"red","storage":"128GB"}'::jsonb);
   INSERT INTO auth.users (id) VALUES (v_user);
@@ -87,8 +93,12 @@ BEGIN
      NULL, NULL, NULL, NULL, NULL, pg_catalog.now() - interval '10 minutes'),
     (v_order_refunded, v_merchant, v_customer, 'R20P1-REFUNDED', 1500.00, 'uba_redvault', 'refunded', 'pending',
      NULL, NULL, NULL, NULL, NULL, pg_catalog.now() - interval '10 minutes');
+  -- Line A captures VAT once per line: two N1 units at 7.5% capture 15
+  -- kobo. Line B is zero-rated and captures none.
   INSERT INTO public.order_items (id, order_id, product_id, variant_id, name, price, quantity)
-  VALUES (v_item, v_order_vat, v_product, v_variant, 'Redvault P20 item', 150000, 2);
+  VALUES (v_item, v_order_vat, v_product, v_variant, 'Redvault P20 item', 1, 2);
+  INSERT INTO public.order_items (id, order_id, product_id, name, price, quantity)
+  VALUES (v_item_z, v_order_vat, v_product_z, 'Redvault P20 zero item', 500, 1);
   INSERT INTO private.uba_redvault_applications
     (id, order_id, discount_code_id, merchant_id, quote_version_id, quote_payload_hash,
      quote_payload, customer_email, checkout_key, request_hash,
@@ -105,14 +115,15 @@ BEGIN
      200000, 'NGN', 'approved', v_policy,
      encode(extensions.digest(v_policy::text, 'sha256'), 'hex'), 'ACCT_r20p1', 0, NULL,
      '{"capture_reference":"R20P1-ATTEMPT-VAT","capture_amount_kobo":"200000","capture_currency":"NGN","capture_status":"success","held_reason":"provider_eligibility_evidence_unavailable"}'::jsonb);
-  -- Unit 1: standard-rated at 7.5% on a 100000 gross with 10000 discount
-  -- (net 90000 + VAT 7500). Unit 2: zero-rated, net only.
+  -- Line A units share the 15 kobo captured line VAT: ordinal 1 takes 8,
+  -- ordinal 2 takes 7. The zero-rated line B unit refunds net only.
   INSERT INTO private.uba_redvault_line_allocations
     (application_id, order_item_id, line_id, unit_ordinal, allocation_kobo,
      product_id, variant_id, unit_price_kobo, vat_category_code, vat_rate_bp, tax_basis)
   VALUES
-    (v_application_vat, v_item, 1, 1, 10000, v_product, v_variant, 100000, 'S', 750, 'exclusive'),
-    (v_application_vat, v_item, 1, 2, 0, v_product, v_variant, 50000, 'Z', 0, 'exclusive');
+    (v_application_vat, v_item, 1, 1, 0, v_product, v_variant, 100, 'S', 750, 'exclusive'),
+    (v_application_vat, v_item, 1, 2, 0, v_product, v_variant, 100, 'S', 750, 'exclusive'),
+    (v_application_vat, v_item_z, 2, 1, 0, v_product_z, NULL, 50000, 'Z', 0, 'exclusive');
   DELETE FROM private.uba_redvault_write_context
   WHERE transaction_id = pg_catalog.txid_current();
 
@@ -138,27 +149,37 @@ BEGIN
     RAISE EXCEPTION 'GIGL direct net wrong, got %', v_net;
   END IF;
 
-  -- P1 (unit-refund VAT): the standard-rated unit refunds net + VAT
-  -- (90000 + 7500) and the zero-rated unit refunds net only (50000).
+  -- P1 (unit-refund VAT): line A refunds net + distributed line VAT
+  -- (100 + 8 and 100 + 7) and the zero-rated line B unit refunds net
+  -- only (50000).
   SELECT amount_kobo INTO v_refund_amount
   FROM public.reserve_uba_redvault_refund(v_attempt_vat, v_merchant, 'R20P1-VAT', 'merchandise_units',
     jsonb_build_array(
       jsonb_build_object('orderItemId', v_item::text, 'unitOrdinal', 1),
-      jsonb_build_object('orderItemId', v_item::text, 'unitOrdinal', 2)));
-  IF v_refund_amount <> 147500 THEN
-    RAISE EXCEPTION 'unit refund omitted VAT, got %', v_refund_amount;
+      jsonb_build_object('orderItemId', v_item::text, 'unitOrdinal', 2),
+      jsonb_build_object('orderItemId', v_item_z::text, 'unitOrdinal', 1)));
+  IF v_refund_amount <> 50215 THEN
+    RAISE EXCEPTION 'unit refund misdistributed VAT, got %', v_refund_amount;
   END IF;
   SELECT net_amount_kobo INTO v_link_net
   FROM private.uba_redvault_refund_line_allocations
-  WHERE application_id = v_application_vat AND unit_ordinal = 1
+  WHERE application_id = v_application_vat AND order_item_id = v_item AND unit_ordinal = 1
     AND refund_id = (SELECT id FROM private.uba_redvault_refunds
       WHERE attempt_id = v_attempt_vat AND idempotency_key = 'R20P1-VAT');
-  IF v_link_net <> 97500 THEN
-    RAISE EXCEPTION 'unit refund link omitted VAT, got %', v_link_net;
+  IF v_link_net <> 108 THEN
+    RAISE EXCEPTION 'first ordinal VAT share wrong, got %', v_link_net;
+  END IF;
+  SELECT net_amount_kobo INTO v_link_net
+  FROM private.uba_redvault_refund_line_allocations
+  WHERE application_id = v_application_vat AND order_item_id = v_item AND unit_ordinal = 2
+    AND refund_id = (SELECT id FROM private.uba_redvault_refunds
+      WHERE attempt_id = v_attempt_vat AND idempotency_key = 'R20P1-VAT');
+  IF v_link_net <> 107 THEN
+    RAISE EXCEPTION 'second ordinal VAT share wrong, got %', v_link_net;
   END IF;
   SELECT net_amount_kobo INTO v_link_net_zero
   FROM private.uba_redvault_refund_line_allocations
-  WHERE application_id = v_application_vat AND unit_ordinal = 2
+  WHERE application_id = v_application_vat AND order_item_id = v_item_z AND unit_ordinal = 1
     AND refund_id = (SELECT id FROM private.uba_redvault_refunds
       WHERE attempt_id = v_attempt_vat AND idempotency_key = 'R20P1-VAT');
   IF v_link_net_zero <> 50000 THEN

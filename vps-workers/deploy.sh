@@ -122,11 +122,7 @@ $CRON_BLOCK_START
 */5 *  * * * flock -n $REMOTE_DIR/locks/reconcile-vtu-processing.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-vtu-processing' >> $REMOTE_DIR/logs/reconcile-vtu-processing.log 2>&1
 */5 *  * * * flock -n $REMOTE_DIR/locks/merchant-signup-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/merchant-signup-health' >> $REMOTE_DIR/logs/merchant-signup-health.log 2>&1
 20 *   * * * flock -n $REMOTE_DIR/locks/reconcile-gateway-paid-orders.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-gateway-paid-orders' >> $REMOTE_DIR/logs/reconcile-gateway-paid-orders.log 2>&1
-# process-redvault-refunds is intentionally unscheduled: production refund
-# recovery requires a separately approved restricted-role transport plus
-# provider and operational approval (see
-# docs/superpowers/plans/uba-redvault-evidence/recovery-completion.md).
-# The route stays manual-only behind CRON_SECRET until then.
+# process-redvault-refunds stays unscheduled (manual CRON_SECRET route only) until restricted-role recovery approval.
 * *    * * * flock -n $REMOTE_DIR/locks/petrock-reconcile.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=petrock-reconciliation && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 5m $REMOTE_DIR/bin/process-petrock-reconciliation.sh' >> $REMOTE_DIR/logs/petrock-reconcile.log 2>&1
 */5 * * * * flock -n $REMOTE_DIR/locks/order-notifications.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/order-notifications?batchSize=5' >> $REMOTE_DIR/logs/order-notifications.log 2>&1
 */2 * * * * flock -n $REMOTE_DIR/locks/cache-invalidations.lock bash -lc 'export CACHE_INVALIDATION_STATE_FILE=$REMOTE_DIR/state/cache-invalidations.json && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-cache-invalidation-cron.mjs' >> $REMOTE_DIR/logs/cache-invalidations.log 2>&1

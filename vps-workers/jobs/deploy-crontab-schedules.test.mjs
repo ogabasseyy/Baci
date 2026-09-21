@@ -181,7 +181,7 @@ describe('deploy crontab schedules', () => {
     );
     assert.match(
       deployScript,
-      /process-redvault-refunds is intentionally unscheduled/
+      /process-redvault-refunds stays unscheduled/
     );
   });
 

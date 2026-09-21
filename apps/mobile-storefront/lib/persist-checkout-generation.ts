@@ -13,15 +13,18 @@ export async function persistCheckoutGeneration(
 ): Promise<void> {
   assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
   await enqueueCheckoutGenerationStorage(async () => {
+    // Only generations minted by this build are code-point sorted. Restored
+    // legacy IDs keep locale ordering even when persisted over a newer value.
+    // The marker lands first so a durable generation never lacks its sort
+    // version: a failed marker write rejects before the generation is
+    // exposed, while a stray marker for an unwritten ID is never consulted.
+    if (isMintedCheckoutGeneration(checkoutGeneration)) {
+      await markCodepointCheckoutItemSort(checkoutGeneration);
+    }
     await AsyncStorage.setItem(
       CHECKOUT_GENERATION_STORAGE_KEY,
       checkoutGeneration
     );
-    // Only generations minted by this build are code-point sorted. Restored
-    // legacy IDs keep locale ordering even when persisted over a newer value.
-    if (isMintedCheckoutGeneration(checkoutGeneration)) {
-      await markCodepointCheckoutItemSort(checkoutGeneration);
-    }
   });
 }
 

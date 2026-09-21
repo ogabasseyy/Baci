@@ -121,6 +121,10 @@ export async function getCheckoutAttemptKey(
     persistFrozen: options?.persistFrozen,
     liveGeneration: options?.liveGeneration,
   });
+  // Gateway partitions (for example ":uba_redvault") share the base
+  // generation's sort marker and credit snapshot: both are recorded under
+  // the minted cart UUID so cleanup releases a single entry.
+  const baseGeneration = generation.split(':')[0];
   // The server intentionally excludes the selected gateway from its checkout
   // hash so switching payment methods resumes the same pending order.
   const recoveryPayload = await applyCheckoutCreditSnapshot(
@@ -129,11 +133,8 @@ export async function getCheckoutAttemptKey(
         ([key]) => key !== 'payment_method' && key !== 'payment_status'
       )
     ),
-    generation
+    baseGeneration
   );
-  // Gateway partitions (for example ":uba_redvault") share the base
-  // generation's sort marker: markers are recorded under the minted cart UUID.
-  const markerGeneration = generation.split(':')[0];
   // Only an opaque installation ID is stored here, never checkout PII. Identity
   // hashes the server checkout projection plus local retry partitions.
   return Crypto.digestStringAsync(
@@ -146,7 +147,7 @@ export async function getCheckoutAttemptKey(
         payload: buildOrderIdempotencyPayload(
           toCheckoutIdempotencyInput(recoveryPayload),
           {
-            itemSort: (await usesCodepointCheckoutItemSort(markerGeneration))
+            itemSort: (await usesCodepointCheckoutItemSort(baseGeneration))
               ? 'codepoint'
               : 'locale',
           }

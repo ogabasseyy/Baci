@@ -76,6 +76,19 @@ describe('bugfix: checkout generation is durable before the order request', () =
     expect(storage.get('checkout-idempotency-item-sort-v2')).toContain(minted);
   });
 
+  it('does not expose a generation when its sort marker write fails', async () => {
+    const { registerMintedCheckoutGeneration } =
+      require('./minted-checkout-generations') as typeof import('./minted-checkout-generations');
+    const minted = registerMintedCheckoutGeneration(
+      '99999999-9999-4999-8999-999999999999'
+    );
+    mockSetItem.mockRejectedValueOnce(new Error('disk full'));
+    await expect(persistCheckoutGeneration(minted)).rejects.toThrow(
+      'disk full'
+    );
+    expect(storage.get('checkout-generation-v1')).toBeUndefined();
+  });
+
   it('does not mark restored legacy generations as code-point sorted', async () => {
     const { registerMintedCheckoutGeneration } =
       require('./minted-checkout-generations') as typeof import('./minted-checkout-generations');

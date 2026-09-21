@@ -215,8 +215,13 @@ async function createOrderWithItems(items: TestOrderItem[]) {
 }
 
 describe('createOrder — variant_attributes', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+    // Each test starts a fresh checkout attempt: without this, an earlier
+    // test's frozen credit snapshot would strip later tests' credit fields.
+    const { default: AsyncStorage } =
+      require('@react-native-async-storage/async-storage') as typeof import('@react-native-async-storage/async-storage');
+    await AsyncStorage.clear();
     mockFetchResponse.ok = true;
     mockFetchResponse.status = 200;
     mockFetchJson.mockResolvedValue({

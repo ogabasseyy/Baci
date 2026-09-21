@@ -144,12 +144,15 @@ export async function releaseCheckoutCreditSnapshot(
   checkoutGeneration: string
 ): Promise<void> {
   assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
-  await enqueueCreditSnapshot(async () => {
-    const map = await readCreditMap();
-    if (!(checkoutGeneration in map)) {
-      return;
-    }
-    delete map[checkoutGeneration];
-    await writeCreditMap(map);
-  });
+  // Best-effort cleanup stays off the snapshot queue: callers bound it with
+  // a storage timeout, and a hung cleanup must never wedge later checkouts
+  // behind a poisoned tail. Generations are single-use, so a concurrent
+  // apply for the released ID can only re-create an identical entry from
+  // its frozen replay payload.
+  const map = await readCreditMap();
+  if (!(checkoutGeneration in map)) {
+    return;
+  }
+  delete map[checkoutGeneration];
+  await writeCreditMap(map);
 }

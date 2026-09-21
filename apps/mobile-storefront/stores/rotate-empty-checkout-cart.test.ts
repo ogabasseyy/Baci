@@ -111,6 +111,18 @@ it('releases store-credit snapshots after payment finalizes the generation', asy
   expect(mockRelease).toHaveBeenCalledWith(previousGeneration);
 });
 
+it('persists the rotated generation before cleaning up snapshots', async () => {
+  await rotateEmptyCheckoutCart(() => undefined, {
+    previousGeneration: '46ed63d7-5f10-49f0-9456-9ff571bec43f',
+    retainCreditSnapshot: false,
+  });
+  const persistOrder = mockPersist.mock.invocationCallOrder[0] ?? 0;
+  const releaseOrder = mockRelease.mock.invocationCallOrder[0] ?? 0;
+  expect(mockPersist).toHaveBeenCalled();
+  expect(mockRelease).toHaveBeenCalled();
+  expect(persistOrder).toBeLessThan(releaseOrder);
+});
+
 it('keeps store-credit snapshots when the generation may still be replayed', async () => {
   await rotateEmptyCheckoutCart(() => undefined, {
     previousGeneration: '46ed63d7-5f10-49f0-9456-9ff571bec43f',

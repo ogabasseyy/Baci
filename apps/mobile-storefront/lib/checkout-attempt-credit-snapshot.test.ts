@@ -101,6 +101,24 @@ it('serializes concurrent writes for different generations', async () => {
   expect(persisted[otherGeneration]?.wallet_amount).toBe(1000);
 });
 
+it('releases snapshots without waiting for a hung queued apply', async () => {
+  let releaseHung!: (value: string | null) => void;
+  mockGetItem.mockImplementationOnce(
+    () =>
+      new Promise<string | null>((resolve) => {
+        releaseHung = resolve;
+      })
+  );
+  const hungApply = applyCheckoutCreditSnapshot(
+    { wallet_amount: 5000 },
+    generation
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await releaseCheckoutCreditSnapshot(otherGeneration);
+  releaseHung(null);
+  await hungApply;
+});
+
 it('removes a finalized generation from the credit map', async () => {
   await applyCheckoutCreditSnapshot({ wallet_amount: 5000 }, generation);
   await applyCheckoutCreditSnapshot({ wallet_amount: 1000 }, otherGeneration);

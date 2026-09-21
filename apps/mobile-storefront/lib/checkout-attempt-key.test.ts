@@ -261,6 +261,19 @@ it('looks up the sort marker under the base generation for gateway partitions', 
   expect(usesCodepoint).toHaveBeenCalledWith('cart-one');
 });
 
+it('stores gateway-partition credit snapshots under the base generation', async () => {
+  const { getCheckoutAttemptKey } = loadKeyGenerator();
+  await getCheckoutAttemptKey(
+    { ...payload, use_wallet_credit: true, wallet_amount: 5000 },
+    'cart-one:uba_redvault',
+    { frozen: true }
+  );
+  const snapshots = JSON.parse(
+    storage.get('checkout-attempt-credit-v1') ?? '{}'
+  ) as Record<string, unknown>;
+  expect(Object.keys(snapshots)).toEqual(['cart-one']);
+});
+
 it('resumes the same pending order when changing payment gateways', async () => {
   const { getCheckoutAttemptKey } = loadKeyGenerator();
   const first = await getCheckoutAttemptKey(payload, 'cart-one');

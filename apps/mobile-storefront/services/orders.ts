@@ -3,7 +3,10 @@ import Constants from 'expo-constants';
 import { DEFAULT_TIMEOUT, fetchWithRetry } from '@/lib/api';
 import { resolveApiBaseUrl } from '@/lib/api-url';
 import { assertQueuedCreateOrderSendOwner } from '@/lib/assert-queued-create-order-send-owner';
-import { applyCheckoutCreditSnapshot } from '@/lib/checkout-attempt-credit-snapshot';
+import {
+  applyCheckoutCreditSnapshot,
+  releaseCheckoutCreditSnapshot,
+} from '@/lib/checkout-attempt-credit-snapshot';
 import { getCheckoutAttemptKey } from '@/lib/checkout-attempt-key';
 import { createLogger } from '@/lib/logger';
 import { resolveCheckoutAuthPartition } from '@/lib/resolve-checkout-auth-partition';
@@ -12,6 +15,7 @@ import {
   supabaseAuthStorage,
   supabaseAuthStorageKey,
 } from '@/lib/supabase';
+import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 import { trackEvent } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 import {
@@ -239,7 +243,28 @@ export async function createOrder(
       ? { ...normalizedOrderResponse, idempotency: { replayed: true } }
       : normalizedOrderResponse;
   } catch (error) {
-    throw mapCreateOrderException(error, startTime);
+    const mapped = mapCreateOrderException(error, startTime);
+    // Definitive rejections create no order, so drop the frozen credit choice
+    // and let the shopper's corrected retry snapshot fresh fields. Ambiguous
+    // outcomes (conflicts, timeouts, network and server errors) retain the
+    // snapshot so a lost-response retry reuses the same idempotency key.
+    if (
+      mapped.code === 'VALIDATION_ERROR' ||
+      mapped.code === 'AUTH_ERROR' ||
+      mapped.code === 'NOT_FOUND'
+    ) {
+      try {
+        await withCheckoutStorageTimeout(
+          releaseCheckoutCreditSnapshot(checkoutGeneration)
+        );
+      } catch (releaseError) {
+        log.warn(
+          'Failed to release credit snapshot after order rejection:',
+          releaseError
+        );
+      }
+    }
+    throw mapped;
   }
 }
 

@@ -206,9 +206,15 @@ export async function computeRedvaultOrderQuote({
         quantity: item.quantity,
         taxBasis: 'exclusive',
         unitPriceKobo: asKobo(variant?.price_override ?? product.price),
+        // Attributes are variant dimensions: a line without a variant has
+        // no authoritative attribute source, so client-supplied attributes
+        // must not enter the quote. They feed the pricing group key (a
+        // caller could split identical lines across invented attributes
+        // to change rounding) and are copied into the persisted order,
+        // which would make the snapshot check self-consistent.
         variantAttributes: item.variant_id
           ? readVariantAttributes(variant?.attributes)
-          : (item.variant_attributes ?? {}),
+          : {},
         variantId: item.variant_id ?? null,
         vatCategoryCode: product.vat_category_code ?? 'S',
         vatRateBasisPoints: asKobo(product.vat_rate ?? 7.5),

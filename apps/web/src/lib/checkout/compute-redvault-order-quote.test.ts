@@ -162,6 +162,28 @@ describe('computeRedvaultOrderQuote', () => {
       storage: '128GB',
     });
   });
+  it('drops client attributes on lines without a variant', async () => {
+    const quote = await computeRedvaultOrderQuote({
+      ...input,
+      items: [
+        {
+          ...input.items[0],
+          variant_attributes: { color: 'red' },
+        },
+        {
+          ...input.items[0],
+          variant_attributes: { color: 'blue' },
+        },
+      ],
+      supabase: client() as never,
+    });
+    expect(quote.lines[0].variantAttributes).toEqual({});
+    expect(quote.lines[1].variantAttributes).toEqual({});
+    // Forged attributes must not split identical lines into separately
+    // rounded discount groups.
+    expect(quote.groups).toHaveLength(1);
+    expect(quote.groups[0].variantAttributes).toEqual({});
+  });
   it('mirrors persisted tax column fallbacks for null category and rate', async () => {
     const quote = await computeRedvaultOrderQuote({
       ...input,

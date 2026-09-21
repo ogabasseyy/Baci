@@ -293,7 +293,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
       data: [
         {
           amount: 9500,
-          createdAt: '2026-09-19T20:00:01.000Z',
+          created_at: '2026-09-19T20:00:01.000Z',
           currency: 'NGN',
           id: 124,
           status: 'processed',
@@ -318,7 +318,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
       data: [
         {
           amount: 9500,
-          createdAt: '2026-09-19T19:00:00.000Z',
+          created_at: '2026-09-19T19:00:00.000Z',
           currency: 'NGN',
           id: 124,
           status: 'processed',
@@ -326,7 +326,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
         },
         {
           amount: 9500,
-          createdAt: '2026-09-19T20:00:01.000Z',
+          created_at: '2026-09-19T20:00:01.000Z',
           currency: 'NGN',
           id: 125,
           merchant_note: 'refund-1',
@@ -356,7 +356,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
       data: [
         {
           amount: 9500,
-          createdAt: '2026-09-19T19:00:00.000Z',
+          created_at: '2026-09-19T19:00:00.000Z',
           currency: 'NGN',
           id: 124,
           status: 'processed',
@@ -554,7 +554,7 @@ describe('isolated REDVAULT Paystack refund transport', () => {
       data: [
         {
           amount: 9500,
-          createdAt: '2026-09-19T20:00:01.000Z',
+          created_at: '2026-09-19T20:00:01.000Z',
           currency: 'NGN',
           id: 124,
           merchant_note: 'manual dashboard refund',

@@ -222,7 +222,7 @@ export function createRedvaultPaystackRefundProvider({
         const providerReference = refundId(candidate.id);
         if (!providerReference || known.has(providerReference)) continue;
         if (Number.isFinite(submittedMs)) {
-          const createdMs = Date.parse(String(candidate.createdAt ?? ''));
+          const createdMs = Date.parse(String(candidate.created_at ?? ''));
           if (
             !Number.isFinite(createdMs) ||
             createdMs < submittedMs - SUBMISSION_SKEW_TOLERANCE_MS

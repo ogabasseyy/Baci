@@ -6,6 +6,16 @@ const moneyString = (message: string) =>
     .regex(/^\d+(?:\.\d{1,2})?$/, message)
     .optional();
 
+/**
+ * Canonical money serialization for BNPL route params: two-decimal
+ * normalization collapses float artifacts (230804.63999999998 →
+ * "230804.64") that would otherwise fail the moneyString regex and
+ * land the shopper on the invalid-parameters screen.
+ */
+export function toMoneyRouteParam(value: number): string {
+  return value.toFixed(2);
+}
+
 export const BNPLParamsSchema = z.object({
   orderId: z.string().min(1, 'Order ID is required'),
   gateway: z.enum(['credpal', 'credit_direct', 'klump'] as const, {

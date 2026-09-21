@@ -39,7 +39,9 @@ jest.mock('@/stores/cart-store', () => ({
 }));
 
 const completedMock = trackCheckoutPaymentCompleted as jest.Mock;
-const purchaseMock = trackCheckoutRoutePurchaseCompleted as jest.Mock;
+const purchaseMock = trackCheckoutRoutePurchaseCompleted as jest.Mock<
+  () => Promise<void>
+>;
 
 const DEFAULT_CART_ITEM = {
   id: 'item-1',
@@ -151,6 +153,33 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
         total: 49875,
       })
     );
+  });
+
+  it('rolls back the claim when the native purchase rejects so a later poll can emit', async () => {
+    purchaseMock.mockRejectedValueOnce(new Error('Expo Crypto unavailable'));
+
+    await expect(
+      trackCheckoutPaymentCompletedOnce({
+        orderId: 'order-retry',
+        paymentMethod: 'bank_transfer',
+        value: 470000,
+      })
+    ).resolves.toBe(false);
+
+    // The funnel event must not leak ahead of the rolled-back attempt,
+    // or its retry would double-count the conversion.
+    expect(completedMock).not.toHaveBeenCalled();
+
+    await expect(
+      trackCheckoutPaymentCompletedOnce({
+        orderId: 'order-retry',
+        paymentMethod: 'bank_transfer',
+        value: 470000,
+      })
+    ).resolves.toBe(true);
+
+    expect(completedMock).toHaveBeenCalledTimes(1);
+    expect(purchaseMock).toHaveBeenCalledTimes(2);
   });
 
   it('honours a claim persisted before the current session started', async () => {

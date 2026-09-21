@@ -1,65 +1,13 @@
 import { fetchWithCsrf } from '@/lib/api-client';
+import type { CheckoutVerificationStatus } from './verify-checkout-payment-lookup';
+import {
+  isAbortError,
+  isVerificationResponse,
+  normalizeCurrencyCode,
+  verifyCheckoutPaymentByLookup,
+} from './verify-checkout-payment-lookup';
 
-type VerificationResponse = {
-  currency?: string;
-  orderId?: string;
-  orderNumber?: string;
-  orderTotal?: number;
-  paymentMethod?: string;
-  status?: 'success' | 'pending' | 'failed' | 'cancelled';
-  success?: boolean;
-  finalizationOutcome?: string;
-};
-
-function normalizeCurrencyCode(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const normalized = value.trim().toUpperCase();
-  return normalized || undefined;
-}
-
-function isVerificationResponse(value: unknown): value is VerificationResponse {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  const hasValidStatus =
-    candidate.status === undefined ||
-    candidate.status === 'success' ||
-    candidate.status === 'pending' ||
-    candidate.status === 'failed' ||
-    candidate.status === 'cancelled';
-  const hasValidOrderNumber =
-    candidate.orderNumber === undefined ||
-    typeof candidate.orderNumber === 'string';
-  const hasValidOrderId =
-    candidate.orderId === undefined || typeof candidate.orderId === 'string';
-  const hasValidPaymentMethod =
-    candidate.paymentMethod === undefined ||
-    typeof candidate.paymentMethod === 'string';
-  const hasValidSuccess =
-    candidate.success === undefined || typeof candidate.success === 'boolean';
-  const hasValidFinalizationOutcome =
-    candidate.finalizationOutcome === undefined ||
-    typeof candidate.finalizationOutcome === 'string';
-
-  return (
-    hasValidStatus &&
-    hasValidOrderNumber &&
-    hasValidOrderId &&
-    hasValidPaymentMethod &&
-    hasValidSuccess &&
-    hasValidFinalizationOutcome
-  );
-}
-
-export type CheckoutVerificationStatus =
-  | 'success'
-  | 'pending'
-  | 'failed'
-  | 'reconciling';
+export type { CheckoutVerificationStatus };
 
 // captured the money (mirrors finalizeOrderGatewayPayment kinds): never
 // payment failures — the reverify loop keeps polling for completion.
@@ -80,8 +28,6 @@ const RECONCILING_FINALIZATION_OUTCOMES = new Set([
   'order_skipped',
 ]);
 
-const RECONCILING_LOOKUP_PAYMENT_STATUSES = new Set(['cancelled', 'refunded']);
-
 export interface VerifyCheckoutPaymentParams {
   merchantSlug: string | undefined;
   orderId: string | null;
@@ -93,10 +39,6 @@ export interface VerifyCheckoutPaymentParams {
    * releases instead of stranding the page on "processing" forever.
    */
   signal?: AbortSignal;
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError';
 }
 
 export interface VerifyCheckoutPaymentHandlers {
@@ -151,76 +93,20 @@ export async function verifyCheckoutPayment(
   }: VerifyCheckoutPaymentHandlers
 ): Promise<void> {
   if (!reference) {
-    if (orderId) {
-      setIsVerifying(true);
-      try {
-        const query = new URLSearchParams();
-        if (merchantSlug) query.set('merchant_slug', merchantSlug);
-        if (trackingToken) query.set('tracking_token', trackingToken);
-        const queryString = query.toString();
-        const url = `/api/storefront/orders/${encodeURIComponent(orderId)}${
-          queryString ? `?${queryString}` : ''
-        }`;
-        const response = await fetch(url, { signal });
-        const data = response.ok ? await response.json() : null;
-        if (data && (data.order_number || data.short_id)) {
-          const lookupPaymentStatus =
-            typeof data.payment_status === 'string'
-              ? data.payment_status.trim().toLowerCase()
-              : '';
-          if (RECONCILING_LOOKUP_PAYMENT_STATUSES.has(lookupPaymentStatus)) {
-            // A cancelled/refunded order is terminal reconciliation, not a
-            // confirmed purchase: the cart stays intact for a fresh attempt.
-            setStatus('reconciling');
-            setOrderNumber(data.order_number || data.short_id);
-            if (data.payment_method) {
-              setPaymentMethod(data.payment_method);
-            }
-            return;
-          }
-          clearCart();
-          setStatus('success');
-          setOrderNumber(data.order_number || data.short_id);
-          if (data.payment_method) {
-            setPaymentMethod(data.payment_method);
-          }
-          if (data.payment_status === 'paid') {
-            const lookupTotal = Number(data.total);
-            const lookupCurrency = normalizeCurrencyCode(data.currency);
-            capturePaymentCompleted({
-              orderId,
-              orderNumber: data.order_number || data.short_id,
-              paymentMethod:
-                data.payment_method || paymentMethod || 'paid_order',
-              ...(Number.isFinite(lookupTotal) ? { total: lookupTotal } : {}),
-              ...(lookupCurrency ? { currency: lookupCurrency } : {}),
-            });
-          }
-        } else {
-          // Fallback if API lookup fails
-          clearCart();
-          setStatus('success');
-          setOrderNumber(orderId.slice(0, 8).toUpperCase());
-        }
-      } catch (error) {
-        // An aborted bound releases the lane for a retry; anything else
-        // falls back to the derived order number.
-        if (!isAbortError(error)) {
-          console.error(
-            'Failed to fetch order details on success page:',
-            error
-          );
-        }
-        clearCart();
-        setStatus('success');
-        setOrderNumber(orderId.slice(0, 8).toUpperCase());
-      } finally {
-        setIsVerifying(false);
+    const handled = await verifyCheckoutPaymentByLookup(
+      { merchantSlug, orderId, paymentMethod, trackingToken, signal },
+      {
+        clearCart,
+        setIsVerifying,
+        setOrderNumber,
+        setPaymentMethod,
+        setStatus,
+        capturePaymentCompleted,
       }
-      return;
+    );
+    if (!handled) {
+      redirectToCheckout();
     }
-
-    redirectToCheckout();
     return;
   }
 

@@ -221,6 +221,77 @@ async function reconcileStoredClaims(): Promise<void> {
   }
 }
 
+/**
+ * Releases a previously granted claim so a later poll or revisit can emit
+ * the event again. Used when the guarded emission fails after the claim
+ * was granted (e.g. the ad-platform purchase rejects): without the
+ * release, the persisted claim would suppress the conversion forever.
+ * Best-effort and never-rejecting, like the claim itself.
+ */
+export function releaseCheckoutPurchaseTracking(
+  orderId: string,
+  eventName = 'purchase'
+): Promise<void> {
+  const run = claimChain.then(() => performRelease(orderId, eventName));
+  claimChain = run.then(
+    ({ settled }) =>
+      Promise.race([
+        settled,
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, MAX_QUEUE_HOLD_MS);
+        }),
+      ]),
+    () => undefined
+  );
+  return run.then(
+    () => undefined,
+    () => undefined
+  );
+}
+
+async function performRelease(
+  orderId: string,
+  eventName: string
+): Promise<{ settled: Promise<void> }> {
+  const settled = Promise.resolve();
+  if (!orderId) {
+    return { settled };
+  }
+  const claim = eventName === 'purchase' ? orderId : `${eventName}:${orderId}`;
+  // Drop from the in-process grant set BEFORE persisting: persistClaims
+  // re-merges every grant, so releasing after the write would resurrect
+  // the claim (and its reconciliations) instead of freeing it.
+  grantedClaims.delete(claim);
+  try {
+    const stored = await readStoredClaims();
+    if (stored === STORAGE_TIMEOUT) {
+      log.error('Checkout purchase tracking store read timed out.');
+      return { settled };
+    }
+    if (!stored.includes(claim)) {
+      return { settled };
+    }
+    const write = persistClaims(stored.filter((entry) => entry !== claim));
+    const written = await Promise.race([
+      write.then(() => true as const),
+      storageTimeout(),
+    ]);
+    if (written === STORAGE_TIMEOUT) {
+      log.error('Checkout purchase tracking claim release timed out.');
+      return {
+        settled: write.then(
+          () => reconcileStoredClaims().catch(() => undefined),
+          () => undefined
+        ),
+      };
+    }
+    return { settled };
+  } catch (error) {
+    log.error('Failed to release checkout purchase tracking claim:', error);
+    return { settled };
+  }
+}
+
 export function claimCheckoutPurchaseTracking(
   orderId: string,
   eventName = 'purchase'

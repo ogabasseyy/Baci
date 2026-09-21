@@ -6369,6 +6369,15 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       supabase,
       expect.objectContaining({ orderId: 'order-id' })
     );
+    // Pre-response provisioning: the DVA exists before after() is even
+    // scheduled, so the success page's immediate lookup carries the bank
+    // account — and the post-response branch reuses it instead of
+    // provisioning a second account for the same order.
+    expect(mockGeneratePaymentAccount).toHaveBeenCalledTimes(1);
+    expect(mockPersistPaystackDvaAssignment).toHaveBeenCalledTimes(1);
+    expect(mockGeneratePaymentAccount.mock.invocationCallOrder[0]).toBeLessThan(
+      mockAfter.mock.invocationCallOrder[0]
+    );
     expect(accountUpsert).not.toHaveBeenCalled();
     expect(backgroundSupabase.from).not.toHaveBeenCalledWith('order_items');
     expect(backgroundSupabase.from).not.toHaveBeenCalledWith('order_reminders');

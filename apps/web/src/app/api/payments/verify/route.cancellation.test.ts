@@ -289,6 +289,29 @@ describe('POST /api/payments/verify — finalizer outcomes', () => {
     );
   });
 
+  it('returns the trusted order identity with terminal provider outcomes', async () => {
+    mockVerifyPaystack.mockResolvedValue({
+      data: { amount: 100_000, currency: 'NGN', status: 'failed' },
+      success: true,
+    });
+    const supabase = buildSupabase({ completion: null });
+    mockCreateServiceClient.mockReturnValue(supabase);
+
+    const response = await POST(createRequest());
+    const data = await response.json();
+
+    // Clients attribute this success:false envelope to their order via
+    // orderId instead of treating it as transient and confirming a
+    // payment that cannot settle.
+    expect(response.status).toBe(200);
+    expect(data).toEqual({
+      orderId: 'order-1',
+      orderNumber: 'ORD-1',
+      status: 'failed',
+      success: false,
+    });
+  });
+
   it('returns success without paid-order side effects for an applied strict partial', async () => {
     const supabase = buildSupabase({
       completion: {

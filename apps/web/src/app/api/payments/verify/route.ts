@@ -208,9 +208,15 @@ async function verifyPaymentReference(reference: string) {
   }
 
   if (verification.status !== 'success') {
+    // Terminal provider outcome (failed/cancelled/abandoned): carry the
+    // trusted order identity resolved from the reference's transaction
+    // row so clients can attribute this envelope to their order instead
+    // of treating it as transient and confirming a payment that cannot
+    // settle.
     return NextResponse.json({
       success: false,
       status: verification.status,
+      orderId: transaction.order_id,
       orderNumber:
         existingOrder?.order_number ||
         transaction.gateway_reference.slice(0, 8).toUpperCase(),

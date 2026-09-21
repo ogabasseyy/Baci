@@ -19,6 +19,10 @@ export interface WalletFundedTransferSession {
 export interface WalletFundedOrderPaidPayload {
   checkoutFingerprint: string;
   currency: string;
+  // Funding-intent ID: a retried order creates a second intent, so both
+  // attempts' lifecycle events stamp it to stay distinguishable (same
+  // pattern as the mobile wallet-funded path).
+  intentId: string;
   orderId: string;
   orderNumber?: string;
   // Server-confirmed canonical order total from the completed intent.
@@ -27,14 +31,16 @@ export interface WalletFundedOrderPaidPayload {
 }
 
 /**
- * - `started`   — the wallet-funded transfer session is live; the modal is up.
+ * - `{ started }` — the wallet-funded transfer session is live; the modal
+ *   is up. Carries the funding-intent ID so the caller can stamp its
+ *   start event (retries create distinct intents per order).
  * - `fallback`  — a definite decline; the caller runs the legacy order-DVA path.
  * - `uncertain` — the create-intent POST outcome was indeterminate; the caller
  *   MUST NOT run the legacy path (double-charge risk) and instead prompts the
  *   customer to check their wallet / retry.
  */
 export type WalletFundedTransferStartOutcome =
-  | 'started'
+  | { status: 'started'; intentId: string }
   | 'fallback'
   | 'uncertain';
 
@@ -91,6 +97,7 @@ export function useWalletFundedBankTransfer({
       onOrderPaid({
         checkoutFingerprint: current.checkoutFingerprint,
         currency: current.intent.currency,
+        intentId: current.intent.id,
         orderId: current.orderId,
         orderNumber: current.orderNumber,
         total: current.intent.targetOrderAmount,
@@ -142,7 +149,7 @@ export function useWalletFundedBankTransfer({
       orderNumber,
       trackingToken,
     });
-    return 'started';
+    return { status: 'started', intentId: result.intent.id };
   };
 
   return {

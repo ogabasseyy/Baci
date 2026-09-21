@@ -895,7 +895,7 @@ export const CheckoutPage: React.FC = () => {
   const walletFundedTransfer = useWalletFundedBankTransfer({
     merchantId: merchant?.id,
     merchantSlug: merchant?.slug ?? undefined,
-    onOrderPaid: ({ checkoutFingerprint, currency, orderId, orderNumber, total, trackingToken }) => {
+    onOrderPaid: ({ checkoutFingerprint, currency, intentId, orderId, orderNumber, total, trackingToken }) => {
       // The intent reached server-confirmed `completed`: record the paid
       // conversion before redirecting, or the funnel stalls at the start
       // stage for every auto-debited transfer.
@@ -906,6 +906,7 @@ export const CheckoutPage: React.FC = () => {
         // undefined but keeps '', so only forward a real order number.
         ...(orderNumber ? { orderNumber } : {}),
         paymentMethod,
+        reference: intentId,
         total,
       });
       clearPendingCheckoutOrder();
@@ -2272,8 +2273,14 @@ export const CheckoutPage: React.FC = () => {
               })
             : ('fallback' as const);
 
-        if (walletFundedOutcome === 'started') {
-          capturePaymentStarted();
+        if (
+          walletFundedOutcome !== 'fallback' &&
+          walletFundedOutcome !== 'uncertain'
+        ) {
+          // Stamp the funding-intent ID: a retried order creates a second
+          // intent, and both attempts' lifecycle events must stay
+          // distinguishable (the completion stamps it likewise).
+          capturePaymentStarted(walletFundedOutcome.intentId);
           setIsProcessing(false);
           isOrderInFlightRef.current = false;
           return;

@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import type { MutableRefObject } from 'react';
 import { Alert } from 'react-native';
+import { toMoneyRouteParam } from '@/components/bnpl-checkout/bnpl-params.schema';
 import type { PaymentMethodType } from '@/components/checkout/PaymentMethodSelector';
 import type {
   DeliveryMethod,
@@ -157,9 +158,9 @@ export async function submitBnplCheckout({
     params: {
       orderId: orderResponse.order.id,
       gateway: selectedPayment,
-      amount: String(orderResponse.amountDueToGateway),
+      amount: toMoneyRouteParam(orderResponse.amountDueToGateway),
       ...(Number.isFinite(canonicalOrderTotal)
-        ? { orderTotal: canonicalOrderTotal.toFixed(2) }
+        ? { orderTotal: toMoneyRouteParam(canonicalOrderTotal) }
         : {}),
       customerEmail,
       customerName,
@@ -173,9 +174,9 @@ export async function submitBnplCheckout({
       }),
       // Breakdown snapshot for the approved completion's durable claim
       // (see use-bnpl-checkout-controller): identity already travels above.
-      subtotal: String(snapshot.subtotal),
-      shipping: String(snapshot.deliveryFee),
-      tax: String(snapshot.taxAmount),
+      subtotal: toMoneyRouteParam(snapshot.subtotal),
+      shipping: toMoneyRouteParam(snapshot.deliveryFee),
+      tax: toMoneyRouteParam(snapshot.taxAmount),
     },
   });
 }

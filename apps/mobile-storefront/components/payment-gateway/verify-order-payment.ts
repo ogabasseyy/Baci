@@ -226,9 +226,11 @@ async function checkReferenceSettled(
       // cart and present "Order Confirmed" for a payment that cannot
       // settle. Anything else (pending, network-shaped, or foreign) stays
       // transient so settlement polling can still complete the order.
+      // The route reports terminal provider outcomes as success:false
+      // with the trusted order identity — never success:true — so the
+      // failure gate keys on status plus identity, not on success.
       if (
         response.ok &&
-        data.success === true &&
         data.orderId === orderId &&
         (data.status === 'failed' || data.status === 'cancelled')
       ) {

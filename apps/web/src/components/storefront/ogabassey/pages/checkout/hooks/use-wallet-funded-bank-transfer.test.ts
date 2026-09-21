@@ -69,7 +69,7 @@ describe('useWalletFundedBankTransfer', () => {
 
     const { view } = renderWalletTransfer();
 
-    let started: string | undefined;
+    let started: unknown;
     await act(async () => {
       started = await view.result.current.start(START_ARGS);
     });
@@ -92,7 +92,7 @@ describe('useWalletFundedBankTransfer', () => {
 
     const { view } = renderWalletTransfer();
 
-    let started: string | undefined;
+    let started: unknown;
     await act(async () => {
       started = await view.result.current.start(START_ARGS);
     });
@@ -108,12 +108,12 @@ describe('useWalletFundedBankTransfer', () => {
 
     const { view } = renderWalletTransfer();
 
-    let started: string | undefined;
+    let started: unknown;
     await act(async () => {
       started = await view.result.current.start(START_ARGS);
     });
 
-    expect(started).toBe('started');
+    expect(started).toEqual({ status: 'started', intentId: 'intent-1' });
     expect(view.result.current.account).toEqual(ACCOUNT);
     await waitFor(() => {
       expect(getIntentMock).toHaveBeenCalledWith({
@@ -143,6 +143,7 @@ describe('useWalletFundedBankTransfer', () => {
       expect(onOrderPaid).toHaveBeenCalledWith({
         checkoutFingerprint: 'fingerprint-1',
         currency: 'NGN',
+        intentId: 'intent-1',
         orderId: 'order-1',
         orderNumber: 'ORD-1',
         total: 5000,
@@ -179,7 +180,7 @@ describe('useWalletFundedBankTransfer', () => {
 
     const { view } = renderWalletTransfer();
 
-    let startedPromise: Promise<string> | undefined;
+    let startedPromise: Promise<unknown> | undefined;
     await act(async () => {
       startedPromise = view.result.current.start(START_ARGS);
     });
@@ -192,7 +193,10 @@ describe('useWalletFundedBankTransfer', () => {
       view.result.current.acceptConsent();
     });
 
-    await expect(startedPromise).resolves.toBe('started');
+    await expect(startedPromise).resolves.toEqual({
+      status: 'started',
+      intentId: 'intent-1',
+    });
     expect(view.result.current.consentRequested).toBe(false);
   });
 
@@ -208,7 +212,7 @@ describe('useWalletFundedBankTransfer', () => {
 
     const { view } = renderWalletTransfer();
 
-    let startedPromise: Promise<string> | undefined;
+    let startedPromise: Promise<unknown> | undefined;
     await act(async () => {
       startedPromise = view.result.current.start(START_ARGS);
     });

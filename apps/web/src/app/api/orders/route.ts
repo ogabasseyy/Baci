@@ -63,12 +63,11 @@ import { logger } from '@/lib/logger';
 import { dispatchOrderCreationNotifications } from '@/lib/order-notification-dispatch';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
 import { recordPreGatewayRedemption } from '@/lib/payments/record-pre-gateway-redemption';
-import { provisionInvoiceMethodDva } from '@/lib/provision-invoice-method-dva';
-import { resolveImmediateOrderEmail } from '@/lib/resolve-immediate-order-email';
 import {
   generatePeppolInvoiceXml,
   PEPPOL_BIS_BILLING_COMPLIANCE_NOTE,
 } from '@/lib/peppol-ubl-invoice';
+import { provisionInvoiceMethodDva } from '@/lib/provision-invoice-method-dva';
 import {
   enforcePrizeProductionGuard,
   QuizProductionNotApprovedError,
@@ -81,6 +80,7 @@ import {
   resolveReceiptLogoDataUri,
 } from '@/lib/receipt-pdf-generator';
 import { redactOrderTrackingLinkForLog } from '@/lib/redact-order-tracking-link-for-log';
+import { resolveImmediateOrderEmail } from '@/lib/resolve-immediate-order-email';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { sanitizeLikePattern, sanitizeSearchQuery } from '@/lib/sanitize-core';
@@ -3388,6 +3388,60 @@ export async function POST(request: NextRequest) {
             ? `${merchant.business_name} Orders`
             : undefined;
 
+        // Pay for Me DVA is provisioned BEFORE the response (not in
+        // after()): the requester navigates straight to the success page,
+        // whose single order lookup must already carry the bank account —
+        // provisioning post-response permanently renders copyable
+        // instructions without transfer details. Uses the request-scoped
+        // client (proof-bound RPC, never service-role) like the in-after
+        // branch it replaces. Skipped on replay: the DVA was provisioned
+        // by the original attempt.
+        let preResponsePayformeVirtualAccount: ReceiptOrder['virtual_account'] =
+          null;
+        let payformeProvisioningAttempted = false;
+        if (
+          effectivePaymentMethod === 'payforme' &&
+          !idempotencyReplayed &&
+          Math.max(
+            orderTotal -
+              Math.max(
+                Number(order.amount_paid || 0),
+                savingsAmountUsed + walletAmountUsed
+              ),
+            0
+          ) > 0
+        ) {
+          try {
+            payformeProvisioningAttempted = true;
+            preResponsePayformeVirtualAccount = await provisionInvoiceMethodDva(
+              {
+                supabase,
+                customerEmail: customer_email,
+                customerName: customer_name,
+                customerPhone: customer_phone ?? null,
+                merchantPhone: merchant.phone,
+                orderId: order.id,
+                expiresAt: getImmediateInvoiceDueDate(
+                  order as Record<string, unknown>
+                ).toISOString(),
+                orderCurrency,
+                orderLabel: 'payforme',
+              }
+            );
+          } catch (error) {
+            // Exceptional failure (not a definitive skip): allow the
+            // in-after branch below one retry so the request email can
+            // still carry transfer details.
+            payformeProvisioningAttempted = false;
+            logger.error({
+              message:
+                'Pre-response Pay for Me DVA provisioning threw; will retry post-response',
+              orderId: order.id,
+              error: error instanceof Error ? error.message : error,
+            });
+          }
+        }
+
         // Fire-and-forget: send email after response is delivered so slow/failing
         // ZeptoMail calls never block or time out the order creation response.
         after(async () => {
@@ -3712,28 +3766,40 @@ export async function POST(request: NextRequest) {
               // would persist a virtual account that receipt rendering
               // shows as transfer instructions for an impossible payment.
               if (emailAmountDue > 0) {
-                try {
-                  invoiceVirtualAccount = await provisionInvoiceMethodDva({
-                    supabase,
-                    customerEmail: customer_email,
-                    customerName: customer_name,
-                    customerPhone: customer_phone ?? null,
-                    merchantPhone: merchant.phone,
-                    orderId: order.id,
-                    expiresAt: getImmediateInvoiceDueDate(
-                      order as Record<string, unknown>
-                    ).toISOString(),
-                    orderCurrency,
-                    orderLabel: 'payforme',
-                  });
-                } catch (error) {
-                  logger.error({
-                    message:
-                      'Failed to provision Pay for Me DVA; sending request email without transfer details',
-                    orderId: order.id,
-                    error: error instanceof Error ? error.message : error,
-                  });
+                if (preResponsePayformeVirtualAccount) {
+                  // Pre-response provisioning already persisted the DVA
+                  // the success page looked up: reuse it, never provision
+                  // a second account for the same order.
+                  invoiceVirtualAccount = preResponsePayformeVirtualAccount;
+                } else if (!payformeProvisioningAttempted) {
+                  try {
+                    invoiceVirtualAccount = await provisionInvoiceMethodDva({
+                      supabase,
+                      customerEmail: customer_email,
+                      customerName: customer_name,
+                      customerPhone: customer_phone ?? null,
+                      merchantPhone: merchant.phone,
+                      orderId: order.id,
+                      expiresAt: getImmediateInvoiceDueDate(
+                        order as Record<string, unknown>
+                      ).toISOString(),
+                      orderCurrency,
+                      orderLabel: 'payforme',
+                    });
+                  } catch (error) {
+                    logger.error({
+                      message:
+                        'Failed to provision Pay for Me DVA; sending request email without transfer details',
+                      orderId: order.id,
+                      error: error instanceof Error ? error.message : error,
+                    });
+                  }
                 }
+                // Else: the pre-response attempt ran and yielded nothing
+                // (non-NGN skip or Paystack/persistence failure, already
+                // logged) — no retry, since a second Paystack call cannot
+                // fix a definitive skip and would orphan a second virtual
+                // account on persistence failure.
               }
             }
 

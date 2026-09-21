@@ -1,4 +1,8 @@
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import {
+  claimCheckoutPurchaseTracking,
+  releaseCheckoutPurchaseTracking,
+} from '@/lib/claim-checkout-purchase-tracking';
+import { createLogger } from '@/lib/logger';
 import { useCartStore } from '@/stores/cart-store';
 import { serializeAfterOrderCreated } from './serialize-after-order-created';
 import {
@@ -6,6 +10,8 @@ import {
   trackCheckoutRoutePurchaseCompleted,
 } from './tiktok-checkout-route-tracking';
 import { trackCheckoutPaymentCompleted } from './track-checkout-payment-completed';
+
+const log = createLogger('CheckoutTracking');
 
 export interface CheckoutCompletionAttribution {
   // Checkout identity snapshot for guest purchase matching (the cached
@@ -55,20 +61,36 @@ export async function trackCheckoutPaymentCompletedOnce(
       return false;
     }
     const total = input.value ?? 0;
+    try {
+      // Awaited (not discarded): if the ad purchase rejects — e.g.
+      // generateEventId fails on Expo Crypto — the claim rolls back so a
+      // later settlement poll or revisit can emit, instead of suppressing
+      // the conversion forever behind an unhandled rejection.
+      await trackCheckoutRoutePurchaseCompleted({
+        customerEmail: input.customerEmail,
+        customerPhone: input.customerPhone,
+        items: input.items ?? useCartStore.getState().items,
+        orderId: input.orderId,
+        orderNumber: input.orderNumber || input.orderId,
+        paymentMethod: input.paymentMethod,
+        shipping: input.shipping ?? 0,
+        subtotal: input.subtotal ?? total,
+        tax: input.tax ?? 0,
+        total,
+        userId: input.userId,
+      });
+    } catch (error) {
+      log.error('Checkout purchase tracking failed; claim released:', error);
+      await releaseCheckoutPurchaseTracking(
+        input.orderId,
+        PAYMENT_COMPLETED_CLAIM_EVENT
+      );
+      return false;
+    }
+    // After the fallible emission succeeds: a rolled-back attempt must
+    // not leave a funnel payment_completed behind, or its retry would
+    // double-count the conversion.
     trackCheckoutPaymentCompleted(input);
-    trackCheckoutRoutePurchaseCompleted({
-      customerEmail: input.customerEmail,
-      customerPhone: input.customerPhone,
-      items: input.items ?? useCartStore.getState().items,
-      orderId: input.orderId,
-      orderNumber: input.orderNumber || input.orderId,
-      paymentMethod: input.paymentMethod,
-      shipping: input.shipping ?? 0,
-      subtotal: input.subtotal ?? total,
-      tax: input.tax ?? 0,
-      total,
-      userId: input.userId,
-    });
     return true;
   });
 }

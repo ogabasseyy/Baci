@@ -287,14 +287,22 @@ describe('verifyOrderPaymentForCompletion', () => {
     ).resolves.toEqual({ paid: false });
   });
 
-  it('preserves a definitive failed verification as terminal', async () => {
+  it.each([
+    { status: 'failed' },
+    { status: 'cancelled' },
+  ])('preserves a definitive $status verification as terminal', async ({
+    status,
+  }) => {
     mockFetch((url: string) =>
       String(url).includes('/api/payments/verify')
-        ? new Response(
+        ? // Real route envelope: success:false with the trusted order
+          // identity resolved from the reference's transaction row.
+          new Response(
             JSON.stringify({
-              ...completedVerification,
-              status: 'failed',
-              finalizationOutcome: 'cancelled',
+              success: false,
+              status,
+              orderId: 'order-1',
+              orderNumber: 'ORD-1',
             }),
             { status: 200 }
           )
@@ -309,20 +317,15 @@ describe('verifyOrderPaymentForCompletion', () => {
         trackingToken: 'track-1',
         reference: 'ref-1',
       })
-    ).resolves.toEqual({ paid: false, terminalFailure: 'failed' });
+    ).resolves.toEqual({ paid: false, terminalFailure: status });
   });
 
-  it('preserves a definitive cancelled verification as terminal', async () => {
+  it('keeps an identity-less failed envelope transient instead of terminal', async () => {
     mockFetch((url: string) =>
       String(url).includes('/api/payments/verify')
-        ? new Response(
-            JSON.stringify({
-              ...completedVerification,
-              status: 'cancelled',
-              finalizationOutcome: 'cancelled',
-            }),
-            { status: 200 }
-          )
+        ? new Response(JSON.stringify({ success: false, status: 'failed' }), {
+            status: 200,
+          })
         : new Response(JSON.stringify(pendingTrackedOrder), { status: 200 })
     );
 
@@ -332,7 +335,7 @@ describe('verifyOrderPaymentForCompletion', () => {
         trackingToken: 'track-1',
         reference: 'ref-1',
       })
-    ).resolves.toEqual({ paid: false, terminalFailure: 'cancelled' });
+    ).resolves.toEqual({ paid: false });
   });
 
   it('keeps a foreign failed envelope transient instead of terminal', async () => {
@@ -340,10 +343,10 @@ describe('verifyOrderPaymentForCompletion', () => {
       String(url).includes('/api/payments/verify')
         ? new Response(
             JSON.stringify({
-              ...completedVerification,
+              success: false,
               status: 'failed',
-              finalizationOutcome: 'cancelled',
               orderId: 'order-9',
+              orderNumber: 'ORD-9',
             }),
             { status: 200 }
           )

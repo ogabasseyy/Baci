@@ -1,5 +1,8 @@
 import { CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY } from '@/config/checkout-storage';
-import { claimCheckoutPurchaseTracking } from './claim-checkout-purchase-tracking';
+import {
+  claimCheckoutPurchaseTracking,
+  releaseCheckoutPurchaseTracking,
+} from './claim-checkout-purchase-tracking';
 
 const storage = new Map<string, string>();
 const mockGetItem = jest.fn(async (key: string) => storage.get(key) ?? null);
@@ -30,6 +33,37 @@ it('tracks the first observed order id and ignores a later replay of the same or
   await expect(claimCheckoutPurchaseTracking('order-1')).resolves.toBe(true);
   await expect(claimCheckoutPurchaseTracking('order-1')).resolves.toBe(false);
   await expect(claimCheckoutPurchaseTracking('order-2')).resolves.toBe(true);
+});
+
+it('frees a released claim for re-claim without disturbing other claims', async () => {
+  await expect(
+    claimCheckoutPurchaseTracking('order-1', 'payment_completed')
+  ).resolves.toBe(true);
+  await expect(
+    claimCheckoutPurchaseTracking('order-2', 'payment_completed')
+  ).resolves.toBe(true);
+
+  await expect(
+    releaseCheckoutPurchaseTracking('order-1', 'payment_completed')
+  ).resolves.toBeUndefined();
+
+  // The released order can emit again (e.g. the guarded ad purchase
+  // rejected); the sibling grant still suppresses its replay.
+  await expect(
+    claimCheckoutPurchaseTracking('order-1', 'payment_completed')
+  ).resolves.toBe(true);
+  await expect(
+    claimCheckoutPurchaseTracking('order-2', 'payment_completed')
+  ).resolves.toBe(false);
+});
+
+it('ignores releasing a claim that was never granted', async () => {
+  await expect(
+    releaseCheckoutPurchaseTracking('order-ghost', 'payment_completed')
+  ).resolves.toBeUndefined();
+  await expect(
+    claimCheckoutPurchaseTracking('order-ghost', 'payment_completed')
+  ).resolves.toBe(true);
 });
 
 it('does not re-track a persisted claim after process memory is gone', async () => {

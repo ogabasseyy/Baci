@@ -2218,6 +2218,7 @@ describe('CheckoutPage', () => {
         walletFundedTransferMock.onOrderPaid?.({
           checkoutFingerprint: 'fingerprint-wf-1',
           currency: 'NGN',
+          intentId: 'intent-wf-1',
           orderId: 'order-wf-1',
           orderNumber: 'ORD-WF-1',
           total: 5750,
@@ -2232,6 +2233,7 @@ describe('CheckoutPage', () => {
           order_number: 'ORD-WF-1',
           payment_method: 'bank_transfer',
           payment_status: 'paid',
+          reference: 'intent-wf-1',
           total: 5750,
         })
       );

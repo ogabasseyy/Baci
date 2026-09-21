@@ -6,6 +6,7 @@ import {
   it,
   jest,
 } from '@jest/globals';
+import { BNPLParamsSchema } from '@/components/bnpl-checkout/bnpl-params.schema';
 import type { ShippingAddressInput } from '@/lib/validation';
 import type { OrderResponse } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
@@ -232,7 +233,7 @@ describe('submitBnplCheckout', () => {
     expect(mockRouterPush).toHaveBeenCalledWith({
       pathname: '/bnpl-checkout',
       params: expect.objectContaining({
-        amount: '21500',
+        amount: '21500.00',
         customerEmail: 'ada@example.com',
         gateway: 'credit_direct',
         merchantDomain: 'ogabassey.com',
@@ -244,6 +245,49 @@ describe('submitBnplCheckout', () => {
         trackingToken: 'tracking-token',
       }),
     });
+  });
+
+  it('normalizes floating-point artifacts to schema-valid money params', async () => {
+    // 230604.65 + 199.99 === 230804.63999999998: String(...) would fail
+    // the schema's at-most-two-decimal regex and land on the
+    // invalid-parameters screen instead of the provider.
+    const floatSubtotal = 230604.65 + 199.99;
+    expect(String(floatSubtotal)).toContain('9999999');
+    const params = {
+      ...createParams(),
+      snapshot: { ...snapshot, subtotal: floatSubtotal },
+    };
+    mockCreateOrder.mockResolvedValue({
+      amountDueToGateway: floatSubtotal,
+      order: {
+        created_at: '2026-05-30T12:00:00.000Z',
+        id: 'order-1',
+        order_number: 'BAC-001',
+        payment_status: 'pending',
+        shipping_status: 'pending',
+        total: 21500,
+        tracking_token: 'tracking-token',
+      },
+      savings: null,
+      wallet: null,
+    });
+
+    await submitBnplCheckout(params);
+
+    const routed = (
+      mockRouterPush.mock.calls[0]?.[0] as {
+        params: Record<string, string>;
+      }
+    ).params;
+    expect(routed.amount).toBe('230804.64');
+    expect(routed.subtotal).toBe('230804.64');
+    expect(
+      BNPLParamsSchema.safeParse({
+        gateway: 'credit_direct',
+        orderId: 'order-1',
+        ...routed,
+      }).success
+    ).toBe(true);
   });
 
   it('maps a non-JSON Klump initialize response to PAYMENT_INIT_ERROR', async () => {

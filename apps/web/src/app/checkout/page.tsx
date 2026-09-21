@@ -720,7 +720,7 @@ function Step1_Shipping({
   onShippingSelect,
   selectedQuote,
 }: {
-  onShippingSelect: (quote: ShippingQuote, sessionId: string) => void;
+  onShippingSelect: (quote: ShippingQuote | null, sessionId: string) => void;
   selectedQuote: ShippingQuote | null;
 }) {
   const { control, setValue } = useFormContext<ShippingFormValues>();
@@ -1187,11 +1187,15 @@ function CheckoutPageContent() {
     document.body.appendChild(script);
   }, [paymentSettings.creditDirectEnabled]);
 
-  // Handle shipping quote selection
-  const handleShippingSelect = (quote: ShippingQuote, sessionId: string) => {
+  // Handle shipping quote selection. A null quote clears a selection the
+  // fresh quotes no longer contain (e.g. after an address change).
+  const handleShippingSelect = (
+    quote: ShippingQuote | null,
+    sessionId: string
+  ) => {
     setSelectedShippingQuote(quote);
     setShippingSessionId(sessionId);
-    setShippingFee(quote.price);
+    setShippingFee(quote ? quote.price : null);
   };
 
   // Calculate discount amount

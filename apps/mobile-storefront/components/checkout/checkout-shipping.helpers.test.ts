@@ -423,4 +423,105 @@ describe('checkout-shipping.helpers', () => {
     expect(setResolvedShippingQuoteContextKey).toHaveBeenCalledWith('');
     expect(setIsLoadingQuotes).toHaveBeenLastCalledWith(false);
   });
+
+  it('requests quotes on the advisory order-verification subtotal', async () => {
+    const fetchMock = jest.fn<typeof fetch>().mockResolvedValue({
+      json: async () => ({ quotes: { all: [] } }),
+      ok: true,
+    } as Response);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await fetchShippingQuotes({
+      apiUrl: 'https://example.com',
+      city: 'Lagos',
+      customer: null,
+      items: [
+        createCartItem({
+          hasAssurance: true,
+          name: 'MacBook Air M1',
+          negotiatedPrice: 800,
+          negotiationStatus: 'accepted',
+          price: 1000,
+          quantity: 2,
+        }),
+      ],
+      quoteContextKey: 'Lagos|Lagos',
+      setIsLoadingQuotes: jest.fn(),
+      setResolvedShippingQuoteContextKey: jest.fn(),
+      setSelectedQuoteId: jest.fn(),
+      setShippingQuotes: jest.fn(),
+      shouldResetSelection: true,
+      state: 'Lagos',
+      watchedAddress: '1 Marina',
+      watchedEmail: 'ada@example.com',
+      watchedFirstName: 'Ada',
+      watchedLastName: 'Lovelace',
+      watchedPhone: '08031234567',
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    const requestBody = JSON.parse(String(requestInit?.body));
+    // Catalog basis (1000 x 2) plus 5% assurance on the effective (800 x 2)
+    // basis, matching the server order-verification subtotal.
+    expect(requestBody.cart_subtotal).toBe(2080);
+  });
+
+  it('keeps merchant pickup quotes when city filtering carrier stations', async () => {
+    const fetchMock = jest.fn<typeof fetch>().mockResolvedValue({
+      json: async () => ({
+        quotes: {
+          all: [
+            createShippingQuote({
+              displayName: 'FEZ - Pickup at IKEJA ALLEN',
+              id: 'ikeja-station',
+              isStationPickup: true,
+              price: 3000,
+              provider: 'FEZ',
+              stationAddress: '12 Allen Avenue, Ikeja, Lagos',
+              stationName: 'IKEJA ALLEN',
+            }),
+            createShippingQuote({
+              displayName: 'Merchant Pickup',
+              id: 'merchant-pickup',
+              isStationPickup: true,
+              price: 1500,
+              provider: 'MERCHANT',
+              stationName: 'ABUJA HQ PICKUP',
+            }),
+          ],
+        },
+      }),
+      ok: true,
+    } as Response);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const setShippingQuotes = jest.fn();
+    const setSelectedQuoteId = jest.fn();
+
+    await fetchShippingQuotes({
+      apiUrl: 'https://example.com',
+      city: 'Ikeja',
+      customer: null,
+      deliveryPreference: 'pickup_station',
+      items: [createCartItem()],
+      quoteContextKey: 'Lagos|Ikeja',
+      setIsLoadingQuotes: jest.fn(),
+      setResolvedShippingQuoteContextKey: jest.fn(),
+      setSelectedQuoteId,
+      setShippingQuotes,
+      shouldResetSelection: true,
+      state: 'Lagos',
+      watchedAddress: 'Opebi Road, Ikeja, Lagos',
+      watchedEmail: 'ada@example.com',
+      watchedFirstName: 'Ada',
+      watchedLastName: 'Lovelace',
+      watchedPhone: '08031234567',
+    });
+
+    expect(setShippingQuotes).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: 'ikeja-station' }),
+      expect.objectContaining({ id: 'merchant-pickup' }),
+    ]);
+    expect(setSelectedQuoteId).toHaveBeenLastCalledWith('merchant-pickup');
+  });
 });

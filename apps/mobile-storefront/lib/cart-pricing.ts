@@ -47,3 +47,24 @@ export function hasActiveNegotiatedPrice(item: CartPriceInput): boolean {
 export function getCartItemEffectivePrice(item: CartPriceInput): number {
   return getActiveNegotiatedPrice(item) ?? getCartItemBasePrice(item);
 }
+
+/**
+ * Advisory merchant-rate subtotal on the order-verification basis: catalog
+ * unit prices plus the same effective-basis assurance fees the order payload
+ * carries, matching `computeCanonicalOrderSubtotal` on the server.
+ */
+export function getCartCatalogSubtotalWithAssurance(
+  items: readonly CartItem[]
+): number {
+  return items.reduce((total, item) => {
+    const basePrice = getCartItemBasePrice(item);
+    const assuranceFee = item.hasAssurance
+      ? Math.round(
+          getCartItemEffectivePrice(item) *
+            item.quantity *
+            (item.assuranceRate ?? 0.05)
+        )
+      : 0;
+    return total + basePrice * item.quantity + assuranceFee;
+  }, 0);
+}

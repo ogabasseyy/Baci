@@ -1,4 +1,6 @@
+import type { CartItem } from '@/stores/cart-store';
 import {
+  getCartCatalogSubtotalWithAssurance,
   getCartItemEffectivePrice,
   hasActiveNegotiatedPrice,
 } from './cart-pricing';
@@ -72,5 +74,46 @@ describe('cart-pricing', () => {
 
     expect(hasActiveNegotiatedPrice(item)).toBe(false);
     expect(getCartItemEffectivePrice(item)).toBe(150000);
+  });
+
+  it('sums catalog prices for the carrier quote basis', () => {
+    const items = [
+      { name: 'iPhone 11 Pro Max', price: 470000, quantity: 1 },
+      { name: 'MacBook Air M1', price: 1000, quantity: 2 },
+    ] as CartItem[];
+
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(472000);
+  });
+
+  it('charges accepted negotiated prices plus effective-basis assurance', () => {
+    const items = [
+      {
+        assuranceRate: undefined,
+        hasAssurance: true,
+        name: 'MacBook Air M1',
+        negotiatedPrice: 800,
+        negotiationStatus: 'accepted' as const,
+        price: 1000,
+        quantity: 2,
+      },
+    ] as CartItem[];
+
+    // 1000 x 2 catalog basis plus 5% assurance on the effective (800 x 2) basis.
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(2080);
+  });
+
+  it('ignores unaccepted negotiations and missing assurance in the quote basis', () => {
+    const items = [
+      {
+        hasAssurance: false,
+        name: 'MacBook Air M1',
+        negotiatedPrice: 800,
+        negotiationStatus: 'pending' as const,
+        price: 1000,
+        quantity: 2,
+      },
+    ] as CartItem[];
+
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(2000);
   });
 });

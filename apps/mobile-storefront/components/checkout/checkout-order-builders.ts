@@ -39,6 +39,25 @@ type CheckoutOrderRequest = Omit<CreateOrderRequest, 'items'> & {
   items: MobileCheckoutOrderItemPayload[];
 };
 
+const MERCHANT_RATE_QUOTE_ID_PREFIX = 'mrate_';
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function getMerchantRateId(
+  selectedQuote: ShippingQuote | undefined
+): string | undefined {
+  if (
+    selectedQuote?.provider !== 'MERCHANT' ||
+    typeof selectedQuote.id !== 'string' ||
+    !selectedQuote.id.startsWith(MERCHANT_RATE_QUOTE_ID_PREFIX)
+  ) {
+    return undefined;
+  }
+
+  const rateId = selectedQuote.id.slice(MERCHANT_RATE_QUOTE_ID_PREFIX.length);
+  return UUID_PATTERN.test(rateId) ? rateId : undefined;
+}
+
 export function createCheckoutSnapshot(
   itemsSnapshot: CartItem[],
   deliveryFee: number,
@@ -143,6 +162,17 @@ export function buildCheckoutOrderRequest({
   shippingProvider,
   snapshot,
 }: BuildOrderRequestParams): CheckoutOrderRequest {
+  const isMerchantRateQuote = selectedQuote?.provider === 'MERCHANT';
+  const merchantRateId = getMerchantRateId(selectedQuote);
+  const canUseCarrierQuote =
+    !isMerchantRateQuote &&
+    selectedQuote?.id != null &&
+    ((deliveryMethod === 'door' &&
+      !isProviderStationPickupQuote(selectedQuote)) ||
+      (deliveryMethod === 'airport' && isGiglGoFasterQuote(selectedQuote)) ||
+      (deliveryMethod === 'pickup_station' &&
+        isProviderStationPickupQuote(selectedQuote)));
+
   return {
     customer_email: customerEmail,
     customer_name: customerName,
@@ -156,15 +186,11 @@ export function buildCheckoutOrderRequest({
       ? { airport_type: 'delivery' as const }
       : {}),
     selected_quote_id:
-      selectedQuote?.id != null &&
-      ((deliveryMethod === 'door' &&
-        !isProviderStationPickupQuote(selectedQuote)) ||
-        (deliveryMethod === 'airport' && isGiglGoFasterQuote(selectedQuote)) ||
-        (deliveryMethod === 'pickup_station' &&
-          isProviderStationPickupQuote(selectedQuote)))
+      selectedQuote && canUseCarrierQuote
         ? String(selectedQuote.id)
         : undefined,
-    shipping_provider: shippingProvider,
+    ...(merchantRateId ? { shipping_rate_id: merchantRateId } : {}),
+    shipping_provider: isMerchantRateQuote ? undefined : shippingProvider,
     payment_method: paymentMethodForOrder,
     shipping_address: buildOrderShippingAddress(
       address,

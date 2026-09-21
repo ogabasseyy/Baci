@@ -10,7 +10,7 @@ vi.mock('@/lib/api-client', () => ({
   apiPost: mockApiPost,
 }));
 
-import { ShippingOptions } from './shipping-options';
+import { SelectedShippingDisplay, ShippingOptions } from './shipping-options';
 
 const merchantRateQuote: ShippingQuote = {
   id: 'mrate_9f1b2c3d-0000-4000-8000-000000000001',
@@ -19,8 +19,8 @@ const merchantRateQuote: ShippingQuote = {
   carrierName: 'Standard Delivery',
   displayName: 'Standard Delivery',
   estimatedDays: 3,
-  price: 1500,
-  currency: 'INR',
+  price: 1000,
+  currency: 'NGN',
   pickupIncluded: false,
   insuranceIncluded: false,
 };
@@ -65,6 +65,8 @@ const baseProps = {
   receiverPhone: '08000000000',
   receiverName: 'Ada',
   cartItems: [{ name: 'Pixel 9', quantity: 2, price: 5000 }],
+  // Includes the assurance fee calculated from the complete checkout cart.
+  cartSubtotal: 10500,
 };
 
 describe('ShippingOptions', () => {
@@ -123,8 +125,10 @@ describe('ShippingOptions', () => {
         },
         items: [{ name: 'Pixel 9', quantity: 2, weight: 1, value: 5000 }],
         shipmentType: 'domestic',
-        // Advisory subtotal (2 x ₦5,000) so free-over merchant rates quote right.
-        cart_subtotal: 10000,
+        // The canonical subtotal includes assurance, so merchant-rate thresholds
+        // match the order-time validation basis.
+        cart_subtotal: 10500,
+        supports_merchant_rates: true,
       },
       {
         headers: { 'x-baci-client': 'web-storefront' },
@@ -153,10 +157,98 @@ describe('ShippingOptions', () => {
     expect(mockApiPost).toHaveBeenCalledTimes(1);
   });
 
-  it('filters out merchant-configured rates the legacy submit path cannot thread', async () => {
-    // The legacy checkout submit posts selected_quote_id + shipping_provider
-    // with no shipping_rate_id, so a merchant rate (mrate_<uuid> id, not a
-    // shipping_quotes row) would produce a broken order — it must be dropped.
+  it('refetches merchant rates when the canonical cart subtotal changes', async () => {
+    const { rerender } = render(
+      <ShippingOptions {...baseProps} onSelect={vi.fn()} />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(mockApiPost).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ShippingOptions
+        {...{ ...baseProps, cartSubtotal: 12000 }}
+        onSelect={vi.fn()}
+      />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect(mockApiPost).toHaveBeenCalledTimes(2);
+    expect(mockApiPost).toHaveBeenLastCalledWith(
+      '/api/shipping/quotes',
+      expect.objectContaining({ cart_subtotal: 12000 }),
+      { headers: { 'x-baci-client': 'web-storefront' } }
+    );
+  });
+
+  it('re-selects from each fresh response when the address changes', async () => {
+    const onSelect = vi.fn();
+    mockApiPost.mockResolvedValueOnce(quotesResponse).mockResolvedValueOnce({
+      quotes: { featured: [expensiveQuote], all: [expensiveQuote] },
+      sessionId: 'session-2',
+      expiresAt: '2026-06-12T00:00:00.000Z',
+    });
+
+    const { rerender } = render(
+      <ShippingOptions {...baseProps} onSelect={onSelect} />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(onSelect).toHaveBeenCalledWith(cheapQuote, 'session-1');
+
+    rerender(
+      <ShippingOptions
+        {...baseProps}
+        receiverCity="Abuja"
+        selectedQuoteId="quote-cheap"
+        onSelect={onSelect}
+      />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect(mockApiPost).toHaveBeenCalledTimes(2);
+    expect(onSelect).toHaveBeenCalledWith(expensiveQuote, 'session-2');
+  });
+
+  it('clears the parent selection when the fresh response has no quotes', async () => {
+    const onSelect = vi.fn();
+    mockApiPost.mockResolvedValueOnce(quotesResponse).mockResolvedValueOnce({
+      quotes: { featured: [], all: [] },
+      sessionId: 'session-2',
+      expiresAt: '2026-06-12T00:00:00.000Z',
+    });
+
+    const { rerender } = render(
+      <ShippingOptions {...baseProps} onSelect={onSelect} />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(onSelect).toHaveBeenCalledWith(cheapQuote, 'session-1');
+
+    rerender(
+      <ShippingOptions
+        {...baseProps}
+        receiverCity="Abuja"
+        selectedQuoteId="quote-cheap"
+        onSelect={onSelect}
+      />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect(mockApiPost).toHaveBeenCalledTimes(2);
+    expect(onSelect).toHaveBeenLastCalledWith(null, 'session-2');
+  });
+
+  it('shows and selects merchant-configured rates the checkout can now submit', async () => {
     mockApiPost.mockResolvedValue({
       quotes: { featured: [cheapQuote], all: [merchantRateQuote, cheapQuote] },
       sessionId: 'session-mixed',
@@ -169,17 +261,13 @@ describe('ShippingOptions', () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
 
-    // Carrier quotes still render with their currency-aware price…
     expect(screen.getByText('GIG Logistics')).toBeInTheDocument();
-    // …but the merchant rate is not rendered at all.
-    expect(screen.queryByText('Standard Delivery')).not.toBeInTheDocument();
-    expect(screen.queryByText(/₹\s?1,500/)).not.toBeInTheDocument();
-    // Auto-selection never lands on the filtered merchant rate.
+    expect(screen.getByText('Standard Delivery')).toBeInTheDocument();
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onSelect).toHaveBeenCalledWith(cheapQuote, 'session-mixed');
+    expect(onSelect).toHaveBeenCalledWith(merchantRateQuote, 'session-mixed');
   });
 
-  it('shows the empty state when every quote is a merchant rate', async () => {
+  it('renders a merchant-configured rate when it is the only available option', async () => {
     mockApiPost.mockResolvedValue({
       quotes: { featured: [merchantRateQuote], all: [merchantRateQuote] },
       sessionId: 'session-merchant',
@@ -192,8 +280,49 @@ describe('ShippingOptions', () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
 
-    expect(screen.queryByText('Standard Delivery')).not.toBeInTheDocument();
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByText('Standard Delivery')).toBeInTheDocument();
+    expect(onSelect).toHaveBeenCalledWith(
+      merchantRateQuote,
+      'session-merchant'
+    );
+  });
+
+  it('renders an unavailable ETA instead of zero days for merchant rates', async () => {
+    mockApiPost.mockResolvedValue({
+      quotes: {
+        featured: [
+          { ...merchantRateQuote, estimatedDays: 0, deliveryRange: undefined },
+        ],
+        all: [
+          { ...merchantRateQuote, estimatedDays: 0, deliveryRange: undefined },
+        ],
+      },
+      sessionId: 'session-unknown-eta',
+      expiresAt: '2026-06-12T00:00:00.000Z',
+    });
+
+    render(<ShippingOptions {...baseProps} onSelect={vi.fn()} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect(screen.getByText('ETA unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('0 days')).not.toBeInTheDocument();
+  });
+
+  it('keeps an unavailable ETA out of the selected shipping summary', () => {
+    render(
+      <SelectedShippingDisplay
+        quote={{
+          ...merchantRateQuote,
+          estimatedDays: 0,
+          deliveryRange: undefined,
+        }}
+      />
+    );
+
+    expect(screen.getByText('ETA unavailable')).toBeInTheDocument();
+    expect(screen.queryByText(/0 business days/)).not.toBeInTheDocument();
   });
 
   it('shows a retry message when the quote request fails', async () => {

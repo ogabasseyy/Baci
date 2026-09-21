@@ -217,6 +217,147 @@ describe('checkout order builders', () => {
     expect(request.shipping_address.state).toBe('Rivers');
   });
 
+  it('serializes merchant delivery rates without a carrier quote id', () => {
+    const rateId = '5ec1bd0e-7838-4379-a9e6-d47167f1d0c9';
+    const itemsSnapshot = [
+      {
+        id: 'line-1',
+        product_id: 'product-1',
+        slug: 'iphone-13',
+        name: 'iPhone 13',
+        price: 500000,
+        quantity: 1,
+      },
+    ];
+
+    const request = buildCheckoutOrderRequest({
+      address,
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Lovelace',
+      customerPhone: '08012345678',
+      deliveryMethod: 'door',
+      itemsSnapshot,
+      paymentMethodForOrder: 'paystack',
+      selectedQuote: {
+        id: `mrate_${rateId}`,
+        displayName: 'Lagos delivery',
+        price: 1500,
+        provider: 'MERCHANT',
+      },
+      shippingProvider: 'MERCHANT',
+      snapshot: createCheckoutSnapshot(itemsSnapshot, 1500, 0),
+    });
+
+    expect(request.selected_quote_id).toBeUndefined();
+    expect(request.shipping_provider).toBeUndefined();
+    expect(request.shipping_rate_id).toBe(rateId);
+
+    const payload = buildOrderPayload({
+      merchantId: 'merchant-1',
+      request: CreateOrderRequestSchema.parse(request),
+    });
+    expect(payload).toMatchObject({
+      selected_quote_id: null,
+      shipping_provider: null,
+      shipping_rate_id: rateId,
+    });
+  });
+
+  it('serializes UUIDv7 merchant delivery rates through order validation', () => {
+    const rateId = '018f3f20-2d7a-7cc0-8c4f-3c82a742d8c4';
+    const itemsSnapshot = [
+      {
+        id: 'line-1',
+        product_id: 'product-1',
+        slug: 'iphone-13',
+        name: 'iPhone 13',
+        price: 500000,
+        quantity: 1,
+      },
+    ];
+
+    const request = buildCheckoutOrderRequest({
+      address,
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Lovelace',
+      customerPhone: '08012345678',
+      deliveryMethod: 'door',
+      itemsSnapshot,
+      paymentMethodForOrder: 'paystack',
+      selectedQuote: {
+        id: `mrate_${rateId}`,
+        displayName: 'Lagos delivery',
+        price: 1500,
+        provider: 'MERCHANT',
+      },
+      shippingProvider: 'MERCHANT',
+      snapshot: createCheckoutSnapshot(itemsSnapshot, 1500, 0),
+    });
+
+    expect(request).toMatchObject({
+      selected_quote_id: undefined,
+      shipping_provider: undefined,
+      shipping_rate_id: rateId,
+    });
+
+    const payload = buildOrderPayload({
+      merchantId: 'merchant-1',
+      request: CreateOrderRequestSchema.parse(request),
+    });
+    expect(payload).toMatchObject({
+      selected_quote_id: null,
+      shipping_provider: null,
+      shipping_rate_id: rateId,
+    });
+  });
+
+  it.each([
+    'mrate_not-a-uuid',
+    'merchant-rate-without-prefix',
+  ])('does not serialize malformed merchant rate %s as a carrier quote', (quoteId) => {
+    const itemsSnapshot = [
+      {
+        id: 'line-1',
+        product_id: 'product-1',
+        slug: 'iphone-13',
+        name: 'iPhone 13',
+        price: 500000,
+        quantity: 1,
+      },
+    ];
+    const request = buildCheckoutOrderRequest({
+      address,
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Lovelace',
+      customerPhone: '08012345678',
+      deliveryMethod: 'door',
+      itemsSnapshot,
+      paymentMethodForOrder: 'paystack',
+      selectedQuote: {
+        id: quoteId,
+        displayName: 'Lagos delivery',
+        price: 1500,
+        provider: 'MERCHANT',
+      },
+      shippingProvider: 'MERCHANT',
+      snapshot: createCheckoutSnapshot(itemsSnapshot, 1500, 0),
+    });
+
+    expect(request.selected_quote_id).toBeUndefined();
+    expect(request.shipping_provider).toBeUndefined();
+    expect(request.shipping_rate_id).toBeUndefined();
+
+    const payload = buildOrderPayload({
+      merchantId: 'merchant-1',
+      request: CreateOrderRequestSchema.parse(request),
+    });
+    expect(payload).toMatchObject({
+      selected_quote_id: null,
+      shipping_provider: null,
+      shipping_rate_id: null,
+    });
+  });
+
   it('does not serialize a stale station-pickup quote on door orders', () => {
     const request = buildCheckoutOrderRequest({
       address,

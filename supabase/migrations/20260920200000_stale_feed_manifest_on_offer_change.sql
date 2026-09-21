@@ -8,7 +8,8 @@
 -- the manual backfill reruns -- and the retired offer no longer claims
 -- them (collectOfferClaimedImageUrls), so every feed promotes them into
 -- the base product row. Stale the orphaned rows synchronously on offer
--- change.
+-- change. Inserts recompute too: a new offer can dethrone the
+-- normalized-condition winner with no update or delete event.
 --
 -- Keep-set mirrors the backfill source set exactly: the parent product's
 -- own images plus images of ELIGIBLE active sibling offers, using the
@@ -219,6 +220,36 @@ $$;
 REVOKE ALL ON FUNCTION public.stale_feed_manifest_on_offer_update()
   FROM PUBLIC, anon, authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.stale_feed_manifest_on_offer_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_target record;
+BEGIN
+  -- An insert can dethrone the normalized-condition winner (open_box
+  -- sorts before refurbished), orphaning the former winner's image with
+  -- no update or delete event.
+  FOR v_target IN
+    SELECT DISTINCT new_offers.merchant_id, new_offers.product_id
+    FROM new_offers
+    ORDER BY new_offers.product_id
+  LOOP
+    PERFORM public.lock_feed_manifest_product(v_target.product_id);
+    PERFORM public.stale_orphaned_feed_manifest_rows(
+      v_target.merchant_id,
+      v_target.product_id
+    );
+  END LOOP;
+  RETURN NULL;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.stale_feed_manifest_on_offer_insert()
+  FROM PUBLIC, anon, authenticated, service_role;
+
 CREATE OR REPLACE FUNCTION public.stale_feed_manifest_on_offer_delete()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -295,6 +326,14 @@ AFTER UPDATE ON public.product_offers
 REFERENCING OLD TABLE AS old_offers NEW TABLE AS new_offers
 FOR EACH STATEMENT
 EXECUTE FUNCTION public.stale_feed_manifest_on_offer_update();
+
+DROP TRIGGER IF EXISTS product_offers_stale_feed_manifest_insert
+  ON public.product_offers;
+CREATE TRIGGER product_offers_stale_feed_manifest_insert
+AFTER INSERT ON public.product_offers
+REFERENCING NEW TABLE AS new_offers
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.stale_feed_manifest_on_offer_insert();
 
 DROP TRIGGER IF EXISTS product_offers_stale_feed_manifest_delete
   ON public.product_offers;

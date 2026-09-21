@@ -18,6 +18,7 @@ DECLARE
   v_product_parent uuid := '84100000-0000-4000-8000-000000000006';
   v_product_derivative uuid := '84100000-0000-4000-8000-000000000007';
   v_product_unflagged uuid := '84100000-0000-4000-8000-000000000008';
+  v_product_dethrone uuid := '84100000-0000-4000-8000-000000000009';
   v_variant uuid := '84200000-0000-4000-8000-000000000001';
   v_offer_retire uuid := '84300000-0000-4000-8000-000000000001';
   v_offer_keeper uuid := '84300000-0000-4000-8000-000000000002';
@@ -33,6 +34,8 @@ DECLARE
   v_offer_morph uuid := '84300000-0000-4000-8000-00000000000c';
   v_offer_avifswap uuid := '84300000-0000-4000-8000-00000000000d';
   v_offer_flagoff uuid := '84300000-0000-4000-8000-00000000000e';
+  v_offer_incumbent uuid := '84300000-0000-4000-8000-00000000000f';
+  v_offer_challenger uuid := '84300000-0000-4000-8000-000000000010';
   v_status text;
   v_is_primary boolean;
   v_count integer;
@@ -52,7 +55,8 @@ BEGIN
     (v_product_shared, v_merchant, 'Offer Phone Shared', 150, 'offer-phone-shared', 'active', NULL, true, '[]'),
     (v_product_parent, v_merchant, 'Offer Phone Parent', 160, 'offer-phone-parent', 'active', NULL, true, '[]'),
     (v_product_derivative, v_merchant, 'Offer Phone Derivative', 170, 'offer-phone-derivative', 'active', NULL, true, '[]'),
-    (v_product_unflagged, v_merchant, 'Offer Phone Unflagged', 180, 'offer-phone-unflagged', 'active', NULL, false, '[]');
+    (v_product_unflagged, v_merchant, 'Offer Phone Unflagged', 180, 'offer-phone-unflagged', 'active', NULL, false, '[]'),
+    (v_product_dethrone, v_merchant, 'Offer Phone Dethrone', 190, 'offer-phone-dethrone', 'active', NULL, true, '[]');
   -- One offer per (product, condition): the unique offer key forbids more.
   INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, status, images)
   VALUES
@@ -85,7 +89,9 @@ BEGIN
     (v_offer_avifswap, v_product_derivative, v_merchant, 'used', 60, 'active',
       '["https://cdn.example.com/photo.avif"]'),
     (v_offer_flagoff, v_product_unflagged, v_merchant, 'used', 60, 'active',
-      '["https://cdn.example.com/flagoff.jpg"]');
+      '["https://cdn.example.com/flagoff.jpg"]'),
+    (v_offer_incumbent, v_product_dethrone, v_merchant, 'refurbished', 60, 'active',
+      '["https://cdn.example.com/ref9img.jpg"]');
   -- Single primary per (merchant, product, variant bucket); unique
   -- (merchant, product, source_url) across variant scopes.
   INSERT INTO public.product_feed_images
@@ -107,6 +113,7 @@ BEGIN
     (v_merchant, v_product_parent, NULL, 'https://cdn.example.com/morph.jpg', 'https://cdn.example.com/morph.jpg', 'jpeg', 'verified', false, 0),
     (v_merchant, v_product_derivative, NULL, 'https://cdn.example.com/photo.avif', 'https://cdn.example.com/photo.jpg', 'jpeg', 'verified', false, 0),
     (v_merchant, v_product_unflagged, NULL, 'https://cdn.example.com/flagoff.jpg', 'https://cdn.example.com/flagoff.jpg', 'jpeg', 'verified', false, 0),
+    (v_merchant, v_product_dethrone, NULL, 'https://cdn.example.com/ref9img.jpg', 'https://cdn.example.com/ref9img.jpg', 'jpeg', 'verified', false, 0),
     (v_merchant_two, v_product_other_merchant, NULL, 'https://cdn.example.com/retired.jpg', 'https://cdn.example.com/retired.jpg', 'jpeg', 'verified', true, 0);
 
   -- Extractor parity with extractImageCandidates: trims, skips blanks and
@@ -189,9 +196,9 @@ BEGIN
   SELECT count(*) INTO v_count
   FROM public.product_feed_images
   WHERE merchant_id = v_merchant
-    AND product_id IN (v_product_parent, v_product_derivative, v_product_unflagged)
+    AND product_id IN (v_product_parent, v_product_derivative, v_product_unflagged, v_product_dethrone)
     AND status = 'verified';
-  IF v_count <> 3 THEN
+  IF v_count <> 4 THEN
     RAISE EXCEPTION 'transition product rows must be untouched, got %', v_count;
   END IF;
   SELECT status INTO v_status
@@ -365,6 +372,29 @@ BEGIN
     AND variant_id IS NULL AND source_url = 'https://cdn.example.com/flagoff.jpg';
   IF v_status IS DISTINCT FROM 'stale' THEN
     RAISE EXCEPTION 'unflagged parent offers must not protect rows';
+  END IF;
+
+  -- Inserting a challenger dethrones the normalized-condition winner
+  -- with no update or delete event: open_box sorts before refurbished,
+  -- so the incumbent's row must stale on insert alone.
+  SELECT status INTO v_status
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product_dethrone
+    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/ref9img.jpg';
+  IF v_status IS DISTINCT FROM 'verified' THEN
+    RAISE EXCEPTION 'incumbent row must start verified';
+  END IF;
+  INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, status, images)
+  VALUES (
+    v_offer_challenger, v_product_dethrone, v_merchant, 'open_box', 70, 'active',
+    '["https://cdn.example.com/box9img.jpg"]'
+  );
+  SELECT status INTO v_status
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product_dethrone
+    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/ref9img.jpg';
+  IF v_status IS DISTINCT FROM 'stale' THEN
+    RAISE EXCEPTION 'insert must stale the dethroned winner row';
   END IF;
 
   -- One-time repair path: an existing orphan with no referencing offer

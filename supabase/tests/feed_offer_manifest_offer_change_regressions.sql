@@ -36,9 +36,12 @@ DECLARE
   v_offer_flagoff uuid := '84300000-0000-4000-8000-00000000000e';
   v_offer_incumbent uuid := '84300000-0000-4000-8000-00000000000f';
   v_offer_challenger uuid := '84300000-0000-4000-8000-000000000010';
+  v_offer_nan_price uuid := '84300000-0000-4000-8000-000000000011';
   v_status text;
   v_is_primary boolean;
   v_count integer;
+  v_generation bigint;
+  v_next_generation bigint;
 BEGIN
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES
@@ -91,7 +94,9 @@ BEGIN
     (v_offer_flagoff, v_product_unflagged, v_merchant, 'used', 60, 'active',
       '["https://cdn.example.com/flagoff.jpg"]'),
     (v_offer_incumbent, v_product_dethrone, v_merchant, 'refurbished', 60, 'active',
-      '["https://cdn.example.com/ref9img.jpg"]');
+      '["https://cdn.example.com/ref9img.jpg"]'),
+    (v_offer_nan_price, v_product_dethrone, v_merchant, 'used', 'NaN', 'active',
+      '["https://cdn.example.com/nan9img.jpg"]');
   -- Single primary per (merchant, product, variant bucket); unique
   -- (merchant, product, source_url) across variant scopes.
   INSERT INTO public.product_feed_images
@@ -114,6 +119,7 @@ BEGIN
     (v_merchant, v_product_derivative, NULL, 'https://cdn.example.com/photo.avif', 'https://cdn.example.com/photo.jpg', 'jpeg', 'verified', false, 0),
     (v_merchant, v_product_unflagged, NULL, 'https://cdn.example.com/flagoff.jpg', 'https://cdn.example.com/flagoff.jpg', 'jpeg', 'verified', false, 0),
     (v_merchant, v_product_dethrone, NULL, 'https://cdn.example.com/ref9img.jpg', 'https://cdn.example.com/ref9img.jpg', 'jpeg', 'verified', false, 0),
+    (v_merchant, v_product_dethrone, NULL, 'https://cdn.example.com/nan9img.jpg', 'https://cdn.example.com/nan9img.jpg', 'jpeg', 'verified', false, 1),
     (v_merchant_two, v_product_other_merchant, NULL, 'https://cdn.example.com/retired.jpg', 'https://cdn.example.com/retired.jpg', 'jpeg', 'verified', true, 0);
 
   -- Extractor parity with extractImageCandidates: trims, skips blanks and
@@ -198,7 +204,7 @@ BEGIN
   WHERE merchant_id = v_merchant
     AND product_id IN (v_product_parent, v_product_derivative, v_product_unflagged, v_product_dethrone)
     AND status = 'verified';
-  IF v_count <> 4 THEN
+  IF v_count <> 5 THEN
     RAISE EXCEPTION 'transition product rows must be untouched, got %', v_count;
   END IF;
   SELECT status INTO v_status
@@ -396,6 +402,15 @@ BEGIN
   IF v_status IS DISTINCT FROM 'stale' THEN
     RAISE EXCEPTION 'insert must stale the dethroned winner row';
   END IF;
+  -- Numeric NaN sorts above finite values, so only the explicit guard
+  -- excludes it like Number.isFinite does on the feed side.
+  SELECT status INTO v_status
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product_dethrone
+    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/nan9img.jpg';
+  IF v_status IS DISTINCT FROM 'stale' THEN
+    RAISE EXCEPTION 'NaN price must not protect its image';
+  END IF;
 
   -- One-time repair path: an existing orphan with no referencing offer
   -- stales through the unscoped helper the migration itself calls, while
@@ -404,13 +419,24 @@ BEGIN
     (merchant_id, product_id, source_url, verified_url, verified_format, status, is_primary, position)
   VALUES
     (v_merchant, v_product, 'https://cdn.example.com/ghost.jpg', 'https://cdn.example.com/ghost.jpg', 'jpeg', 'verified', false, 9);
-  PERFORM public.stale_orphaned_feed_manifest_rows(NULL, NULL);
+  SELECT generation INTO v_generation
+  FROM public.cache_invalidation_outbox
+  WHERE merchant_id = v_merchant_two AND target_kind = 'storefront_slug'
+    AND target_id = 'offer-manifest-two';
+  PERFORM public.repair_orphaned_feed_manifest();
   SELECT status INTO v_status
   FROM public.product_feed_images
   WHERE merchant_id = v_merchant AND product_id = v_product
     AND variant_id IS NULL AND source_url = 'https://cdn.example.com/ghost.jpg';
   IF v_status IS DISTINCT FROM 'stale' THEN
     RAISE EXCEPTION 'unscoped repair must stale rows with no live claim';
+  END IF;
+  SELECT generation INTO v_next_generation
+  FROM public.cache_invalidation_outbox
+  WHERE merchant_id = v_merchant_two AND target_kind = 'storefront_slug'
+    AND target_id = 'offer-manifest-two';
+  IF v_next_generation IS NULL OR v_next_generation <= COALESCE(v_generation, 0) THEN
+    RAISE EXCEPTION 'repair must enqueue affected merchants';
   END IF;
   SELECT status INTO v_status
   FROM public.product_feed_images

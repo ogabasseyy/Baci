@@ -28,7 +28,9 @@
 -- multi-row statement touches products in opposite orders, and FOR UPDATE
 -- upgrades conflict with the preexisting foreign-key locks on moved
 -- offers, so recomputation serializes on a transaction-scoped advisory
--- lock per product instead. A parent product update recomputes too,
+-- lock per product instead. The one-time repair enqueues every
+-- affected merchant so served feed entries are evicted behind it. A
+-- parent product update recomputes too,
 -- filtered to condition, variant_model, and flag changes, since
 -- eligibility can change with no offer event at all. Reactivation is intentionally one-way: restored
 -- `verified` rows would require re-verification the trigger cannot
@@ -101,13 +103,15 @@ CREATE OR REPLACE FUNCTION public.stale_orphaned_feed_manifest_rows(
   p_merchant_id uuid,
   p_product_id uuid
 )
-RETURNS void
+RETURNS SETOF uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-  UPDATE public.product_feed_images AS manifest
+  RETURN QUERY
+  WITH staled AS (
+    UPDATE public.product_feed_images AS manifest
   SET status = 'stale',
     is_primary = false,
     updated_at = now()
@@ -137,6 +141,9 @@ BEGIN
               AND o.product_id = manifest.product_id
               AND o.status = 'active'
               AND o.price > 0
+              -- Numeric NaN sorts above every finite value, unlike
+              -- Number.isFinite on the feed side: exclude it explicitly.
+              AND o.price <> 'NaN'::numeric
               AND parent.has_condition_offers IS TRUE
               AND parent.variant_model IS DISTINCT FROM 'sku_matrix'
               AND public.feed_listing_condition(o.condition) IS NOT NULL
@@ -159,7 +166,10 @@ BEGIN
       FROM claims
       WHERE claims.url = manifest.source_url
         OR claims.url = manifest.verified_url
-    );
+    )
+    RETURNING manifest.merchant_id
+  )
+  SELECT DISTINCT staled.merchant_id FROM staled;
 END;
 $$;
 
@@ -351,7 +361,30 @@ REFERENCING OLD TABLE AS old_products NEW TABLE AS new_products
 FOR EACH STATEMENT
 EXECUTE FUNCTION public.stale_feed_manifest_on_product_update();
 
+CREATE OR REPLACE FUNCTION public.repair_orphaned_feed_manifest()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_merchant_id uuid;
+BEGIN
+  -- The repair writes no product or offer row, so no existing trigger
+  -- fires: enqueue every affected merchant so the drainer evicts the
+  -- already-served feed entries (merchant-feed tags) behind the repair.
+  FOR v_merchant_id IN
+    SELECT public.stale_orphaned_feed_manifest_rows(NULL, NULL)
+  LOOP
+    PERFORM public.enqueue_storefront_cache_targets(v_merchant_id);
+  END LOOP;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.repair_orphaned_feed_manifest()
+  FROM PUBLIC, anon, authenticated, service_role;
+
 -- One-time repair for rows orphaned before this trigger existed. Deleted
 -- offers leave no future event, so without this the fix would apply only
 -- to subsequent changes; the triggers keep the table converged after.
-SELECT public.stale_orphaned_feed_manifest_rows(NULL, NULL);
+SELECT public.repair_orphaned_feed_manifest();

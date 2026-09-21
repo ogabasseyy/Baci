@@ -41,13 +41,14 @@ describe('requestOgabasseyChatReply', () => {
       })
     );
 
-    await requestOgabasseyChatReply(false, [], 'Show me phones');
+    await requestOgabasseyChatReply(false, [], 'Show me phones', 'ogabassey');
 
     expect(global.fetch).toHaveBeenCalledWith(
       '/api/chat',
       expect.objectContaining({
         headers: expect.objectContaining({
           Accept: storefrontAgentUiContract.mediaType,
+          'x-baci-storefront-slug': 'ogabassey',
         }),
       })
     );
@@ -135,12 +136,15 @@ describe('requestOgabasseyChatReply', () => {
     );
 
     await expect(
-      requestOgabasseyChatReply(true, [], 'I want a gift')
+      requestOgabasseyChatReply(true, [], 'I want a gift', 'ogabassey')
     ).resolves.toEqual({ events: [], text: 'Ho ho ho!' });
 
     const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
     expect(request?.headers).not.toMatchObject({
       Accept: storefrontAgentUiContract.mediaType,
+    });
+    expect(request?.headers).toMatchObject({
+      'x-baci-storefront-slug': 'ogabassey',
     });
     expect(JSON.parse(String(request?.body))).not.toHaveProperty('sessionId');
   });

@@ -1,27 +1,47 @@
 import type { SantaAction } from '@baci/shared/lib';
 import { showCartToast } from '@/hooks/cart-notifications';
+import { CONFIG } from '@/lib/config';
 import { createLogger } from '@/lib/logger';
 import type { SantaProductLookupResult } from '@/schemas/santa-product-lookup';
 import { santaProductLookupResponseSchema } from '@/schemas/santa-product-lookup';
 import { useCartStore } from '@/stores/cart-store';
 import type { CartItem } from '@/stores/cart-store.types';
-import { API_BASE_URL } from './constants';
+import {
+  API_BASE_URL,
+  SANTA_MERCHANT_SLUG_HEADER,
+  STOREFRONT_MERCHANT_SLUG_HEADER,
+} from './constants';
 
 const log = createLogger('santa-cart');
 
 async function lookupSantaProduct(
   productName: string,
+  expectedMerchantSlug: string,
   signal?: AbortSignal
 ): Promise<SantaProductLookupResult | null> {
   const response = await fetch(`${API_BASE_URL}/api/chat/santa/product`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      [STOREFRONT_MERCHANT_SLUG_HEADER]: expectedMerchantSlug,
+    },
     body: JSON.stringify({ name: productName }),
     signal,
   });
 
   if (!response.ok) {
     throw new Error(`Santa product lookup failed (${response.status})`);
+  }
+
+  const resolvedMerchantSlug = response.headers
+    .get(SANTA_MERCHANT_SLUG_HEADER)
+    ?.trim();
+  if (resolvedMerchantSlug !== expectedMerchantSlug) {
+    log.warn('Ignoring Santa product from a different storefront', {
+      expectedMerchantSlug,
+      resolvedMerchantSlug,
+    });
+    return null;
   }
 
   const parsed = santaProductLookupResponseSchema.safeParse(
@@ -80,10 +100,15 @@ function buildSantaCartItem(
  */
 export async function addSantaWishToCart(
   action: SantaAction,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  expectedMerchantSlug = CONFIG.MERCHANT_SLUG.trim()
 ): Promise<boolean> {
   try {
-    const product = await lookupSantaProduct(action.productName, signal);
+    const product = await lookupSantaProduct(
+      action.productName,
+      expectedMerchantSlug,
+      signal
+    );
     if (!product) {
       showCartToast(
         `Santa couldn't find "${action.productName}" in the store`,

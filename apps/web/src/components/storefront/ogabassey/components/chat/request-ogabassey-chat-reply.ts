@@ -56,7 +56,8 @@ async function readResponseText(response: Response): Promise<string> {
 export async function requestOgabasseyChatReply(
   isSanta: boolean,
   history: ChatMessage[],
-  messageText: string
+  messageText: string,
+  storefrontSlug?: string
 ): Promise<OgabasseyChatReply> {
   const endpoint = isSanta ? '/api/chat/santa' : '/api/chat';
   const response = await fetch(endpoint, {
@@ -66,6 +67,9 @@ export async function requestOgabasseyChatReply(
         ? { Accept: storefrontAgentUiContract.mediaType }
         : {}),
       'Content-Type': 'application/json',
+      ...(storefrontSlug?.trim()
+        ? { 'x-baci-storefront-slug': storefrontSlug.trim() }
+        : {}),
     },
     body: JSON.stringify({
       ...(!isSanta ? { sessionId: getOrCreateChatSessionId() } : {}),

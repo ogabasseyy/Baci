@@ -1,39 +1,38 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getCachedSantaProductList } from '@/ai/santa-data';
+import { resolveAgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
 import { logger } from '@/lib/logger';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { sanitizeForLog } from '@/lib/sanitize-core';
-import { createServiceClient } from '@/lib/supabase/service';
+import { createPublicClient } from '@/lib/supabase/public';
+import { santaProductLookupSchema } from '@/schemas/santa-product-lookup';
 
-// Ogabassey merchant ID — single source of truth across all chat endpoints
-const OGABASSEY_MERCHANT_ID = '3bc72679-c0f7-4db4-9054-6a4a4a95a498';
 const UNLIMITED_STOCK_QUANTITY = 9999;
 
-/**
- * Common handler for product lookup
- */
-async function handleProductLookup(productName: string): Promise<NextResponse> {
-  // Sanitize for safe logging (prevent log injection)
+async function handleProductLookup(
+  productName: string,
+  request: NextRequest
+): Promise<NextResponse> {
   const safeProductName = sanitizeForLog(productName);
-  try {
-    // Get products directly (bypass cache to ensure consistency)
-    const santaProducts = await getCachedSantaProductList(
-      OGABASSEY_MERCHANT_ID
+  const tenant = await resolveAgenticChatTenant(request);
+  if (!tenant) {
+    return NextResponse.json(
+      { error: 'Santa chat is unavailable for this storefront' },
+      { status: 503 }
     );
+  }
 
-    logger.info({
-      message: 'Santa Product searching',
-      count: santaProducts.length,
-      productName: safeProductName,
-    });
-
-    // Find the best match by name
+  try {
+    const santaProducts = await getCachedSantaProductList(
+      tenant.merchantId,
+      tenant.priceNegotiationEnabled
+    );
     const normalizedSearch = productName.toLowerCase().trim();
     const matchingProduct = santaProducts.find(
-      (p) =>
-        p.name.toLowerCase() === normalizedSearch ||
-        p.name.toLowerCase().includes(normalizedSearch) ||
-        normalizedSearch.includes(p.name.toLowerCase())
+      (product) =>
+        product.name.toLowerCase() === normalizedSearch ||
+        product.name.toLowerCase().includes(normalizedSearch) ||
+        normalizedSearch.includes(product.name.toLowerCase())
     );
 
     if (!matchingProduct) {
@@ -44,151 +43,110 @@ async function handleProductLookup(productName: string): Promise<NextResponse> {
       return NextResponse.json({ product: null });
     }
 
-    logger.info({
-      message: 'Santa Product found match',
-      match: matchingProduct.name,
-    });
-
-    // Now get the full product details from database
-    const supabase = createServiceClient();
-    const { data: fullProduct, error } = await supabase
+    // This is deliberately a normal public/RLS client: a catalog match does
+    // not justify a signed checkout client or a privileged product read.
+    const supabase = createPublicClient({ clientInfo: 'baci-santa-product' });
+    const { data: product, error } = await supabase
       .from('products')
       .select(
         'id, name, slug, description, price, images, status, merchant_id, stock, stock_quantity, manage_stock, brand, sku'
       )
-      .eq('merchant_id', OGABASSEY_MERCHANT_ID)
+      .eq('merchant_id', tenant.merchantId)
       .eq('name', matchingProduct.name)
-      .single();
+      .eq('status', 'active')
+      .maybeSingle();
 
-    if (error || !fullProduct) {
-      logger.warn({
-        message: 'Santa Product could not fetch full details',
-        error: error?.message,
-        match: matchingProduct.name,
+    if (error) {
+      logger.error({
+        error: error.message,
+        message: 'Santa Product lookup failed',
+        productName: safeProductName,
       });
-      // Return basic product info from Santa data
-      return NextResponse.json({
+      return NextResponse.json(
+        { error: 'Santa product lookup is temporarily unavailable' },
+        { status: 503 }
+      );
+    }
+
+    if (!product) return NextResponse.json({ product: null });
+
+    type ImageEntry = string | { url?: string };
+    const images = product.images as ImageEntry[] | null;
+    const firstImage = images?.[0];
+    const imageUrl =
+      typeof firstImage === 'string' ? firstImage : firstImage?.url || '';
+    const stock =
+      product.manage_stock === false
+        ? UNLIMITED_STOCK_QUANTITY
+        : getEffectiveStock(product);
+
+    return NextResponse.json(
+      {
         product: {
-          id: '', // No ID available
-          name: matchingProduct.name,
-          slug: '',
-          description: '',
-          price: matchingProduct.price,
-          image: '',
-          imageLarge: '',
-          imageHint: matchingProduct.name,
-          status: 'active',
-          merchant_id: OGABASSEY_MERCHANT_ID,
-          stock: UNLIMITED_STOCK_QUANTITY,
-          manage_stock: false,
-          brand: '',
-          sku: '',
+          id: product.id,
+          name: product.name,
+          slug: product.slug || '',
+          description: product.description || '',
+          price: product.price,
+          image: imageUrl,
+          imageLarge: imageUrl,
+          imageHint: product.name,
+          status: product.status,
+          merchant_id: product.merchant_id,
+          stock,
+          manage_stock: product.manage_stock ?? true,
+          brand: product.brand || '',
+          sku: product.sku || '',
           gtin: '',
           mpn: '',
         },
-      });
-    }
-
-    // Extract image from images array
-    type ImageEntry = string | { url?: string };
-    const images = fullProduct.images as ImageEntry[] | null;
-    let imageUrl = '';
-    if (images && images.length > 0) {
-      const firstImage = images[0];
-      imageUrl =
-        typeof firstImage === 'string' ? firstImage : firstImage?.url || '';
-    }
-
-    // Return full product with proper format
-    const stock =
-      fullProduct.manage_stock === false
-        ? UNLIMITED_STOCK_QUANTITY
-        : getEffectiveStock(fullProduct);
-
-    return NextResponse.json({
-      product: {
-        id: fullProduct.id,
-        name: fullProduct.name,
-        slug: fullProduct.slug || '',
-        description: fullProduct.description || '',
-        price: fullProduct.price,
-        image: imageUrl,
-        imageLarge: imageUrl,
-        imageHint: fullProduct.name,
-        status: fullProduct.status,
-        merchant_id: fullProduct.merchant_id,
-        stock,
-        manage_stock: fullProduct.manage_stock ?? true,
-        brand: fullProduct.brand || '',
-        sku: fullProduct.sku || '',
-        gtin: '',
-        mpn: '',
       },
-    });
-  } catch (err) {
+      {
+        headers: { 'x-baci-santa-merchant-slug': tenant.merchantSlug },
+      }
+    );
+  } catch (error) {
     logger.error({
+      error,
       message: 'Santa Product internal error',
-      error: err,
       productName: safeProductName,
     });
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { error: 'Santa product lookup is temporarily unavailable' },
+      { status: 503 }
     );
   }
 }
 
-/**
- * POST /api/chat/santa/product
- * Body: { name: "ProductName" }
- *
- * Product lookup for Santa's cart integration.
- * Uses POST to work around GET route isolation issues.
- */
+/** POST /api/chat/santa/product Body: { name: string } */
 export async function POST(request: NextRequest) {
-  let productName: string | null = null;
-
+  let body: unknown;
   try {
-    const body = await request.json();
-    productName = body.name;
+    body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  if (!productName || typeof productName !== 'string') {
+  const parsed = santaProductLookupSchema.safeParse(body);
+  if (!parsed.success) {
     return NextResponse.json(
       { error: 'Product name is required' },
       { status: 400 }
     );
   }
-
-  if (productName.length > 200) {
-    return NextResponse.json(
-      { error: 'Product name too long' },
-      { status: 400 }
-    );
-  }
-
-  return handleProductLookup(productName.trim());
+  return handleProductLookup(parsed.data.name, request);
 }
 
-/**
- * GET /api/chat/santa/product?name=ProductName
- *
- * Product lookup for Santa's cart integration.
- * Note: May not work in all contexts due to Next.js route isolation.
- * Prefer using POST endpoint.
- */
+/** GET /api/chat/santa/product?name=ProductName */
 export function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const productName = searchParams.get('name');
-
-  if (!productName) {
+  const parsed = santaProductLookupSchema.safeParse({
+    name: request.nextUrl.searchParams.get('name'),
+  });
+  if (!parsed.success) {
     return NextResponse.json(
       { error: 'Product name is required' },
       { status: 400 }
     );
   }
-
-  return handleProductLookup(productName);
+  return handleProductLookup(parsed.data.name, request);
 }

@@ -31,7 +31,7 @@ const SANTA_ACTION_CURRENCY_CODES = [
 
 const SANTA_ACTION_CURRENCY_PATTERN = SANTA_ACTION_CURRENCY_CODES.join('|');
 
-const SANTA_ACTION_PATTERN_SOURCE = String.raw`ACTION:ADD_TO_CART\|PRODUCT:([^|]+)\|PRICE:\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(?:${SANTA_ACTION_CURRENCY_PATTERN}))?[.,!?;:]*(?![\d,])`;
+const SANTA_ACTION_PATTERN_SOURCE = String.raw`ACTION:ADD_TO_CART\|PRODUCT:((?:(?!ACTION:ADD_TO_CART).)+?)\|PRICE:\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)(?:\s*(?:${SANTA_ACTION_CURRENCY_PATTERN}))?[.,!?;:]*(?![\d,])`;
 
 const SANTA_ACTION_PATTERN = new RegExp(SANTA_ACTION_PATTERN_SOURCE, 'i');
 const SANTA_ACTION_GLOBAL_PATTERN = new RegExp(

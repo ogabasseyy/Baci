@@ -2,11 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createAgenticScopedSupabaseClient: vi.fn(),
+  createPublicClient: vi.fn(),
+  resolveAgenticChatTenant: vi.fn(),
   searchStorefrontProducts: vi.fn(),
 }));
 
 vi.mock('@/lib/agentic/scoped-supabase', () => ({
   createAgenticScopedSupabaseClient: mocks.createAgenticScopedSupabaseClient,
+}));
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: mocks.createPublicClient,
+}));
+vi.mock('@/lib/agentic/agentic-chat-tenant', () => ({
+  resolveAgenticChatTenant: mocks.resolveAgenticChatTenant,
 }));
 
 vi.mock('@/lib/storefront-search', () => ({
@@ -66,6 +74,17 @@ function createQueryMock(result: QueryResult = { data: null, error: null }) {
 
 describe('chat tool handlers', () => {
   beforeEach(() => {
+    mocks.resolveAgenticChatTenant.mockResolvedValue({
+      agenticCheckoutEnabled: true,
+      businessName: 'Ogabassey',
+      currencyCode: 'NGN',
+      merchantId: OGABASSEY_MERCHANT_ID,
+      merchantSlug: 'ogabassey',
+      priceNegotiationEnabled: true,
+    });
+    mocks.createPublicClient.mockImplementation(() =>
+      mocks.createAgenticScopedSupabaseClient()
+    );
     vi.clearAllMocks();
     mocks.searchStorefrontProducts.mockReset();
   });
@@ -338,7 +357,24 @@ describe('chat tool handlers', () => {
     expect(result).toEqual({ products: [], total: 0 });
   });
 
-  it('returns empty chat search results when ranked search fails', async () => {
+  it('uses a public RLS client for catalog search rather than minting a checkout JWT', async () => {
+    mocks.searchStorefrontProducts.mockResolvedValue({
+      count: 0,
+      didYouMean: null,
+      productIds: [],
+      query: 'phone',
+    });
+    const query = createQueryMock({ data: [], error: null });
+    mocks.createPublicClient.mockReturnValue({ from: vi.fn(() => query) });
+
+    await handleSearchProducts({ query: 'phone' });
+
+    expect(mocks.createPublicClient).toHaveBeenCalledWith({
+      clientInfo: 'baci-chat-catalog',
+    });
+  });
+
+  it('surfaces ranked search failures instead of treating them as an empty catalog', async () => {
     mocks.searchStorefrontProducts.mockRejectedValueOnce(
       new Error('search rpc unavailable')
     );
@@ -347,11 +383,9 @@ describe('chat tool handlers', () => {
       rpc: vi.fn(),
     });
 
-    const result = await handleSearchProducts({
-      query: 'iphone',
-    });
-
-    expect(result).toEqual({ products: [], total: 0 });
+    await expect(handleSearchProducts({ query: 'iphone' })).rejects.toThrow(
+      'Catalog search temporarily unavailable'
+    );
   });
 
   it('restricts product details to active Ogabassey products', async () => {

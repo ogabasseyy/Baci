@@ -7,7 +7,7 @@ jest.mock('@/lib/logger', () => ({
   createLogger: () => ({ warn: mockWarn }),
 }));
 
-const { resolveCheckoutAuth, validateCheckoutUser } =
+const { resolveCheckoutAuth } =
   require('./orders-auth') as typeof import('./orders-auth');
 
 function session(accessToken: string): Session {
@@ -277,46 +277,5 @@ describe('resolveCheckoutAuth', () => {
       canValidateUser: true,
       session: recoveredSession,
     });
-  });
-});
-
-describe('validateCheckoutUser', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('returns the authenticated user when validation succeeds', async () => {
-    const auth = {
-      getUser: jest.fn(async () => ({
-        data: { user: { id: 'user-a' } },
-        error: null,
-      })),
-    };
-
-    await expect(validateCheckoutUser(auth as never, 'token')).resolves.toEqual(
-      {
-        data: { user: { id: 'user-a' } },
-        error: null,
-      }
-    );
-    expect(auth.getUser).toHaveBeenCalledWith('token');
-  });
-
-  it('fails closed when user validation never settles', async () => {
-    jest.useFakeTimers();
-    const auth = {
-      getUser: jest.fn(() => new Promise<never>(() => undefined)),
-    };
-    const pending = validateCheckoutUser(auth as never, 'token');
-    const assertion = expect(pending).resolves.toMatchObject({
-      data: { user: null },
-      error: expect.any(Error),
-    });
-    await jest.advanceTimersByTimeAsync(4_000);
-    await assertion;
   });
 });

@@ -1,21 +1,18 @@
-import {
-  createKeyedSerialAsyncQueue,
-  createSerialAsyncQueue,
-} from './create-serial-async-queue';
+import { createKeyedSerialAsyncQueue } from './create-keyed-serial-async-queue';
 
-it('runs queued operations in order even when they overlap', async () => {
-  const enqueue = createSerialAsyncQueue();
+it('runs same-key operations in order even when they overlap', async () => {
+  const enqueue = createKeyedSerialAsyncQueue();
   const seen: number[] = [];
   let releaseFirst!: () => void;
   const firstGate = new Promise<void>((resolve) => {
     releaseFirst = resolve;
   });
 
-  const first = enqueue(async () => {
+  const first = enqueue('gen', async () => {
     await firstGate;
     seen.push(1);
   });
-  const second = enqueue(async () => {
+  const second = enqueue('gen', async () => {
     seen.push(2);
   });
 

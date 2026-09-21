@@ -1,18 +1,3 @@
-export function createSerialAsyncQueue() {
-  let tail: Promise<unknown> = Promise.resolve();
-
-  return function enqueueSerialAsync<T>(
-    operation: () => Promise<T>
-  ): Promise<T> {
-    const run = tail.then(operation, operation);
-    tail = run.then(
-      () => undefined,
-      () => undefined
-    );
-    return run;
-  };
-}
-
 export function createKeyedSerialAsyncQueue() {
   const tails = new Map<string, Promise<unknown>>();
 

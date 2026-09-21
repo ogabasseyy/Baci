@@ -24,12 +24,11 @@ import {
   CreateOrderRequestSchema,
   type OrderResponse,
 } from './orders.schemas';
-import { resolveCheckoutAuth, validateCheckoutUser } from './orders-auth';
-import {
-  buildSnapshottedOrderPayload,
-  releaseCreditAfterDefinitiveRejection,
-} from './orders-credit-snapshot';
+import { resolveCheckoutAuth } from './orders-auth';
+import { buildSnapshottedOrderPayload } from './orders-credit-freeze';
+import { releaseCreditAfterDefinitiveRejection } from './orders-credit-release';
 import { getCheckoutStoredSession } from './orders-session';
+import { validateCheckoutUser } from './orders-user-validation';
 import { readCheckoutStoredSession } from './read-checkout-stored-session';
 
 export { OrderError } from './orders.errors';

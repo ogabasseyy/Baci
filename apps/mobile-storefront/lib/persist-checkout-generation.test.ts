@@ -35,6 +35,10 @@ beforeEach(() => {
   mockRemoveItem.mockClear();
 });
 
+afterEach(() => {
+  jest.useRealTimers();
+});
+
 describe('bugfix: checkout generation is durable before the order request', () => {
   it('does not return until the generation write succeeds', async () => {
     mockSetItem.mockRejectedValueOnce(new Error('disk full'));
@@ -105,6 +109,86 @@ describe('bugfix: checkout generation is durable before the order request', () =
     const markers = storage.get('checkout-idempotency-item-sort-v2') ?? '[]';
     expect(markers).toContain(newer);
     expect(markers).not.toContain(legacy);
+  });
+
+  it('resets the queue after a hung write so later persists proceed', async () => {
+    jest.useFakeTimers();
+    const older = '11111111-1111-4111-8111-111111111111';
+    const newer = '22222222-2222-4222-8222-222222222222';
+    let releaseOlder!: () => void;
+    mockSetItem.mockImplementationOnce(
+      (key: string, value: string) =>
+        new Promise<void>((resolve) => {
+          releaseOlder = () => {
+            storage.set(key, value);
+            resolve();
+          };
+        })
+    );
+    const hung = persistCheckoutGeneration(older);
+    const hungAssertion = expect(hung).rejects.toThrow(
+      'Checkout storage write timed out'
+    );
+    await jest.advanceTimersByTimeAsync(5_000);
+    await hungAssertion;
+
+    await persistCheckoutGeneration(newer);
+    expect(storage.get('checkout-generation-v1')).toBe(newer);
+
+    let compensated!: () => void;
+    const compensatedPromise = new Promise<void>((resolve) => {
+      compensated = resolve;
+    });
+    mockRemoveItem.mockImplementationOnce(async (key: string) => {
+      storage.delete(key);
+      compensated();
+    });
+    releaseOlder();
+    await compensatedPromise;
+    // The abandoned write landed after the newer one, so it is removed
+    // instead of restoring a stale generation.
+    expect(storage.get('checkout-generation-v1')).toBeUndefined();
+  });
+
+  it('preserves a newer generation when invalidating an abandoned write', async () => {
+    jest.useFakeTimers();
+    const older = '33333333-3333-4333-8333-333333333333';
+    const newer = '44444444-4444-4444-8444-444444444444';
+    let releaseOlder!: () => void;
+    mockSetItem.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseOlder = () => {
+            storage.set('checkout-generation-v1', older);
+            // Simulate a newer persist landing before the compensation
+            // read runs.
+            storage.set('checkout-generation-v1', newer);
+            resolve();
+          };
+        })
+    );
+    const hung = persistCheckoutGeneration(older);
+    const hungAssertion = expect(hung).rejects.toThrow(
+      'Checkout storage write timed out'
+    );
+    await jest.advanceTimersByTimeAsync(5_000);
+    await hungAssertion;
+    let compensationRead!: () => void;
+    const compensationReadPromise = new Promise<void>((resolve) => {
+      compensationRead = resolve;
+    });
+    mockGetItem.mockImplementationOnce(async (key: string) => {
+      const value = storage.get(key) ?? null;
+      compensationRead();
+      return value;
+    });
+    releaseOlder();
+    await compensationReadPromise;
+    // One flush lets the skip decision run after its storage read settles.
+    await Promise.resolve();
+    expect(mockGetItem).toHaveBeenCalledWith('checkout-generation-v1');
+    expect(storage.get('checkout-generation-v1')).toBe(newer);
+    expect(mockRemoveItem).not.toHaveBeenCalled();
   });
 
   it('swallows detached persist failures so first-item adds can finish', async () => {

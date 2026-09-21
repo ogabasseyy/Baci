@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY } from '@/config/checkout-storage';
 import { assertCheckoutRecoveryValue } from '@/lib/assert-checkout-recovery-value';
-import { createKeyedSerialAsyncQueue } from '@/lib/create-serial-async-queue';
+import { createKeyedSerialAsyncQueue } from '@/lib/create-keyed-serial-async-queue';
 import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 
 type CheckoutCreditSnapshot = {

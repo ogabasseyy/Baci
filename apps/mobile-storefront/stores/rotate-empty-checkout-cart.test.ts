@@ -7,9 +7,6 @@ const mockPersist = jest.fn<(generation: string) => Promise<void>>(
   async () => undefined
 );
 const mockClear = jest.fn<() => Promise<void>>(async () => undefined);
-const mockCompensate = jest.fn<(generation: string) => Promise<void>>(
-  async () => undefined
-);
 const mockRead = jest.fn<() => Promise<string | null>>(async () => null);
 const mockRelease = jest.fn<(generation: string) => Promise<void>>(
   async () => undefined
@@ -20,8 +17,6 @@ jest.mock('@/lib/persist-checkout-generation', () => ({
 }));
 jest.mock('@/lib/clear-persisted-checkout-generation', () => ({
   clearPersistedCheckoutGeneration: () => mockClear(),
-  removeAbandonedCheckoutGenerationWrite: (generation: string) =>
-    mockCompensate(generation),
 }));
 jest.mock('@/lib/checkout-attempt-credit-snapshot', () => ({
   releaseCheckoutCreditSnapshot: (generation: string) =>
@@ -43,8 +38,6 @@ beforeEach(() => {
   mockRead.mockResolvedValue(null);
   mockRelease.mockReset();
   mockRelease.mockResolvedValue(undefined);
-  mockCompensate.mockReset();
-  mockCompensate.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -136,29 +129,6 @@ it('keeps store-credit snapshots when the generation may still be replayed', asy
     retainCreditSnapshot: true,
   });
   expect(mockRelease).not.toHaveBeenCalled();
-});
-
-it('invalidates an abandoned persist when it settles after the timeout', async () => {
-  jest.useFakeTimers();
-  let settlePersist!: () => void;
-  mockPersist.mockImplementationOnce(
-    () =>
-      new Promise<void>((resolve) => {
-        settlePersist = resolve;
-      })
-  );
-  let rotatedGeneration = '';
-  const rotated = rotateEmptyCheckoutCart((next) => {
-    rotatedGeneration = next.checkoutGeneration;
-  });
-  await jest.advanceTimersByTimeAsync(5_000);
-  await rotated;
-  expect(mockClear).toHaveBeenCalled();
-  expect(mockCompensate).not.toHaveBeenCalled();
-  settlePersist();
-  await Promise.resolve();
-  await Promise.resolve();
-  expect(mockCompensate).toHaveBeenCalledWith(rotatedGeneration);
 });
 
 it('does not block cart rotation when credit cleanup hangs', async () => {

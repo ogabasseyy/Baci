@@ -1,24 +1,8 @@
-import {
-  applyCheckoutCreditSnapshot,
-  releaseCheckoutCreditSnapshot,
-} from '@/lib/checkout-attempt-credit-snapshot';
+import { releaseCheckoutCreditSnapshot } from '@/lib/checkout-attempt-credit-snapshot';
 import { createLogger } from '@/lib/logger';
 import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
-import { buildOrderPayload } from './orders.payload';
 
 const log = createLogger('Order');
-
-type BuildOrderPayloadInput = Parameters<typeof buildOrderPayload>[0];
-
-export function buildSnapshottedOrderPayload(
-  input: BuildOrderPayloadInput,
-  checkoutGeneration: string
-): Promise<ReturnType<typeof buildOrderPayload>> {
-  return applyCheckoutCreditSnapshot(
-    buildOrderPayload(input),
-    checkoutGeneration
-  );
-}
 
 const DEFINITIVE_REJECTION_CODES = new Set([
   'VALIDATION_ERROR',

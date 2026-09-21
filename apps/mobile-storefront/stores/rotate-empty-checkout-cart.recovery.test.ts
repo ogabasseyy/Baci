@@ -85,7 +85,7 @@ function recoverStorage() {
   }
 }
 
-it('clears across repeated persist timeouts, then progresses after recovery', async () => {
+it('clears across repeated persist timeouts without wedging reads, then progresses after recovery', async () => {
   jest.useFakeTimers();
   storage.set(MARKER_KEY, JSON.stringify([markedGeneration]));
   storageHung = true;
@@ -100,12 +100,12 @@ it('clears across repeated persist timeouts, then progresses after recovery', as
   await second;
   expect(storage.get(GENERATION_KEY)).toBeUndefined();
 
-  const blocked = usesCodepointCheckoutItemSort(markedGeneration);
-  const blockedAssertion = expect(blocked).rejects.toThrow(
-    'Checkout storage read timed out'
+  // Each timed-out persist resets the storage queue, so a read after the
+  // resets proceeds on the fresh queue and observes the durable marker
+  // instead of hanging behind the abandoned writes.
+  await expect(usesCodepointCheckoutItemSort(markedGeneration)).resolves.toBe(
+    true
   );
-  await jest.advanceTimersByTimeAsync(5_000);
-  await blockedAssertion;
 
   recoverStorage();
   await expect(usesCodepointCheckoutItemSort(markedGeneration)).resolves.toBe(
@@ -140,4 +140,41 @@ it('invalidates a slow write that lands after recovery without touching newer st
   const second = rotateEmptyCheckoutCart(() => undefined);
   await second;
   expect(storage.get(GENERATION_KEY)).toBe(secondGeneration);
+});
+
+it('lets a newer persist proceed on the reset queue while an older write hangs', async () => {
+  jest.useFakeTimers();
+  let releaseOlder!: () => void;
+  let olderGated = false;
+  mockSetItem.mockImplementation(async (key: string, value: string) => {
+    if (key === GENERATION_KEY && !olderGated) {
+      olderGated = true;
+      await new Promise<void>((resolve) => {
+        releaseOlder = resolve;
+      });
+    }
+    storage.set(key, value);
+  });
+
+  const first = rotateEmptyCheckoutCart(() => undefined);
+  await jest.advanceTimersByTimeAsync(5_000);
+  await first;
+
+  const second = rotateEmptyCheckoutCart(() => undefined);
+  await second;
+  expect(storage.get(GENERATION_KEY)).toBe(secondGeneration);
+
+  let compensated!: () => void;
+  const compensatedPromise = new Promise<void>((resolve) => {
+    compensated = resolve;
+  });
+  mockRemoveItem.mockImplementation(async (key: string) => {
+    storage.delete(key);
+    if (key === GENERATION_KEY) {
+      compensated();
+    }
+  });
+  releaseOlder();
+  await compensatedPromise;
+  expect(storage.get(GENERATION_KEY)).toBeUndefined();
 });

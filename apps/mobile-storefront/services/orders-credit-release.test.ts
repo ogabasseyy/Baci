@@ -1,54 +1,25 @@
 import { jest } from '@jest/globals';
 
-const mockApply = jest.fn<
-  (payload: unknown, generation: string) => Promise<unknown>
->(async (payload: unknown) => payload);
 const mockRelease = jest.fn<(generation: string) => Promise<void>>(
   async () => undefined
-);
-const mockBuildPayload = jest.fn<(input: unknown) => { items: never[] }>(
-  () => ({ items: [] })
 );
 const mockWarn = jest.fn<(message: string, error?: unknown) => void>(
   () => undefined
 );
 
 jest.mock('@/lib/checkout-attempt-credit-snapshot', () => ({
-  applyCheckoutCreditSnapshot: (payload: unknown, generation: string) =>
-    mockApply(payload, generation),
   releaseCheckoutCreditSnapshot: (generation: string) =>
     mockRelease(generation),
 }));
 jest.mock('@/lib/logger', () => ({
   createLogger: () => ({ warn: mockWarn }),
 }));
-jest.mock('./orders.payload', () => ({
-  buildOrderPayload: (input: unknown) => mockBuildPayload(input),
-}));
 
-const { buildSnapshottedOrderPayload, releaseCreditAfterDefinitiveRejection } =
-  require('./orders-credit-snapshot') as typeof import('./orders-credit-snapshot');
+const { releaseCreditAfterDefinitiveRejection } =
+  require('./orders-credit-release') as typeof import('./orders-credit-release');
 
 beforeEach(() => {
   jest.clearAllMocks();
-});
-
-describe('buildSnapshottedOrderPayload', () => {
-  it('freezes the built payload credit fields under the checkout generation', async () => {
-    // orders.payload is mocked; only the passthrough is asserted.
-    const input = { merchantId: 'm', request: {} } as never;
-    await buildSnapshottedOrderPayload(input, 'gen-1');
-    expect(mockBuildPayload).toHaveBeenCalledWith(input);
-    expect(mockApply).toHaveBeenCalledWith({ items: [] }, 'gen-1');
-  });
-
-  it('propagates snapshot failures to the caller', async () => {
-    mockApply.mockRejectedValueOnce(new Error('store hung'));
-    const input = { merchantId: 'm', request: {} } as never;
-    await expect(buildSnapshottedOrderPayload(input, 'gen-1')).rejects.toThrow(
-      'store hung'
-    );
-  });
 });
 
 describe('releaseCreditAfterDefinitiveRejection', () => {

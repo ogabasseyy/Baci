@@ -134,7 +134,6 @@ export async function POST(request: NextRequest) {
         merchantId,
         merchantBusinessName: merchantContext.businessName,
         orderId: data.orderId,
-        orderItems: order.order_items ?? [],
         quote: activeBookingQuote,
         quotePayload,
         usesStoredInternationalSender,

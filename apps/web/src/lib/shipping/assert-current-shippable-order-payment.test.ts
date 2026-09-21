@@ -39,6 +39,22 @@ describe('assertCurrentOrderPaymentShippable', () => {
     expect((failure as OrderShipmentBookingError).status).toBe(400);
   });
 
+  it('rejects a cancellation that landed since the booking read', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'order_cancelled_for_shipment' },
+    });
+
+    const failure = await assertCurrentOrderPaymentShippable(
+      mockSupabase(rpc),
+      'merchant-1',
+      'order-1'
+    ).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(OrderShipmentBookingError);
+    expect((failure as OrderShipmentBookingError).code).toBe('ORDER_CANCELLED');
+    expect((failure as OrderShipmentBookingError).status).toBe(400);
+  });
+
   it('fails closed when the order vanished mid-booking', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: null,

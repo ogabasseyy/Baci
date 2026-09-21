@@ -106,6 +106,24 @@ export async function loadDirectBookingContext(
     };
   }
 
+  // Cancellation restocks inventory back to sale, so a cancelled order must
+  // never reach provider booking. Guest/authenticated cancels set the
+  // payment status while legacy merchant/customer cancels set the shipping
+  // status; reject both spellings either side can carry.
+  if (
+    ['cancelled', 'canceled'].includes(order.shipping_status) ||
+    (order.payment_status !== null &&
+      ['cancelled', 'canceled'].includes(order.payment_status))
+  ) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'Order has been cancelled', code: 'ORDER_CANCELLED' },
+        { status: 400 }
+      ),
+    };
+  }
+
   if (order.selected_quote_id && order.selected_quote_id !== data.quoteId) {
     return {
       ok: false,

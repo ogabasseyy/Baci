@@ -104,6 +104,18 @@ jest.mock('@/stores/cart-store', () => ({
     selector({ clearCart: mockClearCart }),
 }));
 
+let mockAuthUser: { id: string } | null = null;
+let mockAuthCustomer: { id: string } | null = null;
+
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: (
+    selector: (state: {
+      user: { id: string } | null;
+      customer: { id: string } | null;
+    }) => unknown
+  ) => selector({ user: mockAuthUser, customer: mockAuthCustomer }),
+}));
+
 const mockWaitForVtuConfirmation = jest.mocked(waitForVtuConfirmation);
 const mockWaitForWalletTopUpConfirmation = jest.mocked(
   waitForWalletTopUpConfirmation
@@ -173,6 +185,8 @@ describe('usePaymentGatewayController', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
+    mockAuthUser = null;
+    mockAuthCustomer = null;
     mockSearchParams = { ...orderParams };
     mockWaitForVtuConfirmation.mockResolvedValue({
       amount: 2500,
@@ -433,6 +447,65 @@ describe('usePaymentGatewayController', () => {
     });
 
     expect(router.replace).toHaveBeenCalledWith('/orders');
+    expect(router.back).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
+  it('routes guest redvault exits to the tracking-token status view', () => {
+    mockSearchParams = {
+      ...orderParams,
+      paymentMethod: 'uba_redvault',
+      trackingToken: 'track-guest-123',
+    };
+    let leavePress: (() => void) | undefined;
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((_title, _message, buttons) => {
+        leavePress = buttons?.find(
+          (button) => button.text === 'Leave'
+        )?.onPress;
+      });
+    const { result } = renderHook(() => usePaymentGatewayController());
+
+    act(() => {
+      result.current.handleClose();
+    });
+    act(() => {
+      leavePress?.();
+    });
+
+    expect(router.replace).toHaveBeenCalledWith({
+      pathname: '/track-order',
+      params: { trackingToken: 'track-guest-123' },
+    });
+    expect(router.back).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
+  it('routes signed-in redvault exits to the order details view', () => {
+    mockAuthUser = { id: 'user-1' };
+    mockAuthCustomer = { id: 'customer-1' };
+    mockSearchParams = { ...orderParams, paymentMethod: 'uba_redvault' };
+    let leavePress: (() => void) | undefined;
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((_title, _message, buttons) => {
+        leavePress = buttons?.find(
+          (button) => button.text === 'Leave'
+        )?.onPress;
+      });
+    const { result } = renderHook(() => usePaymentGatewayController());
+
+    act(() => {
+      result.current.handleClose();
+    });
+    act(() => {
+      leavePress?.();
+    });
+
+    expect(router.replace).toHaveBeenCalledWith('/orders/order-123');
     expect(router.back).not.toHaveBeenCalled();
 
     alertSpy.mockRestore();

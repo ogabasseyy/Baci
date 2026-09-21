@@ -25,6 +25,13 @@ export async function assertCurrentOrderPaymentShippable(
       'ORDER_REFUNDED'
     );
   }
+  if (error.message?.includes('order_cancelled_for_shipment')) {
+    throw new OrderShipmentBookingError(
+      'This order was cancelled and can no longer be shipped.',
+      400,
+      'ORDER_CANCELLED'
+    );
+  }
   if (error.message?.includes('order_not_found_for_shipment')) {
     throw new OrderShipmentBookingError(
       'Order not found',

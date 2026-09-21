@@ -103,7 +103,6 @@ export async function executeDirectBookingAttempt(params: {
   merchantId: string;
   merchantBusinessName?: string | null;
   orderId: string;
-  orderItems: OrderItemRecord[];
   quote: OrderShipmentQuoteRecord;
   quotePayload: DirectBookingPayload;
   usesStoredInternationalSender: boolean;
@@ -122,7 +121,6 @@ export async function executeDirectBookingAttempt(params: {
     merchantId,
     merchantBusinessName,
     orderId,
-    orderItems,
     quote,
     quotePayload,
     usesStoredInternationalSender,
@@ -192,11 +190,32 @@ export async function executeDirectBookingAttempt(params: {
     assertDomesticQuoteMatchesPayload(receiver, items, quotePayload);
   }
 
+  // Re-read the authoritative order rows after the claim: the loaded
+  // snapshot predates it, and a partial refund that settled (processed +
+  // released) in between is deliberately allowed by the claim while
+  // still leaving stale pre-refund fulfillment quantities behind.
+  // The claim's lock token blocks any newer refund from reserving, so
+  // the rows read here are stable through provider submission.
+  const { data: currentOrderItems, error: currentOrderItemsError } =
+    await supabase
+      .from('order_items')
+      .select('name, quantity, price, fulfillment_data')
+      .eq('order_id', orderId);
+  if (currentOrderItemsError || !currentOrderItems) {
+    throw new OrderShipmentBookingError(
+      'Could not verify the current shippable quantities for this order.',
+      500,
+      'SHIPMENT_BOOKING_STATE_CHECK_FAILED'
+    );
+  }
   // Rebuild the provider items from the authoritative order rows: partial
   // refunds write the surviving per-line quantity into
   // order_items.fulfillment_data, and quoting predates the refund, so the
   // stored/client items above would otherwise ship refunded units.
-  const shippableItems = toDomesticBookingItems(orderItems, items);
+  const shippableItems = toDomesticBookingItems(
+    currentOrderItems as OrderItemRecord[],
+    items
+  );
   assertShippableBookingItems(shippableItems);
 
   const bookingRequest: BookingRequest = {

@@ -106,6 +106,20 @@ export async function claimOrderShipmentBooking(
       );
     }
 
+    // The claim also rejects cancelled orders: cancellation restocks
+    // inventory, so booking one would ship against stock back on sale.
+    if (
+      typeof error === 'object' &&
+      typeof (error as RpcErrorLike).message === 'string' &&
+      (error as RpcErrorLike).message?.includes('order_cancelled_for_shipment')
+    ) {
+      throw new OrderShipmentBookingError(
+        'This order was cancelled and can no longer be shipped.',
+        400,
+        'ORDER_CANCELLED'
+      );
+    }
+
     // Partial refunds leave payment_status paid: the claim rejects while a
     // merchandise refund is still settling so the booking cannot ship
     // stale pre-refund units. No lock was acquired, so nothing to release;

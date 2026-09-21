@@ -133,6 +133,25 @@ describe('claimOrderShipmentBooking', () => {
     } satisfies Partial<OrderShipmentBookingError>);
   });
 
+  it('throws ORDER_CANCELLED when the claim observes a cancelled order', async () => {
+    const { supabase } = createSupabaseMock({
+      rpcResult: {
+        data: null,
+        error: {
+          code: 'P0001',
+          message: 'order_cancelled_for_shipment',
+        },
+      },
+    });
+
+    await expect(
+      claimOrderShipmentBooking(supabase, 'merchant-1', 'order-1')
+    ).rejects.toMatchObject({
+      code: 'ORDER_CANCELLED',
+      status: 400,
+    } satisfies Partial<OrderShipmentBookingError>);
+  });
+
   it('throws ORDER_REFUND_PENDING when a partial refund is still settling', async () => {
     const { supabase } = createSupabaseMock({
       rpcResult: {

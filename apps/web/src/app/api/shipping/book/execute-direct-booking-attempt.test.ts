@@ -21,6 +21,13 @@ vi.mock('./resolve-booking-quote-for-sender', () => ({
   resolveBookingQuoteForSender: mockResolveQuote,
 }));
 
+const mockOrderItemsEq = vi.fn();
+const mockOrderItemsSelect = vi.fn(() => ({ eq: mockOrderItemsEq }));
+const mockFrom = vi.fn(() => ({ select: mockOrderItemsSelect }));
+function supabaseStub() {
+  return { from: mockFrom } as never;
+}
+
 const { executeDirectBookingAttempt } = await import(
   './execute-direct-booking-attempt'
 );
@@ -69,6 +76,7 @@ describe('executeDirectBookingAttempt', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAssertShippable.mockResolvedValue(undefined);
+    mockOrderItemsEq.mockResolvedValue({ data: orderItems, error: null });
     mockGetMerchantSender.mockResolvedValue({ ok: true, sender });
     mockResolveQuote.mockResolvedValue(quote);
     mockBookShipment.mockResolvedValue({
@@ -83,11 +91,10 @@ describe('executeDirectBookingAttempt', () => {
 
   it('resolves the registered sender before making the provider booking', async () => {
     const result = await executeDirectBookingAttempt({
-      supabase: {} as never,
+      supabase: supabaseStub(),
       merchantId: 'merchant-1',
       merchantBusinessName: 'Merchant Store',
       orderId: 'order-1',
-      orderItems,
       quote,
       quotePayload: payload,
       usesStoredInternationalSender: false,
@@ -103,11 +110,10 @@ describe('executeDirectBookingAttempt', () => {
 
   it('verifies the payment state immediately before the provider booking', async () => {
     await executeDirectBookingAttempt({
-      supabase: {} as never,
+      supabase: supabaseStub(),
       merchantId: 'merchant-1',
       merchantBusinessName: 'Merchant Store',
       orderId: 'order-1',
-      orderItems,
       quote,
       quotePayload: payload,
       usesStoredInternationalSender: false,
@@ -129,11 +135,10 @@ describe('executeDirectBookingAttempt', () => {
 
     await expect(
       executeDirectBookingAttempt({
-        supabase: {} as never,
+        supabase: supabaseStub(),
         merchantId: 'merchant-1',
         merchantBusinessName: 'Merchant Store',
         orderId: 'order-1',
-        orderItems,
         quote,
         quotePayload: payload,
         usesStoredInternationalSender: false,
@@ -157,11 +162,10 @@ describe('executeDirectBookingAttempt', () => {
     });
 
     await executeDirectBookingAttempt({
-      supabase: {} as never,
+      supabase: supabaseStub(),
       merchantId: 'merchant-1',
       merchantBusinessName: 'Merchant Store',
       orderId: 'order-1',
-      orderItems,
       quote,
       quotePayload: payload,
       usesStoredInternationalSender: false,
@@ -215,11 +219,10 @@ describe('executeDirectBookingAttempt', () => {
 
     await expect(
       executeDirectBookingAttempt({
-        supabase: {} as never,
+        supabase: supabaseStub(),
         merchantId: 'merchant-1',
         merchantBusinessName: 'Merchant Store',
         orderId: 'order-1',
-        orderItems,
         quote,
         quotePayload: payload,
         usesStoredInternationalSender: false,
@@ -236,11 +239,10 @@ describe('executeDirectBookingAttempt', () => {
     const storedSender = { ...sender, address: '7 Quoted Origin' };
 
     await executeDirectBookingAttempt({
-      supabase: {} as never,
+      supabase: supabaseStub(),
       merchantId: 'merchant-1',
       merchantBusinessName: 'Merchant Store',
       orderId: 'order-1',
-      orderItems,
       quote,
       quotePayload: { ...payload, sender: storedSender },
       usesStoredInternationalSender: true,
@@ -254,12 +256,8 @@ describe('executeDirectBookingAttempt', () => {
   });
 
   it('submits surviving quantities after a partial refund', async () => {
-    const result = await executeDirectBookingAttempt({
-      supabase: {} as never,
-      merchantId: 'merchant-1',
-      merchantBusinessName: 'Merchant Store',
-      orderId: 'order-1',
-      orderItems: [
+    mockOrderItemsEq.mockResolvedValue({
+      data: [
         {
           name: 'Phone',
           quantity: 2,
@@ -267,6 +265,13 @@ describe('executeDirectBookingAttempt', () => {
           fulfillment_data: { fulfillmentQuantity: 1 },
         },
       ],
+      error: null,
+    });
+    const result = await executeDirectBookingAttempt({
+      supabase: supabaseStub(),
+      merchantId: 'merchant-1',
+      merchantBusinessName: 'Merchant Store',
+      orderId: 'order-1',
       quote,
       quotePayload: {
         ...payload,
@@ -293,20 +298,23 @@ describe('executeDirectBookingAttempt', () => {
   });
 
   it('rejects booking when every unit was refunded', async () => {
+    mockOrderItemsEq.mockResolvedValue({
+      data: [
+        {
+          name: 'Phone',
+          quantity: 1,
+          price: 100,
+          fulfillment_data: { fulfillmentQuantity: 0 },
+        },
+      ],
+      error: null,
+    });
     await expect(
       executeDirectBookingAttempt({
-        supabase: {} as never,
+        supabase: supabaseStub(),
         merchantId: 'merchant-1',
         merchantBusinessName: 'Merchant Store',
         orderId: 'order-1',
-        orderItems: [
-          {
-            name: 'Phone',
-            quantity: 1,
-            price: 100,
-            fulfillment_data: { fulfillmentQuantity: 0 },
-          },
-        ],
         quote,
         quotePayload: payload,
         usesStoredInternationalSender: false,
@@ -325,11 +333,10 @@ describe('executeDirectBookingAttempt', () => {
 
     await expect(
       executeDirectBookingAttempt({
-        supabase: {} as never,
+        supabase: supabaseStub(),
         merchantId: 'merchant-1',
         merchantBusinessName: 'Merchant Store',
         orderId: 'order-1',
-        orderItems,
         quote,
         quotePayload: payload,
         usesStoredInternationalSender: false,
@@ -338,6 +345,49 @@ describe('executeDirectBookingAttempt', () => {
     ).rejects.toMatchObject({
       code: 'MERCHANT_SENDER_REQUIRED',
       message: 'Merchant shipping origin is not configured.',
+    });
+
+    expect(mockBookShipment).not.toHaveBeenCalled();
+  });
+
+  it('scopes the post-claim item reload to the booking order', async () => {
+    await executeDirectBookingAttempt({
+      supabase: supabaseStub(),
+      merchantId: 'merchant-1',
+      merchantBusinessName: 'Merchant Store',
+      orderId: 'order-1',
+      quote,
+      quotePayload: payload,
+      usesStoredInternationalSender: false,
+      expectedShippingFee: 2500,
+    });
+
+    expect(mockFrom).toHaveBeenCalledWith('order_items');
+    expect(mockOrderItemsSelect).toHaveBeenCalledWith(
+      'name, quantity, price, fulfillment_data'
+    );
+    expect(mockOrderItemsEq).toHaveBeenCalledWith('order_id', 'order-1');
+  });
+
+  it('fails closed when the post-claim item reload fails', async () => {
+    mockOrderItemsEq.mockResolvedValue({
+      data: null,
+      error: { message: 'connection reset' },
+    });
+
+    await expect(
+      executeDirectBookingAttempt({
+        supabase: supabaseStub(),
+        merchantId: 'merchant-1',
+        merchantBusinessName: 'Merchant Store',
+        orderId: 'order-1',
+        quote,
+        quotePayload: payload,
+        usesStoredInternationalSender: false,
+        expectedShippingFee: 2500,
+      })
+    ).rejects.toMatchObject({
+      code: 'SHIPMENT_BOOKING_STATE_CHECK_FAILED',
     });
 
     expect(mockBookShipment).not.toHaveBeenCalled();

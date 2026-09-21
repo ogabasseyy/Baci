@@ -64,10 +64,18 @@ export function CustomerOrderDetailsContent({
   const hasPickupDetails = Boolean(
     pickupLabel || pickupAddressLine || pickupInstructions
   );
+  // The invoice route downloads a 325 proforma for unpaid invoice-method
+  // orders: label the same document here. The href keeps the
+  // current_document_kind segment (the download route is /invoice).
+  const isProformaInvoice =
+    order.current_document_kind !== 'receipt' &&
+    order.invoice_type_code === '325';
   const documentLabel =
     order.current_document_kind === 'receipt'
       ? 'Download Receipt'
-      : 'Download Invoice';
+      : isProformaInvoice
+        ? 'Download Proforma Invoice'
+        : 'Download Invoice';
   const documentHref = `/api/storefront/account/orders/${order.id}/${order.current_document_kind}?merchantSlug=${encodeURIComponent(merchantSlug)}`;
   const firstItem = order.items[0];
   let buyAgainHref: Route | null = null;

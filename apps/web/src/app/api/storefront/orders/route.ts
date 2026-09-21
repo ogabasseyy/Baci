@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { sanitizePublicOrder } from '@/lib/public-fulfillment-sanitizer';
+import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import {
   getCurrentDocumentKind,
   isReceiptEligible,
@@ -116,6 +117,7 @@ export async function GET(request: NextRequest) {
         tracking_number,
         shipping_provider,
         payment_method,
+        invoice_type_code,
         fulfillment_details,
         order_items (
           id,
@@ -196,6 +198,11 @@ export async function GET(request: NextRequest) {
           shippingStatus,
           externalSource: order.external_source,
           importJobId: order.import_job_id,
+        }),
+        invoice_type_code: resolveInvoiceTypeCode({
+          paymentMethod: order.payment_method,
+          isPaid: paymentStatus === 'paid',
+          storedTypeCode: order.invoice_type_code,
         }),
         receipt_eligible: isReceiptEligible({
           paymentStatus,

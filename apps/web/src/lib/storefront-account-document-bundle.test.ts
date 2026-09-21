@@ -1020,5 +1020,8 @@ describe('buildStorefrontAccountDocumentBundle', () => {
     });
 
     expect(result.invoiceData.invoice_type_code).toBe(expected);
+    // Account views label from the customer-facing order projection, so it
+    // must carry the same resolved code as the generated invoice.
+    expect(result.order.invoice_type_code).toBe(expected);
   });
 });

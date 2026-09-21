@@ -1141,6 +1141,11 @@ describe('BnplLauncher', () => {
     expect(
       screen.queryByText('Klump declined the application')
     ).not.toBeInTheDocument();
+    // The native shell attributes the bridged failure: no web event.
+    expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
+      'payment_failed',
+      expect.anything()
+    );
   });
 
   it('keeps a pre-open Klump SDK failure local instead of bridging it', async () => {
@@ -1295,6 +1300,90 @@ describe('BnplLauncher', () => {
     } finally {
       appendSpy.mockRestore();
     }
+  });
+
+  it('records a web failure for an opened-then-failed browser Klump attempt', async () => {
+    // No native bridge: an ordinary browser session.
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onOpen?: () => void;
+      onError?: (error: Error) => void;
+    };
+    config.onOpen?.();
+    // Checkout already navigated to the launcher: nothing else can close
+    // the onOpen start, so the failure must record here.
+    config.onError?.(new Error('Klump declined the application'));
+
+    await waitFor(() => {
+      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
+        'payment_started',
+        expect.objectContaining({ payment_method: 'klump' })
+      );
+    });
+    await waitFor(() => {
+      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
+        'payment_failed',
+        expect.objectContaining({
+          order_id: 'order-1',
+          payment_method: 'klump',
+          reason: 'klump_error',
+        })
+      );
+    });
+    expect(
+      await screen.findByText('Klump declined the application')
+    ).toBeInTheDocument();
+  });
+
+  it('records no web failure for a pre-open browser Klump error', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+
+    // onOpen never fired: no start exists, so the failure stays local.
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onError?: (error: Error) => void;
+    };
+    config.onError?.(new Error('Klump unavailable'));
+
+    expect(await screen.findByText('Klump unavailable')).toBeInTheDocument();
+    expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
+      'payment_failed',
+      expect.anything()
+    );
+    expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
+      'payment_started',
+      expect.anything()
+    );
   });
 
   it('skips the web start for Klump opens inside a native shell', async () => {

@@ -374,6 +374,30 @@ describe('useBNPLCheckoutController', () => {
     });
   });
 
+  it('ignores success-looking provider documents reached via navigation state', async () => {
+    mockRouteParams = {
+      gateway: 'credpal',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+    };
+    const { result } = renderControllerHook();
+
+    // Main-document navigation is not pre-gated like bridge messages: a
+    // provider/intermediate page carrying a success-looking URL must not
+    // consume the completion, clear the cart, or navigate away.
+    await act(async () => {
+      await result.current.handleNavigationChange({
+        url: 'https://pay.example-provider.com/order-success?reference=Evil-1',
+      } as never);
+    });
+
+    expect(result.current.status).not.toBe('success');
+    expect(result.current.status).not.toBe('error');
+    expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(mockClearCart).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
   it('returns to the app when a trusted merchant SPA navigation leaves BNPL checkout', () => {
     mockRouteParams = {
       gateway: 'credit_direct',

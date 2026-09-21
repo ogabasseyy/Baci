@@ -80,15 +80,19 @@ export function useJuicywayVerification({
 
   // Uses a ref to track polling state to avoid stale closure issues.
   // The epoch invalidates in-flight status checks when a new attempt
-  // supersedes the current one or the modal is dismissed mid-poll.
+  // supersedes the current one, the modal is dismissed mid-poll, or the
+  // hook unmounts. checkInFlight serializes the status requests so a slow
+  // network can never stack overlapping checks for one attempt.
   const pollingRef = useRef<{
     intervalId: NodeJS.Timeout | null;
     attempts: number;
     epoch: number;
+    checkInFlight: boolean;
   }>({
     intervalId: null,
     attempts: 0,
     epoch: 0,
+    checkInFlight: false,
   });
 
   const clearPollingInterval = () => {
@@ -153,7 +157,14 @@ export function useJuicywayVerification({
       if (epoch !== pollingRef.current.epoch) {
         return;
       }
+      // A slow check still awaiting its response: skip this tick rather
+      // than stacking a second request — overlapping responses could
+      // settle twice or contradict each other. The attempt counter still
+      // advances so the wall-clock cap holds.
       pollingRef.current.attempts++;
+      if (pollingRef.current.checkInFlight) {
+        return;
+      }
 
       if (pollingRef.current.attempts >= VERIFY_POLL_MAX_ATTEMPTS) {
         clearPollingInterval();
@@ -162,7 +173,14 @@ export function useJuicywayVerification({
         return;
       }
 
-      const pollStatus = await checkJuicywayPaymentStatus(verificationId);
+      // Promise `.finally()` instead of a try/finally statement, which
+      // would bail React Compiler; semantics are identical.
+      pollingRef.current.checkInFlight = true;
+      const pollStatus = await checkJuicywayPaymentStatus(
+        verificationId
+      ).finally(() => {
+        pollingRef.current.checkInFlight = false;
+      });
       if (epoch !== pollingRef.current.epoch) {
         // Superseded while the check was in flight: never clear the new
         // poll or settle this attempt.
@@ -183,11 +201,15 @@ export function useJuicywayVerification({
     }, VERIFY_POLL_INTERVAL_MS);
   };
 
-  // Cleanup polling on unmount
+  // Cleanup polling on unmount: drop the interval and invalidate the
+  // epoch so an in-flight check can never settle (clear the cart,
+  // navigate to success) after the shopper has navigated away.
   useEffect(() => {
     return () => {
+      pollingRef.current.epoch += 1;
       if (pollingRef.current.intervalId) {
         clearInterval(pollingRef.current.intervalId);
+        pollingRef.current.intervalId = null;
       }
     };
   }, []);

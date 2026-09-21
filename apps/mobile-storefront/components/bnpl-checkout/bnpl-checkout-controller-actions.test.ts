@@ -10,10 +10,13 @@ jest.mock('./bnpl-checkout-message-handler', () => ({
 }));
 
 describe('resolveBNPLNavigationUrlEffect', () => {
+  const trustedBase = { apiBaseUrl: 'https://shop.example.com' };
+
   it('returns success with the extracted reference for order success URLs', () => {
     expect(
       resolveBNPLNavigationUrlEffect(
-        'https://shop.example.com/order-success?reference=ref_123'
+        'https://shop.example.com/order-success?reference=ref_123',
+        trustedBase
       )
     ).toEqual({
       isPending: false,
@@ -25,7 +28,8 @@ describe('resolveBNPLNavigationUrlEffect', () => {
   it('marks accepted-but-pending CredPal results as non-paid success', () => {
     expect(
       resolveBNPLNavigationUrlEffect(
-        'https://shop.example.com/order-success?type=credpal&credpalStatus=pending'
+        'https://shop.example.com/order-success?type=credpal&credpalStatus=pending',
+        trustedBase
       )
     ).toEqual({
       isPending: true,
@@ -37,7 +41,8 @@ describe('resolveBNPLNavigationUrlEffect', () => {
   it('treats approved CredPal results as paid success', () => {
     expect(
       resolveBNPLNavigationUrlEffect(
-        'https://shop.example.com/order-success?type=credpal&credpalStatus=success'
+        'https://shop.example.com/order-success?type=credpal&credpalStatus=success',
+        trustedBase
       )
     ).toEqual({
       isPending: false,
@@ -50,13 +55,31 @@ describe('resolveBNPLNavigationUrlEffect', () => {
     expect(
       resolveBNPLNavigationUrlEffect(
         'https://shop.example.com/order-success?reference=klump_tx_1',
-        { gateway: 'klump' }
+        { ...trustedBase, gateway: 'klump' }
       )
     ).toEqual({
       isPending: true,
       reference: 'klump_tx_1',
       status: 'success',
     });
+  });
+
+  it('ignores success-looking URLs outside the trusted return origin', () => {
+    // A provider/intermediate page carrying /order-success must not
+    // consume the durable completion claim: main-document navigation is
+    // not pre-gated like bridge messages.
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://pay.example-provider.com/order-success?reference=Evil-1',
+        { apiBaseUrl: 'https://usebaci.com', gateway: 'credpal' }
+      )
+    ).toBeNull();
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://pay.example-provider.com/checkout?success=true',
+        { apiBaseUrl: 'https://usebaci.com', gateway: 'credpal' }
+      )
+    ).toBeNull();
   });
 
   it('returns to the app for checkout cancellation URLs', () => {

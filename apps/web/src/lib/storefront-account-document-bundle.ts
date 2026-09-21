@@ -120,6 +120,15 @@ export function buildStorefrontAccountDocumentBundle({
   const customerPhone =
     asString(order.customer_phone) || customer.phone || null;
   const receiptEligible = currentDocumentKind === 'receipt';
+  // Same proforma rule as the order invoice route: the stored 380 default
+  // must not win over 325 for unpaid invoice-method orders. Shared by the
+  // generated invoiceData and the customer-facing order projection so the
+  // account views label the same document the route downloads.
+  const invoiceTypeCode = resolveInvoiceTypeCode({
+    paymentMethod: order.payment_method,
+    isPaid: paymentStatus === 'paid',
+    storedTypeCode: order.invoice_type_code,
+  });
   const registeredAddress = asRecord(merchant.registered_address);
   const sellerIsVatRegistered =
     merchant.vat_registration_status === 'registered';
@@ -372,6 +381,7 @@ export function buildStorefrontAccountDocumentBundle({
     discount_amount: discountAmount,
     balance,
     current_document_kind: currentDocumentKind,
+    invoice_type_code: invoiceTypeCode,
     receipt_eligible: receiptEligible,
     can_cancel: canCancel,
     customer_name: customerName,
@@ -393,13 +403,7 @@ export function buildStorefrontAccountDocumentBundle({
 
   const invoiceData: InvoiceData = {
     invoice_number: order.order_number,
-    // Same proforma rule as the order invoice route: the stored 380 default
-    // must not win over 325 for unpaid invoice-method orders.
-    invoice_type_code: resolveInvoiceTypeCode({
-      paymentMethod: order.payment_method,
-      isPaid: paymentStatus === 'paid',
-      storedTypeCode: order.invoice_type_code,
-    }),
+    invoice_type_code: invoiceTypeCode,
     issue_date: new Date(order.invoice_issue_date || order.created_at),
     tax_point_date: order.tax_point_date
       ? new Date(order.tax_point_date)

@@ -53,8 +53,8 @@ export function createPaymentGatewayEventHandlers({
   // recreates this factory on every render — e.g. after the first failure
   // sets status to error — and a local would reset, letting a late
   // duplicate callback emit payment_failed again. Set synchronously on
-  // first emission (status refs only mirror on render) and reset only by
-  // Retry.
+  // first emission (status refs only mirror on render), stamped with the
+  // failed reference, and reset only by Retry for a new reference.
   const recordPaymentFailure = (reason: string) => {
     // VTU, wallet, and savings-auth flows share this controller but have no
     // checkout order or matching checkout start: their failures must not
@@ -66,6 +66,7 @@ export function createPaymentGatewayEventHandlers({
       return;
     }
     refs.paymentFailureRecordedRef.current = true;
+    refs.paymentFailureReferenceRef.current = reference;
     void trackCheckoutPaymentFailed(reason, orderId, gateway);
   };
 
@@ -113,7 +114,14 @@ export function createPaymentGatewayEventHandlers({
       }
     },
     handleRetry: () => {
-      refs.paymentFailureRecordedRef.current = false;
+      // Retry reloads the same authorization URL and reference without a
+      // new checkout start: retain the failure marker so repeated reload
+      // failures emit a single payment_failed for the one started attempt.
+      // Only a new reference (a genuinely new attempt) may reset it.
+      if (refs.paymentFailureReferenceRef.current !== reference) {
+        refs.paymentFailureRecordedRef.current = false;
+        refs.paymentFailureReferenceRef.current = reference;
+      }
       refs.vtuConfirmationTokenRef.current += 1;
       refs.savingsAuthorizationAbortRef.current?.abort();
       refs.savingsAuthorizationAbortRef.current = null;

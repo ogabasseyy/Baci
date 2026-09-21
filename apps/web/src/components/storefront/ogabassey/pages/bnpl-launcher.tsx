@@ -143,6 +143,42 @@ function captureBnplPaymentStarted({
         })
     );
 }
+
+function captureBnplPaymentFailed({
+    orderId,
+    orderNumber,
+    paymentMethod,
+    reason,
+    value,
+    currency,
+}: {
+    orderId: string;
+    orderNumber?: string;
+    paymentMethod: string;
+    reason: string;
+    value?: number;
+    currency?: string;
+}) {
+    // Inside a native BNPL WebView the native shell records the failure
+    // from bnpl_provider_error: emitting here would double-attribute.
+    if (isNativeBnplWebView()) {
+        return;
+    }
+    captureClientEvent(
+        CHECKOUT_FUNNEL_EVENTS.paymentFailed,
+        buildCheckoutFunnelProperties({
+            channel: 'web',
+            ...(currency ? { currency } : {}),
+            orderId,
+            orderNumber,
+            paymentIntent: 'installments',
+            paymentMethod,
+            reason,
+            source: 'web_checkout',
+            total: value,
+        })
+    );
+}
 export const KLUMP_REDIRECT_URL_KEY = 'klump_redirect_url';
 
 interface SearchParamReader {
@@ -894,6 +930,10 @@ async function launchBnplPayment({
                     klumpSuccessRedirectRef.current = true;
                 },
                 onError: (error) => {
+                    const message =
+                        error instanceof Error
+                            ? error.message
+                            : 'Klump checkout failed.';
                     // Bridge only when this attempt opened (same
                     // unmatched-start guard as Credit Direct and CredPal).
                     if (
@@ -901,21 +941,34 @@ async function launchBnplPayment({
                         notifyNativeBnplProviderError(
                             'klump',
                             order.id,
-                            error instanceof Error
-                                ? error.message
-                                : 'Klump checkout failed.'
+                            message
                         )
                     ) {
                         clearPaymentLaunch(paymentLaunchKeyRef);
                         return;
                     }
+                    // Browser sessions have no native shell to attribute
+                    // the failure, and checkout already navigated away: an
+                    // opened-then-failed attempt must record its web
+                    // failure here or the onOpen start strands unmatched.
+                    // Pre-open errors have no start and stay local.
+                    if (providerOpenedLaunchKeyRef.current === launchKey) {
+                        captureBnplPaymentFailed({
+                            orderId: order.id,
+                            orderNumber: order.order_number ?? undefined,
+                            paymentMethod: 'klump',
+                            reason: 'klump_error',
+                            ...(Number.isFinite(klumpOrderTotal)
+                                ? { value: klumpOrderTotal }
+                                : {}),
+                            ...(klumpOrderCurrency
+                                ? { currency: klumpOrderCurrency }
+                                : {}),
+                        });
+                    }
                     clearPaymentLaunch(paymentLaunchKeyRef);
                     setStatus('error');
-                    setErrorMessage(
-                        error instanceof Error
-                            ? error.message
-                            : 'Klump checkout failed.'
-                    );
+                    setErrorMessage(message);
                 },
             });
             return;

@@ -68,6 +68,22 @@ export function resolveBNPLNavigationUrlEffect(
   options: BNPLNavigationEffectOptions = {}
 ): BNPLNavigationEffect | null {
   if (url.includes('/order-success') || url.includes('success=true')) {
+    // Success consumes the durable payment_completed claim: only a trusted
+    // Baci return origin may complete. Main-document navigation (unlike
+    // bridge messages) is not pre-gated, so a provider/intermediate page
+    // with a success-looking URL must never settle, clear the cart, or
+    // navigate away.
+    if (
+      !isTrustedBnplReturnUrl(
+        url,
+        options.apiBaseUrl ?? '',
+        options.merchantSlug,
+        options.merchantDomain
+      )
+    ) {
+      logBNPLCheckoutDebug('ignored untrusted success navigation', { url });
+      return null;
+    }
     // Accepted-but-pending provider results reach the same success page but
     // are not paid conversions: CredPal's explicit `pending` status, and any
     // Klump navigation — the Klump launcher records only the transaction ID

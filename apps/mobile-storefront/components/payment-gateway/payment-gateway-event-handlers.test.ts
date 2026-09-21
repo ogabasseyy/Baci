@@ -19,6 +19,7 @@ function createRefs(): PaymentGatewayRefs {
     navigationTimeoutRef: { current: null },
     paymentCompletionStartedRef: { current: false },
     paymentFailureRecordedRef: { current: false },
+    paymentFailureReferenceRef: { current: undefined },
     savingsAuthorizationAbortRef: { current: null },
     statusRef: { current: 'ready' },
     vtuConfirmationTokenRef: { current: 0 },
@@ -166,13 +167,16 @@ describe('createPaymentGatewayEventHandlers navigation', () => {
     expect(failedMock).toHaveBeenCalledTimes(1);
   });
 
-  it('allows a fresh failure after Retry', () => {
+  it('emits a single failure across a same-reference Retry', () => {
     const { trackCheckoutPaymentFailed: failedMock } = jest.requireMock(
       '@/services/analytics'
     ) as { trackCheckoutPaymentFailed: jest.Mock };
     failedMock.mockClear();
     const { handlers } = createHandlers('ref-123');
 
+    // Retry reloads the same authorization URL and reference without a
+    // new checkout start: the second reload failure must not emit beside
+    // the first for the one started attempt.
     handlers.handleNavigationChange({
       url: 'https://checkout.paystack.com/orders?cancelled=true',
     } as never);
@@ -184,13 +188,40 @@ describe('createPaymentGatewayEventHandlers navigation', () => {
       },
     } as never);
 
-    expect(failedMock).toHaveBeenCalledTimes(2);
-    expect(failedMock).toHaveBeenNthCalledWith(
-      2,
-      'payment_gateway_load_error',
+    expect(failedMock).toHaveBeenCalledTimes(1);
+    expect(failedMock).toHaveBeenCalledWith(
+      'payment_gateway_cancelled',
       'order-1',
       'paystack'
     );
+  });
+
+  it('allows a fresh failure after Retry with a new reference', () => {
+    const { trackCheckoutPaymentFailed: failedMock } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutPaymentFailed: jest.Mock };
+    failedMock.mockClear();
+    const refs = createRefs();
+    const first = createHandlers('ref-123', refs);
+
+    first.handlers.handleWebViewError({
+      nativeEvent: {
+        description: 'net::ERR_FAILED',
+        url: 'https://checkout.paystack.com/orders?trxref=ref-123',
+      },
+    } as never);
+
+    // A new reference is a genuinely new attempt: Retry may reset.
+    const second = createHandlers('ref-456', refs);
+    second.handlers.handleRetry();
+    second.handlers.handleWebViewError({
+      nativeEvent: {
+        description: 'net::ERR_FAILED',
+        url: 'https://checkout.paystack.com/orders?trxref=ref-456',
+      },
+    } as never);
+
+    expect(failedMock).toHaveBeenCalledTimes(2);
   });
 });
 

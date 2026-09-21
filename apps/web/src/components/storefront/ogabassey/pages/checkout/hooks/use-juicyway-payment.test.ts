@@ -334,6 +334,106 @@ describe('useJuicywayPayment', () => {
     unmount();
   });
 
+  it('serializes poll ticks while a status check is in flight', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveSlowCheck!: (response: Response) => void;
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(initResponse('ref-1', 'pay-1'))
+        .mockResolvedValueOnce(Response.json({}))
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveSlowCheck = resolve;
+            })
+        )
+        // A second overlapping request (only reachable pre-fix): never
+        // resolves, so any duplicate settle would hang the test open.
+        .mockImplementationOnce(() => new Promise<Response>(() => {}));
+      vi.stubGlobal('fetch', fetchMock);
+      const options = createOptions('TRX');
+      const { result, unmount } = renderHook(() =>
+        useJuicywayPayment(options)
+      );
+
+      await act(async () => {
+        await result.current.initializeCryptoPayment();
+      });
+      await act(async () => {
+        await result.current.verifyCryptoPayment();
+      });
+      expect(result.current.cryptoVerificationStatus).toBe('pending');
+
+      // First tick starts a slow check; the second tick must skip rather
+      // than stack a second request for the same attempt.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      const statusUrls = fetchMock.mock.calls
+        .map(([url]) => String(url))
+        .filter((url) => url.includes('/api/payments/status'));
+      expect(statusUrls).toHaveLength(2);
+
+      await act(async () => {
+        resolveSlowCheck(Response.json({ is_confirmed: true }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.cryptoVerificationStatus).toBe('confirmed');
+      expect(options.routerPush).toHaveBeenCalledTimes(1);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores verification responses after unmount', async () => {
+    let resolveStatus!: (response: Response) => void;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(initResponse('ref-1', 'pay-1'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveStatus = resolve;
+          })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const options = createOptions('TRX');
+    const { result, unmount } = renderHook(() =>
+      useJuicywayPayment(options)
+    );
+
+    await act(async () => {
+      await result.current.initializeCryptoPayment();
+    });
+    let verifyPromise!: Promise<void>;
+    act(() => {
+      verifyPromise = result.current.verifyCryptoPayment();
+    });
+    // Navigate away while the initial status check is in flight.
+    act(() => {
+      unmount();
+    });
+    await act(async () => {
+      resolveStatus(Response.json({ is_confirmed: true }));
+      await verifyPromise;
+    });
+
+    // The stale confirmation must not clear the cart or redirect back to
+    // order success from another page.
+    expect(options.routerPush).not.toHaveBeenCalled();
+    expect(options.clearCart).not.toHaveBeenCalled();
+    expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+      'payment_completed',
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
   it('keeps the completion order-keyed', async () => {
     const fetchMock = vi
       .fn()

@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderSuccessPage from '@/app/(storefront)/[slug]/(commerce)/order-success/page';
@@ -141,7 +142,7 @@ describe('storefront order success page', () => {
     );
   });
 
-  it('hands payforme requesters a copyable payer link', async () => {
+  it('hands payforme requesters copyable instructions with no Bearer [REDACTED]', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -155,30 +156,140 @@ describe('storefront order success page', () => {
         trackingToken: 'track-token-123',
       })
     );
-
-    render(<OrderSuccessPage />);
-    await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalled();
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        currency: 'NGN',
+        items: [],
+        subtotal: 3500,
+        shipping_cost: 0,
+        total: 3500,
+        virtual_account: {
+          account_name: 'Baci Checkout ORD-123',
+          account_number: '9876543210',
+          bank_name: 'Baci Bank',
+        },
+      }),
     });
 
-    // Handoff contract: the requester forwards the link — the route
-    // must never claim a delivery happened.
+    render(<OrderSuccessPage />);
+
+    // Handoff contract: instructions (never a link) — the route must
+    // never claim a delivery happened.
     expect(
-      await screen.findByRole('heading', { name: /share the payment link/i })
+      await screen.findByRole('heading', { name: /share the payment details/i })
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/send the payment link below to alice/i)
+      screen.getByText(/send the payment details below to alice/i)
     ).toBeInTheDocument();
     expect(screen.queryByText(/we've sent a payment link/i)).toBeNull();
 
-    const linkInput = screen.getByLabelText(
-      /payment link to share with your payer/i
-    ) as HTMLInputElement;
-    expect(linkInput.value).toContain('/track-order?token=track-token-123');
+    const handoff = (await screen.findByText(
+      /payment details for alice/i
+    )) as HTMLElement;
+    const handoffRoot = handoff.closest('div') as HTMLElement;
+    const handoffQueries = within(handoffRoot);
+    expect(handoffQueries.getByText(/amount due/i)).toBeInTheDocument();
+    expect(handoffQueries.getByText(/₦|NGN/)).toBeInTheDocument();
+    expect(handoffQueries.getByText('Baci Bank')).toBeInTheDocument();
+    expect(handoffQueries.getByText('9876543210')).toBeInTheDocument();
+    // The tracking token is a full-PII bearer: it must appear nowhere
+    // in the handoff — no link, no input, no copied text.
+    expect(handoffQueries.queryByRole('link')).toBeNull();
+    expect(handoffRoot.textContent).not.toContain('track-token-123');
+    expect(handoffRoot.textContent).not.toContain('buyer@example.com');
 
-    fireEvent.click(screen.getByRole('button', { name: /copy/i }));
-    expect(writeText).toHaveBeenCalledWith(linkInput.value);
+    fireEvent.click(
+      handoffQueries.getByRole('button', { name: /copy payment details/i })
+    );
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copied = String(writeText.mock.calls[0][0]);
+    expect(copied).toContain('ORD-123');
+    expect(copied).toContain('9876543210');
+    expect(copied).not.toContain('track-token-123');
+    expect(copied).not.toContain('buyer@example.com');
     expect(await screen.findByText('Copied')).toBeInTheDocument();
+  });
+
+  it('withholds the naira account from foreign-currency payer details', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'payforme',
+        payerName: 'Alice',
+        trackingToken: 'track-token-123',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        currency: 'USD',
+        items: [],
+        subtotal: 3500,
+        shipping_cost: 0,
+        total: 3500,
+        virtual_account: {
+          account_name: 'Baci Checkout ORD-123',
+          account_number: '9876543210',
+          bank_name: 'Baci Bank',
+        },
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    // Same NGN-only rule as the order email: a dollar-denominated
+    // balance must not print the naira account beside it.
+    expect(
+      await screen.findByText(/payment details for alice/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText('9876543210')).toBeNull();
+    expect(screen.queryByText('Baci Bank')).toBeNull();
+    expect(
+      screen.getByText(/your order email has the full transfer details/i)
+    ).toBeInTheDocument();
+  });
+
+  it('tells payforme requesters when nothing is due from the payer', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'payforme',
+        payerName: 'Alice',
+        trackingToken: 'track-token-123',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        currency: 'NGN',
+        items: [],
+        subtotal: 0,
+        shipping_cost: 0,
+        total: 0,
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    expect(
+      await screen.findByText(/payment details for alice/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/nothing is due on this order/i)
+    ).toBeInTheDocument();
   });
 
   it('shows guests the emailed invoice action instead of the archive link', async () => {
@@ -248,7 +359,9 @@ describe('storefront order success page', () => {
     render(<OrderSuccessPage />);
 
     expect(
-      await screen.findByRole('link', { name: /download proforma invoice pdf/i })
+      await screen.findByRole('link', {
+        name: /download proforma invoice pdf/i,
+      })
     ).toHaveAttribute('href', '/test-store/receipts');
     expect(screen.queryByText(/was sent to/i)).toBeNull();
   });

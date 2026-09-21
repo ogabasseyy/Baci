@@ -131,6 +131,7 @@ describe('checkout success page', () => {
         body: JSON.stringify({ reference: 'txn-ref-123' }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
+        signal: expect.any(AbortSignal),
       })
     );
     expect(mockClearCart).toHaveBeenCalled();
@@ -550,6 +551,7 @@ describe('checkout success page', () => {
         body: JSON.stringify({ reference: 'txn-ref-123' }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
+        signal: expect.any(AbortSignal),
       })
     );
     expect(mockClearCart).not.toHaveBeenCalled();
@@ -733,7 +735,8 @@ describe('checkout success page', () => {
 
     await waitFor(() =>
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/storefront/orders/order-123?merchant_slug=test-store&tracking_token=track-token-123'
+        '/api/storefront/orders/order-123?merchant_slug=test-store&tracking_token=track-token-123',
+        { signal: expect.any(AbortSignal) }
       )
     );
     expect(mockClearCart).toHaveBeenCalled();
@@ -760,7 +763,12 @@ describe('checkout success page', () => {
     render(<CheckoutSuccessPage />);
 
     await waitFor(() =>
-      expect(mockFetch).toHaveBeenCalledWith('/api/storefront/orders/order-123')
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/storefront/orders/order-123',
+        {
+          signal: expect.any(AbortSignal),
+        }
+      )
     );
     expect(mockFetch.mock.calls[0]?.[0]).not.toContain('undefined');
   });
@@ -783,6 +791,22 @@ describe('checkout success page', () => {
       expect(screen.getByText('#ABCDEFGH')).toBeInTheDocument()
     );
   });
+
+  // Timer advances and promise drains must run inside act() so React
+  // applies the fetch/settle state updates under fake timers.
+  const flushMicrotasks = async () => {
+    await act(async () => {
+      for (let i = 0; i < 6; i += 1) {
+        await Promise.resolve();
+      }
+    });
+  };
+  const advanceTimers = async (ms: number) => {
+    await act(async () => {
+      vi.advanceTimersByTime(ms);
+      await Promise.resolve();
+    });
+  };
 
   it('re-verifies when navigation swaps to a new reference without remounting', async () => {
     // Stable-router pin: production's useRouter is referentially stable,
@@ -828,19 +852,180 @@ describe('checkout success page', () => {
       rerender(<CheckoutSuccessPage />);
 
       await waitFor(() =>
-        expect(mockFetchWithCsrf).toHaveBeenCalledWith(
-          '/api/payments/verify',
-          {
-            body: JSON.stringify({ reference: 'ref-2' }),
-            headers: { 'Content-Type': 'application/json' },
-            method: 'POST',
-          }
-        )
+        expect(mockFetchWithCsrf).toHaveBeenCalledWith('/api/payments/verify', {
+          body: JSON.stringify({ reference: 'ref-2' }),
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          signal: expect.any(AbortSignal),
+        })
       );
       expect(await screen.findByText('#ORD-2002')).toBeInTheDocument();
       expect(screen.queryByText('#ORD-2001')).toBeNull();
     } finally {
       useRouterSpy.mockRestore();
+    }
+  });
+
+  it('releases a hung verification request and retries the pass', async () => {
+    vi.useFakeTimers();
+    // Stable-router pin: production's useRouter is referentially stable,
+    // so each render must not restart verification with a fresh pass.
+    const useRouterSpy = vi
+      .spyOn(nextNavigation, 'useRouter')
+      .mockReturnValue({ push: mockPush } as never);
+    try {
+      // The first request stalls but honors the pass bound; the retry
+      // observes the captured payment completing.
+      mockFetchWithCsrf.mockImplementationOnce(
+        (_url: unknown, options: unknown) =>
+          new Promise((_resolve, reject) => {
+            const signal = (options as { signal?: AbortSignal } | undefined)
+              ?.signal;
+            signal?.addEventListener('abort', () => {
+              reject(new DOMException('Aborted', 'AbortError'));
+            });
+          })
+      );
+      mockFetchWithCsrf.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          finalizationOutcome: 'completed',
+          orderId: 'order-1',
+          orderNumber: 'ORD-2001',
+          status: 'success',
+          success: true,
+        }),
+      });
+
+      render(<CheckoutSuccessPage />);
+      await flushMicrotasks();
+      expect(mockFetchWithCsrf).toHaveBeenCalledTimes(1);
+
+      // The 10s pass bound aborts the hung request; the loop stays
+      // pending and the 3s retry observes success.
+      await advanceTimers(10000);
+      await flushMicrotasks();
+      await advanceTimers(3000);
+      await flushMicrotasks();
+
+      expect(mockFetchWithCsrf).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('#ORD-2001')).toBeInTheDocument();
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-1',
+        expect.objectContaining({ payment_status: 'paid' })
+      );
+    } finally {
+      useRouterSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps observing late settlement on the slow lane after the fast budget', async () => {
+    vi.useFakeTimers();
+    // Stable-router pin: production's useRouter is referentially stable,
+    // so each render must not restart verification with a fresh pass.
+    const useRouterSpy = vi
+      .spyOn(nextNavigation, 'useRouter')
+      .mockReturnValue({ push: mockPush } as never);
+    try {
+      mockFetchWithCsrf.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          orderNumber: 'ORD-2001',
+          status: 'pending',
+          success: true,
+        }),
+      });
+
+      render(<CheckoutSuccessPage />);
+      await flushMicrotasks();
+
+      // Exhaust the 20 fast passes with finalization still pending: no
+      // conversion, but polling must continue instead of stranding the
+      // page on "processing" after one minute. The 20th pass already arms
+      // the slow timer, so only 19 fast advances fire.
+      for (let i = 0; i < 19; i += 1) {
+        await advanceTimers(3000);
+        await flushMicrotasks();
+      }
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
+      expect(mockFetchWithCsrf).toHaveBeenCalledTimes(20);
+
+      // Past the fast budget the lane slows to 15s: a 3s wait schedules
+      // nothing, the full backoff runs the next pass.
+      await advanceTimers(3000);
+      await flushMicrotasks();
+      expect(mockFetchWithCsrf).toHaveBeenCalledTimes(20);
+      await advanceTimers(12000);
+      await flushMicrotasks();
+      expect(mockFetchWithCsrf).toHaveBeenCalledTimes(21);
+
+      // Late reconciliation marks the order paid: the slow lane observes
+      // it and completes without a manual refresh.
+      mockFetchWithCsrf.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          finalizationOutcome: 'completed',
+          orderId: 'order-1',
+          orderNumber: 'ORD-2001',
+          status: 'success',
+          success: true,
+        }),
+      });
+      await advanceTimers(15000);
+      await flushMicrotasks();
+
+      expect(screen.getByText('#ORD-2001')).toBeInTheDocument();
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-1',
+        expect.objectContaining({ payment_status: 'paid' })
+      );
+    } finally {
+      useRouterSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('revalidates immediately when the shopper returns during a slow wait', async () => {
+    vi.useFakeTimers();
+    // Stable-router pin: production's useRouter is referentially stable,
+    // so each render must not restart verification with a fresh pass.
+    const useRouterSpy = vi
+      .spyOn(nextNavigation, 'useRouter')
+      .mockReturnValue({ push: mockPush } as never);
+    try {
+      mockFetchWithCsrf.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          orderNumber: 'ORD-2001',
+          status: 'pending',
+          success: true,
+        }),
+      });
+
+      render(<CheckoutSuccessPage />);
+      await flushMicrotasks();
+      // Reach the slow lane: the 20th pass arms the 15s timer, so 19 fast
+      // advances get there.
+      for (let i = 0; i < 19; i += 1) {
+        await advanceTimers(3000);
+        await flushMicrotasks();
+      }
+      const callsBeforeFocus = mockFetchWithCsrf.mock.calls.length;
+
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+        await Promise.resolve();
+      });
+      await flushMicrotasks();
+
+      // No timers advanced: the focus return ran the waiting pass now.
+      expect(mockFetchWithCsrf.mock.calls.length).toBe(callsBeforeFocus + 1);
+    } finally {
+      useRouterSpy.mockRestore();
+      vi.useRealTimers();
     }
   });
 });

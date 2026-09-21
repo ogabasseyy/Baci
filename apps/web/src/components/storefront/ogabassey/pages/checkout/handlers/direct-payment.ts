@@ -8,40 +8,10 @@ import { openCreditDirectCheckout } from '@/lib/credit-direct-client';
 import { getCredPalKey, openCredPalCheckout } from '@/lib/credpal';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { captureCreditDirectClientCompletion } from '../credit-direct-client-completion';
-import {
-  type CreditDirectPopupMarker,
-  writeCreditDirectPopupMarker,
-} from '../credit-direct-popup-return';
+import { buildCreditDirectVerificationPath } from './build-credit-direct-verification-path';
+import { writeCreditDirectPopupMarker } from '../credit-direct-popup-return';
 import { persistCreditDirectPopupReference } from '../persist-credit-direct-popup-reference';
 import type { ResumedOrder } from '../types';
-
-export interface CreditDirectVerificationHandoff {
-  orderId: string;
-  merchantSlug: string;
-  completionMarker?: CreditDirectPopupMarker | null;
-  trackingToken?: string | null;
-  customerEmail?: string | null;
-}
-
-export function buildCreditDirectVerificationPath({
-  orderId,
-  merchantSlug,
-  completionMarker,
-  trackingToken,
-  customerEmail,
-}: CreditDirectVerificationHandoff): string {
-  const query = new URLSearchParams({
-    orderId,
-    gateway: 'credit_direct',
-    merchant_slug: merchantSlug,
-  });
-  if (completionMarker) {
-    query.set('creditDirectCompletion', completionMarker.transactionId);
-  }
-  if (trackingToken) query.set('trackingToken', trackingToken);
-  if (customerEmail) query.set('email', customerEmail);
-  return `/checkout/bnpl?${query.toString()}`;
-}
 
 export interface ExecuteResumedDirectPaymentOptions {
   resumedOrder: ResumedOrder | null;

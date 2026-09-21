@@ -73,6 +73,15 @@ export interface VerifyCheckoutPaymentParams {
   paymentMethod: string | null;
   reference: string | null;
   trackingToken: string | null;
+  /**
+   * Per-pass bound owned by the hook: aborts a hung request so the lane
+   * releases instead of stranding the page on "processing" forever.
+   */
+  signal?: AbortSignal;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
 }
 
 export interface VerifyCheckoutPaymentHandlers {
@@ -112,6 +121,7 @@ export async function verifyCheckoutPayment(
     paymentMethod,
     reference,
     trackingToken,
+    signal,
   }: VerifyCheckoutPaymentParams,
   {
     clearCart,
@@ -136,7 +146,7 @@ export async function verifyCheckoutPayment(
         const url = `/api/storefront/orders/${encodeURIComponent(orderId)}${
           queryString ? `?${queryString}` : ''
         }`;
-        const response = await fetch(url);
+        const response = await fetch(url, { signal });
         const data = response.ok ? await response.json() : null;
         if (data && (data.order_number || data.short_id)) {
           clearCart();
@@ -164,7 +174,14 @@ export async function verifyCheckoutPayment(
           setOrderNumber(orderId.slice(0, 8).toUpperCase());
         }
       } catch (error) {
-        console.error('Failed to fetch order details on success page:', error);
+        // An aborted bound releases the lane for a retry; anything else
+        // falls back to the derived order number.
+        if (!isAbortError(error)) {
+          console.error(
+            'Failed to fetch order details on success page:',
+            error
+          );
+        }
         clearCart();
         setStatus('success');
         setOrderNumber(orderId.slice(0, 8).toUpperCase());
@@ -185,6 +202,7 @@ export async function verifyCheckoutPayment(
       body: JSON.stringify({ reference }),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
+      signal,
     });
     const raw: unknown = await response.json();
     const data = isVerificationResponse(raw) ? raw : {};
@@ -256,7 +274,11 @@ export async function verifyCheckoutPayment(
       setOrderNumber(reference.slice(0, 8).toUpperCase());
     }
   } catch (error) {
-    console.error('Failed to verify payment:', error);
+    // An aborted bound is the loop working as intended — stay pending so
+    // the hook schedules the retry — without error telemetry noise.
+    if (!isAbortError(error)) {
+      console.error('Failed to verify payment:', error);
+    }
     setStatus('pending');
     setOrderNumber(reference.slice(0, 8).toUpperCase());
   } finally {

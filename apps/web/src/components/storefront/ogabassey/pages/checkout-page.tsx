@@ -129,10 +129,8 @@ import { captureCheckoutPaymentFailed } from './checkout/capture-checkout-paymen
 import { captureCheckoutPaymentStarted } from './checkout/capture-checkout-payment-started';
 import { captureCreditDirectClientCompletion } from './checkout/credit-direct-client-completion';
 import { writeCreditDirectPopupMarker } from './checkout/credit-direct-popup-return';
-import {
-  buildCreditDirectVerificationPath,
-  executeResumedDirectPayment,
-} from './checkout/handlers/direct-payment';
+import { buildCreditDirectVerificationPath } from './checkout/handlers/build-credit-direct-verification-path';
+import { executeResumedDirectPayment } from './checkout/handlers/direct-payment';
 import { persistCreditDirectPopupReference } from './checkout/persist-credit-direct-popup-reference';
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';

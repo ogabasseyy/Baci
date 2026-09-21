@@ -24,6 +24,11 @@ export interface StorefrontOrderData {
   subtotal: number;
   shipping_cost: number;
   total: number;
+  virtual_account?: {
+    account_name: string | null;
+    account_number: string;
+    bank_name: string | null;
+  } | null;
 }
 
 export async function fetchStorefrontOrderData(

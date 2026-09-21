@@ -49,7 +49,7 @@ function OrderSuccessContent() {
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [payerLinkCopied, setPayerLinkCopied] = useState(false);
+  const [payerDetailsCopied, setPayerDetailsCopied] = useState(false);
   const [estimatedDeliveryDate] = useState(
     () =>
       new Date(Date.now() + DELIVERY_ESTIMATE_MS).toISOString().split('T')[0]
@@ -104,20 +104,43 @@ function OrderSuccessContent() {
     order?.payment_method === 'invoice';
   const isInvoice = isInvoiceMethod && order?.payment_status !== 'paid';
   // Pay for Me handoff contract: nothing is delivered to the payer
-  // contact server-side — the requester's email carries the transfer
-  // details to forward, and this page hands them the shareable payment
-  // link. The copy must never claim a delivery happened.
+  // contact server-side, and the tracking token is a full-PII bearer —
+  // sharing any link that carries it would disclose the requester's
+  // email, phone, and shipping address to the payer. The handoff is
+  // therefore copyable payment instructions (amount + transfer details)
+  // with no token, no link, and no PII. The copy must never claim a
+  // delivery happened.
   const isPayForMe = _type === 'payforme';
   const payerName = searchParams.get('payerName') || 'Friend';
-  const payerToken = orderToken || order?.tracking_token || null;
-  const payerPaymentLink =
-    isPayForMe && payerToken && typeof window !== 'undefined'
-      ? `${window.location.origin}${getHref(`/track-order?token=${encodeURIComponent(payerToken)}`)}`
+  // Same DVA-compatibility rule as the order email: Paystack DVAs settle
+  // in NGN only, so a foreign-currency quote never prints the naira
+  // account beside a dollar amount.
+  const payerDvaCompatible =
+    !order?.currency || order.currency.trim().toUpperCase() === 'NGN';
+  const payerTransferAccount =
+    payerDvaCompatible &&
+    order &&
+    order.total > 0 &&
+    order.virtual_account?.account_number
+      ? order.virtual_account
+      : null;
+  const payerDetailsText =
+    isPayForMe && order
+      ? [
+          `Payment for order ${order.order_number}: ${formatCurrency(order.total)}`,
+          ...(payerTransferAccount
+            ? [
+                `Bank: ${payerTransferAccount.bank_name || 'See your order email'}`,
+                `Account name: ${payerTransferAccount.account_name || 'See your order email'}`,
+                `Account number: ${payerTransferAccount.account_number}`,
+              ]
+            : []),
+        ].join('\n')
       : null;
 
   const heading = hasValidatedOrder
     ? isPayForMe
-      ? 'Share the Payment Link'
+      ? 'Share the Payment Details'
       : isInvoice
         ? 'Proforma Invoice Ready!'
         : 'Order Confirmed!'
@@ -126,7 +149,7 @@ function OrderSuccessContent() {
       : 'Finalizing your order';
   const description = hasValidatedOrder
     ? isPayForMe
-      ? `Send the payment link below to ${payerName} — your order will be processed once payment is received.`
+      ? `Send the payment details below to ${payerName} — your order will be processed once payment is received.`
       : isInvoice
         ? 'We have prepared your proforma invoice and sent it to your email. Share it with your company or procurement team.'
         : 'Thank you for your purchase. Your order has been received.'
@@ -180,35 +203,78 @@ function OrderSuccessContent() {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{heading}</h1>
           <p className="text-gray-500 mb-8">{description}</p>
 
-          {/* Payer handoff (Pay for Me only): the shareable payment link
-              the requester forwards — nothing is sent to the payer. */}
-          {isPayForMe && payerPaymentLink && (
+          {/* Payer handoff (Pay for Me only): copyable payment
+              instructions the requester forwards — amount plus transfer
+              details, with no bearer token, no link, and no PII. */}
+          {isPayForMe && payerDetailsText && order && (
             <div className="mb-8 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-left">
               <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">
-                Payment link for {payerName}
+                Payment details for {payerName}
               </p>
-              <div className="flex items-center gap-2">
-                <input
-                  aria-label="Payment link to share with your payer"
-                  readOnly
-                  value={payerPaymentLink}
-                  onFocus={(event) => event.target.select()}
-                  className="min-w-0 flex-1 truncate rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    void navigator.clipboard?.writeText(payerPaymentLink).then(
-                      () => setPayerLinkCopied(true),
-                      () => setPayerLinkCopied(false)
-                    );
-                  }}
-                  className="shrink-0 rounded-lg bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 active:scale-[0.98] flex items-center gap-2"
-                >
-                  {payerLinkCopied ? <Check size={16} /> : <Copy size={16} />}
-                  {payerLinkCopied ? 'Copied' : 'Copy'}
-                </button>
-              </div>
+              <dl className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 space-y-1">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-gray-500">Amount due</dt>
+                  <dd className="font-bold text-gray-900">
+                    {formatCurrency(order.total)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-gray-500">Order</dt>
+                  <dd className="font-mono font-bold text-gray-900">
+                    {order.order_number}
+                  </dd>
+                </div>
+                {payerTransferAccount && (
+                  <>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-gray-500">Bank</dt>
+                      <dd className="font-bold text-gray-900">
+                        {payerTransferAccount.bank_name ||
+                          'See your order email'}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-gray-500">Account name</dt>
+                      <dd className="font-bold text-gray-900">
+                        {payerTransferAccount.account_name ||
+                          'See your order email'}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-gray-500">Account number</dt>
+                      <dd className="font-mono font-bold text-gray-900">
+                        {payerTransferAccount.account_number}
+                      </dd>
+                    </div>
+                  </>
+                )}
+              </dl>
+              {!payerTransferAccount && order.total > 0 && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Your order email has the full transfer details — forward them
+                  to {payerName} along with the amount above.
+                </p>
+              )}
+              {order.total <= 0 && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Nothing is due on this order — no payment needed from{' '}
+                  {payerName}.
+                </p>
+              )}
+              <button
+                type="button"
+                aria-label="Copy payment details to share with your payer"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(payerDetailsText).then(
+                    () => setPayerDetailsCopied(true),
+                    () => setPayerDetailsCopied(false)
+                  );
+                }}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 active:scale-[0.98]"
+              >
+                {payerDetailsCopied ? <Check size={16} /> : <Copy size={16} />}
+                {payerDetailsCopied ? 'Copied' : 'Copy details'}
+              </button>
             </div>
           )}
 

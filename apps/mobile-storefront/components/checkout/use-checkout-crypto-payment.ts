@@ -140,11 +140,15 @@ async function runCryptoPaymentInitialization({
       );
     }
 
-    // The provider initialized with a wallet address: record the start now.
+    // The provider initialized with a wallet address: record the start now,
+    // stamped with the initialized reference (payment ID fallback) so a
+    // retry on another network or coin reconciles to its own attempt
+    // instead of blending into an indistinguishable same-order start.
     await trackCheckoutPaymentStarted({
       orderId: order.id,
       orderNumber: order.order_number || order.id.slice(0, 8).toUpperCase(),
       paymentMethod: 'juicyway',
+      reference: initData.reference || payment.payment_id || undefined,
       value: orderResponse.amountDueToGateway,
     });
     setIsProcessing(false);

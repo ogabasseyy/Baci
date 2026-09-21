@@ -18,9 +18,17 @@ import {
 
 // A pending gateway response can settle shortly after the first verify
 // call: re-run verification on a bounded poll so the completed branch is
-// still reached without a manual refresh.
+// still reached without a manual refresh. Fast passes cover the common
+// webhook race; the slow lane keeps observing late reconciliation (e.g. a
+// captured payment whose finalization lands minutes later) instead of
+// stranding the mounted page on "processing" after one minute.
 const VERIFY_REPOLL_INTERVAL_MS = 3000;
-const VERIFY_REPOLL_MAX_ATTEMPTS = 20;
+const VERIFY_REPOLL_FAST_MAX_ATTEMPTS = 20;
+const VERIFY_REPOLL_SLOW_INTERVAL_MS = 15000;
+const VERIFY_REPOLL_MAX_ATTEMPTS = 40;
+// Each pass is abort-bounded so one hung connection releases the lane
+// instead of stalling every later pass behind a never-settling request.
+const VERIFY_REQUEST_TIMEOUT_MS = 10000;
 
 export type { CheckoutVerificationStatus };
 
@@ -96,16 +104,31 @@ export function useCheckoutSuccessVerification({
     let disposed = false;
     let reverifyTimer: ReturnType<typeof setTimeout> | null = null;
     let reverifyAttempts = 0;
+    let passInFlight = false;
+    let passController: AbortController | null = null;
+    let passTimeout: ReturnType<typeof setTimeout> | null = null;
     const clearReverifyTimer = () => {
       if (reverifyTimer !== null) {
         clearTimeout(reverifyTimer);
         reverifyTimer = null;
       }
     };
+    const abortPass = () => {
+      if (passTimeout !== null) {
+        clearTimeout(passTimeout);
+        passTimeout = null;
+      }
+      if (passController !== null) {
+        passController.abort();
+        passController = null;
+      }
+    };
     // Serialized: the next attempt is scheduled only after the current
     // verification settles, so a slow older response can never arrive
     // after a newer success and overwrite the terminal state (or schedule
-    // a redirect after payment was confirmed).
+    // a redirect after payment was confirmed). Each pass is abort-bounded
+    // so a hung request releases the lane for its retry instead of
+    // stalling every later pass behind a never-settling connection.
     const runVerificationPass = () => {
       // Gate the pass itself on the terminal status: setStatus('success')
       // only schedules the React update, so the settling promise's
@@ -115,13 +138,28 @@ export function useCheckoutSuccessVerification({
       // paid order to failed (payment_failed + checkout redirect).
       if (
         disposed ||
+        passInFlight ||
         statusRef.current !== 'pending' ||
         reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS
       ) {
         return;
       }
       reverifyAttempts += 1;
-      void verifyCheckoutPayment(verifyParams, verifyHandlers).finally(() => {
+      passInFlight = true;
+      passController = new AbortController();
+      passTimeout = setTimeout(() => {
+        passController?.abort();
+      }, VERIFY_REQUEST_TIMEOUT_MS);
+      void verifyCheckoutPayment(
+        { ...verifyParams, signal: passController.signal },
+        verifyHandlers
+      ).finally(() => {
+        if (passTimeout !== null) {
+          clearTimeout(passTimeout);
+          passTimeout = null;
+        }
+        passController = null;
+        passInFlight = false;
         if (
           disposed ||
           statusRef.current !== 'pending' ||
@@ -129,10 +167,14 @@ export function useCheckoutSuccessVerification({
         ) {
           return;
         }
+        const interval =
+          reverifyAttempts < VERIFY_REPOLL_FAST_MAX_ATTEMPTS
+            ? VERIFY_REPOLL_INTERVAL_MS
+            : VERIFY_REPOLL_SLOW_INTERVAL_MS;
         reverifyTimer = setTimeout(() => {
           reverifyTimer = null;
           runVerificationPass();
-        }, VERIFY_REPOLL_INTERVAL_MS);
+        }, interval);
       });
     };
     const verifyHandlers: VerifyCheckoutPaymentHandlers = {
@@ -190,11 +232,38 @@ export function useCheckoutSuccessVerification({
       },
     };
 
+    // The shopper returned while a slow-lane wait was pending: revalidate
+    // now instead of making them wait out the backoff.
+    const revalidateOnVisible = () => {
+      if (
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'hidden'
+      ) {
+        return;
+      }
+      if (disposed || passInFlight || reverifyTimer === null) {
+        return;
+      }
+      if (
+        statusRef.current !== 'pending' ||
+        reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS
+      ) {
+        return;
+      }
+      clearReverifyTimer();
+      runVerificationPass();
+    };
+    window.addEventListener('focus', revalidateOnVisible);
+    document.addEventListener('visibilitychange', revalidateOnVisible);
+
     runVerificationPass();
 
     return () => {
       disposed = true;
       clearReverifyTimer();
+      abortPass();
+      window.removeEventListener('focus', revalidateOnVisible);
+      document.removeEventListener('visibilitychange', revalidateOnVisible);
       if (timerHandle.current !== null) {
         clearTimeout(timerHandle.current);
       }

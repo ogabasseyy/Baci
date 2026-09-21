@@ -62,9 +62,9 @@ import { mergeReceiptItemsWithInvoiceMetadata } from '@/lib/invoice-receipt-item
 import { logger } from '@/lib/logger';
 import { dispatchOrderCreationNotifications } from '@/lib/order-notification-dispatch';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
-import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
 import { recordPreGatewayRedemption } from '@/lib/payments/record-pre-gateway-redemption';
-import { generatePaymentAccount } from '@/lib/paystack';
+import { provisionInvoiceMethodDva } from '@/lib/provision-invoice-method-dva';
+import { resolveImmediateOrderEmail } from '@/lib/resolve-immediate-order-email';
 import {
   generatePeppolInvoiceXml,
   PEPPOL_BIS_BILLING_COMPLIANCE_NOTE,
@@ -1014,115 +1014,6 @@ export async function GET(request: NextRequest) {
 // CSRF exemption: This endpoint is called by unauthenticated storefront guests during checkout.
 // Guest users do not have CSRF tokens. Abuse is mitigated by rate limiting in proxy.ts,
 // Zod validates input shape, while the SECURITY DEFINER RPC enforces merchant + item authorization server-side.
-
-interface InvoiceMethodDvaProvisioningInput {
-  supabase: Parameters<typeof persistPaystackDvaAssignment>[0];
-  customerEmail: string | null;
-  customerName: string | null;
-  customerPhone: string | null;
-  merchantPhone: string | null;
-  // Pre-resolved issue timestamp: the invoice caller shares its timing
-  // object here so the DVA expiry and the PDF due date derive from the
-  // identical instant (no "two nows" drift).
-  order: { id: string; createdAt: string };
-  orderCurrency: string;
-  /** Invoice keeps its exact legacy log messages; payforme logs its own. */
-  orderLabel: 'invoice' | 'payforme';
-}
-
-/**
- * Provisions a Paystack DVA for an invoice-method order (invoice or Pay
- * for Me) and persists the assignment. Throws propagate to the caller so
- * the email catch can still render with the pre-derived credited
- * balance; provisioning failures and persistence failures log and
- * return null (merchant-contact fallback). The caller chooses the
- * Supabase client: invoice keeps the pre-existing admin client, while
- * Pay for Me must pass the request-scoped client — the reservation goes
- * through the proof-bound RPC (same pattern as payments/initialize) and
- * never crosses a service-role boundary (AGENTS.md).
- */
-async function provisionInvoiceMethodDva({
-  supabase,
-  customerEmail,
-  customerName,
-  customerPhone,
-  merchantPhone,
-  order,
-  orderCurrency,
-  orderLabel,
-}: InvoiceMethodDvaProvisioningInput): Promise<
-  ReceiptOrder['virtual_account']
-> {
-  const nameParts = (customerName || 'Customer').trim().split(' ');
-  const firstName = nameParts[0] || 'Customer';
-  const lastName = nameParts.slice(1).join(' ') || 'User';
-
-  // Paystack DVAs settle in NGN only: provisioning for a
-  // foreign-currency quote would print a naira account beside
-  // a dollar amount and risk a rejected transfer, so non-NGN
-  // orders skip provisioning (null result) and fall
-  // through to merchant-contact instructions.
-  const dvaResult =
-    orderCurrency === 'NGN'
-      ? await generatePaymentAccount({
-          email: customerEmail || `${order.id}@orders.usebaci.com`,
-          firstName,
-          lastName,
-          phone: customerPhone || merchantPhone || '08000000000',
-          orderId: order.id,
-        })
-      : null;
-
-  if (dvaResult?.success) {
-    const generatedVirtualAccount = {
-      account_number: dvaResult.data.account_number,
-      bank_name: dvaResult.data.bank_name,
-      account_name: dvaResult.data.account_name,
-    };
-
-    const persistenceFailure = await persistPaystackDvaAssignment(supabase, {
-      accountName: dvaResult.data.account_name,
-      accountNumber: dvaResult.data.account_number,
-      bankName: dvaResult.data.bank_name,
-      customerEmail: customerEmail || `${order.id}@orders.usebaci.com`,
-      expiresAt: getImmediateInvoiceDueDate({
-        created_at: order.createdAt,
-      }).toISOString(),
-      orderId: order.id,
-    });
-
-    if (persistenceFailure) {
-      logger.error({
-        message:
-          orderLabel === 'invoice'
-            ? 'Failed to store auto-generated invoice DVA'
-            : 'Failed to store auto-generated payforme DVA',
-        orderId: order.id,
-      });
-      return null;
-    }
-    logger.info({
-      message:
-        orderLabel === 'invoice'
-          ? 'Stored auto-generated invoice DVA successfully'
-          : 'Stored auto-generated payforme DVA successfully',
-      orderId: order.id,
-      accountNumber: dvaResult.data.account_number,
-    });
-    return generatedVirtualAccount;
-  }
-  if (dvaResult) {
-    logger.error({
-      message:
-        orderLabel === 'invoice'
-          ? 'Auto-generation of invoice DVA failed'
-          : 'Auto-generation of payforme DVA failed',
-      orderId: order.id,
-      error: dvaResult.error,
-    });
-  }
-  return null;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -3409,16 +3300,6 @@ export async function POST(request: NextRequest) {
       voucherOrderFullyCovered &&
       amountDueToGateway <= 0 &&
       (quizVoucherFinalized || order.payment_status === 'paid');
-    // Wallet/quiz-voucher full coverage finalizes payment server-side, but
-    // the create-RPC row still carries the pre-coverage status. Derive the
-    // paid state from the coverage flags so the immediate invoice email —
-    // subject, PDF kind, and Peppol type code — presents a paid commercial
-    // invoice instead of an unpaid proforma.
-    const isPaidForImmediateEmail =
-      isWalletFullyPaid ||
-      isQuizVoucherFullyPaid ||
-      String(order.payment_status || payment_status || '').toLowerCase() ===
-        'paid';
     const shouldSendImmediateOrderNotifications =
       !idempotencyReplayed &&
       (isPayOnDelivery(effectivePaymentMethod) ||
@@ -3479,18 +3360,20 @@ export async function POST(request: NextRequest) {
           paymentLink,
         };
 
-        // Same classification as the invoice download route and Peppol
-        // subject: unpaid invoice-method orders are proforma (325)
-        // quotations, so the body must use quotation semantics too. Unpaid
-        // Pay for Me orders are payment requests: same transfer
-        // instructions, but request (not quotation) semantics under their
-        // own document kind.
-        const emailDocumentKind =
-          effectivePaymentMethod === 'invoice' && !isPaidForImmediateEmail
-            ? ('proforma' as const)
-            : effectivePaymentMethod === 'payforme' && !isPaidForImmediateEmail
-              ? ('payment_request' as const)
-              : ('confirmation' as const);
+        // Single immediate-email classification (paid state, document
+        // kind, subject): wallet/quiz-voucher coverage finalizes
+        // server-side while the create-RPC row still carries the
+        // pre-coverage status.
+        const immediateEmail = resolveImmediateOrderEmail({
+          effectivePaymentMethod,
+          isWalletFullyPaid,
+          isQuizVoucherFullyPaid,
+          orderPaymentStatus: order.payment_status,
+          requestPaymentStatus: payment_status,
+          orderNumber: emailData.orderNumber,
+        });
+        const emailDocumentKind = immediateEmail.documentKind;
+        const isPaidForImmediateEmail = immediateEmail.isPaidForEmail;
         // NOTE: htmlContent/textContent are rendered inside after(), after
         // DVA provisioning, so the proforma body can include the
         // bank-transfer payment instructions.
@@ -3584,10 +3467,13 @@ export async function POST(request: NextRequest) {
                     customerName: customer_name,
                     customerPhone: customer_phone ?? null,
                     merchantPhone: merchant.phone,
-                    order: {
-                      id: order.id,
-                      createdAt: invoiceTimingOrder.created_at,
-                    },
+                    orderId: order.id,
+                    // Shared invoice timing: the DVA expiry and the PDF
+                    // due date derive from the identical instant.
+                    expiresAt:
+                      getImmediateInvoiceDueDate(
+                        invoiceTimingOrder
+                      ).toISOString(),
                     orderCurrency,
                     orderLabel: 'invoice',
                   });
@@ -3833,13 +3719,10 @@ export async function POST(request: NextRequest) {
                     customerName: customer_name,
                     customerPhone: customer_phone ?? null,
                     merchantPhone: merchant.phone,
-                    order: {
-                      id: order.id,
-                      createdAt:
-                        typeof order.created_at === 'string'
-                          ? order.created_at
-                          : new Date().toISOString(),
-                    },
+                    orderId: order.id,
+                    expiresAt: getImmediateInvoiceDueDate(
+                      order as Record<string, unknown>
+                    ).toISOString(),
                     orderCurrency,
                     orderLabel: 'payforme',
                   });
@@ -3885,12 +3768,7 @@ export async function POST(request: NextRequest) {
               // isPaidForImmediateEmail): the attachment block above may
               // fail, leaving emailedInvoiceTypeCode undefined, and the
               // subject must not flip to commercial on that failure.
-              subject:
-                effectivePaymentMethod === 'invoice'
-                  ? `${emailDocumentKind === 'proforma' ? 'Proforma Invoice' : 'Invoice'} Generated - #${emailData.orderNumber}`
-                  : effectivePaymentMethod === 'payforme'
-                    ? `Payment Request - #${emailData.orderNumber}`
-                    : `Order Confirmation - #${emailData.orderNumber}`,
+              subject: immediateEmail.subject,
               htmlContent,
               textContent,
               replyTo: replyToEmail,

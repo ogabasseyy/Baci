@@ -17,6 +17,7 @@ import type { PaymentMethodType } from './PaymentMethodSelector';
 import type { DeliveryMethod, ShippingQuote } from './types';
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethodType, string> = {
+  uba_redvault: 'Pay with UBA — review final price before payment',
   paystack: 'Card Payment (Paystack)',
   korapay: 'Card Payment (Korapay)',
   bank_transfer: 'Bank Transfer',

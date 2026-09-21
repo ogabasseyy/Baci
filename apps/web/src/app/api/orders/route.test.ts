@@ -243,6 +243,7 @@ function mockAuthUser(id: string) {
 }
 
 interface RpcOverrides {
+  create_storefront_redvault_order?: { data: unknown; error: unknown };
   // Per-RPC return values. Default values mirror a minimal happy path.
   create_storefront_order?: { data: unknown; error: unknown };
   create_storefront_order_with_quiz_voucher?: {
@@ -608,6 +609,368 @@ const baseOrderRow = {
   shipping_fee: 0,
   customer_id: CUSTOMER_ID,
 };
+
+describe('POST /api/orders REDVAULT integration', () => {
+  it.each([
+    null,
+    'ship',
+    'pickup',
+  ] as const)('forwards the Idempotency-Key and verified %s fulfillment to protected checkout', async (kind) => {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const availability = await import(
+      '@/lib/checkout/redvault-payment-availability'
+    );
+    const quoting = await import('@/lib/checkout/compute-redvault-order-quote');
+    const checkout = await import(
+      '@/lib/checkout/create-redvault-checkout-response'
+    );
+    const shipping = await import(
+      '@/lib/shipping/merchant-rates/verify-order-shipping-rate'
+    );
+    const shippingSpy = vi
+      .spyOn(shipping, 'verifyOrderShippingRate')
+      .mockResolvedValue({
+        ok: true,
+        amount: 0,
+        currency: 'NGN',
+        kind: kind ?? 'ship',
+        rateName: 'Verified rate',
+        pickupAddress: kind === 'pickup' ? { address: '1 Test Street' } : null,
+      } as never);
+    const { redvaultTestQuote } = await import(
+      '@/lib/checkout/redvault-test-fixture'
+    );
+    const availabilitySpy = vi
+      .spyOn(availability, 'getRedvaultPaymentAvailability')
+      .mockReturnValue({
+        available: true,
+        reason: 'provider_evidence_unavailable',
+      });
+    const quoteSpy = vi
+      .spyOn(quoting, 'computeRedvaultOrderQuote')
+      .mockResolvedValue(redvaultTestQuote);
+    const checkoutSpy = vi
+      .spyOn(checkout, 'createRedvaultCheckoutResponse')
+      .mockResolvedValue(
+        Response.json(
+          { order: { id: 'protected-order' } },
+          { status: 201 }
+        ) as never
+      );
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Galaxy S24',
+            price: 1000,
+            slug: 'galaxy-s24',
+          },
+        ],
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    try {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'redvault-enabled-checkout' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+            payment_method: 'uba_redvault',
+            ...(kind
+              ? {
+                  shipping_rate_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                  shipping_fee: 0,
+                  items: [
+                    {
+                      product_id: '11111111-1111-4111-8111-111111111111',
+                      name: 'Galaxy S24',
+                      price: 1000,
+                      quantity: 1,
+                    },
+                  ],
+                }
+              : {}),
+          }),
+        })
+      );
+      expect(await response.json()).toEqual({
+        order: { id: 'protected-order' },
+      });
+      expect(response.status).toBe(201);
+      expect(checkoutSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderRpcArgs: expect.objectContaining({
+            p_checkout_idempotency_key: 'redvault-enabled-checkout',
+            p_checkout_request_hash: expect.any(String),
+            ...(kind
+              ? {
+                  p_merchant_fulfillment: {
+                    provider:
+                      kind === 'pickup' ? 'MERCHANT_PICKUP' : 'MERCHANT',
+                    rate_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                    rate_name: 'Verified rate',
+                    pickup_details:
+                      kind === 'pickup' ? { address: '1 Test Street' } : null,
+                  },
+                }
+              : {}),
+          }),
+        })
+      );
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'create_storefront_order',
+        expect.anything()
+      );
+      // The REDVAULT draft reserves inventory, so the draft success path
+      // runs the same merchant and per-slug PDP cache revalidation.
+      expect(mockRevalidateProducts).toHaveBeenCalledWith(
+        '6b5cb8a4-5575-456c-b936-8cdfae30db74'
+      );
+      expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+        '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        ['galaxy-s24']
+      );
+    } finally {
+      availabilitySpy.mockRestore();
+      quoteSpy.mockRestore();
+      checkoutSpy.mockRestore();
+      shippingSpy.mockRestore();
+    }
+  });
+
+  it('emits the platform order-created event for first-time REDVAULT orders', async () => {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const availability = await import(
+      '@/lib/checkout/redvault-payment-availability'
+    );
+    const quoting = await import('@/lib/checkout/compute-redvault-order-quote');
+    const checkout = await import(
+      '@/lib/checkout/create-redvault-checkout-response'
+    );
+    const events = await import(
+      '@/lib/events/record-platform-order-created-event'
+    );
+    const availabilitySpy = vi
+      .spyOn(availability, 'getRedvaultPaymentAvailability')
+      .mockReturnValue({
+        available: true,
+        reason: 'provider_evidence_unavailable',
+      });
+    const { redvaultTestQuote } = await import(
+      '@/lib/checkout/redvault-test-fixture'
+    );
+    const quoteSpy = vi
+      .spyOn(quoting, 'computeRedvaultOrderQuote')
+      .mockResolvedValue(redvaultTestQuote);
+    const checkoutSpy = vi
+      .spyOn(checkout, 'createRedvaultCheckoutResponse')
+      .mockResolvedValue(
+        Response.json(
+          {
+            order: {
+              created_at: '2026-09-21T11:00:00.000Z',
+              currency: 'NGN',
+              id: 'rv-order-1',
+              order_number: 'RV-1',
+              total: 1500,
+            },
+          },
+          { status: 201 }
+        ) as never
+      );
+    const eventSpy = vi.spyOn(events, 'recordPlatformOrderCreatedEvent');
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Galaxy S24',
+            price: 1000,
+            slug: 'galaxy-s24',
+          },
+        ],
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    try {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'redvault-event-checkout' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+            payment_method: 'uba_redvault',
+          }),
+        })
+      );
+      expect(response.status).toBe(201);
+      expect(eventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          currency: 'NGN',
+          customerEmail: 'customer@example.com',
+          eventTimestamp: '2026-09-21T11:00:00.000Z',
+          merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+          orderId: 'rv-order-1',
+          orderNumber: 'RV-1',
+          value: 1500,
+        })
+      );
+    } finally {
+      availabilitySpy.mockRestore();
+      quoteSpy.mockRestore();
+      checkoutSpy.mockRestore();
+      eventSpy.mockRestore();
+    }
+  });
+
+  it('suppresses the platform event for replayed REDVAULT checkouts', async () => {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const availability = await import(
+      '@/lib/checkout/redvault-payment-availability'
+    );
+    const quoting = await import('@/lib/checkout/compute-redvault-order-quote');
+    const checkout = await import(
+      '@/lib/checkout/create-redvault-checkout-response'
+    );
+    const events = await import(
+      '@/lib/events/record-platform-order-created-event'
+    );
+    const availabilitySpy = vi
+      .spyOn(availability, 'getRedvaultPaymentAvailability')
+      .mockReturnValue({
+        available: true,
+        reason: 'provider_evidence_unavailable',
+      });
+    const { redvaultTestQuote } = await import(
+      '@/lib/checkout/redvault-test-fixture'
+    );
+    const quoteSpy = vi
+      .spyOn(quoting, 'computeRedvaultOrderQuote')
+      .mockResolvedValue(redvaultTestQuote);
+    const checkoutSpy = vi
+      .spyOn(checkout, 'createRedvaultCheckoutResponse')
+      .mockResolvedValue(
+        Response.json(
+          {
+            idempotency: { replayed: true },
+            order: { id: 'rv-order-1', total: 1500 },
+          },
+          {
+            headers: { 'x-idempotency-replayed': 'true' },
+            status: 200,
+          }
+        ) as never
+      );
+    const eventSpy = vi.spyOn(events, 'recordPlatformOrderCreatedEvent');
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Galaxy S24',
+            price: 1000,
+            slug: 'galaxy-s24',
+          },
+        ],
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    try {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'redvault-event-checkout' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+            payment_method: 'uba_redvault',
+          }),
+        })
+      );
+      expect(response.status).toBe(200);
+      expect(eventSpy).not.toHaveBeenCalled();
+    } finally {
+      availabilitySpy.mockRestore();
+      quoteSpy.mockRestore();
+      checkoutSpy.mockRestore();
+      eventSpy.mockRestore();
+    }
+  });
+
+  it('rejects an unavailable offer without generic order/provider side effects', async () => {
+    vi.clearAllMocks();
+    const productRows = [
+      {
+        id: 'p-1',
+        name: 'Galaxy S24',
+        brand: 'Samsung',
+        condition: 'new',
+        price: 1000,
+        vat_category_code: 'S',
+        vat_rate: 7.5,
+      },
+    ];
+    const supabase = buildMockSupabase(
+      {
+        create_storefront_redvault_order: {
+          data: null,
+          error: { message: 'redvault_disabled' },
+        },
+      },
+      { productRows }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+          payment_method: 'uba_redvault',
+        }),
+        headers: { 'Idempotency-Key': 'redvault-fixture' },
+      })
+    );
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe('REDVAULT_UNAVAILABLE');
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_redvault_order',
+      expect.anything()
+    );
+    expect(mockGeneratePaymentAccount).not.toHaveBeenCalled();
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+});
 
 async function readJson(response: Response) {
   return JSON.parse(await response.text());
@@ -7605,7 +7968,7 @@ describe('POST /api/orders — merchant shipping rate enforcement', () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         maybeSingle: vi.fn().mockResolvedValue({
-          data: { currency: 'NGN' },
+          data: { id: 'existing-order', currency: 'NGN' },
           error: null,
         }),
         update,

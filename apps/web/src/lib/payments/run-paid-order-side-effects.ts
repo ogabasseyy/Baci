@@ -105,6 +105,7 @@ export async function runPaidOrderSideEffects(
       ad_tracking_conversion: buildAdTrackingExecutor(args),
       merchant_settlement: buildSettlementExecutor({
         ...args,
+        orderPaymentMethod: args.order.payment_method,
         orderShippingProvider: args.order.shipping_provider,
         orderShippingFundingSource: args.order.shipping_funding_source,
         orderShippingRetainedAmount:

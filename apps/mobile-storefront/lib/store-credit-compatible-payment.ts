@@ -10,7 +10,8 @@ export type StoreCreditPaymentMethod =
   | 'klump'
   | 'juicyway'
   | 'invoice'
-  | 'payforme';
+  | 'payforme'
+  | 'uba_redvault';
 
 /**
  * STORE_CREDIT_COMPATIBLE_PAYMENT_METHODS lists full-payment methods that can

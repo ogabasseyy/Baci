@@ -316,6 +316,87 @@ describe('bookOrderShipment', () => {
     ).rejects.toThrow('no items');
   });
 
+  it('throws ORDER_REFUNDED for a fully-refunded order before provider booking', async () => {
+    const supabase = createMockSupabase({
+      order: {
+        data: {
+          ...validOrder,
+          payment_status: 'refunded',
+          order_items: [
+            {
+              name: 'Widget',
+              quantity: 2,
+              price: 5000,
+              fulfillment_data: {},
+            },
+          ],
+        },
+        error: null,
+      },
+    });
+
+    // Missing fulfillmentQuantity would fall back to the original
+    // quantity; the refunded-payment guard must reject first.
+    await expect(
+      bookOrderShipment(supabase, 'merchant-1', 'order-1')
+    ).rejects.toThrow('was refunded and can no longer be shipped');
+  });
+
+  it('rejects a refund that finalized after the booking read', async () => {
+    const supabase = createMockSupabase({
+      order: {
+        data: { ...validOrder, payment_status: 'paid' },
+        error: null,
+      },
+      quote: { data: validQuote, error: null },
+      merchant: { data: validMerchant, error: null },
+    });
+    const rpc = supabase.rpc as unknown as ReturnType<typeof vi.fn>;
+    const originalRpc = rpc.getMockImplementation();
+    rpc.mockImplementation(async (fn: string, ...rest: unknown[]) => {
+      if (fn === 'assert_shippable_order_payment') {
+        return {
+          data: null,
+          error: { message: 'order_refunded_for_shipment' },
+        };
+      }
+      return (originalRpc as (...args: unknown[]) => Promise<unknown>)(
+        fn,
+        ...rest
+      );
+    });
+
+    await expect(
+      bookOrderShipment(supabase, 'merchant-1', 'order-1')
+    ).rejects.toThrow('was refunded and can no longer be shipped');
+    expect(shippingService.bookShipment).not.toHaveBeenCalled();
+  });
+
+  it('throws NO_SHIPPABLE_ITEMS when every surviving item quantity is zero', async () => {
+    const supabase = createMockSupabase({
+      order: {
+        data: {
+          ...validOrder,
+          order_items: [
+            {
+              name: 'Widget',
+              quantity: 2,
+              price: 5000,
+              fulfillment_data: { fulfillmentQuantity: 0 },
+            },
+          ],
+        },
+        error: null,
+      },
+      quote: { data: validQuote, error: null },
+      merchant: { data: validMerchant, error: null },
+    });
+
+    await expect(
+      bookOrderShipment(supabase, 'merchant-1', 'order-1')
+    ).rejects.toThrow('nothing left to ship');
+  });
+
   it('throws QUOTE_NOT_FOUND when quote does not exist', async () => {
     const supabase = createMockSupabase({
       order: { data: validOrder, error: null },

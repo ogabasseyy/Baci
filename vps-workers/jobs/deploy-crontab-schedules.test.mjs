@@ -172,6 +172,19 @@ describe('deploy crontab schedules', () => {
     );
   });
 
+  it('keeps the REDVAULT refund worker unscheduled until restricted-role approval', () => {
+    const deployScript = readDeployScript();
+
+    assert.doesNotMatch(
+      deployScript,
+      /^\s*(\*\/\d+|\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s+.*process-redvault-refunds/m
+    );
+    assert.match(
+      deployScript,
+      /process-redvault-refunds stays unscheduled/
+    );
+  });
+
   it('restarts the drain receiver after promotion before installing cleanup cron', () => {
     const deployScript = readDeployScript();
     const restartIndex = deployScript.indexOf(

@@ -18343,10 +18343,12 @@ export type Database = {
           currency: string;
           merchant_country: string;
           merchant_id: string;
+          payment_method: string;
           payment_status: string;
           shipping_status: string;
           total: number;
           tracking_token: string;
+          wallet_amount_used: number;
         }[];
       };
       get_order_receipt_bank_details: {

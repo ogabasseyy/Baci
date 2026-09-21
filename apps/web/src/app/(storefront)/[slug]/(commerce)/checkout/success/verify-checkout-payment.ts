@@ -32,6 +32,7 @@ export interface VerifyCheckoutPaymentParams {
   merchantSlug: string | undefined;
   orderId: string | null;
   paymentMethod: string | null;
+  pendingRedvaultOrder: boolean;
   reference: string | null;
   trackingToken: string | null;
   /**
@@ -76,6 +77,7 @@ export async function verifyCheckoutPayment(
     merchantSlug,
     orderId,
     paymentMethod,
+    pendingRedvaultOrder,
     reference,
     trackingToken,
     signal,
@@ -94,9 +96,17 @@ export async function verifyCheckoutPayment(
 ): Promise<void> {
   if (!reference) {
     const handled = await verifyCheckoutPaymentByLookup(
-      { merchantSlug, orderId, paymentMethod, trackingToken, signal },
+      {
+        merchantSlug,
+        orderId,
+        paymentMethod,
+        pendingRedvaultOrder,
+        trackingToken,
+        signal,
+      },
       {
         clearCart,
+        scheduleFailedRedirect,
         setIsVerifying,
         setOrderNumber,
         setPaymentMethod,
@@ -122,7 +132,16 @@ export async function verifyCheckoutPayment(
     const raw: unknown = await response.json();
     const data = isVerificationResponse(raw) ? raw : {};
 
-    if (data.status === 'pending') {
+    // A 202 or an explicit held/evidence/review code keeps the page
+    // pending even when the payload also carries a success flag: the
+    // capture has not settled and must not confirm the order.
+    if (
+      response.status === 202 ||
+      data.code === 'REDVAULT_CAPTURE_HELD' ||
+      data.code === 'REDVAULT_CAPTURE_EVIDENCE_REVIEW' ||
+      data.code === 'REDVAULT_RECONCILIATION_REQUIRED' ||
+      data.status === 'pending'
+    ) {
       setStatus('pending');
       setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
     } else if (!response.ok) {

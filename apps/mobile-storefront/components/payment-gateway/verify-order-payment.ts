@@ -4,6 +4,7 @@ import {
   TRACK_ORDER_API_BASE_URL,
   TRACK_ORDER_MERCHANT_SLUG,
 } from '@/components/track-order/track-order.config';
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 import { getSession } from '@/lib/supabase';
 import {
   type TrackedCompletionAttribution,
@@ -81,19 +82,6 @@ function toTrackedItems(value: unknown): TrackOrderData['items'] {
   return Array.isArray(items) ? (items as TrackOrderData['items']) : [];
 }
 
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), VERIFY_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 interface TrackedOrderRead {
   order: TrackOrderData['order'];
   customer: TrackOrderData['customer'] | null;
@@ -107,7 +95,7 @@ async function readTrackedOrder(
   try {
     const response = await fetchWithTimeout(
       `${TRACK_ORDER_API_BASE_URL}/api/storefront/orders/track-order?token=${encodeURIComponent(trackingToken)}&merchant_slug=${encodeURIComponent(TRACK_ORDER_MERCHANT_SLUG)}`,
-      {}
+      { timeout: VERIFY_TIMEOUT_MS }
     );
     if (!response.ok) {
       return null;
@@ -198,6 +186,7 @@ async function checkReferenceSettled(
     const response = await fetchWithTimeout(
       `${CHECKOUT_API_BASE_URL}/api/payments/verify`,
       {
+        timeout: VERIFY_TIMEOUT_MS,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

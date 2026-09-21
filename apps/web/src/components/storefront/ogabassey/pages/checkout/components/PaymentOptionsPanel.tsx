@@ -8,27 +8,18 @@ import {
   KorapayLogo,
   PaystackLogo,
 } from '../../../components/PaymentLogos';
-import type { PaymentMethod, PaymentTab } from '../types';
-import { PaymentOptionCard } from './PaymentOptionCard';
+import type { PaymentTab } from '../types';
+import type { PaymentOptionsPanelProps } from './payment-options-panel.types';
 import { PaymentInstallmentDetails } from './PaymentInstallmentDetails';
+import { PaymentOptionCard } from './PaymentOptionCard';
 import {
-  type FeatureSettings,
+  RedvaultPaymentOption,
+} from './redvault/RedvaultPaymentOption';
+import {
   isNgnChargeCurrency,
 } from './payment-step-availability';
 
-interface PaymentOptionsPanelProps {
-  paymentTab: PaymentTab;
-  setPaymentTab: (v: PaymentTab) => void;
-  paymentMethod: PaymentMethod;
-  setPaymentMethod: (v: PaymentMethod) => void;
-  paystackCheckoutAvailable: boolean;
-  korapayCheckoutAvailable: boolean;
-  bankTransferCheckoutAvailable: boolean;
-  featureSettings?: FeatureSettings | null;
-  klumpEligible: boolean;
-  hasInstallmentOptions: boolean;
-  currency?: string | null;
-}
+
 
 export function PaymentOptionsPanel({
   paymentTab,
@@ -42,6 +33,9 @@ export function PaymentOptionsPanel({
   klumpEligible,
   hasInstallmentOptions,
   currency,
+  redvaultAvailable,
+  redvaultStatus,
+  redvaultSummary,
 }: PaymentOptionsPanelProps) {
   useEffect(() => {
     if (!hasInstallmentOptions && paymentTab === 'installments') {
@@ -116,6 +110,21 @@ export function PaymentOptionsPanel({
         <div className="space-y-3 animate-in fade-in">
           <p className="text-xs text-store-background-text/60">Choose how you'd like to pay:</p>
           <div className="grid grid-cols-1 gap-3">
+            <PaymentOptionCard
+              method="invoice"
+              paymentMethod={paymentMethod}
+              setPaymentMethod={setPaymentMethod}
+              title="Generate Invoice"
+              description="Create an invoice and pay later"
+              icon={<FileText className="size-6 text-store-foreground" />}
+            />
+            <RedvaultPaymentOption
+              available={redvaultAvailable}
+              onSelect={() => setPaymentMethod('uba_redvault')}
+              selected={paymentMethod === 'uba_redvault'}
+              status={redvaultStatus}
+              summary={redvaultSummary}
+            />
             {paystackCheckoutAvailable && (
               <PaymentOptionCard
                 method="paystack"

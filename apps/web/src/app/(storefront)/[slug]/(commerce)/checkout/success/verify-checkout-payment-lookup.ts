@@ -5,6 +5,7 @@ export type CheckoutVerificationStatus =
   | 'reconciling';
 
 export type VerificationResponse = {
+  code?: string;
   currency?: string;
   orderId?: string;
   orderNumber?: string;
@@ -50,6 +51,8 @@ export function isVerificationResponse(
   const hasValidFinalizationOutcome =
     candidate.finalizationOutcome === undefined ||
     typeof candidate.finalizationOutcome === 'string';
+  const hasValidCode =
+    candidate.code === undefined || typeof candidate.code === 'string';
 
   return (
     hasValidStatus &&
@@ -57,7 +60,8 @@ export function isVerificationResponse(
     hasValidOrderId &&
     hasValidPaymentMethod &&
     hasValidSuccess &&
-    hasValidFinalizationOutcome
+    hasValidFinalizationOutcome &&
+    hasValidCode
   );
 }
 
@@ -71,12 +75,14 @@ export interface VerifyCheckoutPaymentLookupParams {
   merchantSlug: string | undefined;
   orderId: string | null;
   paymentMethod: string | null;
+  pendingRedvaultOrder: boolean;
   trackingToken: string | null;
   signal?: AbortSignal;
 }
 
 export interface VerifyCheckoutPaymentLookupHandlers {
   clearCart: () => void;
+  scheduleFailedRedirect: () => void;
   setIsVerifying: (isVerifying: boolean) => void;
   setOrderNumber: (orderNumber: string | null) => void;
   setPaymentMethod: (paymentMethod: string | null) => void;
@@ -102,11 +108,13 @@ export async function verifyCheckoutPaymentByLookup(
     merchantSlug,
     orderId,
     paymentMethod,
+    pendingRedvaultOrder,
     trackingToken,
     signal,
   }: VerifyCheckoutPaymentLookupParams,
   {
     clearCart,
+    scheduleFailedRedirect,
     setIsVerifying,
     setOrderNumber,
     setPaymentMethod,
@@ -129,7 +137,45 @@ export async function verifyCheckoutPaymentByLookup(
     }`;
     const response = await fetch(url, { signal });
     const data = response.ok ? await response.json() : null;
-    if (data && (data.order_number || data.short_id)) {
+    // Terminal states first: a fully refunded REDVAULT order keeps a
+    // non-paid payment status, and a cancelled one can stay unpaid
+    // with a cancelled shipping status. Neither is still processing.
+    const redvaultTerminalCancelled =
+      data?.payment_method === 'uba_redvault' &&
+      data.payment_status !== 'paid' &&
+      data.shipping_status === 'cancelled';
+    const redvaultTerminalRefunded =
+      data?.payment_method === 'uba_redvault' &&
+      data.payment_status === 'refunded';
+    if (
+      data?.payment_method === 'uba_redvault' &&
+      data.payment_status !== 'paid' &&
+      data.payment_status !== 'refunded' &&
+      !redvaultTerminalCancelled
+    ) {
+      setPaymentMethod('uba_redvault');
+      setStatus('pending');
+      setOrderNumber(
+        data.order_number || data.short_id || orderId.slice(0, 8).toUpperCase()
+      );
+    } else if (redvaultTerminalCancelled) {
+      setPaymentMethod('uba_redvault');
+      setStatus('failed');
+      scheduleFailedRedirect();
+      setOrderNumber(
+        data.order_number || data.short_id || orderId.slice(0, 8).toUpperCase()
+      );
+    } else if (redvaultTerminalRefunded) {
+      // A fully refunded order is terminal non-success: never present
+      // it as a payment success, and never clear the cart the shopper
+      // may have built since.
+      setPaymentMethod('uba_redvault');
+      setStatus('failed');
+      scheduleFailedRedirect();
+      setOrderNumber(
+        data.order_number || data.short_id || orderId.slice(0, 8).toUpperCase()
+      );
+    } else if (data && (data.order_number || data.short_id)) {
       const lookupPaymentStatus =
         typeof data.payment_status === 'string'
           ? data.payment_status.trim().toLowerCase()
@@ -161,6 +207,12 @@ export async function verifyCheckoutPaymentByLookup(
           ...(lookupCurrency ? { currency: lookupCurrency } : {}),
         });
       }
+    } else if (pendingRedvaultOrder) {
+      // Fallback if API lookup fails: retain the REDVAULT cart instead of
+      // confirming an order the lookup could not see.
+      setPaymentMethod('uba_redvault');
+      setStatus('pending');
+      setOrderNumber(orderId.slice(0, 8).toUpperCase());
     } else {
       // Fallback if API lookup fails
       clearCart();
@@ -173,9 +225,15 @@ export async function verifyCheckoutPaymentByLookup(
     if (!isAbortError(error)) {
       console.error('Failed to fetch order details on success page:', error);
     }
-    clearCart();
-    setStatus('success');
-    setOrderNumber(orderId.slice(0, 8).toUpperCase());
+    if (pendingRedvaultOrder) {
+      setPaymentMethod('uba_redvault');
+      setStatus('pending');
+      setOrderNumber(orderId.slice(0, 8).toUpperCase());
+    } else {
+      clearCart();
+      setStatus('success');
+      setOrderNumber(orderId.slice(0, 8).toUpperCase());
+    }
   } finally {
     setIsVerifying(false);
   }

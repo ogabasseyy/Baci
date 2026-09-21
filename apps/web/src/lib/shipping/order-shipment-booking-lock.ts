@@ -92,6 +92,69 @@ export async function claimOrderShipmentBooking(
       };
     }
 
+    // The claim atomically verifies the order is not refunded while
+    // acquiring the lock: a finalized full refund blocks the booking.
+    if (
+      typeof error === 'object' &&
+      typeof (error as RpcErrorLike).message === 'string' &&
+      (error as RpcErrorLike).message?.includes('order_refunded_for_shipment')
+    ) {
+      throw new OrderShipmentBookingError(
+        'This order was refunded and can no longer be shipped.',
+        400,
+        'ORDER_REFUNDED'
+      );
+    }
+
+    // The claim also rejects cancelled orders: cancellation restocks
+    // inventory, so booking one would ship against stock back on sale.
+    if (
+      typeof error === 'object' &&
+      typeof (error as RpcErrorLike).message === 'string' &&
+      (error as RpcErrorLike).message?.includes('order_cancelled_for_shipment')
+    ) {
+      throw new OrderShipmentBookingError(
+        'This order was cancelled and can no longer be shipped.',
+        400,
+        'ORDER_CANCELLED'
+      );
+    }
+
+    // REDVAULT is prepaid: the claim rejects REDVAULT orders whose hosted
+    // payment has not succeeded, so no provider shipment exists before
+    // money commits.
+    if (
+      typeof error === 'object' &&
+      typeof (error as RpcErrorLike).message === 'string' &&
+      (error as RpcErrorLike).message?.includes(
+        'order_redvault_unpaid_for_shipment'
+      )
+    ) {
+      throw new OrderShipmentBookingError(
+        'This UBA order has not been paid and cannot be shipped yet.',
+        400,
+        'ORDER_UNPAID'
+      );
+    }
+
+    // Partial refunds leave payment_status paid: the claim rejects while a
+    // merchandise refund is still settling so the booking cannot ship
+    // stale pre-refund units. No lock was acquired, so nothing to release;
+    // 409 signals the caller to retry after settlement.
+    if (
+      typeof error === 'object' &&
+      typeof (error as RpcErrorLike).message === 'string' &&
+      (error as RpcErrorLike).message?.includes(
+        'order_refund_pending_for_shipment'
+      )
+    ) {
+      throw new OrderShipmentBookingError(
+        'A refund for this order is still settling. Please try again shortly.',
+        409,
+        'ORDER_REFUND_PENDING'
+      );
+    }
+
     logger.error({
       message: 'Shipment booking lock claim failed',
       rpcCode: getRpcErrorCode(error),

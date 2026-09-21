@@ -1,11 +1,16 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { completeOrderGatewayPayment } from '@/lib/payments/complete-order-gateway-payment';
 import { confirmPaidOrderInventoryOrRollback } from '@/lib/payments/confirm-paid-order-inventory';
-import {
-  type BlockedOrderPaymentOutcome,
-  fileBlockedOrderPaymentReview,
-} from '@/lib/payments/file-blocked-order-payment-review';
+import { fileBlockedOrderPaymentReview } from '@/lib/payments/file-blocked-order-payment-review';
+import type {
+  FinalizeOrderGatewayPaymentArgs,
+  FinalizeOrderGatewayPaymentOutcome,
+} from './finalize-order-gateway-payment-types';
+
+export type {
+  FinalizeOrderGatewayPaymentOutcome,
+  FinalizeOrderGatewayPaymentTransaction,
+} from './finalize-order-gateway-payment-types';
+
 import { fileSettlementCaptureFailureReview } from '@/lib/payments/file-settlement-capture-failure-review';
 import { schedulePaidOrderNotifications } from '@/lib/payments/notify-paid-order';
 import { getOrderOutboxState } from '@/lib/payments/order-has-outbox-rows';
@@ -13,29 +18,9 @@ import { toRichPaidOrder } from '@/lib/payments/paid-order-normalization';
 import { persistPaidOrderSideEffectRetry } from '@/lib/payments/paid-order-retry-persistence';
 import { PAID_ORDER_RICH_SELECT } from '@/lib/payments/paid-order-rich-select';
 import { persistPrePushRetryMarkers } from '@/lib/payments/persist-pre-push-retry-markers';
+import { resolveOrderGatewayCompletion } from '@/lib/payments/resolve-order-gateway-completion';
 import { runPaidOrderSideEffects } from '@/lib/payments/run-paid-order-side-effects';
 import { settleCapturedOrderPayment } from '@/lib/payments/settle-captured-order-payment';
-
-export type FinalizeOrderGatewayPaymentOutcome =
-  | { kind: 'completion_failed'; error: unknown }
-  | BlockedOrderPaymentOutcome
-  | { kind: 'order_fetch_failed'; error: unknown }
-  | {
-      kind: 'inventory_failed';
-      payload: { code?: string; error?: string };
-      status: number;
-    }
-  | { kind: 'inventory_cleanup_failed' }
-  | { kind: 'completed'; healed: boolean; orderNumber: string | null };
-
-export interface FinalizeOrderGatewayPaymentTransaction {
-  id: string;
-  order_id: string | null;
-  merchant_id: string;
-  amount: number | string | null;
-  platform_fee: number | null;
-  gateway_reference: string | null;
-}
 
 export async function finalizeOrderGatewayPayment({
   supabase,
@@ -47,36 +32,19 @@ export async function finalizeOrderGatewayPayment({
   wonTransactionFlip,
   actor,
   scheduleAfter,
-}: {
-  supabase: SupabaseClient;
-  transaction: FinalizeOrderGatewayPaymentTransaction;
-  orderId: string;
-  gateway: 'juicyway' | 'paystack' | 'korapay';
-  reference: string;
-  gatewayResponse: Record<string, unknown>;
-  // True only for the caller that flipped the transaction row itself (the
-  // webhook delivery that won the `.neq('status','completed')` claim). Heal
-  // and sweep callers pass false.
-  wonTransactionFlip: boolean;
-  actor: string;
-  scheduleAfter: (task: () => Promise<void>) => void;
-}): Promise<FinalizeOrderGatewayPaymentOutcome> {
-  const result = await completeOrderGatewayPayment({
+}: FinalizeOrderGatewayPaymentArgs): Promise<FinalizeOrderGatewayPaymentOutcome> {
+  const result = await resolveOrderGatewayCompletion({
     actor,
+    gateway,
     gatewayResponse,
+    merchantId: transaction.merchant_id,
     orderId,
+    reference,
     supabase,
     transactionId: transaction.id,
   });
-
-  if (!result.ok) {
-    return { error: result.error, kind: 'completion_failed' };
-  }
-
+  if (!result.ok) return result.outcome;
   const completion = result.completion;
-  if (completion.error_code) {
-    return { error: completion, kind: 'completion_failed' };
-  }
 
   const blockedOutcome = await fileBlockedOrderPaymentReview({
     completion,
@@ -109,7 +77,7 @@ export async function finalizeOrderGatewayPayment({
   const capturedOnAlreadyPaidOrder =
     Boolean(completion.order_already_paid) &&
     !completion.order_updated &&
-    (wonTransactionFlip ||
+    ((!result.redvaultDuplicate && wonTransactionFlip) ||
       (Boolean(outboxState?.hasRows) &&
         outboxState?.payerTransactionId !== transaction.id));
   const legacyPaidReplay =
@@ -181,7 +149,7 @@ export async function finalizeOrderGatewayPayment({
     return { error: normalizationError, kind: 'order_fetch_failed' };
   }
 
-  if (!capturedOnAlreadyPaidOrder) {
+  if (!capturedOnAlreadyPaidOrder && !result.redvaultInventoryConfirmed) {
     const inventoryOutcome = await confirmPaidOrderInventoryOrRollback({
       gateway,
       merchantId: transaction.merchant_id,

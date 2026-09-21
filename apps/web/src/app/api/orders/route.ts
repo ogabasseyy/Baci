@@ -17,10 +17,6 @@ import {
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
 import { buildImmediateInvoiceMerchant } from '@/lib/build-immediate-invoice-merchant';
 import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
-import {
-  revalidateProductSlugs,
-  revalidateProducts,
-} from '@/lib/cache-revalidation';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
@@ -29,7 +25,12 @@ import {
   isCanonicalOrderSubtotalUuidError,
 } from '@/lib/checkout/canonical-order-subtotal';
 import { prepareCheckoutIdempotencyReplay } from '@/lib/checkout/checkout-idempotency-replay';
+import {
+  computeRedvaultOrderQuote,
+  type RedvaultOrderQuote,
+} from '@/lib/checkout/compute-redvault-order-quote';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
+import { createRedvaultCheckoutResponse } from '@/lib/checkout/create-redvault-checkout-response';
 import type { createTransactionDiscountProof } from '@/lib/checkout/create-transaction-discount-proof';
 import { createTransactionDiscountProofForCheckout } from '@/lib/checkout/create-transaction-discount-proof-for-checkout';
 import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
@@ -38,9 +39,13 @@ import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airpo
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
+import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
+import { revalidateOrderProductCaches } from '@/lib/checkout/revalidate-order-product-caches';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
+import { validateRedvaultRequest } from '@/lib/checkout/validate-redvault-request';
 import {
   generateOrderConfirmationEmail,
   generateOrderConfirmationText,
@@ -1083,6 +1088,28 @@ export async function POST(request: NextRequest) {
       ? null
       : getRequestIdempotencyKey(request);
     const verifiedQuizVoucherAwardIdsByIndex = new Map<number, string>();
+    if (payment_method === 'uba_redvault') {
+      const availability = getRedvaultPaymentAvailability();
+      if (!availability.available) {
+        return NextResponse.json(
+          {
+            code: 'REDVAULT_UNAVAILABLE',
+            error: 'REDVAULT payment is not available',
+            reason: availability.reason,
+          },
+          { status: 409 }
+        );
+      }
+      const rejection = validateRedvaultRequest({
+        merchantId: merchant_id,
+        hasVoucherItem,
+        discountCode: body.discount_code,
+        useWallet: use_wallet_credit,
+        useSavings: use_savings_credit,
+        idempotencyKey: requestIdempotencyKey,
+      });
+      if (rejection) return rejection;
+    }
     // award id → the (first) still-valid signed token that produced it, so a
     // later award-status rejection can name the exact line for checkout to
     // prune instead of stranding the whole cart.
@@ -1718,6 +1745,7 @@ export async function POST(request: NextRequest) {
       merchant.slug
     );
     const vatRegistered = merchant.vat_registration_status === 'registered';
+    const redvaultRequested = payment_method === 'uba_redvault';
 
     // ALWAYS validate per-line client prices — even for non-entitled merchants
     // and callers that omit expected_total. The RPC charges the catalog line
@@ -1779,12 +1807,17 @@ export async function POST(request: NextRequest) {
     //   still server-validated and capped before this point; this branch only
     //   decides whether the validated discount should be charged.
     const shouldApplyServerDerivedDiscount =
+      !redvaultRequested &&
       merchantCanAutoNegotiate &&
       !requestedDiscountCode &&
       (typeof body.expected_total === 'number' || source === 'mobile_app');
     const serverDerivedDiscountAmount = shouldApplyServerDerivedDiscount
       ? (negotiationDiscount?.totalDiscount ?? 0)
       : 0;
+
+    let redvaultQuote: Awaited<
+      ReturnType<typeof computeRedvaultOrderQuote>
+    > | null = null;
 
     let transactionDiscountProofResult:
       | ReturnType<typeof createTransactionDiscountProof>
@@ -2012,6 +2045,94 @@ export async function POST(request: NextRequest) {
     }
     const requestedSavingsRedemption =
       savingsRedemptionRequested && savingsCurrencySupported;
+
+    const redvaultOrderRpcClient = redvaultRequested
+      ? createStorefrontOrderRpcClient({
+          redvaultCustomerEmail: customer_email,
+          fallbackClient: supabase,
+          hasCanonicalDeliveryMetadata: Boolean(
+            canonicalDeliveryMethod || canonicalAirportType
+          ),
+          merchantId: merchant_id,
+          userId: resolvedUserId,
+        })
+      : null;
+
+    if (redvaultRequested) {
+      if (!redvaultOrderRpcClient) {
+        return NextResponse.json(
+          {
+            code: 'REDVAULT_QUOTE_INVALID',
+            error: 'Unable to validate REDVAULT items',
+          },
+          { status: 400 }
+        );
+      }
+      if (
+        requestedDiscountCode ||
+        use_savings_credit ||
+        use_wallet_credit ||
+        hasVoucherItem ||
+        (negotiationDiscount?.totalDiscount ?? 0) > 0
+      ) {
+        return NextResponse.json(
+          {
+            code: 'REDVAULT_COMBINATION_UNSUPPORTED',
+            error:
+              'REDVAULT cannot be combined with another discount or redemption',
+          },
+          { status: 400 }
+        );
+      }
+      if (!requestIdempotencyKey?.trim()) {
+        return NextResponse.json(
+          {
+            code: 'REDVAULT_IDEMPOTENCY_KEY_REQUIRED',
+            error: 'A checkout idempotency key is required',
+          },
+          { status: 400 }
+        );
+      }
+      try {
+        const { data: replayRows, error: replayError } =
+          await redvaultOrderRpcClient.rpc(
+            'get_storefront_redvault_checkout_replay',
+            { p_checkout_key: requestIdempotencyKey }
+          );
+        const replay = Array.isArray(replayRows) ? replayRows[0] : replayRows;
+        if (replayError) throw replayError;
+        redvaultQuote =
+          replay && typeof replay === 'object' && 'quote_payload' in replay
+            ? (replay as { quote_payload: RedvaultOrderQuote }).quote_payload
+            : await computeRedvaultOrderQuote({
+                items: orderItemsPayload,
+                merchantId: merchant_id,
+                supabase: redvaultOrderRpcClient,
+              });
+      } catch (error) {
+        logger.warn({
+          error,
+          merchantId: merchant_id,
+          message: 'Unable to construct authoritative REDVAULT quote',
+        });
+        return NextResponse.json(
+          {
+            code: 'REDVAULT_QUOTE_INVALID',
+            error: 'Unable to validate REDVAULT items',
+          },
+          { status: 400 }
+        );
+      }
+      if (redvaultQuote.discountKobo <= 0) {
+        return NextResponse.json(
+          {
+            code: 'REDVAULT_NOT_ELIGIBLE',
+            error: 'No eligible REDVAULT items are in this order',
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     // Canonical server-verified pre-discount subtotal. Computed lazily (at
     // most once) — shared by the discount-code amount computation and the
@@ -2507,14 +2628,94 @@ export async function POST(request: NextRequest) {
         ? { ...orderRpcArgs, p_discount_code_id: discountCodeId }
         : orderRpcArgs;
 
-    const orderRpcClient = createStorefrontOrderRpcClient({
-      fallbackClient: supabase,
-      hasCanonicalDeliveryMetadata: Boolean(
-        canonicalDeliveryMethod || canonicalAirportType
-      ),
-      merchantId: merchant_id,
-      userId: resolvedUserId,
-    });
+    const orderRpcClient =
+      redvaultOrderRpcClient ??
+      createStorefrontOrderRpcClient({
+        ...(redvaultRequested ? { redvaultCustomerEmail: customer_email } : {}),
+        fallbackClient: supabase,
+        hasCanonicalDeliveryMetadata: Boolean(
+          canonicalDeliveryMethod || canonicalAirportType
+        ),
+        merchantId: merchant_id,
+        userId: resolvedUserId,
+      });
+    if (redvaultRequested && redvaultQuote) {
+      if (merchantResolvedCurrency !== 'NGN') {
+        return NextResponse.json(
+          {
+            error: 'REDVAULT requires NGN orders',
+            code: 'REDVAULT_CURRENCY_UNSUPPORTED',
+          },
+          { status: 409 }
+        );
+      }
+      const redvaultCheckoutResponse = await createRedvaultCheckoutResponse({
+        client: orderRpcClient,
+        orderRpcArgs: {
+          ...orderRpcArgs,
+          ...redvaultOrderDraftFulfillment(
+            verifiedMerchantShippingRate,
+            body.shipping_rate_id
+          ),
+        },
+        quote: redvaultQuote,
+        customerEmail: customer_email,
+        merchantId: merchant_id,
+        userId: resolvedUserId,
+      });
+      // The REDVAULT draft reserves inventory through the standard
+      // order-creation path. Run the same best-effort product cache
+      // revalidation as the standard branch so listings and PDP pages do
+      // not keep advertising pre-reservation stock.
+      if (redvaultCheckoutResponse.status === 201) {
+        await revalidateOrderProductCaches({
+          merchantId: merchant_id,
+          orderId: null,
+          productIds: orderItemsPayload.map((item) => item.product_id),
+          supabase,
+        });
+        // First-time REDVAULT creations return before the shared platform
+        // event call below, so emit the idempotent order-created event
+        // here. Replays answer 200 and stay suppressed: the event keys
+        // off the order idempotency identity, not the request count.
+        const redvaultBody = (await redvaultCheckoutResponse
+          .clone()
+          .json()) as {
+          order?: {
+            created_at?: unknown;
+            currency?: unknown;
+            id?: unknown;
+            order_number?: unknown;
+            total?: unknown;
+          };
+        };
+        const redvaultOrder = redvaultBody.order;
+        if (redvaultOrder && typeof redvaultOrder.id === 'string') {
+          await recordPlatformOrderCreatedEvent({
+            currency:
+              typeof redvaultOrder.currency === 'string'
+                ? redvaultOrder.currency
+                : merchantResolvedCurrency,
+            customerEmail: customer_email,
+            eventTimestamp:
+              typeof redvaultOrder.created_at === 'string'
+                ? redvaultOrder.created_at
+                : new Date().toISOString(),
+            ipAddress: clientIp,
+            merchantId: merchant_id,
+            orderId: redvaultOrder.id,
+            orderNumber:
+              typeof redvaultOrder.order_number === 'string' &&
+              redvaultOrder.order_number
+                ? redvaultOrder.order_number
+                : redvaultOrder.id.slice(0, 8).toUpperCase(),
+            userAgent: clientUserAgent,
+            value: Number(redvaultOrder.total ?? 0),
+          });
+        }
+      }
+      return redvaultCheckoutResponse;
+    }
     const { data: orderRows, error: orderError } = await orderRpcClient.rpc(
       orderCreateRpcName,
       orderCreateRpcArgs
@@ -2945,63 +3146,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // create_storefront_order* decremented product_variants/products stock inside
-    // the RPC above (for every order — paid, POD, or unpaid). Bust the merchant's
-    // storefront product caches so stock is fresh immediately instead of after the
-    // ~300s 'products' cacheLife. One call covers the whole cart (the RPC processes
-    // all p_items atomically — no per-line-item fan-out). Skip on idempotent replay
-    // (no re-decrement). Fire here — before wallet/savings/email side effects — so
-    // it is never gated on downstream success; guarded so it can't break checkout.
+    // The order RPC decremented stock above (for every order — paid, POD,
+    // or unpaid). Bust caches here — before wallet/savings/email side
+    // effects — so it is never gated on downstream success. Skip on
+    // idempotent replay (no re-decrement). Best-effort: never breaks checkout.
     if (!idempotencyReplayed) {
-      try {
-        revalidateProducts(merchant_id);
-
-        // revalidateProducts() above busts only the merchant-wide/listing
-        // tags. The bounded PDP snapshot is tagged
-        // per-slug (getProductScopedCacheTag('product', merchantId, slug)),
-        // which a bare revalidateProducts(merchantId) does NOT bust, so the
-        // exact PDP a shopper is viewing could keep serving just-sold-out
-        // stock for the full ~300s 'products' cacheLife. orderItemsPayload
-        // carries product_id but not slug, so resolve slugs with one
-        // merchant-scoped, PK-indexed lookup and bust the per-slug PDP tags too.
-        const revalidateProductIds = Array.from(
-          new Set(
-            orderItemsPayload
-              .map((item) => item.product_id)
-              .filter((id): id is string => Boolean(id))
-          )
-        );
-        if (revalidateProductIds.length > 0) {
-          const { data: revalidateProductRows, error: revalidateSlugError } =
-            await supabase
-              .from('products')
-              .select('slug')
-              .eq('merchant_id', merchant_id)
-              .in('id', revalidateProductIds)
-              .returns<Array<{ slug: string }>>();
-          if (revalidateSlugError) {
-            logger.error({
-              message:
-                'Failed to resolve product slugs for PDP cache revalidation',
-              error: revalidateSlugError,
-              orderId: order.id,
-              merchantId: merchant_id,
-            });
-          } else if (revalidateProductRows) {
-            revalidateProductSlugs(
-              merchant_id,
-              revalidateProductRows.map((row) => row.slug)
-            );
-          }
-        }
-      } catch (revalidateError) {
-        logger.error({
-          message: 'Failed to revalidate product caches after order creation',
-          error: revalidateError,
-          orderId: order.id,
-          merchantId: merchant_id,
-        });
-      }
+      await revalidateOrderProductCaches({
+        merchantId: merchant_id,
+        orderId: order.id,
+        productIds: orderItemsPayload.map((item) => item.product_id),
+        supabase,
+      });
     }
 
     const orderTotal = Number(order.total ?? 0);

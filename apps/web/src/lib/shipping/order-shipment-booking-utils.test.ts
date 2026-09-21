@@ -180,6 +180,33 @@ describe('toDomesticBookingItems', () => {
     ]);
   });
 
+  it('applies surviving quantities to matching quote lines regardless of order', () => {
+    expect(
+      toDomesticBookingItems(
+        [
+          {
+            name: 'A',
+            quantity: 2,
+            price: 100,
+            fulfillment_data: { fulfillmentQuantity: 1 },
+          },
+          {
+            name: 'B',
+            quantity: 1,
+            price: 200,
+            fulfillment_data: { fulfillmentQuantity: 0 },
+          },
+        ],
+        [
+          { name: 'B', quantity: 1, weight: 1, value: 200 },
+          { name: 'A', quantity: 2, weight: 1, value: 100 },
+        ]
+      )
+    ).toEqual([
+      { name: 'A', description: 'A', quantity: 1, weight: 1, value: 100 },
+    ]);
+  });
+
   it('derives the same 1 kg fallback used by domestic quote construction', () => {
     expect(
       toQuoteComparableOrderItems(

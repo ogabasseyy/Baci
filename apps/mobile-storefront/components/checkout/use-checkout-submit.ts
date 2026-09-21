@@ -4,33 +4,31 @@ import {
   buildSavingsOrderFields,
   buildWalletOrderFields,
 } from '@/lib/wallet-payment-helpers';
-import { trackCheckoutStep } from '@/services/analytics';
 import { createOrder } from '@/services/orders';
 import { useCartStore } from '@/stores/cart-store';
+import { acquireCheckoutSubmitFence } from './acquire-checkout-submit-fence';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
 import { buildCheckoutCompletionAttribution } from './checkout-completion-attribution';
-import { maybeClaimCheckoutInvoice } from './checkout-invoice-claim';
-import {
-  buildCheckoutOrderRequest,
-  createCheckoutSnapshot,
-} from './checkout-order-builders';
-import { finalizeCheckoutPayment } from './checkout-payment-finalization';
+import { buildCheckoutOrderRequest } from './checkout-order-builders';
 import { runCheckoutPostOrderSideEffects } from './checkout-post-order-side-effects';
 import {
   blockIfMixedPrizeCart,
   cartHasVoucherLine,
 } from './checkout-prize-cart-guard';
-import { repriceCartOrAbort } from './checkout-reprice-gate';
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
-import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
+import { handleCreatedCheckoutOrder } from './handle-created-checkout-order';
+import { isBnplPayment } from './is-bnpl-payment';
+import { prepareCheckoutOrderInputs } from './prepare-checkout-order-inputs';
+import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
+import { runFinalizeCheckoutPayment } from './run-finalize-checkout-payment';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 
 export type { UseCheckoutSubmitParams };
-
 export function useCheckoutSubmit({
   accountPassword,
+  onRedvaultOrder,
   appliedDiscountCode,
   availablePaymentMethods,
   clearCart,
@@ -68,22 +66,14 @@ export function useCheckoutSubmit({
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
   return async (address: ShippingAddressInput) => {
     const itemsSnapshot = [...useCartStore.getState().items];
-    const checkoutGenerationSnapshot =
-      useCartStore.getState().checkoutGeneration;
-    const groupNegotiationSnapshot =
-      useCartStore.getState().cartWideNegotiationActive;
-
-    // Checkout-time safety net: never let a prize voucher check out alongside
-    // paid items (the prize redeems on its own order and the cart is cleared).
+    const {
+      checkoutGeneration: checkoutGenerationSnapshot,
+      cartWideNegotiationActive: groupNegotiationSnapshot,
+    } = useCartStore.getState();
     if (blockIfMixedPrizeCart(itemsSnapshot)) {
       return;
     }
-    // A voucher-only cart (₦0 prize) must take the standard order path, which
-    // returns the pre-reserved order already paid and routes to success — never
-    // a BNPL/financing flow (those bypass the fully-paid route and would open a
-    // ₦0 loan while leaving the voucher in the cart).
     const isVoucherOnlyCart = cartHasVoucherLine(itemsSnapshot);
-
     if (
       !validateCheckoutSubmission({
         availablePaymentMethods,
@@ -104,8 +94,30 @@ export function useCheckoutSubmit({
     ) {
       return;
     }
-
-    isOrderInFlight.current = true;
+    // REDVAULT fence preamble (extracted): validates a possibly-stale
+    // fenced order before any new order is created below. The acquire
+    // helper holds the in-flight latch across the fence await and owns
+    // its release on decline; the main flow below reuses the held latch
+    // through its own try/finally.
+    const submitFence = await acquireCheckoutSubmitFence({
+      accountPassword,
+      address,
+      clearCart,
+      customer,
+      isAuthenticated,
+      isOrderInFlight,
+      onRedvaultOrder,
+      saveAsDefaultAddress,
+      saveDetails,
+      selectedPayment,
+      selectedSavedAddressId,
+    });
+    if (!submitFence) {
+      return;
+    }
+    const { customerEmail, customerName, customerPhone } = submitFence;
+    // The in-flight latch is already held (acquired before the fence
+    // await above) and releases in the finally below.
     setIsProcessing(true);
 
     // Set once createOrder commits: post-creation failures that do record a
@@ -115,47 +127,28 @@ export function useCheckoutSubmit({
     let createdOrderId: string | undefined;
 
     try {
-      if (
-        itemsSnapshot.length > 0 &&
-        (await repriceCartOrAbort(itemsSnapshot, merchantId))
-      ) {
+      const preparedOrderInputs = await prepareCheckoutOrderInputs({
+        deliveryFee,
+        getLiveSavingsSelection,
+        isVoucherOnlyCart,
+        itemsSnapshot,
+        merchantId,
+        orderTotals,
+        paymentTab,
+        selectedPayment,
+        walletBalance,
+        walletSelection,
+      });
+      if (!preparedOrderInputs) {
         return;
       }
-
-      const snapshot = createCheckoutSnapshot(
-        itemsSnapshot,
-        deliveryFee,
-        orderTotals?.taxAmount ?? 0
-      );
-      const { liveSavingsSelection, liveWalletSelection } =
-        resolveCheckoutStoreCreditSelections({
-          getLiveSavingsSelection,
-          itemsSnapshot,
-          paymentTab,
-          selectedPayment,
-          snapshotTotal: snapshot.total,
-          walletBalance,
-          walletSelection,
-        });
-
-      trackCheckoutStep('review');
-      const customerEmail = customer?.email || address.email;
-      const customerPhone = address.phone;
-      const customerName = `${address.firstName} ${address.lastName}`;
-      // A voucher-only cart is a ₦0 prize: force a non-POD method so the voucher
-      // RPC marks the pre-reserved order paid (it keys payment_status off
-      // p_payment_method — 'pod'/'pay_on_delivery' → pending, else → paid). With
-      // POD the prize order would be left pending while the cart is cleared.
-      // Pay-for-me keeps its own persisted identity (like web checkout):
-      // collapsing it to 'invoice' would misclassify its documents as
-      // proforma. The server defaults it to pending, matching invoice flow.
-      const paymentMethodForOrder = isVoucherOnlyCart
-        ? 'card'
-        : selectedPayment;
-      const isBNPL =
-        selectedPayment === 'credpal' ||
-        selectedPayment === 'credit_direct' ||
-        selectedPayment === 'klump';
+      const {
+        liveSavingsSelection,
+        liveWalletSelection,
+        paymentMethodForOrder,
+        snapshot,
+      } = preparedOrderInputs;
+      const isBNPL = isBnplPayment(selectedPayment);
 
       if (isBNPL && !isVoucherOnlyCart) {
         await submitBnplCheckout({
@@ -187,7 +180,6 @@ export function useCheckoutSubmit({
         });
         return;
       }
-
       const orderResponse = await createOrder(
         {
           ...buildCheckoutOrderRequest({
@@ -215,16 +207,30 @@ export function useCheckoutSubmit({
       );
       const { order } = orderResponse;
       createdOrderId = order.id;
-      const orderNumber =
-        order.order_number || order.id.slice(0, 8).toUpperCase();
-      await maybeClaimCheckoutInvoice({
-        selectedPayment,
-        order,
-        orderNumber,
-        itemsSnapshot,
-      });
-
-      await finalizeCheckoutPayment({
+      const { handled: redvaultHandled, orderNumber } =
+        await handleCreatedCheckoutOrder({
+          accountPassword,
+          address,
+          checkoutGeneration: checkoutGenerationSnapshot,
+          customer,
+          customerEmail,
+          customerName,
+          customerPhone,
+          isAuthenticated,
+          itemsSnapshot,
+          onRedvaultOrder,
+          orderResponse,
+          saveAsDefaultAddress,
+          saveDetails,
+          selectedPayment,
+          selectedSavedAddressId,
+          snapshot,
+          user,
+        });
+      if (redvaultHandled) {
+        return;
+      }
+      await runFinalizeCheckoutPayment({
         attribution: buildCheckoutCompletionAttribution({
           customerEmail,
           customerPhone,
@@ -263,19 +269,11 @@ export function useCheckoutSubmit({
           selectedPayment === 'bank_transfer',
       });
     } catch (error) {
-      const cartStore = useCartStore.getState();
-      if (cartStore.items.length === 0) {
-        try {
-          await cartStore.restoreItems(
-            itemsSnapshot,
-            groupNegotiationSnapshot,
-            checkoutGenerationSnapshot
-          );
-        } catch {
-          // In-memory restore already applied; persist failures must not hide
-          // the original checkout error.
-        }
-      }
+      await restoreEmptiedCheckoutCart({
+        cartWideNegotiationActive: groupNegotiationSnapshot,
+        checkoutGeneration: checkoutGenerationSnapshot,
+        itemsSnapshot,
+      });
       handleCheckoutSubmitError(error, selectedPayment, createdOrderId);
     } finally {
       setIsProcessing(false);

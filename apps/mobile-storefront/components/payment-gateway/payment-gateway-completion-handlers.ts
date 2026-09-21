@@ -1,7 +1,15 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
+import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import { clearPersistedRedvaultOrderWithRetry } from '@/lib/pending-redvault-order';
+import {
+  clearRedvaultPurchaseTrackingContext,
+  loadRedvaultPurchaseTrackingContext,
+} from '@/lib/redvault-purchase-tracking-context';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
 import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
+import { verifyRedvaultPayment } from '@/services/redvault';
+import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
 import {
   beginSavingsAuthorizationCompletion,
@@ -37,6 +45,7 @@ export function createPaymentGatewayCompletionHandlers({
   orderNumber,
   orderTotal,
   paymentKind,
+  paymentMethod,
   queryClient,
   reference,
   refs,
@@ -141,6 +150,58 @@ export function createPaymentGatewayCompletionHandlers({
       return;
     }
 
+    let verifiedOrderNumber = orderNumber;
+    if (paymentMethod === 'uba_redvault') {
+      paymentCompletionStartedRef.current = true;
+      clearPendingLoadTimeout();
+      setPaymentStatus('processing');
+      try {
+        const outcome = await verifyRedvaultPayment(reference || '');
+        if (!isMountedRef.current) return;
+        if (outcome === 'pending' || outcome === 'held') {
+          setPaymentStatus(outcome);
+          return;
+        }
+        verifiedOrderNumber = outcome.orderNumber || orderNumber;
+        // The persisted fence must clear now: otherwise the next submit
+        // resolves this paid order, clears the new cart, and routes back
+        // here instead of placing the new purchase. Retry transient
+        // storage failures before degrading to best-effort — verification
+        // already succeeded, so cleanup must never revert to pending.
+        try {
+          await clearPersistedRedvaultOrderWithRetry();
+        } catch {
+          // A fence that will not clear is left for the next resolver
+          // pass; the verified payment still succeeds below.
+        }
+        try {
+          const trackingContext = await loadRedvaultPurchaseTrackingContext(
+            orderId || ''
+          );
+          if (
+            trackingContext &&
+            (await claimCheckoutPurchaseTracking(orderId || ''))
+          ) {
+            trackCheckoutRoutePurchaseCompleted({
+              ...trackingContext,
+              orderId: orderId || '',
+              orderNumber: verifiedOrderNumber || trackingContext.orderNumber,
+            });
+            await clearRedvaultPurchaseTrackingContext(orderId || '');
+          }
+        } catch {
+          // Verification already succeeded; ignore analytics failures.
+        }
+      } catch {
+        if (!isMountedRef.current) return;
+        setErrorMessage(
+          'We could not confirm your UBA payment yet. Do not pay again; check your orders shortly.'
+        );
+        setPaymentStatus('pending');
+        return;
+      }
+    }
+
     paymentCompletionStartedRef.current = true;
     clearPendingLoadTimeout();
     setPaymentStatus('success');
@@ -214,7 +275,7 @@ export function createPaymentGatewayCompletionHandlers({
         pathname: '/order-success',
         params: {
           orderId: orderId || '',
-          orderNumber: orderNumber || '',
+          orderNumber: verifiedOrderNumber || '',
           paymentMethod: gateway,
           reference: reference || '',
           ...(trackingToken && { trackingToken }),

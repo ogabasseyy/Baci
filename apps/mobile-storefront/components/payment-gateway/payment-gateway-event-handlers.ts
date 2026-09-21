@@ -19,6 +19,7 @@ interface PaymentGatewayEventHandlerInput {
   gateway?: string;
   orderId?: string;
   paymentKind?: string;
+  paymentMethod?: string;
   reference?: string;
   refs: PaymentGatewayRefs;
   returnTo?: string;
@@ -28,7 +29,13 @@ interface PaymentGatewayEventHandlerInput {
   setPaymentStatus: PaymentStatusSetter;
 }
 
-const terminalStatuses = new Set(['error', 'processing', 'success']);
+const terminalStatuses = new Set([
+  'error',
+  'processing',
+  'pending',
+  'held',
+  'success',
+]);
 
 export function createPaymentGatewayEventHandlers({
   beginPaymentCompletion,
@@ -37,6 +44,7 @@ export function createPaymentGatewayEventHandlers({
   gateway,
   orderId,
   paymentKind,
+  paymentMethod,
   reference,
   refs,
   returnTo,
@@ -116,6 +124,17 @@ export function createPaymentGatewayEventHandlers({
       }
     },
     handleRetry: () => {
+      if (paymentMethod === 'uba_redvault') {
+        if (
+          refs.statusRef.current === 'processing' ||
+          refs.statusRef.current === 'success'
+        )
+          return;
+        refs.paymentCompletionStartedRef.current = false;
+        setErrorMessage(null);
+        beginPaymentCompletion();
+        return;
+      }
       // Retry reloads the same authorization URL and reference without a
       // new checkout start: retain the failure marker so repeated reload
       // failures emit a single payment_failed for the one started attempt.
@@ -137,7 +156,8 @@ export function createPaymentGatewayEventHandlers({
     },
     handleShouldStartLoadWithRequest: (request: { url: string }) => {
       if (
-        (paymentKind === PAYMENT_KINDS.VTU ||
+        (paymentMethod === 'uba_redvault' ||
+          paymentKind === PAYMENT_KINDS.VTU ||
           paymentKind === PAYMENT_KINDS.WALLET ||
           paymentKind === PAYMENT_KINDS.SAVINGS_AUTH) &&
         isSessionPaymentCompletionRedirect(request.url, reference)

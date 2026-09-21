@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { confirmBookedOrderPaymentPersist } from '@/lib/shipping/confirm-booked-order-payment-persist';
 import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
 import type { OrderShipmentQuoteRecord } from '@/lib/shipping/refresh-order-shipment-quote';
 import type {
@@ -21,6 +22,17 @@ export async function persistBookedOrderShipment(
   supabase: SupabaseClient,
   input: PersistBookedOrderShipmentInput
 ): Promise<{ shipmentId: string }> {
+  // A full refund may have finalized while the provider call was in
+  // flight: refuse the persist (the confirm files the ops review) rather
+  // than recording a shipment for refunded money.
+  await confirmBookedOrderPaymentPersist({
+    merchantId: input.merchantId,
+    orderId: input.orderId,
+    provider: input.result.provider,
+    providerShipmentId: input.result.providerShipmentId,
+    supabase,
+    trackingNumber: input.result.trackingNumber,
+  });
   const { data: shipment, error: shipmentError } = await supabase
     .from('shipments')
     .insert({

@@ -3,7 +3,7 @@ import type { MutableRefObject } from 'react';
 import type { PaymentMethodType } from '@/components/checkout/PaymentMethodSelector';
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutPaymentStarted } from '@/services/analytics';
-import type { OrderResponse } from '@/services/orders';
+import { OrderError, type OrderResponse } from '@/services/orders';
 import type { CheckoutCompletionAttribution } from '@/services/track-checkout-payment-completed-once';
 import { clearAndPersistCheckoutCart } from './checkout-cart-persistence';
 import {
@@ -47,6 +47,11 @@ export async function finalizeCheckoutPayment({
   setShowCryptoSelection,
   shouldCreateWalletFundedBankTransferOrder,
 }: FinalizeCheckoutPaymentParams) {
+  if (selectedPayment === 'uba_redvault')
+    throw new OrderError(
+      'Review the server UBA summary before payment',
+      'REDVAULT_REVIEW_REQUIRED'
+    );
   const { order } = orderResponse;
   const fullyPaidStoreCreditPaymentMethod =
     getFullyPaidStoreCreditPaymentMethod(orderResponse);

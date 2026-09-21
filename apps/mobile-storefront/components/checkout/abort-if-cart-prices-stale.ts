@@ -3,19 +3,21 @@ import {
   pickChangedPriceById,
   repriceCartItems,
 } from '@/services/cart-reprice';
-import { type CartItem, useCartStore } from '@/stores/cart-store';
+import { useCartStore } from '@/stores/cart-store';
+import type { CartItem } from '@/stores/cart-store.types';
 
 /**
- * Reprices the cart against live merchant prices before order creation.
- * Returns true when prices changed: the cart is updated in place, the
- * shopper is told to review the new total, and the submit must abort so
- * checkout restarts from the corrected snapshot. Extracted from
- * use-checkout-submit (300-line file limit).
+ * Reprices the checkout snapshot and aborts when prices moved: the cart is
+ * updated to the live prices and the shopper retries against the new
+ * total. Returns true when the submit must stop.
  */
-export async function repriceCartOrAbort(
+export async function abortIfCartPricesStale(
   itemsSnapshot: CartItem[],
   merchantId: string
 ): Promise<boolean> {
+  if (itemsSnapshot.length === 0) {
+    return false;
+  }
   const reprice = await repriceCartItems(itemsSnapshot, merchantId);
   if (reprice.changes.length === 0) {
     return false;

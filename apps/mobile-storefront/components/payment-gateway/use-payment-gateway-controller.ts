@@ -5,6 +5,7 @@ import { Alert } from 'react-native';
 import type { WebView } from 'react-native-webview';
 import { useToast } from '@/components/ui/Toast';
 import { setClipboardString } from '@/lib/clipboard';
+import { useAuthStore } from '@/stores/auth-store';
 import { useCartStore } from '@/stores/cart-store';
 import { createPaymentGatewayMessageHandler } from './create-payment-gateway-message-handler';
 import {
@@ -22,6 +23,7 @@ import type {
 } from './payment-gateway-controller.types';
 import { createPaymentGatewayEventHandlers } from './payment-gateway-event-handlers';
 import { createPaymentGatewayTimers } from './payment-gateway-timers';
+import { resolvePendingOrdersRoute } from './resolve-pending-orders-route';
 
 // React Compiler forbids passing refs to plain function calls during render but
 // allows passing them to hooks. These wrappers classify the render-time handler
@@ -66,6 +68,8 @@ export function usePaymentGatewayController() {
   );
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearCart = useCartStore((state) => state.clearCart);
+  const user = useAuthStore((state) => state.user);
+  const customer = useAuthStore((state) => state.customer);
   const toast = useToast();
   const [status, setStatusState] = useState<PaymentGatewayStatus>('loading');
   const statusRef = useRef<PaymentGatewayStatus>('loading');
@@ -138,6 +142,7 @@ export function usePaymentGatewayController() {
     orderNumber,
     orderTotal,
     paymentKind,
+    paymentMethod,
     reference,
     returnTo,
     trackingToken,
@@ -161,6 +166,7 @@ export function usePaymentGatewayController() {
       orderNumber,
       orderTotal,
       paymentKind,
+      paymentMethod,
       queryClient,
       reference,
       refs: gatewayRefs,
@@ -189,6 +195,8 @@ export function usePaymentGatewayController() {
     amount,
     clearCart,
     confirmVtuPaymentSuccess: beginVtuPaymentCompletion,
+    confirmRedvaultPayment:
+      paymentMethod === 'uba_redvault' ? beginPaymentCompletion : undefined,
     copiedGatewayTextRef,
     copyGatewayText,
     customerIdentifier,
@@ -223,11 +231,35 @@ export function usePaymentGatewayController() {
   const handleClose = () => {
     Alert.alert('Cancel Payment?', getCloseConfirmationMessage(paymentKind), [
       { text: 'Continue Payment', style: 'cancel' },
-      { text: 'Leave', style: 'destructive', onPress: () => router.back() },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: () => {
+          if (paymentMethod === 'uba_redvault') {
+            // The order is already initialized server-side with a live
+            // Paystack attempt. Route to the orders flow instead of back to
+            // the populated checkout so the shopper cannot place a second
+            // order while the first still reserves inventory. Guests have
+            // no authenticated orders view, so they land on the
+            // tracking-token status view for the still-live attempt.
+            router.replace(
+              resolvePendingOrdersRoute({
+                customerId: customer?.id,
+                orderId,
+                trackingToken,
+                userId: user?.id,
+              })
+            );
+            return;
+          }
+          router.back();
+        },
+      },
     ]);
   };
   const eventHandlers = usePaymentGatewayEventHandlers({
     beginPaymentCompletion,
+    paymentMethod,
     clearPendingLoadTimeout,
     clearPendingNavigation,
     gateway,
@@ -252,6 +284,7 @@ export function usePaymentGatewayController() {
     handleClose,
     ...eventHandlers,
     handleWebViewMessage,
+    paymentMethod,
     paymentKind,
     status,
     toast,

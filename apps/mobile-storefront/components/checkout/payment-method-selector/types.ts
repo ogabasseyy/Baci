@@ -18,7 +18,8 @@ export type PaymentMethodType =
   | 'klump'
   | 'juicyway'
   | 'invoice'
-  | 'payforme';
+  | 'payforme'
+  | 'uba_redvault';
 
 export type PaymentTab = 'full' | 'installments' | 'pay_later';
 

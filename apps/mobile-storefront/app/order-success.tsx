@@ -10,12 +10,12 @@ import { OrderReconciliationView } from '@/components/orders/OrderReconciliation
 import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
 import { isDeferredSettlementMethod } from '@/components/orders/order-success-content';
 import { useGuestInvoicePaidState } from '@/components/orders/use-invoice-paid-state';
+import { useOrderSuccessPermissionFlow } from '@/components/orders/use-order-success-permission-flow';
 import { useSettlementCompletion } from '@/components/orders/use-settlement-completion';
 import { ReceiptPreviewModal } from '@/components/receipts/ReceiptPreviewModal';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
-import { usePermissionBooster } from '@/hooks/use-permission-booster';
 import { useReceiptPreview } from '@/hooks/use-receipt-preview';
 import { useReceiptDetail } from '@/hooks/use-receipts';
 import { hasOrderSuccessIdentity } from '@/lib/order-success-identity';
@@ -99,20 +99,22 @@ export default function OrderSuccessScreen() {
     disabled: isReconciliation,
   });
 
-  const { requestPermission, triggerSystemPrompt, markDenied } =
-    usePermissionBooster();
-  const [showPermissionModal, setShowPermissionModal] = useState(false);
-  // Mirrors permissionFlowActiveRef for render: the soft-ask modal closing
-  // on grant does NOT end the flow — the native system prompt is still in
-  // flight, and the success banner must stay unmounted underneath it.
-  const [isPermissionFlowActive, setPermissionFlowActive] = useState(false);
-  // While a presented post-order interstitial owns the full screen the
-  // success banner stays unmounted; cleared when the interstitial closes.
-  const [isFullscreenAdActive, setFullscreenAdActive] = useState(false);
   // Tracks the notification permission flow (soft-ask modal through the
   // native prompt) independently of render state so the interstitial
   // cancellation predicate below always sees the current value.
   const permissionFlowActiveRef = useRef(false);
+  const {
+    handlePermissionDeny,
+    handlePermissionGrant,
+    isPermissionFlowActive,
+    showPermissionModal,
+  } = useOrderSuccessPermissionFlow({
+    isReconciliation,
+    permissionFlowActiveRef,
+  });
+  // While a presented post-order interstitial owns the full screen the
+  // success banner stays unmounted; cleared when the interstitial closes.
+  const [isFullscreenAdActive, setFullscreenAdActive] = useState(false);
   // Same for the receipt preview: a late LOADED event must never present
   // the interstitial over an explicit document-viewing action.
   const receiptPreviewActiveRef = useRef(false);
@@ -219,49 +221,6 @@ export default function OrderSuccessScreen() {
       clearTimeout(interstitialTimerId);
     };
   }, [isReconciliation, orderId, orderNumber, reference]);
-
-  useEffect(() => {
-    // No soft-ask on reconciliation arrivals: no completed purchase sits
-    // behind them.
-    if (isReconciliation) {
-      return;
-    }
-    // Check for notification permissions (Soft Ask)
-    // Small delay to let the success animation play (better UX).
-    // The flag is set before awaiting the permission lookup: on a slow
-    // device the native-module import or status check can still be pending
-    // past the interstitial timer, and the ad must not present just as the
-    // soft ask opens. Terminal non-modal results clear it immediately.
-    const timerId = setTimeout(async () => {
-      permissionFlowActiveRef.current = true;
-      setPermissionFlowActive(true);
-      const result = await requestPermission('notifications');
-      if (result === 'soft-ask-needed') {
-        setShowPermissionModal(true);
-      } else {
-        permissionFlowActiveRef.current = false;
-        setPermissionFlowActive(false);
-      }
-    }, 1500);
-
-    return () => {
-      clearTimeout(timerId);
-    };
-  }, [isReconciliation, requestPermission]);
-
-  const handlePermissionGrant = async () => {
-    setShowPermissionModal(false);
-    await triggerSystemPrompt('notifications');
-    permissionFlowActiveRef.current = false;
-    setPermissionFlowActive(false);
-  };
-
-  const handlePermissionDeny = () => {
-    setShowPermissionModal(false);
-    permissionFlowActiveRef.current = false;
-    setPermissionFlowActive(false);
-    markDenied('notifications');
-  };
 
   const handleViewOrders = () => {
     if (!customer && trackingToken) {

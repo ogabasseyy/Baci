@@ -9,13 +9,15 @@ import { SHIPPING_PROVIDER_CODES } from '@/lib/shipping/types';
 import { matchesGiglProviderRate } from './matches-gigl-provider-rate';
 import { OrderShipmentBookingError } from './order-shipment-booking-error';
 import { readPackageDimensionsCm } from './package-dimensions';
+import { survivingShipmentQuantity } from './surviving-shipment-quantity';
 
 export { OrderShipmentBookingError };
 
-type OrderItemRecord = {
+export type OrderItemRecord = {
   name: string | null;
   quantity: number | null;
   price: number | string | null;
+  fulfillment_data?: unknown;
 };
 
 export function isShippingProviderCode(
@@ -112,13 +114,15 @@ export function parseStoredQuoteRequest(value: unknown): QuoteRequest | null {
 }
 
 export function toShipmentItems(orderItems: OrderItemRecord[]): ShipmentItem[] {
-  return orderItems.map((item) => ({
-    name: item.name || 'Order item',
-    description: item.name || 'Order item',
-    quantity: Math.max(1, item.quantity ?? 1),
-    weight: 1,
-    value: Number(item.price || 0),
-  }));
+  return orderItems
+    .map((item) => ({
+      name: item.name || 'Order item',
+      description: item.name || 'Order item',
+      quantity: survivingShipmentQuantity(item),
+      weight: 1,
+      value: Number(item.price || 0),
+    }))
+    .filter((item) => item.quantity > 0);
 }
 
 export function toDomesticBookingItems(
@@ -126,17 +130,47 @@ export function toDomesticBookingItems(
   quoteItems: ShipmentItem[] | undefined
 ): ShipmentItem[] {
   if (!quoteItems?.length) return toShipmentItems(orderItems);
-  return quoteItems.map((item) => ({
-    name: item.name,
-    description: item.description || item.name,
-    quantity: item.quantity,
-    weight: item.weight,
-    value: item.value,
-    ...(item.hsCode ? { hsCode: item.hsCode } : {}),
-    ...(item.length !== undefined ? { length: item.length } : {}),
-    ...(item.width !== undefined ? { width: item.width } : {}),
-    ...(item.height !== undefined ? { height: item.height } : {}),
-  }));
+  const unmatchedOrderItems = [...orderItems];
+  return quoteItems
+    .map((item) => {
+      const orderItemIndex = unmatchedOrderItems.findIndex(
+        (orderItem) =>
+          orderItem.name === item.name &&
+          orderItem.quantity === item.quantity &&
+          Number(orderItem.price) === item.value
+      );
+      const matchedOrderItem =
+        orderItemIndex === -1 ? item : unmatchedOrderItems[orderItemIndex];
+      if (orderItemIndex !== -1) unmatchedOrderItems.splice(orderItemIndex, 1);
+      return {
+        name: item.name,
+        description: item.description || item.name,
+        quantity: survivingShipmentQuantity(matchedOrderItem),
+        weight: item.weight,
+        value: item.value,
+        ...(item.hsCode ? { hsCode: item.hsCode } : {}),
+        ...(item.length !== undefined ? { length: item.length } : {}),
+        ...(item.width !== undefined ? { width: item.width } : {}),
+        ...(item.height !== undefined ? { height: item.height } : {}),
+      };
+    })
+    .filter((item) => item.quantity > 0);
+}
+
+/**
+ * Fail closed when refunds release every serialized unit before booking:
+ * the post-filtered collection can be empty even though the order still
+ * holds items. Never send the provider an invalid empty-items booking for
+ * a still-paid order.
+ */
+export function assertShippableBookingItems(items: ShipmentItem[]): void {
+  if (items.length === 0) {
+    throw new OrderShipmentBookingError(
+      'All order items have been refunded; there is nothing left to ship.',
+      400,
+      'NO_SHIPPABLE_ITEMS'
+    );
+  }
 }
 
 export function quotedShipmentItemWeight(item: {

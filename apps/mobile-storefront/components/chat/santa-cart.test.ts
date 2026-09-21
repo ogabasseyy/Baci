@@ -26,9 +26,11 @@ jest.mock('@/lib/logger', () => ({
 jest.mock('./constants', () => ({
   API_BASE_URL: 'https://test.example',
   CHAT_REQUEST_TIMEOUT_MS: 1000,
+  SANTA_MERCHANT_SLUG_HEADER: 'x-baci-santa-merchant-slug',
+  STOREFRONT_MERCHANT_SLUG_HEADER: 'x-baci-storefront-slug',
 }));
 
-import { addSantaWishToCart } from './santa-cart';
+import { addSantaWishToCart, fulfilSantaCartActions } from './santa-cart';
 
 const action: SantaAction = {
   type: 'ADD_TO_CART',
@@ -36,10 +38,18 @@ const action: SantaAction = {
   price: 800_000,
 };
 
-function mockLookup(product: unknown, ok = true, status = 200) {
+function mockLookup(
+  product: unknown,
+  ok = true,
+  status = 200,
+  resolvedMerchantSlug = 'ogabassey'
+) {
   global.fetch = jest.fn(async () => ({
     ok,
     status,
+    headers: new Headers({
+      'x-baci-santa-merchant-slug': resolvedMerchantSlug,
+    }),
     json: async () => ({ product }),
   })) as unknown as typeof fetch;
 }
@@ -54,6 +64,7 @@ describe('addSantaWishToCart', () => {
       id: 'prod-1',
       name: 'iPhone 15',
       price: 950_000,
+      max_discount_percentage: 40,
       image: 'https://img/iphone.jpg',
       manage_stock: true,
       slug: 'iphone-15',
@@ -116,6 +127,7 @@ describe('addSantaWishToCart', () => {
       id: 'prod-null',
       name: 'Null Stock Phone',
       price: 300_000,
+      max_discount_percentage: 40,
       image: null,
       manage_stock: true,
       slug: null,
@@ -138,11 +150,12 @@ describe('addSantaWishToCart', () => {
     );
   });
 
-  it('applies a free Santa grant as a negotiated price', async () => {
+  it('keeps catalog price when the granted price exceeds the product ceiling', async () => {
     mockLookup({
       id: 'prod-free',
       name: 'Free Gift',
       price: 500_000,
+      max_discount_percentage: 2,
       manage_stock: false,
     });
 
@@ -155,7 +168,32 @@ describe('addSantaWishToCart', () => {
     expect(result).toBe(true);
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
-        negotiatedPrice: 0,
+        price: 500_000,
+        negotiatedPrice: undefined,
+        negotiationStatus: undefined,
+      })
+    );
+  });
+
+  it('honors a granted price at the exact product ceiling', async () => {
+    mockLookup({
+      id: 'prod-2',
+      name: 'Phone',
+      price: 100_000,
+      max_discount_percentage: 2,
+      manage_stock: false,
+    });
+
+    const result = await addSantaWishToCart({
+      type: 'ADD_TO_CART',
+      productName: 'Phone',
+      price: 98_000,
+    });
+
+    expect(result).toBe(true);
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        negotiatedPrice: 98_000,
         negotiationStatus: 'accepted',
       })
     );
@@ -223,5 +261,102 @@ describe('addSantaWishToCart', () => {
     expect(result).toBe(false);
     expect(mockAddItem).not.toHaveBeenCalled();
     expect(mockShowCartToast).toHaveBeenCalledWith(expect.any(String), 'error');
+  });
+
+  it('ignores a lookup resolved for a different storefront', async () => {
+    mockLookup(
+      {
+        id: 'prod-1',
+        name: 'iPhone 15',
+        price: 950_000,
+        manage_stock: false,
+      },
+      true,
+      200,
+      'winter-store'
+    );
+
+    const result = await addSantaWishToCart(action);
+
+    expect(result).toBe(false);
+    expect(mockAddItem).not.toHaveBeenCalled();
+  });
+
+  it('sends the expected merchant slug as a non-authoritative assertion', async () => {
+    mockLookup({
+      id: 'prod-1',
+      name: 'iPhone 15',
+      price: 950_000,
+      manage_stock: false,
+    });
+
+    await addSantaWishToCart(action, mockAbortSignal, 'ogabassey');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'x-baci-storefront-slug': 'ogabassey',
+        }),
+      })
+    );
+  });
+});
+
+describe('fulfilSantaCartActions', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('fulfils every Santa directive when the reply matches this storefront', async () => {
+    mockLookup({
+      id: 'prod-1',
+      name: 'Phone',
+      price: 500_000,
+      max_discount_percentage: 40,
+      manage_stock: false,
+    });
+
+    fulfilSantaCartActions({
+      expectedMerchantSlug: 'ogabassey',
+      resolvedMerchantSlug: 'ogabassey',
+      signal: mockAbortSignal,
+      text: 'Granted ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000.',
+    });
+
+    // fulfilSantaCartActions is fire-and-forget; poll until the lookup settles.
+    const deadline = Date.now() + 1000;
+    while (mockAddItem.mock.calls.length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(mockAddItem).toHaveBeenCalledTimes(1);
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Phone' })
+    );
+  });
+
+  it('ignores Santa directives resolved for a different storefront', () => {
+    global.fetch = jest.fn() as unknown as typeof fetch;
+
+    fulfilSantaCartActions({
+      expectedMerchantSlug: 'ogabassey',
+      resolvedMerchantSlug: 'winter-store',
+      signal: mockAbortSignal,
+      text: 'Granted ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000.',
+    });
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockAddItem).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the reply has no Santa directives', () => {
+    fulfilSantaCartActions({
+      expectedMerchantSlug: 'ogabassey',
+      resolvedMerchantSlug: 'ogabassey',
+      signal: mockAbortSignal,
+      text: 'Just a friendly hello.',
+    });
+
+    expect(mockAddItem).not.toHaveBeenCalled();
   });
 });

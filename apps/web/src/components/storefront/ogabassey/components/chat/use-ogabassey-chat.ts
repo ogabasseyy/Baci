@@ -1,5 +1,6 @@
 'use client';
 
+import { isSantaGrantedPriceWithinCeiling } from '@baci/shared/lib';
 import { useEffect, useRef, useState } from 'react';
 import { useCart } from '@/hooks/cart';
 import {
@@ -187,9 +188,21 @@ export function useOgabasseyChat({
       if (!parsedPayload.success) return;
       const product = parsedPayload.data.product;
       if (!product) return;
+      // Mirror the cart's out-of-stock guard so the action is not marked
+      // added when addToCart silently refuses the line.
+      if (product.manage_stock && (product.stock ?? 0) <= 0) return;
 
       addToCart(product, 1);
-      if (santaAction.price < product.price) {
+      // The model price is untrusted: only honor it inside the
+      // server-computed per-product ceiling, otherwise keep catalog price.
+      if (
+        santaAction.price < product.price &&
+        isSantaGrantedPriceWithinCeiling(
+          product.price,
+          santaAction.price,
+          product.max_discount_percentage
+        )
+      ) {
         applyNegotiatedPrice?.(product.id, santaAction.price);
       }
       setMessages((previous) =>

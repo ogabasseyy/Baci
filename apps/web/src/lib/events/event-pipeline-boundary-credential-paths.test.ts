@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
@@ -295,6 +296,7 @@ describe('event pipeline credential-path authority', () => {
       ...eventPipelineRepairPickupCredentialPaths,
       ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
+      ...eventPipelineChatCredentialPaths,
     ]);
   });
 });

@@ -49,7 +49,7 @@ async function handleProductLookup(
     const { data: product, error } = await supabase
       .from('products')
       .select(
-        'id, name, slug, description, price, images, status, merchant_id, stock, stock_quantity, manage_stock, brand, sku'
+        'id, name, slug, description, price, images, status, merchant_id, stock, stock_quantity, manage_stock, brand, sku, has_variants'
       )
       .eq('merchant_id', tenant.merchantId)
       .eq('name', matchingProduct.name)
@@ -70,6 +70,17 @@ async function handleProductLookup(
 
     if (!product) return NextResponse.json({ product: null });
 
+    // Variant-bearing products need an explicit SKU choice that a chat wish
+    // cannot express. Refuse direct insertion rather than ordering the parent
+    // product at its base price without identifying the actual variant.
+    if (product.has_variants) {
+      logger.info({
+        message: 'Santa Product variant selection required',
+        productName: safeProductName,
+      });
+      return NextResponse.json({ product: null });
+    }
+
     type ImageEntry = string | { url?: string };
     const images = product.images as ImageEntry[] | null;
     const firstImage = images?.[0];
@@ -88,6 +99,7 @@ async function handleProductLookup(
           slug: product.slug || '',
           description: product.description || '',
           price: product.price,
+          max_discount_percentage: matchingProduct.max_discount_percentage ?? 0,
           image: imageUrl,
           imageLarge: imageUrl,
           imageHint: product.name,

@@ -1,4 +1,4 @@
-import { parseSantaActions, stripSantaActions } from '@baci/shared/lib';
+import { stripSantaActions } from '@baci/shared/lib';
 import type { FlashListRef } from '@shopify/flash-list';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
@@ -21,7 +21,7 @@ import {
   STOREFRONT_MERCHANT_SLUG_HEADER,
 } from './constants';
 import { readChatResponseText } from './read-chat-response';
-import { addSantaWishToCart } from './santa-cart';
+import { fulfilSantaCartActions } from './santa-cart';
 import type { ChatMessage } from './types';
 import { resolveSuggestionRoute, SUGGESTIONS } from './types';
 
@@ -125,24 +125,15 @@ async function requestChatReply({
 
       // In Santa mode, fulfil any ADD_TO_CART wish before the directive is
       // stripped from the displayed text. Fire-and-forget so the reply renders
-      // immediately; addSantaWishToCart surfaces its own success/error toast.
+      // immediately; fulfilSantaCartActions surfaces its own success/error
+      // toast and ignores replies resolved for another storefront.
       if (santaMode) {
-        const expectedMerchantSlug = CONFIG.MERCHANT_SLUG.trim();
-        const actions = parseSantaActions(aiResponseText);
-        if (chatReply.merchantSlug === expectedMerchantSlug) {
-          for (const action of actions) {
-            void addSantaWishToCart(
-              action,
-              controller.signal,
-              expectedMerchantSlug
-            );
-          }
-        } else if (actions.length > 0) {
-          log.warn('Ignoring Santa cart actions for a different storefront', {
-            expectedMerchantSlug,
-            resolvedMerchantSlug: chatReply.merchantSlug,
-          });
-        }
+        fulfilSantaCartActions({
+          expectedMerchantSlug: CONFIG.MERCHANT_SLUG.trim(),
+          resolvedMerchantSlug: chatReply.merchantSlug,
+          signal: controller.signal,
+          text: aiResponseText,
+        });
       }
 
       // Clean response text (sanitizeHtml not needed — RN <Text> doesn't execute HTML)

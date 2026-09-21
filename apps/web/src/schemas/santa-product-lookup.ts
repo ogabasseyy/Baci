@@ -10,6 +10,7 @@ const santaLookupProductSchema = z.object({
   slug: z.string(),
   description: z.string(),
   price: z.number().finite().nonnegative(),
+  max_discount_percentage: z.number().finite().nonnegative(),
   image: z.string(),
   imageLarge: z.string(),
   imageHint: z.string(),

@@ -330,6 +330,7 @@ jobs:
           --sql-check supabase/tests/uba_redvault_refund_inventory_p1_regressions.sql
           --sql-check supabase/migrations/tests/manual_order_document_date_sync.sql
           --sql-check supabase/tests/feed_offer_manifest_offer_change_regressions.sql
+          --sql-check supabase/migrations/tests/santa_catalog_projection.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

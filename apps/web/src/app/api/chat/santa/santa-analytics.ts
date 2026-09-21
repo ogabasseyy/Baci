@@ -45,7 +45,9 @@ function getInteractionType(response: string): {
   const denied =
     /budget.*below/i.test(response) ||
     /can(?:not|'t).*approve/i.test(response) ||
+    /cannot.*grant/i.test(response) ||
     /workshop has costs/i.test(response) ||
+    /save up/i.test(response) ||
     /payment plan/i.test(response);
 
   return {

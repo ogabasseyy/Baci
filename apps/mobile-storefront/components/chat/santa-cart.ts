@@ -1,4 +1,8 @@
-import type { SantaAction } from '@baci/shared/lib';
+import {
+  isSantaGrantedPriceWithinCeiling,
+  parseSantaActions,
+  type SantaAction,
+} from '@baci/shared/lib';
 import { showCartToast } from '@/hooks/cart-notifications';
 import { CONFIG } from '@/lib/config';
 import { createLogger } from '@/lib/logger';
@@ -75,7 +79,16 @@ function buildSantaCartItem(
 ): Omit<CartItem, 'id'> {
   // Santa already negotiated the price the customer should pay. Only treat it as
   // a negotiated price when it actually beats the catalog price (mirrors web).
-  const hasDiscount = grantedPrice >= 0 && grantedPrice < product.price;
+  // The model price is untrusted: honor it only inside the server-computed
+  // per-product ceiling, otherwise keep catalog price.
+  const hasDiscount =
+    grantedPrice >= 0 &&
+    grantedPrice < product.price &&
+    isSantaGrantedPriceWithinCeiling(
+      product.price,
+      grantedPrice,
+      product.max_discount_percentage ?? 0
+    );
   const managesStock = product.manage_stock === true;
   const slug =
     product.slug?.trim() || product.id || slugifySantaProductName(product.name);
@@ -91,6 +104,34 @@ function buildSantaCartItem(
     negotiatedPrice: hasDiscount ? grantedPrice : undefined,
     negotiationStatus: hasDiscount ? 'accepted' : undefined,
   };
+}
+
+/**
+ * Fulfil the Santa `ADD_TO_CART` wishes in a chat reply, but only when the
+ * response was resolved for this storefront. Each wish is fire-and-forget so
+ * the reply renders immediately; addSantaWishToCart surfaces its own
+ * success/error toast. Replies resolved for another storefront are ignored.
+ */
+export function fulfilSantaCartActions(args: {
+  expectedMerchantSlug: string;
+  resolvedMerchantSlug: string | undefined;
+  signal?: AbortSignal;
+  text: string;
+}): void {
+  const actions = parseSantaActions(args.text);
+  if (args.resolvedMerchantSlug !== args.expectedMerchantSlug) {
+    if (actions.length > 0) {
+      log.warn('Ignoring Santa cart actions for a different storefront', {
+        expectedMerchantSlug: args.expectedMerchantSlug,
+        resolvedMerchantSlug: args.resolvedMerchantSlug,
+      });
+    }
+    return;
+  }
+
+  for (const action of actions) {
+    void addSantaWishToCart(action, args.signal, args.expectedMerchantSlug);
+  }
 }
 
 /**

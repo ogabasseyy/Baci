@@ -405,6 +405,7 @@ describe('useOgabasseyChat - handleSend', () => {
           slug: 'pixel-9',
           description: '',
           price: 650000,
+          max_discount_percentage: 2,
           image: '',
           imageLarge: '',
           imageHint: 'Pixel 9',
@@ -431,11 +432,118 @@ describe('useOgabasseyChat - handleSend', () => {
       }),
       1
     );
+    // A 23% model grant exceeds the 2% product ceiling: the wish is still
+    // fulfilled at catalog price, but the untrusted price is not applied.
+    expect(chatMocks.applyNegotiatedPrice).not.toHaveBeenCalled();
     expect(result.current.messages[1]?.santaActions).toEqual([
       { productName: 'iPhone 15', price: 600000, added: false },
       { productName: 'Pixel 9', price: 500000, added: true },
     ]);
     expect(chatMocks.setIsCartOpen).toHaveBeenCalledWith(true);
+  });
+
+  it('applies a Santa grant inside the server product ceiling', async () => {
+    chatMocks.parseSantaActions.mockReturnValueOnce([
+      { type: 'ADD_TO_CART', productName: 'Pixel 9', price: 637000 },
+    ]);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeStreamingResponse('raw Santa directive')
+    );
+
+    const { result } = renderHook(() =>
+      useOgabasseyChat({ isSanta: true, storefrontSlug: 'ogabassey' })
+    );
+
+    await act(async () => {
+      await result.current.handleSend('I want a phone');
+    });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      headers: new Headers({ 'x-baci-santa-merchant-slug': 'ogabassey' }),
+      json: async () => ({
+        product: {
+          id: 'product-9',
+          merchant_id: 'merchant-9',
+          name: 'Pixel 9',
+          slug: 'pixel-9',
+          description: '',
+          price: 650000,
+          max_discount_percentage: 2,
+          image: '',
+          imageLarge: '',
+          imageHint: 'Pixel 9',
+          status: 'active',
+          stock: 1,
+          manage_stock: true,
+          brand: '',
+          sku: '',
+          gtin: '',
+          mpn: '',
+        },
+      }),
+      ok: true,
+    });
+
+    await act(async () => {
+      await result.current.handleAddSantaWishToCart(1);
+    });
+
+    expect(chatMocks.addToCart).toHaveBeenCalled();
+    expect(chatMocks.applyNegotiatedPrice).toHaveBeenCalledWith(
+      'product-9',
+      637000
+    );
+    expect(result.current.messages[1]?.santaActions?.[0]?.added).toBe(true);
+  });
+
+  it('does not mark the action added when the product is out of stock', async () => {
+    chatMocks.parseSantaActions.mockReturnValueOnce([
+      { type: 'ADD_TO_CART', productName: 'Pixel 9', price: 637000 },
+    ]);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeStreamingResponse('raw Santa directive')
+    );
+
+    const { result } = renderHook(() =>
+      useOgabasseyChat({ isSanta: true, storefrontSlug: 'ogabassey' })
+    );
+
+    await act(async () => {
+      await result.current.handleSend('I want a phone');
+    });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      headers: new Headers({ 'x-baci-santa-merchant-slug': 'ogabassey' }),
+      json: async () => ({
+        product: {
+          id: 'product-9',
+          merchant_id: 'merchant-9',
+          name: 'Pixel 9',
+          slug: 'pixel-9',
+          description: '',
+          price: 650000,
+          max_discount_percentage: 2,
+          image: '',
+          imageLarge: '',
+          imageHint: 'Pixel 9',
+          status: 'active',
+          stock: 0,
+          manage_stock: true,
+          brand: '',
+          sku: '',
+          gtin: '',
+          mpn: '',
+        },
+      }),
+      ok: true,
+    });
+
+    await act(async () => {
+      await result.current.handleAddSantaWishToCart(1);
+    });
+
+    expect(chatMocks.addToCart).not.toHaveBeenCalled();
+    expect(chatMocks.applyNegotiatedPrice).not.toHaveBeenCalled();
+    expect(chatMocks.setIsCartOpen).not.toHaveBeenCalled();
+    expect(result.current.messages[1]?.santaActions?.[0]?.added).toBe(false);
   });
 
   it('does not add a malformed product lookup response to the cart', async () => {

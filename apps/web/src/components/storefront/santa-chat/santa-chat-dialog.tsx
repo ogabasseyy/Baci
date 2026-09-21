@@ -1,5 +1,6 @@
 'use client';
 
+import { isSantaGrantedPriceWithinCeiling } from '@baci/shared/lib';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -187,7 +188,7 @@ export function SantaChatDialog({
       }
 
       const { product } = (await response.json()) as {
-        product: Product | null;
+        product: (Product & { max_discount_percentage?: number }) | null;
       };
 
       if (!product) {
@@ -195,11 +196,23 @@ export function SantaChatDialog({
         showNotification(`Could not find "${productName}" in catalog`);
         return;
       }
+      if (product.manage_stock && (product.stock ?? 0) <= 0) {
+        showNotification(`"${productName}" is out of stock`);
+        return;
+      }
 
       addToCart(product, 1);
 
       const cartItemId = product.id;
-      if (applyNegotiatedPrice && negotiatedPrice < product.price) {
+      if (
+        applyNegotiatedPrice &&
+        negotiatedPrice < product.price &&
+        isSantaGrantedPriceWithinCeiling(
+          product.price,
+          negotiatedPrice,
+          product.max_discount_percentage ?? 0
+        )
+      ) {
         applyNegotiatedPrice(cartItemId, negotiatedPrice);
       }
 

@@ -1320,6 +1320,9 @@ importers:
 
   packages/shared:
     devDependencies:
+      decode-uri-component:
+        specifier: 0.2.2
+        version: 0.2.2(patch_hash=58cf2570adc926b85c502a5e6d5a90a90e44d133525c5b6c6a9b82c4cec0557d)
       typescript:
         specifier: ~7.0.2
         version: 7.0.2

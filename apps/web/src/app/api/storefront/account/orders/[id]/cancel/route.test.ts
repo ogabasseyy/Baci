@@ -296,4 +296,32 @@ describe('POST /api/storefront/account/orders/[id]/cancel', () => {
       p_reason: null,
     });
   });
+
+  it('fails closed when the payment-method lookup errors', async () => {
+    mockAuthenticateApiRequest.mockResolvedValue({
+      user: { id: 'user-1' },
+      error: null,
+      supabase: {
+        rpc: mockRpc,
+        from: vi.fn(() => ({
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: null,
+                error: { message: 'connection reset' },
+              }),
+            })),
+          })),
+        })),
+      },
+    });
+
+    const res = await POST(makeRequest({}), { params });
+    const json = await res.json();
+
+    expect(res.status).toBe(503);
+    expect(json.code).toBe('order_lookup_failed');
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockSendOrderCancellationEmail).not.toHaveBeenCalled();
+  });
 });

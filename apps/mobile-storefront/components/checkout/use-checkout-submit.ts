@@ -11,6 +11,7 @@ import { createOrder } from '@/services/orders';
 import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { useCartStore } from '@/stores/cart-store';
 import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
+import { acquireCheckoutSubmitFence } from './acquire-checkout-submit-fence';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
 import {
   buildCheckoutOrderRequest,
@@ -24,11 +25,7 @@ import {
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
-import {
-  type CheckoutSubmitFenceResult,
-  resolveCheckoutSubmitFence,
-  runRedvaultSubmitInitializationSideEffects,
-} from './checkout-submit-redvault';
+import { runRedvaultSubmitInitializationSideEffects } from './checkout-submit-redvault';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
 import { isBnplPayment } from './is-bnpl-payment';
 import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
@@ -106,33 +103,24 @@ export function useCheckoutSubmit({
       return;
     }
     // REDVAULT fence preamble (extracted): validates a possibly-stale
-    // fenced order before any new order is created below. The synchronous
-    // in-flight latch is acquired BEFORE this network-backed await: two
-    // rapid presses would otherwise both pass validation and continue
-    // into duplicate order creation and payment initialization. The latch
-    // releases when the fence declines the submit (or throws); the main
-    // flow below reuses it through its own try/finally.
-    isOrderInFlight.current = true;
-    let submitFence: CheckoutSubmitFenceResult;
-    try {
-      submitFence = await resolveCheckoutSubmitFence({
-        accountPassword,
-        address,
-        clearCart,
-        customer,
-        isAuthenticated,
-        onRedvaultOrder,
-        saveAsDefaultAddress,
-        saveDetails,
-        selectedPayment,
-        selectedSavedAddressId,
-      });
-    } catch (error) {
-      isOrderInFlight.current = false;
-      throw error;
-    }
-    if (!submitFence.proceed) {
-      isOrderInFlight.current = false;
+    // fenced order before any new order is created below. The acquire
+    // helper holds the in-flight latch across the fence await and owns
+    // its release on decline; the main flow below reuses the held latch
+    // through its own try/finally.
+    const submitFence = await acquireCheckoutSubmitFence({
+      accountPassword,
+      address,
+      clearCart,
+      customer,
+      isAuthenticated,
+      isOrderInFlight,
+      onRedvaultOrder,
+      saveAsDefaultAddress,
+      saveDetails,
+      selectedPayment,
+      selectedSavedAddressId,
+    });
+    if (!submitFence) {
       return;
     }
     const { customerEmail, customerName, customerPhone } = submitFence;

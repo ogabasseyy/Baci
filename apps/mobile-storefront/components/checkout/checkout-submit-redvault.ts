@@ -23,6 +23,20 @@ export type CheckoutSubmitFenceResult = {
   customerPhone: string;
 };
 
+export type ResolveCheckoutSubmitFenceOptions = {
+  accountPassword: string;
+  address: ShippingAddressInput;
+  clearCart: () => void | Promise<void>;
+  customer: SubmitCustomer;
+  isAuthenticated: boolean;
+  // Presence-tested only: the review callback lives with the submit hook.
+  onRedvaultOrder?: unknown;
+  saveAsDefaultAddress: boolean;
+  saveDetails: boolean;
+  selectedPayment: string | null;
+  selectedSavedAddressId: string | null;
+};
+
 /**
  * REDVAULT submit preamble: guards the unavailable review, derives the
  * customer identity the fence replay needs, and resolves the inventory
@@ -43,19 +57,7 @@ export async function resolveCheckoutSubmitFence({
   saveDetails,
   selectedPayment,
   selectedSavedAddressId,
-}: {
-  accountPassword: string;
-  address: ShippingAddressInput;
-  clearCart: () => void | Promise<void>;
-  customer: SubmitCustomer;
-  isAuthenticated: boolean;
-  // Presence-tested only: the review callback lives with the submit hook.
-  onRedvaultOrder?: unknown;
-  saveAsDefaultAddress: boolean;
-  saveDetails: boolean;
-  selectedPayment: string | null;
-  selectedSavedAddressId: string | null;
-}): Promise<CheckoutSubmitFenceResult> {
+}: ResolveCheckoutSubmitFenceOptions): Promise<CheckoutSubmitFenceResult> {
   const customerEmail = customer?.email || address.email;
   const customerPhone = address.phone;
   const customerName = `${address.firstName} ${address.lastName}`;

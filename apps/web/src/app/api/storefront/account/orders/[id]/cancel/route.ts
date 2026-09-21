@@ -82,13 +82,29 @@ export async function POST(
   // 4. Perform the cancellation via the SECURITY DEFINER RPC. REDVAULT
   // orders cancel through the scoped RPC: the generic one cannot write a
   // REDVAULT row (protected-path guard) and would leak the fenced units.
-  // An unreadable row falls through to the generic RPC, which enforces
-  // ownership itself.
-  const { data: orderRow } = await auth.supabase
+  // An unreadable row (null data, no error) falls through to the generic
+  // RPC, which enforces ownership itself. A lookup ERROR fails closed
+  // instead: treating it as an ordinary order would misroute a REDVAULT
+  // cancellation into the generic RPC and 500.
+  const { data: orderRow, error: orderLookupError } = await auth.supabase
     .from('orders')
     .select('payment_method')
     .eq('id', id)
     .maybeSingle();
+  if (orderLookupError) {
+    logger.error({
+      message: 'Order payment-method lookup failed before cancellation',
+      orderId: id,
+      error: orderLookupError,
+    });
+    return NextResponse.json(
+      {
+        error: 'Could not load the order. Please try again.',
+        code: 'order_lookup_failed',
+      },
+      { status: 503 }
+    );
+  }
   const cancelRpc =
     (orderRow as { payment_method?: string } | null)?.payment_method ===
     'uba_redvault'

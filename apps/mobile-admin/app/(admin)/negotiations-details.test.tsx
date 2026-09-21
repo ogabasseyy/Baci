@@ -1,9 +1,12 @@
-import './negotiations-test-setup';
+import '../../test/mocks/negotiations-test-setup';
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import {
+  mocks,
+  negotiationRows,
+} from '../../test/mocks/negotiations-test-setup';
 import NegotiationsScreen from './negotiations';
-import { mocks, negotiationRows } from './negotiations-test-setup';
 
 describe('NegotiationsScreen', () => {
   it('reveals the itemized cart snapshot for a bulk offer when expanded', async () => {

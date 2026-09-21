@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -68,4 +69,39 @@ describe('Metro configuration', () => {
       expect(isBlocked(blockedPath)).toBe(true);
     }
   });
+
+  it('keeps dev-only modules out of bundled route files', () => {
+    // Regression guard: a vitest setup helper once lived directly under app/
+    // where neither the *.test.* nor __tests__ blockList patterns excluded it,
+    // breaking every release bundle. Test helpers belong in test/ or __tests__/.
+    expect(findBundledDevImports(path.join(projectRoot, 'app'))).toEqual([]);
+  });
 });
+
+const DEV_ONLY_IMPORT =
+  /(?:from|import\()\s*['"](?:vitest|vite)['"]|require\(\s*['"](?:vitest|vite)['"]/;
+
+function findBundledDevImports(dir: string): string[] {
+  const offenders: string[] = [];
+
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+
+    if (entry.isDirectory()) {
+      if (!isBlocked(fullPath + path.sep)) {
+        offenders.push(...findBundledDevImports(fullPath));
+      }
+      continue;
+    }
+
+    if (!/\.[cm]?[jt]sx?$/.test(entry.name) || isBlocked(fullPath)) {
+      continue;
+    }
+
+    if (DEV_ONLY_IMPORT.test(readFileSync(fullPath, 'utf8'))) {
+      offenders.push(path.relative(projectRoot, fullPath));
+    }
+  }
+
+  return offenders;
+}

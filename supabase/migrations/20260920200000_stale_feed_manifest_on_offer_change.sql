@@ -30,9 +30,9 @@
 -- offers, so recomputation serializes on a transaction-scoped advisory
 -- lock per product instead. The one-time repair enqueues every
 -- affected merchant so served feed entries are evicted behind it. A
--- parent product update recomputes too,
--- filtered to condition, variant_model, and flag changes, since
--- eligibility can change with no offer event at all. Reactivation is intentionally one-way: restored
+-- parent product update recomputes too, filtered to condition,
+-- variant_model, flag, and image changes, since eligibility can change
+-- with no offer event at all. Reactivation is intentionally one-way: restored
 -- `verified` rows would require re-verification the trigger cannot
 -- perform, so reactivated URLs wait for the backfill like any newly
 -- added image (fail-closed).
@@ -297,10 +297,11 @@ DECLARE
   v_target record;
 BEGIN
   -- Eligibility can change with no offer event (condition, matrix, or
-  -- flag flip), so parent updates recompute the same keep-set.
-  -- Transition tables cannot combine with an UPDATE OF column list, so
-  -- the trigger fires on every parent update and filters to relevant
-  -- column changes here.
+  -- flag flip), and removed parent images orphan their rows the same
+  -- way, so parent updates recompute the same keep-set. Transition
+  -- tables cannot combine with an UPDATE OF column list, so the trigger
+  -- fires on every parent update and filters to relevant column changes
+  -- here.
   FOR v_target IN
     SELECT DISTINCT new_products.merchant_id, new_products.id AS product_id
     FROM new_products
@@ -309,6 +310,7 @@ BEGIN
       OR new_products.variant_model IS DISTINCT FROM old_products.variant_model
       OR new_products.has_condition_offers
         IS DISTINCT FROM old_products.has_condition_offers
+      OR new_products.images IS DISTINCT FROM old_products.images
     ORDER BY new_products.id
   LOOP
     PERFORM public.lock_feed_manifest_product(v_target.product_id);

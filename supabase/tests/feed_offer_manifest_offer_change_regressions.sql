@@ -458,6 +458,24 @@ BEGIN
   IF v_status IS DISTINCT FROM 'stale' THEN
     RAISE EXCEPTION 'repair must reach cross-merchant orphans';
   END IF;
+
+  -- Removing a parent image orphans its row with no offer event: the
+  -- products trigger recomputes on images changes the same way.
+  UPDATE public.products SET images = '[]' WHERE id = v_product;
+  SELECT status INTO v_status
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product
+    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/base.jpg';
+  IF v_status IS DISTINCT FROM 'stale' THEN
+    RAISE EXCEPTION 'removed parent image must stale its row';
+  END IF;
+  SELECT status INTO v_status
+  FROM public.product_feed_images
+  WHERE merchant_id = v_merchant AND product_id = v_product
+    AND variant_id IS NULL AND source_url = 'https://cdn.example.com/keep.jpg';
+  IF v_status IS DISTINCT FROM 'verified' THEN
+    RAISE EXCEPTION 'offer-claimed row must survive parent image removal';
+  END IF;
 END;
 $$;
 

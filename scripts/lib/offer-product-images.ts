@@ -11,6 +11,7 @@ export interface OfferProductImageInput {
     id: string;
     condition?: string | null;
     has_condition_offers?: boolean | null;
+    variant_model?: string | null;
   }>;
   merchantId: string;
   storefrontBaseUrl: string;
@@ -22,10 +23,11 @@ export interface OfferProductImageInput {
 
 /**
  * Merge condition-offer imagery into the classified rows. Only flagged
- * products are eligible: feed hydration skips the offers relation
- * otherwise, so unflagged offer rows could never build an exclusion set
- * and would leak into base product imagery. Throws on query failure so
- * the caller can fail the backfill loudly.
+ * non-matrix products are eligible, mirroring hydrate-feed-condition-offers:
+ * feed hydration skips the offers relation otherwise, so those offer rows
+ * could never build an exclusion set and would leak into base product
+ * imagery. Throws on query failure so the caller can fail the backfill
+ * loudly.
  */
 export async function appendOfferProductImages(
   input: OfferProductImageInput
@@ -35,7 +37,8 @@ export async function appendOfferProductImages(
   const { supabase, products, merchantId, storefrontBaseUrl, productRows } =
     input;
   const offerProducts = products.filter(
-    (product) => product.has_condition_offers
+    (product) =>
+      product.has_condition_offers && product.variant_model !== 'sku_matrix'
   );
   return appendOfferImageCandidates({
     supabase,

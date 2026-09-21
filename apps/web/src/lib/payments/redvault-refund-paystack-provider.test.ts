@@ -250,6 +250,19 @@ describe('isolated REDVAULT Paystack refund transport', () => {
       })
     ).resolves.toEqual({ kind: 'pending', providerStatus: 'pending' });
   });
+  it('throws when the refund list lookup fails instead of resolving pending', async () => {
+    const { provider } = setup(null);
+    await expect(
+      provider.lookupByCaptureReference({
+        captureReference: 'RV-capture',
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+        expectedCorrelationKey: 'refund-1',
+        knownProviderReferences: [],
+        submittedAt: null,
+      })
+    ).rejects.toThrow('REDVAULT refund list lookup failed');
+  });
   it('stays pending on ambiguous sibling refunds instead of resolving the wrong one', async () => {
     const row = (id: number, status: string) => ({
       amount: 9500,

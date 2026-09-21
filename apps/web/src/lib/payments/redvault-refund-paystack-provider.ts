@@ -204,8 +204,14 @@ export function createRedvaultPaystackRefundProvider({
       const rows = await requestList(
         `?transaction=${encodeURIComponent(captureReference)}&perPage=100`
       );
+      // A null list is a transport failure (missing secret, non-OK, thrown
+      // fetch), not an empty result: resolving it to pending would report
+      // recovery complete while the provider state stays unknown.
+      if (rows === null) {
+        throw new Error('REDVAULT refund list lookup failed');
+      }
       const matches: { providerReference: string; status: string }[] = [];
-      for (const row of rows ?? []) {
+      for (const row of rows) {
         const candidate = record(row);
         if (!candidate) continue;
         // Amount and currency filter first so the transaction-ID lookup

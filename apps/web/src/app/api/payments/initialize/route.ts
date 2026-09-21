@@ -1128,14 +1128,18 @@ export async function POST(request: NextRequest) {
     // order-bound proof the cancellation and attachment paths demand —
     // before the minted context is used for any REDVAULT write (only the
     // email-gated snapshot read ran so far, which reveals nothing new).
+    // The snapshot no longer returns the token (it is UUID+email
+    // accessible), so verification runs inside a boolean proof RPC.
     // Authenticated callers are already bound by user id downstream, so
     // only the guest lane gates here. Missing and mismatched share one
     // code to avoid a token oracle.
     if (orderRequiresRedvault && !redvaultCustomerAuth?.user) {
-      if (
-        !data.tracking_token ||
-        data.tracking_token !== orderSnapshot.tracking_token
-      ) {
+      const { data: tokenValid, error: tokenError } =
+        await paymentDataClient.rpc('verify_order_tracking_token', {
+          p_order_id: data.order_id,
+          p_tracking_token: data.tracking_token ?? '',
+        });
+      if (tokenError || tokenValid !== true) {
         return createErrorResponse(
           'Order ownership proof is required to initialize UBA payment',
           'REDVAULT_TRACKING_TOKEN_INVALID',
@@ -1297,11 +1301,6 @@ export async function POST(request: NextRequest) {
       paystack_subaccount_code:
         typeof paystackSubaccount === 'string' ? paystackSubaccount : null,
     };
-
-    const trackingToken =
-      typeof orderSnapshot.tracking_token === 'string'
-        ? orderSnapshot.tracking_token
-        : undefined;
 
     const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
     const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
@@ -1504,6 +1503,26 @@ export async function POST(request: NextRequest) {
         : `BAC-${nanoidUppercase()}`;
     const redirectUrl = `${protocol}://${merchant.slug}.${rootDomain}/checkout/success?reference=${reference}`;
 
+    // BNPL launcher URLs carry the order tracking token for post-payment
+    // tracking. The payment snapshot no longer returns it (an
+    // anon-accessible snapshot must not disclose the ownership proof), so
+    // read it lazily with the privileged client. This runs after the
+    // REDVAULT early return, where the client is always privileged.
+    let cachedTrackingToken: string | undefined | null = null;
+    async function readTrackingToken(): Promise<string | undefined> {
+      if (cachedTrackingToken !== null) return cachedTrackingToken;
+      const { data: trackingTokenRow } = await paymentDataClient
+        .from('orders')
+        .select('tracking_token')
+        .eq('id', data.order_id)
+        .single();
+      cachedTrackingToken =
+        trackingTokenRow && typeof trackingTokenRow.tracking_token === 'string'
+          ? trackingTokenRow.tracking_token || undefined
+          : undefined;
+      return cachedTrackingToken;
+    }
+
     // Initialize payment based on gateway
     let paymentResult: PaymentResult;
 
@@ -1636,6 +1655,7 @@ export async function POST(request: NextRequest) {
             orderId: paymentData.order_id,
             gateway,
           });
+          const trackingToken = await readTrackingToken();
           if (trackingToken) {
             bnplQuery.set('trackingToken', trackingToken);
           }
@@ -1663,6 +1683,7 @@ export async function POST(request: NextRequest) {
             orderId: paymentData.order_id,
             reference,
           });
+          const trackingToken = await readTrackingToken();
           if (trackingToken) {
             bnplQuery.set('trackingToken', trackingToken);
           }

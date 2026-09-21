@@ -136,6 +136,7 @@ let rpcDvaReservationResult: { data: unknown; error: unknown };
 let redvaultAttemptInitializeResult: { data: unknown; error: unknown };
 let redvaultAttemptClaimResults: Array<{ data: unknown; error: unknown }>;
 let redvaultAttemptReserveResults: Array<{ data: unknown; error: unknown }>;
+let rpcTokenProofResult: { data: unknown; error: unknown };
 const rpcCalls: Array<{ args?: unknown; name: string }> = [];
 
 function createMockSupabase() {
@@ -144,6 +145,8 @@ function createMockSupabase() {
       rpcCalls.push({ name, args });
       if (name === 'get_order_payment_snapshot')
         return Promise.resolve(rpcResult);
+      if (name === 'verify_order_tracking_token')
+        return Promise.resolve(rpcTokenProofResult);
       if (name === 'get_storefront_redvault_paystack_subaccount')
         return Promise.resolve({
           data:
@@ -175,6 +178,7 @@ function createMockSupabase() {
 let merchantResult: { data: unknown; error: unknown };
 let featureSettingsResult: { data: unknown; error: unknown };
 let orderPaymentResult: { data: unknown; error: unknown };
+let orderTokenResult: { data: unknown; error: unknown };
 let savingsRedemptionsResult: { data: unknown; error: unknown };
 
 function createMockAdminClient() {
@@ -205,6 +209,7 @@ function createMockAdminClient() {
               eq: () => ({
                 single: () => Promise.resolve(orderPaymentResult),
               }),
+              single: () => Promise.resolve(orderTokenResult),
             }),
           }),
         };
@@ -297,6 +302,7 @@ function setupDefaults() {
   redvaultAttemptInitializeResult = { data: null, error: null };
   redvaultAttemptClaimResults = [];
   redvaultAttemptReserveResults = [];
+  rpcTokenProofResult = { data: true, error: null };
   merchantResult = {
     data: {
       id: MERCHANT_ID,
@@ -308,6 +314,10 @@ function setupDefaults() {
   };
   featureSettingsResult = { data: null, error: null };
   orderPaymentResult = { data: { wallet_amount_used: 0 }, error: null };
+  orderTokenResult = {
+    data: { tracking_token: 'track-token-123' },
+    error: null,
+  };
   savingsRedemptionsResult = { data: [], error: null };
   routeMocks.authenticateApiRequest.mockResolvedValue({ user: null });
   routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
@@ -694,11 +704,11 @@ describe('POST /api/payments/initialize', () => {
             merchant_id: MERCHANT_ID,
             payment_method: 'uba_redvault',
             total: 5000,
-            tracking_token: 'track-token-123',
           },
         ],
         error: null,
       };
+      rpcTokenProofResult = { data: false, error: null };
 
       const res = await POST(
         makeRequest({ ...validBody, payment_method: 'uba_redvault', ...body })
@@ -708,6 +718,16 @@ describe('POST /api/payments/initialize', () => {
       expect(res.status).toBe(403);
       expect(json.code).toBe('REDVAULT_TRACKING_TOKEN_INVALID');
       expect(mockInitializePaystack).not.toHaveBeenCalled();
+      expect(rpcCalls).toContainEqual({
+        name: 'verify_order_tracking_token',
+        args: {
+          p_order_id: ORDER_ID,
+          p_tracking_token:
+            'tracking_token' in body
+              ? (body as { tracking_token: string }).tracking_token
+              : '',
+        },
+      });
     });
 
     it('ignores a client-supplied amount and derives the gateway amount from the order', async () => {

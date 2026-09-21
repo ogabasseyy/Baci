@@ -37,6 +37,13 @@ const SHELL_DELEGATE_MODULES = new Map<
       routeJsxPattern: /<UsdtWalletFundingScreen(?=[\s/>])/,
     },
   ],
+  [
+    'repairs/status.tsx',
+    {
+      modulePath: '../components/repairs/RepairStatusScreen.tsx',
+      routeJsxPattern: /<RepairStatusScreen(?=[\s/>])/,
+    },
+  ],
 ]);
 
 type RouteModule = {
@@ -78,6 +85,7 @@ const EXPLICIT_STATIC_ROUTES = new Set([
   'profile/delete-account.tsx',
   'profile/edit.tsx',
   'quiz/prize-checkout-simulation.tsx',
+  'repairs/status.tsx',
   'search.tsx',
   'utilities/history.tsx',
   'wallet/manage-cards.tsx',

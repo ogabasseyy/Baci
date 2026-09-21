@@ -65,5 +65,26 @@ describe('eventPipelineRepairPickupCredentialPaths', () => {
       'apps/web/src/lib/agentic/jwt-signing-material.ts',
       'apps/web/src/env.ts',
     ]);
+    expect(eventPipelineRepairPickupCredentialPaths).toContainEqual([
+      'apps/web/src/app/api/storefront/[slug]/repairs/pickup/route.ts',
+      'apps/web/src/lib/repairs/repair-center-address.ts',
+      'apps/web/src/lib/repairs/repair-pickup-receiver-client.ts',
+      'apps/web/src/lib/supabase/scoped-jwt.ts',
+      'apps/web/src/lib/agentic/jwt-signing-material.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineRepairPickupCredentialPaths).toContainEqual([
+      'apps/web/src/app/api/storefront/[slug]/repairs/pickup/route.ts',
+      'apps/web/src/lib/repairs/repairs-catalog-access.ts',
+      'apps/web/src/lib/cached-data.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineRepairPickupCredentialPaths).toContainEqual([
+      'apps/web/src/lib/repairs/start-mobile-repair-pickup-payment.ts',
+      'apps/web/src/lib/repairs/repair-pickup-receiver-client.ts',
+      'apps/web/src/lib/supabase/scoped-jwt.ts',
+      'apps/web/src/lib/agentic/jwt-signing-material.ts',
+      'apps/web/src/env.ts',
+    ]);
   });
 });

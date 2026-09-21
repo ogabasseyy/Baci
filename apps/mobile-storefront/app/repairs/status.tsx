@@ -1,1 +1,5 @@
-export { RepairStatusScreen as default } from '@/components/repairs/RepairStatusScreen';
+import { RepairStatusScreen } from '@/components/repairs/RepairStatusScreen';
+
+export default function RepairStatusRoute() {
+  return <RepairStatusScreen />;
+}

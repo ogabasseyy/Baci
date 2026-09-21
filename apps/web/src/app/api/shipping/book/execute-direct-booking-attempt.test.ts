@@ -63,6 +63,8 @@ const payload = {
   items: [{ name: 'Phone', quantity: 1, weight: 1, value: 100 }],
 };
 
+const orderItems = [{ name: 'Phone', quantity: 1, price: 100 }];
+
 describe('executeDirectBookingAttempt', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -85,6 +87,7 @@ describe('executeDirectBookingAttempt', () => {
       merchantId: 'merchant-1',
       merchantBusinessName: 'Merchant Store',
       orderId: 'order-1',
+      orderItems,
       quote,
       quotePayload: payload,
       usesStoredInternationalSender: false,
@@ -104,6 +107,7 @@ describe('executeDirectBookingAttempt', () => {
       merchantId: 'merchant-1',
       merchantBusinessName: 'Merchant Store',
       orderId: 'order-1',
+      orderItems,
       quote,
       quotePayload: payload,
       usesStoredInternationalSender: false,
@@ -129,6 +133,7 @@ describe('executeDirectBookingAttempt', () => {
         merchantId: 'merchant-1',
         merchantBusinessName: 'Merchant Store',
         orderId: 'order-1',
+        orderItems,
         quote,
         quotePayload: payload,
         usesStoredInternationalSender: false,
@@ -156,6 +161,7 @@ describe('executeDirectBookingAttempt', () => {
       merchantId: 'merchant-1',
       merchantBusinessName: 'Merchant Store',
       orderId: 'order-1',
+      orderItems,
       quote,
       quotePayload: payload,
       usesStoredInternationalSender: false,
@@ -167,7 +173,15 @@ describe('executeDirectBookingAttempt', () => {
       expect.objectContaining({
         quoteId: 'quote-refreshed',
         receiver: payload.receiver,
-        items: payload.items,
+        items: [
+          {
+            name: 'Phone',
+            description: 'Phone',
+            quantity: 1,
+            weight: 1,
+            value: 100,
+          },
+        ],
       })
     );
   });
@@ -205,6 +219,7 @@ describe('executeDirectBookingAttempt', () => {
         merchantId: 'merchant-1',
         merchantBusinessName: 'Merchant Store',
         orderId: 'order-1',
+        orderItems,
         quote,
         quotePayload: payload,
         usesStoredInternationalSender: false,
@@ -225,6 +240,7 @@ describe('executeDirectBookingAttempt', () => {
       merchantId: 'merchant-1',
       merchantBusinessName: 'Merchant Store',
       orderId: 'order-1',
+      orderItems,
       quote,
       quotePayload: { ...payload, sender: storedSender },
       usesStoredInternationalSender: true,
@@ -235,6 +251,69 @@ describe('executeDirectBookingAttempt', () => {
       'GIGL',
       expect.objectContaining({ sender: storedSender })
     );
+  });
+
+  it('submits surviving quantities after a partial refund', async () => {
+    const result = await executeDirectBookingAttempt({
+      supabase: {} as never,
+      merchantId: 'merchant-1',
+      merchantBusinessName: 'Merchant Store',
+      orderId: 'order-1',
+      orderItems: [
+        {
+          name: 'Phone',
+          quantity: 2,
+          price: 100,
+          fulfillment_data: { fulfillmentQuantity: 1 },
+        },
+      ],
+      quote,
+      quotePayload: {
+        ...payload,
+        items: [{ name: 'Phone', quantity: 2, weight: 1, value: 100 }],
+      },
+      usesStoredInternationalSender: false,
+      expectedShippingFee: 2500,
+    });
+
+    const shippable = [
+      {
+        name: 'Phone',
+        description: 'Phone',
+        quantity: 1,
+        weight: 1,
+        value: 100,
+      },
+    ];
+    expect(result.items).toEqual(shippable);
+    expect(mockBookShipment).toHaveBeenCalledWith(
+      'GIGL',
+      expect.objectContaining({ items: shippable })
+    );
+  });
+
+  it('rejects booking when every unit was refunded', async () => {
+    await expect(
+      executeDirectBookingAttempt({
+        supabase: {} as never,
+        merchantId: 'merchant-1',
+        merchantBusinessName: 'Merchant Store',
+        orderId: 'order-1',
+        orderItems: [
+          {
+            name: 'Phone',
+            quantity: 1,
+            price: 100,
+            fulfillment_data: { fulfillmentQuantity: 0 },
+          },
+        ],
+        quote,
+        quotePayload: payload,
+        usesStoredInternationalSender: false,
+        expectedShippingFee: 2500,
+      })
+    ).rejects.toMatchObject({ code: 'NO_SHIPPABLE_ITEMS' });
+    expect(mockBookShipment).not.toHaveBeenCalled();
   });
 
   it('does not call the provider when merchant sender resolution fails', async () => {
@@ -250,6 +329,7 @@ describe('executeDirectBookingAttempt', () => {
         merchantId: 'merchant-1',
         merchantBusinessName: 'Merchant Store',
         orderId: 'order-1',
+        orderItems,
         quote,
         quotePayload: payload,
         usesStoredInternationalSender: false,

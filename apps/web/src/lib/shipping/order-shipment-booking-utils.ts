@@ -13,7 +13,7 @@ import { survivingShipmentQuantity } from './surviving-shipment-quantity';
 
 export { OrderShipmentBookingError };
 
-type OrderItemRecord = {
+export type OrderItemRecord = {
   name: string | null;
   quantity: number | null;
   price: number | string | null;

@@ -193,7 +193,10 @@ describe('resolveRedvaultFenceForResubmit', () => {
         onInitializationSuccess,
       })
     ).resolves.toBe('handled');
-    expect(mockAttach).toHaveBeenCalledWith({ orderId: 'order-rv' });
+    expect(mockAttach).toHaveBeenCalledWith({
+      orderId: 'order-rv',
+      trackingToken: 'track-rv',
+    });
     expect(onInitializationSuccess.mock.invocationCallOrder[0]).toBeLessThan(
       mockAttach.mock.invocationCallOrder[0]
     );

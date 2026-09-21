@@ -3934,7 +3934,7 @@ describe('CheckoutPage', () => {
       if (url === '/api/orders') {
         return Response.json({
           amountDueToGateway: 5_000,
-          order: { id: 'order-redvault', currency: 'NGN' },
+          order: { id: 'order-redvault', currency: 'NGN', tracking_token: 'track-redvault' },
           redvault: {
             quote: {
               product_subtotal_kobo: 500_000,
@@ -3983,7 +3983,7 @@ describe('CheckoutPage', () => {
     await waitFor(() => {
       expect(rpcMock).toHaveBeenCalledWith(
         'attach_redvault_guest_application_to_customer',
-        { p_order_id: 'order-redvault' }
+        { p_order_id: 'order-redvault', p_tracking_token: 'track-redvault' }
       );
     });
     await waitFor(() => {

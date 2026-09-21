@@ -38,6 +38,7 @@ type DirectBookingOrder = {
     name: string;
     quantity: number;
     price: number;
+    fulfillment_data?: unknown;
     product_id?: string | null;
     product?: unknown;
   }> | null;
@@ -65,7 +66,7 @@ export async function loadDirectBookingContext(
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .select(
-      'id, merchant_id, selected_quote_id, shipping_funding_source, shipping_provider, shipping_status, shipping_fee, payment_method, payment_status, shipping_address, order_items(name, quantity, price, product_id, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions, commodity_code))'
+      'id, merchant_id, selected_quote_id, shipping_funding_source, shipping_provider, shipping_status, shipping_fee, payment_method, payment_status, shipping_address, order_items(name, quantity, price, fulfillment_data, product_id, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions, commodity_code))'
     )
     .eq('id', data.orderId)
     .eq('merchant_id', merchantId)

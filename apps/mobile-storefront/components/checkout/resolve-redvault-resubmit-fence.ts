@@ -105,6 +105,7 @@ export async function resolveRedvaultFenceForResubmit({
           if (attemptGuestAttach) {
             await attachRedvaultGuestOrderAfterSignup({
               orderId: persisted.orderId,
+              trackingToken: persisted.trackingToken,
             });
           }
         },

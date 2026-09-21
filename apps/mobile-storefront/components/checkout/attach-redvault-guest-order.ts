@@ -13,20 +13,26 @@ import { trackError } from '@/services/analytics';
  * Recovery: when the attach fails under an established session, the new
  * identity can never verify the guest-owned attempt, so sign back out to
  * restore the guest context rather than stranding the payment.
+ *
+ * The RPC requires the order's tracking token as order-bound proof; without
+ * it there is nothing to prove with, so skip the attach and keep the guest
+ * context instead of failing the payment.
  */
 export async function attachRedvaultGuestOrderAfterSignup({
   orderId,
+  trackingToken,
 }: {
   orderId: string;
+  trackingToken?: string;
 }): Promise<void> {
   try {
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session || !trackingToken) return;
     const { error } = await supabase.rpc(
       'attach_redvault_guest_application_to_customer',
-      { p_order_id: orderId }
+      { p_order_id: orderId, p_tracking_token: trackingToken }
     );
     if (error) throw error;
   } catch (attachError) {

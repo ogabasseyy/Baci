@@ -138,6 +138,7 @@ export async function runRedvaultSubmitInitializationSideEffects({
   saveAsDefaultAddress,
   saveDetails,
   selectedSavedAddressId,
+  trackingToken,
 }: {
   accountPassword: string;
   address: ShippingAddressInput;
@@ -148,6 +149,7 @@ export async function runRedvaultSubmitInitializationSideEffects({
   saveAsDefaultAddress: boolean;
   saveDetails: boolean;
   selectedSavedAddressId: string | null;
+  trackingToken?: string;
 }): Promise<void> {
   await runCheckoutPostOrderSideEffects({
     accountPassword,
@@ -164,6 +166,6 @@ export async function runRedvaultSubmitInitializationSideEffects({
   // interrupted checkout can still replay or verify under the new
   // session.
   if (!isAuthenticated && saveDetails && accountPassword.length >= 6) {
-    await attachRedvaultGuestOrderAfterSignup({ orderId: orderId });
+    await attachRedvaultGuestOrderAfterSignup({ orderId, trackingToken });
   }
 }

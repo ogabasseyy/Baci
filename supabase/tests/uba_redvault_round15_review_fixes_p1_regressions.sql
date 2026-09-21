@@ -60,14 +60,14 @@ BEGIN
 
   INSERT INTO public.orders
     (id, merchant_id, customer_id, order_number, total, payment_method, payment_status, shipping_status,
-     created_at)
+     tracking_token, created_at)
   VALUES
     (v_order_refund, v_merchant, v_customer, 'R15P1-REFUND', 1500.00, 'uba_redvault', 'paid', 'processing',
-     pg_catalog.now() - interval '10 minutes'),
+     'track-r15-refund', pg_catalog.now() - interval '10 minutes'),
     (v_order_guest, v_merchant, v_customer, 'R15P1-GUEST', 1500.00, 'uba_redvault', 'unpaid', 'pending',
-     pg_catalog.now() - interval '10 minutes'),
+     'track-r15-guest', pg_catalog.now() - interval '10 minutes'),
     (v_order_plain, v_merchant, v_customer, 'R15P1-PLAIN', 1500.00, 'card', 'paid', 'processing',
-     pg_catalog.now() - interval '10 minutes');
+     'track-r15-plain', pg_catalog.now() - interval '10 minutes');
   INSERT INTO public.order_items (id, order_id, product_id, variant_id, name, price, quantity)
   VALUES (v_item, v_order_refund, v_product, v_variant, 'Redvault P15 item', 150000, 2);
   INSERT INTO private.uba_redvault_applications
@@ -123,13 +123,13 @@ BEGIN
   PERFORM set_config('request.jwt.claim.sub', v_user::text, true);
   PERFORM set_config('request.jwt.claims', jsonb_build_object(
     'role', 'authenticated', 'sub', v_user::text, 'email', 'stranger@example.com')::text, true);
-  SELECT public.attach_redvault_guest_application_to_customer(v_order_guest) INTO v_attached;
+  SELECT public.attach_redvault_guest_application_to_customer(v_order_guest, 'track-r15-guest') INTO v_attached;
   IF v_attached IS NOT FALSE THEN
     RAISE EXCEPTION 'stranger email attached the checkout';
   END IF;
   PERFORM set_config('request.jwt.claims', jsonb_build_object(
     'role', 'authenticated', 'sub', v_user::text, 'email', v_guest_email)::text, true);
-  SELECT public.attach_redvault_guest_application_to_customer(v_order_guest) INTO v_attached;
+  SELECT public.attach_redvault_guest_application_to_customer(v_order_guest, 'track-r15-guest') INTO v_attached;
   IF v_attached IS NOT TRUE THEN
     RAISE EXCEPTION 'guest checkout was not attached';
   END IF;
@@ -141,19 +141,19 @@ BEGIN
   IF v_owner <> v_user THEN
     RAISE EXCEPTION 'customer was not attached, got %', v_owner;
   END IF;
-  SELECT public.attach_redvault_guest_application_to_customer(v_order_guest) INTO v_attached;
+  SELECT public.attach_redvault_guest_application_to_customer(v_order_guest, 'track-r15-guest') INTO v_attached;
   IF v_attached IS NOT FALSE THEN
     RAISE EXCEPTION 'attach was not single-claim';
   END IF;
   BEGIN
-    PERFORM public.attach_redvault_guest_application_to_customer(v_order_plain);
+    PERFORM public.attach_redvault_guest_application_to_customer(v_order_plain, 'track-r15-plain');
     RAISE EXCEPTION 'non-REDVAULT attach unexpectedly succeeded';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'redvault_attach_order_not_found' THEN RAISE; END IF;
   END;
   PERFORM set_config('request.jwt.claim.role', 'anon', true);
   BEGIN
-    PERFORM public.attach_redvault_guest_application_to_customer(v_order_guest);
+    PERFORM public.attach_redvault_guest_application_to_customer(v_order_guest, 'track-r15-guest');
     RAISE EXCEPTION 'anonymous attach unexpectedly succeeded';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'forbidden: attach_redvault_guest_application_to_customer requires authenticated' THEN RAISE; END IF;

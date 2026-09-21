@@ -218,6 +218,7 @@ export function useCheckoutSubmit({
               saveAsDefaultAddress,
               saveDetails,
               selectedSavedAddressId,
+              trackingToken: order.tracking_token ?? undefined,
             }),
           onRedvaultOrder,
           orderResponse,

@@ -2107,7 +2107,10 @@ export const CheckoutPage: React.FC = () => {
     // checkout fingerprint: edited contact/delivery/cart inputs cancel and
     // recreate it instead of initializing a stale order with skipped
     // validation. A live (409) cancel keeps the prepared order and replays
-    // it instead of opening a second order; any other outcome recreates.
+    // it instead of opening a second order; cancelled/gone recreates. A
+    // failed cancel keeps the fence and blocks: the prepared order may
+    // still hold its reservation, so clearing it would strand inventory
+    // while the replacement order fails against the held stock.
     let activeRedvaultOrder =
       paymentMethod === 'uba_redvault' ? redvaultOrderReady : null;
     if (
@@ -2118,7 +2121,10 @@ export const CheckoutPage: React.FC = () => {
       )
     ) {
       const staleCancel = await cancelStaleCheckoutOrder({
-        isAuthenticated: !!user,
+        // This route mounts no auth provider, so `user` is always null
+        // here: resolve the cookie session or signed-in customers cancel
+        // down the guest route and mis-route to the recreate branch.
+        isAuthenticated: await waitForResolvedStorefrontCustomerAuth(),
         orderId: activeRedvaultOrder.orderId,
         reason: 'Checkout details changed before UBA payment',
         trackingToken: activeRedvaultOrder.trackingToken,
@@ -2127,17 +2133,24 @@ export const CheckoutPage: React.FC = () => {
         console.warn(
           'Prepared REDVAULT order already initializing; replaying it.'
         );
+      } else if (staleCancel === 'failed') {
+        // Unproven (timeout, server error, no ownership proof): keep the
+        // fence and stop this submit instead of recreating. The retry
+        // re-attempts the same cancellation; clearing here would strand
+        // the reservation while the replacement fails against held stock.
+        toast({
+          title: 'Order Still Processing',
+          description:
+            'We could not release your previous order. Please try again.',
+          variant: 'destructive',
+        });
+        isOrderInFlightRef.current = false;
+        setIsProcessing(false);
+        return;
       } else {
-        // Cancelled, gone, or unreleasable (guest without a token, request
-        // failure): the prepared order never initialized — this branch is
-        // the only initializer and it clears the state first — so nothing
-        // is payable and recreating below is safe. A failed cancel may
-        // leave a pre-init draft for abandoned cleanup to collect.
-        if (staleCancel === 'failed') {
-          console.error(
-            'Failed to cancel stale prepared REDVAULT order; recreating.'
-          );
-        }
+        // Cancelled or gone: the prepared order never initialized — this
+        // branch is the only initializer and it clears the state first —
+        // so nothing is payable and recreating below is safe.
         activeRedvaultOrder = null;
         setRedvaultOrderReady(null);
         clearPendingCheckoutOrder();
@@ -2175,10 +2188,17 @@ export const CheckoutPage: React.FC = () => {
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        if (session) {
+        // The attach RPC requires the order's tracking token as
+        // order-bound proof; without the persisted token there is nothing
+        // to prove with, so skip the attach and let initialization run
+        // under the guest identity instead of failing the payment.
+        if (session && activeRedvaultOrder.trackingToken) {
           const { error: attachError } = await supabase.rpc(
             'attach_redvault_guest_application_to_customer',
-            { p_order_id: activeRedvaultOrder.orderId }
+            {
+              p_order_id: activeRedvaultOrder.orderId,
+              p_tracking_token: activeRedvaultOrder.trackingToken,
+            }
           );
           if (attachError) {
             console.error('Guest checkout attach error:', attachError);
@@ -2300,7 +2320,7 @@ export const CheckoutPage: React.FC = () => {
       if (reusablePendingOrder.ordinaryPendingOrder) {
         const ordinary = reusablePendingOrder.ordinaryPendingOrder;
         const ordinaryCancel = await cancelStaleCheckoutOrder({
-          isAuthenticated: !!user,
+          isAuthenticated: await waitForResolvedStorefrontCustomerAuth(),
           orderId: ordinary.orderId,
           reason: 'Shopper switched to UBA payment',
           trackingToken: ordinary.trackingToken,
@@ -2327,7 +2347,7 @@ export const CheckoutPage: React.FC = () => {
       if (reusablePendingOrder.redvaultPendingOrder) {
         const stale = reusablePendingOrder.redvaultPendingOrder;
         const staleCancel = await cancelStaleCheckoutOrder({
-          isAuthenticated: !!user,
+          isAuthenticated: await waitForResolvedStorefrontCustomerAuth(),
           orderId: stale.orderId,
           reason: 'Shopper restarted UBA payment',
           trackingToken: stale.trackingToken,

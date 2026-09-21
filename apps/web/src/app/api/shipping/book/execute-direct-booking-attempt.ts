@@ -2,9 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { shippingService } from '@/lib/shipping';
 import { assertCurrentOrderPaymentShippable } from '@/lib/shipping/assert-current-shippable-order-payment';
 import {
+  assertShippableBookingItems,
   isShippingProviderCode,
+  type OrderItemRecord,
   OrderShipmentBookingError,
   parseStoredQuoteRequest,
+  toDomesticBookingItems,
 } from '@/lib/shipping/order-shipment-booking-utils';
 import type { OrderShipmentQuoteRecord } from '@/lib/shipping/refresh-order-shipment-quote';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
@@ -100,6 +103,7 @@ export async function executeDirectBookingAttempt(params: {
   merchantId: string;
   merchantBusinessName?: string | null;
   orderId: string;
+  orderItems: OrderItemRecord[];
   quote: OrderShipmentQuoteRecord;
   quotePayload: DirectBookingPayload;
   usesStoredInternationalSender: boolean;
@@ -118,6 +122,7 @@ export async function executeDirectBookingAttempt(params: {
     merchantId,
     merchantBusinessName,
     orderId,
+    orderItems,
     quote,
     quotePayload,
     usesStoredInternationalSender,
@@ -187,6 +192,13 @@ export async function executeDirectBookingAttempt(params: {
     assertDomesticQuoteMatchesPayload(receiver, items, quotePayload);
   }
 
+  // Rebuild the provider items from the authoritative order rows: partial
+  // refunds write the surviving per-line quantity into
+  // order_items.fulfillment_data, and quoting predates the refund, so the
+  // stored/client items above would otherwise ship refunded units.
+  const shippableItems = toDomesticBookingItems(orderItems, items);
+  assertShippableBookingItems(shippableItems);
+
   const bookingRequest: BookingRequest = {
     orderId,
     quoteId: bookingQuote.id,
@@ -194,7 +206,7 @@ export async function executeDirectBookingAttempt(params: {
     quoteMetadata: bookingQuote.provider_metadata,
     sender: senderInfo,
     receiver,
-    items,
+    items: shippableItems,
     instructions,
   };
 
@@ -208,5 +220,5 @@ export async function executeDirectBookingAttempt(params: {
     bookingRequest
   );
 
-  return { bookingQuote, items, receiver, result, senderInfo };
+  return { bookingQuote, items: shippableItems, receiver, result, senderInfo };
 }

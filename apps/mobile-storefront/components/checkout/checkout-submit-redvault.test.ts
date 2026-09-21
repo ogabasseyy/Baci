@@ -182,9 +182,13 @@ describe('runRedvaultSubmitInitializationSideEffects', () => {
       accountPassword: 'secret1',
       isAuthenticated: false,
       saveDetails: true,
+      trackingToken: 'track-rv',
     });
 
     expect(mockSideEffects).toHaveBeenCalledTimes(1);
-    expect(mockAttach).toHaveBeenCalledWith({ orderId: 'order-rv' });
+    expect(mockAttach).toHaveBeenCalledWith({
+      orderId: 'order-rv',
+      trackingToken: 'track-rv',
+    });
   });
 });

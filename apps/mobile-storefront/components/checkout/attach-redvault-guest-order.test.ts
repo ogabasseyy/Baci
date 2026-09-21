@@ -31,21 +31,37 @@ describe('attachRedvaultGuestOrderAfterSignup', () => {
   it('skips the attach when no session was established', async () => {
     mockGetSession.mockResolvedValue({ data: { session: null } });
 
+    await attachRedvaultGuestOrderAfterSignup({
+      orderId: 'order-rv',
+      trackingToken: 'track-rv',
+    });
+
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it('skips the attach when the tracking token is missing', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: { user: {} } } });
+
     await attachRedvaultGuestOrderAfterSignup({ orderId: 'order-rv' });
 
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockSignOut).not.toHaveBeenCalled();
+    expect(mockAlert).not.toHaveBeenCalled();
   });
 
   it('attaches the guest order under the new session', async () => {
     mockGetSession.mockResolvedValue({ data: { session: { user: {} } } });
     mockRpc.mockResolvedValue({ error: null });
 
-    await attachRedvaultGuestOrderAfterSignup({ orderId: 'order-rv' });
+    await attachRedvaultGuestOrderAfterSignup({
+      orderId: 'order-rv',
+      trackingToken: 'track-rv',
+    });
 
     expect(mockRpc).toHaveBeenCalledWith(
       'attach_redvault_guest_application_to_customer',
-      { p_order_id: 'order-rv' }
+      { p_order_id: 'order-rv', p_tracking_token: 'track-rv' }
     );
     expect(mockSignOut).not.toHaveBeenCalled();
     expect(mockAlert).not.toHaveBeenCalled();
@@ -55,7 +71,10 @@ describe('attachRedvaultGuestOrderAfterSignup', () => {
     mockGetSession.mockResolvedValue({ data: { session: { user: {} } } });
     mockRpc.mockResolvedValue({ error: { message: 'identity_required' } });
 
-    await attachRedvaultGuestOrderAfterSignup({ orderId: 'order-rv' });
+    await attachRedvaultGuestOrderAfterSignup({
+      orderId: 'order-rv',
+      trackingToken: 'track-rv',
+    });
 
     expect(mockSignOut).toHaveBeenCalledTimes(1);
     expect(mockTrackError).toHaveBeenCalledWith(

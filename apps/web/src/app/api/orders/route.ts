@@ -67,6 +67,7 @@ import { mergeReceiptItemsWithInvoiceMetadata } from '@/lib/invoice-receipt-item
 import { logger } from '@/lib/logger';
 import { dispatchOrderCreationNotifications } from '@/lib/order-notification-dispatch';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
+import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
 import { recordPreGatewayRedemption } from '@/lib/payments/record-pre-gateway-redemption';
 import {
   generatePeppolInvoiceXml,
@@ -3570,7 +3571,8 @@ export async function POST(request: NextRequest) {
             payformeProvisioningAttempted = true;
             preResponsePayformeVirtualAccount = await provisionInvoiceMethodDva(
               {
-                supabase,
+                persistAssignment: (assignment) =>
+                  persistPaystackDvaAssignment(supabase, assignment),
                 customerEmail: customer_email,
                 customerName: customer_name,
                 customerPhone: customer_phone ?? null,
@@ -3670,8 +3672,13 @@ export async function POST(request: NextRequest) {
                 // no virtual account for an impossible payment.
                 if (emailAmountDue > 0) {
                   backgroundSupabase ??= createAdminClient();
+                  const invoiceDvaSupabase = backgroundSupabase;
                   invoiceVirtualAccount = await provisionInvoiceMethodDva({
-                    supabase: backgroundSupabase,
+                    persistAssignment: (assignment) =>
+                      persistPaystackDvaAssignment(
+                        invoiceDvaSupabase,
+                        assignment
+                      ),
                     customerEmail: customer_email,
                     customerName: customer_name,
                     customerPhone: customer_phone ?? null,
@@ -3929,7 +3936,8 @@ export async function POST(request: NextRequest) {
                 } else if (!payformeProvisioningAttempted) {
                   try {
                     invoiceVirtualAccount = await provisionInvoiceMethodDva({
-                      supabase,
+                      persistAssignment: (assignment) =>
+                        persistPaystackDvaAssignment(supabase, assignment),
                       customerEmail: customer_email,
                       customerName: customer_name,
                       customerPhone: customer_phone ?? null,

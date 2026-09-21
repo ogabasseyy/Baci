@@ -1,9 +1,7 @@
 import type { PaymentMethodType } from '@/components/checkout/PaymentMethodSelector';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
 import type { OrderResponse } from '@/services/orders';
-import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import type { CartItem } from '@/stores/cart-store';
 import { maybeClaimCheckoutInvoice } from './checkout-invoice-claim';
 import type { CheckoutSnapshot } from './checkout-order-builders';
@@ -28,7 +26,6 @@ interface HandleCreatedCheckoutOrderParams {
   selectedPayment: PaymentMethodType;
   selectedSavedAddressId: string | null;
   snapshot: CheckoutSnapshot;
-  user: UseCheckoutSubmitParams['user'];
 }
 
 export interface HandledCreatedCheckoutOrder {
@@ -59,7 +56,6 @@ export async function handleCreatedCheckoutOrder({
   selectedPayment,
   selectedSavedAddressId,
   snapshot,
-  user,
 }: HandleCreatedCheckoutOrderParams): Promise<HandledCreatedCheckoutOrder> {
   const { order } = orderResponse;
   const completedPaymentMethod =
@@ -107,20 +103,10 @@ export async function handleCreatedCheckoutOrder({
     });
     return { handled: true, orderNumber };
   }
-  if (await claimCheckoutPurchaseTracking(order.id)) {
-    void trackCheckoutRoutePurchaseCompleted({
-      customerEmail,
-      customerPhone,
-      items: itemsSnapshot,
-      orderId: order.id,
-      orderNumber,
-      paymentMethod: completedPaymentMethod,
-      shipping: snapshot.deliveryFee,
-      subtotal: snapshot.subtotal,
-      tax: snapshot.taxAmount,
-      total: order.total,
-      userId: user?.id ?? undefined,
-    });
-  }
+  // No purchase signal here by design: the order is unpaid at creation,
+  // and submit-time tracking would both overcount pending orders and
+  // consume the durable claim that the paid-verified completion paths
+  // (gateway/bank-transfer/settlement handlers) rely on. Replays and
+  // retries complete through those paths instead.
   return { handled: false, orderNumber };
 }

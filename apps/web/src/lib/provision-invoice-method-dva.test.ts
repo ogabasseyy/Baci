@@ -1,11 +1,7 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/paystack', () => ({
   generatePaymentAccount: vi.fn(),
-}));
-vi.mock('@/lib/payments/persist-paystack-dva-assignment', () => ({
-  persistPaystackDvaAssignment: vi.fn(),
 }));
 vi.mock('@/lib/logger', () => ({
   logger: {
@@ -16,15 +12,14 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 import { logger } from '@/lib/logger';
-import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
 import { generatePaymentAccount } from '@/lib/paystack';
 import { provisionInvoiceMethodDva } from './provision-invoice-method-dva';
 
-const supabase = {} as SupabaseClient;
+const persistAssignment = vi.fn();
 
 function baseInput() {
   return {
-    supabase,
+    persistAssignment,
     customerEmail: 'buyer@example.com',
     customerName: 'Ada Buyer',
     customerPhone: '08010000000',
@@ -51,7 +46,7 @@ describe('provisionInvoiceMethodDva', () => {
         customer_code: 'CUS_ada',
       },
     });
-    vi.mocked(persistPaystackDvaAssignment).mockResolvedValue(null);
+    persistAssignment.mockResolvedValue(null);
 
     const result = await provisionInvoiceMethodDva(baseInput());
 
@@ -62,7 +57,7 @@ describe('provisionInvoiceMethodDva', () => {
       phone: '08010000000',
       orderId: 'order-1',
     });
-    expect(persistPaystackDvaAssignment).toHaveBeenCalledWith(supabase, {
+    expect(persistAssignment).toHaveBeenCalledWith({
       accountName: 'Baci / Ada',
       accountNumber: '1234567890',
       bankName: 'Paystack-Titan',
@@ -90,7 +85,7 @@ describe('provisionInvoiceMethodDva', () => {
 
     expect(result).toBeNull();
     expect(generatePaymentAccount).not.toHaveBeenCalled();
-    expect(persistPaystackDvaAssignment).not.toHaveBeenCalled();
+    expect(persistAssignment).not.toHaveBeenCalled();
   });
 
   it('returns null when generation fails', async () => {
@@ -102,7 +97,7 @@ describe('provisionInvoiceMethodDva', () => {
     const result = await provisionInvoiceMethodDva(baseInput());
 
     expect(result).toBeNull();
-    expect(persistPaystackDvaAssignment).not.toHaveBeenCalled();
+    expect(persistAssignment).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'Auto-generation of invoice DVA failed',
@@ -122,7 +117,7 @@ describe('provisionInvoiceMethodDva', () => {
     });
     // Any truthy value signals a persistence failure (the helper
     // returns a NextResponse failure payload on error paths).
-    vi.mocked(persistPaystackDvaAssignment).mockResolvedValue({} as never);
+    persistAssignment.mockResolvedValue({});
 
     const result = await provisionInvoiceMethodDva(baseInput());
 

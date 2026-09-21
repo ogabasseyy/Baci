@@ -75,9 +75,7 @@ describe('trackCheckoutPaymentFailed', () => {
     await started;
     await failed;
 
-    const events = jest
-      .mocked(trackEvent)
-      .mock.calls.map(([event]) => event);
+    const events = jest.mocked(trackEvent).mock.calls.map(([event]) => event);
     expect(events).toEqual(['payment_started', 'payment_failed']);
   });
 });

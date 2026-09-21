@@ -12,6 +12,7 @@ import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-f
 import { asRoute } from '@/lib/routes';
 import {
   type CheckoutVerificationStatus,
+  hasMatchingPendingRedvaultOrder,
   type VerifyCheckoutPaymentHandlers,
   verifyCheckoutPayment,
 } from './verify-checkout-payment';
@@ -31,32 +32,6 @@ const VERIFY_REPOLL_MAX_ATTEMPTS = 40;
 const VERIFY_REQUEST_TIMEOUT_MS = 10000;
 
 export type { CheckoutVerificationStatus };
-
-function hasMatchingPendingRedvaultOrder(orderId: string | null): boolean {
-  if (!orderId || typeof window === 'undefined') {
-    return false;
-  }
-
-  try {
-    const raw = sessionStorage.getItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY);
-    if (!raw) {
-      return false;
-    }
-    const pendingOrder: unknown = JSON.parse(raw);
-    if (!pendingOrder || typeof pendingOrder !== 'object') {
-      return false;
-    }
-    const snapshot = pendingOrder as {
-      orderId?: unknown;
-      paymentMethod?: unknown;
-    };
-    return (
-      snapshot.orderId === orderId && snapshot.paymentMethod === 'uba_redvault'
-    );
-  } catch {
-    return false;
-  }
-}
 
 interface UseCheckoutSuccessVerificationInput {
   merchantSlug: string | undefined;

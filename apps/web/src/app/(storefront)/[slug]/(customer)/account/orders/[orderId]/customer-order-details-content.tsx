@@ -3,6 +3,7 @@ import { ArrowLeft, CreditCard, ShieldCheck, Truck } from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { CustomerOrderActions } from '@/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/customer-order-actions';
+import { CustomerOrderPaymentHistory } from '@/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/customer-order-payment-history';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
@@ -269,37 +270,10 @@ export function CustomerOrderDetailsContent({
               onOrderChanged={onOrderChanged}
             />
 
-            {order.transactions && order.transactions.length > 0 ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Payment History</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  {order.transactions.map((transaction, index) => (
-                    <div
-                      key={
-                        transaction.id || `${transaction.created_at}-${index}`
-                      }
-                      className="flex justify-between gap-4"
-                    >
-                      <div>
-                        <p className="font-medium">
-                          {transaction.metadata?.payment_method ||
-                            transaction.description ||
-                            'Payment'}
-                        </p>
-                        <p className="text-muted-foreground">
-                          {formatAccountDate(transaction.created_at)}
-                        </p>
-                      </div>
-                      <p className="font-medium">
-                        {formatDisplayCurrency(transaction.amount, currency)}
-                      </p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            ) : null}
+            <CustomerOrderPaymentHistory
+              transactions={order.transactions}
+              currency={currency}
+            />
           </div>
         </div>
       </div>

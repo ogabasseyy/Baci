@@ -1,3 +1,4 @@
+import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { fetchWithCsrf } from '@/lib/api-client';
 import type { CheckoutVerificationStatus } from './verify-checkout-payment-lookup';
 import {
@@ -8,6 +9,34 @@ import {
 } from './verify-checkout-payment-lookup';
 
 export type { CheckoutVerificationStatus };
+
+export function hasMatchingPendingRedvaultOrder(
+  orderId: string | null
+): boolean {
+  if (!orderId || typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    const raw = sessionStorage.getItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY);
+    if (!raw) {
+      return false;
+    }
+    const pendingOrder: unknown = JSON.parse(raw);
+    if (!pendingOrder || typeof pendingOrder !== 'object') {
+      return false;
+    }
+    const snapshot = pendingOrder as {
+      orderId?: unknown;
+      paymentMethod?: unknown;
+    };
+    return (
+      snapshot.orderId === orderId && snapshot.paymentMethod === 'uba_redvault'
+    );
+  } catch {
+    return false;
+  }
+}
 
 // captured the money (mirrors finalizeOrderGatewayPayment kinds): never
 // payment failures — the reverify loop keeps polling for completion.

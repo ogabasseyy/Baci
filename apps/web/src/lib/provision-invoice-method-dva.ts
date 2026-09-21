@@ -1,10 +1,21 @@
 import type { ReceiptOrder } from '@baci/shared';
+import type { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
 import { generatePaymentAccount } from '@/lib/paystack';
 
+export interface DvaAssignmentPersistenceInput {
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  customerEmail: string;
+  expiresAt: string;
+  orderId: string;
+}
+
 interface ProvisionInvoiceMethodDvaInput {
-  supabase: Parameters<typeof persistPaystackDvaAssignment>[0];
+  persistAssignment: (
+    assignment: DvaAssignmentPersistenceInput
+  ) => Promise<NextResponse | null>;
   customerEmail: string | null;
   customerName: string | null;
   customerPhone: string | null;
@@ -24,14 +35,14 @@ interface ProvisionInvoiceMethodDvaInput {
  * for Me) and persists the assignment. Throws propagate to the caller so
  * the email catch can still render with the pre-derived credited
  * balance; provisioning failures and persistence failures log and
- * return null (merchant-contact fallback). The caller chooses the
- * Supabase client: invoice keeps the pre-existing admin client, while
- * Pay for Me must pass the request-scoped client — the reservation goes
- * through the proof-bound RPC (same pattern as payments/initialize) and
- * never crosses a service-role boundary (AGENTS.md).
+ * return null (merchant-contact fallback). Persistence is injected by
+ * the caller (a closure over its own persistPaystackDvaAssignment edge
+ * with the appropriate client: admin for invoice, request-scoped for
+ * Pay for Me): this module never imports the persistence chain itself,
+ * so it introduces no new service-role credential edge.
  */
 export async function provisionInvoiceMethodDva({
-  supabase,
+  persistAssignment,
   customerEmail,
   customerName,
   customerPhone,
@@ -68,7 +79,7 @@ export async function provisionInvoiceMethodDva({
       account_name: dvaResult.data.account_name,
     };
 
-    const persistenceFailure = await persistPaystackDvaAssignment(supabase, {
+    const persistenceFailure = await persistAssignment({
       accountName: dvaResult.data.account_name,
       accountNumber: dvaResult.data.account_number,
       bankName: dvaResult.data.bank_name,

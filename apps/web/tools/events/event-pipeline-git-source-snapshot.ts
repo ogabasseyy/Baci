@@ -11,6 +11,7 @@ function gitPaths(root: string, args: readonly string[]): string[] {
     {
       cwd: root,
       encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
     }
   )
     .split('\0')

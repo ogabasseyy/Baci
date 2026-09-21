@@ -1,5 +1,5 @@
-import { saveRedvaultPurchaseTrackingContext } from '@/lib/redvault-purchase-tracking-context';
 import { persistPendingRedvaultOrder } from '@/lib/pending-redvault-order';
+import { saveRedvaultPurchaseTrackingContext } from '@/lib/redvault-purchase-tracking-context';
 import type { createOrder } from '@/services/orders';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 

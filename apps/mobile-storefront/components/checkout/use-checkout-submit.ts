@@ -225,7 +225,6 @@ export function useCheckoutSubmit({
           selectedPayment,
           selectedSavedAddressId,
           snapshot,
-          user,
         });
       if (redvaultHandled) {
         return;

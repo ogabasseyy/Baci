@@ -1372,6 +1372,22 @@ describe('POST /api/payments/initialize', () => {
       expect(json.authorization_url).toContain('trackingToken=track-token-123');
     });
 
+    it('fails closed when the tracking token lookup errors', async () => {
+      orderTokenResult = {
+        data: null,
+        error: { message: 'connection reset' },
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, gateway: 'credit_direct' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(502);
+      expect(json.code).toBe('GATEWAY_INIT_ERROR');
+      expect(json.authorization_url).toBeUndefined();
+    });
+
     it('returns GATEWAY_DISABLED when Klump is not enabled for the merchant', async () => {
       rpcResult = {
         data: [

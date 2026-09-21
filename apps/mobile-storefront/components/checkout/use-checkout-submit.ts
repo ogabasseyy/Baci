@@ -25,6 +25,7 @@ import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
 import {
+  type CheckoutSubmitFenceResult,
   resolveCheckoutSubmitFence,
   runRedvaultSubmitInitializationSideEffects,
 } from './checkout-submit-redvault';
@@ -105,24 +106,38 @@ export function useCheckoutSubmit({
       return;
     }
     // REDVAULT fence preamble (extracted): validates a possibly-stale
-    // fenced order before any new order is created below.
-    const submitFence = await resolveCheckoutSubmitFence({
-      accountPassword,
-      address,
-      clearCart,
-      customer,
-      isAuthenticated,
-      onRedvaultOrder,
-      saveAsDefaultAddress,
-      saveDetails,
-      selectedPayment,
-      selectedSavedAddressId,
-    });
+    // fenced order before any new order is created below. The synchronous
+    // in-flight latch is acquired BEFORE this network-backed await: two
+    // rapid presses would otherwise both pass validation and continue
+    // into duplicate order creation and payment initialization. The latch
+    // releases when the fence declines the submit (or throws); the main
+    // flow below reuses it through its own try/finally.
+    isOrderInFlight.current = true;
+    let submitFence: CheckoutSubmitFenceResult;
+    try {
+      submitFence = await resolveCheckoutSubmitFence({
+        accountPassword,
+        address,
+        clearCart,
+        customer,
+        isAuthenticated,
+        onRedvaultOrder,
+        saveAsDefaultAddress,
+        saveDetails,
+        selectedPayment,
+        selectedSavedAddressId,
+      });
+    } catch (error) {
+      isOrderInFlight.current = false;
+      throw error;
+    }
     if (!submitFence.proceed) {
+      isOrderInFlight.current = false;
       return;
     }
     const { customerEmail, customerName, customerPhone } = submitFence;
-    isOrderInFlight.current = true;
+    // The in-flight latch is already held (acquired before the fence
+    // await above) and releases in the finally below.
     setIsProcessing(true);
     try {
       if (await abortIfCartPricesStale(itemsSnapshot, merchantId)) {

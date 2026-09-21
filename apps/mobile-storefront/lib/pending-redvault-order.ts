@@ -46,12 +46,21 @@ const TERMINAL_SHIPPING_STATUSES = new Set([
 // resume with the unchanged cart — that would open a second order for
 // merchandise already paid for.
 const PAID_PAYMENT_STATUSES = new Set(['paid', 'bnpl_approved']);
-const PAID_SHIPPING_STATUSES = new Set([
+// Shipping states that prove fulfillment progressed. They are NOT proof of
+// payment on their own (see below), but a line that reached them without
+// payment proof or a terminal unpaid state stays blocked: its hosted
+// attempt may still capture.
+const PROGRESSED_SHIPPING_STATUSES = new Set([
   'processing',
   'shipped',
   'out_for_delivery',
   'delivered',
   'completed',
+]);
+const TERMINAL_UNPAID_PAYMENT_STATUSES = new Set([
+  'refunded',
+  'cancelled',
+  'canceled',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -161,20 +170,28 @@ export async function resolvePersistedRedvaultOrder({
     typeof orderState?.shipping_status === 'string'
       ? orderState.shipping_status
       : '';
-  // A full refund flips payment_status to 'refunded' while leaving a
-  // 'processing' shipping_status behind: refunded money must never read
-  // as paid, or fence recovery routes to a dead success page.
-  if (
-    paymentStatus !== 'refunded' &&
-    (PAID_PAYMENT_STATUSES.has(paymentStatus) ||
-      PAID_SHIPPING_STATUSES.has(shippingStatus))
-  ) {
+  // Payment proof only: merchant confirmation moves shipping_status to
+  // 'processing' without checking payment status, so shipping progression
+  // alone would route an unpaid order to the completed-order flow. A full
+  // refund flips payment_status to 'refunded' while leaving a 'processing'
+  // shipping_status behind: refunded money must never read as paid, or
+  // fence recovery routes to a dead success page.
+  if (PAID_PAYMENT_STATUSES.has(paymentStatus)) {
     await clearPersistedRedvaultOrder();
     return { blocked: false, paidOrderId: persisted.orderId };
   }
+  // Fulfillment progressed without payment proof and without a terminal
+  // unpaid state (refunded/cancelled clear below): the hosted attempt may
+  // still be live, so the fence stays up and checkout stays blocked
+  // instead of clearing into a duplicate order.
+  const progressedButUnpaid =
+    PROGRESSED_SHIPPING_STATUSES.has(shippingStatus) &&
+    !PAID_PAYMENT_STATUSES.has(paymentStatus) &&
+    !TERMINAL_UNPAID_PAYMENT_STATUSES.has(paymentStatus);
   if (
-    TERMINAL_PAYMENT_STATUSES.has(paymentStatus) ||
-    TERMINAL_SHIPPING_STATUSES.has(shippingStatus)
+    !progressedButUnpaid &&
+    (TERMINAL_PAYMENT_STATUSES.has(paymentStatus) ||
+      TERMINAL_SHIPPING_STATUSES.has(shippingStatus))
   ) {
     await clearPersistedRedvaultOrder();
     return { blocked: false };

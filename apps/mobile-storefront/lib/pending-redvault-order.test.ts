@@ -159,6 +159,26 @@ describe('resolvePersistedRedvaultOrder', () => {
     expect(storage.has(KEY)).toBe(false);
   });
 
+  it.each([
+    'processing',
+    'shipped',
+  ])('stays blocked when shipping is %s without payment proof', async (shippingStatus) => {
+    const { resolvePersistedRedvaultOrder } = await load();
+    seed({
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-one',
+      createdAt: new Date().toISOString(),
+    });
+    const validateOrder = jest.fn(async () => ({
+      order: { payment_status: 'unpaid', shipping_status: shippingStatus },
+    }));
+
+    const result = await resolvePersistedRedvaultOrder({ validateOrder });
+
+    expect(result).toEqual({ blocked: true, orderId: 'order-rv' });
+    expect(storage.has(KEY)).toBe(true);
+  });
+
   it('treats a corrupt record as no fence', async () => {
     const { resolvePersistedRedvaultOrder } = await load();
     storage.set(KEY, '{not-json');

@@ -2722,6 +2722,45 @@ export async function POST(request: NextRequest) {
           productIds: orderItemsPayload.map((item) => item.product_id),
           supabase,
         });
+        // First-time REDVAULT creations return before the shared platform
+        // event call below, so emit the idempotent order-created event
+        // here. Replays answer 200 and stay suppressed: the event keys
+        // off the order idempotency identity, not the request count.
+        const redvaultBody = (await redvaultCheckoutResponse
+          .clone()
+          .json()) as {
+          order?: {
+            created_at?: unknown;
+            currency?: unknown;
+            id?: unknown;
+            order_number?: unknown;
+            total?: unknown;
+          };
+        };
+        const redvaultOrder = redvaultBody.order;
+        if (redvaultOrder && typeof redvaultOrder.id === 'string') {
+          await recordPlatformOrderCreatedEvent({
+            currency:
+              typeof redvaultOrder.currency === 'string'
+                ? redvaultOrder.currency
+                : merchantResolvedCurrency,
+            customerEmail: customer_email,
+            eventTimestamp:
+              typeof redvaultOrder.created_at === 'string'
+                ? redvaultOrder.created_at
+                : new Date().toISOString(),
+            ipAddress: clientIp,
+            merchantId: merchant_id,
+            orderId: redvaultOrder.id,
+            orderNumber:
+              typeof redvaultOrder.order_number === 'string' &&
+              redvaultOrder.order_number
+                ? redvaultOrder.order_number
+                : redvaultOrder.id.slice(0, 8).toUpperCase(),
+            userAgent: clientUserAgent,
+            value: Number(redvaultOrder.total ?? 0),
+          });
+        }
       }
       return redvaultCheckoutResponse;
     }

@@ -1511,11 +1511,25 @@ export async function POST(request: NextRequest) {
     let cachedTrackingToken: string | undefined | null = null;
     async function readTrackingToken(): Promise<string | undefined> {
       if (cachedTrackingToken !== null) return cachedTrackingToken;
-      const { data: trackingTokenRow } = await paymentDataClient
-        .from('orders')
-        .select('tracking_token')
-        .eq('id', data.order_id)
-        .single();
+      const { data: trackingTokenRow, error: trackingTokenError } =
+        await paymentDataClient
+          .from('orders')
+          .select('tracking_token')
+          .eq('id', data.order_id)
+          .single();
+      // Fail closed on lookup errors: caching undefined here would still
+      // return a launcher URL without the guest tracking capability
+      // (Klump rejects a missing token outright), turning a transient
+      // database failure into a broken checkout instead of a retryable
+      // initialization error. A genuinely tokenless order (null column,
+      // no error) still resolves to undefined below.
+      if (trackingTokenError) {
+        console.error(
+          'Order tracking token lookup failed:',
+          trackingTokenError
+        );
+        throw new Error('Unable to load the order tracking token');
+      }
       cachedTrackingToken =
         trackingTokenRow && typeof trackingTokenRow.tracking_token === 'string'
           ? trackingTokenRow.tracking_token || undefined

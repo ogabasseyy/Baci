@@ -602,6 +602,54 @@ describe('useCheckoutSubmit', () => {
     expect(params.isOrderInFlight.current).toBe(false);
   });
 
+  it('engages the in-flight lock before fence resolution to block double taps', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    let resolvePersistedRead: (value: null) => void = () => undefined;
+    mockReadPersistedRedvaultOrder.mockImplementationOnce(
+      () =>
+        new Promise<null>((resolve) => {
+          resolvePersistedRead = resolve;
+        })
+    );
+    const validationInFlightStates: boolean[] = [];
+    mockValidateCheckoutSubmission.mockImplementation(
+      (input: { isOrderInFlight: MutableRefObject<boolean> }) => {
+        validationInFlightStates.push(input.isOrderInFlight.current);
+        return !input.isOrderInFlight.current;
+      }
+    );
+    const params = createParams({ selectedPayment: 'paystack' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    let firstSubmit: Promise<void> | undefined;
+    await act(async () => {
+      firstSubmit = result.current(address);
+      await Promise.resolve();
+    });
+
+    expect(params.isOrderInFlight.current).toBe(true);
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockValidateCheckoutSubmission).toHaveBeenCalledTimes(2);
+    expect(validationInFlightStates).toEqual([false, true]);
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolvePersistedRead(null);
+      await firstSubmit;
+    });
+
+    expect(mockCreateOrder).toHaveBeenCalledTimes(1);
+    expect(params.isOrderInFlight.current).toBe(false);
+  });
+
   it('proceeds past the freeze step into order creation when prices are unchanged', async () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],

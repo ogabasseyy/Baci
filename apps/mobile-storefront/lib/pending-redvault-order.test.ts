@@ -89,6 +89,23 @@ describe('resolvePersistedRedvaultOrder', () => {
     expect(storage.has(KEY)).toBe(false);
   });
 
+  it('releases a refunded order instead of routing to a dead success page', async () => {
+    const { resolvePersistedRedvaultOrder } = await load();
+    seed({
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-one',
+      createdAt: new Date().toISOString(),
+    });
+    const validateOrder = jest.fn(async () => ({
+      order: { payment_status: 'refunded', shipping_status: 'processing' },
+    }));
+
+    const result = await resolvePersistedRedvaultOrder({ validateOrder });
+
+    expect(result).toEqual({ blocked: false });
+    expect(storage.has(KEY)).toBe(false);
+  });
+
   it('clears and releases once the order is cancelled', async () => {
     const { resolvePersistedRedvaultOrder } = await load();
     seed({

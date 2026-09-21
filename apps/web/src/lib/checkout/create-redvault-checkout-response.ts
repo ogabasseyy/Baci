@@ -56,6 +56,10 @@ export async function createRedvaultCheckoutResponse({
         }),
       },
     });
+    // Mirror the ordinary order path: a retried checkout key replays the
+    // existing draft, and the caller needs the replay marked (body +
+    // header + 200) so it does not emit another order_created event.
+    const idempotencyReplayed = result.replayed === true;
     return NextResponse.json(
       {
         order: result.summary.order,
@@ -63,8 +67,14 @@ export async function createRedvaultCheckoutResponse({
           quote: result.summary.quote,
           status: 'pending',
         },
+        ...(idempotencyReplayed ? { idempotency: { replayed: true } } : {}),
       },
-      { status: 201 }
+      {
+        headers: idempotencyReplayed
+          ? { 'x-idempotency-replayed': 'true' }
+          : undefined,
+        status: idempotencyReplayed ? 200 : 201,
+      }
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : '';

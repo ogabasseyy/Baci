@@ -92,6 +92,20 @@ export async function claimOrderShipmentBooking(
       };
     }
 
+    // The claim atomically verifies the order is not refunded while
+    // acquiring the lock: a finalized full refund blocks the booking.
+    if (
+      typeof error === 'object' &&
+      typeof (error as RpcErrorLike).message === 'string' &&
+      (error as RpcErrorLike).message?.includes('order_refunded_for_shipment')
+    ) {
+      throw new OrderShipmentBookingError(
+        'This order was refunded and can no longer be shipped.',
+        400,
+        'ORDER_REFUNDED'
+      );
+    }
+
     logger.error({
       message: 'Shipment booking lock claim failed',
       rpcCode: getRpcErrorCode(error),

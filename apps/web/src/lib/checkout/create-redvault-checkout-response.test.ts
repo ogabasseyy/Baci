@@ -138,6 +138,32 @@ describe('REDVAULT checkout response', () => {
       },
     });
   });
+  it('marks an idempotency replayed draft like the ordinary order path', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: [{ ...row, idempotency_replayed: true }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [summaryRow], error: null });
+    const response = await createRedvaultCheckoutResponse({
+      client: { rpc } as never,
+      orderRpcArgs: {
+        p_merchant_id: merchantId,
+        p_customer_email: 'customer@example.test',
+      },
+      quote: redvaultTestQuote,
+      merchantId,
+      customerEmail: 'customer@example.test',
+      userId: null,
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-idempotency-replayed')).toBe('true');
+    expect(await response.json()).toMatchObject({
+      idempotency: { replayed: true },
+      order: { id: row.id },
+    });
+  });
   it('never exposes an unattached draft as a usable order', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [

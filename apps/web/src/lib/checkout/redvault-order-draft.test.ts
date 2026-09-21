@@ -39,6 +39,7 @@ describe('createRedvaultOrderDraft', () => {
       draftArgs,
     });
     expect(result.id).toBe(draft.id);
+    expect(result.replayed).toBe(false);
     expect(rpc).toHaveBeenNthCalledWith(
       1,
       'create_storefront_redvault_order',
@@ -78,6 +79,23 @@ describe('createRedvaultOrderDraft', () => {
       createRedvaultOrderDraft({ client: { rpc } as never, draftArgs: {} })
     ).rejects.toThrow(message);
     expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates the idempotency replay disposition', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: [{ ...draft, idempotency_replayed: true }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [summary], error: null });
+    const result = await createRedvaultOrderDraft({
+      client: { rpc } as never,
+      draftArgs: {},
+    });
+    expect(result.id).toBe(draft.id);
+    expect(result.replayed).toBe(true);
+    expect(rpc).toHaveBeenCalledTimes(2);
   });
 
   it('does not retry an indeterminate creation failure', async () => {

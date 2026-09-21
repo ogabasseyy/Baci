@@ -140,9 +140,13 @@ export async function resolvePersistedRedvaultOrder({
     typeof orderState?.shipping_status === 'string'
       ? orderState.shipping_status
       : '';
+  // A full refund flips payment_status to 'refunded' while leaving a
+  // 'processing' shipping_status behind: refunded money must never read
+  // as paid, or fence recovery routes to a dead success page.
   if (
-    PAID_PAYMENT_STATUSES.has(paymentStatus) ||
-    PAID_SHIPPING_STATUSES.has(shippingStatus)
+    paymentStatus !== 'refunded' &&
+    (PAID_PAYMENT_STATUSES.has(paymentStatus) ||
+      PAID_SHIPPING_STATUSES.has(shippingStatus))
   ) {
     await clearPersistedRedvaultOrder();
     return { blocked: false, paidOrderId: persisted.orderId };

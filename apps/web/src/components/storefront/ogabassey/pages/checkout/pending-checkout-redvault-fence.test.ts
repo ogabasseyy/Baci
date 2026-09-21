@@ -102,6 +102,7 @@ describe('resolveRedvaultCheckoutFence', () => {
   it.each([
     ['gone', null, 404],
     ['cancelled', { id: 'order-1', payment_status: 'unpaid', shipping_status: 'cancelled' }, 200],
+    ['refunded while processing', { id: 'order-1', payment_status: 'refunded', shipping_status: 'processing' }, 200],
   ])('clears a same-lane REDVAULT order that is %s', async (_label, state, status) => {
     const fetchImpl = fencedResponse(
       state as Record<string, unknown> | null,

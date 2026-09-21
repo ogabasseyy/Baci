@@ -114,6 +114,25 @@ describe('claimOrderShipmentBooking', () => {
     } satisfies Partial<OrderShipmentBookingError>);
   });
 
+  it('throws ORDER_REFUNDED when the claim observes a finalized refund', async () => {
+    const { supabase } = createSupabaseMock({
+      rpcResult: {
+        data: null,
+        error: {
+          code: 'P0001',
+          message: 'order_refunded_for_shipment',
+        },
+      },
+    });
+
+    await expect(
+      claimOrderShipmentBooking(supabase, 'merchant-1', 'order-1')
+    ).rejects.toMatchObject({
+      code: 'ORDER_REFUNDED',
+      status: 400,
+    } satisfies Partial<OrderShipmentBookingError>);
+  });
+
   it('throws SHIPMENT_BOOKING_LOCK_FAILED when the claim RPC errors', async () => {
     const logSpy = vi
       .spyOn(logger, 'error')

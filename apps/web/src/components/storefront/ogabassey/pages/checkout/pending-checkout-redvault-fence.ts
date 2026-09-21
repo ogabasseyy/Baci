@@ -39,6 +39,10 @@ type FencedOrderState = {
 };
 
 export function isPaidOrderState(order: FencedOrderState): boolean {
+  // A full refund flips payment_status to 'refunded' while leaving a
+  // 'processing' shipping_status behind: refunded money must never read
+  // as paid, or fence recovery routes to a dead success page.
+  if ((order.payment_status || '') === 'refunded') return false;
   return (
     PAID_PAYMENT_STATUSES.has(order.payment_status || '') ||
     PAID_SHIPPING_STATUSES.has(order.shipping_status || '')

@@ -11,6 +11,7 @@ type RedvaultDraftRow = {
   quote_payload_hash: string;
   quote_version_id: string;
   status: string;
+  idempotency_replayed: boolean;
 };
 
 function firstRow(value: unknown): RedvaultDraftRow | null {
@@ -39,6 +40,7 @@ export async function createRedvaultOrderDraft({
   id: string;
   quotePayloadHash: string;
   quoteVersionId: string;
+  replayed: boolean;
   summary: RedvaultCheckoutSummary;
 }> {
   const { data: draftData, error: draftError } = await client.rpc(
@@ -63,6 +65,7 @@ export async function createRedvaultOrderDraft({
     id: draft.id,
     quotePayloadHash: draft.quote_payload_hash,
     quoteVersionId: draft.quote_version_id,
+    replayed: draft.idempotency_replayed === true,
     summary,
   };
 }

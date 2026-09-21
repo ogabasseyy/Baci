@@ -20,13 +20,11 @@ import {
   assertInternationalQuoteMatchesOrder,
   assertQuoteReceiverMatchesOrder,
 } from '@/lib/shipping/international-quote-order-guard';
-import { toInternationalShipmentItemsFromOrder } from '@/lib/shipping/international-shipment-items';
 import {
   assertShippableBookingItems,
   isShippingProviderCode,
   OrderShipmentBookingError,
   parseStoredQuoteRequest,
-  toDomesticBookingItems,
   toQuoteComparableOrderItems,
 } from '@/lib/shipping/order-shipment-booking-utils';
 import { persistBookedOrderShipment } from '@/lib/shipping/persist-booked-order-shipment';
@@ -36,6 +34,7 @@ import {
   refreshOrderShipmentQuote,
 } from '@/lib/shipping/refresh-order-shipment-quote';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
+import { resolveOrderShipmentParties } from '@/lib/shipping/resolve-order-shipment-parties';
 import {
   applyShippingQuoteBookingEconomicsToOrder,
   applyShippingQuoteBookingEconomicsToQuote,
@@ -237,19 +236,13 @@ export async function bookOrderShipment(
       })
     );
   }
-  const receiver =
-    isInternationalQuote && effectiveQuoteRequest
-      ? {
-          ...effectiveQuoteRequest.receiver,
-          name: bookingContext.receiver.name,
-          email: bookingContext.receiver.email,
-          phone: bookingContext.receiver.phone,
-        }
-      : bookingContext.receiver;
-  const sender =
-    isInternationalQuote && effectiveQuoteRequest?.sender
-      ? effectiveQuoteRequest.sender
-      : merchantSender;
+  const { receiver, sender, items } = resolveOrderShipmentParties({
+    bookingContext,
+    effectiveQuoteRequest,
+    isInternationalQuote,
+    merchantSender,
+    orderItems,
+  });
   if (!sender) {
     throw new OrderShipmentBookingError(
       'The saved international shipping quote is missing its sender. Please get a new quote before shipping.',
@@ -257,13 +250,6 @@ export async function bookOrderShipment(
       'INTERNATIONAL_QUOTE_SENDER_MISSING'
     );
   }
-  const items =
-    isInternationalQuote && effectiveQuoteRequest
-      ? toInternationalShipmentItemsFromOrder(
-          orderItems,
-          effectiveQuoteRequest.items
-        )
-      : toDomesticBookingItems(orderItems, effectiveQuoteRequest?.items);
   assertShippableBookingItems(items);
   // Fresh payment-state check serialized against refund finalization: the
   // order snapshot above predates quote refresh and sender resolution, so

@@ -224,6 +224,80 @@ describe('verifyOrderPaymentForCompletion', () => {
     ).resolves.toEqual({ paid: false });
   });
 
+  it('preserves a definitive failed verification as terminal', async () => {
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(
+            JSON.stringify({
+              ...completedVerification,
+              status: 'failed',
+              finalizationOutcome: 'cancelled',
+            }),
+            { status: 200 }
+          )
+        : new Response(JSON.stringify(pendingTrackedOrder), { status: 200 })
+    );
+
+    // Callers keep the error/retry path instead of navigating to a false
+    // "Order Confirmed".
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false, terminalFailure: 'failed' });
+  });
+
+  it('preserves a definitive cancelled verification as terminal', async () => {
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(
+            JSON.stringify({
+              ...completedVerification,
+              status: 'cancelled',
+              finalizationOutcome: 'cancelled',
+            }),
+            { status: 200 }
+          )
+        : new Response(JSON.stringify(pendingTrackedOrder), { status: 200 })
+    );
+
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false, terminalFailure: 'cancelled' });
+  });
+
+  it('keeps a foreign failed envelope transient instead of terminal', async () => {
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(
+            JSON.stringify({
+              ...completedVerification,
+              status: 'failed',
+              finalizationOutcome: 'cancelled',
+              orderId: 'order-9',
+            }),
+            { status: 200 }
+          )
+        : new Response(JSON.stringify(pendingTrackedOrder), { status: 200 })
+    );
+
+    // Identity-gated like the paid path: order B's failure must never
+    // fail order A — it stays pending for settlement polling.
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false });
+  });
+
   it('sends the native Bearer [REDACTED] when a session exists', async () => {
     mockGetSession.mockResolvedValueOnce({
       access_token: 'native-token-1',

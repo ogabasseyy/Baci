@@ -20,6 +20,9 @@ export function createHandler(
     (text: string, success: string, failure?: string) => Promise<void>
   >(() => Promise.resolve());
   const markPaymentCompletionStarted = jest.fn(() => true);
+  const onTerminalVerificationFailure = jest.fn(
+    (_terminalFailure: 'failed' | 'cancelled') => undefined
+  );
   const scheduleDelayedNavigation = jest.fn<(navigate: () => void) => void>();
   const setSuccessStatus = jest.fn();
   const handler = createPaymentGatewayMessageHandler({
@@ -32,6 +35,7 @@ export function createHandler(
     orderNumber: ' ORD-123 ',
     reference: ' ref-123 ',
     markPaymentCompletionStarted,
+    onTerminalVerificationFailure,
     scheduleDelayedNavigation,
     setSuccessStatus,
     ...overrides,
@@ -44,6 +48,7 @@ export function createHandler(
     copyGatewayText,
     handler,
     markPaymentCompletionStarted,
+    onTerminalVerificationFailure,
     scheduleDelayedNavigation,
     setSuccessStatus,
   };

@@ -175,6 +175,18 @@ export function createPaymentGatewayCompletionHandlers({
           tax: verification.tax,
           value: verification.total ?? purchaseTotal,
         });
+      } else if (verification.terminalFailure) {
+        // Definitive gateway outcome: the payment cannot settle, so keep
+        // the cart and the error/retry path instead of navigating to a
+        // false "Order Confirmed".
+        paymentCompletionStartedRef.current = false;
+        setPaymentStatus('error');
+        setErrorMessage(
+          verification.terminalFailure === 'cancelled'
+            ? 'Payment was cancelled before completion. You can try again.'
+            : 'Payment could not be confirmed. Please try again.'
+        );
+        return;
       }
     }
     await clearCart();

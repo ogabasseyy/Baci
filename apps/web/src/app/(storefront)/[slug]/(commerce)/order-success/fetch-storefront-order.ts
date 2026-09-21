@@ -24,6 +24,7 @@ export interface StorefrontOrderData {
   subtotal: number;
   shipping_cost: number;
   total: number;
+  amount_paid?: number;
   virtual_account?: {
     account_name: string | null;
     account_number: string;

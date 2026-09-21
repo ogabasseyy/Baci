@@ -216,6 +216,51 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
     );
   });
 
+  it('keeps the error path when crypto verification definitively fails', async () => {
+    // Arrange: pending tracked order, but the reference cannot settle.
+    global.fetch = jest.fn(async (url: string) => {
+      if (String(url).includes('/api/payments/verify')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: 'failed',
+            finalizationOutcome: 'cancelled',
+            orderId: 'order-123',
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          order: {
+            id: 'order-123',
+            order_number: 'ORD-123',
+            payment_status: 'pending',
+            total: 49875,
+          },
+        }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+    const {
+      clearCart,
+      handler,
+      onTerminalVerificationFailure,
+      scheduleDelayedNavigation,
+    } = createHandler({ trackingToken: 'track-token-123' });
+
+    // Act
+    await sendMessage(handler, { type: 'crypto_success' });
+
+    // Assert: no conversion, no cart clear, no success navigation — the
+    // error/retry path owns the terminal outcome.
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(onTerminalVerificationFailure).toHaveBeenCalledWith('failed');
+    expect(clearCart).not.toHaveBeenCalled();
+    expect(scheduleDelayedNavigation).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
   it('skips the conversion when crypto settlement is still pending', async () => {
     // Arrange: a crypto callback whose order is not paid yet.
     mockPendingCryptoVerification();

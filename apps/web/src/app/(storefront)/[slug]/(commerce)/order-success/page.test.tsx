@@ -258,7 +258,12 @@ describe('storefront order success page', () => {
     ).toBeInTheDocument();
   });
 
-  it('tells payforme requesters when nothing is due from the payer', async () => {
+  it('asks the payer for the residual when wallet credit partially covers the order', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
     mockSearchParams.mockReturnValue(
       new URLSearchParams({
         orderId: 'order-123',
@@ -275,21 +280,75 @@ describe('storefront order success page', () => {
         tracking_token: 'track-token-123',
         customer_email: 'buyer@example.com',
         currency: 'NGN',
+        payment_status: 'unpaid',
         items: [],
-        subtotal: 0,
+        subtotal: 3500,
         shipping_cost: 0,
-        total: 0,
+        total: 3500,
+        amount_paid: 1500,
+        virtual_account: {
+          account_name: 'Baci Checkout ORD-123',
+          account_number: '9876543210',
+          bank_name: 'Baci Bank',
+        },
       }),
     });
 
     render(<OrderSuccessPage />);
 
+    // The server provisioned the DVA and email for the residual — the
+    // handoff must ask for ₦2,000, never the full ₦3,500 again. (The
+    // order summary still shows the full total; scope to the handoff.)
+    const handoffLabel = await screen.findByText(/payment details for alice/i);
+    const handoffRoot = handoffLabel.closest('div') as HTMLElement;
+    const handoffQueries = within(handoffRoot);
+    expect(handoffQueries.getByText(/₦2,000\.00/)).toBeInTheDocument();
+    expect(handoffQueries.queryByText(/₦3,500\.00/)).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /copy payment details/i })
+    );
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(String(writeText.mock.calls[0][0])).toContain('2,000');
+  });
+
+  it('suppresses the payer handoff once a payforme order is paid', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'payforme',
+        payerName: 'Alice',
+        trackingToken: 'track-token-123',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        currency: 'NGN',
+        payment_status: 'paid',
+        items: [],
+        subtotal: 3500,
+        shipping_cost: 0,
+        total: 3500,
+        amount_paid: 3500,
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    // A paid revisit renders the standard confirmation — no handoff, so
+    // the details can never request the amount again after settlement.
     expect(
-      await screen.findByText(/payment details for alice/i)
+      await screen.findByRole('heading', { name: /order confirmed!/i })
     ).toBeInTheDocument();
+    expect(screen.queryByText(/payment details for alice/i)).toBeNull();
     expect(
-      screen.getByText(/nothing is due on this order/i)
-    ).toBeInTheDocument();
+      screen.queryByRole('button', { name: /copy payment details/i })
+    ).toBeNull();
   });
 
   it('shows guests the emailed invoice action instead of the archive link', async () => {

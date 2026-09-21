@@ -130,6 +130,33 @@ function mockPaidVerification(total = 5000) {
   }) as unknown as typeof fetch;
 }
 
+function mockTerminalVerification() {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/api/payments/verify')) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'cancelled',
+          finalizationOutcome: 'cancelled',
+          orderId: 'order-1',
+        }),
+        { status: 200 }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        order: {
+          id: 'order-1',
+          order_number: 'ORD-1',
+          payment_status: 'pending',
+          total: 5000,
+        },
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+}
+
 function mockPendingVerification() {
   global.fetch = jest.fn(async (url: string) => {
     if (String(url).includes('/api/payments/verify')) {
@@ -256,6 +283,28 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     expect(router.replace).toHaveBeenCalledWith(
       expect.objectContaining({ pathname: '/order-success' })
     );
+  });
+
+  it('keeps the error path when verification definitively cancels', async () => {
+    // Arrange: pending tracked order, but the reference cannot settle.
+    mockTerminalVerification();
+    const { input, refs } = createInput();
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: no conversion, no cart clear, no success navigation — the
+    // error message shows and completion can be retried.
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.setPaymentStatus).toHaveBeenCalledWith('error');
+    expect(input.setErrorMessage).toHaveBeenCalledWith(
+      'Payment was cancelled before completion. You can try again.'
+    );
+    expect(input.clearCart).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(refs.paymentCompletionStartedRef.current).toBe(false);
   });
 
   it('ignores a second completion once one has already started', () => {

@@ -20,6 +20,16 @@ interface VerifyOrderPaymentInput {
 
 export interface OrderPaymentVerification extends TrackedCompletionAttribution {
   paid: boolean;
+  /**
+   * Definitive gateway outcome for this order: the verify endpoint
+   * confirmed the reference cannot settle. Present only alongside
+   * `paid: false` — and only when the envelope carries this order's
+   * identity, so a foreign failure can never fail this order. Callers
+   * use it to keep the error/retry path instead of navigating to
+   * success; its absence means transient (pending/network) and keeps
+   * the settlement-polling success navigation.
+   */
+  terminalFailure?: 'failed' | 'cancelled';
 }
 
 function finiteOrUndefined(value: unknown): number | undefined {
@@ -181,6 +191,19 @@ async function checkReferenceSettled(
       data.finalizationOutcome !== 'completed' ||
       data.orderId !== orderId
     ) {
+      // A definitive failed/cancelled envelope for THIS order is terminal:
+      // collapsing it into the transient pending shape would clear the
+      // cart and present "Order Confirmed" for a payment that cannot
+      // settle. Anything else (pending, network-shaped, or foreign) stays
+      // transient so settlement polling can still complete the order.
+      if (
+        response.ok &&
+        data.success === true &&
+        data.orderId === orderId &&
+        (data.status === 'failed' || data.status === 'cancelled')
+      ) {
+        return { paid: false, terminalFailure: data.status };
+      }
       return { paid: false };
     }
     return { paid: true, total: finiteOrUndefined(data.orderTotal) };

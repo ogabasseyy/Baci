@@ -112,6 +112,18 @@ function OrderSuccessContent() {
   // delivery happened.
   const isPayForMe = _type === 'payforme';
   const payerName = searchParams.get('payerName') || 'Friend';
+  // Authoritative outstanding balance: wallet/savings credit applied at
+  // creation is persisted onto the row (recordPreGatewayRedemption), so
+  // the payer is asked for the residual — the same amount the server
+  // provisioned the DVA and email for — never the full total again. A
+  // paid order suppresses the handoff entirely.
+  const payerOutstandingBalance = order
+    ? Math.max(order.total - (order.amount_paid || 0), 0)
+    : 0;
+  const isPayForMeUnpaid =
+    isPayForMe &&
+    order?.payment_status !== 'paid' &&
+    payerOutstandingBalance > 0;
   // Same DVA-compatibility rule as the order email: Paystack DVAs settle
   // in NGN only, so a foreign-currency quote never prints the naira
   // account beside a dollar amount.
@@ -120,14 +132,14 @@ function OrderSuccessContent() {
   const payerTransferAccount =
     payerDvaCompatible &&
     order &&
-    order.total > 0 &&
+    payerOutstandingBalance > 0 &&
     order.virtual_account?.account_number
       ? order.virtual_account
       : null;
   const payerDetailsText =
-    isPayForMe && order
+    isPayForMeUnpaid && order
       ? [
-          `Payment for order ${order.order_number}: ${formatCurrency(order.total)}`,
+          `Payment for order ${order.order_number}: ${formatCurrency(payerOutstandingBalance)}`,
           ...(payerTransferAccount
             ? [
                 `Bank: ${payerTransferAccount.bank_name || 'See your order email'}`,
@@ -139,7 +151,7 @@ function OrderSuccessContent() {
       : null;
 
   const heading = hasValidatedOrder
-    ? isPayForMe
+    ? isPayForMeUnpaid
       ? 'Share the Payment Details'
       : isInvoice
         ? 'Proforma Invoice Ready!'
@@ -148,7 +160,7 @@ function OrderSuccessContent() {
       ? 'We could not confirm this order yet'
       : 'Finalizing your order';
   const description = hasValidatedOrder
-    ? isPayForMe
+    ? isPayForMeUnpaid
       ? `Send the payment details below to ${payerName} — your order will be processed once payment is received.`
       : isInvoice
         ? 'We have prepared your proforma invoice and sent it to your email. Share it with your company or procurement team.'
@@ -206,7 +218,7 @@ function OrderSuccessContent() {
           {/* Payer handoff (Pay for Me only): copyable payment
               instructions the requester forwards — amount plus transfer
               details, with no bearer token, no link, and no PII. */}
-          {isPayForMe && payerDetailsText && order && (
+          {isPayForMeUnpaid && payerDetailsText && order && (
             <div className="mb-8 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-left">
               <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">
                 Payment details for {payerName}
@@ -215,7 +227,7 @@ function OrderSuccessContent() {
                 <div className="flex justify-between gap-4">
                   <dt className="text-gray-500">Amount due</dt>
                   <dd className="font-bold text-gray-900">
-                    {formatCurrency(order.total)}
+                    {formatCurrency(payerOutstandingBalance)}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-4">
@@ -249,16 +261,10 @@ function OrderSuccessContent() {
                   </>
                 )}
               </dl>
-              {!payerTransferAccount && order.total > 0 && (
+              {!payerTransferAccount && payerOutstandingBalance > 0 && (
                 <p className="mt-2 text-xs text-gray-500">
                   Your order email has the full transfer details — forward them
                   to {payerName} along with the amount above.
-                </p>
-              )}
-              {order.total <= 0 && (
-                <p className="mt-2 text-xs text-gray-500">
-                  Nothing is due on this order — no payment needed from{' '}
-                  {payerName}.
                 </p>
               )}
               <button

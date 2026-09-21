@@ -207,6 +207,15 @@ export function usePaymentGatewayController() {
       paymentCompletionStartedRef.current = true;
       return true;
     },
+    onTerminalVerificationFailure: (terminalFailure) => {
+      paymentCompletionStartedRef.current = false;
+      setPaymentStatus('error');
+      setErrorMessage(
+        terminalFailure === 'cancelled'
+          ? 'Payment was cancelled before completion. You can try again.'
+          : 'Payment could not be confirmed. Please try again.'
+      );
+    },
     scheduleDelayedNavigation,
     setSuccessStatus: () => setPaymentStatus('success'),
   });

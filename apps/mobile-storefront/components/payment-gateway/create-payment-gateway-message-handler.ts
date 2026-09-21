@@ -36,6 +36,9 @@ interface CreatePaymentGatewayMessageHandlerInput {
   trackingToken?: string;
   utilityType?: string;
   markPaymentCompletionStarted: () => boolean;
+  onTerminalVerificationFailure: (
+    terminalFailure: 'failed' | 'cancelled'
+  ) => void;
   scheduleDelayedNavigation: (navigate: () => void) => void;
   setSuccessStatus: () => void;
 }
@@ -120,6 +123,7 @@ export function createPaymentGatewayMessageHandler({
   trackingToken,
   utilityType,
   markPaymentCompletionStarted,
+  onTerminalVerificationFailure,
   scheduleDelayedNavigation,
   setSuccessStatus,
 }: CreatePaymentGatewayMessageHandlerInput) {
@@ -233,6 +237,12 @@ export function createPaymentGatewayMessageHandler({
           tax: cryptoVerification.tax,
           value: cryptoVerification.total ?? cryptoPurchaseTotal,
         });
+      } else if (cryptoVerification.terminalFailure) {
+        // Definitive gateway outcome: the payment cannot settle, so keep
+        // the cart and the error/retry path instead of navigating to a
+        // false "Order Confirmed".
+        onTerminalVerificationFailure(cryptoVerification.terminalFailure);
+        return;
       }
       await clearCart();
       scheduleDelayedNavigation(() => {

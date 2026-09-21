@@ -666,7 +666,9 @@ describe('POST /api/payments/webhook', () => {
 
     const response = await POST(request);
 
-    expect(response.status).toBe(202);
+    // Durable held captures acknowledge with 200: Paystack redelivers
+    // anything else for 72h even though the work already persisted.
+    expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       code,
       error,

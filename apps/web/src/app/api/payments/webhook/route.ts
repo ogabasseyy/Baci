@@ -1502,6 +1502,9 @@ export async function POST(request: NextRequest) {
           wonTransactionFlip: false,
         });
 
+        // The held capture is durably recorded: acknowledge with 200 so
+        // Paystack stops redelivering. Anything else retries for 72h and
+        // re-invokes verification/review handling for settled work.
         if (
           finalizeOutcome.kind === 'captured_held' ||
           finalizeOutcome.kind === 'capture_evidence_review'
@@ -1518,7 +1521,7 @@ export async function POST(request: NextRequest) {
                   : 'Payment capture evidence requires review',
               status: 'pending',
             },
-            { status: 202 }
+            { status: 200 }
           );
         }
 
@@ -2780,6 +2783,9 @@ export async function POST(request: NextRequest) {
         wonTransactionFlip: true,
       });
 
+      // The held capture is durably recorded: acknowledge with 200 so
+      // Paystack stops redelivering. Anything else retries for 72h and
+      // re-invokes verification/review handling for settled work.
       if (
         finalizeOutcome.kind === 'captured_held' ||
         finalizeOutcome.kind === 'capture_evidence_review'
@@ -2796,7 +2802,7 @@ export async function POST(request: NextRequest) {
                 : 'Payment capture evidence requires review',
             status: 'pending',
           },
-          { status: 202 }
+          { status: 200 }
         );
       }
 

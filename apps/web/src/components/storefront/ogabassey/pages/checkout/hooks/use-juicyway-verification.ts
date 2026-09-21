@@ -19,16 +19,30 @@ type VerificationOutcome = 'confirmed' | 'failed' | 'pending';
 // 5 minutes of polling before the deposit is left pending for a later check.
 const VERIFY_POLL_MAX_ATTEMPTS = 30;
 const VERIFY_POLL_INTERVAL_MS = 10_000;
+// Per-request deadline (matches the sibling verification hooks): a stalled
+// status request resolves as pending instead of holding the attempt —
+// including the initial check, which runs before the interval exists.
+const VERIFY_REQUEST_TIMEOUT_MS = 10_000;
 
 // Module scope: the try/catch statements below would otherwise block React
 // Compiler memoization of the hook.
 async function checkJuicywayPaymentStatus(
   verificationId: string
 ): Promise<VerificationOutcome> {
+  // Abort each status request on its own deadline so a hung fetch can
+  // neither hold the initial check (no interval exists yet to bound it)
+  // nor stack behind the polling guard. The abort surfaces as a caught
+  // error below and resolves as pending.
+  const controller = new AbortController();
+  const requestDeadline = setTimeout(
+    () => controller.abort(),
+    VERIFY_REQUEST_TIMEOUT_MS
+  );
   try {
     // Use payment_id parameter for GET /payments/{id} endpoint
     const response = await fetch(
-      `/api/payments/status?gateway=juicyway&payment_id=${verificationId}`
+      `/api/payments/status?gateway=juicyway&payment_id=${verificationId}`,
+      { signal: controller.signal }
     );
 
     if (!response.ok) {
@@ -62,6 +76,8 @@ async function checkJuicywayPaymentStatus(
   } catch (error) {
     console.error('Payment verification error:', error);
     return 'pending';
+  } finally {
+    clearTimeout(requestDeadline);
   }
 }
 

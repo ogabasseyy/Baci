@@ -34,6 +34,12 @@ const SETTLEMENT_MAX_ATTEMPTS = 18;
 // the standard interval instead of stopping after ~3. Other methods keep
 // the short budget: their webhooks settle in seconds.
 const JUICYWAY_SETTLEMENT_MAX_ATTEMPTS = 180;
+// Slow lane after the fast budget runs out: bank transfers and
+// CredPal/Klump approvals can legitimately settle later than ~3 minutes,
+// so a shopper who stays on the screen keeps a minute-cadence watch for
+// another ~27 minutes instead of missing payment_completed entirely.
+const SETTLEMENT_SLOW_POLL_INTERVAL_MS = 60_000;
+const SETTLEMENT_SLOW_MAX_ATTEMPTS = 27;
 
 interface SettlementCompletionParams {
   orderId?: string;
@@ -43,6 +49,8 @@ interface SettlementCompletionParams {
   trackingToken?: string;
   pollIntervalMs?: number;
   maxAttempts?: number;
+  slowPollIntervalMs?: number;
+  slowMaxAttempts?: number;
 }
 
 function toTrackedOrder(value: unknown): TrackOrderData['order'] | null {
@@ -112,6 +120,8 @@ export function useSettlementCompletion({
   maxAttempts = paymentMethod === 'juicyway'
     ? JUICYWAY_SETTLEMENT_MAX_ATTEMPTS
     : SETTLEMENT_MAX_ATTEMPTS,
+  slowPollIntervalMs = SETTLEMENT_SLOW_POLL_INTERVAL_MS,
+  slowMaxAttempts = SETTLEMENT_SLOW_MAX_ATTEMPTS,
 }: SettlementCompletionParams): void {
   useEffect(() => {
     if (
@@ -126,6 +136,7 @@ export function useSettlementCompletion({
     const attemptControllers: AbortController[] = [];
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
+    let slowAttempts = 0;
 
     const check = async (): Promise<void> => {
       if (cancelled) {
@@ -172,10 +183,21 @@ export function useSettlementCompletion({
       } finally {
         clearTimeout(lookupTimeout);
       }
-      if (!cancelled && attempts < maxAttempts) {
+      if (cancelled) {
+        return;
+      }
+      if (attempts < maxAttempts) {
         retryTimer = setTimeout(() => {
           void check();
         }, pollIntervalMs);
+      } else if (slowAttempts < slowMaxAttempts) {
+        // Fast budget spent without settlement: drop to the slow lane
+        // rather than abandoning a shopper whose transfer or BNPL
+        // approval lands minutes later.
+        slowAttempts += 1;
+        retryTimer = setTimeout(() => {
+          void check();
+        }, slowPollIntervalMs);
       }
     };
 
@@ -196,6 +218,8 @@ export function useSettlementCompletion({
     paymentMethod,
     pollIntervalMs,
     reference,
+    slowMaxAttempts,
+    slowPollIntervalMs,
     trackingToken,
   ]);
 }

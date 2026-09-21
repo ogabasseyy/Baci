@@ -53,7 +53,10 @@ export function resolveImmediateOrderEmail({
     effectivePaymentMethod === 'invoice'
       ? `${documentKind === 'proforma' ? 'Proforma Invoice' : 'Invoice'} Generated - #${orderNumber}`
       : effectivePaymentMethod === 'payforme'
-        ? `Payment Request - #${orderNumber}`
+        ? // A fully-funded Pay for Me order is a confirmation, not a
+          // request: its subject must match the confirmed body instead of
+          // prompting the requester to seek payment again.
+          `${documentKind === 'payment_request' ? 'Payment Request' : 'Order Confirmation'} - #${orderNumber}`
         : `Order Confirmation - #${orderNumber}`;
   return { documentKind, isPaidForEmail, subject };
 }

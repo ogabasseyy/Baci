@@ -30,20 +30,20 @@ import {
     writeCreditDirectPopupMarker,
 } from './checkout/credit-direct-popup-return';
 import { captureCreditDirectClientCompletion } from './checkout/credit-direct-client-completion';
-import { clearCheckoutIdempotencyKey } from './checkout/checkout-idempotency';
 import { useCreditDirectVerification } from './checkout/hooks/use-credit-direct-verification';
+import { useCreditDirectConfirmationRedirect } from './checkout/hooks/use-credit-direct-confirmation-redirect';
 import { CreditDirectVerificationView } from './checkout/components/CreditDirectVerificationView';
 import { captureBnplPaymentCompleted } from './checkout/capture-bnpl-payment-completed';
-import { captureBnplPaymentFailed } from './checkout/capture-bnpl-payment-failed';
-import { captureBnplPaymentStarted } from './checkout/capture-bnpl-payment-started';
-
-declare global {
-    interface Window {
-        ReactNativeWebView?: {
-            postMessage: (message: string) => void;
-        };
-    }
-}
+import {
+    bridgeOpenedAttemptError,
+    notifyNativeBnplClose,
+    notifyNativeBnplProviderOpened,
+} from './checkout/native-bnpl-bridge';
+import { captureKlumpCallbackSettlementIfPaid } from './checkout/klump-callback-settlement';
+import {
+    captureKlumpLauncherFailed,
+    captureKlumpLauncherStarted,
+} from './checkout/klump-launcher-attribution';
 
 const KLUMP_TRANSACTION_ID_KEYS = [
     'klump_transaction_id',
@@ -67,8 +67,6 @@ interface KlumpRecordResponse {
     success?: boolean;
     error?: string;
 }
-
-type NativeBNPLBridgeGateway = 'credpal' | 'credit_direct' | 'klump';
 
 function readSearchParam(
     searchParams: SearchParamReader,
@@ -168,91 +166,6 @@ function hasPendingKlumpRedirect(expectedRedirectUrl: string) {
 
         clearPendingKlumpRedirect();
         return false;
-    } catch {
-        return false;
-    }
-}
-
-function notifyNativeBnplProviderOpened(
-    gateway: NativeBNPLBridgeGateway,
-    orderId: string,
-    reference?: string
-) {
-    // Confirms the provider flow actually opened: the native shell records
-    // payment_started from this signal, so initialization failures (order
-    // lookup, SDK load, popup creation) never produce a start.
-    const bridge = window.ReactNativeWebView;
-    if (typeof bridge?.postMessage !== 'function') {
-        return false;
-    }
-
-    try {
-        bridge.postMessage(
-            JSON.stringify({
-                gateway,
-                orderId,
-                ...(reference ? { reference } : {}),
-                type: 'bnpl_provider_opened',
-            })
-        );
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-function notifyNativeBnplProviderError(
-    gateway: NativeBNPLBridgeGateway,
-    orderId: string,
-    message: string,
-    reference?: string
-) {
-    // The provider opened (payment_started recorded natively) and then its
-    // SDK failed: bridge the failure so the native funnel reaches
-    // recordCheckoutFailure instead of leaving an unmatched start. The
-    // native error view (with retry) replaces the WebView, so the caller
-    // defers its own error UI when the bridge lands.
-    const bridge = window.ReactNativeWebView;
-    if (typeof bridge?.postMessage !== 'function') {
-        return false;
-    }
-
-    try {
-        bridge.postMessage(
-            JSON.stringify({
-                gateway,
-                orderId,
-                message,
-                ...(reference ? { reference } : {}),
-                type: 'bnpl_provider_error',
-            })
-        );
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-function notifyNativeBnplClose(gateway: NativeBNPLBridgeGateway) {
-    const bridge = window.ReactNativeWebView;
-    if (typeof bridge?.postMessage !== 'function') {
-        return false;
-    }
-
-    try {
-        bridge.postMessage(
-            JSON.stringify({
-                gateway,
-                message:
-                    gateway === 'credit_direct'
-                        ? 'Credit Direct checkout closed'
-                        : gateway === 'credpal'
-                          ? 'CredPal checkout closed'
-                          : 'Klump checkout closed',
-                type: 'bnpl_close',
-            })
-        );
-        return true;
     } catch {
         return false;
     }
@@ -372,59 +285,17 @@ async function launchBnplPayment({
                 );
             }
 
-            // The record call stores the transaction id but proves no
-            // settlement: only count the conversion when the order row is
-            // server-confirmed paid (the Klump webhook finalizes async).
             // Navigation below proceeds regardless so the shopper is never
             // stranded by a pending webhook.
-            try {
-                const orderSlug =
+            await captureKlumpCallbackSettlementIfPaid({
+                orderId,
+                klumpReference,
+                trackingToken,
+                merchantSlug:
                     merchantSlugParam ||
                     contextMerchantSlug ||
-                    fallbackMerchantSlug;
-                const orderQuery = new URLSearchParams({
-                    merchant_slug: orderSlug,
-                });
-                if (trackingToken) {
-                    orderQuery.set('token', trackingToken);
-                }
-                const orderRes = await fetch(
-                    `/api/storefront/orders/${orderId}?${orderQuery.toString()}`
-                );
-                const orderData = (await orderRes.json()) as {
-                    payment_status?: string;
-                    total?: unknown;
-                    currency?: unknown;
-                } | null;
-                if (
-                    orderRes.ok &&
-                    orderData?.payment_status === 'paid'
-                ) {
-                    // Pass the verified row into the first capture: the
-                    // once-guard would otherwise suppress the richer
-                    // order-success lookup, leaving the conversion valueless.
-                    const klumpTotal = Number(orderData.total);
-                    const klumpCurrency =
-                        typeof orderData.currency === 'string' &&
-                        orderData.currency.trim()
-                            ? orderData.currency.trim()
-                            : undefined;
-                    captureBnplPaymentCompleted({
-                        orderId,
-                        paymentMethod: 'klump',
-                        reference: klumpReference,
-                        ...(Number.isFinite(klumpTotal)
-                            ? { value: klumpTotal }
-                            : {}),
-                        ...(klumpCurrency
-                            ? { currency: klumpCurrency }
-                            : {}),
-                    });
-                }
-            } catch {
-                // Verification unavailable: skip attribution rather than
-                // record an unverified conversion.
-            }
+                    fallbackMerchantSlug,
+            });
 
             const successQuery = new URLSearchParams({
                 orderId,
@@ -580,17 +451,14 @@ async function launchBnplPayment({
                 onError: (error) => {
                     clearCreditDirectPopupMarker(order.id);
                     setCreditDirectPopupMarker(null);
-                    // Bridge only when this attempt opened: a pre-popup SDK
-                    // failure has no native payment_started to match, so
-                    // bridging it would record an unmatched payment_failed.
-                    // Unopened failures fall through to the local error UI.
                     if (
-                        providerOpenedLaunchKeyRef.current === launchKey &&
-                        notifyNativeBnplProviderError(
-                            'credit_direct',
-                            order.id,
-                            error
-                        )
+                        bridgeOpenedAttemptError({
+                            providerOpenedLaunchKeyRef,
+                            launchKey,
+                            gateway: 'credit_direct',
+                            orderId: order.id,
+                            message: error,
+                        })
                     ) {
                         clearPaymentLaunch(paymentLaunchKeyRef);
                         return;
@@ -669,15 +537,14 @@ async function launchBnplPayment({
                     setErrorMessage('Payment cancelled.');
                 },
                 onError: (error) => {
-                    // Bridge only when this attempt opened (same
-                    // unmatched-start guard as Credit Direct).
                     if (
-                        providerOpenedLaunchKeyRef.current === launchKey &&
-                        notifyNativeBnplProviderError(
-                            'credpal',
-                            order.id,
-                            error.message
-                        )
+                        bridgeOpenedAttemptError({
+                            providerOpenedLaunchKeyRef,
+                            launchKey,
+                            gateway: 'credpal',
+                            orderId: order.id,
+                            message: error.message,
+                        })
                     ) {
                         clearPaymentLaunch(paymentLaunchKeyRef);
                         return;
@@ -711,13 +578,6 @@ async function launchBnplPayment({
             }
 
             const publicKey = getKlumpPublicKey();
-            // Attribution for the deferred web start, recorded from onOpen
-            // below (browser sessions only; native shells bridge instead).
-            const klumpOrderTotal = Number(order.total);
-            const klumpOrderCurrency =
-                typeof order.currency === 'string' && order.currency.trim()
-                    ? order.currency.trim()
-                    : undefined;
             const callbackQuery = new URLSearchParams({
                 gateway: 'klump',
                 klump_callback: '1',
@@ -800,17 +660,9 @@ async function launchBnplPayment({
                         order.id,
                         klumpReference ?? undefined
                     );
-                    captureBnplPaymentStarted({
-                        orderId: order.id,
-                        orderNumber: order.order_number ?? undefined,
-                        paymentMethod: 'klump',
+                    captureKlumpLauncherStarted({
+                        order,
                         reference: klumpReference ?? undefined,
-                        ...(Number.isFinite(klumpOrderTotal)
-                            ? { value: klumpOrderTotal }
-                            : {}),
-                        ...(klumpOrderCurrency
-                            ? { currency: klumpOrderCurrency }
-                            : {}),
                     });
                 },
                 onSuccess: () => {
@@ -821,16 +673,15 @@ async function launchBnplPayment({
                         error instanceof Error
                             ? error.message
                             : 'Klump checkout failed.';
-                    // Bridge only when this attempt opened (same
-                    // unmatched-start guard as Credit Direct and CredPal).
                     if (
-                        providerOpenedLaunchKeyRef.current === launchKey &&
-                        notifyNativeBnplProviderError(
-                            'klump',
-                            order.id,
+                        bridgeOpenedAttemptError({
+                            providerOpenedLaunchKeyRef,
+                            launchKey,
+                            gateway: 'klump',
+                            orderId: order.id,
                             message,
-                            klumpReference ?? undefined
-                        )
+                            reference: klumpReference ?? undefined,
+                        })
                     ) {
                         clearPaymentLaunch(paymentLaunchKeyRef);
                         return;
@@ -841,18 +692,9 @@ async function launchBnplPayment({
                     // failure here or the onOpen start strands unmatched.
                     // Pre-open errors have no start and stay local.
                     if (providerOpenedLaunchKeyRef.current === launchKey) {
-                        captureBnplPaymentFailed({
-                            orderId: order.id,
-                            orderNumber: order.order_number ?? undefined,
-                            paymentMethod: 'klump',
-                            reason: 'klump_error',
+                        captureKlumpLauncherFailed({
+                            order,
                             reference: klumpReference ?? undefined,
-                            ...(Number.isFinite(klumpOrderTotal)
-                                ? { value: klumpOrderTotal }
-                                : {}),
-                            ...(klumpOrderCurrency
-                                ? { currency: klumpOrderCurrency }
-                                : {}),
                         });
                     }
                     clearPaymentLaunch(paymentLaunchKeyRef);
@@ -919,7 +761,6 @@ export function BnplLauncher({ merchantSlug = 'ogabassey' }: BnplLauncherProps) 
     const paymentLaunchKeyRef = useRef<string | null>(null);
     const providerOpenedLaunchKeyRef = useRef<string | null>(null);
     const lastLaunchRequestKeyRef = useRef<string | null>(null);
-    const confirmedCleanupKeyRef = useRef<string | null>(null);
     const klumpSuccessRedirectRef = useRef(false);
     const [creditDirectPopupMarker, setCreditDirectPopupMarker] =
         useState<CreditDirectPopupMarker | null>(null);
@@ -1063,73 +904,18 @@ export function BnplLauncher({ merchantSlug = 'ogabassey' }: BnplLauncherProps) 
         lookupEmail,
     });
 
-    const cdConfirmedTotal = creditDirectVerification.confirmedOrder?.total;
-    const cdConfirmedCurrency =
-        creditDirectVerification.confirmedOrder?.currency;
-    useEffect(() => {
-        if (
-            creditDirectVerification.phase !== 'confirmed' ||
-            !orderId ||
-            !creditDirectPopupMarker
-        ) {
-            return;
-        }
-
-        const cleanupKey = `${orderId}:${creditDirectPopupMarker.transactionId}`;
-        if (confirmedCleanupKeyRef.current === cleanupKey) {
-            return;
-        }
-        confirmedCleanupKeyRef.current = cleanupKey;
-
-        const successQuery = new URLSearchParams({
-            orderId,
-            reference: creditDirectPopupMarker.transactionId,
-            type: 'credit_direct',
-        });
-        // Pass the verified row into the first capture: the once-guard
-        // would otherwise suppress the richer order-success lookup,
-        // leaving the conversion valueless.
-        captureBnplPaymentCompleted({
-            orderId,
-            paymentMethod: 'credit_direct',
-            reference: creditDirectPopupMarker.transactionId,
-            ...(cdConfirmedTotal !== undefined
-                ? { value: cdConfirmedTotal }
-                : {}),
-            ...(cdConfirmedCurrency
-                ? { currency: cdConfirmedCurrency }
-                : {}),
-        });
-        if (trackingToken) {
-            successQuery.set('trackingToken', trackingToken);
-        } else if (lookupEmail) {
-            // Email-only guest lookups have no tracking token; order-success
-            // needs the email to fetch the order it is celebrating.
-            successQuery.set('email', lookupEmail);
-        }
-        clearCart?.();
-        try {
-            window.sessionStorage.removeItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY);
-            window.sessionStorage.removeItem('checkout-form');
-        } catch {
-            // Storage cleanup is best-effort; confirmation must still navigate.
-        }
-        void clearCheckoutIdempotencyKey();
-        clearCreditDirectPopupMarker(orderId);
-        router.push(
-            `${buildLauncherScopedPath('/order-success')}?${successQuery.toString()}` as Route
-        );
-    }, [
-        creditDirectVerification.phase,
-        cdConfirmedTotal,
-        cdConfirmedCurrency,
-        creditDirectPopupMarker,
+    useCreditDirectConfirmationRedirect({
+        phase: creditDirectVerification.phase,
+        marker: creditDirectPopupMarker,
         orderId,
         trackingToken,
         lookupEmail,
+        confirmedTotal: creditDirectVerification.confirmedOrder?.total,
+        confirmedCurrency: creditDirectVerification.confirmedOrder?.currency,
+        orderSuccessBasePath: buildLauncherScopedPath('/order-success'),
         clearCart,
         router,
-    ]);
+    });
 
     const retryCreditDirectPayment = () => {
         clearCreditDirectPopupMarker(orderId);

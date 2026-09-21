@@ -147,6 +147,64 @@ describe('useSettlementCompletion', () => {
     }
   });
 
+  it('keeps a slow-lane watch past the fast budget for delayed settlements', async () => {
+    jest.useFakeTimers();
+    try {
+      const pending = trackedResponse({
+        id: 'order-settle-1',
+        order_number: 'ORD-SETTLE-1',
+        payment_status: 'pending',
+        total: 25000,
+      });
+      const fetchCalls = mockFetchSequence([
+        pending,
+        pending,
+        pending,
+        pending,
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'paid',
+          subtotal: 25000,
+          shipping_cost: 0,
+          discount_amount: 0,
+          total: 25000,
+        }),
+      ]);
+
+      renderHook(() =>
+        useSettlementCompletion({
+          ...baseParams,
+          paymentMethod: 'bank_transfer',
+          slowPollIntervalMs: 1000,
+          slowMaxAttempts: 2,
+        })
+      );
+      // Three fast attempts, then two slow-lane attempts; settlement on
+      // the fifth lookup must still record completion.
+      await jest.advanceTimersByTimeAsync(0);
+      expect(mockTrackCompleted).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(1000);
+      await jest.advanceTimersByTimeAsync(1000);
+      await jest.advanceTimersByTimeAsync(1000);
+      await jest.advanceTimersByTimeAsync(1000);
+
+      await waitFor(() =>
+        expect(mockTrackCompleted).toHaveBeenCalledWith(
+          expect.objectContaining({
+            orderId: 'order-settle-1',
+            paymentMethod: 'bank_transfer',
+            value: 25000,
+          })
+        )
+      );
+      expect(fetchCalls()).toBe(5);
+      expect(mockTrackCompleted).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('polls pending CredPal orders to completion after approval', async () => {
     jest.useFakeTimers();
     try {

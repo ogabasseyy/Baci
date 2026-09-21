@@ -34,6 +34,22 @@ describe('resolveImmediateOrderEmail', () => {
     });
   });
 
+  it('confirms a fully-funded payforme order instead of requesting payment', () => {
+    expect(
+      resolveImmediateOrderEmail({
+        effectivePaymentMethod: 'payforme',
+        isWalletFullyPaid: true,
+        isQuizVoucherFullyPaid: false,
+        orderPaymentStatus: 'unpaid',
+        orderNumber: 'ORD-1',
+      })
+    ).toEqual({
+      documentKind: 'confirmation',
+      isPaidForEmail: true,
+      subject: 'Order Confirmation - #ORD-1',
+    });
+  });
+
   it('derives paid from wallet coverage despite the pre-coverage row status', () => {
     expect(
       resolveImmediateOrderEmail({

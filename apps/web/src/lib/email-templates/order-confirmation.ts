@@ -1,7 +1,21 @@
 import { escapeHtmlAttribute, escapeHtmlText } from '@/lib/sanitize';
 import { sanitizeUrl } from '@/lib/sanitize-core';
+import {
+  buildProformaIntroHtml,
+  buildProformaNextStepsText,
+  buildProformaPaymentHtml,
+  buildProformaPaymentText,
+  buildProformaTextIntro,
+  resolveOrderCtaHref,
+  resolveProformaContext,
+} from './order-confirmation-proforma';
 import type { MerchantRegistrationInfo, OrderItem } from './shared';
-import { buildEscapedRegistrationLine, formatEmailMoney } from './shared';
+import {
+  buildOrderItemsHtml,
+  buildOrderItemsText,
+  buildRegistrationFooterHtml,
+  formatEmailMoney,
+} from './shared';
 
 interface OrderConfirmationData extends MerchantRegistrationInfo {
   orderNumber: string;
@@ -69,80 +83,11 @@ export function generateOrderConfirmationEmail(
   // which shows status only and cannot take payment (the quote itself
   // travels as the attached PDF): label it as tracking, never as the
   // document. Payment travels by bank transfer (details below).
-  const ctaHref =
-    (isProforma || isPaymentRequest) && data.paymentLink
-      ? data.paymentLink
-      : data.merchantUrl;
-  // Transfer instructions charge the outstanding balance only: credit
-  // already applied must not be charged again (P1 overpayment guard).
-  const transferAmount = data.amountDue ?? data.total;
-  // A zero balance (e.g. a 100% discount) has nothing to transfer: a
-  // ₦0.00 instruction promising automatic confirmation is an impossible
-  // next step, so zero-due quotes omit the transfer block entirely.
-  const hasAmountDue = transferAmount > 0;
-  // Paystack DVAs settle in NGN only: a foreign-currency quote falls back
-  // to merchant-contact instructions even if a stale account object is
-  // passed — never print a naira account beside a dollar amount.
-  const dvaCurrencyCompatible =
-    !data.currency || data.currency.trim().toUpperCase() === 'NGN';
-  const proformaVirtualAccount = dvaCurrencyCompatible
-    ? data.virtualAccount
-    : undefined;
-  const proformaPaymentHtml =
-    (isProforma || isPaymentRequest) && proformaVirtualAccount && hasAmountDue
-      ? `
-          <!-- Payment Instructions -->
-          <tr>
-            <td style="padding: 0 40px 8px 40px;">
-              <div style="background-color: #fefce8; border-radius: 8px; padding: 24px; border: 1px solid #fde68a;">
-                <h3 style="margin: 0 0 12px 0; font-size: 14px; text-transform: uppercase; color: #92400e; letter-spacing: 0.5px;">💳 Complete Your Bank Transfer</h3>
-                <p style="margin: 0 0 12px 0; font-size: 14px; color: #78350f; line-height: 1.6;">
-                  Transfer <strong>${formatEmailMoney(transferAmount, data.currency)}</strong> to the dedicated account below. Your order is confirmed automatically once payment is received.
-                </p>
-                <table border="0" cellpadding="0" cellspacing="0" width="100%">
-                  <tr>
-                    <td style="color: #92400e; padding: 4px 0; font-size: 14px;">Bank:</td>
-                    <td style="color: #1e293b; font-weight: 600; text-align: right; font-size: 14px;">${escapeHtmlText(proformaVirtualAccount.bankName)}</td>
-                  </tr>
-                  <tr>
-                    <td style="color: #92400e; padding: 4px 0; font-size: 14px;">Account Name:</td>
-                    <td style="color: #1e293b; font-weight: 600; text-align: right; font-size: 14px;">${escapeHtmlText(proformaVirtualAccount.accountName)}</td>
-                  </tr>
-                  <tr>
-                    <td style="color: #92400e; padding: 4px 0; font-size: 14px;">Account Number:</td>
-                    <td style="color: #1e293b; font-weight: 700; text-align: right; font-size: 16px;">${escapeHtmlText(proformaVirtualAccount.accountNumber)}</td>
-                  </tr>
-                </table>
-              </div>
-            </td>
-          </tr>
-  `
-      : '';
-  const quotationIntroHtml = hasAmountDue
-    ? `This proforma invoice is a quotation for the items below. Your order will be processed once payment is received — please share it with your procurement team and ${proformaVirtualAccount ? 'complete your bank transfer using the payment details in this email' : `contact ${escapeHtmlText(data.merchantName)} for payment details`}.`
-    : `This proforma invoice is a quotation for the items below. No payment is due on this quote — please contact ${escapeHtmlText(data.merchantName)} if you have any questions.`;
-  const requestIntroHtml = !hasAmountDue
-    ? `This is a payment request for the items below. No payment is due on this request — please contact ${escapeHtmlText(data.merchantName)} if you have any questions.`
-    : proformaVirtualAccount
-      ? 'This is a payment request for the items below. Share the transfer details with your payer — the order will be processed once payment is received.'
-      : `This is a payment request for the items below. No payment account is assigned yet — please contact ${escapeHtmlText(data.merchantName)} for payment details.`;
-  const itemsHtml = data.items
-    .map(
-      (item) => `
-    <tr>
-      <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
-        <div style="font-weight: 600; color: #1e293b; font-size: 14px;">${escapeHtmlText(item.name)}</div>
-      </td>
-      <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0; text-align: center; color: #64748b; font-size: 14px;">
-        ${item.quantity}
-      </td>
-      <td style="padding: 16px 0; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600; color: #1e293b; font-size: 14px;">
-        ${formatEmailMoney(item.price, data.currency)}
-      </td>
-    </tr>
-  `
-    )
-    .join('');
+  const ctaHref = resolveOrderCtaHref(data);
+  const proforma = resolveProformaContext(data);
+  const proformaPaymentHtml = buildProformaPaymentHtml(data, proforma);
+  const proformaIntroHtml = buildProformaIntroHtml(data, proforma);
+  const itemsHtml = buildOrderItemsHtml(data.items, data.currency);
 
   return `
 <!DOCTYPE html>
@@ -196,7 +141,7 @@ export function generateOrderConfirmationEmail(
             <td style="padding: 40px 40px 20px 40px;">
               <p style="margin: 0; font-size: 16px; color: #334155; line-height: 1.6;">Hi <strong>${escapeHtmlText(data.customerName)}</strong>,</p>
               <p style="margin: 16px 0 0 0; font-size: 16px; color: #475569; line-height: 1.6;">
-                ${isProforma ? quotationIntroHtml : isPaymentRequest ? requestIntroHtml : "We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable)."}
+                ${isProforma || isPaymentRequest ? proformaIntroHtml : "We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable)."}
               </p>
             </td>
           </tr>
@@ -279,12 +224,7 @@ export function generateOrderConfirmationEmail(
               <p style="margin: 0; font-size: 14px; color: #64748b;">
                 Questions? Reply to this email or contact us at <a href="${escapeHtmlAttribute(sanitizeUrl(data.merchantUrl))}" style="color: #ca8a04; text-decoration: none;">${escapeHtmlText(data.merchantName)}</a>
               </p>
-              ${(() => {
-                const reg = buildEscapedRegistrationLine(data);
-                return reg
-                  ? `<p style="margin: 8px 0 0 0; font-size: 12px; color: #94a3b8;">${reg}</p>`
-                  : '';
-              })()}
+              ${buildRegistrationFooterHtml(data)}
               <p style="margin: 20px 0 0 0; font-size: 12px; color: #94a3b8;">
                 &copy; ${new Date().getFullYear()} ${escapeHtmlText(data.merchantName)}. Powered by <strong>Baci</strong>.
               </p>
@@ -310,39 +250,9 @@ export function generateOrderConfirmationText(
 ): string {
   const isProforma = data.documentKind === 'proforma';
   const isPaymentRequest = data.documentKind === 'payment_request';
-  const itemsText = data.items
-    .map(
-      (item) =>
-        `${item.name} x${item.quantity} - ${formatEmailMoney(item.price, data.currency)}`
-    )
-    .join('\n');
-  // The tracking link shows status only and cannot take payment: the next
-  // steps must route payment through the bank-transfer details (or the
-  // merchant when no account was assigned), never through the link.
-  const transferAmount = data.amountDue ?? data.total;
-  // Same zero-due omission as the HTML body: no ₦0.00 instruction.
-  const hasAmountDue = transferAmount > 0;
-  // Same NGN-only gate as the HTML body: a foreign-currency quote falls
-  // back to merchant-contact instructions.
-  const dvaCurrencyCompatible =
-    !data.currency || data.currency.trim().toUpperCase() === 'NGN';
-  const proformaVirtualAccount = dvaCurrencyCompatible
-    ? data.virtualAccount
-    : undefined;
-  const documentNoun = isPaymentRequest ? 'request' : 'quote';
-  const payableNextSteps = [
-    !hasAmountDue
-      ? `No payment is due on this ${documentNoun} — please contact ` +
-        `${data.merchantName} if you have any questions.`
-      : proformaVirtualAccount
-        ? isPaymentRequest
-          ? `Share the transfer details with your payer: ${formatEmailMoney(transferAmount, data.currency)} to the account above — the order is confirmed automatically once payment is received.`
-          : `Complete your bank transfer of ${formatEmailMoney(transferAmount, data.currency)} using the payment details above — your order is confirmed automatically once payment is received.`
-        : `No payment account was assigned to this ${documentNoun} yet — please contact ${data.merchantName} for payment details.`,
-    data.paymentLink ? `Track its status here:\n${data.paymentLink}` : null,
-  ]
-    .filter((line): line is string => line !== null)
-    .join('\n');
+  const itemsText = buildOrderItemsText(data.items, data.currency);
+  const proforma = resolveProformaContext(data);
+  const payableNextSteps = buildProformaNextStepsText(data, proforma);
 
   return `
 ${isProforma ? 'Proforma Invoice' : isPaymentRequest ? 'Payment Request' : 'Order Confirmed!'}
@@ -350,15 +260,9 @@ ${isProforma ? 'Proforma Invoice' : isPaymentRequest ? 'Payment Request' : 'Orde
 Hi ${data.customerName},
 
 ${
-  isProforma
-    ? hasAmountDue
-      ? 'This proforma invoice is a quotation, not a confirmed order. Your order will be processed once payment is received.'
-      : 'This proforma invoice is a quotation, not a confirmed order. No payment is due on this quote.'
-    : isPaymentRequest
-      ? hasAmountDue
-        ? 'This is a payment request, not a confirmed order. Share the transfer details with your payer — the order will be processed once payment is received.'
-        : 'This is a payment request, not a confirmed order. No payment is due on this request.'
-      : 'Your order has been confirmed and will be shipped soon.'
+  isProforma || isPaymentRequest
+    ? buildProformaTextIntro(data.documentKind, proforma.hasAmountDue)
+    : 'Your order has been confirmed and will be shipped soon.'
 }
 
 Order Number: #${data.orderNumber}
@@ -369,15 +273,7 @@ ${itemsText}
 Subtotal: ${formatEmailMoney(data.subtotal, data.currency)}
 Shipping: ${formatEmailMoney(data.shippingFee, data.currency)}
 Total: ${formatEmailMoney(data.total, data.currency)}
-${
-  (isProforma || isPaymentRequest) && proformaVirtualAccount && hasAmountDue
-    ? `
-Payment Details (bank transfer):
-Bank: ${proformaVirtualAccount.bankName}
-Account Name: ${proformaVirtualAccount.accountName}
-Account Number: ${proformaVirtualAccount.accountNumber}`
-    : ''
-}
+${buildProformaPaymentText(data, proforma)}
 
 Shipping Address:
 ${data.shippingAddress.address}

@@ -1,24 +1,15 @@
-import { Alert } from 'react-native';
 import { useMerchant } from '@/hooks/use-merchant';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import {
   buildSavingsOrderFields,
   buildWalletOrderFields,
 } from '@/lib/wallet-payment-helpers';
-import {
-  trackCheckoutInvoiceGenerated,
-  trackCheckoutStep,
-} from '@/services/analytics';
-import {
-  pickChangedPriceById,
-  repriceCartItems,
-} from '@/services/cart-reprice';
+import { trackCheckoutStep } from '@/services/analytics';
 import { createOrder } from '@/services/orders';
-import { serializeAfterOrderCreated } from '@/services/serialize-after-order-created';
 import { useCartStore } from '@/stores/cart-store';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
 import { buildCheckoutCompletionAttribution } from './checkout-completion-attribution';
+import { maybeClaimCheckoutInvoice } from './checkout-invoice-claim';
 import {
   buildCheckoutOrderRequest,
   createCheckoutSnapshot,
@@ -29,6 +20,7 @@ import {
   blockIfMixedPrizeCart,
   cartHasVoucherLine,
 } from './checkout-prize-cart-guard';
+import { repriceCartOrAbort } from './checkout-reprice-gate';
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
@@ -123,17 +115,11 @@ export function useCheckoutSubmit({
     let createdOrderId: string | undefined;
 
     try {
-      if (itemsSnapshot.length > 0) {
-        const reprice = await repriceCartItems(itemsSnapshot, merchantId);
-        if (reprice.changes.length > 0) {
-          useCartStore.getState().repriceItems(pickChangedPriceById(reprice));
-          Alert.alert(
-            'Prices updated',
-            'Some prices changed since you added these items. Your cart has been updated to the latest prices — please review the new total and tap checkout again.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
+      if (
+        itemsSnapshot.length > 0 &&
+        (await repriceCartOrAbort(itemsSnapshot, merchantId))
+      ) {
+        return;
       }
 
       const snapshot = createCheckoutSnapshot(
@@ -231,37 +217,12 @@ export function useCheckoutSubmit({
       createdOrderId = order.id;
       const orderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
-      // A fully covered invoice selection comes back paid with nothing due:
-      // claiming invoice_generated would book a proforma conversion for an
-      // order that routes straight to paid completion. Gate only on the
-      // authoritative unpaid state: a zero-total invoice (e.g. 100%
-      // discount) still generates and emails a proforma, so requiring a
-      // positive amount due would create a false funnel drop-off.
-      const isUnpaidInvoiceOrder = order.payment_status !== 'paid';
-      if (selectedPayment === 'invoice' && isUnpaidInvoiceOrder) {
-        // Chain behind the order-created emission so the funnel keeps
-        // causal order even though creation is recorded fire-and-forget.
-        await serializeAfterOrderCreated(order.id, async () => {
-          if (
-            !(await claimCheckoutPurchaseTracking(
-              order.id,
-              'invoice_generated'
-            ))
-          ) {
-            return;
-          }
-          trackCheckoutInvoiceGenerated({
-            itemCount: itemsSnapshot.reduce(
-              (count, item) => count + item.quantity,
-              0
-            ),
-            orderId: order.id,
-            orderNumber,
-            paymentMethod: 'invoice',
-            total: order.total,
-          });
-        });
-      }
+      await maybeClaimCheckoutInvoice({
+        selectedPayment,
+        order,
+        orderNumber,
+        itemsSnapshot,
+      });
 
       await finalizeCheckoutPayment({
         attribution: buildCheckoutCompletionAttribution({

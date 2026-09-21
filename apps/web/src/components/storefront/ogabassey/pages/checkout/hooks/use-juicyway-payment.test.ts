@@ -175,6 +175,165 @@ describe('useJuicywayPayment', () => {
     unmount();
   });
 
+  it('does not let a dismissed poll settle a retried attempt', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(initResponse('ref-1', 'pay-1'))
+        .mockResolvedValueOnce(Response.json({}))
+        .mockResolvedValueOnce(initResponse('ref-2', 'pay-2', 'ETH'))
+        .mockResolvedValueOnce(Response.json({}))
+        .mockResolvedValueOnce(Response.json({ is_confirmed: true }));
+      vi.stubGlobal('fetch', fetchMock);
+      const { result, rerender, unmount } = renderHook(
+        ({ chain }: { chain: CryptoChain }) =>
+          useJuicywayPayment(createOptions(chain)),
+        { initialProps: { chain: 'TRX' as CryptoChain } }
+      );
+
+      await act(async () => {
+        await result.current.initializeCryptoPayment();
+      });
+      await act(async () => {
+        await result.current.verifyCryptoPayment();
+      });
+      expect(result.current.cryptoVerificationStatus).toBe('pending');
+
+      // Dismiss mid-poll (modal header close), then retry on another
+      // network and leave it pending too.
+      act(() => {
+        result.current.dismissCryptoModal();
+      });
+      rerender({ chain: 'ETH' });
+      await act(async () => {
+        await result.current.initializeCryptoPayment();
+      });
+      expect(result.current.cryptoPaymentData?.reference).toBe('ref-2');
+      await act(async () => {
+        await result.current.verifyCryptoPayment();
+      });
+      expect(result.current.cryptoVerificationStatus).toBe('pending');
+
+      // The first poll tick belongs to attempt 2 only: the dismissed
+      // poll must neither fire again nor settle attempt 1.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+
+      expect(result.current.cryptoVerificationStatus).toBe('confirmed');
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-1',
+        expect.objectContaining({ reference: 'ref-2' })
+      );
+      const failedKeys = mockCaptureCheckoutFunnelEventOnce.mock.calls
+        .filter(([event]) => event === 'payment_failed')
+        .map(([, key]) => key);
+      expect(failedKeys).toEqual([]);
+      const statusUrls = fetchMock.mock.calls
+        .map(([url]) => String(url))
+        .filter((url) => url.includes('/api/payments/status'));
+      expect(statusUrls.filter((url) => url.includes('pay-1'))).toHaveLength(
+        1
+      );
+      expect(statusUrls.filter((url) => url.includes('pay-2'))).toHaveLength(
+        2
+      );
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops polling when the modal is dismissed mid-verification', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(initResponse('ref-1', 'pay-1'))
+        .mockResolvedValueOnce(Response.json({}))
+        .mockResolvedValueOnce(Response.json({ is_confirmed: true }));
+      vi.stubGlobal('fetch', fetchMock);
+      const { result, unmount } = renderHook(() =>
+        useJuicywayPayment(createOptions('TRX'))
+      );
+
+      await act(async () => {
+        await result.current.initializeCryptoPayment();
+      });
+      await act(async () => {
+        await result.current.verifyCryptoPayment();
+      });
+      expect(result.current.cryptoVerificationStatus).toBe('pending');
+
+      // Dismiss with no retry: later ticks must not settle the attempt.
+      act(() => {
+        result.current.dismissCryptoModal();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+
+      expect(result.current.cryptoVerificationStatus).toBe('idle');
+      expect(result.current.isVerifyingCrypto).toBe(false);
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_completed',
+        expect.anything(),
+        expect.anything()
+      );
+      const statusUrls = fetchMock.mock.calls
+        .map(([url]) => String(url))
+        .filter((url) => url.includes('/api/payments/status'));
+      expect(statusUrls).toHaveLength(1);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores an in-flight verification check after dismiss', async () => {
+    let resolveStatus!: (response: Response) => void;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(initResponse('ref-1', 'pay-1'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveStatus = resolve;
+          })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result, unmount } = renderHook(() =>
+      useJuicywayPayment(createOptions('TRX'))
+    );
+
+    await act(async () => {
+      await result.current.initializeCryptoPayment();
+    });
+    let verifyPromise!: Promise<void>;
+    act(() => {
+      verifyPromise = result.current.verifyCryptoPayment();
+    });
+    // Dismiss while the initial status check is in flight.
+    act(() => {
+      result.current.dismissCryptoModal();
+    });
+    await act(async () => {
+      resolveStatus(Response.json({ is_confirmed: true }));
+      await verifyPromise;
+    });
+
+    expect(result.current.cryptoVerificationStatus).toBe('idle');
+    expect(result.current.isVerifyingCrypto).toBe(false);
+    expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+      'payment_completed',
+      expect.anything(),
+      expect.anything()
+    );
+    unmount();
+  });
+
   it('keeps the completion order-keyed', async () => {
     const fetchMock = vi
       .fn()

@@ -2401,7 +2401,13 @@ export const CheckoutPage: React.FC = () => {
           // NOTE: Don't clear cart here - it causes a flash of empty state
           // Cart will be cleared on the payment callback page after successful payment
           // (location.assign over `href =` — global assignment bails React Compiler)
-          capturePaymentStarted();
+          // Klump navigates to the BNPL launcher, which records the start
+          // from the widget's onOpen: firing here would strand an unmatched
+          // start when the launcher lookup, SDK load, or widget fails
+          // before Klump opens.
+          if (paymentMethod !== 'klump') {
+            capturePaymentStarted();
+          }
           window.location.assign(paymentResult.authorization_url);
           return;
         } else if (paymentResult.success && paymentResult.checkout_url) {

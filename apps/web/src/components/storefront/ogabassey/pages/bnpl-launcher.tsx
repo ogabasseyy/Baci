@@ -38,6 +38,7 @@ import { clearCheckoutIdempotencyKey } from './checkout/checkout-idempotency';
 import { useCreditDirectVerification } from './checkout/hooks/use-credit-direct-verification';
 import { CreditDirectVerificationView } from './checkout/components/CreditDirectVerificationView';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
+import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 
 declare global {
     interface Window {
@@ -104,6 +105,39 @@ function captureBnplPaymentCompleted({
             paymentMethod,
             paymentStatus: 'paid',
             reference,
+            source: 'web_checkout',
+            total: value,
+        })
+    );
+}
+function captureBnplPaymentStarted({
+    orderId,
+    orderNumber,
+    paymentMethod,
+    value,
+    currency,
+}: {
+    orderId: string;
+    orderNumber?: string;
+    paymentMethod: string;
+    value?: number;
+    currency?: string;
+}) {
+    // Inside a native BNPL WebView the native shell records the start from
+    // bnpl_provider_opened: emitting here would double-attribute every
+    // web start event.
+    if (isNativeBnplWebView()) {
+        return;
+    }
+    captureClientEvent(
+        CHECKOUT_FUNNEL_EVENTS.paymentStarted,
+        buildCheckoutFunnelProperties({
+            channel: 'web',
+            ...(currency ? { currency } : {}),
+            orderId,
+            orderNumber,
+            paymentIntent: 'installments',
+            paymentMethod,
             source: 'web_checkout',
             total: value,
         })
@@ -759,6 +793,13 @@ async function launchBnplPayment({
             }
 
             const publicKey = getKlumpPublicKey();
+            // Attribution for the deferred web start, recorded from onOpen
+            // below (browser sessions only; native shells bridge instead).
+            const klumpOrderTotal = Number(order.total);
+            const klumpOrderCurrency =
+                typeof order.currency === 'string' && order.currency.trim()
+                    ? order.currency.trim()
+                    : undefined;
             const callbackQuery = new URLSearchParams({
                 gateway: 'klump',
                 klump_callback: '1',
@@ -833,9 +874,21 @@ async function launchBnplPayment({
                 onOpen: () => {
                     // The Klump widget opened: confirm the provider flow to
                     // native so the start is recorded only for opened
-                    // checkouts.
+                    // checkouts. Browser sessions record the deferred web
+                    // start here instead (the helper no-ops natively).
                     providerOpenedLaunchKeyRef.current = launchKey;
                     notifyNativeBnplProviderOpened('klump', order.id);
+                    captureBnplPaymentStarted({
+                        orderId: order.id,
+                        orderNumber: order.order_number ?? undefined,
+                        paymentMethod: 'klump',
+                        ...(Number.isFinite(klumpOrderTotal)
+                            ? { value: klumpOrderTotal }
+                            : {}),
+                        ...(klumpOrderCurrency
+                            ? { currency: klumpOrderCurrency }
+                            : {}),
+                    });
                 },
                 onSuccess: () => {
                     klumpSuccessRedirectRef.current = true;

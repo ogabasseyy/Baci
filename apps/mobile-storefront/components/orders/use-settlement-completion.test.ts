@@ -239,6 +239,57 @@ describe('useSettlementCompletion', () => {
     }
   });
 
+  it('reconciles a deferred juicyway settlement with its provider reference', async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetchSequence([
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'pending',
+          total: 575000,
+        }),
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'paid',
+          subtotal: 575000,
+          shipping_cost: 0,
+          discount_amount: 0,
+          total: 575000,
+        }),
+      ]);
+
+      renderHook(() =>
+        useSettlementCompletion({
+          ...baseParams,
+          paymentMethod: 'juicyway',
+          reference: 'jw-ref-1',
+        })
+      );
+      await jest.advanceTimersByTimeAsync(0);
+      expect(mockTrackCompleted).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(1000);
+
+      // On-chain detection lands after the shopper reaches success: the
+      // polling path consumes the durable claim, so the Juicyway
+      // reference forwarded by the crypto modal must travel with it.
+      await waitFor(() =>
+        expect(mockTrackCompleted).toHaveBeenCalledWith(
+          expect.objectContaining({
+            orderId: 'order-settle-1',
+            paymentMethod: 'juicyway',
+            reference: 'jw-ref-1',
+            value: 575000,
+          })
+        )
+      );
+      expect(mockTrackCompleted).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('never attributes a different order returned for the token', async () => {
     jest.useFakeTimers();
     try {

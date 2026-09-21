@@ -78,13 +78,17 @@ export function useJuicywayVerification({
   const [isVerifying, setIsVerifying] = useState(false);
   const [status, setStatus] = useState<CryptoVerificationStatus>('idle');
 
-  // Uses a ref to track polling state to avoid stale closure issues
+  // Uses a ref to track polling state to avoid stale closure issues.
+  // The epoch invalidates in-flight status checks when a new attempt
+  // supersedes the current one or the modal is dismissed mid-poll.
   const pollingRef = useRef<{
     intervalId: NodeJS.Timeout | null;
     attempts: number;
+    epoch: number;
   }>({
     intervalId: null,
     attempts: 0,
+    epoch: 0,
   });
 
   const clearPollingInterval = () => {
@@ -112,12 +116,21 @@ export function useJuicywayVerification({
       return;
     }
 
+    // A new attempt supersedes any prior poll: drop its interval and
+    // invalidate its in-flight status checks so a stale resolution can
+    // never clear this poll or settle the wrong attempt.
+    pollingRef.current.epoch += 1;
+    const epoch = pollingRef.current.epoch;
+    clearPollingInterval();
     setIsVerifying(true);
     setStatus('checking');
     pollingRef.current.attempts = 0;
 
     // Initial check
     const initialStatus = await checkJuicywayPaymentStatus(verificationId);
+    if (epoch !== pollingRef.current.epoch) {
+      return;
+    }
 
     if (initialStatus === 'confirmed') {
       setIsVerifying(false);
@@ -137,6 +150,9 @@ export function useJuicywayVerification({
     setStatus('pending');
 
     pollingRef.current.intervalId = setInterval(async () => {
+      if (epoch !== pollingRef.current.epoch) {
+        return;
+      }
       pollingRef.current.attempts++;
 
       if (pollingRef.current.attempts >= VERIFY_POLL_MAX_ATTEMPTS) {
@@ -147,6 +163,11 @@ export function useJuicywayVerification({
       }
 
       const pollStatus = await checkJuicywayPaymentStatus(verificationId);
+      if (epoch !== pollingRef.current.epoch) {
+        // Superseded while the check was in flight: never clear the new
+        // poll or settle this attempt.
+        return;
+      }
 
       if (pollStatus === 'confirmed') {
         clearPollingInterval();
@@ -172,6 +193,11 @@ export function useJuicywayVerification({
   }, []);
 
   const reset = () => {
+    // Dismissed mid-poll: drop the interval and invalidate in-flight
+    // checks so a stale tick can neither clear a later poll nor settle
+    // this attempt after the modal closed.
+    pollingRef.current.epoch += 1;
+    clearPollingInterval();
     setIsVerifying(false);
     setStatus('idle');
   };

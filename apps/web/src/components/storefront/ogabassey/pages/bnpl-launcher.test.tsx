@@ -58,10 +58,16 @@ vi.mock('@/lib/api-client', () => ({
 }));
 
 const mockCaptureCheckoutFunnelEventOnce = vi.fn();
+const mockCaptureClientEvent = vi.fn();
 
 vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
   captureCheckoutFunnelEventOnce: (...args: unknown[]) =>
     mockCaptureCheckoutFunnelEventOnce(...args),
+}));
+
+vi.mock('@/lib/posthog/capture-client-event', () => ({
+  captureClientEvent: (...args: unknown[]) =>
+    mockCaptureClientEvent(...args),
 }));
 
 describe('BnplLauncher', () => {
@@ -1173,6 +1179,166 @@ describe('BnplLauncher', () => {
     );
     expect(postMessage).not.toHaveBeenCalledWith(
       expect.stringContaining('bnpl_provider_opened')
+    );
+  });
+
+  it('records the deferred web start when the Klump widget opens in a browser', async () => {
+    // No native bridge: an ordinary browser session.
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: 'order-1',
+          order_number: 'BAC-001',
+          total: 58088.5,
+          currency: 'NGN',
+          customer_email: 'customer@example.com',
+          customer_phone: '08012345678',
+          customer_name: 'John Doe',
+          items: [
+            {
+              product_id: 'product-1',
+              name: 'Capsule',
+              price: 51500,
+              quantity: 1,
+            },
+          ],
+        }),
+      })
+    );
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+    // Constructing the widget opens nothing yet: no web start.
+    expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
+      'payment_started',
+      expect.anything()
+    );
+
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onOpen?: () => void;
+    };
+    config.onOpen?.();
+
+    await waitFor(() => {
+      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
+        'payment_started',
+        expect.objectContaining({
+          channel: 'web',
+          currency: 'NGN',
+          order_id: 'order-1',
+          order_number: 'BAC-001',
+          payment_intent: 'installments',
+          payment_method: 'klump',
+          source: 'web_checkout',
+          total: 58088.5,
+        })
+      );
+    });
+  });
+
+  it('records no web start when the Klump SDK fails to load in a browser', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+    vi.stubGlobal('Klump', undefined);
+    window.Klump = undefined;
+
+    const originalAppendChild = document.head.appendChild.bind(document.head);
+    const appendSpy = vi
+      .spyOn(document.head, 'appendChild')
+      .mockImplementation(<T extends Node>(node: T): T => {
+        const result = originalAppendChild(node);
+        if (
+          node instanceof HTMLScriptElement &&
+          node.src === 'https://js.useklump.com/klump.js'
+        ) {
+          queueMicrotask(() => node.dispatchEvent(new Event('error')));
+        }
+        return result;
+      });
+
+    try {
+      render(<BnplLauncher />);
+
+      expect(
+        await screen.findByRole('heading', { name: 'Something went wrong' })
+      ).toBeInTheDocument();
+      expect(mockKlumpConstructor).not.toHaveBeenCalled();
+      // Pre-open failure: the widget never opened, so no web start may
+      // exist to strand unmatched.
+      expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
+        'payment_started',
+        expect.anything()
+      );
+    } finally {
+      appendSpy.mockRestore();
+    }
+  });
+
+  it('skips the web start for Klump opens inside a native shell', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onOpen?: () => void;
+    };
+    config.onOpen?.();
+
+    // The native shell records the start from the bridge: a web event
+    // here would double-attribute.
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'klump',
+          orderId: 'order-1',
+          type: 'bnpl_provider_opened',
+        })
+      );
+    });
+    expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
+      'payment_started',
+      expect.anything()
     );
   });
 

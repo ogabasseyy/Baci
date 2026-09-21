@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
-
-const mockUnlockBadge = jest.fn();
-const mockUseQuizMobileAds = jest.fn();
-const mockAuthCustomer = { date_of_birth: null as string | null };
+import { RewardedAdEventType } from 'react-native-google-mobile-ads';
+import {
+  type GateProps,
+  mockAuthCustomer,
+  mockPlacementState,
+  mockSetQuizRewardedFlowActive,
+  mockUnlockBadge,
+  mockUseQuizMobileAds,
+} from './use-quiz-rewarded-badge-test-harness';
 
 jest.mock('@/config/quiz-mobile-ads', () => ({
   getQuizMobileAdsConfig: () => ({
@@ -15,6 +20,13 @@ jest.mock('@/config/quiz-mobile-ads', () => ({
 jest.mock('@/hooks/use-quiz-mobile-ads', () => ({
   useQuizMobileAds: (input: unknown) => mockUseQuizMobileAds(input),
 }));
+jest.mock('@/config/mobile-ad-placements', () => ({
+  getMobileAdUnitId: () => ({
+    enabled: mockPlacementState.enabled,
+    format: 'rewarded',
+    unitId: 'test-rewarded-unit',
+  }),
+}));
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (selector: (state: unknown) => unknown) =>
     selector({ customer: mockAuthCustomer }),
@@ -22,6 +34,10 @@ jest.mock('@/stores/auth-store', () => ({
 jest.mock('@/stores/quiz-badge-store', () => ({
   useQuizBadgeStore: (selector: (state: unknown) => unknown) =>
     selector({ getBadge: () => null, unlockBadge: mockUnlockBadge }),
+}));
+jest.mock('@/lib/quiz-fullscreen-ownership', () => ({
+  setQuizRewardedFlowActive: (active: boolean) =>
+    mockSetQuizRewardedFlowActive(active),
 }));
 
 const listeners = new Map<string, (payload?: unknown) => void>();
@@ -44,22 +60,14 @@ jest.mock('react-native-google-mobile-ads', () => ({
   RewardedAdEventType: { EARNED_REWARD: 'earned-reward', LOADED: 'loaded' },
 }));
 
-import { RewardedAdEventType } from 'react-native-google-mobile-ads';
 import { useQuizRewardedBadge } from './use-quiz-rewarded-badge';
-
-type GateProps = {
-  eventId: string;
-  eventTitle: string;
-  remainingSeconds: number;
-  status: 'active' | 'scheduled';
-  userId: string;
-};
 
 describe('useQuizRewardedBadge', () => {
   beforeEach(() => {
     listeners.clear();
     mockAuthCustomer.date_of_birth = null;
     mockUnlockBadge.mockClear();
+    mockSetQuizRewardedFlowActive.mockClear();
     mockAd.show.mockClear();
     mockUseQuizMobileAds.mockReturnValue({
       canRequestAds: true,
@@ -173,6 +181,11 @@ describe('useQuizRewardedBadge', () => {
       'event-1',
       'Today Quiz'
     );
+    expect(result.current.justEarned).toBe(true);
+    expect(result.current.available).toBe(true);
+    act(() => result.current.dismiss());
+    expect(result.current.justEarned).toBe(false);
+    expect(result.current.available).toBe(false);
   });
 
   it('does not block the room when the user dismisses the offer', () => {

@@ -2,13 +2,11 @@ import { isAirportDeliveryEligible } from '@baci/shared';
 import type { RefObject } from 'react';
 import type { UseFormSetValue } from 'react-hook-form';
 import { normalizeStateName } from '@/components/checkout/checkout-shipping.helpers';
-import {
-  getDefaultPickupQuoteId,
-  isProviderStationPickupQuote,
-} from '@/components/checkout/checkout-station-pickup';
+import { getDefaultPickupQuoteId } from '@/components/checkout/checkout-station-pickup';
 import {
   AIRPORT_QUOTE_ID,
   isGiglGoFasterQuote,
+  resolveDoorDeliveryQuoteId,
 } from '@/components/checkout/checkout-step-helpers';
 import type {
   DeliveryMethod,
@@ -217,21 +215,8 @@ export function createCheckoutShippingHandlers({
               : AIRPORT_QUOTE_ID
         );
       } else if (method === 'door') {
-        const selectedQuote = shippingQuotes.find(
-          (quote) => String(quote.id) === String(selectedQuoteId)
-        );
-        const roadQuote = shippingQuotes.find(
-          (quote) =>
-            !isProviderStationPickupQuote(quote) && !isGiglGoFasterQuote(quote)
-        );
         setSelectedQuoteId(
-          selectedQuote &&
-            !isProviderStationPickupQuote(selectedQuote) &&
-            !isGiglGoFasterQuote(selectedQuote)
-            ? String(selectedQuote.id)
-            : roadQuote
-              ? String(roadQuote.id)
-              : ''
+          resolveDoorDeliveryQuoteId(shippingQuotes, selectedQuoteId)
         );
       }
       setDeliveryMethod(method);

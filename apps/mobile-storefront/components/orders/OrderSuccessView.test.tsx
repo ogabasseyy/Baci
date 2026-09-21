@@ -19,6 +19,16 @@ jest.mock('@/components/icons/SuccessIcon', () => ({
   SuccessIcon: () => null,
 }));
 
+jest.mock('@/components/ads/AdSlot', () => {
+  const React = jest.requireActual<typeof import('react')>('react');
+  const { View } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    AdSlot: ({ placement }: { placement: string }) =>
+      React.createElement(View, { testID: `ad-slot-${placement}` }),
+  };
+});
+
 jest.mock('@/components/ui/PermissionModal', () => {
   const { Pressable, Text, View } = jest.requireActual(
     'react-native'
@@ -183,5 +193,67 @@ describe('OrderSuccessView', () => {
 
     expect(onPermissionGrant).toHaveBeenCalledTimes(1);
     expect(onPermissionDeny).toHaveBeenCalledTimes(1);
+  });
+
+  it('unmounts the banner while the permission modal is open', () => {
+    // Regression: an obscured ORDER_SUCCESS_BANNER must not load or report
+    // impressions behind the permission modal.
+    const { rerender } = render(
+      <OrderSuccessView {...createProps()} showPermissionModal={false} />
+    );
+    expect(screen.getByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeTruthy();
+
+    rerender(
+      <OrderSuccessView {...createProps()} showPermissionModal={true} />
+    );
+    expect(screen.queryByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeNull();
+  });
+
+  it('unmounts the banner while the native permission prompt is in flight', () => {
+    // Regression: granting the soft ask closes the modal before the native
+    // system prompt resolves; remounting here loads the banner underneath
+    // that prompt where the shopper cannot see or tap it.
+    const { rerender } = render(
+      <OrderSuccessView {...createProps()} isPermissionFlowActive={false} />
+    );
+    expect(screen.getByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeTruthy();
+
+    rerender(
+      <OrderSuccessView
+        {...createProps()}
+        isPermissionFlowActive={true}
+        showPermissionModal={false}
+      />
+    );
+    expect(screen.queryByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeNull();
+  });
+
+  it('unmounts the banner while the receipt preview is active', () => {
+    // Regression: an obscured ORDER_SUCCESS_BANNER must not load or report
+    // impressions behind the full-screen receipt preview.
+    const { rerender } = render(
+      <OrderSuccessView {...createProps()} isReceiptPreviewActive={false} />
+    );
+    expect(screen.getByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeTruthy();
+
+    rerender(
+      <OrderSuccessView {...createProps()} isReceiptPreviewActive={true} />
+    );
+    expect(screen.queryByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeNull();
+  });
+
+  it('unmounts the banner while a fullscreen ad owns the screen', () => {
+    // Regression: the delayed post-order interstitial presents over this
+    // screen, so the banner must not request or refresh while obscured
+    // underneath it.
+    const { rerender } = render(
+      <OrderSuccessView {...createProps()} isFullscreenAdActive={false} />
+    );
+    expect(screen.getByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeTruthy();
+
+    rerender(
+      <OrderSuccessView {...createProps()} isFullscreenAdActive={true} />
+    );
+    expect(screen.queryByTestId('ad-slot-ORDER_SUCCESS_BANNER')).toBeNull();
   });
 });

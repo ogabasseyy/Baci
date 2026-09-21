@@ -9,7 +9,8 @@ import {
 import { fetchQuizLeaderboard } from '@/services/quiz-leaderboard';
 import { fetchQuizParticipantCount } from '@/services/quiz-participant-count';
 import { QuizResultsPanel } from './QuizResultsPanel';
-import { createQuizStyles, type QuizThemeColors } from './QuizScreen.styles';
+import { createQuizStyles } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 jest.mock('./QuizPrizeClaimPanel', () => ({
   QuizPrizeClaimPanel: () => {

@@ -185,7 +185,7 @@ describe('createOrderWithOfflineSupport — offline queue contract', () => {
   });
 
   it('returns the order without queuing when the request succeeds', async () => {
-    const { createOrderWithOfflineSupport } = require('./orders');
+    const { createOrderWithOfflineSupport } = require('./orders-offline');
     mockFetchWithRetry.mockResolvedValueOnce(mockFetchResponse);
 
     const result = await createOrderWithOfflineSupport(baseRequest);
@@ -197,7 +197,7 @@ describe('createOrderWithOfflineSupport — offline queue contract', () => {
   });
 
   it('queues the order when createOrder encounters a NETWORK_ERROR', async () => {
-    const { createOrderWithOfflineSupport } = require('./orders');
+    const { createOrderWithOfflineSupport } = require('./orders-offline');
     const { NetworkError } = require('@/lib/api');
     mockFetchWithRetry.mockRejectedValueOnce(
       new NetworkError('connection refused')
@@ -215,7 +215,7 @@ describe('createOrderWithOfflineSupport — offline queue contract', () => {
   });
 
   it('re-throws TIMEOUT_ERROR without queuing to avoid duplicate orders', async () => {
-    const { createOrderWithOfflineSupport } = require('./orders');
+    const { createOrderWithOfflineSupport } = require('./orders-offline');
     const { TimeoutError } = require('@/lib/api');
     mockFetchWithRetry.mockRejectedValueOnce(new TimeoutError('timed out'));
 

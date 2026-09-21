@@ -5,7 +5,7 @@
 
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Linking } from 'react-native';
+import { Alert, AppState, Linking } from 'react-native';
 import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
 import { isDeferredSettlementMethod } from '@/components/orders/order-success-content';
 import { useGuestInvoicePaidState } from '@/components/orders/use-invoice-paid-state';
@@ -13,9 +13,12 @@ import { useSettlementCompletion } from '@/components/orders/use-settlement-comp
 import { ReceiptPreviewModal } from '@/components/receipts/ReceiptPreviewModal';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import { usePermissionBooster } from '@/hooks/use-permission-booster';
 import { useReceiptPreview } from '@/hooks/use-receipt-preview';
 import { useReceiptDetail } from '@/hooks/use-receipts';
+import { hasOrderSuccessIdentity } from '@/lib/order-success-identity';
+import { maybeShowPostOrderInterstitial } from '@/lib/post-order-interstitial';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { SERVER_CONFIRMED_ORDER_NOTIFICATION_METHODS } from '@/services/payment-status';
 import { scheduleLocalNotification } from '@/services/push-notifications';
@@ -90,6 +93,41 @@ export default function OrderSuccessScreen() {
   const { requestPermission, triggerSystemPrompt, markDenied } =
     usePermissionBooster();
   const [showPermissionModal, setShowPermissionModal] = useState(false);
+  // Mirrors permissionFlowActiveRef for render: the soft-ask modal closing
+  // on grant does NOT end the flow — the native system prompt is still in
+  // flight, and the success banner must stay unmounted underneath it.
+  const [isPermissionFlowActive, setPermissionFlowActive] = useState(false);
+  // While a presented post-order interstitial owns the full screen the
+  // success banner stays unmounted; cleared when the interstitial closes.
+  const [isFullscreenAdActive, setFullscreenAdActive] = useState(false);
+  // Tracks the notification permission flow (soft-ask modal through the
+  // native prompt) independently of render state so the interstitial
+  // cancellation predicate below always sees the current value.
+  const permissionFlowActiveRef = useRef(false);
+  // Same for the receipt preview: a late LOADED event must never present
+  // the interstitial over an explicit document-viewing action.
+  const receiptPreviewActiveRef = useRef(false);
+  // iOS keeps the native receipt sheet rendered through its slide
+  // dismissal, while closePreview clears the open state synchronously.
+  // Hold receipt ownership until the modal reports dismissal so a late
+  // LOADED event cannot present over the departing sheet and the banner
+  // cannot remount underneath it.
+  const [receiptDismissed, setReceiptDismissed] = useState(true);
+  useEffect(() => {
+    if (receiptPreview.isOpen) setReceiptDismissed(false);
+  }, [receiptPreview.isOpen]);
+  useEffect(() => {
+    if (receiptPreview.isOpen || receiptPreview.isLoading || receiptDismissed)
+      return undefined;
+    const fallback = setTimeout(
+      () => setReceiptDismissed(true),
+      MODAL_DISMISS_FALLBACK_MS
+    );
+    return () => clearTimeout(fallback);
+  }, [receiptPreview.isOpen, receiptPreview.isLoading, receiptDismissed]);
+  const isReceiptPreviewActive =
+    receiptPreview.isLoading || receiptPreview.isOpen || !receiptDismissed;
+  receiptPreviewActiveRef.current = isReceiptPreviewActive;
 
   useEffect(() => {
     const isServerConfirmedNotificationMethod =
@@ -120,12 +158,71 @@ export default function OrderSuccessScreen() {
   }, [orderId, orderNumber, paymentMethod]);
 
   useEffect(() => {
+    // Post-purchase interstitial (once per session, skipped while ads are
+    // disabled). Delayed past the success animation like the soft ask below.
+    // Abandoned if the shopper leaves before the ad loads so a late LOADED
+    // event can never present over an unrelated screen — while the
+    // notification permission flow is visible or in progress so the ad can
+    // never cover the soft-ask modal or race the native prompt — and while
+    // the receipt preview is loading or open so it never covers an
+    // explicit document-viewing action.
+    // A deep link or stale route with no success identity schedules
+    // nothing: presenting would burn the once-per-session cap with no
+    // completed order behind it.
+    if (!hasOrderSuccessIdentity({ orderId, orderNumber, reference })) {
+      return;
+    }
+    let interstitialCancelled = false;
+    const interstitialTimerId = setTimeout(() => {
+      void maybeShowPostOrderInterstitial({
+        isCancelled: () =>
+          interstitialCancelled ||
+          permissionFlowActiveRef.current ||
+          receiptPreviewActiveRef.current ||
+          // A backgrounded shopper must never be greeted by the purchase
+          // ad on resume: presenting while inactive surfaces it only when
+          // the activity returns, outside the post-order moment.
+          AppState.currentState !== 'active',
+        onClosed: () => {
+          if (!interstitialCancelled) setFullscreenAdActive(false);
+        },
+        onPresenting: () => {
+          // show() resolves over a native bridge round-trip after
+          // presentation begins; withhold the banner synchronously here
+          // so it cannot request or record an impression underneath the
+          // presenting interstitial.
+          if (!interstitialCancelled) setFullscreenAdActive(true);
+        },
+      }).then((outcome) => {
+        if (interstitialCancelled) return;
+        // A failed presentation never produces CLOSED: release the
+        // synchronously claimed withhold since no dismissal will arrive.
+        setFullscreenAdActive(outcome === 'shown');
+      });
+    }, 2500);
+
+    return () => {
+      interstitialCancelled = true;
+      clearTimeout(interstitialTimerId);
+    };
+  }, [orderId, orderNumber, reference]);
+
+  useEffect(() => {
     // Check for notification permissions (Soft Ask)
-    // Small delay to let the success animation play (better UX)
+    // Small delay to let the success animation play (better UX).
+    // The flag is set before awaiting the permission lookup: on a slow
+    // device the native-module import or status check can still be pending
+    // past the interstitial timer, and the ad must not present just as the
+    // soft ask opens. Terminal non-modal results clear it immediately.
     const timerId = setTimeout(async () => {
+      permissionFlowActiveRef.current = true;
+      setPermissionFlowActive(true);
       const result = await requestPermission('notifications');
       if (result === 'soft-ask-needed') {
         setShowPermissionModal(true);
+      } else {
+        permissionFlowActiveRef.current = false;
+        setPermissionFlowActive(false);
       }
     }, 1500);
 
@@ -137,10 +234,14 @@ export default function OrderSuccessScreen() {
   const handlePermissionGrant = async () => {
     setShowPermissionModal(false);
     await triggerSystemPrompt('notifications');
+    permissionFlowActiveRef.current = false;
+    setPermissionFlowActive(false);
   };
 
   const handlePermissionDeny = () => {
     setShowPermissionModal(false);
+    permissionFlowActiveRef.current = false;
+    setPermissionFlowActive(false);
     markDenied('notifications');
   };
 
@@ -178,6 +279,9 @@ export default function OrderSuccessScreen() {
         orderNumber={orderNumber}
         paymentMethod={paymentMethod}
         reference={reference}
+        isReceiptPreviewActive={isReceiptPreviewActive}
+        isPermissionFlowActive={isPermissionFlowActive}
+        isFullscreenAdActive={isFullscreenAdActive}
         showPermissionModal={showPermissionModal}
       />
       <ReceiptPreviewModal
@@ -186,6 +290,7 @@ export default function OrderSuccessScreen() {
         isPaid={receiptPreview.isPaid}
         documentType={isProformaDocument ? 'proforma' : undefined}
         onClose={receiptPreview.closePreview}
+        onDismissed={() => setReceiptDismissed(true)}
       />
     </>
   );

@@ -1,3 +1,4 @@
+import { compareReceiptListDesc } from '@baci/shared/receipt';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { sanitizePublicOrder } from '@/lib/public-fulfillment-sanitizer';
@@ -101,6 +102,8 @@ export async function GET(request: NextRequest) {
         id,
         order_number,
         created_at,
+        transaction_date,
+        invoice_issue_date,
         total,
         subtotal,
         shipping_fee,
@@ -140,6 +143,7 @@ export async function GET(request: NextRequest) {
       `)
       .eq('customer_id', customer.id)
       .eq('merchant_id', merchant.id)
+      .order('transaction_date', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false });
 
     if (ordersError) {
@@ -172,6 +176,8 @@ export async function GET(request: NextRequest) {
         id: order.id,
         order_number: order.order_number,
         created_at: order.created_at,
+        transaction_date: order.transaction_date,
+        invoice_issue_date: order.invoice_issue_date,
         total: order.total,
         subtotal: order.subtotal,
         shipping_fee: order.shipping_fee,
@@ -232,6 +238,11 @@ export async function GET(request: NextRequest) {
         }),
       };
     });
+
+    // The database pre-sort above cannot express the display-date fallback
+    // (Supabase orders by column), so file backdated invoices by the same
+    // issue → transaction → creation date the receipt list renders.
+    transformedOrders.sort(compareReceiptListDesc);
 
     return NextResponse.json({
       orders: sanitizePublicOrder(transformedOrders),

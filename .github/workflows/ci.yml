@@ -327,6 +327,7 @@ jobs:
           --sql-check supabase/migrations/tests/normalize_nigerian_repair_pickup_receiver_phone.sql
           --sql-check supabase/migrations/tests/repair_pickup_receiver_fulfillment.sql
           --sql-check supabase/migrations/tests/gigl_tracking_orderless_repair_unlink.sql
+          --sql-check supabase/migrations/tests/manual_order_document_date_sync.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

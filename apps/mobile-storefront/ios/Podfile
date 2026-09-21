@@ -74,6 +74,14 @@ target 'Ogabassey' do
           config.build_settings['OTHER_CFLAGS'] << ' -Wno-error -Wno-implicit-int -Wno-strict-prototypes -Wno-implicit-function-declaration'
           config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
         end
+
+        if target.name == 'ExpoModulesCore'
+          # Xcode 26 enforces complete Swift concurrency checking, which turns a
+          # data-race diagnostic in EventEmitter.swift into a build error.
+          # Third-party code that compiled cleanly under earlier toolchains;
+          # restore minimal checking for this pod only.
+          config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
+        end
       end
     end
 

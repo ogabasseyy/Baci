@@ -101,7 +101,15 @@ describe('checkout-shipping.helpers', () => {
       customer: null,
       latitude: 6.5244,
       longitude: 3.3792,
-      items: [createCartItem()],
+      items: [
+        createCartItem(),
+        createCartItem({
+          id: 'cart-2',
+          negotiatedPrice: 800,
+          price: 1000,
+          quantity: 2,
+        }),
+      ],
       quoteContextKey: 'Lagos|Lagos',
       setIsLoadingQuotes,
       setResolvedShippingQuoteContextKey,
@@ -133,6 +141,17 @@ describe('checkout-shipping.helpers', () => {
     const [, requestInit] = fetchMock.mock.calls[0] ?? [];
     const requestBody = JSON.parse(String(requestInit?.body));
     expect(requestBody.merchantId).toBe('merchant-1');
+    expect(requestBody.supports_merchant_rates).toBe(true);
+    expect(requestBody.cart_subtotal).toBe(472000);
+    expect(requestBody.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'iPhone 11 Pro Max',
+          quantity: 2,
+          value: 1000,
+        }),
+      ])
+    );
     expect(requestBody.receiver).toMatchObject({
       latitude: 6.5244,
       longitude: 3.3792,

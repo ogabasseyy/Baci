@@ -1,3 +1,4 @@
+import { normalizeCarrierProviderIds } from '@baci/shared/constants';
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import {
@@ -98,12 +99,6 @@ function asNumber(value: unknown, fallback: number): number {
 
 function asNullableNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function asStringArray(value: unknown, fallback: string[]): string[] {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === 'string')
-    : fallback;
 }
 
 function asNumberArray(value: unknown, fallback: number[]): number[] {
@@ -255,10 +250,9 @@ export async function GET(request: NextRequest) {
         asGateway(settings.preferred_international_gateway, 'korapay'),
         paystackEnabled
       ),
-      shippingProviders: asStringArray(settings.shipping_providers, [
-        'gigl',
-        'topship',
-      ]),
+      shippingProviders: normalizeCarrierProviderIds(
+        settings.shipping_providers
+      ),
       freeShippingThreshold: asNullableNumber(settings.free_shipping_threshold),
       collectPhone: asBoolean(settings.checkout_collect_phone, true),
       requireAccount: asBoolean(settings.checkout_require_account, false),

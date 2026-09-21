@@ -52,11 +52,14 @@ import { MerchantProvider, useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { apiPost } from '@/lib/api-client';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
+import { calculateCartCatalogSubtotal } from '@/lib/checkout/cart-entitlement-sanitizer';
 import { getCountryByCode } from '@/lib/countries';
 import { trackEvent } from '@/lib/event-tracking';
 import { trackServerSideBeginCheckout } from '@/lib/server-side-analytics';
+import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { createClient } from '@/lib/supabase/client';
 import type { ShippingQuote } from '@/types/shipping-quote';
+import { buildCheckoutShippingSelectionPayload } from './checkout-order-shipping-payload';
 import { handoffLegacyCreditDirectSuccess } from './credit-direct-success';
 import { captureLegacyCreditDirectPopup } from './legacy-credit-direct-popup';
 import { openLegacyCreditDirectPopup } from './open-legacy-credit-direct-popup';
@@ -217,18 +220,13 @@ function createCheckoutOrder(
       state: input.data.state,
     },
     source: 'online_store',
-    // B3 (plan §5 B3): the pre-submit `!selectedShippingQuote`
-    // guard bounces to step 1 with a toast, so by the time
-    // we reach this payload construction the quote is guaranteed
-    // non-null. Optional-chaining stays as defensive coding —
-    // React state isn't narrowed across statements by TS, and
-    // the cost of `?.` here is zero. The original `|| 'GIGL'`
-    // silent fallback (the B3 root-cause bug) is gone for good.
-    shipping_provider: input.selectedShippingQuote?.provider ?? null,
-    selected_quote_id: input.selectedShippingQuote?.id ?? null,
-    shipping_session_id: input.shippingSessionId,
-    shipping_carrier: input.selectedShippingQuote?.carrierName,
-    shipping_service_tier: input.selectedShippingQuote?.serviceTier,
+    // The submit guard guarantees a selected quote. Carrier quotes reference
+    // their persisted quote row; merchant rates send their bare configured
+    // rate id and intentionally null the carrier fields.
+    ...buildCheckoutShippingSelectionPayload(
+      input.selectedShippingQuote,
+      input.shippingSessionId
+    ),
     // Only the trusted code string is sent; the route recomputes + validates
     // the amount server-side. No expected_total here (this legacy flow has no
     // VAT-aware total object), so the wrapper's two-sided amount check guards.
@@ -729,6 +727,11 @@ function Step1_Shipping({
   const { merchant } = useMerchant();
   const { cart } = useCart();
 
+  const cartSubtotal = calculateCartCatalogSubtotal(
+    cart,
+    hasStorefrontPriceNegotiation(merchant)
+  );
+
   const country = merchant?.country ? getCountryByCode(merchant.country) : null;
   const isNigerian = country?.code === 'NG' || !country;
 
@@ -934,6 +937,7 @@ function Step1_Shipping({
               quantity: item.quantity,
               price: item.price,
             }))}
+            cartSubtotal={cartSubtotal}
             onSelect={onShippingSelect}
             selectedQuoteId={selectedQuote?.id}
           />

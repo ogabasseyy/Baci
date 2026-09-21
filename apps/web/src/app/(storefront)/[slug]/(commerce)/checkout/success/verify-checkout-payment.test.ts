@@ -94,7 +94,7 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
 
-  it('treats a revisited fully-refunded REDVAULT order as complete', async () => {
+  it('fails a revisited fully-refunded REDVAULT order without clearing the cart', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -110,8 +110,9 @@ describe('verifyCheckoutPayment', () => {
 
     await verifyCheckoutPayment(params, callbacks);
 
-    expect(callbacks.clearCart).toHaveBeenCalledOnce();
-    expect(callbacks.setStatus).toHaveBeenCalledWith('success');
+    expect(callbacks.clearCart).not.toHaveBeenCalled();
+    expect(callbacks.setStatus).toHaveBeenCalledWith('failed');
+    expect(callbacks.scheduleFailedRedirect).toHaveBeenCalledOnce();
     expect(callbacks.setOrderNumber).toHaveBeenCalledWith('ORD-1');
   });
 

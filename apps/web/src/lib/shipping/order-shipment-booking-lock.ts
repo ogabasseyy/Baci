@@ -106,6 +106,24 @@ export async function claimOrderShipmentBooking(
       );
     }
 
+    // Partial refunds leave payment_status paid: the claim rejects while a
+    // merchandise refund is still settling so the booking cannot ship
+    // stale pre-refund units. No lock was acquired, so nothing to release;
+    // 409 signals the caller to retry after settlement.
+    if (
+      typeof error === 'object' &&
+      typeof (error as RpcErrorLike).message === 'string' &&
+      (error as RpcErrorLike).message?.includes(
+        'order_refund_pending_for_shipment'
+      )
+    ) {
+      throw new OrderShipmentBookingError(
+        'A refund for this order is still settling. Please try again shortly.',
+        409,
+        'ORDER_REFUND_PENDING'
+      );
+    }
+
     logger.error({
       message: 'Shipment booking lock claim failed',
       rpcCode: getRpcErrorCode(error),

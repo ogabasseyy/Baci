@@ -86,6 +86,9 @@ export async function verifyCheckoutPayment(
           data?.payment_method === 'uba_redvault' &&
           data.payment_status !== 'paid' &&
           data.shipping_status === 'cancelled';
+        const redvaultTerminalRefunded =
+          data?.payment_method === 'uba_redvault' &&
+          data.payment_status === 'refunded';
         if (
           data?.payment_method === 'uba_redvault' &&
           data.payment_status !== 'paid' &&
@@ -100,6 +103,18 @@ export async function verifyCheckoutPayment(
               orderId.slice(0, 8).toUpperCase()
           );
         } else if (redvaultTerminalCancelled) {
+          setPaymentMethod('uba_redvault');
+          setStatus('failed');
+          scheduleFailedRedirect();
+          setOrderNumber(
+            data.order_number ||
+              data.short_id ||
+              orderId.slice(0, 8).toUpperCase()
+          );
+        } else if (redvaultTerminalRefunded) {
+          // A fully refunded order is terminal non-success: never present
+          // it as a payment success, and never clear the cart the shopper
+          // may have built since.
           setPaymentMethod('uba_redvault');
           setStatus('failed');
           scheduleFailedRedirect();

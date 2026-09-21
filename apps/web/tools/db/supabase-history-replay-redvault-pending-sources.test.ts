@@ -9,7 +9,7 @@ const REPOSITORY_ROOT = path.resolve(__dirname, '../../../..');
 describe('REDVAULT pending replay sources', () => {
   it('pins each REDVAULT migration pending history replay to its checked-in bytes', async () => {
     const rows = REDVAULT_PENDING_REPLAY_SOURCE_ROWS.split('\n');
-    expect(rows).toHaveLength(69);
+    expect(rows).toHaveLength(70);
 
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

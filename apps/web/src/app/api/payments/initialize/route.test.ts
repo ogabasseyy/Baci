@@ -453,6 +453,7 @@ describe('POST /api/payments/initialize', () => {
             merchant_id: MERCHANT_ID,
             payment_method: 'uba_redvault',
             total: 5000,
+            tracking_token: 'track-token-123',
           },
         ],
         error: null,
@@ -529,11 +530,16 @@ describe('POST /api/payments/initialize', () => {
         ...validBody,
         amount: 1,
         payment_method: 'uba_redvault',
+        tracking_token: 'track-token-123',
       });
 
       const first = await POST(request);
       const second = await POST(
-        makeRequest({ ...validBody, payment_method: 'uba_redvault' })
+        makeRequest({
+          ...validBody,
+          payment_method: 'uba_redvault',
+          tracking_token: 'track-token-123',
+        })
       );
 
       expect(first.status).toBe(200);
@@ -578,6 +584,7 @@ describe('POST /api/payments/initialize', () => {
             merchant_id: MERCHANT_ID,
             payment_method: 'uba_redvault',
             total: 5000,
+            tracking_token: 'track-token-123',
             wallet_amount_used: 0,
           },
         ],
@@ -656,7 +663,11 @@ describe('POST /api/payments/initialize', () => {
       });
 
       const res = await POST(
-        makeRequest({ ...validBody, payment_method: 'uba_redvault' })
+        makeRequest({
+          ...validBody,
+          payment_method: 'uba_redvault',
+          tracking_token: 'track-token-123',
+        })
       );
       const json = await res.json();
 
@@ -666,6 +677,37 @@ describe('POST /api/payments/initialize', () => {
         payment_method: 'uba_redvault',
         reference: 'RV-attempt-1',
       });
+    });
+
+    it.each([
+      { case: 'missing', body: {} },
+      { case: 'mismatched', body: { tracking_token: 'wrong-token' } },
+    ])('rejects a guest REDVAULT initialization with a $case tracking token', async ({
+      body,
+    }) => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+      });
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            payment_method: 'uba_redvault',
+            total: 5000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, payment_method: 'uba_redvault', ...body })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(403);
+      expect(json.code).toBe('REDVAULT_TRACKING_TOKEN_INVALID');
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
     });
 
     it('ignores a client-supplied amount and derives the gateway amount from the order', async () => {

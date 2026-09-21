@@ -141,10 +141,23 @@ BEGIN
   IF v_owner <> v_user THEN
     RAISE EXCEPTION 'customer was not attached, got %', v_owner;
   END IF;
+  -- Idempotent success: the owning caller re-attaching (a retry after the
+  -- first attach succeeded) still gets true, so clients never restore the
+  -- guest context on a checkout they own; single-claim holds because a
+  -- different caller gets false.
+  SELECT public.attach_redvault_guest_application_to_customer(v_order_guest, 'track-r15-guest') INTO v_attached;
+  IF v_attached IS NOT TRUE THEN
+    RAISE EXCEPTION 'owning caller re-attach was not idempotent';
+  END IF;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object(
+    'role', 'authenticated', 'sub', '33333333-0000-4000-8000-0000000000a1',
+    'email', v_guest_email)::text, true);
   SELECT public.attach_redvault_guest_application_to_customer(v_order_guest, 'track-r15-guest') INTO v_attached;
   IF v_attached IS NOT FALSE THEN
     RAISE EXCEPTION 'attach was not single-claim';
   END IF;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object(
+    'role', 'authenticated', 'sub', v_user::text, 'email', v_guest_email)::text, true);
   BEGIN
     PERFORM public.attach_redvault_guest_application_to_customer(v_order_plain, 'track-r15-plain');
     RAISE EXCEPTION 'non-REDVAULT attach unexpectedly succeeded';

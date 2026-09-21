@@ -73,6 +73,24 @@ it('completes account sync before navigating to the gateway', async () => {
   }
 });
 
+it('sends the order tracking token as guest initialization proof', async () => {
+  jest.clearAllMocks();
+  const { originalFetch, fetchMock } = mockSuccessfulInitialize();
+  try {
+    await initializeRedvaultCheckoutById({
+      orderId: 'order-rv',
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada',
+      customerPhone: '08012345678',
+      trackingToken: 'track-rv',
+    });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.tracking_token).toBe('track-rv');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 it('runs the review success callback before navigating on the fresh path', async () => {
   jest.clearAllMocks();
   const { originalFetch } = mockSuccessfulInitialize();

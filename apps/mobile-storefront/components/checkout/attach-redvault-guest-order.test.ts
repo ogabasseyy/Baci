@@ -52,7 +52,7 @@ describe('attachRedvaultGuestOrderAfterSignup', () => {
 
   it('attaches the guest order under the new session', async () => {
     mockGetSession.mockResolvedValue({ data: { session: { user: {} } } });
-    mockRpc.mockResolvedValue({ error: null });
+    mockRpc.mockResolvedValue({ data: true, error: null });
 
     await attachRedvaultGuestOrderAfterSignup({
       orderId: 'order-rv',
@@ -65,6 +65,22 @@ describe('attachRedvaultGuestOrderAfterSignup', () => {
     );
     expect(mockSignOut).not.toHaveBeenCalled();
     expect(mockAlert).not.toHaveBeenCalled();
+  });
+
+  it('signs back out when the attach reports not-attached without an error', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: { user: {} } } });
+    mockRpc.mockResolvedValue({ data: false, error: null });
+
+    await attachRedvaultGuestOrderAfterSignup({
+      orderId: 'order-rv',
+      trackingToken: 'track-rv',
+    });
+
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    expect(mockAlert).toHaveBeenCalledWith(
+      'Account sync failed',
+      expect.any(String)
+    );
   });
 
   it('signs back out to restore the guest context when the attach fails', async () => {

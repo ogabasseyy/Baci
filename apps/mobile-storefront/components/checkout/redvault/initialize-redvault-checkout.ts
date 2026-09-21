@@ -63,6 +63,9 @@ export async function initializeRedvaultCheckoutById({
         customer_phone: customerPhone,
         payment_method: 'uba_redvault',
         gateway: 'paystack',
+        // Order-bound proof the guest lane requires; a missing token
+        // fails closed server-side as a definitive rejection.
+        ...(trackingToken ? { tracking_token: trackingToken } : {}),
       }),
     }
   );

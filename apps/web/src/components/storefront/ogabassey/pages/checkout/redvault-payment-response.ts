@@ -9,6 +9,9 @@ type RedvaultInitializationInput = {
   customerEmail: string;
   customerName: string;
   customerPhone: string;
+  // Order-bound proof the guest lane requires; legacy fences without a
+  // persisted token fail closed server-side.
+  trackingToken?: string;
   billingAddress: {
     line1: string;
     city: string;
@@ -38,6 +41,7 @@ export async function initializeRedvaultPayment(
       customer_phone: input.customerPhone,
       gateway: 'paystack',
       payment_method: 'uba_redvault',
+      ...(input.trackingToken ? { tracking_token: input.trackingToken } : {}),
       billing_address: input.billingAddress,
     }),
   });

@@ -2193,14 +2193,16 @@ export const CheckoutPage: React.FC = () => {
         // to prove with, so skip the attach and let initialization run
         // under the guest identity instead of failing the payment.
         if (session && activeRedvaultOrder.trackingToken) {
-          const { error: attachError } = await supabase.rpc(
+          const { data: attached, error: attachError } = await supabase.rpc(
             'attach_redvault_guest_application_to_customer',
             {
               p_order_id: activeRedvaultOrder.orderId,
               p_tracking_token: activeRedvaultOrder.trackingToken,
             }
           );
-          if (attachError) {
+          // The RPC is idempotent for the owning caller, so false means
+          // the checkout is genuinely not ours: block like an error.
+          if (attachError || attached !== true) {
             console.error('Guest checkout attach error:', attachError);
             setRedvaultStatus('error');
             setIsProcessing(false);
@@ -2218,6 +2220,7 @@ export const CheckoutPage: React.FC = () => {
           customerEmail: activeRedvaultOrder.customerEmail,
           customerName: activeRedvaultOrder.customerName,
           customerPhone: activeRedvaultOrder.customerPhone,
+          trackingToken: activeRedvaultOrder.trackingToken,
           billingAddress: activeRedvaultOrder.billingAddress,
         });
       } catch {
@@ -2365,6 +2368,7 @@ export const CheckoutPage: React.FC = () => {
             replayResult = await initializeRedvaultPayment({
               merchantId: merchant.id,
               orderId: stale.orderId,
+              trackingToken: stale.trackingToken,
               // REDVAULT rails are NGN-only (attempt CHECK + paystack
               // gateway); the stamped order currency is authoritative
               // server-side, so NGN is the only sendable value that can
@@ -2772,6 +2776,7 @@ export const CheckoutPage: React.FC = () => {
           customerEmail,
           customerName: `${firstName} ${lastName}`.trim(),
           customerPhone,
+          trackingToken: order.tracking_token,
           billingAddress,
         }).catch((error: unknown) => {
           setRedvaultStatus('error');

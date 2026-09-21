@@ -106,6 +106,37 @@ describe('REDVAULT checkout response handling', () => {
     );
   });
 
+  it('sends the order tracking token as guest initialization proof when present', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json({ authorization_url: 'https://paystack.test/checkout' })
+      );
+
+    await initializeRedvaultPayment(
+      { ...input, trackingToken: 'track-1' },
+      request
+    );
+    expect(request).toHaveBeenCalledWith(
+      '/api/payments/initialize',
+      expect.objectContaining({
+        body: expect.stringContaining('"tracking_token":"track-1"'),
+      })
+    );
+  });
+
+  it('omits the tracking token field when the fence has none', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json({ authorization_url: 'https://paystack.test/checkout' })
+      );
+
+    await initializeRedvaultPayment(input, request);
+    const body = request.mock.calls[0][1]?.body as string;
+    expect(body).not.toContain('tracking_token');
+  });
+
   it('keeps reconciliation-required initialization pending instead of claiming a received payment', async () => {
     const request = vi
       .fn()

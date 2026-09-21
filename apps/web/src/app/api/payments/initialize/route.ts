@@ -139,6 +139,8 @@ const PaymentInitRequestSchema = z.object({
   crypto_chain: z.enum(['TRX', 'ETH', 'MATIC', 'AVAXC']).optional(),
   crypto_currency: z.enum(['USDT', 'USDC']).optional(),
   payment_method: z.literal('uba_redvault').optional(),
+  // Order-bound proof for guest REDVAULT initialization (below).
+  tracking_token: z.string().min(1).max(128).optional(),
 });
 
 type PaymentInitRequest = z.infer<typeof PaymentInitRequestSchema>;
@@ -1118,6 +1120,28 @@ export async function POST(request: NextRequest) {
         'REDVAULT_PAYMENT_METHOD_REQUIRED',
         409
       );
+    }
+    // Guest REDVAULT lane: the scoped context above binds guest applications
+    // by email alone, so anyone with the order UUID and checkout email could
+    // initialize someone else's hosted checkout and permanently fence its
+    // inventory. Require the persisted tracking token — the same
+    // order-bound proof the cancellation and attachment paths demand —
+    // before the minted context is used for any REDVAULT write (only the
+    // email-gated snapshot read ran so far, which reveals nothing new).
+    // Authenticated callers are already bound by user id downstream, so
+    // only the guest lane gates here. Missing and mismatched share one
+    // code to avoid a token oracle.
+    if (orderRequiresRedvault && !redvaultCustomerAuth?.user) {
+      if (
+        !data.tracking_token ||
+        data.tracking_token !== orderSnapshot.tracking_token
+      ) {
+        return createErrorResponse(
+          'Order ownership proof is required to initialize UBA payment',
+          'REDVAULT_TRACKING_TOKEN_INVALID',
+          403
+        );
+      }
     }
     if (redvaultRequested && !orderRequiresRedvault) {
       return createErrorResponse(

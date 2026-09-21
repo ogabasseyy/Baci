@@ -30,11 +30,15 @@ export async function attachRedvaultGuestOrderAfterSignup({
       data: { session },
     } = await supabase.auth.getSession();
     if (!session || !trackingToken) return;
-    const { error } = await supabase.rpc(
+    const { data, error } = await supabase.rpc(
       'attach_redvault_guest_application_to_customer',
       { p_order_id: orderId, p_tracking_token: trackingToken }
     );
+    // The RPC is idempotent for the owning caller, so false means the
+    // checkout is genuinely not ours (concurrent ownership or state
+    // change): recover instead of navigating under a foreign identity.
     if (error) throw error;
+    if (data !== true) throw new Error('Guest REDVAULT order was not attached');
   } catch (attachError) {
     trackError(
       'redvault_guest_attach',

@@ -105,6 +105,7 @@ async function main() {
     images: unknown;
     condition?: string | null;
     has_condition_offers?: boolean | null;
+    variant_model?: string | null;
   }[] = [];
   let offset = 0;
   let hasMore = true;
@@ -112,7 +113,7 @@ async function main() {
   while (hasMore) {
     const { data, error: productsError } = await supabase
       .from('products')
-      .select('id, images, condition, has_condition_offers')
+      .select('id, images, condition, has_condition_offers, variant_model')
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .range(offset, offset + PAGE_SIZE - 1);

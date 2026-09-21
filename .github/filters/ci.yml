@@ -120,6 +120,7 @@ cwv_runner:
   - '.github/workflows/deploy.yml'
   - '.github/actionlint.yaml'
 deploy_scripts:
+  - 'scripts/**'
   - '.github/filters/ci.yml'
   - '.github/filters/deploy.yml'
   - '.github/workflows/ci.yml'
@@ -153,6 +154,7 @@ deploy_scripts:
 # Root Next config changes affect the web app even when apps/web/** is untouched.
 web:
   - 'apps/web/**'
+  - 'scripts/backfill-feed-images.ts'
   - 'apps/cloudflare-evidence-qualification-worker/**'
   - 'apps/mobile-storefront/assets/quiz/**'
   - 'apps/mobile-storefront/app/**'

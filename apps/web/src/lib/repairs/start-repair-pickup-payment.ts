@@ -38,7 +38,7 @@ export async function startRepairPickupPayment({
   merchantId,
   merchantIdentifier,
   resumeToken,
-  onPaymentInitializationStarted,
+  onPaymentInitializationCheckpoint,
 }: StartRepairPickupPaymentInput): Promise<StartRepairPickupPaymentResult> {
   const allowed = await ensureActionRateLimit('repair-pickup-payment', {
     requests: 5,
@@ -268,6 +268,6 @@ export async function startRepairPickupPayment({
       ticketNumber: repair.ticketNumber,
       resumeToken: nextResumeToken,
     },
-    onPaymentInitializationStarted
+    onPaymentInitializationCheckpoint
   );
 }

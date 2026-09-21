@@ -55,15 +55,31 @@ export async function startMobileRepairPickupPayment(
     throw new Error(
       'Pickup payment claim changed. Retry the same request shortly.'
     );
+  async function complete(result: unknown, attempts = 3) {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        return await receipt(result);
+      } catch (error) {
+        lastError = error;
+        if (attempt + 1 < attempts)
+          await new Promise((resolve) =>
+            setTimeout(resolve, 100 * (attempt + 1))
+          );
+      }
+    }
+    throw lastError;
+  }
   const result = await startRepairPickupPayment({
     ...paymentInput,
-    onPaymentInitializationStarted: async (checkpoint) => {
+    onPaymentInitializationCheckpoint: async (checkpoint) => {
       const saved = await receipt(checkpoint);
-      if (saved.state !== 'unknown')
+      const expected = checkpoint.success ? 'complete' : 'unknown';
+      if (saved.state !== expected)
         throw new Error('Could not preserve payment recovery.');
     },
   });
-  const completed = await receipt(result);
+  const completed = await complete(result);
   if (completed.state !== 'complete' && completed.state !== 'unknown')
     throw new Error('Pickup payment recovery is pending. Retry shortly.');
   return completed.result;

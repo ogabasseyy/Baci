@@ -53,8 +53,8 @@ describe('mobile pickup payment receipt', () => {
       .mockResolvedValueOnce({ data: { state: 'unknown', result: unknown } })
       .mockResolvedValueOnce({ data: { state: 'unknown', result: unknown } });
     mocks.start.mockImplementationOnce(
-      async ({ onPaymentInitializationStarted }) => {
-        await onPaymentInitializationStarted(unknown);
+      async ({ onPaymentInitializationCheckpoint }) => {
+        await onPaymentInitializationCheckpoint(unknown);
         throw new Error('process lost');
       }
     );

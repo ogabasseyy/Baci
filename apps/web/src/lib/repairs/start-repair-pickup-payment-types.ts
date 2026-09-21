@@ -29,7 +29,7 @@ export interface StartRepairPickupPaymentInput {
   merchantId: string;
   merchantIdentifier: string;
   resumeToken?: string | null;
-  onPaymentInitializationStarted?: (
+  onPaymentInitializationCheckpoint?: (
     result: StartRepairPickupPaymentResult
   ) => Promise<void>;
 }

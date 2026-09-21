@@ -53,3 +53,63 @@ it('returns the initialized checkout after a successful response', async () => {
     payment: { amount: 3000 },
   });
 });
+it('persists the provider success before returning so a lost final write replays the receipt', async () => {
+  const checkpoint = vi.fn().mockResolvedValue(undefined);
+  initialize.mockResolvedValue({
+    authorization_url: 'https://checkout.paystack.com/test',
+    reference: 'RPU-123',
+  });
+  const result = await initializeRepairPickupPayment(
+    payload,
+    repair,
+    checkpoint
+  );
+  expect(result).toMatchObject({ success: true });
+  expect(checkpoint).toHaveBeenCalledTimes(2);
+  expect(checkpoint).toHaveBeenNthCalledWith(
+    1,
+    expect.objectContaining({
+      success: false,
+      code: 'payment_initialization_unknown',
+    })
+  );
+  expect(checkpoint).toHaveBeenNthCalledWith(
+    2,
+    expect.objectContaining({
+      success: true,
+      payment: expect.objectContaining({
+        authorizationUrl: 'https://checkout.paystack.com/test',
+      }),
+    })
+  );
+});
+it('still returns the in-memory success when the success checkpoint write fails', async () => {
+  const checkpoint = vi
+    .fn()
+    .mockResolvedValueOnce(undefined)
+    .mockRejectedValueOnce(new Error('transient'));
+  initialize.mockResolvedValue({
+    authorization_url: 'https://checkout.paystack.com/test',
+    reference: 'RPU-123',
+  });
+  const result = await initializeRepairPickupPayment(
+    payload,
+    repair,
+    checkpoint
+  );
+  expect(result).toMatchObject({
+    success: true,
+    payment: { authorizationUrl: 'https://checkout.paystack.com/test' },
+  });
+});
+it('keeps the web failure contract for callers without a checkpoint', async () => {
+  initialize.mockRejectedValue(new Error('provider down'));
+  const result = await initializeRepairPickupPayment(payload, repair);
+  expect(result).toEqual({
+    success: false,
+    code: 'payment_initialization_failed',
+    error:
+      'Your repair request was saved, but payment could not start. Use your ticket to retry shortly.',
+    ...repair,
+  });
+});

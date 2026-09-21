@@ -29,12 +29,25 @@ export async function reconcileMobileRepairPickupPayment(
     )
       return result;
     // The authenticated webhook owns fulfillment; verification never creates a new charge.
+    if (payment.status === 'success')
+      return {
+        ...result,
+        error:
+          'Payment received. Check this repair ticket for pickup confirmation.',
+      };
+    if (payment.status === 'failed' || payment.status === 'abandoned')
+      // A terminal provider outcome retires the unknown attempt: no charge can
+      // still land, so the customer may safely start another payment.
+      return {
+        ...result,
+        code: 'payment_initialization_failed',
+        error:
+          'The previous payment attempt did not complete. Start a new payment to continue.',
+      };
     return {
       ...result,
       error:
-        payment.status === 'success'
-          ? 'Payment received. Check this repair ticket for pickup confirmation.'
-          : 'The original payment is not confirmed. Keep this ticket and contact the store for payment recovery.',
+        'The original payment is not confirmed. Keep this ticket and contact the store for payment recovery.',
     };
   } catch {
     return result;

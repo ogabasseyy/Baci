@@ -8,7 +8,7 @@ import type {
 export async function initializeRepairPickupPayment(
   payload: Parameters<typeof initializeTransaction>[0],
   repair: { id: string; ticketNumber: number; resumeToken: string },
-  checkpoint?: StartRepairPickupPaymentInput['onPaymentInitializationStarted']
+  checkpoint?: StartRepairPickupPaymentInput['onPaymentInitializationCheckpoint']
 ): Promise<StartRepairPickupPaymentResult> {
   const unknown: StartRepairPickupPaymentResult = {
     success: false,
@@ -22,18 +22,44 @@ export async function initializeRepairPickupPayment(
   };
   // Persist the bound reference before the provider can accept the request.
   await checkpoint?.(unknown);
+  let payment: Awaited<ReturnType<typeof initializeTransaction>>;
   try {
-    const payment = await initializeTransaction(payload);
-    return {
-      success: true,
-      ...repair,
-      payment: {
-        amount: payload.amount / 100,
-        authorizationUrl: payment.authorization_url,
-        reference: payment.reference,
-      },
-    };
-  } catch {
+    payment = await initializeTransaction(payload);
+  } catch (error) {
+    console.error('Repair pickup payment initialization failed:', error);
+    if (!checkpoint) {
+      // Callers without a receipt-backed reconciliation path keep the failure
+      // contract the web wizard recovers from.
+      return {
+        success: false,
+        code: 'payment_initialization_failed',
+        error:
+          'Your repair request was saved, but payment could not start. Use your ticket to retry shortly.',
+        ...repair,
+      };
+    }
     return unknown;
   }
+  const succeeded: StartRepairPickupPaymentResult = {
+    success: true,
+    ...repair,
+    payment: {
+      amount: payload.amount / 100,
+      authorizationUrl: payment.authorization_url,
+      reference: payment.reference,
+    },
+  };
+  // Persist the provider success before returning: a lost final write must
+  // replay this receipt instead of stranding the customer on unknown. A failed
+  // checkpoint still returns the in-memory success so the caller's completion
+  // write can persist it.
+  try {
+    await checkpoint?.(succeeded);
+  } catch (checkpointError) {
+    console.error(
+      'Repair pickup payment success checkpoint failed; the completion write will persist it:',
+      checkpointError
+    );
+  }
+  return succeeded;
 }

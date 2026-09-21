@@ -23,9 +23,12 @@ import { AdUnit } from '@/components/storefront/ogabassey/components/AdUnit';
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { fetchWithCsrf } from '@/lib/api-client';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { asRoute } from '@/lib/routes';
+import {
+  type CheckoutVerificationStatus,
+  verifyCheckoutPayment,
+} from './verify-checkout-payment';
 
 /**
  * 2025 Best Practice: Order Confirmation Page
@@ -36,33 +39,6 @@ import { asRoute } from '@/lib/routes';
  * - Micro-animations for engagement
  */
 
-type VerificationResponse = {
-  orderNumber?: string;
-  status?: 'success' | 'pending' | 'failed' | 'cancelled';
-  success?: boolean;
-};
-
-function isVerificationResponse(value: unknown): value is VerificationResponse {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  const hasValidStatus =
-    candidate.status === undefined ||
-    candidate.status === 'success' ||
-    candidate.status === 'pending' ||
-    candidate.status === 'failed' ||
-    candidate.status === 'cancelled';
-  const hasValidOrderNumber =
-    candidate.orderNumber === undefined ||
-    typeof candidate.orderNumber === 'string';
-  const hasValidSuccess =
-    candidate.success === undefined || typeof candidate.success === 'boolean';
-
-  return hasValidStatus && hasValidOrderNumber && hasValidSuccess;
-}
-
 const orderSteps = [
   { id: 'received', label: 'Order Received', icon: CheckCircle2 },
   { id: 'processing', label: 'Processing', icon: Package },
@@ -70,123 +46,29 @@ const orderSteps = [
   { id: 'delivered', label: 'Delivered', icon: MapPin },
 ];
 
-type CheckoutVerificationStatus = 'success' | 'pending' | 'failed';
-
-interface VerifyCheckoutPaymentParams {
-  merchantSlug: string | undefined;
-  orderId: string | null;
-  reference: string | null;
-  trackingToken: string | null;
-}
-
-interface VerifyCheckoutPaymentHandlers {
-  clearCart: () => void;
-  redirectToCheckout: () => void;
-  scheduleFailedRedirect: () => void;
-  setIsVerifying: (isVerifying: boolean) => void;
-  setOrderNumber: (orderNumber: string | null) => void;
-  setPaymentMethod: (paymentMethod: string | null) => void;
-  setStatus: (status: CheckoutVerificationStatus) => void;
-}
-
-/**
- * Runs payment/order verification and maps every outcome onto the page state
- * via the supplied handlers. Module-scope so the try/finally blocks stay
- * outside the component body (React Compiler cannot lower try/finally yet).
- */
-async function verifyCheckoutPayment(
-  {
-    merchantSlug,
-    orderId,
-    reference,
-    trackingToken,
-  }: VerifyCheckoutPaymentParams,
-  {
-    clearCart,
-    redirectToCheckout,
-    scheduleFailedRedirect,
-    setIsVerifying,
-    setOrderNumber,
-    setPaymentMethod,
-    setStatus,
-  }: VerifyCheckoutPaymentHandlers
-): Promise<void> {
-  if (!reference) {
-    if (orderId) {
-      setIsVerifying(true);
-      try {
-        const query = new URLSearchParams();
-        if (merchantSlug) query.set('merchant_slug', merchantSlug);
-        if (trackingToken) query.set('tracking_token', trackingToken);
-        const queryString = query.toString();
-        const url = `/api/storefront/orders/${encodeURIComponent(orderId)}${
-          queryString ? `?${queryString}` : ''
-        }`;
-        const response = await fetch(url);
-        const data = response.ok ? await response.json() : null;
-        if (data && (data.order_number || data.short_id)) {
-          clearCart();
-          setStatus('success');
-          setOrderNumber(data.order_number || data.short_id);
-          if (data.payment_method) {
-            setPaymentMethod(data.payment_method);
-          }
-        } else {
-          // Fallback if API lookup fails
-          clearCart();
-          setStatus('success');
-          setOrderNumber(orderId.slice(0, 8).toUpperCase());
-        }
-      } catch (error) {
-        console.error('Failed to fetch order details on success page:', error);
-        clearCart();
-        setStatus('success');
-        setOrderNumber(orderId.slice(0, 8).toUpperCase());
-      } finally {
-        setIsVerifying(false);
-      }
-      return;
-    }
-
-    redirectToCheckout();
-    return;
+function hasMatchingPendingRedvaultOrder(orderId: string | null): boolean {
+  if (!orderId || typeof window === 'undefined') {
+    return false;
   }
 
-  setIsVerifying(true);
-
   try {
-    const response = await fetchWithCsrf('/api/payments/verify', {
-      body: JSON.stringify({ reference }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    });
-    const raw: unknown = await response.json();
-    const data = isVerificationResponse(raw) ? raw : {};
-
-    if (data.status === 'pending') {
-      setStatus('pending');
-      setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
-    } else if (!response.ok) {
-      console.error('Payment verification failed:', data);
-      setStatus('failed');
-      scheduleFailedRedirect();
-    } else if (data.success && data.status === 'success') {
-      clearCart();
-      setStatus('success');
-      setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
-    } else if (data.status === 'failed' || data.status === 'cancelled') {
-      setStatus('failed');
-      scheduleFailedRedirect();
-    } else {
-      setStatus('pending');
-      setOrderNumber(reference.slice(0, 8).toUpperCase());
+    const raw = sessionStorage.getItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY);
+    if (!raw) {
+      return false;
     }
-  } catch (error) {
-    console.error('Failed to verify payment:', error);
-    setStatus('pending');
-    setOrderNumber(reference.slice(0, 8).toUpperCase());
-  } finally {
-    setIsVerifying(false);
+    const pendingOrder: unknown = JSON.parse(raw);
+    if (!pendingOrder || typeof pendingOrder !== 'object') {
+      return false;
+    }
+    const snapshot = pendingOrder as {
+      orderId?: unknown;
+      paymentMethod?: unknown;
+    };
+    return (
+      snapshot.orderId === orderId && snapshot.paymentMethod === 'uba_redvault'
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -244,6 +126,7 @@ function CheckoutSuccessContent() {
       {
         merchantSlug: merchantContext?.merchant?.slug,
         orderId,
+        pendingRedvaultOrder: hasMatchingPendingRedvaultOrder(orderId),
         reference,
         trackingToken,
       },

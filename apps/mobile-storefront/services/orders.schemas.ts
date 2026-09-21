@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  type RedvaultCheckout,
+  RedvaultCheckoutSchema,
+} from '@/schemas/redvault-checkout';
 
 const MAX_SAVINGS_CREDIT_AMOUNT = 10_000_000;
 
@@ -77,6 +81,23 @@ const createOrderRequestSchemaBase = z.object({
 export const CreateOrderRequestSchema =
   createOrderRequestSchemaBase.superRefine((data, ctx) => {
     if (
+      data.payment_method === 'uba_redvault' &&
+      (data.discount_code ||
+        (data.discount_amount ?? 0) > 0 ||
+        data.use_wallet_credit ||
+        (data.wallet_amount ?? 0) > 0 ||
+        data.use_savings_credit ||
+        (data.savings_amount ?? 0) > 0 ||
+        data.items.some((item) => item.voucher_token))
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'UBA payment cannot be combined with other discounts or store credit',
+        path: ['payment_method'],
+      });
+    }
+    if (
       data.delivery_method === 'airport' &&
       !data.selected_quote_id &&
       data.airport_type === undefined
@@ -97,7 +118,7 @@ export const CreateOrderRequestSchema =
     }
   });
 
-export const OrderResponseSchema = z.object({
+const OrdinaryOrderResponseSchema = z.object({
   order: z.object({
     id: z.string(),
     order_number: z.string().nullable(),
@@ -130,6 +151,23 @@ export const OrderResponseSchema = z.object({
     .optional(),
 });
 
+export const OrderResponseSchema = z.union([
+  RedvaultCheckoutSchema.transform((response) => ({
+    ...response,
+    order: {
+      ...response.order,
+      order_number: null,
+      shipping_status: 'pending',
+      created_at: '',
+    },
+    wallet: null,
+    amountDueToGateway: response.order.total,
+  })),
+  OrdinaryOrderResponseSchema.extend({ redvault: z.never().optional() }),
+]);
+
 export type CreateOrderRequest = z.infer<typeof CreateOrderRequestSchema>;
-export type OrderResponse = z.infer<typeof OrderResponseSchema>;
+export type OrderResponse = z.infer<typeof OrdinaryOrderResponseSchema> & {
+  redvault?: RedvaultCheckout['redvault'];
+};
 export type OrderItem = z.infer<typeof OrderItemSchema>;

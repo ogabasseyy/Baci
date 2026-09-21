@@ -63,7 +63,10 @@ export function buildSupabase(
         ]),
     error: options.outboxError ?? null,
   });
-  const eq = vi.fn().mockReturnValue({ limit, single });
+  const maybeSingle = vi
+    .fn()
+    .mockResolvedValue({ data: { payment_method: 'paystack' }, error: null });
+  const eq = vi.fn().mockReturnValue({ limit, maybeSingle, single });
   const select = vi.fn().mockReturnValue({ eq });
   const deleteChain: Record<string, unknown> = { error: null };
   deleteChain.eq = vi.fn(() => deleteChain);

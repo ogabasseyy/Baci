@@ -123,6 +123,55 @@ jest.mock('./checkout-submit-validation', () => ({
   ) => mockValidateCheckoutSubmission(input),
 }));
 
+const mockResolvePersistedRedvaultOrder = jest.fn(
+  async (
+    _input: unknown
+  ): Promise<{
+    blocked: boolean;
+    orderId?: string;
+    paidOrderId?: string;
+  }> => ({
+    blocked: false,
+  })
+);
+const mockReadPersistedRedvaultOrder = jest.fn<
+  () => Promise<
+    import('@/lib/pending-redvault-order').PersistedRedvaultOrder | null
+  >
+>(async () => null);
+const mockClearPersistedRedvaultOrder = jest.fn(async () => undefined);
+
+jest.mock('@/lib/pending-redvault-order', () => ({
+  resolvePersistedRedvaultOrder: (input: unknown) =>
+    mockResolvePersistedRedvaultOrder(input),
+  readPersistedRedvaultOrder: () => mockReadPersistedRedvaultOrder(),
+  clearPersistedRedvaultOrder: () => mockClearPersistedRedvaultOrder(),
+}));
+
+const mockRouterReplace = jest.fn<(href: unknown) => void>();
+const mockRouterPush = jest.fn<(href: unknown) => void>();
+
+jest.mock('expo-router', () => ({
+  router: {
+    replace: (href: unknown) => mockRouterReplace(href),
+    push: (href: unknown) => mockRouterPush(href),
+  },
+}));
+
+const mockFenceFetchJson = jest.fn(async () => ({
+  order: {
+    id: 'order-rv',
+    payment_status: 'unpaid',
+    shipping_status: 'pending',
+  },
+}));
+
+jest.mock('@/lib/storefront-customer-api-client', () => ({
+  createStorefrontCustomerApiClient: () => ({
+    fetchJson: () => mockFenceFetchJson(),
+  }),
+}));
+
 const mockedUseCartStore = (
   jest.requireMock('@/stores/cart-store') as {
     useCartStore: jest.Mock & {
@@ -231,6 +280,139 @@ describe('useCheckoutSubmit', () => {
     jest.spyOn(Alert, 'alert').mockImplementation(() => {
       // Suppress native alerts in tests.
     });
+  });
+
+  it('does not create a REDVAULT order without a review callback', async () => {
+    const params = createParams({
+      onRedvaultOrder: undefined,
+      selectedPayment: 'uba_redvault',
+    });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Unable to continue',
+      expect.stringMatching(/review is unavailable/i)
+    );
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+    expect(params.isOrderInFlight.current).toBe(false);
+  });
+
+  it('blocks a non-REDVAULT submit while a persisted REDVAULT fence is unresolved', async () => {
+    mockReadPersistedRedvaultOrder.mockResolvedValueOnce({
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-0',
+      createdAt: '2026-09-20T00:00:00.000Z',
+    });
+    mockResolvePersistedRedvaultOrder.mockResolvedValueOnce({
+      blocked: true,
+      orderId: 'order-rv',
+    });
+    const params = createParams({ selectedPayment: 'paystack' });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockResolvePersistedRedvaultOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ validateOrder: expect.any(Function) })
+    );
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Payment still processing',
+      expect.stringMatching(/still being verified/i)
+    );
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+    expect(params.isOrderInFlight.current).toBe(false);
+  });
+
+  it('resolves the fence for REDVAULT submits and recreates once terminal', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    mockReadPersistedRedvaultOrder.mockResolvedValueOnce({
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-0',
+      createdAt: '2026-09-20T00:00:00.000Z',
+    });
+    mockResolvePersistedRedvaultOrder.mockResolvedValueOnce({
+      blocked: false,
+    });
+    const params = createParams({
+      onRedvaultOrder: jest.fn(),
+      selectedPayment: 'uba_redvault',
+    });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockResolvePersistedRedvaultOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ validateOrder: expect.any(Function) })
+    );
+    expect(mockCreateOrder).toHaveBeenCalled();
+  });
+
+  it('routes a REDVAULT resubmit to the paid fence instead of recreating', async () => {
+    mockReadPersistedRedvaultOrder.mockResolvedValueOnce({
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-0',
+      createdAt: '2026-09-20T00:00:00.000Z',
+    });
+    mockResolvePersistedRedvaultOrder.mockResolvedValueOnce({
+      blocked: false,
+      paidOrderId: 'order-rv',
+    });
+    const params = createParams({
+      onRedvaultOrder: jest.fn(),
+      selectedPayment: 'uba_redvault',
+    });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+    expect(params.clearCart).toHaveBeenCalledTimes(1);
+    expect(mockRouterReplace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pathname: '/order-success',
+        params: expect.objectContaining({ orderId: 'order-rv' }),
+      })
+    );
+  });
+
+  it('routes a non-REDVAULT submit to the paid fence instead of recreating', async () => {
+    mockReadPersistedRedvaultOrder.mockResolvedValueOnce({
+      orderId: 'order-rv',
+      checkoutGeneration: 'gen-0',
+      createdAt: '2026-09-20T00:00:00.000Z',
+    });
+    mockResolvePersistedRedvaultOrder.mockResolvedValueOnce({
+      blocked: false,
+      paidOrderId: 'order-rv',
+    });
+    const params = createParams({ selectedPayment: 'paystack' });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+    expect(params.clearCart).toHaveBeenCalledTimes(1);
+    expect(mockRouterReplace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pathname: '/order-success',
+        params: expect.objectContaining({ orderId: 'order-rv' }),
+      })
+    );
   });
 
   afterEach(() => {
@@ -417,6 +599,54 @@ describe('useCheckoutSubmit', () => {
       await firstSubmit;
     });
 
+    expect(params.isOrderInFlight.current).toBe(false);
+  });
+
+  it('engages the in-flight lock before fence resolution to block double taps', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    let resolvePersistedRead: (value: null) => void = () => undefined;
+    mockReadPersistedRedvaultOrder.mockImplementationOnce(
+      () =>
+        new Promise<null>((resolve) => {
+          resolvePersistedRead = resolve;
+        })
+    );
+    const validationInFlightStates: boolean[] = [];
+    mockValidateCheckoutSubmission.mockImplementation(
+      (input: { isOrderInFlight: MutableRefObject<boolean> }) => {
+        validationInFlightStates.push(input.isOrderInFlight.current);
+        return !input.isOrderInFlight.current;
+      }
+    );
+    const params = createParams({ selectedPayment: 'paystack' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    let firstSubmit: Promise<void> | undefined;
+    await act(async () => {
+      firstSubmit = result.current(address);
+      await Promise.resolve();
+    });
+
+    expect(params.isOrderInFlight.current).toBe(true);
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockValidateCheckoutSubmission).toHaveBeenCalledTimes(2);
+    expect(validationInFlightStates).toEqual([false, true]);
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolvePersistedRead(null);
+      await firstSubmit;
+    });
+
+    expect(mockCreateOrder).toHaveBeenCalledTimes(1);
     expect(params.isOrderInFlight.current).toBe(false);
   });
 

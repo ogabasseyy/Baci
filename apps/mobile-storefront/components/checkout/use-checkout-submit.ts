@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 import { useMerchant } from '@/hooks/use-merchant';
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
@@ -8,19 +7,16 @@ import {
   getFullyPaidStoreCreditPaymentMethod,
 } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutStep } from '@/services/analytics';
-import {
-  pickChangedPriceById,
-  repriceCartItems,
-} from '@/services/cart-reprice';
 import { createOrder } from '@/services/orders';
 import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { useCartStore } from '@/stores/cart-store';
+import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
+import { acquireCheckoutSubmitFence } from './acquire-checkout-submit-fence';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
 import {
   buildCheckoutOrderRequest,
   createCheckoutSnapshot,
 } from './checkout-order-builders';
-import { finalizeCheckoutPayment } from './checkout-payment-finalization';
 import { runCheckoutPostOrderSideEffects } from './checkout-post-order-side-effects';
 import {
   blockIfMixedPrizeCart,
@@ -29,13 +25,18 @@ import {
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
+import { runRedvaultSubmitInitializationSideEffects } from './checkout-submit-redvault';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
+import { isBnplPayment } from './is-bnpl-payment';
+import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
+import { runFinalizeCheckoutPayment } from './run-finalize-checkout-payment';
+import { submitRedvaultCheckout } from './submit-redvault-checkout';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 
 export type { UseCheckoutSubmitParams };
-
 export function useCheckoutSubmit({
   accountPassword,
+  onRedvaultOrder,
   appliedDiscountCode,
   availablePaymentMethods,
   clearCart,
@@ -73,22 +74,14 @@ export function useCheckoutSubmit({
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
   return async (address: ShippingAddressInput) => {
     const itemsSnapshot = [...useCartStore.getState().items];
-    const checkoutGenerationSnapshot =
-      useCartStore.getState().checkoutGeneration;
-    const groupNegotiationSnapshot =
-      useCartStore.getState().cartWideNegotiationActive;
-
-    // Checkout-time safety net: never let a prize voucher check out alongside
-    // paid items (the prize redeems on its own order and the cart is cleared).
+    const {
+      checkoutGeneration: checkoutGenerationSnapshot,
+      cartWideNegotiationActive: groupNegotiationSnapshot,
+    } = useCartStore.getState();
     if (blockIfMixedPrizeCart(itemsSnapshot)) {
       return;
     }
-    // A voucher-only cart (₦0 prize) must take the standard order path, which
-    // returns the pre-reserved order already paid and routes to success — never
-    // a BNPL/financing flow (those bypass the fully-paid route and would open a
-    // ₦0 loan while leaving the voucher in the cart).
     const isVoucherOnlyCart = cartHasVoucherLine(itemsSnapshot);
-
     if (
       !validateCheckoutSubmission({
         availablePaymentMethods,
@@ -109,24 +102,35 @@ export function useCheckoutSubmit({
     ) {
       return;
     }
-
-    isOrderInFlight.current = true;
+    // REDVAULT fence preamble (extracted): validates a possibly-stale
+    // fenced order before any new order is created below. The acquire
+    // helper holds the in-flight latch across the fence await and owns
+    // its release on decline; the main flow below reuses the held latch
+    // through its own try/finally.
+    const submitFence = await acquireCheckoutSubmitFence({
+      accountPassword,
+      address,
+      clearCart,
+      customer,
+      isAuthenticated,
+      isOrderInFlight,
+      onRedvaultOrder,
+      saveAsDefaultAddress,
+      saveDetails,
+      selectedPayment,
+      selectedSavedAddressId,
+    });
+    if (!submitFence) {
+      return;
+    }
+    const { customerEmail, customerName, customerPhone } = submitFence;
+    // The in-flight latch is already held (acquired before the fence
+    // await above) and releases in the finally below.
     setIsProcessing(true);
-
     try {
-      if (itemsSnapshot.length > 0) {
-        const reprice = await repriceCartItems(itemsSnapshot, merchantId);
-        if (reprice.changes.length > 0) {
-          useCartStore.getState().repriceItems(pickChangedPriceById(reprice));
-          Alert.alert(
-            'Prices updated',
-            'Some prices changed since you added these items. Your cart has been updated to the latest prices — please review the new total and tap checkout again.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
+      if (await abortIfCartPricesStale(itemsSnapshot, merchantId)) {
+        return;
       }
-
       const snapshot = createCheckoutSnapshot(
         itemsSnapshot,
         deliveryFee,
@@ -142,25 +146,13 @@ export function useCheckoutSubmit({
           walletBalance,
           walletSelection,
         });
-
       trackCheckoutStep('review');
-      const customerEmail = customer?.email || address.email;
-      const customerPhone = address.phone;
-      const customerName = `${address.firstName} ${address.lastName}`;
-      // A voucher-only cart is a ₦0 prize: force a non-POD method so the voucher
-      // RPC marks the pre-reserved order paid (it keys payment_status off
-      // p_payment_method — 'pod'/'pay_on_delivery' → pending, else → paid). With
-      // POD the prize order would be left pending while the cart is cleared.
       const paymentMethodForOrder = isVoucherOnlyCart
         ? 'card'
         : selectedPayment === 'payforme'
           ? 'invoice'
           : selectedPayment;
-      const isBNPL =
-        selectedPayment === 'credpal' ||
-        selectedPayment === 'credit_direct' ||
-        selectedPayment === 'klump';
-
+      const isBNPL = isBnplPayment(selectedPayment);
       if (isBNPL && !isVoucherOnlyCart) {
         await submitBnplCheckout({
           address,
@@ -185,7 +177,6 @@ export function useCheckoutSubmit({
         });
         return;
       }
-
       const orderResponse = await createOrder(
         {
           ...buildCheckoutOrderRequest({
@@ -209,11 +200,46 @@ export function useCheckoutSubmit({
         { checkoutGeneration: checkoutGenerationSnapshot }
       );
       const { order } = orderResponse;
-      const orderNumber =
-        order.order_number || order.id.slice(0, 8).toUpperCase();
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
-
+      const orderNumber =
+        order.order_number || order.id.slice(0, 8).toUpperCase();
+      if (selectedPayment === 'uba_redvault') {
+        await submitRedvaultCheckout({
+          checkoutGeneration: checkoutGenerationSnapshot,
+          customerEmail,
+          customerName,
+          customerPhone,
+          onInitializationSuccess: () =>
+            runRedvaultSubmitInitializationSideEffects({
+              accountPassword,
+              address,
+              customerEmail,
+              customerId: customer?.id,
+              isAuthenticated,
+              orderId: order.id,
+              saveAsDefaultAddress,
+              saveDetails,
+              selectedSavedAddressId,
+              trackingToken: order.tracking_token ?? undefined,
+            }),
+          onRedvaultOrder,
+          orderResponse,
+          trackingContext: {
+            customerEmail,
+            customerPhone,
+            items: itemsSnapshot,
+            orderNumber,
+            paymentMethod: completedPaymentMethod,
+            shipping: snapshot.deliveryFee,
+            subtotal: snapshot.subtotal,
+            tax: snapshot.taxAmount,
+            total: order.total,
+            userId: customer?.id ?? undefined,
+          },
+        });
+        return;
+      }
       if (await claimCheckoutPurchaseTracking(order.id)) {
         void trackCheckoutRoutePurchaseCompleted({
           customerEmail,
@@ -229,8 +255,7 @@ export function useCheckoutSubmit({
           userId: user?.id ?? undefined,
         });
       }
-
-      await finalizeCheckoutPayment({
+      await runFinalizeCheckoutPayment({
         clearCart,
         customerEmail,
         customerName,
@@ -259,19 +284,11 @@ export function useCheckoutSubmit({
           selectedPayment === 'bank_transfer',
       });
     } catch (error) {
-      const cartStore = useCartStore.getState();
-      if (cartStore.items.length === 0) {
-        try {
-          await cartStore.restoreItems(
-            itemsSnapshot,
-            groupNegotiationSnapshot,
-            checkoutGenerationSnapshot
-          );
-        } catch {
-          // In-memory restore already applied; persist failures must not hide
-          // the original checkout error.
-        }
-      }
+      await restoreEmptiedCheckoutCart({
+        cartWideNegotiationActive: groupNegotiationSnapshot,
+        checkoutGeneration: checkoutGenerationSnapshot,
+        itemsSnapshot,
+      });
       handleCheckoutSubmitError(error, selectedPayment);
     } finally {
       setIsProcessing(false);

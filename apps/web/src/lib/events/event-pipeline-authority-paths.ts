@@ -9,4 +9,5 @@ export const eventPipelineAdminImporters = [
   'apps/web/src/lib/repair-notifications.ts',
   'apps/web/src/lib/shipping/persist-admin-gigl-quote.ts',
   'apps/web/src/lib/shipping/persist-refreshed-shipping-quote.ts',
+  'apps/web/src/lib/payments/resolve-order-gateway-completion.ts',
 ] as const;

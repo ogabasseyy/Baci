@@ -217,6 +217,16 @@ function buildSupabaseMock(options: { respectRetainedLock?: boolean } = {}) {
           select: vi.fn(() => ({ eq: eqMerchant })),
         };
       }
+      if (table === 'order_items') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn().mockResolvedValue({
+              data: [{ name: 'Phone', quantity: 1, price: 500000 }],
+              error: null,
+            }),
+          })),
+        };
+      }
       throw new Error(`Unexpected table: ${table}`);
     }),
   };

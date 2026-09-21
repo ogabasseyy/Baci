@@ -22,6 +22,41 @@ type CheckoutIdempotencyReplayResult = {
   isLegacyIdempotencyReplay: boolean;
 };
 
+type StoredCheckoutHashProbe = {
+  merchantId: string;
+  requestHash: string;
+  requestIdempotencyKey: string;
+  supabase: SupabaseClient;
+  warnMessage: string;
+};
+
+async function isStoredCheckoutRequestHash({
+  merchantId,
+  requestHash,
+  requestIdempotencyKey,
+  supabase,
+  warnMessage,
+}: StoredCheckoutHashProbe): Promise<boolean> {
+  const { data: hashMatches, error: probeError } = await supabase.rpc(
+    'is_storefront_order_idempotency_hash',
+    {
+      p_checkout_idempotency_key: requestIdempotencyKey,
+      p_checkout_request_hash: requestHash,
+      p_merchant_id: merchantId,
+    }
+  );
+
+  if (probeError) {
+    logger.warn({
+      message: warnMessage,
+      merchantId,
+      error: probeError,
+    });
+    return false;
+  }
+  return hashMatches === true;
+}
+
 /**
  * Build the current idempotency hash and, only when the database confirms a
  * pre-metadata order, rebuild the legacy hash used by that original request.
@@ -49,21 +84,15 @@ export async function prepareCheckoutIdempotencyReplay({
   );
 
   if (localeRequestHash !== checkoutRequestHash) {
-    const { data: localeHashMatches, error: localeHashProbeError } =
-      await supabase.rpc('is_storefront_order_idempotency_hash', {
-        p_checkout_idempotency_key: requestIdempotencyKey,
-        p_checkout_request_hash: localeRequestHash,
-        p_merchant_id: merchantId,
-      });
-
-    if (localeHashProbeError) {
-      logger.warn({
-        message:
-          'Locale checkout item-order hash probe failed; using the current request hash',
-        merchantId,
-        error: localeHashProbeError,
-      });
-    } else if (localeHashMatches === true) {
+    const localeHashStored = await isStoredCheckoutRequestHash({
+      merchantId,
+      requestHash: localeRequestHash,
+      requestIdempotencyKey,
+      supabase,
+      warnMessage:
+        'Locale checkout item-order hash probe failed; using the current request hash',
+    });
+    if (localeHashStored) {
       checkoutRequestHash = localeRequestHash;
     }
   }
@@ -89,9 +118,28 @@ export async function prepareCheckoutIdempotencyReplay({
       });
     } else if (isLegacyOrder === true) {
       isLegacyIdempotencyReplay = true;
-      checkoutRequestHash = hashOrderIdempotencyPayload(
+      let legacyHash = hashOrderIdempotencyPayload(
         buildLegacyOrderIdempotencyPayload(payload)
       );
+      // Pre-metadata orders were also hashed under locale item ordering, so
+      // probe the legacy payload with the legacy sort before accepting it.
+      const localeLegacyHash = hashOrderIdempotencyPayload(
+        buildLegacyOrderIdempotencyPayload(payload, { itemSort: 'locale' })
+      );
+      if (localeLegacyHash !== legacyHash) {
+        const localeLegacyStored = await isStoredCheckoutRequestHash({
+          merchantId,
+          requestHash: localeLegacyHash,
+          requestIdempotencyKey,
+          supabase,
+          warnMessage:
+            'Locale legacy checkout item-order hash probe failed; using the code-point legacy hash',
+        });
+        if (localeLegacyStored) {
+          legacyHash = localeLegacyHash;
+        }
+      }
+      checkoutRequestHash = legacyHash;
     }
   }
 

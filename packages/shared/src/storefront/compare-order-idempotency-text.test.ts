@@ -12,11 +12,12 @@ describe('compareCodePoints', () => {
 });
 
 describe('compareLocaleText', () => {
-  it('falls back to code-point order when collation ties unequal strings', () => {
+  it('reproduces the historical localeCompare result on collation ties', () => {
     const localeCompare = String.prototype.localeCompare;
     String.prototype.localeCompare = () => 0;
     try {
-      expect(compareLocaleText('a', 'b')).toBe(compareCodePoints('a', 'b'));
+      expect(compareLocaleText('\u00e9', 'e\u0301')).toBe(0);
+      expect(compareCodePoints('\u00e9', 'e\u0301')).not.toBe(0);
     } finally {
       String.prototype.localeCompare = localeCompare;
     }

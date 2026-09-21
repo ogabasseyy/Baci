@@ -4,6 +4,7 @@ import { assertCheckoutRecoveryValue } from '@/lib/assert-checkout-recovery-valu
 import { enqueueCheckoutGenerationStorage } from '@/lib/checkout-generation-storage-queue';
 import { markCodepointCheckoutItemSort } from '@/lib/checkout-idempotency-item-sort';
 import { createLogger } from '@/lib/logger';
+import { isMintedCheckoutGeneration } from '@/lib/minted-checkout-generations';
 
 const log = createLogger('CartStore');
 
@@ -12,14 +13,13 @@ export async function persistCheckoutGeneration(
 ): Promise<void> {
   assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
   await enqueueCheckoutGenerationStorage(async () => {
-    const previous = await AsyncStorage.getItem(
-      CHECKOUT_GENERATION_STORAGE_KEY
-    );
     await AsyncStorage.setItem(
       CHECKOUT_GENERATION_STORAGE_KEY,
       checkoutGeneration
     );
-    if (previous !== checkoutGeneration) {
+    // Only generations minted by this build are code-point sorted. Restored
+    // legacy IDs keep locale ordering even when persisted over a newer value.
+    if (isMintedCheckoutGeneration(checkoutGeneration)) {
       await markCodepointCheckoutItemSort(checkoutGeneration);
     }
   });

@@ -14,9 +14,7 @@ export function compareCodePoints(left: string, right: string): number {
 
 /** Device-default collation used by checkout hashes before code-point sort. */
 export function compareLocaleText(left: string, right: string): number {
-  const collation = left.localeCompare(right);
-  if (collation !== 0) {
-    return collation;
-  }
-  return compareCodePoints(left, right);
+  // Reproduce the historical comparator exactly: stable sort preserved
+  // insertion order on collation ties, and any fallback would reorder them.
+  return left.localeCompare(right);
 }

@@ -20,7 +20,9 @@ export async function rotateEmptyCheckoutCart(
   apply(next);
   if (options?.previousGeneration && options.retainCreditSnapshot !== true) {
     try {
-      await releaseCheckoutCreditSnapshot(options.previousGeneration);
+      await withCheckoutStorageTimeout(
+        releaseCheckoutCreditSnapshot(options.previousGeneration)
+      );
     } catch (error) {
       log.error('Failed to release checkout credit snapshot:', error);
     }

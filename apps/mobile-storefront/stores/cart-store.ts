@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { createLogger } from '@/lib/logger';
+import { registerMintedCheckoutGeneration } from '@/lib/minted-checkout-generations';
 import {
   persistCheckoutGeneration,
   persistCheckoutGenerationDetached,
@@ -78,7 +79,7 @@ export const useCartStore = create<CartState>()(
           const checkoutGeneration =
             state.items.length === 0
               ? state.checkoutGeneration === 'legacy'
-                ? Crypto.randomUUID()
+                ? registerMintedCheckoutGeneration(Crypto.randomUUID())
                 : state.checkoutGeneration
               : state.checkoutGeneration;
           if (state.items.length === 0) {
@@ -246,7 +247,9 @@ export const useCartStore = create<CartState>()(
       },
 
       advanceCheckoutGeneration: async () => {
-        const checkoutGeneration = Crypto.randomUUID();
+        const checkoutGeneration = registerMintedCheckoutGeneration(
+          Crypto.randomUUID()
+        );
         await persistCheckoutGeneration(checkoutGeneration);
         set({ checkoutGeneration });
       },

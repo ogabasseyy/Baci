@@ -131,6 +131,9 @@ export async function getCheckoutAttemptKey(
     ),
     generation
   );
+  // Gateway partitions (for example ":uba_redvault") share the base
+  // generation's sort marker: markers are recorded under the minted cart UUID.
+  const markerGeneration = generation.split(':')[0];
   // Only an opaque installation ID is stored here, never checkout PII. Identity
   // hashes the server checkout projection plus local retry partitions.
   return Crypto.digestStringAsync(
@@ -143,7 +146,7 @@ export async function getCheckoutAttemptKey(
         payload: buildOrderIdempotencyPayload(
           toCheckoutIdempotencyInput(recoveryPayload),
           {
-            itemSort: (await usesCodepointCheckoutItemSort(generation))
+            itemSort: (await usesCodepointCheckoutItemSort(markerGeneration))
               ? 'codepoint'
               : 'locale',
           }

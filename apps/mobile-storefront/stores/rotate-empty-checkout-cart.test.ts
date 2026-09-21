@@ -118,3 +118,14 @@ it('keeps store-credit snapshots when the generation may still be replayed', asy
   });
   expect(mockRelease).not.toHaveBeenCalled();
 });
+
+it('does not block cart rotation when credit cleanup hangs', async () => {
+  jest.useFakeTimers();
+  mockRelease.mockImplementationOnce(() => new Promise<void>(() => undefined));
+  const rotated = rotateEmptyCheckoutCart(() => undefined, {
+    previousGeneration: '46ed63d7-5f10-49f0-9456-9ff571bec43f',
+    retainCreditSnapshot: false,
+  });
+  await jest.advanceTimersByTimeAsync(5_000);
+  await expect(rotated).resolves.toBeDefined();
+});

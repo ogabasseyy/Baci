@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY } from '@/config/checkout-storage';
 import { enqueueCheckoutGenerationStorage } from '@/lib/checkout-generation-storage-queue';
+import { isMintedCheckoutGeneration } from '@/lib/minted-checkout-generations';
 
 function parseGenerationSet(existing: string | null): string[] {
   if (existing === null) {
@@ -44,6 +45,9 @@ export async function markCodepointCheckoutItemSort(
 export function usesCodepointCheckoutItemSort(
   checkoutGeneration: string
 ): Promise<boolean> {
+  if (isMintedCheckoutGeneration(checkoutGeneration)) {
+    return Promise.resolve(true);
+  }
   return enqueueCheckoutGenerationStorage(async () => {
     const generations = parseGenerationSet(
       await AsyncStorage.getItem(CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY)

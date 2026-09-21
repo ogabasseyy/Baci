@@ -66,6 +66,30 @@ describe('bugfix: checkout generation is durable before the order request', () =
     expect(storage.get('checkout-generation-v1')).toBe(newer);
   });
 
+  it('marks minted generations as code-point sorted when persisting', async () => {
+    const { registerMintedCheckoutGeneration } =
+      require('./minted-checkout-generations') as typeof import('./minted-checkout-generations');
+    const minted = registerMintedCheckoutGeneration(
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+    );
+    await persistCheckoutGeneration(minted);
+    expect(storage.get('checkout-idempotency-item-sort-v2')).toContain(minted);
+  });
+
+  it('does not mark restored legacy generations as code-point sorted', async () => {
+    const { registerMintedCheckoutGeneration } =
+      require('./minted-checkout-generations') as typeof import('./minted-checkout-generations');
+    const newer = registerMintedCheckoutGeneration(
+      'ffffffff-ffff-4fff-8fff-ffffffffffff'
+    );
+    await persistCheckoutGeneration(newer);
+    const legacy = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    await persistCheckoutGeneration(legacy);
+    const markers = storage.get('checkout-idempotency-item-sort-v2') ?? '[]';
+    expect(markers).toContain(newer);
+    expect(markers).not.toContain(legacy);
+  });
+
   it('swallows detached persist failures so first-item adds can finish', async () => {
     mockSetItem.mockRejectedValueOnce(new Error('disk full'));
     persistCheckoutGenerationDetached(generation);

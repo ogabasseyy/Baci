@@ -249,6 +249,18 @@ it('resumes the same pending order after a lost response and a lower store-credi
   ).toBe(first);
 });
 
+it('looks up the sort marker under the base generation for gateway partitions', async () => {
+  const usesCodepoint = jest.fn(async () => false);
+  jest.doMock('./checkout-idempotency-item-sort', () => ({
+    usesCodepointCheckoutItemSort: usesCodepoint,
+  }));
+  const { getCheckoutAttemptKey } = loadKeyGenerator();
+  await getCheckoutAttemptKey(payload, 'cart-one:uba_redvault', {
+    frozen: true,
+  });
+  expect(usesCodepoint).toHaveBeenCalledWith('cart-one');
+});
+
 it('resumes the same pending order when changing payment gateways', async () => {
   const { getCheckoutAttemptKey } = loadKeyGenerator();
   const first = await getCheckoutAttemptKey(payload, 'cart-one');

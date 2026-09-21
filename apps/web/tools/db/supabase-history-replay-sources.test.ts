@@ -144,6 +144,12 @@ describe('supabase-history-replay sources', () => {
     );
   });
 
+  it('registers the offer-change feed manifest trigger for replay verification', () => {
+    expect(rows(PENDING_SOURCES)).toContain(
+      '7de47f950351dfd8945be917d091dc50fd5ca80948566b20eb617c5c43e83718 20260920200000_stale_feed_manifest_on_offer_change.sql'
+    );
+  });
+
   it('keeps the quiz-live pending-source cohort unique and lexically ordered', () => {
     const repositoryPaths = EXPECTED_QUIZ_LIVE_PENDING_SOURCES.map(
       ({ repositoryPath }) => repositoryPath

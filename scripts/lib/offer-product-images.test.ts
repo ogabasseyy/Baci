@@ -36,6 +36,33 @@ describe('appendOfferProductImages', () => {
     });
   });
 
+  it('skips flagged sku_matrix products like feed hydration', async () => {
+    mockAppend.mockClear();
+    mockAppend.mockResolvedValue([]);
+    await appendOfferProductImages({
+      supabase: {} as never,
+      products: [
+        { id: 'p1', condition: 'new', has_condition_offers: true },
+        {
+          id: 'p2',
+          condition: 'new',
+          has_condition_offers: true,
+          variant_model: 'sku_matrix',
+        },
+      ],
+      merchantId: 'm-1',
+      storefrontBaseUrl: 'https://store.example',
+      productRows: [],
+    });
+
+    expect(mockAppend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productIds: ['p1'],
+        productConditions: new Map([['p1', 'new']]),
+      })
+    );
+  });
+
   it('propagates backfill failures', async () => {
     mockAppend.mockRejectedValue(new Error('boom'));
     await expect(

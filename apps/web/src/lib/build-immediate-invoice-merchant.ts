@@ -1,5 +1,4 @@
-import type { ReceiptMerchant } from '@baci/shared';
-import { showMerchantBankDetails } from '@/lib/show-merchant-bank-details';
+import { showMerchantBankDetails, type ReceiptMerchant } from '@baci/shared';
 
 function toReceiptRecord<T>(value: unknown): T | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {

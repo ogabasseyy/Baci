@@ -42,9 +42,11 @@ export function createBNPLProviderBridgeHandlers({
   const handleProviderOpenedMessage = ({
     gateway: openedGateway,
     orderId: openedOrderId,
+    reference: openedReference,
   }: {
     gateway?: string;
     orderId?: string;
+    reference?: string;
   }) => {
     if (paymentStartRecordedRef.current || !orderId) {
       return;
@@ -59,6 +61,7 @@ export function createBNPLProviderBridgeHandlers({
     void trackCheckoutPaymentStarted({
       orderId,
       paymentMethod: gateway || 'bnpl',
+      reference: openedReference,
       value: amount ? Number(amount) : undefined,
     });
   };
@@ -72,10 +75,12 @@ export function createBNPLProviderBridgeHandlers({
     gateway: errorGateway,
     orderId: errorOrderId,
     message,
+    reference: errorReference,
   }: {
     gateway?: string;
     orderId?: string;
     message?: string;
+    reference?: string;
   }) => {
     if (statusRef.current === 'success') {
       return;
@@ -86,7 +91,7 @@ export function createBNPLProviderBridgeHandlers({
     if (errorOrderId && errorOrderId !== orderId) {
       return;
     }
-    recordCheckoutFailure('bnpl_provider_error');
+    recordCheckoutFailure('bnpl_provider_error', errorReference);
     clearPendingLoadTimeout();
     setCheckoutStatus('error');
     setErrorMessage(message || 'The provider checkout failed.');

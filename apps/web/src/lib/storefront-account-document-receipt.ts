@@ -1,5 +1,8 @@
-import type { ReceiptMerchant, ReceiptOrder } from '@baci/shared';
-import { showMerchantBankDetails } from '@/lib/show-merchant-bank-details';
+import {
+  showMerchantBankDetails,
+  type ReceiptMerchant,
+  type ReceiptOrder,
+} from '@baci/shared';
 import type {
   StorefrontAccountDocumentMerchantRow,
   StorefrontAccountDocumentOrderRow,

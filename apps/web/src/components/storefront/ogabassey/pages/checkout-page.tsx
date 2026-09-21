@@ -123,6 +123,10 @@ import {
   clearCheckoutIdempotencyKey,
   getCheckoutIdempotencyKey,
 } from './checkout/checkout-idempotency';
+import { captureCheckoutInvoiceGenerated } from './checkout/capture-checkout-invoice-generated';
+import { captureCheckoutPaymentCompleted } from './checkout/capture-checkout-payment-completed';
+import { captureCheckoutPaymentFailed } from './checkout/capture-checkout-payment-failed';
+import { captureCheckoutPaymentStarted } from './checkout/capture-checkout-payment-started';
 import { captureCreditDirectClientCompletion } from './checkout/credit-direct-client-completion';
 import { writeCreditDirectPopupMarker } from './checkout/credit-direct-popup-return';
 import {
@@ -897,21 +901,15 @@ export const CheckoutPage: React.FC = () => {
       // The intent reached server-confirmed `completed`: record the paid
       // conversion before redirecting, or the funnel stalls at the start
       // stage for every auto-debited transfer.
-      captureCheckoutFunnelEventOnce(
-        CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+      captureCheckoutPaymentCompleted({
+        currency,
         orderId,
-        buildCheckoutFunnelProperties({
-          channel: 'web',
-          currency,
-          orderId,
-          ...(orderNumber ? { orderNumber } : {}),
-          paymentIntent: getCheckoutPaymentIntent(paymentMethod),
-          paymentMethod,
-          paymentStatus: 'paid',
-          source: 'web_checkout',
-          total,
-        })
-      );
+        // Preserve the omit-when-empty contract: the compactor drops
+        // undefined but keeps '', so only forward a real order number.
+        ...(orderNumber ? { orderNumber } : {}),
+        paymentMethod,
+        total,
+      });
       clearPendingCheckoutOrder();
       void clearCheckoutIdempotencyKey(checkoutFingerprint);
       clearCheckoutSession();
@@ -2166,27 +2164,19 @@ export const CheckoutPage: React.FC = () => {
         return;
       }
 
-      // payment_started is emitted only once a provider flow actually opens
-      // (initialized DVA, provider URL, opened widget, confirmed transfer
-      // setup) — never speculatively before initialization runs. Stamped
-      // with the initialized reference where one exists so retried
-      // attempts reconcile instead of producing identical starts.
+      // Marks the per-attempt started flag and delegates the event shape
+      // to the focused helper: initialization failures before a provider
+      // flow opens keep the error UI but must not emit an unmatched start.
       const capturePaymentStarted = (reference?: string) => {
         paymentStarted = true;
-        captureClientEvent(
-          CHECKOUT_FUNNEL_EVENTS.paymentStarted,
-          buildCheckoutFunnelProperties({
-            channel: 'web',
-            currency: orderChargeCurrency,
-            orderId: order.id,
-            orderNumber: createdOrderNumber,
-            paymentIntent: getCheckoutPaymentIntent(paymentMethod),
-            paymentMethod,
-            reference,
-            source: 'web_checkout',
-            total: paymentAmount,
-          })
-        );
+        captureCheckoutPaymentStarted({
+          currency: orderChargeCurrency,
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          paymentMethod,
+          reference,
+          total: paymentAmount,
+        });
       };
 
       // Update local wallet balance if redemption occurred
@@ -2212,45 +2202,28 @@ export const CheckoutPage: React.FC = () => {
           // (wallet/store_credit/savings/quiz_voucher after full coverage),
           // not the UI selection.
           const zeroDuePaymentMethod = order.payment_method || paymentMethod;
-          captureCheckoutFunnelEventOnce(
-            CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
-            order.id,
-            buildCheckoutFunnelProperties({
-              channel: 'web',
-              currency: orderChargeCurrency,
-              orderId: order.id,
-              orderNumber: createdOrderNumber,
-              paymentIntent: getCheckoutPaymentIntent(zeroDuePaymentMethod),
-              paymentMethod: zeroDuePaymentMethod,
-              paymentStatus: 'paid',
-              source: 'web_checkout',
-              total: order.total ?? total,
-            })
-          );
+          captureCheckoutPaymentCompleted({
+            currency: orderChargeCurrency,
+            orderId: order.id,
+            orderNumber: createdOrderNumber,
+            paymentMethod: zeroDuePaymentMethod,
+            total: order.total ?? total,
+          });
         } else if (paymentMethod === 'invoice') {
           // Zero due without paid coverage (e.g. a 100% discount): the
           // server still generates and emails a proforma for
           // invoice-method orders, so record the generation before the
           // early return — otherwise the funnel shows a false drop-off.
-          captureCheckoutFunnelEventOnce(
-            CHECKOUT_FUNNEL_EVENTS.invoiceGenerated,
-            order.id,
-            buildCheckoutFunnelProperties({
-              channel: 'web',
-              currency: orderChargeCurrency,
-              itemCount: orderItems.reduce(
-                (count, item) => count + item.quantity,
-                0
-              ),
-              orderId: order.id,
-              orderNumber: createdOrderNumber,
-              paymentIntent: 'proforma_invoice',
-              paymentMethod: 'invoice',
-              paymentStatus: 'unpaid',
-              source: 'web_checkout',
-              total: order.total ?? total,
-            })
-          );
+          captureCheckoutInvoiceGenerated({
+            currency: orderChargeCurrency,
+            itemCount: orderItems.reduce(
+              (count, item) => count + item.quantity,
+              0
+            ),
+            orderId: order.id,
+            orderNumber: createdOrderNumber,
+            total: order.total ?? total,
+          });
         }
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
@@ -2474,21 +2447,15 @@ export const CheckoutPage: React.FC = () => {
             // without opening a popup: only attribute a payment failure
             // when onPopup already proved the provider flow started.
             if (paymentStarted) {
-              captureClientEvent(
-                CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-                buildCheckoutFunnelProperties({
-                  channel: 'web',
-                  currency: orderChargeCurrency,
-                  orderId: order.id,
-                  orderNumber: createdOrderNumber,
-                  paymentIntent: getCheckoutPaymentIntent(paymentMethod),
-                  paymentMethod,
-                  reason: 'credit_direct_error',
-                  reference: initializedReference,
-                  source: 'web_checkout',
-                  total: paymentAmount,
-                })
-              );
+              captureCheckoutPaymentFailed({
+                currency: orderChargeCurrency,
+                orderId: order.id,
+                orderNumber: createdOrderNumber,
+                paymentMethod,
+                reason: 'credit_direct_error',
+                reference: initializedReference,
+                total: paymentAmount,
+              });
             }
             toast({
               title: 'Credit Direct Failed',
@@ -2562,24 +2529,16 @@ export const CheckoutPage: React.FC = () => {
             // the shopper must still reach the success experience: cleanup and
             // navigation run for both outcomes, capture only for success.
             if (data.status === 'success') {
-              captureCheckoutFunnelEventOnce(
-                CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
-                order.id,
-                buildCheckoutFunnelProperties({
-                  channel: 'web',
-                  currency: orderChargeCurrency,
-                  orderId: order.id,
-                  orderNumber: createdOrderNumber,
-                  paymentIntent: getCheckoutPaymentIntent(paymentMethod),
-                  paymentMethod,
-                  paymentStatus: 'paid',
-                  reference: data.order_no,
-                  source: 'web_checkout',
-                  // paymentAmount is only the residual sent to CredPal
-                  // after wallet credits; revenue is the full order total.
-                  total: order.total ?? paymentAmount,
-                })
-              );
+              // paymentAmount is only the residual sent to CredPal
+              // after wallet credits; revenue is the full order total.
+              captureCheckoutPaymentCompleted({
+                currency: orderChargeCurrency,
+                orderId: order.id,
+                orderNumber: createdOrderNumber,
+                paymentMethod,
+                reference: data.order_no,
+                total: order.total ?? paymentAmount,
+              });
             }
             clearPendingCheckoutOrder();
             await clearCheckoutIdempotencyKey(checkoutFingerprint);
@@ -2608,20 +2567,14 @@ export const CheckoutPage: React.FC = () => {
             // the provider flow started (same per-attempt gate as Credit
             // Direct). Unopened failures keep the toast + retry below.
             if (paymentStarted) {
-              captureClientEvent(
-                CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-                buildCheckoutFunnelProperties({
-                  channel: 'web',
-                  currency: orderChargeCurrency,
-                  orderId: order.id,
-                  orderNumber: createdOrderNumber,
-                  paymentIntent: getCheckoutPaymentIntent(paymentMethod),
-                  paymentMethod,
-                  reason: 'credpal_error',
-                  source: 'web_checkout',
-                  total: paymentAmount,
-                })
-              );
+              captureCheckoutPaymentFailed({
+                currency: orderChargeCurrency,
+                orderId: order.id,
+                orderNumber: createdOrderNumber,
+                paymentMethod,
+                reason: 'credpal_error',
+                total: paymentAmount,
+              });
             }
             toast({
               title: 'CredPal Failed',
@@ -2639,22 +2592,13 @@ export const CheckoutPage: React.FC = () => {
         // Don't proceed further - callbacks handle the flow
         return;
       } else if (paymentMethod === 'invoice') {
-        captureCheckoutFunnelEventOnce(
-          CHECKOUT_FUNNEL_EVENTS.invoiceGenerated,
-          order.id,
-          buildCheckoutFunnelProperties({
-            channel: 'web',
-            currency: orderChargeCurrency,
-            itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
-            orderId: order.id,
-            orderNumber: createdOrderNumber,
-            paymentIntent: 'proforma_invoice',
-            paymentMethod: 'invoice',
-            paymentStatus: 'unpaid',
-            source: 'web_checkout',
-            total: order.total ?? total,
-          })
-        );
+        captureCheckoutInvoiceGenerated({
+          currency: orderChargeCurrency,
+          itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          total: order.total ?? total,
+        });
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
         clearCheckoutSession();
@@ -2702,20 +2646,14 @@ export const CheckoutPage: React.FC = () => {
     } catch (error) {
       console.error('Checkout error:', error);
       if (createdOrderId && paymentStarted) {
-        captureClientEvent(
-          CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-          buildCheckoutFunnelProperties({
-            channel: 'web',
-            currency: orderChargeCurrency,
-            orderId: createdOrderId,
-            orderNumber: createdOrderNumber,
-            paymentIntent: getCheckoutPaymentIntent(paymentMethod),
-            paymentMethod,
-            reference: initializedReference,
-            reason: error instanceof Error ? error.name : 'checkout_error',
-            source: 'web_checkout',
-          })
-        );
+        captureCheckoutPaymentFailed({
+          currency: orderChargeCurrency,
+          orderId: createdOrderId,
+          orderNumber: createdOrderNumber,
+          paymentMethod,
+          reason: error instanceof Error ? error.name : 'checkout_error',
+          reference: initializedReference,
+        });
       }
       toast({
         title: 'Checkout Failed',
@@ -2798,22 +2736,16 @@ export const CheckoutPage: React.FC = () => {
       .catch((error: unknown) => {
         console.error('DVA initialization error:', error);
         if (didPaymentStart?.()) {
-          captureClientEvent(
-            CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-            buildCheckoutFunnelProperties({
-              channel: 'web',
-              currency:
-                typeof order.currency === 'string' && order.currency.trim()
-                  ? order.currency.trim().toUpperCase()
-                  : currencyCode,
-              orderId: order.id,
-              paymentMethod: 'bank_transfer',
-              paymentIntent: getCheckoutPaymentIntent('bank_transfer'),
-              reason: 'bank_transfer_error',
-              source: 'web_checkout',
-              total: paymentAmount,
-            })
-          );
+          captureCheckoutPaymentFailed({
+            currency:
+              typeof order.currency === 'string' && order.currency.trim()
+                ? order.currency.trim().toUpperCase()
+                : currencyCode,
+            orderId: order.id,
+            paymentMethod: 'bank_transfer',
+            reason: 'bank_transfer_error',
+            total: paymentAmount,
+          });
         }
         toast({
           title: 'Bank Transfer Failed',
@@ -2863,28 +2795,20 @@ export const CheckoutPage: React.FC = () => {
           return;
         }
         const confirmedItems = buildCheckoutOrderItems(checkoutCart);
-        captureCheckoutFunnelEventOnce(
-          CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
+        // Stamped currency retained from initialization: matches the
+        // start even if the merchant changed payout currency since.
+        captureCheckoutPaymentCompleted({
+          currency: dvaOrderCurrency ?? currencyCode,
+          itemCount: confirmedItems.reduce(
+            (count, item) => count + item.quantity,
+            0
+          ),
           orderId,
-          buildCheckoutFunnelProperties({
-            channel: 'web',
-            // Stamped currency retained from initialization: matches the
-            // start even if the merchant changed payout currency since.
-            currency: dvaOrderCurrency ?? currencyCode,
-            itemCount: confirmedItems.reduce(
-              (count, item) => count + item.quantity,
-              0
-            ),
-            orderId,
-            orderNumber,
-            paymentIntent: getCheckoutPaymentIntent('bank_transfer'),
-            paymentMethod: 'bank_transfer',
-            paymentStatus: 'paid',
-            reference,
-            source: 'web_checkout',
-            total: dvaTotal ?? amount,
-          })
-        );
+          orderNumber,
+          paymentMethod: 'bank_transfer',
+          reference,
+          total: dvaTotal ?? amount,
+        });
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(dvaCheckoutFingerprint);
         clearCheckoutSession();

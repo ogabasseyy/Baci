@@ -1,47 +1,45 @@
 import {
   CHECKOUT_FUNNEL_EVENTS,
   buildCheckoutFunnelProperties,
+  getCheckoutPaymentIntent,
 } from '@baci/shared/contracts';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
-import { isNativeBnplWebView } from './is-native-bnpl-web-view';
 
-interface BnplPaymentFailed {
+interface CheckoutPaymentFailed {
+  currency?: string;
   orderId: string;
   orderNumber?: string;
   paymentMethod: string;
   reason: string;
   reference?: string;
-  value?: number;
-  currency?: string;
+  total?: number;
 }
 
-export function captureBnplPaymentFailed({
+// Web checkout payment failure. Callers gate on the per-attempt
+// started flag: initialization failures before a provider flow opens
+// keep the error UI but must not emit an unmatched payment_failed.
+export function captureCheckoutPaymentFailed({
+  currency,
   orderId,
   orderNumber,
   paymentMethod,
   reason,
   reference,
-  value,
-  currency,
-}: BnplPaymentFailed) {
-  // Inside a native BNPL WebView the native shell records the failure
-  // from bnpl_provider_error: emitting here would double-attribute.
-  if (isNativeBnplWebView()) {
-    return;
-  }
+  total,
+}: CheckoutPaymentFailed) {
   captureClientEvent(
     CHECKOUT_FUNNEL_EVENTS.paymentFailed,
     buildCheckoutFunnelProperties({
       channel: 'web',
-      ...(currency ? { currency } : {}),
+      currency,
       orderId,
       orderNumber,
-      paymentIntent: 'installments',
+      paymentIntent: getCheckoutPaymentIntent(paymentMethod),
       paymentMethod,
       reason,
       reference,
       source: 'web_checkout',
-      total: value,
+      total,
     })
   );
 }

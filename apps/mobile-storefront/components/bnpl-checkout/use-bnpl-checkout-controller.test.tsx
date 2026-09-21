@@ -766,7 +766,8 @@ describe('useBNPLCheckoutController', () => {
     expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
       'bnpl_provider_error',
       'order-123',
-      'credit_direct'
+      'credit_direct',
+      undefined
     );
     expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
   });
@@ -814,7 +815,8 @@ describe('useBNPLCheckoutController', () => {
     expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
       'bnpl_provider_error',
       'order-123',
-      'credpal'
+      'credpal',
+      undefined
     );
     expect(trackCheckoutPaymentFailed).toHaveBeenCalledTimes(1);
   });
@@ -849,7 +851,8 @@ describe('useBNPLCheckoutController', () => {
     expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
       'bnpl_load_error',
       'order-123',
-      'credit_direct'
+      'credit_direct',
+      undefined
     );
   });
 
@@ -984,7 +987,8 @@ describe('useBNPLCheckoutController', () => {
     expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
       'bnpl_load_error',
       'order-123',
-      'credit_direct'
+      'credit_direct',
+      undefined
     );
     expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
   });
@@ -1069,7 +1073,8 @@ describe('useBNPLCheckoutController', () => {
     expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
       'bnpl_load_error',
       'order-123',
-      'credit_direct'
+      'credit_direct',
+      undefined
     );
   });
 

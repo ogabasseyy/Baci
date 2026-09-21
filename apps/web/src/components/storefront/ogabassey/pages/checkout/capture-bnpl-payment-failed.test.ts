@@ -21,6 +21,7 @@ describe('captureBnplPaymentFailed', () => {
       orderNumber: 'ORD-1',
       paymentMethod: 'klump',
       reason: 'klump_error',
+      reference: 'BAC-1',
       value: 5750,
       currency: 'NGN',
     });
@@ -30,6 +31,7 @@ describe('captureBnplPaymentFailed', () => {
       CHECKOUT_FUNNEL_EVENTS.paymentFailed,
       expect.objectContaining({
         reason: 'klump_error',
+        reference: 'BAC-1',
         payment_method: 'klump',
         total: 5750,
         currency: 'NGN',

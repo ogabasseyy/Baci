@@ -13,7 +13,7 @@ import type {
   ReceiptMerchant,
   ReceiptOrder,
 } from '@baci/shared';
-import { generateReceiptHtml } from '@baci/shared';
+import { generateReceiptHtml, showMerchantBankDetails } from '@baci/shared';
 import { useState } from 'react';
 import type { ReceiptListItem } from '@/types/receipt';
 import { useMerchantReceiptInfo, useReceiptDetail } from './use-receipts';
@@ -67,6 +67,10 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       transactions: receiptDetail.transactions,
     };
 
+    // Same NGN-only rule as the web document builders: a
+    // foreign-currency preview must not print the untyped naira account
+    // beside a dollar-denominated balance.
+    const showBankDetails = showMerchantBankDetails(receiptDetail.currency);
     const merchant: ReceiptMerchant = {
       business_name: merchantInfo.business_name,
       logo_url: merchantInfo.logo_url,
@@ -81,10 +85,14 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       brand_colors: merchantInfo.brand_colors ?? undefined,
       vat_registration_status: merchantInfo.vat_registration_status,
       vat_rate: merchantInfo.vat_rate,
-      bank_code: merchantInfo.bank_code,
-      bank_account_number: merchantInfo.bank_account_number,
-      bank_name: merchantInfo.bank_name,
-      bank_account_name: merchantInfo.bank_account_name,
+      bank_code: showBankDetails ? merchantInfo.bank_code : null,
+      bank_account_number: showBankDetails
+        ? merchantInfo.bank_account_number
+        : null,
+      bank_name: showBankDetails ? merchantInfo.bank_name : null,
+      bank_account_name: showBankDetails
+        ? merchantInfo.bank_account_name
+        : null,
       social_media: merchantInfo.social_media,
       pages: merchantInfo.pages,
     };

@@ -203,6 +203,27 @@ describe('verifyOrderPaymentForCompletion', () => {
     ).resolves.toEqual({ paid: false });
   });
 
+  it('rejects a completed envelope that carries no order identity', async () => {
+    const { orderId: _omitted, ...envelopeWithoutIdentity } =
+      completedVerification;
+    void _omitted;
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(JSON.stringify(envelopeWithoutIdentity), { status: 200 })
+        : new Response(JSON.stringify(pendingTrackedOrder), { status: 200 })
+    );
+
+    // Version skew or a malformed success response must fail closed: a
+    // reference for order B must never prove that order A was paid.
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false });
+  });
+
   it('sends the native Bearer [REDACTED] when a session exists', async () => {
     mockGetSession.mockResolvedValueOnce({
       access_token: 'native-token-1',

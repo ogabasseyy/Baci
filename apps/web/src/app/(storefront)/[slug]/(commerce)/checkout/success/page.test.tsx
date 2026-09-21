@@ -783,4 +783,64 @@ describe('checkout success page', () => {
       expect(screen.getByText('#ABCDEFGH')).toBeInTheDocument()
     );
   });
+
+  it('re-verifies when navigation swaps to a new reference without remounting', async () => {
+    // Stable-router pin: production's useRouter is referentially stable,
+    // so only the query change re-runs verification — not the render.
+    const useRouterSpy = vi
+      .spyOn(nextNavigation, 'useRouter')
+      .mockReturnValue({ push: mockPush } as never);
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({ orderId: 'order-1', reference: 'ref-1' })
+    );
+    mockFetchWithCsrf
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          finalizationOutcome: 'completed',
+          orderId: 'order-1',
+          orderNumber: 'ORD-2001',
+          status: 'success',
+          success: true,
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          finalizationOutcome: 'completed',
+          orderId: 'order-2',
+          orderNumber: 'ORD-2002',
+          status: 'success',
+          success: true,
+        }),
+      });
+
+    try {
+      const { rerender } = render(<CheckoutSuccessPage />);
+      expect(await screen.findByText('#ORD-2001')).toBeInTheDocument();
+
+      // App Router query change without a remount: the completed
+      // checkout's terminal state must reset so the new reference is
+      // verified instead of showing the prior order number forever.
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({ orderId: 'order-2', reference: 'ref-2' })
+      );
+      rerender(<CheckoutSuccessPage />);
+
+      await waitFor(() =>
+        expect(mockFetchWithCsrf).toHaveBeenCalledWith(
+          '/api/payments/verify',
+          {
+            body: JSON.stringify({ reference: 'ref-2' }),
+            headers: { 'Content-Type': 'application/json' },
+            method: 'POST',
+          }
+        )
+      );
+      expect(await screen.findByText('#ORD-2002')).toBeInTheDocument();
+      expect(screen.queryByText('#ORD-2001')).toBeNull();
+    } finally {
+      useRouterSpy.mockRestore();
+    }
+  });
 });

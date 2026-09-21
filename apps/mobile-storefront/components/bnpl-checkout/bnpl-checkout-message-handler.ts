@@ -16,11 +16,13 @@ interface BNPLWebViewMessageHandlerOptions {
   onProviderOpenedMessage?: (input: {
     gateway?: string;
     orderId?: string;
+    reference?: string;
   }) => void;
   onProviderErrorMessage?: (input: {
     gateway?: string;
     orderId?: string;
     message?: string;
+    reference?: string;
   }) => void;
 }
 
@@ -91,7 +93,11 @@ export function createBNPLWebViewMessageHandler(
             typeof payload.gateway === 'string' ? payload.gateway : undefined;
           const orderId =
             typeof payload.orderId === 'string' ? payload.orderId : undefined;
-          options.onProviderOpenedMessage?.({ gateway, orderId });
+          const reference =
+            typeof payload.reference === 'string'
+              ? payload.reference
+              : undefined;
+          options.onProviderOpenedMessage?.({ gateway, orderId, reference });
         }
         if (payload.type === 'bnpl_provider_error') {
           const gateway =
@@ -100,7 +106,16 @@ export function createBNPLWebViewMessageHandler(
             typeof payload.orderId === 'string' ? payload.orderId : undefined;
           const message =
             typeof payload.message === 'string' ? payload.message : undefined;
-          options.onProviderErrorMessage?.({ gateway, orderId, message });
+          const reference =
+            typeof payload.reference === 'string'
+              ? payload.reference
+              : undefined;
+          options.onProviderErrorMessage?.({
+            gateway,
+            orderId,
+            message,
+            reference,
+          });
         }
       }
     } catch {

@@ -28,7 +28,8 @@ export type BNPLSetCheckoutStatus = (
     | ((currentStatus: BNPLCheckoutStatus) => BNPLCheckoutStatus)
 ) => void;
 export type BNPLRecordCheckoutFailure = (
-  reason: 'bnpl_provider_error' | 'bnpl_load_error'
+  reason: 'bnpl_provider_error' | 'bnpl_load_error',
+  reference?: string
 ) => void;
 type BNPLCheckoutControllerInput = {
   apiBaseUrl: string;
@@ -80,12 +81,15 @@ export function useBNPLCheckoutController({
   // payment_failed. A ref (not state) so the guard holds synchronously
   // across rerenders; reset only by Retry.
   const failureRecordedRef = useRef(false);
-  const recordCheckoutFailure: BNPLRecordCheckoutFailure = (reason) => {
+  const recordCheckoutFailure: BNPLRecordCheckoutFailure = (
+    reason,
+    reference
+  ) => {
     if (failureRecordedRef.current) {
       return;
     }
     failureRecordedRef.current = true;
-    void trackCheckoutPaymentFailed(reason, orderId, gateway);
+    void trackCheckoutPaymentFailed(reason, orderId, gateway, reference);
   };
   const statusRef = useRef<BNPLCheckoutStatus>('loading');
   const documentUrlRef = useRef(bnplUrl);

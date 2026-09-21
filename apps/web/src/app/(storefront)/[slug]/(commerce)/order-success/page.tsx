@@ -1,6 +1,15 @@
 'use client';
 
-import { ArrowRight, CheckCircle, Download, Loader2, Star } from 'lucide-react';
+import {
+  ArrowRight,
+  Check,
+  CheckCircle,
+  Copy,
+  Download,
+  Loader2,
+  Mail,
+  Star,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -40,6 +49,7 @@ function OrderSuccessContent() {
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [payerLinkCopied, setPayerLinkCopied] = useState(false);
   const [estimatedDeliveryDate] = useState(
     () =>
       new Date(Date.now() + DELIVERY_ESTIMATE_MS).toISOString().split('T')[0]
@@ -93,18 +103,33 @@ function OrderSuccessContent() {
     order?.payment_status === 'invoice' ||
     order?.payment_method === 'invoice';
   const isInvoice = isInvoiceMethod && order?.payment_status !== 'paid';
+  // Pay for Me handoff contract: nothing is delivered to the payer
+  // contact server-side — the requester's email carries the transfer
+  // details to forward, and this page hands them the shareable payment
+  // link. The copy must never claim a delivery happened.
+  const isPayForMe = _type === 'payforme';
+  const payerName = searchParams.get('payerName') || 'Friend';
+  const payerToken = orderToken || order?.tracking_token || null;
+  const payerPaymentLink =
+    isPayForMe && payerToken && typeof window !== 'undefined'
+      ? `${window.location.origin}${getHref(`/track-order?token=${encodeURIComponent(payerToken)}`)}`
+      : null;
 
   const heading = hasValidatedOrder
-    ? isInvoice
-      ? 'Proforma Invoice Ready!'
-      : 'Order Confirmed!'
+    ? isPayForMe
+      ? 'Share the Payment Link'
+      : isInvoice
+        ? 'Proforma Invoice Ready!'
+        : 'Order Confirmed!'
     : hasRecoveryState
       ? 'We could not confirm this order yet'
       : 'Finalizing your order';
   const description = hasValidatedOrder
-    ? isInvoice
-      ? 'We have prepared your proforma invoice and sent it to your email. Share it with your company or procurement team.'
-      : 'Thank you for your purchase. Your order has been received.'
+    ? isPayForMe
+      ? `Send the payment link below to ${payerName} — your order will be processed once payment is received.`
+      : isInvoice
+        ? 'We have prepared your proforma invoice and sent it to your email. Share it with your company or procurement team.'
+        : 'Thank you for your purchase. Your order has been received.'
     : hasRecoveryState
       ? 'We could not validate this order from the current link. You can return to checkout or keep shopping while we sort it out.'
       : 'We are validating your order details now. This page will update as soon as your confirmation is ready.';
@@ -154,6 +179,38 @@ function OrderSuccessContent() {
 
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{heading}</h1>
           <p className="text-gray-500 mb-8">{description}</p>
+
+          {/* Payer handoff (Pay for Me only): the shareable payment link
+              the requester forwards — nothing is sent to the payer. */}
+          {isPayForMe && payerPaymentLink && (
+            <div className="mb-8 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-left">
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">
+                Payment link for {payerName}
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  aria-label="Payment link to share with your payer"
+                  readOnly
+                  value={payerPaymentLink}
+                  onFocus={(event) => event.target.select()}
+                  className="min-w-0 flex-1 truncate rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(payerPaymentLink).then(
+                      () => setPayerLinkCopied(true),
+                      () => setPayerLinkCopied(false)
+                    );
+                  }}
+                  className="shrink-0 rounded-lg bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 active:scale-[0.98] flex items-center gap-2"
+                >
+                  {payerLinkCopied ? <Check size={16} /> : <Copy size={16} />}
+                  {payerLinkCopied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {isLoading && (
             <div className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-500 mb-8">
@@ -206,17 +263,32 @@ function OrderSuccessContent() {
               </Link>
             )}
 
-            {isInvoiceMethod && (
-              <Link
-                href={asRoute(getHref('/receipts'))}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-store-border bg-store-background px-6 py-4 font-bold text-store-background-text transition-colors hover:bg-store-secondary"
-              >
-                <Download size={18} />
-                {isInvoice
-                  ? 'Download Proforma Invoice PDF'
-                  : 'Download Commercial Invoice PDF'}
-              </Link>
-            )}
+            {/* The receipts archive requires an account: guests would
+                only hit the login redirect, so they get the accurate
+                email action. Unpaid guests hold the proforma PDF from the
+                immediate invoice email; paid guests hold the order
+                confirmation email — no commercial-invoice PDF is emailed
+                on later gateway settlement, so the copy must not claim
+                one was sent. */}
+            {isInvoiceMethod &&
+              (user ? (
+                <Link
+                  href={asRoute(getHref('/receipts'))}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-store-border bg-store-background px-6 py-4 font-bold text-store-background-text transition-colors hover:bg-store-secondary"
+                >
+                  <Download size={18} />
+                  {isInvoice
+                    ? 'Download Proforma Invoice PDF'
+                    : 'Download Commercial Invoice PDF'}
+                </Link>
+              ) : (
+                <div className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-6 py-4 text-sm font-medium text-gray-600">
+                  <Mail size={18} />
+                  {isInvoice
+                    ? `Your proforma invoice PDF was sent to ${order?.customer_email || 'your email'}.`
+                    : `Your order confirmation was sent to ${order?.customer_email || 'your email'}.`}
+                </div>
+              ))}
 
             <Link
               href={asRoute(getHref('/'))}

@@ -175,7 +175,8 @@ function hasPendingKlumpRedirect(expectedRedirectUrl: string) {
 
 function notifyNativeBnplProviderOpened(
     gateway: NativeBNPLBridgeGateway,
-    orderId: string
+    orderId: string,
+    reference?: string
 ) {
     // Confirms the provider flow actually opened: the native shell records
     // payment_started from this signal, so initialization failures (order
@@ -190,6 +191,7 @@ function notifyNativeBnplProviderOpened(
             JSON.stringify({
                 gateway,
                 orderId,
+                ...(reference ? { reference } : {}),
                 type: 'bnpl_provider_opened',
             })
         );
@@ -202,7 +204,8 @@ function notifyNativeBnplProviderOpened(
 function notifyNativeBnplProviderError(
     gateway: NativeBNPLBridgeGateway,
     orderId: string,
-    message: string
+    message: string,
+    reference?: string
 ) {
     // The provider opened (payment_started recorded natively) and then its
     // SDK failed: bridge the failure so the native funnel reaches
@@ -220,6 +223,7 @@ function notifyNativeBnplProviderError(
                 gateway,
                 orderId,
                 message,
+                ...(reference ? { reference } : {}),
                 type: 'bnpl_provider_error',
             })
         );
@@ -791,11 +795,16 @@ async function launchBnplPayment({
                     // checkouts. Browser sessions record the deferred web
                     // start here instead (the helper no-ops natively).
                     providerOpenedLaunchKeyRef.current = launchKey;
-                    notifyNativeBnplProviderOpened('klump', order.id);
+                    notifyNativeBnplProviderOpened(
+                        'klump',
+                        order.id,
+                        klumpReference ?? undefined
+                    );
                     captureBnplPaymentStarted({
                         orderId: order.id,
                         orderNumber: order.order_number ?? undefined,
                         paymentMethod: 'klump',
+                        reference: klumpReference ?? undefined,
                         ...(Number.isFinite(klumpOrderTotal)
                             ? { value: klumpOrderTotal }
                             : {}),
@@ -819,7 +828,8 @@ async function launchBnplPayment({
                         notifyNativeBnplProviderError(
                             'klump',
                             order.id,
-                            message
+                            message,
+                            klumpReference ?? undefined
                         )
                     ) {
                         clearPaymentLaunch(paymentLaunchKeyRef);
@@ -836,6 +846,7 @@ async function launchBnplPayment({
                             orderNumber: order.order_number ?? undefined,
                             paymentMethod: 'klump',
                             reason: 'klump_error',
+                            reference: klumpReference ?? undefined,
                             ...(Number.isFinite(klumpOrderTotal)
                                 ? { value: klumpOrderTotal }
                                 : {}),

@@ -55,6 +55,7 @@ export function useCheckoutSuccessVerification({
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
   const statusRef = useRef<CheckoutVerificationStatus>('pending');
+  const verificationIdentityRef = useRef<string | null>(null);
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
@@ -80,6 +81,18 @@ export function useCheckoutSuccessVerification({
       reference,
       trackingToken,
     };
+    // App Router reuses this component when client-side navigation only
+    // changes the query: without a reset, the previous checkout's
+    // terminal status/order details linger and the guard below refuses
+    // to verify the new identity at all.
+    const verificationIdentity = [orderId, reference, trackingToken].join('|');
+    if (verificationIdentityRef.current !== verificationIdentity) {
+      verificationIdentityRef.current = verificationIdentity;
+      statusRef.current = 'pending';
+      setStatus('pending');
+      setOrderNumber(null);
+      setPaymentMethod(null);
+    }
     let disposed = false;
     let reverifyTimer: ReturnType<typeof setTimeout> | null = null;
     let reverifyAttempts = 0;

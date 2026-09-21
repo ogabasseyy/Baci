@@ -9,6 +9,7 @@ interface BnplPaymentStarted {
   orderId: string;
   orderNumber?: string;
   paymentMethod: string;
+  reference?: string;
   value?: number;
   currency?: string;
 }
@@ -17,6 +18,7 @@ export function captureBnplPaymentStarted({
   orderId,
   orderNumber,
   paymentMethod,
+  reference,
   value,
   currency,
 }: BnplPaymentStarted) {
@@ -35,6 +37,7 @@ export function captureBnplPaymentStarted({
       orderNumber,
       paymentIntent: 'installments',
       paymentMethod,
+      reference,
       source: 'web_checkout',
       total: value,
     })

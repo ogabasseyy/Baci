@@ -20,6 +20,7 @@ export {
   type VatBreakdownOrder,
 } from './receipt-money';
 export { sanitizeSvg } from './sanitize-svg';
+export { showMerchantBankDetails } from './show-merchant-bank-details';
 export type {
   ReceiptDocumentKind,
   ReceiptFulfillmentDetails,

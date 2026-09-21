@@ -16,11 +16,15 @@ describe('captureBnplPaymentStarted', () => {
   });
 
   it('emits the web start outside a native WebView', () => {
-    captureBnplPaymentStarted({ orderId: 'order-1', paymentMethod: 'klump' });
+    captureBnplPaymentStarted({
+      orderId: 'order-1',
+      paymentMethod: 'klump',
+      reference: 'BAC-1',
+    });
 
     expect(mocks.captureClientEvent).toHaveBeenCalledWith(
       CHECKOUT_FUNNEL_EVENTS.paymentStarted,
-      expect.objectContaining({ payment_method: 'klump' })
+      expect.objectContaining({ payment_method: 'klump', reference: 'BAC-1' })
     );
   });
 

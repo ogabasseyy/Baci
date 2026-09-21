@@ -171,11 +171,15 @@ async function checkReferenceSettled(
     );
     // Only a completed finalization counts: the endpoint also reports
     // success for cancelled/skipped orders, which are not paid conversions.
+    // The identity check fails closed: the route's orderId and the
+    // provider reference are independently supplied, so a completed
+    // envelope for order B (or a version-skewed envelope with no orderId
+    // at all) must never prove that order A was paid.
     if (
       !response.ok ||
       data.success !== true ||
       data.finalizationOutcome !== 'completed' ||
-      (typeof data.orderId === 'string' && data.orderId !== orderId)
+      data.orderId !== orderId
     ) {
       return { paid: false };
     }

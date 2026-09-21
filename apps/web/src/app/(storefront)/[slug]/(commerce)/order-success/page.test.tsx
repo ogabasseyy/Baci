@@ -1,4 +1,10 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderSuccessPage from '@/app/(storefront)/[slug]/(commerce)/order-success/page';
 
@@ -34,9 +40,11 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   }),
 }));
 
+let mockUser: { id: string } | null = null;
+
 vi.mock('@/contexts/auth-context', () => ({
   useAuthSafe: () => ({
-    user: null,
+    user: mockUser,
   }),
 }));
 
@@ -55,6 +63,7 @@ vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
 describe('storefront order success page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUser = null;
     mockSearchParams.mockReturnValue(
       new URLSearchParams({
         orderId: 'order-123',
@@ -130,6 +139,118 @@ describe('storefront order success page', () => {
         products: [{ gtin: '0123456789012' }],
       })
     );
+  });
+
+  it('hands payforme requesters a copyable payer link', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'payforme',
+        payerName: 'Alice',
+        trackingToken: 'track-token-123',
+      })
+    );
+
+    render(<OrderSuccessPage />);
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    // Handoff contract: the requester forwards the link — the route
+    // must never claim a delivery happened.
+    expect(
+      await screen.findByRole('heading', { name: /share the payment link/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/send the payment link below to alice/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/we've sent a payment link/i)).toBeNull();
+
+    const linkInput = screen.getByLabelText(
+      /payment link to share with your payer/i
+    ) as HTMLInputElement;
+    expect(linkInput.value).toContain('/track-order?token=track-token-123');
+
+    fireEvent.click(screen.getByRole('button', { name: /copy/i }));
+    expect(writeText).toHaveBeenCalledWith(linkInput.value);
+    expect(await screen.findByText('Copied')).toBeInTheDocument();
+  });
+
+  it('shows guests the emailed invoice action instead of the archive link', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'invoice',
+        trackingToken: 'track-token-123',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        items: [],
+        subtotal: 45000,
+        shipping_cost: 1500,
+        total: 49875,
+        payment_method: 'invoice',
+        payment_status: 'unpaid',
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    // Anonymous: the /receipts archive would only bounce to login.
+    // The email also renders in the order summary, so assert the full
+    // action sentence to pin the address to the emailed action.
+    expect(
+      await screen.findByText(
+        /proforma invoice pdf was sent to buyer@example\.com/i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /download proforma invoice pdf/i })
+    ).toBeNull();
+  });
+
+  it('keeps the archive download link for authenticated invoice orders', async () => {
+    mockUser = { id: 'user-1' };
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'invoice',
+        trackingToken: 'track-token-123',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        items: [],
+        subtotal: 45000,
+        shipping_cost: 1500,
+        total: 49875,
+        payment_method: 'invoice',
+        payment_status: 'unpaid',
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    expect(
+      await screen.findByRole('link', { name: /download proforma invoice pdf/i })
+    ).toHaveAttribute('href', '/test-store/receipts');
+    expect(screen.queryByText(/was sent to/i)).toBeNull();
   });
 
   it('keeps supporting legacy token query params', async () => {
@@ -856,10 +977,17 @@ describe('storefront order success page', () => {
     expect(
       screen.queryByRole('link', { name: /download proforma invoice pdf/i })
     ).toBeNull();
-    // The paid invoice order keeps a document action, now rendered as
-    // the commercial (380) invoice rather than disappearing entirely.
+    // Guests cannot reach the account archive (it redirects to login),
+    // so the paid invoice order keeps an accurate email-only action: the
+    // order confirmation email, not a claimed commercial-invoice PDF —
+    // none is emailed on later gateway settlement.
     expect(
-      screen.getByRole('link', { name: /download commercial invoice pdf/i })
+      screen.queryByRole('link', { name: /download commercial invoice pdf/i })
+    ).toBeNull();
+    expect(
+      screen.getByText(
+        /your order confirmation was sent to buyer@example\.com/i
+      )
     ).toBeInTheDocument();
   });
 });

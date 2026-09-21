@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetKlumpSdkLoadForTests } from '@/lib/klump-sdk';
 import { BnplLauncher, KLUMP_REDIRECT_URL_KEY } from './bnpl-launcher';
@@ -1083,6 +1090,7 @@ describe('BnplLauncher', () => {
         JSON.stringify({
           gateway: 'klump',
           orderId: 'order-1',
+          reference: 'BAC-ABCD12345678',
           type: 'bnpl_provider_opened',
         })
       );
@@ -1124,6 +1132,7 @@ describe('BnplLauncher', () => {
         JSON.stringify({
           gateway: 'klump',
           orderId: 'order-1',
+          reference: 'BAC-ABCD12345678',
           type: 'bnpl_provider_opened',
         })
       );
@@ -1134,6 +1143,7 @@ describe('BnplLauncher', () => {
           gateway: 'klump',
           orderId: 'order-1',
           message: 'Klump declined the application',
+          reference: 'BAC-ABCD12345678',
           type: 'bnpl_provider_error',
         })
       );
@@ -1351,6 +1361,69 @@ describe('BnplLauncher', () => {
     ).toBeInTheDocument();
   });
 
+  it('stamps retried Klump starts with each issued reference', async () => {
+    // No native bridge: an ordinary browser session.
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+    const renderKlumpAttempt = async (reference: string) => {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-1',
+          gateway: 'klump',
+          merchant_slug: 'test-store',
+          reference,
+          trackingToken: 'tok-123',
+        })
+      );
+      render(<BnplLauncher />);
+      await waitFor(() => {
+        expect(mockKlumpConstructor).toHaveBeenCalled();
+      });
+      const config = mockKlumpConstructor.mock.calls.at(-1)?.[0] as {
+        onOpen?: () => void;
+        onError?: (error: Error) => void;
+      };
+      config.onOpen?.();
+      return config;
+    };
+
+    // First attempt opens with the original reference; the retry (new
+    // BAC-* reference from re-initialization) opens after remount.
+    await renderKlumpAttempt('BAC-ATTEMPT-1');
+    await waitFor(() => {
+      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
+        'payment_started',
+        expect.objectContaining({
+          order_id: 'order-1',
+          reference: 'BAC-ATTEMPT-1',
+        })
+      );
+    });
+    cleanup();
+    mockKlumpConstructor.mockClear();
+    const retryConfig = await renderKlumpAttempt('BAC-ATTEMPT-2');
+    retryConfig.onError?.(new Error('Klump declined the application'));
+
+    await waitFor(() => {
+      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
+        'payment_started',
+        expect.objectContaining({
+          order_id: 'order-1',
+          reference: 'BAC-ATTEMPT-2',
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
+        'payment_failed',
+        expect.objectContaining({
+          order_id: 'order-1',
+          reason: 'klump_error',
+          reference: 'BAC-ATTEMPT-2',
+        })
+      );
+    });
+  });
+
   it('records no web failure for a pre-open browser Klump error', async () => {
     mockSearchParams.mockReturnValue(
       new URLSearchParams({
@@ -1421,6 +1494,7 @@ describe('BnplLauncher', () => {
         JSON.stringify({
           gateway: 'klump',
           orderId: 'order-1',
+          reference: 'BAC-ABCD12345678',
           type: 'bnpl_provider_opened',
         })
       );

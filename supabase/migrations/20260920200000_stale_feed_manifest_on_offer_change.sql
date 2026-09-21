@@ -52,7 +52,7 @@ AS $$
   -- URL would wrongly stale.
   SELECT DISTINCT trimmed
   FROM (
-    SELECT NULLIF(trim(BOTH E' \t\n\r\f\v\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF' FROM (
+    SELECT NULLIF(trim(BOTH E' \t\n\r\f\u000B\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF' FROM (
       CASE jsonb_typeof(elem.value)
         WHEN 'string' THEN elem.value #>> '{}'
         WHEN 'object' THEN CASE
@@ -89,8 +89,8 @@ AS $$
   -- whitespace sets are JavaScript's, which PostgreSQL's \s does not
   -- cover (see feed_manifest_image_urls).
   SELECT CASE lower(regexp_replace(
-      trim(BOTH E' \t\n\r\f\v\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF' FROM COALESCE(raw_condition, '')),
-      E'[ \t\n\r\f\v\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF-]+', '_', 'g'
+      trim(BOTH E' \t\n\r\f\u000B\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF' FROM COALESCE(raw_condition, '')),
+      E'[ \t\n\r\f\u000B\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF-]+', '_', 'g'
     ))
     WHEN 'new' THEN 'new'
     WHEN 'used' THEN 'used'

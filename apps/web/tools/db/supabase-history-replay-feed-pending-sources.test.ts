@@ -13,7 +13,7 @@ describe('feed pending replay sources', () => {
       '20260918000000_public_active_product_offers.sql',
     ],
     [
-      '564e565b32bd79b40d0181ecc08f210b3ce9b59035ea74ae7999247a5462a411',
+      '7de47f950351dfd8945be917d091dc50fd5ca80948566b20eb617c5c43e83718',
       '20260920200000_stale_feed_manifest_on_offer_change.sql',
     ],
   ])('pins %s to its checked-in bytes', async (sha256, filename) => {

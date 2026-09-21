@@ -146,7 +146,7 @@ describe('supabase-history-replay sources', () => {
 
   it('registers the offer-change feed manifest trigger for replay verification', () => {
     expect(rows(PENDING_SOURCES)).toContain(
-      '564e565b32bd79b40d0181ecc08f210b3ce9b59035ea74ae7999247a5462a411 20260920200000_stale_feed_manifest_on_offer_change.sql'
+      '7de47f950351dfd8945be917d091dc50fd5ca80948566b20eb617c5c43e83718 20260920200000_stale_feed_manifest_on_offer_change.sql'
     );
   });
 

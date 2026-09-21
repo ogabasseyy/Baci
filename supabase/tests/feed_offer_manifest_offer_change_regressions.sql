@@ -145,6 +145,14 @@ BEGIN
   IF v_status IS DISTINCT FROM 'https://cdn.example.com/bom.jpg' THEN
     RAISE EXCEPTION 'extractor must trim ECMAScript-only whitespace';
   END IF;
+  -- A terminal v is content, not whitespace: PostgreSQL E strings do not
+  -- define \v, so encoding vertical tab any other way would eat it.
+  SELECT public.feed_manifest_image_urls(
+    E'["  https://cdn.example.com/q?v\u00A0  "]'
+  ) INTO v_status;
+  IF v_status IS DISTINCT FROM 'https://cdn.example.com/q?v' THEN
+    RAISE EXCEPTION 'extractor must preserve a terminal v';
+  END IF;
 
   -- Listing-condition parity with toGoogleListingCondition.
   IF public.feed_listing_condition(E'\uFEFF Open-Box\u00A0') IS DISTINCT FROM 'refurbished'

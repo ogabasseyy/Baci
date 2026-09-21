@@ -32,6 +32,13 @@ export async function assertCurrentOrderPaymentShippable(
       'ORDER_CANCELLED'
     );
   }
+  if (error.message?.includes('order_redvault_unpaid_for_shipment')) {
+    throw new OrderShipmentBookingError(
+      'This UBA order has not been paid and cannot be shipped yet.',
+      400,
+      'ORDER_UNPAID'
+    );
+  }
   if (error.message?.includes('order_not_found_for_shipment')) {
     throw new OrderShipmentBookingError(
       'Order not found',

@@ -40,80 +40,19 @@ describe('POST /api/cron/process-redvault-refunds', () => {
 
   it('returns 401 when the cron secret is missing or wrong', async () => {
     expect((await POST(makeRequest(''))).status).toBe(401);
-    expect((await POST(makeRequest('Bearer wrong-secret-secret'))).status).toBe(
-      401
-    );
+    expect((await POST(makeRequest('Bearer wrong'))).status).toBe(401);
     expect(mocks.runRedvaultRefundRecovery).not.toHaveBeenCalled();
   });
 
-  it('fails closed when the provider secret is not configured', async () => {
-    vi.stubEnv('PAYSTACK_SECRET_KEY', '');
-
+  it('stays unavailable until the restricted-role transport is approved', async () => {
     const res = await POST(makeRequest());
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      error: 'Refund recovery is not available',
+    });
     expect(mocks.runRedvaultRefundRecovery).not.toHaveBeenCalled();
-  });
-
-  it('drives the production worker with the production guard', async () => {
-    const res = await POST(makeRequest());
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      reconciliation: 'idle',
-      submission: 'idle',
-      success: true,
-    });
-    expect(mocks.runRedvaultRefundRecovery).toHaveBeenCalledOnce();
-    expect(mocks.runRedvaultRefundRecovery).toHaveBeenCalledWith(
-      expect.objectContaining({
-        applyGuard: 'apply-redvault-production-refunds',
-        mode: 'apply',
-        providerEnvironment: 'production',
-      })
-    );
-  });
-
-  it('returns 500 when the worker throws', async () => {
-    mocks.runRedvaultRefundRecovery.mockRejectedValueOnce(new Error('boom'));
-
-    const res = await POST(makeRequest());
-
-    expect(res.status).toBe(500);
-  });
-
-  it.each([
-    {
-      reconciliation: 'idle',
-      submission: 'transport_or_provider_error',
-    },
-    {
-      reconciliation: 'transport_or_provider_error',
-      submission: 'idle',
-    },
-  ])('returns 500 when a pass reports an execution error %j', async (outcome) => {
-    mocks.runRedvaultRefundRecovery.mockResolvedValueOnce(outcome);
-
-    const res = await POST(makeRequest());
-
-    expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ success: false, ...outcome });
-  });
-
-  it('returns 200 when passes report per-refund outcomes', async () => {
-    mocks.runRedvaultRefundRecovery.mockResolvedValueOnce({
-      reconciliation: 'indeterminate',
-      submission: 'processed',
-    });
-
-    const res = await POST(makeRequest());
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      reconciliation: 'indeterminate',
-      submission: 'processed',
-      success: true,
-    });
+    expect(mocks.createServiceClient).not.toHaveBeenCalled();
   });
 
   it('refuses GET outside development', async () => {

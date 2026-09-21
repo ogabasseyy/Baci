@@ -111,8 +111,12 @@ import {
   resolvePendingCheckoutOrder,
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
-import { checkoutFingerprintsMatch } from './checkout/checkout-fingerprints-match';
-import { cancelStaleCheckoutOrder } from './checkout/cancel-stale-checkout-order';
+import {
+  submitRedvaultPreparedOrder,
+  type RedvaultPreparedOrder,
+  type RedvaultStatus,
+} from './checkout/handlers/redvault-prepared-order-submit';
+import { resolveRedvaultSubmitFence } from './checkout/handlers/redvault-submit-fence';
 import {
   clearCheckoutIdempotencyKey,
   getCheckoutIdempotencyKey,
@@ -1201,19 +1205,10 @@ export const CheckoutPage: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('');
   const [redvaultSummary, setRedvaultSummary] =
     useState<RedvaultQuoteSummary | null>(null);
-  const [redvaultStatus, setRedvaultStatus] = useState<
-    'idle' | 'pending' | 'held' | 'error'
-  >('idle');
-  const [redvaultOrderReady, setRedvaultOrderReady] = useState<{
-    billingAddress: DvaBillingAddress;
-    customerEmail: string;
-    customerName: string;
-    customerPhone: string;
-    currency: string;
-    orderId: string;
-    checkoutFingerprint: string;
-    trackingToken?: string;
-  } | null>(null);
+  const [redvaultStatus, setRedvaultStatus] =
+    useState<RedvaultStatus>('idle');
+  const [redvaultOrderReady, setRedvaultOrderReady] =
+    useState<RedvaultPreparedOrder | null>(null);
   const selectPaymentMethod = (nextMethod: PaymentMethod) => {
     if (isOrderInFlightRef.current || redvaultStatus === 'pending' || redvaultStatus === 'held') return;
     if (
@@ -2102,146 +2097,28 @@ export const CheckoutPage: React.FC = () => {
       giftWrappingCost,
     });
 
-    // A REDVAULT order prepared by an earlier click initializes here, AFTER
-    // validation and fingerprinting. The prepared order is bound to the
-    // checkout fingerprint: edited contact/delivery/cart inputs cancel and
-    // recreate it instead of initializing a stale order with skipped
-    // validation. A live (409) cancel keeps the prepared order and replays
-    // it instead of opening a second order; cancelled/gone recreates. A
-    // failed cancel keeps the fence and blocks: the prepared order may
-    // still hold its reservation, so clearing it would strand inventory
-    // while the replacement order fails against the held stock.
-    let activeRedvaultOrder =
-      paymentMethod === 'uba_redvault' ? redvaultOrderReady : null;
+    // A REDVAULT order prepared by an earlier click initializes through
+    // the extracted submit handler (stale-fingerprint cancel, guest
+    // signup/attach, initialization, and redirect/hold handling).
     if (
-      activeRedvaultOrder &&
-      !checkoutFingerprintsMatch(
-        activeRedvaultOrder.checkoutFingerprint,
-        checkoutFingerprint
-      )
+      await submitRedvaultPreparedOrder({
+        paymentMethod,
+        redvaultOrderReady,
+        checkoutFingerprint,
+        waitForResolvedStorefrontCustomerAuth,
+        isOrderInFlightRef,
+        setIsProcessing,
+        setRedvaultStatus,
+        setRedvaultOrderReady,
+        clearPendingCheckoutOrder,
+        createAccount,
+        user,
+        accountPassword,
+        firstName,
+        lastName,
+        merchantId: merchant?.id ?? '',
+      })
     ) {
-      const staleCancel = await cancelStaleCheckoutOrder({
-        // This route mounts no auth provider, so `user` is always null
-        // here: resolve the cookie session or signed-in customers cancel
-        // down the guest route and mis-route to the recreate branch.
-        isAuthenticated: await waitForResolvedStorefrontCustomerAuth(),
-        orderId: activeRedvaultOrder.orderId,
-        reason: 'Checkout details changed before UBA payment',
-        trackingToken: activeRedvaultOrder.trackingToken,
-      });
-      if (staleCancel === 'live') {
-        console.warn(
-          'Prepared REDVAULT order already initializing; replaying it.'
-        );
-      } else if (staleCancel === 'failed') {
-        // Unproven (timeout, server error, no ownership proof): keep the
-        // fence and stop this submit instead of recreating. The retry
-        // re-attempts the same cancellation; clearing here would strand
-        // the reservation while the replacement fails against held stock.
-        toast({
-          title: 'Order Still Processing',
-          description:
-            'We could not release your previous order. Please try again.',
-          variant: 'destructive',
-        });
-        isOrderInFlightRef.current = false;
-        setIsProcessing(false);
-        return;
-      } else {
-        // Cancelled or gone: the prepared order never initialized — this
-        // branch is the only initializer and it clears the state first —
-        // so nothing is payable and recreating below is safe.
-        activeRedvaultOrder = null;
-        setRedvaultOrderReady(null);
-        clearPendingCheckoutOrder();
-      }
-    }
-    if (activeRedvaultOrder) {
-      setIsProcessing(true);
-      setRedvaultStatus('pending');
-      // Guest signup establishes a session before initialization: the
-      // guest application was created with a null user_id, so the new
-      // account must adopt it first or every customer-bound recovery RPC
-      // rejects the changed identity and the live order can never replay
-      // its authorization URL. Signup failures stay tolerated (email may
-      // already exist); only an established session with a failed attach
-      // blocks payment, and the retry re-attempts the attach.
-      if (createAccount && !user && accountPassword.length >= 6) {
-        const supabase = createClient();
-        try {
-          await supabase.auth.signUp({
-            email: activeRedvaultOrder.customerEmail,
-            password: accountPassword,
-            options: {
-              data: {
-                first_name: firstName,
-                last_name: lastName,
-                phone: activeRedvaultOrder.customerPhone,
-                source: 'checkout',
-                signup_type: 'customer',
-              },
-            },
-          });
-        } catch (authError) {
-          console.error('Silent signup background error:', authError);
-        }
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        // The attach RPC requires the order's tracking token as
-        // order-bound proof; without the persisted token there is nothing
-        // to prove with, so skip the attach and let initialization run
-        // under the guest identity instead of failing the payment.
-        if (session && activeRedvaultOrder.trackingToken) {
-          const { data: attached, error: attachError } = await supabase.rpc(
-            'attach_redvault_guest_application_to_customer',
-            {
-              p_order_id: activeRedvaultOrder.orderId,
-              p_tracking_token: activeRedvaultOrder.trackingToken,
-            }
-          );
-          // The RPC is idempotent for the owning caller, so false means
-          // the checkout is genuinely not ours: block like an error.
-          if (attachError || attached !== true) {
-            console.error('Guest checkout attach error:', attachError);
-            setRedvaultStatus('error');
-            setIsProcessing(false);
-            isOrderInFlightRef.current = false;
-            return;
-          }
-        }
-      }
-      let paymentResult: Awaited<ReturnType<typeof initializeRedvaultPayment>>;
-      try {
-        paymentResult = await initializeRedvaultPayment({
-          merchantId: merchant?.id ?? '',
-          orderId: activeRedvaultOrder.orderId,
-          currency: activeRedvaultOrder.currency,
-          customerEmail: activeRedvaultOrder.customerEmail,
-          customerName: activeRedvaultOrder.customerName,
-          customerPhone: activeRedvaultOrder.customerPhone,
-          trackingToken: activeRedvaultOrder.trackingToken,
-          billingAddress: activeRedvaultOrder.billingAddress,
-        });
-      } catch {
-        setRedvaultStatus('error');
-        setIsProcessing(false);
-        isOrderInFlightRef.current = false;
-        return;
-      }
-      setRedvaultOrderReady(null);
-      if (paymentResult.kind === 'pending_reconciliation') {
-        setIsProcessing(false);
-        isOrderInFlightRef.current = false;
-        return;
-      }
-      if (paymentResult.kind === 'captured_held') {
-        setRedvaultStatus('held');
-        setIsProcessing(false);
-        isOrderInFlightRef.current = false;
-        return;
-      }
-      window.location.assign(paymentResult.authorizationUrl);
       return;
     }
 
@@ -2287,138 +2164,32 @@ export const CheckoutPage: React.FC = () => {
         shippingRateId: merchantRateId ?? undefined,
       });
 
-      if (reusablePendingOrder.redvaultUnresolved) {
-        raiseCheckoutError(
-          'Your UBA payment is still being verified. Do not pay again with another method until it completes.'
-        );
-      }
-
-      // The fenced order already committed money (e.g. the webhook marked it
-      // paid after the browser closed): route to the completed order instead
-      // of recreating from the unchanged cart.
-      if (reusablePendingOrder.paidOrder) {
-        const paidOrder = reusablePendingOrder.paidOrder;
-        clearPendingCheckoutOrder();
-        await clearCheckoutIdempotencyKey(checkoutFingerprint);
-        clearCheckoutSession();
-        clearCart();
-        setIsProcessing(false);
-        isOrderInFlightRef.current = false;
-        const successQuery = new URLSearchParams({
-          orderId: paidOrder.orderId,
-          email: customerEmail,
-        });
-        if (paidOrder.trackingToken) {
-          successQuery.set('trackingToken', paidOrder.trackingToken);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
+      // The REDVAULT pending-order fence verdict (paid routing, blocking
+      // cancels, live replay) lives in the extracted submit handler.
+      if (
+        await resolveRedvaultSubmitFence({
+          fence: reusablePendingOrder,
+          checkoutFingerprint,
+          customerEmail,
+          merchantId: merchant.id,
+          firstName,
+          lastName,
+          customerPhone,
+          finalAddress,
+          finalCity,
+          finalState,
+          merchantCountry,
+          waitForResolvedStorefrontCustomerAuth,
+          isOrderInFlightRef,
+          setIsProcessing,
+          setRedvaultStatus,
+          clearPendingCheckoutOrder,
+          clearCheckoutSession,
+          clearCart,
+          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
+        })
+      ) {
         return;
-      }
-
-      // Entering REDVAULT with an ordinary order still pending: its hosted
-      // payment may remain payable, so cancel it before the REDVAULT lane
-      // creates another inventory-reserving order. Unlike the prepared-order
-      // path (provably pre-init), an unreleasable ordinary order blocks the
-      // lane instead of risking a duplicate live checkout.
-      if (reusablePendingOrder.ordinaryPendingOrder) {
-        const ordinary = reusablePendingOrder.ordinaryPendingOrder;
-        const ordinaryCancel = await cancelStaleCheckoutOrder({
-          isAuthenticated: await waitForResolvedStorefrontCustomerAuth(),
-          orderId: ordinary.orderId,
-          reason: 'Shopper switched to UBA payment',
-          trackingToken: ordinary.trackingToken,
-        });
-        if (ordinaryCancel === 'live') {
-          raiseCheckoutError(
-            'Your previous order is still being processed. Please wait for it to complete before paying with UBA.'
-          );
-        }
-        if (ordinaryCancel === 'failed') {
-          raiseCheckoutError(
-            'We could not release your previous order. Please try again.'
-          );
-        }
-        clearPendingCheckoutOrder();
-      }
-
-      // Same-lane REDVAULT retry (reload or return from Paystack) with a
-      // still-pending stored order: the new fingerprint takes a new
-      // idempotency identity, so cancel the old order before submitting or
-      // the lane opens a second inventory-reserving order while the old
-      // hosted URL may still capture. An initializing order reports live
-      // and blocks instead of duplicating.
-      if (reusablePendingOrder.redvaultPendingOrder) {
-        const stale = reusablePendingOrder.redvaultPendingOrder;
-        const staleCancel = await cancelStaleCheckoutOrder({
-          isAuthenticated: await waitForResolvedStorefrontCustomerAuth(),
-          orderId: stale.orderId,
-          reason: 'Shopper restarted UBA payment',
-          trackingToken: stale.trackingToken,
-        });
-        if (staleCancel === 'live') {
-          // The stored order already initialized (reload before following
-          // the redirect): reopen its persisted authorization URL instead
-          // of stranding the fenced order with no in-app path. The fence
-          // stays — it still references this live order.
-          setRedvaultStatus('pending');
-          let replayResult: Awaited<
-            ReturnType<typeof initializeRedvaultPayment>
-          >;
-          try {
-            replayResult = await initializeRedvaultPayment({
-              merchantId: merchant.id,
-              orderId: stale.orderId,
-              trackingToken: stale.trackingToken,
-              // REDVAULT rails are NGN-only (attempt CHECK + paystack
-              // gateway); the stamped order currency is authoritative
-              // server-side, so NGN is the only sendable value that can
-              // ever initialize here.
-              currency: 'NGN',
-              // The email persisted with the stored order: the payment
-              // snapshot lookup rejects a current-form email the shopper
-              // edited after the order was initialized.
-              customerEmail: stale.customerEmail,
-              customerName: `${firstName} ${lastName}`.trim(),
-              customerPhone,
-              billingAddress: buildCheckoutBillingAddress(
-                finalAddress,
-                finalCity,
-                finalState,
-                merchantCountry
-              ),
-            });
-          } catch {
-            setRedvaultStatus('error');
-            setIsProcessing(false);
-            isOrderInFlightRef.current = false;
-            raiseCheckoutError(
-              'We could not reopen your previous UBA payment. Please try again.'
-            );
-          }
-          if (replayResult.kind === 'pending_reconciliation') {
-            setIsProcessing(false);
-            isOrderInFlightRef.current = false;
-            return;
-          }
-          if (replayResult.kind === 'captured_held') {
-            setRedvaultStatus('held');
-            setIsProcessing(false);
-            isOrderInFlightRef.current = false;
-            return;
-          }
-          window.location.assign(replayResult.authorizationUrl);
-          return;
-        }
-        if (staleCancel === 'failed') {
-          raiseCheckoutError(
-            'We could not release your previous UBA payment. Please try again.'
-          );
-        }
-        clearPendingCheckoutOrder();
-      }
-
-      if (reusablePendingOrder.clearStoredOrder) {
-        clearPendingCheckoutOrder();
       }
 
       if (reusablePendingOrder.reusableOrder) {

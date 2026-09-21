@@ -55,6 +55,22 @@ describe('assertCurrentOrderPaymentShippable', () => {
     expect((failure as OrderShipmentBookingError).status).toBe(400);
   });
 
+  it('rejects an unpaid REDVAULT order before the provider booking', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'order_redvault_unpaid_for_shipment' },
+    });
+
+    const failure = await assertCurrentOrderPaymentShippable(
+      mockSupabase(rpc),
+      'merchant-1',
+      'order-1'
+    ).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(OrderShipmentBookingError);
+    expect((failure as OrderShipmentBookingError).code).toBe('ORDER_UNPAID');
+    expect((failure as OrderShipmentBookingError).status).toBe(400);
+  });
+
   it('fails closed when the order vanished mid-booking', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: null,

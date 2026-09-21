@@ -152,6 +152,25 @@ describe('claimOrderShipmentBooking', () => {
     } satisfies Partial<OrderShipmentBookingError>);
   });
 
+  it('throws ORDER_UNPAID when the claim observes an unpaid REDVAULT order', async () => {
+    const { supabase } = createSupabaseMock({
+      rpcResult: {
+        data: null,
+        error: {
+          code: 'P0001',
+          message: 'order_redvault_unpaid_for_shipment',
+        },
+      },
+    });
+
+    await expect(
+      claimOrderShipmentBooking(supabase, 'merchant-1', 'order-1')
+    ).rejects.toMatchObject({
+      code: 'ORDER_UNPAID',
+      status: 400,
+    } satisfies Partial<OrderShipmentBookingError>);
+  });
+
   it('throws ORDER_REFUND_PENDING when a partial refund is still settling', async () => {
     const { supabase } = createSupabaseMock({
       rpcResult: {

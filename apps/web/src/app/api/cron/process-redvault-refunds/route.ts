@@ -1,39 +1,24 @@
 import { NextResponse } from 'next/server';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { logger } from '@/lib/logger';
-import { createRedvaultPaystackRefundProvider } from '@/lib/payments/redvault-refund-paystack-provider';
-import {
-  REDVAULT_PRODUCTION_REFUND_APPLY_GUARD,
-  runRedvaultRefundRecovery,
-} from '@/lib/payments/redvault-refund-recovery-runner';
-import type { RedvaultRefundRpcClient } from '@/lib/payments/redvault-refund-store';
-import { RedvaultRefundStore } from '@/lib/payments/redvault-refund-store';
-import { createServiceClient } from '@/lib/supabase/service';
-
-const recoveryLogger = {
-  error: (entry: Record<string, string>) =>
-    logger.error({ message: 'REDVAULT refund recovery', ...entry }),
-  info: (entry: Record<string, string>) =>
-    logger.info({ message: 'REDVAULT refund recovery', ...entry }),
-};
 
 /**
  * POST /api/cron/process-redvault-refunds
  *
- * Manual fallback only - DO NOT schedule this route (Vercel Cron or
- * vps-workers) until production refund recovery has its separately
- * approved restricted-role transport plus provider and operational
- * approval (see docs/superpowers/plans/uba-redvault-evidence/
- * recovery-completion.md). Keep CRON_SECRET gating intact.
- *
- * Drives one REDVAULT refund submission pass plus one reconciliation pass
- * through the live Paystack provider. Without this worker,
- * operator-reserved refunds sit in pending forever: the recovery runner
- * refuses to run outside an explicit apply guard.
+ * Intentionally unavailable. Production refund recovery requires a
+ * separately approved restricted-role transport with grants limited to
+ * the REDVAULT refund RPC surface, an explicitly reviewed non-test
+ * provider-key policy, an authenticated operator entrypoint, and verified
+ * Paystack refund/reconciliation evidence (see docs/superpowers/plans/
+ * uba-redvault-evidence/recovery-completion.md). None of those exist yet,
+ * so this route must not drive the recovery runner in apply mode against
+ * the live provider through the shared cron secret and an unrestricted
+ * service-role client. Re-enable only by adding the approved restricted
+ * transport — never by re-adding a service-role store here.
  *
  * Security: Requires Authorization: Bearer <CRON_SECRET>
  */
-export async function POST(request: Request) {
+export function POST(request: Request) {
   try {
     // Verify cron secret
     const authHeader = request.headers.get('Authorization');
@@ -50,41 +35,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fail closed: without a provider secret every lookup would resolve
-    // indeterminate and stall reserved refunds instead of processing them.
-    if (!process.env.PAYSTACK_SECRET_KEY) {
-      logger.error({
-        message: 'PAYSTACK_SECRET_KEY is not configured for REDVAULT refunds',
-      });
-      return NextResponse.json(
-        { error: 'Refund provider is not configured' },
-        { status: 500 }
-      );
-    }
-
-    const outcome = await runRedvaultRefundRecovery({
-      applyGuard: REDVAULT_PRODUCTION_REFUND_APPLY_GUARD,
-      logger: recoveryLogger,
-      mode: 'apply',
-      provider: createRedvaultPaystackRefundProvider({
-        getSecret: () => process.env.PAYSTACK_SECRET_KEY,
-      }),
-      providerEnvironment: 'production',
-      store: new RedvaultRefundStore(
-        createServiceClient() as unknown as RedvaultRefundRpcClient
-      ),
+    // Activation boundary (see the header comment): no restricted-role
+    // transport exists, so production recovery stays unavailable.
+    logger.info({
+      message: 'REDVAULT refund recovery is unavailable: no approved transport',
     });
-
-    // The VPS scheduler treats any 2xx as success: surface an execution
-    // failure (rather than a per-refund outcome) as a 500 so alerting
-    // fires instead of silently recording a failed pass as healthy.
-    if (
-      outcome.submission === 'transport_or_provider_error' ||
-      outcome.reconciliation === 'transport_or_provider_error'
-    ) {
-      return NextResponse.json({ success: false, ...outcome }, { status: 500 });
-    }
-    return NextResponse.json({ success: true, ...outcome });
+    return NextResponse.json(
+      { error: 'Refund recovery is not available' },
+      { status: 503 }
+    );
   } catch (error) {
     logger.error({
       message: 'REDVAULT refund processing cron error',

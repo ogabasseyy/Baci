@@ -181,4 +181,70 @@ describe('resolveRedvaultCheckoutFence', () => {
       redvaultUnresolved: true,
     });
   });
+
+  it('keeps a same-lane REDVAULT order fenced when shipping progressed without payment', async () => {
+    const fetchImpl = fencedResponse({
+      id: 'order-1',
+      order_number: 'RV-1',
+      payment_status: 'unpaid',
+      shipping_status: 'processing',
+    });
+    const result = await resolveRedvaultCheckoutFence({
+      fetchImpl,
+      paymentMethod: 'uba_redvault',
+      pendingOrder: snapshot({ paymentMethod: 'uba_redvault' }),
+    });
+    expect(result).toEqual({
+      reusableOrder: null,
+      clearStoredOrder: false,
+      redvaultPendingOrder: {
+        orderId: 'order-1',
+        orderNumber: 'RV-1',
+        trackingToken: 'track-1',
+        customerEmail: 'ada@example.com',
+      },
+    });
+  });
+
+  it('keeps an ordinary order fenced when shipping progressed without payment', async () => {
+    const fetchImpl = fencedResponse({
+      id: 'order-1',
+      order_number: 'ORD-1',
+      payment_status: 'unpaid',
+      shipping_status: 'shipped',
+    });
+    const result = await resolveRedvaultCheckoutFence({
+      fetchImpl,
+      paymentMethod: 'uba_redvault',
+      pendingOrder: snapshot({ paymentMethod: 'card' }),
+    });
+    expect(result).toEqual({
+      reusableOrder: null,
+      clearStoredOrder: false,
+      ordinaryPendingOrder: {
+        orderId: 'order-1',
+        orderNumber: 'ORD-1',
+        trackingToken: 'track-1',
+        customerEmail: 'ada@example.com',
+      },
+    });
+  });
+
+  it('blocks leaving REDVAULT when shipping progressed without payment', async () => {
+    const fetchImpl = fencedResponse({
+      id: 'order-1',
+      payment_status: 'unpaid',
+      shipping_status: 'processing',
+    });
+    const result = await resolveRedvaultCheckoutFence({
+      fetchImpl,
+      paymentMethod: 'card',
+      pendingOrder: snapshot({ paymentMethod: 'uba_redvault' }),
+    });
+    expect(result).toEqual({
+      reusableOrder: null,
+      clearStoredOrder: false,
+      redvaultUnresolved: true,
+    });
+  });
 });

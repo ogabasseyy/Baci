@@ -120,6 +120,23 @@ export async function claimOrderShipmentBooking(
       );
     }
 
+    // REDVAULT is prepaid: the claim rejects REDVAULT orders whose hosted
+    // payment has not succeeded, so no provider shipment exists before
+    // money commits.
+    if (
+      typeof error === 'object' &&
+      typeof (error as RpcErrorLike).message === 'string' &&
+      (error as RpcErrorLike).message?.includes(
+        'order_redvault_unpaid_for_shipment'
+      )
+    ) {
+      throw new OrderShipmentBookingError(
+        'This UBA order has not been paid and cannot be shipped yet.',
+        400,
+        'ORDER_UNPAID'
+      );
+    }
+
     // Partial refunds leave payment_status paid: the claim rejects while a
     // merchandise refund is still settling so the booking cannot ship
     // stale pre-refund units. No lock was acquired, so nothing to release;

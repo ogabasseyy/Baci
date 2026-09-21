@@ -22,12 +22,21 @@ const NON_REUSABLE_PAYMENT_STATUSES = new Set([
 // caller must NOT recreate from the unchanged cart — that would charge the
 // shopper twice for the same merchandise.
 const PAID_PAYMENT_STATUSES = new Set(['paid', 'bnpl_approved']);
-const PAID_SHIPPING_STATUSES = new Set([
+// Shipping states that prove fulfillment progressed. They are NOT proof of
+// payment on their own (see isPaidOrderState), but an order that reached
+// them without payment proof must stay fenced: the caller cancels it first
+// instead of clearing into a duplicate order.
+const PROGRESSED_SHIPPING_STATUSES = new Set([
   'processing',
   'shipped',
   'out_for_delivery',
   'delivered',
   'completed',
+]);
+const TERMINAL_UNPAID_PAYMENT_STATUSES = new Set([
+  'refunded',
+  'cancelled',
+  'canceled',
 ]);
 
 type FencedOrderState = {
@@ -39,13 +48,26 @@ type FencedOrderState = {
 };
 
 export function isPaidOrderState(order: FencedOrderState): boolean {
-  // A full refund flips payment_status to 'refunded' while leaving a
-  // 'processing' shipping_status behind: refunded money must never read
-  // as paid, or fence recovery routes to a dead success page.
-  if ((order.payment_status || '') === 'refunded') return false;
+  // Payment proof only: merchant confirmation moves shipping_status to
+  // 'processing' without checking payment status, so shipping progression
+  // alone would route an unpaid order to the completed-order flow. A full
+  // refund flips payment_status to 'refunded' while leaving a 'processing'
+  // shipping_status behind: refunded money must never read as paid, or
+  // fence recovery routes to a dead success page.
+  return PAID_PAYMENT_STATUSES.has(order.payment_status || '');
+}
+
+export function isProgressedButUnpaidOrderState(
+  order: FencedOrderState
+): boolean {
+  // Fulfillment progressed without payment proof and without a terminal
+  // unpaid state (refunded/cancelled clear through the non-reusable path).
+  // The hosted attempt may still be live, so the fence must stay up and
+  // the caller must cancel this order before submitting a new one.
   return (
-    PAID_PAYMENT_STATUSES.has(order.payment_status || '') ||
-    PAID_SHIPPING_STATUSES.has(order.shipping_status || '')
+    PROGRESSED_SHIPPING_STATUSES.has(order.shipping_status || '') &&
+    !PAID_PAYMENT_STATUSES.has(order.payment_status || '') &&
+    !TERMINAL_UNPAID_PAYMENT_STATUSES.has(order.payment_status || '')
   );
 }
 
@@ -154,7 +176,13 @@ export async function resolveRedvaultCheckoutFence({
           paidOrder: paidOrderIdentity(pendingOrder, sameLaneOrder),
         };
       }
-      if (isNonReusableOrderState(sameLaneOrder)) {
+      // Progressed shipping without payment proof is still pending, not
+      // terminal: the old hosted URL may still capture, so fall through to
+      // the cancel-first surface instead of clearing into a duplicate.
+      if (
+        !isProgressedButUnpaidOrderState(sameLaneOrder) &&
+        isNonReusableOrderState(sameLaneOrder)
+      ) {
         return { reusableOrder: null, clearStoredOrder: true };
       }
       return {
@@ -192,7 +220,12 @@ export async function resolveRedvaultCheckoutFence({
         paidOrder: paidOrderIdentity(pendingOrder, enteringOrder),
       };
     }
-    if (isNonReusableOrderState(enteringOrder)) {
+    // Same progressed-but-unpaid rule as the same-lane branch: keep the
+    // fence and surface the order for cancel-first.
+    if (
+      !isProgressedButUnpaidOrderState(enteringOrder) &&
+      isNonReusableOrderState(enteringOrder)
+    ) {
       return { reusableOrder: null, clearStoredOrder: true };
     }
     return {
@@ -230,7 +263,12 @@ export async function resolveRedvaultCheckoutFence({
         paidOrder: paidOrderIdentity(pendingOrder, fencedOrder),
       };
     }
-    if (isNonReusableOrderState(fencedOrder)) {
+    // Same progressed-but-unpaid rule as the same-lane branch: the lane
+    // switch stays blocked instead of clearing into a second order.
+    if (
+      !isProgressedButUnpaidOrderState(fencedOrder) &&
+      isNonReusableOrderState(fencedOrder)
+    ) {
       return { reusableOrder: null, clearStoredOrder: true };
     }
     return {

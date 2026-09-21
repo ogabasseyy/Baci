@@ -20,12 +20,12 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "ead65c8e771c118e0aff9c21cf69ee689eeb018d",
+  "originMainSha": "474e2d9c8520afeafae048792ce8747de341ec9a",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "61966d7eb4f2226636818bc9a8f7b77eacc3f90d07c64c02f7ccbbd828717f0a",
+  "routeTreeSha256": "1611d4c2c61d888ebf98e33f68cece561a6455f1be31ed5799552b73207416ee",
   "routingProxyInputSha256": "37538e5a53f9eb6567889835217d23427645aab58234a9da63423b9eee47b052",
   "rows": [
     {
@@ -7070,6 +7070,18 @@
     },
     {
       "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{category}/graphics/{graphicsSlug}",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "storefront:(blog)/blog/[...catchAll]/route.ts:options:slug-prefixed",
       "methods": [
         "OPTIONS"
@@ -7927,6 +7939,22 @@
       }
     },
     {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/{category}/graphics/{graphicsSlug}",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
       "decision": "edge_release",
       "reason": "public_release_surface",
       "id": "storefront:(catalog)/(listing)/[category]/compare/page.tsx:slug-prefixed",
@@ -8258,5 +8286,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "8eff605ee463251081b01ecbb982446eeabca3231f1e982513180be7f60b677e"
+  "inventorySha256": "8e49a89f58c1b49d136de3fee32e8e53605b5e832838ac48a10b394665e1eddb"
 }

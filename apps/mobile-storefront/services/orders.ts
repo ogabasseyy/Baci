@@ -6,6 +6,7 @@ import { assertQueuedCreateOrderSendOwner } from '@/lib/assert-queued-create-ord
 import { getCheckoutAttemptKey } from '@/lib/checkout-attempt-key';
 import { createLogger } from '@/lib/logger';
 import { resolveCheckoutAuthPartition } from '@/lib/resolve-checkout-auth-partition';
+import { resolveCheckoutGeneration } from '@/lib/resolve-checkout-generation';
 import {
   supabase,
   supabaseAuthStorage,
@@ -114,16 +115,32 @@ export async function createOrder(
       ? await validateCheckoutUser(supabase.auth, session.access_token)
       : { data: { user: null }, error: null };
 
-  const orderPayload = await buildSnapshottedOrderPayload(
-    {
-      merchantId: MERCHANT_ID,
-      request: validatedRequest,
-      ...(!authError && user?.id && { userId: user.id }),
-    },
-    checkoutGeneration
-  );
-
   try {
+    // The cart generation can be stale while the dedicated persisted
+    // generation still identifies a lost-response attempt. Resolve the
+    // effective generation once and freeze the payload under it, so the
+    // submitted body and the hashed key observe the same credit snapshot.
+    const attemptKeyOptions = frozenCheckoutGeneration
+      ? {
+          frozen: true,
+          persistFrozen: options?.queuedReplay !== true,
+          liveGeneration: useCartStore.getState().checkoutGeneration,
+        }
+      : undefined;
+    const effectiveCheckoutGeneration = await resolveCheckoutGeneration(
+      checkoutGeneration,
+      attemptKeyOptions
+    );
+    // The snapshotted payload can reject on storage failures, so it is built
+    // inside the try block: every failure maps to an OrderError below.
+    const orderPayload = await buildSnapshottedOrderPayload(
+      {
+        merchantId: MERCHANT_ID,
+        request: validatedRequest,
+        ...(!authError && user?.id && { userId: user.id }),
+      },
+      effectiveCheckoutGeneration
+    );
     // Local retry partition only: a getUser timeout must not rotate the key.
     // The submitted payload and server authorization remain unchanged.
     const authPartition = await resolveCheckoutAuthPartition(
@@ -141,13 +158,7 @@ export async function createOrder(
         validatedRequest.payment_method === 'uba_redvault'
           ? `${checkoutGeneration}:uba_redvault`
           : checkoutGeneration,
-        frozenCheckoutGeneration
-          ? {
-              frozen: true,
-              persistFrozen: options?.queuedReplay !== true,
-              liveGeneration: useCartStore.getState().checkoutGeneration,
-            }
-          : undefined
+        attemptKeyOptions
       ));
     const sendSession = await readCheckoutStoredSession(
       supabaseAuthStorage,

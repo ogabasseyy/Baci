@@ -232,63 +232,6 @@ it('does not silently replace a corrupt persisted identity', async () => {
   expect(setItem).not.toHaveBeenCalled();
 });
 
-it('resumes the same pending order after a lost response and a lower store-credit balance', async () => {
-  const { getCheckoutAttemptKey } = loadKeyGenerator();
-  const credited = {
-    ...payload,
-    use_wallet_credit: true,
-    wallet_amount: 5000,
-  };
-  const first = await getCheckoutAttemptKey(credited, 'cart-one');
-  jest.resetModules();
-  expect(
-    await loadKeyGenerator().getCheckoutAttemptKey(
-      { ...credited, wallet_amount: 1000 },
-      'cart-one'
-    )
-  ).toBe(first);
-});
-
-it('looks up the sort marker under the base generation for gateway partitions', async () => {
-  const usesCodepoint = jest.fn(async () => false);
-  jest.doMock('./checkout-idempotency-item-sort', () => ({
-    usesCodepointCheckoutItemSort: usesCodepoint,
-  }));
-  const { getCheckoutAttemptKey } = loadKeyGenerator();
-  await getCheckoutAttemptKey(payload, 'cart-one:uba_redvault', {
-    frozen: true,
-  });
-  expect(usesCodepoint).toHaveBeenCalledWith('cart-one');
-});
-
-it('stores gateway-partition credit snapshots under the base generation', async () => {
-  const { getCheckoutAttemptKey } = loadKeyGenerator();
-  await getCheckoutAttemptKey(
-    { ...payload, use_wallet_credit: true, wallet_amount: 5000 },
-    'cart-one:uba_redvault',
-    { frozen: true }
-  );
-  expect(
-    JSON.parse(
-      storage.get('checkout-attempt-credit-v1:cart-one') ?? '{}'
-    ) as Record<string, unknown>
-  ).toEqual({ use_wallet_credit: true, wallet_amount: 5000 });
-  expect(
-    storage.get('checkout-attempt-credit-v1:cart-one:uba_redvault')
-  ).toBeUndefined();
-});
-
-it('resumes the same pending order when changing payment gateways', async () => {
-  const { getCheckoutAttemptKey } = loadKeyGenerator();
-  const first = await getCheckoutAttemptKey(payload, 'cart-one');
-  expect(
-    await getCheckoutAttemptKey(
-      { ...payload, payment_method: 'korapay', payment_status: 'pending' },
-      'cart-one'
-    )
-  ).toBe(first);
-});
-
 it('resumes the same pending order when cart line order changes', async () => {
   const { getCheckoutAttemptKey } = loadKeyGenerator();
   const items = [

@@ -12,13 +12,28 @@ import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout'
 
 const log = createLogger('CartStore');
 
+// Monotonic write identity: a same-generation retry can complete while an
+// earlier attempt for that generation is still pending, so the value alone
+// cannot tell a stale late write from a valid newer one.
+let checkoutGenerationWriteSequence = 0;
+let lastCompletedCheckoutGenerationWriteSequence = 0;
+let lastCompletedCheckoutGenerationWriteValue: string | null = null;
+
 async function removeAbandonedCheckoutGenerationWrite(
-  abandonedGeneration: string
+  abandonedGeneration: string,
+  abandonedWriteSequence: number
 ): Promise<void> {
-  // Invalidate a timed-out write that settles late: remove the durable
-  // generation only if it still holds the abandoned value. A newer persist
-  // that landed later is preserved, and an empty key simply keeps the
-  // in-memory identity authoritative until the next persist re-syncs it.
+  // Invalidate a timed-out write that settles late: a newer persist that
+  // completed with the same value is preserved, since the stored record is
+  // valid regardless of which attempt wrote it last. Any other outcome —
+  // including a newer different value that the late write just clobbered —
+  // falls through to the value check below.
+  if (
+    lastCompletedCheckoutGenerationWriteSequence > abandonedWriteSequence &&
+    lastCompletedCheckoutGenerationWriteValue === abandonedGeneration
+  ) {
+    return;
+  }
   const current = await AsyncStorage.getItem(CHECKOUT_GENERATION_STORAGE_KEY);
   if (current === abandonedGeneration) {
     await AsyncStorage.removeItem(CHECKOUT_GENERATION_STORAGE_KEY);
@@ -29,6 +44,7 @@ export async function persistCheckoutGeneration(
   checkoutGeneration: string
 ): Promise<void> {
   assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
+  const writeSequence = ++checkoutGenerationWriteSequence;
   let settled = false;
   const attempt = enqueueCheckoutGenerationStorage(async () => {
     // Only generations minted by this build are code-point sorted. Restored
@@ -43,6 +59,12 @@ export async function persistCheckoutGeneration(
       CHECKOUT_GENERATION_STORAGE_KEY,
       checkoutGeneration
     );
+    // A late write must not rewind this fence: an older attempt settling
+    // after a newer write keeps the newer identity authoritative.
+    if (writeSequence > lastCompletedCheckoutGenerationWriteSequence) {
+      lastCompletedCheckoutGenerationWriteSequence = writeSequence;
+      lastCompletedCheckoutGenerationWriteValue = checkoutGeneration;
+    }
   });
   void attempt.then(
     () => {
@@ -64,9 +86,10 @@ export async function persistCheckoutGeneration(
       resetCheckoutGenerationStorageQueue();
       void attempt.then(
         () =>
-          removeAbandonedCheckoutGenerationWrite(checkoutGeneration).catch(
-            () => undefined
-          ),
+          removeAbandonedCheckoutGenerationWrite(
+            checkoutGeneration,
+            writeSequence
+          ).catch(() => undefined),
         () => undefined
       );
     }

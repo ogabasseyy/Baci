@@ -22,7 +22,11 @@ const CREDIT_KEYS = [
 
 // Each generation owns its snapshot key, so concurrent checkouts for
 // different generations never share a read-modify-write cycle.
-const enqueueCreditSnapshot = createKeyedSerialAsyncQueue();
+let enqueueCreditSnapshot = createKeyedSerialAsyncQueue();
+
+function resetCreditSnapshotQueue(): void {
+  enqueueCreditSnapshot = createKeyedSerialAsyncQueue();
+}
 
 function creditSnapshotKey(checkoutGeneration: string): string {
   return `${CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY}:${checkoutGeneration}`;
@@ -109,25 +113,42 @@ export function applyCheckoutCreditSnapshot<T extends Record<string, unknown>>(
   assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
   // Same-generation applies stay serialized so concurrent submits observe a
   // single frozen choice. The wait is bounded: a hung store fails the
-  // attempt instead of wedging later checkouts, and the queue drains itself
-  // once storage recovers.
+  // attempt instead of blocking checkout forever. When the queued apply
+  // itself never settles, the queue is reset so later checkouts for the
+  // same generation are not wedged behind it; genuine failures keep their
+  // order.
+  let settled = false;
+  const attempt = enqueueCreditSnapshot(checkoutGeneration, async () => {
+    const stored = parseCreditSnapshot(
+      await AsyncStorage.getItem(creditSnapshotKey(checkoutGeneration))
+    );
+    if (stored) {
+      return { ...omitCreditFields(payload), ...stored };
+    }
+    await AsyncStorage.setItem(
+      creditSnapshotKey(checkoutGeneration),
+      JSON.stringify(extractCheckoutCreditSnapshot(payload))
+    );
+    return payload;
+  });
+  void attempt.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    }
+  );
   return withCheckoutStorageTimeout(
-    enqueueCreditSnapshot(checkoutGeneration, async () => {
-      const stored = parseCreditSnapshot(
-        await AsyncStorage.getItem(creditSnapshotKey(checkoutGeneration))
-      );
-      if (stored) {
-        return { ...omitCreditFields(payload), ...stored };
-      }
-      await AsyncStorage.setItem(
-        creditSnapshotKey(checkoutGeneration),
-        JSON.stringify(extractCheckoutCreditSnapshot(payload))
-      );
-      return payload;
-    }),
+    attempt,
     undefined,
     'Checkout storage read timed out'
-  );
+  ).catch((error: unknown) => {
+    if (!settled) {
+      resetCreditSnapshotQueue();
+    }
+    throw error;
+  });
 }
 
 export async function releaseCheckoutCreditSnapshot(

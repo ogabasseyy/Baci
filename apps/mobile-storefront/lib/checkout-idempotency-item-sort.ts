@@ -7,42 +7,31 @@ import {
 import { isMintedCheckoutGeneration } from '@/lib/minted-checkout-generations';
 import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 
-function parseGenerationSet(existing: string | null): string[] {
-  if (existing === null) {
-    return [];
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(existing);
-  } catch {
-    throw new Error(
-      'Checkout recovery data is invalid. Please contact support.'
-    );
-  }
-  if (
-    !Array.isArray(parsed) ||
-    parsed.some((entry) => typeof entry !== 'string')
-  ) {
-    throw new Error(
-      'Checkout recovery data is invalid. Please contact support.'
-    );
-  }
-  return parsed;
+// Generation-scoped markers: each generation owns its key, so marking one
+// generation is a single blind write that can never clobber another
+// generation's marker — even when an abandoned write lands late after a
+// queue reset detached it. Same-generation marks are idempotent.
+function codepointCheckoutItemSortKey(checkoutGeneration: string): string {
+  return `${CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY}:${checkoutGeneration}`;
 }
 
 export async function markCodepointCheckoutItemSort(
   checkoutGeneration: string
 ): Promise<void> {
-  const generations = parseGenerationSet(
-    await AsyncStorage.getItem(CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY)
-  );
-  if (generations.includes(checkoutGeneration)) {
-    return;
-  }
-  generations.push(checkoutGeneration);
   await AsyncStorage.setItem(
-    CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY,
-    JSON.stringify(generations)
+    codepointCheckoutItemSortKey(checkoutGeneration),
+    '1'
+  );
+}
+
+export async function releaseCodepointCheckoutItemSort(
+  checkoutGeneration: string
+): Promise<void> {
+  // Lifecycle mirror of the credit snapshot: the marker is pruned once its
+  // generation can no longer be replayed, so completed carts leave no
+  // residue behind. Only this generation's key is removed.
+  await AsyncStorage.removeItem(
+    codepointCheckoutItemSortKey(checkoutGeneration)
   );
 }
 
@@ -67,10 +56,11 @@ export function usesCodepointCheckoutItemSort(
       await markCodepointCheckoutItemSort(checkoutGeneration);
       return true;
     }
-    const generations = parseGenerationSet(
-      await AsyncStorage.getItem(CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY)
+    return (
+      (await AsyncStorage.getItem(
+        codepointCheckoutItemSortKey(checkoutGeneration)
+      )) !== null
     );
-    return generations.includes(checkoutGeneration);
   });
   void attempt.then(
     () => {

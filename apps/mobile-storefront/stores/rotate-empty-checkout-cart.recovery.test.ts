@@ -87,7 +87,7 @@ function recoverStorage() {
 
 it('clears across repeated persist timeouts without wedging reads, then progresses after recovery', async () => {
   jest.useFakeTimers();
-  storage.set(MARKER_KEY, JSON.stringify([markedGeneration]));
+  storage.set(`${MARKER_KEY}:${markedGeneration}`, '1');
   storageHung = true;
 
   const first = rotateEmptyCheckoutCart(() => undefined);

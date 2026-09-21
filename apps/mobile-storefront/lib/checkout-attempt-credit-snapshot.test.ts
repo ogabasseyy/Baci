@@ -193,3 +193,29 @@ it('fails a checkout attempt when the snapshot read never settles', async () => 
   await jest.advanceTimersByTimeAsync(5_000);
   await assertion;
 });
+
+it('resets the queue after a snapshot timeout so the same-generation retry proceeds', async () => {
+  jest.useFakeTimers();
+  mockGetItem.mockImplementationOnce(
+    () => new Promise<string | null>(() => undefined)
+  );
+  const pending = applyCheckoutCreditSnapshot(
+    { wallet_amount: 5000 },
+    generation
+  );
+  const assertion = expect(pending).rejects.toThrow(
+    'Checkout storage read timed out'
+  );
+  await jest.advanceTimersByTimeAsync(5_000);
+  await assertion;
+  const retry = await applyCheckoutCreditSnapshot(
+    { wallet_amount: 5000 },
+    generation
+  );
+  expect(retry.wallet_amount).toBe(5000);
+  expect(
+    JSON.parse(storage.get(snapshotKey(generation)) ?? '{}') as {
+      wallet_amount?: number;
+    }
+  ).toEqual({ wallet_amount: 5000 });
+});

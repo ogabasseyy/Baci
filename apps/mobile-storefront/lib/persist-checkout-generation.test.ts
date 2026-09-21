@@ -81,7 +81,9 @@ describe('bugfix: checkout generation is durable before the order request', () =
       'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
     );
     await persistCheckoutGeneration(minted);
-    expect(storage.get('checkout-idempotency-item-sort-v2')).toContain(minted);
+    expect(storage.get(`checkout-idempotency-item-sort-v2:${minted}`)).toBe(
+      '1'
+    );
   });
 
   it('does not expose a generation when its sort marker write fails', async () => {
@@ -106,9 +108,10 @@ describe('bugfix: checkout generation is durable before the order request', () =
     await persistCheckoutGeneration(newer);
     const legacy = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
     await persistCheckoutGeneration(legacy);
-    const markers = storage.get('checkout-idempotency-item-sort-v2') ?? '[]';
-    expect(markers).toContain(newer);
-    expect(markers).not.toContain(legacy);
+    expect(storage.get(`checkout-idempotency-item-sort-v2:${newer}`)).toBe('1');
+    expect(
+      storage.get(`checkout-idempotency-item-sort-v2:${legacy}`)
+    ).toBeUndefined();
   });
 
   it('resets the queue after a hung write so later persists proceed', async () => {
@@ -187,6 +190,38 @@ describe('bugfix: checkout generation is durable before the order request', () =
     // One flush lets the skip decision run after its storage read settles.
     await Promise.resolve();
     expect(mockGetItem).toHaveBeenCalledWith('checkout-generation-v1');
+    expect(storage.get('checkout-generation-v1')).toBe(newer);
+    expect(mockRemoveItem).not.toHaveBeenCalled();
+  });
+
+  it('preserves a same-generation retry when the abandoned write lands late', async () => {
+    jest.useFakeTimers();
+    const same = '55555555-5555-4555-8555-555555555555';
+    const newer = '66666666-6666-4666-8666-666666666666';
+    let releaseOlder!: () => void;
+    mockSetItem.mockImplementationOnce(
+      (key: string, value: string) =>
+        new Promise<void>((resolve) => {
+          releaseOlder = () => {
+            storage.set(key, value);
+            resolve();
+          };
+        })
+    );
+    const hung = persistCheckoutGeneration(same);
+    const hungAssertion = expect(hung).rejects.toThrow(
+      'Checkout storage write timed out'
+    );
+    await jest.advanceTimersByTimeAsync(5_000);
+    await hungAssertion;
+
+    await persistCheckoutGeneration(same);
+    expect(storage.get('checkout-generation-v1')).toBe(same);
+
+    releaseOlder();
+    // A later persist both synchronizes the compensation and proves the
+    // queue stayed healthy; the vetoed compensation never touches storage.
+    await persistCheckoutGeneration(newer);
     expect(storage.get('checkout-generation-v1')).toBe(newer);
     expect(mockRemoveItem).not.toHaveBeenCalled();
   });

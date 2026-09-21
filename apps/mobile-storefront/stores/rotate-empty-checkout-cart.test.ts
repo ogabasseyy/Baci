@@ -11,7 +11,14 @@ const mockRead = jest.fn<() => Promise<string | null>>(async () => null);
 const mockRelease = jest.fn<(generation: string) => Promise<void>>(
   async () => undefined
 );
+const mockReleaseMarker = jest.fn<(generation: string) => Promise<void>>(
+  async () => undefined
+);
 
+jest.mock('@/lib/checkout-idempotency-item-sort', () => ({
+  releaseCodepointCheckoutItemSort: (generation: string) =>
+    mockReleaseMarker(generation),
+}));
 jest.mock('@/lib/persist-checkout-generation', () => ({
   persistCheckoutGeneration: (generation: string) => mockPersist(generation),
 }));
@@ -38,6 +45,8 @@ beforeEach(() => {
   mockRead.mockResolvedValue(null);
   mockRelease.mockReset();
   mockRelease.mockResolvedValue(undefined);
+  mockReleaseMarker.mockReset();
+  mockReleaseMarker.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -129,6 +138,23 @@ it('keeps store-credit snapshots when the generation may still be replayed', asy
     retainCreditSnapshot: true,
   });
   expect(mockRelease).not.toHaveBeenCalled();
+});
+
+it('prunes the previous sort marker alongside the credit snapshot', async () => {
+  const previousGeneration = '46ed63d7-5f10-49f0-9456-9ff571bec43f';
+  await rotateEmptyCheckoutCart(() => undefined, {
+    previousGeneration,
+    retainCreditSnapshot: false,
+  });
+  expect(mockReleaseMarker).toHaveBeenCalledWith(previousGeneration);
+});
+
+it('keeps the sort marker when the generation may still be replayed', async () => {
+  await rotateEmptyCheckoutCart(() => undefined, {
+    previousGeneration: '46ed63d7-5f10-49f0-9456-9ff571bec43f',
+    retainCreditSnapshot: true,
+  });
+  expect(mockReleaseMarker).not.toHaveBeenCalled();
 });
 
 it('does not block cart rotation when credit cleanup hangs', async () => {

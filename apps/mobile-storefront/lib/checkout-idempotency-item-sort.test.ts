@@ -5,10 +5,14 @@ const mockGetItem = jest.fn(async (key: string) => storage.get(key) ?? null);
 const mockSetItem = jest.fn(async (key: string, value: string) => {
   storage.set(key, value);
 });
+const mockRemoveItem = jest.fn(async (key: string) => {
+  storage.delete(key);
+});
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: (key: string) => mockGetItem(key),
   setItem: (key: string, value: string) => mockSetItem(key, value),
+  removeItem: (key: string) => mockRemoveItem(key),
 }));
 
 function loadSort() {
@@ -22,11 +26,16 @@ function loadRegistry() {
 const generation = '46ed63d7-5f10-49f0-9456-9ff571bec43f';
 const legacyGeneration = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
+function markerKey(id: string): string {
+  return `${CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY}:${id}`;
+}
+
 beforeEach(() => {
   jest.resetModules();
   storage.clear();
   mockGetItem.mockClear();
   mockSetItem.mockClear();
+  mockRemoveItem.mockClear();
 });
 
 afterEach(() => {
@@ -39,18 +48,11 @@ it('makes the minted marker durable before reporting code-point sort', async () 
   await expect(
     loadSort().usesCodepointCheckoutItemSort(generation)
   ).resolves.toBe(true);
-  expect(
-    JSON.parse(
-      storage.get(CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY) ?? '[]'
-    ) as string[]
-  ).toContain(generation);
+  expect(storage.get(markerKey(generation))).toBe('1');
 });
 
 it('reads the durable marker for generations minted before this build', async () => {
-  storage.set(
-    CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY,
-    JSON.stringify([legacyGeneration])
-  );
+  storage.set(markerKey(legacyGeneration), '1');
   const { usesCodepointCheckoutItemSort } = loadSort();
   await expect(usesCodepointCheckoutItemSort(legacyGeneration)).resolves.toBe(
     true
@@ -60,11 +62,20 @@ it('reads the durable marker for generations minted before this build', async ()
   ).resolves.toBe(false);
 });
 
-it('fails closed when the stored marker set is malformed', async () => {
-  storage.set(CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY, 'not-json');
-  await expect(
-    loadSort().usesCodepointCheckoutItemSort(legacyGeneration)
-  ).rejects.toThrow('Checkout recovery data is invalid');
+it('marks one generation without touching another generation marker', async () => {
+  const { markCodepointCheckoutItemSort } = loadSort();
+  await markCodepointCheckoutItemSort(generation);
+  expect(storage.get(markerKey(generation))).toBe('1');
+  expect(storage.get(markerKey(legacyGeneration))).toBeUndefined();
+});
+
+it('releases only the finalized generation marker', async () => {
+  const { releaseCodepointCheckoutItemSort } = loadSort();
+  storage.set(markerKey(generation), '1');
+  storage.set(markerKey(legacyGeneration), '1');
+  await releaseCodepointCheckoutItemSort(generation);
+  expect(storage.get(markerKey(generation))).toBeUndefined();
+  expect(storage.get(markerKey(legacyGeneration))).toBe('1');
 });
 
 it('fails closed instead of hanging behind a stuck persist', async () => {
@@ -82,10 +93,7 @@ it('fails closed instead of hanging behind a stuck persist', async () => {
 
 it('resets the queue after a read timeout so later reads proceed', async () => {
   jest.useFakeTimers();
-  storage.set(
-    CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY,
-    JSON.stringify([legacyGeneration])
-  );
+  storage.set(markerKey(legacyGeneration), '1');
   const { enqueueCheckoutGenerationStorage } =
     require('./checkout-generation-storage-queue') as typeof import('./checkout-generation-storage-queue');
   enqueueCheckoutGenerationStorage(() => new Promise<never>(() => undefined));

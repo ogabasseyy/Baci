@@ -22,6 +22,23 @@ describe('trackCheckoutPaymentFailed', () => {
     );
   });
 
+  it('stamps the failure with the attempt reference when provided', async () => {
+    await trackCheckoutPaymentFailed(
+      'gateway_timeout',
+      'o3',
+      'paystack',
+      'ref-7'
+    );
+
+    expect(trackEvent).toHaveBeenCalledWith(
+      'payment_failed',
+      expect.objectContaining({
+        reason: 'gateway_timeout',
+        reference: 'ref-7',
+      })
+    );
+  });
+
   it('emits pre-order failures without waiting for a claim', async () => {
     await trackCheckoutPaymentFailed('checkout_error', undefined, 'paystack');
 

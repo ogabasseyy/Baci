@@ -91,6 +91,9 @@ describe('initializeGatewayAndRoute', () => {
     await initializeGatewayAndRoute(params);
 
     expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-1', reference: 'ref-1' })
+    );
     expect(params.setIsProcessing).toHaveBeenCalledWith(false);
     expect(mockRouterPush).toHaveBeenCalledWith({
       pathname: '/payment-gateway',
@@ -99,6 +102,47 @@ describe('initializeGatewayAndRoute', () => {
         reference: 'ref-1',
       }),
     });
+  });
+
+  it('stamps each retried start with its issued reference', async () => {
+    // A pending order retried: initialize issues a fresh reference per
+    // attempt, and each start must carry its own for reconciliation.
+    global.fetch = jest
+      .fn(async () => ({
+        ok: true,
+        json: async () => ({
+          success: true,
+          reference: 'ref-retry-2',
+          authorization_url: 'https://pay.example/authorize-2',
+        }),
+      }))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          reference: 'ref-retry-1',
+          authorization_url: 'https://pay.example/authorize-1',
+        }),
+      }) as unknown as typeof fetch;
+
+    await initializeGatewayAndRoute(createParams());
+    await initializeGatewayAndRoute(createParams());
+
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledTimes(2);
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        orderId: 'order-1',
+        reference: 'ref-retry-1',
+      })
+    );
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        orderId: 'order-1',
+        reference: 'ref-retry-2',
+      })
+    );
   });
 
   it('accepts checkout_url when authorization_url is absent', async () => {

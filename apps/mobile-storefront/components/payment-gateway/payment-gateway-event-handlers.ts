@@ -67,7 +67,9 @@ export function createPaymentGatewayEventHandlers({
     }
     refs.paymentFailureRecordedRef.current = true;
     refs.paymentFailureReferenceRef.current = reference;
-    void trackCheckoutPaymentFailed(reason, orderId, gateway);
+    // Stamped with the attempt reference so failures reconcile against
+    // their provider-issued start instead of merging across retries.
+    void trackCheckoutPaymentFailed(reason, orderId, gateway, reference);
   };
 
   return {

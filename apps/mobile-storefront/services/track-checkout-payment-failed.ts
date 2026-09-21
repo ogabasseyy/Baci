@@ -9,7 +9,8 @@ import { serializeAfterOrderCreated } from './serialize-after-order-created';
 export function trackCheckoutPaymentFailed(
   reason: string,
   orderId?: string,
-  paymentMethod?: string
+  paymentMethod?: string,
+  reference?: string
 ): Promise<void> {
   const emit = () => {
     trackEvent(
@@ -22,6 +23,7 @@ export function trackCheckoutPaymentFailed(
           : undefined,
         paymentMethod,
         reason,
+        reference,
         source: 'mobile_app',
       })
     );

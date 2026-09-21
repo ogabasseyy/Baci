@@ -138,10 +138,13 @@ export async function initializeGatewayAndRoute({
   }
 
   // The provider initialized: record the start now, never speculatively.
+  // Stamped with the issued reference so retried attempts for one order
+  // reconcile at attempt level instead of producing identical starts.
   await trackCheckoutPaymentStarted({
     orderId,
     orderNumber,
     paymentMethod: selectedPayment,
+    reference,
     value: orderResponse.amountDueToGateway,
   });
   setIsProcessing(false);

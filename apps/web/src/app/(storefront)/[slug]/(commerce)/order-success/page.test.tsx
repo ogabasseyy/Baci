@@ -286,6 +286,70 @@ describe('storefront order success page', () => {
     }
   });
 
+  it('observes a BNPL settlement that lands after the fast polling budget', async () => {
+    vi.useFakeTimers();
+    try {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-123',
+          reference: 'klump-ref-1',
+          type: 'klump',
+          trackingToken: 'track-token-123',
+        })
+      );
+      const pendingOrder = {
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        items: [],
+        subtotal: 45000,
+        shipping_cost: 1500,
+        total: 49875,
+        payment_method: 'klump',
+        payment_status: 'pending',
+      };
+      const paidOrder = { ...pendingOrder, payment_status: 'paid' };
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => pendingOrder })
+        .mockResolvedValue({ ok: true, json: async () => pendingOrder });
+
+      render(<OrderSuccessPage />);
+      await flushMicrotasks();
+
+      // Exhaust the 20 fast polls with the provider still pending: no
+      // conversion, but polling must continue into the slow lane.
+      for (let i = 0; i < 20; i += 1) {
+        await advanceTimers(3000);
+        await flushMicrotasks();
+      }
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
+      expect(mockFetch).toHaveBeenCalledTimes(21);
+
+      // The webhook marks the order paid minutes later: the next slow
+      // poll observes it and captures the deferred conversion.
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => paidOrder,
+      });
+      await advanceTimers(15000);
+      await flushMicrotasks();
+
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-123',
+        expect.objectContaining({
+          payment_method: 'klump',
+          payment_status: 'paid',
+          reference: 'klump-ref-1',
+          total: 49875,
+        })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('labels the deferred BNPL completion with the stamped order currency', async () => {
     vi.useFakeTimers();
     try {

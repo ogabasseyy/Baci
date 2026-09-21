@@ -50,12 +50,17 @@ const DELIVERY_ESTIMATE_MS = 5 * 24 * 60 * 60 * 1000;
 
 // CredPal and Klump approve asynchronously: the launcher navigates here
 // while the order is still pending, so the success path polls the
-// token-scoped order until the provider webhook marks it paid. Bounded so
-// a guest waiting on a slow approval is never stuck polling forever.
+// token-scoped order until the provider webhook marks it paid. Two lanes:
+// a fast lane for the first minute (webhooks usually land quickly), then
+// a slow lane so approvals settling minutes later still update the page
+// while the shopper waits. Bounded so a guest waiting on a slow approval
+// is never stuck polling forever.
 const PENDING_BNPL_TYPES = ['credpal', 'klump'] as const;
 type PendingBnplType = (typeof PENDING_BNPL_TYPES)[number];
 const BNPL_SETTLEMENT_POLL_INTERVAL_MS = 3000;
-const BNPL_SETTLEMENT_POLL_MAX_ATTEMPTS = 20;
+const BNPL_SETTLEMENT_FAST_POLL_ATTEMPTS = 20;
+const BNPL_SETTLEMENT_SLOW_POLL_INTERVAL_MS = 15000;
+const BNPL_SETTLEMENT_POLL_MAX_ATTEMPTS = 40;
 
 function isPendingBnplType(value: string | null): value is PendingBnplType {
   return (
@@ -202,6 +207,7 @@ function OrderSuccessContent() {
     }
     let cancelled = false;
     let attempts = 0;
+    let inFlight = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const stop = () => {
       if (timer !== undefined) {
@@ -209,21 +215,32 @@ function OrderSuccessContent() {
         timer = undefined;
       }
     };
+    const scheduleNext = () => {
+      const interval =
+        attempts < BNPL_SETTLEMENT_FAST_POLL_ATTEMPTS
+          ? BNPL_SETTLEMENT_POLL_INTERVAL_MS
+          : BNPL_SETTLEMENT_SLOW_POLL_INTERVAL_MS;
+      timer = setTimeout(() => {
+        timer = undefined;
+        void pollSettlement();
+      }, interval);
+    };
     // Serialized: the next poll is scheduled only after the current fetch
     // settles, so a slow older pending response can never arrive after a
     // newer paid response and overwrite the settled order (which would
     // also suppress the completion capture).
     const pollSettlement = async () => {
-      if (cancelled) {
+      if (cancelled || inFlight) {
         return;
       }
+      inFlight = true;
       attempts += 1;
-      const data = await fetchOrderData(
-        orderId,
-        merchant?.slug,
-        orderToken,
-        null
-      );
+      let data: OrderData | null = null;
+      try {
+        data = await fetchOrderData(orderId, merchant?.slug, orderToken, null);
+      } finally {
+        inFlight = false;
+      }
       if (cancelled) {
         return;
       }
@@ -236,18 +253,31 @@ function OrderSuccessContent() {
       ) {
         return;
       }
-      timer = setTimeout(() => {
-        timer = undefined;
-        void pollSettlement();
-      }, BNPL_SETTLEMENT_POLL_INTERVAL_MS);
+      scheduleNext();
     };
-    timer = setTimeout(() => {
-      timer = undefined;
+    // The shopper returned while a slow-lane wait was pending: revalidate
+    // now instead of making them wait out the backoff.
+    const revalidateOnVisible = () => {
+      if (
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'hidden'
+      ) {
+        return;
+      }
+      if (cancelled || inFlight || timer === undefined) {
+        return;
+      }
+      stop();
       void pollSettlement();
-    }, BNPL_SETTLEMENT_POLL_INTERVAL_MS);
+    };
+    window.addEventListener('focus', revalidateOnVisible);
+    document.addEventListener('visibilitychange', revalidateOnVisible);
+    scheduleNext();
     return () => {
       cancelled = true;
       stop();
+      window.removeEventListener('focus', revalidateOnVisible);
+      document.removeEventListener('visibilitychange', revalidateOnVisible);
     };
   }, [needsSettlementPoll, orderId, orderToken, merchant?.slug, bnplType]);
 

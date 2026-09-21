@@ -98,7 +98,8 @@ describe('createPaymentGatewayEventHandlers navigation', () => {
     expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
       'payment_gateway_cancelled',
       'order-1',
-      'paystack'
+      'paystack',
+      'ref-123'
     );
   });
 
@@ -115,7 +116,8 @@ describe('createPaymentGatewayEventHandlers navigation', () => {
     expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
       'payment_gateway_load_error',
       'order-1',
-      'paystack'
+      'paystack',
+      'ref-123'
     );
   });
 
@@ -192,7 +194,8 @@ describe('createPaymentGatewayEventHandlers navigation', () => {
     expect(failedMock).toHaveBeenCalledWith(
       'payment_gateway_cancelled',
       'order-1',
-      'paystack'
+      'paystack',
+      'ref-123'
     );
   });
 

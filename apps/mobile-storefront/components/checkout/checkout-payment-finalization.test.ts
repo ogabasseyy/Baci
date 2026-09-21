@@ -200,6 +200,7 @@ describe('finalizeCheckoutPayment', () => {
       orderId: 'order-1',
       orderNumber: 'BAC-001',
       paymentMethod: 'paystack',
+      reference: 'pay-ref',
       value: 25000,
     });
     expect(runPostOrderSideEffects).toHaveBeenCalledTimes(1);

@@ -6,6 +6,7 @@ export async function trackCheckoutPaymentStarted(input: {
   orderId: string;
   orderNumber?: string;
   paymentMethod: string;
+  reference?: string;
   value?: number;
 }): Promise<void> {
   // Chain behind the order-created emission for this order so the funnel

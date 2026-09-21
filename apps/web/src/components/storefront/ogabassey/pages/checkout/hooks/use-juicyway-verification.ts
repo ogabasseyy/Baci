@@ -81,18 +81,20 @@ export function useJuicywayVerification({
   // Uses a ref to track polling state to avoid stale closure issues.
   // The epoch invalidates in-flight status checks when a new attempt
   // supersedes the current one, the modal is dismissed mid-poll, or the
-  // hook unmounts. checkInFlight serializes the status requests so a slow
-  // network can never stack overlapping checks for one attempt.
+  // hook unmounts. checkInFlightEpoch serializes the status requests so a
+  // slow network can never stack overlapping checks for one attempt; it is
+  // scoped to its epoch so a check stranded by a dismiss can neither block
+  // a retried attempt nor clear that attempt's guard when it resolves.
   const pollingRef = useRef<{
     intervalId: NodeJS.Timeout | null;
     attempts: number;
     epoch: number;
-    checkInFlight: boolean;
+    checkInFlightEpoch: number | null;
   }>({
     intervalId: null,
     attempts: 0,
     epoch: 0,
-    checkInFlight: false,
+    checkInFlightEpoch: null,
   });
 
   const clearPollingInterval = () => {
@@ -160,9 +162,10 @@ export function useJuicywayVerification({
       // A slow check still awaiting its response: skip this tick rather
       // than stacking a second request — overlapping responses could
       // settle twice or contradict each other. The attempt counter still
-      // advances so the wall-clock cap holds.
+      // advances so the wall-clock cap holds. Only this epoch's guard
+      // blocks: a check stranded by a dismiss belongs to a dead epoch.
       pollingRef.current.attempts++;
-      if (pollingRef.current.checkInFlight) {
+      if (pollingRef.current.checkInFlightEpoch === epoch) {
         return;
       }
 
@@ -174,12 +177,16 @@ export function useJuicywayVerification({
       }
 
       // Promise `.finally()` instead of a try/finally statement, which
-      // would bail React Compiler; semantics are identical.
-      pollingRef.current.checkInFlight = true;
+      // would bail React Compiler; semantics are identical. The guard
+      // clears only for its own epoch: a stale resolution must never lift
+      // a retried attempt's guard.
+      pollingRef.current.checkInFlightEpoch = epoch;
       const pollStatus = await checkJuicywayPaymentStatus(
         verificationId
       ).finally(() => {
-        pollingRef.current.checkInFlight = false;
+        if (pollingRef.current.checkInFlightEpoch === epoch) {
+          pollingRef.current.checkInFlightEpoch = null;
+        }
       });
       if (epoch !== pollingRef.current.epoch) {
         // Superseded while the check was in flight: never clear the new

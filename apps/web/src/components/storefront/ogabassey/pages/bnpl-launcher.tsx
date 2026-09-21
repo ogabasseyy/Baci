@@ -1,10 +1,6 @@
 'use client';
 
 import type { Route } from 'next';
-import {
-    CHECKOUT_FUNNEL_EVENTS,
-    buildCheckoutFunnelProperties,
-} from '@baci/shared/contracts';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
@@ -37,8 +33,11 @@ import { captureCreditDirectClientCompletion } from './checkout/credit-direct-cl
 import { clearCheckoutIdempotencyKey } from './checkout/checkout-idempotency';
 import { useCreditDirectVerification } from './checkout/hooks/use-credit-direct-verification';
 import { CreditDirectVerificationView } from './checkout/components/CreditDirectVerificationView';
-import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
-import { captureClientEvent } from '@/lib/posthog/capture-client-event';
+import {
+    captureBnplPaymentCompleted,
+    captureBnplPaymentFailed,
+    captureBnplPaymentStarted,
+} from './checkout/bnpl-funnel-attribution';
 
 declare global {
     interface Window {
@@ -60,125 +59,6 @@ const KLUMP_TRANSACTION_ID_KEYS = [
     'id',
 ] as const;
 
-function isNativeBnplWebView(): boolean {
-    return (
-        typeof window !== 'undefined' &&
-        Boolean(window.ReactNativeWebView)
-    );
-}
-
-function captureBnplPaymentCompleted({
-    orderId,
-    orderNumber,
-    paymentMethod,
-    reference,
-    value,
-    currency,
-}: {
-    orderId: string;
-    orderNumber?: string;
-    paymentMethod: string;
-    reference?: string;
-    value?: number;
-    currency?: string;
-}) {
-    // Inside a native BNPL WebView the native shell owns conversion
-    // attribution (with native-verified outcomes): emitting here would
-    // double-attribute every web completion event.
-    if (isNativeBnplWebView()) {
-        return;
-    }
-    captureCheckoutFunnelEventOnce(
-        CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
-        orderId,
-        buildCheckoutFunnelProperties({
-            channel: 'web',
-            ...(currency ? { currency } : {}),
-            orderId,
-            orderNumber,
-            paymentIntent:
-                paymentMethod === 'credpal' ||
-                paymentMethod === 'credit_direct' ||
-                paymentMethod === 'klump'
-                    ? 'installments'
-                    : undefined,
-            paymentMethod,
-            paymentStatus: 'paid',
-            reference,
-            source: 'web_checkout',
-            total: value,
-        })
-    );
-}
-function captureBnplPaymentStarted({
-    orderId,
-    orderNumber,
-    paymentMethod,
-    value,
-    currency,
-}: {
-    orderId: string;
-    orderNumber?: string;
-    paymentMethod: string;
-    value?: number;
-    currency?: string;
-}) {
-    // Inside a native BNPL WebView the native shell records the start from
-    // bnpl_provider_opened: emitting here would double-attribute every
-    // web start event.
-    if (isNativeBnplWebView()) {
-        return;
-    }
-    captureClientEvent(
-        CHECKOUT_FUNNEL_EVENTS.paymentStarted,
-        buildCheckoutFunnelProperties({
-            channel: 'web',
-            ...(currency ? { currency } : {}),
-            orderId,
-            orderNumber,
-            paymentIntent: 'installments',
-            paymentMethod,
-            source: 'web_checkout',
-            total: value,
-        })
-    );
-}
-
-function captureBnplPaymentFailed({
-    orderId,
-    orderNumber,
-    paymentMethod,
-    reason,
-    value,
-    currency,
-}: {
-    orderId: string;
-    orderNumber?: string;
-    paymentMethod: string;
-    reason: string;
-    value?: number;
-    currency?: string;
-}) {
-    // Inside a native BNPL WebView the native shell records the failure
-    // from bnpl_provider_error: emitting here would double-attribute.
-    if (isNativeBnplWebView()) {
-        return;
-    }
-    captureClientEvent(
-        CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-        buildCheckoutFunnelProperties({
-            channel: 'web',
-            ...(currency ? { currency } : {}),
-            orderId,
-            orderNumber,
-            paymentIntent: 'installments',
-            paymentMethod,
-            reason,
-            source: 'web_checkout',
-            total: value,
-        })
-    );
-}
 export const KLUMP_REDIRECT_URL_KEY = 'klump_redirect_url';
 
 interface SearchParamReader {

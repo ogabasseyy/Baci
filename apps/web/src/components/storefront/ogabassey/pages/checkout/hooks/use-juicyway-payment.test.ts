@@ -468,4 +468,94 @@ describe('useJuicywayPayment', () => {
       'order-1:ref-1'
     );
   });
+
+  it('retries polling after a dismiss strands a slow status check', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveStrandedCheck!: (response: Response) => void;
+      let resolveRetryCheck!: (response: Response) => void;
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(initResponse('ref-1', 'pay-1'))
+        .mockResolvedValueOnce(Response.json({}))
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveStrandedCheck = resolve;
+            })
+        )
+        .mockResolvedValueOnce(initResponse('ref-2', 'pay-2', 'ETH'))
+        .mockResolvedValueOnce(Response.json({}))
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveRetryCheck = resolve;
+            })
+        );
+      vi.stubGlobal('fetch', fetchMock);
+      const { result, rerender, unmount } = renderHook(
+        ({ chain }: { chain: CryptoChain }) =>
+          useJuicywayPayment(createOptions(chain)),
+        { initialProps: { chain: 'TRX' as CryptoChain } }
+      );
+
+      await act(async () => {
+        await result.current.initializeCryptoPayment();
+      });
+      await act(async () => {
+        await result.current.verifyCryptoPayment();
+      });
+      expect(result.current.cryptoVerificationStatus).toBe('pending');
+
+      // First tick starts a slow check; dismiss strands it mid-flight.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      act(() => {
+        result.current.dismissCryptoModal();
+      });
+
+      // Retry on another network: the new attempt's first tick must fire
+      // its own status request even though the old guard never cleared.
+      rerender({ chain: 'ETH' });
+      await act(async () => {
+        await result.current.initializeCryptoPayment();
+      });
+      await act(async () => {
+        await result.current.verifyCryptoPayment();
+      });
+      expect(result.current.cryptoVerificationStatus).toBe('pending');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+
+      const statusUrls = fetchMock.mock.calls
+        .map(([url]) => String(url))
+        .filter((url) => url.includes('/api/payments/status'));
+      expect(statusUrls.filter((url) => url.includes('pay-2'))).toHaveLength(
+        2
+      );
+
+      // The stranded check resolving late must neither settle the retry
+      // nor lift its guard: the retry still confirms on its own check.
+      await act(async () => {
+        resolveStrandedCheck(Response.json({ is_confirmed: true }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.cryptoVerificationStatus).toBe('pending');
+      await act(async () => {
+        resolveRetryCheck(Response.json({ is_confirmed: true }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.cryptoVerificationStatus).toBe('confirmed');
+      expect(
+        mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+          ([event]) => event === 'payment_completed'
+        )
+      ).toHaveLength(1);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

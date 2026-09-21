@@ -209,7 +209,10 @@ async function getQuotesWithinTimeout(
       io.log('warn', 'GIGL quote timed out', {
         timeoutMs: GIGL_QUOTE_TIMEOUT_MS,
       });
-      return quoteProviderFailure.mark([], new Error('GIGL quote request timed out'));
+      return quoteProviderFailure.mark(
+        [],
+        new Error('GIGL quote request timed out')
+      );
     }
     io.log('error', 'Failed to get GIGL quotes', { error: String(error) });
     return quoteProviderFailure.mark([], error);

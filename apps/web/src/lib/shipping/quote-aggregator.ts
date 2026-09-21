@@ -5,12 +5,12 @@
 
 import { rankQuotes, selectFeaturedQuotes } from './aggregator';
 import { getEmptyQuoteDiagnostics } from './empty-quote-diagnostics';
-import { quoteProviderFailure } from './quote-provider-failure';
 import {
   getNoProviderWarning,
   selectQuoteProviders,
 } from './provider-allowlist';
 import type { ShippingProviderRegistry } from './providers/base';
+import { quoteProviderFailure } from './quote-provider-failure';
 import type {
   QuoteRequest,
   QuoteResponse,

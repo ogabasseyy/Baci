@@ -1,4 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.hoisted(() => {
+  process.env.GIGL_BASE_URL =
+    'https://dev-thirdpartynode.theagilitysystems.com';
+  process.env.GIGL_EMAIL = 'test@example.com';
+  process.env.GIGL_PASSWORD = 'test-password';
+});
+
 import { quoteProviderFailure } from '../quote-provider-failure';
 import { GiglApiClient } from './gigl.auth';
 import { getGiglQuotes } from './gigl.quotes';

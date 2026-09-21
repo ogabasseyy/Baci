@@ -186,15 +186,26 @@ BEGIN
   PERFORM public.reserve_uba_redvault_refund(v_attempt_one, v_merchant, 'R5P1-D4',
     'merchandise_units', '[{"orderItemId":"20000000-0000-4000-8000-000000000001","unitOrdinal":4}]'::jsonb);
 
-  -- Finding 2 (resolver): releasing one folded refund resolves the open review.
+  -- Finding 2 (resolver): releasing one folded refund keeps the shared
+  -- review open while the other refund still needs review; releasing the
+  -- last one closes it.
   v_receipt := public.resolve_uba_redvault_refund_inventory_review(v_refund_c1);
   IF (v_receipt->>'inventoryState') <> 'released' THEN
     RAISE EXCEPTION 'resolver did not release: %', v_receipt;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.reconciliation_review
+             WHERE issue_type = 'serialized_inventory_confirmation_failed'
+               AND order_id = v_order_two AND resolved_at IS NULL) THEN
+    RAISE EXCEPTION 'shared review closed while a refund still needs review';
+  END IF;
+  v_receipt := public.resolve_uba_redvault_refund_inventory_review(v_refund_c2);
+  IF (v_receipt->>'inventoryState') <> 'released' THEN
+    RAISE EXCEPTION 'resolver did not release the second refund: %', v_receipt;
+  END IF;
   IF EXISTS (SELECT 1 FROM public.reconciliation_review
              WHERE issue_type = 'serialized_inventory_confirmation_failed'
                AND order_id = v_order_two AND resolved_at IS NULL) THEN
-    RAISE EXCEPTION 'merged review was not resolved';
+    RAISE EXCEPTION 'merged review was not resolved after the last release';
   END IF;
   -- P1-B: capture accepts the merchant-bound scoped route client and refuses
   -- a scoped token bound to a different merchant.

@@ -20,8 +20,11 @@ const recoveryLogger = {
 /**
  * POST /api/cron/process-redvault-refunds
  *
- * Manual fallback only - DO NOT re-enable Vercel Cron for this route.
- * Scheduled execution lives in vps-workers; keep CRON_SECRET gating intact.
+ * Manual fallback only - DO NOT schedule this route (Vercel Cron or
+ * vps-workers) until production refund recovery has its separately
+ * approved restricted-role transport plus provider and operational
+ * approval (see docs/superpowers/plans/uba-redvault-evidence/
+ * recovery-completion.md). Keep CRON_SECRET gating intact.
  *
  * Drives one REDVAULT refund submission pass plus one reconciliation pass
  * through the live Paystack provider. Without this worker,

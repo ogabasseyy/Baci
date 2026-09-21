@@ -94,6 +94,49 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
 
+  it('treats a revisited fully-refunded REDVAULT order as complete', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json({
+          payment_method: 'uba_redvault',
+          payment_status: 'refunded',
+          shipping_status: 'processing',
+          order_number: 'ORD-1',
+        })
+      )
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(params, callbacks);
+
+    expect(callbacks.clearCart).toHaveBeenCalledOnce();
+    expect(callbacks.setStatus).toHaveBeenCalledWith('success');
+    expect(callbacks.setOrderNumber).toHaveBeenCalledWith('ORD-1');
+  });
+
+  it('fails a revisited cancelled REDVAULT order instead of stalling pending', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json({
+          payment_method: 'uba_redvault',
+          payment_status: 'unpaid',
+          shipping_status: 'cancelled',
+          order_number: 'ORD-1',
+        })
+      )
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(params, callbacks);
+
+    expect(callbacks.clearCart).not.toHaveBeenCalled();
+    expect(callbacks.setStatus).toHaveBeenCalledWith('failed');
+    expect(callbacks.scheduleFailedRedirect).toHaveBeenCalledOnce();
+    expect(callbacks.setOrderNumber).toHaveBeenCalledWith('ORD-1');
+  });
+
   it('keeps the cart when a REDVAULT callback reports cancellation', async () => {
     request.mockResolvedValue(
       Response.json({ status: 'cancelled', success: false }, { status: 200 })

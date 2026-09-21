@@ -79,12 +79,30 @@ export async function verifyCheckoutPayment(
         }`;
         const response = await fetch(url);
         const data = response.ok ? await response.json() : null;
+        // Terminal states first: a fully refunded REDVAULT order keeps a
+        // non-paid payment status, and a cancelled one can stay unpaid
+        // with a cancelled shipping status. Neither is still processing.
+        const redvaultTerminalCancelled =
+          data?.payment_method === 'uba_redvault' &&
+          data.payment_status !== 'paid' &&
+          data.shipping_status === 'cancelled';
         if (
           data?.payment_method === 'uba_redvault' &&
-          data.payment_status !== 'paid'
+          data.payment_status !== 'paid' &&
+          data.payment_status !== 'refunded' &&
+          !redvaultTerminalCancelled
         ) {
           setPaymentMethod('uba_redvault');
           setStatus('pending');
+          setOrderNumber(
+            data.order_number ||
+              data.short_id ||
+              orderId.slice(0, 8).toUpperCase()
+          );
+        } else if (redvaultTerminalCancelled) {
+          setPaymentMethod('uba_redvault');
+          setStatus('failed');
+          scheduleFailedRedirect();
           setOrderNumber(
             data.order_number ||
               data.short_id ||

@@ -1,5 +1,4 @@
 'use client';
-// Migrated from temp-source/components/CategoryPage.tsx
 import { useParams } from 'next/navigation';
 import React, { type ReactNode, useEffect, useState } from 'react';
 import { useCart } from '@/hooks/cart';
@@ -79,7 +78,6 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
       : STOREFRONT_PRODUCTS_PER_PAGE;
   const { filters, setFilters } = serverGraphicsFilter;
 
-  // Scroll to top when category changes
   useEffect(() => {
     if (categoryName) {
       window.scrollTo(0, 0);
@@ -185,7 +183,6 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
     // scheduler.yield is absent).
     await yieldToScheduler();
 
-    // Checkbox logic
     setFilters((prev) => {
       const list = prev[section] as string[];
       const valStr = value as string;
@@ -206,7 +203,6 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
     }, 2000);
   };
 
-  // Clean display title for H1 and Breadcrumb (Koray-approved: no keyword stuffing)
   const displayTitle = (() => {
     if (categoryName === 'All') return 'All Products';
 
@@ -224,8 +220,6 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
     setFilters(INITIAL_CATEGORY_FILTER_STATE);
   };
 
-  // Switching grid/list re-renders every ProductCard with a new layout — the
-  // heaviest toggle on the page. Yield first so the click paints before it.
   const handleViewModeChange = async (mode: 'grid' | 'list') => {
     await yieldToScheduler();
     setViewMode(mode);

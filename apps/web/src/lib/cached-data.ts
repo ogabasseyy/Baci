@@ -14,8 +14,8 @@ import type {
   CachedCategorySeo,
 } from '@/lib/cached-category-page-shell-types';
 import {
-  type CategoryPageProductFilters,
   type CachedCategoryPageProductScope,
+  type CategoryPageProductFilters,
   categoryPageProductIdCache,
 } from '@/lib/category-page-product-id-cache';
 import { getCategoryPageShellData } from '@/lib/get-category-page-shell-data';

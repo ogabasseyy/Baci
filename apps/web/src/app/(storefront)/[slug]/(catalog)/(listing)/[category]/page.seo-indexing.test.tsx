@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetCachedMerchant = vi.fn();
 const mockGetCachedCategoryPageData = vi.fn();
+const mockGetCachedCategoryPageGraphicsOptions = vi.fn();
 
 vi.mock('@/lib/cached-data', () => ({
   getCachedMerchant: (...args: unknown[]) => mockGetCachedMerchant(...args),
@@ -9,6 +10,8 @@ vi.mock('@/lib/cached-data', () => ({
     mockGetCachedMerchant(...args),
   getCachedCategoryPageData: (...args: unknown[]) =>
     mockGetCachedCategoryPageData(...args),
+  getCachedCategoryPageGraphicsOptions: (...args: unknown[]) =>
+    mockGetCachedCategoryPageGraphicsOptions(...args),
 }));
 vi.mock('@/lib/store-url', () => ({
   buildStoreUrl: () => 'https://zorvexa.usebaci.com',
@@ -48,6 +51,7 @@ function expectedRobots(index: boolean) {
 describe('category metadata SEO indexing', () => {
   beforeEach(() => {
     mockGetCachedMerchant.mockResolvedValue(merchant);
+    mockGetCachedCategoryPageGraphicsOptions.mockResolvedValue([]);
   });
 
   it('emits noindex robots when the category product query fails', async () => {

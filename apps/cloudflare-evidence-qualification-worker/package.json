@@ -10,7 +10,7 @@
   },
   "devDependencies": {
     "comment-json": "4.6.2",
-    "vitest": "^4.1.9",
+    "vitest": "^4.1.11",
     "wrangler": "4.115.0"
   }
 }

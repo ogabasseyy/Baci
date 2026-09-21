@@ -187,32 +187,6 @@ describe('cached-data cache directives', () => {
     expect(source).toContain('cacheTag(');
     expect(source).toContain('throw error');
   });
-
-  it('keeps dashboard stats on the shared store and fail-loud (PR4b review r4)', () => {
-    // Demotion REVERTED: `dashboard-${merchantId}` is busted by
-    // revalidateProducts(), revalidateMerchant() AND
-    // revalidateMerchantPublication(). A merchant who adds a product expects
-    // the dashboard to reflect it on whichever instance serves them. Still
-    // fail-loud so a transient RPC error is never persisted as null.
-    const source = getFunctionSource('getCachedDashboardStats');
-    expect(source).toContain("'use cache: remote';");
-    expect(source).toContain("cacheLife('merchant');");
-    expect(source).toContain('cacheTag(');
-    expect(source).toContain('throw error');
-  });
-
-  it('keeps platform analytics on the shared store and fail-loud (PR4b review r4)', () => {
-    // Demotion REVERTED: the admin "refresh analytics views" route calls
-    // revalidateAnalytics(), busting the `analytics` tag — an explicit,
-    // user-triggered invalidation contract. A local entry would leave the
-    // refresh button silently broken on every other instance. Still fail-loud
-    // so a transient aggregate error is never cached as null.
-    const source = getFunctionSource('getCachedPlatformAnalytics');
-    expect(source).toContain("'use cache: remote';");
-    expect(source).toContain("cacheLife('products');");
-    expect(source).toContain('cacheTag(');
-    expect(source).toContain('throw summaryError');
-  });
 });
 
 describe('next.config cacheLife profiles', () => {

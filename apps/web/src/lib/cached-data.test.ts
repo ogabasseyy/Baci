@@ -28,13 +28,11 @@ vi.mock('@supabase/supabase-js', () => ({
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import {
   getCachedCategories,
-  getCachedDashboardStats,
   getCachedFeatureSettings,
   getCachedMerchant,
   getCachedMerchantByDomain,
   getCachedMerchantById,
   getCachedMerchantPaystackSubaccountConfigured,
-  getCachedPlatformAnalytics,
   getCachedProductRatingStats,
   getCachedProductReviews,
   getCachedProducts,
@@ -553,6 +551,11 @@ describe('getCachedFeatureSettings', () => {
     const result = await getCachedFeatureSettings('merchant-1');
 
     expect(result).toEqual(settings);
+    expect(mockCreateClient).toHaveBeenCalledWith(
+      'https://test.supabase.co',
+      'test-anon-key',
+      expect.any(Object)
+    );
     const projection = String(harness.mockSelect.mock.calls[0]?.[0] ?? '');
     expect(projection).toContain('blog_enabled');
     expect(projection).toContain('blog_discover_image_validation_enabled');
@@ -589,11 +592,11 @@ describe('getCachedFeatureSettings', () => {
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
     mockCreateClient.mockImplementation(() => {
-      throw new Error('Missing service key');
+      throw new Error('Missing public client configuration');
     });
 
     await expect(getCachedFeatureSettings('merchant-1')).rejects.toThrow(
-      'Missing service key'
+      'Missing public client configuration'
     );
     expect(consoleSpy).toHaveBeenCalled();
   });
@@ -933,97 +936,6 @@ describe('getCachedProducts', () => {
     await getCachedProducts('merchant-1', { limit: 10 });
 
     expect(harness.mockLimit).toHaveBeenCalledWith(10);
-  });
-});
-
-describe('getCachedDashboardStats', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    harness = buildCachedDataTestHarness();
-    mockCreateClient.mockReturnValue({
-      from: harness.mockFrom,
-      rpc: harness.mockRpc,
-      auth: { getUser: vi.fn() },
-    });
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('returns the RPC stats on success', async () => {
-    harness.mockRpc.mockResolvedValueOnce({
-      data: { revenue: 100, orders: 3 },
-      error: null,
-    });
-
-    await expect(getCachedDashboardStats('merchant-1')).resolves.toEqual({
-      revenue: 100,
-      orders: 3,
-    });
-  });
-
-  it('throws on a transient RPC error so it is never cached as absence (PR4b)', async () => {
-    const consoleSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => undefined);
-    harness.mockRpc.mockResolvedValueOnce({
-      data: null,
-      error: { code: '57014', message: 'statement timeout' },
-    });
-
-    await expect(getCachedDashboardStats('merchant-1')).rejects.toMatchObject({
-      code: '57014',
-    });
-    expect(consoleSpy).toHaveBeenCalled();
-  });
-
-  it('returns null when the RPC yields no stats without an error', async () => {
-    harness.mockRpc.mockResolvedValueOnce({ data: null, error: null });
-
-    await expect(getCachedDashboardStats('merchant-1')).resolves.toBeNull();
-  });
-});
-
-describe('getCachedPlatformAnalytics', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    harness = buildCachedDataTestHarness();
-    mockCreateClient.mockReturnValue({
-      from: harness.mockFrom,
-      rpc: harness.mockRpc,
-      auth: { getUser: vi.fn() },
-    });
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('returns the aggregate summary on success', async () => {
-    harness.mockRpc.mockResolvedValueOnce({
-      data: { totalGmv: 5000 },
-      error: null,
-    });
-
-    await expect(
-      getCachedPlatformAnalytics('2026-07-01', '2026-07-13')
-    ).resolves.toEqual({ totalGmv: 5000 });
-  });
-
-  it('throws on a transient RPC error so it is never cached as absence (PR4b)', async () => {
-    const consoleSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => undefined);
-    harness.mockRpc.mockResolvedValueOnce({
-      data: null,
-      error: { code: '57014', message: 'statement timeout' },
-    });
-
-    await expect(
-      getCachedPlatformAnalytics('2026-07-01', '2026-07-13')
-    ).rejects.toMatchObject({ code: '57014' });
-    expect(consoleSpy).toHaveBeenCalled();
   });
 });
 

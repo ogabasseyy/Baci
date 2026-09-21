@@ -1,12 +1,8 @@
 import type { RegisteredAddress } from '@baci/shared';
-import {
-  createClient as createSupabaseClient,
-  type SupabaseClient,
-} from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
 import { cache } from 'react';
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
-import { getSupabaseServiceRoleKey, getSupabaseUrl } from '@/env';
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
 import type {
@@ -51,7 +47,6 @@ import {
   unwrapStorefrontReadResultForCache,
 } from '@/lib/storefront-read-result';
 import type { VariantAttributeSource } from '@/lib/storefront-specs/variant-attributes';
-import { createTimeoutComposedFetch } from '@/lib/supabase/compose-fetch-signal';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
@@ -123,9 +118,6 @@ function combineUniqueRelatedBlogPosts<T extends RelatedBlogPostIdentity>(
 
   return uniquePosts;
 }
-
-/** Default transport bound for cached-data Supabase clients. */
-const CACHED_CLIENT_DEFAULT_TIMEOUT_MS = 10_000;
 
 function getStorefrontSnapshotSupabaseClient(): SupabaseClient<StorefrontDatabase> {
   // The runtime client is the same anonymous public client used by the rest of
@@ -2417,93 +2409,6 @@ export async function getCachedProductRatingStats(productId: string) {
   }
 }
 
-/**
- * Create a Supabase client with Service Role key for secure operations.
- * SERVER-SIDE ONLY. Never use on client.
- */
-function getServiceSupabaseClient() {
-  const url = getSupabaseUrl();
-  const key = getSupabaseServiceRoleKey(); // Throws if on client or missing
-
-  return createSupabaseClient(url, key, {
-    global: {
-      // This client previously had NO transport bound at all — and it sits
-      // inside the hot merchant shell path via getCachedFeatureSettings.
-      fetch: createTimeoutComposedFetch(CACHED_CLIENT_DEFAULT_TIMEOUT_MS),
-    },
-  });
-}
-
-/**
- * Cached dashboard stats (Revenue, Orders, etc.)
- * Uses 'merchant' cacheLife profile (revalidate 60s)
- */
-export async function getCachedDashboardStats(merchantId: string) {
-  // PR4b review round 4: stays `'use cache: remote'` (demotion REVERTED).
-  // `dashboard-${merchantId}` is busted by revalidateProducts(),
-  // revalidateMerchant() AND revalidateMerchantPublication() — a merchant who
-  // adds a product expects the dashboard to reflect it, and a local entry on
-  // another instance would keep serving pre-mutation metrics until `cacheLife`
-  // expiry. Still fail-loud so a transient RPC error is never persisted as
-  // null; the dashboard action's own try/catch degrades to zero metrics
-  // outside the cache scope. A genuine null summary (no error) still returns
-  // null.
-  'use cache: remote';
-  cacheLife('merchant');
-  cacheTag('dashboard', `dashboard-${merchantId}`);
-
-  const supabase = getServiceSupabaseClient();
-
-  const { data: stats, error } = await supabase.rpc(
-    'get_sales_dashboard_stats',
-    { p_merchant_id: merchantId }
-  );
-
-  if (error) {
-    console.error('Error fetching cached dashboard stats:', error);
-    throw error;
-  }
-
-  return stats;
-}
-
-/**
- * Cached platform analytics (Admin).
- * Uses 'products' cacheLife profile (revalidate 5min)
- */
-export async function getCachedPlatformAnalytics(
-  startDate: string,
-  endDate: string
-) {
-  // PR4b review round 4: stays `'use cache: remote'` (demotion REVERTED).
-  // The admin "refresh analytics views" route calls revalidateAnalytics(),
-  // which busts the `analytics` tag — an EXPLICIT, user-triggered invalidation
-  // contract. Demoting it to local would leave the refresh button silently
-  // broken for any request served by another instance. Still fail-loud so a
-  // transient aggregate error is never cached as null; the admin route's
-  // enclosing try/catch returns 500 outside the cache scope.
-  'use cache: remote';
-  cacheLife('products');
-  cacheTag('analytics');
-
-  const supabase = getServiceSupabaseClient();
-
-  const { data: summaryData, error: summaryError } = await supabase.rpc(
-    'get_platform_analytics_summary',
-    {
-      p_start_date: startDate,
-      p_end_date: endDate,
-    }
-  );
-
-  if (summaryError) {
-    console.error('Error fetching cached platform analytics:', summaryError);
-    throw summaryError;
-  }
-
-  return summaryData;
-}
-
 function isMissingRepairsCatalogEnabledColumn(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
     return false;
@@ -2589,8 +2494,7 @@ async function getPublicFeatureSettingsWithMigrationFallback(
 
 /**
  * Cached merchant feature settings.
- * Uses a server-only service-role query with an explicit public-safe column allowlist because
- * this table also stores private integration credentials.
+ * Uses the anonymous public client and an explicit public-safe column allowlist.
  * Uses local Cache Components caching to avoid Vercel RemoteCacheHandler failures
  * on the hot storefront merchant shell path.
  */
@@ -2602,7 +2506,7 @@ export async function getCachedFeatureSettings(
   cacheTag(`features-${merchantId}`);
 
   try {
-    const supabase = getServiceSupabaseClient();
+    const supabase = getPublicSupabaseClient();
     return await getPublicFeatureSettingsWithMigrationFallback(
       supabase,
       merchantId

@@ -144,6 +144,19 @@ function setupBlogListingFetch({
       return { select };
     }
 
+    if (table === 'merchant_feature_settings') {
+      return {
+        select: vi.fn((columns: string) => {
+          featureSettingsSelects.push(columns);
+          const builder = featureSettingsBuilders.shift();
+          if (!builder) {
+            throw new Error('Unexpected extra merchant_feature_settings query');
+          }
+          return builder;
+        }),
+      };
+    }
+
     throw new Error(`Unexpected public table: ${table}`);
   });
 

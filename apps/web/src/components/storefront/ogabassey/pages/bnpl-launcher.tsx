@@ -33,11 +33,9 @@ import { captureCreditDirectClientCompletion } from './checkout/credit-direct-cl
 import { clearCheckoutIdempotencyKey } from './checkout/checkout-idempotency';
 import { useCreditDirectVerification } from './checkout/hooks/use-credit-direct-verification';
 import { CreditDirectVerificationView } from './checkout/components/CreditDirectVerificationView';
-import {
-    captureBnplPaymentCompleted,
-    captureBnplPaymentFailed,
-    captureBnplPaymentStarted,
-} from './checkout/bnpl-funnel-attribution';
+import { captureBnplPaymentCompleted } from './checkout/capture-bnpl-payment-completed';
+import { captureBnplPaymentFailed } from './checkout/capture-bnpl-payment-failed';
+import { captureBnplPaymentStarted } from './checkout/capture-bnpl-payment-started';
 
 declare global {
     interface Window {

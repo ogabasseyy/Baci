@@ -23,7 +23,7 @@ interface StartWalletFundedBankTransferCheckoutParams {
   trackingToken?: string | null;
 }
 
-export function startWalletFundedBankTransferCheckout({
+export async function startWalletFundedBankTransferCheckout({
   attribution,
   isOrderInFlight,
   orderId,
@@ -31,8 +31,11 @@ export function startWalletFundedBankTransferCheckout({
   orderTotal,
   setIsProcessing,
   trackingToken,
-}: StartWalletFundedBankTransferCheckoutParams) {
-  return createWalletFundedBankTransferIntent({
+}: StartWalletFundedBankTransferCheckoutParams): Promise<string | null> {
+  // Resolves the created intent id (not just success) so the caller can
+  // stamp the payment start with the attempt reference; completion later
+  // reconciles against the same id.
+  const response = await createWalletFundedBankTransferIntent({
     merchantId: CHECKOUT_MERCHANT_ID,
     merchantSlug: CHECKOUT_MERCHANT_SLUG,
     onFallback: ({ code, consent, message }) => {
@@ -61,6 +64,7 @@ export function startWalletFundedBankTransferCheckout({
     orderId,
     requestConsent: requestWalletFundingAccountConsent,
   });
+  return response ? response.intent.id : null;
 }
 
 function requestWalletFundingAccountConsent() {

@@ -165,7 +165,10 @@ export function buildStorefrontAccountDocumentBundle({
     lineExtensionTotal > 0;
   let allocatedVatAmount = 0;
 
-  const receiptMerchant: ReceiptMerchant = buildReceiptMerchant(merchant);
+  const receiptMerchant: ReceiptMerchant = buildReceiptMerchant(
+    merchant,
+    currency
+  );
   const receiptOrder: ReceiptOrder = buildReceiptOrder({
     order,
     orderItems,

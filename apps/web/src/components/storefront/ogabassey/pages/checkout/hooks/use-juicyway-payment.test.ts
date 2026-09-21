@@ -462,6 +462,72 @@ describe('useJuicywayPayment', () => {
     );
   });
 
+  it('enforces the polling deadline while a status check hangs', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveHungCheck!: (response: Response) => void;
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(initResponse('ref-1', 'pay-1'))
+        .mockResolvedValueOnce(Response.json({}))
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveHungCheck = resolve;
+            })
+        );
+      vi.stubGlobal('fetch', fetchMock);
+      const { result, unmount } = renderHook(() =>
+        useJuicywayPayment(createOptions('TRX'))
+      );
+
+      await act(async () => {
+        await result.current.initializeCryptoPayment();
+      });
+      await act(async () => {
+        await result.current.verifyCryptoPayment();
+      });
+      expect(result.current.cryptoVerificationStatus).toBe('pending');
+
+      // The first tick starts a check that never settles; the remaining
+      // ticks must still exhaust the 30-attempt budget and release the
+      // verifying UI instead of waiting on the hung request forever.
+      for (let i = 0; i < 30; i += 1) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(10_000);
+        });
+      }
+
+      expect(result.current.cryptoVerificationStatus).toBe('pending');
+      expect(result.current.isVerifyingCrypto).toBe(false);
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_completed',
+        expect.anything(),
+        expect.anything()
+      );
+      const statusUrls = fetchMock.mock.calls
+        .map(([url]) => String(url))
+        .filter((url) => url.includes('/api/payments/status'));
+      expect(statusUrls).toHaveLength(2);
+
+      // The hung check resolving after expiry must not settle the dead
+      // attempt.
+      await act(async () => {
+        resolveHungCheck(Response.json({ is_confirmed: true }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.cryptoVerificationStatus).toBe('pending');
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'payment_completed',
+        expect.anything(),
+        expect.anything()
+      );
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('falls back to the payment id when the reference is empty', () => {
     expect(juicywayAttemptKey('order-1', '', 'pay-1')).toBe('order-1:pay-1');
     expect(juicywayAttemptKey('order-1', 'ref-1', 'pay-1')).toBe(

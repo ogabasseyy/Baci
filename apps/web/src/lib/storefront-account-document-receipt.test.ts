@@ -6,31 +6,34 @@ import {
 
 describe('storefront account receipt builders', () => {
   it('builds receipt merchant metadata from the merchant row', () => {
-    const result = buildReceiptMerchant({
-      business_name: 'Ogabassey',
-      logo_url: 'https://example.com/logo.png',
-      email: 'merchant@example.com',
-      phone: '08000000000',
-      support_email: 'support@example.com',
-      support_phone: '08011111111',
-      business_address: '12 Allen Avenue',
-      cac_rc_number: 'RC123',
-      tax_identification_number: 'TIN123',
-      legal_entity_name: 'Ogabassey Ltd',
-      brand_colors: { primary: '#000000' },
-      vat_registration_status: 'registered',
-      vat_rate: 7.5,
-      bank_code: '999',
-      bank_account_number: '1234567890',
-      bank_name: 'Baci Bank',
-      bank_account_name: 'Ogabassey Ltd',
-      social_media: { instagram: '@ogabassey' },
-      pages: { about: true },
-      registered_address: {
-        street: '99 Registered Road',
-        city: 'Ikeja',
+    const result = buildReceiptMerchant(
+      {
+        business_name: 'Ogabassey',
+        logo_url: 'https://example.com/logo.png',
+        email: 'merchant@example.com',
+        phone: '08000000000',
+        support_email: 'support@example.com',
+        support_phone: '08011111111',
+        business_address: '12 Allen Avenue',
+        cac_rc_number: 'RC123',
+        tax_identification_number: 'TIN123',
+        legal_entity_name: 'Ogabassey Ltd',
+        brand_colors: { primary: '#000000' },
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+        bank_code: '999',
+        bank_account_number: '1234567890',
+        bank_name: 'Baci Bank',
+        bank_account_name: 'Ogabassey Ltd',
+        social_media: { instagram: '@ogabassey' },
+        pages: { about: true },
+        registered_address: {
+          street: '99 Registered Road',
+          city: 'Ikeja',
+        },
       },
-    });
+      'NGN'
+    );
 
     expect(result.business_name).toBe('Ogabassey');
     expect(result.brand_colors).toEqual({ primary: '#000000' });
@@ -42,32 +45,71 @@ describe('storefront account receipt builders', () => {
   });
 
   it('falls back to an empty merchant email when the source value is null', () => {
-    const result = buildReceiptMerchant({
-      business_name: 'Ogabassey',
-      logo_url: 'https://example.com/logo.png',
-      email: null,
-      phone: '08000000000',
-      support_email: 'support@example.com',
-      support_phone: '08011111111',
-      business_address: '12 Allen Avenue',
-      cac_rc_number: 'RC123',
-      tax_identification_number: 'TIN123',
-      legal_entity_name: 'Ogabassey Ltd',
-      brand_colors: { primary: '#000000' },
-      vat_registration_status: 'registered',
-      vat_rate: 7.5,
-      bank_code: '999',
-      bank_account_number: '1234567890',
-      bank_name: 'Baci Bank',
-      bank_account_name: 'Ogabassey Ltd',
-      social_media: { instagram: '@ogabassey' },
-      pages: { about: true },
-      registered_address: null,
-    });
+    const result = buildReceiptMerchant(
+      {
+        business_name: 'Ogabassey',
+        logo_url: 'https://example.com/logo.png',
+        email: null,
+        phone: '08000000000',
+        support_email: 'support@example.com',
+        support_phone: '08011111111',
+        business_address: '12 Allen Avenue',
+        cac_rc_number: 'RC123',
+        tax_identification_number: 'TIN123',
+        legal_entity_name: 'Ogabassey Ltd',
+        brand_colors: { primary: '#000000' },
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+        bank_code: '999',
+        bank_account_number: '1234567890',
+        bank_name: 'Baci Bank',
+        bank_account_name: 'Ogabassey Ltd',
+        social_media: { instagram: '@ogabassey' },
+        pages: { about: true },
+        registered_address: null,
+      },
+      'NGN'
+    );
 
     expect(result.email).toBe('');
     expect(result.business_name).toBe('Ogabassey');
     expect(result.bank_account_number).toBe('1234567890');
+  });
+
+  it('strips merchant bank details for foreign-currency documents', () => {
+    const result = buildReceiptMerchant(
+      {
+        business_name: 'Ogabassey',
+        logo_url: null,
+        email: 'merchant@example.com',
+        phone: null,
+        support_email: null,
+        support_phone: null,
+        business_address: null,
+        cac_rc_number: null,
+        tax_identification_number: null,
+        legal_entity_name: null,
+        brand_colors: null,
+        vat_registration_status: null,
+        vat_rate: null,
+        bank_code: '999',
+        bank_account_number: '1234567890',
+        bank_name: 'Baci Bank',
+        bank_account_name: 'Ogabassey Ltd',
+        social_media: null,
+        pages: null,
+        registered_address: null,
+      },
+      'USD'
+    );
+
+    // Downloads and previews must not print this naira account beside a
+    // dollar amount under Payment Instructions.
+    expect(result.bank_code).toBeNull();
+    expect(result.bank_account_number).toBeNull();
+    expect(result.bank_name).toBeNull();
+    expect(result.bank_account_name).toBeNull();
+    expect(result.business_name).toBe('Ogabassey');
   });
 
   it('builds receipt order details from normalized document data', () => {

@@ -138,14 +138,19 @@ export default function BankTransferScreen() {
       // success route clears the cart (purchase capture needs cart items).
       if (orderId) {
         // Report the canonical full order value: `amount` is only the
-        // shortfall collected after existing wallet balance.
+        // shortfall collected after existing wallet balance, and restored
+        // or legacy links may omit the routed `orderTotal`. The completed
+        // intent's target is authoritative.
+        const intentTotal = Number(intent.targetOrderAmount);
         const requestedTotal = Number(orderTotal);
         const shortfall = Number(amount);
-        const fundedTotal = Number.isFinite(requestedTotal)
-          ? requestedTotal
-          : Number.isFinite(shortfall)
-            ? shortfall
-            : 0;
+        const fundedTotal = Number.isFinite(intentTotal)
+          ? intentTotal
+          : Number.isFinite(requestedTotal)
+            ? requestedTotal
+            : Number.isFinite(shortfall)
+              ? shortfall
+              : 0;
         // First completion wins the durable claim; replays emit nothing.
         // Snapshot the cart synchronously: the claim await below yields,
         // and the success route may clear the cart before it resolves.

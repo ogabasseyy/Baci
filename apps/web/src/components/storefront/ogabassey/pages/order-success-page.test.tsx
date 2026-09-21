@@ -81,15 +81,41 @@ describe('OrderSuccessPage', () => {
     expect(screen.getByText('Proforma Invoice Ready!')).toBeTruthy();
   });
 
-  it('renders payforme title with payer name', () => {
+  it('renders payforme share prompt with payer name', () => {
     setSearchParams({ orderId: 'pay-1', type: 'payforme', payerName: 'Alice' });
     render(<OrderSuccessPage />);
-    expect(screen.getByText('Request Sent!')).toBeTruthy();
+    expect(screen.getByText('Share the Payment Link')).toBeTruthy();
     expect(
-      screen.getByText(
-        /sent a payment link to Alice/,
-      ),
+      screen.getByText(/send the payment link below to Alice/i),
     ).toBeTruthy();
+    // The handoff contract: the requester forwards the link — the page
+    // must never claim a delivery happened.
+    expect(screen.queryByText(/we've sent a payment link/i)).toBeNull();
+    expect(screen.queryByText('Request Sent!')).toBeNull();
+  });
+
+  it('hands the requester a copyable payer link for payforme orders', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    setSearchParams({
+      orderId: 'pay-1',
+      type: 'payforme',
+      payerName: 'Alice',
+      trackingToken: 'track-1',
+    });
+    render(<OrderSuccessPage />);
+
+    const linkInput = screen.getByLabelText(
+      /payment link to share with your payer/i
+    ) as HTMLInputElement;
+    expect(linkInput.value).toContain('/track-order?token=track-1');
+
+    fireEvent.click(screen.getByRole('button', { name: /copy/i }));
+    expect(writeText).toHaveBeenCalledWith(linkInput.value);
+    expect(await screen.findByText('Copied')).toBeTruthy();
   });
 
   it.each(['credit_direct', 'credpal', 'klump'])(

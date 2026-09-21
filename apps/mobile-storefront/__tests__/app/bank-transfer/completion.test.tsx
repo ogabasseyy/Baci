@@ -129,6 +129,29 @@ describe('BankTransferScreen wallet-funded completion', () => {
       params: expect.objectContaining({ orderId: 'order-1' }),
     });
   });
+
+  it('reports the intent target when a legacy link omits the order total', async () => {
+    mockTrackCompletedOnce.mockResolvedValue(true);
+    // Restored/legacy wallet-funded link: no routed orderTotal, and the
+    // amount is only the remaining shortfall after wallet balance.
+    delete mockRouteParams.orderTotal;
+    mockRouteParams.amount = '20000';
+    render(<BankTransferScreen />);
+    expect(pollingOptions?.onCompleted).toBeDefined();
+
+    await act(async () => {
+      pollingOptions?.onCompleted?.({
+        id: 'intent-1',
+        targetOrderAmount: 470000,
+      } as never);
+    });
+
+    await waitFor(() => {
+      expect(mockTrackCompletedOnce).toHaveBeenCalledWith(
+        expect.objectContaining({ orderId: 'order-1', value: 470000 })
+      );
+    });
+  });
 });
 
 describe('BankTransferScreen legacy confirm', () => {

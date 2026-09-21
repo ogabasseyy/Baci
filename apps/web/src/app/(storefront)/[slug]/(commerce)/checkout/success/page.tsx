@@ -1,10 +1,5 @@
 'use client';
 
-import {
-  buildCheckoutFunnelProperties,
-  CHECKOUT_FUNNEL_EVENTS,
-  getCheckoutPaymentIntent,
-} from '@baci/shared/contracts';
 import { motion } from 'framer-motion';
 import {
   AlertCircle,
@@ -23,15 +18,13 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense } from 'react';
 import { AdUnit } from '@/components/storefront/ogabassey/components/AdUnit';
-import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { fetchWithCsrf } from '@/lib/api-client';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
-import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { asRoute } from '@/lib/routes';
+import { useCheckoutSuccessVerification } from './use-checkout-success-verification';
 
 /**
  * 2025 Best Practice: Order Confirmation Page
@@ -42,282 +35,12 @@ import { asRoute } from '@/lib/routes';
  * - Micro-animations for engagement
  */
 
-type VerificationResponse = {
-  currency?: string;
-  orderId?: string;
-  orderNumber?: string;
-  orderTotal?: number;
-  paymentMethod?: string;
-  status?: 'success' | 'pending' | 'failed' | 'cancelled';
-  success?: boolean;
-  finalizationOutcome?: string;
-};
-
-function normalizeCurrencyCode(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const normalized = value.trim().toUpperCase();
-  return normalized || undefined;
-}
-
-function isVerificationResponse(value: unknown): value is VerificationResponse {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  const hasValidStatus =
-    candidate.status === undefined ||
-    candidate.status === 'success' ||
-    candidate.status === 'pending' ||
-    candidate.status === 'failed' ||
-    candidate.status === 'cancelled';
-  const hasValidOrderNumber =
-    candidate.orderNumber === undefined ||
-    typeof candidate.orderNumber === 'string';
-  const hasValidOrderId =
-    candidate.orderId === undefined || typeof candidate.orderId === 'string';
-  const hasValidPaymentMethod =
-    candidate.paymentMethod === undefined ||
-    typeof candidate.paymentMethod === 'string';
-  const hasValidSuccess =
-    candidate.success === undefined || typeof candidate.success === 'boolean';
-  const hasValidFinalizationOutcome =
-    candidate.finalizationOutcome === undefined ||
-    typeof candidate.finalizationOutcome === 'string';
-
-  return (
-    hasValidStatus &&
-    hasValidOrderNumber &&
-    hasValidOrderId &&
-    hasValidPaymentMethod &&
-    hasValidSuccess &&
-    hasValidFinalizationOutcome
-  );
-}
-
 const orderSteps = [
   { id: 'received', label: 'Order Received', icon: CheckCircle2 },
   { id: 'processing', label: 'Processing', icon: Package },
   { id: 'shipped', label: 'Shipped', icon: Truck },
   { id: 'delivered', label: 'Delivered', icon: MapPin },
 ];
-
-type CheckoutVerificationStatus = 'success' | 'pending' | 'failed';
-
-// A pending gateway response can settle shortly after the first verify
-// call: re-run verification on a bounded poll so the completed branch is
-// still reached without a manual refresh.
-const VERIFY_REPOLL_INTERVAL_MS = 3000;
-const VERIFY_REPOLL_MAX_ATTEMPTS = 20;
-// Verify-route finalization outcomes returned non-OK after the provider
-// captured the money (mirrors finalizeOrderGatewayPayment kinds): never
-// payment failures — the reverify loop keeps polling for completion.
-const CAPTURED_PAYMENT_FINALIZATION_OUTCOMES = new Set([
-  'completion_failed',
-  'inventory_cleanup_failed',
-  'inventory_failed',
-  'order_fetch_failed',
-  'review_failed',
-]);
-
-interface VerifyCheckoutPaymentParams {
-  merchantSlug: string | undefined;
-  orderId: string | null;
-  paymentMethod: string | null;
-  reference: string | null;
-  trackingToken: string | null;
-}
-
-interface VerifyCheckoutPaymentHandlers {
-  clearCart: () => void;
-  redirectToCheckout: () => void;
-  scheduleFailedRedirect: () => void;
-  setIsVerifying: (isVerifying: boolean) => void;
-  setOrderNumber: (orderNumber: string | null) => void;
-  setPaymentMethod: (paymentMethod: string | null) => void;
-  setStatus: (status: CheckoutVerificationStatus) => void;
-  capturePaymentCompleted: (input: {
-    currency?: string;
-    orderId: string;
-    orderNumber?: string;
-    paymentMethod: string;
-    reference?: string;
-    total?: number;
-  }) => void;
-  capturePaymentFailed: (input: {
-    orderId?: string | null;
-    orderNumber?: string;
-    paymentMethod?: string | null;
-    reference?: string | null;
-    reason: string;
-  }) => void;
-}
-
-/**
- * Runs payment/order verification and maps every outcome onto the page state
- * via the supplied handlers. Module-scope so the try/finally blocks stay
- * outside the component body (React Compiler cannot lower try/finally yet).
- */
-async function verifyCheckoutPayment(
-  {
-    merchantSlug,
-    orderId,
-    paymentMethod,
-    reference,
-    trackingToken,
-  }: VerifyCheckoutPaymentParams,
-  {
-    clearCart,
-    redirectToCheckout,
-    scheduleFailedRedirect,
-    setIsVerifying,
-    setOrderNumber,
-    setPaymentMethod,
-    setStatus,
-    capturePaymentCompleted,
-    capturePaymentFailed,
-  }: VerifyCheckoutPaymentHandlers
-): Promise<void> {
-  if (!reference) {
-    if (orderId) {
-      setIsVerifying(true);
-      try {
-        const query = new URLSearchParams();
-        if (merchantSlug) query.set('merchant_slug', merchantSlug);
-        if (trackingToken) query.set('tracking_token', trackingToken);
-        const queryString = query.toString();
-        const url = `/api/storefront/orders/${encodeURIComponent(orderId)}${
-          queryString ? `?${queryString}` : ''
-        }`;
-        const response = await fetch(url);
-        const data = response.ok ? await response.json() : null;
-        if (data && (data.order_number || data.short_id)) {
-          clearCart();
-          setStatus('success');
-          setOrderNumber(data.order_number || data.short_id);
-          if (data.payment_method) {
-            setPaymentMethod(data.payment_method);
-          }
-          if (data.payment_status === 'paid') {
-            const lookupTotal = Number(data.total);
-            const lookupCurrency = normalizeCurrencyCode(data.currency);
-            capturePaymentCompleted({
-              orderId,
-              orderNumber: data.order_number || data.short_id,
-              paymentMethod:
-                data.payment_method || paymentMethod || 'paid_order',
-              ...(Number.isFinite(lookupTotal) ? { total: lookupTotal } : {}),
-              ...(lookupCurrency ? { currency: lookupCurrency } : {}),
-            });
-          }
-        } else {
-          // Fallback if API lookup fails
-          clearCart();
-          setStatus('success');
-          setOrderNumber(orderId.slice(0, 8).toUpperCase());
-        }
-      } catch (error) {
-        console.error('Failed to fetch order details on success page:', error);
-        clearCart();
-        setStatus('success');
-        setOrderNumber(orderId.slice(0, 8).toUpperCase());
-      } finally {
-        setIsVerifying(false);
-      }
-      return;
-    }
-
-    redirectToCheckout();
-    return;
-  }
-
-  setIsVerifying(true);
-
-  try {
-    const response = await fetchWithCsrf('/api/payments/verify', {
-      body: JSON.stringify({ reference }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    });
-    const raw: unknown = await response.json();
-    const data = isVerificationResponse(raw) ? raw : {};
-
-    if (data.status === 'pending') {
-      setStatus('pending');
-      setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
-    } else if (!response.ok) {
-      if (
-        typeof data.finalizationOutcome === 'string' &&
-        CAPTURED_PAYMENT_FINALIZATION_OUTCOMES.has(data.finalizationOutcome)
-      ) {
-        // Order/inventory finalization failed after the provider captured
-        // the money: the payment is not failed — reconciliation or the
-        // next reverify pass can still complete it — so stay pending
-        // instead of recording payment_failed and redirecting away.
-        console.warn(
-          'Payment captured but finalization failed; awaiting completion:',
-          data.finalizationOutcome
-        );
-        setStatus('pending');
-        setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
-      } else {
-        console.error('Payment verification failed:', data);
-        setStatus('failed');
-        capturePaymentFailed({
-          orderId,
-          orderNumber: data.orderNumber,
-          paymentMethod: data.paymentMethod || paymentMethod,
-          reference,
-          reason: 'verification_failed',
-        });
-        scheduleFailedRedirect();
-      }
-    } else if (data.success && data.status === 'success') {
-      clearCart();
-      setStatus('success');
-      setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
-      const verifiedOrderId = data.orderId || orderId;
-      // The verify API reports success for completed, order_cancelled, and
-      // order_skipped outcomes alike: only a completed finalization leaves an
-      // active paid order, so only it counts as a paid conversion.
-      if (verifiedOrderId && data.finalizationOutcome === 'completed') {
-        const verifiedTotal = Number(data.orderTotal);
-        const verifiedCurrency = normalizeCurrencyCode(data.currency);
-        capturePaymentCompleted({
-          orderId: verifiedOrderId,
-          orderNumber: data.orderNumber,
-          paymentMethod:
-            data.paymentMethod || paymentMethod || 'payment_gateway',
-          reference,
-          ...(Number.isFinite(verifiedTotal) ? { total: verifiedTotal } : {}),
-          ...(verifiedCurrency ? { currency: verifiedCurrency } : {}),
-        });
-      }
-    } else if (data.status === 'failed' || data.status === 'cancelled') {
-      setStatus('failed');
-      capturePaymentFailed({
-        orderId,
-        orderNumber: data.orderNumber,
-        paymentMethod: data.paymentMethod || paymentMethod,
-        reference,
-        reason:
-          data.status === 'cancelled' ? 'payment_cancelled' : 'payment_failed',
-      });
-      scheduleFailedRedirect();
-    } else {
-      setStatus('pending');
-      setOrderNumber(reference.slice(0, 8).toUpperCase());
-    }
-  } catch (error) {
-    console.error('Failed to verify payment:', error);
-    setStatus('pending');
-    setOrderNumber(reference.slice(0, 8).toUpperCase());
-  } finally {
-    setIsVerifying(false);
-  }
-}
 
 export default function CheckoutSuccessPage() {
   return (
@@ -353,157 +76,17 @@ function CheckoutSuccessContent() {
   const getHref = (path: string) =>
     path.startsWith('http') ? path : `${basePath}${path}`;
 
-  const [status, setStatus] = useState<CheckoutVerificationStatus>('pending');
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [orderNumber, setOrderNumber] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
-  const statusRef = useRef<CheckoutVerificationStatus>('pending');
-  useEffect(() => {
-    statusRef.current = status;
-  }, [status]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler handles memoization
-  useEffect(() => {
-    // Track the failed-redirect timer so navigating away from this page
-    // cancels it — without the cleanup, a user who leaves within the 4s
-    // window gets yanked back to /checkout.
-    const timerHandle: { current: ReturnType<typeof setTimeout> | null } = {
-      current: null,
-    };
-    const redirectToCheckout = () => {
-      router.push(asRoute(getHref('/checkout')));
-    };
-
-    const verifyParams = {
+  const { status, isVerifying, orderNumber, paymentMethod } =
+    useCheckoutSuccessVerification({
       merchantSlug: merchantContext?.merchant?.slug,
       orderId,
-      paymentMethod: paymentMethodParam,
+      paymentMethodParam,
       reference,
       trackingToken,
-    };
-    let disposed = false;
-    let reverifyTimer: ReturnType<typeof setTimeout> | null = null;
-    let reverifyAttempts = 0;
-    const clearReverifyTimer = () => {
-      if (reverifyTimer !== null) {
-        clearTimeout(reverifyTimer);
-        reverifyTimer = null;
-      }
-    };
-    // Serialized: the next attempt is scheduled only after the current
-    // verification settles, so a slow older response can never arrive
-    // after a newer success and overwrite the terminal state (or schedule
-    // a redirect after payment was confirmed).
-    const runVerificationPass = () => {
-      // Gate the pass itself on the terminal status: setStatus('success')
-      // only schedules the React update, so the settling promise's
-      // finally can still observe a stale 'pending' ref and arm another
-      // timer. Without this check that timer performs an extra
-      // verification after success, and a transient failure could flip a
-      // paid order to failed (payment_failed + checkout redirect).
-      if (
-        disposed ||
-        statusRef.current !== 'pending' ||
-        reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS
-      ) {
-        return;
-      }
-      reverifyAttempts += 1;
-      void verifyCheckoutPayment(verifyParams, verifyHandlers).finally(() => {
-        if (
-          disposed ||
-          statusRef.current !== 'pending' ||
-          reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS
-        ) {
-          return;
-        }
-        reverifyTimer = setTimeout(() => {
-          reverifyTimer = null;
-          runVerificationPass();
-        }, VERIFY_REPOLL_INTERVAL_MS);
-      });
-    };
-    const verifyHandlers: VerifyCheckoutPaymentHandlers = {
       clearCart,
-      redirectToCheckout,
-      scheduleFailedRedirect: () => {
-        timerHandle.current = setTimeout(redirectToCheckout, 4000);
-      },
-      setIsVerifying,
-      setOrderNumber,
-      setPaymentMethod,
-      setStatus,
-      capturePaymentCompleted: (input) => {
-        captureCheckoutFunnelEventOnce(
-          CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
-          input.orderId,
-          buildCheckoutFunnelProperties({
-            channel: 'web',
-            currency: input.currency,
-            orderId: input.orderId,
-            orderNumber: input.orderNumber,
-            paymentIntent: getCheckoutPaymentIntent(input.paymentMethod),
-            paymentMethod: input.paymentMethod,
-            paymentStatus: 'paid',
-            reference: input.reference,
-            source: 'web_checkout',
-            total: input.total,
-          })
-        );
-      },
-      capturePaymentFailed: (input) => {
-        // A retry reuses the order with a new gateway reference: claim the
-        // failure per attempt so a later failed attempt is not suppressed
-        // by the first one (same reference still dedupes on re-verify).
-        const failureKey =
-          input.orderId && input.reference
-            ? `${input.orderId}:${input.reference}`
-            : input.orderId || input.reference || 'unknown-order';
-        captureCheckoutFunnelEventOnce(
-          CHECKOUT_FUNNEL_EVENTS.paymentFailed,
-          failureKey,
-          buildCheckoutFunnelProperties({
-            channel: 'web',
-            orderId: input.orderId ?? undefined,
-            orderNumber: input.orderNumber,
-            paymentIntent: input.paymentMethod
-              ? getCheckoutPaymentIntent(input.paymentMethod)
-              : undefined,
-            paymentMethod: input.paymentMethod ?? undefined,
-            reason: input.reason,
-            reference: input.reference ?? undefined,
-            source: 'web_checkout',
-          })
-        );
-      },
-    };
-
-    runVerificationPass();
-
-    return () => {
-      disposed = true;
-      clearReverifyTimer();
-      if (timerHandle.current !== null) {
-        clearTimeout(timerHandle.current);
-      }
-    };
-  }, [
-    reference,
-    orderId,
-    trackingToken,
-    merchantContext,
-    clearCart,
-    router,
-    basePath,
-  ]);
-
-  useEffect(() => {
-    if (status !== 'success' || typeof window === 'undefined') {
-      return;
-    }
-
-    sessionStorage.removeItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY);
-  }, [status]);
+      router,
+      basePath,
+    });
 
   // Failed State
   if (status === 'failed') {

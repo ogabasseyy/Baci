@@ -117,22 +117,24 @@ export async function finalizeCheckoutPayment({
 
   if (isOnlinePayment || isBankTransfer) {
     if (isBankTransfer && shouldCreateWalletFundedBankTransferOrder) {
-      const startedWalletFundedBankTransfer =
-        await startWalletFundedBankTransferCheckout({
-          attribution,
-          isOrderInFlight,
-          orderId: order.id,
-          orderNumber,
-          orderTotal: order.total,
-          setIsProcessing,
-          trackingToken: order.tracking_token,
-        });
-      if (startedWalletFundedBankTransfer) {
-        // The transfer setup succeeded: record the start now, never before.
+      const walletFundedIntentId = await startWalletFundedBankTransferCheckout({
+        attribution,
+        isOrderInFlight,
+        orderId: order.id,
+        orderNumber,
+        orderTotal: order.total,
+        setIsProcessing,
+        trackingToken: order.tracking_token,
+      });
+      if (walletFundedIntentId) {
+        // The transfer setup succeeded: record the start now, never before,
+        // stamped with the created intent so a recreated intent for the
+        // same order reconciles instead of merging with the first start.
         await trackCheckoutPaymentStarted({
           orderId: order.id,
           orderNumber,
           paymentMethod: selectedPayment,
+          reference: walletFundedIntentId,
           value: orderResponse.amountDueToGateway,
         });
         runPostOrderSideEffects();

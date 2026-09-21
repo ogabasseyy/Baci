@@ -2165,8 +2165,10 @@ export const CheckoutPage: React.FC = () => {
 
       // payment_started is emitted only once a provider flow actually opens
       // (initialized DVA, provider URL, opened widget, confirmed transfer
-      // setup) — never speculatively before initialization runs.
-      const capturePaymentStarted = () => {
+      // setup) — never speculatively before initialization runs. Stamped
+      // with the initialized reference where one exists so retried
+      // attempts reconcile instead of producing identical starts.
+      const capturePaymentStarted = (reference?: string) => {
         paymentStarted = true;
         captureClientEvent(
           CHECKOUT_FUNNEL_EVENTS.paymentStarted,
@@ -2177,6 +2179,7 @@ export const CheckoutPage: React.FC = () => {
             orderNumber: createdOrderNumber,
             paymentIntent: getCheckoutPaymentIntent(paymentMethod),
             paymentMethod,
+            reference,
             source: 'web_checkout',
             total: paymentAmount,
           })
@@ -2381,7 +2384,7 @@ export const CheckoutPage: React.FC = () => {
 
         if (paymentResult.success && paymentResult.crypto_payment) {
           // Juicyway crypto payment - show wallet address modal
-          capturePaymentStarted();
+          capturePaymentStarted(paymentResult.reference);
           setCryptoPaymentData({
             address: paymentResult.crypto_payment.address,
             chain: paymentResult.crypto_payment.chain,
@@ -2406,13 +2409,13 @@ export const CheckoutPage: React.FC = () => {
           // start when the launcher lookup, SDK load, or widget fails
           // before Klump opens.
           if (paymentMethod !== 'klump') {
-            capturePaymentStarted();
+            capturePaymentStarted(paymentResult.reference);
           }
           window.location.assign(paymentResult.authorization_url);
           return;
         } else if (paymentResult.success && paymentResult.checkout_url) {
           // Juicyway uses checkout_url
-          capturePaymentStarted();
+          capturePaymentStarted(paymentResult.reference);
           window.location.assign(paymentResult.checkout_url);
           return;
         } else {
@@ -2493,7 +2496,7 @@ export const CheckoutPage: React.FC = () => {
             isOrderInFlightRef.current = false;
           },
           onPopup: async ({ checkoutTransactionId, sessionId }) => {
-            capturePaymentStarted();
+            capturePaymentStarted(checkoutTransactionId || sessionId);
             writeCreditDirectPopupMarker(
               order.id,
               checkoutTransactionId || sessionId
@@ -2657,7 +2660,9 @@ export const CheckoutPage: React.FC = () => {
         router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
         setTimeout(clearCart, 500);
       } else if (paymentMethod === 'payforme') {
-        // Pay For Me - TODO: send payment link
+        // Pay for Me handoff: nothing is delivered to the payer contact —
+        // the requester's email carries the transfer details and the
+        // success page hands them the shareable payment link to forward.
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
         clearCheckoutSession();

@@ -17,6 +17,7 @@ import {
   mockReceiptState,
   mockRequestPermission,
   mockTriggerSystemPrompt,
+  mockUseReceiptsModule,
   setupOrderSuccessMocks,
 } from './order-success.test-utils';
 
@@ -32,6 +33,7 @@ jest.mock('@/hooks/use-permission-booster', () =>
   mockPermissionBoosterModule()
 );
 jest.mock('@/hooks/use-receipt-preview', () => mockReceiptPreviewModule());
+jest.mock('@/hooks/use-receipts', () => mockUseReceiptsModule());
 jest.mock('@/stores/auth-store', () => mockAuthStoreModule());
 jest.mock('@/services/push-notifications', () => mockPushNotificationsModule());
 jest.mock('@/lib/post-order-interstitial', () =>

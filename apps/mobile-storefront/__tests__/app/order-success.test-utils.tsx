@@ -28,6 +28,9 @@ export const mockSearchParamsHolder: { current: Record<string, string> } = {
 export const mockReceiptDismissalHolder: {
   current: (() => void) | undefined;
 } = { current: undefined };
+export const mockPaidCheckOrderHolder: {
+  current: { payment_status?: string } | null;
+} = { current: null };
 export const mockMaybeShowPostOrderInterstitial = jest.fn<
   (options?: {
     isCancelled?: () => boolean;
@@ -128,6 +131,12 @@ export function mockPostOrderInterstitialModule(): unknown {
   };
 }
 
+export function mockUseReceiptsModule(): unknown {
+  return {
+    useReceiptDetail: () => ({ data: mockPaidCheckOrderHolder.current }),
+  };
+}
+
 export function setupOrderSuccessMocks(): void {
   jest.clearAllMocks();
   mockScheduleLocalNotification.mockResolvedValue(undefined);
@@ -135,6 +144,7 @@ export function setupOrderSuccessMocks(): void {
   mockReceiptState.isLoading = false;
   mockReceiptState.isOpen = false;
   mockReceiptDismissalHolder.current = undefined;
+  mockPaidCheckOrderHolder.current = null;
   mockSearchParamsHolder.current = {
     orderId: 'order-1',
     orderNumber: 'BAC-001',

@@ -159,20 +159,24 @@ export function useJuicywayVerification({
       if (epoch !== pollingRef.current.epoch) {
         return;
       }
-      // A slow check still awaiting its response: skip this tick rather
-      // than stacking a second request — overlapping responses could
-      // settle twice or contradict each other. The attempt counter still
-      // advances so the wall-clock cap holds. Only this epoch's guard
-      // blocks: a check stranded by a dismiss belongs to a dead epoch.
+      // The deadline is evaluated before the in-flight guard: a hung
+      // request must not hold the budget hostage forever. On expiry the
+      // epoch is invalidated so the stranded response — if it ever lands —
+      // can neither settle this attempt nor re-arm its guard.
       pollingRef.current.attempts++;
-      if (pollingRef.current.checkInFlightEpoch === epoch) {
-        return;
-      }
-
       if (pollingRef.current.attempts >= VERIFY_POLL_MAX_ATTEMPTS) {
+        pollingRef.current.epoch += 1;
+        pollingRef.current.checkInFlightEpoch = null;
         clearPollingInterval();
         setIsVerifying(false);
         setStatus('pending');
+        return;
+      }
+      // A slow check still awaiting its response: skip this tick rather
+      // than stacking a second request — overlapping responses could
+      // settle twice or contradict each other. Only this epoch's guard
+      // blocks: a check stranded by a dismiss belongs to a dead epoch.
+      if (pollingRef.current.checkInFlightEpoch === epoch) {
         return;
       }
 

@@ -5,7 +5,6 @@ import {
   isDeviceReceiptItemName,
   normalizeReceiptFulfillmentDetails,
   type ReceiptFulfillmentDetails,
-  type ReceiptMerchant,
   type ReceiptOrder,
 } from '@baci/shared';
 import { cookies } from 'next/headers';
@@ -16,6 +15,7 @@ import {
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
+import { buildImmediateInvoiceMerchant } from '@/lib/build-immediate-invoice-merchant';
 import {
   buildOrderTrackingLink,
   redactOrderTrackingLinkForLog,
@@ -333,66 +333,6 @@ function getOrderFulfillmentDetails(
   order: Record<string, unknown>
 ): ReceiptFulfillmentDetails | null {
   return normalizeReceiptFulfillmentDetails(order.fulfillment_details);
-}
-
-function toReceiptRecord<T>(value: unknown): T | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return undefined;
-  }
-
-  return value as T;
-}
-
-function buildImmediateInvoiceMerchant(merchant: {
-  bank_account_name?: string | null;
-  bank_account_number?: string | null;
-  bank_code?: string | null;
-  bank_name?: string | null;
-  brand_colors?: unknown;
-  business_address?: string | null;
-  business_name?: string | null;
-  cac_rc_number?: string | null;
-  email?: string | null;
-  legal_entity_name?: string | null;
-  logo_url?: string | null;
-  pages?: unknown;
-  phone?: string | null;
-  registered_address?: unknown;
-  social_media?: unknown;
-  support_email?: string | null;
-  support_phone?: string | null;
-  tax_identification_number?: string | null;
-  vat_rate?: number | null;
-  vat_registration_status?: string | null;
-}): ReceiptMerchant {
-  return {
-    business_name: merchant.business_name || null,
-    logo_url: merchant.logo_url || null,
-    email: merchant.email || merchant.support_email || '',
-    phone: merchant.phone || null,
-    support_email: merchant.support_email || null,
-    support_phone: merchant.support_phone || null,
-    business_address: merchant.business_address || null,
-    registered_address: toReceiptRecord<ReceiptMerchant['registered_address']>(
-      merchant.registered_address
-    ),
-    cac_rc_number: merchant.cac_rc_number || null,
-    tax_identification_number: merchant.tax_identification_number || null,
-    legal_entity_name: merchant.legal_entity_name || null,
-    brand_colors: toReceiptRecord<ReceiptMerchant['brand_colors']>(
-      merchant.brand_colors
-    ),
-    vat_registration_status: merchant.vat_registration_status || null,
-    vat_rate: merchant.vat_rate ?? null,
-    bank_code: merchant.bank_code || null,
-    bank_account_number: merchant.bank_account_number || null,
-    bank_name: merchant.bank_name || null,
-    bank_account_name: merchant.bank_account_name || null,
-    social_media: toReceiptRecord<ReceiptMerchant['social_media']>(
-      merchant.social_media
-    ),
-    pages: toReceiptRecord<ReceiptMerchant['pages']>(merchant.pages),
-  };
 }
 
 function buildImmediateInvoiceShippingAddress(
@@ -3723,7 +3663,10 @@ export async function POST(request: NextRequest) {
                   }),
                   transactions: [],
                 };
-                const receiptMerchant = buildImmediateInvoiceMerchant(merchant);
+                const receiptMerchant = buildImmediateInvoiceMerchant(
+                  merchant,
+                  orderCurrency
+                );
                 const peppolInvoiceData = buildImmediatePeppolInvoiceData({
                   customerEmail: customer_email,
                   customerName: customer_name,

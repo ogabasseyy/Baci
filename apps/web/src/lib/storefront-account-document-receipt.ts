@@ -1,4 +1,5 @@
 import type { ReceiptMerchant, ReceiptOrder } from '@baci/shared';
+import { showMerchantBankDetails } from '@/lib/show-merchant-bank-details';
 import type {
   StorefrontAccountDocumentMerchantRow,
   StorefrontAccountDocumentOrderRow,
@@ -29,8 +30,13 @@ interface BuildReceiptOrderInput {
 }
 
 export function buildReceiptMerchant(
-  merchant: StorefrontAccountDocumentMerchantRow
+  merchant: StorefrontAccountDocumentMerchantRow,
+  orderCurrency: string
 ): ReceiptMerchant {
+  // Same foreign-currency rule as the order-create invoice email: the
+  // merchant-bank fallback must not print a naira account on a
+  // dollar-denominated download or preview.
+  const showBankDetails = showMerchantBankDetails(orderCurrency);
   return {
     business_name: merchant.business_name,
     logo_url: merchant.logo_url,
@@ -50,10 +56,10 @@ export function buildReceiptMerchant(
     ) as ReceiptMerchant['brand_colors'],
     vat_registration_status: merchant.vat_registration_status,
     vat_rate: merchant.vat_rate,
-    bank_code: merchant.bank_code,
-    bank_account_number: merchant.bank_account_number,
-    bank_name: merchant.bank_name,
-    bank_account_name: merchant.bank_account_name,
+    bank_code: showBankDetails ? merchant.bank_code : null,
+    bank_account_number: showBankDetails ? merchant.bank_account_number : null,
+    bank_name: showBankDetails ? merchant.bank_name : null,
+    bank_account_name: showBankDetails ? merchant.bank_account_name : null,
     social_media: asRecord(
       merchant.social_media
     ) as ReceiptMerchant['social_media'],

@@ -75,8 +75,9 @@ describe('startWalletFundedBankTransferCheckout', () => {
   it('routes to wallet-funded bank transfer when intent creation succeeds', async () => {
     mockCreateWalletFundedBankTransferIntent.mockImplementation(
       async ({ onSuccess }) => {
-        onSuccess(createFundingResponse());
-        return true;
+        const response = createFundingResponse();
+        onSuccess(response);
+        return response;
       }
     );
     const isOrderInFlight = { current: true };
@@ -91,7 +92,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
       trackingToken: 'tracking-token',
     });
 
-    expect(started).toBe(true);
+    expect(started).toBe('11111111-1111-4111-8111-111111111111');
     expect(isOrderInFlight.current).toBe(false);
     expect(setIsProcessing).toHaveBeenCalledWith(false);
     expect(mockRouterPush).toHaveBeenCalledWith({
@@ -114,8 +115,9 @@ describe('startWalletFundedBankTransferCheckout', () => {
   it('carries the checkout attribution snapshot onto the bank-transfer route', async () => {
     mockCreateWalletFundedBankTransferIntent.mockImplementation(
       async ({ onSuccess }) => {
-        onSuccess(createFundingResponse());
-        return true;
+        const response = createFundingResponse();
+        onSuccess(response);
+        return response;
       }
     );
 
@@ -160,7 +162,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
           error: new Error('Paystack unavailable'),
           message: 'Paystack unavailable',
         });
-        return false;
+        return null;
       }
     );
 
@@ -172,7 +174,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
       setIsProcessing: jest.fn(),
     });
 
-    expect(started).toBe(false);
+    expect(started).toBeNull();
     expect(mockTrackError).toHaveBeenCalledWith(
       'wallet_order_funding_intent_failed',
       'Paystack unavailable',
@@ -193,7 +195,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
     mockCreateWalletFundedBankTransferIntent.mockImplementation(
       async ({ requestConsent }) => {
         const consent = await requestConsent();
-        return consent;
+        return consent ? createFundingResponse() : null;
       }
     );
 
@@ -205,7 +207,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
       setIsProcessing: jest.fn(),
     });
 
-    expect(started).toBe(true);
+    expect(started).toBe('11111111-1111-4111-8111-111111111111');
     expect(mockAlert).not.toHaveBeenCalled();
   });
 });

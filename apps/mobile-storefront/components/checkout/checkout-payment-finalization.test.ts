@@ -13,6 +13,7 @@ import {
   mockFetch,
   mockRouterPush,
   mockRouterReplace,
+  mockStartWalletFundedBankTransferCheckout,
 } from './checkout-payment-finalization.test-utils';
 
 let finalizeCheckoutPayment: typeof import('./checkout-payment-finalization')['finalizeCheckoutPayment'];
@@ -236,5 +237,54 @@ describe('finalizeCheckoutPayment', () => {
     expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
     expect(mockRouterPush).not.toHaveBeenCalled();
     expect(runPostOrderSideEffects).not.toHaveBeenCalled();
+  });
+
+  it('stamps wallet-funded starts with each created intent id', async () => {
+    // An expired intent recreated for the same order: each start must
+    // carry its own intent so completions reconcile per attempt.
+    mockStartWalletFundedBankTransferCheckout
+      .mockResolvedValueOnce('intent-1')
+      .mockResolvedValueOnce('intent-2');
+    const finalizeParams = {
+      clearCart: jest.fn<() => void | Promise<void>>(),
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Customer',
+      customerPhone: '08012345678',
+      orderNumber: 'BAC-001',
+      orderResponse: createOrderResponse(),
+      runPostOrderSideEffects: jest.fn(),
+      selectedPayment: 'bank_transfer' as const,
+      setIsProcessing: jest.fn(),
+      setPendingOrder: jest.fn(),
+      setShowCryptoSelection: jest.fn(),
+      shouldCreateWalletFundedBankTransferOrder: true,
+    };
+
+    await finalizeCheckoutPayment({
+      ...finalizeParams,
+      isOrderInFlight: { current: true },
+    });
+    await finalizeCheckoutPayment({
+      ...finalizeParams,
+      isOrderInFlight: { current: true },
+    });
+
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledTimes(2);
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        orderId: 'order-1',
+        paymentMethod: 'bank_transfer',
+        reference: 'intent-1',
+      })
+    );
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        orderId: 'order-1',
+        paymentMethod: 'bank_transfer',
+        reference: 'intent-2',
+      })
+    );
   });
 });

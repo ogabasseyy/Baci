@@ -3,6 +3,7 @@
 import {
   ArrowRight,
   Check,
+  Copy,
   Download,
   FileText,
   Share2,
@@ -58,6 +59,7 @@ export const OrderSuccessPage: React.FC = () => {
   const { isAuthenticated } = useCustomerAuth();
   const searchParams = useSearchParams();
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+  const [payerLinkCopied, setPayerLinkCopied] = useState(false);
 
   const storeSlug = useStoreSlug();
   const getUrl = (path: string) => storeSlug ? `/${storeSlug}${path}` : path;
@@ -76,9 +78,18 @@ export const OrderSuccessPage: React.FC = () => {
     window.scrollTo(0, 0);
   }, []);
 
+  // Pay for Me handoff contract: nothing is delivered to the payer
+  // contact server-side — the requester's email carries the transfer
+  // details to forward, and this page hands them the shareable payment
+  // link. The copy must never claim a delivery happened.
+  const payerPaymentLink =
+    successType === 'payforme' && trackingToken
+      ? `${window.location.origin}${getUrl(`/track-order?token=${trackingToken}`)}`
+      : null;
+
   const getTitle = () => {
     if (successType === 'invoice') return 'Proforma Invoice Ready!';
-    if (successType === 'payforme') return 'Request Sent!';
+    if (successType === 'payforme') return 'Share the Payment Link';
     if (isBnplSuccess) return 'BNPL Checkout Submitted';
     return 'Order Successful!';
   };
@@ -87,7 +98,7 @@ export const OrderSuccessPage: React.FC = () => {
     if (successType === 'invoice')
       return 'Your proforma invoice is ready to share with your company or procurement team.';
     if (successType === 'payforme')
-      return `We've sent a payment link to ${payerName}. Your order will be processed once payment is received.`;
+      return `Send the payment link below to ${payerName} — your order will be processed once payment is received.`;
     if (isBnplSuccess)
       return 'We will confirm your order after the provider approves the payment. You can track this order while approval is pending.';
     return 'Thank you for shopping with Ogabassey. Your receipt will be available for download after your order has been shipped.';
@@ -154,6 +165,44 @@ export const OrderSuccessPage: React.FC = () => {
         <p className="text-gray-600 leading-relaxed mb-8 text-sm md:text-base">
           {getMessage()}
         </p>
+
+        {/* Payer handoff (Pay for Me only): the shareable payment link the
+            requester forwards — nothing is sent to the payer for them. */}
+        {successType === 'payforme' && payerPaymentLink && (
+          <div className="mb-10 rounded-2xl border border-purple-200 bg-purple-50 p-4 text-left">
+            <p className="text-xs font-bold uppercase tracking-widest text-purple-600 mb-2">
+              Payment link for {payerName}
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                aria-label="Payment link to share with your payer"
+                readOnly
+                value={payerPaymentLink}
+                onFocus={(event) => event.target.select()}
+                className="min-w-0 flex-1 truncate rounded-lg border border-purple-200 bg-white px-3 py-2.5 text-sm text-gray-700"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard
+                    ?.writeText(payerPaymentLink)
+                    .then(
+                      () => setPayerLinkCopied(true),
+                      () => setPayerLinkCopied(false)
+                    );
+                }}
+                className="shrink-0 rounded-lg bg-store-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-store-primary/90 active:scale-[0.98] flex items-center gap-2"
+              >
+                {payerLinkCopied ? (
+                  <Check size={16} />
+                ) : (
+                  <Copy size={16} />
+                )}
+                {payerLinkCopied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Download Proforma Invoice Button (Only for Invoice Mode) */}
         {successType === 'invoice' && displayOrder && (

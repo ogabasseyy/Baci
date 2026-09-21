@@ -1839,6 +1839,9 @@ export const CheckoutPage: React.FC = () => {
     // failures (blocked session storage, invoice/POD branches that never
     // start a payment) must not be attributed as payment_failed.
     let paymentStarted = false;
+    // Initialized provider reference for this submit, mirrored wherever a
+    // start is stamped so post-start failures reconcile to the same attempt.
+    let initializedReference: string | undefined;
 
     try {
       let order: {
@@ -2384,7 +2387,8 @@ export const CheckoutPage: React.FC = () => {
 
         if (paymentResult.success && paymentResult.crypto_payment) {
           // Juicyway crypto payment - show wallet address modal
-          capturePaymentStarted(paymentResult.reference);
+          initializedReference = paymentResult.reference;
+          capturePaymentStarted(initializedReference);
           setCryptoPaymentData({
             address: paymentResult.crypto_payment.address,
             chain: paymentResult.crypto_payment.chain,
@@ -2409,13 +2413,15 @@ export const CheckoutPage: React.FC = () => {
           // start when the launcher lookup, SDK load, or widget fails
           // before Klump opens.
           if (paymentMethod !== 'klump') {
-            capturePaymentStarted(paymentResult.reference);
+            initializedReference = paymentResult.reference;
+            capturePaymentStarted(initializedReference);
           }
           window.location.assign(paymentResult.authorization_url);
           return;
         } else if (paymentResult.success && paymentResult.checkout_url) {
           // Juicyway uses checkout_url
-          capturePaymentStarted(paymentResult.reference);
+          initializedReference = paymentResult.reference;
+          capturePaymentStarted(initializedReference);
           window.location.assign(paymentResult.checkout_url);
           return;
         } else {
@@ -2478,6 +2484,7 @@ export const CheckoutPage: React.FC = () => {
                   paymentIntent: getCheckoutPaymentIntent(paymentMethod),
                   paymentMethod,
                   reason: 'credit_direct_error',
+                  reference: initializedReference,
                   source: 'web_checkout',
                   total: paymentAmount,
                 })
@@ -2496,7 +2503,8 @@ export const CheckoutPage: React.FC = () => {
             isOrderInFlightRef.current = false;
           },
           onPopup: async ({ checkoutTransactionId, sessionId }) => {
-            capturePaymentStarted(checkoutTransactionId || sessionId);
+            initializedReference = checkoutTransactionId || sessionId;
+            capturePaymentStarted(initializedReference);
             writeCreditDirectPopupMarker(
               order.id,
               checkoutTransactionId || sessionId
@@ -2703,6 +2711,7 @@ export const CheckoutPage: React.FC = () => {
             orderNumber: createdOrderNumber,
             paymentIntent: getCheckoutPaymentIntent(paymentMethod),
             paymentMethod,
+            reference: initializedReference,
             reason: error instanceof Error ? error.name : 'checkout_error',
             source: 'web_checkout',
           })
@@ -2738,7 +2747,7 @@ export const CheckoutPage: React.FC = () => {
     },
     paymentAmount: number,
     billingAddress: DvaBillingAddress,
-    onDvaReady?: () => void,
+    onDvaReady?: (reference?: string) => void,
     checkoutFingerprint?: string,
     // Proves the provider flow opened (same per-attempt flag as the BNPL
     // gates): initialization failures before a DVA is ready keep the
@@ -2783,7 +2792,7 @@ export const CheckoutPage: React.FC = () => {
           orderCurrency: stampedDvaCurrency,
         });
         setDvaCountdown(3600);
-        onDvaReady?.();
+        onDvaReady?.(result.reference);
         isOrderInFlightRef.current = false;
       })
       .catch((error: unknown) => {

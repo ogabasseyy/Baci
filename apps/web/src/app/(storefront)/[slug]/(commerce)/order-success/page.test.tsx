@@ -350,6 +350,70 @@ describe('storefront order success page', () => {
     }
   });
 
+  it('recovers the settlement lane after a hung lookup aborts', async () => {
+    vi.useFakeTimers();
+    try {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-123',
+          reference: 'klump-ref-1',
+          type: 'klump',
+          trackingToken: 'track-token-123',
+        })
+      );
+      const pendingOrder = {
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        items: [],
+        subtotal: 45000,
+        shipping_cost: 1500,
+        total: 49875,
+        payment_method: 'klump',
+        payment_status: 'pending',
+      };
+      const paidOrder = { ...pendingOrder, payment_status: 'paid' };
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => pendingOrder })
+        .mockImplementationOnce(
+          (_url: unknown, init?: { signal?: AbortSignal }) =>
+            new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => {
+                reject(new DOMException('Aborted', 'AbortError'));
+              });
+            })
+        )
+        .mockResolvedValue({ ok: true, json: async () => paidOrder });
+
+      render(<OrderSuccessPage />);
+      await flushMicrotasks();
+
+      // The first poll hangs; the 10s lookup timeout aborts it and the
+      // lane schedules the next poll instead of stalling forever.
+      await advanceTimers(3000);
+      await flushMicrotasks();
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
+      await advanceTimers(10000);
+      await flushMicrotasks();
+      await advanceTimers(3000);
+      await flushMicrotasks();
+
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-123',
+        expect.objectContaining({
+          payment_method: 'klump',
+          payment_status: 'paid',
+          reference: 'klump-ref-1',
+          total: 49875,
+        })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('labels the deferred BNPL completion with the stamped order currency', async () => {
     vi.useFakeTimers();
     try {

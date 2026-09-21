@@ -16,10 +16,7 @@ import {
 } from '@/lib/agentic/checkout-order-tax';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
 import { buildImmediateInvoiceMerchant } from '@/lib/build-immediate-invoice-merchant';
-import {
-  buildOrderTrackingLink,
-  redactOrderTrackingLinkForLog,
-} from '@/lib/build-order-tracking-link';
+import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
 import {
   revalidateProductSlugs,
   revalidateProducts,
@@ -83,6 +80,7 @@ import {
   generateReceiptBlob,
   resolveReceiptLogoDataUri,
 } from '@/lib/receipt-pdf-generator';
+import { redactOrderTrackingLinkForLog } from '@/lib/redact-order-tracking-link-for-log';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { sanitizeLikePattern, sanitizeSearchQuery } from '@/lib/sanitize-core';

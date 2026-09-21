@@ -1992,6 +1992,16 @@ describe('CheckoutPage', () => {
           )
         ).toBe(true);
       });
+      // The failure reconciles to the same popup attempt as its start.
+      const failure = mockCaptureClientEvent.mock.calls.find(
+        ([event]) => event === 'payment_failed'
+      );
+      expect(failure?.[1]).toEqual(
+        expect.objectContaining({ reference: 'cd-popup-matched-1' })
+      );
+      expect(paymentStartedCalls()[0]?.[1]).toEqual(
+        expect.objectContaining({ reference: 'cd-popup-matched-1' })
+      );
     } finally {
       fetchMock.mockRestore();
     }
@@ -6161,6 +6171,11 @@ describe('CheckoutPage', () => {
     await submitBankTransfer();
     await waitFor(() => expect(startedEvents).toHaveLength(1));
     expect((startedEvents[0][1] as Record<string, unknown>).payment_method).toBe('bank_transfer');
+    // The DVA start reconciles to its issued reference like the
+    // redirect starts do.
+    expect(startedEvents[0][1]).toEqual(
+      expect.objectContaining({ reference: 'dva-ref-1' })
+    );
   });
 
   it('confirms DVA transfers only after the server detects payment', async () => {

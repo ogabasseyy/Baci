@@ -108,7 +108,13 @@ export async function getGiglInternationalQuotes(
       );
     }
 
-    const rates = parseInternationalRates(envelope.data, io);
+    const { rates, malformed } = parseInternationalRates(envelope.data, io);
+    if (malformed) {
+      return quoteProviderFailure.mark(
+        [],
+        new Error('GIGL international quote response was malformed')
+      );
+    }
 
     return rates.flatMap((rate) => {
       if (!hasInternationalBookingSelectors(rate)) {
@@ -195,15 +201,18 @@ function isRateSelector(value: unknown): value is number {
 function parseInternationalRates(
   data: unknown,
   io: GiglQuoteIo
-): ReturnType<typeof giglSchemas.internationalPriceRate.parse>[] {
+): {
+  rates: ReturnType<typeof giglSchemas.internationalPriceRate.parse>[];
+  malformed: boolean;
+} {
   if (!Array.isArray(data)) {
     io.log('warn', 'Invalid GIGL international price response', {
       reason: 'data is not an array',
     });
-    return [];
+    return { rates: [], malformed: true };
   }
 
-  return data.flatMap((rate, index) => {
+  const rates = data.flatMap((rate, index) => {
     const parsed = giglSchemas.internationalPriceRate.safeParse(rate);
     if (!parsed.success) {
       io.log('warn', 'Skipping invalid GIGL international rate', {
@@ -214,4 +223,7 @@ function parseInternationalRates(
     }
     return [parsed.data];
   });
+  // A non-empty payload with zero usable rates is a provider failure, not a
+  // successful no-coverage response. A genuinely empty list stays unmarked.
+  return { rates, malformed: data.length > 0 && rates.length === 0 };
 }

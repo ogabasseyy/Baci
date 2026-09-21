@@ -160,4 +160,96 @@ describe('GiglProvider international quote errors', () => {
       providerRateId: 'GIGL_INTL_2_1_3_1',
     });
   });
+
+  it('marks the result when every international rate is malformed', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(loginResponseWithoutCustomerType))
+      .mockResolvedValueOnce(jsonResponse(internationalCountriesResponse))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: {
+            message: 'Success',
+            status: 200,
+            data: [
+              {
+                GrandTotal: 'not-a-number',
+                LogisticCompany: 0,
+                ShipmentMethod: 0,
+                DeliveryType: 2,
+              },
+              {
+                GrandTotal: null,
+                LogisticCompany: 1,
+                ShipmentMethod: 3,
+                DeliveryType: 2,
+              },
+            ],
+          },
+        })
+      );
+
+    const provider = buildHarness();
+
+    const result = await provider.getQuotes();
+    expect(result).toEqual([]);
+    expect(quoteProviderFailure.get(result)?.message).toBe(
+      'GIGL international quote response was malformed'
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('marks the result when the international price payload is not a list', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(loginResponseWithoutCustomerType))
+      .mockResolvedValueOnce(jsonResponse(internationalCountriesResponse))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: {
+            message: 'Success',
+            status: 200,
+            data: { GrandTotal: 95_000 },
+          },
+        })
+      );
+
+    const provider = buildHarness();
+
+    const result = await provider.getQuotes();
+    expect(result).toEqual([]);
+    expect(quoteProviderFailure.get(result)?.message).toBe(
+      'GIGL international quote response was malformed'
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('leaves a genuinely empty international rate list unmarked', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(loginResponseWithoutCustomerType))
+      .mockResolvedValueOnce(jsonResponse(internationalCountriesResponse))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: {
+            message: 'Success',
+            status: 200,
+            data: [],
+          },
+        })
+      );
+
+    const provider = buildHarness();
+
+    const result = await provider.getQuotes();
+    expect(result).toEqual([]);
+    expect(quoteProviderFailure.get(result)).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 });

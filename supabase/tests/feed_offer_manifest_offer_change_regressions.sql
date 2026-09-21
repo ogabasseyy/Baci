@@ -137,9 +137,18 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.feed_manifest_image_urls(NULL)) THEN
     RAISE EXCEPTION 'extractor must ignore null input';
   END IF;
+  -- ECMAScript-only trim characters (BOM, NBSP) must trim exactly like
+  -- JavaScript trim(), or padded-but-claimed images wrongly stale.
+  SELECT public.feed_manifest_image_urls(
+    E'["  \uFEFFhttps://cdn.example.com/bom.jpg\u00A0  "]'
+  ) INTO v_status;
+  IF v_status IS DISTINCT FROM 'https://cdn.example.com/bom.jpg' THEN
+    RAISE EXCEPTION 'extractor must trim ECMAScript-only whitespace';
+  END IF;
 
   -- Listing-condition parity with toGoogleListingCondition.
-  IF public.feed_listing_condition(' Open-Box ') IS DISTINCT FROM 'refurbished'
+  IF public.feed_listing_condition(E'\uFEFF Open-Box\u00A0') IS DISTINCT FROM 'refurbished'
+    OR public.feed_listing_condition(' Open-Box ') IS DISTINCT FROM 'refurbished'
     OR public.feed_listing_condition('UK_USED') IS DISTINCT FROM 'used'
     OR public.feed_listing_condition('refurbished') IS DISTINCT FROM 'refurbished'
     OR public.feed_listing_condition('new') IS DISTINCT FROM 'new'

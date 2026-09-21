@@ -349,6 +349,8 @@ jobs:
           filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
+      - name: Run backfill scripts unit tests
+        run: pnpm exec vitest run scripts/lib
       - name: Test Migration Version Guard
         run: bash .github/scripts/check-migration-versions.test.sh
       - name: Test Migration Applier Collision Handling

@@ -45,10 +45,14 @@ SET search_path = ''
 AS $$
   -- Mirror extractImageCandidates / collectOfferClaimedImageUrls exactly:
   -- array-only, string elements or { url } objects with string urls,
-  -- trimmed, blanks and malformed elements skipped.
+  -- trimmed, blanks and malformed elements skipped. The trim set is
+  -- JavaScript's WhiteSpace + LineTerminator list, which PostgreSQL's
+  -- \s does not cover (U+FEFF, U+00A0, U+1680, U+2000-U+200A, U+2028,
+  -- U+2029, U+202F, U+205F, U+3000): without them a padded-but-claimed
+  -- URL would wrongly stale.
   SELECT DISTINCT trimmed
   FROM (
-    SELECT NULLIF(regexp_replace(
+    SELECT NULLIF(trim(BOTH E' \t\n\r\f\v\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF' FROM (
       CASE jsonb_typeof(elem.value)
         WHEN 'string' THEN elem.value #>> '{}'
         WHEN 'object' THEN CASE
@@ -57,9 +61,8 @@ AS $$
           ELSE NULL
         END
         ELSE NULL
-      END,
-      '^\s+|\s+$', '', 'g'
-    ), '') AS trimmed
+      END
+    )), '') AS trimmed
     FROM jsonb_array_elements(
       CASE
         WHEN jsonb_typeof(images) = 'array' THEN images
@@ -82,10 +85,12 @@ AS $$
   -- Net mapping of normalizeCanonicalProductCondition +
   -- toGoogleListingCondition (packages/shared/src/lib/product-condition.ts):
   -- trim, lowercase, whitespace/dash runs to underscores, uk_used folds to
-  -- used, refurbished folds through open_box back to refurbished.
+  -- used, refurbished folds through open_box back to refurbished. Both
+  -- whitespace sets are JavaScript's, which PostgreSQL's \s does not
+  -- cover (see feed_manifest_image_urls).
   SELECT CASE lower(regexp_replace(
-      regexp_replace(COALESCE(raw_condition, ''), '^\s+|\s+$', '', 'g'),
-      '[\s-]+', '_', 'g'
+      trim(BOTH E' \t\n\r\f\v\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF' FROM COALESCE(raw_condition, '')),
+      E'[ \t\n\r\f\v\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF-]+', '_', 'g'
     ))
     WHEN 'new' THEN 'new'
     WHEN 'used' THEN 'used'

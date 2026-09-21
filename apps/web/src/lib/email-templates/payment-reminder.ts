@@ -54,8 +54,7 @@ export function generatePaymentReminderEmail(
   // Paystack DVAs settle in NGN only (same gate as the proforma email):
   // a foreign-currency reminder must not print a naira account beside a
   // foreign-currency balance.
-  const dvaCurrencyCompatible =
-    data.currency.trim().toUpperCase() === 'NGN';
+  const dvaCurrencyCompatible = data.currency.trim().toUpperCase() === 'NGN';
   const reminderVirtualAccount = dvaCurrencyCompatible
     ? data.virtualAccount
     : undefined;
@@ -67,8 +66,9 @@ export function generatePaymentReminderEmail(
   // instruction, just no-payment guidance.
   const hasBalanceDue = data.balanceDue > 0;
 
-  const bankTransferHtml = reminderVirtualAccount && hasBalanceDue
-    ? `
+  const bankTransferHtml =
+    reminderVirtualAccount && hasBalanceDue
+      ? `
     <div style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-radius: 12px; padding: 20px; margin-top: 24px; border: 1px solid #e2e8f0;">
       <div style="font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
         💳 Bank Transfer Option
@@ -94,15 +94,15 @@ export function generatePaymentReminderEmail(
       </div>
     </div>
   `
-    : !hasBalanceDue
-      ? `
+      : !hasBalanceDue
+        ? `
     <div style="background: #f0fdf4; border-radius: 12px; padding: 20px; margin-top: 24px; border: 1px solid #bbf7d0;">
       <div style="font-size: 14px; color: #166534;">
         No payment is due on this order — please contact ${escapeHtmlText(data.merchantName)} if you have any questions.
       </div>
     </div>
   `
-      : `
+        : `
     <div style="background: #fffbeb; border-radius: 12px; padding: 20px; margin-top: 24px; border: 1px solid #fde68a;">
       <div style="font-size: 14px; font-weight: 600; color: #92400e; margin-bottom: 8px;">
         💬 How to pay
@@ -234,7 +234,9 @@ export function generatePaymentReminderText(data: PaymentReminderData): string {
 
   // Same NGN-only gate as the HTML body.
   const reminderVirtualAccount =
-    data.currency.trim().toUpperCase() === 'NGN' ? data.virtualAccount : undefined;
+    data.currency.trim().toUpperCase() === 'NGN'
+      ? data.virtualAccount
+      : undefined;
   // Same zero-balance omission as the HTML body.
   const hasBalanceDue = data.balanceDue > 0;
 

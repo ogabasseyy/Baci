@@ -112,9 +112,7 @@ describe('Payment reminder email', () => {
       expect(html).toContain('1234567890');
       expect(text).not.toContain('Complete your payment here');
       expect(text).toContain('Track your order here: https://pay.test/link');
-      expect(text).toContain(
-        'Complete your bank transfer of ₦15,000.00'
-      );
+      expect(text).toContain('Complete your bank transfer of ₦15,000.00');
       expect(text).toContain('Account Number: 1234567890');
     });
 
@@ -131,9 +129,7 @@ describe('Payment reminder email', () => {
       expect(html).toContain('mailto:help@testshop.com');
       expect(html).toContain('arrange payment of ₦15,000.00');
       expect(text).toContain('How to pay:');
-      expect(text).toContain(
-        'Please contact TestShop to arrange payment'
-      );
+      expect(text).toContain('Please contact TestShop to arrange payment');
     });
 
     it('omits transfer instructions when no balance is due', () => {

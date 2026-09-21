@@ -1,7 +1,7 @@
 import {
-  showMerchantBankDetails,
   type ReceiptMerchant,
   type ReceiptOrder,
+  showMerchantBankDetails,
 } from '@baci/shared';
 import type {
   StorefrontAccountDocumentMerchantRow,

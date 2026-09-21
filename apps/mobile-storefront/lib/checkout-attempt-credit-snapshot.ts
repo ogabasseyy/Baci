@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY } from '@/config/checkout-storage';
 import { assertCheckoutRecoveryValue } from '@/lib/assert-checkout-recovery-value';
+import { createSerialAsyncQueue } from '@/lib/create-serial-async-queue';
 
 type CheckoutCreditSnapshot = {
   savings_amount?: number;
@@ -17,6 +18,8 @@ const CREDIT_KEYS = [
   'use_wallet_credit',
   'wallet_amount',
 ] as const;
+
+const enqueueCreditSnapshot = createSerialAsyncQueue();
 
 function isCreditSnapshot(value: unknown): value is CheckoutCreditSnapshot {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -95,22 +98,58 @@ function extractCheckoutCreditSnapshot(
   return snapshot;
 }
 
-export async function applyCheckoutCreditSnapshot<
-  T extends Record<string, unknown>,
->(payload: T, checkoutGeneration: string): Promise<T> {
-  assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
-  const existing = await AsyncStorage.getItem(
-    CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY
-  );
-  const map = parseCreditMap(existing);
-  const stored = map[checkoutGeneration];
-  if (stored) {
-    return { ...payload, ...stored };
+function omitCreditFields<T extends Record<string, unknown>>(payload: T): T {
+  const next = { ...payload };
+  for (const key of CREDIT_KEYS) {
+    delete next[key];
   }
-  map[checkoutGeneration] = extractCheckoutCreditSnapshot(payload);
+  return next;
+}
+
+async function readCreditMap() {
+  return parseCreditMap(
+    await AsyncStorage.getItem(CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY)
+  );
+}
+
+async function writeCreditMap(map: Record<string, CheckoutCreditSnapshot>) {
+  if (Object.keys(map).length === 0) {
+    await AsyncStorage.removeItem(CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY);
+    return;
+  }
   await AsyncStorage.setItem(
     CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY,
     JSON.stringify(map)
   );
-  return payload;
+}
+
+export function applyCheckoutCreditSnapshot<T extends Record<string, unknown>>(
+  payload: T,
+  checkoutGeneration: string
+): Promise<T> {
+  assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
+  return enqueueCreditSnapshot(async () => {
+    const map = await readCreditMap();
+    const stored = map[checkoutGeneration];
+    if (stored) {
+      return { ...omitCreditFields(payload), ...stored };
+    }
+    map[checkoutGeneration] = extractCheckoutCreditSnapshot(payload);
+    await writeCreditMap(map);
+    return payload;
+  });
+}
+
+export async function releaseCheckoutCreditSnapshot(
+  checkoutGeneration: string
+): Promise<void> {
+  assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
+  await enqueueCreditSnapshot(async () => {
+    const map = await readCreditMap();
+    if (!(checkoutGeneration in map)) {
+      return;
+    }
+    delete map[checkoutGeneration];
+    await writeCreditMap(map);
+  });
 }

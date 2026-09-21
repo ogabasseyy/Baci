@@ -2,6 +2,7 @@ import {
   CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY,
   CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
   CHECKOUT_GENERATION_STORAGE_KEY,
+  CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY,
   CHECKOUT_INSTALLATION_STORAGE_KEY,
 } from '@/config/checkout-storage';
 import { getClearableCacheStorageKeys } from './clear-cache-keys';
@@ -12,6 +13,7 @@ it('preserves pending checkout recovery identity when clearing cache', () => {
       CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY,
       CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
       CHECKOUT_GENERATION_STORAGE_KEY,
+      CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY,
       CHECKOUT_INSTALLATION_STORAGE_KEY,
     ])
   ).not.toEqual(
@@ -19,6 +21,7 @@ it('preserves pending checkout recovery identity when clearing cache', () => {
       CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY,
       CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
       CHECKOUT_GENERATION_STORAGE_KEY,
+      CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY,
       CHECKOUT_INSTALLATION_STORAGE_KEY,
     ])
   );

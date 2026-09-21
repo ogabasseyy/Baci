@@ -6,3 +6,5 @@ export const CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY =
 export const CHECKOUT_PENDING_REDVAULT_ORDER_STORAGE_KEY =
   'checkout-pending-redvault-order-v1';
 export const CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY = 'checkout-attempt-credit-v1';
+export const CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY =
+  'checkout-idempotency-item-sort-v2';

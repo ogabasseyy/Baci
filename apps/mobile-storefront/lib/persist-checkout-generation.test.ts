@@ -8,6 +8,9 @@ const mockGetItem = jest.fn(async (key: string) => storage.get(key) ?? null);
 const mockSetItem = jest.fn(async (key: string, value: string) => {
   storage.set(key, value);
 });
+const mockRemoveItem = jest.fn(async (key: string) => {
+  storage.delete(key);
+});
 
 jest.mock('@/lib/logger', () => ({
   createLogger: () => ({
@@ -20,6 +23,7 @@ jest.mock('@/lib/logger', () => ({
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: (key: string) => mockGetItem(key),
   setItem: (key: string, value: string) => mockSetItem(key, value),
+  removeItem: (key: string) => mockRemoveItem(key),
 }));
 
 const generation = '46ed63d7-5f10-49f0-9456-9ff571bec43f';
@@ -28,6 +32,7 @@ beforeEach(() => {
   storage.clear();
   mockGetItem.mockClear();
   mockSetItem.mockClear();
+  mockRemoveItem.mockClear();
 });
 
 describe('bugfix: checkout generation is durable before the order request', () => {
@@ -40,10 +45,31 @@ describe('bugfix: checkout generation is durable before the order request', () =
     expect(storage.get('checkout-generation-v1')).toBe(generation);
   });
 
+  it('does not let an earlier generation write finish after a newer persist', async () => {
+    const newer = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    let finishOlder!: () => void;
+    mockSetItem.mockImplementationOnce(
+      (key: string, value: string) =>
+        new Promise<void>((resolve) => {
+          finishOlder = () => {
+            storage.set(key, value);
+            resolve();
+          };
+        })
+    );
+    const olderWrite = persistCheckoutGeneration(generation);
+    const newerWrite = persistCheckoutGeneration(newer);
+    // Let the older queued write reach its gated storage call.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    finishOlder();
+    await Promise.all([olderWrite, newerWrite]);
+    expect(storage.get('checkout-generation-v1')).toBe(newer);
+  });
+
   it('swallows detached persist failures so first-item adds can finish', async () => {
     mockSetItem.mockRejectedValueOnce(new Error('disk full'));
     persistCheckoutGenerationDetached(generation);
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mockSetItem).toHaveBeenCalled();
   });
 });

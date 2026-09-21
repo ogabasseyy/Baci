@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { CHECKOUT_INSTALLATION_STORAGE_KEY } from '@/config/checkout-storage';
 import { applyCheckoutCreditSnapshot } from '@/lib/checkout-attempt-credit-snapshot';
+import { usesCodepointCheckoutItemSort } from '@/lib/checkout-idempotency-item-sort';
 import { resolveCheckoutGeneration } from '@/lib/resolve-checkout-generation';
 
 let installationPromise: Promise<string> | undefined;
@@ -140,7 +141,12 @@ export async function getCheckoutAttemptKey(
         checkoutGeneration: generation,
         installationId,
         payload: buildOrderIdempotencyPayload(
-          toCheckoutIdempotencyInput(recoveryPayload)
+          toCheckoutIdempotencyInput(recoveryPayload),
+          {
+            itemSort: (await usesCodepointCheckoutItemSort(generation))
+              ? 'codepoint'
+              : 'locale',
+          }
         ),
       })
     )

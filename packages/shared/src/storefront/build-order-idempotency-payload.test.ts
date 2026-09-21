@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { buildOrderIdempotencyPayload } from './build-order-idempotency-payload';
 
 describe('buildOrderIdempotencyPayload', () => {
@@ -30,29 +30,30 @@ describe('buildOrderIdempotencyPayload', () => {
     );
   });
 
-  it('orders hash-significant item fields independently of localeCompare', () => {
-    const localeCompare = vi
-      .spyOn(String.prototype, 'localeCompare')
-      .mockReturnValue(-1);
+  it('orders hash-significant item fields by Unicode scalar values', () => {
+    const payload = buildOrderIdempotencyPayload({
+      customer_email: 'buyer@example.com',
+      customer_name: 'Ada Okafor',
+      items: [
+        {
+          product_id: 'case',
+          price: 5000,
+          quantity: 1,
+          variant_name: '\u{10000}',
+        },
+        {
+          product_id: 'case',
+          price: 5000,
+          quantity: 1,
+          variant_name: '\u{E000}',
+        },
+      ],
+      merchant_id: 'merchant-one',
+    });
 
-    try {
-      const payload = buildOrderIdempotencyPayload({
-        customer_email: 'buyer@example.com',
-        customer_name: 'Ada Okafor',
-        items: [
-          { product_id: 'case', price: 5000, quantity: 1, variant_name: 'ö' },
-          { product_id: 'case', price: 5000, quantity: 1, variant_name: 'z' },
-        ],
-        merchant_id: 'merchant-one',
-      });
-
-      expect(payload.items.map((item) => item.variant_name)).toEqual([
-        'z',
-        'ö',
-      ]);
-      expect(localeCompare).not.toHaveBeenCalled();
-    } finally {
-      localeCompare.mockRestore();
-    }
+    expect(payload.items.map((item) => item.variant_name)).toEqual([
+      '\u{e000}',
+      '\u{10000}',
+    ]);
   });
 });

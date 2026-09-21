@@ -117,7 +117,10 @@ export const useCartStore = create<CartState>()(
         const state = get();
         const items = state.items.filter((item) => item.id !== id);
         if (items.length === 0) {
-          await rotateEmptyCheckoutCart(set);
+          await rotateEmptyCheckoutCart(set, {
+            previousGeneration: state.checkoutGeneration,
+            retainCreditSnapshot: true,
+          });
           return;
         }
         if (state.cartWideNegotiationActive) {
@@ -135,7 +138,10 @@ export const useCartStore = create<CartState>()(
         if (quantity <= 0) {
           const items = state.items.filter((item) => item.id !== id);
           if (items.length === 0) {
-            await rotateEmptyCheckoutCart(set);
+            await rotateEmptyCheckoutCart(set, {
+              previousGeneration: state.checkoutGeneration,
+              retainCreditSnapshot: true,
+            });
             return;
           }
           if (state.cartWideNegotiationActive) {
@@ -168,7 +174,10 @@ export const useCartStore = create<CartState>()(
       },
 
       clearCart: async () => {
-        await rotateEmptyCheckoutCart(set);
+        await rotateEmptyCheckoutCart(set, {
+          previousGeneration: get().checkoutGeneration,
+          retainCreditSnapshot: false,
+        });
       },
 
       getItem: (productId, variantId) => {

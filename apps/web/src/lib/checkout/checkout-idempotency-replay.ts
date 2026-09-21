@@ -44,6 +44,29 @@ export async function prepareCheckoutIdempotencyReplay({
   const checkoutRequestPayload = buildOrderIdempotencyPayload(payload);
   let checkoutRequestHash = hashOrderIdempotencyPayload(checkoutRequestPayload);
   let isLegacyIdempotencyReplay = false;
+  const localeRequestHash = hashOrderIdempotencyPayload(
+    buildOrderIdempotencyPayload(payload, { itemSort: 'locale' })
+  );
+
+  if (localeRequestHash !== checkoutRequestHash) {
+    const { data: localeHashMatches, error: localeHashProbeError } =
+      await supabase.rpc('is_storefront_order_idempotency_hash', {
+        p_checkout_idempotency_key: requestIdempotencyKey,
+        p_checkout_request_hash: localeRequestHash,
+        p_merchant_id: merchantId,
+      });
+
+    if (localeHashProbeError) {
+      logger.warn({
+        message:
+          'Locale checkout item-order hash probe failed; using the current request hash',
+        merchantId,
+        error: localeHashProbeError,
+      });
+    } else if (localeHashMatches === true) {
+      checkoutRequestHash = localeRequestHash;
+    }
+  }
 
   // Delivery metadata was added after the first storefront idempotency hash.
   // Probe the merchant-scoped row before accepting the legacy hash so a new

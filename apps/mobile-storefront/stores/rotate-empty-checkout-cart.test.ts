@@ -8,12 +8,19 @@ const mockPersist = jest.fn<(generation: string) => Promise<void>>(
 );
 const mockClear = jest.fn<() => Promise<void>>(async () => undefined);
 const mockRead = jest.fn<() => Promise<string | null>>(async () => null);
+const mockRelease = jest.fn<(generation: string) => Promise<void>>(
+  async () => undefined
+);
 
 jest.mock('@/lib/persist-checkout-generation', () => ({
   persistCheckoutGeneration: (generation: string) => mockPersist(generation),
 }));
 jest.mock('@/lib/clear-persisted-checkout-generation', () => ({
   clearPersistedCheckoutGeneration: () => mockClear(),
+}));
+jest.mock('@/lib/checkout-attempt-credit-snapshot', () => ({
+  releaseCheckoutCreditSnapshot: (generation: string) =>
+    mockRelease(generation),
 }));
 jest.mock('@/lib/read-persisted-checkout-generation', () => ({
   readPersistedCheckoutGeneration: () => mockRead(),
@@ -29,6 +36,8 @@ beforeEach(() => {
   mockClear.mockResolvedValue(undefined);
   mockRead.mockReset();
   mockRead.mockResolvedValue(null);
+  mockRelease.mockReset();
+  mockRelease.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -91,4 +100,21 @@ it('clears the stale dedicated generation so restart keeps the empty-cart identi
   });
   expect(generation).toBe(rotated.checkoutGeneration);
   expect(generation).not.toBe(staleGeneration);
+});
+
+it('releases store-credit snapshots after payment finalizes the generation', async () => {
+  const previousGeneration = '46ed63d7-5f10-49f0-9456-9ff571bec43f';
+  await rotateEmptyCheckoutCart(() => undefined, {
+    previousGeneration,
+    retainCreditSnapshot: false,
+  });
+  expect(mockRelease).toHaveBeenCalledWith(previousGeneration);
+});
+
+it('keeps store-credit snapshots when the generation may still be replayed', async () => {
+  await rotateEmptyCheckoutCart(() => undefined, {
+    previousGeneration: '46ed63d7-5f10-49f0-9456-9ff571bec43f',
+    retainCreditSnapshot: true,
+  });
+  expect(mockRelease).not.toHaveBeenCalled();
 });

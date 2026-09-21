@@ -10,6 +10,7 @@ vi.mock('@/lib/supabase/public', () => ({
 import {
   getCachedSantaProductList,
   getCachedSantaProducts,
+  selectSantaCatalogProducts,
 } from './santa-data';
 
 function mockProducts(data: unknown) {
@@ -80,5 +81,27 @@ describe('Santa catalog data', () => {
     await expect(
       getCachedSantaProducts('merchant-1', true, 'NGN')
     ).resolves.toContain('High-cost Phone": ₦100,000 (Maximum Discount: 0%)');
+  });
+
+  it('samples across the price range without absolute currency thresholds', () => {
+    const products = Array.from({ length: 16 }, (_, index) => ({
+      brand: 'Acme',
+      max_discount_percentage: 2,
+      max_margin_discount_percentage: 40,
+      name: `Product ${index}`,
+      // Small-unit currency scale (e.g. USD): every product sits far below
+      // the old NGN bucket thresholds.
+      price: 100 * (index + 1),
+    }));
+
+    const selected = selectSantaCatalogProducts(products);
+
+    expect(selected).toHaveLength(16);
+    expect(selected.map((product) => product.price)).toEqual(
+      [...selected.map((product) => product.price)].sort((a, b) => b - a)
+    );
+    expect(selected.at(-1)?.price).toBe(100);
+
+    expect(selectSantaCatalogProducts([])).toEqual([]);
   });
 });

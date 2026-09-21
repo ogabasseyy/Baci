@@ -22,6 +22,29 @@ export type ProductRow = {
 type SantaCatalogProjection =
   Database['public']['Functions']['get_santa_catalog']['Returns'][number];
 
+const SANTA_BUCKET_LIMITS = [30, 50, 80, 100, 80, 80, 50, 30] as const;
+
+/**
+ * Select a price-spread sample of catalog products. Buckets slice the
+ * price-ordered list proportionally instead of using absolute NGN price
+ * thresholds, so the sample keeps working for any tenant currency.
+ */
+export function selectSantaCatalogProducts(
+  products: ProductRow[]
+): ProductRow[] {
+  if (!products.length) return [];
+
+  const ordered = [...products].sort((a, b) => b.price - a.price);
+  const bucketSize = Math.ceil(ordered.length / SANTA_BUCKET_LIMITS.length);
+  const selected = SANTA_BUCKET_LIMITS.flatMap((limit, index) =>
+    ordered.slice(index * bucketSize, (index + 1) * bucketSize).slice(0, limit)
+  );
+
+  return Array.from(
+    new Map(selected.map((product) => [product.name, product])).values()
+  );
+}
+
 function toSantaProduct(
   product: SantaCatalogProjection,
   priceNegotiationEnabled: boolean
@@ -73,27 +96,8 @@ const fetchSantaProductList = async (
   const products = (data ?? []).map((product) =>
     toSantaProduct(product, priceNegotiationEnabled)
   );
-  const priceRanges = [
-    { min: 5000000, max: 999999999, limit: 30 },
-    { min: 2000000, max: 5000000, limit: 50 },
-    { min: 1200000, max: 2000000, limit: 80 },
-    { min: 800000, max: 1200000, limit: 100 },
-    { min: 500000, max: 800000, limit: 80 },
-    { min: 200000, max: 500000, limit: 80 },
-    { min: 50000, max: 200000, limit: 50 },
-    { min: 0, max: 50000, limit: 30 },
-  ];
-  const selected = priceRanges.flatMap((range) =>
-    products
-      .filter(
-        (product) => product.price >= range.min && product.price < range.max
-      )
-      .slice(0, range.limit)
-  );
 
-  return Array.from(
-    new Map(selected.map((product) => [product.name, product])).values()
-  );
+  return selectSantaCatalogProducts(products);
 };
 
 export const getCachedSantaProductList = unstable_cache(

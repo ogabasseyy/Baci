@@ -19,14 +19,24 @@ export interface SantaAction {
 
 const SANTA_ACTION_CURRENCY_CODES = [
   'NGN',
-  'GHS',
-  'KES',
   'USD',
   'GBP',
   'EUR',
+  'CAD',
+  'AUD',
+  'JPY',
+  'INR',
+  'BRL',
   'ZAR',
+  'AED',
+  'KES',
+  'GHS',
+  'EGP',
   'XAF',
   'XOF',
+  'RWF',
+  'TZS',
+  'UGX',
 ] as const;
 
 const SANTA_ACTION_CURRENCY_PATTERN = SANTA_ACTION_CURRENCY_CODES.join('|');

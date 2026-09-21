@@ -34,7 +34,7 @@ export function useOgabasseyChat({
   isSanta: boolean;
   storefrontSlug?: string;
 }): UseOgabasseyChat {
-  const { addToCart, applyNegotiatedPrice, setIsCartOpen } = useCart();
+  const { addToCart, applyNegotiatedPrice, cart, setIsCartOpen } = useCart();
 
   const [isOpen, setIsOpenState] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -192,10 +192,17 @@ export function useOgabasseyChat({
       // added when addToCart silently refuses the line.
       if (product.manage_stock && (product.stock ?? 0) <= 0) return;
 
+      // addToCart merges into an existing line for the same product, and the
+      // negotiated unit price would then reprice previously added units too.
+      // Only negotiate fresh lines so the grant covers exactly the added unit.
+      const lineAlreadyExists = cart.some(
+        (item) => item.cartItemId === product.id
+      );
       addToCart(product, 1);
       // The model price is untrusted: only honor it inside the
       // server-computed per-product ceiling, otherwise keep catalog price.
       if (
+        !lineAlreadyExists &&
         santaAction.price < product.price &&
         isSantaGrantedPriceWithinCeiling(
           product.price,

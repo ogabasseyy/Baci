@@ -3,11 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   createAgenticScopedSupabaseClient: vi.fn(),
   from: vi.fn(),
+  getCachedSantaProductList: vi.fn(),
   insert: vi.fn(),
 }));
 
 vi.mock('@/lib/agentic/scoped-supabase', () => ({
   createAgenticScopedSupabaseClient: mocks.createAgenticScopedSupabaseClient,
+}));
+vi.mock('@/ai/santa-data', () => ({
+  getCachedSantaProductList: mocks.getCachedSantaProductList,
 }));
 
 import { logSantaInteraction } from './santa-analytics';
@@ -29,6 +33,9 @@ describe('logSantaInteraction', () => {
     mocks.createAgenticScopedSupabaseClient.mockReturnValue({
       from: mocks.from,
     });
+    mocks.getCachedSantaProductList.mockResolvedValue([
+      { name: 'Phone', price: 500000 },
+    ]);
   });
 
   it('skips analytics when agentic checkout is disabled', async () => {
@@ -73,6 +80,38 @@ describe('logSantaInteraction', () => {
       | undefined;
     expect(inserted?.session_id).toEqual(expect.any(String));
     expect(inserted?.session_id as string).toHaveLength(32);
+  });
+
+  it('measures the discount against catalog price, not customer budget', async () => {
+    await logSantaInteraction({
+      clientIp: '1.2.3.4',
+      response: 'Deal! ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:500000',
+      tenant,
+      userMessage: 'I offer 1000000',
+    });
+
+    expect(mocks.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approved_price: 500000,
+        discount_percentage: 0,
+        requested_price: 1000000,
+      })
+    );
+  });
+
+  it('records no discount when the granted product is outside the catalog', async () => {
+    mocks.getCachedSantaProductList.mockResolvedValue([]);
+
+    await logSantaInteraction({
+      clientIp: '1.2.3.4',
+      response: 'Deal! ACTION:ADD_TO_CART|PRODUCT:Ghost|PRICE:100',
+      tenant,
+      userMessage: 'I offer 1000000',
+    });
+
+    expect(mocks.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ discount_percentage: null })
+    );
   });
 
   it('records a wish_denied interaction for budget rejections', async () => {

@@ -22,6 +22,7 @@ vi.mock('@/lib/storefront-search', () => ({
 }));
 
 import {
+  handleAddToCart,
   handleCheckPaymentStatus,
   handleGetProductDetails,
   handleGetRecommendations,
@@ -659,5 +660,56 @@ describe('chat tool handlers', () => {
     });
 
     expect(result).toEqual([]);
+  });
+
+  it('fails closed with empty results when tenant resolution returns null', async () => {
+    mocks.resolveAgenticChatTenant.mockResolvedValue(null);
+
+    await expect(handleSearchProducts({ query: 'phone' })).resolves.toEqual({
+      products: [],
+      total: 0,
+    });
+    await expect(
+      handleGetProductDetails({ productId: 'phone' })
+    ).resolves.toBeNull();
+    await expect(
+      handleGetRecommendations({ productId: 'phone', type: 'accessories' })
+    ).resolves.toEqual([]);
+    await expect(
+      handleAddToCart({ productId: 'phone', quantity: 1 })
+    ).resolves.toBeNull();
+    expect(mocks.createPublicClient).not.toHaveBeenCalled();
+    expect(mocks.createAgenticScopedSupabaseClient).not.toHaveBeenCalled();
+  });
+
+  it('resolves add-to-cart through the tenant-scoped product details lookup', async () => {
+    const row = {
+      brand: 'Apple',
+      category: 'Phones',
+      description: null,
+      has_condition_offers: false,
+      has_variants: false,
+      id: 'phone',
+      images: [],
+      manage_stock: false,
+      name: 'Phone',
+      price: 100,
+      slug: 'phone',
+      status: 'active',
+      stock: 0,
+      stock_quantity: 0,
+      variant_model: null,
+    };
+    const query = createQueryMock();
+    query.single.mockResolvedValue({ data: row, error: null });
+    const from = vi.fn(() => query);
+    mocks.createAgenticScopedSupabaseClient.mockReturnValue({ from });
+
+    const result = await handleAddToCart({ productId: 'phone', quantity: 1 });
+
+    expect(from).toHaveBeenCalledWith('products');
+    expect(query.eq).toHaveBeenCalledWith('merchant_id', OGABASSEY_MERCHANT_ID);
+    expect(query.eq).toHaveBeenCalledWith('status', 'active');
+    expect(result).toMatchObject({ id: 'phone', name: 'Phone' });
   });
 });

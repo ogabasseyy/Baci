@@ -317,28 +317,23 @@ describe('fulfilSantaCartActions', () => {
       manage_stock: false,
     });
 
-    fulfilSantaCartActions({
+    await fulfilSantaCartActions({
       expectedMerchantSlug: 'ogabassey',
       resolvedMerchantSlug: 'ogabassey',
       signal: mockAbortSignal,
       text: 'Granted ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000.',
     });
 
-    // fulfilSantaCartActions is fire-and-forget; poll until the lookup settles.
-    const deadline = Date.now() + 1000;
-    while (mockAddItem.mock.calls.length === 0 && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
     expect(mockAddItem).toHaveBeenCalledTimes(1);
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Phone' })
     );
   });
 
-  it('ignores Santa directives resolved for a different storefront', () => {
+  it('ignores Santa directives resolved for a different storefront', async () => {
     global.fetch = jest.fn() as unknown as typeof fetch;
 
-    fulfilSantaCartActions({
+    await fulfilSantaCartActions({
       expectedMerchantSlug: 'ogabassey',
       resolvedMerchantSlug: 'winter-store',
       signal: mockAbortSignal,
@@ -349,8 +344,8 @@ describe('fulfilSantaCartActions', () => {
     expect(mockAddItem).not.toHaveBeenCalled();
   });
 
-  it('does nothing when the reply has no Santa directives', () => {
-    fulfilSantaCartActions({
+  it('does nothing when the reply has no Santa directives', async () => {
+    await fulfilSantaCartActions({
       expectedMerchantSlug: 'ogabassey',
       resolvedMerchantSlug: 'ogabassey',
       signal: mockAbortSignal,

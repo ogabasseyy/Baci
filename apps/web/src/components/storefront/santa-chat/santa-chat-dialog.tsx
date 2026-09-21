@@ -144,7 +144,7 @@ export function SantaChatDialog({
   );
 
   // Cart integration
-  const { addToCart, cartCount, applyNegotiatedPrice, setMerchantSlug } =
+  const { addToCart, cart, cartCount, applyNegotiatedPrice, setMerchantSlug } =
     useCart();
 
   // Set merchant slug on mount + cleanup abort/timers on unmount
@@ -201,11 +201,18 @@ export function SantaChatDialog({
         return;
       }
 
+      // addToCart merges into an existing line for the same product, and the
+      // negotiated unit price would then reprice previously added units too.
+      // Only negotiate fresh lines so the grant covers exactly the added unit.
+      const lineAlreadyExists = cart.some(
+        (item) => item.cartItemId === product.id
+      );
       addToCart(product, 1);
 
       const cartItemId = product.id;
       if (
         applyNegotiatedPrice &&
+        !lineAlreadyExists &&
         negotiatedPrice < product.price &&
         isSantaGrantedPriceWithinCeiling(
           product.price,

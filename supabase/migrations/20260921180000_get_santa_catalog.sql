@@ -22,11 +22,15 @@ AS $$
       WHEN p.price IS NULL OR p.price <= 0 THEN 0
       -- Preserve the existing margin floor without returning the private cost.
       WHEN p.cost_price IS NULL OR p.cost_price <= 0 THEN 2
+      -- A proportional 1% cost reserve keeps the margin floor correct in any
+      -- payout currency; a flat reserve amount would be wrong outside NGN.
       ELSE GREATEST(
         0,
         LEAST(
           2,
-          FLOOR(((p.price - p.cost_price - 10000) / p.price) * 100)::integer
+          FLOOR(
+            ((p.price - p.cost_price - (p.price * 0.01)) / p.price) * 100
+          )::integer
         )
       )
     END AS max_margin_discount_percentage

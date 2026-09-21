@@ -1,7 +1,11 @@
 import 'server-only';
 import { headers } from 'next/headers';
 import { logger } from '@/lib/logger';
-import { resolveStorefrontRouteIdentifiers } from '@/lib/storefront-host';
+import {
+  getRequestHost,
+  resolveStorefrontRouteIdentifiers,
+  stripPort,
+} from '@/lib/storefront-host';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { getConfiguredAgenticMerchantSlug } from './agentic-merchant-slug';
@@ -37,6 +41,26 @@ function getRootDomain(): string {
   return process.env.NEXT_PUBLIC_ROOT_DOMAIN?.trim() || 'usebaci.com';
 }
 
+const VERCEL_PREVIEW_SUFFIX = '.vercel.app';
+const VALID_PREVIEW_SUBDOMAIN = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/**
+ * Mirror of the proxy's Vercel preview classification: preview deployments
+ * are platform hosts (slug-prefixed storefront routes), not merchant custom
+ * domains, so the configured tenant fallback applies to them. Arbitrary
+ * custom-domain hosts must still resolve through the canonical merchant
+ * lookup and never use the fallback.
+ */
+function isVercelPreviewHost(hostname: string): boolean {
+  if (!hostname.endsWith(VERCEL_PREVIEW_SUFFIX)) return false;
+  const subdomain = hostname.slice(0, -VERCEL_PREVIEW_SUFFIX.length);
+  return (
+    subdomain.length > 0 &&
+    !subdomain.includes('.') &&
+    VALID_PREVIEW_SUBDOMAIN.test(subdomain)
+  );
+}
+
 export function getAgenticChatTenantResolutionInput({
   configuredSlug,
   request,
@@ -54,9 +78,13 @@ export function getAgenticChatTenantResolutionInput({
     rootDomain,
   });
 
-  // Only the central platform and localhost paths need configuration fallback
-  // (notably the native client). Any tenant-looking host must resolve itself.
-  return hostIdentifiers.length === 0
+  // Only the central platform, localhost, and Vercel preview paths need
+  // configuration fallback (notably the native client). Any tenant-looking
+  // host must resolve itself.
+  const requestHostname = stripPort(getRequestHost(request));
+  const isPlatformHost =
+    hostIdentifiers.length === 0 || isVercelPreviewHost(requestHostname);
+  return isPlatformHost
     ? { fallbackIdentifier: configuredSlug, rootDomain }
     : { rootDomain };
 }

@@ -108,16 +108,17 @@ function buildSantaCartItem(
 
 /**
  * Fulfil the Santa `ADD_TO_CART` wishes in a chat reply, but only when the
- * response was resolved for this storefront. Each wish is fire-and-forget so
- * the reply renders immediately; addSantaWishToCart surfaces its own
+ * response was resolved for this storefront. Callers fire-and-forget so the
+ * reply renders immediately; addSantaWishToCart surfaces its own
  * success/error toast. Replies resolved for another storefront are ignored.
+ * The returned promise settles once every wish has been attempted.
  */
-export function fulfilSantaCartActions(args: {
+export async function fulfilSantaCartActions(args: {
   expectedMerchantSlug: string;
   resolvedMerchantSlug: string | undefined;
   signal?: AbortSignal;
   text: string;
-}): void {
+}): Promise<void> {
   const actions = parseSantaActions(args.text);
   if (args.resolvedMerchantSlug !== args.expectedMerchantSlug) {
     if (actions.length > 0) {
@@ -129,9 +130,11 @@ export function fulfilSantaCartActions(args: {
     return;
   }
 
-  for (const action of actions) {
-    void addSantaWishToCart(action, args.signal, args.expectedMerchantSlug);
-  }
+  await Promise.all(
+    actions.map((action) =>
+      addSantaWishToCart(action, args.signal, args.expectedMerchantSlug)
+    )
+  );
 }
 
 /**

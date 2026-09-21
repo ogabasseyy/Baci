@@ -22,6 +22,12 @@ async function handleProductLookup(
     );
   }
 
+  // Every resolved response — including misses — echoes the resolving
+  // tenant so clients can verify which storefront answered the lookup.
+  const responseHeaders = {
+    'x-baci-santa-merchant-slug': tenant.merchantSlug,
+  };
+
   try {
     const santaProducts = await getCachedSantaProductList(
       tenant.merchantId,
@@ -40,7 +46,7 @@ async function handleProductLookup(
         message: 'Santa Product no match found',
         productName: safeProductName,
       });
-      return NextResponse.json({ product: null });
+      return NextResponse.json({ product: null }, { headers: responseHeaders });
     }
 
     // This is deliberately a normal public/RLS client: a catalog match does
@@ -68,7 +74,9 @@ async function handleProductLookup(
       );
     }
 
-    if (!product) return NextResponse.json({ product: null });
+    if (!product) {
+      return NextResponse.json({ product: null }, { headers: responseHeaders });
+    }
 
     // Variant-bearing products need an explicit SKU choice that a chat wish
     // cannot express. Refuse direct insertion rather than ordering the parent
@@ -78,7 +86,7 @@ async function handleProductLookup(
         message: 'Santa Product variant selection required',
         productName: safeProductName,
       });
-      return NextResponse.json({ product: null });
+      return NextResponse.json({ product: null }, { headers: responseHeaders });
     }
 
     type ImageEntry = string | { url?: string };
@@ -113,9 +121,7 @@ async function handleProductLookup(
           mpn: '',
         },
       },
-      {
-        headers: { 'x-baci-santa-merchant-slug': tenant.merchantSlug },
-      }
+      { headers: responseHeaders }
     );
   } catch (error) {
     logger.error({

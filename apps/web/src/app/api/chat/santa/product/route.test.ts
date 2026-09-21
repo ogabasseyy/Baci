@@ -136,6 +136,9 @@ describe('Santa product lookup', () => {
       request('https://usebaci.com/api/chat/santa/product', { name: 'Phone' })
     );
     expect(response.status).toBe(200);
+    expect(response.headers.get('x-baci-santa-merchant-slug')).toBe(
+      'demo-store'
+    );
     await expect(response.json()).resolves.toEqual({ product: null });
   });
 });

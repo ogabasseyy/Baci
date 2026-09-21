@@ -78,6 +78,12 @@ describe('resolveAgenticChatTenant', () => {
     ],
     ['demo-store.usebaci.com', { rootDomain: 'usebaci.com' }],
     ['unknown.example', { rootDomain: 'usebaci.com' }],
+    [
+      'baci-git-feature-acme.vercel.app',
+      { fallbackIdentifier: 'demo-store', rootDomain: 'usebaci.com' },
+    ],
+    ['notvercel.app', { rootDomain: 'usebaci.com' }],
+    ['a.b.vercel.app', { rootDomain: 'usebaci.com' }],
   ])('classifies the raw host before tenant lookup: %s', (host, expected) => {
     expect(
       getAgenticChatTenantResolutionInput({

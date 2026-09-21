@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { parseSantaAction } from '@baci/shared/lib';
+import { getCachedSantaProductList } from '@/ai/santa-data';
 import type { AgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 
@@ -77,11 +78,26 @@ export async function logSantaInteraction({
 
   const interaction = getInteractionType(response);
   const requestedPrice = getRequestedPrice(userMessage);
+  // Discounts are measured against the catalog price, never the customer's
+  // stated budget: an over-budget full-price grant is a 0% discount, not a
+  // windfall. Unknown catalog prices record no discount rather than a
+  // budget-derived fiction.
+  const catalogPrice = interaction.productName
+    ? (
+        await getCachedSantaProductList(
+          tenant.merchantId,
+          tenant.priceNegotiationEnabled
+        )
+      ).find((product) => product.name === interaction.productName)?.price
+    : undefined;
   const discountPercentage =
     interaction.approvedPrice !== null &&
-    requestedPrice !== null &&
-    requestedPrice > interaction.approvedPrice
-      ? ((requestedPrice - interaction.approvedPrice) / requestedPrice) * 100
+    catalogPrice !== undefined &&
+    catalogPrice > 0
+      ? Math.max(
+          ((catalogPrice - interaction.approvedPrice) / catalogPrice) * 100,
+          0
+        )
       : null;
   const sessionId = createSantaSessionId(clientIp);
   const supabase = createAgenticScopedSupabaseClient({

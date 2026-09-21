@@ -51,8 +51,9 @@ BEGIN
   INSERT INTO public.products (id, merchant_id, name, price, cost_price, status, brand)
   VALUES
     ('2a9a0000-0000-4000-8000-000000000011', v_published_merchant, 'High margin device', 100000, 40000, 'active', 'Apple'),
-    ('2a9a0000-0000-4000-8000-000000000012', v_published_merchant, 'Margin-protected device', 100000, 95000, 'active', 'Apple'),
+    ('2a9a0000-0000-4000-8000-000000000012', v_published_merchant, 'Margin-protected device', 100000, 99500, 'active', 'Apple'),
     ('2a9a0000-0000-4000-8000-000000000013', v_published_merchant, 'No-cost device', 100000, NULL, 'active', 'Apple'),
+    ('2a9a0000-0000-4000-8000-000000000018', v_published_merchant, 'Small-currency device', 1000, 600, 'active', 'Apple'),
     ('2a9a0000-0000-4000-8000-000000000014', v_published_merchant, 'Zero-price device', 0, NULL, 'active', 'Apple'),
     ('2a9a0000-0000-4000-8000-000000000016', v_published_merchant, 'Galaxy A55', 100000, 40000, 'active', 'Samsung'),
     ('2a9a0000-0000-4000-8000-000000000017', v_published_merchant, 'Budget device', 100000, 0, 'active', 'Tecno'),
@@ -90,6 +91,15 @@ BEGIN
     RAISE EXCEPTION 'invalid/zero price must fail closed: %', row_to_json(v_result);
   END IF;
 
+  -- A small-unit-currency product (e.g. USD 1,000 with cost 600) must keep a
+  -- healthy ceiling: a flat NGN-scale reserve would collapse it to zero.
+  SELECT * INTO v_result
+  FROM public.get_santa_catalog(v_published_merchant)
+  WHERE name = 'Small-currency device';
+  IF v_result.max_margin_discount_percentage IS DISTINCT FROM 2 THEN
+    RAISE EXCEPTION 'small-currency ceiling should be 2: %', row_to_json(v_result);
+  END IF;
+
 
 
   IF EXISTS (
@@ -117,7 +127,7 @@ BEGIN
   SELECT array_agg(name ORDER BY name) INTO v_names
   FROM public.get_santa_catalog('2a9a0000-0000-4000-8000-000000000001');
   IF v_names IS DISTINCT FROM ARRAY[
-    'Budget device', 'Galaxy A55', 'High margin device', 'Margin-protected device', 'No-cost device', 'Zero-price device'
+    'Budget device', 'Galaxy A55', 'High margin device', 'Margin-protected device', 'No-cost device', 'Small-currency device', 'Zero-price device'
   ]::text[] THEN
     RAISE EXCEPTION 'anon safe projection returned unexpected rows: %', v_names;
   END IF;

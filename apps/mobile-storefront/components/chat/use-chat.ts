@@ -128,7 +128,7 @@ async function requestChatReply({
       // immediately; fulfilSantaCartActions surfaces its own success/error
       // toast and ignores replies resolved for another storefront.
       if (santaMode) {
-        fulfilSantaCartActions({
+        void fulfilSantaCartActions({
           expectedMerchantSlug: CONFIG.MERCHANT_SLUG.trim(),
           resolvedMerchantSlug: chatReply.merchantSlug,
           signal: controller.signal,

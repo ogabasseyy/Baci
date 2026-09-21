@@ -170,4 +170,38 @@ describe('repairPickupClient', () => {
     );
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+  it('refuses to send pickup requests over cleartext HTTP to non-local hosts', async () => {
+    const fetch = jest.fn();
+    global.fetch = fetch;
+    process.env.EXPO_PUBLIC_API_URL = 'http://api.example.com';
+    try {
+      jest.resetModules();
+      const { repairPickupClient: insecure } = await import(
+        './repair-pickup-client'
+      );
+      await expect(insecure.quote(data)).rejects.toThrow('must use HTTPS');
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.EXPO_PUBLIC_API_URL;
+    }
+  });
+  it('allows cleartext HTTP for local development hosts', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ price: 3000, currency: 'NGN' }),
+    });
+    process.env.EXPO_PUBLIC_API_URL = 'http://127.0.0.1:8081';
+    try {
+      jest.resetModules();
+      const { repairPickupClient: local } = await import(
+        './repair-pickup-client'
+      );
+      await expect(local.quote(data)).resolves.toEqual({
+        price: 3000,
+        currency: 'NGN',
+      });
+    } finally {
+      delete process.env.EXPO_PUBLIC_API_URL;
+    }
+  });
 });

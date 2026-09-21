@@ -33,7 +33,11 @@ describe('mobileRepairPickupSchema', () => {
       }).success
     ).toBe(false);
     expect(
-      mobileRepairPickupSchema.safeParse({ action: 'pay', data }).success
+      mobileRepairPickupSchema.safeParse({
+        action: 'pay',
+        requestId: '14bf2192-16de-442b-bf75-700f4ff2aaca',
+        data,
+      }).success
     ).toBe(false);
   });
 });

@@ -1,9 +1,14 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { router } from 'expo-router';
+import type { ReactNode } from 'react';
 
 const mockNative = { callback: () => {} };
 const mockPickupBack = jest.fn();
 jest.mock('expo-router', () => ({
-  Stack: { Screen: () => null },
+  Stack: {
+    Screen: ({ options }: { options?: { headerRight?: () => ReactNode } }) =>
+      options?.headerRight?.() ?? null,
+  },
   router: { push: jest.fn() },
 }));
 jest.mock('expo-router/react-navigation', () => ({
@@ -61,10 +66,27 @@ jest.mock('./RepairBookingForm', () => ({
 
 import { RepairsCatalogScreen } from './RepairsCatalogScreen';
 
+beforeEach(() => jest.clearAllMocks());
+
 it('routes hardware and gesture back through the pickup handler without unmounting the form', () => {
   render(<RepairsCatalogScreen />);
   fireEvent.press(screen.getByText('Start repair'));
   act(() => mockNative.callback());
   expect(mockPickupBack).toHaveBeenCalledTimes(1);
+  expect(screen.getByText('Pickup review')).toBeTruthy();
+});
+
+it('routes the Track repair header action to the repair status screen', () => {
+  render(<RepairsCatalogScreen />);
+  fireEvent.press(screen.getByText('Track repair'));
+  expect(jest.mocked(router.push)).toHaveBeenCalledTimes(1);
+  expect(jest.mocked(router.push)).toHaveBeenCalledWith('/repairs/status');
+});
+
+it('keeps the Track repair action available while the pickup form is open', () => {
+  render(<RepairsCatalogScreen />);
+  fireEvent.press(screen.getByText('Start repair'));
+  fireEvent.press(screen.getByText('Track repair'));
+  expect(jest.mocked(router.push)).toHaveBeenCalledWith('/repairs/status');
   expect(screen.getByText('Pickup review')).toBeTruthy();
 });

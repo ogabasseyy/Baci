@@ -2,18 +2,26 @@ import Constants from 'expo-constants';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import type { RepairBookingRequest } from '@/lib/repair-catalog-schemas';
-import { repairPickupAttemptSchema } from '@/schemas/repair-pickup-attempt';
+import {
+  type RepairPickupAttempt,
+  repairPickupAttemptSchema,
+} from '@/schemas/repair-pickup-attempt';
 
 async function key(data: RepairBookingRequest) {
   return `repair-pickup-attempt-${await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify([Constants.expoConfig?.extra?.merchantSlug || 'ogabassey', data]))}`;
 }
-type Attempt = {
-  requestId: string;
-  expectedPickupFee: number;
-  resumeToken?: string;
-};
+type Attempt = RepairPickupAttempt;
 const pending = new Map<string, Promise<Attempt>>();
 const retired = new Set<string>();
+const RETIRED_TOMBSTONE = JSON.stringify({ retired: true });
+
+function isRetiredTombstone(raw: string): boolean {
+  try {
+    return (JSON.parse(raw) as { retired?: unknown } | null)?.retired === true;
+  } catch {
+    return false;
+  }
+}
 
 export const repairPickupPaymentAttempt = {
   async get(
@@ -28,7 +36,7 @@ export const repairPickupPaymentAttempt = {
       const raw = retired.has(storageKey)
         ? null
         : await SecureStore.getItemAsync(storageKey);
-      if (raw) {
+      if (raw && !isRetiredTombstone(raw)) {
         return repairPickupAttemptSchema.parse(JSON.parse(raw));
       }
       const requestId = Crypto.randomUUID();
@@ -52,7 +60,14 @@ export const repairPickupPaymentAttempt = {
     // A definitive response retires this attempt in memory even if deletion
     // fails. A replacement must still be written successfully before sending.
     retired.add(storageKey);
-    await SecureStore.deleteItemAsync(storageKey);
+    try {
+      await SecureStore.deleteItemAsync(storageKey);
+    } catch (error) {
+      // Deletion failed: persist a tombstone so a restart cannot replay the
+      // retired attempt, then report the storage failure.
+      await SecureStore.setItemAsync(storageKey, RETIRED_TOMBSTONE);
+      throw error;
+    }
     retired.delete(storageKey);
   },
 };

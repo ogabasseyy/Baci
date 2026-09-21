@@ -49,4 +49,31 @@ describe('RepairStatusScreen', () => {
     );
     expect(repairPickupClient.status).not.toHaveBeenCalled();
   });
+  it('shows the validation alert when the lookup fields are empty', () => {
+    render(<RepairStatusScreen />);
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Check repair status' })
+    );
+    expect(
+      screen.getByText('Enter your ticket number and booking email.')
+    ).toBeTruthy();
+    expect(repairPickupClient.status).not.toHaveBeenCalled();
+  });
+  it('shows the retry error when the status lookup rejects', async () => {
+    jest.mocked(repairPickupClient.status).mockRejectedValue(new Error('Down'));
+    render(<RepairStatusScreen />);
+    fireEvent.changeText(screen.getByLabelText('Ticket number'), '123');
+    fireEvent.changeText(
+      screen.getByLabelText('Booking email'),
+      'test@example.com'
+    );
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Check repair status' })
+    );
+    await screen.findByText('Could not load repair status. Please try again.');
+    expect(repairPickupClient.status).toHaveBeenCalledWith(
+      123,
+      'test@example.com'
+    );
+  });
 });

@@ -4,3 +4,4 @@ export const repairPickupAttemptSchema = z.object({
   expectedPickupFee: z.number().positive(),
   resumeToken: z.string().optional(),
 });
+export type RepairPickupAttempt = z.infer<typeof repairPickupAttemptSchema>;

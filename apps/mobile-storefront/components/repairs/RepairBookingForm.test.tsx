@@ -144,6 +144,27 @@ describe('RepairBookingForm', () => {
     expect(screen.getByText('Pickup checkout')).toBeTruthy();
   });
 
+  it('blocks pickup submit without an address and keeps checkout closed', () => {
+    render(
+      <RepairBookingForm
+        device={device}
+        quote={quote}
+        isSubmitting={false}
+        serverError={null}
+        fieldErrors={null}
+        onSubmit={onSubmit}
+      />
+    );
+
+    fillValidForm();
+    fireEvent.press(screen.getByLabelText('Pickup'));
+    fireEvent.press(screen.getByLabelText('Submit repair request'));
+
+    expect(screen.getByText('Enter a valid pickup address.')).toBeTruthy();
+    expect(screen.queryByText('Pickup checkout')).toBeNull();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('omits device/quote ids for the free-text path (no device)', () => {
     render(
       <RepairBookingForm

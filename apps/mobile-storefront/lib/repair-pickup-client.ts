@@ -11,7 +11,35 @@ const merchant = encodeURIComponent(
   Constants.expoConfig?.extra?.merchantSlug || 'ogabassey'
 );
 
+function isLocalDevelopmentHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '::1' ||
+    host === '[::1]' ||
+    host.startsWith('10.') ||
+    host.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  );
+}
+
+function requireSecureOrigin(): void {
+  const protocol = new URL(origin).protocol;
+  if (protocol === 'https:') return;
+  if (
+    typeof __DEV__ !== 'undefined' &&
+    __DEV__ &&
+    isLocalDevelopmentHost(new URL(origin).hostname)
+  )
+    return;
+  throw new Error(
+    'Pickup payment is unavailable: the repair service URL must use HTTPS.'
+  );
+}
+
 async function post(path: string, body: unknown): Promise<unknown> {
+  requireSecureOrigin();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
   try {

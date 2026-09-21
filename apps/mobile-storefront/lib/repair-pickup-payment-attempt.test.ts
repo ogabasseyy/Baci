@@ -72,9 +72,42 @@ describe('durable pickup attempt', () => {
     await expect(repairPickupPaymentAttempt.clear(data)).rejects.toThrow(
       'Unavailable'
     );
+    expect(jest.mocked(SecureStore.setItemAsync).mock.calls[0][1]).toBe(
+      JSON.stringify({ retired: true })
+    );
     const next = await repairPickupPaymentAttempt.get(data, 4000);
     expect(next.expectedPickupFee).toBe(4000);
     expect(next.resumeToken).toBeUndefined();
-    expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(1);
+    expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(2);
+  });
+  it('keeps a retired attempt unavailable across a module reload when deletion failed', async () => {
+    jest.mocked(SecureStore.getItemAsync).mockResolvedValue(
+      JSON.stringify({
+        requestId: '14bf2192-16de-442b-bf75-700f4ff2aaca',
+        expectedPickupFee: 3000,
+        resumeToken: 'expired',
+      })
+    );
+    jest
+      .mocked(SecureStore.deleteItemAsync)
+      .mockRejectedValueOnce(new Error('Unavailable'));
+    await expect(repairPickupPaymentAttempt.clear(data)).rejects.toThrow(
+      'Unavailable'
+    );
+    const tombstone = jest.mocked(SecureStore.setItemAsync).mock.calls[0][1];
+    // Simulate an app restart: fresh module state over the same persisted store.
+    jest.resetModules();
+    const freshSecureStore = jest.requireMock(
+      'expo-secure-store'
+    ) as typeof SecureStore;
+    jest.mocked(freshSecureStore.getItemAsync).mockResolvedValue(tombstone);
+    jest.mocked(freshSecureStore.setItemAsync).mockResolvedValue(undefined);
+    const { repairPickupPaymentAttempt: fresh } = await import(
+      './repair-pickup-payment-attempt'
+    );
+    const next = await fresh.get(data, 4000);
+    expect(next.expectedPickupFee).toBe(4000);
+    expect(next.resumeToken).toBeUndefined();
+    expect(freshSecureStore.setItemAsync).toHaveBeenCalledTimes(1);
   });
 });

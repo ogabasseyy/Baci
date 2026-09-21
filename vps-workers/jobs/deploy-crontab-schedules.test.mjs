@@ -172,20 +172,16 @@ describe('deploy crontab schedules', () => {
     );
   });
 
-  it('schedules the REDVAULT refund worker every five minutes', () => {
+  it('keeps the REDVAULT refund worker unscheduled until restricted-role approval', () => {
     const deployScript = readDeployScript();
 
-    assert.match(
+    assert.doesNotMatch(
       deployScript,
-      /\*\/5 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/process-redvault-refunds\.lock/
+      /^\s*(\*\/\d+|\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s+.*process-redvault-refunds/m
     );
     assert.match(
       deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/process-redvault-refunds/
-    );
-    assert.match(
-      deployScript,
-      />> \$REMOTE_DIR\/logs\/process-redvault-refunds\.log 2>&1/
+      /process-redvault-refunds is intentionally unscheduled/
     );
   });
 

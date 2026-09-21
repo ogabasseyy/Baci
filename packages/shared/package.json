@@ -31,8 +31,9 @@
     "zod": "^3.0.0 || ^4.0.0"
   },
   "devDependencies": {
+    "decode-uri-component": "0.2.2",
     "typescript": "~7.0.2",
-    "vitest": "^4.1.9",
+    "vitest": "^4.1.11",
     "zod": "^4.4.3"
   }
 }

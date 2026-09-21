@@ -54,39 +54,16 @@ describe('validateStorefrontEdgeInventory', () => {
     const sourceSha = artifact.originMainSha;
     // A branch-only authority disappears from fresh CI clones after squash merge.
     // Keep this checked-in artifact anchored in the checkout's reachable history.
-    try {
-      await expect(
-        execFileAsync('git', [
-          '-C',
-          repoRoot,
-          'merge-base',
-          '--is-ancestor',
-          sourceSha,
-          'HEAD',
-        ])
-      ).resolves.toMatchObject({ stdout: '' });
-    } catch {
-      // Review sandboxes may synthesize a squash tip that omits the branch
-      // authority from ancestry while preserving its bytes (mirroring the
-      // synthesized-tip fallback in storefront-edge-source-authority.ts).
-      // Accept a source-identical tree instead: the only expected drift
-      // between the authority and its regen commit is the regenerated
-      // artifact and this test's frozen hash, so diff everything else.
-      // Missing objects or any other drift still fail closed here, and the
-      // validator below binds the exact routing bytes either way.
-      await execFileAsync('git', [
+    await expect(
+      execFileAsync('git', [
         '-C',
         repoRoot,
-        'diff',
-        '--quiet',
+        'merge-base',
+        '--is-ancestor',
         sourceSha,
         'HEAD',
-        '--',
-        '.',
-        ':!docs/superpowers/evidence/storefront-edge/task-1a-inventory.json',
-        ':!apps/web/tools/cost/validate-storefront-edge-inventory.test.ts',
-      ]);
-    }
+      ])
+    ).resolves.toMatchObject({ stdout: '' });
     // Act
     const result = await validateStorefrontEdgeInventory({
       repoRoot,
@@ -98,8 +75,8 @@ describe('validateStorefrontEdgeInventory', () => {
     // Assert
     expect(result).toEqual({
       inventorySha256:
-        'bf8d05cc9231dcf32341897e93ac86b5f30223f6c57948d0df5a9158be33a804',
-      rowCount: 553,
+        '62c9da1068bb029efe5e1338537bffb7f69e3e5a7ad7a029ae72dd4429b0a2af',
+      rowCount: 554,
       storefrontEntrypointCount: 76,
     });
   });

@@ -12,7 +12,7 @@ import { assertWorkflowContract } from './cwv-runner-authority-runtime.mjs';
 import { createGithubAppTokenPostReceipt } from './cwv-runner-create-github-app-token-post.receipt.mjs';
 
 const root = new URL('../..', import.meta.url);
-const pins = { checkout: 'actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0', uploadArtifact: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02', downloadArtifact: 'actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0', createGithubAppToken: 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1' };
+const pins = { checkout: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1', uploadArtifact: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02', downloadArtifact: 'actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0', createGithubAppToken: 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1' };
 const auditorTokenExpression = '${{ steps.auditor-token.outputs.token }}';
 const read = () => readFile(new URL('.github/workflows/cwv-runner-attestation.yml', root), 'utf8');
 const workflowSourceNames = (names) => names.filter((name) => /\.ya?ml$/i.test(name));

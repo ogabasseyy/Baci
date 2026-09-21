@@ -111,4 +111,14 @@ export const EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES = [
       'supabase/migrations/20260908010000_include_tracking_order_gift_wrapping_fee.sql',
     sha256: 'ff0193f3652343e26e35a84a5a00188d90e26bf4bf95c7c016c35388adf81d5c',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260912150000_backfill_manual_order_document_dates.sql',
+    sha256: '27e87592cf8100d1618058f3c1b3d6623ba59e905c74cf8e5d5897ee27394618',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260920160000_sync_review_transaction_date_to_document_dates.sql',
+    sha256: '8ae2f2a178305f701484038e9c7fe43037baa1b1c2cb2db9fd6d09bccbbb0fa3',
+  },
 ];

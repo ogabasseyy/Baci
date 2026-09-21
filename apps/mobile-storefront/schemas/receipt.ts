@@ -55,6 +55,8 @@ export const ReceiptListItemSchema = z.object({
   amount_paid: z.number(),
   currency: z.string(),
   created_at: z.string(),
+  transaction_date: z.string().nullable().optional(),
+  invoice_issue_date: z.string().nullable().optional(),
   items: z.array(OrderItemSchema),
 });
 
@@ -77,6 +79,8 @@ export const ReceiptDetailSchema = z.object({
   currency: z.string(),
   is_credit_order: z.boolean(),
   created_at: z.string(),
+  transaction_date: z.string().nullable().optional(),
+  invoice_issue_date: z.string().nullable().optional(),
   notes: z.string().nullable(),
   customer_name: z.string(),
   customer_email: z.string(),
@@ -106,7 +110,7 @@ export const MerchantReceiptInfoSchema = z.object({
   brand_colors: z
     .object({
       primary: z.string(),
-      background: z.string(),
+      background: z.string().optional(),
       accent: z.string(),
     })
     .nullable(),

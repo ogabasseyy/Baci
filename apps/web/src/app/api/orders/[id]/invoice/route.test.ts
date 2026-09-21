@@ -307,6 +307,37 @@ describe('GET /api/orders/[id]/invoice', () => {
     );
   });
 
+  it('falls back to the transaction day when the issue date is null', async () => {
+    vi.mocked(createClient).mockReturnValue(
+      createSupabaseMock({
+        order: {
+          data: {
+            ...(orderResult.data as Record<string, unknown>),
+            invoice_issue_date: null,
+            transaction_date: '2026-03-05T10:00:00.000Z',
+          },
+          error: null,
+        },
+      }) as unknown as ReturnType<typeof createClient>
+    );
+
+    const response = await GET(
+      new NextRequest(`http://localhost/api/orders/${ORDER_ID}/invoice`),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+
+    expect(response.status).toBe(200);
+    const invoiceData = vi.mocked(generatePeppolInvoiceXml).mock
+      .calls[0]?.[0] as {
+      issue_date: Date;
+    };
+    // created_at is 2026-03-22 (recording day); the Peppol invoice must
+    // carry the Mar 5 transaction day instead.
+    expect(invoiceData.issue_date).toEqual(
+      new Date('2026-03-05T10:00:00.000Z')
+    );
+  });
+
   it('attaches order-level fulfillment items to their matching invoice lines', async () => {
     vi.mocked(createClient).mockReturnValue(
       createSupabaseMock({

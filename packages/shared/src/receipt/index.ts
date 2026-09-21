@@ -19,6 +19,7 @@ export {
   type VatBreakdownMerchant,
   type VatBreakdownOrder,
 } from './receipt-money';
+export { compareReceiptListDesc, type ReceiptSortable } from './receipt-sort';
 export { sanitizeSvg } from './sanitize-svg';
 export { showMerchantBankDetails } from './show-merchant-bank-details';
 export type {

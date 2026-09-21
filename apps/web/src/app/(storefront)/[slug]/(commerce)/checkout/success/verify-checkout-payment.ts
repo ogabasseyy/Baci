@@ -55,7 +55,11 @@ function isVerificationResponse(value: unknown): value is VerificationResponse {
   );
 }
 
-export type CheckoutVerificationStatus = 'success' | 'pending' | 'failed';
+export type CheckoutVerificationStatus =
+  | 'success'
+  | 'pending'
+  | 'failed'
+  | 'reconciling';
 
 // captured the money (mirrors finalizeOrderGatewayPayment kinds): never
 // payment failures — the reverify loop keeps polling for completion.
@@ -66,6 +70,17 @@ const CAPTURED_PAYMENT_FINALIZATION_OUTCOMES = new Set([
   'order_fetch_failed',
   'review_failed',
 ]);
+
+// Captured money with no active paid order left to complete: the finalizer
+// filed a reconciliation review (order_cancelled) or the order was refunded
+// (order_skipped). Terminal — repolling would return the same outcome —
+// but never a confirmed order.
+const RECONCILING_FINALIZATION_OUTCOMES = new Set([
+  'order_cancelled',
+  'order_skipped',
+]);
+
+const RECONCILING_LOOKUP_PAYMENT_STATUSES = new Set(['cancelled', 'refunded']);
 
 export interface VerifyCheckoutPaymentParams {
   merchantSlug: string | undefined;
@@ -149,6 +164,20 @@ export async function verifyCheckoutPayment(
         const response = await fetch(url, { signal });
         const data = response.ok ? await response.json() : null;
         if (data && (data.order_number || data.short_id)) {
+          const lookupPaymentStatus =
+            typeof data.payment_status === 'string'
+              ? data.payment_status.trim().toLowerCase()
+              : '';
+          if (RECONCILING_LOOKUP_PAYMENT_STATUSES.has(lookupPaymentStatus)) {
+            // A cancelled/refunded order is terminal reconciliation, not a
+            // confirmed purchase: the cart stays intact for a fresh attempt.
+            setStatus('reconciling');
+            setOrderNumber(data.order_number || data.short_id);
+            if (data.payment_method) {
+              setPaymentMethod(data.payment_method);
+            }
+            return;
+          }
           clearCart();
           setStatus('success');
           setOrderNumber(data.order_number || data.short_id);
@@ -238,13 +267,28 @@ export async function verifyCheckoutPayment(
         scheduleFailedRedirect();
       }
     } else if (data.success && data.status === 'success') {
+      // The verify API reports success for completed, order_cancelled, and
+      // order_skipped outcomes alike: the latter two captured the money but
+      // left no active paid order, so the shopper sees the
+      // reconciliation/refund state — never a confirmed order — and the
+      // cart stays intact for a fresh attempt.
+      if (
+        typeof data.finalizationOutcome === 'string' &&
+        RECONCILING_FINALIZATION_OUTCOMES.has(data.finalizationOutcome)
+      ) {
+        setStatus('reconciling');
+        setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
+        if (data.paymentMethod) {
+          setPaymentMethod(data.paymentMethod);
+        }
+        return;
+      }
       clearCart();
       setStatus('success');
       setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
       const verifiedOrderId = data.orderId || orderId;
-      // The verify API reports success for completed, order_cancelled, and
-      // order_skipped outcomes alike: only a completed finalization leaves an
-      // active paid order, so only it counts as a paid conversion.
+      // Only a completed finalization leaves an active paid order, so only
+      // it counts as a paid conversion.
       if (verifiedOrderId && data.finalizationOutcome === 'completed') {
         const verifiedTotal = Number(data.orderTotal);
         const verifiedCurrency = normalizeCurrencyCode(data.currency);

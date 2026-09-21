@@ -30,7 +30,21 @@ export interface OrderPaymentVerification extends TrackedCompletionAttribution {
    * the settlement-polling success navigation.
    */
   terminalFailure?: 'failed' | 'cancelled';
+  /**
+   * Captured-but-cancelled/refunded outcome for this order: the provider
+   * took the money but the finalizer left no active paid order (a
+   * reconciliation review was filed). Present only alongside
+   * `paid: false` with this order's identity. Callers route it to the
+   * reconciliation state — never the generic confirmation — and skip
+   * settlement polling, which can never make a cancelled order paid.
+   */
+  reconciliation?: 'order_cancelled' | 'order_skipped';
 }
+
+const RECONCILING_FINALIZATION_OUTCOMES = new Set([
+  'order_cancelled',
+  'order_skipped',
+]);
 
 function finiteOrUndefined(value: unknown): number | undefined {
   const numeric = Number(value);
@@ -128,6 +142,22 @@ async function checkTrackedOrderPaid(
     read.customer,
     read.items
   );
+  const trackedPaymentStatus = read.order.payment_status?.trim().toLowerCase();
+  if (
+    trackedPaymentStatus === 'cancelled' ||
+    trackedPaymentStatus === 'refunded'
+  ) {
+    // Terminal server state (mirrors the verify finalization kinds): no
+    // settlement poll can revive this order, so surface reconciliation
+    // instead of the transient pending shape.
+    return {
+      paid: false,
+      reconciliation:
+        trackedPaymentStatus === 'refunded'
+          ? 'order_skipped'
+          : 'order_cancelled',
+    };
+  }
   if (read.order.payment_status !== 'paid') {
     // Unpaid now, but the projection already carries the checkout identity
     // and breakdown the finalized path below would otherwise lose.
@@ -204,6 +234,24 @@ async function checkReferenceSettled(
       ) {
         return { paid: false, terminalFailure: data.status };
       }
+      // Captured money with no active paid order left: same identity gate
+      // as the terminal failure above — a foreign envelope must never
+      // reconcile this order.
+      if (
+        response.ok &&
+        data.success === true &&
+        data.orderId === orderId &&
+        typeof data.finalizationOutcome === 'string' &&
+        RECONCILING_FINALIZATION_OUTCOMES.has(data.finalizationOutcome)
+      ) {
+        return {
+          paid: false,
+          reconciliation:
+            data.finalizationOutcome === 'order_skipped'
+              ? 'order_skipped'
+              : 'order_cancelled',
+        };
+      }
       return { paid: false };
     }
     return { paid: true, total: finiteOrUndefined(data.orderTotal) };
@@ -228,7 +276,7 @@ export async function verifyOrderPaymentForCompletion({
   let pendingAttribution: TrackedCompletionAttribution | undefined;
   if (trackingToken) {
     const tracked = await checkTrackedOrderPaid(orderId, trackingToken);
-    if (tracked.paid) {
+    if (tracked.paid || tracked.reconciliation) {
       return tracked;
     }
     pendingAttribution = tracked.pending;

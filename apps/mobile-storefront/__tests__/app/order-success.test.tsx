@@ -5,6 +5,8 @@ import {
   mockColorSchemeModule,
   mockExpoRouterModule,
   mockOpenPreviewByOrderId,
+  mockOrderReconciliationView,
+  mockOrderReconciliationViewModule,
   mockOrderSuccessView,
   mockOrderSuccessViewModule,
   mockPermissionBoosterModule,
@@ -20,6 +22,9 @@ import {
 jest.mock('expo-router', () => mockExpoRouterModule());
 jest.mock('@/components/orders/OrderSuccessView', () =>
   mockOrderSuccessViewModule()
+);
+jest.mock('@/components/orders/OrderReconciliationView', () =>
+  mockOrderReconciliationViewModule()
 );
 jest.mock('@/components/receipts/ReceiptPreviewModal', () =>
   mockReceiptPreviewModalModule()
@@ -62,6 +67,28 @@ describe('OrderSuccessScreen', () => {
         1
       );
     });
+  });
+
+  it.each([
+    { outcome: 'order_cancelled' },
+    { outcome: 'order_skipped' },
+  ])('renders reconciliation instead of confirmation for a $outcome arrival', async ({
+    outcome,
+  }) => {
+    mockSearchParamsHolder.current = {
+      ...mockSearchParamsHolder.current,
+      reconciliation: outcome,
+    };
+
+    render(<OrderSuccessScreen />);
+
+    await waitFor(() => {
+      expect(mockOrderReconciliationView).toHaveBeenCalledWith(
+        expect.objectContaining({ orderNumber: 'BAC-001' })
+      );
+    });
+    expect(mockOrderSuccessView).not.toHaveBeenCalled();
+    expect(mockScheduleLocalNotification).not.toHaveBeenCalled();
   });
 
   it('does not schedule an order notification when order identity is missing', async () => {

@@ -178,6 +178,40 @@ describe('checkout success page', () => {
     );
   });
 
+  it.each([
+    { outcome: 'order_cancelled' },
+    { outcome: 'order_skipped' },
+  ])('shows reconciliation instead of success for a captured $outcome payment', async ({
+    outcome,
+  }) => {
+    mockFetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        finalizationOutcome: outcome,
+        orderId: 'order-1',
+        orderNumber: 'ORD-2001',
+        status: 'success',
+        success: true,
+      }),
+    });
+
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /order under review/i })
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByText('#ORD-2001')).toBeInTheDocument();
+    expect(screen.queryByText(/order received/i)).toBeNull();
+    expect(mockClearCart).not.toHaveBeenCalled();
+    expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+      'payment_completed',
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
   it('claims verification failures per attempt when one order retries with a new reference', async () => {
     mockSearchParams.mockReturnValue(
       new URLSearchParams({ reference: 'ref-1', orderId: 'order-1' })
@@ -232,10 +266,15 @@ describe('checkout success page', () => {
 
     render(<CheckoutSuccessPage />);
 
-    await waitFor(() => expect(mockClearCart).toHaveBeenCalled());
+    // Captured-but-cancelled is terminal reconciliation: the cart stays
+    // intact, no success experience renders, and no funnel event fires.
     await waitFor(() =>
-      expect(screen.getByText(/ORD-2001/i)).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: /order under review/i })
+      ).toBeInTheDocument()
     );
+    expect(mockClearCart).not.toHaveBeenCalled();
+    expect(screen.queryByText(/order received/i)).toBeNull();
     expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
   });
 

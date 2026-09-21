@@ -51,6 +51,11 @@ interface SettlementCompletionParams {
   maxAttempts?: number;
   slowPollIntervalMs?: number;
   slowMaxAttempts?: number;
+  /**
+   * Terminal non-paid states (captured-but-cancelled/refunded): polling
+   * can never make the order paid, so skip the lookup budget entirely.
+   */
+  disabled?: boolean;
 }
 
 function toTrackedOrder(value: unknown): TrackOrderData['order'] | null {
@@ -122,9 +127,11 @@ export function useSettlementCompletion({
     : SETTLEMENT_MAX_ATTEMPTS,
   slowPollIntervalMs = SETTLEMENT_SLOW_POLL_INTERVAL_MS,
   slowMaxAttempts = SETTLEMENT_SLOW_MAX_ATTEMPTS,
+  disabled = false,
 }: SettlementCompletionParams): void {
   useEffect(() => {
     if (
+      disabled ||
       !paymentMethod ||
       !SETTLEMENT_POLL_METHODS.has(paymentMethod) ||
       !orderId ||
@@ -212,6 +219,7 @@ export function useSettlementCompletion({
       }
     };
   }, [
+    disabled,
     maxAttempts,
     orderId,
     orderNumber,

@@ -1749,11 +1749,24 @@ describe('BnplLauncher', () => {
           '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
         );
       });
-      const completedCalls =
-        mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
-          ([event]) => event === 'payment_completed'
-        );
-      expect(completedCalls.length).toBe(captures ? 1 : 0);
+      // Attribution is detached from navigation: wait for the lookup to
+      // settle before asserting its outcome.
+      if (captures) {
+        await waitFor(() => {
+          expect(
+            mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+              ([event]) => event === 'payment_completed'
+            ).length
+          ).toBe(1);
+        });
+      } else {
+        await act(async () => {});
+        expect(
+          mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+            ([event]) => event === 'payment_completed'
+          ).length
+        ).toBe(0);
+      }
     }
   );
 
@@ -1789,17 +1802,52 @@ describe('BnplLauncher', () => {
         '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
       );
     });
-    expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
-      'payment_completed',
-      'order-1',
-      expect.objectContaining({
-        payment_method: 'klump',
-        payment_status: 'paid',
+    await waitFor(() => {
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-1',
+        expect.objectContaining({
+          payment_method: 'klump',
+          payment_status: 'paid',
+          reference: 'BAC-ABCD12345678',
+          total: 20000,
+          currency: 'NGN',
+        })
+      );
+    });
+  });
+
+  it('redirects the Klump callback to success even when the settlement lookup hangs', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
         reference: 'BAC-ABCD12345678',
-        total: 20000,
-        currency: 'NGN',
+        trackingToken: 'tok-123',
+        klump_callback: '1',
+        transaction_id: 'klump-txn-123',
       })
     );
+    // The record call succeeds but the settlement lookup never resolves:
+    // attribution is detached, so the redirect must not wait for it.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => new Promise(() => undefined))
+    );
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(
+        '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+      );
+    });
+    expect(
+      mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+        ([event]) => event === 'payment_completed'
+      ).length
+    ).toBe(0);
   });
 
   it('shows an error state and does not redirect when order fetch fails', async () => {

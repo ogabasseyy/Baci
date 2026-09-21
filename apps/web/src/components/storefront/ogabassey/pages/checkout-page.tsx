@@ -1751,9 +1751,8 @@ export const CheckoutPage: React.FC = () => {
     // `shipping_provider: null + selected_quote_id: null` (or empty
     // string), which slips past the RPC's `provider != null AND
     // quote_id IS NULL` guard (both null → guard doesn't fire) and
-    // persists a silent zero-shipping order. Mirrors the pre-submit
-    // block in `place-order.ts`. Treat empty string as no quote too —
-    // the state hook initializes selectedQuoteId to `''` (line ~573).
+    // persists a silent zero-shipping order. Treat empty string as no
+    // quote too — the state hook initializes selectedQuoteId to `''`.
     if (
       ((deliveryMethod === 'door' || deliveryMethod === 'pickup_station') && !selectedQuoteId) ||
       (deliveryMethod === 'airport' && !isAirportDeliveryReady(airportRequiresQuote, selectedQuoteMatchesDeliveryMethod))

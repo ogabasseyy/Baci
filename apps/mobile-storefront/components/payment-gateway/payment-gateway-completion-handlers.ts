@@ -187,6 +187,25 @@ export function createPaymentGatewayCompletionHandlers({
             : 'Payment could not be confirmed. Please try again.'
         );
         return;
+      } else if (verification.reconciliation) {
+        // Captured money with no active paid order: route to the
+        // reconciliation state instead of the generic confirmation. The
+        // cart stays intact for a fresh attempt; settlement polling is
+        // skipped there since a cancelled order can never become paid.
+        scheduleDelayedNavigation(() => {
+          router.replace({
+            pathname: '/order-success',
+            params: {
+              orderId: orderId || '',
+              orderNumber: orderNumber || '',
+              paymentMethod: gateway,
+              reference: reference || '',
+              reconciliation: verification.reconciliation,
+              ...(trackingToken && { trackingToken }),
+            },
+          });
+        });
+        return;
       }
     }
     await clearCart();

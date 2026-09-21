@@ -262,6 +262,7 @@ export async function GET(
         gift_wrapping_fee: order.gift_wrapping_fee ?? 0,
         shipping_cost: order.shipping_cost ?? order.shipping_fee ?? 0,
         total: order.total,
+        amount_paid: order.amount_paid,
         customer_name: order.customer_name,
         customer_email: order.customer_email,
         customer_phone: order.customer_phone,

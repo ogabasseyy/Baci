@@ -6,6 +6,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Linking } from 'react-native';
+import { OrderReconciliationView } from '@/components/orders/OrderReconciliationView';
 import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
 import { isDeferredSettlementMethod } from '@/components/orders/order-success-content';
 import { useGuestInvoicePaidState } from '@/components/orders/use-invoice-paid-state';
@@ -49,7 +50,14 @@ export default function OrderSuccessScreen() {
     trackingToken,
     paymentMethod,
     deliveryEstimate,
+    reconciliation,
   } = useLocalSearchParams<Record<string, string>>();
+  // Captured-but-cancelled/refunded arrivals (see the gateway completion
+  // handlers): the money moved but no active paid order exists, so this
+  // screen renders the reconciliation state with no settlement polling,
+  // success notification, interstitial, or permission soft-ask.
+  const isReconciliation =
+    reconciliation === 'order_cancelled' || reconciliation === 'order_skipped';
   const customer = useAuthStore((s) => s.customer);
   const orderNotificationScheduledRef = useRef(false);
   // An invoice or Pay for Me order paid externally after checkout must not
@@ -88,6 +96,7 @@ export default function OrderSuccessScreen() {
     paymentMethod,
     reference,
     trackingToken,
+    disabled: isReconciliation,
   });
 
   const { requestPermission, triggerSystemPrompt, markDenied } =
@@ -132,7 +141,7 @@ export default function OrderSuccessScreen() {
   useEffect(() => {
     const isServerConfirmedNotificationMethod =
       SERVER_CONFIRMED_ORDER_NOTIFICATION_METHODS.has(paymentMethod);
-    if (orderNotificationScheduledRef.current || !orderId) {
+    if (isReconciliation || orderNotificationScheduledRef.current || !orderId) {
       return;
     }
 
@@ -155,7 +164,7 @@ export default function OrderSuccessScreen() {
       orderNotificationScheduledRef.current = false;
       console.warn('Failed to schedule order received notification', error);
     });
-  }, [orderId, orderNumber, paymentMethod]);
+  }, [isReconciliation, orderId, orderNumber, paymentMethod]);
 
   useEffect(() => {
     // Post-purchase interstitial (once per session, skipped while ads are
@@ -168,8 +177,12 @@ export default function OrderSuccessScreen() {
     // explicit document-viewing action.
     // A deep link or stale route with no success identity schedules
     // nothing: presenting would burn the once-per-session cap with no
-    // completed order behind it.
-    if (!hasOrderSuccessIdentity({ orderId, orderNumber, reference })) {
+    // completed order behind it. Reconciliation arrivals likewise present
+    // nothing: no completed order sits behind them either.
+    if (
+      isReconciliation ||
+      !hasOrderSuccessIdentity({ orderId, orderNumber, reference })
+    ) {
       return;
     }
     let interstitialCancelled = false;
@@ -205,9 +218,14 @@ export default function OrderSuccessScreen() {
       interstitialCancelled = true;
       clearTimeout(interstitialTimerId);
     };
-  }, [orderId, orderNumber, reference]);
+  }, [isReconciliation, orderId, orderNumber, reference]);
 
   useEffect(() => {
+    // No soft-ask on reconciliation arrivals: no completed purchase sits
+    // behind them.
+    if (isReconciliation) {
+      return;
+    }
     // Check for notification permissions (Soft Ask)
     // Small delay to let the success animation play (better UX).
     // The flag is set before awaiting the permission lookup: on a slow
@@ -229,7 +247,7 @@ export default function OrderSuccessScreen() {
     return () => {
       clearTimeout(timerId);
     };
-  }, [requestPermission]);
+  }, [isReconciliation, requestPermission]);
 
   const handlePermissionGrant = async () => {
     setShowPermissionModal(false);
@@ -261,6 +279,18 @@ export default function OrderSuccessScreen() {
         receiptPreview.openPreviewByOrderId(orderId);
       }
     : undefined;
+
+  if (isReconciliation) {
+    return (
+      <OrderReconciliationView
+        colors={colors}
+        isDark={colorScheme === 'dark'}
+        orderNumber={orderNumber}
+        onContinueShopping={handleContinueShopping}
+        onViewOrders={handleViewOrders}
+      />
+    );
+  }
 
   return (
     <>

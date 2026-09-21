@@ -59,6 +59,19 @@ export function mockOrderSuccessViewModule(): unknown {
   };
 }
 
+export const mockOrderReconciliationView = jest.fn();
+
+export function mockOrderReconciliationViewModule(): unknown {
+  return {
+    OrderReconciliationView: (props: unknown) => {
+      const { View } =
+        jest.requireActual<typeof import('react-native')>('react-native');
+      mockOrderReconciliationView(props);
+      return <View testID="order-reconciliation-view" />;
+    },
+  };
+}
+
 export function mockReceiptPreviewModalModule(): unknown {
   return {
     ReceiptPreviewModal: ({
@@ -141,6 +154,7 @@ export function setupOrderSuccessMocks(): void {
   jest.clearAllMocks();
   mockScheduleLocalNotification.mockResolvedValue(undefined);
   mockOrderSuccessView.mockClear();
+  mockOrderReconciliationView.mockClear();
   mockReceiptState.isLoading = false;
   mockReceiptState.isOpen = false;
   mockReceiptDismissalHolder.current = undefined;

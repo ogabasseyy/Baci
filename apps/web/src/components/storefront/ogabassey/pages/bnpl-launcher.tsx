@@ -285,9 +285,11 @@ async function launchBnplPayment({
                 );
             }
 
-            // Navigation below proceeds regardless so the shopper is never
-            // stranded by a pending webhook.
-            await captureKlumpCallbackSettlementIfPaid({
+            // Best-effort attribution detached from navigation: the record
+            // call above already succeeded, and the helper never throws, so
+            // a stalled settlement lookup must not delay the redirect —
+            // the shopper proceeds while attribution lands independently.
+            void captureKlumpCallbackSettlementIfPaid({
                 orderId,
                 klumpReference,
                 trackingToken,

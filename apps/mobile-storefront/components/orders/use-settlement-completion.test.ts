@@ -423,6 +423,19 @@ describe('useSettlementCompletion', () => {
     }
   });
 
+  it('skips polling entirely when disabled for terminal states', () => {
+    const fetchSpy = jest.fn(async () => new Response('{}', { status: 200 }));
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    renderHook(() =>
+      useSettlementCompletion({ ...baseParams, disabled: true })
+    );
+
+    // A cancelled order can never become paid: no lookup budget is spent.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(mockTrackCompleted).not.toHaveBeenCalled();
+  });
+
   it('skips the lookup for synchronous methods and missing tokens', () => {
     const fetchSpy = jest.fn(async () => new Response('{}', { status: 200 }));
     global.fetch = fetchSpy as unknown as typeof fetch;

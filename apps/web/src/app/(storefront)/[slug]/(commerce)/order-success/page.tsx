@@ -17,6 +17,7 @@ import { GoogleCustomerReviews } from '@/components/analytics/google-customer-re
 import { useAuthSafe } from '@/contexts/auth-context';
 import { useCurrencyWithCountry } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
+import { formatCurrency as formatCurrencyForCode } from '@/lib/currency';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { asRoute } from '@/lib/routes';
 import {
@@ -136,10 +137,22 @@ function OrderSuccessContent() {
     order.virtual_account?.account_number
       ? order.virtual_account
       : null;
+  // The stamped historical currency wins over the merchant's current
+  // payout currency: a USD order revisited after the merchant switches to
+  // NGN must still ask the payer in dollars. Absent/invalid codes fall
+  // back to the merchant-country config inside the formatter.
+  const payerAmountText = order
+    ? formatCurrencyForCode(
+        payerOutstandingBalance,
+        merchant?.country,
+        undefined,
+        order.currency
+      )
+    : '';
   const payerDetailsText =
     isPayForMeUnpaid && order
       ? [
-          `Payment for order ${order.order_number}: ${formatCurrency(payerOutstandingBalance)}`,
+          `Payment for order ${order.order_number}: ${payerAmountText}`,
           ...(payerTransferAccount
             ? [
                 `Bank: ${payerTransferAccount.bank_name || 'See your order email'}`,
@@ -226,9 +239,7 @@ function OrderSuccessContent() {
               <dl className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 space-y-1">
                 <div className="flex justify-between gap-4">
                   <dt className="text-gray-500">Amount due</dt>
-                  <dd className="font-bold text-gray-900">
-                    {formatCurrency(payerOutstandingBalance)}
-                  </dd>
+                  <dd className="font-bold text-gray-900">{payerAmountText}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt className="text-gray-500">Order</dt>

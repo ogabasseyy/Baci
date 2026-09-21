@@ -157,6 +157,35 @@ function mockTerminalVerification() {
   }) as unknown as typeof fetch;
 }
 
+function mockReconciliationVerification(
+  outcome: 'order_cancelled' | 'order_skipped' = 'order_cancelled'
+) {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/api/payments/verify')) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'success',
+          finalizationOutcome: outcome,
+          orderId: 'order-1',
+        }),
+        { status: 200 }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        order: {
+          id: 'order-1',
+          order_number: 'ORD-1',
+          payment_status: 'pending',
+          total: 5000,
+        },
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+}
+
 function mockPendingVerification() {
   global.fetch = jest.fn(async (url: string) => {
     if (String(url).includes('/api/payments/verify')) {
@@ -305,6 +334,37 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     expect(input.clearCart).not.toHaveBeenCalled();
     expect(router.replace).not.toHaveBeenCalled();
     expect(refs.paymentCompletionStartedRef.current).toBe(false);
+  });
+
+  it.each([
+    { outcome: 'order_cancelled' },
+    { outcome: 'order_skipped' },
+  ])('routes a captured $outcome payment to reconciliation, not confirmation', async ({
+    outcome,
+  }) => {
+    // Arrange: captured money, but the finalizer left no active order.
+    mockReconciliationVerification(
+      outcome as 'order_cancelled' | 'order_skipped'
+    );
+    const { input } = createInput();
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: no conversion, cart intact, and the success route carries
+    // the reconciliation outcome for its dedicated state.
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.clearCart).not.toHaveBeenCalled();
+    expect(input.setPaymentStatus).not.toHaveBeenCalledWith('error');
+    expect(router.replace).toHaveBeenCalledWith({
+      pathname: '/order-success',
+      params: expect.objectContaining({
+        orderId: 'order-1',
+        reconciliation: outcome,
+      }),
+    });
   });
 
   it('ignores a second completion once one has already started', () => {

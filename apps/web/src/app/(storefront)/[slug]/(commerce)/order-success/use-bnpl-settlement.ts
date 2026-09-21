@@ -106,7 +106,7 @@ export function useBnplSettlement({
 }: UseBnplSettlementInput) {
   const bnplType = isPendingBnplType(checkoutType) ? checkoutType : null;
   // The standard CredPal pending redirect carries the provider
-  // transaction as `credpalRef` (see the place-order CredPal handler),
+  // transaction as `credpalRef` (see the checkout-page CredPal handler),
   // not `reference`: accept the alias so the later settlement capture
   // can reconcile the deferred conversion to the provider transaction.
   const bnplReference = referenceParam || credpalRefParam;

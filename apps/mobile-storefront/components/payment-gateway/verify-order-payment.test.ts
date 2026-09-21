@@ -157,15 +157,76 @@ describe('verifyOrderPaymentForCompletion', () => {
     ).resolves.toEqual({ paid: false });
   });
 
-  it('rejects cancelled finalizations even when the endpoint reports success', async () => {
+  it.each([
+    { outcome: 'order_cancelled' },
+    { outcome: 'order_skipped' },
+  ])('preserves a captured $outcome finalization as reconciliation', async ({
+    outcome,
+  }) => {
     mockFetch(
       () =>
         new Response(
           JSON.stringify({
             success: true,
             status: 'success',
-            finalizationOutcome: 'order_cancelled',
+            finalizationOutcome: outcome,
             orderId: 'order-1',
+          }),
+          { status: 200 }
+        )
+    );
+
+    // Callers route to the reconciliation state instead of the generic
+    // "Order Confirmed" — and never record a paid conversion.
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false, reconciliation: outcome });
+  });
+
+  it('keeps a foreign cancelled envelope transient instead of reconciling', async () => {
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(
+            JSON.stringify({
+              success: true,
+              status: 'success',
+              finalizationOutcome: 'order_cancelled',
+              orderId: 'order-9',
+            }),
+            { status: 200 }
+          )
+        : new Response(JSON.stringify(pendingTrackedOrder), { status: 200 })
+    );
+
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false });
+  });
+
+  it.each([
+    { paymentStatus: 'cancelled', reconciliation: 'order_cancelled' },
+    { paymentStatus: 'refunded', reconciliation: 'order_skipped' },
+  ])('reconciles a $paymentStatus tracked order without reference verification', async ({
+    paymentStatus,
+    reconciliation,
+  }) => {
+    const fetchMock = mockFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            order: {
+              id: 'order-1',
+              order_number: 'ORD-1',
+              payment_status: paymentStatus,
+              total: 5000,
+            },
           }),
           { status: 200 }
         )
@@ -174,9 +235,11 @@ describe('verifyOrderPaymentForCompletion', () => {
     await expect(
       verifyOrderPaymentForCompletion({
         orderId: 'order-1',
-        reference: 'ref-1',
+        trackingToken: 'track-1',
       })
-    ).resolves.toEqual({ paid: false });
+    ).resolves.toEqual({ paid: false, reconciliation });
+    // Terminal server state: no reference lookup is attempted.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('rejects orders that do not match the tracked order', async () => {

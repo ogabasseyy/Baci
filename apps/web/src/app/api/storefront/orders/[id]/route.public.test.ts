@@ -87,6 +87,40 @@ describe('GET /api/storefront/orders/[id] public lookup', () => {
     });
   });
 
+  it('returns the credited amount for a guest order with partial coverage', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123?token=track-token-123&merchant_slug=test-store'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: null },
+    });
+    // A guest Pay for Me order partially covered by wallet credit: the
+    // success page reconciles payer instructions from amount_paid, so
+    // the proof-bound guest response must carry it (not just the
+    // signed-in select).
+    mockAnonClient.rpc.mockResolvedValue({
+      data: [
+        {
+          ...mockOrderData,
+          payment_status: 'unpaid',
+          payment_method: 'payforme',
+          total: 11000,
+          amount_paid: 4000,
+          items: [],
+        },
+      ],
+      error: null,
+    });
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toMatchObject({ total: 11000, amount_paid: 4000 });
+  });
+
   it('returns 400 when merchant_slug is missing for public lookup', async () => {
     const request = new NextRequest(
       'http://localhost/api/storefront/orders/order-uuid-123'

@@ -24,6 +24,7 @@ import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { asRoute } from '@/lib/routes';
+import { CheckoutReconciliationView } from './checkout-reconciliation-view';
 import { useCheckoutSuccessVerification } from './use-checkout-success-verification';
 
 /**
@@ -129,6 +130,13 @@ function CheckoutSuccessContent() {
           </Link>
         </motion.div>
       </div>
+    );
+  }
+
+  // Captured-but-cancelled/refunded: reconciliation state, never success.
+  if (status === 'reconciling') {
+    return (
+      <CheckoutReconciliationView orderNumber={orderNumber} getHref={getHref} />
     );
   }
 

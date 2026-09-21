@@ -243,6 +243,26 @@ export function createPaymentGatewayMessageHandler({
         // false "Order Confirmed".
         onTerminalVerificationFailure(cryptoVerification.terminalFailure);
         return;
+      } else if (cryptoVerification.reconciliation) {
+        // Captured money with no active paid order: route to the
+        // reconciliation state instead of the generic confirmation, with
+        // the cart intact for a fresh attempt.
+        scheduleDelayedNavigation(() => {
+          router.replace({
+            pathname: '/order-success',
+            params: {
+              orderId: cryptoOrderId,
+              orderNumber: getTrimmedString(orderNumber),
+              paymentMethod: getTrimmedString(gateway) || 'crypto',
+              reference: cryptoReference,
+              reconciliation: cryptoVerification.reconciliation,
+              ...(getTrimmedString(trackingToken) && {
+                trackingToken: getTrimmedString(trackingToken),
+              }),
+            },
+          });
+        });
+        return;
       }
       await clearCart();
       scheduleDelayedNavigation(() => {

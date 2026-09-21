@@ -1,5 +1,10 @@
 import { captureBnplPaymentCompleted } from './capture-bnpl-payment-completed';
 
+// Per-request deadline (matches the sibling verification hooks): a stalled
+// settlement lookup resolves as unattributed instead of holding the
+// callback — navigation proceeds independently below regardless.
+const KLUMP_CALLBACK_LOOKUP_TIMEOUT_MS = 10_000;
+
 interface KlumpCallbackSettlement {
   orderId: string;
   klumpReference: string;
@@ -28,13 +33,19 @@ export async function captureKlumpCallbackSettlementIfPaid({
   trackingToken,
   merchantSlug,
 }: KlumpCallbackSettlement): Promise<void> {
+  const controller = new AbortController();
+  const lookupDeadline = setTimeout(
+    () => controller.abort(),
+    KLUMP_CALLBACK_LOOKUP_TIMEOUT_MS
+  );
   try {
     const orderQuery = new URLSearchParams({
       merchant_slug: merchantSlug,
     });
     orderQuery.set('token', trackingToken);
     const orderRes = await fetch(
-      `/api/storefront/orders/${orderId}?${orderQuery.toString()}`
+      `/api/storefront/orders/${orderId}?${orderQuery.toString()}`,
+      { signal: controller.signal }
     );
     const orderData = (await orderRes.json()) as KlumpSettlementOrderRow | null;
     if (orderRes.ok && orderData?.payment_status === 'paid') {
@@ -57,5 +68,7 @@ export async function captureKlumpCallbackSettlementIfPaid({
   } catch {
     // Verification unavailable: skip attribution rather than
     // record an unverified conversion.
+  } finally {
+    clearTimeout(lookupDeadline);
   }
 }

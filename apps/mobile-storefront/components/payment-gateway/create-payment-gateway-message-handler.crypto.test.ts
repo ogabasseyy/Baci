@@ -261,6 +261,55 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 
+  it('routes crypto success to reconciliation when the order was cancelled', async () => {
+    // Arrange: captured money, but the finalizer left no active order.
+    global.fetch = jest.fn(async (url: string) => {
+      if (String(url).includes('/api/payments/verify')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: 'success',
+            finalizationOutcome: 'order_cancelled',
+            orderId: 'order-123',
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          order: {
+            id: 'order-123',
+            order_number: 'ORD-123',
+            payment_status: 'pending',
+            total: 49875,
+          },
+        }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+    const { clearCart, handler, scheduleDelayedNavigation } = createHandler({
+      trackingToken: 'track-token-123',
+    });
+
+    // Act
+    await sendMessage(handler, { type: 'crypto_success' });
+
+    // Assert: no conversion, cart intact, and the success route carries
+    // the reconciliation outcome for its dedicated state.
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(clearCart).not.toHaveBeenCalled();
+    expect(scheduleDelayedNavigation).toHaveBeenCalledTimes(1);
+    const scheduledNavigation = scheduleDelayedNavigation.mock.calls[0]?.[0];
+    scheduledNavigation?.();
+    expect(router.replace).toHaveBeenCalledWith({
+      pathname: '/order-success',
+      params: expect.objectContaining({
+        orderId: 'order-123',
+        reconciliation: 'order_cancelled',
+      }),
+    });
+  });
+
   it('skips the conversion when crypto settlement is still pending', async () => {
     // Arrange: a crypto callback whose order is not paid yet.
     mockPendingCryptoVerification();

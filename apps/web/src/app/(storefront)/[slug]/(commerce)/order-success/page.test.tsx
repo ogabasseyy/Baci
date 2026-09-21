@@ -11,7 +11,8 @@ import OrderSuccessPage from '@/app/(storefront)/[slug]/(commerce)/order-success
 
 const mockSearchParams = vi.fn();
 const mockFetch = vi.fn();
-let mockMerchant = { slug: 'test-store', country: 'NG' };
+let mockMerchant: { slug: string; country: string; payout_currency?: string } =
+  { slug: 'test-store', country: 'NG' };
 const mockGoogleCustomerReviews = vi.hoisted(() => vi.fn());
 const mockCaptureCheckoutFunnelEventOnce = vi.hoisted(() => vi.fn());
 
@@ -310,6 +311,60 @@ describe('storefront order success page', () => {
     );
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(String(writeText.mock.calls[0][0])).toContain('2,000');
+  });
+
+  it('denominates payer instructions in the stamped order currency', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    // The merchant has since switched to NGN payouts; the historical USD
+    // order must still ask its payer in dollars — displayed and copied.
+    mockMerchant = {
+      slug: 'test-store',
+      country: 'NG',
+      payout_currency: 'NGN',
+    };
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'payforme',
+        payerName: 'Alice',
+        trackingToken: 'track-token-123',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        currency: 'USD',
+        payment_status: 'unpaid',
+        items: [],
+        subtotal: 3500,
+        shipping_cost: 0,
+        total: 3500,
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    const handoffLabel = await screen.findByText(/payment details for alice/i);
+    const handoffRoot = handoffLabel.closest('div') as HTMLElement;
+    const handoffQueries = within(handoffRoot);
+    expect(handoffQueries.getByText(/\$3,500\.00/)).toBeInTheDocument();
+    expect(handoffQueries.queryByText(/₦/)).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /copy payment details/i })
+    );
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copied = String(writeText.mock.calls[0][0]);
+    expect(copied).toContain('$3,500.00');
+    expect(copied).not.toContain('₦');
   });
 
   it('suppresses the payer handoff once a payforme order is paid', async () => {

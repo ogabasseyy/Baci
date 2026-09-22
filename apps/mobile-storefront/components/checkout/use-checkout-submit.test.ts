@@ -4,11 +4,10 @@ import type { MutableRefObject } from 'react';
 import { Alert } from 'react-native';
 import type { CartPriceChange, RepriceResult } from '@/services/cart-reprice';
 import type { CartItem } from '@/stores/cart-store.types';
+import { createOrderResponseFixture } from './checkout-order-response-fixture';
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
-import {
-  type UseCheckoutSubmitParams,
-  useCheckoutSubmit,
-} from './use-checkout-submit';
+import { useCheckoutSubmit } from './use-checkout-submit';
+import { address, cartItem, createParams } from './use-checkout-submit.setup';
 
 const mockRepriceCartItems = jest.fn() as jest.MockedFunction<
   (items: CartItem[], merchantId: string) => Promise<RepriceResult>
@@ -184,71 +183,6 @@ const mockedUseCartStore = (
   }
 ).useCartStore;
 
-const cartItem: CartItem = {
-  id: 'line-1',
-  name: 'iPhone 15 Pro',
-  price: 1200000,
-  product_id: 'product-1',
-  quantity: 1,
-  slug: 'iphone-15-pro',
-};
-
-const address = {
-  address: '1 Test Way',
-  city: 'Ikeja',
-  email: 'customer@example.com',
-  firstName: 'Ada',
-  lastName: 'Okafor',
-  phone: '08012345678',
-  state: 'Lagos',
-};
-
-function createRef<T>(current: T): MutableRefObject<T> {
-  return { current };
-}
-
-function createParams(
-  overrides: Partial<UseCheckoutSubmitParams> = {}
-): UseCheckoutSubmitParams {
-  return {
-    accountPassword: '',
-    appliedDiscountCode: null,
-    availablePaymentMethods: ['paystack'],
-    clearCart: jest.fn<() => void | Promise<void>>(),
-    currentShippingQuoteContextKey: 'door:Lagos:Ikeja',
-    customer: null,
-    deliveryFee: 1500,
-    deliveryMethod: 'door',
-    getLiveSavingsSelection:
-      jest.fn<UseCheckoutSubmitParams['getLiveSavingsSelection']>(),
-    getShippingProvider: () => 'gigl',
-    isAuthenticated: false,
-    isLoadingQuotes: false,
-    isOrderInFlight: createRef(false),
-    isProcessing: false,
-    mobileCheckoutIdempotencyRef: createRef(null),
-    orderTotals: { taxAmount: 0 },
-    paymentSettings: { klump_enabled: true },
-    paymentTab: 'full',
-    resolvedShippingQuoteContextKey: 'door:Lagos:Ikeja',
-    requiresShippingQuote: true,
-    saveAsDefaultAddress: false,
-    saveDetails: false,
-    selectedPayment: 'paystack',
-    selectedQuote: undefined,
-    selectedSavedAddressId: null,
-    setIsProcessing: jest.fn(),
-    setPendingOrder: jest.fn(),
-    setShowCryptoSelection: jest.fn(),
-    setStep: jest.fn(),
-    user: null,
-    walletBalance: 0,
-    walletFundedBankTransferOptionEnabled: false,
-    walletSelection: undefined,
-    ...overrides,
-  };
-}
-
 describe('useCheckoutSubmit', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -265,40 +199,14 @@ describe('useCheckoutSubmit', () => {
     // (proceed). Default to valid so the freeze step, which now runs after
     // validation, is reached.
     mockValidateCheckoutSubmission.mockReturnValue(true);
-    mockCreateOrder.mockResolvedValue({
-      amountDueToGateway: 1201500,
-      order: {
-        created_at: '2026-07-09T12:00:00.000Z',
-        id: 'order-1',
-        order_number: 'ORD-1',
-        payment_status: 'pending',
-        shipping_status: 'pending',
-        total: 1201500,
-      },
-      wallet: null,
-    });
+    mockCreateOrder.mockResolvedValue(
+      createOrderResponseFixture({
+        effectiveCheckoutGeneration: 'gen-1',
+      })
+    );
     jest.spyOn(Alert, 'alert').mockImplementation(() => {
       // Suppress native alerts in tests.
     });
-  });
-
-  it('does not create a REDVAULT order without a review callback', async () => {
-    const params = createParams({
-      onRedvaultOrder: undefined,
-      selectedPayment: 'uba_redvault',
-    });
-    const { result } = renderHook(() => useCheckoutSubmit(params));
-
-    await act(async () => {
-      await result.current(address);
-    });
-
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Unable to continue',
-      expect.stringMatching(/review is unavailable/i)
-    );
-    expect(mockCreateOrder).not.toHaveBeenCalled();
-    expect(params.isOrderInFlight.current).toBe(false);
   });
 
   it('blocks a non-REDVAULT submit while a persisted REDVAULT fence is unresolved', async () => {

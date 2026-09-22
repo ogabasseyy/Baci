@@ -6,6 +6,7 @@ export { trackCheckoutOrderCreated } from './track-checkout-order-created';
 export { trackCheckoutPaymentCompleted } from './track-checkout-payment-completed';
 export {
   type CheckoutPaymentCompletionOutcome,
+  PAYMENT_COMPLETED_CLAIM_EVENT,
   trackCheckoutPaymentCompletedOnce,
 } from './track-checkout-payment-completed-once';
 export { trackCheckoutPaymentFailed } from './track-checkout-payment-failed';

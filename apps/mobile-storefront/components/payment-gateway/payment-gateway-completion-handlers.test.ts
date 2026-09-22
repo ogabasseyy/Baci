@@ -13,6 +13,7 @@ const mockHandleVtuConfirmation = jest.fn();
 const mockTrackCheckoutPaymentCompletedOnce = jest.fn(
   async (_input: unknown) => true
 );
+const mockTrackCheckoutPaymentCompleted = jest.fn((_input: unknown) => {});
 const mockVerifyRedvaultPayment =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
@@ -21,6 +22,9 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@/services/analytics', () => ({
+  PAYMENT_COMPLETED_CLAIM_EVENT: 'payment_completed',
+  trackCheckoutPaymentCompleted: (input: unknown) =>
+    mockTrackCheckoutPaymentCompleted(input),
   trackCheckoutPaymentCompletedOnce: (input: unknown) =>
     mockTrackCheckoutPaymentCompletedOnce(input),
 }));
@@ -329,6 +333,56 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     expect(router.replace).toHaveBeenCalledWith(
       expect.objectContaining({ pathname: '/order-success' })
     );
+  });
+
+  it('emits the funnel payment_completed once for verified REDVAULT success', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue(null);
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(true);
+    const { input } = createInput({
+      paymentMethod: 'uba_redvault',
+      gateway: 'uba_redvault',
+      amount: 4000,
+      orderTotal: 5000,
+    });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+
+    // The canonical total wins over the residual gateway amount, and the
+    // once-helper stays untouched so the ad purchase is never re-emitted.
+    expect(mockTrackCheckoutPaymentCompleted).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-1',
+        orderNumber: 'ORD-1',
+        paymentMethod: 'uba_redvault',
+        reference: 'ref-1',
+        value: 5000,
+      })
+    );
+    expect(mockClaimCheckoutPurchaseTracking).toHaveBeenCalledWith(
+      'order-1',
+      'payment_completed'
+    );
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+  });
+
+  it('skips the funnel emission when another path recorded the conversion', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue(null);
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(false);
+    mockIsCheckoutPurchaseClaimed.mockResolvedValue(true);
+    const { input } = createInput({
+      paymentMethod: 'uba_redvault',
+      gateway: 'uba_redvault',
+    });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+
+    expect(mockTrackCheckoutPaymentCompleted).not.toHaveBeenCalled();
+    expect(input.clearCart).toHaveBeenCalledTimes(1);
   });
 
   it('clears the persisted REDVAULT fence after verified success', async () => {

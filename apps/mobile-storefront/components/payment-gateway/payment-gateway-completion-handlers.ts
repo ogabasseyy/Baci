@@ -163,10 +163,12 @@ export function createPaymentGatewayCompletionHandlers({
 
     let verifiedOrderNumber = orderNumber;
     // A provider-confirmed REDVAULT payment completes exactly once below:
-    // the REDVAULT branch owns the single conversion emission, so the
-    // generic verification block is skipped for it — otherwise a paid
+    // the REDVAULT branch owns the ad purchase emission, so the generic
+    // verification block is skipped for it — otherwise a paid
     // tracked-order lookup would emit the same ad purchase and legacy
-    // order_completed a second time under the other claim key.
+    // order_completed a second time under the other claim key. The
+    // funnel payment_completed is still emitted in the shared
+    // completion under its own claim.
     let redvaultVerified = false;
     if (paymentMethod === 'uba_redvault') {
       const outcome = await verifyRedvaultCompletion(completionContext);

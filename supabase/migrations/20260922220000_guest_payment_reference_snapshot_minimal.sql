@@ -6,6 +6,13 @@
 -- raw provider payloads and internal fee data from the projection. The
 -- access control (exact gateway reference plus matching order tracking
 -- token, order-bound rows only, no existence oracle) is unchanged.
+--
+-- PostgreSQL forbids CREATE OR REPLACE from changing a function's return
+-- type, and 20260922210000 created this function with 15 OUT columns
+-- versus the 12 here: drop the old signature first so timestamp-ordered
+-- application never blocks deployment.
+
+DROP FUNCTION IF EXISTS public.get_guest_payment_reference_snapshot(text, text);
 
 CREATE OR REPLACE FUNCTION public.get_guest_payment_reference_snapshot(
   p_gateway_reference text,

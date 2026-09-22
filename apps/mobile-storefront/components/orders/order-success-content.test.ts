@@ -52,6 +52,22 @@ describe('order success content helpers', () => {
     });
   });
 
+  it('returns commercial invoice messaging for credited unpaid invoices', () => {
+    expect(getOrderSuccessTone('invoice', false, true)).toMatchObject({
+      documentLabel: 'View / Download Invoice',
+      eyebrow: 'Invoice ready',
+      nextDocumentTitle: 'Invoice',
+      title: 'Invoice Ready',
+    });
+  });
+
+  it('keeps proforma messaging for uncredited unpaid invoices', () => {
+    expect(getOrderSuccessTone('invoice', false, false)).toMatchObject({
+      documentLabel: 'View / Download Proforma Invoice',
+      title: 'Proforma Invoice Ready!',
+    });
+  });
+
   it('resolves authoritative paid state only for deferred-settlement methods', () => {
     // The success screen enables its receipt-detail lookup for these.
     expect(isDeferredSettlementMethod('invoice')).toBe(true);

@@ -114,6 +114,33 @@ describe('Order confirmation email', () => {
       expect(text).toContain('Order Confirmed!');
       expect(text).toContain('will be shipped soon');
     });
+
+    it('carries balance instructions on flagged credited confirmations', () => {
+      const payload = {
+        ...baseOrderData,
+        documentKind: 'confirmation' as const,
+        amountDue: 6500,
+        balanceDueInstructions: true,
+        virtualAccount: {
+          bankName: 'Test Bank',
+          accountNumber: '0123456789',
+          accountName: 'Baci / Ada',
+        },
+      };
+      const html = generateOrderConfirmationEmail(payload);
+      const text = generateOrderConfirmationText(payload);
+
+      // Commercial classification everywhere, transfer instructions added.
+      expect(html).toContain('Order #ORD-001 Confirmed');
+      expect(html).not.toContain('Proforma Invoice');
+      expect(html).toContain('Complete Your Bank Transfer');
+      expect(html).toContain('0123456789');
+      expect(html).toContain('outstanding balance');
+      expect(text).toContain('Order Confirmed!');
+      expect(text).toContain('outstanding balance');
+      expect(text).toContain('0123456789');
+      expect(text).not.toContain('will be shipped soon');
+    });
   });
 
   describe('currency formatting', () => {

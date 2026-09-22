@@ -9,10 +9,31 @@ export function isDeferredSettlementMethod(paymentMethod?: string): boolean {
   return !!paymentMethod && DEFERRED_SETTLEMENT_METHODS.has(paymentMethod);
 }
 
-export function getOrderSuccessTone(paymentMethod?: string, isPaid = false) {
+export function getOrderSuccessTone(
+  paymentMethod?: string,
+  isPaid = false,
+  isCommercialDocument = false
+) {
   // A paid invoice order is a commercial invoice/receipt, not a proforma:
   // match the web success page, which keys proforma copy off unpaid state.
   if (paymentMethod === 'invoice' && !isPaid) {
+    // Partial payment or pre-gateway credit already accepted value, so
+    // the generated preview is a commercial invoice: the screen must
+    // agree instead of borrowing proforma copy for a commercial
+    // document. The order stays active (unlike paid), so the copy
+    // names the outstanding balance rather than a receipt.
+    if (isCommercialDocument) {
+      return {
+        documentLabel: 'View / Download Invoice',
+        eyebrow: 'Invoice ready',
+        nextDocumentText:
+          'Your invoice reflects the payments received so far. Complete the outstanding balance to finalize your order.',
+        nextDocumentTitle: 'Invoice',
+        subtitle:
+          "We've credited your payments so far. Complete the outstanding balance and we'll begin processing.",
+        title: 'Invoice Ready',
+      };
+    }
     return {
       documentLabel: 'View / Download Proforma Invoice',
       eyebrow: 'Proforma invoice ready',

@@ -16,6 +16,7 @@ import {
 import { trackEvent } from './analytics-core';
 
 export {
+  PAYMENT_COMPLETED_CLAIM_EVENT,
   trackCheckoutInvoiceGenerated,
   trackCheckoutOrderCreated,
   trackCheckoutPaymentCompleted,

@@ -11,8 +11,13 @@ import {
   loadRedvaultPurchaseTrackingContext,
 } from '@/lib/redvault-purchase-tracking-context';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
-import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
+import {
+  PAYMENT_COMPLETED_CLAIM_EVENT,
+  trackCheckoutPaymentCompleted,
+  trackCheckoutPaymentCompletedOnce,
+} from '@/services/analytics';
 import { verifyRedvaultPayment } from '@/services/redvault';
+import { serializeAfterOrderCreated } from '@/services/serialize-after-order-created';
 import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import type { PaymentStatusSetter } from './payment-gateway-controller.types';
 import { verifyOrderPaymentForCompletion } from './verify-order-payment';
@@ -153,9 +158,10 @@ function buildOrderSuccessParams(
  * Shared completion after verification: a server-confirmed settlement
  * check, a single conversion emission, then cart clear and success
  * routing. Provider-verified REDVAULT payments skip the generic
- * verification block — the REDVAULT branch already owns the single
- * conversion emission, and a lagging tracked row must not override a
- * provider-confirmed success with an error or a second emission.
+ * verification block — the REDVAULT branch already owns the ad
+ * purchase emission, so only the funnel payment_completed is emitted
+ * below under its own claim; a lagging tracked row must not override
+ * a provider-confirmed success with an error or a second emission.
  */
 export async function settleOrderCompletion(
   context: OrderCompletionContext,
@@ -254,6 +260,46 @@ export async function settleOrderCompletion(
       });
       return;
     }
+  }
+  if (orderId && redvaultVerified) {
+    // Provider-verified REDVAULT payments skip the generic verification
+    // block above: a lagging tracked row must not override the
+    // provider-confirmed success with an error, and the REDVAULT branch
+    // already owns the ad purchase emission under the purchase claim.
+    // The canonical funnel payment_completed still needs one emission,
+    // so claim the payment_completed key and emit the funnel event
+    // only — routing through the once-helper would re-emit the ad
+    // purchase under the other claim key and double-count the
+    // conversion. A held claim means another path already recorded it;
+    // an unreadable store favours emitting over losing the conversion
+    // (claim convention), while an unmounted screen still suppresses
+    // the late emission.
+    const purchaseTotal = orderTotal ?? amount ?? 0;
+    await serializeAfterOrderCreated(orderId, async () => {
+      if (!isMountedRef.current) {
+        return;
+      }
+      const claimed = await claimCheckoutPurchaseTracking(
+        orderId,
+        PAYMENT_COMPLETED_CLAIM_EVENT
+      );
+      const alreadyRecorded =
+        !claimed &&
+        (await isCheckoutPurchaseClaimed(
+          orderId,
+          PAYMENT_COMPLETED_CLAIM_EVENT
+        ));
+      if (alreadyRecorded) {
+        return;
+      }
+      trackCheckoutPaymentCompleted({
+        orderId,
+        orderNumber: orderNumber || orderId,
+        paymentMethod: gateway || 'uba_redvault',
+        ...(reference ? { reference } : {}),
+        value: purchaseTotal,
+      });
+    });
   }
   await clearCart();
   scheduleDelayedNavigation(() => {

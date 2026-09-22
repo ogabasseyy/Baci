@@ -29,6 +29,7 @@ export function OrderSuccessView({
   orderNumber,
   paymentMethod,
   reference,
+  isCommercialDocument = false,
   isDocumentLoading = false,
   isPaid = false,
   isPermissionFlowActive = false,
@@ -38,7 +39,11 @@ export function OrderSuccessView({
 }: OrderSuccessViewProps) {
   const resolvedDeliveryEstimate =
     resolveOrderSuccessDeliveryEstimate(deliveryEstimate);
-  const successTone = getOrderSuccessTone(paymentMethod, isPaid);
+  const successTone = getOrderSuccessTone(
+    paymentMethod,
+    isPaid,
+    isCommercialDocument
+  );
 
   return (
     <>

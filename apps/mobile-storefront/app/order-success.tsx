@@ -264,6 +264,7 @@ export default function OrderSuccessScreen() {
         colors={colors}
         deliveryEstimate={deliveryEstimate}
         isDark={colorScheme === 'dark'}
+        isCommercialDocument={isPartiallyPaidOrder || isCreditedOrder}
         isDocumentLoading={receiptPreview.isLoading}
         isPaid={isPaidOrder}
         onContinueShopping={handleContinueShopping}

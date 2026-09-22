@@ -835,9 +835,19 @@ export const CheckoutPage: React.FC = () => {
   const effectiveItemSubtotal = hasCheckoutCartItems
     ? itemSubtotal
     : resumedOrder?.subtotal || 0;
+  // A resumed start replays a stamped order, not a live cart: report the
+  // canonical total (shipping, tax, wrapping, and discounts included)
+  // and the stamped currency, matching the resumed payment_started and
+  // completion events. The subtotal-only/metric-currency variant would
+  // split one attempt across inconsistent values and relabel history
+  // after a merchant currency change.
   const effectiveCheckoutCartTotal = hasCheckoutCartItems
     ? checkoutCartTotal
-    : resumedOrder?.subtotal || checkoutCartTotal;
+    : (resumedOrder?.total ?? checkoutCartTotal);
+  const effectiveCheckoutCurrency =
+    !hasCheckoutCartItems && resumedOrder?.currency
+      ? resumedOrder.currency
+      : currencyCode;
 
   // Set once an order is created for this attempt: post-creation rerenders
   // (pending-order persist, widget state) must not re-emit checkout_started
@@ -850,7 +860,7 @@ export const CheckoutPage: React.FC = () => {
   // deterministic per rendered tree and collides after reload).
   useCheckoutStartFunnel({
     attemptId: `gen-${readCheckoutAttemptGeneration()}`,
-    currency: currencyCode,
+    currency: effectiveCheckoutCurrency,
     displayItems,
     effectiveCheckoutCartTotal,
     effectiveItemSubtotal,

@@ -29,6 +29,16 @@ export interface ProformaEmailInput {
   merchantUrl: string;
   paymentLink?: string;
   virtualAccount?: ProformaVirtualAccount;
+  /**
+   * Commercial confirmations for credited-but-unpaid invoices keep
+   * confirmation semantics (subject, PDF kind, Peppol type code) but
+   * must still carry transfer instructions: without them the recipient
+   * sees the full total with no way to pay the residual balance. The
+   * route sets this only for invoice-method confirmations that are not
+   * fully paid and still have an amount due — every other caller keeps
+   * the default and renders exactly as before.
+   */
+  balanceDueInstructions?: boolean;
 }
 
 export interface ProformaContext {
@@ -84,18 +94,41 @@ function isProformaOrRequest(input: ProformaEmailInput): boolean {
   );
 }
 
+/**
+ * Commercial confirmation with an outstanding balance (a credited
+ * invoice the route flagged): same transfer mechanics as a quotation,
+ * confirmation copy everywhere else.
+ */
+export function isBalanceDueConfirmation(
+  input: ProformaEmailInput,
+  context: ProformaContext
+): boolean {
+  return (
+    input.documentKind === 'confirmation' &&
+    input.balanceDueInstructions === true &&
+    context.hasAmountDue
+  );
+}
+
+function shouldRenderTransferInstructions(
+  input: ProformaEmailInput,
+  context: ProformaContext
+): boolean {
+  return (
+    (isProformaOrRequest(input) || isBalanceDueConfirmation(input, context)) &&
+    !!context.virtualAccount &&
+    context.hasAmountDue
+  );
+}
+
 export function buildProformaPaymentHtml(
   input: ProformaEmailInput,
   context: ProformaContext
 ): string {
-  if (
-    !isProformaOrRequest(input) ||
-    !context.virtualAccount ||
-    !context.hasAmountDue
-  ) {
+  const account = context.virtualAccount;
+  if (!account || !shouldRenderTransferInstructions(input, context)) {
     return '';
   }
-  const account = context.virtualAccount;
   return `
           <!-- Payment Instructions -->
           <tr>
@@ -125,10 +158,24 @@ export function buildProformaPaymentHtml(
   `;
 }
 
+export function buildConfirmationBalanceIntroHtml(
+  input: ProformaEmailInput,
+  context: ProformaContext
+): string {
+  const amount = formatEmailMoney(context.transferAmount, input.currency);
+  if (context.virtualAccount) {
+    return `Your order is confirmed. An outstanding balance of <strong>${amount}</strong> remains — complete your bank transfer using the payment details in this email; your order is processed once payment is received.`;
+  }
+  return `Your order is confirmed. An outstanding balance of <strong>${amount}</strong> remains — please contact ${escapeHtmlText(input.merchantName)} for payment details.`;
+}
+
 export function buildProformaIntroHtml(
   input: ProformaEmailInput,
   context: ProformaContext
 ): string {
+  if (input.documentKind === 'confirmation') {
+    return buildConfirmationBalanceIntroHtml(input, context);
+  }
   if (input.documentKind === 'payment_request') {
     if (!context.hasAmountDue) {
       return `This is a payment request for the items below. No payment is due on this request — please contact ${escapeHtmlText(input.merchantName)} if you have any questions.`;
@@ -142,6 +189,17 @@ export function buildProformaIntroHtml(
     return `This proforma invoice is a quotation for the items below. Your order will be processed once payment is received — please share it with your procurement team and ${context.virtualAccount ? 'complete your bank transfer using the payment details in this email' : `contact ${escapeHtmlText(input.merchantName)} for payment details`}.`;
   }
   return `This proforma invoice is a quotation for the items below. No payment is due on this quote — please contact ${escapeHtmlText(input.merchantName)} if you have any questions.`;
+}
+
+export function buildConfirmationBalanceTextIntro(
+  input: ProformaEmailInput,
+  context: ProformaContext
+): string {
+  const amount = formatEmailMoney(context.transferAmount, input.currency);
+  if (context.virtualAccount) {
+    return `Your order is confirmed with an outstanding balance of ${amount}. Complete your bank transfer using the payment details in this email.`;
+  }
+  return `Your order is confirmed with an outstanding balance of ${amount}. Please contact ${input.merchantName} for payment details.`;
 }
 
 export function buildProformaTextIntro(
@@ -162,14 +220,10 @@ export function buildProformaPaymentText(
   input: ProformaEmailInput,
   context: ProformaContext
 ): string {
-  if (
-    !isProformaOrRequest(input) ||
-    !context.virtualAccount ||
-    !context.hasAmountDue
-  ) {
+  const account = context.virtualAccount;
+  if (!account || !shouldRenderTransferInstructions(input, context)) {
     return '';
   }
-  const account = context.virtualAccount;
   return `
 Payment Details (bank transfer):
 Bank: ${account.bankName}
@@ -187,7 +241,11 @@ export function buildProformaNextStepsText(
   context: ProformaContext
 ): string {
   const documentNoun =
-    input.documentKind === 'payment_request' ? 'request' : 'quote';
+    input.documentKind === 'payment_request'
+      ? 'request'
+      : input.documentKind === 'confirmation'
+        ? 'order'
+        : 'quote';
   return [
     !context.hasAmountDue
       ? `No payment is due on this ${documentNoun} — please contact ` +
@@ -195,7 +253,9 @@ export function buildProformaNextStepsText(
       : context.virtualAccount
         ? input.documentKind === 'payment_request'
           ? `Share the transfer details with your payer: ${formatEmailMoney(context.transferAmount, input.currency)} to the account above — the order is confirmed automatically once payment is received.`
-          : `Complete your bank transfer of ${formatEmailMoney(context.transferAmount, input.currency)} using the payment details above — your order is confirmed automatically once payment is received.`
+          : input.documentKind === 'confirmation'
+            ? `Complete your bank transfer of ${formatEmailMoney(context.transferAmount, input.currency)} using the payment details above — the outstanding balance settles automatically once payment is received.`
+            : `Complete your bank transfer of ${formatEmailMoney(context.transferAmount, input.currency)} using the payment details above — your order is confirmed automatically once payment is received.`
         : `No payment account was assigned to this ${documentNoun} yet — please contact ${input.merchantName} for payment details.`,
     input.paymentLink ? `Track its status here:\n${input.paymentLink}` : null,
   ]

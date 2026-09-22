@@ -1,11 +1,14 @@
 import { escapeHtmlAttribute, escapeHtmlText } from '@/lib/sanitize';
 import { sanitizeUrl } from '@/lib/sanitize-core';
 import {
+  buildConfirmationBalanceIntroHtml,
+  buildConfirmationBalanceTextIntro,
   buildProformaIntroHtml,
   buildProformaNextStepsText,
   buildProformaPaymentHtml,
   buildProformaPaymentText,
   buildProformaTextIntro,
+  isBalanceDueConfirmation,
   resolveOrderCtaHref,
   resolveProformaContext,
 } from './order-confirmation-proforma';
@@ -68,6 +71,13 @@ interface OrderConfirmationData extends MerchantRegistrationInfo {
    * callers without partial coverage.
    */
   amountDue?: number;
+  /**
+   * Renders residual-balance transfer instructions on a commercial
+   * confirmation (credited-but-unpaid invoice): same mechanics as the
+   * proforma block, confirmation copy everywhere else. See
+   * ProformaEmailInput for the scoping contract.
+   */
+  balanceDueInstructions?: boolean;
 }
 
 /**
@@ -86,7 +96,13 @@ export function generateOrderConfirmationEmail(
   const ctaHref = resolveOrderCtaHref(data);
   const proforma = resolveProformaContext(data);
   const proformaPaymentHtml = buildProformaPaymentHtml(data, proforma);
-  const proformaIntroHtml = buildProformaIntroHtml(data, proforma);
+  // A credited-but-unpaid invoice stays a commercial confirmation, but
+  // the recipient still needs the outstanding-balance instructions the
+  // confirmation path otherwise omits.
+  const hasBalanceDue = isBalanceDueConfirmation(data, proforma);
+  const proformaIntroHtml = hasBalanceDue
+    ? buildConfirmationBalanceIntroHtml(data, proforma)
+    : buildProformaIntroHtml(data, proforma);
   const itemsHtml = buildOrderItemsHtml(data.items, data.currency);
 
   return `
@@ -129,7 +145,7 @@ export function generateOrderConfirmationEmail(
                 <tr>
                   <td colspan="2" style="padding-top: 30px;">
                     <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; line-height: 1.2;">${isProforma ? `Proforma Invoice #${escapeHtmlText(data.orderNumber)}` : isPaymentRequest ? `Payment Request #${escapeHtmlText(data.orderNumber)}` : `Order #${escapeHtmlText(data.orderNumber)} Confirmed`}</h1>
-                    <p style="margin: 10px 0 0 0; color: #cbd5e1; font-size: 16px;">${isProforma ? 'A quotation for your review — no payment taken yet' : isPaymentRequest ? 'Share the transfer details below with your payer — no payment taken yet' : 'Thank you for your purchase'}</p>
+                    <p style="margin: 10px 0 0 0; color: #cbd5e1; font-size: 16px;">${isProforma ? 'A quotation for your review — no payment taken yet' : isPaymentRequest ? 'Share the transfer details below with your payer — no payment taken yet' : hasBalanceDue ? 'Your order is confirmed — an outstanding balance remains' : 'Thank you for your purchase'}</p>
                   </td>
                 </tr>
               </table>
@@ -141,7 +157,7 @@ export function generateOrderConfirmationEmail(
             <td style="padding: 40px 40px 20px 40px;">
               <p style="margin: 0; font-size: 16px; color: #334155; line-height: 1.6;">Hi <strong>${escapeHtmlText(data.customerName)}</strong>,</p>
               <p style="margin: 16px 0 0 0; font-size: 16px; color: #475569; line-height: 1.6;">
-                ${isProforma || isPaymentRequest ? proformaIntroHtml : "We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable)."}
+                ${isProforma || isPaymentRequest || hasBalanceDue ? proformaIntroHtml : "We've received your order and are getting it ready! Your items are currently <strong>on hold</strong> until we receive payment confirmation (if applicable)."}
               </p>
             </td>
           </tr>
@@ -253,6 +269,7 @@ export function generateOrderConfirmationText(
   const itemsText = buildOrderItemsText(data.items, data.currency);
   const proforma = resolveProformaContext(data);
   const payableNextSteps = buildProformaNextStepsText(data, proforma);
+  const textBalanceDue = isBalanceDueConfirmation(data, proforma);
 
   return `
 ${isProforma ? 'Proforma Invoice' : isPaymentRequest ? 'Payment Request' : 'Order Confirmed!'}
@@ -262,7 +279,9 @@ Hi ${data.customerName},
 ${
   isProforma || isPaymentRequest
     ? buildProformaTextIntro(data.documentKind, proforma.hasAmountDue)
-    : 'Your order has been confirmed and will be shipped soon.'
+    : textBalanceDue
+      ? buildConfirmationBalanceTextIntro(data, proforma)
+      : 'Your order has been confirmed and will be shipped soon.'
 }
 
 Order Number: #${data.orderNumber}
@@ -282,7 +301,7 @@ Phone: ${data.shippingAddress.phone}
 
 What's next?
 ${
-  isProforma || isPaymentRequest
+  isProforma || isPaymentRequest || textBalanceDue
     ? payableNextSteps
     : "You'll receive a shipping confirmation email with tracking information once your order is on its way."
 }

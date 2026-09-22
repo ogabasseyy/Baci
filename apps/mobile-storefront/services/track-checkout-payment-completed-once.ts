@@ -42,7 +42,10 @@ type CheckoutPaymentCompletionInput = CheckoutCompletionAttribution & {
   value?: number;
 };
 
-const PAYMENT_COMPLETED_CLAIM_EVENT = 'payment_completed';
+// Shared with the REDVAULT completion path, which emits the funnel event
+// directly (the once-helper would re-emit the ad purchase the REDVAULT
+// branch already owns): both lanes must claim the same key.
+export const PAYMENT_COMPLETED_CLAIM_EVENT = 'payment_completed';
 
 // Outcome of a completion attempt. Settlement polling must distinguish a
 // released claim (the order is still paid but nothing was recorded: keep

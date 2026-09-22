@@ -119,6 +119,68 @@ describe('proforma payment html', () => {
     expect(
       buildProformaPaymentHtml(zeroDue, resolveProformaContext(zeroDue))
     ).toBe('');
+    // Even a flagged confirmation renders nothing without an account or
+    // an outstanding balance.
+    const flaggedNoAccount = inputWith({
+      documentKind: 'confirmation',
+      balanceDueInstructions: true,
+    });
+    expect(
+      buildProformaPaymentHtml(
+        flaggedNoAccount,
+        resolveProformaContext(flaggedNoAccount)
+      )
+    ).toBe('');
+    const flaggedZeroDue = inputWith({
+      documentKind: 'confirmation',
+      balanceDueInstructions: true,
+      amountDue: 0,
+      virtualAccount: account,
+    });
+    expect(
+      buildProformaPaymentHtml(
+        flaggedZeroDue,
+        resolveProformaContext(flaggedZeroDue)
+      )
+    ).toBe('');
+  });
+
+  it('renders the residual-balance block for flagged confirmations', () => {
+    const flagged = inputWith({
+      documentKind: 'confirmation',
+      balanceDueInstructions: true,
+      total: 25000,
+      amountDue: 10000,
+      virtualAccount: account,
+    });
+    const context = resolveProformaContext(flagged);
+    const html = buildProformaPaymentHtml(flagged, context);
+
+    expect(html).toContain('Complete Your Bank Transfer');
+    expect(html).toContain('0123456789');
+    const text = buildProformaPaymentText(flagged, context);
+    expect(text).toContain('Payment Details');
+    expect(text).toContain('0123456789');
+    expect(text).toContain('Test Bank');
+  });
+
+  it('keeps confirmation copy commercial on the balance intros', () => {
+    const flagged = inputWith({
+      documentKind: 'confirmation',
+      balanceDueInstructions: true,
+      total: 25000,
+      amountDue: 10000,
+      virtualAccount: account,
+    });
+    const context = resolveProformaContext(flagged);
+
+    expect(buildProformaIntroHtml(flagged, context)).toContain(
+      'outstanding balance'
+    );
+    expect(buildProformaIntroHtml(flagged, context)).not.toContain('quotation');
+    const steps = buildProformaNextStepsText(flagged, context);
+    expect(steps).toContain('outstanding balance');
+    expect(steps).not.toContain('this quote');
   });
 });
 

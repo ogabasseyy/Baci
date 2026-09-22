@@ -4013,17 +4013,30 @@ export async function POST(request: NextRequest) {
                   bankName: invoiceVirtualAccount.bank_name,
                 }
               : undefined;
+            // A credited-but-unpaid invoice stays a commercial
+            // confirmation (never a quotation), yet the recipient still
+            // needs the residual-balance transfer instructions the
+            // confirmation body otherwise omits. Scoped tightly: an
+            // invoice without credit is proforma, and a fully-paid order
+            // needs no instructions.
+            const emailBalanceDueInstructions =
+              effectivePaymentMethod === 'invoice' &&
+              emailDocumentKind === 'confirmation' &&
+              !isPaidForImmediateEmail &&
+              emailAmountDue > 0;
             const htmlContent = generateOrderConfirmationEmail({
               ...emailData,
               documentKind: emailDocumentKind,
               amountDue: emailAmountDue,
               virtualAccount: emailVirtualAccount,
+              balanceDueInstructions: emailBalanceDueInstructions,
             });
             const textContent = generateOrderConfirmationText({
               ...emailData,
               documentKind: emailDocumentKind,
               amountDue: emailAmountDue,
               virtualAccount: emailVirtualAccount,
+              balanceDueInstructions: emailBalanceDueInstructions,
             });
             const emailResult = await sendEmail({
               to: customer_email,

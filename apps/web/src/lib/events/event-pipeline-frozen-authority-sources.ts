@@ -22,7 +22,7 @@ export const eventPipelineFrozenRoutes = {
   // dispatch changed in this feature. Keep its reviewed bytes squash-safe by
   // binding the final source to a content receipt instead of a PR-only commit.
   'apps/web/src/app/api/orders/route.ts':
-    '910d178a9948099cd27ea12bff9c8ebb28aaf92ec817667d2c2168b43abebdae',
+    '05467e96b78b850ed0a3f096d4d3e6b685e00723802f6f513110a0d3574f0a50',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

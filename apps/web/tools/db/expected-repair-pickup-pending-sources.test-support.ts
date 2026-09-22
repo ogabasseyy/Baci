@@ -189,4 +189,14 @@ export const EXPECTED_REPAIR_PICKUP_PENDING_SOURCES = [
       'supabase/migrations/20260908010000_lease_mobile_repair_pickup_claims.sql',
     sha256: 'eda54c4669ad9e645e73e6264ae61690afd1a0cfad8fe0ab5a3c1454c39da959',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260921100000_harden_repair_booking_rate_limit.sql',
+    sha256: '376775c5c684f7bf4d94f8e2534d541a8d72046014f8b2d0c13bd1e25687bbbd',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260921100100_add_repair_booking_rate_limit_index.sql',
+    sha256: 'd0cadea6856e12a16f88d39d6291d9d0eff314e72d1f5703a966bb4c6b336a6f',
+  },
 ];

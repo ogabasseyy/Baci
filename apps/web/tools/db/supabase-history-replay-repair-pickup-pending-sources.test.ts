@@ -51,6 +51,8 @@ describe('repair pickup pending replay sources', () => {
       '93b58684a23f79656f82654cd0b325469375ebfcb0ab57833213e3ec91153fa9 20260905140300_gigl_monitor_fast_path_merchant_identity.sql',
       '14b6dadfeb4ccbb0b15e1278b5d9a565a707b9af385eff108cc35e9f2e2189b0 20260907201000_mobile_repair_pickup_payment_receipts.sql',
       'eda54c4669ad9e645e73e6264ae61690afd1a0cfad8fe0ab5a3c1454c39da959 20260908010000_lease_mobile_repair_pickup_claims.sql',
+      '376775c5c684f7bf4d94f8e2534d541a8d72046014f8b2d0c13bd1e25687bbbd 20260921100000_harden_repair_booking_rate_limit.sql',
+      'd0cadea6856e12a16f88d39d6291d9d0eff314e72d1f5703a966bb4c6b336a6f 20260921100100_add_repair_booking_rate_limit_index.sql',
     ]);
   });
 });

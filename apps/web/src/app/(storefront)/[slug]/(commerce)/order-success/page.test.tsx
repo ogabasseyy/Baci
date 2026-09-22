@@ -529,6 +529,54 @@ describe('storefront order success page', () => {
     ).toBeNull();
   });
 
+  it('suppresses the payer handoff when shipping is cancelled but payment is unpaid', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'payforme',
+        payerName: 'Alice',
+        trackingToken: 'track-token-123',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        currency: 'NGN',
+        payment_status: 'unpaid',
+        shipping_status: 'cancelled',
+        items: [],
+        subtotal: 3500,
+        shipping_cost: 0,
+        total: 3500,
+        amount_paid: 0,
+        virtual_account: {
+          account_name: 'Baci Checkout ORD-123',
+          account_number: '9876543210',
+          bank_name: 'Baci Bank',
+        },
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    // A shipping cancellation retires the order even while the payment
+    // row stays unpaid: funding it cannot lead to fulfillment.
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: /share the payment details/i })
+      ).toBeNull()
+    );
+    expect(screen.queryByText(/payment details for alice/i)).toBeNull();
+    expect(screen.queryByText('9876543210')).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /copy payment details/i })
+    ).toBeNull();
+  });
+
   it('shows guests the emailed invoice action instead of the archive link', async () => {
     mockSearchParams.mockReturnValue(
       new URLSearchParams({

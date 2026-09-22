@@ -88,6 +88,12 @@ export default function OrderSuccessScreen() {
   // active paid order exists.
   const wasPaidOrder =
     receiptRefundedOrder || guestInvoice.status === 'refunded';
+  // Partially paid accepted money without settling: commercial
+  // presentation, but the order stays active — never the reconciliation
+  // state above.
+  const isPartiallyPaidOrder =
+    receiptPaymentStatus === 'partially_paid' ||
+    guestInvoice.status === 'partially_paid';
   // Purchase-success side effects (notification, interstitial, permission
   // soft-ask) wait until the deferred-order status is authoritative: both
   // lookups begin unresolved, and a slow refunded lookup must not lose a
@@ -131,7 +137,10 @@ export default function OrderSuccessScreen() {
   // the web success page (unpaid invoice orders only — paid orders keep the
   // commercial receipt even if this screen was reached via invoice).
   const isProformaDocument =
-    paymentMethod === 'invoice' && !isPaidOrder && !wasPaidOrder;
+    paymentMethod === 'invoice' &&
+    !isPaidOrder &&
+    !wasPaidOrder &&
+    !isPartiallyPaidOrder;
   const receiptPreview = useReceiptPreview({
     documentKind: isProformaDocument ? 'proforma' : undefined,
   });

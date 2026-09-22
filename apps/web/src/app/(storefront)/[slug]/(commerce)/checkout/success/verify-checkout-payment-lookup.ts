@@ -142,18 +142,31 @@ export async function verifyCheckoutPaymentByLookup(
     }`;
     const response = await fetch(url, { signal });
     const data = response.ok ? await response.json() : null;
+    // The guest tracking RPC projects payment_status but never
+    // payment_method, so a real tracking response carries no method.
+    // Fall back to the proof-bound REDVAULT context (the session
+    // snapshot keyed on this order + uba_redvault selection) so the
+    // REDVAULT branches below stay reachable; an explicit RPC value
+    // always wins over the snapshot.
+    const lookupPaymentMethod =
+      typeof data?.payment_method === 'string' && data.payment_method
+        ? data.payment_method
+        : pendingRedvaultOrder
+          ? 'uba_redvault'
+          : undefined;
     // Terminal states first: a fully refunded REDVAULT order keeps a
     // non-paid payment status, and a cancelled one can stay unpaid
     // with a cancelled shipping status. Neither is still processing.
     const redvaultTerminalCancelled =
-      data?.payment_method === 'uba_redvault' &&
-      data.payment_status !== 'paid' &&
-      data.shipping_status === 'cancelled';
+      lookupPaymentMethod === 'uba_redvault' &&
+      data?.payment_status !== 'paid' &&
+      data?.shipping_status === 'cancelled';
     const redvaultTerminalRefunded =
-      data?.payment_method === 'uba_redvault' &&
-      data.payment_status === 'refunded';
+      lookupPaymentMethod === 'uba_redvault' &&
+      data?.payment_status === 'refunded';
     if (
-      data?.payment_method === 'uba_redvault' &&
+      data &&
+      lookupPaymentMethod === 'uba_redvault' &&
       data.payment_status !== 'paid' &&
       data.payment_status !== 'refunded' &&
       !redvaultTerminalCancelled
@@ -239,7 +252,17 @@ export async function verifyCheckoutPaymentByLookup(
   } catch (error) {
     // An aborted bound releases the lane for a retry; anything else
     // falls back to the derived order number.
-    if (!isAbortError(error)) {
+    if (isAbortError(error)) {
+      // The lookup bound fired: the order state is unknown, so stay
+      // pending (the polling hook retries) instead of confirming an
+      // unverified order and clearing the cart.
+      if (pendingRedvaultOrder) {
+        setPaymentMethod('uba_redvault');
+      }
+      setStatus('pending');
+      setOrderNumber(orderId.slice(0, 8).toUpperCase());
+      return true;
+    } else {
       console.error('Failed to fetch order details on success page:', error);
     }
     if (pendingRedvaultOrder) {

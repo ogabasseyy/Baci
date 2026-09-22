@@ -101,7 +101,11 @@ export function useJuicywayPayment({
           // payment ID fallback the attempt key uses).
           reference: payment.reference || payment.paymentId,
           source: 'web_checkout',
-          total: pendingCryptoOrder?.amount,
+          // Revenue is the canonical order total, not the residual the
+          // provider charges after wallet/savings credit — matching the
+          // completion and failure paths below. Older pending orders
+          // without a total keep the charged amount.
+          total: pendingCryptoOrder?.total ?? pendingCryptoOrder?.amount,
         })
       );
     },
@@ -136,6 +140,11 @@ export function useJuicywayPayment({
     if (!cryptoPaymentData) {
       return;
     }
+    // An empty top-level reference with a provider payment ID still
+    // identifies the attempt: fall back so the conversion and handoff
+    // reconcile to the same provider attempt the start event recorded.
+    const providerReference =
+      cryptoPaymentData.reference || cryptoPaymentData.paymentId;
     captureCheckoutFunnelEventOnce(
       CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
       cryptoPaymentData.orderId,
@@ -146,7 +155,7 @@ export function useJuicywayPayment({
         paymentIntent: getCheckoutPaymentIntent('juicyway'),
         paymentMethod: 'juicyway',
         paymentStatus: 'paid',
-        reference: cryptoPaymentData.reference,
+        reference: providerReference,
         source: 'web_checkout',
         total: pendingCryptoOrder?.total ?? pendingCryptoOrder?.amount,
       })
@@ -157,7 +166,7 @@ export function useJuicywayPayment({
     const successQuery = new URLSearchParams({
       type: 'crypto',
       orderId: cryptoPaymentData.orderId,
-      reference: cryptoPaymentData.reference,
+      reference: providerReference,
     });
     if (cryptoPaymentData.trackingToken) {
       successQuery.set('trackingToken', cryptoPaymentData.trackingToken);
@@ -184,6 +193,11 @@ export function useJuicywayPayment({
         currency: selectedCryptoCurrency,
       });
     }
+    // Same provider-attempt fallback as completion: the failure is
+    // reference-stamped, so an empty reference must resolve to the
+    // payment ID the attempt key already uses.
+    const providerReference =
+      cryptoPaymentData.reference || cryptoPaymentData.paymentId;
     captureCheckoutFunnelEventOnce(
       CHECKOUT_FUNNEL_EVENTS.paymentFailed,
       juicywayAttemptKey(
@@ -198,7 +212,7 @@ export function useJuicywayPayment({
         paymentIntent: getCheckoutPaymentIntent('juicyway'),
         paymentMethod: 'juicyway',
         reason,
-        reference: cryptoPaymentData.reference,
+        reference: providerReference,
         source: 'web_checkout',
         total: pendingCryptoOrder?.total ?? pendingCryptoOrder?.amount,
       })

@@ -16,18 +16,29 @@
  * `partially_paid` status): relabeling it proforma (325) would suppress
  * its Peppol artifact, so partial-payment evidence counts as previously
  * paid via `paymentStatus`.
+ *
+ * Wallet/savings credit applied at creation is persisted onto the row
+ * (`recordPreGatewayRedemption` writes `amount_paid` while deliberately
+ * leaving the status `unpaid`/`pending`): a positive credited balance is
+ * the same accepted-value evidence, so `amountPaid` also counts as
+ * previously paid.
  */
 export function resolveInvoiceTypeCode(input: {
   paymentMethod?: string | null;
   isPaid: boolean;
   wasPaid?: boolean;
   paymentStatus?: string | null;
+  amountPaid?: number | null;
   storedTypeCode?: string | null;
 }): string {
   const method = input.paymentMethod?.trim().toLowerCase();
   const stored = input.storedTypeCode?.trim();
   const status = input.paymentStatus?.trim().toLowerCase();
-  const previouslyPaid = input.wasPaid || status === 'partially_paid';
+  const creditedAmount = Number(input.amountPaid ?? 0);
+  const previouslyPaid =
+    input.wasPaid ||
+    status === 'partially_paid' ||
+    (Number.isFinite(creditedAmount) && creditedAmount > 0);
   if (method === 'invoice' && !input.isPaid && !previouslyPaid) {
     return stored && stored !== '380' ? stored : '325';
   }

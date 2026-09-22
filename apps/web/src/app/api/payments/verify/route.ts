@@ -1,76 +1,21 @@
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { verifyPayment as verifyKorapayPayment } from '@/lib/korapay';
 import { logger } from '@/lib/logger';
 import { ensurePaidOrderInventoryConfirmed } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import type { GatewayVerificationResult } from '@/lib/payments/types';
-import { verifyTransaction as verifyPaystackPayment } from '@/lib/paystack';
-import { createAnonClient } from '@/lib/supabase/anon';
 import { createServiceClient } from '@/lib/supabase/service';
 import { referenceSchema, verifyPaymentBodySchema } from '@/schemas/payments';
-
-function getVerifiedAmount(
-  gateway: string,
-  gatewayResponse: Record<string, unknown>
-): { amount: number; currency?: string } | null {
-  const rawAmount = gatewayResponse.amount;
-  if (
-    typeof rawAmount !== 'number' ||
-    !Number.isFinite(rawAmount) ||
-    rawAmount <= 0
-  ) {
-    return null;
-  }
-
-  const currency =
-    typeof gatewayResponse.currency === 'string'
-      ? gatewayResponse.currency
-      : undefined;
-  // Paystack returns amounts in kobo (smallest unit), divide by 100
-  const amount = gateway === 'paystack' ? rawAmount / 100 : rawAmount;
-
-  return { amount, currency };
-}
-
-async function verifyGatewayPayment(
-  gateway: string,
-  reference: string
-): Promise<GatewayVerificationResult> {
-  if (gateway === 'paystack') {
-    const result = await verifyPaystackPayment(reference);
-    if (!result.success) {
-      return result;
-    }
-
-    return {
-      success: true,
-      status: result.data.status,
-      gatewayResponse: result.data as unknown as Record<string, unknown>,
-    };
-  }
-
-  if (gateway === 'korapay') {
-    const result = await verifyKorapayPayment(reference);
-    if (!result.success) {
-      return result;
-    }
-
-    return {
-      success: true,
-      status: result.data.status,
-      gatewayResponse: result.data as unknown as Record<string, unknown>,
-    };
-  }
-
-  return {
-    success: false,
-    error: `Unsupported gateway: ${gateway}`,
-    code: 'UNSUPPORTED_GATEWAY',
-  };
-}
+import {
+  getVerifiedAmount,
+  verifyGatewayPayment,
+} from './verify-gateway-payment';
+import {
+  getGuestPaymentReferenceSnapshot,
+  verifyGuestPaymentReference,
+} from './verify-guest-payment-reference';
 
 async function verifyPaymentReference(reference: string) {
   const parsedReference = referenceSchema.safeParse(reference);
@@ -454,39 +399,6 @@ export function GET() {
   );
 }
 
-/**
- * Proof-bound guest authorization: the per-order tracking token is a
- * secret known only to the shopper (URL) and the merchant, so a
- * request proving knowledge of it for the reference's own order is as
- * authorized as a CSRF-validated session request. The binding
- * (reference → transaction → order → token) is proven inside the
- * narrow `verify_payment_reference_token` RPC over the anon client —
- * never through a service-role table client in this user-facing route.
- * Fails closed (including on lookup errors) with no existence oracle
- * beyond the uniform 403.
- */
-async function isTrackingTokenAuthorizedForReference(
-  reference: string,
-  trackingToken: string
-): Promise<boolean> {
-  try {
-    const supabase = createAnonClient();
-    const { data, error } = await supabase.rpc(
-      'verify_payment_reference_token',
-      {
-        p_gateway_reference: reference,
-        p_tracking_token: trackingToken,
-      }
-    );
-    if (error) {
-      return false;
-    }
-    return data === true;
-  } catch {
-    return false;
-  }
-}
-
 export async function POST(request: NextRequest) {
   const csrf = await checkCsrfProtection(request);
 
@@ -511,22 +423,31 @@ export async function POST(request: NextRequest) {
   }
 
   if (!csrf.valid) {
-    // Guest native checkouts carry no session: authorize via the
-    // order's tracking token instead of rejecting with 403 (which the
+    // Guest native checkouts carry no session: serve them through the
+    // proof-bound guest path instead of rejecting with 403 (which the
     // client would collapse into transient and confirm unpaid orders).
+    // The per-order tracking token is a secret known only to the shopper
+    // (URL) and the merchant; the snapshot RPC returns a row only for
+    // the reference's own order, and the guest verifier is read-only —
+    // transaction/order reads come from that snapshot and
+    // payment-finalization writes stay on the gateway webhook boundary.
+    // A sessionless request therefore never reaches the generic
+    // service-role client below. Fails closed (including on lookup
+    // errors) with no existence oracle beyond the uniform 403.
     const trackingToken = parsedBody.data.trackingToken;
-    const authorized =
-      typeof trackingToken === 'string' &&
-      (await isTrackingTokenAuthorizedForReference(
+    if (typeof trackingToken === 'string') {
+      const snapshot = await getGuestPaymentReferenceSnapshot(
         parsedBody.data.reference,
         trackingToken
-      ));
-    if (!authorized) {
-      return (
-        csrf.response ??
-        NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 })
       );
+      if (snapshot) {
+        return verifyGuestPaymentReference(snapshot);
+      }
     }
+    return (
+      csrf.response ??
+      NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 })
+    );
   }
 
   return verifyPaymentReference(parsedBody.data.reference);

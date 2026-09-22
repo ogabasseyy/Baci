@@ -125,3 +125,58 @@ describe('useReceiptPreview foreign-currency bank details', () => {
     expect(result.current.html).toContain('0987654321');
   });
 });
+
+describe('useReceiptPreview document kind', () => {
+  it('derives proforma for a never-paid invoice opened without a kind', () => {
+    mockReceiptDetail = unpaidProformaDetail('NGN');
+    const { result } = renderHook(() => useReceiptPreview());
+
+    act(() => {
+      result.current.openPreviewByOrderId('order-1');
+    });
+
+    expect(result.current.isOpen).toBe(true);
+    expect(result.current.html).toContain(
+      '<div class="doc-title">Proforma Invoice</div>'
+    );
+    expect(result.current.html).not.toContain(
+      '<div class="doc-title">Invoice</div>'
+    );
+  });
+
+  it('keeps the commercial title for a partially paid invoice without a kind', () => {
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      payment_status: 'partially_paid',
+    };
+    const { result } = renderHook(() => useReceiptPreview());
+
+    act(() => {
+      result.current.openPreviewByOrderId('order-1');
+    });
+
+    expect(result.current.isOpen).toBe(true);
+    expect(result.current.html).not.toContain('Proforma Invoice');
+  });
+
+  it('prefers an explicit caller kind over the derived one', () => {
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      payment_status: 'paid',
+    };
+    const { result } = renderHook(() =>
+      useReceiptPreview({ documentKind: 'proforma' })
+    );
+
+    act(() => {
+      result.current.openPreviewByOrderId('order-1');
+    });
+
+    // The generator itself resolves a paid order to a receipt even with
+    // a stale explicit kind — the hook must forward, never rewrite.
+    expect(result.current.isOpen).toBe(true);
+    expect(result.current.html).toContain(
+      '<div class="doc-title">Receipt</div>'
+    );
+  });
+});

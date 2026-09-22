@@ -533,6 +533,7 @@ export async function GET(
         isPaid: isPaidOrder,
         wasPaid: order.payment_status?.trim().toLowerCase() === 'refunded',
         paymentStatus: order.payment_status,
+        amountPaid,
         storedTypeCode: order.invoice_type_code,
       }),
       issue_date: order.invoice_issue_date

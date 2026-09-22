@@ -210,6 +210,7 @@ export async function GET(request: NextRequest) {
           isPaid: paymentStatus === 'paid',
           wasPaid: paymentStatus === 'refunded',
           paymentStatus,
+          amountPaid: order.amount_paid,
           storedTypeCode: order.invoice_type_code,
         }),
         receipt_eligible: isReceiptEligible({

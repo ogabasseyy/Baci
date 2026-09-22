@@ -22,7 +22,11 @@ function toTrackedOrder(value: unknown): TrackOrderData['order'] | null {
 // Payment outcome for a guest deferred-settlement order (invoice, Pay for
 // Me): refunded is distinct from unpaid — the order was previously paid,
 // so it must never render proforma/request copy.
-export type GuestInvoicePaymentStatus = 'paid' | 'refunded' | 'unpaid';
+export type GuestInvoicePaymentStatus =
+  | 'paid'
+  | 'refunded'
+  | 'partially_paid'
+  | 'unpaid';
 
 export interface GuestInvoicePaymentState {
   status: GuestInvoicePaymentStatus;
@@ -114,6 +118,10 @@ export function useGuestInvoicePaidState({
               // screen renders reconciliation/commercial state instead of
               // proforma/request copy.
               setStatus('refunded');
+            } else if (order.payment_status === 'partially_paid') {
+              // Accepted money without settling: commercial presentation,
+              // but the order stays active (never reconciliation).
+              setStatus('partially_paid');
             }
           }
           setLookupSettled(true);

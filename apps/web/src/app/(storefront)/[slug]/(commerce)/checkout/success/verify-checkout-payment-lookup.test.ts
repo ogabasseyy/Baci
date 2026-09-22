@@ -264,7 +264,105 @@ describe('verifyCheckoutPaymentByLookup', () => {
     const h = handlers();
     await verifyCheckoutPaymentByLookup(params(), h);
     expect(errorSpy).not.toHaveBeenCalled();
-    // Abort still falls back to derived success for non-REDVAULT orders.
+    // An aborted bound leaves the order unverified: pending (the
+    // polling hook retries) with the cart intact, never success.
+    expect(h.setStatus).toHaveBeenCalledWith('pending');
+    expect(h.setOrderNumber).toHaveBeenCalledWith('ORDER-12');
+    expect(h.clearCart).not.toHaveBeenCalled();
+    expect(h.capturePaymentCompleted).not.toHaveBeenCalled();
+  });
+
+  it('stays pending when an abort hits a REDVAULT-context lookup', async () => {
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockRejectedValueOnce(new DOMException('x', 'AbortError'));
+    const h = handlers();
+
+    await expect(
+      verifyCheckoutPaymentByLookup(params({ pendingRedvaultOrder: true }), h)
+    ).resolves.toBe(true);
+
+    expect(h.setPaymentMethod).toHaveBeenCalledWith('uba_redvault');
+    expect(h.setStatus).toHaveBeenCalledWith('pending');
+    expect(h.clearCart).not.toHaveBeenCalled();
+  });
+
+  it('holds a REDVAULT-context lookup pending when the RPC omits payment_method', async () => {
+    // Actual get_order_tracking shape: payment_status without
+    // payment_method. The proof-bound REDVAULT context must still route
+    // this to pending instead of the generic success branch.
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: 'order-12345678',
+          order_number: 'BAC-6',
+          payment_status: 'pending',
+          shipping_status: 'pending',
+          total: 5750,
+          currency: 'NGN',
+        }),
+    } as Response);
+    const h = handlers();
+
+    await expect(
+      verifyCheckoutPaymentByLookup(params({ pendingRedvaultOrder: true }), h)
+    ).resolves.toBe(true);
+
+    expect(h.setPaymentMethod).toHaveBeenCalledWith('uba_redvault');
+    expect(h.setStatus).toHaveBeenCalledWith('pending');
+    expect(h.clearCart).not.toHaveBeenCalled();
+    expect(h.capturePaymentCompleted).not.toHaveBeenCalled();
+  });
+
+  it('fails a REDVAULT-context lookup when the method-less RPC shows a cancelled order', async () => {
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: 'order-12345678',
+          order_number: 'BAC-7',
+          payment_status: 'unpaid',
+          shipping_status: 'cancelled',
+          total: 5750,
+          currency: 'NGN',
+        }),
+    } as Response);
+    const h = handlers();
+
+    await expect(
+      verifyCheckoutPaymentByLookup(params({ pendingRedvaultOrder: true }), h)
+    ).resolves.toBe(true);
+
+    expect(h.setStatus).toHaveBeenCalledWith('failed');
+    expect(h.scheduleFailedRedirect).toHaveBeenCalledTimes(1);
+    expect(h.clearCart).not.toHaveBeenCalled();
+  });
+
+  it('prefers an explicit RPC payment_method over the REDVAULT context', async () => {
+    // A stale session snapshot must not reclassify an order the RPC
+    // positively identifies as another method.
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          order_number: 'BAC-8',
+          payment_method: 'paystack',
+          payment_status: 'paid',
+          total: 21500,
+          currency: 'ngn',
+        }),
+    } as Response);
+    const h = handlers();
+
+    await expect(
+      verifyCheckoutPaymentByLookup(params({ pendingRedvaultOrder: true }), h)
+    ).resolves.toBe(true);
+
     expect(h.setStatus).toHaveBeenCalledWith('success');
+    expect(h.setPaymentMethod).toHaveBeenCalledWith('paystack');
+    expect(h.clearCart).toHaveBeenCalledTimes(1);
   });
 });

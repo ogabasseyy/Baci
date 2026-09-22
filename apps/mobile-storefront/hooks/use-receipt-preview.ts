@@ -101,8 +101,22 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       pages: merchantInfo.pages,
     };
 
+    // Archive callers open by order id without an explicit kind: derive
+    // it from the loaded order so a never-paid invoice keeps its
+    // proforma labeling instead of falling back to the generic
+    // commercial "Invoice". Matches the success-screen classification:
+    // only unpaid (never paid, refunded, or partially paid) invoices
+    // are proforma.
+    const derivedDocumentKind =
+      options.documentKind ??
+      (receiptDetail.payment_method === 'invoice' &&
+      receiptDetail.payment_status !== 'paid' &&
+      receiptDetail.payment_status !== 'refunded' &&
+      receiptDetail.payment_status !== 'partially_paid'
+        ? 'proforma'
+        : undefined);
     html = generateReceiptHtml(orderData, merchant, {
-      documentKind: options.documentKind,
+      documentKind: derivedDocumentKind,
     });
     isPaid = receiptDetail.payment_status === 'paid';
   }

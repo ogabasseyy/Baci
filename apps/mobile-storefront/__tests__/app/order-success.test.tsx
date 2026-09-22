@@ -272,6 +272,28 @@ describe('OrderSuccessScreen', () => {
     expect(mockOpenPreviewByOrderId).not.toHaveBeenCalled();
   });
 
+  it('renders commercial presentation for a partially paid guest invoice', () => {
+    mockAuthCustomerHolder.current = null;
+    mockSearchParamsHolder.current = {
+      orderId: 'order-9',
+      paymentMethod: 'invoice',
+    };
+    mockGuestInvoiceHolder.current = {
+      status: 'partially_paid',
+      isResolved: true,
+    };
+    render(<OrderSuccessScreen />);
+
+    const latestProps = mockOrderSuccessView.mock.calls.at(-1)?.[0] as
+      | { documentType?: string; isPaid?: boolean }
+      | undefined;
+
+    // Accepted money without settling: never proforma, never
+    // reconciliation — the order stays active.
+    expect(latestProps?.documentType).toBeUndefined();
+    expect(mockOrderReconciliationView).not.toHaveBeenCalled();
+  });
+
   it('reports unpaid for invoice orders without a paid receipt', () => {
     mockSearchParamsHolder.current = {
       orderId: 'order-9',

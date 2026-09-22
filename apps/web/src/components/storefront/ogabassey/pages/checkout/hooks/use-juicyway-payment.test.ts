@@ -630,4 +630,56 @@ describe('useJuicywayPayment', () => {
       vi.useRealTimers();
     }
   });
+
+  it('reports the full order total when credit partially covers a Juicyway order', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(initResponse('ref-1', 'pay-1'));
+    vi.stubGlobal('fetch', fetchMock);
+    const options = createOptions('TRX');
+    const { result } = renderHook(() =>
+      useJuicywayPayment({
+        ...options,
+        // Wallet credit covered all but 750 of the 5750 order: the
+        // provider charges the residual, but revenue is the full total.
+        pendingCryptoOrder: { ...pendingOrder, amount: 750, total: 5750 },
+      })
+    );
+
+    await act(async () => {
+      await result.current.initializeCryptoPayment();
+    });
+
+    const startedTotals = mockCaptureCheckoutFunnelEventOnce.mock.calls
+      .filter(([event]) => event === 'payment_started')
+      .map(([, , properties]) => (properties as { total?: number }).total);
+    expect(startedTotals).toEqual([5750]);
+  });
+
+  it('carries the payment id through completion when the reference is empty', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(initResponse('', 'pay-1'))
+      .mockResolvedValueOnce(Response.json({ is_confirmed: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const options = createOptions('TRX');
+    const { result } = renderHook(() => useJuicywayPayment(options));
+
+    await act(async () => {
+      await result.current.initializeCryptoPayment();
+    });
+    // The initialization mapper preserves the empty reference: the
+    // attempt still opens under the payment id.
+    expect(result.current.cryptoPaymentData?.reference).toBe('');
+    await act(async () => {
+      await result.current.verifyCryptoPayment();
+    });
+
+    expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+      'payment_completed',
+      'order-1',
+      expect.objectContaining({ reference: 'pay-1' })
+    );
+    expect(options.routerPush).toHaveBeenCalledWith(
+      expect.stringContaining('reference=pay-1')
+    );
+  });
 });

@@ -122,6 +122,12 @@ export function createBNPLNavigationHandlers({
         }
       }
       await clearCart();
+      // clearCart persists the emptied cart through its own fallible
+      // await: recheck before routing so a screen that unmounted during
+      // the write never navigates afterward.
+      if (!isMountedRef.current) {
+        return;
+      }
       scheduleOrderSuccess({
         gateway,
         orderId,

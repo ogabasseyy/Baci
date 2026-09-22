@@ -188,6 +188,7 @@ export function useBNPLCheckoutController({
       clearPendingLoadTimeout,
       gateway,
       orderId,
+      orderTotal,
       paymentStartRecordedRef,
       recordCheckoutFailure,
       setCheckoutStatus,

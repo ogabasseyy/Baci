@@ -101,6 +101,7 @@ export function getCheckoutPaymentIntent(
     case 'paystack':
     case 'korapay':
     case 'juicyway':
+    case 'uba_redvault':
     case 'bank_transfer':
     case 'paypal':
     case 'wallet':

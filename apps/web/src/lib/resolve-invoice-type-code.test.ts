@@ -93,6 +93,31 @@ describe('resolveInvoiceTypeCode', () => {
     ).toBe('325');
   });
 
+  it('preserves the commercial code for a partially credited invoice order', () => {
+    // recordPreGatewayRedemption persists wallet/savings credit onto
+    // amount_paid while leaving the status unpaid: value was accepted,
+    // so the stored 380 survives and the Peppol artifact is kept.
+    expect(
+      resolveInvoiceTypeCode({
+        paymentMethod: 'invoice',
+        isPaid: false,
+        wasPaid: false,
+        paymentStatus: 'unpaid',
+        amountPaid: 22000,
+        storedTypeCode: '380',
+      })
+    ).toBe('380');
+    expect(
+      resolveInvoiceTypeCode({
+        paymentMethod: 'invoice',
+        isPaid: false,
+        paymentStatus: 'pending',
+        amountPaid: 22000,
+        storedTypeCode: null,
+      })
+    ).toBe('380');
+  });
+
   it('preserves the commercial code for a partially paid invoice order', () => {
     // complete_merchant_invoice_partial_payment_v1 leaves the durable
     // partially_paid status: money was accepted, so the stored 380 is a

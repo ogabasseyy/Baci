@@ -9,6 +9,7 @@ describe('checkout funnel analytics contract', () => {
   it('maps the invoice choice to the proforma-invoice intent', () => {
     expect(getCheckoutPaymentIntent('invoice')).toBe('proforma_invoice');
     expect(getCheckoutPaymentIntent('paystack')).toBe('pay_now');
+    expect(getCheckoutPaymentIntent('uba_redvault')).toBe('pay_now');
     expect(getCheckoutPaymentIntent('credpal')).toBe('installments');
     expect(getCheckoutPaymentIntent('unknown_method')).toBeUndefined();
   });

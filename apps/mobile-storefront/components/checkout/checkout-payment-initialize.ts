@@ -145,7 +145,11 @@ export async function initializeGatewayAndRoute({
     orderNumber,
     paymentMethod: selectedPayment,
     reference,
-    value: orderResponse.amountDueToGateway,
+    // Revenue is the canonical order total, not the residual due at the
+    // gateway after wallet/savings credit — matching order_created and
+    // the eventual completion. amountDueToGateway stays on the route
+    // params above, which is what the provider actually charges.
+    value: orderResponse.order.total,
   });
   setIsProcessing(false);
   if (isBankTransfer) {

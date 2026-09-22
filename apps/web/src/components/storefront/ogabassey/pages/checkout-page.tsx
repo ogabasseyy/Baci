@@ -765,6 +765,15 @@ export const CheckoutPage: React.FC = () => {
   const [isVerifyingDva, setIsVerifyingDva] = useState(false);
   const [isInitializingDva, setIsInitializingDva] = useState(false);
   const [dvaCountdown, setDvaCountdown] = useState(3600); // 1 hour in seconds
+  // Retires "Confirm Transfer Sent" attempts: closing the DVA modal bumps
+  // this synchronously (a ref, so the pending verification sees it even
+  // before React re-renders), and the confirmation continuation returns
+  // early for any attempt that is no longer current.
+  const dvaConfirmAttemptRef = useRef(0);
+  const closeDvaModal = () => {
+    dvaConfirmAttemptRef.current += 1;
+    setDvaData(null);
+  };
 
   // Crypto selection state (before payment is initialized)
   const [showCryptoSelector, setShowCryptoSelector] = useState(false);
@@ -2973,6 +2982,7 @@ export const CheckoutPage: React.FC = () => {
       checkoutFingerprint: dvaCheckoutFingerprint,
       orderCurrency: dvaOrderCurrency,
     } = dvaData;
+    const confirmAttempt = dvaConfirmAttemptRef.current;
     setIsVerifyingDva(true);
     verifyDvaTransferStatus({
       merchantSlug: merchant?.slug ?? undefined,
@@ -2986,6 +2996,13 @@ export const CheckoutPage: React.FC = () => {
             description:
               'We could not find your transfer. If you already sent it, wait a moment and confirm again.',
           });
+          return;
+        }
+        // The modal closed while the status request was pending (either
+        // close action retires the attempt): the shopper chose "close and
+        // check later", so never clear state, route, or clear the cart —
+        // the delayed cart clear could otherwise erase a newer cart.
+        if (confirmAttempt !== dvaConfirmAttemptRef.current) {
           return;
         }
         const confirmedItems = buildCheckoutOrderItems(checkoutCart);
@@ -3422,7 +3439,7 @@ export const CheckoutPage: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setDvaData(null)}
+                onClick={closeDvaModal}
                 className="size-8 rounded-lg bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
               >
                 <X size={16} />
@@ -3514,7 +3531,7 @@ export const CheckoutPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDvaData(null)}
+                  onClick={closeDvaModal}
                   className="w-full py-2.5 text-gray-500 text-sm font-medium hover:text-gray-700 transition-colors"
                 >
                   Close and check later

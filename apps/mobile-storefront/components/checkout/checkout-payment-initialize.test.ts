@@ -104,6 +104,34 @@ describe('initializeGatewayAndRoute', () => {
     });
   });
 
+  it('records the full order total when credit partially covers the order', async () => {
+    mockInitResponse({
+      success: true,
+      reference: 'ref-1',
+      authorization_url: 'https://pay.example/authorize',
+    });
+    // Wallet credit covered all but 750 of the 5750 order: the provider
+    // charges the residual, but started revenue is the full total.
+    const partialCreditResponse: OrderResponse = {
+      ...orderResponse,
+      amountDueToGateway: 750,
+      order: { ...orderResponse.order, total: 5750 },
+    };
+
+    await initializeGatewayAndRoute(
+      createParams({ orderResponse: partialCreditResponse })
+    );
+
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledWith(
+      expect.objectContaining({ value: 5750 })
+    );
+    // The route still carries what the gateway charges.
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/payment-gateway',
+      params: expect.objectContaining({ amount: '750' }),
+    });
+  });
+
   it('stamps each retried start with its issued reference', async () => {
     // A pending order retried: initialize issues a fresh reference per
     // attempt, and each start must carry its own for reconciliation.

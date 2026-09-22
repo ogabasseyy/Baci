@@ -121,6 +121,39 @@ describe('useBNPLCheckoutController', () => {
     });
   });
 
+  it('records the full order total when credit partially covers a BNPL start', async () => {
+    mockRouteParams = {
+      gateway: 'credpal',
+      orderId: 'order-123',
+      // Wallet credit covered all but 750 of the 5750 order: the
+      // provider charges the residual, but started revenue is the total.
+      amount: '750',
+      orderTotal: '5750',
+      trackingToken: 'track-token-123',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'bnpl_provider_opened',
+            gateway: 'credpal',
+            orderId: 'order-123',
+          }),
+        },
+      });
+    });
+
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledWith({
+      orderId: 'order-123',
+      paymentMethod: 'credpal',
+      reference: undefined,
+      value: 5750,
+    });
+  });
+
   it('records a single start for duplicate provider-opened signals', async () => {
     mockRouteParams = {
       gateway: 'credpal',
@@ -349,6 +382,47 @@ describe('useBNPLCheckoutController', () => {
 
     expect(trackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(1);
     expect(mockClearCart).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('does not route when unmounted during the cart clear', async () => {
+    mockRouteParams = {
+      gateway: 'credpal',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+      trackingToken: 'track-token-123',
+    };
+    let resolveClearCart: () => void = () => {};
+    (mockClearCart as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveClearCart = resolve;
+        })
+    );
+    const { result, unmount } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'navigation',
+            url: 'https://usebaci.com/ogabassey/order-success?reference=CP-1&credpalStatus=success',
+          }),
+        },
+      });
+    });
+
+    act(() => {
+      unmount();
+    });
+
+    await act(async () => {
+      resolveClearCart();
+    });
+
+    // The persisted cart write already landed, but the late resolution
+    // must not route after unmount.
+    expect(mockClearCart).toHaveBeenCalledTimes(1);
     expect(router.replace).not.toHaveBeenCalled();
   });
 

@@ -10,6 +10,10 @@ export interface BNPLProviderBridgeDeps {
   gateway?: string;
   orderId?: string;
   amount?: string;
+  /** Canonical order total: `amount` is only the residual provider
+   * charge after wallet/savings credit, but started revenue is the
+   * whole order — matching the completion path. */
+  orderTotal?: string;
   statusRef: MutableRefObject<BNPLCheckoutStatus>;
   paymentStartRecordedRef: MutableRefObject<boolean>;
   setCheckoutStatus: BNPLSetCheckoutStatus;
@@ -28,6 +32,7 @@ export function createBNPLProviderBridgeHandlers({
   gateway,
   orderId,
   amount,
+  orderTotal,
   statusRef,
   paymentStartRecordedRef,
   setCheckoutStatus,
@@ -62,7 +67,11 @@ export function createBNPLProviderBridgeHandlers({
       orderId,
       paymentMethod: gateway || 'bnpl',
       reference: openedReference,
-      value: amount ? Number(amount) : undefined,
+      value: orderTotal
+        ? Number(orderTotal)
+        : amount
+          ? Number(amount)
+          : undefined,
     });
   };
 

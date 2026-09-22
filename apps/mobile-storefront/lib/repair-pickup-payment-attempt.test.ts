@@ -28,6 +28,7 @@ describe('durable pickup attempt', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(SecureStore.setItemAsync).mockResolvedValue(undefined);
+    jest.mocked(SecureStore.deleteItemAsync).mockResolvedValue(undefined);
   });
   it('restores exactly the identity saved before the first request', async () => {
     jest.mocked(SecureStore.getItemAsync).mockResolvedValueOnce(null);
@@ -57,6 +58,44 @@ describe('durable pickup attempt', () => {
       requestId: '14bf2192-16de-442b-bf75-700f4ff2aaca',
       expectedPickupFee: 3000,
     });
+  });
+  it('quarantines truncated persisted JSON and persists a replacement attempt', async () => {
+    jest
+      .mocked(SecureStore.getItemAsync)
+      .mockResolvedValue('{"requestId": "14bf2192');
+    const next = await repairPickupPaymentAttempt.get(data, 4000);
+    expect(next).toEqual({
+      requestId: '14bf2192-16de-442b-bf75-700f4ff2aaca',
+      expectedPickupFee: 4000,
+      resumeToken: undefined,
+    });
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(SecureStore.setItemAsync).mock.calls[0][1]).toBe(
+      JSON.stringify({
+        requestId: '14bf2192-16de-442b-bf75-700f4ff2aaca',
+        expectedPickupFee: 4000,
+      })
+    );
+  });
+  it('quarantines schema-incompatible persisted values and persists a replacement attempt', async () => {
+    jest
+      .mocked(SecureStore.getItemAsync)
+      .mockResolvedValue(
+        JSON.stringify({ requestId: 'not-a-uuid', expectedPickupFee: -5 })
+      );
+    const next = await repairPickupPaymentAttempt.get(data, 4000);
+    expect(next).toEqual({
+      requestId: '14bf2192-16de-442b-bf75-700f4ff2aaca',
+      expectedPickupFee: 4000,
+      resumeToken: undefined,
+    });
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(SecureStore.setItemAsync).mock.calls[0][1]).toBe(
+      JSON.stringify({
+        requestId: '14bf2192-16de-442b-bf75-700f4ff2aaca',
+        expectedPickupFee: 4000,
+      })
+    );
   });
   it('replaces a definitively failed attempt before retrying even if deletion failed', async () => {
     jest.mocked(SecureStore.getItemAsync).mockResolvedValue(

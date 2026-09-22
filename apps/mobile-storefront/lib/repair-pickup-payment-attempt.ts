@@ -37,7 +37,14 @@ export const repairPickupPaymentAttempt = {
         ? null
         : await SecureStore.getItemAsync(storageKey);
       if (raw && !isRetiredTombstone(raw)) {
-        return repairPickupAttemptSchema.parse(JSON.parse(raw));
+        try {
+          return repairPickupAttemptSchema.parse(JSON.parse(raw));
+        } catch {
+          // Truncated JSON or a schema-incompatible record must not wedge
+          // retries: drop it (best effort) and fall through to a fresh
+          // durable attempt, whose write overwrites the invalid value.
+          await SecureStore.deleteItemAsync(storageKey).catch(() => undefined);
+        }
       }
       const requestId = Crypto.randomUUID();
       // Fail before sending if retry identity cannot be durably saved.

@@ -30,6 +30,19 @@ export async function initializeRepairPickupPayment(
   let payment: Awaited<ReturnType<typeof initializeTransaction>>;
   try {
     payment = await initializeTransaction(payload);
+    if (
+      !payment?.authorization_url ||
+      (payload.reference != null && payment.reference !== payload.reference)
+    ) {
+      // A 200 with a missing checkout URL or an echoed reference that does
+      // not match the bound request proves nothing about the provider state:
+      // stay on the unknown path so reconciliation replays the receipt
+      // instead of checkpointing a malformed success the receipt schema can
+      // never replay.
+      throw new Error(
+        'Paystack returned an invalid payment initialization response.'
+      );
+    }
   } catch (error) {
     console.error('Repair pickup payment initialization failed:', error);
     if (!checkpoint) {

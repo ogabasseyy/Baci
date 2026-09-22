@@ -141,6 +141,56 @@ it('still returns the in-memory success when the success checkpoint write fails'
     payment: { authorizationUrl: 'https://checkout.paystack.com/test' },
   });
 });
+it('returns unknown when Paystack omits the checkout URL so reconciliation replays the receipt', async () => {
+  const checkpoint = vi.fn().mockResolvedValue(undefined);
+  initialize.mockResolvedValue({ reference: 'RPU-123' });
+  const result = await initializeRepairPickupPayment(
+    payload,
+    repair,
+    checkpoint
+  );
+  expect(result).toMatchObject({
+    success: false,
+    code: 'payment_initialization_unknown',
+    reference: 'RPU-123',
+  });
+  expect(checkpoint).not.toHaveBeenCalledWith(
+    expect.objectContaining({ success: true })
+  );
+});
+it('returns unknown when Paystack echoes a different reference', async () => {
+  const checkpoint = vi.fn().mockResolvedValue(undefined);
+  initialize.mockResolvedValue({
+    authorization_url: 'https://checkout.paystack.com/test',
+    reference: 'RPU-OTHER',
+  });
+  const result = await initializeRepairPickupPayment(
+    payload,
+    repair,
+    checkpoint
+  );
+  expect(result).toMatchObject({
+    success: false,
+    code: 'payment_initialization_unknown',
+  });
+  expect(checkpoint).not.toHaveBeenCalledWith(
+    expect.objectContaining({ success: true })
+  );
+});
+it('keeps the web failure contract for malformed provider responses without a checkpoint', async () => {
+  initialize.mockResolvedValue({
+    authorization_url: 'https://checkout.paystack.com/test',
+    reference: 'RPU-OTHER',
+  });
+  const result = await initializeRepairPickupPayment(payload, repair);
+  expect(result).toEqual({
+    success: false,
+    code: 'payment_initialization_failed',
+    error:
+      'Your repair request was saved, but payment could not start. Use your ticket to retry shortly.',
+    ...repair,
+  });
+});
 it('keeps the web failure contract for callers without a checkpoint', async () => {
   initialize.mockRejectedValue(new Error('provider down'));
   const result = await initializeRepairPickupPayment(payload, repair);

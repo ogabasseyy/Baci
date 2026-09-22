@@ -399,4 +399,64 @@ BEGIN
   END LOOP;
 END $$;
 
+-- Merchants on the legacy ogabassey template keep the free-form booking path
+-- even without catalogue eligibility: the storefront serves them the /repair
+-- wizard under that same condition (see canUseRepairBooking).
+INSERT INTO public.merchants (
+  id, email, business_name, slug, business_type, is_published, template_id
+)
+VALUES (
+  '00000000-0000-0000-0000-000000003015',
+  'repair-rpc-template@example.com',
+  'Repair RPC Template',
+  'repair-rpc-template',
+  'fashion',
+  true,
+  'ogabassey'
+)
+ON CONFLICT (id) DO UPDATE
+SET business_type = EXCLUDED.business_type,
+    is_published = EXCLUDED.is_published,
+    template_id = EXCLUDED.template_id;
+
+UPDATE public.merchant_feature_settings
+SET repairs_catalog_enabled = false
+WHERE merchant_id = '00000000-0000-0000-0000-000000003015';
+
+INSERT INTO public.merchant_feature_settings (
+  merchant_id, repairs_catalog_enabled
+)
+SELECT '00000000-0000-0000-0000-000000003015', false
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM public.merchant_feature_settings
+  WHERE merchant_id = '00000000-0000-0000-0000-000000003015'
+);
+
+DO $$
+DECLARE
+  created record;
+BEGIN
+  SELECT *
+  INTO created
+  FROM public.create_repair_booking(
+    '00000000-0000-0000-0000-000000003015',
+    'Ada Lovelace',
+    'ada@example.com',
+    '08012345678',
+    'Smartphone',
+    'iPhone 15',
+    'The screen is cracked and the battery drains quickly.',
+    NULL,
+    'dropoff',
+    NULL,
+    NULL,
+    NULL
+  );
+
+  IF created.id IS NULL THEN
+    RAISE EXCEPTION 'template-backed merchant must receive a free-form repair booking';
+  END IF;
+END $$;
+
 ROLLBACK;

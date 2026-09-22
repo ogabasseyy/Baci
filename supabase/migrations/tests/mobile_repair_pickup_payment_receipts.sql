@@ -27,6 +27,16 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   PERFORM public.mobile_repair_pickup_payment_receipt(m,r,h,owner_id,response);
   IF public.mobile_repair_pickup_payment_receipt(m,r,h,other_id)->'result' IS DISTINCT FROM response THEN RAISE EXCEPTION 'lost response not replayed'; END IF;
+  -- Owner-matched definitive pre-provider failures complete unfenced: a device
+  -- or quote deactivated after the catalogue check maps to 'unavailable'
+  -- before any provider call, so no charge can exist for that code.
+  IF public.mobile_repair_pickup_payment_receipt_v2(m,'14bf2192-16de-442b-bf75-700f4ff2aace',h,owner_id)->>'state' <> 'claimed' THEN RAISE EXCEPTION 'v2 claim failed'; END IF;
+  IF public.mobile_repair_pickup_payment_receipt_v2(m,'14bf2192-16de-442b-bf75-700f4ff2aace',h,owner_id,'{"success":false,"code":"unavailable","error":"deactivated"}')->>'state' <> 'complete' THEN RAISE EXCEPTION 'v2 unavailable completion failed'; END IF;
+  IF public.mobile_repair_pickup_payment_receipt_v2(m,'14bf2192-16de-442b-bf75-700f4ff2aacf',h,owner_id)->>'state' <> 'claimed' THEN RAISE EXCEPTION 'v2 claim failed'; END IF;
+  BEGIN
+    PERFORM public.mobile_repair_pickup_payment_receipt_v2(m,'14bf2192-16de-442b-bf75-700f4ff2aacf',h,owner_id,'{"success":false,"code":"bogus","error":"bogus"}');
+    RAISE EXCEPTION 'uncoded completion accepted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   PERFORM set_config('request.jwt.claims', '{"repair_pickup_receiver_context":"server-quote","repair_pickup_receiver_merchant_id":"14bf2192-16de-442b-bf75-700f4ff2aaca"}', true);
   BEGIN
     PERFORM public.mobile_repair_pickup_payment_receipt(m,r,h,owner_id);

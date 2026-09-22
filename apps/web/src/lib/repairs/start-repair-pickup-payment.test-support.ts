@@ -123,11 +123,13 @@ export function arrangeStartRepairPickupPayment() {
   });
   mocks.markRepairPickupAwaitingPayment.mockResolvedValue({ ok: true });
   mocks.bindRepairPickupPendingPaymentReference.mockResolvedValue({ ok: true });
-  mocks.initializeTransaction.mockResolvedValue({
+  // Real Paystack echoes the requested reference; the mock does the same so
+  // the success path exercises the echoed-reference validation.
+  mocks.initializeTransaction.mockImplementation(async (payload) => ({
     access_code: 'access-code',
     authorization_url: 'https://checkout.paystack.com/access-code',
-    reference: 'provider-reference',
-  });
+    reference: payload.reference,
+  }));
 }
 
 export function getStartRepairPickupPaymentMocks(): typeof mocks {

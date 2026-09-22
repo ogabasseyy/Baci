@@ -3,6 +3,30 @@ import type { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { generatePaymentAccount } from '@/lib/paystack';
 
+// The pre-response Pay for Me call holds the order-creation POST after
+// the order has committed: bound the provider leg so a stalled Paystack
+// request throws (and the caller falls back to post-response
+// provisioning) instead of hanging the response until the client times
+// out. Persistence stays outside the deadline — Supabase carries its
+// own client timeouts, and a timed-out provider must never persist.
+const DVA_PROVIDER_TIMEOUT_MS = 10_000;
+
+async function withProviderDeadline<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error('Paystack DVA provider request timed out'));
+      }, DVA_PROVIDER_TIMEOUT_MS);
+      work.then(resolve, reject);
+    });
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export interface DvaAssignmentPersistenceInput {
   accountName: string;
   accountNumber: string;
@@ -63,13 +87,15 @@ export async function provisionInvoiceMethodDva({
   // through to merchant-contact instructions.
   const dvaResult =
     orderCurrency === 'NGN'
-      ? await generatePaymentAccount({
-          email: customerEmail || `${orderId}@orders.usebaci.com`,
-          firstName,
-          lastName,
-          phone: customerPhone || merchantPhone || '08000000000',
-          orderId,
-        })
+      ? await withProviderDeadline(
+          generatePaymentAccount({
+            email: customerEmail || `${orderId}@orders.usebaci.com`,
+            firstName,
+            lastName,
+            phone: customerPhone || merchantPhone || '08000000000',
+            orderId,
+          })
+        )
       : null;
 
   if (dvaResult?.success) {

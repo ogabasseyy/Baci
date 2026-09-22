@@ -67,17 +67,33 @@ function OrderSuccessContent() {
       return;
     }
 
+    // Same-route navigation (order A → order B) reuses this component
+    // without remounting: clear the rendered order so A's details —
+    // especially the Pay for Me payer handoff — are never shown or
+    // copied under B's URL while B's lookup is in flight or fails.
+    setOrder(null);
+    setPayerDetailsCopied(false);
+    setLoading(true);
+    let cancelled = false;
     fetchStorefrontOrderData(
       orderId,
       merchant?.slug,
       orderToken,
       lookupEmail
     ).then((data) => {
+      // A superseded lookup resolving late must not overwrite the
+      // current identity's state (or suppress its loading UI).
+      if (cancelled) {
+        return;
+      }
       if (data) {
         setOrder(data);
       }
       setLoading(false);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [orderId, merchant?.slug, orderToken, lookupEmail]);
 
   useBnplSettlement({

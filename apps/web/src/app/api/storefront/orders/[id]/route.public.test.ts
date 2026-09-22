@@ -121,6 +121,94 @@ describe('GET /api/storefront/orders/[id] public lookup', () => {
     expect(data).toMatchObject({ total: 11000, amount_paid: 4000 });
   });
 
+  it('returns the active provisioned DVA for a guest Pay for Me lookup', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123?token=track-token-123&merchant_slug=test-store'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: null },
+    });
+    // A guest Pay for Me checkout: the success page renders copyable
+    // payer instructions from this lookup, so the proof-bound guest
+    // response must carry the provisioned account — not just the
+    // signed-in branch.
+    mockAnonClient.rpc.mockResolvedValue({
+      data: [
+        {
+          ...mockOrderData,
+          payment_status: 'unpaid',
+          payment_method: 'payforme',
+          items: [],
+          payment_accounts: [
+            {
+              account_number: '1234567890',
+              bank_name: 'Paystack-Titan',
+              account_name: 'Baci / Ada',
+              provider: 'paystack',
+              assignment_customer_email_source: 'order_email',
+              created_at: new Date(Date.now() - 60_000).toISOString(),
+              assigned_at: new Date(Date.now() - 60_000).toISOString(),
+              expires_at: new Date(Date.now() + 3600_000).toISOString(),
+            },
+          ],
+        },
+      ],
+      error: null,
+    });
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.virtual_account).toMatchObject({
+      account_number: '1234567890',
+      bank_name: 'Paystack-Titan',
+      account_name: 'Baci / Ada',
+    });
+  });
+
+  it('omits expired DVAs from the guest lookup (never payable)', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123?token=track-token-123&merchant_slug=test-store'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: null },
+    });
+    mockAnonClient.rpc.mockResolvedValue({
+      data: [
+        {
+          ...mockOrderData,
+          payment_status: 'unpaid',
+          payment_method: 'payforme',
+          items: [],
+          payment_accounts: [
+            {
+              account_number: '1234567890',
+              bank_name: 'Paystack-Titan',
+              account_name: 'Baci / Ada',
+              provider: 'paystack',
+              assignment_customer_email_source: 'order_email',
+              created_at: '2026-01-01T00:00:00.000Z',
+              assigned_at: '2026-01-01T00:00:00.000Z',
+              expires_at: '2026-01-02T00:00:00.000Z',
+            },
+          ],
+        },
+      ],
+      error: null,
+    });
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.virtual_account).toBeNull();
+  });
+
   it('returns 400 when merchant_slug is missing for public lookup', async () => {
     const request = new NextRequest(
       'http://localhost/api/storefront/orders/order-uuid-123'

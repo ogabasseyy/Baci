@@ -128,4 +128,26 @@ describe('provisionInvoiceMethodDva', () => {
       })
     );
   });
+
+  it('throws (for post-response retry) when the provider never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      // Never-settling provider request: the deadline must release the
+      // pre-response order-creation POST instead of hanging it.
+      vi.mocked(generatePaymentAccount).mockReturnValue(
+        new Promise<never>(() => {})
+      );
+
+      const pending = provisionInvoiceMethodDva(baseInput());
+      const assertion = expect(pending).rejects.toThrow(
+        'Paystack DVA provider request timed out'
+      );
+      await vi.advanceTimersByTimeAsync(10_000);
+      await assertion;
+
+      expect(persistAssignment).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

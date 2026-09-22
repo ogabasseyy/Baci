@@ -122,6 +122,12 @@ describe('useJuicywayPayment', () => {
       .map(([, key]) => key);
     expect(startedKeys).toEqual(['order-1:ref-1', 'order-1:ref-2']);
     expect(failedKeys).toEqual(['order-1:ref-1', 'order-1:ref-2']);
+    // Each start carries its attempt's provider reference so starts
+    // reconcile with their reference-stamped failures.
+    const startedReferences = mockCaptureCheckoutFunnelEventOnce.mock.calls
+      .filter(([event]) => event === 'payment_started')
+      .map(([, , properties]) => (properties as { reference?: string }).reference);
+    expect(startedReferences).toEqual(['ref-1', 'ref-2']);
   });
 
   it('re-initializes a replacement session when retrying the same network after failure', async () => {

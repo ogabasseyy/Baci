@@ -14,6 +14,7 @@ import { createAnonClient } from '@/lib/supabase/anon';
 import { createClient } from '@/lib/supabase/server';
 import { fetchProductRouteDetails } from './fetch-product-route-details';
 import { mapOrderItemsWithRoutes } from './map-order-items-with-routes';
+import { mapTrackingPaymentAccounts } from './map-tracking-payment-accounts';
 import { orderDetailSelect } from './order-detail-select';
 import type { OrderItem } from './order-item-types';
 import { resolveMerchantIdBySlug } from './resolve-merchant-id-by-slug';
@@ -249,6 +250,15 @@ export async function GET(
           .in('id', productIds)
     );
     const items = mapOrderItemsWithRoutes(rawItems, productRouteDetails);
+    // Guest Pay for Me checkouts render payer instructions from this
+    // lookup: include the active provisioned account (strict selection —
+    // expired aliases are never payable, unlike the paid-document
+    // historical allowance in the signed-in branch).
+    const guestVirtualAccount =
+      selectPreferredOrderPaymentAccount(
+        mapTrackingPaymentAccounts(order.payment_accounts),
+        new Date()
+      ) || null;
 
     return NextResponse.json(
       sanitizePublicOrder({
@@ -273,6 +283,7 @@ export async function GET(
         merchant_id: order.merchant_id,
         tracking_token: token || null,
         items,
+        virtual_account: guestVirtualAccount,
       })
     );
   } catch (error) {

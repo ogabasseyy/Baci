@@ -95,6 +95,11 @@ export function useJuicywayPayment({
           orderId: payment.orderId,
           paymentIntent: getCheckoutPaymentIntent('juicyway'),
           paymentMethod: 'juicyway',
+          // Attempt-level reconciliation: a retry mints a new provider
+          // reference, and the failure/completion events are
+          // reference-stamped — the start must carry it too (with the
+          // payment ID fallback the attempt key uses).
+          reference: payment.reference || payment.paymentId,
           source: 'web_checkout',
           total: pendingCryptoOrder?.amount,
         })

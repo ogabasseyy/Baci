@@ -216,6 +216,82 @@ describe('storefront order success page', () => {
     expect(await screen.findByText('Copied')).toBeInTheDocument();
   });
 
+  it('clears the previous order when navigation changes the lookup identity', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-A',
+        type: 'payforme',
+        trackingToken: 'track-A',
+      })
+    );
+    const lookupA = {
+      ok: true,
+      json: async () => ({
+        id: 'order-A',
+        order_number: 'ORD-A',
+        tracking_token: 'track-A',
+        customer_email: 'a@example.com',
+        currency: 'NGN',
+        items: [],
+        subtotal: 3500,
+        shipping_cost: 0,
+        total: 3500,
+        virtual_account: {
+          account_name: 'Baci Checkout ORD-A',
+          account_number: '1111111111',
+          bank_name: 'Baci Bank',
+        },
+      }),
+    };
+    let resolveLookupB!: (response: unknown) => void;
+    const lookupBPending = new Promise((resolve) => {
+      resolveLookupB = resolve;
+    });
+    mockFetch
+      .mockResolvedValueOnce(lookupA)
+      .mockReturnValueOnce(lookupBPending);
+    const { rerender } = render(<OrderSuccessPage />);
+
+    // Order A renders with its payer handoff.
+    expect(
+      await screen.findByRole('heading', { name: /share the payment details/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText('1111111111')).toBeInTheDocument();
+
+    // Same-route navigation to order B reuses the component: A's
+    // details must clear immediately — never rendered or copied
+    // under B's URL while B's lookup is in flight.
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-B',
+        type: 'payforme',
+        trackingToken: 'track-B',
+      })
+    );
+    rerender(<OrderSuccessPage />);
+
+    await waitFor(() => {
+      expect(screen.queryByText('ORD-A')).toBeNull();
+    });
+    expect(screen.queryByText('1111111111')).toBeNull();
+    expect(screen.queryByText(/payment details for/i)).toBeNull();
+    expect(
+      screen.getByRole('heading', { name: /finalizing your order/i })
+    ).toBeInTheDocument();
+
+    // B's lookup fails: recovery state, still with no trace of A.
+    await act(async () => {
+      resolveLookupB({ ok: false, json: async () => null });
+    });
+    expect(
+      await screen.findByRole('heading', {
+        name: /we could not confirm this order yet/i,
+      })
+    ).toBeInTheDocument();
+    expect(screen.queryByText('ORD-A')).toBeNull();
+    expect(screen.queryByText('1111111111')).toBeNull();
+  });
+
   it('withholds the naira account from foreign-currency payer details', async () => {
     mockSearchParams.mockReturnValue(
       new URLSearchParams({

@@ -66,7 +66,15 @@ const withFirebaseModularHeaders = (config) => {
         # Ensure pods have DEFINES_MODULE set for static framework linkage
         config.build_settings['DEFINES_MODULE'] = 'YES'
         config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-        
+
+        if target.name == 'ExpoModulesCore'
+          # Xcode 26 enforces complete Swift concurrency checking, which turns a
+          # data-race diagnostic in EventEmitter.swift into a build error.
+          # Third-party code that compiled cleanly under earlier toolchains;
+          # restore minimal checking for this pod only.
+          config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
+        end
+
         if target.name.start_with?('RNFB') || target.name.start_with?('Firebase')
           # Force include React headers for Firebase modules
           config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited) '

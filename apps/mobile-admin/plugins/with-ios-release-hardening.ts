@@ -8,12 +8,62 @@
  * privacy manifest, local network description.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   type ConfigPlugin,
+  withDangerousMod,
   withEntitlementsPlist,
   withInfoPlist,
   withXcodeProject,
 } from 'expo/config-plugins';
+
+const EXPO_MODULES_CORE_CONCURRENCY_MARKER =
+  '# Added by with-ios-release-hardening (ExpoModulesCore concurrency)';
+
+const EXPO_MODULES_CORE_CONCURRENCY_BLOCK = `    ${EXPO_MODULES_CORE_CONCURRENCY_MARKER}
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        if target.name == 'ExpoModulesCore'
+          # Xcode 26 enforces complete Swift concurrency checking, which turns a
+          # data-race diagnostic in EventEmitter.swift into a build error.
+          # Third-party code that compiled cleanly under earlier toolchains;
+          # restore minimal checking for this pod only.
+          config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
+        end
+      end
+    end
+`;
+
+/**
+ * Resolve a path guaranteed to stay inside the project root.
+ */
+function safeProjectPath(projectRoot: string, ...segments: string[]): string {
+  const resolvedRoot = path.resolve(projectRoot);
+  const targetPath = path.resolve(resolvedRoot, ...segments);
+
+  if (
+    !targetPath.startsWith(resolvedRoot + path.sep) &&
+    targetPath !== resolvedRoot
+  ) {
+    throw new Error(
+      `Path traversal detected: ${targetPath} is outside project root`
+    );
+  }
+
+  return targetPath;
+}
+
+function upsertExpoModulesCoreConcurrency(podfileContent: string): string {
+  if (podfileContent.includes(EXPO_MODULES_CORE_CONCURRENCY_MARKER)) {
+    return podfileContent;
+  }
+
+  return podfileContent.replace(
+    /post_install do \|installer\|/,
+    `post_install do |installer|\n${EXPO_MODULES_CORE_CONCURRENCY_BLOCK}`
+  );
+}
 
 interface HardeningOptions {
   /** Apple Development Team ID (default: from EXPO_APPLE_TEAM_ID env var) */
@@ -70,6 +120,26 @@ const withIosReleaseHardening: ConfigPlugin<HardeningOptions | undefined> = (
   });
 
   // 3. Xcode project: signing, team
+  // 4. Podfile: scope minimal Swift concurrency checking to ExpoModulesCore
+  // (Xcode 26 complete-checking breaks its EventEmitter.swift). Runs on every
+  // prebuild, so the checked-in ios/ Podfile is not the source of truth here.
+  nextConfig = withDangerousMod(nextConfig, [
+    'ios',
+    (mod) => {
+      const podfilePath = safeProjectPath(
+        mod.modRequest.projectRoot,
+        'ios',
+        'Podfile'
+      );
+      const podfileContent = fs.readFileSync(podfilePath, 'utf8');
+      fs.writeFileSync(
+        podfilePath,
+        upsertExpoModulesCoreConcurrency(podfileContent)
+      );
+      return mod;
+    },
+  ]);
+
   nextConfig = withXcodeProject(nextConfig, (mod) => {
     const project = mod.modResults;
     const configurations = project.pbxXCBuildConfigurationSection?.();

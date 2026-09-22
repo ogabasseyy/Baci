@@ -1,4 +1,5 @@
 import { useMerchant } from '@/hooks/use-merchant';
+import { checkoutCreditSnapshotStore } from '@/lib/checkout-credit-snapshot-store';
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
@@ -192,6 +193,11 @@ export function useCheckoutSubmit({
       const orderResponse = await createOrder(orderRequest, {
         checkoutGeneration: checkoutGenerationSnapshot,
       });
+      // Re-freeze submitted values on rollback, not live UI selections.
+      submitCreditFields =
+        checkoutCreditSnapshotStore.completedChoice(
+          checkoutGenerationSnapshot
+        ) ?? submitCreditFields;
       const { order } = orderResponse;
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;

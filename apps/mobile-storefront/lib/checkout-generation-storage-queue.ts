@@ -2,12 +2,17 @@ import { createKeyedSerialAsyncQueue } from '@/lib/create-keyed-serial-async-que
 
 let enqueueKeyed = createKeyedSerialAsyncQueue();
 
-export function enqueueCheckoutGenerationStorage<T>(
+function enqueueGenerationStorageOperation<T>(
   operation: () => Promise<T>
 ): Promise<T> {
   return enqueueKeyed('checkout-generation', operation);
 }
 
-export function resetCheckoutGenerationStorageQueue(): void {
+function resetGenerationStorageQueue(): void {
   enqueueKeyed = createKeyedSerialAsyncQueue();
 }
+
+export const checkoutGenerationStorageQueue = {
+  enqueue: enqueueGenerationStorageOperation,
+  reset: resetGenerationStorageQueue,
+};

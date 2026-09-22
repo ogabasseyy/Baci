@@ -1,13 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CHECKOUT_GENERATION_STORAGE_KEY } from '@/config/checkout-storage';
 import { assertCheckoutRecoveryValue } from '@/lib/assert-checkout-recovery-value';
-import {
-  enqueueCheckoutGenerationStorage,
-  resetCheckoutGenerationStorageQueue,
-} from '@/lib/checkout-generation-storage-queue';
+import { checkoutGenerationStorageQueue } from '@/lib/checkout-generation-storage-queue';
 import { createLogger } from '@/lib/logger';
 import { markCodepointCheckoutItemSort } from '@/lib/mark-codepoint-checkout-item-sort';
-import { isMintedCheckoutGeneration } from '@/lib/minted-checkout-generations';
+import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 
 const log = createLogger('CartStore');
@@ -55,13 +52,13 @@ export async function persistCheckoutGeneration(
   assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
   const writeSequence = ++checkoutGenerationWriteSequence;
   let settled = false;
-  const attempt = enqueueCheckoutGenerationStorage(async () => {
+  const attempt = checkoutGenerationStorageQueue.enqueue(async () => {
     // Only generations minted by this build are code-point sorted. Restored
     // legacy IDs keep locale ordering even when persisted over a newer value.
     // The marker lands first so a durable generation never lacks its sort
     // version: a failed marker write rejects before the generation is
     // exposed, while a stray marker for an unwritten ID is never consulted.
-    if (isMintedCheckoutGeneration(checkoutGeneration)) {
+    if (mintedCheckoutGenerations.isRegistered(checkoutGeneration)) {
       await markCodepointCheckoutItemSort(checkoutGeneration);
     }
     await AsyncStorage.setItem(
@@ -94,15 +91,17 @@ export async function persistCheckoutGeneration(
     // with newer writes. Genuine failures skip the reset so queued writes
     // keep their order. Callers observe the failure and retry on demand.
     if (!settled) {
-      resetCheckoutGenerationStorageQueue();
+      checkoutGenerationStorageQueue.reset();
       void attempt.then(
         () =>
-          enqueueCheckoutGenerationStorage(() =>
-            compensateAbandonedCheckoutGenerationWrite(
-              checkoutGeneration,
-              writeSequence
+          checkoutGenerationStorageQueue
+            .enqueue(() =>
+              compensateAbandonedCheckoutGenerationWrite(
+                checkoutGeneration,
+                writeSequence
+              )
             )
-          ).catch(() => undefined),
+            .catch(() => undefined),
         () => undefined
       );
     }

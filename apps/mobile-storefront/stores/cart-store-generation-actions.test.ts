@@ -13,7 +13,7 @@ jest.mock('@/lib/persist-checkout-generation', () => ({
 
 const { createCheckoutGenerationActions } =
   require('./cart-store-generation-actions') as typeof import('./cart-store-generation-actions');
-const { isMintedCheckoutGeneration } =
+const { mintedCheckoutGenerations } =
   require('@/lib/minted-checkout-generations') as typeof import('@/lib/minted-checkout-generations');
 
 beforeEach(() => {
@@ -34,7 +34,9 @@ describe('advanceCheckoutGeneration', () => {
     expect(set).toHaveBeenCalledWith({
       checkoutGeneration: 'minted-generation',
     });
-    expect(isMintedCheckoutGeneration('minted-generation')).toBe(true);
+    expect(mintedCheckoutGenerations.isRegistered('minted-generation')).toBe(
+      true
+    );
   });
 
   it('propagates persist failures without applying the new generation', async () => {

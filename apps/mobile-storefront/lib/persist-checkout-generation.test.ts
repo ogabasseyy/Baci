@@ -75,9 +75,9 @@ describe('bugfix: checkout generation is durable before the order request', () =
   });
 
   it('marks minted generations as code-point sorted when persisting', async () => {
-    const { registerMintedCheckoutGeneration } =
+    const { mintedCheckoutGenerations } =
       require('./minted-checkout-generations') as typeof import('./minted-checkout-generations');
-    const minted = registerMintedCheckoutGeneration(
+    const minted = mintedCheckoutGenerations.register(
       'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
     );
     await persistCheckoutGeneration(minted);
@@ -87,9 +87,9 @@ describe('bugfix: checkout generation is durable before the order request', () =
   });
 
   it('does not expose a generation when its sort marker write fails', async () => {
-    const { registerMintedCheckoutGeneration } =
+    const { mintedCheckoutGenerations } =
       require('./minted-checkout-generations') as typeof import('./minted-checkout-generations');
-    const minted = registerMintedCheckoutGeneration(
+    const minted = mintedCheckoutGenerations.register(
       '99999999-9999-4999-8999-999999999999'
     );
     mockSetItem.mockRejectedValueOnce(new Error('disk full'));
@@ -100,9 +100,9 @@ describe('bugfix: checkout generation is durable before the order request', () =
   });
 
   it('does not mark restored legacy generations as code-point sorted', async () => {
-    const { registerMintedCheckoutGeneration } =
+    const { mintedCheckoutGenerations } =
       require('./minted-checkout-generations') as typeof import('./minted-checkout-generations');
-    const newer = registerMintedCheckoutGeneration(
+    const newer = mintedCheckoutGenerations.register(
       'ffffffff-ffff-4fff-8fff-ffffffffffff'
     );
     await persistCheckoutGeneration(newer);

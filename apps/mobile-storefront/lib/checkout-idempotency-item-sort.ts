@@ -1,11 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY } from '@/config/checkout-storage';
-import {
-  enqueueCheckoutGenerationStorage,
-  resetCheckoutGenerationStorageQueue,
-} from '@/lib/checkout-generation-storage-queue';
+import { checkoutGenerationStorageQueue } from '@/lib/checkout-generation-storage-queue';
 import { markCodepointCheckoutItemSort } from '@/lib/mark-codepoint-checkout-item-sort';
-import { isMintedCheckoutGeneration } from '@/lib/minted-checkout-generations';
+import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 
 export function usesCodepointCheckoutItemSort(
@@ -17,8 +14,8 @@ export function usesCodepointCheckoutItemSort(
   // read itself never settles, the queue is reset so later operations are
   // not wedged behind it; genuine failures keep their order.
   let settled = false;
-  const attempt = enqueueCheckoutGenerationStorage(async () => {
-    if (isMintedCheckoutGeneration(checkoutGeneration)) {
+  const attempt = checkoutGenerationStorageQueue.enqueue(async () => {
+    if (mintedCheckoutGenerations.isRegistered(checkoutGeneration)) {
       // A minted generation is code-point sorted from birth, but its
       // marker must be durable before checkout uses it: a detached
       // persist may have failed before this first read, and after a
@@ -49,7 +46,7 @@ export function usesCodepointCheckoutItemSort(
     'Checkout storage read timed out'
   ).catch((error: unknown) => {
     if (!settled) {
-      resetCheckoutGenerationStorageQueue();
+      checkoutGenerationStorageQueue.reset();
     }
     throw error;
   });

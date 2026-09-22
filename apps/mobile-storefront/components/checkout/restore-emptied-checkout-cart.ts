@@ -1,6 +1,8 @@
 import { applyCheckoutCreditSnapshot } from '@/lib/checkout-attempt-credit-snapshot';
 import { createLogger } from '@/lib/logger';
 import { markCodepointCheckoutItemSort } from '@/lib/mark-codepoint-checkout-item-sort';
+import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
+import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 import { useCartStore } from '@/stores/cart-store';
 import type { CartItem } from '@/stores/cart-store.types';
 
@@ -41,10 +43,18 @@ export async function restoreEmptiedCheckoutCart({
   // The clear path released this generation's frozen credit snapshot and
   // sort marker. Re-freeze both under the restored generation so a retry
   // replays the created order instead of hashing fresh credit under a
-  // forked idempotency key.
+  // forked idempotency key. Only generations minted by this build ever
+  // held a marker: a legacy generation was keyed with locale ordering,
+  // and marking it now would fork its key on retry. The marker write is
+  // bounded (the snapshot apply already times out internally) so a hung
+  // store cannot latch checkout recovery forever.
   try {
     await applyCheckoutCreditSnapshot(creditFields, checkoutGeneration);
-    await markCodepointCheckoutItemSort(checkoutGeneration);
+    if (mintedCheckoutGenerations.isRegistered(checkoutGeneration)) {
+      await withCheckoutStorageTimeout(
+        markCodepointCheckoutItemSort(checkoutGeneration)
+      );
+    }
   } catch (recoveryError) {
     log.error(
       'Failed to restore checkout recovery data after cart rollback:',

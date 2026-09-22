@@ -38,8 +38,8 @@ afterEach(() => {
 });
 
 it('makes the minted marker durable before reporting code-point sort', async () => {
-  const { registerMintedCheckoutGeneration } = loadRegistry();
-  registerMintedCheckoutGeneration(generation);
+  const { mintedCheckoutGenerations } = loadRegistry();
+  mintedCheckoutGenerations.register(generation);
   await expect(
     loadSort().usesCodepointCheckoutItemSort(generation)
   ).resolves.toBe(true);
@@ -59,9 +59,11 @@ it('reads the durable marker for generations minted before this build', async ()
 
 it('fails closed instead of hanging behind a stuck persist', async () => {
   jest.useFakeTimers();
-  const { enqueueCheckoutGenerationStorage } =
+  const { checkoutGenerationStorageQueue } =
     require('./checkout-generation-storage-queue') as typeof import('./checkout-generation-storage-queue');
-  enqueueCheckoutGenerationStorage(() => new Promise<never>(() => undefined));
+  checkoutGenerationStorageQueue.enqueue(
+    () => new Promise<never>(() => undefined)
+  );
   const pending = loadSort().usesCodepointCheckoutItemSort(legacyGeneration);
   const assertion = expect(pending).rejects.toThrow(
     'Checkout storage read timed out'
@@ -73,9 +75,11 @@ it('fails closed instead of hanging behind a stuck persist', async () => {
 it('resets the queue after a read timeout so later reads proceed', async () => {
   jest.useFakeTimers();
   storage.set(markerKey(legacyGeneration), '1');
-  const { enqueueCheckoutGenerationStorage } =
+  const { checkoutGenerationStorageQueue } =
     require('./checkout-generation-storage-queue') as typeof import('./checkout-generation-storage-queue');
-  enqueueCheckoutGenerationStorage(() => new Promise<never>(() => undefined));
+  checkoutGenerationStorageQueue.enqueue(
+    () => new Promise<never>(() => undefined)
+  );
   const { usesCodepointCheckoutItemSort } = loadSort();
   const assertion = expect(
     usesCodepointCheckoutItemSort(legacyGeneration)

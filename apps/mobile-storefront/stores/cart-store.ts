@@ -1,7 +1,8 @@
 import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { registerMintedCheckoutGeneration } from '@/lib/minted-checkout-generations';
+import { checkoutGenerationRestoreGate } from '@/lib/checkout-generation-restore-gate';
+import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
 import { applyPersistedCheckoutGeneration } from './apply-persisted-checkout-generation';
@@ -74,7 +75,7 @@ export const useCartStore = create<CartState>()(
           const checkoutGeneration =
             state.items.length === 0
               ? state.checkoutGeneration === 'legacy'
-                ? registerMintedCheckoutGeneration(Crypto.randomUUID())
+                ? mintedCheckoutGenerations.register(Crypto.randomUUID())
                 : state.checkoutGeneration
               : state.checkoutGeneration;
           if (state.items.length === 0) {
@@ -266,14 +267,20 @@ export const useCartStore = create<CartState>()(
       partialize: partializeCartStore,
       onRehydrateStorage: () => (state) => {
         const generationWhenReadBegan = state?.checkoutGeneration ?? 'legacy';
-        void applyPersistedCheckoutGeneration(
-          (checkoutGeneration) => {
-            useCartStore.setState({ checkoutGeneration });
-          },
-          {
-            generationWhenReadBegan,
-            getLiveGeneration: () => useCartStore.getState().checkoutGeneration,
-          }
+        checkoutGenerationRestoreGate.noteRestoreStarted(
+          applyPersistedCheckoutGeneration(
+            (checkoutGeneration) => {
+              checkoutGenerationRestoreGate.noteRestoredGeneration(
+                checkoutGeneration
+              );
+              useCartStore.setState({ checkoutGeneration });
+            },
+            {
+              generationWhenReadBegan,
+              getLiveGeneration: () =>
+                useCartStore.getState().checkoutGeneration,
+            }
+          )
         );
       },
     }

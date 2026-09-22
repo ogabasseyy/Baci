@@ -56,17 +56,38 @@ async function restoreClobberedCreditSnapshot(
       .catch(() => undefined);
     return;
   }
-  const stored = parseCreditSnapshot(
-    await AsyncStorage.getItem(
-      checkoutCreditSnapshotStore.key(checkoutGeneration)
-    )
-  );
-  if (!stored || !creditSnapshotsEqual(stored, latest.snapshot)) {
-    await AsyncStorage.setItem(
-      checkoutCreditSnapshotStore.key(checkoutGeneration),
-      JSON.stringify(latest.snapshot)
-    );
-  }
+  // A release can land between the authority read above and this write,
+  // resurrecting a retired snapshot after its removal. Repair through the
+  // generation queue — re-checking authority inside the queued op — so the
+  // rewrite cannot slip past a newer completion or tombstone.
+  const expectedSequence = latest.sequence;
+  const expectedSnapshot = latest.snapshot;
+  await checkoutCreditSnapshotStore
+    .enqueue(checkoutGeneration, async () => {
+      const stored = parseCreditSnapshot(
+        await AsyncStorage.getItem(
+          checkoutCreditSnapshotStore.key(checkoutGeneration)
+        )
+      );
+      // Rechecked after the read with no await before the write, so a
+      // release landing during the read cannot be missed: the check and
+      // the write are atomic with respect to same-thread interleavings.
+      const current = checkoutCreditSnapshotStore.latest(checkoutGeneration);
+      if (
+        !current ||
+        'tombstone' in current ||
+        current.sequence !== expectedSequence
+      ) {
+        return;
+      }
+      if (!stored || !creditSnapshotsEqual(stored, expectedSnapshot)) {
+        await AsyncStorage.setItem(
+          checkoutCreditSnapshotStore.key(checkoutGeneration),
+          JSON.stringify(expectedSnapshot)
+        );
+      }
+    })
+    .catch(() => undefined);
 }
 
 function isCreditSnapshot(value: unknown): value is CheckoutCreditSnapshot {

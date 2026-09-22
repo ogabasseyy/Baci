@@ -1,5 +1,5 @@
 import { CHECKOUT_GENERATION_STORAGE_KEY } from '@/config/checkout-storage';
-import { enqueueCheckoutGenerationStorage } from './checkout-generation-storage-queue';
+import { checkoutGenerationStorageQueue } from './checkout-generation-storage-queue';
 import { clearPersistedCheckoutGeneration } from './clear-persisted-checkout-generation';
 import { persistCheckoutGeneration } from './persist-checkout-generation';
 import { readPersistedCheckoutGeneration } from './read-persisted-checkout-generation';
@@ -35,7 +35,7 @@ it('clears the stale generation even when a queued persist never settles', async
   const gate = new Promise<void>((resolve) => {
     releaseHung = resolve;
   });
-  const hung = enqueueCheckoutGenerationStorage(() => gate);
+  const hung = checkoutGenerationStorageQueue.enqueue(() => gate);
   await clearPersistedCheckoutGeneration();
   expect(mockStorage.get(CHECKOUT_GENERATION_STORAGE_KEY)).toBeUndefined();
   releaseHung();

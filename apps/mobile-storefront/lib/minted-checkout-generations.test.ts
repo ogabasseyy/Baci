@@ -1,13 +1,12 @@
-import {
-  isMintedCheckoutGeneration,
-  registerMintedCheckoutGeneration,
-} from './minted-checkout-generations';
+import { mintedCheckoutGenerations } from './minted-checkout-generations';
 
 it('returns the registered generation for inline minting', () => {
-  expect(registerMintedCheckoutGeneration('gen-1')).toBe('gen-1');
-  expect(isMintedCheckoutGeneration('gen-1')).toBe(true);
+  expect(mintedCheckoutGenerations.register('gen-1')).toBe('gen-1');
+  expect(mintedCheckoutGenerations.isRegistered('gen-1')).toBe(true);
 });
 
 it('reports unregistered generations as not minted', () => {
-  expect(isMintedCheckoutGeneration('never-registered')).toBe(false);
+  expect(mintedCheckoutGenerations.isRegistered('never-registered')).toBe(
+    false
+  );
 });

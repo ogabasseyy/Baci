@@ -53,6 +53,8 @@ jest.mock('@/lib/logger', () => ({
 // load after the mock functions above are initialized.
 const { restoreEmptiedCheckoutCart } =
   require('./restore-emptied-checkout-cart') as typeof import('./restore-emptied-checkout-cart');
+const { mintedCheckoutGenerations } =
+  require('@/lib/minted-checkout-generations') as typeof import('@/lib/minted-checkout-generations');
 
 const generation = '46ed63d7-5f10-49f0-9456-9ff571bec43f';
 const itemsSnapshot: CartItem[] = [
@@ -72,7 +74,12 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+afterEach(() => {
+  jest.useRealTimers();
+});
+
 it('restores items and re-freezes recovery data after a rollback', async () => {
+  mintedCheckoutGenerations.register(generation);
   await restoreEmptiedCheckoutCart({
     cartWideNegotiationActive: false,
     checkoutGeneration: generation,
@@ -88,6 +95,45 @@ it('restores items and re-freezes recovery data after a rollback', async () => {
   expect(mockApply).toHaveBeenCalledWith(creditFields, generation);
   expect(mockMark).toHaveBeenCalledWith(generation);
   expect(mockError).not.toHaveBeenCalled();
+});
+
+it('leaves legacy generations unmarked on rollback', async () => {
+  const legacyGeneration = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  await restoreEmptiedCheckoutCart({
+    cartWideNegotiationActive: false,
+    checkoutGeneration: legacyGeneration,
+    creditFields,
+    itemsSnapshot,
+  });
+
+  expect(mockRestoreItems).toHaveBeenCalledWith(
+    itemsSnapshot,
+    false,
+    legacyGeneration
+  );
+  expect(mockApply).toHaveBeenCalledWith(creditFields, legacyGeneration);
+  expect(mockMark).not.toHaveBeenCalled();
+  expect(mockError).not.toHaveBeenCalled();
+});
+
+it('bounds the marker restore so recovery cannot hang on a stuck store', async () => {
+  jest.useFakeTimers();
+  mintedCheckoutGenerations.register(generation);
+  mockMark.mockImplementationOnce(() => new Promise<never>(() => undefined));
+
+  const restoring = restoreEmptiedCheckoutCart({
+    cartWideNegotiationActive: false,
+    checkoutGeneration: generation,
+    creditFields,
+    itemsSnapshot,
+  });
+  await jest.advanceTimersByTimeAsync(5_000);
+  await expect(restoring).resolves.toBeUndefined();
+  expect(mockRestoreItems).toHaveBeenCalledTimes(1);
+  expect(mockError).toHaveBeenCalledWith(
+    'Failed to restore checkout recovery data after cart rollback:',
+    expect.any(Error)
+  );
 });
 
 it('skips the restore when the cart was never emptied', async () => {

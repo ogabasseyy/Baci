@@ -1,16 +1,21 @@
 // Generations minted by this build (codepoint sort era). Restored legacy IDs
 // are never registered, so re-persisting them cannot mark them as sorted.
-const mintedCheckoutGenerations = new Set<string>();
+const mintedCheckoutGenerationIds = new Set<string>();
 
-export function registerMintedCheckoutGeneration(
+function registerMintedCheckoutGenerationId(
   checkoutGeneration: string
 ): string {
-  mintedCheckoutGenerations.add(checkoutGeneration);
+  mintedCheckoutGenerationIds.add(checkoutGeneration);
   return checkoutGeneration;
 }
 
-export function isMintedCheckoutGeneration(
+function isRegisteredMintedCheckoutGeneration(
   checkoutGeneration: string
 ): boolean {
-  return mintedCheckoutGenerations.has(checkoutGeneration);
+  return mintedCheckoutGenerationIds.has(checkoutGeneration);
 }
+
+export const mintedCheckoutGenerations = {
+  isRegistered: isRegisteredMintedCheckoutGeneration,
+  register: registerMintedCheckoutGenerationId,
+};

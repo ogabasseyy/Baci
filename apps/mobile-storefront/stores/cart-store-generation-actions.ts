@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import type { StoreApi } from 'zustand';
 import { createLogger } from '@/lib/logger';
-import { registerMintedCheckoutGeneration } from '@/lib/minted-checkout-generations';
+import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGeneration } from '@/lib/persist-checkout-generation';
 import type { CartState } from './cart-store-state';
 
@@ -12,7 +12,7 @@ export function createCheckoutGenerationActions(
 ): Pick<CartState, 'advanceCheckoutGeneration' | 'restoreItems'> {
   return {
     advanceCheckoutGeneration: async () => {
-      const checkoutGeneration = registerMintedCheckoutGeneration(
+      const checkoutGeneration = mintedCheckoutGenerations.register(
         Crypto.randomUUID()
       );
       await persistCheckoutGeneration(checkoutGeneration);

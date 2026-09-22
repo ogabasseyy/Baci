@@ -36,6 +36,17 @@ it('keeps only the highest-sequence completed choice', () => {
   });
 });
 
+it('reports the frozen choice actually submitted', () => {
+  const id = '22222222-2222-4222-8222-222222222222';
+  expect(checkoutCreditSnapshotStore.completedChoice(id)).toBeUndefined();
+  checkoutCreditSnapshotStore.noteCompleted(id, 1, { wallet_amount: 5000 });
+  expect(checkoutCreditSnapshotStore.completedChoice(id)).toEqual({
+    wallet_amount: 5000,
+  });
+  checkoutCreditSnapshotStore.noteTombstone(id, 2);
+  expect(checkoutCreditSnapshotStore.completedChoice(id)).toBeUndefined();
+});
+
 it('retires the completed choice with a tombstone', () => {
   const id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
   checkoutCreditSnapshotStore.noteCompleted(id, 1, { wallet_amount: 5000 });

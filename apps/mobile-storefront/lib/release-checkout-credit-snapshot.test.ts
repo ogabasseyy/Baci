@@ -38,6 +38,10 @@ beforeEach(() => {
   mockRemoveItem.mockClear();
 });
 
+afterEach(() => {
+  jest.useRealTimers();
+});
+
 it('releases snapshots without waiting for a hung queued apply', async () => {
   let release!: (value: string | null) => void;
   let entered!: () => void;
@@ -98,28 +102,32 @@ it('lets the next apply freeze fresh fields after a release', async () => {
   ).toEqual({ wallet_amount: 1000 });
 });
 
-it('restores a snapshot frozen after a slow removal settles late', async () => {
-  await loadApply().applyCheckoutCreditSnapshot(
+it('skips a detached removal when a newer snapshot completed after release', async () => {
+  jest.useFakeTimers();
+  let releaseRead!: (value: string | null) => void;
+  let readEntered!: () => void;
+  const readEnteredPromise = new Promise<void>((resolve) => {
+    readEntered = resolve;
+  });
+  mockGetItem.mockImplementationOnce(
+    () =>
+      new Promise<string | null>((resolve) => {
+        releaseRead = resolve;
+        readEntered();
+      })
+  );
+  const hung = loadApply().applyCheckoutCreditSnapshot(
     { wallet_amount: 1000 },
     generation
   );
-  let releaseRemoval!: () => void;
-  let removalEntered!: () => void;
-  const removalEnteredPromise = new Promise<void>((resolve) => {
-    removalEntered = resolve;
-  });
-  mockRemoveItem.mockImplementationOnce(
-    () =>
-      new Promise<void>((resolve) => {
-        releaseRemoval = () => {
-          storage.delete(snapshotKey(generation));
-          resolve();
-        };
-        removalEntered();
-      })
+  await readEnteredPromise;
+  const hungAssertion = expect(hung).rejects.toThrow(
+    'Checkout storage read timed out'
   );
-  const releasing = loadRelease().releaseCheckoutCreditSnapshot(generation);
-  await removalEnteredPromise;
+
+  await loadRelease().releaseCheckoutCreditSnapshot(generation);
+  await jest.advanceTimersByTimeAsync(5_000);
+  await hungAssertion;
 
   const retry = await loadApply().applyCheckoutCreditSnapshot(
     { wallet_amount: 5000 },
@@ -127,17 +135,15 @@ it('restores a snapshot frozen after a slow removal settles late', async () => {
   );
   expect(retry.wallet_amount).toBe(5000);
 
-  let compensated!: () => void;
-  const compensatedPromise = new Promise<void>((resolve) => {
-    compensated = resolve;
-  });
-  mockSetItem.mockImplementationOnce(async (key: string, value: string) => {
-    storage.set(key, value);
-    compensated();
-  });
-  releaseRemoval();
-  await releasing;
-  await compensatedPromise;
+  releaseRead(null);
+  // Flush the hung apply's completion plus the detached removal behind
+  // it: the removal rechecks, sees the newer completed choice, and
+  // stands down without deleting it. A regression would call removeItem
+  // synchronously when the removal op starts, well within this flush.
+  for (let tick = 0; tick < 10; tick += 1) {
+    await Promise.resolve();
+  }
+  expect(mockRemoveItem).not.toHaveBeenCalled();
   expect(
     JSON.parse(storage.get(snapshotKey(generation)) ?? '{}') as {
       wallet_amount?: number;
@@ -145,31 +151,26 @@ it('restores a snapshot frozen after a slow removal settles late', async () => {
   ).toEqual({ wallet_amount: 5000 });
 });
 
-it('leaves storage empty when a newer release supersedes the removal', async () => {
+it('removes idempotently when releases stack without a newer choice', async () => {
   await loadApply().applyCheckoutCreditSnapshot(
     { wallet_amount: 1000 },
     generation
   );
-  let releaseRemoval!: () => void;
-  let removalEntered!: () => void;
-  const removalEnteredPromise = new Promise<void>((resolve) => {
-    removalEntered = resolve;
+  let removals = 0;
+  let bothRemoved!: () => void;
+  const bothRemovedPromise = new Promise<void>((resolve) => {
+    bothRemoved = resolve;
   });
-  mockRemoveItem.mockImplementationOnce(
-    () =>
-      new Promise<void>((resolve) => {
-        releaseRemoval = () => {
-          storage.delete(snapshotKey(generation));
-          resolve();
-        };
-        removalEntered();
-      })
-  );
-  const releasing = loadRelease().releaseCheckoutCreditSnapshot(generation);
-  await removalEnteredPromise;
+  mockRemoveItem.mockImplementation(async (key: string) => {
+    storage.delete(key);
+    removals += 1;
+    if (removals === 2) {
+      bothRemoved();
+    }
+  });
   await loadRelease().releaseCheckoutCreditSnapshot(generation);
-  releaseRemoval();
-  await releasing;
+  await loadRelease().releaseCheckoutCreditSnapshot(generation);
+  await bothRemovedPromise;
   expect(storage.get(snapshotKey(generation))).toBeUndefined();
-  expect(mockSetItem).toHaveBeenCalledTimes(1);
+  expect(mockRemoveItem).toHaveBeenCalledTimes(2);
 });

@@ -1,7 +1,4 @@
-import {
-  compareCodePoints,
-  compareLocaleText,
-} from './compare-order-idempotency-text';
+import { compareOrderIdempotencyText } from './compare-order-idempotency-text';
 
 type IdempotencyItem = {
   assurance_fee?: number;
@@ -55,7 +52,9 @@ export type BuildOrderIdempotencyPayloadOptions = {
 };
 
 function itemTextCompare(sort: OrderIdempotencyItemSort) {
-  return sort === 'locale' ? compareLocaleText : compareCodePoints;
+  return sort === 'locale'
+    ? compareOrderIdempotencyText.locale
+    : compareOrderIdempotencyText.codePoints;
 }
 
 function normalizeText(value: string | null | undefined) {

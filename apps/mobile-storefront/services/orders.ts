@@ -6,7 +6,6 @@ import { assertQueuedCreateOrderSendOwner } from '@/lib/assert-queued-create-ord
 import { getCheckoutAttemptKey } from '@/lib/checkout-attempt-key';
 import { createLogger } from '@/lib/logger';
 import { resolveCheckoutAuthPartition } from '@/lib/resolve-checkout-auth-partition';
-import { resolveCheckoutGeneration } from '@/lib/resolve-checkout-generation';
 import {
   supabase,
   supabaseAuthStorage,
@@ -31,6 +30,7 @@ import { releaseCreditAfterDefinitiveRejection } from './orders-credit-release';
 import { getCheckoutStoredSession } from './orders-session';
 import { validateCheckoutUser } from './orders-user-validation';
 import { readCheckoutStoredSession } from './read-checkout-stored-session';
+import { resolveEffectiveCheckoutGeneration } from './resolve-effective-checkout-generation';
 
 export { OrderError } from './orders.errors';
 export type {
@@ -119,21 +119,14 @@ export async function createOrder(
   // assigning the effective value below.
   let effectiveCheckoutGeneration = checkoutGeneration;
   try {
-    // The cart generation can be stale while the dedicated persisted
-    // generation still identifies a lost-response attempt. Resolve the
-    // effective generation once and freeze the payload under it, so the
-    // submitted body and the hashed key observe the same credit snapshot.
-    const attemptKeyOptions = frozenCheckoutGeneration
-      ? {
-          frozen: true,
-          persistFrozen: options?.queuedReplay !== true,
-          liveGeneration: useCartStore.getState().checkoutGeneration,
-        }
-      : undefined;
-    effectiveCheckoutGeneration = await resolveCheckoutGeneration(
+    const resolvedGeneration = await resolveEffectiveCheckoutGeneration({
       checkoutGeneration,
-      attemptKeyOptions
-    );
+      frozenCheckoutGeneration,
+      queuedReplay: options?.queuedReplay,
+    });
+    effectiveCheckoutGeneration =
+      resolvedGeneration.effectiveCheckoutGeneration;
+    const attemptKeyOptions = resolvedGeneration.attemptKeyOptions;
     // The snapshotted payload can reject on storage failures, so it is built
     // inside the try block: every failure maps to an OrderError below.
     const orderPayload = await buildSnapshottedOrderPayload(

@@ -40,6 +40,20 @@ function latestCreditApplyRecord(
   return creditApplyRecords.get(checkoutGeneration);
 }
 
+function completedCreditApplyChoice(
+  checkoutGeneration: string
+): CheckoutCreditSnapshot | undefined {
+  // The frozen choice actually submitted under this generation, for
+  // rollback paths that must re-freeze submitted values rather than the
+  // live UI selections (a retry may have substituted stored values when
+  // the shopper edited credit fields mid-flight).
+  const latest = creditApplyRecords.get(checkoutGeneration);
+  if (!latest || 'tombstone' in latest) {
+    return undefined;
+  }
+  return latest.snapshot;
+}
+
 function noteCompletedCreditApply(
   checkoutGeneration: string,
   sequence: number,
@@ -63,6 +77,7 @@ function creditSnapshotKey(checkoutGeneration: string): string {
 }
 
 export const checkoutCreditSnapshotStore = {
+  completedChoice: completedCreditApplyChoice,
   enqueue<T>(
     checkoutGeneration: string,
     operation: () => Promise<T>

@@ -243,3 +243,35 @@ it('releases the resolved snapshot after a definitive rejection with a stale car
     'persisted-gen'
   );
 });
+
+it('uses the restored durable generation for frozen UI retries started before rehydrate', async () => {
+  const { default: AsyncStorage } =
+    require('@react-native-async-storage/async-storage') as typeof import('@react-native-async-storage/async-storage');
+  await AsyncStorage.setItem(CHECKOUT_GENERATION_STORAGE_KEY, 'persisted-gen');
+  mockCartGeneration = 'stale-cart';
+  const { checkoutGenerationRestoreGate } =
+    require('@/lib/checkout-generation-restore-gate') as typeof import('@/lib/checkout-generation-restore-gate');
+  let releaseRestore!: () => void;
+  const restoreSettled = new Promise<void>((resolve) => {
+    releaseRestore = resolve;
+  });
+  checkoutGenerationRestoreGate.noteRestoreStarted(
+    restoreSettled.then(() => {
+      mockCartGeneration = 'persisted-gen';
+      checkoutGenerationRestoreGate.noteRestoredGeneration('persisted-gen');
+    })
+  );
+
+  const ordering = loadCreateOrder().createOrder(validRequest(), {
+    checkoutGeneration: 'stale-cart',
+  });
+  releaseRestore();
+  await ordering;
+
+  expect(mockBuildSnapshottedOrderPayload.mock.calls[0]?.[1]).toBe(
+    'persisted-gen'
+  );
+  expect(await AsyncStorage.getItem(CHECKOUT_GENERATION_STORAGE_KEY)).toBe(
+    'persisted-gen'
+  );
+});

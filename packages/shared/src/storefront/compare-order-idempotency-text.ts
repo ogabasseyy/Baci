@@ -1,4 +1,4 @@
-export function compareCodePoints(left: string, right: string): number {
+function compareByCodePoints(left: string, right: string): number {
   const leftPoints = Array.from(left);
   const rightPoints = Array.from(right);
   const limit = Math.min(leftPoints.length, rightPoints.length);
@@ -13,8 +13,13 @@ export function compareCodePoints(left: string, right: string): number {
 }
 
 /** Device-default collation used by checkout hashes before code-point sort. */
-export function compareLocaleText(left: string, right: string): number {
+function compareByLocaleText(left: string, right: string): number {
   // Reproduce the historical comparator exactly: stable sort preserved
   // insertion order on collation ties, and any fallback would reorder them.
   return left.localeCompare(right);
 }
+
+export const compareOrderIdempotencyText = {
+  codePoints: compareByCodePoints,
+  locale: compareByLocaleText,
+};

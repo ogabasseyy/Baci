@@ -1,5 +1,10 @@
 import { cacheLife, cacheTag } from 'next/cache';
 import { getCategoryPageDataCacheTag } from '@/lib/category-page-cache-tags';
+import {
+  applyCategoryGraphicsPredicate,
+  buildCategoryGraphicsJoin,
+  normalizeCategoryGraphicsValues,
+} from '@/lib/category-page-graphics-query';
 import { getPublicSupabaseClient } from '@/lib/public-supabase-client';
 
 export type SpecialCollectionSlug =
@@ -30,17 +35,7 @@ type RemotelyCachedCategoryPageProductScope = Exclude<
   { kind: 'legacy' }
 >;
 
-/**
- * Single normalization for GPU facet values. Facets are derived from
- * `product_key_specs.gpu` with trimming, and filter predicates must use the
- * same form so a facet option always matches the rows that produced it.
- * The stored side is normalized at rest by migration
- * `20260922120000_normalize_product_key_specs_gpu` (backfill + trim
- * trigger), so trimmed request values exact-match the column.
- */
-export function normalizeCategoryGraphicsValue(value: string): string {
-  return value.trim();
-}
+export { normalizeCategoryGraphicsValue } from './category-page-graphics-query';
 
 function buildCategoryPageProductIdsQuery(
   supabase: ReturnType<typeof getPublicSupabaseClient>,
@@ -49,61 +44,55 @@ function buildCategoryPageProductIdsQuery(
   selectOptions?: { count: 'exact'; head: boolean },
   filters?: CategoryPageProductFilters
 ) {
-  const graphics = (filters?.graphics ?? [])
-    .map((value) => normalizeCategoryGraphicsValue(value))
-    .filter((value) => value.length > 0);
-  const graphicsJoin =
-    graphics.length > 0 ? ', product_key_specs!inner(gpu)' : '';
+  const graphics = normalizeCategoryGraphicsValues(filters?.graphics);
+  const graphicsJoin = buildCategoryGraphicsJoin(graphics);
 
   if (scope.kind === 'category') {
-    let query = supabase
-      .from('products')
-      .select(
-        `id, product_categories!inner(category_id)${graphicsJoin}`,
-        selectOptions
-      )
-      .eq('merchant_id', merchantId)
-      .eq('status', 'active')
-      .in('product_categories.category_id', scope.categoryIds)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: true });
-
-    if (graphics.length > 0) {
-      query = query.in('product_key_specs.gpu', graphics);
-    }
+    const query = applyCategoryGraphicsPredicate(
+      supabase
+        .from('products')
+        .select(
+          `id, product_categories!inner(category_id)${graphicsJoin}`,
+          selectOptions
+        )
+        .eq('merchant_id', merchantId)
+        .eq('status', 'active')
+        .in('product_categories.category_id', scope.categoryIds)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true }),
+      graphics
+    );
 
     return query;
   }
 
   if (scope.kind === 'legacy') {
     const sanitizedCategoryName = scope.categoryName.replace(/[,().]/g, '');
-    let query = supabase
-      .from('products')
-      .select(`id${graphicsJoin}`, selectOptions)
-      .eq('merchant_id', merchantId)
-      .eq('status', 'active')
-      .or(
-        `category.ilike.%${sanitizedCategoryName}%,brand.ilike.%${sanitizedCategoryName}%,name.ilike.%${sanitizedCategoryName}%`
-      )
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: true });
-
-    if (graphics.length > 0) {
-      query = query.in('product_key_specs.gpu', graphics);
-    }
+    const query = applyCategoryGraphicsPredicate(
+      supabase
+        .from('products')
+        .select(`id${graphicsJoin}`, selectOptions)
+        .eq('merchant_id', merchantId)
+        .eq('status', 'active')
+        .or(
+          `category.ilike.%${sanitizedCategoryName}%,brand.ilike.%${sanitizedCategoryName}%,name.ilike.%${sanitizedCategoryName}%`
+        )
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true }),
+      graphics
+    );
 
     return query;
   }
 
-  let query = supabase
-    .from('products')
-    .select(`id${graphicsJoin}`, selectOptions)
-    .eq('merchant_id', merchantId)
-    .eq('status', 'active');
-
-  if (graphics.length > 0) {
-    query = query.in('product_key_specs.gpu', graphics);
-  }
+  let query = applyCategoryGraphicsPredicate(
+    supabase
+      .from('products')
+      .select(`id${graphicsJoin}`, selectOptions)
+      .eq('merchant_id', merchantId)
+      .eq('status', 'active'),
+    graphics
+  );
 
   switch (scope.collectionSlug) {
     case 'new-arrivals':

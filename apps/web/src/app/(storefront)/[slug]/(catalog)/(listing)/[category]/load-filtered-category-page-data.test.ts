@@ -84,6 +84,41 @@ describe('loadFilteredCategoryPageData', () => {
     expect(mockGetData).toHaveBeenCalledOnce();
   });
 
+  it('keeps an over-cap hub toggle intact via a validated hub token', async () => {
+    const available = Array.from({ length: 10 }, (_, i) => `RTX 4070 rev${i}`);
+    mockGetGraphicsOptions.mockResolvedValueOnce(available);
+    const remaining = available.slice(1);
+
+    const result = await loadFilteredCategoryPageData({
+      category: 'gaming-laptops',
+      merchantId: 'merchant-1',
+      productLimit: 20,
+      productOffset: 0,
+      rawGraphics: remaining,
+      storeSlug: 'demo-store',
+      trustedHubSlug: 'rtx-4070',
+    });
+
+    expect(result.selectedGraphics).toHaveLength(9);
+  });
+
+  it('applies the request cap when the hub token is unknown', async () => {
+    const available = Array.from({ length: 10 }, (_, i) => `RTX 4070 rev${i}`);
+    mockGetGraphicsOptions.mockResolvedValueOnce(available);
+
+    const result = await loadFilteredCategoryPageData({
+      category: 'gaming-laptops',
+      merchantId: 'merchant-1',
+      productLimit: 20,
+      productOffset: 0,
+      rawGraphics: available.slice(1),
+      storeSlug: 'demo-store',
+      trustedHubSlug: 'rtx-9999',
+    });
+
+    expect(result.selectedGraphics).toHaveLength(8);
+  });
+
   it('passes the full trusted hub selection through without the request cap', async () => {
     const available = Array.from({ length: 10 }, (_, i) => `GPU ${i}`);
     mockGetGraphicsOptions.mockResolvedValueOnce(available);

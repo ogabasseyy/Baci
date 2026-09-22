@@ -2,6 +2,10 @@ import {
   getCachedCategoryPageData,
   getCachedCategoryPageGraphicsOptionsStrict,
 } from '@/lib/cached-data';
+import {
+  getGamingLaptopGraphicsHub,
+  getGraphicsOptionsForHub,
+} from '@/lib/storefront-category/gaming-laptop-graphics-hubs';
 import { resolveCategoryGraphicsFilters } from './resolve-category-graphics-filters';
 
 interface LoadFilteredCategoryPageDataOptions {
@@ -17,6 +21,30 @@ interface LoadFilteredCategoryPageDataOptions {
    * lifted for them (allowlist intersection still applies).
    */
   trustedGraphics?: boolean;
+  /**
+   * Hub token minted by a hub-originated transition. Validated against the
+   * hub's facet set: when every requested value belongs to the hub, the
+   * untrusted-request cap is lifted for the transition too.
+   */
+  trustedHubSlug?: string;
+}
+
+function isTrustedHubSelection(
+  graphicsOptions: string[],
+  trustedHubSlug: string | undefined,
+  rawGraphics: string | string[] | undefined
+): boolean {
+  if (!trustedHubSlug) return false;
+  const hub = getGamingLaptopGraphicsHub(trustedHubSlug);
+  if (!hub) return false;
+  const requested = Array.isArray(rawGraphics)
+    ? rawGraphics
+    : rawGraphics
+      ? [rawGraphics]
+      : [];
+  if (requested.length === 0) return false;
+  const matching = new Set(getGraphicsOptionsForHub(graphicsOptions, hub));
+  return requested.every((value) => matching.has(value.trim()));
 }
 
 function hasRequestedGraphics(
@@ -37,6 +65,7 @@ export async function loadFilteredCategoryPageData({
   rawGraphics,
   storeSlug,
   trustedGraphics = false,
+  trustedHubSlug,
 }: LoadFilteredCategoryPageDataOptions) {
   const initialDataPromise = getCachedCategoryPageData(
     merchantId,
@@ -92,7 +121,11 @@ export async function loadFilteredCategoryPageData({
   const selectedGraphics = resolveCategoryGraphicsFilters(
     rawGraphics,
     graphicsOptions,
-    { trustedSource: trustedGraphics }
+    {
+      trustedSource:
+        trustedGraphics ||
+        isTrustedHubSelection(graphicsOptions, trustedHubSlug, rawGraphics),
+    }
   );
   const data =
     selectedGraphics.length > 0

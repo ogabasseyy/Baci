@@ -1110,6 +1110,25 @@ describe('getIndexableRobotsMetadata', () => {
     });
   });
 
+  it('ignores the hub transition token in robots and canonical decisions', () => {
+    expect(
+      getIndexableRobotsMetadata({
+        graphics: 'NVIDIA RTX 4070',
+        graphicsHub: 'rtx-4070',
+      })
+    ).toMatchObject({
+      index: false,
+      follow: true,
+    });
+
+    expect(
+      getCanonicalStorefrontFilterSearchParams(
+        { graphics: 'NVIDIA RTX 4070', graphicsHub: 'rtx-4070' },
+        { filtersAffectResults: true }
+      ).toString()
+    ).toBe('graphics=NVIDIA+RTX+4070');
+  });
+
   it('treats graphics as a storefront filter for faceted listing URLs', () => {
     expect(
       getIndexableRobotsMetadata({ graphics: 'NVIDIA RTX 4070' })

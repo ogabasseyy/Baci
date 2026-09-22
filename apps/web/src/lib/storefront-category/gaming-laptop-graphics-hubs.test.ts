@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildGamingLaptopGraphicsHubPath,
+  buildHubPaginationBasePath,
   getAvailableGamingLaptopGraphicsHubs,
   getGamingLaptopGraphicsHub,
   getGraphicsOptionsForHub,
@@ -47,5 +48,37 @@ describe('gaming laptop graphics hubs', () => {
     expect(buildGamingLaptopGraphicsHubPath('gaming-laptops', 'rtx-4070')).toBe(
       '/gaming-laptops/graphics/rtx-4070'
     );
+  });
+
+  it('anchors hub pagination to the request-scoped storefront path', () => {
+    expect(
+      buildHubPaginationBasePath({
+        baseUrl: 'http://localhost:3000/ogabassey',
+        canonicalBaseUrl:
+          'http://localhost:3000/ogabassey/gaming-laptops/graphics/rtx-4070',
+        requestScopedBaseUrl: 'http://localhost:3000/ogabassey',
+      })
+    ).toBe('/ogabassey/gaming-laptops/graphics/rtx-4070');
+  });
+
+  it('drops the merchant prefix on custom-domain scopes', () => {
+    expect(
+      buildHubPaginationBasePath({
+        baseUrl: 'https://ogabassey.com',
+        canonicalBaseUrl:
+          'https://ogabassey.com/gaming-laptops/graphics/rtx-4070',
+        requestScopedBaseUrl: 'https://ogabassey.com',
+      })
+    ).toBe('/gaming-laptops/graphics/rtx-4070');
+  });
+
+  it('returns undefined without a hub canonical URL', () => {
+    expect(
+      buildHubPaginationBasePath({
+        baseUrl: 'https://ogabassey.com',
+        canonicalBaseUrl: undefined,
+        requestScopedBaseUrl: 'https://ogabassey.com',
+      })
+    ).toBeUndefined();
   });
 });

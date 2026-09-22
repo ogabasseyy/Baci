@@ -77,6 +77,7 @@ vi.mock('@/components/storefront/ogabassey/pages/category-page', () => ({
     selectedGraphics,
     totalProductCount,
     products,
+    paginationBasePath,
   }: {
     currentPage?: number;
     graphicsOptions?: string[];
@@ -84,12 +85,14 @@ vi.mock('@/components/storefront/ogabassey/pages/category-page', () => ({
     selectedGraphics?: string[];
     totalProductCount?: number;
     products?: Array<{ id: string; name: string; price: string }>;
+    paginationBasePath?: string;
   }) => (
     <section aria-label="Category page">
       Category page
       {currentPage ? <div>Page: {currentPage}</div> : null}
       {totalProductCount ? <div>Total: {totalProductCount}</div> : null}
       {productsArePrePaginated ? <div>Prepaginated</div> : null}
+      {paginationBasePath ? <div>Pagination: {paginationBasePath}</div> : null}
       {graphicsOptions?.map((graphics) => (
         <div key={`graphics-option-${graphics}`}>Option: {graphics}</div>
       ))}
@@ -145,6 +148,8 @@ vi.mock('@/lib/cached-data', () => ({
   getCachedCategoryPageData: (...args: unknown[]) =>
     mockGetCachedCategoryPageData(...args),
   getCachedCategoryPageGraphicsOptions: (...args: unknown[]) =>
+    mockGetCachedCategoryPageGraphicsOptions(...args),
+  getCachedCategoryPageGraphicsOptionsStrict: (...args: unknown[]) =>
     mockGetCachedCategoryPageGraphicsOptions(...args),
   getMerchantByIdentifier: (...args: unknown[]) =>
     mockGetMerchantByIdentifier(...args),

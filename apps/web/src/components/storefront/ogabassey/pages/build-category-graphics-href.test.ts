@@ -23,4 +23,28 @@ describe('buildCategoryGraphicsHref', () => {
       })
     ).toBe('/store/gaming-laptops');
   });
+
+  it('mints a hub token for hub-originated transitions', () => {
+    expect(
+      buildCategoryGraphicsHref({
+        graphics: ['NVIDIA RTX 4070'],
+        pathname: '/store/gaming-laptops',
+        resetPage: true,
+        search: '?page=2',
+        trustedHubSlug: 'rtx-4070',
+      })
+    ).toBe(
+      '/store/gaming-laptops?graphics=NVIDIA+RTX+4070&graphicsHub=rtx-4070'
+    );
+  });
+
+  it('drops a stale hub token on listing-originated transitions', () => {
+    expect(
+      buildCategoryGraphicsHref({
+        graphics: ['NVIDIA RTX 4070'],
+        pathname: '/store/gaming-laptops',
+        search: '?graphicsHub=rtx-4070&graphics=Old',
+      })
+    ).toBe('/store/gaming-laptops?graphics=NVIDIA+RTX+4070');
+  });
 });

@@ -1,8 +1,5 @@
-import type { Product as CartProduct } from '@/lib/products';
-import type { Dispatch, MouseEvent, SetStateAction } from 'react';
 import type { FilterState } from '../components/CategoryFiltersSidebar';
 import type { Product } from '../types';
-import { toRelatedProductsProduct } from './product-details-page/related-product';
 
 export type CategoryPageColor =
   | string
@@ -30,56 +27,6 @@ export const NON_RECENCY_COLLECTION_SLUGS = new Set([
   'on-sale',
   'featured',
 ]);
-
-interface GraphicsFilterRouteOptions {
-  canUseClientFilters: boolean;
-  hasServerGraphicsFilter: boolean;
-  hasUrlGraphicsSelection: boolean;
-}
-
-/**
- * Decide whether a graphics change routes through the server or stays local.
- * Small categories load the full set, so a graphics toggle stays local with
- * the other client facets (brand/price) instead of navigating and silently
- * resetting them. A URL-driven graphics selection still routes through the
- * server because the server-filtered product set is its source of truth.
- */
-export function shouldRouteGraphicsChangeThroughServer(
-  options: GraphicsFilterRouteOptions
-): boolean {
-  return (
-    options.hasServerGraphicsFilter &&
-    (!options.canUseClientFilters || options.hasUrlGraphicsSelection)
-  );
-}
-
-/**
- * Added-to-cart feedback handler: adds the product, then clears the "Added"
- * state after a beat so repeat taps stay honest.
- */
-export function createCategoryAddToCartHandler(
-  addToCart: (product: CartProduct, quantity?: number) => void,
-  setAddedItems: Dispatch<SetStateAction<string[]>>
-): (_event: MouseEvent, product: Product) => void {
-  return (_event, product) => {
-    addToCart(toRelatedProductsProduct(product), 1);
-
-    const productId = String(product.id);
-    setAddedItems((prev) => [...prev, productId]);
-    setTimeout(() => {
-      setAddedItems((prev) => prev.filter((id) => id !== productId));
-    }, 2000);
-  };
-}
-
-/** Human-readable category heading derived from the route slug. */
-export function buildCategoryDisplayTitle(categoryName: string): string {
-  if (categoryName === 'All') return 'All Products';
-
-  return decodeURIComponent(categoryName)
-    .replace(/-/g, ' ')
-    .replace(/\b\w/g, (l) => l.toUpperCase());
-}
 
 export const INITIAL_CATEGORY_FILTER_STATE: FilterState = {
   brand: [],

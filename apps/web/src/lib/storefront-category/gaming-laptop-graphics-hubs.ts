@@ -47,3 +47,38 @@ export function buildGamingLaptopGraphicsHubPath(
 ): string {
   return `/${categorySlug}/graphics/${graphicsSlug}`;
 }
+
+interface HubPaginationBasePathInput {
+  baseUrl: string;
+  canonicalBaseUrl?: string;
+  requestScopedBaseUrl: string;
+}
+
+/**
+ * UI pagination base for curated hub pages. Anchors the hub suffix to the
+ * request-scoped store URL (which carries the merchant path prefix in
+ * path-routing storefronts) rather than the canonical store URL (which may
+ * not), so page 2+ never leaves the merchant storefront.
+ */
+export function buildHubPaginationBasePath({
+  baseUrl,
+  canonicalBaseUrl,
+  requestScopedBaseUrl,
+}: HubPaginationBasePathInput): string | undefined {
+  if (!canonicalBaseUrl?.startsWith(baseUrl)) {
+    return undefined;
+  }
+
+  const hubSuffix = canonicalBaseUrl.slice(baseUrl.length) || '/';
+  const suffix = hubSuffix.startsWith('/') ? hubSuffix : `/${hubSuffix}`;
+
+  try {
+    const scopedPath = new URL(requestScopedBaseUrl).pathname.replace(
+      /\/+$/,
+      ''
+    );
+    return `${scopedPath}${suffix}` || '/';
+  } catch {
+    return suffix;
+  }
+}

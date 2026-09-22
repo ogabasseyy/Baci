@@ -82,6 +82,7 @@ export async function GamingGraphicsHubRuntime(
       />
       <CategoryPageContent
         canonicalBaseUrl={page.canonicalBaseUrl}
+        hubSlug={page.hub.slug}
         params={Promise.resolve({
           category: params.category,
           slug: params.slug,

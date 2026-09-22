@@ -8,15 +8,15 @@ import { yieldToScheduler } from '@/lib/yield-to-scheduler';
 import type { FilterState } from '../components/CategoryFiltersSidebar';
 import { CategoryRecentCarousel } from '../components/CategoryRecentCarousel';
 import type { Product } from '../types';
+import { buildCategoryDisplayTitle } from './category-display-title';
+import { createCategoryAddToCartHandler } from './category-add-to-cart';
+import { shouldRouteGraphicsChangeThroughServer } from './category-graphics-routing';
 import {
   buildAvailableFilterOptions,
-  buildCategoryDisplayTitle,
-  createCategoryAddToCartHandler,
   filterCategoryProducts,
   hasActiveFilterSelection,
   INITIAL_CATEGORY_FILTER_STATE,
   NON_RECENCY_COLLECTION_SLUGS,
-  shouldRouteGraphicsChangeThroughServer,
 } from './category-page-derivations';
 import { CategoryPageMobileFilterDrawer } from './category-page-mobile-filter-drawer';
 import { CategoryPageResults } from './category-page-results';
@@ -43,8 +43,9 @@ export interface CategorySEOProps {
   totalProductCount?: number;
   graphicsOptions?: string[];
   selectedGraphics?: string[];
-  /** Pagination base override; hubs keep page 2+ on their indexable route. */
+  /** Hub overrides: indexable pagination base + cap-validation slug. */
   paginationBasePath?: string;
+  hubSlug?: string;
 }
 
 export const CategoryPage: React.FC<CategorySEOProps> = ({
@@ -59,6 +60,7 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
   graphicsOptions = [],
   selectedGraphics = [],
   paginationBasePath,
+  hubSlug,
 }) => {
   const params = useParams();
   const categoryName = (params?.category || 'All') as string;
@@ -69,13 +71,13 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  const merchantContext = useMerchantSafe();
-  const basePath = merchantContext?.basePath ?? '';
+  const basePath = useMerchantSafe()?.basePath ?? '';
   const serverGraphicsFilter = useServerCategoryGraphicsFilter({
     availableGraphics: graphicsOptions,
     basePath,
     categoryName,
     selectedGraphics,
+    hubSlug,
   });
   const safeItemsPerPage =
     Number.isInteger(itemsPerPage) && itemsPerPage > 0

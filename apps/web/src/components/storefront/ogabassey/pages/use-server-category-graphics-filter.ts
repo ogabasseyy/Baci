@@ -11,6 +11,29 @@ interface UseServerCategoryGraphicsFilterOptions {
   basePath: string;
   categoryName: string;
   selectedGraphics: string[];
+  /**
+   * Curated hub slug this filter instance renders under. Transitions mint a
+   * hub token so the listing can validate the selection against the hub's
+   * facet set instead of applying the untrusted-request cap.
+   */
+  hubSlug?: string;
+}
+
+type NonGraphicsFilterState = Omit<FilterState, 'graphics'>;
+
+function preserveNonGraphicsFilters(prev: FilterState): NonGraphicsFilterState {
+  return {
+    brand: prev.brand,
+    colors: prev.colors,
+    condition: prev.condition,
+    displaySize: prev.displaySize,
+    displayType: prev.displayType,
+    maxPrice: prev.maxPrice,
+    minPrice: prev.minPrice,
+    ram: prev.ram,
+    simType: prev.simType,
+    storage: prev.storage,
+  };
 }
 
 export function useServerCategoryGraphicsFilter({
@@ -18,6 +41,7 @@ export function useServerCategoryGraphicsFilter({
   basePath,
   categoryName,
   selectedGraphics,
+  hubSlug,
 }: UseServerCategoryGraphicsFilterOptions) {
   const router = useRouter();
   const [filters, setFilters] = useState<FilterState>(() => ({
@@ -30,10 +54,13 @@ export function useServerCategoryGraphicsFilter({
 
   if (filterScopeKey !== previousFilterScopeKey) {
     setPreviousFilterScopeKey(filterScopeKey);
-    setFilters({
+    // A new URL graphics selection must not discard local brand/price facet
+    // state the shopper applied while the previous selection was active.
+    setFilters((prev) => ({
       ...INITIAL_CATEGORY_FILTER_STATE,
+      ...preserveNonGraphicsFilters(prev),
       graphics: selectedGraphics,
-    });
+    }));
   }
 
   const enabled = availableGraphics.length > 0;
@@ -55,6 +82,7 @@ export function useServerCategoryGraphicsFilter({
         pathname: categoryListingPath,
         resetPage: true,
         search: window.location.search,
+        trustedHubSlug: hubSlug,
       })
     );
   }

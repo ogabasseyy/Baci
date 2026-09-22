@@ -44,20 +44,25 @@ BEGIN
   IF p_result IS NOT NULL AND (v_receipt.result IS NULL
     OR v_receipt.result ->> 'code' = 'payment_initialization_unknown') THEN
     -- Unfenced completions are allowed only for owner-matched definitive
-    -- pre-provider failures (no charge can exist for these codes); unknown and
-    -- success completions still require fencing.
+    -- pre-provider failures (no charge can exist for these codes); unknown,
+    -- success, and uncoded completions still require fencing.
     IF v_receipt.owner_token <> p_owner
       OR jsonb_typeof(p_result) <> 'object'
       OR jsonb_typeof(p_result -> 'success') IS DISTINCT FROM 'boolean'
       OR (
         v_receipt.execution_started_at IS NULL
-        AND NOT (
-          (p_result ->> 'success') = 'false'
-          AND p_result ->> 'code' IN (
-            'rate_limited', 'validation_failed',
-            'payment_initialization_failed', 'not_found',
-            'pickup_unavailable', 'quote_changed',
-            'resume_invalid', 'lookup_failed'
+        AND (
+          (p_result ->> 'success') IS DISTINCT FROM 'false'
+          OR (p_result ->> 'code') IS NULL
+          OR NOT (
+            (p_result ->> 'code') = ANY (
+              ARRAY[
+                'rate_limited', 'validation_failed',
+                'payment_initialization_failed', 'not_found',
+                'pickup_unavailable', 'quote_changed',
+                'resume_invalid', 'lookup_failed'
+              ]
+            )
           )
         )
       )

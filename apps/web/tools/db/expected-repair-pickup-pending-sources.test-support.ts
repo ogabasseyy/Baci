@@ -212,6 +212,6 @@ export const EXPECTED_REPAIR_PICKUP_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260922000300_allow_owner_pre_provider_failure_completion.sql',
-    sha256: 'cf74ae2681b63a87737af9d9da78720410cd3ffd2aacddbdc950cbf71470ba65',
+    sha256: 'eb60234d95e4110df1184d85cc54816fc0326cbb5b0498d4fb345d9dbc4d3b34',
   },
 ];

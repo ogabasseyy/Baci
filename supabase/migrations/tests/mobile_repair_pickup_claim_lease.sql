@@ -23,7 +23,8 @@ BEGIN
   IF public.begin_mobile_repair_pickup_payment(m,r,h,new_owner) THEN RAISE EXCEPTION 'owner started twice'; END IF;
   UPDATE public.mobile_repair_pickup_payment_receipts SET claim_expires_at = now() - interval '1 day'
     WHERE merchant_id=m AND request_id=r;
-  IF public.mobile_repair_pickup_payment_receipt_v2(m,r,h,old_owner)->>'state' <> 'pending' THEN RAISE EXCEPTION 'unknown execution reclaimed'; END IF;
+  IF public.mobile_repair_pickup_payment_receipt_v2(m,r,h,new_owner)->>'state' <> 'claimed' THEN RAISE EXCEPTION 'fenced resultless execution not recovered'; END IF;
+  IF NOT public.begin_mobile_repair_pickup_payment(m,r,h,new_owner) THEN RAISE EXCEPTION 'recovered owner could not fence'; END IF;
   IF public.mobile_repair_pickup_payment_receipt_v2(m,r,h,new_owner,
     '{"success":false,"code":"payment_initialization_unknown"}'::jsonb)->>'state' <> 'unknown'
   THEN RAISE EXCEPTION 'checkpoint not retained as unknown'; END IF;
@@ -37,8 +38,8 @@ BEGIN
   PERFORM public.mobile_repair_pickup_payment_receipt(m,r,h,old_owner);
   UPDATE public.mobile_repair_pickup_payment_receipts SET claim_expires_at = now() - interval '1 day'
     WHERE merchant_id=m AND request_id=r;
-  IF public.mobile_repair_pickup_payment_receipt_v2(m,r,h,new_owner)->>'state' <> 'pending'
-  THEN RAISE EXCEPTION 'legacy execution reclaimed'; END IF;
+  IF public.mobile_repair_pickup_payment_receipt_v2(m,r,h,new_owner)->>'state' <> 'claimed'
+  THEN RAISE EXCEPTION 'legacy fenced execution not recovered'; END IF;
   IF has_function_privilege('anon','public.begin_mobile_repair_pickup_payment(uuid,uuid,text,uuid)','EXECUTE')
     OR has_function_privilege('authenticated','public.begin_mobile_repair_pickup_payment(uuid,uuid,text,uuid)','EXECUTE')
     OR has_function_privilege('service_role','public.begin_mobile_repair_pickup_payment(uuid,uuid,text,uuid)','EXECUTE')

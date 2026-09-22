@@ -56,6 +56,8 @@ describe('repair pickup pending replay sources', () => {
       '163baf57cebf174698d659d3d37c871acd6954ce8cadb2b3c9f02f8cb7e1909d 20260922000100_add_merchant_created_at_repair_index.sql',
       'a0ab3247329ae38fb03985ee798c00dff7d3ada4360a9bc7f3cc2d638b9528c0 20260922000200_require_digits_in_repair_booking_phone.sql',
       'eb60234d95e4110df1184d85cc54816fc0326cbb5b0498d4fb345d9dbc4d3b34 20260922000300_allow_owner_pre_provider_failure_completion.sql',
+      'e48d46a1d7831db1fb4b930924cbd6611419a13b2835bf652124a2625d00bcb1 20260922000400_retain_template_backed_repair_booking_eligibility.sql',
+      '57d98f45ff2f7a33ed8a99393c47b35ca9e3e4dbf1c049072164987275474924 20260922000500_allow_unavailable_owner_pre_provider_failure_completion.sql',
     ]);
   });
 });

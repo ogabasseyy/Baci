@@ -8,6 +8,7 @@ vi.mock('@/lib/ollama-agentic-chat', () => ({
 import { runOllamaChat } from './run-ollama-chat';
 
 const options = {
+  agenticCheckoutEnabled: true,
   baseUrl: 'https://ollama.example.com',
   model: 'test-model',
   executeToolCall: mocks.execute,

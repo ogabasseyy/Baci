@@ -74,6 +74,7 @@ describe('runChatProviderChain', () => {
 
     const result = await runChatProviderChain({
       abortSignal: new AbortController().signal,
+      agenticCheckoutEnabled: true,
       messages: [{ content: 'Hello', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -128,6 +129,7 @@ describe('runChatProviderChain', () => {
     }) as unknown as typeof generateText);
     const result = await runChatProviderChain({
       abortSignal: new AbortController().signal,
+      agenticCheckoutEnabled: true,
       messages: [{ role: 'user', content: 'Show phones' }],
       sessionId: 'session-1',
     });
@@ -161,6 +163,7 @@ describe('runChatProviderChain', () => {
 
     const result = await runChatProviderChain({
       abortSignal: new AbortController().signal,
+      agenticCheckoutEnabled: true,
       messages: [{ content: 'Hello', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -192,6 +195,7 @@ describe('runChatProviderChain', () => {
 
     const attempt = runChatProviderChain({
       abortSignal: new AbortController().signal,
+      agenticCheckoutEnabled: true,
       messages: [{ content: 'Create a payment account', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -228,6 +232,7 @@ describe('runChatProviderChain', () => {
 
     const result = await runChatProviderChain({
       abortSignal: new AbortController().signal,
+      agenticCheckoutEnabled: true,
       messages: [{ content: 'Show me phones', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -278,6 +283,7 @@ describe('runChatProviderChain', () => {
 
     const result = await runChatProviderChain({
       abortSignal: new AbortController().signal,
+      agenticCheckoutEnabled: true,
       messages: [{ content: 'Tell me about this phone', role: 'user' }],
       sessionId: 'session-1',
     });

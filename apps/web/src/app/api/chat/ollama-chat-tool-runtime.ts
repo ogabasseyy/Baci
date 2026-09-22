@@ -27,6 +27,11 @@ const AGENTIC_CHAT_TOOL_NAME_LIST = [
 
 type AgenticChatToolName = (typeof AGENTIC_CHAT_TOOL_NAME_LIST)[number];
 
+const CHECKOUT_TOOL_NAMES = new Set<AgenticChatToolName>([
+  'createVirtualAccount',
+  'cancelOrder',
+]);
+
 const AGENTIC_CHAT_TOOL_NAMES = new Set<AgenticChatToolName>(
   AGENTIC_CHAT_TOOL_NAME_LIST
 );
@@ -90,10 +95,15 @@ function executeAgenticChatTool(
 export async function executeAgenticChatToolForOllama(
   name: string,
   rawArguments: unknown,
-  sessionId: string
+  sessionId: string,
+  agenticCheckoutEnabled = true
 ): Promise<string> {
   if (!isAgenticChatToolName(name)) {
     return JSON.stringify({ error: `Unknown tool: ${name}` });
+  }
+
+  if (agenticCheckoutEnabled === false && CHECKOUT_TOOL_NAMES.has(name)) {
+    return JSON.stringify({ error: 'Agentic checkout disabled' });
   }
 
   try {

@@ -66,6 +66,7 @@ function didAiSdkToolCreateSideEffect(
 export function createAiSdkAgenticChatTools(
   sessionId: string,
   options: {
+    agenticCheckoutEnabled?: boolean;
     onSideEffect?: (toolName: string) => void;
     onToolResult?: (
       toolName: string,
@@ -104,7 +105,7 @@ export function createAiSdkAgenticChatTools(
     return pending;
   };
 
-  return {
+  const tools = {
     searchProducts: {
       description: TOOL_DESCRIPTIONS.searchProducts,
       inputSchema: searchProductsSchema,
@@ -192,4 +193,14 @@ export function createAiSdkAgenticChatTools(
       },
     },
   };
+
+  // When the tenant disables agentic checkout, the model must not even see
+  // the commerce tools — execution-time fail-closed alone still lets it
+  // promise payments and cancellations it cannot fulfil.
+  if (options.agenticCheckoutEnabled === false) {
+    Reflect.deleteProperty(tools, 'cancelOrder');
+    Reflect.deleteProperty(tools, 'createVirtualAccount');
+  }
+
+  return tools;
 }

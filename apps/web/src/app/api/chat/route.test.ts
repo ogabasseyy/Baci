@@ -28,6 +28,21 @@ let llmError: Error | null = null;
 let llmStreamError: Error | null = null;
 let llmResponseText = 'LLM response';
 let chatProvider: 'auto' | 'gemini' | 'llm' | 'ollama' = 'auto';
+let mockTenant: {
+  agenticCheckoutEnabled: boolean;
+  businessName: string;
+  currencyCode: string;
+  merchantId: string;
+  merchantSlug: string;
+  priceNegotiationEnabled: boolean;
+} | null = {
+  agenticCheckoutEnabled: true,
+  businessName: 'Demo Store',
+  currencyCode: 'NGN',
+  merchantId: 'merchant-1',
+  merchantSlug: 'demo-store',
+  priceNegotiationEnabled: true,
+};
 
 // ---- Mocks ----
 
@@ -62,6 +77,10 @@ vi.mock('@/ai/provider', () => ({
   ),
   activeTextModel: 'mock-model',
   fallbackTextModel: 'mock-fallback-model',
+}));
+
+vi.mock('@/lib/agentic/agentic-chat-tenant', () => ({
+  resolveAgenticChatTenant: vi.fn(async () => mockTenant),
 }));
 
 vi.mock('@/env', () => ({
@@ -298,6 +317,14 @@ describe('POST /api/chat', () => {
     llmStreamError = null;
     llmResponseText = 'LLM response';
     chatProvider = 'auto';
+    mockTenant = {
+      agenticCheckoutEnabled: true,
+      businessName: 'Demo Store',
+      currencyCode: 'NGN',
+      merchantId: 'merchant-1',
+      merchantSlug: 'demo-store',
+      priceNegotiationEnabled: true,
+    };
     generateTextWithChainMock.mockImplementation(generateRouteChainAttempt);
   });
 
@@ -378,8 +405,23 @@ describe('POST /api/chat', () => {
     expect(response.headers.get('Content-Type')).toBe(
       'text/plain; charset=utf-8'
     );
+    expect(response.headers.get('x-baci-santa-merchant-slug')).toBe(
+      'demo-store'
+    );
     const text = await response.text();
     expect(text).toBe('AI response');
+  });
+
+  it('returns 503 when no configured tenant resolves', async () => {
+    mockTenant = null;
+
+    const response = await POST(
+      makeRequest({
+        messages: [{ role: 'user', content: 'Show me phones' }],
+      })
+    );
+
+    expect(response.status).toBe(503);
   });
 
   it('uses VPS Gemma through Ollama when configured', async () => {

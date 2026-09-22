@@ -45,6 +45,7 @@ it.each([
   });
   const result = await runChatProviderChain({
     abortSignal: new AbortController().signal,
+    agenticCheckoutEnabled: true,
     messages: [{ role: 'user', content: 'Show phones' }],
     sessionId: 'session',
   });
@@ -97,6 +98,7 @@ it.each([
   );
   const result = await runChatProviderChain({
     abortSignal: new AbortController().signal,
+    agenticCheckoutEnabled: true,
     messages: [{ role: 'user', content: 'Show phones' }],
     sessionId: 'session',
   });

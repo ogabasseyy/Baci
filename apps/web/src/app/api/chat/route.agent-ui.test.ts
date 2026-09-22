@@ -9,6 +9,16 @@ let ollamaExecutedToolNameBeforeFailure = '';
 let ollamaExecutedToolResultBeforeFailure = '';
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/ai/provider', () => ({ checkRateLimit: () => ({ allowed: true }) }));
+vi.mock('@/lib/agentic/agentic-chat-tenant', () => ({
+  resolveAgenticChatTenant: vi.fn(async () => ({
+    agenticCheckoutEnabled: true,
+    businessName: 'Demo Store',
+    currencyCode: 'NGN',
+    merchantId: 'merchant-1',
+    merchantSlug: 'demo-store',
+    priceNegotiationEnabled: true,
+  })),
+}));
 vi.mock('@/env', () => ({
   getAiChatProvider: () => 'ollama',
   getAiChatModel: () => 'gemma4:e4b',

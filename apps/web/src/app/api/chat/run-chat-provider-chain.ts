@@ -37,10 +37,12 @@ interface AgenticChatProviderResult extends ChainTextResult {
  */
 export async function runChatProviderChain({
   abortSignal,
+  agenticCheckoutEnabled,
   messages,
   sessionId,
 }: {
   abortSignal: AbortSignal;
+  agenticCheckoutEnabled: boolean;
   messages: ModelMessage[];
   sessionId: string;
 }): Promise<AgenticChatProviderResult> {
@@ -57,6 +59,7 @@ export async function runChatProviderChain({
     presentationCollector = collector;
     presentationProviderName = providerName;
     return createAiSdkAgenticChatTools(sessionId, {
+      agenticCheckoutEnabled,
       onSideEffect: () => {
         sideEffectExecuted = true;
       },

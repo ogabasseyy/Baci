@@ -2,7 +2,7 @@ import { createOllamaAgenticChatResponse } from '@/lib/ollama-agentic-chat';
 import type { OllamaToolCall } from '@/lib/ollama-chat';
 import { createChatPresentationEventCollector } from './create-chat-presentation-event-collector';
 import { negotiateChatAgentUiResponse } from './negotiate-chat-agent-ui-response';
-import { ollamaAgenticChatTools } from './ollama-chat-tools';
+import { getOllamaAgenticChatTools } from './ollama-chat-tools';
 import { recoverOllamaChatResponse } from './recover-ollama-chat-response';
 import {
   bufferTextResponse,
@@ -68,6 +68,7 @@ export async function runOllamaChat(
   req: Request,
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
   options: {
+    agenticCheckoutEnabled: boolean;
     baseUrl: string;
     model: string;
     basicAuth?: string;
@@ -85,7 +86,7 @@ export async function runOllamaChat(
       messages: buildChatMessages(messages, options.model, {
         toolsEnabled: true,
       }),
-      tools: ollamaAgenticChatTools,
+      tools: getOllamaAgenticChatTools(options.agenticCheckoutEnabled),
       executeToolCall: async (call) => {
         const toolName = call.function.name;
         if (

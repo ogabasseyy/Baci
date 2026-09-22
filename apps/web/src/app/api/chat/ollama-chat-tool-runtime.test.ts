@@ -152,4 +152,27 @@ describe('ollama chat tool runtime', () => {
 
     expect(JSON.parse(result)).toEqual({ error: 'Unknown tool: addToCart' });
   });
+
+  it('refuses commerce tools when agentic checkout is disabled', async () => {
+    const cancel = await executeAgenticChatToolForOllama(
+      'cancelOrder',
+      JSON.stringify({ orderId: 'order-1' }),
+      'session-42',
+      false
+    );
+    const account = await executeAgenticChatToolForOllama(
+      'createVirtualAccount',
+      JSON.stringify({}),
+      'session-42',
+      false
+    );
+
+    expect(JSON.parse(cancel)).toEqual({
+      error: 'Agentic checkout disabled',
+    });
+    expect(JSON.parse(account)).toEqual({
+      error: 'Agentic checkout disabled',
+    });
+    expect(mocks.handleCancelOrder).not.toHaveBeenCalled();
+  });
 });

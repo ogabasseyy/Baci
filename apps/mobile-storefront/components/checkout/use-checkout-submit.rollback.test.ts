@@ -285,4 +285,46 @@ describe('useCheckoutSubmit rollback credit', () => {
       })
     );
   });
+
+  it('restores the submitted generation when it differs from the snapshot', async () => {
+    // Checkout began before generation restoration completed: the cart
+    // snapshot is stale, but createOrder submitted under the restored
+    // identity. Rollback must follow the submitted generation so a retry
+    // replays the created order instead of forking the idempotency key.
+    const submitted = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    mockCreateOrder.mockImplementation(
+      async () =>
+        ({
+          amountDueToGateway: 1201500,
+          effectiveCheckoutGeneration: submitted,
+          idempotency: { replayed: false },
+          order: {
+            created_at: '2026-07-09T12:00:00.000Z',
+            id: 'order-1',
+            order_number: 'ORD-1',
+            payment_status: 'pending',
+            shipping_status: 'pending',
+            total: 1201500,
+          },
+          wallet: null,
+        }) as never
+    );
+    mockRunFinalizeCheckoutPayment.mockRejectedValueOnce(
+      new Error('routing failed')
+    );
+    const params = createParams();
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockRestore).toHaveBeenCalledWith(
+      expect.objectContaining({ checkoutGeneration: submitted })
+    );
+  });
 });

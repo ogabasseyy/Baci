@@ -278,11 +278,13 @@ it('uses the restored durable generation for frozen UI retries started before re
     checkoutGeneration: 'stale-cart',
   });
   releaseRestore();
-  await ordering;
+  const submitted = await ordering;
 
   expect(mockBuildSnapshottedOrderPayload.mock.calls[0]?.[1]).toBe(
     'persisted-gen'
   );
+  // Rollback recovery follows the submitted identity, not the stale pin.
+  expect(submitted.effectiveCheckoutGeneration).toBe('persisted-gen');
   expect(mockGetCheckoutAttemptKey.mock.calls[0]?.[1]).toBe('persisted-gen');
   expect(await AsyncStorage.getItem(CHECKOUT_GENERATION_STORAGE_KEY)).toBe(
     'persisted-gen'

@@ -239,4 +239,57 @@ describe('bugfix: checkout generation is durable before the order request', () =
     await writeEntered;
     expect(mockSetItem).toHaveBeenCalled();
   });
+
+  it('never issues an abandoned write after a newer persist completed', async () => {
+    jest.useFakeTimers();
+    const blocker = '77777777-7777-4777-8777-777777777777';
+    const older = '88888888-8888-4888-8888-888888888888';
+    const newer = '99999999-9999-4999-8999-999999999999';
+    // Hold the shared queue so the older persist stays queued without
+    // starting while the timeout detaches the chain.
+    let releaseBlocker!: () => void;
+    let blockerEntered!: () => void;
+    const blockerEnteredPromise = new Promise<void>((resolve) => {
+      blockerEntered = resolve;
+    });
+    mockSetItem.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          blockerEntered();
+          releaseBlocker = () => resolve();
+        })
+    );
+    const blockerWrite = persistCheckoutGeneration(blocker);
+    void blockerWrite.catch(() => undefined);
+    await blockerEnteredPromise;
+    const hung = persistCheckoutGeneration(older);
+    const hungAssertion = expect(hung).rejects.toThrow(
+      'Checkout storage write timed out'
+    );
+    await jest.advanceTimersByTimeAsync(5_000);
+    await hungAssertion;
+
+    // A newer persist completes on the fresh chain while the older one
+    // never started.
+    await persistCheckoutGeneration(newer);
+    expect(storage.get('checkout-generation-v1')).toBe(newer);
+    const writesBeforeRelease = mockSetItem.mock.calls.length;
+
+    // The abandoned chain drains: the blocker lands, then the older
+    // attempt starts, sees the newer completion, and stands down without
+    // issuing its write — the stale value is never durably observable,
+    // so no kill window needs the detached compensation.
+    releaseBlocker();
+    for (let tick = 0; tick < 10; tick += 1) {
+      await Promise.resolve();
+    }
+    expect(storage.get('checkout-generation-v1')).toBe(newer);
+    expect(
+      mockSetItem.mock.calls
+        .slice(writesBeforeRelease)
+        .filter(([key]) => key === 'checkout-generation-v1')
+        .map(([, value]) => value)
+    ).not.toContain(older);
+    expect(mockRemoveItem).not.toHaveBeenCalled();
+  });
 });

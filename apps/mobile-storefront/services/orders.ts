@@ -18,7 +18,7 @@ import {
   OrderError,
   throwOrderHttpError,
 } from './orders.errors';
-import { parseOrderResponse } from './orders.response';
+import { type CreateOrderResult, parseOrderResponse } from './orders.response';
 import {
   type CreateOrderRequest,
   CreateOrderRequestSchema,
@@ -63,7 +63,7 @@ export type CreateOrderOptions = {
 export async function createOrder(
   request: CreateOrderRequest,
   options?: CreateOrderOptions
-): Promise<OrderResponse> {
+): Promise<CreateOrderResult> {
   const startTime = Date.now();
   const frozenCheckoutGeneration = options?.checkoutGeneration;
   const checkoutGeneration =
@@ -222,9 +222,15 @@ export async function createOrder(
       });
     }
 
+    // The submitted generation travels with the response so rollback
+    // recovery replays this exact order identity on retry.
     return replayed
-      ? { ...normalizedOrderResponse, idempotency: { replayed: true } }
-      : normalizedOrderResponse;
+      ? {
+          ...normalizedOrderResponse,
+          effectiveCheckoutGeneration,
+          idempotency: { replayed: true },
+        }
+      : { ...normalizedOrderResponse, effectiveCheckoutGeneration };
   } catch (error) {
     const mapped = mapCreateOrderException(error, startTime);
     // The payload was frozen under the resolved generation, so rejection

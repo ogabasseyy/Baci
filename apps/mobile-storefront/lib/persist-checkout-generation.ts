@@ -61,6 +61,17 @@ export async function persistCheckoutGeneration(
     if (mintedCheckoutGenerations.isRegistered(checkoutGeneration)) {
       await markCodepointCheckoutItemSort(checkoutGeneration);
     }
+    // Fence the abandoned write: after a queue reset detached this chain,
+    // a newer persist may have completed while this attempt awaited the
+    // marker above. Issuing the set below would make the stale value
+    // durable before the detached compensation can repair it — and a kill
+    // in that interval restarts into the wrong generation, forking the
+    // next retry's idempotency key. There is no await between this check
+    // and the setItem call, so a newer completion cannot slip between
+    // them: anything completing later issues its write after this one.
+    if (lastCompletedCheckoutGenerationWriteSequence > writeSequence) {
+      return;
+    }
     await AsyncStorage.setItem(
       CHECKOUT_GENERATION_STORAGE_KEY,
       checkoutGeneration

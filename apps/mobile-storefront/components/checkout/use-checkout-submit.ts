@@ -19,13 +19,15 @@ import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
 import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
-import { runRedvaultSubmitInitializationSideEffects } from './checkout-submit-redvault';
-import { captureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
+import {
+  captureCheckoutSubmitRollbackState,
+  trackSubmittedCheckoutGeneration,
+} from './checkout-submit-rollback-state';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
 import { isBnplPayment } from './is-bnpl-payment';
 import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
 import { runFinalizeCheckoutPayment } from './run-finalize-checkout-payment';
-import { submitRedvaultCheckout } from './submit-redvault-checkout';
+import { runRedvaultPostOrderBranch } from './submit-redvault-checkout';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 
 export type { UseCheckoutSubmitParams };
@@ -125,6 +127,9 @@ export function useCheckoutSubmit({
     // Hoisted for the rollback path, which re-freezes these on cart restore.
     let submitCreditFields: Record<string, unknown> | undefined;
     let submitHadSortMarker: boolean | undefined;
+    const submittedGeneration = trackSubmittedCheckoutGeneration(
+      checkoutGenerationSnapshot
+    );
     try {
       if (await abortIfCartPricesStale(itemsSnapshot, merchantId)) {
         return;
@@ -193,8 +198,9 @@ export function useCheckoutSubmit({
       const orderResponse = await createOrder(orderRequest, {
         checkoutGeneration: checkoutGenerationSnapshot,
       });
+      submittedGeneration.track(orderResponse);
       const rollbackState = await captureCheckoutSubmitRollbackState(
-        checkoutGenerationSnapshot,
+        submittedGeneration.current(),
         creditFields
       );
       submitCreditFields = rollbackState.creditFields;
@@ -204,40 +210,29 @@ export function useCheckoutSubmit({
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
       const orderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
-      if (selectedPayment === 'uba_redvault') {
-        await submitRedvaultCheckout({
-          checkoutGeneration: checkoutGenerationSnapshot,
+      if (
+        await runRedvaultPostOrderBranch({
+          accountPassword,
+          address,
+          checkoutGeneration: submittedGeneration.current(),
+          completedPaymentMethod,
+          customer,
           customerEmail,
           customerName,
           customerPhone,
-          onInitializationSuccess: () =>
-            runRedvaultSubmitInitializationSideEffects({
-              accountPassword,
-              address,
-              customerEmail,
-              customerId: customer?.id,
-              isAuthenticated,
-              orderId: order.id,
-              saveAsDefaultAddress,
-              saveDetails,
-              selectedSavedAddressId,
-              trackingToken: order.tracking_token ?? undefined,
-            }),
+          isAuthenticated,
+          itemsSnapshot,
           onRedvaultOrder,
+          order,
+          orderNumber,
           orderResponse,
-          trackingContext: {
-            customerEmail,
-            customerPhone,
-            items: itemsSnapshot,
-            orderNumber,
-            paymentMethod: completedPaymentMethod,
-            shipping: snapshot.deliveryFee,
-            subtotal: snapshot.subtotal,
-            tax: snapshot.taxAmount,
-            total: order.total,
-            userId: customer?.id ?? undefined,
-          },
-        });
+          saveAsDefaultAddress,
+          saveDetails,
+          selectedPayment,
+          selectedSavedAddressId,
+          snapshot,
+        })
+      ) {
         return;
       }
       if (await claimCheckoutPurchaseTracking(order.id)) {
@@ -286,7 +281,7 @@ export function useCheckoutSubmit({
     } catch (error) {
       await restoreEmptiedCheckoutCart({
         cartWideNegotiationActive: groupNegotiationSnapshot,
-        checkoutGeneration: checkoutGenerationSnapshot,
+        checkoutGeneration: submittedGeneration.current(),
         creditFields: submitCreditFields,
         hadSortMarker: submitHadSortMarker,
         itemsSnapshot,

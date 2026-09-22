@@ -267,6 +267,7 @@ describe('useCheckoutSubmit', () => {
     mockValidateCheckoutSubmission.mockReturnValue(true);
     mockCreateOrder.mockResolvedValue({
       amountDueToGateway: 1201500,
+      effectiveCheckoutGeneration: 'gen-1',
       order: {
         created_at: '2026-07-09T12:00:00.000Z',
         id: 'order-1',

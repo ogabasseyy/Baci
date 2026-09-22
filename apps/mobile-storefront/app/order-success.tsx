@@ -208,11 +208,19 @@ export default function OrderSuccessScreen() {
     }
   };
 
-  const handleViewDocument = orderId
-    ? () => {
-        receiptPreview.openPreviewByOrderId(orderId);
-      }
-    : undefined;
+  // The preview loads through the authenticated receipt query, which is
+  // disabled without a signed-in user: offering the action to a guest
+  // would stick the button on "Preparing document..." forever. The
+  // tracking-token lookup cannot substitute — it returns a summary
+  // without the settlement-critical document fields (order virtual
+  // account, transactions, merchant banking). Guests reach their order
+  // through View orders (tracking-token route) instead.
+  const handleViewDocument =
+    orderId && customer
+      ? () => {
+          receiptPreview.openPreviewByOrderId(orderId);
+        }
+      : undefined;
 
   if (isParamVerificationPending) {
     // The reconciliation parameter is still unverified: render nothing

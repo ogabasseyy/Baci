@@ -128,6 +128,7 @@ export function buildStorefrontAccountDocumentBundle({
     paymentMethod: order.payment_method,
     isPaid: paymentStatus === 'paid',
     wasPaid: paymentStatus === 'refunded',
+    paymentStatus,
     storedTypeCode: order.invoice_type_code,
   });
   const registeredAddress = asRecord(merchant.registered_address);

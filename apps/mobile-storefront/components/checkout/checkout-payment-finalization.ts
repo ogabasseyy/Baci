@@ -20,6 +20,7 @@ interface FinalizeCheckoutPaymentParams {
   customerEmail: string;
   customerName: string;
   customerPhone: string;
+  isMountedRef?: MutableRefObject<boolean>;
   isOrderInFlight: MutableRefObject<boolean>;
   orderNumber: string;
   orderResponse: OrderResponse;
@@ -37,6 +38,7 @@ export async function finalizeCheckoutPayment({
   customerEmail,
   customerName,
   customerPhone,
+  isMountedRef,
   isOrderInFlight,
   orderNumber,
   orderResponse,
@@ -63,6 +65,7 @@ export async function finalizeCheckoutPayment({
     await routeStoreCreditSuccess({
       attribution,
       clearCart,
+      isMountedRef,
       orderId: order.id,
       orderNumber,
       orderResponse,
@@ -87,6 +90,7 @@ export async function finalizeCheckoutPayment({
     await routeFullyPaidPrizeSuccess({
       attribution,
       clearCart,
+      isMountedRef,
       isOrderInFlight,
       orderId: order.id,
       orderNumber,

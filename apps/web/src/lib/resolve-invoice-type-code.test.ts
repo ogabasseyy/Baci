@@ -92,4 +92,28 @@ describe('resolveInvoiceTypeCode', () => {
       })
     ).toBe('325');
   });
+
+  it('preserves the commercial code for a partially paid invoice order', () => {
+    // complete_merchant_invoice_partial_payment_v1 leaves the durable
+    // partially_paid status: money was accepted, so the stored 380 is a
+    // completed transaction's code — not the meaningless default — and
+    // the Peppol artifact must survive.
+    expect(
+      resolveInvoiceTypeCode({
+        paymentMethod: 'invoice',
+        isPaid: false,
+        wasPaid: false,
+        paymentStatus: 'partially_paid',
+        storedTypeCode: '380',
+      })
+    ).toBe('380');
+    expect(
+      resolveInvoiceTypeCode({
+        paymentMethod: 'invoice',
+        isPaid: false,
+        paymentStatus: 'partially_paid',
+        storedTypeCode: null,
+      })
+    ).toBe('380');
+  });
 });

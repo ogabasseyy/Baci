@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, render, waitFor } from '@testing-library/react-native';
 import {
+  mockAuthCustomerHolder,
   mockAuthStoreModule,
   mockColorSchemeModule,
   mockExpoRouterModule,
@@ -254,6 +255,21 @@ describe('OrderSuccessScreen', () => {
     latestProps?.onViewDocument?.();
 
     expect(mockOpenPreviewByOrderId).toHaveBeenCalledWith('order-1');
+  });
+
+  it('hides the document action for guests without a usable receipt lookup', () => {
+    mockAuthCustomerHolder.current = null;
+    render(<OrderSuccessScreen />);
+
+    const latestProps = mockOrderSuccessView.mock.calls.at(-1)?.[0] as
+      | { onViewDocument?: () => void }
+      | undefined;
+
+    // The authenticated receipt query is disabled without a signed-in
+    // user, so no handler is offered instead of a button stuck on
+    // "Preparing document...".
+    expect(latestProps?.onViewDocument).toBeUndefined();
+    expect(mockOpenPreviewByOrderId).not.toHaveBeenCalled();
   });
 
   it('reports unpaid for invoice orders without a paid receipt', () => {

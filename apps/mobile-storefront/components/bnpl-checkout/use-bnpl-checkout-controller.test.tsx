@@ -312,6 +312,46 @@ describe('useBNPLCheckoutController', () => {
     );
   });
 
+  it('does not clear the cart or route when unmounted during success attribution', async () => {
+    mockRouteParams = {
+      gateway: 'credpal',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+      trackingToken: 'track-token-123',
+    };
+    let resolveAttribution: (value: boolean) => void = () => {};
+    (trackCheckoutPaymentCompletedOnce as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveAttribution = resolve;
+        })
+    );
+    const { result, unmount } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'navigation',
+            url: 'https://usebaci.com/ogabassey/order-success?reference=CP-1&credpalStatus=success',
+          }),
+        },
+      });
+    });
+
+    act(() => {
+      unmount();
+    });
+
+    await act(async () => {
+      resolveAttribution(true);
+    });
+
+    expect(trackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(1);
+    expect(mockClearCart).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
   it('does not trust merchantDomain route params for SPA success navigation messages', () => {
     mockRouteParams = {
       gateway: 'credit_direct',

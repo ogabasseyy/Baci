@@ -24,6 +24,7 @@ export interface BNPLNavigationHandlerDeps {
   tax?: string;
   trackingToken?: string;
   clearCart: () => Promise<void>;
+  isMountedRef: MutableRefObject<boolean>;
   statusRef: MutableRefObject<BNPLCheckoutStatus>;
   setCheckoutStatus: BNPLSetCheckoutStatus;
   setErrorMessage: (message: string | null) => void;
@@ -56,6 +57,7 @@ export function createBNPLNavigationHandlers({
   tax,
   trackingToken,
   clearCart,
+  isMountedRef,
   statusRef,
   setCheckoutStatus,
   setErrorMessage,
@@ -113,6 +115,11 @@ export function createBNPLNavigationHandlers({
               ? Number(amount)
               : undefined,
         });
+        // The emission can outlive the screen: a late resolution must not
+        // erase the cart or route after unmount.
+        if (!isMountedRef.current) {
+          return;
+        }
       }
       await clearCart();
       scheduleOrderSuccess({

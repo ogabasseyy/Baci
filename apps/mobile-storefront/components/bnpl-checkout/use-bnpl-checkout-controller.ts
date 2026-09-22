@@ -92,6 +92,10 @@ export function useBNPLCheckoutController({
     void trackCheckoutPaymentFailed(reason, orderId, gateway, reference);
   };
   const statusRef = useRef<BNPLCheckoutStatus>('loading');
+  // Guards async continuations (success attribution) that can resolve
+  // after the screen is gone: a late resolution must not clear the cart
+  // or route after unmount.
+  const isMountedRef = useRef(true);
   const documentUrlRef = useRef(bnplUrl);
   const trackDocumentUrl = (url: unknown) => {
     if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
@@ -130,6 +134,7 @@ export function useBNPLCheckoutController({
   const scheduleLoadTimeout = () => getLoadTimers().scheduleLoadTimeout();
   useEffect(
     () => () => {
+      isMountedRef.current = false;
       if (loadTimeoutRef.current) {
         clearTimeout(loadTimeoutRef.current);
         loadTimeoutRef.current = null;
@@ -158,6 +163,7 @@ export function useBNPLCheckoutController({
       customerEmail,
       customerPhone,
       gateway,
+      isMountedRef,
       merchantDomain,
       merchantSlug,
       orderId,

@@ -10,16 +10,25 @@
  * completed transaction whose payment was later returned, so `wasPaid`
  * keeps the commercial (380) classification even though the order is not
  * currently paid.
+ *
+ * A partially paid invoice-method order has accepted money too
+ * (`complete_merchant_invoice_partial_payment_v1` leaves the durable
+ * `partially_paid` status): relabeling it proforma (325) would suppress
+ * its Peppol artifact, so partial-payment evidence counts as previously
+ * paid via `paymentStatus`.
  */
 export function resolveInvoiceTypeCode(input: {
   paymentMethod?: string | null;
   isPaid: boolean;
   wasPaid?: boolean;
+  paymentStatus?: string | null;
   storedTypeCode?: string | null;
 }): string {
   const method = input.paymentMethod?.trim().toLowerCase();
   const stored = input.storedTypeCode?.trim();
-  if (method === 'invoice' && !input.isPaid && !input.wasPaid) {
+  const status = input.paymentStatus?.trim().toLowerCase();
+  const previouslyPaid = input.wasPaid || status === 'partially_paid';
+  if (method === 'invoice' && !input.isPaid && !previouslyPaid) {
     return stored && stored !== '380' ? stored : '325';
   }
   return stored || '380';

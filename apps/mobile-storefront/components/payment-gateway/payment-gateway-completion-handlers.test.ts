@@ -48,15 +48,22 @@ const mockClaimCheckoutPurchaseTracking =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockIsCheckoutPurchaseClaimed =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockReleaseCheckoutPurchaseTracking =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockClearRedvaultPurchaseTrackingContext =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
-const mockTrackCheckoutRoutePurchaseCompleted = jest.fn();
+const mockTrackCheckoutRoutePurchaseCompleted =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
 jest.mock('@/lib/claim-checkout-purchase-tracking', () => ({
   claimCheckoutPurchaseTracking: (...args: unknown[]) =>
     mockClaimCheckoutPurchaseTracking(...args),
   isCheckoutPurchaseClaimed: (...args: unknown[]) =>
     mockIsCheckoutPurchaseClaimed(...args),
+}));
+jest.mock('@/lib/claim-checkout-purchase-release', () => ({
+  releaseCheckoutPurchaseTracking: (...args: unknown[]) =>
+    mockReleaseCheckoutPurchaseTracking(...args),
 }));
 
 jest.mock('@/lib/redvault-purchase-tracking-context', () => ({
@@ -688,6 +695,51 @@ describe('createPaymentGatewayCompletionHandlers', () => {
         reconciliation: outcome,
       }),
     });
+  });
+
+  it('releases the purchase claim when REDVAULT tracking rejects so a retry can emit', async () => {
+    // Arrange
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue({
+      items: [],
+      orderNumber: 'ORD-9',
+      paymentMethod: 'uba_redvault',
+      shipping: 0,
+      subtotal: 5000,
+      tax: 0,
+      total: 5000,
+    });
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(true);
+    mockTrackCheckoutRoutePurchaseCompleted.mockRejectedValueOnce(
+      new Error('ad platform down')
+    );
+
+    // Act: first pass emits nothing but still succeeds the payment.
+    const first = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      first.input
+    ).beginPaymentCompletion();
+
+    // Assert: claim rolled back, context retained for retry.
+    expect(mockReleaseCheckoutPurchaseTracking).toHaveBeenCalledWith('order-1');
+    expect(mockClearRedvaultPurchaseTrackingContext).not.toHaveBeenCalled();
+    expect(first.input.setPaymentStatus).toHaveBeenLastCalledWith('success');
+    expect(first.input.clearCart).toHaveBeenCalled();
+
+    // Act: retry emits exactly once and then cleans up.
+    mockTrackCheckoutRoutePurchaseCompleted.mockClear();
+    mockClearRedvaultPurchaseTrackingContext.mockClear();
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(true);
+    const second = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      second.input
+    ).beginPaymentCompletion();
+
+    expect(mockTrackCheckoutRoutePurchaseCompleted).toHaveBeenCalledTimes(1);
+    expect(mockClearRedvaultPurchaseTrackingContext).toHaveBeenCalledWith(
+      'order-1'
+    );
+    expect(mockReleaseCheckoutPurchaseTracking).toHaveBeenCalledTimes(1);
   });
 
   it('ignores a second completion once one has already started', () => {

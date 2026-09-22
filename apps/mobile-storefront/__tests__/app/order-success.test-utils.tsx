@@ -116,10 +116,15 @@ export function mockReceiptPreviewModule(): unknown {
   };
 }
 
+export const mockAuthCustomerHolder: {
+  current: { id: string } | null;
+} = { current: { id: 'user-1' } };
+
 export function mockAuthStoreModule(): unknown {
   return {
-    useAuthStore: (selector: (state: { customer: null }) => unknown) =>
-      selector({ customer: null }),
+    useAuthStore: (
+      selector: (state: { customer: { id: string } | null }) => unknown
+    ) => selector({ customer: mockAuthCustomerHolder.current }),
   };
 }
 
@@ -167,6 +172,7 @@ export function setupOrderSuccessMocks(): void {
   mockReceiptDismissalHolder.current = undefined;
   mockPaidCheckOrderHolder.current = null;
   mockReceiptFetchedHolder.current = true;
+  mockAuthCustomerHolder.current = { id: 'user-1' };
   mockSearchParamsHolder.current = {
     orderId: 'order-1',
     orderNumber: 'BAC-001',

@@ -134,8 +134,8 @@ function OrderSuccessContent() {
   // Invoice-method detection stays true after payment so a paid invoice
   // order keeps its commercial (380) document action; proforma
   // presentation is unpaid-only, matching resolveInvoiceTypeCode. A
-  // refunded invoice was previously paid, so it keeps the commercial
-  // presentation too — never "Proforma Invoice Ready".
+  // refunded or partially paid invoice accepted money, so it keeps the
+  // commercial presentation too — never "Proforma Invoice Ready".
   const isInvoiceMethod =
     _type === 'invoice' ||
     order?.payment_status === 'invoice' ||
@@ -143,7 +143,8 @@ function OrderSuccessContent() {
   const isInvoice =
     isInvoiceMethod &&
     order?.payment_status !== 'paid' &&
-    order?.payment_status !== 'refunded';
+    order?.payment_status !== 'refunded' &&
+    order?.payment_status !== 'partially_paid';
   // Pay for Me handoff contract: nothing is delivered to the payer
   // contact server-side, and the tracking token is a full-PII bearer —
   // sharing any link that carries it would disclose the requester's

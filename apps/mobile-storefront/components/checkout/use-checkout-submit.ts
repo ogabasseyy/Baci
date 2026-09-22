@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useMerchant } from '@/hooks/use-merchant';
 import type { ShippingAddressInput } from '@/lib/validation';
 import {
@@ -64,6 +65,16 @@ export function useCheckoutSubmit({
 }: UseCheckoutSubmitParams) {
   const { data: merchant } = useMerchant();
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
+  // Guards the fully-paid routing continuation: the completion-tracking
+  // await can outlive checkout, and a late resolution must not erase a
+  // newly created cart or navigate away from the shopper's screen.
+  const isMountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      isMountedRef.current = false;
+    },
+    []
+  );
   return async (address: ShippingAddressInput) => {
     const itemsSnapshot = [...useCartStore.getState().items];
     const {
@@ -244,6 +255,7 @@ export function useCheckoutSubmit({
         customerEmail,
         customerName,
         customerPhone,
+        isMountedRef,
         isOrderInFlight,
         orderNumber,
         orderResponse,

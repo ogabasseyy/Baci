@@ -43,17 +43,4 @@ export const eventPipelineAuthorityServicePaths = [
     'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
     'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
   ],
-  // Verified-payment fulfillment builds its dispatch client from the service
-  // factory when the Paystack response and webhook are both lost.
-  [
-    'apps/web/src/app/api/storefront/[slug]/repairs/pickup/route.ts',
-    'apps/web/src/lib/repairs/start-mobile-repair-pickup-payment.ts',
-    'apps/web/src/lib/repairs/reconcile-mobile-repair-pickup-payment.ts',
-    'apps/web/src/lib/supabase/service.ts',
-  ],
-  [
-    'apps/web/src/lib/repairs/start-mobile-repair-pickup-payment.ts',
-    'apps/web/src/lib/repairs/reconcile-mobile-repair-pickup-payment.ts',
-    'apps/web/src/lib/supabase/service.ts',
-  ],
 ] as const;

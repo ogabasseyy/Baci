@@ -1,7 +1,5 @@
 import 'server-only';
 import { verifyTransaction } from '@/lib/paystack';
-import { createServiceClient } from '@/lib/supabase/service';
-import { dispatchRepairPickupPayment } from './dispatch-repair-pickup-payment';
 import { repairPickupPaymentClaims } from './repair-pickup-payment-claim';
 import type { StartRepairPickupPaymentResult } from './start-repair-pickup-payment-types';
 
@@ -30,41 +28,18 @@ export async function reconcileMobileRepairPickupPayment(
       claim.currency !== result.currency
     )
       return result;
-    // Authoritative verification: persist and dispatch through the same
-    // idempotent path the webhook uses. Verification never creates a new
-    // charge; the receipt stays unknown (no authorization URL survived to
-    // hand back), so a repeated retry replays the same idempotent
-    // fulfillment instead of stranding the paid pickup.
-    if (payment.status === 'success') {
-      if (result.id) {
-        try {
-          const dispatched = await dispatchRepairPickupPayment({
-            gateway: 'paystack',
-            gatewayResponse: verified.data as unknown as Record<
-              string,
-              unknown
-            >,
-            reference: result.reference,
-            supabase: createServiceClient(),
-            // Paystack verifies in kobo; the dispatch takes major units.
-            verifiedAmount: payment.amount / 100,
-          });
-          if (dispatched?.ok)
-            return {
-              ...result,
-              error:
-                'Payment received. Your pickup is confirmed; check this repair ticket for pickup details.',
-            };
-        } catch {
-          // A later retry replays fulfillment; keep the recovery message.
-        }
-      }
+    // Authoritative verification only: fulfillment stays on the
+    // Paystack-authenticated webhook path because user-facing code must never
+    // construct a service-role client. The verified success persists through
+    // the fenced receipt completion write, so the receipt is durably
+    // confirmed (never stranded on unknown) and any webhook redelivery books
+    // the pickup idempotently. Verification never creates a new charge.
+    if (payment.status === 'success')
       return {
         ...result,
         error:
           'Payment received. Check this repair ticket for pickup confirmation.',
       };
-    }
     if (payment.status === 'failed' || payment.status === 'abandoned')
       // A terminal provider outcome retires the unknown attempt: no charge can
       // still land, so the customer may safely start another payment.

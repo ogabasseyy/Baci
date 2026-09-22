@@ -173,7 +173,6 @@ export const EVENT_PIPELINE_BOUNDARY = {
     servicePaths: eventPipelineAuthorityServicePaths,
     operationalServiceImporters: [
       'apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts',
-      'apps/web/src/lib/repairs/reconcile-mobile-repair-pickup-payment.ts',
     ],
   },
   callers: runtimeCallers,

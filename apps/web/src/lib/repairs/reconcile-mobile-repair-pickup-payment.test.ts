@@ -1,18 +1,9 @@
-import type { NextResponse } from 'next/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { reconcileMobileRepairPickupPayment } from './reconcile-mobile-repair-pickup-payment';
 import { repairPickupPaymentClaims } from './repair-pickup-payment-claim';
 
 const verify = vi.hoisted(() => vi.fn());
-const dispatch = vi.hoisted(() => vi.fn());
-const serviceClient = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/paystack', () => ({ verifyTransaction: verify }));
-vi.mock('./dispatch-repair-pickup-payment', () => ({
-  dispatchRepairPickupPayment: dispatch,
-}));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: serviceClient,
-}));
 const unknown = {
   success: false as const,
   code: 'payment_initialization_unknown',
@@ -92,39 +83,8 @@ it.each([
       'The previous payment attempt did not complete. Start a new payment to continue.',
   });
 });
-it('dispatches a verified success through the webhook fulfillment path', async () => {
+it('keeps a verified success on the unknown receipt until the webhook fulfills', async () => {
   verify.mockResolvedValue(verified('success'));
-  dispatch.mockResolvedValue({ ok: true } as unknown as NextResponse);
-  serviceClient.mockReturnValue({ rpc: vi.fn() });
-  expect(
-    await reconcileMobileRepairPickupPayment(reconcilable, merchantId)
-  ).toEqual({
-    ...reconcilable,
-    error:
-      'Payment received. Your pickup is confirmed; check this repair ticket for pickup details.',
-  });
-  expect(dispatch).toHaveBeenCalledWith({
-    gateway: 'paystack',
-    gatewayResponse: expect.objectContaining({ reference: 'RPU-123' }),
-    reference: 'RPU-123',
-    supabase: expect.anything(),
-    verifiedAmount: 3000,
-  });
-});
-it('keeps the recovery message when fulfillment dispatch is not yet durable', async () => {
-  verify.mockResolvedValue(verified('success'));
-  dispatch.mockResolvedValue({ ok: false } as unknown as NextResponse);
-  expect(
-    await reconcileMobileRepairPickupPayment(reconcilable, merchantId)
-  ).toEqual({
-    ...reconcilable,
-    error:
-      'Payment received. Check this repair ticket for pickup confirmation.',
-  });
-});
-it('keeps the recovery message when fulfillment dispatch throws for a later retry', async () => {
-  verify.mockResolvedValue(verified('success'));
-  dispatch.mockRejectedValueOnce(new Error('offline'));
   expect(
     await reconcileMobileRepairPickupPayment(reconcilable, merchantId)
   ).toEqual({

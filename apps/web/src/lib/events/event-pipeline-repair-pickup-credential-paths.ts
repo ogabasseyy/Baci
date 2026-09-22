@@ -36,15 +36,6 @@ const storefrontPickupRoute =
 const catalogAccess = 'apps/web/src/lib/repairs/repairs-catalog-access.ts';
 const startMobilePayment =
   'apps/web/src/lib/repairs/start-mobile-repair-pickup-payment.ts';
-const reconcilePayment =
-  'apps/web/src/lib/repairs/reconcile-mobile-repair-pickup-payment.ts';
-const dispatchPaymentChain = [
-  reconcilePayment,
-  dispatchPayment,
-  handlePayment,
-  fulfillAfterPayment,
-] as const;
-
 const receiverJwtEnv = [
   receiverClient,
   scopedJwt,
@@ -228,95 +219,4 @@ export const eventPipelineRepairPickupCredentialPaths = [
     ...receiverJwtEnv,
   ],
   [startMobilePayment, ...receiverJwtEnv],
-  // Verified-payment fulfillment dispatches through the webhook fulfillment
-  // chain when the Paystack response and webhook are both lost. These chains
-  // record the reviewed route-to-dispatch credential flow explicitly.
-  [
-    storefrontPickupRoute,
-    startMobilePayment,
-    ...dispatchPaymentChain,
-    notifyPickupBooking,
-    repairNotifications,
-    expoPush,
-    envPath,
-  ],
-  [
-    storefrontPickupRoute,
-    startMobilePayment,
-    ...dispatchPaymentChain,
-    notifyPickupBooking,
-    repairNotifications,
-    adminPath,
-    envPath,
-  ],
-  [
-    storefrontPickupRoute,
-    startMobilePayment,
-    ...dispatchPaymentChain,
-    notifyPickupBooking,
-    repairNotifications,
-    zeptomail,
-    envPath,
-  ],
-  [...dispatchPaymentChain, bookPickup, ...centerReceiverJwtEnv],
-  [
-    ...dispatchPaymentChain,
-    notifyPickupBooking,
-    repairNotifications,
-    cachedData,
-    envPath,
-  ],
-  [
-    ...dispatchPaymentChain,
-    notifyPickupBooking,
-    repairNotifications,
-    expoPush,
-    envPath,
-  ],
-  [
-    ...dispatchPaymentChain,
-    notifyPickupBooking,
-    repairNotifications,
-    adminPath,
-    envPath,
-  ],
-  [
-    ...dispatchPaymentChain,
-    notifyPickupBooking,
-    repairNotifications,
-    zeptomail,
-    envPath,
-  ],
-  [
-    startMobilePayment,
-    ...dispatchPaymentChain,
-    notifyPickupBooking,
-    repairNotifications,
-    cachedData,
-    envPath,
-  ],
-  [
-    startMobilePayment,
-    ...dispatchPaymentChain,
-    notifyPickupBooking,
-    repairNotifications,
-    expoPush,
-    envPath,
-  ],
-  [
-    startMobilePayment,
-    ...dispatchPaymentChain,
-    notifyPickupBooking,
-    repairNotifications,
-    adminPath,
-    envPath,
-  ],
-  [
-    startMobilePayment,
-    ...dispatchPaymentChain,
-    notifyPickupBooking,
-    repairNotifications,
-    zeptomail,
-    envPath,
-  ],
 ] as const;

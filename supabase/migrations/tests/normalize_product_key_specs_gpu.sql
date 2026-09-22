@@ -1,18 +1,21 @@
 -- Regression test for 20260922120000_normalize_product_key_specs_gpu.
 -- Category graphics facets expose trimmed gpu values and filter predicates
--- compare trimmed request values, so padded stored rows would create facet
--- options that match nothing. Covers: backfill (no padded rows at rest),
--- INSERT trim trigger, UPDATE trim trigger. Uses sentinel UUIDs and cleans
--- up after itself.
+-- compare trimmed request values, so padded stored rows would otherwise
+-- create facet options that match nothing. Covers: trigger presence, the
+-- backfill UPDATE against a seeded padded row, the at-rest backfill effect,
+-- and the INSERT/UPDATE trim trigger. Uses sentinel UUIDs and cleans up
+-- after itself.
 
 DO $test$
 DECLARE
   v_merchant_id uuid := '7e3f2e50-1111-4000-8000-000000000001';
   v_product_id uuid := '7e3f2e50-1111-4000-8000-000000000002';
+  v_seed_product_id uuid := '7e3f2e50-1111-4000-8000-000000000003';
   v_stored_gpu text;
   v_padded_count integer;
+  v_trigger_enabled char;
 BEGIN
-  -- Arrange: sentinel merchant + product (FK chain for product_key_specs).
+  -- Arrange: sentinel merchant + products (FK chain for product_key_specs).
   INSERT INTO public.merchants (id, email, slug)
   VALUES (v_merchant_id, 'gpu-trim-test@example.com', 'gpu-trim-test-sentinel')
   ON CONFLICT (id) DO NOTHING;
@@ -21,9 +24,46 @@ BEGIN
   VALUES (v_product_id, v_merchant_id, 'GPU Trim Sentinel', 100000)
   ON CONFLICT (id) DO NOTHING;
 
-  DELETE FROM public.product_key_specs WHERE product_id = v_product_id;
+  INSERT INTO public.products (id, merchant_id, name, price)
+  VALUES (v_seed_product_id, v_merchant_id, 'GPU Trim Seed Sentinel', 100000)
+  ON CONFLICT (id) DO NOTHING;
 
-  -- Backfill: no padded gpu values may remain at rest.
+  DELETE FROM public.product_key_specs
+  WHERE product_id IN (v_product_id, v_seed_product_id);
+
+  -- Guard: the normalization trigger must exist and stay enabled, otherwise
+  -- future writes reintroduce padded rows the facet cannot match.
+  SELECT tgenabled INTO v_trigger_enabled
+  FROM pg_trigger
+  WHERE tgname = 'product_key_specs_trim_gpu'
+    AND tgrelid = 'public.product_key_specs'::regclass;
+  IF v_trigger_enabled IS NULL THEN
+    RAISE EXCEPTION 'product_key_specs_trim_gpu trigger is missing';
+  END IF;
+  IF v_trigger_enabled <> 'O' THEN
+    RAISE EXCEPTION 'product_key_specs_trim_gpu trigger is not enabled';
+  END IF;
+
+  -- Backfill, seeded: insert a padded row with the trigger disabled to
+  -- reproduce the pre-migration condition, then apply the migration's
+  -- UPDATE and assert it normalizes the row.
+  ALTER TABLE public.product_key_specs DISABLE TRIGGER product_key_specs_trim_gpu;
+  INSERT INTO public.product_key_specs (product_id, gpu)
+  VALUES (v_seed_product_id, '  NVIDIA RTX 4070  ');
+  ALTER TABLE public.product_key_specs ENABLE TRIGGER product_key_specs_trim_gpu;
+
+  UPDATE public.product_key_specs
+  SET gpu = btrim(gpu)
+  WHERE product_id = v_seed_product_id AND gpu <> btrim(gpu);
+
+  SELECT gpu INTO v_stored_gpu
+  FROM public.product_key_specs
+  WHERE product_id = v_seed_product_id;
+  IF v_stored_gpu <> 'NVIDIA RTX 4070' THEN
+    RAISE EXCEPTION 'backfill UPDATE did not normalize seeded gpu, stored %', v_stored_gpu;
+  END IF;
+
+  -- Backfill, at rest: no padded gpu values may remain.
   SELECT count(*) INTO v_padded_count
   FROM public.product_key_specs
   WHERE gpu IS NOT NULL AND gpu <> btrim(gpu);
@@ -55,7 +95,8 @@ BEGIN
   END IF;
 
   -- Cleanup: remove sentinel rows (key specs cascade from products).
-  DELETE FROM public.products WHERE id = v_product_id;
+  DELETE FROM public.products
+  WHERE id IN (v_product_id, v_seed_product_id);
   DELETE FROM public.merchants WHERE id = v_merchant_id;
 END;
 $test$;

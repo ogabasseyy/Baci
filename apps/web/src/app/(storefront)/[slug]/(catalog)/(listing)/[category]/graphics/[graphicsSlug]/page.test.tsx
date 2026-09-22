@@ -72,6 +72,18 @@ describe('GamingGraphicsHubPage', () => {
     expect(metadata.robots).toMatchObject({ index: true, follow: true });
   });
 
+  it('noindexes hub URLs with ignored non-hub filters', async () => {
+    const metadata = await generateMetadata({
+      params: props.params,
+      searchParams: Promise.resolve({ brand: 'HP' }),
+    });
+
+    expect(metadata.alternates).toEqual({
+      canonical: 'https://ogabassey.com/gaming-laptops/graphics/rtx-4070',
+    });
+    expect(metadata.robots).toMatchObject({ index: false, follow: true });
+  });
+
   it('renders the filtered category inventory below a single hub H1', async () => {
     render(await GamingGraphicsHubRuntime(props));
 

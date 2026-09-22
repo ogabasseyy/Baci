@@ -5,6 +5,7 @@ import {
   getAvailableGamingLaptopGraphicsHubs,
   getGamingLaptopGraphicsHub,
   getGraphicsOptionsForHub,
+  resolveCarriedHubSlug,
 } from './gaming-laptop-graphics-hubs';
 
 describe('gaming laptop graphics hubs', () => {
@@ -78,6 +79,36 @@ describe('gaming laptop graphics hubs', () => {
         baseUrl: 'https://ogabassey.com',
         canonicalBaseUrl: undefined,
         requestScopedBaseUrl: 'https://ogabassey.com',
+      })
+    ).toBeUndefined();
+  });
+
+  it('carries a validated hub token forward for the next transition', () => {
+    expect(
+      resolveCarriedHubSlug({
+        graphicsOptions: ['NVIDIA RTX 4070 8GB', 'RTX 4070 Laptop'],
+        hubSlug: undefined,
+        rawGraphics: ['NVIDIA RTX 4070 8GB'],
+        trustedHubSlug: 'rtx-4070',
+      })
+    ).toBe('rtx-4070');
+  });
+
+  it('falls back to the hub context for unvalidated tokens', () => {
+    expect(
+      resolveCarriedHubSlug({
+        graphicsOptions: ['NVIDIA RTX 4070 8GB'],
+        hubSlug: 'rtx-4070',
+        rawGraphics: ['Unknown GPU'],
+        trustedHubSlug: 'rtx-4070',
+      })
+    ).toBe('rtx-4070');
+    expect(
+      resolveCarriedHubSlug({
+        graphicsOptions: ['NVIDIA RTX 4070 8GB'],
+        hubSlug: undefined,
+        rawGraphics: ['NVIDIA RTX 4070 8GB'],
+        trustedHubSlug: 'rtx-9999',
       })
     ).toBeUndefined();
   });

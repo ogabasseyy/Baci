@@ -147,6 +147,51 @@ describe('CategoryPageContent graphics hubs', () => {
     ).toBeInTheDocument();
   });
 
+  it('carries a validated hub token onto listing renders', async () => {
+    mockGetCachedCategoryPageGraphicsOptions.mockResolvedValue([
+      'NVIDIA RTX 4070 8GB',
+      'RTX 4070 Laptop',
+    ]);
+
+    const ui = await CategoryPageContent({
+      params: Promise.resolve({
+        slug: 'demo-store',
+        category: 'gaming-laptops',
+      }),
+      searchParams: Promise.resolve({
+        graphics: 'NVIDIA RTX 4070 8GB',
+        graphicsHub: 'rtx-4070',
+        page: '1',
+      }),
+    });
+
+    render(ui);
+
+    expect(screen.getByText('Hub: rtx-4070')).toBeInTheDocument();
+  });
+
+  it('drops an unvalidated hub token instead of carrying it', async () => {
+    mockGetCachedCategoryPageGraphicsOptions.mockResolvedValue([
+      'NVIDIA RTX 4070 8GB',
+    ]);
+
+    const ui = await CategoryPageContent({
+      params: Promise.resolve({
+        slug: 'demo-store',
+        category: 'gaming-laptops',
+      }),
+      searchParams: Promise.resolve({
+        graphics: 'NVIDIA RTX 4070 8GB',
+        graphicsHub: 'rtx-9999',
+        page: '1',
+      }),
+    });
+
+    render(ui);
+
+    expect(screen.queryByText(/Hub: /)).not.toBeInTheDocument();
+  });
+
   it('passes the full trusted hub selection through without the request cap', async () => {
     const available = Array.from({ length: 10 }, (_, i) => `GPU ${i}`);
     mockGetCachedCategoryPageGraphicsOptions.mockResolvedValue(available);

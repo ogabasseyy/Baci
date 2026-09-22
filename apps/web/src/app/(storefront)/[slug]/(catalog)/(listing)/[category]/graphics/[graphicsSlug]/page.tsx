@@ -38,16 +38,25 @@ async function loadPage(props: GamingGraphicsHubPageProps) {
   });
   if (!page) notFound();
 
-  return { page, params };
+  return { page, params, searchParams };
 }
 
 export async function generateMetadata(
   props: GamingGraphicsHubPageProps
 ): Promise<Metadata> {
-  const { page } = await loadPage(props);
+  const { page, searchParams } = await loadPage(props);
   const pagePrefix = page.currentPage > 1 ? `Page ${page.currentPage} | ` : '';
   const title = `${pagePrefix}${page.hub.label} Gaming Laptops Price in ${page.countryName} | ${page.merchant.business_name}`;
   const description = `Compare ${page.productCount} ${page.hub.label} gaming laptops at ${page.merchant.business_name}. Check prices, RAM, storage, processors, displays, condition and current availability in ${page.countryName}.`;
+  // The hub loader ignores non-hub query filters, so any extra params render
+  // a duplicate of the canonical hub URL and must be noindexed. Hub-owned
+  // params (graphics selection, hub token, page) are excluded from the check.
+  const {
+    graphics: _hubGraphics,
+    graphicsHub: _hubToken,
+    page: _hubPage,
+    ...hubFilters
+  } = searchParams;
 
   return {
     title: { absolute: title },
@@ -58,7 +67,7 @@ export async function generateMetadata(
         page.currentPage
       ),
     },
-    robots: getIndexableRobotsMetadata(),
+    robots: getIndexableRobotsMetadata(hubFilters),
   };
 }
 

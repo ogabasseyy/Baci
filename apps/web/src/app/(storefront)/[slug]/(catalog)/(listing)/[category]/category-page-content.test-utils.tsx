@@ -78,6 +78,7 @@ vi.mock('@/components/storefront/ogabassey/pages/category-page', () => ({
     totalProductCount,
     products,
     paginationBasePath,
+    hubSlug,
   }: {
     currentPage?: number;
     graphicsOptions?: string[];
@@ -86,6 +87,7 @@ vi.mock('@/components/storefront/ogabassey/pages/category-page', () => ({
     totalProductCount?: number;
     products?: Array<{ id: string; name: string; price: string }>;
     paginationBasePath?: string;
+    hubSlug?: string;
   }) => (
     <section aria-label="Category page">
       Category page
@@ -93,6 +95,7 @@ vi.mock('@/components/storefront/ogabassey/pages/category-page', () => ({
       {totalProductCount ? <div>Total: {totalProductCount}</div> : null}
       {productsArePrePaginated ? <div>Prepaginated</div> : null}
       {paginationBasePath ? <div>Pagination: {paginationBasePath}</div> : null}
+      {hubSlug ? <div>Hub: {hubSlug}</div> : null}
       {graphicsOptions?.map((graphics) => (
         <div key={`graphics-option-${graphics}`}>Option: {graphics}</div>
       ))}

@@ -2,10 +2,7 @@ import {
   getCachedCategoryPageData,
   getCachedCategoryPageGraphicsOptionsStrict,
 } from '@/lib/cached-data';
-import {
-  getGamingLaptopGraphicsHub,
-  getGraphicsOptionsForHub,
-} from '@/lib/storefront-category/gaming-laptop-graphics-hubs';
+import { isTrustedHubGraphicsSelection } from '@/lib/storefront-category/gaming-laptop-graphics-hubs';
 import { resolveCategoryGraphicsFilters } from './resolve-category-graphics-filters';
 
 interface LoadFilteredCategoryPageDataOptions {
@@ -27,24 +24,6 @@ interface LoadFilteredCategoryPageDataOptions {
    * untrusted-request cap is lifted for the transition too.
    */
   trustedHubSlug?: string;
-}
-
-function isTrustedHubSelection(
-  graphicsOptions: string[],
-  trustedHubSlug: string | undefined,
-  rawGraphics: string | string[] | undefined
-): boolean {
-  if (!trustedHubSlug) return false;
-  const hub = getGamingLaptopGraphicsHub(trustedHubSlug);
-  if (!hub) return false;
-  const requested = Array.isArray(rawGraphics)
-    ? rawGraphics
-    : rawGraphics
-      ? [rawGraphics]
-      : [];
-  if (requested.length === 0) return false;
-  const matching = new Set(getGraphicsOptionsForHub(graphicsOptions, hub));
-  return requested.every((value) => matching.has(value.trim()));
 }
 
 function hasRequestedGraphics(
@@ -124,7 +103,11 @@ export async function loadFilteredCategoryPageData({
     {
       trustedSource:
         trustedGraphics ||
-        isTrustedHubSelection(graphicsOptions, trustedHubSlug, rawGraphics),
+        isTrustedHubGraphicsSelection({
+          graphicsOptions,
+          rawGraphics,
+          trustedHubSlug,
+        }),
     }
   );
   const data =

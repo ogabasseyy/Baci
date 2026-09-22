@@ -10,11 +10,9 @@ import type { RawDbProduct } from '@/lib/normalize-product';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildRequestScopedStoreUrl, buildStoreUrl } from '@/lib/store-url';
 import {
-  buildGamingLaptopGraphicsHubPath,
   buildHubPaginationBasePath,
-  GAMING_LAPTOPS_CATEGORY_SLUG,
+  resolveCarriedHubSlug,
 } from '@/lib/storefront-category/gaming-laptop-graphics-hubs';
-import { loadPublishedGamingLaptopGraphicsHubs } from '@/lib/storefront-category/load-published-gaming-laptop-graphics-hubs';
 import {
   parseStorefrontPageParam,
   STOREFRONT_PRODUCTS_PER_PAGE,
@@ -34,6 +32,7 @@ import {
 import { buildCategoryPageContentSchemas } from './category-page-content-schema';
 import { CategoryPageCrawlSummary } from './category-page-crawl-summary';
 import { CategoryPageDeferredCompareLinks } from './category-page-deferred-compare-links';
+import { loadGraphicsHubLinks } from './category-page-graphics-hub-links';
 import { loadCategoryHubContent } from './load-category-hub-content';
 import { loadFilteredCategoryPageData } from './load-filtered-category-page-data';
 
@@ -186,22 +185,13 @@ export async function CategoryPageContent({
     merchant,
     await headers()
   );
-  const publishedGraphicsHubs =
-    category === GAMING_LAPTOPS_CATEGORY_SLUG
-      ? await loadPublishedGamingLaptopGraphicsHubs({
-          categorySlug: category,
-          graphicsOptions,
-          merchantId: merchant.id,
-          storeSlug: slug,
-        }).catch(() => [])
-      : [];
-  const graphicsHubLinks = publishedGraphicsHubs.map((hub) => ({
-    href: `${requestScopedBaseUrl}${buildGamingLaptopGraphicsHubPath(
-      category,
-      hub.slug
-    )}`,
-    label: `Shop ${hub.label} gaming laptops`,
-  }));
+  const graphicsHubLinks = await loadGraphicsHubLinks({
+    category,
+    graphicsOptions,
+    requestScopedBaseUrl,
+    slug,
+    store: merchant,
+  });
   const hubContent = buildCategoryPageHubModel({
     data,
     categorySlug: category,
@@ -251,7 +241,13 @@ export async function CategoryPageContent({
       <V2ComparisonScope storageNamespace={merchant.id}>
         <OgabasseyCategoryPage
           hubSections={<CategoryHubSections hub={hubContent} />}
-          hubSlug={hubSlug}
+          hubSlug={resolveCarriedHubSlug({
+            graphicsOptions,
+            hubSlug,
+            rawGraphics: graphics,
+            trustedHubSlug:
+              typeof graphicsHub === 'string' ? graphicsHub : undefined,
+          })}
           // Curated hub pages keep their own pagination route
           // (/gaming-laptops/graphics/[slug]?page=N) instead of the generic
           // listing pagination path (?graphics=...), which is noindex.

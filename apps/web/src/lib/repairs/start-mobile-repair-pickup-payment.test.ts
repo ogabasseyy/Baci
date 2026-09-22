@@ -108,21 +108,25 @@ describe('mobile pickup payment receipt', () => {
     // Claim only: execution was never fenced, so the receipt stays reclaimable.
     expect(mocks.rpc).toHaveBeenCalledTimes(1);
   });
-  it('returns an unfenced core failure directly without a completion write', async () => {
+  it('persists an unfenced definitive failure through the completion write', async () => {
     const quoteChanged = {
       success: false,
       code: 'quote_changed',
       error: 'The pickup fee changed. Review the new fee and try again.',
     };
     mocks.rpc.mockResolvedValueOnce({ data: { state: 'claimed' } });
-    // The core returns before provider initialization: the fence never runs.
+    // The core returns before provider initialization: the fence never runs,
+    // but the receipt RPC lets the current owner persist definitive failures.
     mocks.start.mockResolvedValueOnce(quoteChanged);
+    mocks.rpc.mockResolvedValueOnce({
+      data: { state: 'complete', result: quoteChanged },
+    });
     await expect(startMobileRepairPickupPayment(input)).resolves.toEqual(
       quoteChanged
     );
-    // Claim only: no completion write, so the receipt stays reclaimable and
-    // the actionable failure reaches the caller intact.
-    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    // Claim plus completion write: the actionable failure is durable and
+    // reaches the caller intact instead of stranding the receipt.
+    expect(mocks.rpc).toHaveBeenCalledTimes(2);
   });
   it('does not reach the provider when another worker reclaimed the expired claim', async () => {
     mocks.rpc

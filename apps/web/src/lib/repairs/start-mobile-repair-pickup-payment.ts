@@ -61,11 +61,10 @@ export async function startMobileRepairPickupPayment(
     }
     throw lastError;
   }
-  // The core can return a failure before provider initialization runs (rate
-  // limit, catalogue gate, quote change). Those results must return directly:
-  // no fence means the completion write below would be rejected and the
-  // actionable result lost.
-  let fenced = false;
+  // The core can return a definitive failure before provider initialization
+  // runs (rate limit, catalogue gate, quote change). The receipt RPC lets the
+  // current owner persist those unfenced — no charge can exist for them —
+  // while unknown and success completions still require the fence below.
   const result = await startRepairPickupPayment({
     ...paymentInput,
     // Fence execution only once provider initialization can actually begin:
@@ -82,7 +81,6 @@ export async function startMobileRepairPickupPayment(
         throw new Error(
           'Pickup payment claim changed. Retry the same request shortly.'
         );
-      fenced = true;
     },
     onPaymentInitializationCheckpoint: async (checkpoint) => {
       const saved = await receipt(checkpoint);
@@ -91,7 +89,6 @@ export async function startMobileRepairPickupPayment(
         throw new Error('Could not preserve payment recovery.');
     },
   });
-  if (!fenced) return result;
   const completed = await complete(result);
   if (completed.state !== 'complete' && completed.state !== 'unknown')
     throw new Error('Pickup payment recovery is pending. Retry shortly.');

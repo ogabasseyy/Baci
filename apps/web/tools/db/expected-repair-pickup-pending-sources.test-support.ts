@@ -209,4 +209,9 @@ export const EXPECTED_REPAIR_PICKUP_PENDING_SOURCES = [
       'supabase/migrations/20260922000200_require_digits_in_repair_booking_phone.sql',
     sha256: 'a0ab3247329ae38fb03985ee798c00dff7d3ada4360a9bc7f3cc2d638b9528c0',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260922000300_allow_owner_pre_provider_failure_completion.sql',
+    sha256: 'cf74ae2681b63a87737af9d9da78720410cd3ffd2aacddbdc950cbf71470ba65',
+  },
 ];

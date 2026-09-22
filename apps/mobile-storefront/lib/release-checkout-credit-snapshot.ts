@@ -18,6 +18,9 @@ export function releaseCheckoutCreditSnapshot(
   // after this release keeps its snapshot even if the removal settles
   // late, and there is no delete-before-repair crash window because the
   // deletion itself is conditional — a newer choice is never deleted.
+  // When the removal was already in flight while the newer choice
+  // completed, the post-settlement verification rewrites the
+  // authoritative choice the in-flight delete just removed.
   const releaseSequence = checkoutCreditSnapshotStore.nextSequence();
   checkoutCreditSnapshotStore.noteTombstone(
     checkoutGeneration,
@@ -36,6 +39,17 @@ export function releaseCheckoutCreditSnapshot(
       await AsyncStorage.removeItem(
         checkoutCreditSnapshotStore.key(checkoutGeneration)
       );
+      const after = checkoutCreditSnapshotStore.latest(checkoutGeneration);
+      if (
+        after &&
+        !('tombstone' in after) &&
+        after.sequence > releaseSequence
+      ) {
+        await AsyncStorage.setItem(
+          checkoutCreditSnapshotStore.key(checkoutGeneration),
+          JSON.stringify(after.snapshot)
+        );
+      }
     })
     .catch(() => undefined);
   return Promise.resolve();

@@ -174,3 +174,49 @@ it('removes idempotently when releases stack without a newer choice', async () =
   expect(storage.get(snapshotKey(generation))).toBeUndefined();
   expect(mockRemoveItem).toHaveBeenCalledTimes(2);
 });
+
+it('heals a newer choice deleted by a detached in-flight removal', async () => {
+  function loadStore() {
+    return require('./checkout-credit-snapshot-store') as typeof import('./checkout-credit-snapshot-store');
+  }
+  await loadApply().applyCheckoutCreditSnapshot(
+    { wallet_amount: 1000 },
+    generation
+  );
+  // Hold the release removal in flight at the storage layer.
+  let removalEntered!: () => void;
+  const removalEnteredPromise = new Promise<void>((resolve) => {
+    removalEntered = resolve;
+  });
+  let releaseRemoval!: () => void;
+  const removalGate = new Promise<void>((resolve) => {
+    releaseRemoval = resolve;
+  });
+  mockRemoveItem.mockImplementationOnce(async (key: string) => {
+    removalEntered();
+    await removalGate;
+    storage.delete(key);
+  });
+  await loadRelease().releaseCheckoutCreditSnapshot(generation);
+  await removalEnteredPromise;
+  // A retry apply queued behind the hung removal times out and resets
+  // the generation queue; the next retry freezes fresh fields on the
+  // new chain while the abandoned removal still drains.
+  loadStore().checkoutCreditSnapshotStore.resetKey(generation);
+  const retry = await loadApply().applyCheckoutCreditSnapshot(
+    { wallet_amount: 5000 },
+    generation
+  );
+  expect(retry.wallet_amount).toBe(5000);
+  releaseRemoval();
+  for (let tick = 0; tick < 10; tick += 1) {
+    await Promise.resolve();
+  }
+  // The abandoned delete landed after the retry completed, so the
+  // post-settlement verification rewrote the authoritative choice.
+  expect(
+    JSON.parse(storage.get(snapshotKey(generation)) ?? '{}') as {
+      wallet_amount?: number;
+    }
+  ).toEqual({ wallet_amount: 5000 });
+});

@@ -84,6 +84,7 @@ it('restores items and re-freezes recovery data after a rollback', async () => {
     cartWideNegotiationActive: false,
     checkoutGeneration: generation,
     creditFields,
+    hadSortMarker: true,
     itemsSnapshot,
   });
 
@@ -103,6 +104,7 @@ it('leaves legacy generations unmarked on rollback', async () => {
     cartWideNegotiationActive: false,
     checkoutGeneration: legacyGeneration,
     creditFields,
+    hadSortMarker: false,
     itemsSnapshot,
   });
 
@@ -114,6 +116,50 @@ it('leaves legacy generations unmarked on rollback', async () => {
   expect(mockApply).toHaveBeenCalledWith(creditFields, legacyGeneration);
   expect(mockMark).not.toHaveBeenCalled();
   expect(mockError).not.toHaveBeenCalled();
+});
+
+it('restores a captured marker for a generation missing from the registry', async () => {
+  // Post-restart shape: the minted registry is empty, but the marker
+  // existed before cleanup.
+  const restoredGeneration = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  await restoreEmptiedCheckoutCart({
+    cartWideNegotiationActive: false,
+    checkoutGeneration: restoredGeneration,
+    creditFields,
+    hadSortMarker: true,
+    itemsSnapshot,
+  });
+
+  expect(mockApply).toHaveBeenCalledWith(creditFields, restoredGeneration);
+  expect(mockMark).toHaveBeenCalledWith(restoredGeneration);
+});
+
+it('skips the marker when capture is false even for minted generations', async () => {
+  mintedCheckoutGenerations.register(generation);
+  await restoreEmptiedCheckoutCart({
+    cartWideNegotiationActive: false,
+    checkoutGeneration: generation,
+    creditFields,
+    hadSortMarker: false,
+    itemsSnapshot,
+  });
+
+  expect(mockApply).toHaveBeenCalledWith(creditFields, generation);
+  expect(mockMark).not.toHaveBeenCalled();
+});
+
+it('falls back to the minted registry when capture is unavailable', async () => {
+  mintedCheckoutGenerations.register(generation);
+  await restoreEmptiedCheckoutCart({
+    cartWideNegotiationActive: false,
+    checkoutGeneration: generation,
+    creditFields,
+    hadSortMarker: undefined,
+    itemsSnapshot,
+  });
+
+  expect(mockApply).toHaveBeenCalledWith(creditFields, generation);
+  expect(mockMark).toHaveBeenCalledWith(generation);
 });
 
 it('bounds the marker restore so recovery cannot hang on a stuck store', async () => {

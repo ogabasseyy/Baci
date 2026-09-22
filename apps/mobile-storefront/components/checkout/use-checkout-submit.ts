@@ -1,5 +1,4 @@
 import { useMerchant } from '@/hooks/use-merchant';
-import { checkoutCreditSnapshotStore } from '@/lib/checkout-credit-snapshot-store';
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
@@ -21,6 +20,7 @@ import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
 import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
 import { runRedvaultSubmitInitializationSideEffects } from './checkout-submit-redvault';
+import { captureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
 import { isBnplPayment } from './is-bnpl-payment';
 import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
@@ -124,6 +124,7 @@ export function useCheckoutSubmit({
     setIsProcessing(true);
     // Hoisted for the rollback path, which re-freezes these on cart restore.
     let submitCreditFields: Record<string, unknown> | undefined;
+    let submitHadSortMarker: boolean | undefined;
     try {
       if (await abortIfCartPricesStale(itemsSnapshot, merchantId)) {
         return;
@@ -189,15 +190,15 @@ export function useCheckoutSubmit({
         shippingProvider: getShippingProvider(),
         snapshot,
       });
-      submitCreditFields = creditFields;
       const orderResponse = await createOrder(orderRequest, {
         checkoutGeneration: checkoutGenerationSnapshot,
       });
-      // Re-freeze submitted values on rollback, not live UI selections.
-      submitCreditFields =
-        checkoutCreditSnapshotStore.completedChoice(
-          checkoutGenerationSnapshot
-        ) ?? submitCreditFields;
+      const rollbackState = await captureCheckoutSubmitRollbackState(
+        checkoutGenerationSnapshot,
+        creditFields
+      );
+      submitCreditFields = rollbackState.creditFields;
+      submitHadSortMarker = rollbackState.hadSortMarker;
       const { order } = orderResponse;
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
@@ -287,6 +288,7 @@ export function useCheckoutSubmit({
         cartWideNegotiationActive: groupNegotiationSnapshot,
         checkoutGeneration: checkoutGenerationSnapshot,
         creditFields: submitCreditFields,
+        hadSortMarker: submitHadSortMarker,
         itemsSnapshot,
       });
       handleCheckoutSubmitError(error, selectedPayment);

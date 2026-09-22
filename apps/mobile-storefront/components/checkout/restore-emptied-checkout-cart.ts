@@ -16,11 +16,13 @@ export async function restoreEmptiedCheckoutCart({
   cartWideNegotiationActive,
   checkoutGeneration,
   creditFields,
+  hadSortMarker,
   itemsSnapshot,
 }: {
   cartWideNegotiationActive: boolean;
   checkoutGeneration: string;
   creditFields?: Record<string, unknown>;
+  hadSortMarker?: boolean;
   itemsSnapshot: CartItem[];
 }): Promise<void> {
   const cartStore = useCartStore.getState();
@@ -43,14 +45,20 @@ export async function restoreEmptiedCheckoutCart({
   // The clear path released this generation's frozen credit snapshot and
   // sort marker. Re-freeze both under the restored generation so a retry
   // replays the created order instead of hashing fresh credit under a
-  // forked idempotency key. Only generations minted by this build ever
-  // held a marker: a legacy generation was keyed with locale ordering,
-  // and marking it now would fork its key on retry. The marker write is
+  // forked idempotency key. The marker is restored only when it existed
+  // before cleanup: a legacy generation was keyed with locale ordering,
+  // and marking it now would fork its key on retry. When the pre-cleanup
+  // state could not be captured, the minted registry covers the
+  // same-process case (it is empty after a restart, so restored current
+  // generations must pass their captured state). The marker write is
   // bounded (the snapshot apply already times out internally) so a hung
   // store cannot latch checkout recovery forever.
   try {
     await applyCheckoutCreditSnapshot(creditFields, checkoutGeneration);
-    if (mintedCheckoutGenerations.isRegistered(checkoutGeneration)) {
+    const shouldRestoreMarker =
+      hadSortMarker ??
+      mintedCheckoutGenerations.isRegistered(checkoutGeneration);
+    if (shouldRestoreMarker) {
       await withCheckoutStorageTimeout(
         markCodepointCheckoutItemSort(checkoutGeneration)
       );

@@ -281,6 +281,7 @@ describe('useCheckoutSubmit rollback credit', () => {
       expect.objectContaining({
         checkoutGeneration: generation,
         creditFields: { use_wallet_credit: true, wallet_amount: 5000 },
+        hadSortMarker: false,
       })
     );
   });

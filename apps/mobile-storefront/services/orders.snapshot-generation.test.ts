@@ -1,5 +1,8 @@
 import { jest } from '@jest/globals';
-import { CHECKOUT_GENERATION_STORAGE_KEY } from '@/config/checkout-storage';
+import {
+  CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
+  CHECKOUT_GENERATION_STORAGE_KEY,
+} from '@/config/checkout-storage';
 import type { CreateOrderRequest } from './orders';
 
 // Lazily required after the mock consts initialize: a top-level import would
@@ -110,6 +113,15 @@ jest.mock('./orders-credit-freeze', () => ({
     input: Record<string, unknown>,
     checkoutGeneration: string
   ) => mockBuildSnapshottedOrderPayload(input, checkoutGeneration),
+}));
+
+const mockGetCheckoutAttemptKey = jest.fn<
+  (...args: unknown[]) => Promise<string>
+>(async () => 'mocked-idempotency-key');
+
+jest.mock('@/lib/checkout-attempt-key', () => ({
+  getCheckoutAttemptKey: (...args: unknown[]) =>
+    mockGetCheckoutAttemptKey(...args),
 }));
 
 const mockReleaseCreditAfterDefinitiveRejection =
@@ -271,7 +283,13 @@ it('uses the restored durable generation for frozen UI retries started before re
   expect(mockBuildSnapshottedOrderPayload.mock.calls[0]?.[1]).toBe(
     'persisted-gen'
   );
+  expect(mockGetCheckoutAttemptKey.mock.calls[0]?.[1]).toBe('persisted-gen');
   expect(await AsyncStorage.getItem(CHECKOUT_GENERATION_STORAGE_KEY)).toBe(
     'persisted-gen'
   );
+  expect(
+    JSON.parse(
+      (await AsyncStorage.getItem(CHECKOUT_AUTH_PARTITION_STORAGE_KEY)) ?? '{}'
+    ) as Record<string, string>
+  ).toEqual({ 'persisted-gen': 'guest' });
 });

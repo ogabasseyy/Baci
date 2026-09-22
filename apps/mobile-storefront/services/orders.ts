@@ -139,8 +139,12 @@ export async function createOrder(
     );
     // Local retry partition only: a getUser timeout must not rotate the key.
     // The submitted payload and server authorization remain unchanged.
+    // The auth partition map and the idempotency key are derived under
+    // the resolved generation: using the possibly-stale cart value here
+    // would fork both away from the frozen payload on retries started
+    // before rehydration completed.
     const authPartition = await resolveCheckoutAuthPartition(
-      checkoutGeneration,
+      effectiveCheckoutGeneration,
       storedSession?.user?.id,
       { sessionReadInconclusive: initialSession.timedOut }
     );
@@ -152,8 +156,8 @@ export async function createOrder(
           user_id: authPartition,
         },
         validatedRequest.payment_method === 'uba_redvault'
-          ? `${checkoutGeneration}:uba_redvault`
-          : checkoutGeneration,
+          ? `${effectiveCheckoutGeneration}:uba_redvault`
+          : effectiveCheckoutGeneration,
         attemptKeyOptions
       ));
     const sendSession = await readCheckoutStoredSession(

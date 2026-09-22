@@ -299,4 +299,8 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260921180000_include_tracking_order_payment_accounts.sql',
     sha256: 'e4cc677df89fc76136e7ad3d6439d07893df34d6e064f0941951ec1d0c2723c9',
   },
+  {
+    repositoryPath: 'supabase/migrations/20260921180000_get_santa_catalog.sql',
+    sha256: 'ccb69b3c76fc8fccdd2832177f66e2fb508afef422f554adf0ba9d792a58b19a',
+  },
 ].sort((a, b) => a.repositoryPath.localeCompare(b.repositoryPath));

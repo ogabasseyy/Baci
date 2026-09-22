@@ -1,5 +1,6 @@
 'use client';
 
+import { isSantaGrantedPriceWithinCeiling } from '@baci/shared/lib';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -143,7 +144,7 @@ export function SantaChatDialog({
   );
 
   // Cart integration
-  const { addToCart, cartCount, applyNegotiatedPrice, setMerchantSlug } =
+  const { addToCart, cart, cartCount, applyNegotiatedPrice, setMerchantSlug } =
     useCart();
 
   // Set merchant slug on mount + cleanup abort/timers on unmount
@@ -187,7 +188,7 @@ export function SantaChatDialog({
       }
 
       const { product } = (await response.json()) as {
-        product: Product | null;
+        product: (Product & { max_discount_percentage?: number }) | null;
       };
 
       if (!product) {
@@ -195,11 +196,30 @@ export function SantaChatDialog({
         showNotification(`Could not find "${productName}" in catalog`);
         return;
       }
+      if (product.manage_stock && (product.stock ?? 0) <= 0) {
+        showNotification(`"${productName}" is out of stock`);
+        return;
+      }
 
+      // addToCart merges into an existing line for the same product, and the
+      // negotiated unit price would then reprice previously added units too.
+      // Only negotiate fresh lines so the grant covers exactly the added unit.
+      const lineAlreadyExists = cart.some(
+        (item) => item.cartItemId === product.id
+      );
       addToCart(product, 1);
 
       const cartItemId = product.id;
-      if (applyNegotiatedPrice && negotiatedPrice < product.price) {
+      if (
+        applyNegotiatedPrice &&
+        !lineAlreadyExists &&
+        negotiatedPrice < product.price &&
+        isSantaGrantedPriceWithinCeiling(
+          product.price,
+          negotiatedPrice,
+          product.max_discount_percentage ?? 0
+        )
+      ) {
         applyNegotiatedPrice(cartItemId, negotiatedPrice);
       }
 

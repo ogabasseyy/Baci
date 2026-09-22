@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "b9dfcca9cf409dd79d95c613fbe9f6ac9315d371",
+  "originMainSha": "6dd23d1daa9ac42a90062a00cc02200e8834c0ab",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "fb05b35fdde5cba2151b89ae73d7db737b3bd884b9d0c089f616f8ebb159df8f",
-  "routingProxyInputSha256": "873acc876939724f8c24a38bedbec6ab258acdf8f866e4ef3603e966a3b17e83",
+  "routeTreeSha256": "61966d7eb4f2226636818bc9a8f7b77eacc3f90d07c64c02f7ccbbd828717f0a",
+  "routingProxyInputSha256": "44ec834ce510189b44b3dd083b137e2096e74e5a5a4ab69ca07fcbf08307fffc",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -3157,6 +3157,22 @@
       "routePattern": "/{*externalMediaPath?}",
       "sourceKind": "automatic_subresource",
       "sourcePath": "apps/web/src/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/insurance/insurance-policy-footer-actions.tsx"
+    },
+    {
+      "decision": "origin_dynamic",
+      "destinationCondition": {
+        "hostKind": "configured_google_maps_origin",
+        "precedence": "before_path_decision"
+      },
+      "id": "automatic-subresource:post-purchase-google-review-order-success",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "reason": "browser_external_media_request",
+      "routePattern": "/{*externalMediaPath?}",
+      "sourceKind": "automatic_subresource",
+      "sourcePath": "apps/web/src/components/storefront/ogabassey/pages/order-success-page.tsx"
     },
     {
       "decision": "origin_dynamic",
@@ -8242,5 +8258,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "a3bac518ac0ef289fd795de23dcd7f0deff2c113ef0bce7dad38b3837f613841"
+  "inventorySha256": "61943ab4f695d7caba191999d470a92ed2128748240e2470e1678b09ff2d3898"
 }

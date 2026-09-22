@@ -160,7 +160,17 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
     section: keyof FilterState,
     value: string | number
   ) => {
-    if (section === 'graphics' && hasServerGraphicsFilter) {
+    // Route graphics through the server only when the client cannot filter
+    // them itself. Small categories load the full set, so a graphics toggle
+    // stays local with the other client facets (brand/price) instead of
+    // navigating and silently resetting them. A URL-driven graphics selection
+    // still routes through the server because the server-filtered product set
+    // is the source of truth for it.
+    const shouldRouteGraphicsThroughServer =
+      section === 'graphics' &&
+      hasServerGraphicsFilter &&
+      (!canUseClientFilters || selectedGraphics.length > 0);
+    if (shouldRouteGraphicsThroughServer) {
       serverGraphicsFilter.toggle(String(value), filters.graphics);
       return;
     }

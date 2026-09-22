@@ -105,14 +105,16 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     // it from the loaded order so a never-paid invoice keeps its
     // proforma labeling instead of falling back to the generic
     // commercial "Invoice". Matches the success-screen classification:
-    // only unpaid (never paid, refunded, or partially paid) invoices
-    // are proforma.
+    // only invoices with no prior-payment evidence (never paid,
+    // refunded, partially paid, or wallet/savings credited) are
+    // proforma.
     const derivedDocumentKind =
       options.documentKind ??
       (receiptDetail.payment_method === 'invoice' &&
       receiptDetail.payment_status !== 'paid' &&
       receiptDetail.payment_status !== 'refunded' &&
-      receiptDetail.payment_status !== 'partially_paid'
+      receiptDetail.payment_status !== 'partially_paid' &&
+      Number(receiptDetail.amount_paid ?? 0) <= 0
         ? 'proforma'
         : undefined);
     html = generateReceiptHtml(orderData, merchant, {

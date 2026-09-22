@@ -110,14 +110,8 @@ export function PaymentOptionsPanel({
         <div className="space-y-3 animate-in fade-in">
           <p className="text-xs text-store-background-text/60">Choose how you'd like to pay:</p>
           <div className="grid grid-cols-1 gap-3">
-            <PaymentOptionCard
-              method="invoice"
-              paymentMethod={paymentMethod}
-              setPaymentMethod={setPaymentMethod}
-              title="Generate Invoice"
-              description="Create an invoice and pay later"
-              icon={<FileText className="size-6 text-store-foreground" />}
-            />
+            {/* Invoice lives on its own "Get a Proforma Invoice" tab
+              below: a second invoice card here would duplicate it. */}
             <RedvaultPaymentOption
               available={redvaultAvailable}
               onSelect={() => setPaymentMethod('uba_redvault')}

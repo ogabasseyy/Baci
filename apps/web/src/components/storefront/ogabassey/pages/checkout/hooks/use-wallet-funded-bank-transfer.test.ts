@@ -152,6 +152,35 @@ describe('useWalletFundedBankTransfer', () => {
     });
   });
 
+  it('reports the canonical order total when savings shrink the intent target', async () => {
+    // The intent targets the post-savings residual, but the completed
+    // purchase revenue is the whole order.
+    const savingsIntent = { ...INTENT, targetOrderAmount: 4750 };
+    startMock.mockResolvedValue({
+      account: ACCOUNT,
+      intent: savingsIntent,
+      kind: 'intent',
+    });
+    getIntentMock.mockResolvedValue({
+      ...savingsIntent,
+      fundedAmount: 4750,
+      orderPaid: true,
+      status: 'completed',
+    });
+
+    const { onOrderPaid, view } = renderWalletTransfer();
+
+    await act(async () => {
+      await view.result.current.start({ ...START_ARGS, orderTotal: 5750 });
+    });
+
+    await waitFor(() => {
+      expect(onOrderPaid).toHaveBeenCalledWith(
+        expect.objectContaining({ total: 5750 })
+      );
+    });
+  });
+
   it('does not pay the order out on an ambiguous transfer', async () => {
     startMock.mockResolvedValue({ account: ACCOUNT, intent: INTENT, kind: 'intent' });
     getIntentMock.mockResolvedValue({ ...INTENT, status: 'review_required' });

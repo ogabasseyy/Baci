@@ -94,6 +94,12 @@ export default function OrderSuccessScreen() {
   const isPartiallyPaidOrder =
     receiptPaymentStatus === 'partially_paid' ||
     guestInvoice.status === 'partially_paid';
+  // Pre-gateway wallet/savings credit recorded in amount_paid while the
+  // status stays unpaid/pending: same accepted-value evidence, so the
+  // same commercial presentation on both authenticated and guest paths.
+  const isCreditedOrder =
+    Number(paidCheckOrder?.amount_paid ?? 0) > 0 ||
+    guestInvoice.status === 'credited';
   // Purchase-success side effects (notification, interstitial, permission
   // soft-ask) wait until the deferred-order status is authoritative: both
   // lookups begin unresolved, and a slow refunded lookup must not lose a
@@ -140,7 +146,8 @@ export default function OrderSuccessScreen() {
     paymentMethod === 'invoice' &&
     !isPaidOrder &&
     !wasPaidOrder &&
-    !isPartiallyPaidOrder;
+    !isPartiallyPaidOrder &&
+    !isCreditedOrder;
   const receiptPreview = useReceiptPreview({
     documentKind: isProformaDocument ? 'proforma' : undefined,
   });

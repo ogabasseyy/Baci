@@ -13,6 +13,10 @@ export interface WalletFundedTransferSession {
   intent: WalletOrderFundingIntent;
   orderId: string;
   orderNumber?: string;
+  /** Canonical order total for revenue reporting: the intent's target
+   * is the residual after savings, but the completion is the whole
+   * order. Optional: older callers omit it and keep the intent amount. */
+  orderTotal?: number;
   trackingToken?: string;
 }
 
@@ -51,6 +55,7 @@ interface StartArgs {
   merchantSlug?: string;
   orderId: string;
   orderNumber?: string;
+  orderTotal?: number;
   trackingToken?: string;
 }
 
@@ -94,13 +99,16 @@ export function useWalletFundedBankTransfer({
       }
       // The polling hook fires this at most once, only when the intent
       // reaches server-confirmed `completed`: the order is paid.
+      // Revenue is the canonical order total, not the intent's target
+      // (the residual after savings) — older sessions without a total
+      // keep the intent amount.
       onOrderPaid({
         checkoutFingerprint: current.checkoutFingerprint,
         currency: current.intent.currency,
         intentId: current.intent.id,
         orderId: current.orderId,
         orderNumber: current.orderNumber,
-        total: current.intent.targetOrderAmount,
+        total: current.orderTotal ?? current.intent.targetOrderAmount,
         trackingToken: current.trackingToken,
       });
     },
@@ -120,6 +128,7 @@ export function useWalletFundedBankTransfer({
     merchantSlug: startMerchantSlug,
     orderId,
     orderNumber,
+    orderTotal,
     trackingToken,
   }: StartArgs): Promise<WalletFundedTransferStartOutcome> => {
     const result = await startWalletFundedBankTransfer({
@@ -147,6 +156,7 @@ export function useWalletFundedBankTransfer({
       intent: result.intent,
       orderId,
       orderNumber,
+      orderTotal,
       trackingToken,
     });
     return { status: 'started', intentId: result.intent.id };

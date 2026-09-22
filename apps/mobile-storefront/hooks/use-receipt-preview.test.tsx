@@ -144,6 +144,21 @@ describe('useReceiptPreview document kind', () => {
     );
   });
 
+  it('keeps the commercial title for a wallet-credited invoice without a kind', () => {
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      amount_paid: 20000,
+    };
+    const { result } = renderHook(() => useReceiptPreview());
+
+    act(() => {
+      result.current.openPreviewByOrderId('order-1');
+    });
+
+    expect(result.current.isOpen).toBe(true);
+    expect(result.current.html).not.toContain('Proforma Invoice');
+  });
+
   it('keeps the commercial title for a partially paid invoice without a kind', () => {
     mockReceiptDetail = {
       ...unpaidProformaDetail('NGN'),

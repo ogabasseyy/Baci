@@ -57,6 +57,9 @@ interface TrackedOrder {
   tax_amount?: number | null;
   gift_wrapping_fee?: number | null;
   total: number;
+  // Prior-payment evidence for wallet/savings-credited invoices.
+  // Optional: older RPC projections omit it.
+  amount_paid?: number | string | null;
   currency?: string | null;
   created_at: string;
   updated_at: string;
@@ -264,6 +267,10 @@ export async function GET(request: NextRequest) {
         tax_amount: order.tax_amount ?? null,
         gift_wrapping_fee: order.gift_wrapping_fee ?? null,
         total: order.total,
+        // Prior-payment evidence for credited (partially wallet/savings
+        // covered) invoices: the RPC projects amount_paid, but this
+        // response must forward it for guest classification.
+        amount_paid: order.amount_paid ?? 0,
         currency: order.currency || 'NGN',
       },
       customer: {

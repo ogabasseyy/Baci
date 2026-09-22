@@ -21,11 +21,15 @@ function toTrackedOrder(value: unknown): TrackOrderData['order'] | null {
 
 // Payment outcome for a guest deferred-settlement order (invoice, Pay for
 // Me): refunded is distinct from unpaid — the order was previously paid,
-// so it must never render proforma/request copy.
+// so it must never render proforma/request copy. Credited covers
+// pre-gateway wallet/savings credit recorded in amount_paid while the
+// status stays unpaid/pending: accepted value, commercial presentation,
+// but the order stays active (never reconciliation).
 export type GuestInvoicePaymentStatus =
   | 'paid'
   | 'refunded'
   | 'partially_paid'
+  | 'credited'
   | 'unpaid';
 
 export interface GuestInvoicePaymentState {
@@ -122,6 +126,10 @@ export function useGuestInvoicePaidState({
               // Accepted money without settling: commercial presentation,
               // but the order stays active (never reconciliation).
               setStatus('partially_paid');
+            } else if (Number(order.amount_paid ?? 0) > 0) {
+              // Pre-gateway credit with an unreconciled status: same
+              // commercial presentation as partially_paid.
+              setStatus('credited');
             }
           }
           setLookupSettled(true);

@@ -23,9 +23,6 @@ export interface GuestPaymentReferenceSnapshot {
   transactionStatus: string;
   gateway: string;
   gatewayReference: string;
-  gatewayResponse: unknown;
-  metadata: unknown;
-  platformFee: unknown;
   orderNumber: string | null;
   orderPaymentStatus: string | null;
   orderShippingStatus: string | null;
@@ -62,9 +59,6 @@ function toSnapshot(
       typeof row.transaction_status === 'string' ? row.transaction_status : '',
     gateway: typeof row.gateway === 'string' ? row.gateway : '',
     gatewayReference: row.gateway_reference,
-    gatewayResponse: row.gateway_response ?? null,
-    metadata: row.metadata ?? null,
-    platformFee: row.platform_fee ?? null,
     orderNumber: typeof row.order_number === 'string' ? row.order_number : null,
     orderPaymentStatus:
       typeof row.order_payment_status === 'string'

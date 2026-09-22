@@ -14,6 +14,7 @@ import {
   mockPermissionBoosterModule,
   mockPostOrderInterstitialModule,
   mockPushNotificationsModule,
+  mockReceiptPreviewModalHolder,
   mockReceiptPreviewModalModule,
   mockReceiptPreviewModule,
   mockRequestPermission,
@@ -45,7 +46,10 @@ jest.mock('@/lib/post-order-interstitial', () =>
 
 import OrderSuccessScreen from '@/app/order-success';
 
-let mockPaidCheckOrder: { payment_status?: string } | null = null;
+let mockPaidCheckOrder: {
+  payment_status?: string;
+  amount_paid?: number;
+} | null = null;
 jest.mock('@/hooks/use-receipts', () => ({
   useReceiptDetail: () => ({ data: mockPaidCheckOrder, isFetched: true }),
 }));
@@ -291,6 +295,37 @@ describe('OrderSuccessScreen', () => {
     // Accepted money without settling: never proforma, never
     // reconciliation — the order stays active.
     expect(latestProps?.documentType).toBeUndefined();
+    expect(mockOrderReconciliationView).not.toHaveBeenCalled();
+  });
+
+  it('renders commercial presentation for a wallet-credited invoice', () => {
+    mockSearchParamsHolder.current = {
+      orderId: 'order-9',
+      paymentMethod: 'invoice',
+    };
+    mockPaidCheckOrder = { payment_status: 'unpaid', amount_paid: 400 };
+    render(<OrderSuccessScreen />);
+
+    // Credited balance with an unreconciled status: the preview modal
+    // gets no proforma stamp.
+    expect(mockReceiptPreviewModalHolder.current?.documentType).toBeUndefined();
+    expect(mockOrderReconciliationView).not.toHaveBeenCalled();
+    mockPaidCheckOrder = null;
+  });
+
+  it('renders commercial presentation for a wallet-credited guest invoice', () => {
+    mockAuthCustomerHolder.current = null;
+    mockSearchParamsHolder.current = {
+      orderId: 'order-9',
+      paymentMethod: 'invoice',
+    };
+    mockGuestInvoiceHolder.current = {
+      status: 'credited',
+      isResolved: true,
+    };
+    render(<OrderSuccessScreen />);
+
+    expect(mockReceiptPreviewModalHolder.current?.documentType).toBeUndefined();
     expect(mockOrderReconciliationView).not.toHaveBeenCalled();
   });
 

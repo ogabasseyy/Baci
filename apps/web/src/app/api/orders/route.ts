@@ -685,6 +685,8 @@ function buildImmediatePeppolInvoiceData(input: {
   paymentAccount: ReceiptOrder['virtual_account'];
   paymentMethod?: string;
   isPaid?: boolean;
+  paymentStatus?: string | null;
+  amountPaid?: number | null;
   shippingAddress: OrderCreateInput['shipping_address'];
 }): InvoiceData {
   const taxAmount = Number(input.order.tax_amount || 0);
@@ -790,9 +792,13 @@ function buildImmediatePeppolInvoiceData(input: {
     invoice_number: input.orderNumber,
     // Same classification as the invoice download route: unpaid invoice
     // orders are proforma (325), everything else stays commercial (380).
+    // Prior-payment evidence (partially_paid status, credited amount_paid)
+    // keeps partially covered invoices commercial.
     invoice_type_code: resolveInvoiceTypeCode({
       paymentMethod: input.paymentMethod,
       isPaid: input.isPaid ?? false,
+      paymentStatus: input.paymentStatus,
+      amountPaid: input.amountPaid,
       storedTypeCode: undefined,
     }),
     issue_date: issueDate,
@@ -3526,6 +3532,16 @@ export async function POST(request: NextRequest) {
           isQuizVoucherFullyPaid,
           orderPaymentStatus: order.payment_status,
           requestPaymentStatus: payment_status,
+          // Same credited-balance rule as the attached PDF below:
+          // credit already applied must not render quotation copy.
+          paymentStatus:
+            typeof order.payment_status === 'string'
+              ? order.payment_status
+              : payment_status,
+          amountPaid: Math.max(
+            Number(order.amount_paid || 0),
+            savingsAmountUsed + walletAmountUsed
+          ),
           orderNumber: emailData.orderNumber,
         });
         const emailDocumentKind = immediateEmail.documentKind;
@@ -3797,6 +3813,8 @@ export async function POST(request: NextRequest) {
                   paymentAccount: invoiceVirtualAccount,
                   paymentMethod: effectivePaymentMethod,
                   isPaid: isPaidForImmediateEmail,
+                  paymentStatus: receiptOrder.payment_status,
+                  amountPaid,
                   shippingAddress: shippingAddressForOrder,
                 });
                 let peppolInvoiceXml: string | null = null;

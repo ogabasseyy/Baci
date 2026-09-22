@@ -121,6 +121,19 @@ describe('payment schedule selection', () => {
       expect(screen.getByRole('button', { name: 'Get a Proforma Invoice' })).toBeInTheDocument();
     });
   });
+  it('offers the invoice option exactly once, on its own tab', () => {
+    renderPanel('full');
+
+    // The "Get a Proforma Invoice" tab owns invoice selection: no
+    // duplicate invoice card may appear under Pay in Full.
+    expect(
+      screen.getByRole('button', { name: 'Get a Proforma Invoice' })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('radio', { name: /invoice/i })
+    ).not.toBeInTheDocument();
+  });
+
   it('offers a proforma invoice without requiring an online payment gateway', () => {
     const { setPaymentMethod } = renderPanel('invoice', false);
 

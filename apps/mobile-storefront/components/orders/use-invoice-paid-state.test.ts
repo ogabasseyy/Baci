@@ -2,7 +2,11 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { useGuestInvoicePaidState } from './use-invoice-paid-state';
 
-function mockTrackedOrder(paymentStatus: string, id = 'order-inv-1') {
+function mockTrackedOrder(
+  paymentStatus: string,
+  id = 'order-inv-1',
+  extra: Record<string, unknown> = {}
+) {
   global.fetch = jest.fn(
     async () =>
       new Response(
@@ -12,6 +16,7 @@ function mockTrackedOrder(paymentStatus: string, id = 'order-inv-1') {
             order_number: 'ORD-INV-1',
             payment_status: paymentStatus,
             total: 50000,
+            ...extra,
           },
         }),
         { status: 200 }
@@ -188,6 +193,18 @@ describe('useGuestInvoicePaidState', () => {
     // distinct outcome lets the success screen render reconciliation or
     // commercial-document state.
     await waitFor(() => expect(result.current.status).toBe('refunded'));
+    expect(result.current.isResolved).toBe(true);
+  });
+
+  it('resolves credited for a wallet-covered guest invoice instead of unpaid', async () => {
+    mockTrackedOrder('unpaid', 'order-inv-1', { amount_paid: 20000 });
+
+    const { result } = renderHook(() => useGuestInvoicePaidState(baseParams));
+
+    // Pre-gateway credit with an unreconciled status: commercial
+    // presentation like partially_paid, never proforma, never
+    // reconciliation.
+    await waitFor(() => expect(result.current.status).toBe('credited'));
     expect(result.current.isResolved).toBe(true);
   });
 

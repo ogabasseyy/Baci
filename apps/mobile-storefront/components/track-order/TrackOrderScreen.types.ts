@@ -36,6 +36,9 @@ export interface TrackOrderData {
     tax_amount?: number | null;
     gift_wrapping_fee?: number | null;
     total: number;
+    // Prior-payment evidence for wallet/savings-credited invoices.
+    // Optional: older responses omit it and classify status-only.
+    amount_paid?: number | null;
     currency: string;
   };
   customer: {

@@ -144,7 +144,10 @@ export async function finalizeCheckoutPayment({
           orderNumber,
           paymentMethod: selectedPayment,
           reference: walletFundedIntentId,
-          value: orderResponse.amountDueToGateway,
+          // Revenue is the canonical order total, not the residual due
+          // at the gateway after wallet/savings credit — matching the
+          // eventual completion.
+          value: order.total,
         });
         runPostOrderSideEffects();
         return;

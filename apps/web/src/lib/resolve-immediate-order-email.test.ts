@@ -18,6 +18,27 @@ describe('resolveImmediateOrderEmail', () => {
     });
   });
 
+  it('confirms a partially credited invoice order instead of quoting', () => {
+    // Accepted value (partial status or credited balance) with an
+    // unpaid balance: commercial confirmation, but the receipt stays
+    // unpaid.
+    expect(
+      resolveImmediateOrderEmail({
+        effectivePaymentMethod: 'invoice',
+        isWalletFullyPaid: false,
+        isQuizVoucherFullyPaid: false,
+        orderPaymentStatus: 'unpaid',
+        paymentStatus: 'partially_paid',
+        amountPaid: 400,
+        orderNumber: 'ORD-1',
+      })
+    ).toEqual({
+      documentKind: 'confirmation',
+      isPaidForEmail: false,
+      subject: 'Invoice Generated - #ORD-1',
+    });
+  });
+
   it('classifies an unpaid payforme order as a payment request', () => {
     expect(
       resolveImmediateOrderEmail({

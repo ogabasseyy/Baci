@@ -47,9 +47,6 @@ function snapshotRow(overrides = {}) {
     transaction_status: 'pending',
     gateway: 'paystack',
     gateway_reference: REFERENCE,
-    gateway_response: null,
-    metadata: {},
-    platform_fee: '0.00',
     order_number: 'ORD-9',
     order_payment_status: 'pending',
     order_shipping_status: 'pending',
@@ -196,6 +193,39 @@ describe('/api/payments/verify tracking-token authorization', () => {
 
     expect(response.status).toBe(403);
     expect(mockVerifyPaystack).not.toHaveBeenCalled();
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
+  });
+
+  it('ignores non-verification columns when the RPC returns extra fields', async () => {
+    // Defense in depth behind the SQL projection regression: even if a
+    // row carried raw provider payloads, the parser drops them before
+    // verification, so gateway_response / metadata / platform_fee can
+    // never reach a response.
+    mockRpc.mockResolvedValue({
+      data: [
+        {
+          ...snapshotRow(),
+          gateway_response: { authorization: { reusable: true } },
+          metadata: { card: 'vaulted' },
+          platform_fee: '250.00',
+        },
+      ],
+      error: null,
+    });
+    mockVerifyPaystack.mockResolvedValue({
+      success: true,
+      data: { status: 'failed' },
+    });
+
+    const response = await POST(
+      guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ success: false, status: 'failed' });
+    expect(JSON.stringify(body)).not.toContain('reusable');
+    expect(JSON.stringify(body)).not.toContain('vaulted');
     expect(mockCreateServiceClient).not.toHaveBeenCalled();
   });
 

@@ -288,6 +288,46 @@ describe('finalizeCheckoutPayment', () => {
     );
   });
 
+  it('records the full order total on wallet-funded starts under partial credit', async () => {
+    // Savings covered all but 750 of the 5750 order: the intent funds
+    // the residual, but started revenue is the whole order.
+    mockStartWalletFundedBankTransferCheckout.mockResolvedValueOnce('intent-1');
+
+    await finalizeCheckoutPayment({
+      clearCart: jest.fn<() => void | Promise<void>>(),
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Customer',
+      customerPhone: '08012345678',
+      isOrderInFlight: { current: true },
+      orderNumber: 'BAC-001',
+      orderResponse: createOrderResponse({
+        amountDueToGateway: 750,
+        order: {
+          id: 'order-1',
+          payment_status: 'pending',
+          tracking_token: 'tracking-token',
+          total: 5750,
+        },
+      }),
+      runPostOrderSideEffects: jest.fn(),
+      selectedPayment: 'bank_transfer' as const,
+      setIsProcessing: jest.fn(),
+      setPendingOrder: jest.fn(),
+      setShowCryptoSelection: jest.fn(),
+      shouldCreateWalletFundedBankTransferOrder: true,
+    });
+
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-1',
+        paymentMethod: 'bank_transfer',
+        reference: 'intent-1',
+        value: 5750,
+      })
+    );
+  });
+
   it('requires persisted summary review before REDVAULT initialization', async () => {
     mockFetch.mockResolvedValue({
       json: async () => ({

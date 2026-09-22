@@ -9,6 +9,8 @@ interface ResolveImmediateOrderEmailInput {
   isQuizVoucherFullyPaid: boolean;
   orderPaymentStatus?: string | null;
   requestPaymentStatus?: string | null;
+  paymentStatus?: string | null;
+  amountPaid?: number | null;
   orderNumber: string;
 }
 
@@ -33,6 +35,8 @@ export function resolveImmediateOrderEmail({
   isQuizVoucherFullyPaid,
   orderPaymentStatus,
   requestPaymentStatus,
+  paymentStatus,
+  amountPaid,
   orderNumber,
 }: ResolveImmediateOrderEmailInput): ResolvedImmediateOrderEmail {
   const isPaidForEmail =
@@ -40,8 +44,19 @@ export function resolveImmediateOrderEmail({
     isQuizVoucherFullyPaid ||
     String(orderPaymentStatus || requestPaymentStatus || '').toLowerCase() ===
       'paid';
+  // Same prior-payment evidence as the invoice-type resolver: a
+  // partially paid status or a positive credited balance means the
+  // invoice already accepted value, so the email is a commercial
+  // confirmation with the outstanding balance — never a quotation.
+  // isPaidForEmail stays strict (fully paid only): partial credit must
+  // not mark the receipt paid.
+  const status = paymentStatus?.trim().toLowerCase();
+  const creditedAmount = Number(amountPaid ?? 0);
+  const previouslyPaid =
+    status === 'partially_paid' ||
+    (Number.isFinite(creditedAmount) && creditedAmount > 0);
   const documentKind =
-    effectivePaymentMethod === 'invoice' && !isPaidForEmail
+    effectivePaymentMethod === 'invoice' && !isPaidForEmail && !previouslyPaid
       ? ('proforma' as const)
       : effectivePaymentMethod === 'payforme' && !isPaidForEmail
         ? ('payment_request' as const)

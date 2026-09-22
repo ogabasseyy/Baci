@@ -72,18 +72,25 @@ export function mockOrderReconciliationViewModule(): unknown {
   };
 }
 
+export const mockReceiptPreviewModalHolder: {
+  current: { documentType?: string } | null;
+} = { current: null };
+
 export function mockReceiptPreviewModalModule(): unknown {
   return {
     ReceiptPreviewModal: ({
       onDismissed,
       visible,
+      documentType,
     }: {
       onDismissed?: () => void;
       visible: boolean;
+      documentType?: string;
     }) => {
       const { View } =
         jest.requireActual<typeof import('react-native')>('react-native');
       mockReceiptDismissalHolder.current = onDismissed;
+      mockReceiptPreviewModalHolder.current = { documentType };
       return visible ? <View testID="receipt-preview-modal" /> : null;
     },
   };
@@ -170,6 +177,7 @@ export function setupOrderSuccessMocks(): void {
   mockReceiptState.isLoading = false;
   mockReceiptState.isOpen = false;
   mockReceiptDismissalHolder.current = undefined;
+  mockReceiptPreviewModalHolder.current = null;
   mockPaidCheckOrderHolder.current = null;
   mockReceiptFetchedHolder.current = true;
   mockAuthCustomerHolder.current = { id: 'user-1' };

@@ -1,6 +1,10 @@
 'use client';
 
 import { useAirportQuoteRecovery } from './checkout/hooks/use-airport-quote-recovery';
+import {
+  useDvaConfirmTransfer,
+  type DvaModalData,
+} from './checkout/hooks/use-dva-confirm-transfer';
 import { isAirportDeliveryReady } from './checkout/is-airport-delivery-ready';
 import { canShowDeliveryMethods } from './checkout/can-show-delivery-methods';
 
@@ -525,35 +529,6 @@ async function requestDvaInitialization({
 // the DVA reference is a locally generated BAC-* value that was never
 // registered as a Paystack transaction (probing /transaction/verify with it
 // can only error for real DVA transfers).
-async function verifyDvaTransferStatus({
-  merchantSlug,
-  reference,
-  trackingToken,
-}: {
-  merchantSlug?: string;
-  reference: string;
-  trackingToken?: string | null;
-}): Promise<boolean> {
-  if (trackingToken && merchantSlug) {
-    const response = await fetch(
-      `/api/storefront/orders/track-order?token=${encodeURIComponent(trackingToken)}&merchant_slug=${encodeURIComponent(merchantSlug)}`
-    );
-    if (!response.ok) {
-      return false;
-    }
-    const result = await response.json().catch(() => null);
-    return result?.order?.payment_status === 'paid';
-  }
-  const response = await fetch(
-    `/api/payments/status?gateway=paystack&reference=${encodeURIComponent(reference)}`
-  );
-  if (!response.ok) {
-    return false;
-  }
-  const result = await response.json().catch(() => null);
-  return result?.success === true && result?.is_confirmed === true;
-}
-
 export const CheckoutPage: React.FC = () => {
   const { cart, clearCart, isHydrated, removeFromCart } = useCart();
   const merchantContext = useMerchantSafe();
@@ -742,38 +717,24 @@ export const CheckoutPage: React.FC = () => {
 
 
   // Dedicated Virtual Account (DVA) state
-  const [dvaData, setDvaData] = useState<{
-    account_number: string;
-    account_name: string;
-    bank_name: string;
-    bank_code: string;
-    amount: number;
-    /** Full order total: `amount` is only the residual due at the DVA
-     * after wallet credits, but purchase revenue is the whole order.
-     */
-    total: number;
-    reference: string;
-    orderId?: string;
-    orderNumber?: string;
-    trackingToken?: string | null;
-    /** Originating checkout fingerprint: scopes post-confirm idempotency
-     * cleanup so another tab's newer checkout keeps its recovery key. */
-    checkoutFingerprint?: string;
-    /** Normalized stamped order currency for completion labeling. */
-    orderCurrency?: string;
-  } | null>(null);
-  const [isVerifyingDva, setIsVerifyingDva] = useState(false);
+  const [dvaData, setDvaData] = useState<DvaModalData | null>(null);
   const [isInitializingDva, setIsInitializingDva] = useState(false);
   const [dvaCountdown, setDvaCountdown] = useState(3600); // 1 hour in seconds
-  // Retires "Confirm Transfer Sent" attempts: closing the DVA modal bumps
-  // this synchronously (a ref, so the pending verification sees it even
-  // before React re-renders), and the confirmation continuation returns
-  // early for any attempt that is no longer current.
-  const dvaConfirmAttemptRef = useRef(0);
-  const closeDvaModal = () => {
-    dvaConfirmAttemptRef.current += 1;
-    setDvaData(null);
-  };
+  // "Confirm Transfer Sent" lifecycle (server verification, conversion,
+  // routing, delayed cart clear) tied to the modal attempt that started
+  // it — see useDvaConfirmTransfer.
+  const { closeDvaModal, handleDvaConfirmTransfer, isVerifyingDva } =
+    useDvaConfirmTransfer({
+      checkoutCart,
+      clearCart,
+      clearCheckoutSession,
+      clearPendingCheckoutOrder,
+      currencyCode,
+      dvaData,
+      getHref,
+      merchantSlug: merchant?.slug ?? undefined,
+      setDvaData,
+    });
 
   // Crypto selection state (before payment is initialized)
   const [showCryptoSelector, setShowCryptoSelector] = useState(false);
@@ -2324,7 +2285,12 @@ export const CheckoutPage: React.FC = () => {
           orderNumber: createdOrderNumber,
           paymentMethod,
           reference,
-          total: paymentAmount,
+          // Revenue is the canonical order total, not the residual due
+          // at the provider after wallet/savings credit — matching
+          // order_created above and the eventual completion.
+          // paymentAmount stays on the provider initialization, which
+          // charges only the residual.
+          total: order.total ?? total,
         });
       };
 
@@ -2418,6 +2384,9 @@ export const CheckoutPage: React.FC = () => {
                 merchantSlug: merchant.slug ?? undefined,
                 orderId: order.id,
                 orderNumber: createdOrderNumber,
+                // Canonical row total for the completion revenue (the
+                // intent target is the post-savings residual).
+                orderTotal: order.total ?? total,
                 trackingToken: order.tracking_token,
               })
             : ('fallback' as const);
@@ -2961,88 +2930,6 @@ export const CheckoutPage: React.FC = () => {
       .finally(() => {
         setIsProcessing(false);
         setIsInitializingDva(false);
-      });
-  };
-
-  // "Confirm Transfer Sent" verifies the DVA reference server-side before
-  // recording the conversion: completing on the shopper's word alone would
-  // book paid revenue for transfers that never land. Still pending → toast
-  // and stay on the modal so the shopper can retry or close-and-check-later.
-  const handleDvaConfirmTransfer = () => {
-    if (!dvaData || !dvaData.orderId || isVerifyingDva) {
-      return;
-    }
-    const {
-      orderId,
-      orderNumber,
-      reference,
-      amount,
-      total: dvaTotal,
-      trackingToken,
-      checkoutFingerprint: dvaCheckoutFingerprint,
-      orderCurrency: dvaOrderCurrency,
-    } = dvaData;
-    const confirmAttempt = dvaConfirmAttemptRef.current;
-    setIsVerifyingDva(true);
-    verifyDvaTransferStatus({
-      merchantSlug: merchant?.slug ?? undefined,
-      reference,
-      trackingToken,
-    })
-      .then(async (confirmed) => {
-        if (!confirmed) {
-          toast({
-            title: 'Transfer not detected yet',
-            description:
-              'We could not find your transfer. If you already sent it, wait a moment and confirm again.',
-          });
-          return;
-        }
-        // The modal closed while the status request was pending (either
-        // close action retires the attempt): the shopper chose "close and
-        // check later", so never clear state, route, or clear the cart —
-        // the delayed cart clear could otherwise erase a newer cart.
-        if (confirmAttempt !== dvaConfirmAttemptRef.current) {
-          return;
-        }
-        const confirmedItems = buildCheckoutOrderItems(checkoutCart);
-        // Stamped currency retained from initialization: matches the
-        // start even if the merchant changed payout currency since.
-        captureCheckoutPaymentCompleted({
-          currency: dvaOrderCurrency ?? currencyCode,
-          itemCount: confirmedItems.reduce(
-            (count, item) => count + item.quantity,
-            0
-          ),
-          orderId,
-          orderNumber,
-          paymentMethod: 'bank_transfer',
-          reference,
-          total: dvaTotal ?? amount,
-        });
-        clearPendingCheckoutOrder();
-        await clearCheckoutIdempotencyKey(dvaCheckoutFingerprint);
-        clearCheckoutSession();
-        setDvaData(null);
-        const successQuery = new URLSearchParams({
-          type: 'standard',
-          orderId,
-        });
-        if (trackingToken) {
-          successQuery.set('trackingToken', trackingToken);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-        setTimeout(clearCart, 500);
-      })
-      .catch(() => {
-        toast({
-          title: 'Could not verify transfer',
-          description: 'Please check your connection and try again.',
-          variant: 'destructive',
-        });
-      })
-      .finally(() => {
-        setIsVerifyingDva(false);
       });
   };
 

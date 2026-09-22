@@ -755,6 +755,8 @@ export class TopshipProvider extends BaseShippingProvider {
         rates = result.data;
       } else if (result.status === false) {
         throw new Error(result.message || 'Topship quote request failed');
+      } else {
+        throw new Error('Topship quote response malformed');
       }
 
       if (rates.length === 0) {

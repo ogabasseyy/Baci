@@ -43,6 +43,16 @@ export function runGiglQuoteSelections(
             timeoutMs: options.timeoutMs,
             ...selection,
           });
+          if (!options.signal.aborted) {
+            // The fetch timed out while the parent still wants results: an
+            // actual provider timeout, not a superseded request. Count it so
+            // an all-timed-out run rejects instead of resolving unmarked.
+            failures.push(
+              new Error(
+                `GIGL quote request timed out after ${options.timeoutMs}ms`
+              )
+            );
+          }
           return null;
         }
         failures.push(error);

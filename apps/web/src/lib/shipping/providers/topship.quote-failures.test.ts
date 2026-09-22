@@ -63,6 +63,26 @@ describe('TopshipProvider quote failure signaling', () => {
           )
         ),
     },
+    {
+      name: 'the provider returns a success envelope with a non-array payload',
+      fetchResult: () =>
+        Promise.resolve(
+          new Response(JSON.stringify({ status: true, data: {} }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        ),
+    },
+    {
+      name: 'the provider returns an unrecognized success object',
+      fetchResult: () =>
+        Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        ),
+    },
   ])('marks an empty result when $name', async ({ fetchResult }) => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(fetchResult));
     const [{ TopshipProvider }, { quoteProviderFailure }] = await Promise.all([

@@ -248,6 +248,46 @@ describe('ShippingOptions', () => {
     expect(onSelect).toHaveBeenLastCalledWith(null, 'session-2');
   });
 
+  it('clears the parent selection when a refresh request fails', async () => {
+    const onSelect = vi.fn();
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    mockApiPost
+      .mockResolvedValueOnce(quotesResponse)
+      .mockRejectedValueOnce(new Error('network down'));
+
+    try {
+      const { rerender } = render(
+        <ShippingOptions {...baseProps} onSelect={onSelect} />
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(onSelect).toHaveBeenCalledWith(cheapQuote, 'session-1');
+
+      rerender(
+        <ShippingOptions
+          {...baseProps}
+          receiverCity="Abuja"
+          selectedQuoteId="quote-cheap"
+          onSelect={onSelect}
+        />
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+
+      expect(mockApiPost).toHaveBeenCalledTimes(2);
+      expect(onSelect).toHaveBeenLastCalledWith(null, '');
+      expect(
+        screen.getByText('Unable to get shipping options. Please try again.')
+      ).toBeInTheDocument();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it('shows and selects merchant-configured rates the checkout can now submit', async () => {
     mockApiPost.mockResolvedValue({
       quotes: { featured: [cheapQuote], all: [merchantRateQuote, cheapQuote] },

@@ -1,9 +1,11 @@
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import { createLogger } from '@/lib/logger';
 import { trackCheckoutOrderCreated } from '@/services/analytics';
 import type { CreateOrderRequest, OrderResponse } from './orders.schemas';
 import { serializeAfterOrderCreated } from './serialize-after-order-created';
 
 const ORDER_CREATED_CLAIM_EVENT = 'order_created';
+const log = createLogger('OrderAnalytics');
 
 export async function trackCreatedOrderOnce(
   order: OrderResponse,
@@ -51,4 +53,23 @@ export async function trackCreatedOrderOnce(
       total: order.order.total,
     });
   });
+}
+
+/**
+ * Fire-and-forget order-created recording: analytics must never hold the
+ * order response hostage — a stalled native store would otherwise keep
+ * the shopper on the submitting state for an already-committed order
+ * (and invite a duplicate retry).
+ */
+export function recordOrderCreatedAnalytics(
+  order: OrderResponse,
+  request: CreateOrderRequest,
+  startTime: number,
+  paymentMethod?: string
+): void {
+  void trackCreatedOrderOnce(order, request, startTime, paymentMethod).catch(
+    (error: unknown) => {
+      log.error('Failed to record order-created analytics:', error);
+    }
+  );
 }

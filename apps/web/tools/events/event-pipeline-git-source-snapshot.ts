@@ -11,6 +11,9 @@ function gitPaths(root: string, args: readonly string[]): string[] {
     {
       cwd: root,
       encoding: 'utf8',
+      // `git ls-files` output for this repo exceeds Node's 1 MiB default
+      // execFileSync buffer (spawnSync git ENOBUFS on CI); match the
+      // explicit buffers used elsewhere in this module.
       maxBuffer: 64 * 1024 * 1024,
     }
   )

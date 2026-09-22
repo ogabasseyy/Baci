@@ -1,29 +1,30 @@
-import { useEffect, useRef } from 'react';
+import { useIsMountedRef } from '@/components/bnpl-checkout/use-is-mounted-ref';
 import { useMerchant } from '@/hooks/use-merchant';
 import type { ShippingAddressInput } from '@/lib/validation';
-import {
-  buildSavingsOrderFields,
-  buildWalletOrderFields,
-} from '@/lib/wallet-payment-helpers';
+import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
+import { trackCheckoutStep } from '@/services/analytics';
 import { createOrder } from '@/services/orders';
 import { useCartStore } from '@/stores/cart-store';
+import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
 import { acquireCheckoutSubmitFence } from './acquire-checkout-submit-fence';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
-import { buildCheckoutCompletionAttribution } from './checkout-completion-attribution';
-import { buildCheckoutOrderRequest } from './checkout-order-builders';
-import { runCheckoutPostOrderSideEffects } from './checkout-post-order-side-effects';
+import { createCheckoutSnapshot } from './checkout-order-builders';
 import {
   blockIfMixedPrizeCart,
   cartHasVoucherLine,
 } from './checkout-prize-cart-guard';
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
+import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
+import { createSubmittedOrderIdentity } from './checkout-submit-order-identity';
+import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
+import { tryCaptureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
-import { handleCreatedCheckoutOrder } from './handle-created-checkout-order';
 import { isBnplPayment } from './is-bnpl-payment';
-import { prepareCheckoutOrderInputs } from './prepare-checkout-order-inputs';
 import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
-import { runFinalizeCheckoutPayment } from './run-finalize-checkout-payment';
+import { runCheckoutFinalization } from './run-checkout-finalization';
+import { runRedvaultPostOrderBranch } from './run-redvault-post-order-branch';
+import { trackSubmittedCheckoutGeneration } from './track-submitted-checkout-generation';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 
 export type { UseCheckoutSubmitParams };
@@ -65,16 +66,9 @@ export function useCheckoutSubmit({
 }: UseCheckoutSubmitParams) {
   const { data: merchant } = useMerchant();
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
-  // Guards the fully-paid routing continuation: the completion-tracking
-  // await can outlive checkout, and a late resolution must not erase a
-  // newly created cart or navigate away from the shopper's screen.
-  const isMountedRef = useRef(true);
-  useEffect(
-    () => () => {
-      isMountedRef.current = false;
-    },
-    []
-  );
+  // Late completion-tracking resolutions must not erase a newly created
+  // cart or navigate away from the shopper's screen.
+  const isMountedRef = useIsMountedRef();
   return async (address: ShippingAddressInput) => {
     const itemsSnapshot = [...useCartStore.getState().items];
     const {
@@ -130,37 +124,42 @@ export function useCheckoutSubmit({
     // The in-flight latch is already held (acquired before the fence
     // await above) and releases in the finally below.
     setIsProcessing(true);
-
-    // Set once createOrder commits: post-creation failures that do record a
-    // funnel failure must carry the order id so the event serializes behind
-    // order_created and joins to the order. (Pre-start init failures are
-    // suppressed from the funnel; the id still threads through for them.)
-    let createdOrderId: string | undefined;
-
+    const orderIdentity = createSubmittedOrderIdentity();
+    // Hoisted for the rollback path, which re-freezes these on cart restore.
+    let submitCreditFields: Record<string, unknown> | undefined;
+    let submitHadSortMarker: boolean | undefined;
+    // Inconclusive marker read: the catch path skips cleanup.
+    let rollbackCaptureInconclusive = false;
+    const submittedGeneration = trackSubmittedCheckoutGeneration(
+      checkoutGenerationSnapshot
+    );
     try {
-      const preparedOrderInputs = await prepareCheckoutOrderInputs({
-        deliveryFee,
-        getLiveSavingsSelection,
-        isVoucherOnlyCart,
-        itemsSnapshot,
-        merchantId,
-        orderTotals,
-        paymentTab,
-        selectedPayment,
-        walletBalance,
-        walletSelection,
-      });
-      if (!preparedOrderInputs) {
+      if (await abortIfCartPricesStale(itemsSnapshot, merchantId)) {
         return;
       }
-      const {
-        liveSavingsSelection,
-        liveWalletSelection,
-        paymentMethodForOrder,
-        snapshot,
-      } = preparedOrderInputs;
+      const snapshot = createCheckoutSnapshot(
+        itemsSnapshot,
+        deliveryFee,
+        orderTotals?.taxAmount ?? 0
+      );
+      const { liveSavingsSelection, liveWalletSelection } =
+        resolveCheckoutStoreCreditSelections({
+          getLiveSavingsSelection,
+          itemsSnapshot,
+          paymentTab,
+          selectedPayment,
+          snapshotTotal: snapshot.total,
+          walletBalance,
+          walletSelection,
+        });
+      trackCheckoutStep('review');
+      // Pay-for-me keeps its own persisted identity: collapsing it to
+      // 'invoice' would misclassify its documents as proforma and skip
+      // the server payforme dispatch branch.
+      const paymentMethodForOrder = isVoucherOnlyCart
+        ? 'card'
+        : selectedPayment;
       const isBNPL = isBnplPayment(selectedPayment);
-
       if (isBNPL && !isVoucherOnlyCart) {
         await submitBnplCheckout({
           address,
@@ -176,12 +175,7 @@ export function useCheckoutSubmit({
           liveWalletSelection,
           checkoutGeneration: checkoutGenerationSnapshot,
           mobileCheckoutIdempotencyRef,
-          // The Klump path creates its order inside the nested submit:
-          // capture the id so a nested init failure still reports with
-          // the committed order identity.
-          onOrderCreated: (nestedOrderId) => {
-            createdOrderId = nestedOrderId;
-          },
+          onOrderCreated: orderIdentity.captureCreatedOrder,
           paymentMethodForOrder,
           paymentSettings,
           selectedPayment,
@@ -191,38 +185,52 @@ export function useCheckoutSubmit({
         });
         return;
       }
-      const orderResponse = await createOrder(
-        {
-          ...buildCheckoutOrderRequest({
-            address,
-            customerEmail,
-            customerName,
-            customerPhone,
-            deliveryMethod,
-            discountCode: appliedDiscountCode,
-            itemsSnapshot,
-            paymentMethodForOrder,
-            selectedQuote,
-            shippingProvider: getShippingProvider(),
-            snapshot,
-          }),
-          ...(appliedDiscountCode
-            ? {}
-            : buildSavingsOrderFields(liveSavingsSelection)),
-          ...buildWalletOrderFields(liveWalletSelection),
-        },
-        {
-          analyticsPaymentMethod: selectedPayment,
-          checkoutGeneration: checkoutGenerationSnapshot,
-        }
+      const { creditFields, orderRequest } = buildCheckoutSubmitOrderRequest({
+        address,
+        appliedDiscountCode,
+        customerEmail,
+        customerName,
+        customerPhone,
+        deliveryMethod,
+        itemsSnapshot,
+        liveSavingsSelection,
+        liveWalletSelection,
+        paymentMethodForOrder,
+        selectedQuote,
+        shippingProvider: getShippingProvider(),
+        snapshot,
+      });
+      const orderResponse = await createOrder(orderRequest, {
+        checkoutGeneration: checkoutGenerationSnapshot,
+      });
+      orderIdentity.captureCreatedOrder(orderResponse.order.id);
+      submittedGeneration.track(orderResponse);
+      const rollbackCapture = await tryCaptureCheckoutSubmitRollbackState(
+        submittedGeneration.current(),
+        creditFields
       );
+      if (!rollbackCapture.ok) {
+        // Fail closed before finalization: without a conclusive sort
+        // mode, a failed finalize would empty the cart with no rollback
+        // path. The created order stands; the cart stays intact for retry.
+        rollbackCaptureInconclusive = true;
+        throw new Error(
+          'Checkout verification timed out; your cart is unchanged.'
+        );
+      }
+      submitCreditFields = rollbackCapture.creditFields;
+      submitHadSortMarker = rollbackCapture.hadSortMarker;
       const { order } = orderResponse;
-      createdOrderId = order.id;
-      const { handled: redvaultHandled, orderNumber } =
-        await handleCreatedCheckoutOrder({
+      const completedPaymentMethod =
+        getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
+      const orderNumber =
+        order.order_number || order.id.slice(0, 8).toUpperCase();
+      if (
+        await runRedvaultPostOrderBranch({
           accountPassword,
           address,
-          checkoutGeneration: checkoutGenerationSnapshot,
+          checkoutGeneration: submittedGeneration.current(),
+          completedPaymentMethod,
           customer,
           customerEmail,
           customerName,
@@ -230,62 +238,60 @@ export function useCheckoutSubmit({
           isAuthenticated,
           itemsSnapshot,
           onRedvaultOrder,
+          order,
+          orderNumber,
           orderResponse,
           saveAsDefaultAddress,
           saveDetails,
           selectedPayment,
           selectedSavedAddressId,
           snapshot,
-        });
-      if (redvaultHandled) {
+        })
+      ) {
         return;
       }
-      await runFinalizeCheckoutPayment({
-        attribution: buildCheckoutCompletionAttribution({
-          customerEmail,
-          customerPhone,
-          // Auth identity, not the storefront customer-row id: the server
-          // conversion payload joins on external_id for cross-device ad
-          // matching, and the cached auth identity must win.
-          userId: user?.id ?? undefined,
-          items: itemsSnapshot,
-          snapshot,
-        }),
+      await runCheckoutFinalization({
+        accountPassword,
+        address,
         clearCart,
+        completedPaymentMethod,
+        customer,
         customerEmail,
         customerName,
         customerPhone,
+        isAuthenticated,
         isMountedRef,
         isOrderInFlight,
+        itemsSnapshot,
+        order,
         orderNumber,
         orderResponse,
-        runPostOrderSideEffects: () => {
-          void runCheckoutPostOrderSideEffects({
-            accountPassword,
-            address,
-            customerEmail,
-            customerId: customer?.id,
-            isAuthenticated,
-            saveAsDefaultAddress,
-            saveDetails,
-            selectedSavedAddressId,
-          });
-        },
+        saveAsDefaultAddress,
+        saveDetails,
         selectedPayment,
+        selectedSavedAddressId,
         setIsProcessing,
         setPendingOrder,
         setShowCryptoSelection,
-        shouldCreateWalletFundedBankTransferOrder:
-          walletFundedBankTransferOptionEnabled &&
-          selectedPayment === 'bank_transfer',
+        snapshot,
+        user,
+        walletFundedBankTransferOptionEnabled,
       });
     } catch (error) {
-      await restoreEmptiedCheckoutCart({
-        cartWideNegotiationActive: groupNegotiationSnapshot,
-        checkoutGeneration: checkoutGenerationSnapshot,
-        itemsSnapshot,
-      });
-      handleCheckoutSubmitError(error, selectedPayment, createdOrderId);
+      if (!rollbackCaptureInconclusive) {
+        await restoreEmptiedCheckoutCart({
+          cartWideNegotiationActive: groupNegotiationSnapshot,
+          checkoutGeneration: submittedGeneration.current(),
+          creditFields: submitCreditFields,
+          hadSortMarker: submitHadSortMarker,
+          itemsSnapshot,
+        });
+      }
+      handleCheckoutSubmitError(
+        error,
+        selectedPayment,
+        orderIdentity.createdOrderId
+      );
     } finally {
       setIsProcessing(false);
       isOrderInFlight.current = false;

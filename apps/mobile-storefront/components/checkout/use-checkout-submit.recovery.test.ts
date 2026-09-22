@@ -4,6 +4,7 @@ import type { MutableRefObject } from 'react';
 import { Alert } from 'react-native';
 import type { RepriceResult } from '@/services/cart-reprice';
 import type { CartItem } from '@/stores/cart-store.types';
+import { createOrderResponseFixture } from './checkout-order-response-fixture';
 import {
   type UseCheckoutSubmitParams,
   useCheckoutSubmit,
@@ -272,22 +273,28 @@ describe('useCheckoutSubmit recovery', () => {
       changes: [],
       priceById: { 'line-1': 1200000 },
     });
-    mockCreateOrder.mockResolvedValue({
-      amountDueToGateway: 1201500,
-      idempotency: { replayed: true },
-      order: {
-        created_at: '2026-07-09T12:00:00.000Z',
-        id: 'order-replay-1',
-        order_number: 'ORD-R1',
-        payment_status: 'pending',
-        shipping_status: 'pending',
-        total: 1201500,
-      },
-      wallet: null,
-    });
+    mockCreateOrder.mockResolvedValue(
+      createOrderResponseFixture({
+        effectiveCheckoutGeneration: 'gen-1',
+        orderId: 'order-replay-1',
+        orderNumber: 'ORD-R1',
+        replayed: true,
+      })
+    );
     const { trackCheckoutRoutePurchaseCompleted } = jest.requireMock(
       '@/services/tiktok-checkout-route-tracking'
     ) as { trackCheckoutRoutePurchaseCompleted: ReturnType<typeof jest.fn> };
+    // Replay precondition: the first attempt already recorded the
+    // purchase, so the durable claim is held before this submit runs.
+    const { claimCheckoutPurchaseTracking } = jest.requireActual(
+      '@/lib/claim-checkout-purchase-tracking'
+    ) as {
+      claimCheckoutPurchaseTracking: (
+        orderId: string,
+        event?: string
+      ) => Promise<boolean>;
+    };
+    await claimCheckoutPurchaseTracking('order-replay-1');
     const params = createParams();
     const { result } = renderHook(() => useCheckoutSubmit(params));
 
@@ -314,11 +321,13 @@ describe('useCheckoutSubmit recovery', () => {
     mockCreateOrder
       .mockResolvedValueOnce({
         amountDueToGateway: 1201500,
+        effectiveCheckoutGeneration: 'gen-1',
         order,
         wallet: null,
       })
       .mockResolvedValueOnce({
         amountDueToGateway: 1201500,
+        effectiveCheckoutGeneration: 'gen-1',
         idempotency: { replayed: true },
         order,
         wallet: null,

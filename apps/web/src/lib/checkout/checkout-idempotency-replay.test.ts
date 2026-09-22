@@ -84,4 +84,141 @@ describe('prepareCheckoutIdempotencyReplay', () => {
     });
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
+
+  it('uses the locale item-order hash when that hash is already stored', async () => {
+    const localeCompare = vi
+      .spyOn(String.prototype, 'localeCompare')
+      .mockImplementation(function localeOrder(this: string, other: unknown) {
+        if (this === other) {
+          return 0;
+        }
+        return this < (other as string) ? 1 : -1;
+      });
+
+    try {
+      const payload = {
+        ...basePayload,
+        items: [
+          {
+            product_id: 'case',
+            price: 5000,
+            quantity: 1,
+            variant_name: 'z',
+          },
+          {
+            product_id: 'case',
+            price: 5000,
+            quantity: 1,
+            variant_name: 'ö',
+          },
+        ],
+      };
+      const localeHash = hashOrderIdempotencyPayload(
+        buildOrderIdempotencyPayload(payload, { itemSort: 'locale' })
+      );
+      const currentHash = hashOrderIdempotencyPayload(
+        buildOrderIdempotencyPayload(payload)
+      );
+      expect(localeHash).not.toBe(currentHash);
+
+      const supabase = {
+        rpc: vi.fn(async (name: string) => {
+          if (name === 'is_storefront_order_idempotency_hash') {
+            return { data: true, error: null };
+          }
+          return { data: false, error: null };
+        }),
+      } as unknown as SupabaseClient;
+
+      await expect(
+        prepareCheckoutIdempotencyReplay({
+          canonicalAirportType: payload.airport_type,
+          canonicalDeliveryMethod: payload.delivery_method,
+          merchantId: payload.merchant_id,
+          payload,
+          requestIdempotencyKey: 'checkout-1',
+          supabase,
+        })
+      ).resolves.toEqual({
+        checkoutRequestHash: localeHash,
+        isLegacyIdempotencyReplay: false,
+      });
+    } finally {
+      localeCompare.mockRestore();
+    }
+  });
+
+  it('uses the locale legacy hash when a pre-metadata order stored it', async () => {
+    const localeCompare = vi
+      .spyOn(String.prototype, 'localeCompare')
+      .mockImplementation(function localeOrder(this: string, other: unknown) {
+        if (this === other) {
+          return 0;
+        }
+        return this < (other as string) ? 1 : -1;
+      });
+
+    try {
+      const payload = {
+        ...basePayload,
+        items: [
+          {
+            product_id: 'case',
+            price: 5000,
+            quantity: 1,
+            variant_name: 'z',
+          },
+          {
+            product_id: 'case',
+            price: 5000,
+            quantity: 1,
+            variant_name: 'ö',
+          },
+        ],
+      };
+      const localeLegacyHash = hashOrderIdempotencyPayload(
+        buildLegacyOrderIdempotencyPayload(payload, { itemSort: 'locale' })
+      );
+      const legacyHash = hashOrderIdempotencyPayload(
+        buildLegacyOrderIdempotencyPayload(payload)
+      );
+      expect(localeLegacyHash).not.toBe(legacyHash);
+
+      const rpc = vi.fn(
+        async (name: string, params?: Record<string, string>) => {
+          if (name === 'is_legacy_storefront_order_idempotency_key') {
+            return { data: true, error: null };
+          }
+          if (name === 'is_storefront_order_idempotency_hash') {
+            return {
+              data: params?.p_checkout_request_hash === localeLegacyHash,
+              error: null,
+            };
+          }
+          return { data: false, error: null };
+        }
+      );
+      const supabase = { rpc } as unknown as SupabaseClient;
+
+      await expect(
+        prepareCheckoutIdempotencyReplay({
+          canonicalAirportType: payload.airport_type,
+          canonicalDeliveryMethod: payload.delivery_method,
+          merchantId: payload.merchant_id,
+          payload,
+          requestIdempotencyKey: 'checkout-1',
+          supabase,
+        })
+      ).resolves.toEqual({
+        checkoutRequestHash: localeLegacyHash,
+        isLegacyIdempotencyReplay: true,
+      });
+      expect(rpc).toHaveBeenCalledWith(
+        'is_storefront_order_idempotency_hash',
+        expect.objectContaining({ p_checkout_request_hash: localeLegacyHash })
+      );
+    } finally {
+      localeCompare.mockRestore();
+    }
+  });
 });

@@ -179,7 +179,10 @@ function getLastFetchOptions(): MockFetchOptions {
   return options;
 }
 
-async function createOrderWithItems(items: TestOrderItem[]) {
+async function createOrderWithItems(
+  items: TestOrderItem[],
+  credit?: Pick<CreateOrderRequest, 'use_wallet_credit' | 'wallet_amount'>
+) {
   const { createOrder } = require('./orders') as typeof import('./orders');
 
   await createOrder({
@@ -187,6 +190,7 @@ async function createOrderWithItems(items: TestOrderItem[]) {
     customer_name: 'Test User',
     customer_phone: '+2348012345678',
     items,
+    ...credit,
     subtotal: items.reduce(
       (total, item) => total + item.price * item.quantity,
       0
@@ -206,6 +210,9 @@ async function createOrderWithItems(items: TestOrderItem[]) {
 
 describe('createOrder checkout retry keys', () => {
   beforeEach(() => {
+    // Fresh module registry per test: checkout recovery singletons (credit
+    // records, queues, installation promise) must not leak across tests.
+    jest.resetModules();
     jest.clearAllMocks();
     mockFetchResponse.ok = true;
     mockFetchResponse.status = 200;
@@ -233,5 +240,62 @@ describe('createOrder checkout retry keys', () => {
     expect(firstKey).toBeTruthy();
     await createOrderWithItems(items);
     expect(getLastFetchOptions().headers?.['Idempotency-Key']).toBe(firstKey);
+  });
+
+  it('releases the frozen credit choice after a definitive rejection', async () => {
+    const { default: AsyncStorage } =
+      require('@react-native-async-storage/async-storage') as typeof import('@react-native-async-storage/async-storage');
+    await AsyncStorage.clear();
+    const items = [
+      { id: 'buds2', name: 'Samsung Galaxy Buds2', price: 85000, quantity: 1 },
+    ];
+    mockFetchResponse.ok = false;
+    mockFetchResponse.status = 400;
+    mockFetchJson.mockResolvedValueOnce({
+      error: 'Store credit cannot be combined with this payment method',
+      code: 'invalid_credit_combination',
+    } as unknown as MockCreateOrderApiResponse);
+    await expect(
+      createOrderWithItems(items, {
+        use_wallet_credit: true,
+        wallet_amount: 5000,
+      })
+    ).rejects.toThrow();
+    await expect(
+      AsyncStorage.getItem('checkout-attempt-credit-v1:cart-one')
+    ).resolves.toBeNull();
+
+    mockFetchResponse.ok = true;
+    mockFetchResponse.status = 200;
+    await createOrderWithItems(items, { use_wallet_credit: false });
+    expect(getLastFetchOptions().body).not.toContain('"wallet_amount":5000');
+  });
+
+  it('retains the frozen credit choice after an ambiguous conflict', async () => {
+    const { default: AsyncStorage } =
+      require('@react-native-async-storage/async-storage') as typeof import('@react-native-async-storage/async-storage');
+    await AsyncStorage.clear();
+    const items = [
+      { id: 'buds2', name: 'Samsung Galaxy Buds2', price: 85000, quantity: 1 },
+    ];
+    mockFetchResponse.ok = false;
+    mockFetchResponse.status = 409;
+    mockFetchJson.mockResolvedValueOnce({
+      error: 'Order already being processed',
+      code: 'order_conflict',
+    } as unknown as MockCreateOrderApiResponse);
+    await expect(
+      createOrderWithItems(items, {
+        use_wallet_credit: true,
+        wallet_amount: 5000,
+      })
+    ).rejects.toThrow();
+    const retained = JSON.parse(
+      (await AsyncStorage.getItem('checkout-attempt-credit-v1:cart-one')) ??
+        '{}'
+    ) as { wallet_amount?: number };
+    expect(retained.wallet_amount).toBe(5000);
+    mockFetchResponse.ok = true;
+    mockFetchResponse.status = 200;
   });
 });

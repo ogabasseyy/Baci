@@ -8,12 +8,26 @@ const mockPersist = jest.fn<(generation: string) => Promise<void>>(
 );
 const mockClear = jest.fn<() => Promise<void>>(async () => undefined);
 const mockRead = jest.fn<() => Promise<string | null>>(async () => null);
+const mockRelease = jest.fn<(generation: string) => Promise<void>>(
+  async () => undefined
+);
+const mockReleaseMarker = jest.fn<(generation: string) => Promise<void>>(
+  async () => undefined
+);
 
+jest.mock('@/lib/release-codepoint-checkout-item-sort', () => ({
+  releaseCodepointCheckoutItemSort: (generation: string) =>
+    mockReleaseMarker(generation),
+}));
 jest.mock('@/lib/persist-checkout-generation', () => ({
   persistCheckoutGeneration: (generation: string) => mockPersist(generation),
 }));
 jest.mock('@/lib/clear-persisted-checkout-generation', () => ({
   clearPersistedCheckoutGeneration: () => mockClear(),
+}));
+jest.mock('@/lib/release-checkout-credit-snapshot', () => ({
+  releaseCheckoutCreditSnapshot: (generation: string) =>
+    mockRelease(generation),
 }));
 jest.mock('@/lib/read-persisted-checkout-generation', () => ({
   readPersistedCheckoutGeneration: () => mockRead(),
@@ -29,6 +43,14 @@ beforeEach(() => {
   mockClear.mockResolvedValue(undefined);
   mockRead.mockReset();
   mockRead.mockResolvedValue(null);
+  mockRelease.mockReset();
+  mockRelease.mockResolvedValue(undefined);
+  mockReleaseMarker.mockReset();
+  mockReleaseMarker.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 it('applies the empty cart before persisting the new purchase identity', async () => {
@@ -46,6 +68,19 @@ it('applies the empty cart before persisting the new purchase identity', async (
   expect(applied).toEqual([rotated]);
   expect(rotated.checkoutGeneration).not.toBe(first.checkoutGeneration);
   expect(rotated.items).toEqual([]);
+});
+
+it('still returns after a never-resolving generation write', async () => {
+  jest.useFakeTimers();
+  mockPersist.mockImplementation(() => new Promise(() => undefined));
+  const applied: ReturnType<typeof emptyCheckoutCart>[] = [];
+  const rotation = rotateEmptyCheckoutCart((next) => {
+    applied.push(next);
+  });
+  await jest.advanceTimersByTimeAsync(5_000);
+  await expect(rotation).resolves.toEqual(applied[0]);
+  expect(applied[0]?.items).toEqual([]);
+  jest.useRealTimers();
 });
 
 it('still applies the empty cart when generation persist rejects', async () => {
@@ -74,4 +109,61 @@ it('clears the stale dedicated generation so restart keeps the empty-cart identi
   });
   expect(generation).toBe(rotated.checkoutGeneration);
   expect(generation).not.toBe(staleGeneration);
+});
+
+it('releases store-credit snapshots after payment finalizes the generation', async () => {
+  const previousGeneration = '46ed63d7-5f10-49f0-9456-9ff571bec43f';
+  await rotateEmptyCheckoutCart(() => undefined, {
+    previousGeneration,
+    retainCreditSnapshot: false,
+  });
+  expect(mockRelease).toHaveBeenCalledWith(previousGeneration);
+});
+
+it('persists the rotated generation before cleaning up snapshots', async () => {
+  await rotateEmptyCheckoutCart(() => undefined, {
+    previousGeneration: '46ed63d7-5f10-49f0-9456-9ff571bec43f',
+    retainCreditSnapshot: false,
+  });
+  const persistOrder = mockPersist.mock.invocationCallOrder[0] ?? 0;
+  const releaseOrder = mockRelease.mock.invocationCallOrder[0] ?? 0;
+  expect(mockPersist).toHaveBeenCalled();
+  expect(mockRelease).toHaveBeenCalled();
+  expect(persistOrder).toBeLessThan(releaseOrder);
+});
+
+it('keeps store-credit snapshots when the generation may still be replayed', async () => {
+  await rotateEmptyCheckoutCart(() => undefined, {
+    previousGeneration: '46ed63d7-5f10-49f0-9456-9ff571bec43f',
+    retainCreditSnapshot: true,
+  });
+  expect(mockRelease).not.toHaveBeenCalled();
+});
+
+it('prunes the previous sort marker alongside the credit snapshot', async () => {
+  const previousGeneration = '46ed63d7-5f10-49f0-9456-9ff571bec43f';
+  await rotateEmptyCheckoutCart(() => undefined, {
+    previousGeneration,
+    retainCreditSnapshot: false,
+  });
+  expect(mockReleaseMarker).toHaveBeenCalledWith(previousGeneration);
+});
+
+it('keeps the sort marker when the generation may still be replayed', async () => {
+  await rotateEmptyCheckoutCart(() => undefined, {
+    previousGeneration: '46ed63d7-5f10-49f0-9456-9ff571bec43f',
+    retainCreditSnapshot: true,
+  });
+  expect(mockReleaseMarker).not.toHaveBeenCalled();
+});
+
+it('does not block cart rotation when credit cleanup hangs', async () => {
+  jest.useFakeTimers();
+  mockRelease.mockImplementationOnce(() => new Promise<void>(() => undefined));
+  const rotated = rotateEmptyCheckoutCart(() => undefined, {
+    previousGeneration: '46ed63d7-5f10-49f0-9456-9ff571bec43f',
+    retainCreditSnapshot: false,
+  });
+  await jest.advanceTimersByTimeAsync(5_000);
+  await expect(rotated).resolves.toBeDefined();
 });

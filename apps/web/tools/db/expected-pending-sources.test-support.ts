@@ -290,6 +290,10 @@ export const EXPECTED_PENDING_SOURCES = [
     sha256: '7de47f950351dfd8945be917d091dc50fd5ca80948566b20eb617c5c43e83718',
   },
   {
+    repositoryPath: 'supabase/migrations/20260921180000_get_santa_catalog.sql',
+    sha256: 'ccb69b3c76fc8fccdd2832177f66e2fb508afef422f554adf0ba9d792a58b19a',
+  },
+  {
     repositoryPath:
       'supabase/migrations/20260922120000_normalize_product_key_specs_gpu.sql',
     sha256: '7136052dee51db40c86a9a747aecc5a3a66a48067b400693bc96631fba4686ce',

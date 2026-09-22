@@ -53,6 +53,12 @@ export async function restoreEmptiedCheckoutCart({
     if (creditFields) {
       await applyCheckoutCreditSnapshot(creditFields, checkoutGeneration);
     }
+    // Re-read the live cart: the marker and credit restores above can
+    // pend while the shopper adds a new item, and restoring the old
+    // snapshot over it would rewind the new cart and its generation.
+    if (useCartStore.getState().items.length !== 0) {
+      return;
+    }
     await cartStore.restoreItems(
       itemsSnapshot,
       cartWideNegotiationActive,

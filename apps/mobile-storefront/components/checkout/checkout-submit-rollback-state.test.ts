@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { captureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
+import { tryCaptureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
 
 const mockCompletedChoice = jest.fn<
   (checkoutGeneration: string) => Record<string, unknown> | undefined
@@ -36,31 +36,36 @@ it('captures submitted credit and the pre-cleanup marker state', async () => {
   mockUsesCodepoint.mockResolvedValue(true);
 
   await expect(
-    captureCheckoutSubmitRollbackState(generation, liveCreditFields)
+    tryCaptureCheckoutSubmitRollbackState(generation, liveCreditFields)
   ).resolves.toEqual({
     creditFields: { use_wallet_credit: true, wallet_amount: 5000 },
     hadSortMarker: true,
+    ok: true,
   });
   expect(mockUsesCodepoint).toHaveBeenCalledWith(generation);
 });
 
 it('falls back to live fields when nothing was frozen', async () => {
   await expect(
-    captureCheckoutSubmitRollbackState(generation, liveCreditFields)
-  ).resolves.toEqual({ creditFields: liveCreditFields, hadSortMarker: false });
+    tryCaptureCheckoutSubmitRollbackState(generation, liveCreditFields)
+  ).resolves.toEqual({
+    creditFields: liveCreditFields,
+    hadSortMarker: false,
+    ok: true,
+  });
 });
 
-it('degrades the marker capture without losing the credit fields', async () => {
+it('reports ok:false instead of guessing legacy on an inconclusive read', async () => {
   mockCompletedChoice.mockReturnValue({
     use_wallet_credit: true,
     wallet_amount: 5000,
   });
   mockUsesCodepoint.mockRejectedValueOnce(new Error('store hung'));
 
+  // After a restart the minted registry is empty, so degrading to
+  // undefined would restore the cart without its marker and fork the
+  // retry's key. The submit path skips cleanup on ok:false.
   await expect(
-    captureCheckoutSubmitRollbackState(generation, liveCreditFields)
-  ).resolves.toEqual({
-    creditFields: { use_wallet_credit: true, wallet_amount: 5000 },
-    hadSortMarker: undefined,
-  });
+    tryCaptureCheckoutSubmitRollbackState(generation, liveCreditFields)
+  ).resolves.toEqual({ ok: false });
 });

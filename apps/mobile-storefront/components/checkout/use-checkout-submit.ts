@@ -19,7 +19,7 @@ import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
 import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
-import { captureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
+import { tryCaptureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
 import { isBnplPayment } from './is-bnpl-payment';
 import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
@@ -125,6 +125,8 @@ export function useCheckoutSubmit({
     // Hoisted for the rollback path, which re-freezes these on cart restore.
     let submitCreditFields: Record<string, unknown> | undefined;
     let submitHadSortMarker: boolean | undefined;
+    // Inconclusive marker read: the catch path skips cleanup.
+    let rollbackCaptureInconclusive = false;
     const submittedGeneration = trackSubmittedCheckoutGeneration(
       checkoutGenerationSnapshot
     );
@@ -197,12 +199,15 @@ export function useCheckoutSubmit({
         checkoutGeneration: checkoutGenerationSnapshot,
       });
       submittedGeneration.track(orderResponse);
-      const rollbackState = await captureCheckoutSubmitRollbackState(
+      const rollbackCapture = await tryCaptureCheckoutSubmitRollbackState(
         submittedGeneration.current(),
         creditFields
       );
-      submitCreditFields = rollbackState.creditFields;
-      submitHadSortMarker = rollbackState.hadSortMarker;
+      rollbackCaptureInconclusive = !rollbackCapture.ok;
+      if (rollbackCapture.ok) {
+        submitCreditFields = rollbackCapture.creditFields;
+        submitHadSortMarker = rollbackCapture.hadSortMarker;
+      }
       const { order } = orderResponse;
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
@@ -277,13 +282,15 @@ export function useCheckoutSubmit({
           selectedPayment === 'bank_transfer',
       });
     } catch (error) {
-      await restoreEmptiedCheckoutCart({
-        cartWideNegotiationActive: groupNegotiationSnapshot,
-        checkoutGeneration: submittedGeneration.current(),
-        creditFields: submitCreditFields,
-        hadSortMarker: submitHadSortMarker,
-        itemsSnapshot,
-      });
+      if (!rollbackCaptureInconclusive) {
+        await restoreEmptiedCheckoutCart({
+          cartWideNegotiationActive: groupNegotiationSnapshot,
+          checkoutGeneration: submittedGeneration.current(),
+          creditFields: submitCreditFields,
+          hadSortMarker: submitHadSortMarker,
+          itemsSnapshot,
+        });
+      }
       handleCheckoutSubmitError(error, selectedPayment);
     } finally {
       setIsProcessing(false);

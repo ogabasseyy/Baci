@@ -43,8 +43,12 @@ const mockUseMerchant = jest.fn() as jest.MockedFunction<
 let cartItems: CartItem[] = [];
 
 const mockStorage = new Map<string, string>();
+let mockGetItemFailure: { error: Error; keySubstring: string } | null = null;
 jest.mock('@react-native-async-storage/async-storage', () => ({
-  getItem: (key: string) => Promise.resolve(mockStorage.get(key) ?? null),
+  getItem: (key: string) =>
+    mockGetItemFailure && key.includes(mockGetItemFailure.keySubstring)
+      ? Promise.reject(mockGetItemFailure.error)
+      : Promise.resolve(mockStorage.get(key) ?? null),
   setItem: (key: string, value: string) => {
     mockStorage.set(key, value);
     return Promise.resolve();
@@ -127,8 +131,10 @@ jest.mock('./restore-emptied-checkout-cart', () => ({
   restoreEmptiedCheckoutCart: (input: unknown) => mockRestore(input),
 }));
 
+const mockHandleSubmitError = jest.fn();
 jest.mock('./checkout-submit-error', () => ({
-  handleCheckoutSubmitError: jest.fn(),
+  handleCheckoutSubmitError: (...args: unknown[]) =>
+    mockHandleSubmitError(...args),
 }));
 
 jest.mock('./checkout-submit-validation', () => ({
@@ -157,6 +163,7 @@ describe('useCheckoutSubmit rollback credit', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockStorage.clear();
+    mockGetItemFailure = null;
     cartItems = [cartItem];
     mockUseMerchant.mockReturnValue({ data: { id: 'merchant-1' } });
     mockedUseCartStore.getState = () => ({
@@ -249,6 +256,40 @@ describe('useCheckoutSubmit rollback credit', () => {
 
     expect(mockRestore).toHaveBeenCalledWith(
       expect.objectContaining({ checkoutGeneration: submitted })
+    );
+  });
+
+  it('skips cart restore when the marker read is inconclusive', async () => {
+    // Post-restart shape: the minted registry is empty and the marker
+    // read fails, so the sort mode is unknown. Restoring the cart would
+    // risk a locale-ordered retry under a forked idempotency key.
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    mockCreateOrder.mockResolvedValue(
+      createOrderResponseFixture({
+        effectiveCheckoutGeneration: generation,
+      })
+    );
+    mockGetItemFailure = {
+      error: new Error('store hung'),
+      keySubstring: 'checkout-idempotency-item-sort-v2',
+    };
+    mockRunFinalizeCheckoutPayment.mockRejectedValueOnce(
+      new Error('routing failed')
+    );
+    const params = createParams();
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockRestore).not.toHaveBeenCalled();
+    expect(mockHandleSubmitError).toHaveBeenCalledWith(
+      expect.any(Error),
+      'paystack'
     );
   });
 });

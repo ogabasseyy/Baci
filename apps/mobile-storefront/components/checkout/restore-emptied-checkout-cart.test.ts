@@ -205,6 +205,32 @@ it('leaves the cart empty when the required marker cannot be made durable', asyn
   );
 });
 
+it('aborts when the shopper rebuilds the cart mid-restore', async () => {
+  // The marker and credit restores can pend while the shopper adds a new
+  // item; restoring the old snapshot over it would rewind the new cart.
+  mockApply.mockImplementationOnce(async (payload) => {
+    mockCartItems.push({
+      id: 'cart-item-new',
+      name: 'New item',
+      price: 1000,
+      product_id: 'product-new',
+      quantity: 1,
+      slug: 'new-item',
+    });
+    return payload;
+  });
+
+  await restoreEmptiedCheckoutCart({
+    cartWideNegotiationActive: false,
+    checkoutGeneration: generation,
+    creditFields,
+    hadSortMarker: false,
+    itemsSnapshot,
+  });
+
+  expect(mockRestoreItems).not.toHaveBeenCalled();
+});
+
 it('skips the restore when the cart was never emptied', async () => {
   mockCartItems = itemsSnapshot;
 

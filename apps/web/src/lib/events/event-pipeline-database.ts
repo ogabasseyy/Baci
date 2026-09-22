@@ -1,5 +1,6 @@
 import { eventPipelineAdminImporters } from '@/lib/events/event-pipeline-authority-paths';
 import { eventPipelineAuthorityServicePaths } from '@/lib/events/event-pipeline-authority-service-paths';
+import { eventPipelineChatCredentialPaths } from '@/lib/events/event-pipeline-chat-credential-paths';
 import { eventPipelineCredentialPaths } from '@/lib/events/event-pipeline-credential-paths';
 import {
   eventPipelineFrozenRoutes,
@@ -138,6 +139,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       ...eventPipelineRepairPickupCredentialPaths,
       ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
+      ...eventPipelineChatCredentialPaths,
     ],
     factoryModules: [
       'apps/web/src/lib/supabase/admin.ts',

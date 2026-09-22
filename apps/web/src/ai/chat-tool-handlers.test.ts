@@ -2,11 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createAgenticScopedSupabaseClient: vi.fn(),
+  createPublicClient: vi.fn(),
+  resolveAgenticChatTenant: vi.fn(),
   searchStorefrontProducts: vi.fn(),
 }));
 
 vi.mock('@/lib/agentic/scoped-supabase', () => ({
   createAgenticScopedSupabaseClient: mocks.createAgenticScopedSupabaseClient,
+}));
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: mocks.createPublicClient,
+}));
+vi.mock('@/lib/agentic/agentic-chat-tenant', () => ({
+  resolveAgenticChatTenant: mocks.resolveAgenticChatTenant,
 }));
 
 vi.mock('@/lib/storefront-search', () => ({
@@ -14,6 +22,7 @@ vi.mock('@/lib/storefront-search', () => ({
 }));
 
 import {
+  handleAddToCart,
   handleCheckPaymentStatus,
   handleGetProductDetails,
   handleGetRecommendations,
@@ -66,6 +75,17 @@ function createQueryMock(result: QueryResult = { data: null, error: null }) {
 
 describe('chat tool handlers', () => {
   beforeEach(() => {
+    mocks.resolveAgenticChatTenant.mockResolvedValue({
+      agenticCheckoutEnabled: true,
+      businessName: 'Ogabassey',
+      currencyCode: 'NGN',
+      merchantId: OGABASSEY_MERCHANT_ID,
+      merchantSlug: 'ogabassey',
+      priceNegotiationEnabled: true,
+    });
+    mocks.createPublicClient.mockImplementation(() =>
+      mocks.createAgenticScopedSupabaseClient()
+    );
     vi.clearAllMocks();
     mocks.searchStorefrontProducts.mockReset();
   });
@@ -338,7 +358,24 @@ describe('chat tool handlers', () => {
     expect(result).toEqual({ products: [], total: 0 });
   });
 
-  it('returns empty chat search results when ranked search fails', async () => {
+  it('uses a public RLS client for catalog search rather than minting a checkout JWT', async () => {
+    mocks.searchStorefrontProducts.mockResolvedValue({
+      count: 0,
+      didYouMean: null,
+      productIds: [],
+      query: 'phone',
+    });
+    const query = createQueryMock({ data: [], error: null });
+    mocks.createPublicClient.mockReturnValue({ from: vi.fn(() => query) });
+
+    await handleSearchProducts({ query: 'phone' });
+
+    expect(mocks.createPublicClient).toHaveBeenCalledWith({
+      clientInfo: 'baci-chat-catalog',
+    });
+  });
+
+  it('surfaces ranked search failures instead of treating them as an empty catalog', async () => {
     mocks.searchStorefrontProducts.mockRejectedValueOnce(
       new Error('search rpc unavailable')
     );
@@ -347,11 +384,9 @@ describe('chat tool handlers', () => {
       rpc: vi.fn(),
     });
 
-    const result = await handleSearchProducts({
-      query: 'iphone',
-    });
-
-    expect(result).toEqual({ products: [], total: 0 });
+    await expect(handleSearchProducts({ query: 'iphone' })).rejects.toThrow(
+      'Catalog search temporarily unavailable'
+    );
   });
 
   it('restricts product details to active Ogabassey products', async () => {
@@ -625,5 +660,56 @@ describe('chat tool handlers', () => {
     });
 
     expect(result).toEqual([]);
+  });
+
+  it('fails closed with empty results when tenant resolution returns null', async () => {
+    mocks.resolveAgenticChatTenant.mockResolvedValue(null);
+
+    await expect(handleSearchProducts({ query: 'phone' })).resolves.toEqual({
+      products: [],
+      total: 0,
+    });
+    await expect(
+      handleGetProductDetails({ productId: 'phone' })
+    ).resolves.toBeNull();
+    await expect(
+      handleGetRecommendations({ productId: 'phone', type: 'accessories' })
+    ).resolves.toEqual([]);
+    await expect(
+      handleAddToCart({ productId: 'phone', quantity: 1 })
+    ).resolves.toBeNull();
+    expect(mocks.createPublicClient).not.toHaveBeenCalled();
+    expect(mocks.createAgenticScopedSupabaseClient).not.toHaveBeenCalled();
+  });
+
+  it('resolves add-to-cart through the tenant-scoped product details lookup', async () => {
+    const row = {
+      brand: 'Apple',
+      category: 'Phones',
+      description: null,
+      has_condition_offers: false,
+      has_variants: false,
+      id: 'phone',
+      images: [],
+      manage_stock: false,
+      name: 'Phone',
+      price: 100,
+      slug: 'phone',
+      status: 'active',
+      stock: 0,
+      stock_quantity: 0,
+      variant_model: null,
+    };
+    const query = createQueryMock();
+    query.single.mockResolvedValue({ data: row, error: null });
+    const from = vi.fn(() => query);
+    mocks.createAgenticScopedSupabaseClient.mockReturnValue({ from });
+
+    const result = await handleAddToCart({ productId: 'phone', quantity: 1 });
+
+    expect(from).toHaveBeenCalledWith('products');
+    expect(query.eq).toHaveBeenCalledWith('merchant_id', OGABASSEY_MERCHANT_ID);
+    expect(query.eq).toHaveBeenCalledWith('status', 'active');
+    expect(result).toMatchObject({ id: 'phone', name: 'Phone' });
   });
 });

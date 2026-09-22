@@ -56,6 +56,14 @@ describe('merchant shipping provider policy', () => {
     );
   });
 
+  it('keeps the SQL runtime check aligned with the shared carrier catalog', () => {
+    const sqlTest = readFileSync(SHIPPING_POLICY_SQL_TEST_PATH, 'utf8');
+
+    expect(sqlTest).toContain(
+      `ARRAY[${CARRIER_PROVIDER_IDS.map((id) => `'${id}'`).join(', ')}]`
+    );
+  });
+
   it('covers changed selections after opt-out and mixed-case stored carrier settings', () => {
     const sqlTest = readFileSync(SHIPPING_POLICY_SQL_TEST_PATH, 'utf8');
 

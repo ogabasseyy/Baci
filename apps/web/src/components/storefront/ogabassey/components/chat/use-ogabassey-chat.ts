@@ -3,6 +3,7 @@
 import { isSantaGrantedPriceWithinCeiling } from '@baci/shared/lib';
 import { useEffect, useRef, useState } from 'react';
 import { useCart } from '@/hooks/cart';
+import { SANTA_MERCHANT_SLUG_HEADER } from '@/lib/agentic/santa-merchant-slug-header';
 import {
   parseSantaActions,
   stripSantaActions,
@@ -178,7 +179,7 @@ export function useOgabasseyChat({
       });
       if (
         !response.ok ||
-        response.headers.get('x-baci-santa-merchant-slug') !== expectedMerchantSlug
+        response.headers.get(SANTA_MERCHANT_SLUG_HEADER) !== expectedMerchantSlug
       ) {
         return;
       }

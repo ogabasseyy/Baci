@@ -73,6 +73,7 @@ vi.mock('@/ai/prompts/santa', () => ({
 
 // ---- Import handler AFTER mocks ----
 import { generateText } from 'ai';
+import { getCachedSantaProducts } from '@/ai/santa-data';
 import { resolveAgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { POST } from './route';
@@ -242,6 +243,41 @@ describe('POST /api/chat/santa', () => {
           expect.objectContaining({ role: 'user', content: 'Hello' }),
         ]),
         abortSignal: expect.any(AbortSignal),
+      })
+    );
+  });
+
+  it('names the resolved storefront in the system prompt as untrusted display data', async () => {
+    await POST(
+      makeRequest({
+        messages: [{ role: 'user', content: 'Hello' }],
+      })
+    );
+
+    expect(generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: expect.stringContaining(
+          '<storefront-display-name>"Demo Store"</storefront-display-name>'
+        ),
+      })
+    );
+  });
+
+  it('falls back to a no-action prompt when the catalog lookup fails', async () => {
+    vi.mocked(getCachedSantaProducts).mockRejectedValueOnce(
+      new Error('catalog down')
+    );
+
+    const response = await POST(
+      makeRequest({
+        messages: [{ role: 'user', content: 'Hello' }],
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: expect.stringContaining('do not emit any ACTION:ADD_TO_CART'),
       })
     );
   });

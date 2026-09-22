@@ -186,11 +186,6 @@ export const EXPECTED_REPAIR_PICKUP_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20260908010000_lease_mobile_repair_pickup_claims.sql',
-    sha256: 'eda54c4669ad9e645e73e6264ae61690afd1a0cfad8fe0ab5a3c1454c39da959',
-  },
-  {
-    repositoryPath:
       'supabase/migrations/20260921100000_harden_repair_booking_rate_limit.sql',
     sha256: '376775c5c684f7bf4d94f8e2534d541a8d72046014f8b2d0c13bd1e25687bbbd',
   },
@@ -198,5 +193,20 @@ export const EXPECTED_REPAIR_PICKUP_PENDING_SOURCES = [
     repositoryPath:
       'supabase/migrations/20260921100100_add_repair_booking_rate_limit_index.sql',
     sha256: 'd0cadea6856e12a16f88d39d6291d9d0eff314e72d1f5703a966bb4c6b336a6f',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260922000000_lease_mobile_repair_pickup_claims.sql',
+    sha256: 'eda54c4669ad9e645e73e6264ae61690afd1a0cfad8fe0ab5a3c1454c39da959',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260922000100_add_merchant_created_at_repair_index.sql',
+    sha256: '163baf57cebf174698d659d3d37c871acd6954ce8cadb2b3c9f02f8cb7e1909d',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260922000200_require_digits_in_repair_booking_phone.sql',
+    sha256: 'a0ab3247329ae38fb03985ee798c00dff7d3ada4360a9bc7f3cc2d638b9528c0',
   },
 ];

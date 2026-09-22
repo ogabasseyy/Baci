@@ -172,6 +172,33 @@ EXCEPTION
     END IF;
 END $$;
 
+-- separator-only phone values carry no digits and must fail validation.
+DO $$
+BEGIN
+  PERFORM *
+  FROM public.create_repair_booking(
+    '00000000-0000-0000-0000-000000003006',
+    'Ada Lovelace',
+    'ada@example.com',
+    '----------',
+    'Smartphone',
+    'iPhone 15',
+    'The screen is cracked and the battery drains quickly.',
+    NULL,
+    'dropoff',
+    NULL,
+    NULL,
+    NULL
+  );
+
+  RAISE EXCEPTION 'direct RPC must reject separator-only customer phone';
+EXCEPTION
+  WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE '%invalid_customer_phone%' THEN
+      RAISE;
+    END IF;
+END $$;
+
 -- ordinary email and phone values must pass the repair booking validator;
 -- dollar-quoted function bodies use single regex escapes.
 DO $$

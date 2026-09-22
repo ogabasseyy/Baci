@@ -9,18 +9,27 @@
 BEGIN;
 
 -- Public wrapper: SECURITY INVOKER, pinned search_path, anon + authenticated can EXECUTE.
+-- One DO block per assertion so replay failures attribute the exact check.
 DO $$
 DECLARE
   is_definer boolean;
-  config text[];
 BEGIN
-  SELECT prosecdef, proconfig INTO is_definer, config
+  SELECT prosecdef INTO is_definer
   FROM pg_proc
   WHERE oid = 'public.create_repair_booking(uuid, text, text, text, text, text, text, timestamptz, text, text, uuid, uuid)'::regprocedure;
 
   IF is_definer IS NOT FALSE THEN
     RAISE EXCEPTION 'public.create_repair_booking must be SECURITY INVOKER';
   END IF;
+END $$;
+
+DO $$
+DECLARE
+  config text[];
+BEGIN
+  SELECT proconfig INTO config
+  FROM pg_proc
+  WHERE oid = 'public.create_repair_booking(uuid, text, text, text, text, text, text, timestamptz, text, text, uuid, uuid)'::regprocedure;
 
   -- Wrapper must pin search_path = '' (hardening migration 20260711100009).
   IF config IS NULL OR NOT EXISTS (
@@ -30,13 +39,19 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'public.create_repair_booking must SET search_path = ''''';
   END IF;
+END $$;
 
+DO $$
+BEGIN
   IF NOT has_function_privilege('anon',
     'public.create_repair_booking(uuid, text, text, text, text, text, text, timestamptz, text, text, uuid, uuid)',
     'EXECUTE') THEN
     RAISE EXCEPTION 'anon must have EXECUTE on public.create_repair_booking';
   END IF;
+END $$;
 
+DO $$
+BEGIN
   IF NOT has_function_privilege('authenticated',
     'public.create_repair_booking(uuid, text, text, text, text, text, text, timestamptz, text, text, uuid, uuid)',
     'EXECUTE') THEN

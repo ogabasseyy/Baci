@@ -74,6 +74,8 @@ describe('Metro configuration', () => {
     expect(DEV_ONLY_IMPORT.test("import 'vitest'")).toBe(true);
     expect(DEV_ONLY_IMPORT.test("import 'vite'")).toBe(true);
     expect(DEV_ONLY_IMPORT.test("import('vitest')")).toBe(true);
+    expect(DEV_ONLY_IMPORT.test("import ('vitest')")).toBe(true);
+    expect(DEV_ONLY_IMPORT.test("require ('vitest')")).toBe(true);
   });
 
   it('keeps dev-only modules out of bundled route files', () => {
@@ -85,7 +87,7 @@ describe('Metro configuration', () => {
 });
 
 const DEV_ONLY_IMPORT =
-  /(?:from|import(?:\()?)\s*['"](?:vitest|vite)['"]|require\(\s*['"](?:vitest|vite)['"]/;
+  /(?:from|import\s*(?:\(\s*)?)\s*['"](?:vitest|vite)['"]|require\s*\(\s*['"](?:vitest|vite)['"]/;
 
 function findBundledDevImports(dir: string): string[] {
   const offenders: string[] = [];

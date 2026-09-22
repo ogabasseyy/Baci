@@ -1,13 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import type { SetStateAction } from 'react';
+import { describe, expect, it, vi } from 'vitest';
 import type { FilterState } from '../components/CategoryFiltersSidebar';
 import type { Product } from '../types';
 import {
   buildAvailableFilterOptions,
+  buildCategoryDisplayTitle,
+  createCategoryAddToCartHandler,
   EMPTY_AVAILABLE_FILTER_OPTIONS,
   filterCategoryProducts,
   getCategoryProductColorName,
   hasActiveFilterSelection,
   INITIAL_CATEGORY_FILTER_STATE,
+  shouldRouteGraphicsChangeThroughServer,
 } from './category-page-derivations';
 
 function buildProduct(overrides: Partial<Product> = {}): Product {
@@ -187,5 +191,83 @@ describe('hasActiveFilterSelection', () => {
     expect(
       hasActiveFilterSelection(buildFilters({ minPrice: 5000 }), true)
     ).toBe(true);
+  });
+});
+
+describe('shouldRouteGraphicsChangeThroughServer', () => {
+  it('routes through the server when client filters are unavailable', () => {
+    expect(
+      shouldRouteGraphicsChangeThroughServer({
+        canUseClientFilters: false,
+        hasServerGraphicsFilter: true,
+        hasUrlGraphicsSelection: false,
+      })
+    ).toBe(true);
+  });
+
+  it('routes through the server for a URL-driven selection', () => {
+    expect(
+      shouldRouteGraphicsChangeThroughServer({
+        canUseClientFilters: true,
+        hasServerGraphicsFilter: true,
+        hasUrlGraphicsSelection: true,
+      })
+    ).toBe(true);
+  });
+
+  it('keeps graphics local when the full set is loaded with no URL selection', () => {
+    expect(
+      shouldRouteGraphicsChangeThroughServer({
+        canUseClientFilters: true,
+        hasServerGraphicsFilter: true,
+        hasUrlGraphicsSelection: false,
+      })
+    ).toBe(false);
+  });
+
+  it('is false without a server graphics filter', () => {
+    expect(
+      shouldRouteGraphicsChangeThroughServer({
+        canUseClientFilters: false,
+        hasServerGraphicsFilter: false,
+        hasUrlGraphicsSelection: false,
+      })
+    ).toBe(false);
+  });
+});
+
+describe('buildCategoryDisplayTitle', () => {
+  it('returns All Products for the All route', () => {
+    expect(buildCategoryDisplayTitle('All')).toBe('All Products');
+  });
+
+  it('humanizes a category slug', () => {
+    expect(buildCategoryDisplayTitle('gaming-laptops')).toBe('Gaming Laptops');
+  });
+});
+
+describe('createCategoryAddToCartHandler', () => {
+  it('adds the product and clears the Added state after a beat', () => {
+    vi.useFakeTimers();
+    try {
+      const addToCart = vi.fn();
+      const added: string[] = [];
+      const setAddedItems = vi.fn((action: SetStateAction<string[]>) => {
+        const updater =
+          typeof action === 'function' ? action : () => action;
+        added.splice(0, added.length, ...updater(added));
+      });
+      const handler = createCategoryAddToCartHandler(addToCart, setAddedItems);
+      const product = buildProduct({ id: 'p1' });
+
+      handler({} as Parameters<typeof handler>[0], product);
+
+      expect(addToCart).toHaveBeenCalledTimes(1);
+      expect(added).toEqual(['p1']);
+      vi.advanceTimersByTime(2000);
+      expect(added).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -532,46 +532,61 @@ describe('getCachedFeatureSettings', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns feature settings from database on success', async () => {
+  function mockMerchantSlugLookup(slug: string | null = 'test-store') {
+    harness.mockMaybeSingle.mockResolvedValueOnce({
+      data: slug ? { slug } : null,
+      error: null,
+      count: null,
+    });
+  }
+
+  function mockFeatureSnapshot(featureSettings: unknown) {
+    harness.mockRpc.mockResolvedValueOnce({
+      data: [
+        {
+          resolution_status: 'found',
+          custom_domain: null,
+          feature_settings: featureSettings,
+          merchant_data: { id: 'merchant-1', slug: 'test-store' },
+        },
+      ],
+      error: null,
+    });
+  }
+
+  it('returns feature settings from the snapshot projection on success', async () => {
     const settings = {
       blog_enabled: true,
       blog_discover_image_validation_enabled: true,
-      repairs_catalog_enabled: false,
       shipping_insurance_enabled: true,
       shipping_insurance_min_order_value: 10000,
       shipping_insurance_opt_in_default: true,
     };
-
-    harness.mockMaybeSingle.mockResolvedValueOnce({
-      data: settings,
-      error: null,
-      count: null,
-    });
+    mockMerchantSlugLookup();
+    mockFeatureSnapshot(settings);
 
     const result = await getCachedFeatureSettings('merchant-1');
 
-    expect(result).toEqual(settings);
-    expect(mockCreateClient).toHaveBeenCalledWith(
-      'https://test.supabase.co',
-      'test-anon-key',
-      expect.any(Object)
+    expect(result).toEqual({
+      repairs_catalog_enabled: false,
+      ...settings,
+    });
+    // Slug resolves through the anon-safe merchants lookup ...
+    expect(harness.mockFrom).toHaveBeenCalledWith('merchants');
+    expect(harness.mockEq).toHaveBeenCalledWith('id', 'merchant-1');
+    // ... and settings come from the SECURITY DEFINER snapshot RPC, never
+    // the secret-bearing base table (anonymous SELECT is revoked there).
+    expect(harness.mockRpc).toHaveBeenCalledWith(
+      'resolve_storefront_public_snapshot_v2',
+      { p_identifier: 'test-store' },
+      { get: true }
     );
-    const projection = String(harness.mockSelect.mock.calls[0]?.[0] ?? '');
-    expect(projection).toContain('blog_enabled');
-    expect(projection).toContain('blog_discover_image_validation_enabled');
-    expect(projection).toContain('repairs_catalog_enabled');
-    expect(projection).toContain('shipping_insurance_enabled');
-    expect(projection).toContain('shipping_insurance_min_order_value');
-    expect(projection).toContain('shipping_insurance_opt_in_default');
-    expect(projection).toContain('facebook_pixel_id');
-    expect(projection).toContain('custom_settings');
-    expect(projection).not.toContain('facebook_capi_token');
-    expect(projection).not.toContain('tiktok_access_token');
-    expect(projection).not.toContain('ga4_api_secret');
-    expect(projection).not.toContain('snapchat_capi_token');
+    expect(harness.mockFrom).not.toHaveBeenCalledWith(
+      'merchant_feature_settings'
+    );
   });
 
-  it('throws on Supabase error instead of returning defaults', async () => {
+  it('throws on merchant lookup error instead of returning defaults', async () => {
     const consoleSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
@@ -584,6 +599,20 @@ describe('getCachedFeatureSettings', () => {
     await expect(getCachedFeatureSettings('merchant-1')).rejects.toMatchObject({
       message: 'Not found',
     });
+    expect(consoleSpy).toHaveBeenCalled();
+  });
+
+  it('throws when the snapshot read is unavailable instead of returning defaults', async () => {
+    const consoleSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    mockMerchantSlugLookup();
+    harness.mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'timeout', code: '57014' },
+    });
+
+    await expect(getCachedFeatureSettings('merchant-1')).rejects.toThrow();
     expect(consoleSpy).toHaveBeenCalled();
   });
 
@@ -601,12 +630,9 @@ describe('getCachedFeatureSettings', () => {
     expect(consoleSpy).toHaveBeenCalled();
   });
 
-  it('returns public defaults when no settings row exists', async () => {
-    harness.mockMaybeSingle.mockResolvedValueOnce({
-      data: null,
-      error: null,
-      count: null,
-    });
+  it('returns public defaults when the snapshot has no settings', async () => {
+    mockMerchantSlugLookup();
+    mockFeatureSnapshot(null);
 
     const result = await getCachedFeatureSettings('merchant-1');
 

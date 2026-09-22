@@ -92,6 +92,7 @@ export async function GamingGraphicsHubRuntime(
         })}
         seoPageName={`${page.hub.label} Gaming Laptops`}
         titleHeading="h2"
+        trustedGraphics
       />
     </>
   );

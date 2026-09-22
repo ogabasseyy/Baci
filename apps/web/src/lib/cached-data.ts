@@ -307,76 +307,16 @@ export interface MerchantFeatureSettings {
   [key: string]: unknown;
 }
 
-const MERCHANT_PUBLIC_FEATURE_SETTINGS_SELECT: string = `
-  about_page_enabled,
-  agentic_checkout_enabled,
-  auto_blog_enabled,
-  blog_enabled,
-  blog_discover_image_validation_enabled,
-  checkout_collect_phone,
-  checkout_require_account,
-  checkout_show_order_notes,
-  contact_page_enabled,
-  credpal_enabled,
-  credit_direct_enabled,
-  credit_direct_max_amount,
-  credit_direct_min_amount,
-  custom_settings,
-  discount_codes_enabled,
-  faq_page_enabled,
-  facebook_pixel_id,
-  free_shipping_threshold,
-  google_analytics_id,
-  google_place_id,
-  google_reviews_enabled,
-  guest_checkout_enabled,
-  juicyway_enabled,
-  klump_enabled,
-  klump_max_amount,
-  klump_min_amount,
-  korapay_enabled,
-  loyalty_enabled,
-  low_stock_threshold,
-  order_tracking_enabled,
-  pay_on_delivery_enabled,
-  paystack_enabled,
-  preferred_international_gateway,
-  preferred_local_gateway,
-  privacy_page_enabled,
-  repairs_catalog_enabled,
-  reviews_enabled,
-  rewards_page_enabled,
-  shipping_insurance_enabled,
-  shipping_insurance_min_order_value,
-  shipping_insurance_opt_in_default,
-  shipping_providers,
-  show_recent_purchases,
-  show_stock_levels,
-  snapchat_pixel_id,
-  terms_page_enabled,
-  tiktok_pixel_id,
-  twitter_pixel_id,
-  vtu_airtime_enabled,
-  vtu_checkout_addon_amounts,
-  vtu_checkout_addon_enabled,
-  vtu_data_enabled,
-  vtu_electricity_enabled,
-  vtu_enabled,
-  vtu_loyalty_reward_enabled,
-  vtu_tv_enabled,
-  wallet_order_auto_debit_enabled,
-  wallet_paystack_dva_enabled,
-  customer_device_savings_enabled,
-  customer_device_savings_auto_debit_enabled,
-  customer_device_savings_break_fee_enabled,
-  wishlist_enabled
-`;
-
-const MERCHANT_PUBLIC_FEATURE_SETTINGS_LEGACY_SELECT =
-  MERCHANT_PUBLIC_FEATURE_SETTINGS_SELECT.replace(
-    /^\s*repairs_catalog_enabled,\n/m,
-    ''
-  );
+/**
+ * Public feature settings are never read from the `merchant_feature_settings`
+ * base table here: production revokes anonymous SELECT on it. The readable
+ * contract is the allowlisted `feature_settings` projection inside the
+ * SECURITY DEFINER `resolve_storefront_public_snapshot_v2` RPC (see
+ * `getCachedFeatureSettings`), whose key set must stay free of secret-bearing
+ * columns such as `facebook_capi_token`, `tiktok_access_token`,
+ * `ga4_api_secret`, and `paypal_client_secret` (pinned by
+ * `cache-invalidation-feature-projection.test.ts`).
+ */
 
 export interface CachedMerchant {
   id: string;
@@ -2426,39 +2366,6 @@ export async function getCachedProductRatingStats(productId: string) {
   }
 }
 
-function isMissingRepairsCatalogEnabledColumn(error: unknown): boolean {
-  if (!error || typeof error !== 'object') {
-    return false;
-  }
-
-  const maybeError = error as {
-    code?: unknown;
-    details?: unknown;
-    hint?: unknown;
-    message?: unknown;
-  };
-  const combined = [maybeError.message, maybeError.details, maybeError.hint]
-    .filter((value): value is string => typeof value === 'string')
-    .join(' ')
-    .toLowerCase();
-
-  return (
-    maybeError.code === '42703' && combined.includes('repairs_catalog_enabled')
-  );
-}
-
-async function queryMerchantFeatureSettings(
-  supabase: SupabaseClient,
-  merchantId: string,
-  selectColumns = MERCHANT_PUBLIC_FEATURE_SETTINGS_SELECT
-) {
-  return await supabase
-    .from('merchant_feature_settings')
-    .select(selectColumns)
-    .eq('merchant_id', merchantId)
-    .maybeSingle();
-}
-
 function normalizeMerchantFeatureSettings(
   merchantId: string,
   data: unknown
@@ -2475,43 +2382,14 @@ function normalizeMerchantFeatureSettings(
   } as MerchantFeatureSettings;
 }
 
-async function getPublicFeatureSettingsWithMigrationFallback(
-  supabase: SupabaseClient,
-  merchantId: string
-): Promise<MerchantFeatureSettings> {
-  const { data, error } = await queryMerchantFeatureSettings(
-    supabase,
-    merchantId
-  );
-
-  if (!error) {
-    return normalizeMerchantFeatureSettings(merchantId, data);
-  }
-
-  if (!isMissingRepairsCatalogEnabledColumn(error)) {
-    throw error;
-  }
-
-  console.warn(
-    'merchant_feature_settings.repairs_catalog_enabled is unavailable; using legacy public feature settings projection'
-  );
-  const { data: legacyData, error: legacyError } =
-    await queryMerchantFeatureSettings(
-      supabase,
-      merchantId,
-      MERCHANT_PUBLIC_FEATURE_SETTINGS_LEGACY_SELECT
-    );
-
-  if (legacyError) {
-    throw legacyError;
-  }
-
-  return normalizeMerchantFeatureSettings(merchantId, legacyData);
-}
-
 /**
  * Cached merchant feature settings.
- * Uses the anonymous public client and an explicit public-safe column allowlist.
+ * Reads the allowlisted feature projection from the SECURITY DEFINER
+ * `resolve_storefront_public_snapshot_v2` RPC via the anonymous public
+ * client. Production revokes anonymous SELECT on the secret-bearing
+ * `merchant_feature_settings` base table, so this path must never query it
+ * directly — and per AGENTS.md it must never use the service-role client
+ * for user-facing reads either.
  * Uses local Cache Components caching to avoid Vercel RemoteCacheHandler failures
  * on the hot storefront merchant shell path.
  */
@@ -2524,9 +2402,26 @@ export async function getCachedFeatureSettings(
 
   try {
     const supabase = getPublicSupabaseClient();
-    return await getPublicFeatureSettingsWithMigrationFallback(
-      supabase,
-      merchantId
+    const { data: merchant, error: merchantError } = await supabase
+      .from('merchants')
+      .select('slug')
+      .eq('id', merchantId)
+      .maybeSingle();
+
+    if (merchantError) throw merchantError;
+    if (!merchant || typeof merchant.slug !== 'string' || !merchant.slug) {
+      throw new Error('Feature settings merchant lookup found no merchant');
+    }
+
+    const row = unwrapStorefrontReadResultForCache(
+      await readStorefrontMerchantSnapshot(
+        getStorefrontSnapshotSupabaseClient(),
+        merchant.slug
+      )
+    );
+    return normalizeMerchantFeatureSettings(
+      merchantId,
+      row?.feature_settings ?? null
     );
   } catch (error) {
     console.error('Error fetching feature settings:', error);

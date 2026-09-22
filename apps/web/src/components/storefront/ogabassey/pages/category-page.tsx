@@ -10,15 +10,17 @@ import { CategoryRecentCarousel } from '../components/CategoryRecentCarousel';
 import type { Product } from '../types';
 import {
   buildAvailableFilterOptions,
+  buildCategoryDisplayTitle,
+  createCategoryAddToCartHandler,
   filterCategoryProducts,
   hasActiveFilterSelection,
   INITIAL_CATEGORY_FILTER_STATE,
   NON_RECENCY_COLLECTION_SLUGS,
+  shouldRouteGraphicsChangeThroughServer,
 } from './category-page-derivations';
 import { CategoryPageMobileFilterDrawer } from './category-page-mobile-filter-drawer';
 import { CategoryPageResults } from './category-page-results';
 import { CategoryPageToolbar } from './category-page-toolbar';
-import { toRelatedProductsProduct } from './product-details-page/related-product';
 import { useServerCategoryGraphicsFilter } from './use-server-category-graphics-filter';
 
 export interface CategorySEOProps {
@@ -41,6 +43,8 @@ export interface CategorySEOProps {
   totalProductCount?: number;
   graphicsOptions?: string[];
   selectedGraphics?: string[];
+  /** Pagination base override; hubs keep page 2+ on their indexable route. */
+  paginationBasePath?: string;
 }
 
 export const CategoryPage: React.FC<CategorySEOProps> = ({
@@ -54,6 +58,7 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
   totalProductCount,
   graphicsOptions = [],
   selectedGraphics = [],
+  paginationBasePath,
 }) => {
   const params = useParams();
   const categoryName = (params?.category || 'All') as string;
@@ -160,17 +165,14 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
     section: keyof FilterState,
     value: string | number
   ) => {
-    // Route graphics through the server only when the client cannot filter
-    // them itself. Small categories load the full set, so a graphics toggle
-    // stays local with the other client facets (brand/price) instead of
-    // navigating and silently resetting them. A URL-driven graphics selection
-    // still routes through the server because the server-filtered product set
-    // is the source of truth for it.
-    const shouldRouteGraphicsThroughServer =
+    if (
       section === 'graphics' &&
-      hasServerGraphicsFilter &&
-      (!canUseClientFilters || selectedGraphics.length > 0);
-    if (shouldRouteGraphicsThroughServer) {
+      shouldRouteGraphicsChangeThroughServer({
+        canUseClientFilters,
+        hasServerGraphicsFilter,
+        hasUrlGraphicsSelection: selectedGraphics.length > 0,
+      })
+    ) {
       serverGraphicsFilter.toggle(String(value), filters.graphics);
       return;
     }
@@ -203,26 +205,14 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
     });
   };
 
-  const handleAddToCart = (_e: React.MouseEvent, product: Product) => {
-    addToCart(toRelatedProductsProduct(product), 1);
+  const handleAddToCart = createCategoryAddToCartHandler(
+    addToCart,
+    setAddedItems
+  );
 
-    const productId = String(product.id);
-    setAddedItems((prev) => [...prev, productId]);
-    setTimeout(() => {
-      setAddedItems((prev) => prev.filter((id) => id !== productId));
-    }, 2000);
-  };
+  const displayTitle = buildCategoryDisplayTitle(categoryName);
 
-  const displayTitle = (() => {
-    if (categoryName === 'All') return 'All Products';
-
-    return decodeURIComponent(categoryName)
-      .replace(/-/g, ' ')
-      .replace(/\b\w/g, (l) => l.toUpperCase());
-  })();
-
-  const pageTitle = displayTitle;
-  const categoryPath = serverGraphicsFilter.paginationPath;
+  const categoryPath = paginationBasePath ?? serverGraphicsFilter.paginationPath;
   const clearFilters = () => {
     if (hasServerGraphicsFilter && selectedGraphics.length > 0) {
       serverGraphicsFilter.clear();
@@ -286,7 +276,7 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
         paginationProductCount={paginationProductCount}
         currentPageNumber={currentPageNumber}
         totalPages={totalPages}
-        pageTitle={pageTitle}
+        pageTitle={displayTitle}
         categoryPath={categoryPath}
       />
 

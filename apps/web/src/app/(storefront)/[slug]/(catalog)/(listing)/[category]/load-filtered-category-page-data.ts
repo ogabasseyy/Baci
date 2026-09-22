@@ -11,6 +11,12 @@ interface LoadFilteredCategoryPageDataOptions {
   productOffset: number;
   rawGraphics: string | string[] | undefined;
   storeSlug: string;
+  /**
+   * Trusted callers (curated hub pages) pass facet-derived graphics values,
+   * not raw query strings, so the untrusted-request cardinality cap is
+   * lifted for them (allowlist intersection still applies).
+   */
+  trustedGraphics?: boolean;
 }
 
 function hasRequestedGraphics(
@@ -30,6 +36,7 @@ export async function loadFilteredCategoryPageData({
   productOffset,
   rawGraphics,
   storeSlug,
+  trustedGraphics = false,
 }: LoadFilteredCategoryPageDataOptions) {
   const initialDataPromise = getCachedCategoryPageData(
     merchantId,
@@ -84,7 +91,8 @@ export async function loadFilteredCategoryPageData({
   const graphicsOptions = graphicsResult.options;
   const selectedGraphics = resolveCategoryGraphicsFilters(
     rawGraphics,
-    graphicsOptions
+    graphicsOptions,
+    { trustedSource: trustedGraphics }
   );
   const data =
     selectedGraphics.length > 0

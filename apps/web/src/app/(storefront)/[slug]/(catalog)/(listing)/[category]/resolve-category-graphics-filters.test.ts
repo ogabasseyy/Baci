@@ -29,4 +29,20 @@ describe('resolveCategoryGraphicsFilters', () => {
   it('returns no selection when the facet read is unavailable', () => {
     expect(resolveCategoryGraphicsFilters('NVIDIA RTX 4070', [])).toEqual([]);
   });
+
+  it('caps untrusted requests at eight values', () => {
+    const available = Array.from({ length: 10 }, (_, i) => `GPU ${i}`);
+    expect(resolveCategoryGraphicsFilters(available, available)).toHaveLength(
+      8
+    );
+  });
+
+  it('lifts the cap for trusted hub sources while keeping the allowlist', () => {
+    const available = Array.from({ length: 10 }, (_, i) => `GPU ${i}`);
+    expect(
+      resolveCategoryGraphicsFilters([...available, 'Unknown GPU'], available, {
+        trustedSource: true,
+      })
+    ).toEqual([...available].sort());
+  });
 });

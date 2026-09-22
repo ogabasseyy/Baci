@@ -1,6 +1,16 @@
 const MAX_GRAPHICS_FILTERS = 8;
 const MAX_GRAPHICS_FILTER_LENGTH = 120;
 
+interface ResolveCategoryGraphicsFiltersOptions {
+  /**
+   * Trusted callers (curated hub pages) pass facet-derived values, not raw
+   * query strings, so the request-cardinality cap does not apply. Values are
+   * still intersected with the facet allowlist and length-checked; the set
+   * stays bounded by distinct inventory values.
+   */
+  trustedSource?: boolean;
+}
+
 /**
  * Accept only bounded, full-category facet values. Besides keeping URLs tidy,
  * intersecting with the server-derived options prevents arbitrary query-string
@@ -8,7 +18,8 @@ const MAX_GRAPHICS_FILTER_LENGTH = 120;
  */
 export function resolveCategoryGraphicsFilters(
   rawGraphics: string | string[] | undefined,
-  availableGraphics: string[]
+  availableGraphics: string[],
+  options: ResolveCategoryGraphicsFiltersOptions = {}
 ): string[] {
   const requested = Array.isArray(rawGraphics)
     ? rawGraphics
@@ -17,7 +28,7 @@ export function resolveCategoryGraphicsFilters(
       : [];
   const available = new Set(availableGraphics);
 
-  return Array.from(
+  const resolved = Array.from(
     new Set(
       requested
         .map((value) => value.trim())
@@ -28,7 +39,9 @@ export function resolveCategoryGraphicsFilters(
             available.has(value)
         )
     )
-  )
-    .sort((left, right) => left.localeCompare(right))
-    .slice(0, MAX_GRAPHICS_FILTERS);
+  ).sort((left, right) => left.localeCompare(right));
+
+  return options.trustedSource
+    ? resolved
+    : resolved.slice(0, MAX_GRAPHICS_FILTERS);
 }

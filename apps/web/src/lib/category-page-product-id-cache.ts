@@ -34,6 +34,9 @@ type RemotelyCachedCategoryPageProductScope = Exclude<
  * Single normalization for GPU facet values. Facets are derived from
  * `product_key_specs.gpu` with trimming, and filter predicates must use the
  * same form so a facet option always matches the rows that produced it.
+ * The stored side is normalized at rest by migration
+ * `20260922120000_normalize_product_key_specs_gpu` (backfill + trim
+ * trigger), so trimmed request values exact-match the column.
  */
 export function normalizeCategoryGraphicsValue(value: string): string {
   return value.trim();

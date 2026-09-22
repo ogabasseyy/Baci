@@ -84,6 +84,31 @@ describe('loadFilteredCategoryPageData', () => {
     expect(mockGetData).toHaveBeenCalledOnce();
   });
 
+  it('passes the full trusted hub selection through without the request cap', async () => {
+    const available = Array.from({ length: 10 }, (_, i) => `GPU ${i}`);
+    mockGetGraphicsOptions.mockResolvedValueOnce(available);
+
+    const result = await loadFilteredCategoryPageData({
+      category: 'gaming-laptops',
+      merchantId: 'merchant-1',
+      productLimit: 20,
+      productOffset: 0,
+      rawGraphics: available,
+      storeSlug: 'demo-store',
+      trustedGraphics: true,
+    });
+
+    expect(result.selectedGraphics).toHaveLength(10);
+    expect(mockGetData).toHaveBeenLastCalledWith(
+      'merchant-1',
+      'gaming-laptops',
+      'demo-store',
+      0,
+      20,
+      { graphics: result.selectedGraphics }
+    );
+  });
+
   it('still serves the unfiltered listing when no filter was requested and the facet read fails', async () => {
     mockGetData.mockResolvedValueOnce({
       products: [{ id: 'unfiltered-product' }],

@@ -50,6 +50,11 @@ interface PageProps {
   titleHeading?: 'h1' | 'h2';
   canonicalBaseUrl?: string;
   seoPageName?: string;
+  /**
+   * Curated hub pages pass facet-derived graphics values (not raw query
+   * strings), so the untrusted-request cardinality cap is lifted for them.
+   */
+  trustedGraphics?: boolean;
 }
 function renderCategoryNotFoundContent({
   slug,
@@ -75,6 +80,7 @@ export async function CategoryPageContent({
   searchParams,
   seoPageName,
   titleHeading = 'h1',
+  trustedGraphics = false,
 }: PageProps) {
   const { slug, category } = await params;
   const { graphics, page } = await searchParams;
@@ -107,6 +113,7 @@ export async function CategoryPageContent({
       productOffset,
       rawGraphics: graphics,
       storeSlug: slug,
+      trustedGraphics,
     });
 
   if (!data.isCollection && data.isInactiveCategory) {
@@ -262,6 +269,14 @@ export async function CategoryPageContent({
       <V2ComparisonScope storageNamespace={merchant.id}>
         <OgabasseyCategoryPage
           hubSections={<CategoryHubSections hub={hubContent} />}
+          // Curated hub pages keep their own pagination route
+          // (/gaming-laptops/graphics/[slug]?page=N) instead of the generic
+          // listing pagination path (?graphics=...), which is noindex.
+          paginationBasePath={
+            canonicalBaseUrl
+              ? canonicalBaseUrl.slice(baseUrl.length) || '/'
+              : undefined
+          }
           currentPage={categoryPageCurrentPage}
           productsArePrePaginated={productsArePrePaginated}
           categoryImage={

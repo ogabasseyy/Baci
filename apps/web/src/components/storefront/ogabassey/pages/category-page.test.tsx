@@ -271,6 +271,41 @@ describe('CategoryPage', () => {
     }
   );
 
+  it('keeps hub pagination on the hub route when a base override is provided', () => {
+    mockMatchMedia(true);
+    vi.mocked(useParams).mockReturnValue({
+      slug: 'test',
+      category: 'gaming-laptops',
+    });
+
+    const products = Array.from({ length: 20 }, (_, index) => ({
+      ...PRODUCT_WITH_IMAGE,
+      id: String(index + 1),
+      name: `Product ${index + 1}`,
+    }));
+
+    render(
+      <CategoryPage
+        currentPage={2}
+        products={products}
+        productsArePrePaginated={true}
+        totalProductCount={45}
+        graphicsOptions={['NVIDIA RTX 4070']}
+        selectedGraphics={['NVIDIA RTX 4070']}
+        paginationBasePath="/test-store/gaming-laptops/graphics/rtx-4070"
+      />
+    );
+
+    expect(screen.getByRole('link', { name: '1' })).toHaveAttribute(
+      'href',
+      '/test-store/gaming-laptops/graphics/rtx-4070'
+    );
+    expect(screen.getByRole('link', { name: '3' })).toHaveAttribute(
+      'href',
+      '/test-store/gaming-laptops/graphics/rtx-4070?page=3'
+    );
+  });
+
   it('hides the recent carousel on later pre-paginated pages (page slice is not the newest items)', () => {
     mockMatchMedia(true);
 

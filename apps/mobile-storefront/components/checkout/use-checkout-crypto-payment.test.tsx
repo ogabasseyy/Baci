@@ -139,5 +139,11 @@ describe('useCheckoutCryptoPayment juicyway start reference', () => {
     expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledWith(
       expect.objectContaining({ reference: 'pay-9' })
     );
+    // The canonical fallback lives in state too: the completion handoff
+    // forwards `reference`, so without this the settlement poller could
+    // emit the completion but never reconcile it to its start.
+    const state: CryptoPaymentState | null = result.current.cryptoPayment;
+    expect(state?.reference).toBe('pay-9');
+    expect(state?.paymentId).toBe('pay-9');
   });
 });

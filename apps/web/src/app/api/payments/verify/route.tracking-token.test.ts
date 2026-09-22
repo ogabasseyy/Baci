@@ -24,12 +24,20 @@ vi.mock('@/lib/supabase/service', () => ({
   createServiceClient: () => mockCreateServiceClient(),
 }));
 
+const mockRpc = vi.fn();
+const mockCreateAnonClient = vi.fn(() => ({ rpc: mockRpc }));
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: () => mockCreateAnonClient(),
+}));
+
 import { POST } from './route';
 
 const REFERENCE = 'BAC-VERIFY-9';
 const TRACKING_TOKEN = 'track-token-9';
 
-function buildSupabase(orderTrackingToken: string | null) {
+// Downstream verification still runs on the service client (pre-existing
+// edge); only the guest proof binding moved to the anon RPC.
+function buildSupabase() {
   const from = vi.fn((table: string) => {
     if (table === 'transactions') {
       return {
@@ -58,10 +66,13 @@ function buildSupabase(orderTrackingToken: string | null) {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         maybeSingle: vi.fn().mockResolvedValue({
-          data:
-            orderTrackingToken === null
-              ? { id: 'order-9' }
-              : { id: 'order-9', tracking_token: orderTrackingToken },
+          data: {
+            id: 'order-9',
+            order_number: 'ORD-9',
+            payment_status: 'pending',
+            shipping_status: 'pending',
+            total: 5000,
+          },
           error: null,
         }),
       };
@@ -91,7 +102,8 @@ describe('/api/payments/verify tracking-token authorization', () => {
   });
 
   it('authorizes a guest verification whose token matches the reference order', async () => {
-    mockCreateServiceClient.mockReturnValue(buildSupabase(TRACKING_TOKEN));
+    mockCreateServiceClient.mockReturnValue(buildSupabase());
+    mockRpc.mockResolvedValue({ data: true, error: null });
 
     const response = await POST(
       guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
@@ -110,7 +122,8 @@ describe('/api/payments/verify tracking-token authorization', () => {
   });
 
   it('rejects a mismatched tracking token without verifying', async () => {
-    mockCreateServiceClient.mockReturnValue(buildSupabase(TRACKING_TOKEN));
+    mockCreateServiceClient.mockReturnValue(buildSupabase());
+    mockRpc.mockResolvedValue({ data: false, error: null });
 
     const response = await POST(
       guestRequest({ reference: REFERENCE, trackingToken: 'wrong-token' })
@@ -126,12 +139,25 @@ describe('/api/payments/verify tracking-token authorization', () => {
     const response = await POST(guestRequest({ reference: REFERENCE }));
 
     expect(response.status).toBe(403);
-    expect(mockCreateServiceClient).not.toHaveBeenCalled();
+    expect(mockCreateAnonClient).not.toHaveBeenCalled();
     expect(mockVerifyPaystack).not.toHaveBeenCalled();
   });
 
   it('rejects when the order carries no tracking token', async () => {
-    mockCreateServiceClient.mockReturnValue(buildSupabase(null));
+    mockCreateServiceClient.mockReturnValue(buildSupabase());
+    mockRpc.mockResolvedValue({ data: false, error: null });
+
+    const response = await POST(
+      guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockVerifyPaystack).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the proof RPC errors', async () => {
+    mockCreateServiceClient.mockReturnValue(buildSupabase());
+    mockRpc.mockResolvedValue({ data: null, error: new Error('db down') });
 
     const response = await POST(
       guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })

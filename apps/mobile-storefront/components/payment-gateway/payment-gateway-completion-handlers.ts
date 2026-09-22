@@ -1,6 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import {
+  claimCheckoutPurchaseTracking,
+  isCheckoutPurchaseClaimed,
+} from '@/lib/claim-checkout-purchase-tracking';
 import { clearPersistedRedvaultOrderWithRetry } from '@/lib/pending-redvault-order';
 import {
   clearRedvaultPurchaseTrackingContext,
@@ -179,20 +182,25 @@ export function createPaymentGatewayCompletionHandlers({
             orderId || ''
           );
           if (trackingContext) {
-            // The order-created path claims its own scoped key, so a denial
-            // here means the purchase was already recorded through another
-            // path — emit only on a fresh claim.
+            // The order-created path claims its own scoped key — emit only
+            // on a fresh claim.
             if (await claimCheckoutPurchaseTracking(orderId || '')) {
               await trackCheckoutRoutePurchaseCompleted({
                 ...trackingContext,
                 orderId: orderId || '',
                 orderNumber: verifiedOrderNumber || trackingContext.orderNumber,
               });
+              await clearRedvaultPurchaseTrackingContext(orderId || '');
+            } else if (await isCheckoutPurchaseClaimed(orderId || '')) {
+              // The claim is actually held, so the purchase went out
+              // through another path: the saved context is stale and must
+              // not linger in AsyncStorage indefinitely.
+              await clearRedvaultPurchaseTrackingContext(orderId || '');
             }
-            // Cleanup is independent of the claim: a denied claim means the
-            // conversion went out elsewhere, so the saved email/phone/items
-            // must not linger in AsyncStorage indefinitely.
-            await clearRedvaultPurchaseTrackingContext(orderId || '');
+            // Otherwise the store itself was unavailable (a denial is not
+            // proof of emission): retain the context so a later retry
+            // still has the email/phone/items snapshot — clearing here
+            // would destroy the only copy without any purchase going out.
           }
         } catch {
           // Verification already succeeded; ignore analytics failures.

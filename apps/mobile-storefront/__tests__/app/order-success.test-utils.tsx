@@ -144,9 +144,16 @@ export function mockPostOrderInterstitialModule(): unknown {
   };
 }
 
+export const mockReceiptFetchedHolder: { current: boolean } = {
+  current: true,
+};
+
 export function mockUseReceiptsModule(): unknown {
   return {
-    useReceiptDetail: () => ({ data: mockPaidCheckOrderHolder.current }),
+    useReceiptDetail: () => ({
+      data: mockPaidCheckOrderHolder.current,
+      isFetched: mockReceiptFetchedHolder.current,
+    }),
   };
 }
 
@@ -159,6 +166,7 @@ export function setupOrderSuccessMocks(): void {
   mockReceiptState.isOpen = false;
   mockReceiptDismissalHolder.current = undefined;
   mockPaidCheckOrderHolder.current = null;
+  mockReceiptFetchedHolder.current = true;
   mockSearchParamsHolder.current = {
     orderId: 'order-1',
     orderNumber: 'BAC-001',

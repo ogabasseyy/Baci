@@ -1,4 +1,3 @@
-import { timingSafeEqual } from 'node:crypto';
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { verifyPayment as verifyKorapayPayment } from '@/lib/korapay';
@@ -9,6 +8,7 @@ import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/invento
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import type { GatewayVerificationResult } from '@/lib/payments/types';
 import { verifyTransaction as verifyPaystackPayment } from '@/lib/paystack';
+import { createAnonClient } from '@/lib/supabase/anon';
 import { createServiceClient } from '@/lib/supabase/service';
 import { referenceSchema, verifyPaymentBodySchema } from '@/schemas/payments';
 
@@ -95,8 +95,16 @@ async function verifyPaymentReference(reference: string) {
       reference: parsedReference.data,
       error: transactionError,
     });
+    // Permanent for this reference: no webhook or poll can materialize a
+    // transaction row that the provider never created. The machine code
+    // plus the echoed reference let native callers fail terminally
+    // instead of confirming an unverifiable attempt as transient.
     return NextResponse.json(
-      { error: 'Transaction not found' },
+      {
+        error: 'Transaction not found',
+        code: 'reference_not_found',
+        reference: parsedReference.data,
+      },
       { status: 404 }
     );
   }
@@ -118,8 +126,14 @@ async function verifyPaymentReference(reference: string) {
       message: 'Payment verify called for a transaction without an order',
       reference: parsedReference.data,
     });
+    // Permanent for this reference: a non-order transaction can never
+    // settle an order. Same machine-code contract as above.
     return NextResponse.json(
-      { error: 'Transaction is not an order payment' },
+      {
+        error: 'Transaction is not an order payment',
+        code: 'reference_not_order_payment',
+        reference: parsedReference.data,
+      },
       { status: 409 }
     );
   }
@@ -241,8 +255,15 @@ async function verifyPaymentReference(reference: string) {
         expected: transactionAmount,
         received: verifiedAmount.amount,
       });
+      // Permanent for this attempt: the provider-confirmed amount differs
+      // from the stored transaction, so this reference can never settle
+      // the order. Same machine-code contract as the 404/409 envelopes.
       return NextResponse.json(
-        { error: 'Payment amount mismatch' },
+        {
+          error: 'Payment amount mismatch',
+          code: 'amount_mismatch',
+          reference: parsedReference.data,
+        },
         { status: 400 }
       );
     }
@@ -261,8 +282,13 @@ async function verifyPaymentReference(reference: string) {
         expected: expectedCurrency,
         received: verifiedAmount.currency,
       });
+      // Permanent for this attempt, like the amount mismatch above.
       return NextResponse.json(
-        { error: 'Payment currency mismatch' },
+        {
+          error: 'Payment currency mismatch',
+          code: 'currency_mismatch',
+          reference: parsedReference.data,
+        },
         { status: 400 }
       );
     }
@@ -432,41 +458,30 @@ export function GET() {
  * Proof-bound guest authorization: the per-order tracking token is a
  * secret known only to the shopper (URL) and the merchant, so a
  * request proving knowledge of it for the reference's own order is as
- * authorized as a CSRF-validated session request. Binds
- * reference → transaction → order → token; fails closed (including on
- * lookup errors) with no existence oracle beyond the uniform 403.
+ * authorized as a CSRF-validated session request. The binding
+ * (reference → transaction → order → token) is proven inside the
+ * narrow `verify_payment_reference_token` RPC over the anon client —
+ * never through a service-role table client in this user-facing route.
+ * Fails closed (including on lookup errors) with no existence oracle
+ * beyond the uniform 403.
  */
 async function isTrackingTokenAuthorizedForReference(
   reference: string,
   trackingToken: string
 ): Promise<boolean> {
   try {
-    const supabase = createServiceClient();
-    const { data: transaction } = await supabase
-      .from('transactions')
-      .select('order_id')
-      .eq('gateway_reference', reference)
-      .maybeSingle();
-    const orderId = (transaction as { order_id?: unknown } | null)?.order_id;
-    if (typeof orderId !== 'string' || !orderId) {
-      return false;
-    }
-    const { data: order } = await supabase
-      .from('orders')
-      .select('tracking_token')
-      .eq('id', orderId)
-      .maybeSingle();
-    const expected = (order as { tracking_token?: unknown } | null)
-      ?.tracking_token;
-    if (typeof expected !== 'string' || !expected) {
-      return false;
-    }
-    const expectedBuffer = Buffer.from(expected, 'utf8');
-    const suppliedBuffer = Buffer.from(trackingToken, 'utf8');
-    return (
-      expectedBuffer.length === suppliedBuffer.length &&
-      timingSafeEqual(expectedBuffer, suppliedBuffer)
+    const supabase = createAnonClient();
+    const { data, error } = await supabase.rpc(
+      'verify_payment_reference_token',
+      {
+        p_gateway_reference: reference,
+        p_tracking_token: trackingToken,
+      }
     );
+    if (error) {
+      return false;
+    }
+    return data === true;
   } catch {
     return false;
   }

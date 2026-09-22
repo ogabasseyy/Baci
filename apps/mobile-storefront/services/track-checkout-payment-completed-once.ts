@@ -1,7 +1,7 @@
+import { releaseCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-release';
 import {
   claimCheckoutPurchaseTracking,
   isCheckoutPurchaseClaimed,
-  releaseCheckoutPurchaseTracking,
 } from '@/lib/claim-checkout-purchase-tracking';
 import { createLogger } from '@/lib/logger';
 import { useCartStore } from '@/stores/cart-store';

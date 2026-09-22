@@ -1,17 +1,12 @@
 import { CHECKOUT_API_BASE_URL } from '@/components/checkout/checkout-screen.constants';
-import type { TrackOrderData } from '@/components/track-order/TrackOrderScreen.types';
-import {
-  TRACK_ORDER_API_BASE_URL,
-  TRACK_ORDER_MERCHANT_SLUG,
-} from '@/components/track-order/track-order.config';
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 import { getSession } from '@/lib/supabase';
+import type { TrackedCompletionAttribution } from '@/lib/tracked-order-completion';
 import {
-  type TrackedCompletionAttribution,
-  toTrackedCompletionAttribution,
-} from '@/lib/tracked-order-completion';
-
-const VERIFY_TIMEOUT_MS = 15_000;
+  checkTrackedOrderPaid,
+  type TrackedOrderVerification,
+  VERIFY_TIMEOUT_MS,
+} from './verify-order-payment-tracked-lookup';
 
 interface VerifyOrderPaymentInput {
   orderId?: string;
@@ -51,109 +46,22 @@ const RECONCILING_FINALIZATION_OUTCOMES = new Set([
   'order_skipped',
 ]);
 
+// Permanent reference defects: the attempt itself is invalid (wrong
+// amount/currency, unknown reference, non-order reference), so no webhook
+// or settlement poll can make it succeed. The API returns these as 4xx
+// envelopes with a machine-readable code plus the processed reference;
+// the client only trusts them when the echoed reference matches the one
+// it sent, binding the envelope to this request.
+const PERMANENT_VERIFICATION_CODES = new Set([
+  'amount_mismatch',
+  'currency_mismatch',
+  'reference_not_found',
+  'reference_not_order_payment',
+]);
+
 function finiteOrUndefined(value: unknown): number | undefined {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : undefined;
-}
-
-function toTrackedOrder(value: unknown): TrackOrderData['order'] | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-  const order = (value as { order?: unknown }).order;
-  if (!order || typeof order !== 'object') {
-    return null;
-  }
-  return order as TrackOrderData['order'];
-}
-
-function toTrackedCustomer(value: unknown): TrackOrderData['customer'] | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-  const customer = (value as { customer?: unknown }).customer;
-  if (!customer || typeof customer !== 'object') {
-    return null;
-  }
-  return customer as TrackOrderData['customer'];
-}
-
-function toTrackedItems(value: unknown): TrackOrderData['items'] {
-  if (!value || typeof value !== 'object') {
-    return [];
-  }
-  const items = (value as { items?: unknown }).items;
-  return Array.isArray(items) ? (items as TrackOrderData['items']) : [];
-}
-
-interface TrackedOrderRead {
-  order: TrackOrderData['order'];
-  customer: TrackOrderData['customer'] | null;
-  items: TrackOrderData['items'];
-}
-
-async function readTrackedOrder(
-  orderId: string,
-  trackingToken: string
-): Promise<TrackedOrderRead | null> {
-  try {
-    const response = await fetchWithTimeout(
-      `${TRACK_ORDER_API_BASE_URL}/api/storefront/orders/track-order?token=${encodeURIComponent(trackingToken)}&merchant_slug=${encodeURIComponent(TRACK_ORDER_MERCHANT_SLUG)}`,
-      { timeout: VERIFY_TIMEOUT_MS }
-    );
-    if (!response.ok) {
-      return null;
-    }
-    const body: unknown = await response.json();
-    const order = toTrackedOrder(body);
-    if (!order || order.id !== orderId) {
-      return null;
-    }
-    return {
-      order,
-      customer: toTrackedCustomer(body),
-      items: toTrackedItems(body),
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function checkTrackedOrderPaid(
-  orderId: string,
-  trackingToken: string
-): Promise<
-  OrderPaymentVerification & { pending?: TrackedCompletionAttribution }
-> {
-  const read = await readTrackedOrder(orderId, trackingToken);
-  if (!read) {
-    return { paid: false };
-  }
-  const attribution = toTrackedCompletionAttribution(
-    read.order,
-    read.customer,
-    read.items
-  );
-  const trackedPaymentStatus = read.order.payment_status?.trim().toLowerCase();
-  if (trackedPaymentStatus === 'refunded') {
-    // A refund proves the provider captured the money (mirrors the
-    // verify finalization kinds): no settlement poll can revive this
-    // order, so surface reconciliation instead of the transient shape.
-    return { paid: false, reconciliation: 'order_skipped' };
-  }
-  if (trackedPaymentStatus === 'cancelled') {
-    // An ordinary cancelled row proves no capture (maintenance flips
-    // stale unpaid orders to cancelled): unpaid terminal failure with
-    // the error/retry path — never the "Payment Received"
-    // reconciliation state.
-    return { paid: false, terminalFailure: 'cancelled' };
-  }
-  if (read.order.payment_status !== 'paid') {
-    // Unpaid now, but the projection already carries the checkout identity
-    // and breakdown the finalized path below would otherwise lose.
-    return { paid: false, pending: attribution };
-  }
-  return { paid: true, ...attribution };
 }
 
 interface VerifyReferenceResponse {
@@ -162,6 +70,8 @@ interface VerifyReferenceResponse {
   finalizationOutcome?: string;
   orderId?: string;
   orderTotal?: number;
+  code?: string;
+  reference?: string;
 }
 
 function toVerifyReferenceResponse(value: unknown): VerifyReferenceResponse {
@@ -252,6 +162,19 @@ async function checkReferenceSettled(
               : 'order_cancelled',
         };
       }
+      // Permanent reference defects (amount/currency mismatch, unknown or
+      // non-order reference): no webhook or poll can repair the attempt,
+      // so report terminal failure instead of transient and preserve the
+      // cart/error path. Trusts only an envelope echoing this request's
+      // reference — a skewed envelope for another reference stays
+      // transient.
+      if (
+        data.reference === reference &&
+        typeof data.code === 'string' &&
+        PERMANENT_VERIFICATION_CODES.has(data.code)
+      ) {
+        return { paid: false, terminalFailure: 'failed' };
+      }
       return { paid: false };
     }
     return { paid: true, total: finiteOrUndefined(data.orderTotal) };
@@ -275,11 +198,33 @@ export async function verifyOrderPaymentForCompletion({
   }
   let pendingAttribution: TrackedCompletionAttribution | undefined;
   if (trackingToken) {
-    const tracked = await checkTrackedOrderPaid(orderId, trackingToken);
+    const tracked: TrackedOrderVerification = await checkTrackedOrderPaid(
+      orderId,
+      trackingToken
+    );
     // Terminal server state (paid, reconciling, or terminally failed):
     // return immediately with no reference lookup — the row already
     // settles the order.
-    if (tracked.paid || tracked.reconciliation || tracked.terminalFailure) {
+    if (tracked.paid || tracked.reconciliation) {
+      return tracked;
+    }
+    if (tracked.terminalFailure === 'cancelled' && reference) {
+      // A cancelled row proves no capture was recorded — but the supplied
+      // reference may have captured late (the verify endpoint represents
+      // that as order_cancelled). Verify before reporting an ordinary
+      // cancellation, and prefer a definitive reference outcome; a
+      // transient reference answer leaves the cancelled row standing.
+      const settled = await checkReferenceSettled(
+        orderId,
+        reference,
+        trackingToken
+      );
+      if (settled.paid || settled.reconciliation || settled.terminalFailure) {
+        return settled;
+      }
+      return tracked;
+    }
+    if (tracked.terminalFailure) {
       return tracked;
     }
     pendingAttribution = tracked.pending;

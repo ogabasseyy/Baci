@@ -5,6 +5,13 @@ import { usePermissionBooster } from '@/hooks/use-permission-booster';
 interface OrderSuccessPermissionFlowInput {
   isReconciliation: boolean;
   permissionFlowActiveRef: RefObject<boolean>;
+  /**
+   * Whether the deferred-order status is authoritative yet. The soft ask
+   * waits for it like every other purchase-success side effect: a slow
+   * refunded lookup must not open the permission modal for an order that
+   * is about to flip to reconciliation.
+   */
+  statusAuthoritative: boolean;
 }
 
 /**
@@ -16,6 +23,7 @@ interface OrderSuccessPermissionFlowInput {
 export function useOrderSuccessPermissionFlow({
   isReconciliation,
   permissionFlowActiveRef,
+  statusAuthoritative,
 }: OrderSuccessPermissionFlowInput) {
   const { requestPermission, triggerSystemPrompt, markDenied } =
     usePermissionBooster();
@@ -27,8 +35,9 @@ export function useOrderSuccessPermissionFlow({
 
   useEffect(() => {
     // No soft-ask on reconciliation arrivals: no completed purchase sits
-    // behind them.
-    if (isReconciliation) {
+    // behind them. Otherwise wait until the deferred-order status is
+    // authoritative before arming the timer.
+    if (isReconciliation || !statusAuthoritative) {
       return;
     }
     // Check for notification permissions (Soft Ask)
@@ -54,7 +63,12 @@ export function useOrderSuccessPermissionFlow({
     };
     // permissionFlowActiveRef is a stable caller-owned ref: listing it
     // satisfies exhaustive-deps without ever re-arming the timer.
-  }, [isReconciliation, permissionFlowActiveRef, requestPermission]);
+  }, [
+    isReconciliation,
+    statusAuthoritative,
+    permissionFlowActiveRef,
+    requestPermission,
+  ]);
 
   const handlePermissionGrant = async () => {
     setShowPermissionModal(false);

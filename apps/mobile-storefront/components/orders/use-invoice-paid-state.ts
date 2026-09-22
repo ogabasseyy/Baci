@@ -22,7 +22,20 @@ function toTrackedOrder(value: unknown): TrackOrderData['order'] | null {
 // Payment outcome for a guest deferred-settlement order (invoice, Pay for
 // Me): refunded is distinct from unpaid — the order was previously paid,
 // so it must never render proforma/request copy.
-export type GuestInvoicePaymentState = 'paid' | 'refunded' | 'unpaid';
+export type GuestInvoicePaymentStatus = 'paid' | 'refunded' | 'unpaid';
+
+export interface GuestInvoicePaymentState {
+  status: GuestInvoicePaymentStatus;
+  /**
+   * Whether the status is authoritative yet: true synchronously when no
+   * lookup is needed (skipped, non-deferred, or missing identity), and
+   * only after the token lookup settles otherwise. Screens gate
+   * purchase-success side effects (notification, interstitial, soft ask)
+   * on this so a slow lookup cannot trigger them for an order that is
+   * about to flip to reconciliation.
+   */
+  isResolved: boolean;
+}
 
 // Resolves the paid state for guest deferred-settlement orders (invoice,
 // Pay for Me). The authenticated receipt-detail query is disabled without
@@ -41,20 +54,26 @@ export function useGuestInvoicePaidState({
   trackingToken?: string;
   skip: boolean;
 }): GuestInvoicePaymentState {
-  const [state, setState] = useState<GuestInvoicePaymentState>('unpaid');
+  // Whether this identity needs the token lookup at all. Derived during
+  // render (not state) so screens see `isResolved: true` synchronously
+  // when there is nothing to wait for — side effects for ordinary
+  // synchronous checkouts must not stall a frame on the async lookup.
+  const lookupNeeded =
+    !skip &&
+    isDeferredSettlementMethod(paymentMethod) &&
+    !!orderId &&
+    !!trackingToken;
+  const [status, setStatus] = useState<GuestInvoicePaymentStatus>('unpaid');
+  const [lookupSettled, setLookupSettled] = useState(false);
   useEffect(() => {
     // The payment state belongs to one lookup identity: same-route
     // navigation or a new deep link can swap a paid guest invoice for a
     // different unpaid one on the mounted route, and the new lookup must
     // not inherit the previous order's paid presentation
     // (receipt/commercial copy for an unpaid order).
-    setState('unpaid');
-    if (
-      skip ||
-      !isDeferredSettlementMethod(paymentMethod) ||
-      !orderId ||
-      !trackingToken
-    ) {
+    setStatus('unpaid');
+    setLookupSettled(false);
+    if (!lookupNeeded) {
       return;
     }
     let cancelled = false;
@@ -89,19 +108,23 @@ export function useGuestInvoicePaidState({
           }
           if (order && order.id === orderId) {
             if (order.payment_status === 'paid') {
-              setState('paid');
+              setStatus('paid');
             } else if (order.payment_status === 'refunded') {
               // Previously paid, now refunded: distinct from unpaid so the
               // screen renders reconciliation/commercial state instead of
               // proforma/request copy.
-              setState('refunded');
+              setStatus('refunded');
             }
           }
+          setLookupSettled(true);
           return;
         } catch {
           // Display stays proforma after retries exhaust; the shopper can
           // still pay or retry.
           if (cancelled || attempt >= 2) {
+            if (!cancelled) {
+              setLookupSettled(true);
+            }
             return;
           }
         } finally {
@@ -111,11 +134,14 @@ export function useGuestInvoicePaidState({
           }
         }
       }
+      if (!cancelled) {
+        setLookupSettled(true);
+      }
     })();
     return () => {
       cancelled = true;
       activeController?.abort();
     };
-  }, [skip, orderId, paymentMethod, trackingToken]);
-  return state;
+  }, [lookupNeeded, orderId, trackingToken]);
+  return { status, isResolved: !lookupNeeded || lookupSettled };
 }

@@ -46,6 +46,8 @@ const mockLoadRedvaultPurchaseTrackingContext =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockClaimCheckoutPurchaseTracking =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockIsCheckoutPurchaseClaimed =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockClearRedvaultPurchaseTrackingContext =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockTrackCheckoutRoutePurchaseCompleted = jest.fn();
@@ -53,6 +55,8 @@ const mockTrackCheckoutRoutePurchaseCompleted = jest.fn();
 jest.mock('@/lib/claim-checkout-purchase-tracking', () => ({
   claimCheckoutPurchaseTracking: (...args: unknown[]) =>
     mockClaimCheckoutPurchaseTracking(...args),
+  isCheckoutPurchaseClaimed: (...args: unknown[]) =>
+    mockIsCheckoutPurchaseClaimed(...args),
 }));
 
 jest.mock('@/lib/redvault-purchase-tracking-context', () => ({
@@ -365,8 +369,10 @@ describe('createPaymentGatewayCompletionHandlers', () => {
       total: 5000,
     });
     // Another path already recorded the conversion: no fresh claim, so no
-    // emission — but the saved email/phone/items must not linger.
+    // emission — but the held claim proves the context is stale, so it is
+    // still cleared instead of lingering.
     mockClaimCheckoutPurchaseTracking.mockResolvedValue(false);
+    mockIsCheckoutPurchaseClaimed.mockResolvedValue(true);
     const { input } = createInput({ paymentMethod: 'uba_redvault' });
     await createPaymentGatewayCompletionHandlers(
       input
@@ -375,6 +381,31 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     expect(mockClearRedvaultPurchaseTrackingContext).toHaveBeenCalledWith(
       'order-1'
     );
+    expect(input.setPaymentStatus).toHaveBeenLastCalledWith('success');
+  });
+
+  it('retains saved REDVAULT context when the store is unavailable', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue({
+      items: [],
+      orderNumber: 'ORD-9',
+      paymentMethod: 'uba_redvault',
+      shipping: 0,
+      subtotal: 5000,
+      tax: 0,
+      total: 5000,
+    });
+    // A denied claim is not proof of emission: with the store wedged the
+    // purchase may never have gone out, so the saved email/phone/items
+    // snapshot must survive for a later retry.
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(false);
+    mockIsCheckoutPurchaseClaimed.mockResolvedValue(false);
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+    expect(mockTrackCheckoutRoutePurchaseCompleted).not.toHaveBeenCalled();
+    expect(mockClearRedvaultPurchaseTrackingContext).not.toHaveBeenCalled();
     expect(input.setPaymentStatus).toHaveBeenLastCalledWith('success');
   });
 

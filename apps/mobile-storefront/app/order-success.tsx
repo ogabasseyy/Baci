@@ -12,6 +12,7 @@ import { isDeferredSettlementMethod } from '@/components/orders/order-success-co
 import { useGuestInvoicePaidState } from '@/components/orders/use-invoice-paid-state';
 import { useOrderSuccessPermissionFlow } from '@/components/orders/use-order-success-permission-flow';
 import { useSettlementCompletion } from '@/components/orders/use-settlement-completion';
+import { verifyOrderPaymentForCompletion } from '@/components/payment-gateway/verify-order-payment';
 import { ReceiptPreviewModal } from '@/components/receipts/ReceiptPreviewModal';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -64,29 +65,72 @@ export default function OrderSuccessScreen() {
   // keep showing proforma/request copy when the shopper returns: resolve
   // the authoritative paid state for deferred-settlement orders (guests
   // keep the method-based tone until their lookup settles).
-  const { data: paidCheckOrder } = useReceiptDetail(
-    isDeferredSettlementMethod(paymentMethod) && orderId ? orderId : null
-  );
+  const needsDeferredStatus =
+    isDeferredSettlementMethod(paymentMethod) && !!orderId;
+  const { data: paidCheckOrder, isFetched: isReceiptCheckFetched } =
+    useReceiptDetail(needsDeferredStatus ? (orderId ?? null) : null);
   const receiptPaymentStatus = paidCheckOrder?.payment_status;
   const receiptPaidOrder = receiptPaymentStatus === 'paid';
   const receiptRefundedOrder = receiptPaymentStatus === 'refunded';
+  // The receipt query is disabled without a signed-in user: only wait for
+  // it when it can actually run, otherwise the guest lookup below is the
+  // authority.
+  const receiptAuthoritative =
+    !needsDeferredStatus || !customer || isReceiptCheckFetched;
   // Guests have no authenticated receipt query: resolve their paid state
   // through the tracking token so externally-paid invoices stop showing
   // proforma copy on return.
-  const guestInvoiceStatus = useGuestInvoicePaidState({
+  const guestInvoice = useGuestInvoicePaidState({
     orderId,
     paymentMethod,
     trackingToken,
     skip: receiptPaidOrder,
   });
-  const isPaidOrder = receiptPaidOrder || guestInvoiceStatus === 'paid';
+  const isPaidOrder = receiptPaidOrder || guestInvoice.status === 'paid';
   // A refunded invoice or Pay for Me order was previously paid: it must
   // never render proforma/request copy. Like a captured-but-cancelled
   // arrival it renders the reconciliation state — the money moved but no
   // active paid order exists.
   const wasPaidOrder =
-    receiptRefundedOrder || guestInvoiceStatus === 'refunded';
-  const isReconciliation = isParamReconciliation || wasPaidOrder;
+    receiptRefundedOrder || guestInvoice.status === 'refunded';
+  // Purchase-success side effects (notification, interstitial, permission
+  // soft-ask) wait until the deferred-order status is authoritative: both
+  // lookups begin unresolved, and a slow refunded lookup must not lose a
+  // race against the 1.5–2.5s timers and open an ad or soft ask for an
+  // order that is about to flip to reconciliation.
+  const deferredStatusAuthoritative =
+    receiptAuthoritative && guestInvoice.isResolved;
+  // The reconciliation route parameter is caller-controlled (public
+  // scheme/universal links): a crafted deep link must not render
+  // "Payment Received" on its word alone. Verify it proof-bound before
+  // rendering the reconciliation state; an unverified param falls
+  // through to the ordinary success flow.
+  const [paramReconciliationVerified, setParamReconciliationVerified] =
+    useState<boolean | undefined>(undefined);
+  useEffect(() => {
+    setParamReconciliationVerified(undefined);
+    if (!isParamReconciliation || !orderId) {
+      return;
+    }
+    let cancelled = false;
+    void verifyOrderPaymentForCompletion({
+      orderId,
+      trackingToken,
+      reference,
+    }).then((result) => {
+      if (!cancelled) {
+        setParamReconciliationVerified(!!result.reconciliation);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isParamReconciliation, orderId, trackingToken, reference]);
+  const isParamVerificationPending =
+    isParamReconciliation && paramReconciliationVerified === undefined;
+  const isReconciliation =
+    (isParamReconciliation && paramReconciliationVerified === true) ||
+    wasPaidOrder;
   // The proforma action opens this same preview: stamp the explicit kind so
   // the generated artifact and modal chrome read as a proforma, matching
   // the web success page (unpaid invoice orders only — paid orders keep the
@@ -121,6 +165,8 @@ export default function OrderSuccessScreen() {
   } = useOrderSuccessPermissionFlow({
     isReconciliation,
     permissionFlowActiveRef,
+    statusAuthoritative:
+      deferredStatusAuthoritative && !isParamVerificationPending,
   });
   // While a presented post-order interstitial owns the full screen the
   // success banner stays unmounted; cleared when the interstitial closes.
@@ -153,7 +199,13 @@ export default function OrderSuccessScreen() {
   useEffect(() => {
     const isServerConfirmedNotificationMethod =
       SERVER_CONFIRMED_ORDER_NOTIFICATION_METHODS.has(paymentMethod);
-    if (isReconciliation || orderNotificationScheduledRef.current || !orderId) {
+    if (
+      isReconciliation ||
+      !deferredStatusAuthoritative ||
+      isParamVerificationPending ||
+      orderNotificationScheduledRef.current ||
+      !orderId
+    ) {
       return;
     }
 
@@ -176,7 +228,14 @@ export default function OrderSuccessScreen() {
       orderNotificationScheduledRef.current = false;
       console.warn('Failed to schedule order received notification', error);
     });
-  }, [isReconciliation, orderId, orderNumber, paymentMethod]);
+  }, [
+    isReconciliation,
+    deferredStatusAuthoritative,
+    isParamVerificationPending,
+    orderId,
+    orderNumber,
+    paymentMethod,
+  ]);
 
   useEffect(() => {
     // Post-purchase interstitial (once per session, skipped while ads are
@@ -193,6 +252,8 @@ export default function OrderSuccessScreen() {
     // nothing: no completed order sits behind them either.
     if (
       isReconciliation ||
+      !deferredStatusAuthoritative ||
+      isParamVerificationPending ||
       !hasOrderSuccessIdentity({ orderId, orderNumber, reference })
     ) {
       return;
@@ -230,7 +291,14 @@ export default function OrderSuccessScreen() {
       interstitialCancelled = true;
       clearTimeout(interstitialTimerId);
     };
-  }, [isReconciliation, orderId, orderNumber, reference]);
+  }, [
+    isReconciliation,
+    deferredStatusAuthoritative,
+    isParamVerificationPending,
+    orderId,
+    orderNumber,
+    reference,
+  ]);
 
   const handleViewOrders = () => {
     if (!customer && trackingToken) {
@@ -248,6 +316,14 @@ export default function OrderSuccessScreen() {
         receiptPreview.openPreviewByOrderId(orderId);
       }
     : undefined;
+
+  if (isParamVerificationPending) {
+    // The reconciliation parameter is still unverified: render nothing
+    // until the proof-bound check resolves — neither the success banner
+    // (a spoofed param must not borrow its credibility) nor the
+    // reconciliation state.
+    return null;
+  }
 
   if (isReconciliation) {
     return (

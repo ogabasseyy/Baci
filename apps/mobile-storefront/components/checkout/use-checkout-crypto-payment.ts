@@ -163,7 +163,12 @@ async function runCryptoPaymentInitialization({
       amount: payment.amount || orderResponse.amountDueToGateway,
       cryptoAmount: payment.crypto_amount || '',
       confirmationTime: payment.confirmation_time || '',
-      reference: initData.reference || '',
+      // Canonical provider-attempt reference, shared by the start event
+      // above and the completion handoff: when initialization returns a
+      // payment ID but no top-level reference, the payment ID is the
+      // attempt identity — without it settlement polling could emit the
+      // completion but never reconcile it to its start.
+      reference: initData.reference || payment.payment_id || '',
       paymentId: payment.payment_id || '',
       trackingToken,
     });

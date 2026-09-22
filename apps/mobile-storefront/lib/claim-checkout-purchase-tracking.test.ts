@@ -1,8 +1,6 @@
 import { CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY } from '@/config/checkout-storage';
-import {
-  claimCheckoutPurchaseTracking,
-  releaseCheckoutPurchaseTracking,
-} from './claim-checkout-purchase-tracking';
+import { releaseCheckoutPurchaseTracking } from './claim-checkout-purchase-release';
+import { claimCheckoutPurchaseTracking } from './claim-checkout-purchase-tracking';
 
 const storage = new Map<string, string>();
 const mockGetItem = jest.fn(async (key: string) => storage.get(key) ?? null);
@@ -418,11 +416,62 @@ it('releases the queue when a write never settles', async () => {
     // The store is wedged so this claim also fails closed — the point is it
     // resolves at all instead of waiting on the hung write forever.
     await expect(second).resolves.toBe(false);
+    // Let the maximum queue hold elapse before tearing down fake timers:
+    // otherwise the chain tail stays bound to a discarded fake timer and
+    // every later test in this file inherits a permanently wedged queue.
+    await jest.advanceTimersByTimeAsync(12000);
   } finally {
     jest.useRealTimers();
     mockSetItem.mockImplementation(async (key: string, value: string) => {
       storage.set(key, value);
     });
+  }
+});
+
+it('retries a release whose store read timed out so the next poll can emit', async () => {
+  jest.useFakeTimers();
+  try {
+    // Flush any queue hold inherited from earlier tests (at most the
+    // 10s maximum) so the opening grant does not wait on fake time that
+    // this test never advances before asserting it.
+    await jest.advanceTimersByTimeAsync(12000);
+    // Grant while the store is healthy.
+    await expect(
+      claimCheckoutPurchaseTracking('order-retry-release', 'payment_completed')
+    ).resolves.toBe(true);
+
+    // The release read hangs: the caller is answered now, but the
+    // persisted claim remains.
+    mockGetItem.mockImplementation(
+      () => new Promise<string | null>(() => undefined)
+    );
+    const released = releaseCheckoutPurchaseTracking(
+      'order-retry-release',
+      'payment_completed'
+    );
+    await jest.advanceTimersByTimeAsync(3000);
+    await released;
+
+    // The store recovers: a scheduled retry pass removes the stale claim,
+    // so a later poll re-claims and emits instead of reading the stale
+    // claim, classifying it as already-emitted, and stopping forever.
+    mockGetItem.mockImplementation(
+      async (key: string) => storage.get(key) ?? null
+    );
+    await jest.advanceTimersByTimeAsync(8000);
+    expect(
+      parseStoredClaimsForTest(
+        storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY)
+      )
+    ).not.toContain('payment_completed:order-retry-release');
+    await expect(
+      claimCheckoutPurchaseTracking('order-retry-release', 'payment_completed')
+    ).resolves.toBe(true);
+  } finally {
+    jest.useRealTimers();
+    mockGetItem.mockImplementation(
+      async (key: string) => storage.get(key) ?? null
+    );
   }
 });
 

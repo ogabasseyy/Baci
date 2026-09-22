@@ -622,6 +622,43 @@ describe('storefront order success page', () => {
     ).toBeInTheDocument();
   });
 
+  it('renders a refunded invoice as previously paid instead of proforma', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'invoice',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        currency: 'NGN',
+        payment_status: 'refunded',
+        payment_method: 'invoice',
+        items: [],
+        subtotal: 45000,
+        shipping_cost: 1500,
+        total: 49875,
+        amount_paid: 49875,
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    // A refunded invoice revisited through its success URL keeps the
+    // commercial presentation — never "Proforma Invoice Ready".
+    expect(
+      await screen.findByRole('heading', { name: /order confirmed!/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: /proforma invoice ready!/i })
+    ).toBeNull();
+  });
+
   // Timer advances and promise drains must run inside act() so React
   // applies the fetch/settle state updates under fake timers.
   const flushMicrotasks = async () => {

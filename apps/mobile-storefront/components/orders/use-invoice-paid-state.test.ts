@@ -32,7 +32,7 @@ describe('useGuestInvoicePaidState', () => {
 
     const { result } = renderHook(() => useGuestInvoicePaidState(baseParams));
 
-    await waitFor(() => expect(result.current).toBe('paid'));
+    await waitFor(() => expect(result.current.status).toBe('paid'));
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('track-order?token=track-inv-1'),
       expect.anything()
@@ -46,7 +46,7 @@ describe('useGuestInvoicePaidState', () => {
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(result.current).toBe('unpaid');
+    expect(result.current.status).toBe('unpaid');
   });
 
   it('retries a failed lookup before accepting unpaid presentation', async () => {
@@ -71,7 +71,7 @@ describe('useGuestInvoicePaidState', () => {
 
     const { result } = renderHook(() => useGuestInvoicePaidState(baseParams));
 
-    await waitFor(() => expect(result.current).toBe('paid'));
+    await waitFor(() => expect(result.current.status).toBe('paid'));
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -86,7 +86,7 @@ describe('useGuestInvoicePaidState', () => {
       expect((global.fetch as jest.Mock).mock.calls.length).toBe(2)
     );
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(result.current).toBe('unpaid');
+    expect(result.current.status).toBe('unpaid');
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -108,7 +108,7 @@ describe('useGuestInvoicePaidState', () => {
         }),
       { initialProps: { orderId: 'order-inv-1', trackingToken: 'track-inv-1' } }
     );
-    await waitFor(() => expect(result.current).toBe('paid'));
+    await waitFor(() => expect(result.current.status).toBe('paid'));
 
     // Same-route navigation to another invoice: the pending lookup must
     // clear the previous order's paid flag instead of presenting the
@@ -116,7 +116,7 @@ describe('useGuestInvoicePaidState', () => {
     mockTrackedOrder('pending', 'order-inv-2');
     rerender({ orderId: 'order-inv-2', trackingToken: 'track-inv-2' });
 
-    await waitFor(() => expect(result.current).toBe('unpaid'));
+    await waitFor(() => expect(result.current.status).toBe('unpaid'));
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('track-order?token=track-inv-2'),
       expect.anything()
@@ -132,7 +132,7 @@ describe('useGuestInvoicePaidState', () => {
     );
 
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(result.current).toBe('unpaid');
+    expect(result.current.status).toBe('unpaid');
   });
 
   it('resolves paid for a guest pay-for-me order settled externally', async () => {
@@ -142,7 +142,7 @@ describe('useGuestInvoicePaidState', () => {
       useGuestInvoicePaidState({ ...baseParams, paymentMethod: 'payforme' })
     );
 
-    await waitFor(() => expect(result.current).toBe('paid'));
+    await waitFor(() => expect(result.current.status).toBe('paid'));
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('track-order?token=track-inv-1'),
       expect.anything()
@@ -158,7 +158,7 @@ describe('useGuestInvoicePaidState', () => {
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(result.current).toBe('unpaid');
+    expect(result.current.status).toBe('unpaid');
   });
 
   it('resolves refunded for a previously-paid guest invoice instead of unpaid', async () => {
@@ -169,7 +169,54 @@ describe('useGuestInvoicePaidState', () => {
     // A refunded invoice must never present proforma/request copy: the
     // distinct outcome lets the success screen render reconciliation or
     // commercial-document state.
-    await waitFor(() => expect(result.current).toBe('refunded'));
+    await waitFor(() => expect(result.current.status).toBe('refunded'));
+    expect(result.current.isResolved).toBe(true);
+  });
+
+  it('reports unresolved until the token lookup settles', async () => {
+    let resolveFetch!: (response: Response) => void;
+    global.fetch = jest.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        })
+    ) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useGuestInvoicePaidState(baseParams));
+
+    // The lookup is in flight: screens must withhold purchase-success
+    // side effects until the status is authoritative.
+    expect(result.current).toEqual({ status: 'unpaid', isResolved: false });
+
+    resolveFetch(
+      new Response(
+        JSON.stringify({
+          order: {
+            id: 'order-inv-1',
+            order_number: 'ORD-INV-1',
+            payment_status: 'refunded',
+            total: 50000,
+          },
+        }),
+        { status: 200 }
+      )
+    );
+    await waitFor(() =>
+      expect(result.current).toEqual({ status: 'refunded', isResolved: true })
+    );
+  });
+
+  it('reports resolved synchronously when no lookup is needed', () => {
+    const fetchSpy = jest.fn(async () => new Response('{}', { status: 200 }));
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    const { result } = renderHook(() =>
+      useGuestInvoicePaidState({ ...baseParams, paymentMethod: 'paystack' })
+    );
+
+    // Non-deferred methods never look up: side effects must not stall.
+    expect(result.current).toEqual({ status: 'unpaid', isResolved: true });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('skips the lookup for immediate-settlement methods', () => {
@@ -181,6 +228,6 @@ describe('useGuestInvoicePaidState', () => {
     );
 
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(result.current).toBe('unpaid');
+    expect(result.current.status).toBe('unpaid');
   });
 });

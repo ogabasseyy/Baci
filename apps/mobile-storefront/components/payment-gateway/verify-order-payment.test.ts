@@ -267,7 +267,9 @@ describe('verifyOrderPaymentForCompletion', () => {
   it('fails an ordinary cancelled tracked order as unpaid terminal', async () => {
     // A cancelled row proves no capture: terminal failure with the
     // error/retry path — never the "Payment Received" reconciliation
-    // state, and no reference lookup is attempted.
+    // state. With no reference available the row short-circuits with no
+    // verification lookup; a supplied reference is verified first (see
+    // the late-capture regression below).
     const fetchMock = mockFetch(
       () =>
         new Response(
@@ -287,7 +289,6 @@ describe('verifyOrderPaymentForCompletion', () => {
       verifyOrderPaymentForCompletion({
         orderId: 'order-1',
         trackingToken: 'track-1',
-        reference: 'ref-1',
       })
     ).resolves.toEqual({ paid: false, terminalFailure: 'cancelled' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -450,5 +451,144 @@ describe('verifyOrderPaymentForCompletion', () => {
       verifyOrderPaymentForCompletion({ orderId: 'order-1' })
     ).resolves.toEqual({ paid: false });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('verifies the reference before rejecting a cancelled tracked row', async () => {
+    // Late capture settles through the verify endpoint after the tracked
+    // row was flipped to cancelled: the row alone must not report an
+    // ordinary cancellation when a reference is available.
+    const cancelledTrackedOrder = {
+      order: {
+        id: 'order-1',
+        order_number: 'ORD-1',
+        payment_status: 'cancelled',
+        total: 5000,
+      },
+    };
+    const fetchMock = mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(
+            JSON.stringify({
+              success: true,
+              status: 'success',
+              finalizationOutcome: 'order_cancelled',
+              orderId: 'order-1',
+            }),
+            { status: 200 }
+          )
+        : new Response(JSON.stringify(cancelledTrackedOrder), { status: 200 })
+    );
+
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false, reconciliation: 'order_cancelled' });
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes('/api/payments/verify')
+      )
+    ).toBe(true);
+  });
+
+  it('keeps the cancelled row when reference verification stays transient', async () => {
+    const cancelledTrackedOrder = {
+      order: {
+        id: 'order-1',
+        order_number: 'ORD-1',
+        payment_status: 'cancelled',
+        total: 5000,
+      },
+    };
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(JSON.stringify({ success: false, status: 'pending' }), {
+            status: 200,
+          })
+        : new Response(JSON.stringify(cancelledTrackedOrder), { status: 200 })
+    );
+
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false, terminalFailure: 'cancelled' });
+  });
+
+  it('reports terminal failure for a permanent amount-mismatch envelope', async () => {
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(
+            JSON.stringify({
+              error: 'Payment amount mismatch',
+              code: 'amount_mismatch',
+              reference: 'ref-1',
+            }),
+            { status: 400 }
+          )
+        : new Response(JSON.stringify(pendingTrackedOrder), { status: 200 })
+    );
+
+    // No webhook or poll can repair the attempt: keep the error/retry
+    // path with the cart intact instead of transient success navigation.
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false, terminalFailure: 'failed' });
+  });
+
+  it('reports terminal failure for a missing transaction reference', async () => {
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(
+            JSON.stringify({
+              error: 'Transaction not found',
+              code: 'reference_not_found',
+              reference: 'ref-1',
+            }),
+            { status: 404 }
+          )
+        : new Response(JSON.stringify(pendingTrackedOrder), { status: 200 })
+    );
+
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false, terminalFailure: 'failed' });
+  });
+
+  it('stays transient when the terminal envelope answers another reference', async () => {
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(
+            JSON.stringify({
+              error: 'Payment amount mismatch',
+              code: 'amount_mismatch',
+              reference: 'ref-other',
+            }),
+            { status: 400 }
+          )
+        : new Response(JSON.stringify(pendingTrackedOrder), { status: 200 })
+    );
+
+    // The reference echo binds the envelope to its request: a skewed
+    // envelope for another reference must not fail this order.
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false });
   });
 });

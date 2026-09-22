@@ -8,6 +8,12 @@
 
 BEGIN;
 
+-- merchants writes fire the identity-audit trigger, whose canonical writer
+-- requires an audit actor: run fixtures as service_role like the other
+-- merchants-seeding replay checks (e.g. agentic_paystack_dva_alias_conflict).
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
 -- Public wrapper: SECURITY INVOKER, pinned search_path, anon + authenticated can EXECUTE.
 -- One DO block per assertion so replay failures attribute the exact check.
 DO $$
@@ -132,22 +138,20 @@ END $$;
 
 -- Direct RPC callers bypass app-layer Zod, so the function must reject malformed
 -- payloads and normalize accepted values itself.
--- TEMPORARY replay diagnostic: business_type rides a follow-up UPDATE (and the
--- ON CONFLICT clause is dropped) to isolate which write path raises 28000.
 INSERT INTO public.merchants (
-  id, email, business_name, slug, is_published
+  id, email, business_name, slug, business_type, is_published
 )
 VALUES (
   '00000000-0000-0000-0000-000000003006',
   'repair-rpc-validation@example.com',
   'Repair RPC Validation',
   'repair-rpc-validation',
+  'electronics',
   true
-);
-
-UPDATE public.merchants
-SET business_type = 'electronics'
-WHERE id = '00000000-0000-0000-0000-000000003006';
+)
+ON CONFLICT (id) DO UPDATE
+SET business_type = EXCLUDED.business_type,
+    is_published = EXCLUDED.is_published;
 
 UPDATE public.merchant_feature_settings
 SET repairs_catalog_enabled = true

@@ -21,7 +21,7 @@ export function createHandler(
   >(() => Promise.resolve());
   const markPaymentCompletionStarted = jest.fn(() => true);
   const onTerminalVerificationFailure = jest.fn(
-    (_terminalFailure: 'failed' | 'cancelled') => undefined
+    (_terminalFailure: 'failed' | 'cancelled' | 'abandoned') => undefined
   );
   const scheduleDelayedNavigation = jest.fn<(navigate: () => void) => void>();
   const setSuccessStatus = jest.fn();

@@ -48,16 +48,27 @@ const {
   ),
   mockSendEmail: vi.fn(() => Promise.resolve({ success: true })),
   mockAfter: vi.fn((cb: () => unknown) => cb()),
-  mockGeneratePaymentAccount: vi.fn(() =>
-    Promise.resolve({
-      success: true,
-      data: {
-        bank_name: 'Wema Bank',
-        account_number: '1234567890',
-        account_name: 'OgaBassey-Test',
-        customer_code: 'CUS_mock',
-      },
-    })
+  mockGeneratePaymentAccount: vi.fn(
+    ():
+      | Promise<{
+          success: true;
+          data: {
+            bank_name: string;
+            account_number: string;
+            account_name: string;
+            customer_code: string;
+          };
+        }>
+      | Promise<{ success: false; error: string }> =>
+      Promise.resolve({
+        success: true,
+        data: {
+          bank_name: 'Wema Bank',
+          account_number: '1234567890',
+          account_name: 'OgaBassey-Test',
+          customer_code: 'CUS_mock',
+        },
+      })
   ),
   mockGenerateReceiptBlob: vi.fn(() => new Blob(['branded-invoice'])),
   mockResolveReceiptLogoDataUri: vi.fn(
@@ -6744,6 +6755,140 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     expect(accountUpsert).not.toHaveBeenCalled();
     expect(backgroundSupabase.from).not.toHaveBeenCalledWith('order_items');
     expect(backgroundSupabase.from).not.toHaveBeenCalledWith('order_reminders');
+  });
+
+  it('retries Pay for Me DVA provisioning post-response after a handled provider failure', async () => {
+    // paystackRequest converts HTTP errors and fetch rejections into
+    // { success: false }: the pre-response attempt must report retryable
+    // (not suppress the fallback), so the committed request email still
+    // carries transfer details after the post-response retry.
+    mockGeneratePaymentAccount.mockResolvedValueOnce({
+      success: false,
+      error: 'transient provider outage',
+    });
+    const supabase = buildMockSupabase();
+    const { accountUpsert, backgroundSupabase } = createBackgroundSupabaseMock({
+      orderItemsResponses: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+    mockPersistPaystackDvaAssignment.mockResolvedValueOnce(null);
+
+    supabase.from = vi.fn((_table: string) => {
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        in: vi.fn().mockReturnThis(),
+        returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+        overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+        insert: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn().mockReturnThis(),
+        // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+        then: (resolve: any) => Promise.resolve().then(resolve),
+      };
+    }) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'payforme',
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    // The handled pre-response failure retried post-response: the email
+    // carries transfer details from the second provisioning.
+    expect(mockGeneratePaymentAccount).toHaveBeenCalledTimes(2);
+    expect(mockPersistPaystackDvaAssignment).toHaveBeenCalledTimes(1);
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentKind: 'payment_request',
+        virtualAccount: {
+          accountName: 'OgaBassey-Test',
+          accountNumber: '1234567890',
+          bankName: 'Wema Bank',
+        },
+      })
+    );
+    // First attempt pre-response, retry inside after(): only one account
+    // persisted for the order despite two provider calls.
+    expect(mockGeneratePaymentAccount.mock.invocationCallOrder[0]).toBeLessThan(
+      mockAfter.mock.invocationCallOrder[0]
+    );
+    expect(
+      mockPersistPaystackDvaAssignment.mock.invocationCallOrder[0]
+    ).toBeGreaterThan(mockAfter.mock.invocationCallOrder[0]);
+    expect(accountUpsert).not.toHaveBeenCalled();
   });
 
   it('skips Pay for Me DVA provisioning when a discounted order has zero due', async () => {

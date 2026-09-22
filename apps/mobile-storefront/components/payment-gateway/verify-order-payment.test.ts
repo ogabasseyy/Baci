@@ -290,6 +290,7 @@ describe('verifyOrderPaymentForCompletion', () => {
   it.each([
     { status: 'failed' },
     { status: 'cancelled' },
+    { status: 'abandoned' },
   ])('preserves a definitive $status verification as terminal', async ({
     status,
   }) => {

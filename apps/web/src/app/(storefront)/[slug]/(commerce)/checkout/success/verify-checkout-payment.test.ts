@@ -97,6 +97,34 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'capture_hold_failed',
+    'completion_failed',
+    'order_fetch_failed',
+  ])('keeps a captured-but-unfinalized %s outcome pending instead of failing', async (finalizationOutcome) => {
+    // Exact route shape: HTTP 500 tagged with the outcome — the provider
+    // took the money, so the page must wait, never record
+    // payment_failed or redirect back to checkout (where a retry could
+    // duplicate the capture).
+    request.mockResolvedValue(
+      Response.json(
+        { error: 'Failed to finalize order', finalizationOutcome },
+        { status: 500 }
+      )
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(
+      { ...params, reference: 'reference' },
+      callbacks
+    );
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
+    expect(callbacks.clearCart).not.toHaveBeenCalled();
+    expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
+    expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
+  });
+
   it('fails a revisited fully-refunded REDVAULT order without clearing the cart', async () => {
     vi.stubGlobal(
       'fetch',

@@ -5,20 +5,24 @@ import { generatePaymentAccount } from '@/lib/paystack';
 
 // The pre-response Pay for Me call holds the order-creation POST after
 // the order has committed: bound the provider leg so a stalled Paystack
-// request throws (and the caller falls back to post-response
+// request resolves retryable (and the caller falls back to post-response
 // provisioning) instead of hanging the response until the client times
-// out. Persistence stays outside the deadline — Supabase carries its
-// own client timeouts, and a timed-out provider must never persist.
+// out. Unexpected provider rejections still throw. Persistence stays
+// outside the deadline — Supabase carries its own client timeouts, and
+// a timed-out provider must never persist.
 const DVA_PROVIDER_TIMEOUT_MS = 10_000;
 
-async function withProviderDeadline<T>(work: Promise<T>): Promise<T> {
+async function raceProviderDeadline<T>(
+  work: Promise<T>
+): Promise<{ ok: true; value: T } | { ok: false }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await new Promise<T>((resolve, reject) => {
-      timer = setTimeout(() => {
-        reject(new Error('Paystack DVA provider request timed out'));
-      }, DVA_PROVIDER_TIMEOUT_MS);
-      work.then(resolve, reject);
+    return await new Promise((resolve, reject) => {
+      timer = setTimeout(() => resolve({ ok: false }), DVA_PROVIDER_TIMEOUT_MS);
+      work.then(
+        (value) => resolve({ ok: true, value }),
+        (error) => reject(error)
+      );
     });
   } finally {
     if (timer !== undefined) {
@@ -54,12 +58,26 @@ interface ProvisionInvoiceMethodDvaInput {
   orderLabel: 'invoice' | 'payforme';
 }
 
+export type ProvisionInvoiceMethodDvaOutcome =
+  | {
+      outcome: 'provisioned';
+      virtualAccount: NonNullable<ReceiptOrder['virtual_account']>;
+    }
+  /** Definitive skip (non-NGN quote): never retry. */
+  | { outcome: 'skipped' }
+  /** Retryable provider failure (handled error or deadline): the caller
+   * may provision again later (Pay for Me post-response fallback). */
+  | { outcome: 'failed' }
+  /** Uncertain persistence (the write may have landed): never retry —
+   * a second provisioning could persist a duplicate account. */
+  | { outcome: 'uncertain' };
+
 /**
  * Provisions a Paystack DVA for an invoice-method order (invoice or Pay
- * for Me) and persists the assignment. Throws propagate to the caller so
- * the email catch can still render with the pre-derived credited
- * balance; provisioning failures and persistence failures log and
- * return null (merchant-contact fallback). Persistence is injected by
+ * for Me) and persists the assignment. Both deadline expiry and handled
+ * provider errors resolve `failed` (retryable); definitive skips and
+ * uncertain persistence failures stay suppressed. Unexpected provider
+ * rejections still throw. Persistence is injected by
  * the caller (a closure over its own persistPaystackDvaAssignment edge
  * with the appropriate client: admin for invoice, request-scoped for
  * Pay for Me): this module never imports the persistence chain itself,
@@ -75,7 +93,7 @@ export async function provisionInvoiceMethodDva({
   expiresAt,
   orderCurrency,
   orderLabel,
-}: ProvisionInvoiceMethodDvaInput): Promise<ReceiptOrder['virtual_account']> {
+}: ProvisionInvoiceMethodDvaInput): Promise<ProvisionInvoiceMethodDvaOutcome> {
   const nameParts = (customerName || 'Customer').trim().split(' ');
   const firstName = nameParts[0] || 'Customer';
   const lastName = nameParts.slice(1).join(' ') || 'User';
@@ -83,22 +101,33 @@ export async function provisionInvoiceMethodDva({
   // Paystack DVAs settle in NGN only: provisioning for a
   // foreign-currency quote would print a naira account beside
   // a dollar amount and risk a rejected transfer, so non-NGN
-  // orders skip provisioning (null result) and fall
+  // orders skip provisioning (definitive skip) and fall
   // through to merchant-contact instructions.
-  const dvaResult =
-    orderCurrency === 'NGN'
-      ? await withProviderDeadline(
-          generatePaymentAccount({
-            email: customerEmail || `${orderId}@orders.usebaci.com`,
-            firstName,
-            lastName,
-            phone: customerPhone || merchantPhone || '08000000000',
-            orderId,
-          })
-        )
-      : null;
+  if (orderCurrency !== 'NGN') {
+    return { outcome: 'skipped' };
+  }
+  const raced = await raceProviderDeadline(
+    generatePaymentAccount({
+      email: customerEmail || `${orderId}@orders.usebaci.com`,
+      firstName,
+      lastName,
+      phone: customerPhone || merchantPhone || '08000000000',
+      orderId,
+    })
+  );
+  if (!raced.ok) {
+    logger.error({
+      message:
+        orderLabel === 'invoice'
+          ? 'Auto-generation of invoice DVA timed out'
+          : 'Auto-generation of payforme DVA timed out',
+      orderId,
+    });
+    return { outcome: 'failed' };
+  }
+  const dvaResult = raced.value;
 
-  if (dvaResult?.success) {
+  if (dvaResult.success) {
     const generatedVirtualAccount = {
       account_number: dvaResult.data.account_number,
       bank_name: dvaResult.data.bank_name,
@@ -122,7 +151,7 @@ export async function provisionInvoiceMethodDva({
             : 'Failed to store auto-generated payforme DVA',
         orderId,
       });
-      return null;
+      return { outcome: 'uncertain' };
     }
     logger.info({
       message:
@@ -132,7 +161,7 @@ export async function provisionInvoiceMethodDva({
       orderId,
       accountNumber: dvaResult.data.account_number,
     });
-    return generatedVirtualAccount;
+    return { outcome: 'provisioned', virtualAccount: generatedVirtualAccount };
   }
   if (dvaResult) {
     logger.error({
@@ -143,6 +172,7 @@ export async function provisionInvoiceMethodDva({
       orderId,
       error: dvaResult.error,
     });
+    return { outcome: 'failed' };
   }
-  return null;
+  return { outcome: 'skipped' };
 }

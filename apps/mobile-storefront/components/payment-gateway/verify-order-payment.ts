@@ -28,9 +28,11 @@ export interface OrderPaymentVerification extends TrackedCompletionAttribution {
    * identity, so a foreign failure can never fail this order. Callers
    * use it to keep the error/retry path instead of navigating to
    * success; its absence means transient (pending/network) and keeps
-   * the settlement-polling success navigation.
+   * the settlement-polling success navigation. `abandoned` is terminal
+   * too: Paystack reports it when the shopper leaves the payment page,
+   * and the attempt can never settle afterwards.
    */
-  terminalFailure?: 'failed' | 'cancelled';
+  terminalFailure?: 'failed' | 'cancelled' | 'abandoned';
   /**
    * Captured-but-cancelled/refunded outcome for this order: the provider
    * took the money but the finalizer left no active paid order (a
@@ -221,7 +223,9 @@ async function checkReferenceSettled(
       if (
         response.ok &&
         data.orderId === orderId &&
-        (data.status === 'failed' || data.status === 'cancelled')
+        (data.status === 'failed' ||
+          data.status === 'cancelled' ||
+          data.status === 'abandoned')
       ) {
         return { paid: false, terminalFailure: data.status };
       }

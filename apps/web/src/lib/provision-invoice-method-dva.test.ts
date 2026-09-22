@@ -66,9 +66,12 @@ describe('provisionInvoiceMethodDva', () => {
       orderId: 'order-1',
     });
     expect(result).toEqual({
-      account_number: '1234567890',
-      bank_name: 'Paystack-Titan',
-      account_name: 'Baci / Ada',
+      outcome: 'provisioned',
+      virtualAccount: {
+        account_number: '1234567890',
+        bank_name: 'Paystack-Titan',
+        account_name: 'Baci / Ada',
+      },
     });
     expect(logger.info).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -77,18 +80,20 @@ describe('provisionInvoiceMethodDva', () => {
     );
   });
 
-  it('skips provisioning for foreign-currency quotes', async () => {
+  it('reports a definitive skip for foreign-currency quotes', async () => {
     const result = await provisionInvoiceMethodDva({
       ...baseInput(),
       orderCurrency: 'USD',
     });
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ outcome: 'skipped' });
     expect(generatePaymentAccount).not.toHaveBeenCalled();
     expect(persistAssignment).not.toHaveBeenCalled();
   });
 
-  it('returns null when generation fails', async () => {
+  it('reports handled provider failures as retryable', async () => {
+    // paystackRequest converts HTTP errors and fetch rejections into
+    // { success: false }: the caller may provision again post-response.
     vi.mocked(generatePaymentAccount).mockResolvedValue({
       success: false,
       error: 'provider down',
@@ -96,7 +101,7 @@ describe('provisionInvoiceMethodDva', () => {
 
     const result = await provisionInvoiceMethodDva(baseInput());
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ outcome: 'failed' });
     expect(persistAssignment).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -105,7 +110,7 @@ describe('provisionInvoiceMethodDva', () => {
     );
   });
 
-  it('returns null when persistence fails', async () => {
+  it('reports uncertain persistence instead of retryable', async () => {
     vi.mocked(generatePaymentAccount).mockResolvedValue({
       success: true,
       data: {
@@ -121,7 +126,7 @@ describe('provisionInvoiceMethodDva', () => {
 
     const result = await provisionInvoiceMethodDva(baseInput());
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ outcome: 'uncertain' });
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'Failed to store auto-generated invoice DVA',
@@ -129,7 +134,7 @@ describe('provisionInvoiceMethodDva', () => {
     );
   });
 
-  it('throws (for post-response retry) when the provider never settles', async () => {
+  it('reports a stalled provider as retryable without persisting', async () => {
     vi.useFakeTimers();
     try {
       // Never-settling provider request: the deadline must release the
@@ -139,9 +144,9 @@ describe('provisionInvoiceMethodDva', () => {
       );
 
       const pending = provisionInvoiceMethodDva(baseInput());
-      const assertion = expect(pending).rejects.toThrow(
-        'Paystack DVA provider request timed out'
-      );
+      const assertion = expect(pending).resolves.toEqual({
+        outcome: 'failed',
+      });
       await vi.advanceTimersByTimeAsync(10_000);
       await assertion;
 

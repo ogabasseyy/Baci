@@ -208,6 +208,7 @@ export async function GET(request: NextRequest) {
         invoice_type_code: resolveInvoiceTypeCode({
           paymentMethod: order.payment_method,
           isPaid: paymentStatus === 'paid',
+          wasPaid: paymentStatus === 'refunded',
           storedTypeCode: order.invoice_type_code,
         }),
         receipt_eligible: isReceiptEligible({

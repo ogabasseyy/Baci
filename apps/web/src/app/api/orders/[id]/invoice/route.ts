@@ -531,6 +531,7 @@ export async function GET(
       invoice_type_code: resolveInvoiceTypeCode({
         paymentMethod: order.payment_method,
         isPaid: isPaidOrder,
+        wasPaid: order.payment_status?.trim().toLowerCase() === 'refunded',
         storedTypeCode: order.invoice_type_code,
       }),
       issue_date: order.invoice_issue_date

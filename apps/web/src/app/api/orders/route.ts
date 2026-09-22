@@ -3568,25 +3568,35 @@ export async function POST(request: NextRequest) {
           ) > 0
         ) {
           try {
-            payformeProvisioningAttempted = true;
-            preResponsePayformeVirtualAccount = await provisionInvoiceMethodDva(
-              {
-                persistAssignment: (assignment) =>
-                  persistPaystackDvaAssignment(supabase, assignment),
-                customerEmail: customer_email,
-                customerName: customer_name,
-                customerPhone: customer_phone ?? null,
-                merchantPhone: merchant.phone,
-                orderId: order.id,
-                expiresAt: getImmediateInvoiceDueDate(
-                  order as Record<string, unknown>
-                ).toISOString(),
-                orderCurrency,
-                orderLabel: 'payforme',
-              }
-            );
+            const preResponseOutcome = await provisionInvoiceMethodDva({
+              persistAssignment: (assignment) =>
+                persistPaystackDvaAssignment(supabase, assignment),
+              customerEmail: customer_email,
+              customerName: customer_name,
+              customerPhone: customer_phone ?? null,
+              merchantPhone: merchant.phone,
+              orderId: order.id,
+              expiresAt: getImmediateInvoiceDueDate(
+                order as Record<string, unknown>
+              ).toISOString(),
+              orderCurrency,
+              orderLabel: 'payforme',
+            });
+            if (preResponseOutcome.outcome === 'provisioned') {
+              payformeProvisioningAttempted = true;
+              preResponsePayformeVirtualAccount =
+                preResponseOutcome.virtualAccount;
+            } else if (preResponseOutcome.outcome === 'failed') {
+              // Retryable provider failure (handled error or deadline):
+              // allow the in-after branch below one retry so the request
+              // email can still carry transfer details. Definitive skips
+              // and uncertain persistence stay suppressed.
+              payformeProvisioningAttempted = false;
+            } else {
+              payformeProvisioningAttempted = true;
+            }
           } catch (error) {
-            // Exceptional failure (not a definitive skip): allow the
+            // Unexpected failure (not a discriminated outcome): allow the
             // in-after branch below one retry so the request email can
             // still carry transfer details.
             payformeProvisioningAttempted = false;
@@ -3673,7 +3683,7 @@ export async function POST(request: NextRequest) {
                 if (emailAmountDue > 0) {
                   backgroundSupabase ??= createAdminClient();
                   const invoiceDvaSupabase = backgroundSupabase;
-                  invoiceVirtualAccount = await provisionInvoiceMethodDva({
+                  const invoiceOutcome = await provisionInvoiceMethodDva({
                     persistAssignment: (assignment) =>
                       persistPaystackDvaAssignment(
                         invoiceDvaSupabase,
@@ -3693,6 +3703,10 @@ export async function POST(request: NextRequest) {
                     orderCurrency,
                     orderLabel: 'invoice',
                   });
+                  invoiceVirtualAccount =
+                    invoiceOutcome.outcome === 'provisioned'
+                      ? invoiceOutcome.virtualAccount
+                      : null;
                 }
 
                 const fulfillment = getOrderFulfillmentDetails(
@@ -3935,7 +3949,7 @@ export async function POST(request: NextRequest) {
                   invoiceVirtualAccount = preResponsePayformeVirtualAccount;
                 } else if (!payformeProvisioningAttempted) {
                   try {
-                    invoiceVirtualAccount = await provisionInvoiceMethodDva({
+                    const retryOutcome = await provisionInvoiceMethodDva({
                       persistAssignment: (assignment) =>
                         persistPaystackDvaAssignment(supabase, assignment),
                       customerEmail: customer_email,
@@ -3949,6 +3963,10 @@ export async function POST(request: NextRequest) {
                       orderCurrency,
                       orderLabel: 'payforme',
                     });
+                    invoiceVirtualAccount =
+                      retryOutcome.outcome === 'provisioned'
+                        ? retryOutcome.virtualAccount
+                        : null;
                   } catch (error) {
                     logger.error({
                       message:

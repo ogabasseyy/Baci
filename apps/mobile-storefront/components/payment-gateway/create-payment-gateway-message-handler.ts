@@ -38,7 +38,7 @@ interface CreatePaymentGatewayMessageHandlerInput {
   utilityType?: string;
   markPaymentCompletionStarted: () => boolean;
   onTerminalVerificationFailure: (
-    terminalFailure: 'failed' | 'cancelled'
+    terminalFailure: 'failed' | 'cancelled' | 'abandoned'
   ) => void;
   scheduleDelayedNavigation: (navigate: () => void) => void;
   setSuccessStatus: () => void;

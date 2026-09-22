@@ -61,4 +61,35 @@ describe('resolveInvoiceTypeCode', () => {
       })
     ).toBe('380');
   });
+
+  it('keeps the commercial code for a refunded invoice order', () => {
+    // A completed-and-refunded transaction is not a quotation: the
+    // download keeps its 380 name/rendering and Peppol artifact.
+    expect(
+      resolveInvoiceTypeCode({
+        paymentMethod: 'invoice',
+        isPaid: false,
+        wasPaid: true,
+        storedTypeCode: '380',
+      })
+    ).toBe('380');
+    expect(
+      resolveInvoiceTypeCode({
+        paymentMethod: 'invoice',
+        isPaid: false,
+        wasPaid: true,
+        storedTypeCode: null,
+      })
+    ).toBe('380');
+  });
+
+  it('still forces 325 for never-paid invoice orders when wasPaid is absent', () => {
+    expect(
+      resolveInvoiceTypeCode({
+        paymentMethod: 'invoice',
+        isPaid: false,
+        storedTypeCode: '380',
+      })
+    ).toBe('325');
+  });
 });

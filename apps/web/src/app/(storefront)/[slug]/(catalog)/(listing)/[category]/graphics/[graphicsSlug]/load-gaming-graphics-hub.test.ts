@@ -12,6 +12,8 @@ vi.mock('@/lib/cached-data', () => ({
   getCachedCategoryPageData: (...args: unknown[]) => mockGetData(...args),
   getCachedCategoryPageGraphicsOptions: (...args: unknown[]) =>
     mockGetGraphicsOptions(...args),
+  getCachedCategoryPageGraphicsOptionsStrict: (...args: unknown[]) =>
+    mockGetGraphicsOptions(...args),
   getMerchantByIdentifier: (...args: unknown[]) => mockGetMerchant(...args),
 }));
 
@@ -65,6 +67,21 @@ describe('loadGamingGraphicsHub', () => {
       countryName: 'Nigeria',
       productCount: 12,
     });
+  });
+
+  it('surfaces a facet failure instead of a 404 for a valid hub', async () => {
+    mockGetGraphicsOptions.mockRejectedValueOnce(
+      new Error('facet query failed')
+    );
+
+    await expect(
+      loadGamingGraphicsHub({
+        categorySlug: 'gaming-laptops',
+        currentPage: 1,
+        graphicsSlug: 'rtx-4070',
+        merchantSlug: 'ogabassey.com',
+      })
+    ).rejects.toThrow('facet query failed');
   });
 
   it('does not publish thin or unsupported hubs', async () => {

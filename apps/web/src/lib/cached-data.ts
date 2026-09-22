@@ -13,6 +13,7 @@ import {
   type CachedCategoryPageProductScope,
   type CategoryPageProductFilters,
   categoryPageProductIdCache,
+  normalizeCategoryGraphicsValue,
 } from '@/lib/category-page-product-id-cache';
 import { getCategoryPageShellData } from '@/lib/get-category-page-shell-data';
 import { hydrateAndSanitizePublicProducts } from '@/lib/hydrate-public-products';
@@ -1920,8 +1921,8 @@ async function getCachedCategoryPageGraphicsOptionsRead(
     new Set(
       rows
         .flat()
-        .map((row) => row.gpu?.trim())
-        .filter((gpu): gpu is string => Boolean(gpu))
+        .map((row) => (row.gpu ? normalizeCategoryGraphicsValue(row.gpu) : ''))
+        .filter((gpu): gpu is string => gpu.length > 0)
     )
   ).sort((left, right) => left.localeCompare(right));
 }
@@ -2187,12 +2188,10 @@ export async function getCachedCategoryPageGraphicsOptions(
   categorySlug: string,
   _storeSlug: string
 ): Promise<string[]> {
-  const shell = await getCategoryPageShellData(merchantId, categorySlug);
-
   try {
-    return await getCachedCategoryPageGraphicsOptionsRead(
+    return await getCachedCategoryPageGraphicsOptionsStrict(
       merchantId,
-      shell.productScope
+      categorySlug
     );
   } catch (error) {
     console.warn('Category graphics facet query failed outside cache:', {
@@ -2202,6 +2201,24 @@ export async function getCachedCategoryPageGraphicsOptions(
     });
     return [];
   }
+}
+
+/**
+ * Strict graphics-facet read that propagates query failures instead of
+ * converting them to an empty array. Use it wherever an empty result changes
+ * routing (hub 404s, filtered-listing fallbacks): return null / unavailable
+ * only after a successful read proves there is no inventory.
+ */
+export async function getCachedCategoryPageGraphicsOptionsStrict(
+  merchantId: string,
+  categorySlug: string
+): Promise<string[]> {
+  const shell = await getCategoryPageShellData(merchantId, categorySlug);
+
+  return getCachedCategoryPageGraphicsOptionsRead(
+    merchantId,
+    shell.productScope
+  );
 }
 
 /**

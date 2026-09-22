@@ -883,6 +883,49 @@ describe('cached-data product query projections', () => {
     expect(result).toEqual(['Integrated Graphics', 'NVIDIA RTX 4070']);
   });
 
+  it('normalizes padded graphics filter values before the key-spec predicate', async () => {
+    harness.mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'cat-laptops',
+        name: 'Gaming Laptops',
+        slug: 'gaming-laptops',
+        description: 'Gaming laptops',
+        image_url: null,
+        is_active: true,
+        seo_heading: null,
+        seo_description: null,
+        seo_features: null,
+        seo_faq: null,
+        parent: null,
+      },
+      error: null,
+    });
+    harness.mockListResult.data = [{ id: 'cat-laptops' }];
+    harness.mockQueryExecution
+      .mockResolvedValueOnce(harness.mockListResult)
+      .mockResolvedValueOnce({ data: [{ id: 'product-rtx' }], error: null })
+      .mockResolvedValueOnce({ data: null, error: null, count: 1 })
+      .mockResolvedValueOnce({
+        data: [{ id: 'product-rtx', name: 'RTX Laptop' }],
+        error: null,
+      });
+
+    await getCachedCategoryPageData(
+      'merchant-123',
+      'gaming-laptops',
+      'test-store',
+      0,
+      20,
+      {
+        graphics: [' NVIDIA RTX 4070 '],
+      }
+    );
+
+    expect(harness.mockIn).toHaveBeenCalledWith('product_key_specs.gpu', [
+      'NVIDIA RTX 4070',
+    ]);
+  });
+
   it('getCachedCategoryPageData applies deterministic ordering to collection ID lists', async () => {
     const collectionCases = [
       {

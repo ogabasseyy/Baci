@@ -1110,6 +1110,25 @@ describe('getIndexableRobotsMetadata', () => {
     });
   });
 
+  it('treats graphics as a storefront filter for faceted listing URLs', () => {
+    expect(
+      getIndexableRobotsMetadata({ graphics: 'NVIDIA RTX 4070' })
+    ).toMatchObject({
+      index: false,
+      follow: true,
+    });
+
+    expect(
+      getIndexableRobotsMetadata(
+        { graphics: 'NVIDIA RTX 4070' },
+        { filtersAffectResults: true }
+      )
+    ).toMatchObject({
+      index: true,
+      follow: true,
+    });
+  });
+
   it('noindexes storefront search query URLs while preserving follow directives', () => {
     expect(getIndexableRobotsMetadata({ q: 'acc6.top' })).toMatchObject({
       index: false,
@@ -1183,6 +1202,15 @@ describe('getCanonicalStorefrontFilterSearchParams', () => {
         { filtersAffectResults: true }
       ).toString()
     ).toBe('search=redmi+pad');
+  });
+
+  it('preserves a focused graphics filter in canonical query params', () => {
+    expect(
+      getCanonicalStorefrontFilterSearchParams(
+        { graphics: 'NVIDIA RTX 4070' },
+        { filtersAffectResults: true }
+      ).toString()
+    ).toBe('graphics=NVIDIA+RTX+4070');
   });
 
   it('drops canonical filter params until filters affect listing results', () => {

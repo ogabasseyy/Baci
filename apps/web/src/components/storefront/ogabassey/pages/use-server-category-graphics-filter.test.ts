@@ -38,4 +38,28 @@ describe('useServerCategoryGraphicsFilter', () => {
       '/store/gaming-laptops?graphics=Integrated+Graphics&graphics=NVIDIA+RTX+4070'
     );
   });
+
+  it('routes graphics changes to the category listing from a graphics hub pathname', () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/store/gaming-laptops/graphics/rtx-4070?page=2'
+    );
+    const { result } = renderHook(() =>
+      useServerCategoryGraphicsFilter({
+        availableGraphics: ['Integrated Graphics', 'NVIDIA RTX 4070'],
+        basePath: '/store',
+        categoryName: 'gaming-laptops',
+        selectedGraphics: ['Integrated Graphics'],
+      })
+    );
+
+    act(() => {
+      result.current.toggle('NVIDIA RTX 4070', ['Integrated Graphics']);
+    });
+
+    expect(mockPush).toHaveBeenCalledWith(
+      '/store/gaming-laptops?graphics=Integrated+Graphics&graphics=NVIDIA+RTX+4070'
+    );
+  });
 });

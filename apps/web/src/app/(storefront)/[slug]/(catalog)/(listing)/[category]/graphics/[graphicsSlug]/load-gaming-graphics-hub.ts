@@ -1,6 +1,6 @@
 import {
   getCachedCategoryPageData,
-  getCachedCategoryPageGraphicsOptions,
+  getCachedCategoryPageGraphicsOptionsStrict,
   getMerchantByIdentifier,
 } from '@/lib/cached-data';
 import { getCountryByCode } from '@/lib/countries';
@@ -35,10 +35,12 @@ export async function loadGamingGraphicsHub({
   const merchant = await getMerchantByIdentifier(merchantSlug);
   if (!merchant) return null;
 
-  const graphicsOptions = await getCachedCategoryPageGraphicsOptions(
+  // Strict read: a transient facet failure must surface as an error (the
+  // route's error boundary), never as a 404 for a valid hub. Only a
+  // successful read with no matching inventory returns null below.
+  const graphicsOptions = await getCachedCategoryPageGraphicsOptionsStrict(
     merchant.id,
-    categorySlug,
-    merchantSlug
+    categorySlug
   );
   const availableHubs = await loadPublishedGamingLaptopGraphicsHubs({
     categorySlug,

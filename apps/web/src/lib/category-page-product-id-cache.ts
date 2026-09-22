@@ -30,6 +30,15 @@ type RemotelyCachedCategoryPageProductScope = Exclude<
   { kind: 'legacy' }
 >;
 
+/**
+ * Single normalization for GPU facet values. Facets are derived from
+ * `product_key_specs.gpu` with trimming, and filter predicates must use the
+ * same form so a facet option always matches the rows that produced it.
+ */
+export function normalizeCategoryGraphicsValue(value: string): string {
+  return value.trim();
+}
+
 function buildCategoryPageProductIdsQuery(
   supabase: ReturnType<typeof getPublicSupabaseClient>,
   merchantId: string,
@@ -37,7 +46,9 @@ function buildCategoryPageProductIdsQuery(
   selectOptions?: { count: 'exact'; head: boolean },
   filters?: CategoryPageProductFilters
 ) {
-  const graphics = filters?.graphics ?? [];
+  const graphics = (filters?.graphics ?? [])
+    .map((value) => normalizeCategoryGraphicsValue(value))
+    .filter((value) => value.length > 0);
   const graphicsJoin =
     graphics.length > 0 ? ', product_key_specs!inner(gpu)' : '';
 

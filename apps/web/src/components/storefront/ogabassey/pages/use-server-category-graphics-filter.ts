@@ -42,11 +42,17 @@ export function useServerCategoryGraphicsFilter({
     pathname: `${basePath}/${categoryName}`,
   });
 
+  // Always route graphics changes to the category listing path (the same
+  // path backing paginationPath). window.location.pathname may be a graphics
+  // hub (/gaming-laptops/graphics/[slug]) which ignores the ?graphics= query,
+  // so navigating there would silently restore the hub selection.
+  const categoryListingPath = `${basePath}/${categoryName}`;
+
   function navigate(graphics: string[]) {
     router.push(
       buildCategoryGraphicsHref({
         graphics,
-        pathname: window.location.pathname,
+        pathname: categoryListingPath,
         resetPage: true,
         search: window.location.search,
       })

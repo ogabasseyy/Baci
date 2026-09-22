@@ -12,6 +12,8 @@ vi.mock('@/lib/cached-data', () => ({
     mockGetCachedCategoryPageData(...args),
   getCachedCategoryPageGraphicsOptions: (...args: unknown[]) =>
     mockGetCachedCategoryPageGraphicsOptions(...args),
+  getCachedCategoryPageGraphicsOptionsStrict: (...args: unknown[]) =>
+    mockGetCachedCategoryPageGraphicsOptions(...args),
 }));
 vi.mock('@/lib/store-url', () => ({
   buildStoreUrl: () => 'https://zorvexa.usebaci.com',

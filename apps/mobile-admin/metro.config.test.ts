@@ -70,6 +70,12 @@ describe('Metro configuration', () => {
     }
   });
 
+  it('detects side-effect dev-only imports', () => {
+    expect(DEV_ONLY_IMPORT.test("import 'vitest'")).toBe(true);
+    expect(DEV_ONLY_IMPORT.test("import 'vite'")).toBe(true);
+    expect(DEV_ONLY_IMPORT.test("import('vitest')")).toBe(true);
+  });
+
   it('keeps dev-only modules out of bundled route files', () => {
     // Regression guard: a vitest setup helper once lived directly under app/
     // where neither the *.test.* nor __tests__ blockList patterns excluded it,
@@ -79,7 +85,7 @@ describe('Metro configuration', () => {
 });
 
 const DEV_ONLY_IMPORT =
-  /(?:from|import\()\s*['"](?:vitest|vite)['"]|require\(\s*['"](?:vitest|vite)['"]/;
+  /(?:from|import(?:\()?)\s*['"](?:vitest|vite)['"]|require\(\s*['"](?:vitest|vite)['"]/;
 
 function findBundledDevImports(dir: string): string[] {
   const offenders: string[] = [];

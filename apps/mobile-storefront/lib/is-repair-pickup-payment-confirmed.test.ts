@@ -4,6 +4,7 @@ describe('isRepairPickupPaymentConfirmed', () => {
   it.each([
     'paid',
     'booked',
+    'retrying',
     'review',
     'manual_fulfilled',
   ])('accepts %s', (status) => {

@@ -35,7 +35,10 @@ type RemotelyCachedCategoryPageProductScope = Exclude<
   { kind: 'legacy' }
 >;
 
-export { normalizeCategoryGraphicsValue } from './category-page-graphics-query';
+export {
+  MAX_CATEGORY_GRAPHICS_VALUE_LENGTH,
+  normalizeCategoryGraphicsValue,
+} from './category-page-graphics-query';
 
 function buildCategoryPageProductIdsQuery(
   supabase: ReturnType<typeof getPublicSupabaseClient>,

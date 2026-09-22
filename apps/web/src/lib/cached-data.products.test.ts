@@ -883,6 +883,85 @@ describe('cached-data product query projections', () => {
     expect(result).toEqual(['Integrated Graphics', 'NVIDIA RTX 4070']);
   });
 
+  it('excludes overlong GPU labels the filter resolver cannot select', async () => {
+    harness.mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'cat-laptops',
+        name: 'Gaming Laptops',
+        slug: 'gaming-laptops',
+        description: 'Gaming laptops',
+        image_url: null,
+        is_active: true,
+        seo_heading: null,
+        seo_description: null,
+        seo_features: null,
+        seo_faq: null,
+        parent: null,
+      },
+      error: null,
+    });
+    harness.mockListResult.data = [{ id: 'cat-laptops' }];
+    harness.mockQueryExecution
+      .mockResolvedValueOnce(harness.mockListResult)
+      .mockResolvedValueOnce({
+        data: [{ id: 'product-1' }, { id: 'product-2' }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: null, error: null, count: 2 })
+      .mockResolvedValueOnce({
+        data: [{ gpu: 'NVIDIA RTX 4070' }, { gpu: 'x'.repeat(121) }],
+        error: null,
+      });
+
+    const result = await getCachedCategoryPageGraphicsOptions(
+      'merchant-123',
+      'gaming-laptops',
+      'test-store'
+    );
+
+    expect(result).toEqual(['NVIDIA RTX 4070']);
+  });
+
+  it('pages facets to exhaustion when the exact count query fails', async () => {
+    harness.mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'cat-laptops',
+        name: 'Gaming Laptops',
+        slug: 'gaming-laptops',
+        description: 'Gaming laptops',
+        image_url: null,
+        is_active: true,
+        seo_heading: null,
+        seo_description: null,
+        seo_features: null,
+        seo_faq: null,
+        parent: null,
+      },
+      error: null,
+    });
+    harness.mockListResult.data = [{ id: 'cat-laptops' }];
+    harness.mockQueryExecution
+      .mockResolvedValueOnce(harness.mockListResult)
+      .mockResolvedValueOnce({
+        data: [{ id: 'product-1' }, { id: 'product-2' }],
+        error: null,
+      })
+      .mockRejectedValueOnce(new Error('exact count unavailable'))
+      .mockResolvedValueOnce({ data: [{ id: 'product-3' }], error: null })
+      .mockResolvedValueOnce({
+        data: [{ gpu: 'NVIDIA RTX 4070' }, { gpu: 'Rare GPU Past The Cap' }],
+        error: null,
+      });
+
+    const result = await getCachedCategoryPageGraphicsOptions(
+      'merchant-123',
+      'gaming-laptops',
+      'test-store'
+    );
+
+    expect(result).toEqual(['NVIDIA RTX 4070', 'Rare GPU Past The Cap']);
+  });
+
   it('normalizes padded graphics filter values before the key-spec predicate', async () => {
     harness.mockSingle.mockResolvedValueOnce({
       data: {

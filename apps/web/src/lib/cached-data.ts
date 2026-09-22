@@ -13,6 +13,7 @@ import {
   type CachedCategoryPageProductScope,
   type CategoryPageProductFilters,
   categoryPageProductIdCache,
+  MAX_CATEGORY_GRAPHICS_VALUE_LENGTH,
   normalizeCategoryGraphicsValue,
 } from '@/lib/category-page-product-id-cache';
 import { getCategoryPageShellData } from '@/lib/get-category-page-shell-data';
@@ -1822,7 +1823,13 @@ async function getCachedCategoryPageGraphicsOptionsRead(
     throw new Error('Category graphics options product IDs unavailable');
   }
 
+  // Accept the seed as complete only against an EXACT count: the count-failure
+  // fallback sets the total to the capped seed length, which would otherwise
+  // trivially satisfy the comparison and hide GPUs past the cache cap (their
+  // curated hubs would incorrectly 404). With no trustworthy total, pass
+  // null so assembly pages to exhaustion instead.
   const productIds =
+    idResult.totalProductCountExact &&
     idResult.productIds.length >= idResult.totalProductCount
       ? idResult.productIds
       : await fetchAllCategoryPageProductIds({
@@ -1857,12 +1864,17 @@ async function getCachedCategoryPageGraphicsOptionsRead(
     return (data || []) as Array<{ gpu?: string | null }>;
   });
 
+  // Mirror the resolver's selectability bound: advertising an overlong GPU
+  // the shopper cannot select would serve the unfiltered catalog instead.
   return Array.from(
     new Set(
       rows
         .flat()
         .map((row) => (row.gpu ? normalizeCategoryGraphicsValue(row.gpu) : ''))
-        .filter((gpu): gpu is string => gpu.length > 0)
+        .filter(
+          (gpu): gpu is string =>
+            gpu.length > 0 && gpu.length <= MAX_CATEGORY_GRAPHICS_VALUE_LENGTH
+        )
     )
   ).sort((left, right) => left.localeCompare(right));
 }
@@ -2154,6 +2166,12 @@ export async function getCachedCategoryPageGraphicsOptionsStrict(
   categorySlug: string
 ): Promise<string[]> {
   const shell = await getCategoryPageShellData(merchantId, categorySlug);
+  // A shell failure is an outage, not an empty facet: routing treats [] as
+  // "no inventory" (hub 404s, unfiltered listings), so propagate to the
+  // error boundary instead of returning a valid empty read.
+  if ('categoryQueryFailed' in shell && shell.categoryQueryFailed === true) {
+    throw new Error('Category graphics facet shell query failed');
+  }
 
   return getCachedCategoryPageGraphicsOptionsRead(
     merchantId,

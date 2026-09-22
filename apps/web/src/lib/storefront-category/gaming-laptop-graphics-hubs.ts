@@ -1,3 +1,5 @@
+import { normalizeCategoryGraphicsValue } from '../category-page-graphics-query';
+
 export const GAMING_LAPTOPS_CATEGORY_SLUG = 'gaming-laptops';
 
 export const GAMING_LAPTOP_GRAPHICS_HUBS = [
@@ -79,7 +81,9 @@ export function isTrustedHubGraphicsSelection({
       : [];
   if (requested.length === 0) return false;
   const matching = new Set(getGraphicsOptionsForHub(graphicsOptions, hub));
-  return requested.every((value) => matching.has(value.trim()));
+  return requested.every((value) =>
+    matching.has(normalizeCategoryGraphicsValue(value))
+  );
 }
 
 /**

@@ -1,5 +1,9 @@
+import {
+  MAX_CATEGORY_GRAPHICS_VALUE_LENGTH,
+  normalizeCategoryGraphicsValue,
+} from '@/lib/category-page-graphics-query';
+
 const MAX_GRAPHICS_FILTERS = 8;
-const MAX_GRAPHICS_FILTER_LENGTH = 120;
 
 interface ResolveCategoryGraphicsFiltersOptions {
   /**
@@ -31,11 +35,11 @@ export function resolveCategoryGraphicsFilters(
   const resolved = Array.from(
     new Set(
       requested
-        .map((value) => value.trim())
+        .map((value) => normalizeCategoryGraphicsValue(value))
         .filter(
           (value) =>
             value.length > 0 &&
-            value.length <= MAX_GRAPHICS_FILTER_LENGTH &&
+            value.length <= MAX_CATEGORY_GRAPHICS_VALUE_LENGTH &&
             available.has(value)
         )
     )

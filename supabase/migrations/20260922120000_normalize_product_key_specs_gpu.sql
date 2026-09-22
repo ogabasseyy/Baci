@@ -3,12 +3,19 @@
 -- trimmed at rest: a padded row (e.g. ' NVIDIA RTX 4070 ') would otherwise
 -- create a facet option that exact-matches nothing, including itself.
 --
+-- Trimming covers the full ASCII whitespace set (spaces, tabs, newlines,
+-- form-feeds, carriage returns, vertical tabs) via an explicit character
+-- class shared with `normalizeCategoryGraphicsValue` in TypeScript, so
+-- advertised facet values always exact-match the stored column. Plain
+-- `btrim()`/`String.trim()` disagree on tabs and newlines.
+--
 -- Backfills existing padded values and keeps future writes trimmed with a
 -- BEFORE trigger. The whitespace-only UPDATE is safe to replay.
 
 UPDATE public.product_key_specs
-SET gpu = btrim(gpu)
-WHERE gpu IS NOT NULL AND gpu <> btrim(gpu);
+SET gpu = regexp_replace(gpu, '^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$', '', 'g')
+WHERE gpu IS NOT NULL
+  AND gpu <> regexp_replace(gpu, '^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$', '', 'g');
 
 CREATE OR REPLACE FUNCTION public.trim_product_key_specs_gpu()
 RETURNS trigger
@@ -17,7 +24,12 @@ SET search_path TO ''
 AS $$
 BEGIN
   IF NEW.gpu IS NOT NULL THEN
-    NEW.gpu := btrim(NEW.gpu);
+    NEW.gpu := regexp_replace(
+      NEW.gpu,
+      '^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$',
+      '',
+      'g'
+    );
   END IF;
   RETURN NEW;
 END;

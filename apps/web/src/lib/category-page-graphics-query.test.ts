@@ -13,6 +13,15 @@ describe('normalizeCategoryGraphicsValue', () => {
     );
   });
 
+  it('trims the same ASCII whitespace set as the Postgres backfill', () => {
+    expect(normalizeCategoryGraphicsValue('\tNVIDIA RTX 4070\n')).toBe(
+      'NVIDIA RTX 4070'
+    );
+    expect(normalizeCategoryGraphicsValue('\r\n\f\vRTX 4070\v\f\n\r')).toBe(
+      'RTX 4070'
+    );
+  });
+
   it('leaves already-trimmed values untouched', () => {
     expect(normalizeCategoryGraphicsValue('Integrated Graphics')).toBe(
       'Integrated Graphics'

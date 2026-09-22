@@ -5,6 +5,7 @@ import { SantaChatDialog } from './santa-chat-dialog';
 const cartMocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
   applyNegotiatedPrice: vi.fn(),
+  cart: [] as Array<{ cartItemId: string }>,
   setMerchantSlug: vi.fn(),
 }));
 
@@ -33,6 +34,7 @@ vi.mock('@/hooks/use-cart', () => ({
   useCart: () => ({
     addToCart: cartMocks.addToCart,
     applyNegotiatedPrice: cartMocks.applyNegotiatedPrice,
+    cart: cartMocks.cart,
     cartCount: 0,
     setMerchantSlug: cartMocks.setMerchantSlug,
   }),
@@ -115,6 +117,7 @@ function startChatAndSendWish() {
 describe('SantaChatDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    cartMocks.cart = [];
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 

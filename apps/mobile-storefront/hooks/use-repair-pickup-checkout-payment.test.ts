@@ -45,6 +45,27 @@ jest.mock('@/lib/open-repair-pickup-payment', () => ({
   openRepairPickupPayment: (...args: unknown[]) => mockOpenPayment(...args),
 }));
 
+type AppStateListener = (state: string) => void;
+// `mock` prefix: babel-plugin-jest-hoist allows these inside jest.mock.
+const mockAppStateListeners = new Set<AppStateListener>();
+function emitAppState(state: string) {
+  for (const listener of [...mockAppStateListeners]) listener(state);
+}
+function resetAppStateListeners() {
+  mockAppStateListeners.clear();
+}
+// No requireActual spread: enumerating the real module triggers native
+// TurboModules absent under jest. Nothing else in this graph needs RN.
+jest.mock('react-native', () => ({
+  AppState: {
+    currentState: 'active',
+    addEventListener: (_event: string, handler: AppStateListener) => {
+      mockAppStateListeners.add(handler);
+      return { remove: () => mockAppStateListeners.delete(handler) };
+    },
+  },
+}));
+
 type Recovery = { ready: boolean; saved: RepairPickupSession | null };
 
 function renderPayment(saved: RepairPickupSession | null = null) {
@@ -58,6 +79,7 @@ function renderPayment(saved: RepairPickupSession | null = null) {
 describe('useRepairPickupCheckoutPayment', () => {
   beforeEach(() => {
     primeRepairPickupCheckoutMocks();
+    resetAppStateListeners();
   });
 
   it('starts idle with no price, ticket, or error', () => {
@@ -139,6 +161,42 @@ describe('useRepairPickupCheckoutPayment', () => {
     expect(result.current.ticket).toBe(42);
     expect(result.current.status).toBe('paid');
     expect(result.current.tracking).toBe('GIG123');
+  });
+
+  it('refreshes status once when the app returns after the browser opened', async () => {
+    mockClientPay.mockResolvedValueOnce(pickupPaySuccess());
+    mockClientStatus.mockResolvedValue(pickupStatusFound());
+    const { result } = renderPayment();
+    await act(async () => {
+      await result.current.quote();
+    });
+    await act(async () => {
+      await result.current.run(result.current.pay);
+    });
+    // Inline refresh from pay().
+    expect(mockClientStatus).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      emitAppState('active');
+    });
+    expect(mockClientStatus).toHaveBeenCalledTimes(2);
+    // One-shot: further foregroundings do not refetch.
+    await act(async () => {
+      emitAppState('active');
+    });
+    expect(mockClientStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores app foregrounding when no browser was opened', async () => {
+    mockClientStatus.mockResolvedValue(pickupStatusFound());
+    const { result } = renderPayment();
+    await act(async () => {
+      await result.current.quote();
+    });
+    await act(async () => {
+      emitAppState('active');
+    });
+    expect(mockClientStatus).not.toHaveBeenCalled();
+    expect(result.current.status).toBeUndefined();
   });
 
   it('clears stale recovery when the resume token expired', async () => {

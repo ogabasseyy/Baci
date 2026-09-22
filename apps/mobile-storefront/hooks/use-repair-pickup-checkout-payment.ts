@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { openRepairPickupPayment } from '@/lib/open-repair-pickup-payment';
 import type { RepairBookingRequest } from '@/lib/repair-catalog-schemas';
 import { repairPickupClient } from '@/lib/repair-pickup-client';
@@ -22,6 +23,7 @@ export function useRepairPickupCheckoutPayment(
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
+  const browserOpened = useRef(false);
   const { ready, saved } = recovery;
 
   useEffect(() => {
@@ -31,6 +33,29 @@ export function useRepairPickupCheckoutPayment(
     setPrice(saved.price);
     setPaymentUrl(saved.paymentUrl);
   }, [saved]);
+
+  const customerEmail = data.customerEmail;
+  useEffect(() => {
+    if (!ticket) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      // Android resolves the browser promise at open time, so the inline
+      // refresh in pay() runs before checkout. Refresh once on return.
+      if (state !== 'active' || !browserOpened.current) return;
+      browserOpened.current = false;
+      repairPickupClient
+        .status(ticket, customerEmail)
+        .then((result) => {
+          if (!result.found) return;
+          setStatus(result.repair.pickupPaymentStatus ?? 'pending');
+          setTracking(result.repair.trackingNumber);
+          setTerminal(TERMINAL_REPAIR_STATUSES.includes(result.repair.status));
+        })
+        .catch(() => {
+          // Keep the last status; manual Refresh stays available.
+        });
+    });
+    return () => subscription.remove();
+  }, [ticket, customerEmail]);
 
   async function run(action: () => Promise<void>) {
     if (inFlight.current || !ready) return;
@@ -138,6 +163,7 @@ export function useRepairPickupCheckoutPayment(
     }
     // Closing the browser is not payment confirmation; only read server status.
     await openRepairPickupPayment(url);
+    browserOpened.current = true;
     if (ticketNumber) await refresh(ticketNumber);
   }
 

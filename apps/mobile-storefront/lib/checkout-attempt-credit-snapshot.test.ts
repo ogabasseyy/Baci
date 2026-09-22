@@ -146,37 +146,6 @@ it('lets other generations proceed while one apply is hung', async () => {
   await hung;
 });
 
-it('releases snapshots without waiting for a hung queued apply', async () => {
-  const gate = gateFirstRead();
-
-  const hungApply = loadSnapshot().applyCheckoutCreditSnapshot(
-    { wallet_amount: 5000 },
-    generation
-  );
-  await gate.entered;
-  await loadSnapshot().releaseCheckoutCreditSnapshot(otherGeneration);
-  gate.release(null);
-  await hungApply;
-});
-
-it('removes only the finalized generation snapshot', async () => {
-  await loadSnapshot().applyCheckoutCreditSnapshot(
-    { wallet_amount: 5000 },
-    generation
-  );
-  await loadSnapshot().applyCheckoutCreditSnapshot(
-    { wallet_amount: 1000 },
-    otherGeneration
-  );
-  await loadSnapshot().releaseCheckoutCreditSnapshot(generation);
-  expect(storage.get(snapshotKey(generation))).toBeUndefined();
-  expect(
-    JSON.parse(storage.get(snapshotKey(otherGeneration)) ?? '{}') as {
-      wallet_amount?: number;
-    }
-  ).toEqual({ wallet_amount: 1000 });
-});
-
 it('fails closed when a stored generation snapshot is malformed', async () => {
   storage.set(
     snapshotKey(generation),

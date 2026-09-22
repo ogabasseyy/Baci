@@ -31,3 +31,15 @@ it('marks one generation without touching another generation marker', async () =
     )
   ).toBeUndefined();
 });
+
+it('propagates storage failures so checkout fails closed', async () => {
+  mockSetItem.mockRejectedValueOnce(new Error('disk full'));
+  await expect(markCodepointCheckoutItemSort(generation)).rejects.toThrow(
+    'disk full'
+  );
+  expect(
+    storage.get(
+      `${CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY}:${generation}`
+    )
+  ).toBeUndefined();
+});

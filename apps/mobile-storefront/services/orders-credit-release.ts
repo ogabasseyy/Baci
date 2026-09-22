@@ -1,5 +1,5 @@
-import { releaseCheckoutCreditSnapshot } from '@/lib/checkout-attempt-credit-snapshot';
 import { createLogger } from '@/lib/logger';
+import { releaseCheckoutCreditSnapshot } from '@/lib/release-checkout-credit-snapshot';
 import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 
 const log = createLogger('Order');

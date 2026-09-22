@@ -1,7 +1,7 @@
 export function createKeyedSerialAsyncQueue() {
   const tails = new Map<string, Promise<unknown>>();
 
-  return function enqueueKeyedSerialAsync<T>(
+  function enqueueKeyedSerialAsync<T>(
     key: string,
     operation: () => Promise<T>
   ): Promise<T> {
@@ -20,5 +20,16 @@ export function createKeyedSerialAsyncQueue() {
       }
     });
     return run;
-  };
+  }
+
+  function resetKeyedSerialAsyncQueueKey(key: string): void {
+    // Detach only this key's tail: other keys keep their order while the
+    // reset key starts a fresh chain. The abandoned tail still drains on
+    // its own, and its prune skips itself since the tail no longer matches.
+    tails.delete(key);
+  }
+
+  return Object.assign(enqueueKeyedSerialAsync, {
+    resetKey: resetKeyedSerialAsyncQueueKey,
+  });
 }

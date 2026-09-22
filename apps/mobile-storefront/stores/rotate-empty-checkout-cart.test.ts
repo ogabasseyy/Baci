@@ -25,7 +25,7 @@ jest.mock('@/lib/persist-checkout-generation', () => ({
 jest.mock('@/lib/clear-persisted-checkout-generation', () => ({
   clearPersistedCheckoutGeneration: () => mockClear(),
 }));
-jest.mock('@/lib/checkout-attempt-credit-snapshot', () => ({
+jest.mock('@/lib/release-checkout-credit-snapshot', () => ({
   releaseCheckoutCreditSnapshot: (generation: string) =>
     mockRelease(generation),
 }));

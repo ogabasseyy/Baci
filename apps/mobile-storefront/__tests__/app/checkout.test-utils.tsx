@@ -128,6 +128,7 @@ const mockUseCartStore = Object.assign(
     selector(mockCartState),
   {
     getState: () => mockCartState,
+    subscribe: () => () => undefined,
     persist: {
       getOptions: () => ({
         name: 'cart-storage',

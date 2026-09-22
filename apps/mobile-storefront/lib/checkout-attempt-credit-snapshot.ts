@@ -1,16 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY } from '@/config/checkout-storage';
 import { assertCheckoutRecoveryValue } from '@/lib/assert-checkout-recovery-value';
+import {
+  type CheckoutCreditSnapshot,
+  checkoutCreditSnapshotStore,
+} from '@/lib/checkout-credit-snapshot-store';
 import { createKeyedSerialAsyncQueue } from '@/lib/create-keyed-serial-async-queue';
 import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
-
-type CheckoutCreditSnapshot = {
-  savings_amount?: number;
-  savings_goal_id?: string;
-  use_savings_credit?: boolean;
-  use_wallet_credit?: boolean;
-  wallet_amount?: number;
-};
 
 const CREDIT_KEYS = [
   'savings_amount',
@@ -22,34 +17,12 @@ const CREDIT_KEYS = [
 
 // Each generation owns its snapshot key, so concurrent checkouts for
 // different generations never share a read-modify-write cycle.
-let enqueueCreditSnapshot = createKeyedSerialAsyncQueue();
+const enqueueCreditSnapshot = createKeyedSerialAsyncQueue();
 
-function resetCreditSnapshotQueue(): void {
-  enqueueCreditSnapshot = createKeyedSerialAsyncQueue();
-}
-
-// Authoritative completed choice per generation: after a queue reset, an
-// abandoned apply can settle late on its detached queue while a newer
-// apply already froze a different choice. The sequence orders completions
-// (a tombstone marks a released snapshot so a stale in-flight apply can
-// never resurrect it), and readers adopt the authoritative choice instead
-// of acting on clobbered content.
-type CreditApplyRecord =
-  | { sequence: number; snapshot: CheckoutCreditSnapshot }
-  | { sequence: number; tombstone: true };
-
-let creditApplySequence = 0;
-const creditApplyRecords = new Map<string, CreditApplyRecord>();
-
-function noteCompletedCreditApply(
-  checkoutGeneration: string,
-  sequence: number,
-  snapshot: CheckoutCreditSnapshot
-): void {
-  const latest = creditApplyRecords.get(checkoutGeneration);
-  if (!latest || sequence > latest.sequence) {
-    creditApplyRecords.set(checkoutGeneration, { sequence, snapshot });
-  }
+function resetCreditSnapshotQueue(checkoutGeneration: string): void {
+  // Reset only the timed-out generation: other generations keep their
+  // queued order instead of being detached onto a fresh chain.
+  enqueueCreditSnapshot.resetKey(checkoutGeneration);
 }
 
 function creditSnapshotsEqual(
@@ -67,27 +40,42 @@ async function restoreClobberedCreditSnapshot(
   // back with the authoritative choice. Readers validate against the same
   // record, so even a read that lands in the repair window observes the
   // newer choice instead of the stale content.
-  const latest = creditApplyRecords.get(checkoutGeneration);
-  if (
-    !latest ||
-    'tombstone' in latest ||
-    latest.sequence <= abandonedSequence
-  ) {
+  const latest = checkoutCreditSnapshotStore.latest(checkoutGeneration);
+  if (!latest || latest.sequence <= abandonedSequence) {
+    return;
+  }
+  if ('tombstone' in latest) {
+    // The generation was released after the abandoned apply started, so the
+    // write that just landed is stale residue on top of the removal. Repair
+    // it through the generation queue — re-checking authority inside the
+    // queued op — so the removal cannot slip between a newer apply's read
+    // and write and delete a freshly frozen choice.
+    await enqueueCreditSnapshot(checkoutGeneration, async () => {
+      const current = checkoutCreditSnapshotStore.latest(checkoutGeneration);
+      if (
+        !current ||
+        !('tombstone' in current) ||
+        current.sequence <= abandonedSequence
+      ) {
+        return;
+      }
+      await AsyncStorage.removeItem(
+        checkoutCreditSnapshotStore.key(checkoutGeneration)
+      );
+    }).catch(() => undefined);
     return;
   }
   const stored = parseCreditSnapshot(
-    await AsyncStorage.getItem(creditSnapshotKey(checkoutGeneration))
+    await AsyncStorage.getItem(
+      checkoutCreditSnapshotStore.key(checkoutGeneration)
+    )
   );
   if (!stored || !creditSnapshotsEqual(stored, latest.snapshot)) {
     await AsyncStorage.setItem(
-      creditSnapshotKey(checkoutGeneration),
+      checkoutCreditSnapshotStore.key(checkoutGeneration),
       JSON.stringify(latest.snapshot)
     );
   }
-}
-
-function creditSnapshotKey(checkoutGeneration: string): string {
-  return `${CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY}:${checkoutGeneration}`;
 }
 
 function isCreditSnapshot(value: unknown): value is CheckoutCreditSnapshot {
@@ -177,19 +165,34 @@ export function applyCheckoutCreditSnapshot<T extends Record<string, unknown>>(
   // order. A reset apply that settles late cannot clobber the newer
   // choice: readers adopt the authoritative completed choice, and the
   // abandoned write is overwritten back if it lands after one.
-  const applySequence = ++creditApplySequence;
+  const applySequence = checkoutCreditSnapshotStore.nextSequence();
   let settled = false;
   const attempt = enqueueCreditSnapshot(checkoutGeneration, async () => {
     const stored = parseCreditSnapshot(
-      await AsyncStorage.getItem(creditSnapshotKey(checkoutGeneration))
+      await AsyncStorage.getItem(
+        checkoutCreditSnapshotStore.key(checkoutGeneration)
+      )
     );
-    const latest = creditApplyRecords.get(checkoutGeneration);
-    if (
-      latest &&
-      !('tombstone' in latest) &&
-      (!stored || !creditSnapshotsEqual(stored, latest.snapshot))
-    ) {
-      noteCompletedCreditApply(
+    const latest = checkoutCreditSnapshotStore.latest(checkoutGeneration);
+    if (latest && 'tombstone' in latest) {
+      // The generation was released, so no frozen choice exists: any stored
+      // content is a late write from an abandoned attempt, not a choice to
+      // adopt. Freeze fresh fields so a retry after a definitive rejection
+      // never stays stuck on the rejected credit.
+      const snapshot = extractCheckoutCreditSnapshot(payload);
+      await AsyncStorage.setItem(
+        checkoutCreditSnapshotStore.key(checkoutGeneration),
+        JSON.stringify(snapshot)
+      );
+      checkoutCreditSnapshotStore.noteCompleted(
+        checkoutGeneration,
+        applySequence,
+        snapshot
+      );
+      return payload;
+    }
+    if (latest && (!stored || !creditSnapshotsEqual(stored, latest.snapshot))) {
+      checkoutCreditSnapshotStore.noteCompleted(
         checkoutGeneration,
         applySequence,
         latest.snapshot
@@ -197,15 +200,23 @@ export function applyCheckoutCreditSnapshot<T extends Record<string, unknown>>(
       return { ...omitCreditFields(payload), ...latest.snapshot };
     }
     if (stored) {
-      noteCompletedCreditApply(checkoutGeneration, applySequence, stored);
+      checkoutCreditSnapshotStore.noteCompleted(
+        checkoutGeneration,
+        applySequence,
+        stored
+      );
       return { ...omitCreditFields(payload), ...stored };
     }
     const snapshot = extractCheckoutCreditSnapshot(payload);
     await AsyncStorage.setItem(
-      creditSnapshotKey(checkoutGeneration),
+      checkoutCreditSnapshotStore.key(checkoutGeneration),
       JSON.stringify(snapshot)
     );
-    noteCompletedCreditApply(checkoutGeneration, applySequence, snapshot);
+    checkoutCreditSnapshotStore.noteCompleted(
+      checkoutGeneration,
+      applySequence,
+      snapshot
+    );
     return payload;
   });
   void attempt.then(
@@ -222,7 +233,7 @@ export function applyCheckoutCreditSnapshot<T extends Record<string, unknown>>(
     'Checkout storage read timed out'
   ).catch((error: unknown) => {
     if (!settled) {
-      resetCreditSnapshotQueue();
+      resetCreditSnapshotQueue(checkoutGeneration);
       void attempt.then(
         () =>
           restoreClobberedCreditSnapshot(
@@ -234,20 +245,4 @@ export function applyCheckoutCreditSnapshot<T extends Record<string, unknown>>(
     }
     throw error;
   });
-}
-
-export async function releaseCheckoutCreditSnapshot(
-  checkoutGeneration: string
-): Promise<void> {
-  assertCheckoutRecoveryValue(checkoutGeneration, 'generation');
-  // Best-effort cleanup deletes only this generation's key: it cannot drop
-  // another checkout's snapshot, and it never waits on the apply queue, so
-  // a hung apply cannot wedge payment completion. The tombstone retires the
-  // completed choice so a stale in-flight apply can never resurrect it and
-  // the next apply freezes fresh fields.
-  creditApplyRecords.set(checkoutGeneration, {
-    sequence: ++creditApplySequence,
-    tombstone: true,
-  });
-  await AsyncStorage.removeItem(creditSnapshotKey(checkoutGeneration));
 }

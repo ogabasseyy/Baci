@@ -7,7 +7,7 @@ const mockWarn = jest.fn<(message: string, error?: unknown) => void>(
   () => undefined
 );
 
-jest.mock('@/lib/checkout-attempt-credit-snapshot', () => ({
+jest.mock('@/lib/release-checkout-credit-snapshot', () => ({
   releaseCheckoutCreditSnapshot: (generation: string) =>
     mockRelease(generation),
 }));

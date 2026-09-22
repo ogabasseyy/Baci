@@ -4,6 +4,10 @@ function loadSnapshot() {
   return require('./checkout-attempt-credit-snapshot') as typeof import('./checkout-attempt-credit-snapshot');
 }
 
+function loadRelease() {
+  return require('./release-checkout-credit-snapshot') as typeof import('./release-checkout-credit-snapshot');
+}
+
 const storage = new Map<string, string>();
 const mockGetItem = jest.fn(async (key: string) => storage.get(key) ?? null);
 const mockSetItem = jest.fn(async (key: string, value: string) => {
@@ -181,4 +185,102 @@ it('restores the newer choice when an abandoned write lands after a retry', asyn
       wallet_amount?: number;
     }
   ).toEqual({ wallet_amount: 5000 });
+});
+
+it('keeps other generations serialized when one generation queue resets', async () => {
+  jest.useFakeTimers();
+  const otherGeneration = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  mockGetItem.mockImplementationOnce(
+    () => new Promise<string | null>(() => undefined)
+  );
+  const hungA = loadSnapshot().applyCheckoutCreditSnapshot(
+    { wallet_amount: 1000 },
+    generation
+  );
+  const hungAssertion = expect(hungA).rejects.toThrow(
+    'Checkout storage read timed out'
+  );
+  await jest.advanceTimersByTimeAsync(4_999);
+
+  const gate = gateFirstRead();
+  const firstB = loadSnapshot().applyCheckoutCreditSnapshot(
+    { wallet_amount: 5000 },
+    otherGeneration
+  );
+  await gate.entered;
+  await jest.advanceTimersByTimeAsync(1);
+  await hungAssertion;
+
+  let secondBRan = false;
+  const secondB = loadSnapshot()
+    .applyCheckoutCreditSnapshot({ wallet_amount: 1000 }, otherGeneration)
+    .then((result) => {
+      secondBRan = true;
+      return result;
+    });
+  await jest.advanceTimersByTimeAsync(0);
+  expect(secondBRan).toBe(false);
+
+  gate.release(null);
+  const [firstResult, secondResult] = await Promise.all([firstB, secondB]);
+  expect(firstResult.wallet_amount).toBe(5000);
+  expect(secondResult.wallet_amount).toBe(5000);
+  expect(
+    JSON.parse(storage.get(snapshotKey(otherGeneration)) ?? '{}') as {
+      wallet_amount?: number;
+    }
+  ).toEqual({ wallet_amount: 5000 });
+});
+
+it('removes a late snapshot write that lands after a release tombstone', async () => {
+  jest.useFakeTimers();
+  let releaseWrite!: () => void;
+  let writeEntered!: () => void;
+  const writeEnteredPromise = new Promise<void>((resolve) => {
+    writeEntered = resolve;
+  });
+  mockSetItem.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        releaseWrite = () => {
+          storage.set(
+            snapshotKey(generation),
+            JSON.stringify({ wallet_amount: 1000 })
+          );
+          resolve();
+        };
+        writeEntered();
+      })
+  );
+  const first = loadSnapshot().applyCheckoutCreditSnapshot(
+    { wallet_amount: 1000 },
+    generation
+  );
+  await writeEnteredPromise;
+  const firstAssertion = expect(first).rejects.toThrow(
+    'Checkout storage read timed out'
+  );
+  await jest.advanceTimersByTimeAsync(5_000);
+  await firstAssertion;
+
+  await loadRelease().releaseCheckoutCreditSnapshot(generation);
+  expect(storage.get(snapshotKey(generation))).toBeUndefined();
+
+  let repaired!: () => void;
+  const repairedPromise = new Promise<void>((resolve) => {
+    repaired = resolve;
+  });
+  mockRemoveItem.mockImplementationOnce(async (key: string) => {
+    storage.delete(key);
+    repaired();
+  });
+  releaseWrite();
+  await repairedPromise;
+  expect(storage.get(snapshotKey(generation))).toBeUndefined();
+
+  const retry = await loadSnapshot().applyCheckoutCreditSnapshot(
+    { wallet_amount: 5000 },
+    generation
+  );
+  expect(retry.wallet_amount).toBe(5000);
 });

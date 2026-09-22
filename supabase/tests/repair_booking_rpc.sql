@@ -459,4 +459,35 @@ BEGIN
   END IF;
 END $$;
 
+-- The template exception restores only the free-form path: catalogue-linked
+-- branches (a device id or quote id) still require catalogue eligibility, so
+-- a stale or hidden option cannot be booked after the feature is disabled.
+DO $$
+BEGIN
+  BEGIN
+    PERFORM *
+    FROM public.create_repair_booking(
+      '00000000-0000-0000-0000-000000003015',
+      'Ada Lovelace',
+      'ada@example.com',
+      '08012345678',
+      'Smartphone',
+      'iPhone 15',
+      'The screen is cracked and the battery drains quickly.',
+      NULL,
+      'dropoff',
+      NULL,
+      '00000000-0000-0000-0000-000000003099',
+      NULL
+    );
+
+    RAISE EXCEPTION 'template-backed merchant must not book a linked device without catalogue eligibility';
+  EXCEPTION
+    WHEN OTHERS THEN
+      IF SQLERRM NOT LIKE '%catalog_disabled%' THEN
+        RAISE;
+      END IF;
+  END;
+END $$;
+
 ROLLBACK;

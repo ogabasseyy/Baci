@@ -18,16 +18,19 @@ import {
   OrderError,
   throwOrderHttpError,
 } from './orders.errors';
-import { buildOrderPayload } from './orders.payload';
-import { parseOrderResponse } from './orders.response';
+import { type CreateOrderResult, parseOrderResponse } from './orders.response';
 import {
   type CreateOrderRequest,
   CreateOrderRequestSchema,
   type OrderResponse,
 } from './orders.schemas';
 import { resolveCheckoutAuth } from './orders-auth';
+import { buildSnapshottedOrderPayload } from './orders-credit-freeze';
+import { releaseCreditAfterDefinitiveRejection } from './orders-credit-release';
 import { getCheckoutStoredSession } from './orders-session';
+import { validateCheckoutUser } from './orders-user-validation';
 import { readCheckoutStoredSession } from './read-checkout-stored-session';
+import { resolveEffectiveCheckoutGeneration } from './resolve-effective-checkout-generation';
 
 export { OrderError } from './orders.errors';
 export type {
@@ -46,31 +49,6 @@ const MERCHANT_ID =
   Constants.expoConfig?.extra?.merchantId ||
   '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 
-const CHECKOUT_USER_VALIDATION_TIMEOUT_MS = 4_000;
-
-async function validateCheckoutUser(accessToken: string) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<{
-    data: { user: null };
-    error: Error;
-  }>((resolve) => {
-    timer = setTimeout(
-      () =>
-        resolve({
-          data: { user: null },
-          error: new Error('Checkout user validation timed out'),
-        }),
-      CHECKOUT_USER_VALIDATION_TIMEOUT_MS
-    );
-  });
-
-  try {
-    return await Promise.race([supabase.auth.getUser(accessToken), timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 async function checkNetwork(): Promise<boolean> {
   const state = await NetInfo.fetch();
   return state.isConnected === true && state.isInternetReachable !== false;
@@ -85,7 +63,7 @@ export type CreateOrderOptions = {
 export async function createOrder(
   request: CreateOrderRequest,
   options?: CreateOrderOptions
-): Promise<OrderResponse> {
+): Promise<CreateOrderResult> {
   const startTime = Date.now();
   const frozenCheckoutGeneration = options?.checkoutGeneration;
   const checkoutGeneration =
@@ -134,20 +112,39 @@ export async function createOrder(
     error: authError,
   } =
     checkoutAuth.canValidateUser && session?.access_token
-      ? await validateCheckoutUser(session.access_token)
+      ? await validateCheckoutUser(supabase.auth, session.access_token)
       : { data: { user: null }, error: null };
 
-  const orderPayload = buildOrderPayload({
-    merchantId: MERCHANT_ID,
-    request: validatedRequest,
-    ...(!authError && user?.id && { userId: user.id }),
-  });
-
+  // Falls back to the cart generation when resolution itself fails before
+  // assigning the effective value below.
+  let effectiveCheckoutGeneration = checkoutGeneration;
   try {
+    const resolvedGeneration = await resolveEffectiveCheckoutGeneration({
+      checkoutGeneration,
+      frozenCheckoutGeneration,
+      queuedReplay: options?.queuedReplay,
+    });
+    effectiveCheckoutGeneration =
+      resolvedGeneration.effectiveCheckoutGeneration;
+    const attemptKeyOptions = resolvedGeneration.attemptKeyOptions;
+    // The snapshotted payload can reject on storage failures, so it is built
+    // inside the try block: every failure maps to an OrderError below.
+    const orderPayload = await buildSnapshottedOrderPayload(
+      {
+        merchantId: MERCHANT_ID,
+        request: validatedRequest,
+        ...(!authError && user?.id && { userId: user.id }),
+      },
+      effectiveCheckoutGeneration
+    );
     // Local retry partition only: a getUser timeout must not rotate the key.
     // The submitted payload and server authorization remain unchanged.
+    // The auth partition map and the idempotency key are derived under
+    // the resolved generation: using the possibly-stale cart value here
+    // would fork both away from the frozen payload on retries started
+    // before rehydration completed.
     const authPartition = await resolveCheckoutAuthPartition(
-      checkoutGeneration,
+      effectiveCheckoutGeneration,
       storedSession?.user?.id,
       { sessionReadInconclusive: initialSession.timedOut }
     );
@@ -159,15 +156,9 @@ export async function createOrder(
           user_id: authPartition,
         },
         validatedRequest.payment_method === 'uba_redvault'
-          ? `${checkoutGeneration}:uba_redvault`
-          : checkoutGeneration,
-        frozenCheckoutGeneration
-          ? {
-              frozen: true,
-              persistFrozen: options?.queuedReplay !== true,
-              liveGeneration: useCartStore.getState().checkoutGeneration,
-            }
-          : undefined
+          ? `${effectiveCheckoutGeneration}:uba_redvault`
+          : effectiveCheckoutGeneration,
+        attemptKeyOptions
       ));
     const sendSession = await readCheckoutStoredSession(
       supabaseAuthStorage,
@@ -231,11 +222,25 @@ export async function createOrder(
       });
     }
 
+    // The submitted generation travels with the response so rollback
+    // recovery replays this exact order identity on retry.
     return replayed
-      ? { ...normalizedOrderResponse, idempotency: { replayed: true } }
-      : normalizedOrderResponse;
+      ? {
+          ...normalizedOrderResponse,
+          effectiveCheckoutGeneration,
+          idempotency: { replayed: true },
+        }
+      : { ...normalizedOrderResponse, effectiveCheckoutGeneration };
   } catch (error) {
-    throw mapCreateOrderException(error, startTime);
+    const mapped = mapCreateOrderException(error, startTime);
+    // The payload was frozen under the resolved generation, so rejection
+    // cleanup releases that same snapshot; releasing the possibly-stale
+    // cart generation would leave the rejected fields behind for retries.
+    await releaseCreditAfterDefinitiveRejection(
+      mapped.code,
+      effectiveCheckoutGeneration
+    );
+    throw mapped;
   }
 }
 

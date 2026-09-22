@@ -1,4 +1,5 @@
 import {
+  type BuildOrderIdempotencyPayloadOptions,
   buildOrderIdempotencyPayload,
   type OrderIdempotencyPayloadInput,
 } from './order-idempotency';
@@ -9,10 +10,11 @@ import {
  * targets an order created before the metadata rollout.
  */
 export function buildLegacyOrderIdempotencyPayload(
-  input: OrderIdempotencyPayloadInput
+  input: OrderIdempotencyPayloadInput,
+  options?: BuildOrderIdempotencyPayloadOptions
 ) {
   const legacyInput = { ...input };
   delete legacyInput.delivery_method;
   delete legacyInput.airport_type;
-  return buildOrderIdempotencyPayload(legacyInput);
+  return buildOrderIdempotencyPayload(legacyInput, options);
 }

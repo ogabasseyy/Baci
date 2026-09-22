@@ -1,4 +1,5 @@
 import { CHECKOUT_GENERATION_STORAGE_KEY } from '@/config/checkout-storage';
+import { checkoutGenerationStorageQueue } from './checkout-generation-storage-queue';
 import { clearPersistedCheckoutGeneration } from './clear-persisted-checkout-generation';
 import { persistCheckoutGeneration } from './persist-checkout-generation';
 import { readPersistedCheckoutGeneration } from './read-persisted-checkout-generation';
@@ -26,4 +27,17 @@ it('removes the dedicated generation so cart persistence can keep the empty-cart
   expect(mockStorage.get(CHECKOUT_GENERATION_STORAGE_KEY)).toBe(generation);
   await clearPersistedCheckoutGeneration();
   await expect(readPersistedCheckoutGeneration()).resolves.toBeNull();
+});
+
+it('clears the stale generation even when a queued persist never settles', async () => {
+  mockStorage.set(CHECKOUT_GENERATION_STORAGE_KEY, 'stale-generation');
+  let releaseHung!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    releaseHung = resolve;
+  });
+  const hung = checkoutGenerationStorageQueue.enqueue(() => gate);
+  await clearPersistedCheckoutGeneration();
+  expect(mockStorage.get(CHECKOUT_GENERATION_STORAGE_KEY)).toBeUndefined();
+  releaseHung();
+  await hung;
 });

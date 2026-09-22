@@ -150,6 +150,12 @@ describe('supabase-history-replay sources', () => {
     );
   });
 
+  it('registers the storefront order idempotency hash probe for replay verification', () => {
+    expect(rows(PENDING_SOURCES)).toContain(
+      '2e7f253690d3f5b6671934792f502c734e8bb14a914bff74cfcfec86adcba7b2 20260911200000_probe_storefront_order_idempotency_hash.sql'
+    );
+  });
+
   it('keeps the quiz-live pending-source cohort unique and lexically ordered', () => {
     const repositoryPaths = EXPECTED_QUIZ_LIVE_PENDING_SOURCES.map(
       ({ repositoryPath }) => repositoryPath

@@ -121,4 +121,9 @@ export const EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES = [
       'supabase/migrations/20260920160000_sync_review_transaction_date_to_document_dates.sql',
     sha256: '8ae2f2a178305f701484038e9c7fe43037baa1b1c2cb2db9fd6d09bccbbb0fa3',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260911200000_probe_storefront_order_idempotency_hash.sql',
+    sha256: '2e7f253690d3f5b6671934792f502c734e8bb14a914bff74cfcfec86adcba7b2',
+  },
 ];

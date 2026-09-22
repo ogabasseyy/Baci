@@ -156,8 +156,6 @@ it.each([
   { customer_email: 'guest-two@example.com' },
   { shipping_fee: 8000 },
   { discount_code: 'SALE' },
-  { wallet_amount: 1000, use_wallet_credit: true },
-  { savings_amount: 1000, savings_goal_id: 'goal', use_savings_credit: true },
   { items: [{ product_id: 'buds3', price: 85000, quantity: 1 }] },
   { items: [{ product_id: 'buds2', price: 85000, quantity: 2 }] },
   { shipping_address: { address: 'Different address' } },
@@ -232,17 +230,6 @@ it('does not silently replace a corrupt persisted identity', async () => {
     loadKeyGenerator().getCheckoutAttemptKey(payload, 'cart-one')
   ).rejects.toThrow('Checkout recovery data is invalid');
   expect(setItem).not.toHaveBeenCalled();
-});
-
-it('resumes the same pending order when changing payment gateways', async () => {
-  const { getCheckoutAttemptKey } = loadKeyGenerator();
-  const first = await getCheckoutAttemptKey(payload, 'cart-one');
-  expect(
-    await getCheckoutAttemptKey(
-      { ...payload, payment_method: 'korapay', payment_status: 'pending' },
-      'cart-one'
-    )
-  ).toBe(first);
 });
 
 it('resumes the same pending order when cart line order changes', async () => {

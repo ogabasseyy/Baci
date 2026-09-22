@@ -4,6 +4,7 @@ import type { MutableRefObject } from 'react';
 import { Alert } from 'react-native';
 import type { RepriceResult } from '@/services/cart-reprice';
 import type { CartItem } from '@/stores/cart-store.types';
+import { createOrderResponseFixture } from './checkout-order-response-fixture';
 import {
   type UseCheckoutSubmitParams,
   useCheckoutSubmit,
@@ -267,19 +268,14 @@ describe('useCheckoutSubmit recovery', () => {
       changes: [],
       priceById: { 'line-1': 1200000 },
     });
-    mockCreateOrder.mockResolvedValue({
-      amountDueToGateway: 1201500,
-      idempotency: { replayed: true },
-      order: {
-        created_at: '2026-07-09T12:00:00.000Z',
-        id: 'order-replay-1',
-        order_number: 'ORD-R1',
-        payment_status: 'pending',
-        shipping_status: 'pending',
-        total: 1201500,
-      },
-      wallet: null,
-    });
+    mockCreateOrder.mockResolvedValue(
+      createOrderResponseFixture({
+        effectiveCheckoutGeneration: 'gen-1',
+        orderId: 'order-replay-1',
+        orderNumber: 'ORD-R1',
+        replayed: true,
+      })
+    );
     const { trackCheckoutRoutePurchaseCompleted } = jest.requireMock(
       '@/services/tiktok-checkout-route-tracking'
     ) as { trackCheckoutRoutePurchaseCompleted: ReturnType<typeof jest.fn> };

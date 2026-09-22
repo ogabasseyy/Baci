@@ -96,6 +96,9 @@ jobs:
         with:
           packages: platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006
 
+      - name: Link cmdline-tools latest for Hermes builds
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" link-cmdline-tools-latest
+
       - name: Configure pnpm store directory
         uses: ./.github/actions/setup-pnpm-store
         with:

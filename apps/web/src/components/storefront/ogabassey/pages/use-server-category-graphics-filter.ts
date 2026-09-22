@@ -64,9 +64,13 @@ export function useServerCategoryGraphicsFilter({
   }
 
   const enabled = availableGraphics.length > 0;
+  // Page links must carry the validated hub token: without it, following a
+  // page link from an over-cap hub transition drops back to the capped
+  // selection and desynchronizes the listing from its metadata.
   const paginationPath = buildCategoryGraphicsHref({
     graphics: selectedGraphics,
     pathname: `${basePath}/${categoryName}`,
+    trustedHubSlug: hubSlug,
   });
 
   // Always route graphics changes to the category listing path (the same

@@ -53,6 +53,7 @@ describe('GamingGraphicsHubPage', () => {
       matchingGraphics: ['NVIDIA RTX 4070'],
       merchant: {
         business_name: 'Ogabassey',
+        is_published: true,
         slug: 'ogabassey',
       },
       productCount: 12,
@@ -81,6 +82,47 @@ describe('GamingGraphicsHubPage', () => {
     expect(metadata.alternates).toEqual({
       canonical: 'https://ogabassey.com/gaming-laptops/graphics/rtx-4070',
     });
+    expect(metadata.robots).toMatchObject({ index: false, follow: true });
+  });
+
+  it('noindexes hub URLs carrying an ignored graphics selection', async () => {
+    const metadata = await generateMetadata({
+      params: props.params,
+      searchParams: Promise.resolve({ graphics: 'RTX 4060' }),
+    });
+
+    expect(metadata.robots).toMatchObject({ index: false, follow: true });
+  });
+
+  it('noindexes hub URLs carrying a listing-transition hub token', async () => {
+    const metadata = await generateMetadata({
+      params: props.params,
+      searchParams: Promise.resolve({ graphicsHub: 'rtx-4070' }),
+    });
+
+    expect(metadata.robots).toMatchObject({ index: false, follow: true });
+  });
+
+  it('noindexes hubs for unpublished stores', async () => {
+    mockLoadHub.mockResolvedValue({
+      availableHubs: [{ slug: 'rtx-4070', model: '4070', label: 'RTX 4070' }],
+      canonicalBaseUrl:
+        'https://ogabassey.com/gaming-laptops/graphics/rtx-4070',
+      countryName: 'Nigeria',
+      currentPage: 1,
+      hub: { slug: 'rtx-4070', model: '4070', label: 'RTX 4070' },
+      matchingGraphics: ['NVIDIA RTX 4070'],
+      merchant: {
+        business_name: 'Ogabassey',
+        is_published: false,
+        slug: 'ogabassey',
+      },
+      productCount: 12,
+      totalPages: 1,
+    });
+
+    const metadata = await generateMetadata(props);
+
     expect(metadata.robots).toMatchObject({ index: false, follow: true });
   });
 

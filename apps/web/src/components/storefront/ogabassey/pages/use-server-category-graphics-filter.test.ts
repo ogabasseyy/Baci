@@ -83,6 +83,22 @@ describe('useServerCategoryGraphicsFilter', () => {
     );
   });
 
+  it('carries the validated hub token on pagination links', () => {
+    const { result } = renderHook(() =>
+      useServerCategoryGraphicsFilter({
+        availableGraphics: ['Integrated Graphics', 'NVIDIA RTX 4070'],
+        basePath: '/store',
+        categoryName: 'gaming-laptops',
+        selectedGraphics: ['Integrated Graphics'],
+        hubSlug: 'rtx-4070',
+      })
+    );
+
+    expect(result.current.paginationPath).toBe(
+      '/store/gaming-laptops?graphics=Integrated+Graphics&graphicsHub=rtx-4070'
+    );
+  });
+
   it('preserves local non-graphics facets when a new URL graphics selection arrives', () => {
     const { result, rerender } = renderHook(
       ({ selectedGraphics }: { selectedGraphics: string[] }) =>

@@ -48,15 +48,28 @@ export async function generateMetadata(
   const pagePrefix = page.currentPage > 1 ? `Page ${page.currentPage} | ` : '';
   const title = `${pagePrefix}${page.hub.label} Gaming Laptops Price in ${page.countryName} | ${page.merchant.business_name}`;
   const description = `Compare ${page.productCount} ${page.hub.label} gaming laptops at ${page.merchant.business_name}. Check prices, RAM, storage, processors, displays, condition and current availability in ${page.countryName}.`;
-  // The hub loader ignores non-hub query filters, so any extra params render
-  // a duplicate of the canonical hub URL and must be noindexed. Hub-owned
-  // params (graphics selection, hub token, page) are excluded from the check.
-  const {
-    graphics: _hubGraphics,
-    graphicsHub: _hubToken,
-    page: _hubPage,
-    ...hubFilters
-  } = searchParams;
+  // The hub loader ignores query filters: hub graphics arrive via the path
+  // slug, so any graphics selection renders a duplicate of the canonical hub
+  // URL and must be noindexed. Only `page` is hub-owned (pagination
+  // canonicalizes it). A hub token is minted for listing transitions, never
+  // for hub URLs, so its presence also marks a duplicate.
+  const { page: _hubPage, ...hubFilters } = searchParams;
+  const hubToken = searchParams.graphicsHub;
+  const hasHubToken =
+    (typeof hubToken === 'string' && hubToken.trim() !== '') ||
+    (Array.isArray(hubToken) && hubToken.some((entry) => entry.trim() !== ''));
+  const baseRobots = getIndexableRobotsMetadata(hubFilters);
+  const baseRobotsObject =
+    baseRobots != null && typeof baseRobots === 'object' ? baseRobots : null;
+  const baseIndex = baseRobotsObject != null && baseRobotsObject.index === true;
+  const baseGoogleBot =
+    baseRobotsObject != null && typeof baseRobotsObject.googleBot === 'object'
+      ? baseRobotsObject.googleBot
+      : {};
+  // Unpublished stores render the unpublished screen from the layout, so the
+  // hub must never be indexable even when inventory resolves.
+  const indexable =
+    baseIndex && !hasHubToken && page.merchant.is_published === true;
 
   return {
     title: { absolute: title },
@@ -67,7 +80,12 @@ export async function generateMetadata(
         page.currentPage
       ),
     },
-    robots: getIndexableRobotsMetadata(hubFilters),
+    robots: {
+      ...(baseRobotsObject ?? {}),
+      index: indexable,
+      follow: true,
+      googleBot: { ...baseGoogleBot, index: indexable, follow: true },
+    },
   };
 }
 

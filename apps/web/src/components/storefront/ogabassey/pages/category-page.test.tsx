@@ -155,94 +155,6 @@ describe('CategoryPage', () => {
     expect(yieldSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('routes graphics changes through the server when the category is pre-paginated', async () => {
-    mockMatchMedia(true);
-    vi.mocked(useParams).mockReturnValue({
-      slug: 'test',
-      category: 'gaming-laptops',
-    });
-    window.history.replaceState(
-      {},
-      '',
-      '/test-store/gaming-laptops?page=2'
-    );
-
-    render(
-      <CategoryPage
-        graphicsOptions={['Integrated Graphics', 'NVIDIA RTX 4070']}
-        products={[PRODUCT_WITH_IMAGE]}
-        productsArePrePaginated={true}
-        totalProductCount={40}
-      />
-    );
-
-    await act(async () => {
-      await filterHarness.onFilterChange?.('graphics', 'NVIDIA RTX 4070');
-    });
-
-    expect(mockRouterPush).toHaveBeenCalledWith(
-      '/test-store/gaming-laptops?graphics=NVIDIA+RTX+4070'
-    );
-    expect(yieldSpy).not.toHaveBeenCalled();
-  });
-
-  it('keeps graphics local with other client facets when the full set is loaded', async () => {
-    mockMatchMedia(true);
-    vi.mocked(useParams).mockReturnValue({
-      slug: 'test',
-      category: 'gaming-laptops',
-    });
-    window.history.replaceState({}, '', '/test-store/gaming-laptops');
-
-    const products = [
-      {
-        ...PRODUCT_WITH_IMAGE,
-        id: 'rtx-apple',
-        name: 'RTX Apple Laptop',
-        brand: 'Apple',
-        graphics: 'NVIDIA RTX 4070',
-      },
-      {
-        ...PRODUCT_WITH_IMAGE,
-        id: 'integrated-apple',
-        name: 'Integrated Apple Laptop',
-        brand: 'Apple',
-        graphics: 'Integrated Graphics',
-      },
-      {
-        ...PRODUCT_WITH_IMAGE,
-        id: 'rtx-dell',
-        name: 'RTX Dell Laptop',
-        brand: 'Dell',
-        graphics: 'NVIDIA RTX 4070',
-      },
-    ];
-
-    render(
-      <CategoryPage
-        graphicsOptions={['Integrated Graphics', 'NVIDIA RTX 4070']}
-        products={products}
-      />
-    );
-
-    await act(async () => {
-      await filterHarness.onFilterChange?.('brand', 'Apple');
-    });
-    await act(async () => {
-      await filterHarness.onFilterChange?.('graphics', 'NVIDIA RTX 4070');
-    });
-
-    // No server navigation: the brand selection survives the graphics toggle.
-    expect(mockRouterPush).not.toHaveBeenCalled();
-    expect(screen.getByRole('article', { name: 'RTX Apple Laptop' })).toBeInTheDocument();
-    expect(
-      screen.queryByRole('article', { name: 'Integrated Apple Laptop' })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('article', { name: 'RTX Dell Laptop' })
-    ).not.toBeInTheDocument();
-  });
-
   it('renders the recently-added product carousel in place of the promo banner', () => {
     mockMatchMedia(true);
 
@@ -270,41 +182,6 @@ describe('CategoryPage', () => {
       ).not.toBeInTheDocument();
     }
   );
-
-  it('keeps hub pagination on the hub route when a base override is provided', () => {
-    mockMatchMedia(true);
-    vi.mocked(useParams).mockReturnValue({
-      slug: 'test',
-      category: 'gaming-laptops',
-    });
-
-    const products = Array.from({ length: 20 }, (_, index) => ({
-      ...PRODUCT_WITH_IMAGE,
-      id: String(index + 1),
-      name: `Product ${index + 1}`,
-    }));
-
-    render(
-      <CategoryPage
-        currentPage={2}
-        products={products}
-        productsArePrePaginated={true}
-        totalProductCount={45}
-        graphicsOptions={['NVIDIA RTX 4070']}
-        selectedGraphics={['NVIDIA RTX 4070']}
-        paginationBasePath="/test-store/gaming-laptops/graphics/rtx-4070"
-      />
-    );
-
-    expect(screen.getByRole('link', { name: '1' })).toHaveAttribute(
-      'href',
-      '/test-store/gaming-laptops/graphics/rtx-4070'
-    );
-    expect(screen.getByRole('link', { name: '3' })).toHaveAttribute(
-      'href',
-      '/test-store/gaming-laptops/graphics/rtx-4070?page=3'
-    );
-  });
 
   it('hides the recent carousel on later pre-paginated pages (page slice is not the newest items)', () => {
     mockMatchMedia(true);

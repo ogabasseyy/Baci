@@ -106,6 +106,10 @@ export async function generateMetadata({
   }
 
   const productOffset = (currentPage - 1) * STOREFRONT_PRODUCTS_PER_PAGE;
+  // Carry the hub token so metadata (title, description, page count) matches
+  // the listing body on validated over-cap hub transitions. The loader
+  // validates the token before lifting the cardinality cap.
+  const metadataHubSlug = resolvedSearchParams.graphicsHub;
   const { data } = await loadFilteredCategoryPageData({
     category,
     merchantId: merchant.id,
@@ -113,6 +117,8 @@ export async function generateMetadata({
     productOffset,
     rawGraphics: resolvedSearchParams.graphics,
     storeSlug: slug,
+    trustedHubSlug:
+      typeof metadataHubSlug === 'string' ? metadataHubSlug : undefined,
   });
 
   if (!data.isCollection && data.isInactiveCategory) {

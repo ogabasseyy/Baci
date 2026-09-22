@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "2a4a8e40bf15a169038132df19b8593a463912cc",
+  "originMainSha": "614dcaf6fa28356e56ff4d58b62ce1ab0910d774",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
   "routeTreeSha256": "61966d7eb4f2226636818bc9a8f7b77eacc3f90d07c64c02f7ccbbd828717f0a",
-  "routingProxyInputSha256": "37538e5a53f9eb6567889835217d23427645aab58234a9da63423b9eee47b052",
+  "routingProxyInputSha256": "f5639e331bb021e29771d4ff94aa1a79d04a8fd266aebc513c74a4b2faf8bcbf",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1426,6 +1426,18 @@
       "routePattern": "/api/storefront/{slug}/repairs/devices/{deviceSlug}",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/[slug]/repairs/devices/[deviceSlug]/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/[slug]/repairs/pickup/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/{slug}/repairs/pickup",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/[slug]/repairs/pickup/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8258,5 +8270,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "fc114c60005e54091dec3771a075325fe7db1893cfe77ded059f786fee0ca7bf"
+  "inventorySha256": "a87e8d1b38f386848831ca870dcf0342a2ef7a34c568a091d8e00ff505da1728"
 }

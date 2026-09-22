@@ -53,7 +53,11 @@ describe('mobile pickup payment receipt', () => {
       .mockResolvedValueOnce({ data: { state: 'unknown', result: unknown } })
       .mockResolvedValueOnce({ data: { state: 'unknown', result: unknown } });
     mocks.start.mockImplementationOnce(
-      async ({ onPaymentInitializationCheckpoint }) => {
+      async ({
+        onPaymentInitializationCheckpoint,
+        onBeforeProviderInitialization,
+      }) => {
+        await onBeforeProviderInitialization?.();
         await onPaymentInitializationCheckpoint(unknown);
         throw new Error('process lost');
       }
@@ -72,7 +76,12 @@ describe('mobile pickup payment receipt', () => {
       .mockResolvedValueOnce({ data: true })
       .mockResolvedValueOnce({ data: { state: 'complete', result } })
       .mockResolvedValueOnce({ data: { state: 'complete', result } });
-    mocks.start.mockResolvedValue(result);
+    mocks.start.mockImplementationOnce(
+      async ({ onBeforeProviderInitialization }) => {
+        await onBeforeProviderInitialization?.();
+        return result;
+      }
+    );
     await startMobileRepairPickupPayment(input);
     const replay = await startMobileRepairPickupPayment(input);
     expect(replay).toEqual(result);
@@ -90,13 +99,30 @@ describe('mobile pickup payment receipt', () => {
     await expect(startMobileRepairPickupPayment(input)).rejects.toThrow();
     expect(mocks.start).not.toHaveBeenCalled();
   });
-  it('does not start payment when another worker reclaimed the expired claim', async () => {
+  it('leaves the claim reclaimable when the core fails before provider initialization', async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: { state: 'claimed' } });
+    mocks.start.mockRejectedValueOnce(new Error('quote unavailable'));
+    await expect(startMobileRepairPickupPayment(input)).rejects.toThrow(
+      'quote unavailable'
+    );
+    // Claim only: execution was never fenced, so the receipt stays reclaimable.
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+  });
+  it('does not reach the provider when another worker reclaimed the expired claim', async () => {
     mocks.rpc
       .mockResolvedValueOnce({ data: { state: 'claimed' } })
       .mockResolvedValueOnce({ error: { message: 'claim ownership changed' } });
-    mocks.start.mockResolvedValue(result);
-    await expect(startMobileRepairPickupPayment(input)).rejects.toThrow();
-    expect(mocks.start).not.toHaveBeenCalled();
+    mocks.start.mockImplementationOnce(
+      async ({ onBeforeProviderInitialization }) => {
+        await onBeforeProviderInitialization?.();
+        return result;
+      }
+    );
+    await expect(startMobileRepairPickupPayment(input)).rejects.toThrow(
+      'claim changed'
+    );
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenCalledTimes(2);
   });
   it('keeps an interrupted completion unknown rather than initializing again', async () => {
     mocks.rpc
@@ -104,7 +130,12 @@ describe('mobile pickup payment receipt', () => {
       .mockResolvedValueOnce({ data: true })
       .mockResolvedValueOnce({ error: { message: 'offline' } })
       .mockResolvedValueOnce({ data: { state: 'pending' } });
-    mocks.start.mockResolvedValue(result);
+    mocks.start.mockImplementationOnce(
+      async ({ onBeforeProviderInitialization }) => {
+        await onBeforeProviderInitialization?.();
+        return result;
+      }
+    );
     await expect(startMobileRepairPickupPayment(input)).rejects.toThrow();
     await expect(startMobileRepairPickupPayment(input)).rejects.toThrow();
     expect(mocks.start).toHaveBeenCalledTimes(1);

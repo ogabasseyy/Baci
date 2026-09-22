@@ -33,6 +33,45 @@ it('persists the bound reference before a lost provider response and returns unk
   });
   expect(initialize).toHaveBeenCalledTimes(1);
 });
+it('fences execution before persisting the unknown checkpoint and contacting Paystack', async () => {
+  const order: string[] = [];
+  const checkpoint = vi.fn().mockImplementation(async () => {
+    order.push('checkpoint');
+  });
+  const onBeforeProviderInitialization = vi
+    .fn()
+    .mockImplementation(async () => {
+      order.push('fence');
+    });
+  initialize.mockImplementation(async () => {
+    order.push('provider');
+    throw new Error('response lost');
+  });
+  const result = await initializeRepairPickupPayment(
+    payload,
+    repair,
+    checkpoint,
+    onBeforeProviderInitialization
+  );
+  expect(result).toMatchObject({
+    success: false,
+    code: 'payment_initialization_unknown',
+  });
+  expect(order).toEqual(['fence', 'checkpoint', 'provider']);
+});
+it('does not contact Paystack when execution fencing fails', async () => {
+  const checkpoint = vi.fn().mockResolvedValue(undefined);
+  await expect(
+    initializeRepairPickupPayment(
+      payload,
+      repair,
+      checkpoint,
+      vi.fn().mockRejectedValue(new Error('claim changed'))
+    )
+  ).rejects.toThrow('claim changed');
+  expect(initialize).not.toHaveBeenCalled();
+  expect(checkpoint).not.toHaveBeenCalled();
+});
 it('does not contact Paystack if its checkpoint cannot be persisted', async () => {
   await expect(
     initializeRepairPickupPayment(

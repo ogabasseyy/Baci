@@ -8,7 +8,8 @@ import type {
 export async function initializeRepairPickupPayment(
   payload: Parameters<typeof initializeTransaction>[0],
   repair: { id: string; ticketNumber: number; resumeToken: string },
-  checkpoint?: StartRepairPickupPaymentInput['onPaymentInitializationCheckpoint']
+  checkpoint?: StartRepairPickupPaymentInput['onPaymentInitializationCheckpoint'],
+  onBeforeProviderInitialization?: StartRepairPickupPaymentInput['onBeforeProviderInitialization']
 ): Promise<StartRepairPickupPaymentResult> {
   const unknown: StartRepairPickupPaymentResult = {
     success: false,
@@ -20,6 +21,10 @@ export async function initializeRepairPickupPayment(
     amountKobo: payload.amount,
     currency: 'NGN',
   };
+  // Fence execution immediately before the provider can accept the request.
+  // The receipt claim stays reclaimable through the merchant lookup, quote,
+  // and repair setup; the fenced completion writes below require this fence.
+  await onBeforeProviderInitialization?.();
   // Persist the bound reference before the provider can accept the request.
   await checkpoint?.(unknown);
   let payment: Awaited<ReturnType<typeof initializeTransaction>>;

@@ -46,15 +46,6 @@ export async function startMobileRepairPickupPayment(
     throw new Error(
       'Pickup payment is still being reconciled. Retry status shortly or contact the store; do not start another repair.'
     );
-  const begun = await createRepairPickupReceiverClient(
-    input.merchantId,
-    new Date(),
-    'server-payment-start'
-  ).rpc('begin_mobile_repair_pickup_payment', args);
-  if (begun.error || begun.data !== true)
-    throw new Error(
-      'Pickup payment claim changed. Retry the same request shortly.'
-    );
   async function complete(result: unknown, attempts = 3) {
     let lastError: unknown;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -72,6 +63,21 @@ export async function startMobileRepairPickupPayment(
   }
   const result = await startRepairPickupPayment({
     ...paymentInput,
+    // Fence execution only once provider initialization can actually begin:
+    // fencing here (instead of right after the claim) keeps the receipt
+    // reclaimable across the merchant lookup, quote, and repair setup, while
+    // the fenced completion writes still require this fence first.
+    onBeforeProviderInitialization: async () => {
+      const begun = await createRepairPickupReceiverClient(
+        input.merchantId,
+        new Date(),
+        'server-payment-start'
+      ).rpc('begin_mobile_repair_pickup_payment', args);
+      if (begun.error || begun.data !== true)
+        throw new Error(
+          'Pickup payment claim changed. Retry the same request shortly.'
+        );
+    },
     onPaymentInitializationCheckpoint: async (checkpoint) => {
       const saved = await receipt(checkpoint);
       const expected = checkpoint.success ? 'complete' : 'unknown';

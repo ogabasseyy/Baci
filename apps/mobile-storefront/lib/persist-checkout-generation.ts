@@ -5,8 +5,8 @@ import {
   enqueueCheckoutGenerationStorage,
   resetCheckoutGenerationStorageQueue,
 } from '@/lib/checkout-generation-storage-queue';
-import { markCodepointCheckoutItemSort } from '@/lib/checkout-idempotency-item-sort';
 import { createLogger } from '@/lib/logger';
+import { markCodepointCheckoutItemSort } from '@/lib/mark-codepoint-checkout-item-sort';
 import { isMintedCheckoutGeneration } from '@/lib/minted-checkout-generations';
 import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 
@@ -19,25 +19,34 @@ let checkoutGenerationWriteSequence = 0;
 let lastCompletedCheckoutGenerationWriteSequence = 0;
 let lastCompletedCheckoutGenerationWriteValue: string | null = null;
 
-async function removeAbandonedCheckoutGenerationWrite(
+async function compensateAbandonedCheckoutGenerationWrite(
   abandonedGeneration: string,
   abandonedWriteSequence: number
 ): Promise<void> {
-  // Invalidate a timed-out write that settles late: a newer persist that
-  // completed with the same value is preserved, since the stored record is
-  // valid regardless of which attempt wrote it last. Any other outcome —
-  // including a newer different value that the late write just clobbered —
-  // falls through to the value check below.
+  // Runs on the storage queue so the read and repair below are atomic with
+  // respect to every other queued write: a newer generation can neither
+  // land between them nor be deleted by this compensation.
+  const latestSequence = lastCompletedCheckoutGenerationWriteSequence;
+  const latestValue = lastCompletedCheckoutGenerationWriteValue;
   if (
-    lastCompletedCheckoutGenerationWriteSequence > abandonedWriteSequence &&
-    lastCompletedCheckoutGenerationWriteValue === abandonedGeneration
+    latestSequence > abandonedWriteSequence &&
+    latestValue === abandonedGeneration
   ) {
+    // A newer persist completed with the same value: the stored record is
+    // valid regardless of which attempt wrote it last.
     return;
   }
   const current = await AsyncStorage.getItem(CHECKOUT_GENERATION_STORAGE_KEY);
-  if (current === abandonedGeneration) {
-    await AsyncStorage.removeItem(CHECKOUT_GENERATION_STORAGE_KEY);
+  if (current !== abandonedGeneration) {
+    return;
   }
+  if (latestSequence > abandonedWriteSequence && latestValue !== null) {
+    // The late write clobbered a newer completed identity: restore the
+    // authoritative value instead of leaving the key empty.
+    await AsyncStorage.setItem(CHECKOUT_GENERATION_STORAGE_KEY, latestValue);
+    return;
+  }
+  await AsyncStorage.removeItem(CHECKOUT_GENERATION_STORAGE_KEY);
 }
 
 export async function persistCheckoutGeneration(
@@ -79,16 +88,20 @@ export async function persistCheckoutGeneration(
   } catch (error) {
     // A hung write must neither wedge later persists behind it nor restore
     // a stale generation when it eventually lands: reset the queue so the
-    // next attempt proceeds, and invalidate the abandoned write if it
-    // settles late. Genuine failures skip the reset so queued writes keep
-    // their order. Callers observe the failure and retry on demand.
+    // next attempt proceeds, and compensate the abandoned write if it
+    // settles late. The compensation is enqueued when the write lands, on
+    // whatever queue is current then, so its read and repair serialize
+    // with newer writes. Genuine failures skip the reset so queued writes
+    // keep their order. Callers observe the failure and retry on demand.
     if (!settled) {
       resetCheckoutGenerationStorageQueue();
       void attempt.then(
         () =>
-          removeAbandonedCheckoutGenerationWrite(
-            checkoutGeneration,
-            writeSequence
+          enqueueCheckoutGenerationStorage(() =>
+            compensateAbandonedCheckoutGenerationWrite(
+              checkoutGeneration,
+              writeSequence
+            )
           ).catch(() => undefined),
         () => undefined
       );

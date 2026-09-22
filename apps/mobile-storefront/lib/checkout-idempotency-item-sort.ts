@@ -4,36 +4,9 @@ import {
   enqueueCheckoutGenerationStorage,
   resetCheckoutGenerationStorageQueue,
 } from '@/lib/checkout-generation-storage-queue';
+import { markCodepointCheckoutItemSort } from '@/lib/mark-codepoint-checkout-item-sort';
 import { isMintedCheckoutGeneration } from '@/lib/minted-checkout-generations';
 import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
-
-// Generation-scoped markers: each generation owns its key, so marking one
-// generation is a single blind write that can never clobber another
-// generation's marker — even when an abandoned write lands late after a
-// queue reset detached it. Same-generation marks are idempotent.
-function codepointCheckoutItemSortKey(checkoutGeneration: string): string {
-  return `${CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY}:${checkoutGeneration}`;
-}
-
-export async function markCodepointCheckoutItemSort(
-  checkoutGeneration: string
-): Promise<void> {
-  await AsyncStorage.setItem(
-    codepointCheckoutItemSortKey(checkoutGeneration),
-    '1'
-  );
-}
-
-export async function releaseCodepointCheckoutItemSort(
-  checkoutGeneration: string
-): Promise<void> {
-  // Lifecycle mirror of the credit snapshot: the marker is pruned once its
-  // generation can no longer be replayed, so completed carts leave no
-  // residue behind. Only this generation's key is removed.
-  await AsyncStorage.removeItem(
-    codepointCheckoutItemSortKey(checkoutGeneration)
-  );
-}
 
 export function usesCodepointCheckoutItemSort(
   checkoutGeneration: string
@@ -58,7 +31,7 @@ export function usesCodepointCheckoutItemSort(
     }
     return (
       (await AsyncStorage.getItem(
-        codepointCheckoutItemSortKey(checkoutGeneration)
+        `${CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY}:${checkoutGeneration}`
       )) !== null
     );
   });

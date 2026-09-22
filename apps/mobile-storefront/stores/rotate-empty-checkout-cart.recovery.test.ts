@@ -164,17 +164,15 @@ it('lets a newer persist proceed on the reset queue while an older write hangs',
   await second;
   expect(storage.get(GENERATION_KEY)).toBe(secondGeneration);
 
-  let compensated!: () => void;
-  const compensatedPromise = new Promise<void>((resolve) => {
-    compensated = resolve;
+  let restored!: () => void;
+  const restoredPromise = new Promise<void>((resolve) => {
+    restored = resolve;
   });
-  mockRemoveItem.mockImplementation(async (key: string) => {
-    storage.delete(key);
-    if (key === GENERATION_KEY) {
-      compensated();
-    }
+  mockSetItem.mockImplementationOnce(async (key: string, value: string) => {
+    storage.set(key, value);
+    restored();
   });
   releaseOlder();
-  await compensatedPromise;
-  expect(storage.get(GENERATION_KEY)).toBeUndefined();
+  await restoredPromise;
+  expect(storage.get(GENERATION_KEY)).toBe(secondGeneration);
 });

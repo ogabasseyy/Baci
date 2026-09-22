@@ -1,8 +1,8 @@
 import { releaseCheckoutCreditSnapshot } from '@/lib/checkout-attempt-credit-snapshot';
-import { releaseCodepointCheckoutItemSort } from '@/lib/checkout-idempotency-item-sort';
 import { clearPersistedCheckoutGeneration } from '@/lib/clear-persisted-checkout-generation';
 import { createLogger } from '@/lib/logger';
 import { persistCheckoutGeneration } from '@/lib/persist-checkout-generation';
+import { releaseCodepointCheckoutItemSort } from '@/lib/release-codepoint-checkout-item-sort';
 import { withCheckoutStorageTimeout } from '@/lib/with-checkout-storage-timeout';
 import { emptyCheckoutCart } from './empty-checkout-cart';
 

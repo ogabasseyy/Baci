@@ -115,6 +115,9 @@ export async function createOrder(
       ? await validateCheckoutUser(supabase.auth, session.access_token)
       : { data: { user: null }, error: null };
 
+  // Falls back to the cart generation when resolution itself fails before
+  // assigning the effective value below.
+  let effectiveCheckoutGeneration = checkoutGeneration;
   try {
     // The cart generation can be stale while the dedicated persisted
     // generation still identifies a lost-response attempt. Resolve the
@@ -127,7 +130,7 @@ export async function createOrder(
           liveGeneration: useCartStore.getState().checkoutGeneration,
         }
       : undefined;
-    const effectiveCheckoutGeneration = await resolveCheckoutGeneration(
+    effectiveCheckoutGeneration = await resolveCheckoutGeneration(
       checkoutGeneration,
       attemptKeyOptions
     );
@@ -227,9 +230,12 @@ export async function createOrder(
       : normalizedOrderResponse;
   } catch (error) {
     const mapped = mapCreateOrderException(error, startTime);
+    // The payload was frozen under the resolved generation, so rejection
+    // cleanup releases that same snapshot; releasing the possibly-stale
+    // cart generation would leave the rejected fields behind for retries.
     await releaseCreditAfterDefinitiveRejection(
       mapped.code,
-      checkoutGeneration
+      effectiveCheckoutGeneration
     );
     throw mapped;
   }

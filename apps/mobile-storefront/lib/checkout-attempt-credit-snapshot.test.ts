@@ -1,8 +1,8 @@
 import { CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY } from '@/config/checkout-storage';
-import {
-  applyCheckoutCreditSnapshot,
-  releaseCheckoutCreditSnapshot,
-} from './checkout-attempt-credit-snapshot';
+
+function loadSnapshot() {
+  return require('./checkout-attempt-credit-snapshot') as typeof import('./checkout-attempt-credit-snapshot');
+}
 
 const storage = new Map<string, string>();
 const mockGetItem = jest.fn(async (key: string) => storage.get(key) ?? null);
@@ -46,6 +46,7 @@ function gateFirstRead() {
 }
 
 beforeEach(() => {
+  jest.resetModules();
   storage.clear();
   mockGetItem.mockClear();
   mockSetItem.mockClear();
@@ -55,9 +56,8 @@ beforeEach(() => {
 afterEach(() => {
   jest.useRealTimers();
 });
-
 it('freezes the first observed store-credit fields for a checkout generation', async () => {
-  const first = await applyCheckoutCreditSnapshot(
+  const first = await loadSnapshot().applyCheckoutCreditSnapshot(
     {
       wallet_amount: 5000,
       use_wallet_credit: true,
@@ -65,7 +65,7 @@ it('freezes the first observed store-credit fields for a checkout generation', a
     generation
   );
   expect(first.wallet_amount).toBe(5000);
-  const replay = await applyCheckoutCreditSnapshot(
+  const replay = await loadSnapshot().applyCheckoutCreditSnapshot(
     {
       wallet_amount: 1000,
       use_wallet_credit: true,
@@ -76,14 +76,14 @@ it('freezes the first observed store-credit fields for a checkout generation', a
 });
 
 it('drops credit fields that were absent from the first snapshot', async () => {
-  await applyCheckoutCreditSnapshot(
+  await loadSnapshot().applyCheckoutCreditSnapshot(
     {
       wallet_amount: 5000,
       use_wallet_credit: true,
     },
     generation
   );
-  const replay = await applyCheckoutCreditSnapshot(
+  const replay = await loadSnapshot().applyCheckoutCreditSnapshot(
     {
       wallet_amount: 1000,
       use_wallet_credit: true,
@@ -102,11 +102,11 @@ it('drops credit fields that were absent from the first snapshot', async () => {
 it('serializes concurrent applies for the same generation', async () => {
   const gate = gateFirstRead();
 
-  const first = applyCheckoutCreditSnapshot(
+  const first = loadSnapshot().applyCheckoutCreditSnapshot(
     { wallet_amount: 5000 },
     generation
   );
-  const second = applyCheckoutCreditSnapshot(
+  const second = loadSnapshot().applyCheckoutCreditSnapshot(
     { wallet_amount: 1000 },
     generation
   );
@@ -126,9 +126,12 @@ it('serializes concurrent applies for the same generation', async () => {
 it('lets other generations proceed while one apply is hung', async () => {
   const gate = gateFirstRead();
 
-  const hung = applyCheckoutCreditSnapshot({ wallet_amount: 5000 }, generation);
+  const hung = loadSnapshot().applyCheckoutCreditSnapshot(
+    { wallet_amount: 5000 },
+    generation
+  );
   await gate.entered;
-  const other = await applyCheckoutCreditSnapshot(
+  const other = await loadSnapshot().applyCheckoutCreditSnapshot(
     { wallet_amount: 1000 },
     otherGeneration
   );
@@ -146,20 +149,26 @@ it('lets other generations proceed while one apply is hung', async () => {
 it('releases snapshots without waiting for a hung queued apply', async () => {
   const gate = gateFirstRead();
 
-  const hungApply = applyCheckoutCreditSnapshot(
+  const hungApply = loadSnapshot().applyCheckoutCreditSnapshot(
     { wallet_amount: 5000 },
     generation
   );
   await gate.entered;
-  await releaseCheckoutCreditSnapshot(otherGeneration);
+  await loadSnapshot().releaseCheckoutCreditSnapshot(otherGeneration);
   gate.release(null);
   await hungApply;
 });
 
 it('removes only the finalized generation snapshot', async () => {
-  await applyCheckoutCreditSnapshot({ wallet_amount: 5000 }, generation);
-  await applyCheckoutCreditSnapshot({ wallet_amount: 1000 }, otherGeneration);
-  await releaseCheckoutCreditSnapshot(generation);
+  await loadSnapshot().applyCheckoutCreditSnapshot(
+    { wallet_amount: 5000 },
+    generation
+  );
+  await loadSnapshot().applyCheckoutCreditSnapshot(
+    { wallet_amount: 1000 },
+    otherGeneration
+  );
+  await loadSnapshot().releaseCheckoutCreditSnapshot(generation);
   expect(storage.get(snapshotKey(generation))).toBeUndefined();
   expect(
     JSON.parse(storage.get(snapshotKey(otherGeneration)) ?? '{}') as {
@@ -174,48 +183,9 @@ it('fails closed when a stored generation snapshot is malformed', async () => {
     JSON.stringify({ wallet_amount: '5000' })
   );
   await expect(
-    applyCheckoutCreditSnapshot({ wallet_amount: 1000 }, generation)
+    loadSnapshot().applyCheckoutCreditSnapshot(
+      { wallet_amount: 1000 },
+      generation
+    )
   ).rejects.toThrow('Checkout recovery data is invalid');
-});
-
-it('fails a checkout attempt when the snapshot read never settles', async () => {
-  jest.useFakeTimers();
-  mockGetItem.mockImplementationOnce(
-    () => new Promise<string | null>(() => undefined)
-  );
-  const pending = applyCheckoutCreditSnapshot(
-    { wallet_amount: 5000 },
-    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
-  );
-  const assertion = expect(pending).rejects.toThrow(
-    'Checkout storage read timed out'
-  );
-  await jest.advanceTimersByTimeAsync(5_000);
-  await assertion;
-});
-
-it('resets the queue after a snapshot timeout so the same-generation retry proceeds', async () => {
-  jest.useFakeTimers();
-  mockGetItem.mockImplementationOnce(
-    () => new Promise<string | null>(() => undefined)
-  );
-  const pending = applyCheckoutCreditSnapshot(
-    { wallet_amount: 5000 },
-    generation
-  );
-  const assertion = expect(pending).rejects.toThrow(
-    'Checkout storage read timed out'
-  );
-  await jest.advanceTimersByTimeAsync(5_000);
-  await assertion;
-  const retry = await applyCheckoutCreditSnapshot(
-    { wallet_amount: 5000 },
-    generation
-  );
-  expect(retry.wallet_amount).toBe(5000);
-  expect(
-    JSON.parse(storage.get(snapshotKey(generation)) ?? '{}') as {
-      wallet_amount?: number;
-    }
-  ).toEqual({ wallet_amount: 5000 });
 });

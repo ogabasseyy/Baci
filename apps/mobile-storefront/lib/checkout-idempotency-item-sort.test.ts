@@ -5,14 +5,10 @@ const mockGetItem = jest.fn(async (key: string) => storage.get(key) ?? null);
 const mockSetItem = jest.fn(async (key: string, value: string) => {
   storage.set(key, value);
 });
-const mockRemoveItem = jest.fn(async (key: string) => {
-  storage.delete(key);
-});
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: (key: string) => mockGetItem(key),
   setItem: (key: string, value: string) => mockSetItem(key, value),
-  removeItem: (key: string) => mockRemoveItem(key),
 }));
 
 function loadSort() {
@@ -35,7 +31,6 @@ beforeEach(() => {
   storage.clear();
   mockGetItem.mockClear();
   mockSetItem.mockClear();
-  mockRemoveItem.mockClear();
 });
 
 afterEach(() => {
@@ -60,22 +55,6 @@ it('reads the durable marker for generations minted before this build', async ()
   await expect(
     usesCodepointCheckoutItemSort('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
   ).resolves.toBe(false);
-});
-
-it('marks one generation without touching another generation marker', async () => {
-  const { markCodepointCheckoutItemSort } = loadSort();
-  await markCodepointCheckoutItemSort(generation);
-  expect(storage.get(markerKey(generation))).toBe('1');
-  expect(storage.get(markerKey(legacyGeneration))).toBeUndefined();
-});
-
-it('releases only the finalized generation marker', async () => {
-  const { releaseCodepointCheckoutItemSort } = loadSort();
-  storage.set(markerKey(generation), '1');
-  storage.set(markerKey(legacyGeneration), '1');
-  await releaseCodepointCheckoutItemSort(generation);
-  expect(storage.get(markerKey(generation))).toBeUndefined();
-  expect(storage.get(markerKey(legacyGeneration))).toBe('1');
 });
 
 it('fails closed instead of hanging behind a stuck persist', async () => {

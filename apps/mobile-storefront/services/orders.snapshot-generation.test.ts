@@ -112,6 +112,16 @@ jest.mock('./orders-credit-freeze', () => ({
   ) => mockBuildSnapshottedOrderPayload(input, checkoutGeneration),
 }));
 
+const mockReleaseCreditAfterDefinitiveRejection =
+  jest.fn<(code: string, checkoutGeneration: string) => Promise<void>>();
+
+jest.mock('./orders-credit-release', () => ({
+  releaseCreditAfterDefinitiveRejection: (
+    code: string,
+    checkoutGeneration: string
+  ) => mockReleaseCreditAfterDefinitiveRejection(code, checkoutGeneration),
+}));
+
 function validRequest(): CreateOrderRequest {
   return {
     customer_email: 'test@example.com',
@@ -176,6 +186,7 @@ beforeEach(async () => {
   mockBuildSnapshottedOrderPayload.mockImplementation(async (input) => ({
     ...(input.request as Record<string, unknown>),
   }));
+  mockReleaseCreditAfterDefinitiveRejection.mockResolvedValue(undefined);
 });
 
 it('freezes the payload under the persisted generation when the cart is stale', async () => {
@@ -203,5 +214,32 @@ it('maps snapshot failures to an OrderError instead of leaking plain errors', as
   expect(failure).toBeInstanceOf(OrderError);
   expect((failure as InstanceType<typeof OrderError>).code).toBe(
     'UNKNOWN_ERROR'
+  );
+});
+
+it('releases the resolved snapshot after a definitive rejection with a stale cart', async () => {
+  const { default: AsyncStorage } =
+    require('@react-native-async-storage/async-storage') as typeof import('@react-native-async-storage/async-storage');
+  await AsyncStorage.setItem(CHECKOUT_GENERATION_STORAGE_KEY, 'persisted-gen');
+  mockFetchWithRetry.mockResolvedValueOnce({
+    ok: false,
+    status: 400,
+    json: async () => ({ error: 'bad request' }),
+    headers: { get: () => null },
+  });
+  const failure = await loadCreateOrder()
+    .createOrder(validRequest())
+    .then(
+      () => null,
+      (error: unknown) => error
+    );
+  const { OrderError } = loadOrderError();
+  expect(failure).toBeInstanceOf(OrderError);
+  expect((failure as InstanceType<typeof OrderError>).code).toBe(
+    'VALIDATION_ERROR'
+  );
+  expect(mockReleaseCreditAfterDefinitiveRejection).toHaveBeenCalledWith(
+    'VALIDATION_ERROR',
+    'persisted-gen'
   );
 });

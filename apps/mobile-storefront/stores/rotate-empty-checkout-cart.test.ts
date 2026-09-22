@@ -15,7 +15,7 @@ const mockReleaseMarker = jest.fn<(generation: string) => Promise<void>>(
   async () => undefined
 );
 
-jest.mock('@/lib/checkout-idempotency-item-sort', () => ({
+jest.mock('@/lib/release-codepoint-checkout-item-sort', () => ({
   releaseCodepointCheckoutItemSort: (generation: string) =>
     mockReleaseMarker(generation),
 }));

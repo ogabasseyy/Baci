@@ -115,7 +115,7 @@ export const useCartStore = create<CartState>()(
         if (items.length === 0) {
           await rotateEmptyCheckoutCart(set, {
             previousGeneration: state.checkoutGeneration,
-            retainCreditSnapshot: true,
+            retainCreditSnapshot: false,
           });
           return;
         }
@@ -136,7 +136,7 @@ export const useCartStore = create<CartState>()(
           if (items.length === 0) {
             await rotateEmptyCheckoutCart(set, {
               previousGeneration: state.checkoutGeneration,
-              retainCreditSnapshot: true,
+              retainCreditSnapshot: false,
             });
             return;
           }

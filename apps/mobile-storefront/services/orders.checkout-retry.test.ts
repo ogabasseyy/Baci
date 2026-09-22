@@ -209,6 +209,9 @@ async function createOrderWithItems(
 
 describe('createOrder checkout retry keys', () => {
   beforeEach(() => {
+    // Fresh module registry per test: checkout recovery singletons (credit
+    // records, queues, installation promise) must not leak across tests.
+    jest.resetModules();
     jest.clearAllMocks();
     mockFetchResponse.ok = true;
     mockFetchResponse.status = 200;

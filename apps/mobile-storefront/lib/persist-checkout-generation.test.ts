@@ -138,19 +138,19 @@ describe('bugfix: checkout generation is durable before the order request', () =
     await persistCheckoutGeneration(newer);
     expect(storage.get('checkout-generation-v1')).toBe(newer);
 
-    let compensated!: () => void;
-    const compensatedPromise = new Promise<void>((resolve) => {
-      compensated = resolve;
+    let restored!: () => void;
+    const restoredPromise = new Promise<void>((resolve) => {
+      restored = resolve;
     });
-    mockRemoveItem.mockImplementationOnce(async (key: string) => {
-      storage.delete(key);
-      compensated();
+    mockSetItem.mockImplementationOnce(async (key: string, value: string) => {
+      storage.set(key, value);
+      restored();
     });
     releaseOlder();
-    await compensatedPromise;
-    // The abandoned write landed after the newer one, so it is removed
-    // instead of restoring a stale generation.
-    expect(storage.get('checkout-generation-v1')).toBeUndefined();
+    await restoredPromise;
+    // The abandoned write landed after the newer one, so the newer
+    // identity is restored instead of leaving a stale generation behind.
+    expect(storage.get('checkout-generation-v1')).toBe(newer);
   });
 
   it('preserves a newer generation when invalidating an abandoned write', async () => {

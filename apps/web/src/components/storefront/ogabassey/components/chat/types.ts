@@ -44,6 +44,8 @@ export function resolveSuggestionNavigationPath(
 export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
+  /** Server-attested tenant slug of the reply, when the server sent one. */
+  merchantSlug?: string;
   /** Validated, temporary UI requested by server-owned commerce tool results. */
   uiEvents?: StorefrontAgentUiEvent[];
   /**

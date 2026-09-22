@@ -35,7 +35,8 @@ export function useOgabasseyChat({
   isSanta: boolean;
   storefrontSlug?: string;
 }): UseOgabasseyChat {
-  const { addToCart, applyNegotiatedPrice, cart, setIsCartOpen } = useCart();
+  const { addToCart, applyNegotiatedPrice, cart, setIsCartOpen, setMerchantSlug } =
+    useCart();
 
   const [isOpen, setIsOpenState] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -128,6 +129,9 @@ export function useOgabasseyChat({
           text: displayText,
           santaActions,
           ...(aiReply.events.length > 0 ? { uiEvents: aiReply.events } : {}),
+          ...(aiReply.merchantSlug
+            ? { merchantSlug: aiReply.merchantSlug }
+            : {}),
         },
       ]);
     } catch (error) {
@@ -166,6 +170,21 @@ export function useOgabasseyChat({
       !expectedMerchantSlug ||
       pendingSantaActions.current.has(actionKey)
     ) return;
+    // The wish is only fulfillable against the tenant that attested the
+    // reply it came from — never a silent cross-storefront add.
+    const replyMerchantSlug = message.merchantSlug;
+    if (!replyMerchantSlug) {
+      console.error('[Santa Cart] Missing resolved merchant slug');
+      return;
+    }
+    if (replyMerchantSlug !== expectedMerchantSlug) {
+      console.error('[Santa Cart] Resolved tenant differs from storefront', {
+        expectedMerchantSlug,
+        replyMerchantSlug,
+      });
+      return;
+    }
+    setMerchantSlug(replyMerchantSlug);
     pendingSantaActions.current.add(actionKey);
 
     try {

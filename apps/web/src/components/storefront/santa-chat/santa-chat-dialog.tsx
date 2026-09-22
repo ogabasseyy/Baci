@@ -2,7 +2,6 @@
 
 import { isSantaGrantedPriceWithinCeiling } from '@baci/shared/lib';
 import Image from 'next/image';
-import Link from 'next/link';
 import {
   type Dispatch,
   type SetStateAction,
@@ -15,6 +14,8 @@ import { useCart } from '@/hooks/use-cart';
 import type { Product } from '@/lib/products';
 import { ChatInput } from './chat-input';
 import { ChatMessage } from './chat-message';
+import { readSantaMerchantSlug } from './read-santa-merchant-slug';
+import { SantaChatHeader } from './santa-chat-header';
 import type { ChatMessage as ChatMessageType } from './types';
 import { parseSantaActions, stripSantaActions } from './types';
 import { WelcomeScreen } from './welcome-screen';
@@ -37,6 +38,8 @@ interface StreamSantaReplyOptions {
   processedActionsRef: { current: Set<string> };
   setMessages: Dispatch<SetStateAction<Message[]>>;
   onCartAction: (productName: string, price: number) => Promise<void>;
+  expectedMerchantSlug?: string | null;
+  onMerchantSlug: (merchantSlug: string) => void;
 }
 
 // Module-scope helper: keeps throw-in-try out of the component body so
@@ -47,6 +50,8 @@ async function streamSantaReply({
   processedActionsRef,
   setMessages,
   onCartAction,
+  expectedMerchantSlug,
+  onMerchantSlug,
 }: StreamSantaReplyOptions): Promise<void> {
   // Cancel any previous in-flight request
   abortControllerRef.current?.abort();
@@ -55,7 +60,12 @@ async function streamSantaReply({
 
   const response = await fetch('/api/chat/santa', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(expectedMerchantSlug
+        ? { 'x-baci-storefront-slug': expectedMerchantSlug }
+        : {}),
+    },
     signal: controller.signal,
     body: JSON.stringify({
       messages: updatedMessages.map((m) => ({
@@ -68,6 +78,13 @@ async function streamSantaReply({
 
   if (!response.ok) {
     throw new Error('Failed to get response from Santa');
+  }
+
+  // Adopt only the server-attested tenant; cart actions below refuse to run
+  // against a different storefront.
+  const merchantSlug = readSantaMerchantSlug(response);
+  if (merchantSlug) {
+    onMerchantSlug(merchantSlug);
   }
 
   // Handle streaming response
@@ -147,15 +164,23 @@ export function SantaChatDialog({
   const { addToCart, cart, cartCount, applyNegotiatedPrice, setMerchantSlug } =
     useCart();
 
-  // Set merchant slug on mount + cleanup abort/timers on unmount
+  // Server-attested tenant, adopted from Santa response headers. Nothing is
+  // assumed on mount: cart actions wait for the first attested reply.
+  const [merchantSlug, setResolvedMerchantSlug] = useState<string | null>(null);
+
+  // Cleanup abort/timers on unmount
   useEffect(() => {
-    setMerchantSlug('ogabassey');
     return () => {
       abortControllerRef.current?.abort();
       if (notificationTimerRef.current)
         clearTimeout(notificationTimerRef.current);
     };
-  }, [setMerchantSlug]);
+  }, []);
+
+  const handleMerchantSlug = (slug: string) => {
+    setResolvedMerchantSlug(slug);
+    setMerchantSlug(slug);
+  };
 
   const showNotification = (msg: string) => {
     if (notificationTimerRef.current)
@@ -177,7 +202,10 @@ export function SantaChatDialog({
     try {
       const response = await fetch('/api/chat/santa/product', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(merchantSlug ? { 'x-baci-storefront-slug': merchantSlug } : {}),
+        },
         body: JSON.stringify({ name: productName }),
         signal: AbortSignal.timeout(8000),
       });
@@ -185,6 +213,25 @@ export function SantaChatDialog({
       if (!response.ok) {
         console.error('[Santa Cart] Failed to fetch product');
         return;
+      }
+
+      const resolvedMerchantSlug = readSantaMerchantSlug(response);
+      if (
+        merchantSlug &&
+        (!resolvedMerchantSlug || resolvedMerchantSlug !== merchantSlug)
+      ) {
+        console.error('[Santa Cart] Resolved tenant differs from storefront', {
+          expectedMerchantSlug: merchantSlug,
+          resolvedMerchantSlug,
+        });
+        showNotification(
+          'Open the resolved storefront before adding this wish'
+        );
+        return;
+      }
+
+      if (resolvedMerchantSlug) {
+        handleMerchantSlug(resolvedMerchantSlug);
       }
 
       const { product } = (await response.json()) as {
@@ -269,6 +316,8 @@ export function SantaChatDialog({
       processedActionsRef,
       setMessages,
       onCartAction: handleAddToCart,
+      expectedMerchantSlug: merchantSlug,
+      onMerchantSlug: handleMerchantSlug,
     })
       .catch((err) => {
         console.error('Santa chat error:', err);
@@ -301,88 +350,11 @@ export function SantaChatDialog({
 
   return (
     <div className={containerClasses}>
-      {/* Header */}
-      <header
-        className="bg-red-600 p-4 text-white shadow-lg sticky top-0 z-10 flex items-center justify-between"
-        style={{
-          borderBottom: '4px solid #a4171d',
-        }}
-      >
-        {/* Left: Back/Close button */}
-        <div className="w-16">
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close chat"
-              className="p-2"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={2.5}
-                stroke="currentColor"
-                className="size-6"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M6 18 18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          )}
-        </div>
-
-        {/* Title */}
-        <div className="text-center">
-          <h1
-            className="text-2xl md:text-3xl tracking-wider"
-            style={{
-              fontFamily: '"Mountains of Christmas", cursive',
-              textShadow: '0 1px 3px rgba(0,0,0,0.4)',
-            }}
-          >
-            Santa&apos;s Workshop
-          </h1>
-          <p
-            className="text-xs text-red-100"
-            style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}
-          >
-            by Ogabassey
-          </p>
-        </div>
-
-        {/* Right: Cart icon with count */}
-        <div className="w-16 flex items-center justify-end gap-2">
-          <Link
-            href="/ogabassey/cart"
-            className="p-2 relative"
-            aria-label={`View Cart (${cartCount} items)`}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="size-6"
-              aria-hidden="true"
-            >
-              <path
-                fillRule="evenodd"
-                d="M7.5 6v.75H5.513c-.96 0-1.763.746-1.858 1.705L3.11 18.238A3 3 0 0 0 6.077 21h11.846a3 3 0 0 0 2.967-2.762l-.545-9.783A1.875 1.875 0 0 0 18.487 6.75H16.5V6a4.5 4.5 0 0 0-9 0Zm1.5 0V6a3 3 0 0 1 6 0v.75H9Z"
-                clipRule="evenodd"
-              />
-            </svg>
-            {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-green-500 text-white text-xs font-bold rounded-full size-5 flex items-center justify-center">
-                {cartCount > 9 ? '9+' : cartCount}
-              </span>
-            )}
-          </Link>
-        </div>
-      </header>
+      <SantaChatHeader
+        onClose={onClose}
+        merchantSlug={merchantSlug}
+        cartCount={cartCount}
+      />
 
       {/* Cart notification toast */}
       {cartNotification && (

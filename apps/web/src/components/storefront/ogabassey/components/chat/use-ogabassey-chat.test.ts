@@ -7,6 +7,7 @@ const chatMocks = vi.hoisted(() => ({
   cart: [] as Array<{ cartItemId: string }>,
   parseSantaActions: vi.fn(),
   setIsCartOpen: vi.fn(),
+  setMerchantSlug: vi.fn(),
   stripSantaActions: vi.fn((content: string) => content),
 }));
 
@@ -17,6 +18,7 @@ vi.mock('@/hooks/cart', () => ({
     applyNegotiatedPrice: chatMocks.applyNegotiatedPrice,
     cart: chatMocks.cart,
     setIsCartOpen: chatMocks.setIsCartOpen,
+    setMerchantSlug: chatMocks.setMerchantSlug,
   })),
 }));
 
@@ -29,7 +31,7 @@ vi.mock('@/components/storefront/santa-chat/types', () => ({
 import { useOgabasseyChat } from './use-ogabassey-chat';
 
 // Helper to create a streaming response body from a string
-function makeStreamingResponse(text: string) {
+function makeStreamingResponse(text: string, merchantSlug: string | null = 'ogabassey') {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
@@ -40,6 +42,9 @@ function makeStreamingResponse(text: string) {
   return {
     ok: true,
     body: stream,
+    headers: new Headers(
+      merchantSlug ? { 'x-baci-santa-merchant-slug': merchantSlug } : {}
+    ),
   };
 }
 
@@ -713,5 +718,142 @@ describe('useOgabasseyChat - handleSubmit', () => {
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalled();
     });
+  });
+});
+
+describe('useOgabasseyChat - reply tenant attribution', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    chatMocks.cart = [];
+    chatMocks.parseSantaActions.mockReturnValue([]);
+    chatMocks.stripSantaActions.mockImplementation((content: string) => content);
+    window.localStorage.clear();
+    global.fetch = vi.fn();
+  });
+
+  function mockProductLookup() {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      headers: new Headers({ 'x-baci-santa-merchant-slug': 'ogabassey' }),
+      json: async () => ({
+        product: {
+          id: 'product-9',
+          merchant_id: 'merchant-9',
+          name: 'Pixel 9',
+          slug: 'pixel-9',
+          description: '',
+          price: 650000,
+          max_discount_percentage: 2,
+          image: '',
+          imageLarge: '',
+          imageHint: 'Pixel 9',
+          status: 'active',
+          stock: 1,
+          manage_stock: true,
+          brand: '',
+          sku: '',
+          gtin: '',
+          mpn: '',
+        },
+      }),
+      ok: true,
+    });
+  }
+
+  it('attributes the model message to the attested reply tenant', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeStreamingResponse('Hello!')
+    );
+
+    const { result } = renderHook(() =>
+      useOgabasseyChat({ isSanta: false, storefrontSlug: 'ogabassey' })
+    );
+
+    await act(async () => {
+      await result.current.handleSend('Hi');
+    });
+
+    expect(result.current.messages[1]).toMatchObject({
+      merchantSlug: 'ogabassey',
+      role: 'model',
+    });
+  });
+
+  it('refuses the cart add when the reply carried no tenant', async () => {
+    chatMocks.parseSantaActions.mockReturnValueOnce([
+      { type: 'ADD_TO_CART', productName: 'Pixel 9', price: 500000 },
+    ]);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeStreamingResponse('raw Santa directive', null)
+    );
+
+    const { result } = renderHook(() =>
+      useOgabasseyChat({ isSanta: true, storefrontSlug: 'ogabassey' })
+    );
+
+    await act(async () => {
+      await result.current.handleSend('I want a phone');
+    });
+    await act(async () => {
+      await result.current.handleAddSantaWishToCart(1);
+    });
+
+    expect(chatMocks.addToCart).not.toHaveBeenCalled();
+    expect(chatMocks.setMerchantSlug).not.toHaveBeenCalled();
+  });
+
+  it('refuses the cart add when the reply tenant differs from the storefront', async () => {
+    chatMocks.parseSantaActions.mockReturnValueOnce([
+      { type: 'ADD_TO_CART', productName: 'Pixel 9', price: 500000 },
+    ]);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeStreamingResponse('raw Santa directive', 'winter-store')
+    );
+
+    const { result } = renderHook(() =>
+      useOgabasseyChat({ isSanta: true, storefrontSlug: 'ogabassey' })
+    );
+
+    await act(async () => {
+      await result.current.handleSend('I want a phone');
+    });
+    await act(async () => {
+      await result.current.handleAddSantaWishToCart(1);
+    });
+
+    expect(chatMocks.addToCart).not.toHaveBeenCalled();
+    expect(chatMocks.setMerchantSlug).not.toHaveBeenCalled();
+  });
+
+  it('switches the cart to the attested tenant before adding', async () => {
+    const invocationOrder: string[] = [];
+    chatMocks.setMerchantSlug.mockImplementation(() => {
+      invocationOrder.push('setMerchantSlug');
+    });
+    chatMocks.addToCart.mockImplementation(() => {
+      invocationOrder.push('addToCart');
+    });
+    chatMocks.parseSantaActions.mockReturnValueOnce([
+      { type: 'ADD_TO_CART', productName: 'Pixel 9', price: 500000 },
+    ]);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeStreamingResponse('raw Santa directive')
+    );
+
+    const { result } = renderHook(() =>
+      useOgabasseyChat({ isSanta: true, storefrontSlug: 'ogabassey' })
+    );
+
+    await act(async () => {
+      await result.current.handleSend('I want a phone');
+    });
+    mockProductLookup();
+    await act(async () => {
+      await result.current.handleAddSantaWishToCart(1);
+    });
+
+    expect(chatMocks.setMerchantSlug).toHaveBeenCalledWith('ogabassey');
+    expect(invocationOrder.indexOf('setMerchantSlug')).toBeLessThan(
+      invocationOrder.indexOf('addToCart')
+    );
   });
 });

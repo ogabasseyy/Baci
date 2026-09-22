@@ -295,7 +295,9 @@ describe('useBNPLCheckoutController', () => {
         nativeEvent: {
           data: JSON.stringify({
             type: 'navigation',
-            url: 'https://usebaci.com/ogabassey/order-success?reference=CP-1',
+            // Explicit approval: a status-less CredPal return stays
+            // pending and never consumes the completion claim.
+            url: 'https://usebaci.com/ogabassey/order-success?reference=CP-1&credpalStatus=success',
           }),
         },
       });

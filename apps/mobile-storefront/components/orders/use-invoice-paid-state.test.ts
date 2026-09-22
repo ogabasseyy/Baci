@@ -90,6 +90,24 @@ describe('useGuestInvoicePaidState', () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
+  it('stays unresolved after failed lookups so a refunded order is never guessed unpaid', async () => {
+    global.fetch = jest.fn(async () => {
+      throw new Error('network down');
+    }) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useGuestInvoicePaidState(baseParams));
+
+    await waitFor(() =>
+      expect((global.fetch as jest.Mock).mock.calls.length).toBe(2)
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Both attempts failed: the status is a guess, not an answer. The
+    // screen must withhold authoritative presentation and success side
+    // effects rather than bless guessed-unpaid for an order that may in
+    // fact be refunded.
+    expect(result.current).toEqual({ status: 'unpaid', isResolved: false });
+  });
+
   it('resets paid when the route swaps to a different unpaid invoice', async () => {
     mockTrackedOrder('paid', 'order-inv-1');
 

@@ -29,6 +29,25 @@ import { useBnplSettlement } from './use-bnpl-settlement';
 // Default to 5 days for delivery logic if not available
 const DELIVERY_ESTIMATE_MS = 5 * 24 * 60 * 60 * 1000;
 
+// Terminal payment states can never become payable: a cancelled, failed,
+// or otherwise dead order must not offer payer instructions or a live
+// DVA, even when an outstanding balance remains on the row.
+const TERMINAL_PAY_FOR_ME_STATUSES = new Set([
+  'abandoned',
+  'cancelled',
+  'canceled',
+  'declined',
+  'expired',
+  'failed',
+  'reversed',
+]);
+
+function isTerminalPayForMeStatus(status?: string | null): boolean {
+  return (
+    !!status && TERMINAL_PAY_FOR_ME_STATUSES.has(status.trim().toLowerCase())
+  );
+}
+
 function OrderSuccessContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get('orderId');
@@ -142,9 +161,15 @@ function OrderSuccessContent() {
   const payerOutstandingBalance = order
     ? Math.max(order.total - (order.amount_paid || 0), 0)
     : 0;
+  // A cancelled/failed/refunded order with an outstanding balance is not
+  // payable: reopening its tokenized success URL must not display and
+  // copy a live DVA for an order that cannot be fulfilled. Only an
+  // active (non-terminal, non-paid) status keeps the handoff.
   const isPayForMeUnpaid =
     isPayForMe &&
     order?.payment_status !== 'paid' &&
+    order?.payment_status !== 'refunded' &&
+    !isTerminalPayForMeStatus(order?.payment_status) &&
     payerOutstandingBalance > 0;
   // Same DVA-compatibility rule as the order email: Paystack DVAs settle
   // in NGN only, so a foreign-currency quote never prints the naira

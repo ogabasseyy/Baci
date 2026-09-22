@@ -38,6 +38,35 @@ describe('resolveBNPLNavigationUrlEffect', () => {
     });
   });
 
+  it('treats a CredPal return without a status as pending, not paid', () => {
+    // The launcher omits credpalStatus when the runtime payload supplies
+    // none: without an explicit success this must not consume the durable
+    // completion claim.
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://shop.example.com/order-success?type=credpal',
+        { ...trustedBase, gateway: 'credpal' }
+      )
+    ).toEqual({
+      isPending: true,
+      reference: null,
+      status: 'success',
+    });
+  });
+
+  it('treats an unrecognized CredPal status as pending, not paid', () => {
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://shop.example.com/order-success?type=credpal&credpalStatus=approved',
+        { ...trustedBase, gateway: 'credpal' }
+      )
+    ).toEqual({
+      isPending: true,
+      reference: null,
+      status: 'success',
+    });
+  });
+
   it('treats approved CredPal results as paid success', () => {
     expect(
       resolveBNPLNavigationUrlEffect(

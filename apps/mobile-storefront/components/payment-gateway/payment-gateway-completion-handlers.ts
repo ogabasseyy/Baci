@@ -154,6 +154,12 @@ export function createPaymentGatewayCompletionHandlers({
     }
 
     let verifiedOrderNumber = orderNumber;
+    // A provider-confirmed REDVAULT payment completes exactly once below:
+    // the REDVAULT branch owns the single conversion emission, so the
+    // generic verification block is skipped for it — otherwise a paid
+    // tracked-order lookup would emit the same ad purchase and legacy
+    // order_completed a second time under the other claim key.
+    let redvaultVerified = false;
     if (paymentMethod === 'uba_redvault') {
       paymentCompletionStartedRef.current = true;
       clearPendingLoadTimeout();
@@ -166,6 +172,7 @@ export function createPaymentGatewayCompletionHandlers({
           return;
         }
         verifiedOrderNumber = outcome.orderNumber || orderNumber;
+        redvaultVerified = true;
         // The persisted fence must clear now: otherwise the next submit
         // resolves this paid order, clears the new cart, and routes back
         // here instead of placing the new purchase. Retry transient
@@ -218,7 +225,11 @@ export function createPaymentGatewayCompletionHandlers({
     paymentCompletionStartedRef.current = true;
     clearPendingLoadTimeout();
     setPaymentStatus('success');
-    if (orderId) {
+    // Skipped for provider-verified REDVAULT payments (see above): the
+    // REDVAULT branch already owns the single conversion emission, and a
+    // lagging tracked row must not override a provider-confirmed success
+    // with an error or a second emission.
+    if (orderId && !redvaultVerified) {
       // Prefer the canonical order total: `amount` is only the residual due
       // at the gateway after wallet/savings credits.
       const purchaseTotal = orderTotal ?? amount ?? 0;
@@ -231,6 +242,13 @@ export function createPaymentGatewayCompletionHandlers({
         trackingToken,
         reference,
       });
+      // The shopper may have left while verification was pending (up to
+      // its full timeout): a late response must not record a conversion
+      // or erase the cart after unmount — a new storefront cart built
+      // since would be destroyed even though navigation refuses to run.
+      if (!isMountedRef.current) {
+        return;
+      }
       if (verification.paid) {
         // The tracked order already carries the checkout identity,
         // breakdown, and line items: forward them so the durable claim is
@@ -249,6 +267,11 @@ export function createPaymentGatewayCompletionHandlers({
           tax: verification.tax,
           value: verification.total ?? purchaseTotal,
         });
+        // Same unmount hazard across the fallible tracking call: stop
+        // before clearCart when the screen is gone.
+        if (!isMountedRef.current) {
+          return;
+        }
       } else if (verification.terminalFailure) {
         // Definitive gateway outcome: the payment cannot settle, so keep
         // the cart and the error/retry path instead of navigating to a

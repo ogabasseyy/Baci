@@ -176,6 +176,10 @@ async function performRelease(
     return { settled };
   } catch (error) {
     log.error('Failed to release checkout purchase tracking claim:', error);
+    // A rejected read leaves the persisted claim exactly as a timed-out
+    // read does: retry on the same bounded schedule or the next poll
+    // mistakes it for a recorded conversion and stops.
+    scheduleReleaseRetry(claim, RELEASE_RETRY_ATTEMPTS);
     return { settled };
   }
 }

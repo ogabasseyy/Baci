@@ -475,6 +475,28 @@ it('retries a release whose store read timed out so the next poll can emit', asy
   }
 });
 
+it('retries a release whose store read rejects so the next poll can emit', async () => {
+  await expect(
+    claimCheckoutPurchaseTracking('order-retry-reject', 'payment_completed')
+  ).resolves.toBe(true);
+
+  // A non-timeout rejection takes the catch path: the caller is answered
+  // while the persisted claim remains, and the scheduled retry must
+  // remove it once the store answers again.
+  mockGetItem.mockRejectedValueOnce(new Error('store down'));
+  await releaseCheckoutPurchaseTracking(
+    'order-retry-reject',
+    'payment_completed'
+  );
+
+  // The retry is chained directly behind the release, so this re-claim
+  // deterministically observes the post-retry store: success proves the
+  // stale claim is gone and a later poll can emit.
+  await expect(
+    claimCheckoutPurchaseTracking('order-retry-reject', 'payment_completed')
+  ).resolves.toBe(true);
+});
+
 function parseStoredClaimsForTest(raw: string | undefined): string[] {
   if (!raw) {
     return [];

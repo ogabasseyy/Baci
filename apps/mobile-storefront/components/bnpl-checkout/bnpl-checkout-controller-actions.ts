@@ -88,10 +88,18 @@ export function resolveBNPLNavigationUrlEffect(
     // are not paid conversions: CredPal's explicit `pending` status, and any
     // Klump navigation — the Klump launcher records only the transaction ID
     // and its return carries no settlement proof, so settlement is always
-    // confirmed later via the tracked order.
+    // confirmed later via the tracked order. For CredPal only an explicit
+    // `success` settles: the launcher adds `credpalStatus` only when the
+    // runtime payload supplies one, so a missing or unrecognized value
+    // must stay pending — treating it as paid would consume the durable
+    // completion claim on a malformed or version-skewed callback that
+    // later polling cannot correct.
+    const providerStatus = extractBNPLProviderStatus(url);
     const isPending =
-      extractBNPLProviderStatus(url) === 'pending' ||
-      options.gateway === 'klump';
+      options.gateway === 'klump' ||
+      (options.gateway === 'credpal'
+        ? providerStatus !== 'success'
+        : providerStatus === 'pending');
     return {
       isPending,
       reference: extractReferenceFromUrl(url),

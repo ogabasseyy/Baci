@@ -119,12 +119,12 @@ export function useGuestInvoicePaidState({
           setLookupSettled(true);
           return;
         } catch {
-          // Display stays proforma after retries exhaust; the shopper can
-          // still pay or retry.
+          // Transport failures stay unresolved: an exhausted lookup
+          // answers nothing, so the status must not become authoritative
+          // — a refunded order would otherwise present guessed-unpaid
+          // copy with success side effects enabled. Display stays
+          // proforma; the shopper can still pay or retry.
           if (cancelled || attempt >= 2) {
-            if (!cancelled) {
-              setLookupSettled(true);
-            }
             return;
           }
         } finally {
@@ -134,9 +134,8 @@ export function useGuestInvoicePaidState({
           }
         }
       }
-      if (!cancelled) {
-        setLookupSettled(true);
-      }
+      // Repeated non-ok responses (5xx) likewise answer nothing: stay
+      // unresolved rather than blessing the guessed-unpaid default.
     })();
     return () => {
       cancelled = true;

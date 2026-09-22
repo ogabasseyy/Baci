@@ -293,6 +293,37 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     );
   });
 
+  it('emits exactly one purchase for a verified REDVAULT success', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue({
+      items: [],
+      orderNumber: 'ORD-9',
+      paymentMethod: 'uba_redvault',
+      shipping: 0,
+      subtotal: 5000,
+      tax: 0,
+      total: 5000,
+    });
+    // Even with a paid tracked order, the generic block must not run for
+    // a provider-verified REDVAULT payment: its payment_completed claim
+    // is independent of the REDVAULT branch's purchase claim, so a
+    // second emission would double-count the conversion.
+    mockPaidVerification();
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(true);
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+
+    expect(mockTrackCheckoutRoutePurchaseCompleted).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.clearCart).toHaveBeenCalledTimes(1);
+    expect(input.setPaymentStatus).toHaveBeenLastCalledWith('success');
+    expect(router.replace).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/order-success' })
+    );
+  });
+
   it('clears the persisted REDVAULT fence after verified success', async () => {
     mockVerifyRedvaultPayment.mockResolvedValue('success');
     const { input } = createInput({ paymentMethod: 'uba_redvault' });
@@ -489,6 +520,57 @@ describe('createPaymentGatewayCompletionHandlers', () => {
         }),
       })
     );
+  });
+
+  it('stops completion work when the screen unmounts while verifying', async () => {
+    // Arrange: verification stays pending until the test releases it.
+    let resolveVerify!: (response: Response) => void;
+    global.fetch = jest.fn(async (url: string) => {
+      if (String(url).includes('/api/payments/verify')) {
+        return new Promise<Response>((resolve) => {
+          resolveVerify = resolve;
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          order: {
+            id: 'order-1',
+            order_number: 'ORD-1',
+            payment_status: 'pending',
+            total: 5000,
+          },
+        }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+    const { input, refs } = createInput();
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+    const completion = beginPaymentCompletion();
+
+    // Act: the shopper leaves while verification is pending, then the
+    // provider answers paid.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    refs.isMountedRef.current = false;
+    resolveVerify(
+      new Response(
+        JSON.stringify({
+          success: true,
+          status: 'success',
+          finalizationOutcome: 'completed',
+          orderId: 'order-1',
+          orderTotal: 5000,
+        }),
+        { status: 200 }
+      )
+    );
+    await completion;
+
+    // Assert: no conversion is recorded and the cart survives — a new
+    // storefront cart built since unmount must not be erased.
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.clearCart).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
   });
 
   it('forwards tracked identity, breakdown, and items on direct completion', async () => {

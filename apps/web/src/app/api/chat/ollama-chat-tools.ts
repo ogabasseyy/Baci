@@ -22,8 +22,14 @@ export const ollamaAgenticChatTools: OllamaChatTool[] = [
               'Search query for products, for example iPhone 15 or gaming laptop',
           },
           category: { ...STRING_SCHEMA, description: 'Optional category' },
-          maxPrice: { ...NUMBER_SCHEMA, description: 'Maximum price in Naira' },
-          minPrice: { ...NUMBER_SCHEMA, description: 'Minimum price in Naira' },
+          maxPrice: {
+            ...NUMBER_SCHEMA,
+            description: 'Maximum price in the storefront currency',
+          },
+          minPrice: {
+            ...NUMBER_SCHEMA,
+            description: 'Minimum price in the storefront currency',
+          },
         },
       },
     },
@@ -54,7 +60,10 @@ export const ollamaAgenticChatTools: OllamaChatTool[] = [
         type: 'object',
         required: ['amount', 'customerEmail', 'customerName', 'items'],
         properties: {
-          amount: { ...NUMBER_SCHEMA, description: 'Total amount in Naira' },
+          amount: {
+            ...NUMBER_SCHEMA,
+            description: 'Total amount in the storefront currency',
+          },
           customerEmail: {
             ...STRING_SCHEMA,
             description: 'Customer email address',

@@ -11,6 +11,8 @@ const options = {
   agenticCheckoutEnabled: true,
   baseUrl: 'https://ollama.example.com',
   model: 'test-model',
+  currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
+  merchantName: 'Demo Store',
   executeToolCall: mocks.execute,
 };
 

@@ -46,6 +46,7 @@ import {
   getOllamaBasicAuth,
 } from '@/env';
 import { resolveAgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
+import { getCurrencyConfig } from '@/lib/currency';
 import { createLlmChatResponse } from '@/lib/llm-chat';
 import { sanitizeHtml } from '@/lib/sanitize';
 
@@ -165,6 +166,9 @@ export async function POST(req: Request) {
           bearer,
           model: chatModel,
           messages: buildChatMessages(sanitizedMessages, chatModel, {
+            checkoutEnabled: tenant.agenticCheckoutEnabled,
+            currency: getCurrencyConfig(undefined, tenant.currencyCode),
+            merchantName: tenant.businessName,
             toolsEnabled: false,
           }),
           signal: req.signal,
@@ -198,6 +202,8 @@ export async function POST(req: Request) {
           baseUrl: ollamaBaseUrl,
           model: getAiChatModel(),
           basicAuth: getOllamaBasicAuth(),
+          currency: getCurrencyConfig(undefined, tenant.currencyCode),
+          merchantName: tenant.businessName,
           executeToolCall: (call) =>
             executeAgenticChatToolForOllama(
               call.function.name,
@@ -218,6 +224,8 @@ export async function POST(req: Request) {
         messages: sanitizedMessages,
         abortSignal: req.signal,
         agenticCheckoutEnabled: tenant.agenticCheckoutEnabled,
+        currency: getCurrencyConfig(undefined, tenant.currencyCode),
+        merchantName: tenant.businessName,
         sessionId,
       });
     } catch (error) {

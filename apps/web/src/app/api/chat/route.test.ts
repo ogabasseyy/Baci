@@ -981,7 +981,9 @@ describe('POST /api/chat', () => {
     expect(generateText).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'mock-model',
-        system: expect.stringContaining('Ogabassey AI'),
+        system: expect.stringContaining(
+          'intelligent shopping assistant for the configured storefront'
+        ),
         tools: expect.objectContaining({
           searchProducts: expect.objectContaining({
             description: 'Search products',

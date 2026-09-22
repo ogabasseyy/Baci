@@ -1,3 +1,4 @@
+import type { CurrencyConfig } from '@/lib/currency';
 import { createOllamaAgenticChatResponse } from '@/lib/ollama-agentic-chat';
 import type { OllamaToolCall } from '@/lib/ollama-chat';
 import { createChatPresentationEventCollector } from './create-chat-presentation-event-collector';
@@ -72,6 +73,8 @@ export async function runOllamaChat(
     baseUrl: string;
     model: string;
     basicAuth?: string;
+    currency: CurrencyConfig;
+    merchantName: string;
     executeToolCall: (call: OllamaToolCall) => Promise<string>;
   }
 ): Promise<Response | null> {
@@ -84,6 +87,9 @@ export async function runOllamaChat(
       model: options.model,
       basicAuth: options.basicAuth,
       messages: buildChatMessages(messages, options.model, {
+        checkoutEnabled: options.agenticCheckoutEnabled,
+        currency: options.currency,
+        merchantName: options.merchantName,
         toolsEnabled: true,
       }),
       tools: getOllamaAgenticChatTools(options.agenticCheckoutEnabled),

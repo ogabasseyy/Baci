@@ -15,7 +15,7 @@ vi.mock('@/ai/text-provider-chain', () => ({
   getTextProviderChain: mocks.getTextProviderChain,
 }));
 vi.mock('@/config/agentic-chat-system-prompt', () => ({
-  AGENTIC_SYSTEM_PROMPT: 'test system prompt',
+  buildAgenticSystemPrompt: vi.fn(() => 'test system prompt'),
 }));
 
 import { resetProviderCooldowns } from '@/ai/provider-cooldown';
@@ -75,6 +75,8 @@ describe('runChatProviderChain', () => {
     const result = await runChatProviderChain({
       abortSignal: new AbortController().signal,
       agenticCheckoutEnabled: true,
+      currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
+      merchantName: 'Demo Store',
       messages: [{ content: 'Hello', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -130,6 +132,8 @@ describe('runChatProviderChain', () => {
     const result = await runChatProviderChain({
       abortSignal: new AbortController().signal,
       agenticCheckoutEnabled: true,
+      currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
+      merchantName: 'Demo Store',
       messages: [{ role: 'user', content: 'Show phones' }],
       sessionId: 'session-1',
     });
@@ -164,6 +168,8 @@ describe('runChatProviderChain', () => {
     const result = await runChatProviderChain({
       abortSignal: new AbortController().signal,
       agenticCheckoutEnabled: true,
+      currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
+      merchantName: 'Demo Store',
       messages: [{ content: 'Hello', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -196,6 +202,8 @@ describe('runChatProviderChain', () => {
     const attempt = runChatProviderChain({
       abortSignal: new AbortController().signal,
       agenticCheckoutEnabled: true,
+      currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
+      merchantName: 'Demo Store',
       messages: [{ content: 'Create a payment account', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -233,6 +241,8 @@ describe('runChatProviderChain', () => {
     const result = await runChatProviderChain({
       abortSignal: new AbortController().signal,
       agenticCheckoutEnabled: true,
+      currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
+      merchantName: 'Demo Store',
       messages: [{ content: 'Show me phones', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -284,6 +294,8 @@ describe('runChatProviderChain', () => {
     const result = await runChatProviderChain({
       abortSignal: new AbortController().signal,
       agenticCheckoutEnabled: true,
+      currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
+      merchantName: 'Demo Store',
       messages: [{ content: 'Tell me about this phone', role: 'user' }],
       sessionId: 'session-1',
     });

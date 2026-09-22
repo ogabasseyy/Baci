@@ -2,7 +2,6 @@
 
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { pruneExpiredVoucherCartLines } from '@/lib/checkout/quiz-voucher-expiry';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
@@ -12,14 +11,13 @@ import {
   DEFAULT_ASSURANCE_RATE,
   DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS,
   generateCartItemId,
-  getCartFromStorage,
-  getCartWideNegotiationFromStorage,
   getMerchantSlugFromStorage,
   saveCartToStorage,
   saveCartWideNegotiationToStorage,
   saveMerchantSlugToStorage,
 } from './cart-storage';
 import type { AddToCartOptions, CartContextType, CartItem } from './cart-types';
+import { getMerchantCartState } from './merchant-cart-storage';
 import {
   applyValidationResults,
   createCartHash,
@@ -44,11 +42,17 @@ export function StorefrontCartProvider({
   const [cart, setCart] = useState<CartItem[]>([]);
   // True while a cart-wide (group) negotiation is applied. Removing a line
   // invalidates the proportional group total, so it is reset on removal.
-  const [cartWideNegotiationActive, setCartWideNegotiationActive] =
+  const [cartWideNegotiationActive, setCartWideNegotiationActiveState] =
     useState(false);
+  const cartWideNegotiationActiveRef = useRef(false);
+  const setCartWideNegotiationActive = (active: boolean) => {
+    cartWideNegotiationActiveRef.current = active;
+    setCartWideNegotiationActiveState(active);
+  };
   const [merchantSlug, setMerchantSlugState] = useState<string | null>(
     initialMerchantSlug
   );
+  const merchantSlugRef = useRef<string | null>(initialMerchantSlug);
   const [isHydrated, setIsHydrated] = useState(false);
   // Tracks idle/interaction-driven activation only. The non-deferred case is
   // derived below so the activation effect never sets state synchronously.
@@ -74,15 +78,17 @@ export function StorefrontCartProvider({
   if (isHydrated && initialMerchantSlug !== prevInitialMerchantSlug) {
     setPrevInitialMerchantSlug(initialMerchantSlug);
     const slugToUse = initialMerchantSlug || getMerchantSlugFromStorage();
+    const merchantCartState = getMerchantCartState(slugToUse);
+    merchantSlugRef.current = slugToUse;
     setMerchantSlugState(slugToUse);
     // Prune quiz-prize voucher lines whose signed token has already expired
     // (7-day window). An expired voucher line is forced to ₦0 and re-fails
     // every checkout until removed, so it must never survive rehydration.
-    setCart(pruneExpiredVoucherCartLines(getCartFromStorage(slugToUse)));
+    setCart(merchantCartState.cart);
     // Re-read the group flag for the new merchant too, so it stays consistent
     // with the freshly loaded cart (otherwise the previous merchant's flag
     // leaks onto this cart).
-    setCartWideNegotiationActive(getCartWideNegotiationFromStorage(slugToUse));
+    setCartWideNegotiationActive(merchantCartState.cartWideNegotiationActive);
   }
 
   // Hydrate cart + merchant slug from localStorage after mount (storage is
@@ -97,8 +103,10 @@ export function StorefrontCartProvider({
   // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only hydration; initialMerchantSlug prop changes handled during render
   useEffect(() => {
     const slugToUse = initialMerchantSlug || getMerchantSlugFromStorage();
-    setCart(pruneExpiredVoucherCartLines(getCartFromStorage(slugToUse)));
-    setCartWideNegotiationActive(getCartWideNegotiationFromStorage(slugToUse));
+    const merchantCartState = getMerchantCartState(slugToUse);
+    merchantSlugRef.current = slugToUse;
+    setCart(merchantCartState.cart);
+    setCartWideNegotiationActive(merchantCartState.cartWideNegotiationActive);
     setMerchantSlugState(slugToUse);
     setIsHydrated(true);
   }, []);
@@ -251,7 +259,8 @@ export function StorefrontCartProvider({
         });
 
         if (resetGroup) {
-          setCartWideNegotiationActive(false);
+          cartWideNegotiationActiveRef.current = false;
+          setCartWideNegotiationActiveState(false);
         }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
@@ -350,7 +359,7 @@ export function StorefrontCartProvider({
       return;
     }
 
-    const wasGroupActive = cartWideNegotiationActive;
+    const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
       const cartItemId = generateCartItemId(
         productForCart.id,
@@ -437,6 +446,7 @@ export function StorefrontCartProvider({
     cartItemIdOrProductId: string,
     variantId?: string
   ) => {
+    const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
       const filtered = previousCart.filter((item) => {
         if (variantId) {
@@ -455,7 +465,7 @@ export function StorefrontCartProvider({
       // A cart-wide (group) negotiation distributes one negotiated total across
       // all lines; removing a line breaks that total, so reset the group deal
       // and revert remaining lines to catalog price.
-      if (cartWideNegotiationActive) {
+      if (wasGroupActive) {
         return filtered.map((item) => ({
           ...item,
           negotiatedPrice: undefined,
@@ -465,7 +475,7 @@ export function StorefrontCartProvider({
 
       return filtered;
     });
-    if (cartWideNegotiationActive) {
+    if (wasGroupActive) {
       setCartWideNegotiationActive(false);
     }
   };
@@ -475,6 +485,7 @@ export function StorefrontCartProvider({
     quantity: number,
     variantId?: string
   ) => {
+    const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
       const targetIndex = previousCart.findIndex((item) => {
         if (variantId) {
@@ -494,7 +505,7 @@ export function StorefrontCartProvider({
         const filtered = previousCart.filter(
           (_, index) => index !== targetIndex
         );
-        if (cartWideNegotiationActive) {
+        if (wasGroupActive) {
           return filtered.map((item) => ({
             ...item,
             negotiatedPrice: undefined,
@@ -515,7 +526,7 @@ export function StorefrontCartProvider({
       // A quantity change alters the cart total, so an active cart-wide
       // negotiation no longer represents the agreed total — clear the group
       // deal on every line (not only when the line is removed).
-      if (cartWideNegotiationActive) {
+      if (wasGroupActive) {
         return nextCart.map((line) => ({
           ...line,
           negotiatedPrice: undefined,
@@ -524,7 +535,7 @@ export function StorefrontCartProvider({
       }
       return nextCart;
     });
-    if (cartWideNegotiationActive) {
+    if (wasGroupActive) {
       setCartWideNegotiationActive(false);
     }
   };
@@ -538,6 +549,7 @@ export function StorefrontCartProvider({
     saveCartToStorage([], slugToClear);
     saveCartWideNegotiationToStorage(false, slugToClear);
     setCart([]);
+    merchantSlugRef.current = null;
     setMerchantSlugState(null);
     saveMerchantSlugToStorage(null);
     setCartWideNegotiationActive(false);
@@ -545,13 +557,22 @@ export function StorefrontCartProvider({
   };
 
   const setMerchantSlug = (slug: string) => {
+    if (merchantSlugRef.current === slug) {
+      saveMerchantSlugToStorage(slug);
+      return;
+    }
+
+    merchantSlugRef.current = slug;
+    const merchantCartState = getMerchantCartState(slug);
     setMerchantSlugState(slug);
+    setCart(merchantCartState.cart);
+    setCartWideNegotiationActive(merchantCartState.cartWideNegotiationActive);
     saveMerchantSlugToStorage(slug);
   };
 
   const applyNegotiatedPrice = (cartItemId: string, newPrice: number) => {
     if (!enableSmartCartPro) return;
-    const wasGroupActive = cartWideNegotiationActive;
+    const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
       // If a cart-wide deal was active, clear the proportional group prices from
       // the other lines first so only this line keeps a negotiation.

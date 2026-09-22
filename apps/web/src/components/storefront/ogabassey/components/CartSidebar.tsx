@@ -25,6 +25,7 @@ import { getStorefrontProductHref } from '@/lib/storefront-product-href';
 import { AdUnit } from './AdUnit';
 import { CartSidebarTotal } from './cart-sidebar-total';
 // import { ActionTooltip } from './Tooltip';
+import { hasCartMerchantContext } from './cart-sidebar-merchant-context';
 import { EmptyState } from './empty-state';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import {
@@ -61,6 +62,7 @@ export const CartSidebar: React.FC = () => {
     applyCartWideNegotiation,
     clearNegotiatedPrice,
     toggleAssurance,
+    merchantSlug: cartMerchantSlug,
   } = useCart();
 
   const [negotiationState, setNegotiationState] =
@@ -69,13 +71,22 @@ export const CartSidebar: React.FC = () => {
   // Get merchant context for slug
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
-  const basePath = merchantContext?.basePath;
+  const cartMerchantContextMatches = hasCartMerchantContext(
+    cartMerchantSlug,
+    merchant?.slug
+  );
+  const basePath =
+    cartMerchantSlug && !cartMerchantContextMatches
+      ? `/${cartMerchantSlug}`
+      : merchantContext?.basePath;
   const negotiationVatRate =
+    cartMerchantContextMatches &&
     merchant?.vat_registration_status === 'registered'
       ? (merchant.vat_rate ?? 7.5) / 100
       : 0;
 
-  const hasPriceNegotiation = hasStorefrontPriceNegotiation(merchant);
+  const hasPriceNegotiation =
+    cartMerchantContextMatches && hasStorefrontPriceNegotiation(merchant);
 
   const displayCart = sanitizeCartItems(cart, hasPriceNegotiation);
 
@@ -97,7 +108,11 @@ export const CartSidebar: React.FC = () => {
 
   // Track ViewCart event when sidebar opens
   useEffect(() => {
-    if (isCartOpen && displayCart.length > 0) {
+    if (
+      isCartOpen &&
+      displayCart.length > 0 &&
+      cartMerchantContextMatches
+    ) {
       // Map cart items to Product structure expected by analytics
       const analyticsProducts = displayCart.map((item) => ({
         product: {
@@ -110,13 +125,23 @@ export const CartSidebar: React.FC = () => {
         quantity: item.quantity,
       }));
 
-      analytics.viewCart(analyticsProducts, 'NGN', {
-        merchantId: merchant?.id || '',
-        // If we had user data context, we would pass it here
-        // userData: { email: user?.email, ... }
-      });
+      analytics.viewCart(
+        analyticsProducts,
+        merchant?.payout_currency ?? 'NGN',
+        {
+          merchantId: merchant?.id || '',
+          // If we had user data context, we would pass it here
+          // userData: { email: user?.email, ... }
+        }
+      );
     }
-  }, [isCartOpen, cart, merchant?.id]);
+  }, [
+    isCartOpen,
+    cart,
+    cartMerchantContextMatches,
+    merchant?.id,
+    merchant?.payout_currency,
+  ]);
 
   if (!isCartOpen) return null;
 
@@ -413,7 +438,9 @@ export const CartSidebar: React.FC = () => {
                           </div>
 
                           {/* Assurance/Insurance Toggle */}
-                          {merchant?.feature_settings?.shipping_insurance_enabled && (
+                          {cartMerchantContextMatches &&
+                            merchant?.feature_settings
+                              ?.shipping_insurance_enabled && (
                             <div className="mt-4 pt-3 border-t border-gray-50">
                               <label className="flex items-start gap-2 cursor-pointer group">
                                 <div className="relative flex items-center mt-0.5">
@@ -540,7 +567,7 @@ export const CartSidebar: React.FC = () => {
       </div>
 
       {/* Negotiation Modal — only render when merchant context is available */}
-      {negotiationState && merchant?.id && (
+      {negotiationState && cartMerchantContextMatches && merchant?.id && (
         <NegotiationModal
           isOpen={negotiationState.isOpen}
           onClose={() => setNegotiationState(null)}

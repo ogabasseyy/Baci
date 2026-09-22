@@ -3,8 +3,12 @@
 -- compare trimmed request values, so padded stored rows would otherwise
 -- create facet options that match nothing. Covers: trigger presence, the
 -- backfill UPDATE against a seeded padded row, the at-rest backfill effect,
--- and the INSERT/UPDATE trim trigger. Uses sentinel UUIDs and cleans up
--- after itself.
+-- and the INSERT/UPDATE trim trigger. Runs in a transaction with the
+-- service-role JWT claim (merchant writes fire canonical audit triggers that
+-- require actor context) and rolls back, leaving no sentinel residue.
+
+BEGIN;
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
 
 DO $test$
 DECLARE
@@ -94,9 +98,7 @@ BEGIN
     RAISE EXCEPTION 'UPDATE trigger did not trim gpu, stored %', v_stored_gpu;
   END IF;
 
-  -- Cleanup: remove sentinel rows (key specs cascade from products).
-  DELETE FROM public.products
-  WHERE id IN (v_product_id, v_seed_product_id);
-  DELETE FROM public.merchants WHERE id = v_merchant_id;
 END;
 $test$;
+
+ROLLBACK;

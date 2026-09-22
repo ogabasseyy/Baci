@@ -92,6 +92,9 @@ function setupBlogListingFetch({
       singleResult: result,
     })
   );
+  const publicMerchantBuilder = createQueryBuilder({
+    singleResult: { data: { slug: 'merchant-1' }, error: null },
+  });
   const featureSettingsSelects: string[] = [];
   const postsBuilder = createQueryBuilder({
     queryResult: { data: posts, count: count ?? posts.length, error: null },
@@ -132,6 +135,10 @@ function setupBlogListingFetch({
   const blogBuilders = [postsBuilder, categoriesBuilder];
   const blogSelects: ReturnType<typeof vi.fn>[] = [];
   const publicFrom = vi.fn((table: string) => {
+    if (table === 'merchants') {
+      return { select: vi.fn(() => publicMerchantBuilder) };
+    }
+
     if (table === 'blog_posts') {
       const select = vi.fn(() => {
         const builder = blogBuilders.shift();
@@ -394,30 +401,15 @@ describe('getCachedFeatureSettings', () => {
     vi.clearAllMocks();
   });
 
-  it('falls back to the legacy feature settings projection while the repairs flag migration is pending', async () => {
-    const { featureSettingsSelects } = setupBlogListingFetch({
-      featureSettingsResults: [
-        {
-          data: null,
-          error: {
-            code: '42703',
-            message:
-              'column merchant_feature_settings.repairs_catalog_enabled does not exist',
-          },
-        },
-        { data: { blog_enabled: true }, error: null },
-      ],
-    });
+  it('normalizes snapshot feature settings missing the repairs flag', async () => {
+    setupBlogListingFetch();
 
     const settings = await getCachedFeatureSettings('merchant-1');
 
     expect(settings).toMatchObject({
       blog_enabled: true,
-      // Normalized default while the column is missing.
+      // Normalized default while the snapshot projection lacks the flag.
       repairs_catalog_enabled: false,
     });
-    expect(featureSettingsSelects).toHaveLength(2);
-    expect(featureSettingsSelects[0]).toContain('repairs_catalog_enabled');
-    expect(featureSettingsSelects[1]).not.toContain('repairs_catalog_enabled');
   });
 });

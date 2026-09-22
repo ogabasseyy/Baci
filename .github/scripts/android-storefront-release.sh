@@ -27,12 +27,29 @@ case "$operation" in
     # versioned dir without the `latest` link, failing configuration with
     # "Could not find sdkmanager executable".
     if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
-      CANDIDATE="$(find "$SDK/cmdline-tools" -maxdepth 3 -name sdkmanager -type f | head -n 1)"
+      # Select only an executable sdkmanager, ignoring anything nested under a
+      # stale `latest` directory so a later cleanup cannot remove the chosen
+      # candidate out from under the new link.
+      CANDIDATE=""
+      while IFS= read -r candidate_path; do
+        if [ -x "$candidate_path" ]; then
+          CANDIDATE="$candidate_path"
+          break
+        fi
+      done < <(find "$SDK/cmdline-tools" -maxdepth 3 -path '*/latest/*' -prune -o -name sdkmanager -type f -print | sort)
       if [ -z "$CANDIDATE" ]; then
         echo "::error::No sdkmanager under $SDK/cmdline-tools" >&2
         exit 1
       fi
-      ln -sfn "$(dirname "$(dirname "$CANDIDATE")")" "$SDK/cmdline-tools/latest"
+      LATEST="$SDK/cmdline-tools/latest"
+      if [ -e "$LATEST" ] && [ ! -L "$LATEST" ]; then
+        # A real directory here would swallow `ln -sfn` (the link lands inside
+        # it) while the check below keeps failing, so remove the invalid
+        # directory before linking. This branch only runs when `latest` has no
+        # executable sdkmanager, so a valid installation is never removed.
+        rm -rf "$LATEST"
+      fi
+      ln -sfn "$(dirname "$(dirname "$CANDIDATE")")" "$LATEST"
     fi
     test -x "$SDK/cmdline-tools/latest/bin/sdkmanager"
     ;;

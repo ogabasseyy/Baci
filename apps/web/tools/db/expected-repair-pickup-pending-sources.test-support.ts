@@ -229,4 +229,9 @@ export const EXPECTED_REPAIR_PICKUP_PENDING_SOURCES = [
       'supabase/migrations/20260922000600_limit_template_booking_exception_to_free_form.sql',
     sha256: 'b809187110edc080ae7e300af6ec7ed8ac50d016d149d04d097eec53bba2bccf',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260922000700_enforce_invoker_repair_booking_wrapper.sql',
+    sha256: '421d572509d58e976c3eb53a9f09944f47833dd67de8fdf301fca4f51eb90941',
+  },
 ];

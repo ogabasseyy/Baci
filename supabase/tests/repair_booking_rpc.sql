@@ -10,22 +10,16 @@ BEGIN;
 
 -- Public wrapper: SECURITY INVOKER, pinned search_path, anon + authenticated can EXECUTE.
 -- One DO block per assertion so replay failures attribute the exact check.
--- TEMPORARY replay diagnostic: report the observed prosecdef through the
--- only observable channel (SQLSTATE) since the runner swallows messages.
--- 42883 = wrapper missing; 22004 = prosecdef null; P0001 = definer observed;
--- silence = invoker observed (assertion holds, run continues).
 DO $$
 DECLARE
-  v_definer boolean;
+  is_definer boolean;
 BEGIN
-  SELECT prosecdef INTO v_definer
+  SELECT prosecdef INTO is_definer
   FROM pg_proc
   WHERE oid = 'public.create_repair_booking(uuid, text, text, text, text, text, text, timestamptz, text, text, uuid, uuid)'::regprocedure;
 
-  IF v_definer IS NULL THEN
-    RAISE EXCEPTION 'saw prosecdef null' USING ERRCODE = '22004';
-  ELSIF v_definer THEN
-    RAISE EXCEPTION 'saw prosecdef true' USING ERRCODE = 'P0001';
+  IF is_definer IS NOT FALSE THEN
+    RAISE EXCEPTION 'public.create_repair_booking must be SECURITY INVOKER';
   END IF;
 END $$;
 

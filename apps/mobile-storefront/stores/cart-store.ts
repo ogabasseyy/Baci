@@ -1,11 +1,9 @@
 import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { createLogger } from '@/lib/logger';
-import {
-  persistCheckoutGeneration,
-  persistCheckoutGenerationDetached,
-} from '@/lib/persist-checkout-generation';
+import { checkoutGenerationRestoreGate } from '@/lib/checkout-generation-restore-gate';
+import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
+import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
 import { applyPersistedCheckoutGeneration } from './apply-persisted-checkout-generation';
 import {
@@ -14,6 +12,7 @@ import {
   mergeExistingCartItem,
 } from './cart-line';
 import type { CartItem } from './cart-store.types';
+import { createCheckoutGenerationActions } from './cart-store-generation-actions';
 import {
   applyReprice,
   clearGroupNegotiation,
@@ -26,8 +25,6 @@ import { rotateEmptyCheckoutCart } from './rotate-empty-checkout-cart';
 
 export type { CartItem } from './cart-store.types';
 export { formatPrice, selectCartQuantities };
-
-const log = createLogger('CartStore');
 
 export function resetCartLineSequence() {
   if (useCartStore.getState().items.length === 0) {
@@ -78,7 +75,7 @@ export const useCartStore = create<CartState>()(
           const checkoutGeneration =
             state.items.length === 0
               ? state.checkoutGeneration === 'legacy'
-                ? Crypto.randomUUID()
+                ? mintedCheckoutGenerations.register(Crypto.randomUUID())
                 : state.checkoutGeneration
               : state.checkoutGeneration;
           if (state.items.length === 0) {
@@ -117,7 +114,10 @@ export const useCartStore = create<CartState>()(
         const state = get();
         const items = state.items.filter((item) => item.id !== id);
         if (items.length === 0) {
-          await rotateEmptyCheckoutCart(set);
+          await rotateEmptyCheckoutCart(set, {
+            previousGeneration: state.checkoutGeneration,
+            retainCreditSnapshot: false,
+          });
           return;
         }
         if (state.cartWideNegotiationActive) {
@@ -135,7 +135,10 @@ export const useCartStore = create<CartState>()(
         if (quantity <= 0) {
           const items = state.items.filter((item) => item.id !== id);
           if (items.length === 0) {
-            await rotateEmptyCheckoutCart(set);
+            await rotateEmptyCheckoutCart(set, {
+              previousGeneration: state.checkoutGeneration,
+              retainCreditSnapshot: false,
+            });
             return;
           }
           if (state.cartWideNegotiationActive) {
@@ -168,7 +171,10 @@ export const useCartStore = create<CartState>()(
       },
 
       clearCart: async () => {
-        await rotateEmptyCheckoutCart(set);
+        await rotateEmptyCheckoutCart(set, {
+          previousGeneration: get().checkoutGeneration,
+          retainCreditSnapshot: false,
+        });
       },
 
       getItem: (productId, variantId) => {
@@ -236,31 +242,7 @@ export const useCartStore = create<CartState>()(
         }));
       },
 
-      advanceCheckoutGeneration: async () => {
-        const checkoutGeneration = Crypto.randomUUID();
-        await persistCheckoutGeneration(checkoutGeneration);
-        set({ checkoutGeneration });
-      },
-      restoreItems: async (
-        items,
-        cartWideNegotiationActive,
-        checkoutGeneration
-      ) => {
-        set({
-          items,
-          ...(cartWideNegotiationActive !== undefined && {
-            cartWideNegotiationActive,
-          }),
-          ...(checkoutGeneration !== undefined && { checkoutGeneration }),
-        });
-        if (checkoutGeneration !== undefined) {
-          try {
-            await persistCheckoutGeneration(checkoutGeneration);
-          } catch (error) {
-            log.error('Failed to persist restored checkout generation:', error);
-          }
-        }
-      },
+      ...createCheckoutGenerationActions(set),
 
       repriceItems: (priceById) => {
         set((state) => applyReprice(state, priceById));
@@ -285,14 +267,20 @@ export const useCartStore = create<CartState>()(
       partialize: partializeCartStore,
       onRehydrateStorage: () => (state) => {
         const generationWhenReadBegan = state?.checkoutGeneration ?? 'legacy';
-        void applyPersistedCheckoutGeneration(
-          (checkoutGeneration) => {
-            useCartStore.setState({ checkoutGeneration });
-          },
-          {
-            generationWhenReadBegan,
-            getLiveGeneration: () => useCartStore.getState().checkoutGeneration,
-          }
+        checkoutGenerationRestoreGate.noteRestoreStarted(
+          applyPersistedCheckoutGeneration(
+            (checkoutGeneration) => {
+              checkoutGenerationRestoreGate.noteRestoredGeneration(
+                checkoutGeneration
+              );
+              useCartStore.setState({ checkoutGeneration });
+            },
+            {
+              generationWhenReadBegan,
+              getLiveGeneration: () =>
+                useCartStore.getState().checkoutGeneration,
+            }
+          )
         );
       },
     }

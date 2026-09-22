@@ -18918,6 +18918,14 @@ export type Database = {
         Args: { p_checkout_idempotency_key: string; p_merchant_id: string };
         Returns: boolean;
       };
+      is_storefront_order_idempotency_hash: {
+        Args: {
+          p_checkout_idempotency_key: string;
+          p_checkout_request_hash: string;
+          p_merchant_id: string;
+        };
+        Returns: boolean;
+      };
       has_merchant_access: {
         Args: { p_merchant_id: string };
         Returns: boolean;

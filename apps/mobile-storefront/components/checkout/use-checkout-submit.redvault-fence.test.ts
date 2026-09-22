@@ -1,14 +1,11 @@
 import { jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
-import type { MutableRefObject } from 'react';
 import { Alert } from 'react-native';
 import type { RepriceResult } from '@/services/cart-reprice';
 import type { CartItem } from '@/stores/cart-store.types';
 import { createOrderResponseFixture } from './checkout-order-response-fixture';
-import {
-  type UseCheckoutSubmitParams,
-  useCheckoutSubmit,
-} from './use-checkout-submit';
+import { useCheckoutSubmit } from './use-checkout-submit';
+import { address, cartItem, createParams } from './use-checkout-submit.setup';
 
 const mockRepriceCartItems = jest.fn() as jest.MockedFunction<
   (items: CartItem[], merchantId: string) => Promise<RepriceResult>
@@ -51,6 +48,9 @@ jest.mock('@/services/cart-reprice', () => ({
 }));
 
 jest.mock('@/services/orders', () => ({
+  // Lazy wrapper (not `createOrder: mockCreateOrder`): jest hoists this factory
+  // above the `const mockCreateOrder`, so an eager binding captures `undefined`.
+  // Typed args keep it compatible with the typed mock.
   createOrder: (
     ...args: Parameters<typeof import('@/services/orders').createOrder>
   ) => mockCreateOrder(...args),
@@ -120,6 +120,55 @@ jest.mock('./checkout-submit-validation', () => ({
   ) => mockValidateCheckoutSubmission(input),
 }));
 
+const mockResolvePersistedRedvaultOrder = jest.fn(
+  async (
+    _input: unknown
+  ): Promise<{
+    blocked: boolean;
+    orderId?: string;
+    paidOrderId?: string;
+  }> => ({
+    blocked: false,
+  })
+);
+const mockReadPersistedRedvaultOrder = jest.fn<
+  () => Promise<
+    import('@/lib/pending-redvault-order').PersistedRedvaultOrder | null
+  >
+>(async () => null);
+const mockClearPersistedRedvaultOrder = jest.fn(async () => undefined);
+
+jest.mock('@/lib/pending-redvault-order', () => ({
+  resolvePersistedRedvaultOrder: (input: unknown) =>
+    mockResolvePersistedRedvaultOrder(input),
+  readPersistedRedvaultOrder: () => mockReadPersistedRedvaultOrder(),
+  clearPersistedRedvaultOrder: () => mockClearPersistedRedvaultOrder(),
+}));
+
+const mockRouterReplace = jest.fn<(href: unknown) => void>();
+const mockRouterPush = jest.fn<(href: unknown) => void>();
+
+jest.mock('expo-router', () => ({
+  router: {
+    replace: (href: unknown) => mockRouterReplace(href),
+    push: (href: unknown) => mockRouterPush(href),
+  },
+}));
+
+const mockFenceFetchJson = jest.fn(async () => ({
+  order: {
+    id: 'order-rv',
+    payment_status: 'unpaid',
+    shipping_status: 'pending',
+  },
+}));
+
+jest.mock('@/lib/storefront-customer-api-client', () => ({
+  createStorefrontCustomerApiClient: () => ({
+    fetchJson: () => mockFenceFetchJson(),
+  }),
+}));
+
 const mockedUseCartStore = (
   jest.requireMock('@/stores/cart-store') as {
     useCartStore: jest.Mock & {
@@ -132,72 +181,7 @@ const mockedUseCartStore = (
   }
 ).useCartStore;
 
-const cartItem: CartItem = {
-  id: 'line-1',
-  name: 'iPhone 15 Pro',
-  price: 1200000,
-  product_id: 'product-1',
-  quantity: 1,
-  slug: 'iphone-15-pro',
-};
-
-const address = {
-  address: '1 Test Way',
-  city: 'Ikeja',
-  email: 'customer@example.com',
-  firstName: 'Ada',
-  lastName: 'Okafor',
-  phone: '08012345678',
-  state: 'Lagos',
-};
-
-function createRef<T>(current: T): MutableRefObject<T> {
-  return { current };
-}
-
-function createParams(
-  overrides: Partial<UseCheckoutSubmitParams> = {}
-): UseCheckoutSubmitParams {
-  return {
-    accountPassword: '',
-    appliedDiscountCode: null,
-    availablePaymentMethods: ['paystack'],
-    clearCart: jest.fn<() => void | Promise<void>>(),
-    currentShippingQuoteContextKey: 'door:Lagos:Ikeja',
-    customer: null,
-    deliveryFee: 1500,
-    deliveryMethod: 'door',
-    getLiveSavingsSelection:
-      jest.fn<UseCheckoutSubmitParams['getLiveSavingsSelection']>(),
-    getShippingProvider: () => 'gigl',
-    isAuthenticated: false,
-    isLoadingQuotes: false,
-    isOrderInFlight: createRef(false),
-    isProcessing: false,
-    mobileCheckoutIdempotencyRef: createRef(null),
-    orderTotals: { taxAmount: 0 },
-    paymentSettings: { klump_enabled: true },
-    paymentTab: 'full',
-    resolvedShippingQuoteContextKey: 'door:Lagos:Ikeja',
-    requiresShippingQuote: true,
-    saveAsDefaultAddress: false,
-    saveDetails: false,
-    selectedPayment: 'paystack',
-    selectedQuote: undefined,
-    selectedSavedAddressId: null,
-    setIsProcessing: jest.fn(),
-    setPendingOrder: jest.fn(),
-    setShowCryptoSelection: jest.fn(),
-    setStep: jest.fn(),
-    user: null,
-    walletBalance: 0,
-    walletFundedBankTransferOptionEnabled: false,
-    walletSelection: undefined,
-    ...overrides,
-  };
-}
-
-describe('useCheckoutSubmit recovery', () => {
+describe('useCheckoutSubmit REDVAULT fence', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     cartItems = [cartItem];
@@ -210,84 +194,36 @@ describe('useCheckoutSubmit recovery', () => {
       restoreItems: mockRestoreItems,
     });
     mockValidateCheckoutSubmission.mockReturnValue(true);
-    jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    mockCreateOrder.mockResolvedValue(
+      createOrderResponseFixture({
+        effectiveCheckoutGeneration: 'gen-1',
+      })
+    );
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {
+      // Suppress native alerts in tests.
+    });
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  it('restores the pre-submit checkout generation when order creation fails after the cart is cleared', async () => {
-    mockRepriceCartItems.mockResolvedValue({
-      changes: [],
-      priceById: { 'line-1': 1200000 },
+  it('does not create a REDVAULT order without a review callback', async () => {
+    const params = createParams({
+      onRedvaultOrder: undefined,
+      selectedPayment: 'uba_redvault',
     });
-    mockCreateOrder.mockImplementation(async () => {
-      cartItems = [];
-      throw new Error('payment init failed');
-    });
-    const params = createParams();
     const { result } = renderHook(() => useCheckoutSubmit(params));
 
     await act(async () => {
       await result.current(address);
     });
 
-    expect(mockRestoreItems).toHaveBeenCalledWith([cartItem], false, 'gen-1');
-  });
-
-  it('still reports the original checkout error when restore persistence rejects', async () => {
-    mockRepriceCartItems.mockResolvedValue({
-      changes: [],
-      priceById: { 'line-1': 1200000 },
-    });
-    const checkoutError = new Error('payment init failed');
-    mockCreateOrder.mockImplementation(async () => {
-      cartItems = [];
-      throw checkoutError;
-    });
-    mockRestoreItems.mockRejectedValueOnce(new Error('disk full'));
-    const { handleCheckoutSubmitError } = jest.requireMock(
-      './checkout-submit-error'
-    ) as { handleCheckoutSubmitError: ReturnType<typeof jest.fn> };
-    const params = createParams();
-    const { result } = renderHook(() => useCheckoutSubmit(params));
-
-    await act(async () => {
-      await result.current(address);
-    });
-
-    expect(handleCheckoutSubmitError).toHaveBeenCalledWith(
-      checkoutError,
-      'paystack'
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Unable to continue',
+      expect.stringMatching(/review is unavailable/i)
     );
-  });
-
-  it('tracks a recovered order on the first observed replay response', async () => {
-    mockRepriceCartItems.mockResolvedValue({
-      changes: [],
-      priceById: { 'line-1': 1200000 },
-    });
-    mockCreateOrder.mockResolvedValue(
-      createOrderResponseFixture({
-        effectiveCheckoutGeneration: 'gen-1',
-        orderId: 'order-replay-1',
-        orderNumber: 'ORD-R1',
-        replayed: true,
-      })
-    );
-    const { trackCheckoutRoutePurchaseCompleted } = jest.requireMock(
-      '@/services/tiktok-checkout-route-tracking'
-    ) as { trackCheckoutRoutePurchaseCompleted: ReturnType<typeof jest.fn> };
-    const params = createParams();
-    const { result } = renderHook(() => useCheckoutSubmit(params));
-
-    await act(async () => {
-      await result.current(address);
-    });
-
-    expect(trackCheckoutRoutePurchaseCompleted).toHaveBeenCalledWith(
-      expect.objectContaining({ orderId: 'order-replay-1' })
-    );
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+    expect(params.isOrderInFlight.current).toBe(false);
   });
 });

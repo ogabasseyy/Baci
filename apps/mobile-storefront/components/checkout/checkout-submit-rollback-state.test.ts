@@ -1,8 +1,5 @@
 import { jest } from '@jest/globals';
-import {
-  captureCheckoutSubmitRollbackState,
-  trackSubmittedCheckoutGeneration,
-} from './checkout-submit-rollback-state';
+import { captureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
 
 const mockCompletedChoice = jest.fn<
   (checkoutGeneration: string) => Record<string, unknown> | undefined
@@ -66,19 +63,4 @@ it('degrades the marker capture without losing the credit fields', async () => {
     creditFields: { use_wallet_credit: true, wallet_amount: 5000 },
     hadSortMarker: undefined,
   });
-});
-
-it('tracks the submitted generation once createOrder resolves it', () => {
-  const submitted = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-  const tracker = trackSubmittedCheckoutGeneration(generation);
-  // No order exists before createOrder returns: the snapshot stays.
-  expect(tracker.current()).toBe(generation);
-  tracker.track({ effectiveCheckoutGeneration: submitted });
-  expect(tracker.current()).toBe(submitted);
-});
-
-it('keeps the snapshot when the response carries no resolved generation', () => {
-  const tracker = trackSubmittedCheckoutGeneration(generation);
-  tracker.track({});
-  expect(tracker.current()).toBe(generation);
 });

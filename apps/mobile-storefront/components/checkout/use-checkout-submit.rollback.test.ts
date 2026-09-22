@@ -1,14 +1,17 @@
 import { jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
-import type { MutableRefObject } from 'react';
 import { Alert } from 'react-native';
 import { applyCheckoutCreditSnapshot } from '@/lib/checkout-attempt-credit-snapshot';
 import type { RepriceResult } from '@/services/cart-reprice';
 import type { CartItem } from '@/stores/cart-store.types';
+import { createOrderResponseFixture } from './checkout-order-response-fixture';
+import { useCheckoutSubmit } from './use-checkout-submit';
 import {
-  type UseCheckoutSubmitParams,
-  useCheckoutSubmit,
-} from './use-checkout-submit';
+  address,
+  cartItem,
+  createParams,
+  generation,
+} from './use-checkout-submit.setup';
 
 const mockRepriceCartItems = jest.fn() as jest.MockedFunction<
   (items: CartItem[], merchantId: string) => Promise<RepriceResult>
@@ -150,73 +153,6 @@ const mockedUseCartStore = (
   }
 ).useCartStore;
 
-const generation = '46ed63d7-5f10-49f0-9456-9ff571bec43f';
-
-const cartItem: CartItem = {
-  id: 'line-1',
-  name: 'iPhone 15 Pro',
-  price: 1200000,
-  product_id: 'product-1',
-  quantity: 1,
-  slug: 'iphone-15-pro',
-};
-
-const address = {
-  address: '1 Test Way',
-  city: 'Ikeja',
-  email: 'customer@example.com',
-  firstName: 'Ada',
-  lastName: 'Okafor',
-  phone: '08012345678',
-  state: 'Lagos',
-};
-
-function createRef<T>(current: T): MutableRefObject<T> {
-  return { current };
-}
-
-function createParams(
-  overrides: Partial<UseCheckoutSubmitParams> = {}
-): UseCheckoutSubmitParams {
-  return {
-    accountPassword: '',
-    appliedDiscountCode: null,
-    availablePaymentMethods: ['paystack'],
-    clearCart: jest.fn<() => void | Promise<void>>(),
-    currentShippingQuoteContextKey: 'door:Lagos:Ikeja',
-    customer: null,
-    deliveryFee: 1500,
-    deliveryMethod: 'door',
-    getLiveSavingsSelection:
-      jest.fn<UseCheckoutSubmitParams['getLiveSavingsSelection']>(),
-    getShippingProvider: () => 'gigl',
-    isAuthenticated: false,
-    isLoadingQuotes: false,
-    isOrderInFlight: createRef(false),
-    isProcessing: false,
-    mobileCheckoutIdempotencyRef: createRef(null),
-    orderTotals: { taxAmount: 0 },
-    paymentSettings: { klump_enabled: true },
-    paymentTab: 'full',
-    resolvedShippingQuoteContextKey: 'door:Lagos:Ikeja',
-    requiresShippingQuote: true,
-    saveAsDefaultAddress: false,
-    saveDetails: false,
-    selectedPayment: 'paystack',
-    selectedQuote: undefined,
-    selectedSavedAddressId: null,
-    setIsProcessing: jest.fn(),
-    setPendingOrder: jest.fn(),
-    setShowCryptoSelection: jest.fn(),
-    setStep: jest.fn(),
-    user: null,
-    walletBalance: 0,
-    walletFundedBankTransferOptionEnabled: false,
-    walletSelection: undefined,
-    ...overrides,
-  };
-}
-
 describe('useCheckoutSubmit rollback credit', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -296,22 +232,10 @@ describe('useCheckoutSubmit rollback credit', () => {
       changes: [],
       priceById: { 'line-1': 1200000 },
     });
-    mockCreateOrder.mockImplementation(
-      async () =>
-        ({
-          amountDueToGateway: 1201500,
-          effectiveCheckoutGeneration: submitted,
-          idempotency: { replayed: false },
-          order: {
-            created_at: '2026-07-09T12:00:00.000Z',
-            id: 'order-1',
-            order_number: 'ORD-1',
-            payment_status: 'pending',
-            shipping_status: 'pending',
-            total: 1201500,
-          },
-          wallet: null,
-        }) as never
+    mockCreateOrder.mockResolvedValue(
+      createOrderResponseFixture({
+        effectiveCheckoutGeneration: submitted,
+      })
     );
     mockRunFinalizeCheckoutPayment.mockRejectedValueOnce(
       new Error('routing failed')

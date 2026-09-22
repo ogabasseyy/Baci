@@ -29,40 +29,35 @@ export async function restoreEmptiedCheckoutCart({
   if (cartStore.items.length !== 0) {
     return;
   }
-  try {
-    await cartStore.restoreItems(
-      itemsSnapshot,
-      cartWideNegotiationActive,
-      checkoutGeneration
-    );
-  } catch (restoreError) {
-    void restoreError;
-    return;
-  }
-  if (!creditFields) {
-    return;
-  }
   // The clear path released this generation's frozen credit snapshot and
-  // sort marker. Re-freeze both under the restored generation so a retry
-  // replays the created order instead of hashing fresh credit under a
-  // forked idempotency key. The marker is restored only when it existed
+  // sort marker. The marker is restored FIRST and the cart is left empty
+  // unless the required marker is durable: a code-point-era generation
+  // restored without its marker would retry under locale ordering and
+  // fork the idempotency key, while a durable marker with no cart behind
+  // it is inert (per-generation keys are never consulted for another
+  // generation's checkout). The marker is restored only when it existed
   // before cleanup: a legacy generation was keyed with locale ordering,
   // and marking it now would fork its key on retry. When the pre-cleanup
   // state could not be captured, the minted registry covers the
   // same-process case (it is empty after a restart, so restored current
   // generations must pass their captured state). The marker write is
-  // bounded (the snapshot apply already times out internally) so a hung
-  // store cannot latch checkout recovery forever.
+  // bounded so a hung store cannot latch checkout recovery forever.
+  const shouldRestoreMarker =
+    hadSortMarker ?? mintedCheckoutGenerations.isRegistered(checkoutGeneration);
   try {
-    await applyCheckoutCreditSnapshot(creditFields, checkoutGeneration);
-    const shouldRestoreMarker =
-      hadSortMarker ??
-      mintedCheckoutGenerations.isRegistered(checkoutGeneration);
     if (shouldRestoreMarker) {
       await withCheckoutStorageTimeout(
         markCodepointCheckoutItemSort(checkoutGeneration)
       );
     }
+    if (creditFields) {
+      await applyCheckoutCreditSnapshot(creditFields, checkoutGeneration);
+    }
+    await cartStore.restoreItems(
+      itemsSnapshot,
+      cartWideNegotiationActive,
+      checkoutGeneration
+    );
   } catch (recoveryError) {
     log.error(
       'Failed to restore checkout recovery data after cart rollback:',

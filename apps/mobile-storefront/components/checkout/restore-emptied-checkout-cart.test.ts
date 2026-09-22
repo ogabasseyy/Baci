@@ -175,7 +175,30 @@ it('bounds the marker restore so recovery cannot hang on a stuck store', async (
   });
   await jest.advanceTimersByTimeAsync(5_000);
   await expect(restoring).resolves.toBeUndefined();
-  expect(mockRestoreItems).toHaveBeenCalledTimes(1);
+  // Fail closed: the cart is left empty rather than restored without its
+  // required marker.
+  expect(mockRestoreItems).not.toHaveBeenCalled();
+  expect(mockApply).not.toHaveBeenCalled();
+  expect(mockError).toHaveBeenCalledWith(
+    'Failed to restore checkout recovery data after cart rollback:',
+    expect.any(Error)
+  );
+});
+
+it('leaves the cart empty when the required marker cannot be made durable', async () => {
+  mockMark.mockRejectedValueOnce(new Error('disk full'));
+
+  await expect(
+    restoreEmptiedCheckoutCart({
+      cartWideNegotiationActive: false,
+      checkoutGeneration: generation,
+      creditFields,
+      hadSortMarker: true,
+      itemsSnapshot,
+    })
+  ).resolves.toBeUndefined();
+  expect(mockRestoreItems).not.toHaveBeenCalled();
+  expect(mockApply).not.toHaveBeenCalled();
   expect(mockError).toHaveBeenCalledWith(
     'Failed to restore checkout recovery data after cart rollback:',
     expect.any(Error)
@@ -202,6 +225,7 @@ it('restores items without recovery data when credit is unresolved', async () =>
     cartWideNegotiationActive: true,
     checkoutGeneration: generation,
     creditFields: undefined,
+    hadSortMarker: false,
     itemsSnapshot,
   });
 
@@ -222,11 +246,18 @@ it('never masks an item-restore failure', async () => {
       cartWideNegotiationActive: false,
       checkoutGeneration: generation,
       creditFields,
+      hadSortMarker: true,
       itemsSnapshot,
     })
   ).resolves.toBeUndefined();
-  expect(mockApply).not.toHaveBeenCalled();
-  expect(mockMark).not.toHaveBeenCalled();
+  // The marker and credit land first; without items behind them they are
+  // inert residue for a generation that will never be retried.
+  expect(mockMark).toHaveBeenCalledWith(generation);
+  expect(mockApply).toHaveBeenCalledWith(creditFields, generation);
+  expect(mockError).toHaveBeenCalledWith(
+    'Failed to restore checkout recovery data after cart rollback:',
+    expect.any(Error)
+  );
 });
 
 it('never masks a recovery-data failure', async () => {
@@ -237,10 +268,12 @@ it('never masks a recovery-data failure', async () => {
       cartWideNegotiationActive: false,
       checkoutGeneration: generation,
       creditFields,
+      hadSortMarker: true,
       itemsSnapshot,
     })
   ).resolves.toBeUndefined();
-  expect(mockRestoreItems).toHaveBeenCalledTimes(1);
+  expect(mockMark).toHaveBeenCalledWith(generation);
+  expect(mockRestoreItems).not.toHaveBeenCalled();
   expect(mockError).toHaveBeenCalledWith(
     'Failed to restore checkout recovery data after cart rollback:',
     expect.any(Error)

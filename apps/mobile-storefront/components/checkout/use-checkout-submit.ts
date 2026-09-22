@@ -19,15 +19,13 @@ import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
 import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
-import {
-  captureCheckoutSubmitRollbackState,
-  trackSubmittedCheckoutGeneration,
-} from './checkout-submit-rollback-state';
+import { captureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
 import { isBnplPayment } from './is-bnpl-payment';
 import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
 import { runFinalizeCheckoutPayment } from './run-finalize-checkout-payment';
-import { runRedvaultPostOrderBranch } from './submit-redvault-checkout';
+import { runRedvaultPostOrderBranch } from './run-redvault-post-order-branch';
+import { trackSubmittedCheckoutGeneration } from './track-submitted-checkout-generation';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 
 export type { UseCheckoutSubmitParams };

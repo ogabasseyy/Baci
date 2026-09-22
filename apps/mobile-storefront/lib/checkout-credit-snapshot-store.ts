@@ -1,4 +1,5 @@
 import { CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY } from '@/config/checkout-storage';
+import { createKeyedSerialAsyncQueue } from '@/lib/create-keyed-serial-async-queue';
 
 export type CheckoutCreditSnapshot = {
   savings_amount?: number;
@@ -20,6 +21,13 @@ type CreditApplyRecord =
 
 let creditApplySequence = 0;
 const creditApplyRecords = new Map<string, CreditApplyRecord>();
+
+// Each generation owns its snapshot key, so concurrent checkouts for
+// different generations never share a read-modify-write cycle. The queue
+// lives beside the records so both the apply path and the release
+// compensation order their storage mutations on the same per-generation
+// chain.
+const enqueueSnapshotOperation = createKeyedSerialAsyncQueue();
 
 function nextCreditApplySequence(): number {
   creditApplySequence += 1;
@@ -55,9 +63,20 @@ function creditSnapshotKey(checkoutGeneration: string): string {
 }
 
 export const checkoutCreditSnapshotStore = {
+  enqueue<T>(
+    checkoutGeneration: string,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    return enqueueSnapshotOperation(checkoutGeneration, operation);
+  },
   key: creditSnapshotKey,
   latest: latestCreditApplyRecord,
   nextSequence: nextCreditApplySequence,
   noteCompleted: noteCompletedCreditApply,
   noteTombstone: noteCreditApplyTombstone,
+  resetKey(checkoutGeneration: string): void {
+    // Reset only the timed-out generation: other generations keep their
+    // queued order instead of being detached onto a fresh chain.
+    enqueueSnapshotOperation.resetKey(checkoutGeneration);
+  },
 };

@@ -1,5 +1,10 @@
+import { applyCheckoutCreditSnapshot } from '@/lib/checkout-attempt-credit-snapshot';
+import { createLogger } from '@/lib/logger';
+import { markCodepointCheckoutItemSort } from '@/lib/mark-codepoint-checkout-item-sort';
 import { useCartStore } from '@/stores/cart-store';
 import type { CartItem } from '@/stores/cart-store.types';
+
+const log = createLogger('Checkout');
 
 /**
  * Restores the checkout snapshot when a failed submit emptied the cart.
@@ -8,10 +13,12 @@ import type { CartItem } from '@/stores/cart-store.types';
 export async function restoreEmptiedCheckoutCart({
   cartWideNegotiationActive,
   checkoutGeneration,
+  creditFields,
   itemsSnapshot,
 }: {
   cartWideNegotiationActive: boolean;
   checkoutGeneration: string;
+  creditFields?: Record<string, unknown>;
   itemsSnapshot: CartItem[];
 }): Promise<void> {
   const cartStore = useCartStore.getState();
@@ -26,5 +33,22 @@ export async function restoreEmptiedCheckoutCart({
     );
   } catch (restoreError) {
     void restoreError;
+    return;
+  }
+  if (!creditFields) {
+    return;
+  }
+  // The clear path released this generation's frozen credit snapshot and
+  // sort marker. Re-freeze both under the restored generation so a retry
+  // replays the created order instead of hashing fresh credit under a
+  // forked idempotency key.
+  try {
+    await applyCheckoutCreditSnapshot(creditFields, checkoutGeneration);
+    await markCodepointCheckoutItemSort(checkoutGeneration);
+  } catch (recoveryError) {
+    log.error(
+      'Failed to restore checkout recovery data after cart rollback:',
+      recoveryError
+    );
   }
 }

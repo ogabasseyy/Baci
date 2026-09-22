@@ -1,11 +1,7 @@
 import { useMerchant } from '@/hooks/use-merchant';
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
-import {
-  buildSavingsOrderFields,
-  buildWalletOrderFields,
-  getFullyPaidStoreCreditPaymentMethod,
-} from '@/lib/wallet-payment-helpers';
+import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutStep } from '@/services/analytics';
 import { createOrder } from '@/services/orders';
 import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
@@ -13,10 +9,7 @@ import { useCartStore } from '@/stores/cart-store';
 import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
 import { acquireCheckoutSubmitFence } from './acquire-checkout-submit-fence';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
-import {
-  buildCheckoutOrderRequest,
-  createCheckoutSnapshot,
-} from './checkout-order-builders';
+import { createCheckoutSnapshot } from './checkout-order-builders';
 import { runCheckoutPostOrderSideEffects } from './checkout-post-order-side-effects';
 import {
   blockIfMixedPrizeCart,
@@ -25,6 +18,7 @@ import {
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
+import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
 import { runRedvaultSubmitInitializationSideEffects } from './checkout-submit-redvault';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
 import { isBnplPayment } from './is-bnpl-payment';
@@ -127,6 +121,8 @@ export function useCheckoutSubmit({
     // The in-flight latch is already held (acquired before the fence
     // await above) and releases in the finally below.
     setIsProcessing(true);
+    // Hoisted for the rollback path, which re-freezes these on cart restore.
+    let submitCreditFields: Record<string, unknown> | undefined;
     try {
       if (await abortIfCartPricesStale(itemsSnapshot, merchantId)) {
         return;
@@ -177,28 +173,25 @@ export function useCheckoutSubmit({
         });
         return;
       }
-      const orderResponse = await createOrder(
-        {
-          ...buildCheckoutOrderRequest({
-            address,
-            customerEmail,
-            customerName,
-            customerPhone,
-            deliveryMethod,
-            discountCode: appliedDiscountCode,
-            itemsSnapshot,
-            paymentMethodForOrder,
-            selectedQuote,
-            shippingProvider: getShippingProvider(),
-            snapshot,
-          }),
-          ...(appliedDiscountCode
-            ? {}
-            : buildSavingsOrderFields(liveSavingsSelection)),
-          ...buildWalletOrderFields(liveWalletSelection),
-        },
-        { checkoutGeneration: checkoutGenerationSnapshot }
-      );
+      const { creditFields, orderRequest } = buildCheckoutSubmitOrderRequest({
+        address,
+        appliedDiscountCode,
+        customerEmail,
+        customerName,
+        customerPhone,
+        deliveryMethod,
+        itemsSnapshot,
+        liveSavingsSelection,
+        liveWalletSelection,
+        paymentMethodForOrder,
+        selectedQuote,
+        shippingProvider: getShippingProvider(),
+        snapshot,
+      });
+      submitCreditFields = creditFields;
+      const orderResponse = await createOrder(orderRequest, {
+        checkoutGeneration: checkoutGenerationSnapshot,
+      });
       const { order } = orderResponse;
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
@@ -287,6 +280,7 @@ export function useCheckoutSubmit({
       await restoreEmptiedCheckoutCart({
         cartWideNegotiationActive: groupNegotiationSnapshot,
         checkoutGeneration: checkoutGenerationSnapshot,
+        creditFields: submitCreditFields,
         itemsSnapshot,
       });
       handleCheckoutSubmitError(error, selectedPayment);

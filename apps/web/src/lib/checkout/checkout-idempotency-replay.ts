@@ -23,19 +23,19 @@ type CheckoutIdempotencyReplayResult = {
 };
 
 type StoredCheckoutHashProbe = {
+  failureMessage: string;
   merchantId: string;
   requestHash: string;
   requestIdempotencyKey: string;
   supabase: SupabaseClient;
-  warnMessage: string;
 };
 
 async function isStoredCheckoutRequestHash({
+  failureMessage,
   merchantId,
   requestHash,
   requestIdempotencyKey,
   supabase,
-  warnMessage,
 }: StoredCheckoutHashProbe): Promise<boolean> {
   const { data: hashMatches, error: probeError } = await supabase.rpc(
     'is_storefront_order_idempotency_hash',
@@ -47,12 +47,16 @@ async function isStoredCheckoutRequestHash({
   );
 
   if (probeError) {
-    logger.warn({
-      message: warnMessage,
+    // A probe error is not a confirmed miss: falling through would submit
+    // the alternate hash under the existing key and turn a transient
+    // database blip into an idempotency conflict instead of a replay.
+    // Fail closed so the request surfaces a retryable 5xx instead.
+    logger.error({
+      message: failureMessage,
       merchantId,
       error: probeError,
     });
-    return false;
+    throw new Error(failureMessage);
   }
   return hashMatches === true;
 }
@@ -85,12 +89,11 @@ export async function prepareCheckoutIdempotencyReplay({
 
   if (localeRequestHash !== checkoutRequestHash) {
     const localeHashStored = await isStoredCheckoutRequestHash({
+      failureMessage: 'Locale checkout item-order hash probe failed',
       merchantId,
       requestHash: localeRequestHash,
       requestIdempotencyKey,
       supabase,
-      warnMessage:
-        'Locale checkout item-order hash probe failed; using the current request hash',
     });
     if (localeHashStored) {
       checkoutRequestHash = localeRequestHash;
@@ -128,12 +131,11 @@ export async function prepareCheckoutIdempotencyReplay({
       );
       if (localeLegacyHash !== legacyHash) {
         const localeLegacyStored = await isStoredCheckoutRequestHash({
+          failureMessage: 'Locale legacy checkout item-order hash probe failed',
           merchantId,
           requestHash: localeLegacyHash,
           requestIdempotencyKey,
           supabase,
-          warnMessage:
-            'Locale legacy checkout item-order hash probe failed; using the code-point legacy hash',
         });
         if (localeLegacyStored) {
           legacyHash = localeLegacyHash;

@@ -97,3 +97,79 @@ it('lets the next apply freeze fresh fields after a release', async () => {
     }
   ).toEqual({ wallet_amount: 1000 });
 });
+
+it('restores a snapshot frozen after a slow removal settles late', async () => {
+  await loadApply().applyCheckoutCreditSnapshot(
+    { wallet_amount: 1000 },
+    generation
+  );
+  let releaseRemoval!: () => void;
+  let removalEntered!: () => void;
+  const removalEnteredPromise = new Promise<void>((resolve) => {
+    removalEntered = resolve;
+  });
+  mockRemoveItem.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        releaseRemoval = () => {
+          storage.delete(snapshotKey(generation));
+          resolve();
+        };
+        removalEntered();
+      })
+  );
+  const releasing = loadRelease().releaseCheckoutCreditSnapshot(generation);
+  await removalEnteredPromise;
+
+  const retry = await loadApply().applyCheckoutCreditSnapshot(
+    { wallet_amount: 5000 },
+    generation
+  );
+  expect(retry.wallet_amount).toBe(5000);
+
+  let compensated!: () => void;
+  const compensatedPromise = new Promise<void>((resolve) => {
+    compensated = resolve;
+  });
+  mockSetItem.mockImplementationOnce(async (key: string, value: string) => {
+    storage.set(key, value);
+    compensated();
+  });
+  releaseRemoval();
+  await releasing;
+  await compensatedPromise;
+  expect(
+    JSON.parse(storage.get(snapshotKey(generation)) ?? '{}') as {
+      wallet_amount?: number;
+    }
+  ).toEqual({ wallet_amount: 5000 });
+});
+
+it('leaves storage empty when a newer release supersedes the removal', async () => {
+  await loadApply().applyCheckoutCreditSnapshot(
+    { wallet_amount: 1000 },
+    generation
+  );
+  let releaseRemoval!: () => void;
+  let removalEntered!: () => void;
+  const removalEnteredPromise = new Promise<void>((resolve) => {
+    removalEntered = resolve;
+  });
+  mockRemoveItem.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        releaseRemoval = () => {
+          storage.delete(snapshotKey(generation));
+          resolve();
+        };
+        removalEntered();
+      })
+  );
+  const releasing = loadRelease().releaseCheckoutCreditSnapshot(generation);
+  await removalEnteredPromise;
+  await loadRelease().releaseCheckoutCreditSnapshot(generation);
+  releaseRemoval();
+  await releasing;
+  expect(storage.get(snapshotKey(generation))).toBeUndefined();
+  expect(mockSetItem).toHaveBeenCalledTimes(1);
+});

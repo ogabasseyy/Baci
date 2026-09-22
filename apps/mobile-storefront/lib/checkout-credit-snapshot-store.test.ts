@@ -45,3 +45,48 @@ it('retires the completed choice with a tombstone', () => {
     tombstone: true,
   });
 });
+
+it('serializes operations sharing a generation', async () => {
+  const id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  const order: string[] = [];
+  const first = checkoutCreditSnapshotStore.enqueue(id, async () => {
+    order.push('first');
+  });
+  const second = checkoutCreditSnapshotStore.enqueue(id, async () => {
+    order.push('second');
+  });
+  await Promise.all([first, second]);
+  expect(order).toEqual(['first', 'second']);
+});
+
+it('resets only the specified generation queue', async () => {
+  const resetId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+  const keptId = '11111111-1111-4111-8111-111111111111';
+  let releaseKept!: () => void;
+  let enteredKept!: () => void;
+  const enteredPromise = new Promise<void>((resolve) => {
+    enteredKept = resolve;
+  });
+  const first = checkoutCreditSnapshotStore.enqueue(
+    keptId,
+    () =>
+      new Promise<void>((release) => {
+        releaseKept = release;
+        enteredKept();
+      })
+  );
+  await enteredPromise;
+  checkoutCreditSnapshotStore.resetKey(resetId);
+  let secondRan = false;
+  const second = checkoutCreditSnapshotStore.enqueue(keptId, async () => {
+    secondRan = true;
+  });
+  // The kept generation stays serialized: the second op cannot run while
+  // the first is still gated, even after an unrelated reset.
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(secondRan).toBe(false);
+  releaseKept();
+  await Promise.all([first, second]);
+  expect(secondRan).toBe(true);
+});

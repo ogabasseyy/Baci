@@ -5,9 +5,12 @@ const { mockLoadPublished } = vi.hoisted(() => ({
   mockLoadPublished: vi.fn(),
 }));
 
-vi.mock('@/lib/storefront-category/load-published-gaming-laptop-graphics-hubs', () => ({
-  loadPublishedGamingLaptopGraphicsHubs: mockLoadPublished,
-}));
+vi.mock(
+  '@/lib/storefront-category/load-published-gaming-laptop-graphics-hubs',
+  () => ({
+    loadPublishedGamingLaptopGraphicsHubs: mockLoadPublished,
+  })
+);
 
 const store = { id: 'store-1' };
 

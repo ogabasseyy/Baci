@@ -50,13 +50,16 @@ describe('provisionInvoiceMethodDva', () => {
 
     const result = await provisionInvoiceMethodDva(baseInput());
 
-    expect(generatePaymentAccount).toHaveBeenCalledWith({
-      email: 'buyer@example.com',
-      firstName: 'Ada',
-      lastName: 'Buyer',
-      phone: '08010000000',
-      orderId: 'order-1',
-    });
+    expect(generatePaymentAccount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'buyer@example.com',
+        firstName: 'Ada',
+        lastName: 'Buyer',
+        phone: '08010000000',
+        orderId: 'order-1',
+        signal: expect.any(AbortSignal),
+      })
+    );
     expect(persistAssignment).toHaveBeenCalledWith({
       accountName: 'Baci / Ada',
       accountNumber: '1234567890',
@@ -134,13 +137,22 @@ describe('provisionInvoiceMethodDva', () => {
     );
   });
 
-  it('reports a stalled provider as retryable without persisting', async () => {
+  it('aborts a stalled provider and reports retryable without persisting', async () => {
     vi.useFakeTimers();
     try {
-      // Never-settling provider request: the deadline must release the
+      // Never-settling provider request, aborted like a real fetch:
+      // the deadline must cancel the request (so it cannot race the
+      // post-response retry into a duplicate account) and release the
       // pre-response order-creation POST instead of hanging it.
-      vi.mocked(generatePaymentAccount).mockReturnValue(
-        new Promise<never>(() => {})
+      let observedSignal: AbortSignal | undefined;
+      vi.mocked(generatePaymentAccount).mockImplementation(
+        (input) =>
+          new Promise<never>((_resolve, reject) => {
+            observedSignal = input.signal;
+            input.signal?.addEventListener('abort', () => {
+              reject(new DOMException('aborted', 'AbortError'));
+            });
+          })
       );
 
       const pending = provisionInvoiceMethodDva(baseInput());
@@ -150,6 +162,7 @@ describe('provisionInvoiceMethodDva', () => {
       await vi.advanceTimersByTimeAsync(10_000);
       await assertion;
 
+      expect(observedSignal?.aborted).toBe(true);
       expect(persistAssignment).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();

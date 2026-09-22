@@ -139,6 +139,33 @@ describe('verifyOrderPaymentForCompletion', () => {
     });
   });
 
+  it('forwards the tracking token so guests authorize reference verification', async () => {
+    const fetchMock = mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(JSON.stringify(completedVerification), { status: 200 })
+        : new Response(JSON.stringify(pendingTrackedOrder), { status: 200 })
+    );
+
+    await verifyOrderPaymentForCompletion({
+      orderId: 'order-1',
+      trackingToken: 'track-1',
+      reference: 'ref-1',
+    });
+
+    // Sessionless guests have no Bearer [REDACTED] the verify route uses the token
+    // as proof-bound authorization; without it the route returns 403
+    // and the client would collapse terminal outcomes to transient.
+    const verifyCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes('/api/payments/verify')
+    );
+    expect(verifyCall).toBeDefined();
+    const verifyInit = verifyCall?.[1] as { body?: unknown } | undefined;
+    expect(JSON.parse(verifyInit?.body as string)).toEqual({
+      reference: 'ref-1',
+      trackingToken: 'track-1',
+    });
+  });
+
   it('rejects a matching-reference redirect whose verification is pending', async () => {
     mockFetch((url: string) =>
       String(url).includes('/api/payments/verify')
@@ -210,13 +237,8 @@ describe('verifyOrderPaymentForCompletion', () => {
     ).resolves.toEqual({ paid: false });
   });
 
-  it.each([
-    { paymentStatus: 'cancelled', reconciliation: 'order_cancelled' },
-    { paymentStatus: 'refunded', reconciliation: 'order_skipped' },
-  ])('reconciles a $paymentStatus tracked order without reference verification', async ({
-    paymentStatus,
-    reconciliation,
-  }) => {
+  it('reconciles a refunded tracked order without reference verification', async () => {
+    // A refund proves capture: reconciliation, never confirmation.
     const fetchMock = mockFetch(
       () =>
         new Response(
@@ -224,7 +246,7 @@ describe('verifyOrderPaymentForCompletion', () => {
             order: {
               id: 'order-1',
               order_number: 'ORD-1',
-              payment_status: paymentStatus,
+              payment_status: 'refunded',
               total: 5000,
             },
           }),
@@ -237,8 +259,37 @@ describe('verifyOrderPaymentForCompletion', () => {
         orderId: 'order-1',
         trackingToken: 'track-1',
       })
-    ).resolves.toEqual({ paid: false, reconciliation });
+    ).resolves.toEqual({ paid: false, reconciliation: 'order_skipped' });
     // Terminal server state: no reference lookup is attempted.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails an ordinary cancelled tracked order as unpaid terminal', async () => {
+    // A cancelled row proves no capture: terminal failure with the
+    // error/retry path — never the "Payment Received" reconciliation
+    // state, and no reference lookup is attempted.
+    const fetchMock = mockFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            order: {
+              id: 'order-1',
+              order_number: 'ORD-1',
+              payment_status: 'cancelled',
+              total: 5000,
+            },
+          }),
+          { status: 200 }
+        )
+    );
+
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false, terminalFailure: 'cancelled' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

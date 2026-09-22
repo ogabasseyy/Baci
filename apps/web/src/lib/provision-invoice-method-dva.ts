@@ -4,31 +4,26 @@ import { logger } from '@/lib/logger';
 import { generatePaymentAccount } from '@/lib/paystack';
 
 // The pre-response Pay for Me call holds the order-creation POST after
-// the order has committed: bound the provider leg so a stalled Paystack
-// request resolves retryable (and the caller falls back to post-response
-// provisioning) instead of hanging the response until the client times
-// out. Unexpected provider rejections still throw. Persistence stays
-// outside the deadline — Supabase carries its own client timeouts, and
-// a timed-out provider must never persist.
+// the order has committed: bound the provider leg with an abortable
+// deadline so a stalled Paystack request is cancelled — never left
+// running to race the post-response retry into duplicate/orphaned
+// provider accounts — and resolves retryable instead of hanging the
+// response until the client times out. Aborting settles every leg: all
+// three provider calls are fetch-backed through paystackRequest, which
+// converts the abort into a handled failure; a directly-thrown abort
+// maps to retryable below for the same guarantee. Unexpected provider
+// rejections still throw. Persistence stays outside the deadline —
+// Supabase carries its own client timeouts, and a timed-out provider
+// must never persist. The retry converges on one account via the
+// existing-DVA check inside generatePaymentAccount.
 const DVA_PROVIDER_TIMEOUT_MS = 10_000;
 
-async function raceProviderDeadline<T>(
-  work: Promise<T>
-): Promise<{ ok: true; value: T } | { ok: false }> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await new Promise((resolve, reject) => {
-      timer = setTimeout(() => resolve({ ok: false }), DVA_PROVIDER_TIMEOUT_MS);
-      work.then(
-        (value) => resolve({ ok: true, value }),
-        (error) => reject(error)
-      );
-    });
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
-  }
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof DOMException !== 'undefined' &&
+    error instanceof DOMException &&
+    error.name === 'AbortError'
+  );
 }
 
 export interface DvaAssignmentPersistenceInput {
@@ -106,26 +101,36 @@ export async function provisionInvoiceMethodDva({
   if (orderCurrency !== 'NGN') {
     return { outcome: 'skipped' };
   }
-  const raced = await raceProviderDeadline(
-    generatePaymentAccount({
+  const providerController = new AbortController();
+  const providerTimer = setTimeout(
+    () => providerController.abort(),
+    DVA_PROVIDER_TIMEOUT_MS
+  );
+  let dvaResult: Awaited<ReturnType<typeof generatePaymentAccount>>;
+  try {
+    dvaResult = await generatePaymentAccount({
       email: customerEmail || `${orderId}@orders.usebaci.com`,
       firstName,
       lastName,
       phone: customerPhone || merchantPhone || '08000000000',
       orderId,
-    })
-  );
-  if (!raced.ok) {
-    logger.error({
-      message:
-        orderLabel === 'invoice'
-          ? 'Auto-generation of invoice DVA timed out'
-          : 'Auto-generation of payforme DVA timed out',
-      orderId,
+      signal: providerController.signal,
     });
-    return { outcome: 'failed' };
+  } catch (error) {
+    if (isAbortError(error)) {
+      logger.error({
+        message:
+          orderLabel === 'invoice'
+            ? 'Auto-generation of invoice DVA timed out'
+            : 'Auto-generation of payforme DVA timed out',
+        orderId,
+      });
+      return { outcome: 'failed' };
+    }
+    throw error;
+  } finally {
+    clearTimeout(providerTimer);
   }
-  const dvaResult = raced.value;
 
   if (dvaResult.success) {
     const generatedVirtualAccount = {

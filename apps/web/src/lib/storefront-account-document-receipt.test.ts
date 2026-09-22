@@ -306,4 +306,72 @@ describe('storefront account receipt builders', () => {
     expect(result.items).toHaveLength(1);
     expect(result.transactions).toHaveLength(1);
   });
+
+  it('strips a persisted virtual account for foreign-currency documents', () => {
+    const result = buildReceiptOrder({
+      order: {
+        id: 'order-fx-1',
+        order_number: 'ORD-FX-1',
+        created_at: '2026-03-22T10:00:00.000Z',
+        updated_at: null,
+        payment_status: 'unpaid',
+        shipping_status: 'pending',
+        currency: 'USD',
+        total: 500,
+        subtotal: 500,
+        shipping_fee: 0,
+        tax_amount: 0,
+        discount_amount: 0,
+        amount_paid: 0,
+        shipping_address: null,
+        customer_name: null,
+        customer_email: null,
+        customer_phone: null,
+        payment_method: 'paystack',
+        is_credit_order: false,
+        tracking_number: null,
+        shipping_provider: null,
+        notes: null,
+        invoice_type_code: null,
+        invoice_issue_date: null,
+        tax_point_date: null,
+        payment_due_date: null,
+        buyer_reference: null,
+        purchase_order_reference: null,
+        tax_exclusive_amount: null,
+        tax_inclusive_amount: null,
+        invoice_note: null,
+        firs_irn: null,
+        firs_csid: null,
+        firs_qr_code: null,
+        payment_terms: null,
+      },
+      orderItems: [],
+      transactions: [],
+      paymentAccount: {
+        account_number: '1234567890',
+        bank_name: 'Baci Bank',
+        account_name: 'Ogabassey Ltd',
+      },
+      paymentStatus: 'unpaid',
+      shippingAddress: null,
+      currency: 'USD',
+      total: 500,
+      subtotal: 500,
+      shippingFee: 0,
+      taxAmount: 0,
+      discountAmount: 0,
+      amountPaid: 0,
+      balance: 500,
+      customerName: 'Ada Buyer',
+      customerEmail: 'ada@example.com',
+      customerPhone: null,
+    });
+
+    // The persisted Paystack DVA is a naira account: printing it beside a
+    // dollar-denominated balance risks a rejected or mis-converted
+    // transfer, so the order-level account is stripped like the merchant
+    // fallback.
+    expect(result.virtual_account).toBeNull();
+  });
 });

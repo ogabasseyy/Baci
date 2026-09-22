@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { verifyPayment as verifyKorapayPayment } from '@/lib/korapay';
@@ -427,14 +428,52 @@ export function GET() {
   );
 }
 
+/**
+ * Proof-bound guest authorization: the per-order tracking token is a
+ * secret known only to the shopper (URL) and the merchant, so a
+ * request proving knowledge of it for the reference's own order is as
+ * authorized as a CSRF-validated session request. Binds
+ * reference → transaction → order → token; fails closed (including on
+ * lookup errors) with no existence oracle beyond the uniform 403.
+ */
+async function isTrackingTokenAuthorizedForReference(
+  reference: string,
+  trackingToken: string
+): Promise<boolean> {
+  try {
+    const supabase = createServiceClient();
+    const { data: transaction } = await supabase
+      .from('transactions')
+      .select('order_id')
+      .eq('gateway_reference', reference)
+      .maybeSingle();
+    const orderId = (transaction as { order_id?: unknown } | null)?.order_id;
+    if (typeof orderId !== 'string' || !orderId) {
+      return false;
+    }
+    const { data: order } = await supabase
+      .from('orders')
+      .select('tracking_token')
+      .eq('id', orderId)
+      .maybeSingle();
+    const expected = (order as { tracking_token?: unknown } | null)
+      ?.tracking_token;
+    if (typeof expected !== 'string' || !expected) {
+      return false;
+    }
+    const expectedBuffer = Buffer.from(expected, 'utf8');
+    const suppliedBuffer = Buffer.from(trackingToken, 'utf8');
+    return (
+      expectedBuffer.length === suppliedBuffer.length &&
+      timingSafeEqual(expectedBuffer, suppliedBuffer)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: NextRequest) {
   const csrf = await checkCsrfProtection(request);
-  if (!csrf.valid) {
-    return (
-      csrf.response ??
-      NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 })
-    );
-  }
 
   const contentType = request.headers.get('content-type') ?? '';
   if (!contentType.toLowerCase().includes('application/json')) {
@@ -454,6 +493,25 @@ export async function POST(request: NextRequest) {
   const parsedBody = verifyPaymentBodySchema.safeParse(body);
   if (!parsedBody.success) {
     return NextResponse.json({ error: 'Invalid reference' }, { status: 400 });
+  }
+
+  if (!csrf.valid) {
+    // Guest native checkouts carry no session: authorize via the
+    // order's tracking token instead of rejecting with 403 (which the
+    // client would collapse into transient and confirm unpaid orders).
+    const trackingToken = parsedBody.data.trackingToken;
+    const authorized =
+      typeof trackingToken === 'string' &&
+      (await isTrackingTokenAuthorizedForReference(
+        parsedBody.data.reference,
+        trackingToken
+      ));
+    if (!authorized) {
+      return (
+        csrf.response ??
+        NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 })
+      );
+    }
   }
 
   return verifyPaymentReference(parsedBody.data.reference);

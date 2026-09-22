@@ -56,7 +56,7 @@ export default function OrderSuccessScreen() {
   // handlers): the money moved but no active paid order exists, so this
   // screen renders the reconciliation state with no settlement polling,
   // success notification, interstitial, or permission soft-ask.
-  const isReconciliation =
+  const isParamReconciliation =
     reconciliation === 'order_cancelled' || reconciliation === 'order_skipped';
   const customer = useAuthStore((s) => s.customer);
   const orderNotificationScheduledRef = useRef(false);
@@ -67,22 +67,32 @@ export default function OrderSuccessScreen() {
   const { data: paidCheckOrder } = useReceiptDetail(
     isDeferredSettlementMethod(paymentMethod) && orderId ? orderId : null
   );
-  const receiptPaidOrder = paidCheckOrder?.payment_status === 'paid';
+  const receiptPaymentStatus = paidCheckOrder?.payment_status;
+  const receiptPaidOrder = receiptPaymentStatus === 'paid';
+  const receiptRefundedOrder = receiptPaymentStatus === 'refunded';
   // Guests have no authenticated receipt query: resolve their paid state
   // through the tracking token so externally-paid invoices stop showing
   // proforma copy on return.
-  const guestInvoicePaid = useGuestInvoicePaidState({
+  const guestInvoiceStatus = useGuestInvoicePaidState({
     orderId,
     paymentMethod,
     trackingToken,
     skip: receiptPaidOrder,
   });
-  const isPaidOrder = receiptPaidOrder || guestInvoicePaid;
+  const isPaidOrder = receiptPaidOrder || guestInvoiceStatus === 'paid';
+  // A refunded invoice or Pay for Me order was previously paid: it must
+  // never render proforma/request copy. Like a captured-but-cancelled
+  // arrival it renders the reconciliation state — the money moved but no
+  // active paid order exists.
+  const wasPaidOrder =
+    receiptRefundedOrder || guestInvoiceStatus === 'refunded';
+  const isReconciliation = isParamReconciliation || wasPaidOrder;
   // The proforma action opens this same preview: stamp the explicit kind so
   // the generated artifact and modal chrome read as a proforma, matching
   // the web success page (unpaid invoice orders only — paid orders keep the
   // commercial receipt even if this screen was reached via invoice).
-  const isProformaDocument = paymentMethod === 'invoice' && !isPaidOrder;
+  const isProformaDocument =
+    paymentMethod === 'invoice' && !isPaidOrder && !wasPaidOrder;
   const receiptPreview = useReceiptPreview({
     documentKind: isProformaDocument ? 'proforma' : undefined,
   });

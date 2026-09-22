@@ -71,6 +71,12 @@ export function buildReceiptMerchant(
 }
 
 export function buildReceiptOrder(input: BuildReceiptOrderInput): ReceiptOrder {
+  // Same NGN-only rule as the merchant fallback above: the persisted
+  // Paystack DVA is an untyped naira account, so a foreign-currency
+  // document must not print it beside a dollar-denominated balance. The
+  // renderer prefers the order-level account, so gating only the merchant
+  // fields leaves the gap open.
+  const showBankDetails = showMerchantBankDetails(input.currency);
   return {
     order_number: input.order.order_number,
     created_at: input.order.created_at,
@@ -91,13 +97,14 @@ export function buildReceiptOrder(input: BuildReceiptOrderInput): ReceiptOrder {
     customer_email: input.customerEmail,
     customer_phone: input.customerPhone,
     shipping_address: input.shippingAddress,
-    virtual_account: input.paymentAccount
-      ? {
-          account_number: input.paymentAccount.account_number,
-          bank_name: input.paymentAccount.bank_name || '',
-          account_name: input.paymentAccount.account_name || '',
-        }
-      : null,
+    virtual_account:
+      showBankDetails && input.paymentAccount
+        ? {
+            account_number: input.paymentAccount.account_number,
+            bank_name: input.paymentAccount.bank_name || '',
+            account_name: input.paymentAccount.account_name || '',
+          }
+        : null,
     fulfillment_details: input.order.fulfillment_details
       ? (asRecord(
           input.order.fulfillment_details

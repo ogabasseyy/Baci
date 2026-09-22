@@ -11,7 +11,7 @@ export type VerificationResponse = {
   orderNumber?: string;
   orderTotal?: number;
   paymentMethod?: string;
-  status?: 'success' | 'pending' | 'failed' | 'cancelled';
+  status?: 'success' | 'pending' | 'failed' | 'cancelled' | 'abandoned';
   success?: boolean;
   finalizationOutcome?: string;
 };
@@ -37,7 +37,8 @@ export function isVerificationResponse(
     candidate.status === 'success' ||
     candidate.status === 'pending' ||
     candidate.status === 'failed' ||
-    candidate.status === 'cancelled';
+    candidate.status === 'cancelled' ||
+    candidate.status === 'abandoned';
   const hasValidOrderNumber =
     candidate.orderNumber === undefined ||
     typeof candidate.orderNumber === 'string';
@@ -69,7 +70,11 @@ export function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-const RECONCILING_LOOKUP_PAYMENT_STATUSES = new Set(['cancelled', 'refunded']);
+// Only statuses proving capture reconcile: a refund is itself proof the
+// provider took the money. An ordinary cancelled row proves nothing —
+// maintenance flips stale unpaid orders to cancelled — so cancelled
+// orders fail as unpaid below instead of promising a refund.
+const RECONCILING_LOOKUP_PAYMENT_STATUSES = new Set(['refunded']);
 
 export interface VerifyCheckoutPaymentLookupParams {
   merchantSlug: string | undefined;
@@ -181,13 +186,25 @@ export async function verifyCheckoutPaymentByLookup(
           ? data.payment_status.trim().toLowerCase()
           : '';
       if (RECONCILING_LOOKUP_PAYMENT_STATUSES.has(lookupPaymentStatus)) {
-        // A cancelled/refunded order is terminal reconciliation, not a
-        // confirmed purchase: the cart stays intact for a fresh attempt.
+        // A refunded order is terminal reconciliation, not a confirmed
+        // purchase: the cart stays intact for a fresh attempt.
         setStatus('reconciling');
         setOrderNumber(data.order_number || data.short_id);
         if (data.payment_method) {
           setPaymentMethod(data.payment_method);
         }
+        return true;
+      }
+      if (lookupPaymentStatus === 'cancelled') {
+        // Ordinary cancelled rows prove no capture: terminal unpaid
+        // failure with the cart intact — never the "Payment Received"
+        // reconciliation view.
+        setStatus('failed');
+        setOrderNumber(data.order_number || data.short_id);
+        if (data.payment_method) {
+          setPaymentMethod(data.payment_method);
+        }
+        scheduleFailedRedirect();
         return true;
       }
       clearCart();

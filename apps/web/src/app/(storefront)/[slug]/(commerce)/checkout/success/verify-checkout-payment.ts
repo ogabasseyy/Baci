@@ -239,7 +239,15 @@ export async function verifyCheckoutPayment(
           ...(verifiedCurrency ? { currency: verifiedCurrency } : {}),
         });
       }
-    } else if (data.status === 'failed' || data.status === 'cancelled') {
+    } else if (
+      data.status === 'failed' ||
+      data.status === 'cancelled' ||
+      data.status === 'abandoned'
+    ) {
+      // Terminal provider outcomes (abandoned = the shopper left the
+      // Paystack page; the attempt can never settle): show the
+      // failure/retry state with the matching failure event instead of
+      // re-polling until the retry budget expires.
       setStatus('failed');
       capturePaymentFailed({
         orderId,
@@ -247,7 +255,11 @@ export async function verifyCheckoutPayment(
         paymentMethod: data.paymentMethod || paymentMethod,
         reference,
         reason:
-          data.status === 'cancelled' ? 'payment_cancelled' : 'payment_failed',
+          data.status === 'cancelled'
+            ? 'payment_cancelled'
+            : data.status === 'abandoned'
+              ? 'payment_abandoned'
+              : 'payment_failed',
       });
       scheduleFailedRedirect();
     } else {

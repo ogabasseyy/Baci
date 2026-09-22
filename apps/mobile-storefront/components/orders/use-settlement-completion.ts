@@ -171,7 +171,7 @@ export function useSettlementCompletion({
               customer,
               toTrackedItems(body)
             );
-          await trackCheckoutPaymentCompletedOnce({
+          const outcome = await trackCheckoutPaymentCompletedOnce({
             ...attribution,
             orderId,
             orderNumber: orderNumber || order.order_number || orderId,
@@ -183,7 +183,13 @@ export function useSettlementCompletion({
             ...(reference ? { reference } : {}),
             value: verifiedTotal,
           });
-          return;
+          if (outcome !== 'released') {
+            return;
+          }
+          // The claim was released after a failed emission (or never
+          // granted): the order is still paid but nothing was recorded, so
+          // fall through and reschedule the next poll instead of returning
+          // as though completion had been recorded.
         }
       } catch {
         // Transient lookup failure: retry until the attempt budget runs out.

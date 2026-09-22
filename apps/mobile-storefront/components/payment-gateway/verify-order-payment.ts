@@ -34,12 +34,14 @@ export interface OrderPaymentVerification extends TrackedCompletionAttribution {
    */
   terminalFailure?: 'failed' | 'cancelled' | 'abandoned';
   /**
-   * Captured-but-cancelled/refunded outcome for this order: the provider
-   * took the money but the finalizer left no active paid order (a
-   * reconciliation review was filed). Present only alongside
-   * `paid: false` with this order's identity. Callers route it to the
-   * reconciliation state — never the generic confirmation — and skip
-   * settlement polling, which can never make a cancelled order paid.
+   * Captured-but-unresolved outcome for this order: the provider took
+   * the money but the finalizer left no active paid order (a
+   * reconciliation review was filed, or the order was refunded after
+   * capture). Present only alongside `paid: false` with this order's
+   * identity. Callers route it to the reconciliation state — never the
+   * generic confirmation — and skip settlement polling, which can never
+   * make such an order paid. Ordinary cancelled rows (no proven
+   * capture) use `terminalFailure` instead.
    */
   reconciliation?: 'order_cancelled' | 'order_skipped';
 }
@@ -133,20 +135,18 @@ async function checkTrackedOrderPaid(
     read.items
   );
   const trackedPaymentStatus = read.order.payment_status?.trim().toLowerCase();
-  if (
-    trackedPaymentStatus === 'cancelled' ||
-    trackedPaymentStatus === 'refunded'
-  ) {
-    // Terminal server state (mirrors the verify finalization kinds): no
-    // settlement poll can revive this order, so surface reconciliation
-    // instead of the transient pending shape.
-    return {
-      paid: false,
-      reconciliation:
-        trackedPaymentStatus === 'refunded'
-          ? 'order_skipped'
-          : 'order_cancelled',
-    };
+  if (trackedPaymentStatus === 'refunded') {
+    // A refund proves the provider captured the money (mirrors the
+    // verify finalization kinds): no settlement poll can revive this
+    // order, so surface reconciliation instead of the transient shape.
+    return { paid: false, reconciliation: 'order_skipped' };
+  }
+  if (trackedPaymentStatus === 'cancelled') {
+    // An ordinary cancelled row proves no capture (maintenance flips
+    // stale unpaid orders to cancelled): unpaid terminal failure with
+    // the error/retry path — never the "Payment Received"
+    // reconciliation state.
+    return { paid: false, terminalFailure: 'cancelled' };
   }
   if (read.order.payment_status !== 'paid') {
     // Unpaid now, but the projection already carries the checkout identity
@@ -172,13 +172,15 @@ function toVerifyReferenceResponse(value: unknown): VerifyReferenceResponse {
 
 async function checkReferenceSettled(
   orderId: string,
-  reference: string
+  reference: string,
+  trackingToken?: string | null
 ): Promise<OrderPaymentVerification> {
   try {
     // The verify route enforces CSRF protection, which accepts Bearer
     // authentication for native callers. Guests have no session and rely
     // on the tracking-token lookup above (a proof-bound GET with no CSRF
-    // requirement) instead.
+    // requirement) instead. Forward that same token so the route can
+    // authorize this reference verification proof-bound.
     let accessToken: string | null = null;
     try {
       accessToken = (await getSession())?.access_token ?? null;
@@ -194,7 +196,10 @@ async function checkReferenceSettled(
           'Content-Type': 'application/json',
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
-        body: JSON.stringify({ reference }),
+        body: JSON.stringify({
+          reference,
+          ...(trackingToken ? { trackingToken } : {}),
+        }),
       }
     );
     const data = toVerifyReferenceResponse(
@@ -271,13 +276,20 @@ export async function verifyOrderPaymentForCompletion({
   let pendingAttribution: TrackedCompletionAttribution | undefined;
   if (trackingToken) {
     const tracked = await checkTrackedOrderPaid(orderId, trackingToken);
-    if (tracked.paid || tracked.reconciliation) {
+    // Terminal server state (paid, reconciling, or terminally failed):
+    // return immediately with no reference lookup — the row already
+    // settles the order.
+    if (tracked.paid || tracked.reconciliation || tracked.terminalFailure) {
       return tracked;
     }
     pendingAttribution = tracked.pending;
   }
   if (reference) {
-    const settled = await checkReferenceSettled(orderId, reference);
+    const settled = await checkReferenceSettled(
+      orderId,
+      reference,
+      trackingToken
+    );
     // The reference finalized payment after the lookup saw pending: retain
     // the lookup's identity and breakdown so the durable claim is consumed
     // whole. The verify total wins when finite (same order, same total).

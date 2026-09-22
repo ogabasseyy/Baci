@@ -19,6 +19,11 @@ function toTrackedOrder(value: unknown): TrackOrderData['order'] | null {
   return order as TrackOrderData['order'];
 }
 
+// Payment outcome for a guest deferred-settlement order (invoice, Pay for
+// Me): refunded is distinct from unpaid — the order was previously paid,
+// so it must never render proforma/request copy.
+export type GuestInvoicePaymentState = 'paid' | 'refunded' | 'unpaid';
+
 // Resolves the paid state for guest deferred-settlement orders (invoice,
 // Pay for Me). The authenticated receipt-detail query is disabled without
 // a signed-in user, so a guest returning through the tracking token would
@@ -35,15 +40,15 @@ export function useGuestInvoicePaidState({
   paymentMethod?: string;
   trackingToken?: string;
   skip: boolean;
-}): boolean {
-  const [isPaid, setIsPaid] = useState(false);
+}): GuestInvoicePaymentState {
+  const [state, setState] = useState<GuestInvoicePaymentState>('unpaid');
   useEffect(() => {
-    // The paid flag belongs to one lookup identity: same-route navigation
-    // or a new deep link can swap a paid guest invoice for a different
-    // unpaid one on the mounted route, and the new lookup must not
-    // inherit the previous order's paid presentation (receipt/commercial
-    // copy for an unpaid order).
-    setIsPaid(false);
+    // The payment state belongs to one lookup identity: same-route
+    // navigation or a new deep link can swap a paid guest invoice for a
+    // different unpaid one on the mounted route, and the new lookup must
+    // not inherit the previous order's paid presentation
+    // (receipt/commercial copy for an unpaid order).
+    setState('unpaid');
     if (
       skip ||
       !isDeferredSettlementMethod(paymentMethod) ||
@@ -82,12 +87,15 @@ export function useGuestInvoicePaidState({
           if (cancelled) {
             return;
           }
-          if (
-            order &&
-            order.id === orderId &&
-            order.payment_status === 'paid'
-          ) {
-            setIsPaid(true);
+          if (order && order.id === orderId) {
+            if (order.payment_status === 'paid') {
+              setState('paid');
+            } else if (order.payment_status === 'refunded') {
+              // Previously paid, now refunded: distinct from unpaid so the
+              // screen renders reconciliation/commercial state instead of
+              // proforma/request copy.
+              setState('refunded');
+            }
           }
           return;
         } catch {
@@ -109,5 +117,5 @@ export function useGuestInvoicePaidState({
       activeController?.abort();
     };
   }, [skip, orderId, paymentMethod, trackingToken]);
-  return isPaid;
+  return state;
 }

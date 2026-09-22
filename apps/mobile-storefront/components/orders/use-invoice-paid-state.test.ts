@@ -32,7 +32,7 @@ describe('useGuestInvoicePaidState', () => {
 
     const { result } = renderHook(() => useGuestInvoicePaidState(baseParams));
 
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current).toBe('paid'));
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('track-order?token=track-inv-1'),
       expect.anything()
@@ -46,7 +46,7 @@ describe('useGuestInvoicePaidState', () => {
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(result.current).toBe(false);
+    expect(result.current).toBe('unpaid');
   });
 
   it('retries a failed lookup before accepting unpaid presentation', async () => {
@@ -71,7 +71,7 @@ describe('useGuestInvoicePaidState', () => {
 
     const { result } = renderHook(() => useGuestInvoicePaidState(baseParams));
 
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current).toBe('paid'));
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -86,7 +86,7 @@ describe('useGuestInvoicePaidState', () => {
       expect((global.fetch as jest.Mock).mock.calls.length).toBe(2)
     );
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(result.current).toBe(false);
+    expect(result.current).toBe('unpaid');
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -108,7 +108,7 @@ describe('useGuestInvoicePaidState', () => {
         }),
       { initialProps: { orderId: 'order-inv-1', trackingToken: 'track-inv-1' } }
     );
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current).toBe('paid'));
 
     // Same-route navigation to another invoice: the pending lookup must
     // clear the previous order's paid flag instead of presenting the
@@ -116,7 +116,7 @@ describe('useGuestInvoicePaidState', () => {
     mockTrackedOrder('pending', 'order-inv-2');
     rerender({ orderId: 'order-inv-2', trackingToken: 'track-inv-2' });
 
-    await waitFor(() => expect(result.current).toBe(false));
+    await waitFor(() => expect(result.current).toBe('unpaid'));
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('track-order?token=track-inv-2'),
       expect.anything()
@@ -132,7 +132,7 @@ describe('useGuestInvoicePaidState', () => {
     );
 
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(result.current).toBe(false);
+    expect(result.current).toBe('unpaid');
   });
 
   it('resolves paid for a guest pay-for-me order settled externally', async () => {
@@ -142,7 +142,7 @@ describe('useGuestInvoicePaidState', () => {
       useGuestInvoicePaidState({ ...baseParams, paymentMethod: 'payforme' })
     );
 
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current).toBe('paid'));
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('track-order?token=track-inv-1'),
       expect.anything()
@@ -158,7 +158,18 @@ describe('useGuestInvoicePaidState', () => {
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(result.current).toBe(false);
+    expect(result.current).toBe('unpaid');
+  });
+
+  it('resolves refunded for a previously-paid guest invoice instead of unpaid', async () => {
+    mockTrackedOrder('refunded');
+
+    const { result } = renderHook(() => useGuestInvoicePaidState(baseParams));
+
+    // A refunded invoice must never present proforma/request copy: the
+    // distinct outcome lets the success screen render reconciliation or
+    // commercial-document state.
+    await waitFor(() => expect(result.current).toBe('refunded'));
   });
 
   it('skips the lookup for immediate-settlement methods', () => {
@@ -170,6 +181,6 @@ describe('useGuestInvoicePaidState', () => {
     );
 
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(result.current).toBe(false);
+    expect(result.current).toBe('unpaid');
   });
 });

@@ -225,6 +225,35 @@ async function performRelease(
   }
 }
 
+/**
+ * Reports whether a conversion claim is currently held, either granted by
+ * this process or persisted by an earlier session. Bounded and
+ * never-rejecting like the claim itself; an unreadable store reports false
+ * so callers favour retrying a paid order over assuming it was recorded.
+ */
+export async function isCheckoutPurchaseClaimed(
+  orderId: string,
+  eventName = 'purchase'
+): Promise<boolean> {
+  if (!orderId) {
+    return false;
+  }
+  const claim = eventName === 'purchase' ? orderId : `${eventName}:${orderId}`;
+  if (grantedClaims.has(claim)) {
+    return true;
+  }
+  try {
+    const stored = await readStoredClaims();
+    if (stored === STORAGE_TIMEOUT) {
+      return false;
+    }
+    return stored.includes(claim);
+  } catch (error) {
+    log.error('Failed to read checkout purchase tracking claim:', error);
+    return false;
+  }
+}
+
 export function claimCheckoutPurchaseTracking(
   orderId: string,
   eventName = 'purchase'

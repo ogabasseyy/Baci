@@ -45,7 +45,7 @@ const baseParams = {
 describe('useSettlementCompletion', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockTrackCompleted.mockResolvedValue(true);
+    mockTrackCompleted.mockResolvedValue('emitted');
   });
 
   it('completes when a pending order settles to paid on a later poll', async () => {
@@ -449,5 +449,80 @@ describe('useSettlementCompletion', () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(mockTrackCompleted).not.toHaveBeenCalled();
+  });
+
+  it('reschedules the polling lane after a released claim instead of stopping', async () => {
+    jest.useFakeTimers();
+    try {
+      // The order is already paid, but the first tracking attempt fails to
+      // emit and releases its claim: the lane must poll again and record
+      // completion on retry rather than returning as though it succeeded.
+      const fetchCalls = mockFetchSequence([
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'paid',
+          subtotal: 25000,
+          shipping_cost: 0,
+          discount_amount: 0,
+          total: 25000,
+        }),
+      ]);
+      mockTrackCompleted
+        .mockResolvedValueOnce('released')
+        .mockResolvedValue('emitted');
+
+      renderHook(() =>
+        useSettlementCompletion({
+          ...baseParams,
+          paymentMethod: 'bank_transfer',
+          pollIntervalMs: 1000,
+          maxAttempts: 3,
+        })
+      );
+      await jest.advanceTimersByTimeAsync(0);
+      expect(mockTrackCompleted).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(1000);
+
+      await waitFor(() => expect(mockTrackCompleted).toHaveBeenCalledTimes(2));
+      expect(fetchCalls()).toBe(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('stops polling once another path has already recorded completion', async () => {
+    jest.useFakeTimers();
+    try {
+      const fetchCalls = mockFetchSequence([
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'paid',
+          subtotal: 25000,
+          shipping_cost: 0,
+          discount_amount: 0,
+          total: 25000,
+        }),
+      ]);
+      mockTrackCompleted.mockResolvedValue('already_emitted');
+
+      renderHook(() =>
+        useSettlementCompletion({
+          ...baseParams,
+          paymentMethod: 'bank_transfer',
+          pollIntervalMs: 1000,
+          maxAttempts: 3,
+        })
+      );
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(5000);
+
+      // The conversion is safe elsewhere: no further lookups are spent.
+      expect(mockTrackCompleted).toHaveBeenCalledTimes(1);
+      expect(fetchCalls()).toBe(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

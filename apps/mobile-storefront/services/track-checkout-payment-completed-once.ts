@@ -1,5 +1,6 @@
 import {
   claimCheckoutPurchaseTracking,
+  isCheckoutPurchaseClaimed,
   releaseCheckoutPurchaseTracking,
 } from '@/lib/claim-checkout-purchase-tracking';
 import { createLogger } from '@/lib/logger';
@@ -43,13 +44,22 @@ type CheckoutPaymentCompletionInput = CheckoutCompletionAttribution & {
 
 const PAYMENT_COMPLETED_CLAIM_EVENT = 'payment_completed';
 
+// Outcome of a completion attempt. Settlement polling must distinguish a
+// released claim (the order is still paid but nothing was recorded: keep
+// polling) from an already-recorded conversion (another path emitted it:
+// stop), which a bare boolean cannot express.
+export type CheckoutPaymentCompletionOutcome =
+  | 'emitted'
+  | 'already_emitted'
+  | 'released';
+
 // Records the paid conversion once per order. The first caller wins the
 // durable claim and emits both the funnel payment_completed event and the
 // native ad purchase; replays after a remount, recovery, or reopened intent
-// return false and emit nothing, while navigation still proceeds.
+// report already_emitted and emit nothing, while navigation still proceeds.
 export async function trackCheckoutPaymentCompletedOnce(
   input: CheckoutPaymentCompletionInput
-): Promise<boolean> {
+): Promise<CheckoutPaymentCompletionOutcome> {
   // Wait behind the order-created emission for this order so the funnel
   // keeps causal order even though creation is recorded fire-and-forget.
   return await serializeAfterOrderCreated(input.orderId, async () => {
@@ -58,7 +68,16 @@ export async function trackCheckoutPaymentCompletedOnce(
       PAYMENT_COMPLETED_CLAIM_EVENT
     );
     if (!claimed) {
-      return false;
+      // A denied claim usually means another path already recorded the
+      // conversion — but it can also mean the store was unreadable and
+      // nothing was granted. Check which: polling callers must keep their
+      // lane when nothing is recorded, yet stop when the conversion is
+      // already safe, and a bare boolean cannot tell those apart.
+      const held = await isCheckoutPurchaseClaimed(
+        input.orderId,
+        PAYMENT_COMPLETED_CLAIM_EVENT
+      );
+      return held ? 'already_emitted' : 'released';
     }
     const total = input.value ?? 0;
     try {
@@ -85,12 +104,12 @@ export async function trackCheckoutPaymentCompletedOnce(
         input.orderId,
         PAYMENT_COMPLETED_CLAIM_EVENT
       );
-      return false;
+      return 'released';
     }
     // After the fallible emission succeeds: a rolled-back attempt must
     // not leave a funnel payment_completed behind, or its retry would
     // double-count the conversion.
     trackCheckoutPaymentCompleted(input);
-    return true;
+    return 'emitted';
   });
 }

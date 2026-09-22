@@ -178,15 +178,20 @@ export function createPaymentGatewayCompletionHandlers({
           const trackingContext = await loadRedvaultPurchaseTrackingContext(
             orderId || ''
           );
-          if (
-            trackingContext &&
-            (await claimCheckoutPurchaseTracking(orderId || ''))
-          ) {
-            trackCheckoutRoutePurchaseCompleted({
-              ...trackingContext,
-              orderId: orderId || '',
-              orderNumber: verifiedOrderNumber || trackingContext.orderNumber,
-            });
+          if (trackingContext) {
+            // The order-created path claims its own scoped key, so a denial
+            // here means the purchase was already recorded through another
+            // path — emit only on a fresh claim.
+            if (await claimCheckoutPurchaseTracking(orderId || '')) {
+              await trackCheckoutRoutePurchaseCompleted({
+                ...trackingContext,
+                orderId: orderId || '',
+                orderNumber: verifiedOrderNumber || trackingContext.orderNumber,
+              });
+            }
+            // Cleanup is independent of the claim: a denied claim means the
+            // conversion went out elsewhere, so the saved email/phone/items
+            // must not linger in AsyncStorage indefinitely.
             await clearRedvaultPurchaseTrackingContext(orderId || '');
           }
         } catch {

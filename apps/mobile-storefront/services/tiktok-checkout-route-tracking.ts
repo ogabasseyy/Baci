@@ -65,7 +65,7 @@ export function trackCheckoutRoutePaymentInfo(paymentMethod: string) {
   return trackAdPaymentInfoAdded(paymentMethod);
 }
 
-export function trackCheckoutRoutePurchaseCompleted({
+export async function trackCheckoutRoutePurchaseCompleted({
   customerEmail,
   customerPhone,
   items = [],
@@ -77,20 +77,13 @@ export function trackCheckoutRoutePurchaseCompleted({
   subtotal = total,
   tax = 0,
   userId,
-}: CheckoutPurchaseInput) {
-  trackOrderCompleted({
-    currency: 'NGN',
-    itemCount: items.reduce((acc, item) => acc + item.quantity, 0),
-    orderId,
-    orderNumber,
-    paymentMethod,
-    shipping,
-    subtotal,
-    tax,
-    total,
-  });
-
-  return trackAdPurchase({
+}: CheckoutPurchaseInput): Promise<void> {
+  // Await the fallible ad purchase BEFORE the legacy order_completed
+  // event: if the ad emission rejects, the shared completion claim rolls
+  // back so a later poll or revisit can emit. Emitting order_completed
+  // first would let that escaped event double-count the conversion on
+  // retry, since a released claim cannot un-emit it.
+  await trackAdPurchase({
     currency: 'NGN',
     email: customerEmail,
     items: toAdItems(items),
@@ -103,5 +96,17 @@ export function trackCheckoutRoutePurchaseCompleted({
     tax,
     total,
     userId,
+  });
+
+  trackOrderCompleted({
+    currency: 'NGN',
+    itemCount: items.reduce((acc, item) => acc + item.quantity, 0),
+    orderId,
+    orderNumber,
+    paymentMethod,
+    shipping,
+    subtotal,
+    tax,
+    total,
   });
 }

@@ -353,6 +353,31 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     expect(input.setPaymentStatus).toHaveBeenLastCalledWith('success');
   });
 
+  it('clears saved REDVAULT context without re-emitting when the purchase claim is taken', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue({
+      items: [],
+      orderNumber: 'ORD-9',
+      paymentMethod: 'uba_redvault',
+      shipping: 0,
+      subtotal: 5000,
+      tax: 0,
+      total: 5000,
+    });
+    // Another path already recorded the conversion: no fresh claim, so no
+    // emission — but the saved email/phone/items must not linger.
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(false);
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+    expect(mockTrackCheckoutRoutePurchaseCompleted).not.toHaveBeenCalled();
+    expect(mockClearRedvaultPurchaseTrackingContext).toHaveBeenCalledWith(
+      'order-1'
+    );
+    expect(input.setPaymentStatus).toHaveBeenLastCalledWith('success');
+  });
+
   it('preserves the cart when REDVAULT verification rejects', async () => {
     mockVerifyRedvaultPayment.mockRejectedValue(new Error('offline'));
     const { input } = createInput({ paymentMethod: 'uba_redvault' });

@@ -44,6 +44,12 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
   let html = '';
   let isPaid = false;
   if (isOpen) {
+    // Same NGN-only rule as the web document builders: a
+    // foreign-currency preview must not print the untyped naira account
+    // beside a dollar-denominated balance. The renderer prefers the
+    // order-level virtual account, so the guard must cover it — not just
+    // the merchant fallback below.
+    const showBankDetails = showMerchantBankDetails(receiptDetail.currency);
     const orderData: ReceiptOrder = {
       order_number: receiptDetail.order_number,
       created_at: receiptDetail.created_at,
@@ -64,15 +70,11 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       customer_email: receiptDetail.customer_email,
       customer_phone: receiptDetail.customer_phone,
       shipping_address: receiptDetail.shipping_address,
-      virtual_account: receiptDetail.virtual_account,
+      virtual_account: showBankDetails ? receiptDetail.virtual_account : null,
       items: receiptDetail.items,
       transactions: receiptDetail.transactions,
     };
 
-    // Same NGN-only rule as the web document builders: a
-    // foreign-currency preview must not print the untyped naira account
-    // beside a dollar-denominated balance.
-    const showBankDetails = showMerchantBankDetails(receiptDetail.currency);
     const merchant: ReceiptMerchant = {
       business_name: merchantInfo.business_name,
       logo_url: merchantInfo.logo_url,

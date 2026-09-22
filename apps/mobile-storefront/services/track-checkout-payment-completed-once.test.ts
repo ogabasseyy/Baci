@@ -68,7 +68,7 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
         paymentMethod: 'bank_transfer',
         value: 470000,
       })
-    ).resolves.toBe(true);
+    ).resolves.toBe('emitted');
 
     expect(completedMock).toHaveBeenCalledTimes(1);
     expect(completedMock).toHaveBeenCalledWith(
@@ -93,7 +93,7 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
         paymentMethod: 'bank_transfer',
         value: 470000,
       })
-    ).resolves.toBe(false);
+    ).resolves.toBe('already_emitted');
 
     expect(completedMock).toHaveBeenCalledTimes(1);
     expect(purchaseMock).toHaveBeenCalledTimes(1);
@@ -120,7 +120,7 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
         paymentMethod: 'bank_transfer',
         value: 2000,
       })
-    ).resolves.toBe(true);
+    ).resolves.toBe('emitted');
 
     expect(purchaseMock).toHaveBeenCalledWith(
       expect.objectContaining({ items: snapshot })
@@ -140,7 +140,7 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
         tax: 3375,
         value: 49875,
       })
-    ).resolves.toBe(true);
+    ).resolves.toBe('emitted');
 
     expect(purchaseMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -164,7 +164,7 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
         paymentMethod: 'bank_transfer',
         value: 470000,
       })
-    ).resolves.toBe(false);
+    ).resolves.toBe('released');
 
     // The funnel event must not leak ahead of the rolled-back attempt,
     // or its retry would double-count the conversion.
@@ -176,7 +176,7 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
         paymentMethod: 'bank_transfer',
         value: 470000,
       })
-    ).resolves.toBe(true);
+    ).resolves.toBe('emitted');
 
     expect(completedMock).toHaveBeenCalledTimes(1);
     expect(purchaseMock).toHaveBeenCalledTimes(2);
@@ -193,7 +193,7 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
         orderId: 'order-9',
         paymentMethod: 'credpal',
       })
-    ).resolves.toBe(false);
+    ).resolves.toBe('already_emitted');
 
     expect(completedMock).not.toHaveBeenCalled();
     expect(purchaseMock).not.toHaveBeenCalled();

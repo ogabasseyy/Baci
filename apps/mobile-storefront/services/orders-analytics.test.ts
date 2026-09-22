@@ -54,7 +54,7 @@ describe('trackCreatedOrderOnce', () => {
       'paystack'
     );
 
-    expect(mockClaim).toHaveBeenCalledWith('order-1');
+    expect(mockClaim).toHaveBeenCalledWith('order-1', 'order_created');
     expect(mockTrack).toHaveBeenCalledTimes(1);
     expect(mockTrack).toHaveBeenCalledWith({
       itemCount: 3,

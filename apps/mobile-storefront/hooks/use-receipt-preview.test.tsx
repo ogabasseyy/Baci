@@ -82,4 +82,46 @@ describe('useReceiptPreview foreign-currency bank details', () => {
     expect(result.current.isOpen).toBe(true);
     expect(result.current.html).toContain('1234567890');
   });
+
+  it('strips a persisted virtual account from USD previews', () => {
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('USD'),
+      virtual_account: {
+        account_number: '0987654321',
+        bank_name: 'Wema Bank',
+        account_name: 'Ogabassey Ltd',
+      },
+    };
+    const { result } = renderHook(() => useReceiptPreview());
+
+    act(() => {
+      result.current.openPreviewByOrderId('order-1');
+    });
+
+    // The renderer prefers the order-level account, so the merchant-only
+    // guard is not enough: the naira DVA must not print beside a
+    // dollar-denominated balance.
+    expect(result.current.isOpen).toBe(true);
+    expect(result.current.html).not.toContain('0987654321');
+    expect(result.current.html).not.toContain('Wema Bank');
+  });
+
+  it('keeps a persisted virtual account for NGN previews', () => {
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      virtual_account: {
+        account_number: '0987654321',
+        bank_name: 'Wema Bank',
+        account_name: 'Ogabassey Ltd',
+      },
+    };
+    const { result } = renderHook(() => useReceiptPreview());
+
+    act(() => {
+      result.current.openPreviewByOrderId('order-1');
+    });
+
+    expect(result.current.isOpen).toBe(true);
+    expect(result.current.html).toContain('0987654321');
+  });
 });

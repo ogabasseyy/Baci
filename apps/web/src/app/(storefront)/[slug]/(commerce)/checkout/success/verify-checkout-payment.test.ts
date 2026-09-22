@@ -125,6 +125,42 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { status: 'failed', reason: 'payment_failed' },
+    { status: 'cancelled', reason: 'payment_cancelled' },
+    { status: 'abandoned', reason: 'payment_abandoned' },
+  ])('fails a $status reference verification with the matching failure event', async ({ status, reason }) => {
+    // Exact route shape for terminal provider outcomes: the attempt can
+    // never settle, so the page shows failure/retry immediately instead
+    // of re-polling until the retry budget expires.
+    request.mockResolvedValue(
+      Response.json({
+        success: false,
+        status,
+        orderId: 'order-id',
+        orderNumber: 'ORD-1',
+        paymentMethod: 'paystack',
+      })
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(
+      { ...params, reference: 'reference' },
+      callbacks
+    );
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith('failed');
+    expect(callbacks.clearCart).not.toHaveBeenCalled();
+    expect(callbacks.capturePaymentFailed).toHaveBeenCalledWith({
+      orderId: 'order-id',
+      orderNumber: 'ORD-1',
+      paymentMethod: 'paystack',
+      reference: 'reference',
+      reason,
+    });
+    expect(callbacks.scheduleFailedRedirect).toHaveBeenCalledTimes(1);
+  });
+
   it('fails a revisited fully-refunded REDVAULT order without clearing the cart', async () => {
     vi.stubGlobal(
       'fetch',

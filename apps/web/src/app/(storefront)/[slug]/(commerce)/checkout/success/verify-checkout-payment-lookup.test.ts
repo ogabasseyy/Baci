@@ -41,6 +41,7 @@ describe('verifyCheckoutPaymentByLookup helpers', () => {
 
   it('validates verification response shapes', () => {
     expect(isVerificationResponse({ status: 'success' })).toBe(true);
+    expect(isVerificationResponse({ status: 'abandoned' })).toBe(true);
     expect(isVerificationResponse({ status: 'bogus' })).toBe(false);
     expect(isVerificationResponse(null)).toBe(false);
     expect(isVerificationResponse([])).toBe(false);
@@ -106,7 +107,33 @@ describe('verifyCheckoutPaymentByLookup', () => {
     expect(h.setIsVerifying).toHaveBeenCalledWith(false);
   });
 
-  it('routes cancelled/refunded lookups to reconciling with the cart intact', async () => {
+  it('routes refunded lookups to reconciling with the cart intact', async () => {
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          order_number: 'BAC-2',
+          payment_method: 'paystack',
+          payment_status: 'refunded',
+        }),
+    } as Response);
+    const h = handlers();
+
+    await expect(verifyCheckoutPaymentByLookup(params(), h)).resolves.toBe(
+      true
+    );
+
+    expect(h.setStatus).toHaveBeenCalledWith('reconciling');
+    expect(h.setOrderNumber).toHaveBeenCalledWith('BAC-2');
+    expect(h.clearCart).not.toHaveBeenCalled();
+    expect(h.capturePaymentCompleted).not.toHaveBeenCalled();
+  });
+
+  it('fails ordinary cancelled lookups as unpaid instead of promising a refund', async () => {
+    // A cancelled row proves no capture (maintenance flips stale unpaid
+    // orders): terminal unpaid failure with the cart intact — never the
+    // "Payment Received" reconciliation view.
     vi.stubGlobal('fetch', mockFetch);
     mockFetch.mockResolvedValue({
       ok: true,
@@ -123,8 +150,10 @@ describe('verifyCheckoutPaymentByLookup', () => {
       true
     );
 
-    expect(h.setStatus).toHaveBeenCalledWith('reconciling');
+    expect(h.setStatus).toHaveBeenCalledWith('failed');
     expect(h.setOrderNumber).toHaveBeenCalledWith('BAC-2');
+    expect(h.setPaymentMethod).toHaveBeenCalledWith('paystack');
+    expect(h.scheduleFailedRedirect).toHaveBeenCalledTimes(1);
     expect(h.clearCart).not.toHaveBeenCalled();
     expect(h.capturePaymentCompleted).not.toHaveBeenCalled();
   });

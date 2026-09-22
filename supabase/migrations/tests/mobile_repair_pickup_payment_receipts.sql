@@ -1,4 +1,7 @@
 BEGIN;
+
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
 INSERT INTO public.merchants(id, email, business_name, slug, is_published)
 VALUES ('14bf2192-16de-442b-bf75-700f4ff2aaca', 'receipt-test@example.com', 'Receipt Test', 'receipt-test-3448', true);
 SET LOCAL ROLE repair_pickup_receiver;

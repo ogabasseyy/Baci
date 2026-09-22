@@ -20,6 +20,22 @@ case "$operation" in
       chmod +x "$HERMESC_DST/linux64-bin/hermesc" 2>/dev/null || true
     fi
     ;;
+  link-cmdline-tools-latest)
+    SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/.android/sdk}}"
+    # React Native's hermes-engine build resolves sdkmanager only via
+    # cmdline-tools/latest (or legacy tools/); setup-android installs a
+    # versioned dir without the `latest` link, failing configuration with
+    # "Could not find sdkmanager executable".
+    if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
+      CANDIDATE="$(find "$SDK/cmdline-tools" -maxdepth 3 -name sdkmanager -type f | head -n 1)"
+      if [ -z "$CANDIDATE" ]; then
+        echo "::error::No sdkmanager under $SDK/cmdline-tools" >&2
+        exit 1
+      fi
+      ln -sfn "$(dirname "$(dirname "$CANDIDATE")")" "$SDK/cmdline-tools/latest"
+    fi
+    test -x "$SDK/cmdline-tools/latest/bin/sdkmanager"
+    ;;
   resolve-version)
     if [ "$GH_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$VERSION_CODE_INPUT" ]; then
       VERSION_CODE="$VERSION_CODE_INPUT"

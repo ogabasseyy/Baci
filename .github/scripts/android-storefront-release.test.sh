@@ -40,4 +40,22 @@ if bash "$script" unknown >"$fixture_root/unknown-log" 2>&1; then
 fi
 grep -q 'Unknown Android storefront release operation' "$fixture_root/unknown-log"
 
+sdk_root="$fixture_root/sdk"
+mkdir -p "$sdk_root/cmdline-tools/20.0/bin"
+touch "$sdk_root/cmdline-tools/20.0/bin/sdkmanager"
+chmod +x "$sdk_root/cmdline-tools/20.0/bin/sdkmanager"
+ANDROID_HOME="$sdk_root" bash "$script" link-cmdline-tools-latest
+[ -x "$sdk_root/cmdline-tools/latest/bin/sdkmanager" ]
+
+ANDROID_HOME="$sdk_root" bash "$script" link-cmdline-tools-latest
+[ -x "$sdk_root/cmdline-tools/latest/bin/sdkmanager" ]
+
+empty_root="$fixture_root/empty-sdk"
+mkdir -p "$empty_root/cmdline-tools"
+if ANDROID_HOME="$empty_root" bash "$script" link-cmdline-tools-latest >"$fixture_root/link-log" 2>&1; then
+  echo 'Expected missing sdkmanager to fail' >&2
+  exit 1
+fi
+grep -q 'No sdkmanager' "$fixture_root/link-log"
+
 echo 'Android storefront release script checks passed'

@@ -1,16 +1,13 @@
 import { useMerchant } from '@/hooks/use-merchant';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutStep } from '@/services/analytics';
 import { createOrder } from '@/services/orders';
-import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { useCartStore } from '@/stores/cart-store';
 import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
 import { acquireCheckoutSubmitFence } from './acquire-checkout-submit-fence';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
 import { createCheckoutSnapshot } from './checkout-order-builders';
-import { runCheckoutPostOrderSideEffects } from './checkout-post-order-side-effects';
 import {
   blockIfMixedPrizeCart,
   cartHasVoucherLine,
@@ -23,7 +20,7 @@ import { tryCaptureCheckoutSubmitRollbackState } from './checkout-submit-rollbac
 import { validateCheckoutSubmission } from './checkout-submit-validation';
 import { isBnplPayment } from './is-bnpl-payment';
 import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
-import { runFinalizeCheckoutPayment } from './run-finalize-checkout-payment';
+import { runCheckoutFinalization } from './run-checkout-finalization';
 import { runRedvaultPostOrderBranch } from './run-redvault-post-order-branch';
 import { trackSubmittedCheckoutGeneration } from './track-submitted-checkout-generation';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
@@ -203,11 +200,17 @@ export function useCheckoutSubmit({
         submittedGeneration.current(),
         creditFields
       );
-      rollbackCaptureInconclusive = !rollbackCapture.ok;
-      if (rollbackCapture.ok) {
-        submitCreditFields = rollbackCapture.creditFields;
-        submitHadSortMarker = rollbackCapture.hadSortMarker;
+      if (!rollbackCapture.ok) {
+        // Fail closed before finalization: without a conclusive sort
+        // mode, a failed finalize would empty the cart with no rollback
+        // path. The created order stands; the cart stays intact for retry.
+        rollbackCaptureInconclusive = true;
+        throw new Error(
+          'Checkout verification timed out; your cart is unchanged.'
+        );
       }
+      submitCreditFields = rollbackCapture.creditFields;
+      submitHadSortMarker = rollbackCapture.hadSortMarker;
       const { order } = orderResponse;
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
@@ -238,48 +241,31 @@ export function useCheckoutSubmit({
       ) {
         return;
       }
-      if (await claimCheckoutPurchaseTracking(order.id)) {
-        void trackCheckoutRoutePurchaseCompleted({
-          customerEmail,
-          customerPhone,
-          items: itemsSnapshot,
-          orderId: order.id,
-          orderNumber,
-          paymentMethod: completedPaymentMethod,
-          shipping: snapshot.deliveryFee,
-          subtotal: snapshot.subtotal,
-          tax: snapshot.taxAmount,
-          total: order.total,
-          userId: user?.id ?? undefined,
-        });
-      }
-      await runFinalizeCheckoutPayment({
+      await runCheckoutFinalization({
+        accountPassword,
+        address,
         clearCart,
+        completedPaymentMethod,
+        customer,
         customerEmail,
         customerName,
         customerPhone,
+        isAuthenticated,
         isOrderInFlight,
+        itemsSnapshot,
+        order,
         orderNumber,
         orderResponse,
-        runPostOrderSideEffects: () => {
-          void runCheckoutPostOrderSideEffects({
-            accountPassword,
-            address,
-            customerEmail,
-            customerId: customer?.id,
-            isAuthenticated,
-            saveAsDefaultAddress,
-            saveDetails,
-            selectedSavedAddressId,
-          });
-        },
+        saveAsDefaultAddress,
+        saveDetails,
         selectedPayment,
+        selectedSavedAddressId,
         setIsProcessing,
         setPendingOrder,
         setShowCryptoSelection,
-        shouldCreateWalletFundedBankTransferOrder:
-          walletFundedBankTransferOptionEnabled &&
-          selectedPayment === 'bank_transfer',
+        snapshot,
+        user,
+        walletFundedBankTransferOptionEnabled,
       });
     } catch (error) {
       if (!rollbackCaptureInconclusive) {

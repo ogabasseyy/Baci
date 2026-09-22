@@ -286,9 +286,15 @@ describe('useCheckoutSubmit rollback credit', () => {
       await result.current(address);
     });
 
+    // Finalization never runs: without a rollback path, clearing the
+    // cart for a payment route that then fails would strand the shopper
+    // with an unpaid order and an empty cart.
+    expect(mockRunFinalizeCheckoutPayment).not.toHaveBeenCalled();
     expect(mockRestore).not.toHaveBeenCalled();
     expect(mockHandleSubmitError).toHaveBeenCalledWith(
-      expect.any(Error),
+      expect.objectContaining({
+        message: expect.stringMatching(/cart is unchanged/i),
+      }),
       'paystack'
     );
   });

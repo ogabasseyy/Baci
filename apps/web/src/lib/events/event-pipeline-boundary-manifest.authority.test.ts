@@ -77,6 +77,7 @@ describe('event pipeline authority importer boundary', () => {
     ]);
     expect(manifest.authority.operationalServiceImporters).toEqual([
       'apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts',
+      'apps/web/src/lib/repairs/reconcile-mobile-repair-pickup-payment.ts',
     ]);
   });
 

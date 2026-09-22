@@ -63,10 +63,14 @@ describe('Santa catalog data', () => {
 
     await expect(
       getCachedSantaProducts('merchant-1', true, 'NGN')
-    ).resolves.toContain('Spark 50": ₦100,000 (Maximum Discount: 0%)');
+    ).resolves.toContain(
+      'Spark 50": ₦100,000 (catalog price: 100000 NGN, Maximum Discount: 0%)'
+    );
     await expect(
       getCachedSantaProducts('merchant-1', false, 'NGN')
-    ).resolves.toContain('Spark 50": ₦100,000 (Maximum Discount: 0%)');
+    ).resolves.toContain(
+      'Spark 50": ₦100,000 (catalog price: 100000 NGN, Maximum Discount: 0%)'
+    );
   });
 
   it('keeps a margin-protected product at zero even when checkout allows negotiation', async () => {
@@ -80,7 +84,24 @@ describe('Santa catalog data', () => {
     ]);
     await expect(
       getCachedSantaProducts('merchant-1', true, 'NGN')
-    ).resolves.toContain('High-cost Phone": ₦100,000 (Maximum Discount: 0%)');
+    ).resolves.toContain(
+      'High-cost Phone": ₦100,000 (catalog price: 100000 NGN, Maximum Discount: 0%)'
+    );
+  });
+
+  it('emits a parser-safe ASCII catalog price alongside localized display', async () => {
+    mockProducts([
+      {
+        brand: 'Apple',
+        max_margin_discount_percentage: 40,
+        name: 'Phone',
+        price: 100_000,
+      },
+    ]);
+
+    const catalog = await getCachedSantaProducts('merchant-1', true, 'NGN');
+
+    expect(catalog).toContain('(catalog price: 100000 NGN,');
   });
 
   it('samples across the price range without absolute currency thresholds', () => {

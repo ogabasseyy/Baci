@@ -120,7 +120,10 @@ const formatSantaCatalog = async (
   return products
     .map(
       (product) =>
-        `* ${JSON.stringify(product.name)}: ${formatAmountInCurrency(product.price, currencyCode, { maximumFractionDigits: 0 })} (Maximum Discount: ${product.max_discount_percentage}%)`
+        // The parenthesized catalog price is a plain ASCII number for the
+        // model to copy into ACTION PRICE fields: localized display amounts
+        // (e.g. `₹1,00,000`, `1.000 €`) do not round-trip the action parser.
+        `* ${JSON.stringify(product.name)}: ${formatAmountInCurrency(product.price, currencyCode, { maximumFractionDigits: 0 })} (catalog price: ${product.price} ${currencyCode}, Maximum Discount: ${product.max_discount_percentage}%)`
     )
     .join('\n');
 };

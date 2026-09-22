@@ -164,6 +164,11 @@ export function buildCheckoutOrderRequest({
 }: BuildOrderRequestParams): CheckoutOrderRequest {
   const isMerchantRateQuote = selectedQuote?.provider === 'MERCHANT';
   const merchantRateId = getMerchantRateId(selectedQuote);
+  if (isMerchantRateQuote && !merchantRateId) {
+    throw new Error(
+      'The selected merchant delivery option is invalid. Please refresh shipping options.'
+    );
+  }
   const canUseCarrierQuote =
     !isMerchantRateQuote &&
     selectedQuote?.id != null &&

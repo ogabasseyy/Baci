@@ -314,7 +314,7 @@ describe('checkout order builders', () => {
   it.each([
     'mrate_not-a-uuid',
     'merchant-rate-without-prefix',
-  ])('does not serialize malformed merchant rate %s as a carrier quote', (quoteId) => {
+  ])('rejects malformed merchant rate %s instead of submitting it', (quoteId) => {
     const itemsSnapshot = [
       {
         id: 'line-1',
@@ -325,37 +325,28 @@ describe('checkout order builders', () => {
         quantity: 1,
       },
     ];
-    const request = buildCheckoutOrderRequest({
-      address,
-      customerEmail: 'ada@example.com',
-      customerName: 'Ada Lovelace',
-      customerPhone: '08012345678',
-      deliveryMethod: 'door',
-      itemsSnapshot,
-      paymentMethodForOrder: 'paystack',
-      selectedQuote: {
-        id: quoteId,
-        displayName: 'Lagos delivery',
-        price: 1500,
-        provider: 'MERCHANT',
-      },
-      shippingProvider: 'MERCHANT',
-      snapshot: createCheckoutSnapshot(itemsSnapshot, 1500, 0),
-    });
 
-    expect(request.selected_quote_id).toBeUndefined();
-    expect(request.shipping_provider).toBeUndefined();
-    expect(request.shipping_rate_id).toBeUndefined();
-
-    const payload = buildOrderPayload({
-      merchantId: 'merchant-1',
-      request: CreateOrderRequestSchema.parse(request),
-    });
-    expect(payload).toMatchObject({
-      selected_quote_id: null,
-      shipping_provider: null,
-      shipping_rate_id: null,
-    });
+    expect(() =>
+      buildCheckoutOrderRequest({
+        address,
+        customerEmail: 'ada@example.com',
+        customerName: 'Ada Lovelace',
+        customerPhone: '08012345678',
+        deliveryMethod: 'door',
+        itemsSnapshot,
+        paymentMethodForOrder: 'paystack',
+        selectedQuote: {
+          id: quoteId,
+          displayName: 'Lagos delivery',
+          price: 1500,
+          provider: 'MERCHANT',
+        },
+        shippingProvider: 'MERCHANT',
+        snapshot: createCheckoutSnapshot(itemsSnapshot, 1500, 0),
+      })
+    ).toThrow(
+      'The selected merchant delivery option is invalid. Please refresh shipping options.'
+    );
   });
 
   it('does not serialize a stale station-pickup quote on door orders', () => {

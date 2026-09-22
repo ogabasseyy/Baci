@@ -102,6 +102,39 @@ describe('cart-pricing', () => {
     expect(getCartCatalogSubtotalWithAssurance(items)).toBe(2080);
   });
 
+  it('rounds fractional assurance fees to two decimals like the server', () => {
+    const items = [
+      {
+        hasAssurance: true,
+        name: 'MacBook Air M1',
+        negotiatedPrice: 333.33,
+        negotiationStatus: 'accepted' as const,
+        price: 500,
+        quantity: 2,
+      },
+    ] as CartItem[];
+
+    // Catalog basis (500 x 2) plus round2(333.33 x 2 x 0.05) = 33.33.
+    // Whole-unit rounding would give 33 and mismatch order verification.
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(1033.33);
+  });
+
+  it('uses the fixed server rate even when the cart carries a custom rate', () => {
+    const items = [
+      {
+        assuranceRate: 0.07,
+        hasAssurance: true,
+        name: 'MacBook Air M1',
+        negotiatedPrice: 800,
+        negotiationStatus: 'accepted' as const,
+        price: 1000,
+        quantity: 2,
+      },
+    ] as CartItem[];
+
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(2080);
+  });
+
   it('ignores unaccepted negotiations and missing assurance in the quote basis', () => {
     const items = [
       {

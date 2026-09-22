@@ -5,8 +5,8 @@ export { trackCheckoutInvoiceGenerated } from './track-checkout-invoice-generate
 export { trackCheckoutOrderCreated } from './track-checkout-order-created';
 export { trackCheckoutPaymentCompleted } from './track-checkout-payment-completed';
 export {
-  trackCheckoutPaymentCompletedOnce,
   type CheckoutPaymentCompletionOutcome,
+  trackCheckoutPaymentCompletedOnce,
 } from './track-checkout-payment-completed-once';
 export { trackCheckoutPaymentFailed } from './track-checkout-payment-failed';
 export { trackCheckoutPaymentMethodSelected } from './track-checkout-payment-method-selected';

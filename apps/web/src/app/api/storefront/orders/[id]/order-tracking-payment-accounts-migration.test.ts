@@ -19,7 +19,7 @@ it('adds payment_accounts while preserving tracking authorization and response l
   const migration = readFileSync(
     resolve(
       migrationsDir,
-      '20260921180000_include_tracking_order_payment_accounts.sql'
+      '20260921180100_include_tracking_order_payment_accounts.sql'
     ),
     'utf8'
   );

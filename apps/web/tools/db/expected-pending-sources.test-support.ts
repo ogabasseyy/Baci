@@ -296,7 +296,7 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20260921180000_include_tracking_order_payment_accounts.sql',
+      'supabase/migrations/20260921180100_include_tracking_order_payment_accounts.sql',
     sha256: 'e4cc677df89fc76136e7ad3d6439d07893df34d6e064f0941951ec1d0c2723c9',
   },
   {
@@ -305,7 +305,7 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20260922120000_verify_payment_reference_token_rpc.sql',
+      'supabase/migrations/20260922120100_verify_payment_reference_token_rpc.sql',
     sha256: '16fee07c93035f58783ea0dcde7688b7c8155adedeb522b5dee446a3e932ba1d',
   },
   {

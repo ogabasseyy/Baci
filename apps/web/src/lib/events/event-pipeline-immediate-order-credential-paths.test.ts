@@ -3,12 +3,29 @@ import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-imm
 
 describe('eventPipelineImmediateOrderCredentialPaths', () => {
   it('allows only the audited immediate-order notification edges', () => {
-    expect(eventPipelineImmediateOrderCredentialPaths).toHaveLength(14);
+    expect(eventPipelineImmediateOrderCredentialPaths).toHaveLength(16);
     expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
       'apps/web/src/app/api/orders/route.ts',
       'apps/web/src/lib/immediate-order-notification.ts',
       'apps/web/src/lib/immediate-order/confirmation-email.ts',
       'apps/web/src/lib/zeptomail.ts',
+      'apps/web/src/env.ts',
+    ]);
+    // ZeptoMail's audit sink reaches the admin client: the same
+    // confirmation chain with the admin hop is registered exactly.
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/app/api/orders/route.ts',
+      'apps/web/src/lib/immediate-order-notification.ts',
+      'apps/web/src/lib/immediate-order/confirmation-email.ts',
+      'apps/web/src/lib/zeptomail.ts',
+      'apps/web/src/lib/supabase/admin.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/lib/immediate-order-notification.ts',
+      'apps/web/src/lib/immediate-order/confirmation-email.ts',
+      'apps/web/src/lib/zeptomail.ts',
+      'apps/web/src/lib/supabase/admin.ts',
       'apps/web/src/env.ts',
     ]);
     expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([

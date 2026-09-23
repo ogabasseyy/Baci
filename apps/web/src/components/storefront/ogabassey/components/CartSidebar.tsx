@@ -15,9 +15,10 @@ import {
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type React from 'react';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { type CartItem, useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
+import { useSafeTimeout } from '@/hooks/use-safe-timeout';
 import { analytics } from '@/lib/analytics';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { asRoute } from '@/lib/routes';
@@ -88,24 +89,14 @@ export const CartSidebar: React.FC = () => {
   const hasPriceNegotiation =
     cartMerchantContextMatches && hasStorefrontPriceNegotiation(merchant);
 
-  const displayCart = useMemo(
-    () => sanitizeCartItems(cart, hasPriceNegotiation),
-    [cart, hasPriceNegotiation]
-  );
+  const displayCart = sanitizeCartItems(cart, hasPriceNegotiation);
 
-  const displayCartTotal = useMemo(
-    () => calculateCartTotal(cart, hasPriceNegotiation),
-    [cart, hasPriceNegotiation]
-  );
+  const displayCartTotal = calculateCartTotal(cart, hasPriceNegotiation);
 
-  const hasNonNegotiableCartItem = useMemo(
-    () =>
-      displayCart.some(
-        (item) =>
-          !isQuizVoucherCartItem(item) &&
-          !isProductNegotiable({ brand: item.brand, name: item.name })
-      ),
-    [displayCart]
+  const hasNonNegotiableCartItem = displayCart.some(
+    (item) =>
+      !isQuizVoucherCartItem(item) &&
+      !isProductNegotiable({ brand: item.brand, name: item.name })
   );
 
   const getHref = (path: string) =>
@@ -113,18 +104,7 @@ export const CartSidebar: React.FC = () => {
 
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const router = useRouter();
-  const isMountedRef = useRef(true);
-  const checkoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      if (checkoutTimerRef.current) {
-        clearTimeout(checkoutTimerRef.current);
-      }
-    };
-  }, []);
+  const scheduleTimeout = useSafeTimeout();
 
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
@@ -541,19 +521,16 @@ export const CartSidebar: React.FC = () => {
                     // Navigate to checkout
                     router.push(asRoute(getHref('/checkout')));
                     // Reset loading state after a delay (in case user comes back).
-                    // Skip the reset when navigation unmounted the sidebar.
-                    const timer = setTimeout(() => {
-                      if (isMountedRef.current) {
-                        setIsCheckoutLoading(false);
-                      }
+                    // The reset is dropped when navigation unmounted the sidebar.
+                    scheduleTimeout(() => {
+                      setIsCheckoutLoading(false);
                     }, 2000);
-                    checkoutTimerRef.current = timer;
                   }}
                   disabled={isCheckoutLoading}
                   className="w-full bg-store-primary hover:bg-store-primary/90 text-store-primary-text font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg group disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isCheckoutLoading ? (
-                    <div className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="size-5 border-2 border-store-primary-text/30 border-t-store-primary-text rounded-full animate-spin" />
                   ) : (
                     <>
                       Proceed to Checkout

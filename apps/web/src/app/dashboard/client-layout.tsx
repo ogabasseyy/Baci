@@ -71,6 +71,7 @@ import {
 import { useAuth } from '@/contexts/auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { COUNTRIES, getCountryByCode } from '@/lib/countries';
+import { buildDashboardStoreUrl } from '@/lib/dashboard-store-url';
 import { isRepairsBusinessType } from '@/lib/repairs/repairs-feature';
 import { asRoute } from '@/lib/routes';
 import { cn } from '@/lib/utils';
@@ -329,31 +330,7 @@ export default function DashboardClientLayout({
     ? getCountryByCode(merchant.country)
     : null;
 
-  const getStoreUrl = () => {
-    if (!merchant?.slug) return '#';
-
-    const isDevelopment = process.env.NODE_ENV === 'development';
-
-    if (isDevelopment) {
-      // Use the running origin instead of a hardcoded port so any dev port
-      // works. Falls back to :3000 during SSR, where window is unavailable.
-      if (typeof window !== 'undefined') {
-        return `${window.location.origin}/${merchant.slug}`;
-      }
-      return `http://localhost:3000/${merchant.slug}`;
-    }
-
-    // In production, prioritize custom domain
-    if (merchant.custom_domain) {
-      return `https://${merchant.custom_domain}`;
-    }
-
-    // Fallback to subdomain URL
-    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
-    return `https://${merchant.slug}.${rootDomain}`;
-  };
-
-  const storeUrl = getStoreUrl();
+  const storeUrl = buildDashboardStoreUrl(merchant);
 
   const handleSignOut = async () => {
     await signOut();

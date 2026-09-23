@@ -148,4 +148,41 @@ describe('StorefrontCartProvider merchant switching', () => {
       )
     ).toBe(true);
   });
+
+  it('adopts the saved cart when the merchant slug prop changes', async () => {
+    localStorageMock.setItem(
+      'baci-cart-first-guest',
+      JSON.stringify([{ ...product, id: 'first', quantity: 1 }])
+    );
+    localStorageMock.setItem(
+      'baci-cart-second-guest',
+      JSON.stringify([{ ...product, id: 'second', quantity: 1 }])
+    );
+
+    let slug: string | undefined = 'first';
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug={slug}>
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result, rerender } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    expect(result.current.cart.map((item) => item.id)).toEqual(['first']);
+
+    slug = 'second';
+    rerender();
+    await waitFor(() => expect(result.current.merchantSlug).toBe('second'));
+    expect(result.current.cart.map((item) => item.id)).toEqual(['second']);
+
+    // The handler-facing refs sync from committed state, so re-setting the
+    // adopted slug is a no-op that keeps the adopted cart for later adds.
+    act(() => {
+      result.current.setMerchantSlug('second');
+      result.current.addToCart(product, 1);
+    });
+    expect(result.current.cart.map((item) => item.id)).toEqual([
+      'second',
+      'prod-1',
+    ]);
+  });
 });

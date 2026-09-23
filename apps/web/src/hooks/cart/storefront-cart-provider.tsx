@@ -79,7 +79,10 @@ export function StorefrontCartProvider({
     setPrevInitialMerchantSlug(initialMerchantSlug);
     const slugToUse = initialMerchantSlug || getMerchantSlugFromStorage();
     const merchantCartState = getMerchantCartState(slugToUse);
-    merchantSlugRef.current = slugToUse;
+    // State setters only: ref writes are not rolled back when React abandons
+    // a render, so the refs sync from committed state in the effects below.
+    // A ref holding an uncommitted slug would make setMerchantSlug
+    // early-return and skip loading that merchant's cart.
     setMerchantSlugState(slugToUse);
     // Prune quiz-prize voucher lines whose signed token has already expired
     // (7-day window). An expired voucher line is forced to ₦0 and re-fails
@@ -88,8 +91,21 @@ export function StorefrontCartProvider({
     // Re-read the group flag for the new merchant too, so it stays consistent
     // with the freshly loaded cart (otherwise the previous merchant's flag
     // leaks onto this cart).
-    setCartWideNegotiationActive(merchantCartState.cartWideNegotiationActive);
+    setCartWideNegotiationActiveState(
+      merchantCartState.cartWideNegotiationActive
+    );
   }
+
+  // Keep the handler-facing refs aligned with committed state. Handlers read
+  // the refs to avoid stale closures; syncing here (not during render) keeps
+  // them consistent with what actually committed.
+  useEffect(() => {
+    merchantSlugRef.current = merchantSlug;
+  }, [merchantSlug]);
+
+  useEffect(() => {
+    cartWideNegotiationActiveRef.current = cartWideNegotiationActive;
+  }, [cartWideNegotiationActive]);
 
   // Hydrate cart + merchant slug from localStorage after mount (storage is
   // unavailable during SSR), gated by `isHydrated` so consumers keep rendering

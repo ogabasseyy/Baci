@@ -94,7 +94,7 @@ export async function executeAgenticChatToolForOllama(
   name: string,
   rawArguments: unknown,
   sessionId: string,
-  agenticCheckoutEnabled = true
+  agenticCheckoutEnabled: boolean
 ): Promise<string> {
   if (!isAgenticChatToolName(name)) {
     return JSON.stringify({ error: `Unknown tool: ${name}` });

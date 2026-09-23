@@ -49,4 +49,24 @@ describe('SantaClientPage', () => {
       expect(screen.getByText(/GH/)).toBeInTheDocument();
     });
   });
+
+  it('prefers payout currency over the country currency with the exact amount', async () => {
+    mocks.useMerchant.mockReturnValue({
+      loading: false,
+      merchant: {
+        country: 'NG',
+        id: 'merchant-1',
+        payout_currency: 'GHS',
+      },
+    });
+    render(<SantaClientPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('GHS 1,000.00', {
+          normalizer: (text) => text.replace(/\u00a0/g, ' '),
+        })
+      ).toBeInTheDocument();
+    });
+  });
 });

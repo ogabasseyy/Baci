@@ -1,11 +1,6 @@
 import { buildStorefrontDisplayData } from '@/lib/agentic/storefront-display-data';
 import type { CurrencyConfig } from '@/lib/currency';
-
-const DEFAULT_AGENTIC_CURRENCY: CurrencyConfig = {
-  code: 'NGN',
-  locale: 'en-NG',
-  symbol: '₦',
-};
+import { DEFAULT_PLATFORM_CURRENCY_CONFIG } from '@/lib/resolve-merchant-currency';
 
 export function buildAgenticSystemPrompt(
   merchantName: string,
@@ -13,7 +8,7 @@ export function buildAgenticSystemPrompt(
 ): string {
   const merchantDisplayData = buildStorefrontDisplayData(merchantName);
   const checkoutEnabled = options.checkoutEnabled !== false;
-  const currency = options.currency ?? DEFAULT_AGENTIC_CURRENCY;
+  const currency = options.currency ?? DEFAULT_PLATFORM_CURRENCY_CONFIG;
   const capabilityList = checkoutEnabled
     ? `1. **Product Search** - Find products matching customer queries
 2. **Product Details** - Get full specifications and pricing

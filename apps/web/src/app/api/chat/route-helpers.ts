@@ -1,5 +1,6 @@
 import { buildStorefrontDisplayData } from '@/lib/agentic/storefront-display-data';
 import type { CurrencyConfig } from '@/lib/currency';
+import { DEFAULT_PLATFORM_CURRENCY_CONFIG } from '@/lib/resolve-merchant-currency';
 
 /**
  * VPS responses are buffered before delivery so a malformed stream can fall
@@ -62,11 +63,7 @@ export function buildChatMessages(
     currency?: CurrencyConfig;
   } = {}
 ) {
-  const currency = options.currency ?? {
-    code: 'NGN',
-    locale: 'en-NG',
-    symbol: '₦',
-  };
+  const currency = options.currency ?? DEFAULT_PLATFORM_CURRENCY_CONFIG;
   const systemPrompt = buildVpsChatSystemPrompt(
     options.merchantName,
     options.toolsEnabled === true,

@@ -36,7 +36,10 @@ import {
   isChatAbortError,
   withTimeout,
 } from '@/app/api/chat/route-helpers';
-import { runChatProviderChain } from '@/app/api/chat/run-chat-provider-chain';
+import {
+  GEMINI_PROVIDER_TIMEOUT_MS,
+  runChatProviderChain,
+} from '@/app/api/chat/run-chat-provider-chain';
 import { runOllamaChat } from '@/app/api/chat/run-ollama-chat';
 import {
   getAiChatModel,
@@ -84,6 +87,12 @@ function generateSessionId(ip: string): string {
 export async function POST(req: Request) {
   try {
     const remainingRouteMs = createRouteDeadline(CUSTOMER_CHAT_TIMEOUT_MS);
+    // Hold back one chain attempt for the Gemini fallback: without a
+    // reserve, a hung first-choice stage burns the whole route budget and
+    // the chain below runs with ~0ms, serving the static fallback without
+    // ever attempting Gemini.
+    const firstStageTimeoutMs = () =>
+      Math.max(0, remainingRouteMs() - GEMINI_PROVIDER_TIMEOUT_MS);
 
     const headersList = await headers();
     const forwardedFor = headersList.get('x-forwarded-for');
@@ -182,7 +191,7 @@ export async function POST(req: Request) {
             toolsEnabled: false,
           }),
           signal: req.signal,
-          timeoutMs: remainingRouteMs(),
+          timeoutMs: firstStageTimeoutMs(),
         });
         const bufferedResponse = await bufferTextResponse(llmResponse);
         return withChatTenantHeader(
@@ -214,7 +223,7 @@ export async function POST(req: Request) {
           basicAuth: getOllamaBasicAuth(),
           currency: getCurrencyConfig(undefined, tenant.currencyCode),
           merchantName: tenant.businessName,
-          timeoutMs: remainingRouteMs(),
+          timeoutMs: firstStageTimeoutMs(),
           executeToolCall: (call) =>
             executeAgenticChatToolForOllama(
               call.function.name,

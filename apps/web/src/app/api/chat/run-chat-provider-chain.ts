@@ -12,7 +12,12 @@ import { createAiSdkAgenticChatTools } from './chat-tool-runtime';
 import { createChatPresentationEventCollector } from './create-chat-presentation-event-collector';
 
 const GEMINI_PROVIDER_PREFIX = 'google:';
-const GEMINI_PROVIDER_TIMEOUT_MS = 25_000;
+/**
+ * One provider attempt's budget inside the chain. The chat route holds back
+ * this much from the first-choice stages so the fallback keeps one full
+ * attempt even when the first stage burns its budget.
+ */
+export const GEMINI_PROVIDER_TIMEOUT_MS = 25_000;
 function buildTextOnlyFallbackSystemPrompt(merchantName: string): string {
   return (
     `${buildStorefrontDisplayData(merchantName)} ` +

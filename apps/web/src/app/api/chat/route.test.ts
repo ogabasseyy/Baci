@@ -542,9 +542,10 @@ describe('POST /api/chat', () => {
     expect(createOllamaAgenticChatResponse).toHaveBeenCalledOnce();
     const ollamaTimeoutMs = vi.mocked(createOllamaAgenticChatResponse).mock
       .calls[0]?.[0]?.timeoutMs;
-    // The Ollama stage spends the remaining route budget, not a fresh 60s.
-    expect(ollamaTimeoutMs).toBeLessThanOrEqual(60_000);
-    expect(ollamaTimeoutMs).toBeGreaterThan(59_000);
+    // The Ollama stage holds back one chain attempt for the Gemini fallback
+    // instead of spending the whole remaining route budget.
+    expect(ollamaTimeoutMs).toBeLessThanOrEqual(35_000);
+    expect(ollamaTimeoutMs).toBeGreaterThan(34_000);
     expect(generateText).toHaveBeenCalledOnce();
     expect(warnSpy).toHaveBeenCalledWith(
       '[Agentic Chat] Ollama request failed; falling back to Gemini:',
@@ -1148,6 +1149,24 @@ describe('POST /api/chat', () => {
     expect(llmMessages?.[0]?.content).not.toContain('commerce tools');
     expect(createOllamaAgenticChatResponse).not.toHaveBeenCalled();
     expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it('holds back one chain attempt when calling the LLM server', async () => {
+    llmServerUrl = TEST_LLM_SERVER_URL;
+    llmServerBearer = TEST_LLM_SERVER_BEARER;
+
+    const response = await POST(
+      makeRequest({
+        messages: [{ role: 'user', content: 'Show me phones' }],
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const llmTimeoutMs = vi.mocked(createLlmChatResponse).mock.calls[0]?.[0]
+      ?.timeoutMs;
+    // 60s route budget minus the 25s Gemini-fallback reserve.
+    expect(llmTimeoutMs).toBeLessThanOrEqual(35_000);
+    expect(llmTimeoutMs).toBeGreaterThan(34_000);
   });
 
   it('prefers LLM server over Ollama when both are configured', async () => {

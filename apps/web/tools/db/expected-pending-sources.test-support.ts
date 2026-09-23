@@ -354,7 +354,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260827110101_recheck_jumia_oauth_self_authorization_conflicts.sql',
-    sha256: '89a888fd6c211e1e048487a228dae26e5d2221c6db33860de96394eab1c14fdb',
+    sha256: '81631bd7f3a9da60fc97d0481c2038c182124f106e1ee2fdaaea568540eae304',
   },
   {
     repositoryPath:

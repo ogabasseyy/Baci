@@ -4,7 +4,6 @@ import {
 } from '@baci/shared';
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { sanitizePublicOrder } from '@/lib/public-fulfillment-sanitizer';
 import { isValidUuid, sanitizeForLog } from '@/lib/sanitize-core';
 import { toOrderPaymentAccount } from '@/lib/storefront-customer-payment-account-adapter';
@@ -17,6 +16,7 @@ import { mapOrderItemsWithRoutes } from './map-order-items-with-routes';
 import { mapTrackingPaymentAccounts } from './map-tracking-payment-accounts';
 import { orderDetailSelect } from './order-detail-select';
 import type { OrderItem } from './order-item-types';
+import { parseOrderDetailQuery } from './parse-order-detail-query';
 import { resolveMerchantIdBySlug } from './resolve-merchant-id-by-slug';
 
 export async function GET(
@@ -25,33 +25,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const { searchParams } = new URL(request.url);
-
-    const token =
-      searchParams.get('token') ||
-      searchParams.get('tracking_token') ||
-      undefined;
-    const email = searchParams.get('email') || undefined;
-    const merchantSlug =
-      searchParams.get('merchant_slug') ||
-      searchParams.get('slug') ||
-      undefined;
-
-    const parsed = z
-      .object({
-        token: z.string().min(1).optional(),
-        email: z.email().optional(),
-        merchant_slug: z.string().min(1).optional(),
-      })
-      .safeParse({ token, email, merchant_slug: merchantSlug });
-
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Invalid request', details: z.flattenError(parsed.error) },
-        { status: 400 }
-      );
+    const queryResult = parseOrderDetailQuery(request);
+    if (!queryResult.ok) {
+      return queryResult.response;
     }
-
+    const { token, email, merchantSlug } = queryResult.query;
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const {

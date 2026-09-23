@@ -32,6 +32,17 @@ export const eventPipelineImmediateOrderCredentialPaths = [
     zeptomailPath,
     envPath,
   ],
+  // ZeptoMail's audit sink reaches the admin client (best-effort email
+  // attempt inserts): register the admin-inclusive variants exactly.
+  [
+    ordersRoutePath,
+    notificationPath,
+    confirmationEmailPath,
+    zeptomailPath,
+    adminPath,
+    envPath,
+  ],
+  [notificationPath, confirmationEmailPath, zeptomailPath, adminPath, envPath],
   [
     ordersRoutePath,
     notificationPath,

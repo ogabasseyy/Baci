@@ -7,6 +7,7 @@ import {
 } from '@/lib/checkout/order-idempotency';
 import { generateOrderConfirmationEmail } from '@/lib/email-templates';
 import { logger } from '@/lib/logger';
+import { reservePaystackDvaAssignment } from '@/lib/payments/reserve-paystack-dva-assignment';
 import { createQuizVoucherToken } from '@/lib/quiz-voucher-token';
 import { POST } from './route';
 
@@ -231,6 +232,17 @@ vi.mock('@/lib/quiz-proof', () => ({
   createQuizRpcServerProof: mockCreateQuizRpcServerProof,
 }));
 
+// The invoice email flow persists the auto-generated DVA through the
+// proof-bound reserve RPC (round 3); the reservation proof needs a service
+// key unavailable in this suite, so stub the reservation boundary here.
+// The RPC itself is unit-covered in persist-paystack-dva-assignment.test.ts.
+vi.mock('@/lib/payments/reserve-paystack-dva-assignment', () => ({
+  reservePaystackDvaAssignment: vi.fn(async () => ({
+    data: 'inserted',
+    error: null,
+  })),
+}));
+
 vi.mock('@/lib/shipping/providers/gigl', () => ({
   giglProvider: { getLocations: vi.fn().mockResolvedValue([]) },
 }));
@@ -278,6 +290,13 @@ interface RpcOverrides {
     data: unknown;
     error: unknown;
   };
+  // Proof-bound persisted invoice items (round 3: replaces the admin
+  // order_items reads). Accepts a read sequence to cover the
+  // retry-on-empty path.
+  get_invoice_artifact_order_items?:
+    | { data: unknown; error: unknown }
+    | Array<{ data: unknown; error: unknown }>;
+  insert_invoice_reminder?: { data: unknown; error: unknown };
 }
 
 function buildMockSupabase(
@@ -549,7 +568,10 @@ function buildMockSupabase(
     rpc: vi.fn((name: string) => {
       const outcome = overrides[name as keyof RpcOverrides] ??
         defaultRpcOutcomes[name] ?? { data: null, error: null };
-      return Promise.resolve(outcome);
+      const resolved = Array.isArray(outcome)
+        ? (outcome.shift() ?? { data: null, error: null })
+        : outcome;
+      return Promise.resolve(resolved);
     }),
   };
 }
@@ -6091,37 +6113,54 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('generates a branded PDF invoice and attaches it to the confirmation email when payment method is invoice', async () => {
-    const supabase = buildMockSupabase();
-    const { accountUpsert, backgroundSupabase, orderItemsOrder } =
-      createBackgroundSupabaseMock({
-        orderItemsResponses: [
-          { data: [], error: null },
+    // Round 3 reads persisted invoice items through the proof-bound
+    // get_invoice_artifact_order_items RPC (tracking token authorizes the
+    // read): empty first read exercises the retry, the second serves the
+    // canonical snapshot.
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
           {
-            data: [
-              {
-                id: 'order-item-1',
-                product_id: 'p-1',
-                variant_id: null,
-                variant_attributes: null,
-                variant_name: null,
-                name: 'Widget',
-                quantity: 1,
-                price: 1000,
-                has_assurance: true,
-                assurance_fee: 50,
-                item_description: null,
-                line_extension_amount: 1050,
-                vat_category_code: 'S',
-                vat_rate: 7.5,
-                vat_amount: 0,
-                sellers_item_id: null,
-                unit_code: 'EA',
-              },
-            ],
-            error: null,
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
           },
         ],
-      });
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: true,
+              assurance_fee: 50,
+              item_description: null,
+              line_extension_amount: 1050,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
 
     supabase.from = vi.fn((_table: string) => {
@@ -6219,7 +6258,16 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       }
     );
     expect(mockNotifyNewOrder).not.toHaveBeenCalled();
-    expect(orderItemsOrder).toHaveBeenCalledTimes(2);
+    // The canonical snapshot loads through the proof-bound RPC, authorized
+    // by the creation tracking token — never the admin order_items read.
+    const artifactReads = (
+      supabase.rpc.mock.calls as unknown as [string, unknown][]
+    ).filter(([name]) => name === 'get_invoice_artifact_order_items');
+    expect(artifactReads).toHaveLength(2);
+    expect(artifactReads[0]?.[1]).toEqual({
+      p_order_id: 'order-id',
+      p_tracking_token: 'track-invoice-1',
+    });
 
     // Assert sendEmail was called with the branded invoice attachment. The
     // checkout payload does not currently collect a buyer Peppol endpoint, so
@@ -6323,27 +6371,30 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       pdfOptions.documentDate.getTime() + 14 * 24 * 60 * 60 * 1000
     );
 
-    // Assert the auto-generated DVA was persisted with the shared upsert/expiry contract.
-    expect(backgroundSupabase.from).toHaveBeenCalledWith(
-      'order_payment_accounts'
-    );
-    expect(accountUpsert).toHaveBeenCalledWith(
+    // Assert the auto-generated DVA was reserved through the proof-bound
+    // RPC with the shared expiry contract (round 3: no admin upsert).
+    expect(vi.mocked(reservePaystackDvaAssignment)).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({
-        order_id: 'order-id',
-        account_number: '1234567890',
-        bank_name: 'Wema Bank',
-        account_name: 'OgaBassey-Test',
-        provider: 'paystack',
-        expires_at: expect.any(String),
-      }),
-      { onConflict: 'order_id,provider' }
+        orderId: 'order-id',
+        accountNumber: '1234567890',
+        bankName: 'Wema Bank',
+        accountName: 'OgaBassey-Test',
+        expiresAt: expect.any(String),
+      })
     );
-    expect(
-      Date.parse(
-        (accountUpsert.mock.calls[0]?.[0] as { expires_at: string }).expires_at
-      )
-    ).toBe(pdfOptions.dueDate.getTime());
-    expect(backgroundSupabase.from).toHaveBeenCalledWith('order_reminders');
+    const reservationAssignment = vi.mocked(reservePaystackDvaAssignment).mock
+      .calls[0]?.[1] as { expiresAt: string };
+    expect(Date.parse(reservationAssignment.expiresAt)).toBe(
+      pdfOptions.dueDate.getTime()
+    );
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'insert_invoice_reminder',
+      expect.objectContaining({
+        p_order_id: 'order-id',
+        p_tracking_token: 'track-invoice-1',
+      })
+    );
     expect(supabase.from).not.toHaveBeenCalledWith('order_payment_accounts');
   });
 
@@ -6352,20 +6403,21 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     // value must keep the immediate email commercial (380) with its
     // Peppol artifact — never a 325 proforma.
     const supabase = buildMockSupabase({
-      redeem_wallet_for_order: {
+      create_storefront_order: {
         data: [
           {
-            success: true,
-            redeemed_amount: 400,
-            new_balance: 1600,
-            transaction_id: 'txn-wallet-1',
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
           },
         ],
         error: null,
       },
-    });
-    const { backgroundSupabase } = createBackgroundSupabaseMock({
-      orderItemsResponses: [
+      get_invoice_artifact_order_items: [
         { data: [], error: null },
         {
           data: [
@@ -6392,7 +6444,19 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
           error: null,
         },
       ],
+      redeem_wallet_for_order: {
+        data: [
+          {
+            success: true,
+            redeemed_amount: 400,
+            new_balance: 1600,
+            transaction_id: 'txn-wallet-1',
+          },
+        ],
+        error: null,
+      },
     });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
 
     supabase.from = vi.fn((_table: string) => {
@@ -7145,6 +7209,46 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       Promise.resolve({ data: null, error: null })
     );
     const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: true,
+              assurance_fee: 50,
+              item_description: null,
+              line_extension_amount: 1050,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
       redeem_wallet_for_order: {
         data: [
           {
@@ -7368,30 +7472,49 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('renders invoice attachments from persisted canonical order items', async () => {
-    const supabase = buildMockSupabase();
-    const { backgroundSupabase } = createBackgroundSupabaseMock({
-      orderItems: [
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
         {
-          id: 'order-item-1',
-          product_id: 'p-1',
-          variant_id: null,
-          variant_attributes: null,
-          variant_name: 'Matte Black',
-          name: 'Canonical Widget',
-          quantity: 1,
-          price: 1250,
-          has_assurance: false,
-          assurance_fee: 0,
-          item_description: null,
-          line_extension_amount: 1250,
-          vat_category_code: 'S',
-          vat_rate: 7.5,
-          vat_amount: 0,
-          sellers_item_id: 'SKU-CANONICAL',
-          unit_code: 'EA',
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: 'Matte Black',
+              name: 'Canonical Widget',
+              quantity: 1,
+              price: 1250,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1250,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: 'SKU-CANONICAL',
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
         },
       ],
     });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
 
     supabase.from = vi.fn((_table: string) => ({
@@ -7484,31 +7607,50 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('passes persisted item condition without fabricating a raw variant label when variant_name is empty', async () => {
-    const supabase = buildMockSupabase();
-    const { backgroundSupabase } = createBackgroundSupabaseMock({
-      orderItems: [
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
         {
-          id: 'order-item-1',
-          product_id: 'p-1',
-          variant_id: null,
-          variant_attributes: null,
-          variant_name: null,
-          condition: 'used',
-          name: 'Samsung Galaxy S22 Ultra',
-          quantity: 1,
-          price: 750000,
-          has_assurance: false,
-          assurance_fee: 0,
-          item_description: null,
-          line_extension_amount: 750000,
-          vat_category_code: 'S',
-          vat_rate: 7.5,
-          vat_amount: 0,
-          sellers_item_id: null,
-          unit_code: 'EA',
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              condition: 'used',
+              name: 'Samsung Galaxy S22 Ultra',
+              quantity: 1,
+              price: 750000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 750000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
         },
       ],
     });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
 
     const supabaseMod = await import('@/lib/supabase/server');
@@ -7566,7 +7708,48 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('sends the invoice email with fallback branding when logo resolution fails', async () => {
-    const supabase = buildMockSupabase();
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: true,
+              assurance_fee: 50,
+              item_description: null,
+              line_extension_amount: 1050,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
     const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
     mockResolveReceiptLogoDataUri.mockRejectedValueOnce(
@@ -7662,13 +7845,61 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     );
   });
 
-  it('still sends the invoice email when background DVA persistence fails', async () => {
-    const supabase = buildMockSupabase();
-    const { accountUpsert, backgroundSupabase, reminderInsert } =
-      createBackgroundSupabaseMock({
-        accountError: { message: 'insert failed' },
-        reminderError: { message: 'reminder failed' },
-      });
+  it('still sends the invoice email when invoice DVA reservation fails', async () => {
+    // Round 3 persists through proof-bound RPCs: fail the reservation and
+    // the reminder inserts while the email (with its PDF, minus the virtual
+    // account) must still go out.
+    vi.mocked(reservePaystackDvaAssignment).mockResolvedValueOnce({
+      data: null,
+      error: { message: 'insert failed' },
+    });
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: true,
+              assurance_fee: 50,
+              item_description: null,
+              line_extension_amount: 1050,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+      insert_invoice_reminder: {
+        data: null,
+        error: { message: 'reminder failed' },
+      },
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
 
     supabase.from = vi.fn((_table: string) => ({
@@ -7737,24 +7968,20 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     });
 
     expect(mockGeneratePaymentAccount).toHaveBeenCalled();
-    expect(accountUpsert).toHaveBeenCalledWith(
+    expect(vi.mocked(reservePaystackDvaAssignment)).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({
-        order_id: 'order-id',
-        account_number: '1234567890',
-        expires_at: expect.any(String),
-      }),
-      { onConflict: 'order_id,provider' }
-    );
-    expect(reminderInsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        order_id: 'order-id',
-        channel: 'email',
+        orderId: 'order-id',
+        accountNumber: '1234567890',
       })
     );
-    expect(backgroundSupabase.from).toHaveBeenCalledWith(
-      'order_payment_accounts'
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'insert_invoice_reminder',
+      expect.objectContaining({
+        p_order_id: 'order-id',
+        p_channel: 'email',
+      })
     );
-    expect(backgroundSupabase.from).toHaveBeenCalledWith('order_reminders');
     expect(mockSendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         attachments: expect.arrayContaining([
@@ -7796,6 +8023,46 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
         ],
         error: null,
       },
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: true,
+              assurance_fee: 50,
+              item_description: null,
+              line_extension_amount: 1050,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
     });
     const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);

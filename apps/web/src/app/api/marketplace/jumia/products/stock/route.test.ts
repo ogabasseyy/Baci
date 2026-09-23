@@ -24,16 +24,22 @@ const mockSupabase = {
   auth: { getUser: mockGetUser },
   from: vi.fn((table: string) => {
     if (table === 'jumia_product_mappings') {
-      const makeEqChain = (remaining: number) => ({
+      const makeChain = (remainingEq: number, remainingOr: number) => ({
         eq: (field: string, value: unknown) => {
           mappingFilters.push({ field, value });
-          return remaining === 1
+          return remainingEq === 1 && remainingOr === 0
             ? mockMappingsSelect()
-            : makeEqChain(remaining - 1);
+            : makeChain(remainingEq - 1, remainingOr);
+        },
+        or: (filter: string) => {
+          mappingFilters.push({ field: 'or', value: filter });
+          return remainingOr === 1 && remainingEq === 0
+            ? mockMappingsSelect()
+            : makeChain(remainingEq, remainingOr - 1);
         },
       });
       return {
-        select: () => makeEqChain(4),
+        select: () => makeChain(4, 2),
         update: (...args: unknown[]) => ({
           eq: () => mockMappingUpdate(...args),
         }),
@@ -243,17 +249,14 @@ describe('POST /api/marketplace/jumia/products/stock', () => {
     expect(body.updated).toBe(1);
     expect(body.feedId).toBe('feed-123');
     expect(mockUpdateStock).toHaveBeenCalledOnce();
-    // Verify tracking upsert includes updated stock for delta detection
-    expect(mockMappingUpsert).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'm1',
-          baci_stock_at_last_sync: 10,
-          last_feed_id: 'feed-123',
-        }),
-      ]),
-      expect.anything()
+    // Verify scoped tracking update includes updated stock for delta detection
+    expect(mockMappingUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baci_stock_at_last_sync: 10,
+        last_feed_id: 'feed-123',
+      })
     );
+    expect(mockMappingUpsert).not.toHaveBeenCalled();
   });
 
   it('uses stock_quantity over legacy stock when both present', async () => {

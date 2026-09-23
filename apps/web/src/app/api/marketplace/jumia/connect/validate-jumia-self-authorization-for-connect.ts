@@ -22,14 +22,36 @@ export async function validateJumiaSelfAuthorizationForConnect(args: {
   submittedCredentials: JumiaSelfAuthorizationCredentials;
   supabase: SupabaseClient;
 }): Promise<ValidatedSelfAuthorization> {
-  const authorizationLease = args.discoveryId
-    ? await claimJumiaResumedAuthorization({
+  // A fresh discovery whose credentials already back an active grant must
+  // serialize its exchange with worker refreshes just like a resumed one.
+  // The fresh-discovery claim is best-effort: an unreadable stored grant
+  // must not block explicit reauthorization with submitted credentials.
+  let authorizationLease: Awaited<
+    ReturnType<typeof claimJumiaResumedAuthorization>
+  >;
+  if (args.discoveryId) {
+    authorizationLease = await claimJumiaResumedAuthorization({
+      clientKeyHash: args.clientKeyHash,
+      encryptionKey: args.encryptionKey,
+      merchantId: args.merchantId,
+      supabase: args.supabase,
+    });
+  } else {
+    try {
+      authorizationLease = await claimJumiaResumedAuthorization({
         clientKeyHash: args.clientKeyHash,
         encryptionKey: args.encryptionKey,
         merchantId: args.merchantId,
         supabase: args.supabase,
-      })
-    : null;
+      });
+    } catch (error) {
+      console.error(
+        '[Jumia Connect] Continuing fresh discovery without a refresh lease:',
+        error instanceof Error ? error.message : String(error)
+      );
+      authorizationLease = null;
+    }
+  }
   // A fresh, explicit credential submission is a reauthorization attempt and
   // must not be replaced by an expired stored grant. Resumed discoveries have
   // already committed to the stored authorization, so they use the leased

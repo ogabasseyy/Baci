@@ -170,11 +170,21 @@ function hasFreshSharedCredentials(
   return tokenIsFresh;
 }
 
+export type CarriedJumiaAuthorizationCredentials = {
+  refreshToken: string;
+  clientId: string;
+  authorizationRotationVersion: number;
+};
+
 export async function acquireJumiaAuthorizationRefreshLease(
   state: JumiaAuthorizationRefreshState,
   supabase: SupabaseClient
 ): Promise<
-  | { leaseToken: string; authorizationRotationVersion?: number }
+  | {
+      leaseToken: string;
+      authorizationRotationVersion?: number;
+      carriedCredentials?: CarriedJumiaAuthorizationCredentials;
+    }
   | {
       reloaded: Awaited<
         ReturnType<typeof reloadSharedAuthorizationCredentials>
@@ -182,6 +192,12 @@ export async function acquireJumiaAuthorizationRefreshLease(
     }
 > {
   let currentState = state;
+  // When another worker wins the rotation while this caller waits, the
+  // caller's in-memory refresh token is already consumed. Carry the
+  // winner's reloaded credentials into the retry so the eventual exchange
+  // submits a live token instead of the stale original.
+  const startVersion = state.authorizationRotationVersion ?? 1;
+  let carriedCredentials: CarriedJumiaAuthorizationCredentials | undefined;
 
   for (let attempt = 0; attempt < REFRESH_LEASE_BUSY_RETRIES; attempt += 1) {
     const claim = await claimJumiaAuthorizationRefreshLease(
@@ -192,6 +208,7 @@ export async function acquireJumiaAuthorizationRefreshLease(
       return {
         leaseToken: claim.leaseToken,
         authorizationRotationVersion: currentState.authorizationRotationVersion,
+        ...(carriedCredentials ? { carriedCredentials } : {}),
       };
     }
 
@@ -202,6 +219,13 @@ export async function acquireJumiaAuthorizationRefreshLease(
       );
       if (hasFreshSharedCredentials(currentState, reloaded)) {
         return { reloaded };
+      }
+      if (reloaded.authorizationRotationVersion > startVersion) {
+        carriedCredentials = {
+          refreshToken: reloaded.refreshToken,
+          clientId: reloaded.clientId,
+          authorizationRotationVersion: reloaded.authorizationRotationVersion,
+        };
       }
       currentState = {
         ...currentState,
@@ -218,6 +242,13 @@ export async function acquireJumiaAuthorizationRefreshLease(
     );
     if (hasFreshSharedCredentials(currentState, reloaded)) {
       return { reloaded };
+    }
+    if (reloaded.authorizationRotationVersion > startVersion) {
+      carriedCredentials = {
+        refreshToken: reloaded.refreshToken,
+        clientId: reloaded.clientId,
+        authorizationRotationVersion: reloaded.authorizationRotationVersion,
+      };
     }
 
     if (attempt < REFRESH_LEASE_BUSY_RETRIES - 1) {

@@ -13,15 +13,20 @@ const mocks = vi.hoisted(() => ({
     },
     from: vi.fn((table: string) => {
       if (table === 'marketplace_integrations') {
-        const scopeQuery: { eq: ReturnType<typeof vi.fn> } = {
-          eq: vi.fn((column: string) =>
-            column === 'shop_id'
-              ? Promise.resolve({
-                  data: [{ marketplace_key: 'Jumia Nigeria' }],
-                  error: null,
-                })
-              : scopeQuery
-          ),
+        const scopeResult = Promise.resolve({
+          data: [{ marketplace_key: 'Jumia Nigeria' }],
+          error: null,
+        });
+        const scopeQuery: {
+          eq: ReturnType<typeof vi.fn>;
+          or: ReturnType<typeof vi.fn>;
+          then: (resolve: (value: unknown) => unknown) => unknown;
+        } = {
+          eq: vi.fn(() => scopeQuery),
+          or: vi.fn(() => scopeResult),
+          // biome-ignore lint/suspicious/noThenProperty: Supabase query mocks are intentionally thenable.
+          then: (resolve: (value: unknown) => unknown) =>
+            scopeResult.then(resolve),
         };
         return {
           update: vi.fn(() => ({

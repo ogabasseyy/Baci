@@ -5,6 +5,7 @@ import {
   getPushReadyJumiaStockMappings,
   loadJumiaStockMappings,
 } from '@/lib/jumia/load-jumia-stock-mappings';
+import { updateJumiaStockTracking } from '@/lib/jumia/update-jumia-stock-tracking';
 import { getEffectiveStock } from '@/lib/product-stock';
 
 export interface JumiaStockSyncResult {
@@ -141,22 +142,17 @@ export async function syncJumiaStockForIntegration(args: {
     }))
   );
 
-  const now = new Date().toISOString();
-  const { error: bulkError } = await supabase
-    .from('jumia_product_mappings')
-    .upsert(
-      stockUpdates.map((update) => ({
-        id: update.mappingId,
-        baci_stock_at_last_sync: update.stock,
-        last_stock_synced_at: now,
-        last_feed_id: feedId,
-      })),
-      { onConflict: 'id', ignoreDuplicates: false }
-    );
+  const { trackingFailures } = await updateJumiaStockTracking(supabase, {
+    updates: stockUpdates.map((update) => ({
+      mappingId: update.mappingId,
+      stock: update.stock,
+    })),
+    feedId,
+  });
   return {
     updated: stockUpdates.length,
     skipped,
-    trackingFailures: bulkError ? stockUpdates.length : 0,
+    trackingFailures,
     feedId,
   };
 }

@@ -24,6 +24,7 @@ import {
   getPushReadyJumiaStockMappings,
   loadJumiaStockMappings,
 } from '@/lib/jumia/load-jumia-stock-mappings';
+import { updateJumiaStockTracking } from '@/lib/jumia/update-jumia-stock-tracking';
 import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { createClient } from '@/lib/supabase/server';
@@ -258,25 +259,19 @@ export async function POST(request: NextRequest) {
       }))
     );
 
-    const now = new Date().toISOString();
-    let trackingFailures = 0;
+    const { trackingFailures } = await updateJumiaStockTracking(supabase, {
+      updates: stockUpdates.map((update) => ({
+        mappingId: update.mappingId,
+        stock: update.stock,
+      })),
+      feedId,
+    });
 
-    const bulkUpdates = stockUpdates.map((update) => ({
-      id: update.mappingId,
-      baci_stock_at_last_sync: update.stock,
-      last_stock_synced_at: now,
-      last_feed_id: feedId,
-    }));
-
-    const { error: bulkError } = await supabase
-      .from('jumia_product_mappings')
-      .upsert(bulkUpdates, { onConflict: 'id', ignoreDuplicates: false });
-
-    if (bulkError) {
-      trackingFailures = stockUpdates.length;
+    if (trackingFailures > 0) {
       console.error(
-        '[Jumia Stock Sync] Bulk tracking update failed:',
-        bulkError
+        '[Jumia Stock Sync] Stock tracking update failed for',
+        trackingFailures,
+        'mapping(s)'
       );
     }
 

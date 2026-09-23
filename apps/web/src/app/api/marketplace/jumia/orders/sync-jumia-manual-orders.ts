@@ -29,21 +29,48 @@ export async function syncJumiaManualOrders(args: {
 
   // A shop shared by several business clients returns one unattributable
   // order set. Stamp the selected key only when the scope is unambiguous;
-  // otherwise keep the neutral scope (and fail closed to it on lookup
-  // errors) so sibling syncs cannot churn rows between marketplaces.
+  // otherwise keep the neutral scope so sibling syncs cannot churn rows
+  // between marketplaces.
   const shopMarketplaceKeys = await getJumiaShopNonDefaultMarketplaceKeys(
     supabase,
     merchantId,
-    jumiaClient.shopId
+    jumiaClient.shopId,
+    {
+      // OAuth order queries are shop-wide (the collapsed country_code is
+      // not a request filter), so only country-scope the count when the
+      // provider fetch itself is country-scoped.
+      countryCode:
+        jumiaClient.marketplaceKey === 'oauth'
+          ? undefined
+          : jumiaClient.countryCode,
+    }
   );
-  const ambiguousOrderScope =
-    !(shopMarketplaceKeys instanceof Set) || shopMarketplaceKeys.size > 1;
   if (!(shopMarketplaceKeys instanceof Set)) {
+    // A scope lookup failure must abort the sync: continuing would stamp
+    // orders with the neutral key, clear sync_error, and report success
+    // while multi-marketplace rows stay hidden from scoped reads.
     logger.error({
       message: 'Failed to resolve Jumia shop marketplace scope',
       error: shopMarketplaceKeys.message,
     });
+    const { error: syncErrorUpdateError } = await supabase
+      .from('marketplace_integrations')
+      .update({
+        sync_error: `Failed to resolve Jumia shop marketplace scope: ${shopMarketplaceKeys.message}`,
+      })
+      .eq('id', integrationId)
+      .eq('merchant_id', merchantId);
+    if (syncErrorUpdateError) {
+      logger.error({
+        message: 'Failed to persist Jumia manual sync scope error',
+        error: syncErrorUpdateError,
+      });
+    }
+    throw new Error(
+      `Failed to resolve Jumia shop marketplace scope: ${shopMarketplaceKeys.message}`
+    );
   }
+  const ambiguousOrderScope = shopMarketplaceKeys.size > 1;
 
   // Fetch all orders from Jumia (auto-paginating) — last 7 days
   const sevenDaysAgo = new Date();

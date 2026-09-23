@@ -7,11 +7,12 @@ import {
 describe('loadJumiaStockMappings', () => {
   it('scopes mapping discovery to the merchant marketplace', async () => {
     const query = {
-      eq: vi.fn((column: string) =>
-        column === 'sync_status'
+      eq: vi.fn(() => query),
+      or: vi.fn(function (this: unknown, filter: string) {
+        return filter.startsWith('sync_inventory')
           ? Promise.resolve({ data: [], error: null })
-          : query
-      ),
+          : query;
+      }),
       select: vi.fn(),
     };
     query.select.mockReturnValue(query);
@@ -30,6 +31,33 @@ describe('loadJumiaStockMappings', () => {
     expect(query.eq).toHaveBeenCalledWith('jumia_shop_id', 'shop-1');
     expect(query.eq).toHaveBeenCalledWith('marketplace_key', 'NG-1');
     expect(query.eq).toHaveBeenCalledWith('sync_status', 'synced');
+  });
+
+  it('excludes deactivated and inventory-opted-out mappings', async () => {
+    const query = {
+      eq: vi.fn(() => query),
+      or: vi.fn(() => query),
+      select: vi.fn(),
+    };
+    query.select.mockReturnValue(query);
+    query.or.mockReturnValueOnce(query);
+    query.or.mockResolvedValueOnce({ data: [], error: null });
+    const supabase = {
+      from: vi.fn(() => query),
+    } as never;
+
+    await loadJumiaStockMappings(supabase, {
+      merchantId: 'merchant-1',
+      shopId: 'shop-1',
+      marketplaceKey: 'NG-1',
+    });
+
+    expect(query.or).toHaveBeenCalledWith(
+      'is_active.is.null,is_active.eq.true'
+    );
+    expect(query.or).toHaveBeenCalledWith(
+      'sync_inventory.is.null,sync_inventory.eq.true'
+    );
   });
 
   it('returns only mappings with provider identifiers as push-ready', () => {

@@ -6,6 +6,7 @@ import {
 } from '@/schemas/jumia';
 import {
   acquireJumiaAuthorizationRefreshLease,
+  type CarriedJumiaAuthorizationCredentials,
   releaseJumiaAuthorizationRefreshLease,
 } from './jumia-authorization-refresh-lease';
 import { persistJumiaAuthorizationRotation } from './jumia-client-token-rotation';
@@ -111,6 +112,7 @@ async function refreshJumiaClientAccessTokenOnce(
 
   const supabase = getScopedSupabaseForPersistence(state);
   let refreshLeaseToken: string | null = null;
+  let carriedCredentials: CarriedJumiaAuthorizationCredentials | undefined;
 
   if (state.authorizationId) {
     const leaseResult = await acquireJumiaAuthorizationRefreshLease(
@@ -121,6 +123,7 @@ async function refreshJumiaClientAccessTokenOnce(
       return leaseResult.reloaded;
     }
     refreshLeaseToken = leaseResult.leaseToken;
+    carriedCredentials = leaseResult.carriedCredentials;
   }
 
   const controller = new AbortController();
@@ -128,13 +131,19 @@ async function refreshJumiaClientAccessTokenOnce(
   let refreshSucceeded = false;
 
   try {
+    // When a rotation won while this worker waited for the lease, the
+    // in-memory refresh token is already consumed; exchange the carried
+    // winner credentials instead.
+    const exchangeRefreshToken =
+      carriedCredentials?.refreshToken ?? state.refreshToken;
+    const exchangeClientId = carriedCredentials?.clientId ?? state.clientId;
     const response = await fetchWithThrottle(`${state.apiBase}/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'refresh_token',
-        refresh_token: state.refreshToken,
-        client_id: state.clientId,
+        refresh_token: exchangeRefreshToken,
+        client_id: exchangeClientId,
       }),
       signal: controller.signal,
     });
@@ -158,7 +167,10 @@ async function refreshJumiaClientAccessTokenOnce(
       );
     }
     const tokenExpiresAt = new Date(Date.now() + data.expires_in * 1000);
-    const refreshToken = data.refresh_token ?? state.refreshToken;
+    const refreshToken =
+      data.refresh_token ??
+      carriedCredentials?.refreshToken ??
+      state.refreshToken;
     const refreshTokenExpiresAt = data.refresh_expires_in
       ? new Date(Date.now() + data.refresh_expires_in * 1000)
       : state.refreshTokenExpiresAt;
@@ -173,7 +185,14 @@ async function refreshJumiaClientAccessTokenOnce(
         );
       }
       const persisted = await persistJumiaAuthorizationRotation({
-        state,
+        state: carriedCredentials
+          ? {
+              ...state,
+              clientId: carriedCredentials.clientId,
+              authorizationRotationVersion:
+                carriedCredentials.authorizationRotationVersion,
+            }
+          : state,
         supabase,
         refreshLeaseToken,
         data: selfAuthorizationData.data,

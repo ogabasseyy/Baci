@@ -154,6 +154,20 @@ export async function syncJumiaOrdersForActiveIntegrations(
         integrationId: integration.id,
       });
       result.stockUpdated += stock.updated;
+      if (stock.trackingFailures > 0) {
+        // The feed was accepted but per-mapping tracking did not advance,
+        // so the same feed would resubmit on the next run. Surface it as a
+        // sync error instead of reporting a clean run.
+        const message = `${integration.merchant_id}/stock: ${stock.trackingFailures} mapping(s) failed to record the stock sync`;
+        result.errors.push(message);
+        logger.error({
+          message: 'Jumia stock tracking update failed',
+          error: message,
+          integrationId: integration.id,
+          merchant_id: integration.merchant_id,
+          route: JUMIA_ORDER_SYNC_ROUTE,
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       result.errors.push(`${integration.merchant_id}/stock: ${message}`);

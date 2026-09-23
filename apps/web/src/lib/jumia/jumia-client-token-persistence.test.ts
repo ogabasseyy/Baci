@@ -28,6 +28,7 @@ vi.mock('@/lib/jumia/load-jumia-authorization-grant', () => ({
   }),
 }));
 
+import { loadJumiaAuthorizationGrant } from '@/lib/jumia/load-jumia-authorization-grant';
 import { refreshJumiaClientAccessToken } from './jumia-client-token-persistence';
 
 describe('refreshJumiaClientAccessToken', () => {
@@ -130,6 +131,66 @@ describe('refreshJumiaClientAccessToken', () => {
         p_refresh_token_expires_at: expect.any(String),
         p_refresh_lease_token: 'lease-token',
       })
+    );
+  });
+
+  it('exchanges carried credentials when a rotation wins during the lease wait', async () => {
+    vi.mocked(loadJumiaAuthorizationGrant).mockResolvedValue({
+      credential_ciphertext: 'stored-ciphertext',
+      token_expires_at: '2026-01-01T00:00:00.000Z',
+      refresh_token_expires_at: '2026-12-31T10:00:00.000Z',
+      rotation_version: 2,
+      client_key_hash: 'a'.repeat(64),
+    } as never);
+    decrypt.mockReturnValue({
+      accessToken: 'winner-access',
+      refreshToken: 'winner-refresh',
+      clientId: 'client-id',
+    });
+    rpc
+      .mockResolvedValueOnce({
+        data: null,
+        error: { code: '40001', message: 'Stale Jumia authorization rotation' },
+      })
+      .mockResolvedValueOnce({ data: 'lease-token', error: null })
+      .mockResolvedValueOnce({ data: 3, error: null });
+    const supabase = { rpc };
+    const fetchWithThrottle = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: 'fresh-access-token',
+          refresh_token: 'fresh-refresh-token',
+          expires_in: 3600,
+          refresh_expires_in: 86400,
+          token_type: 'Bearer',
+        }),
+        { status: 200 }
+      )
+    );
+
+    await refreshJumiaClientAccessToken(
+      {
+        integrationId: 'integration-1',
+        merchantId: 'merchant-1',
+        accessToken: 'stale-access',
+        refreshToken: 'consumed-refresh-token',
+        clientId: 'client-id',
+        authorizationId: 'auth-1',
+        authorizationRotationVersion: 1,
+        tokenExpiresAt: null,
+        refreshTokenExpiresAt: null,
+        supabase: supabase as never,
+        apiBase: 'https://api.jumia.test',
+      },
+      fetchWithThrottle
+    );
+
+    const body = fetchWithThrottle.mock.calls[0]?.[1]?.body as URLSearchParams;
+    expect(body.get('refresh_token')).toBe('winner-refresh');
+    expect(rpc).toHaveBeenNthCalledWith(
+      3,
+      'rotate_jumia_authorization_credentials',
+      expect.objectContaining({ p_expected_rotation_version: 2 })
     );
   });
 

@@ -72,10 +72,55 @@ describe('validateJumiaSelfAuthorizationForConnect', () => {
 
     expect(persistRotatedJumiaCredentials).toHaveBeenCalled();
     expect(persistRotatedJumiaCredentialsWithLease).not.toHaveBeenCalled();
-    expect(claimJumiaResumedAuthorization).not.toHaveBeenCalled();
+    expect(claimJumiaResumedAuthorization).toHaveBeenCalledWith(
+      expect.objectContaining({ clientKeyHash: 'hash-1' })
+    );
     expect(onCredentialsRotated).toHaveBeenCalledWith({
       credentialCiphertext: 'ordinary-ciphertext',
       expectedRotationVersion: 2,
+    });
+  });
+
+  it('serializes a fresh discovery against an existing grant without replacing submitted credentials', async () => {
+    vi.mocked(claimJumiaResumedAuthorization).mockResolvedValue({
+      credentials: { clientId: 'client-1', refreshToken: 'stored-refresh' },
+      authorizationId: 'auth-1',
+      authorizationRotationVersion: 3,
+      leaseToken: 'lease-1',
+    });
+    vi.mocked(validateJumiaSelfAuthorization).mockImplementationOnce(
+      async (submitted, options) => {
+        expect(submitted).toEqual(credentials);
+        await options?.onCredentialsRotated?.({
+          credentials: { ...credentials, accessToken: 'access-1' },
+          accessTokenExpiresAt: validated.accessTokenExpiresAt,
+          refreshTokenExpiresAt: validated.refreshTokenExpiresAt,
+        });
+        return validated;
+      }
+    );
+    const onCredentialsRotated = vi.fn();
+
+    await validateJumiaSelfAuthorizationForConnect({
+      clientKeyHash: 'hash-1',
+      encryptionKey: 'key',
+      merchantId: 'merchant-1',
+      onCredentialsRotated,
+      submittedCredentials: credentials,
+      supabase: {} as never,
+    });
+
+    expect(persistRotatedJumiaCredentialsWithLease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorizationId: 'auth-1',
+        authorizationRotationVersion: 3,
+        refreshLeaseToken: 'lease-1',
+      })
+    );
+    expect(persistRotatedJumiaCredentials).not.toHaveBeenCalled();
+    expect(onCredentialsRotated).toHaveBeenCalledWith({
+      credentialCiphertext: 'leased-ciphertext',
+      expectedRotationVersion: 3,
     });
   });
 
@@ -154,7 +199,7 @@ describe('validateJumiaSelfAuthorizationForConnect', () => {
       supabase: {} as never,
     });
 
-    expect(claimJumiaResumedAuthorization).not.toHaveBeenCalled();
+    expect(claimJumiaResumedAuthorization).toHaveBeenCalled();
     expect(persistRotatedJumiaCredentialsWithLease).not.toHaveBeenCalled();
   });
 

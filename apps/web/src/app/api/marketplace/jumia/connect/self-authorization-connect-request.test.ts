@@ -469,7 +469,9 @@ describe('handleJumiaSelfAuthorizationConnectRequest', () => {
       expect.any(Object)
     );
     expect(claimJumiaSelfAuthorizationDiscovery).not.toHaveBeenCalled();
-    expect(claimJumiaResumedAuthorization).not.toHaveBeenCalled();
+    // Fresh submissions still serialize best-effort against an existing
+    // grant while validating with the submitted credentials.
+    expect(claimJumiaResumedAuthorization).toHaveBeenCalled();
     expect(createJumiaSelfAuthorizationDiscovery).toHaveBeenCalled();
   });
 

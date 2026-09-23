@@ -15,16 +15,17 @@ function createSupabase(
   query.eq.mockReturnValue(query);
   const activeQuery = {
     eq: vi.fn(),
+    or: vi.fn(),
     select: vi.fn(),
+    // biome-ignore lint/suspicious/noThenProperty: Supabase query mocks are intentionally thenable.
+    then: (
+      resolve: (value: unknown) => unknown,
+      reject: (reason: unknown) => unknown
+    ) => Promise.resolve(activeIntegrations).then(resolve, reject),
   };
   activeQuery.select.mockReturnValue(activeQuery);
-  let activeEqCalls = 0;
-  activeQuery.eq.mockImplementation(() => {
-    activeEqCalls += 1;
-    return activeEqCalls === 4
-      ? Promise.resolve(activeIntegrations)
-      : activeQuery;
-  });
+  activeQuery.eq.mockReturnValue(activeQuery);
+  activeQuery.or.mockImplementation(() => Promise.resolve(activeIntegrations));
   let fromCalls = 0;
   return {
     from: vi.fn(() => {
@@ -68,6 +69,60 @@ describe('getJumiaOrderScope', () => {
       marketplaceKey: 'default',
       shopId: 'shop-1',
     });
+  });
+
+  it('counts the shop scope within the integration country', async () => {
+    const supabase = createSupabase(
+      {
+        data: {
+          marketplace_key: 'NG-main',
+          shop_id: 'shop-1',
+          country_code: 'NG',
+        },
+        error: null,
+      },
+      { data: [], error: null }
+    );
+
+    await expect(
+      getJumiaOrderScope(supabase, 'merchant-1', 'integration-1')
+    ).resolves.toEqual({
+      kind: 'ok',
+      cachedMarketplaceKeys: ['NG-main', 'default'],
+      marketplaceKey: 'NG-main',
+      shopId: 'shop-1',
+    });
+    const activeQuery = (supabase.from as ReturnType<typeof vi.fn>).mock
+      .results[1].value as { or: ReturnType<typeof vi.fn> };
+    expect(activeQuery.or).toHaveBeenCalledWith(
+      'country_code.eq.NG,country_code.is.null'
+    );
+  });
+
+  it('keeps the shop-wide scope count for OAuth integrations', async () => {
+    const supabase = createSupabase(
+      {
+        data: {
+          marketplace_key: 'oauth',
+          shop_id: 'shop-1',
+          country_code: 'NG',
+        },
+        error: null,
+      },
+      { data: [], error: null }
+    );
+
+    await expect(
+      getJumiaOrderScope(supabase, 'merchant-1', 'integration-1')
+    ).resolves.toEqual({
+      kind: 'ok',
+      cachedMarketplaceKeys: ['oauth', 'default'],
+      marketplaceKey: 'oauth',
+      shopId: 'shop-1',
+    });
+    const activeQuery = (supabase.from as ReturnType<typeof vi.fn>).mock
+      .results[1].value as { or: ReturnType<typeof vi.fn> };
+    expect(activeQuery.or).not.toHaveBeenCalled();
   });
 
   it('does not include neutral rows when the shop has multiple marketplaces', async () => {

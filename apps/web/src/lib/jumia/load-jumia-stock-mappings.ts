@@ -21,7 +21,12 @@ export async function loadJumiaStockMappings(
     .eq('merchant_id', args.merchantId)
     .eq('jumia_shop_id', args.shopId)
     .eq('marketplace_key', args.marketplaceKey)
-    .eq('sync_status', 'synced');
+    .eq('sync_status', 'synced')
+    // A deactivated or inventory-opted-out mapping can retain
+    // sync_status='synced'; never push stock for those listings. Both flags
+    // are nullable with a true default, so NULL keeps syncing.
+    .or('is_active.is.null,is_active.eq.true')
+    .or('sync_inventory.is.null,sync_inventory.eq.true');
 
   return { mappings: (data as JumiaStockMapping[] | null) ?? null, error };
 }

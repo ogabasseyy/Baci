@@ -129,7 +129,9 @@ describe('Jumia orders GET', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(integrationSelect).toHaveBeenCalledWith('shop_id, marketplace_key');
+    expect(integrationSelect).toHaveBeenCalledWith(
+      'shop_id, marketplace_key, country_code'
+    );
     expect(integrationQuery.eq).toHaveBeenCalledWith('id', INTEGRATION_ID);
     expect(orderQuery.eq).toHaveBeenCalledWith(
       'jumia_shop_id',

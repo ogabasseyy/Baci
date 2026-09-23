@@ -29,7 +29,7 @@ export async function getJumiaOrderScope(
 ): Promise<JumiaOrderScopeResult> {
   const { data: integration, error } = await supabase
     .from('marketplace_integrations')
-    .select('shop_id, marketplace_key')
+    .select('shop_id, marketplace_key, country_code')
     .eq('id', integrationId)
     .eq('merchant_id', merchantId)
     .eq('platform', 'jumia')
@@ -57,10 +57,21 @@ export async function getJumiaOrderScope(
     };
   }
 
+  // Reads must use the same country-aware scope the manual sync wrote
+  // with, except for OAuth integrations whose provider queries are
+  // shop-wide.
   const nonDefaultMarketplaceKeys = await getJumiaShopNonDefaultMarketplaceKeys(
     supabase,
     merchantId,
-    integration.shop_id
+    integration.shop_id,
+    {
+      countryCode:
+        marketplaceKey === 'oauth'
+          ? undefined
+          : typeof integration.country_code === 'string'
+            ? integration.country_code
+            : undefined,
+    }
   );
   if (!(nonDefaultMarketplaceKeys instanceof Set)) {
     return nonDefaultMarketplaceKeys;

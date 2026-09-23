@@ -5,6 +5,65 @@ export interface JumiaStockConfig {
   apiBase: string;
 }
 
+type ShopsResponse = {
+  shops?: Array<{
+    id?: unknown;
+    businessClients?: Array<{ status?: unknown }>;
+  }>;
+};
+
+/**
+ * Counts the shop's active business clients via the provider. Returns null
+ * when the shop cannot be verified (network failure, unexpected payload,
+ * unknown shop) so callers fail closed.
+ */
+async function loadActiveBusinessClientCount(args: {
+  apiBase: string;
+  shopId: string;
+  accessToken: string;
+  refreshToken: () => Promise<string>;
+}): Promise<number | null> {
+  const fetchShops = (token: string) =>
+    fetch(`${args.apiBase}/shops`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+    });
+  let response = await fetchShops(args.accessToken);
+  if (response.status === 401) {
+    response = await fetchShops(await args.refreshToken());
+  }
+  if (!response.ok) return null;
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return null;
+  }
+  const shops = Array.isArray(payload)
+    ? payload
+    : (payload as ShopsResponse)?.shops;
+  if (!Array.isArray(shops)) return null;
+  const shop = (
+    shops as Array<{ id?: unknown; businessClients?: unknown }>
+  ).find(
+    (candidate) =>
+      typeof candidate === 'object' &&
+      candidate !== null &&
+      candidate.id === args.shopId
+  );
+  const businessClients = shop?.businessClients as
+    | Array<{ status?: unknown }>
+    | undefined;
+  if (!Array.isArray(businessClients)) return null;
+  return businessClients.filter(
+    (businessClient) =>
+      typeof businessClient?.status === 'string' &&
+      businessClient.status.toLowerCase() === 'active'
+  ).length;
+}
+
 function resolveEffectiveStock(product: {
   stock: unknown;
   stock_quantity: unknown;
@@ -67,6 +126,24 @@ export async function syncJumiaStockForIntegration(args: {
     });
   }
   if (pushReady.length === 0) return { updated: 0, skipped };
+
+  // The stock-feed contract has no business-client selector. One OAuth
+  // shop can expose several active business clients under a single
+  // marketplace_key='oauth' integration, so an unscoped feed could apply
+  // inventory outside the intended marketplace. Fail closed: skip shops
+  // that are ambiguous or cannot be verified.
+  const activeMarketplaces = await loadActiveBusinessClientCount({
+    apiBase: config.apiBase,
+    shopId: integration.shop_id,
+    accessToken,
+    refreshToken,
+  });
+  if (activeMarketplaces !== 1) {
+    console.error(
+      `[Jumia Sync] Stock: skipping shop ${integration.shop_id} with ${activeMarketplaces ?? 'unverifiable'} active marketplace(s)`
+    );
+    return { updated: 0, skipped };
+  }
 
   const variantIds = pushReady.flatMap((mapping) =>
     mapping.variant_id ? [mapping.variant_id] : []

@@ -162,6 +162,44 @@ describe('acquireJumiaAuthorizationRefreshLease', () => {
     setTimeoutSpy.mockRestore();
   });
 
+  it('carries reloaded credentials into the retry when the version advances', async () => {
+    // Another worker won the rotation, but its access token is older than
+    // this caller's cached expiry, so the reload is not fresh enough to
+    // reuse. The eventual claim must carry the winner's live refresh token
+    // because the caller's original token is already consumed.
+    vi.mocked(loadJumiaAuthorizationGrant).mockResolvedValue({
+      credential_ciphertext: 'stored-ciphertext',
+      token_expires_at: '2026-01-01T00:00:00.000Z',
+      refresh_token_expires_at: '2026-12-31T10:00:00.000Z',
+      rotation_version: 2,
+      client_key_hash: 'a'.repeat(64),
+    } as never);
+
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: null,
+        error: { code: '40001', message: 'Stale Jumia authorization rotation' },
+      })
+      .mockResolvedValueOnce({ data: 'lease-token', error: null });
+    const supabase = { rpc };
+
+    const result = await acquireJumiaAuthorizationRefreshLease(
+      refreshState,
+      supabase as never
+    );
+
+    expect(result).toEqual({
+      leaseToken: 'lease-token',
+      authorizationRotationVersion: 2,
+      carriedCredentials: {
+        refreshToken: 'fresh-refresh',
+        clientId: 'client-id',
+        authorizationRotationVersion: 2,
+      },
+    });
+  });
+
   it('returns a clear forbidden error when view-only refresh is denied', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: null,

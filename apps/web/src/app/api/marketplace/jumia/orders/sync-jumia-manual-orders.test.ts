@@ -32,32 +32,41 @@ const jumiaClient = {
   marketplaceKey: 'Jumia Nigeria',
 };
 
-function scopeQuery(rows: Array<{ marketplace_key: string | null }>) {
-  const query: Record<string, ReturnType<typeof vi.fn>> = {
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn((column: string) =>
-      column === 'shop_id'
-        ? Promise.resolve({ data: rows, error: null })
-        : query
-    ),
-    update: vi.fn().mockReturnThis(),
+function scopeQuery(
+  rows: Array<{ marketplace_key: string | null }>,
+  scopeError: { message: string } | null = null
+) {
+  const result = Promise.resolve({ data: rows, error: scopeError });
+  const query: Record<string, unknown> = {
+    select: vi.fn(() => query),
+    eq: vi.fn(() => query),
+    or: vi.fn(() => result),
+    // biome-ignore lint/suspicious/noThenProperty: Supabase query mocks are intentionally thenable.
+    then: (resolve: (value: unknown) => unknown) => result.then(resolve),
+    update: vi.fn(() => query),
   };
   return query;
 }
 
 function supabaseMock(options: {
   scopeRows: Array<{ marketplace_key: string | null }>;
+  scopeError?: { message: string } | null;
   upserted: Record<string, unknown>[];
+  integrationUpdates?: Record<string, unknown>[];
 }) {
+  const integrationUpdates = options.integrationUpdates ?? [];
   return {
     from: vi.fn((table: string) => {
       if (table === 'marketplace_integrations') {
-        const query = scopeQuery(options.scopeRows);
-        query.update = vi.fn(() => ({
-          eq: vi.fn(() => ({
-            eq: vi.fn(() => Promise.resolve({ error: null })),
-          })),
-        }));
+        const query = scopeQuery(options.scopeRows, options.scopeError);
+        query.update = vi.fn((payload: Record<string, unknown>) => {
+          integrationUpdates.push(payload);
+          return {
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => Promise.resolve({ error: null })),
+            })),
+          };
+        });
         return query;
       }
       if (table === 'jumia_orders') {
@@ -156,5 +165,51 @@ describe('syncJumiaManualOrders', () => {
 
     expect(result).toEqual({ synced: 0, newOrders: 0 });
     expect(upserted).toHaveLength(0);
+  });
+
+  it('aborts before fetching when the scope lookup fails', async () => {
+    const upserted: Record<string, unknown>[] = [];
+    const integrationUpdates: Record<string, unknown>[] = [];
+    const supabase = supabaseMock({
+      scopeRows: [],
+      scopeError: { message: 'connection reset' },
+      upserted,
+      integrationUpdates,
+    });
+
+    await expect(
+      syncJumiaManualOrders({
+        supabase: supabase as never,
+        merchantId: 'merchant-1',
+        integrationId: 'integration-1',
+        jumiaClient: jumiaClient as never,
+      })
+    ).rejects.toThrow('Failed to resolve Jumia shop marketplace scope');
+
+    expect(mocks.getAllOrders).not.toHaveBeenCalled();
+    expect(upserted).toHaveLength(0);
+    expect(integrationUpdates).toHaveLength(1);
+    expect(integrationUpdates[0]?.sync_error).toContain(
+      'Failed to resolve Jumia shop marketplace scope'
+    );
+    expect(integrationUpdates[0]).not.toHaveProperty('last_sync_at');
+  });
+
+  it('keeps the shop-wide scope count for OAuth integrations', async () => {
+    const upserted: Record<string, unknown>[] = [];
+    const supabase = supabaseMock({
+      scopeRows: [{ marketplace_key: 'oauth' }],
+      upserted,
+    });
+
+    const result = await syncJumiaManualOrders({
+      supabase: supabase as never,
+      merchantId: 'merchant-1',
+      integrationId: 'integration-1',
+      jumiaClient: { ...jumiaClient, marketplaceKey: 'oauth' } as never,
+    });
+
+    expect(result).toEqual({ synced: 1, newOrders: 1 });
+    expect(upserted[0]?.marketplace_key).toBe('oauth');
   });
 });

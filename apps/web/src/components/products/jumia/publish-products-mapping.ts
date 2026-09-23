@@ -50,6 +50,17 @@ export function isJumiaProductFullyMapped(
   if (sellableVariants.length === 0) {
     return successfulMappings.length > 0;
   }
+  const [onlyVariant] = sellableVariants;
+  if (sellableVariants.length === 1 && onlyVariant && !onlyVariant.id) {
+    // Single-unit product: the caller already scoped these mappings to
+    // this product id, so a variant-less mapping identifies the same
+    // sellable unit even after a local SKU edit. Matching by SKU here
+    // would unmap the product and offer a re-publish that the export
+    // reservation rejects with 409.
+    return successfulMappings.some(
+      (mapping) => !mapping.variantId || mapping.sellerSku === onlyVariant.sku
+    );
+  }
   return sellableVariants.every((variant) =>
     successfulMappings.some(
       (mapping) =>

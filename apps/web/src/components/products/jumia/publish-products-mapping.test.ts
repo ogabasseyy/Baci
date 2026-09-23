@@ -49,6 +49,15 @@ describe('isJumiaProductFullyMapped', () => {
     ).toBe(true);
   });
 
+  it('keeps a simple mapped product blocked after its local SKU changes', () => {
+    expect(
+      isJumiaProductFullyMapped(
+        { id: 'product-4', name: 'Case', price: 10, sku: 'CASE-NEW' },
+        [{ sellerSku: 'CASE-OLD', syncStatus: 'synced' }]
+      )
+    ).toBe(true);
+  });
+
   it('keeps a mapped variant blocked after its local SKU changes', () => {
     expect(
       isJumiaProductFullyMapped(

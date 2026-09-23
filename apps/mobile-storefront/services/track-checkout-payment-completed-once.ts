@@ -1,5 +1,6 @@
 import { releaseCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-release';
 import {
+  awaitCreationPurchaseEmission,
   claimCheckoutPurchaseTracking,
   isCheckoutPurchaseClaimed,
 } from '@/lib/claim-checkout-purchase-tracking';
@@ -93,10 +94,19 @@ export async function trackCheckoutPaymentCompletedOnce(
     // default purchase claim right after order creation: repeating it
     // here would double-count every normally settled order, so the
     // completion lane emits the funnel event only when that purchase
-    // already went out.
-    const purchaseAlreadySent = await isCheckoutPurchaseClaimed(
-      input.orderId
-    );
+    // already went out. The bare claim reads held from the instant it is
+    // granted while the fire-and-forget creation emission may still be
+    // running — share that in-flight emission instead of trusting the
+    // claim, or a later rejection loses the purchase while the funnel
+    // event emitted here stands. A failed creation releases its claim,
+    // so the completion emits the purchase itself below.
+    const creationOutcome = await awaitCreationPurchaseEmission(input.orderId);
+    const purchaseAlreadySent =
+      creationOutcome === 'sent'
+        ? true
+        : creationOutcome === 'failed'
+          ? false
+          : await isCheckoutPurchaseClaimed(input.orderId);
     const total = input.value ?? 0;
     if (!purchaseAlreadySent) {
       try {

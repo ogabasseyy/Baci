@@ -117,6 +117,39 @@ describe('useSettlementCompletion', () => {
     }
   });
 
+  it('forwards the tracked order currency to the settlement completion', async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetchSequence([
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'paid',
+          subtotal: 2000,
+          shipping_cost: 0,
+          discount_amount: 0,
+          total: 2000,
+          currency: 'KES',
+        }),
+      ]);
+
+      renderHook(() => useSettlementCompletion(baseParams));
+      await jest.advanceTimersByTimeAsync(0);
+
+      await waitFor(() =>
+        expect(mockTrackCompleted).toHaveBeenCalledWith(
+          expect.objectContaining({
+            orderId: 'order-settle-1',
+            currency: 'KES',
+            value: 2000,
+          })
+        )
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('polls standard bank transfers and stops after the attempt budget', async () => {
     jest.useFakeTimers();
     try {

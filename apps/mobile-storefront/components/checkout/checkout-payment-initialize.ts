@@ -150,6 +150,10 @@ export async function initializeGatewayAndRoute({
     // the eventual completion. amountDueToGateway stays on the route
     // params above, which is what the provider actually charges.
     value: orderResponse.order.total,
+    // Stamped creation currency: absent values keep the NGN default.
+    ...(orderResponse.order.currency
+      ? { currency: orderResponse.order.currency }
+      : {}),
   });
   setIsProcessing(false);
   if (isBankTransfer) {

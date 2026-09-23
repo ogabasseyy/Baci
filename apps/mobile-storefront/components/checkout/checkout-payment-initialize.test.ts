@@ -132,6 +132,26 @@ describe('initializeGatewayAndRoute', () => {
     });
   });
 
+  it('forwards the stamped creation currency to the start event', async () => {
+    mockInitResponse({
+      success: true,
+      reference: 'ref-1',
+      authorization_url: 'https://pay.example/authorize',
+    });
+    const currencyResponse: OrderResponse = {
+      ...orderResponse,
+      order: { ...orderResponse.order, currency: 'KES' },
+    };
+
+    await initializeGatewayAndRoute(
+      createParams({ orderResponse: currencyResponse })
+    );
+
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledWith(
+      expect.objectContaining({ currency: 'KES', value: 5750 })
+    );
+  });
+
   it('stamps each retried start with its issued reference', async () => {
     // A pending order retried: initialize issues a fresh reference per
     // attempt, and each start must carry its own for reconciliation.

@@ -1,6 +1,9 @@
 import type { MutableRefObject } from 'react';
 import { releaseCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-release';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import {
+  claimCheckoutPurchaseTracking,
+  trackCreationPurchaseEmission,
+} from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import type { createOrder } from '@/services/orders';
 import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
@@ -74,7 +77,7 @@ export async function runCheckoutFinalization({
     // claim is the completion lane's "purchase already sent" signal, and
     // a failed emission must not pose as a recorded purchase or the
     // completion would emit the funnel without any ad purchase at all.
-    void trackCheckoutRoutePurchaseCompleted({
+    const creationEmission = trackCheckoutRoutePurchaseCompleted({
       customerEmail,
       customerPhone,
       items: itemsSnapshot,
@@ -86,7 +89,13 @@ export async function runCheckoutFinalization({
       tax: snapshot.taxAmount,
       total: order.total,
       userId: user?.id ?? undefined,
-    }).catch(() => {
+    });
+    // Share the in-flight emission with the completion lane: the bare
+    // claim reads held from this instant while the purchase above may
+    // still be running, and a settlement landing in that window must
+    // await it instead of trusting the claim.
+    trackCreationPurchaseEmission(order.id, creationEmission);
+    void creationEmission.catch(() => {
       void releaseCheckoutPurchaseTracking(order.id);
     });
   }

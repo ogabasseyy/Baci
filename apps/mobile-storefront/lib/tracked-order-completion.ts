@@ -9,6 +9,7 @@ export interface TrackedCompletionAttribution {
   subtotal?: number;
   tax?: number;
   total?: number;
+  currency?: string;
 }
 
 function finiteOrUndefined(value: unknown): number | undefined {
@@ -94,5 +95,11 @@ export function toTrackedCompletionAttribution(
     ...(subtotal !== undefined ? { subtotal } : {}),
     ...(tax !== undefined ? { tax } : {}),
     ...(total !== undefined ? { total } : {}),
+    // The tracked order stamps its currency: forward it so settlement
+    // keeps the creation currency instead of defaulting to NGN. Absent
+    // values keep the default exactly as before.
+    ...(typeof order.currency === 'string' && order.currency
+      ? { currency: order.currency }
+      : {}),
   };
 }

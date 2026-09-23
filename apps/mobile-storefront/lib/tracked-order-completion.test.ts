@@ -55,6 +55,7 @@ describe('toTrackedCompletionAttribution', () => {
       subtotal: 100000,
       tax: 7500,
       total: 107500,
+      currency: 'NGN',
     });
   });
 
@@ -106,5 +107,23 @@ describe('toTrackedCompletionAttribution', () => {
     );
 
     expect(attribution.tax).toBe(7500);
+  });
+
+  it('forwards a non-default tracked currency', () => {
+    const attribution = toTrackedCompletionAttribution(
+      orderWith({ currency: 'KES' }),
+      customer,
+      []
+    );
+
+    expect(attribution.currency).toBe('KES');
+  });
+
+  it('omits currency when the projection does not carry one', () => {
+    const order = orderWith({});
+    delete (order as Partial<typeof order>).currency;
+    const attribution = toTrackedCompletionAttribution(order, customer, []);
+
+    expect(attribution).not.toHaveProperty('currency');
   });
 });

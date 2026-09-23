@@ -11,8 +11,8 @@ import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
 import { isDeferredSettlementMethod } from '@/components/orders/order-success-content';
 import { useGuestInvoicePaidState } from '@/components/orders/use-invoice-paid-state';
 import { useOrderSuccessSideEffects } from '@/components/orders/use-order-success-side-effects';
+import { useParamReconciliationVerification } from '@/components/orders/use-param-reconciliation-verification';
 import { useSettlementCompletion } from '@/components/orders/use-settlement-completion';
-import { verifyOrderPaymentForCompletion } from '@/components/payment-gateway/verify-order-payment';
 import { ReceiptPreviewModal } from '@/components/receipts/ReceiptPreviewModal';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -109,39 +109,17 @@ export default function OrderSuccessScreen() {
     receiptAuthoritative && guestInvoice.isResolved;
   // The reconciliation route parameter is caller-controlled (public
   // scheme/universal links): a crafted deep link must not render
-  // "Payment Received" on its word alone. Verify it proof-bound before
-  // rendering the reconciliation state; a verified-absent param falls
-  // through to the ordinary success flow, while an inconclusive lookup
-  // stays pending instead of coercing to either view.
-  const [paramReconciliationVerified, setParamReconciliationVerified] =
-    useState<boolean | undefined>(undefined);
-  useEffect(() => {
-    setParamReconciliationVerified(undefined);
-    if (!isParamReconciliation || !orderId) {
-      return;
-    }
-    let cancelled = false;
-    void verifyOrderPaymentForCompletion({
-      orderId,
-      trackingToken,
-      reference,
-    }).then((result) => {
-      if (cancelled) {
-        return;
-      }
-      // Inconclusive (transport/parse failure) is neither proof nor
-      // disproof: stay pending instead of coercing to false, which would
-      // render the ordinary success view under a caller-controlled
-      // (spoofable) parameter. A remount re-verifies.
-      if (result.inconclusive && !result.reconciliation) {
-        return;
-      }
-      setParamReconciliationVerified(!!result.reconciliation);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isParamReconciliation, orderId, trackingToken, reference]);
+  // "Payment Received" on its word alone. Verified proof-bound (with
+  // bounded retries for transient failures) before rendering the
+  // reconciliation state; a verified-absent param falls through to the
+  // ordinary success flow, while an inconclusive lookup stays pending
+  // instead of coercing to either view.
+  const paramReconciliationVerified = useParamReconciliationVerification({
+    isParamReconciliation,
+    orderId,
+    trackingToken,
+    reference,
+  });
   const isParamVerificationPending =
     isParamReconciliation && paramReconciliationVerified === undefined;
   const isReconciliation =

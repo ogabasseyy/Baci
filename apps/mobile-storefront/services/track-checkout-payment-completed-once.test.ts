@@ -258,4 +258,88 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
     expect(purchaseMock).not.toHaveBeenCalled();
     expect(completedMock).toHaveBeenCalledTimes(1);
   });
+
+  it('waits for the in-flight creation emission instead of trusting the bare claim', async () => {
+    const {
+      claimCheckoutPurchaseTracking,
+      trackCreationPurchaseEmission,
+    } = await import('@/lib/claim-checkout-purchase-tracking');
+    let resolveCreation!: () => void;
+    const creationEmission = new Promise<void>((resolve) => {
+      resolveCreation = resolve;
+    });
+    // Creation-lane state: the bare claim is granted while the ad
+    // purchase is still running.
+    await expect(
+      claimCheckoutPurchaseTracking('order-race-sent')
+    ).resolves.toBe(true);
+    trackCreationPurchaseEmission('order-race-sent', creationEmission);
+
+    const outcome = trackCheckoutPaymentCompletedOnce({
+      orderId: 'order-race-sent',
+      orderNumber: 'BAC-RS',
+      paymentMethod: 'paystack',
+      value: 5750,
+    });
+    // Let the completion reach the shared emission: nothing may emit
+    // while creation is still in flight.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(purchaseMock).not.toHaveBeenCalled();
+    expect(completedMock).not.toHaveBeenCalled();
+
+    resolveCreation();
+    await expect(outcome).resolves.toBe('emitted');
+
+    // Creation owned the purchase; the completion emitted funnel-only.
+    expect(purchaseMock).not.toHaveBeenCalled();
+    expect(completedMock).toHaveBeenCalledTimes(1);
+    expect(completedMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-race-sent' })
+    );
+  });
+
+  it('emits the purchase itself when the in-flight creation emission rejects', async () => {
+    const {
+      claimCheckoutPurchaseTracking,
+      trackCreationPurchaseEmission,
+    } = await import('@/lib/claim-checkout-purchase-tracking');
+    const { releaseCheckoutPurchaseTracking } = await import(
+      '@/lib/claim-checkout-purchase-release'
+    );
+    let rejectCreation!: (error: Error) => void;
+    const creationEmission = new Promise<void>((_resolve, reject) => {
+      rejectCreation = reject;
+    });
+    await expect(
+      claimCheckoutPurchaseTracking('order-race-failed')
+    ).resolves.toBe(true);
+    trackCreationPurchaseEmission('order-race-failed', creationEmission);
+    // Mirror the creation lane's rollback catch: a rejected emission
+    // releases the bare claim.
+    void creationEmission.catch(() =>
+      releaseCheckoutPurchaseTracking('order-race-failed')
+    );
+
+    const outcome = trackCheckoutPaymentCompletedOnce({
+      orderId: 'order-race-failed',
+      orderNumber: 'BAC-RF',
+      paymentMethod: 'korapay',
+      value: 9000,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(purchaseMock).not.toHaveBeenCalled();
+    expect(completedMock).not.toHaveBeenCalled();
+
+    // Deferred rejection: the completion must not trust the
+    // previously-held claim — it emits the purchase itself so the
+    // conversion is not lost while the funnel event stands.
+    rejectCreation(new Error('ad network down'));
+    await expect(outcome).resolves.toBe('emitted');
+
+    expect(purchaseMock).toHaveBeenCalledTimes(1);
+    expect(purchaseMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-race-failed' })
+    );
+    expect(completedMock).toHaveBeenCalledTimes(1);
+  });
 });

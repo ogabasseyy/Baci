@@ -14,6 +14,9 @@ const mockTrackCheckoutPaymentCompletedOnce = jest.fn(
   async (_input: unknown) => true
 );
 const mockTrackCheckoutPaymentCompleted = jest.fn((_input: unknown) => {});
+const mockTrackCheckoutPaymentFailed = jest.fn(
+  async (..._args: unknown[]) => {}
+);
 const mockVerifyRedvaultPayment =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
@@ -27,6 +30,8 @@ jest.mock('@/services/analytics', () => ({
     mockTrackCheckoutPaymentCompleted(input),
   trackCheckoutPaymentCompletedOnce: (input: unknown) =>
     mockTrackCheckoutPaymentCompletedOnce(input),
+  trackCheckoutPaymentFailed: (...args: unknown[]) =>
+    mockTrackCheckoutPaymentFailed(...args),
 }));
 
 jest.mock('./payment-gateway-completions', () => ({
@@ -185,14 +190,16 @@ function mockPaidVerification(total = 5000) {
   }) as unknown as typeof fetch;
 }
 
-function mockTerminalVerification() {
+function mockTerminalVerification(
+  status: 'failed' | 'cancelled' | 'abandoned' = 'cancelled'
+) {
   global.fetch = jest.fn(async (url: string) => {
     if (String(url).includes('/api/payments/verify')) {
       return new Response(
         JSON.stringify({
-          success: true,
-          status: 'cancelled',
-          finalizationOutcome: 'cancelled',
+          success: false,
+          status,
+          finalizationOutcome: status,
           orderId: 'order-1',
         }),
         { status: 200 }
@@ -748,6 +755,37 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     expect(input.clearCart).not.toHaveBeenCalled();
     expect(router.replace).not.toHaveBeenCalled();
     expect(refs.paymentCompletionStartedRef.current).toBe(false);
+  });
+
+  it.each([
+    'failed',
+    'cancelled',
+    'abandoned',
+  ] as const)('records payment_failed with the canonical total on a %s verdict', async (verdict) => {
+    // Arrange: the provider definitively declined the attempt, while
+    // wallet credit covered most of the 49875 order (5000 residual due).
+    mockTerminalVerification(verdict);
+    const { input } = createInput({ amount: 5000, orderTotal: 49875 });
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: the started attempt is matched with the full order
+    // revenue — never the residual due — and the cart/error path stays.
+    expect(mockTrackCheckoutPaymentFailed).toHaveBeenCalledWith(
+      verdict,
+      'order-1',
+      'paystack',
+      'ref-1',
+      undefined,
+      49875
+    );
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.clearCart).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(input.setPaymentStatus).toHaveBeenCalledWith('error');
   });
 
   it.each([

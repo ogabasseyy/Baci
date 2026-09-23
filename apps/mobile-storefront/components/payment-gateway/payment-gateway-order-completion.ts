@@ -11,10 +11,14 @@ import {
   loadRedvaultPurchaseTrackingContext,
 } from '@/lib/redvault-purchase-tracking-context';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
-import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
+import {
+  trackCheckoutPaymentCompletedOnce,
+  trackCheckoutPaymentFailed,
+} from '@/services/analytics';
 import { verifyRedvaultPayment } from '@/services/redvault';
 import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import type { PaymentStatusSetter } from './payment-gateway-controller.types';
+import { buildOrderSuccessParams } from './payment-gateway-success-params';
 import { settleRedvaultFunnelCompletion } from './settle-redvault-funnel-completion';
 import { verifyOrderPaymentForCompletion } from './verify-order-payment';
 
@@ -140,34 +144,6 @@ export async function verifyRedvaultCompletion(
   }
 }
 
-function buildOrderSuccessParams(
-  context: OrderCompletionContext,
-  verifiedOrderNumber: string | undefined,
-  reconciliation?: 'order_cancelled' | 'order_skipped'
-) {
-  const {
-    gateway,
-    orderId,
-    orderNumber,
-    paymentMethod,
-    reference,
-    trackingToken,
-  } = context;
-  return {
-    orderId: orderId || '',
-    orderNumber: verifiedOrderNumber || orderNumber || '',
-    // The selected method, not the rails gateway: a REDVAULT success
-    // routed as `paystack` would join the settlement poll set, and a
-    // late Once-helper emission there would re-emit the ad purchase the
-    // REDVAULT branch already owns (the denied-claim fail-closed path
-    // cannot retry through it).
-    paymentMethod: paymentMethod ?? gateway,
-    reference: reference || '',
-    ...(reconciliation && { reconciliation }),
-    ...(trackingToken && { trackingToken }),
-  };
-}
-
 /**
  * Shared completion after verification: a server-confirmed settlement
  * check, a single conversion emission, then cart clear and success
@@ -249,7 +225,18 @@ export async function settleOrderCompletion(
     } else if (verification.terminalFailure) {
       // Definitive gateway outcome: the payment cannot settle, so keep
       // the cart and the error/retry path instead of navigating to a
-      // false "Order Confirmed".
+      // false "Order Confirmed". Initialization already emitted
+      // payment_started for this attempt, so the funnel failure must be
+      // recorded here with the canonical total — otherwise every
+      // provider-declined attempt strands unmatched.
+      await trackCheckoutPaymentFailed(
+        verification.terminalFailure,
+        orderId,
+        gateway || 'payment_gateway',
+        reference,
+        undefined,
+        purchaseTotal
+      );
       paymentCompletionStartedRef.current = false;
       setPaymentStatus('error');
       setErrorMessage(

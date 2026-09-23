@@ -38,7 +38,7 @@ describe('logSantaInteraction', () => {
     ]);
   });
 
-  it('skips analytics when agentic checkout is disabled', async () => {
+  it('records analytics even when agentic checkout is disabled', async () => {
     await logSantaInteraction({
       clientIp: '1.2.3.4',
       response: 'Ho ho ho!',
@@ -46,8 +46,12 @@ describe('logSantaInteraction', () => {
       userMessage: 'Hello Santa',
     });
 
-    expect(mocks.createAgenticScopedSupabaseClient).not.toHaveBeenCalled();
-    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.createAgenticScopedSupabaseClient).toHaveBeenCalledWith({
+      merchantId: tenant.merchantId,
+      merchantSlug: tenant.merchantSlug,
+      sessionId: expect.any(String),
+    });
+    expect(mocks.insert).toHaveBeenCalledTimes(1);
   });
 
   it('records a wish_granted interaction with bounded fields', async () => {

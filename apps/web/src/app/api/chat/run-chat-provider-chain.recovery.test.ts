@@ -45,6 +45,10 @@ it.each([
   });
   const result = await runChatProviderChain({
     abortSignal: new AbortController().signal,
+    agenticCheckoutEnabled: true,
+    currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
+    merchantName: 'Demo Store',
+    timeoutMs: 60_000,
     messages: [{ role: 'user', content: 'Show phones' }],
     sessionId: 'session',
   });
@@ -97,6 +101,10 @@ it.each([
   );
   const result = await runChatProviderChain({
     abortSignal: new AbortController().signal,
+    agenticCheckoutEnabled: true,
+    currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
+    merchantName: 'Demo Store',
+    timeoutMs: 60_000,
     messages: [{ role: 'user', content: 'Show phones' }],
     sessionId: 'session',
   });

@@ -3,6 +3,9 @@
 import { isSantaGrantedPriceWithinCeiling } from '@baci/shared/lib';
 import { useEffect, useRef, useState } from 'react';
 import { useCart } from '@/hooks/cart';
+import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
+import { getMerchantCartState } from '@/hooks/cart/merchant-cart-storage';
+import { SANTA_MERCHANT_SLUG_HEADER } from '@/lib/agentic/santa-merchant-slug-header';
 import {
   parseSantaActions,
   stripSantaActions,
@@ -34,7 +37,8 @@ export function useOgabasseyChat({
   isSanta: boolean;
   storefrontSlug?: string;
 }): UseOgabasseyChat {
-  const { addToCart, applyNegotiatedPrice, cart, setIsCartOpen } = useCart();
+  const { addToCart, applyNegotiatedPrice, setIsCartOpen, setMerchantSlug } =
+    useCart();
 
   const [isOpen, setIsOpenState] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -127,6 +131,9 @@ export function useOgabasseyChat({
           text: displayText,
           santaActions,
           ...(aiReply.events.length > 0 ? { uiEvents: aiReply.events } : {}),
+          ...(aiReply.merchantSlug
+            ? { merchantSlug: aiReply.merchantSlug }
+            : {}),
         },
       ]);
     } catch (error) {
@@ -165,6 +172,21 @@ export function useOgabasseyChat({
       !expectedMerchantSlug ||
       pendingSantaActions.current.has(actionKey)
     ) return;
+    // The wish is only fulfillable against the tenant that attested the
+    // reply it came from — never a silent cross-storefront add.
+    const replyMerchantSlug = message.merchantSlug;
+    if (!replyMerchantSlug) {
+      console.error('[Santa Cart] Missing resolved merchant slug');
+      return;
+    }
+    if (replyMerchantSlug !== expectedMerchantSlug) {
+      console.error('[Santa Cart] Resolved tenant differs from storefront', {
+        expectedMerchantSlug,
+        replyMerchantSlug,
+      });
+      return;
+    }
+    setMerchantSlug(replyMerchantSlug);
     pendingSantaActions.current.add(actionKey);
 
     try {
@@ -178,7 +200,7 @@ export function useOgabasseyChat({
       });
       if (
         !response.ok ||
-        response.headers.get('x-baci-santa-merchant-slug') !== expectedMerchantSlug
+        response.headers.get(SANTA_MERCHANT_SLUG_HEADER) !== expectedMerchantSlug
       ) {
         return;
       }
@@ -195,9 +217,15 @@ export function useOgabasseyChat({
       // addToCart merges into an existing line for the same product, and the
       // negotiated unit price would then reprice previously added units too.
       // Only negotiate fresh lines so the grant covers exactly the added unit.
-      const lineAlreadyExists = cart.some(
-        (item) => item.cartItemId === product.id
-      );
+      // Existence uses the shared merge matcher against the adopted
+      // merchant's saved cart — the exact cart setMerchantSlug loaded above
+      // and addToCart merges into — never the hook's `cart` snapshot, which
+      // still holds the pre-switch cart.
+      const lineAlreadyExists =
+        findMergingCartLineIndex(
+          getMerchantCartState(expectedMerchantSlug).cart,
+          product
+        ) >= 0;
       addToCart(product, 1);
       // The model price is untrusted: only honor it inside the
       // server-computed per-product ceiling, otherwise keep catalog price.

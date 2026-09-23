@@ -1,5 +1,6 @@
 'use client';
 
+import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { FilterState } from '../components/CategoryFiltersSidebar';
@@ -87,7 +88,7 @@ export function useServerCategoryGraphicsFilter({
         resetPage: true,
         search: window.location.search,
         trustedHubSlug: hubSlug,
-      })
+      }) as Route
     );
   }
 

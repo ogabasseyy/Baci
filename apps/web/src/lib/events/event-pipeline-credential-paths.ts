@@ -268,4 +268,99 @@ export const eventPipelineCredentialPaths = [
     'apps/web/src/lib/supabase/admin.ts',
     'apps/web/src/env.ts',
   ],
+  // Audited immediate-order notification edges (invoice funnel): the
+  // order-success confirmation mail, invoice/proforma artifacts, and
+  // merchant notifications fan out through the pre-existing audited
+  // ZeptoMail/Expo/persist-DVA senders below. Each root's full chain is
+  // registered because the boundary gate matches chains exactly.
+  [
+    'apps/web/src/app/api/orders/route.ts',
+    'apps/web/src/lib/immediate-order-notification.ts',
+    'apps/web/src/lib/immediate-order/confirmation-email.ts',
+    'apps/web/src/lib/zeptomail.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/app/api/orders/route.ts',
+    'apps/web/src/lib/immediate-order-notification.ts',
+    'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
+    'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
+    'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/app/api/orders/route.ts',
+    'apps/web/src/lib/immediate-order-notification.ts',
+    'apps/web/src/lib/immediate-order/merchant-notifications.ts',
+    'apps/web/src/lib/order-notification-dispatch.ts',
+    'apps/web/src/lib/expo-push.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/immediate-order-notification.ts',
+    'apps/web/src/lib/immediate-order/confirmation-email.ts',
+    'apps/web/src/lib/zeptomail.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/immediate-order-notification.ts',
+    'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
+    'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
+    'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/immediate-order-notification.ts',
+    'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
+    'apps/web/src/lib/supabase/admin.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/immediate-order-notification.ts',
+    'apps/web/src/lib/immediate-order/merchant-notifications.ts',
+    'apps/web/src/lib/order-notification-dispatch.ts',
+    'apps/web/src/lib/expo-push.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/immediate-order/confirmation-email.ts',
+    'apps/web/src/lib/zeptomail.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/immediate-order/confirmation-email.ts',
+    'apps/web/src/lib/zeptomail.ts',
+    'apps/web/src/lib/supabase/admin.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
+    'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
+    'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
+    'apps/web/src/lib/supabase/admin.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/immediate-order/merchant-notifications.ts',
+    'apps/web/src/lib/order-notification-dispatch.ts',
+    'apps/web/src/lib/expo-push.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/immediate-order/merchant-notifications.ts',
+    'apps/web/src/lib/order-notification-dispatch.ts',
+    'apps/web/src/lib/expo-push.ts',
+    'apps/web/src/lib/supabase/admin.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/immediate-order/payforme-dva.ts',
+    'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
+    'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
+    'apps/web/src/env.ts',
+  ],
 ] as const;

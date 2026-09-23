@@ -7,6 +7,7 @@ vi.hoisted(() => {
   process.env.GIGL_PASSWORD = 'test-password';
 });
 
+import { quoteProviderFailure } from '../quote-provider-failure';
 import { GiglApiClient } from './gigl.auth';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
@@ -90,7 +91,11 @@ describe('GiglProvider international quote errors', () => {
 
     const provider = buildHarness();
 
-    await expect(provider.getQuotes()).resolves.toEqual([]);
+    const result = await provider.getQuotes();
+    expect(result).toEqual([]);
+    expect(quoteProviderFailure.get(result)?.message).toBe(
+      'GIGL international quote request failed'
+    );
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -104,7 +109,11 @@ describe('GiglProvider international quote errors', () => {
 
     const provider = buildHarness();
 
-    await expect(provider.getQuotes()).resolves.toEqual([]);
+    const result = await provider.getQuotes();
+    expect(result).toEqual([]);
+    expect(quoteProviderFailure.get(result)?.message).toBe(
+      'network unavailable'
+    );
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -150,5 +159,97 @@ describe('GiglProvider international quote errors', () => {
       pricingVersion: 'gigl_platform_margin_v1',
       providerRateId: 'GIGL_INTL_2_1_3_1',
     });
+  });
+
+  it('marks the result when every international rate is malformed', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(loginResponseWithoutCustomerType))
+      .mockResolvedValueOnce(jsonResponse(internationalCountriesResponse))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: {
+            message: 'Success',
+            status: 200,
+            data: [
+              {
+                GrandTotal: 'not-a-number',
+                LogisticCompany: 0,
+                ShipmentMethod: 0,
+                DeliveryType: 2,
+              },
+              {
+                GrandTotal: null,
+                LogisticCompany: 1,
+                ShipmentMethod: 3,
+                DeliveryType: 2,
+              },
+            ],
+          },
+        })
+      );
+
+    const provider = buildHarness();
+
+    const result = await provider.getQuotes();
+    expect(result).toEqual([]);
+    expect(quoteProviderFailure.get(result)?.message).toBe(
+      'GIGL international quote response was malformed'
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('marks the result when the international price payload is not a list', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(loginResponseWithoutCustomerType))
+      .mockResolvedValueOnce(jsonResponse(internationalCountriesResponse))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: {
+            message: 'Success',
+            status: 200,
+            data: { GrandTotal: 95_000 },
+          },
+        })
+      );
+
+    const provider = buildHarness();
+
+    const result = await provider.getQuotes();
+    expect(result).toEqual([]);
+    expect(quoteProviderFailure.get(result)?.message).toBe(
+      'GIGL international quote response was malformed'
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('leaves a genuinely empty international rate list unmarked', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(loginResponseWithoutCustomerType))
+      .mockResolvedValueOnce(jsonResponse(internationalCountriesResponse))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: {
+            message: 'Success',
+            status: 200,
+            data: [],
+          },
+        })
+      );
+
+    const provider = buildHarness();
+
+    const result = await provider.getQuotes();
+    expect(result).toEqual([]);
+    expect(quoteProviderFailure.get(result)).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

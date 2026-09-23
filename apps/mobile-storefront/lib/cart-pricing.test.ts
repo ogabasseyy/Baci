@@ -1,4 +1,6 @@
+import type { CartItem } from '@/stores/cart-store';
 import {
+  getCartCatalogSubtotalWithAssurance,
   getCartItemEffectivePrice,
   hasActiveNegotiatedPrice,
 } from './cart-pricing';
@@ -72,5 +74,111 @@ describe('cart-pricing', () => {
 
     expect(hasActiveNegotiatedPrice(item)).toBe(false);
     expect(getCartItemEffectivePrice(item)).toBe(150000);
+  });
+
+  it('sums catalog prices for the carrier quote basis', () => {
+    const items = [
+      { name: 'iPhone 11 Pro Max', price: 470000, quantity: 1 },
+      { name: 'MacBook Air M1', price: 1000, quantity: 2 },
+    ] as CartItem[];
+
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(472000);
+  });
+
+  it('uses the retained catalog value for a zero-priced prize voucher', () => {
+    const items = [
+      {
+        name: 'Prize Phone',
+        price: 0,
+        compare_at_price: 300000,
+        catalog_price: 205000,
+        quantity: 1,
+        voucher_token: 'signed-token',
+        voucher_award_id: 'award-1',
+      },
+    ] as CartItem[];
+
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(205000);
+    expect(getCartItemEffectivePrice(items[0])).toBe(0);
+  });
+
+  it('uses the retained catalog value for a below-catalog condition offer', () => {
+    const items = [
+      {
+        name: 'Used Pixel 8',
+        price: 320000,
+        catalog_price: 410000,
+        quantity: 1,
+        condition: 'used',
+      },
+    ] as CartItem[];
+
+    // A carrier tier between 320000 and 410000 must see 410000.
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(410000);
+  });
+
+  it('charges accepted negotiated prices plus effective-basis assurance', () => {
+    const items = [
+      {
+        assuranceRate: undefined,
+        hasAssurance: true,
+        name: 'MacBook Air M1',
+        negotiatedPrice: 800,
+        negotiationStatus: 'accepted' as const,
+        price: 1000,
+        quantity: 2,
+      },
+    ] as CartItem[];
+
+    // 1000 x 2 catalog basis plus 5% assurance on the effective (800 x 2) basis.
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(2080);
+  });
+
+  it('rounds fractional assurance fees to two decimals like the server', () => {
+    const items = [
+      {
+        hasAssurance: true,
+        name: 'MacBook Air M1',
+        negotiatedPrice: 333.33,
+        negotiationStatus: 'accepted' as const,
+        price: 500,
+        quantity: 2,
+      },
+    ] as CartItem[];
+
+    // Catalog basis (500 x 2) plus round2(333.33 x 2 x 0.05) = 33.33.
+    // Whole-unit rounding would give 33 and mismatch order verification.
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(1033.33);
+  });
+
+  it('uses the fixed server rate even when the cart carries a custom rate', () => {
+    const items = [
+      {
+        assuranceRate: 0.07,
+        hasAssurance: true,
+        name: 'MacBook Air M1',
+        negotiatedPrice: 800,
+        negotiationStatus: 'accepted' as const,
+        price: 1000,
+        quantity: 2,
+      },
+    ] as CartItem[];
+
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(2080);
+  });
+
+  it('ignores unaccepted negotiations and missing assurance in the quote basis', () => {
+    const items = [
+      {
+        hasAssurance: false,
+        name: 'MacBook Air M1',
+        negotiatedPrice: 800,
+        negotiationStatus: 'pending' as const,
+        price: 1000,
+        quantity: 2,
+      },
+    ] as CartItem[];
+
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(2000);
   });
 });

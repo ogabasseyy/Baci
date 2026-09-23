@@ -4,6 +4,7 @@ import {
   ShippingProviderRegistry,
 } from './providers/base';
 import { QuoteAggregator } from './quote-aggregator';
+import { quoteProviderFailure } from './quote-provider-failure';
 import type { QuoteRequest } from './types';
 
 const quoteRequest: QuoteRequest = {
@@ -92,7 +93,9 @@ describe('QuoteAggregator', () => {
 
   it('collects provider failures as warnings when a registered provider rejects', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
     const registry = new ShippingProviderRegistry();
     registry.register(
       createProvider({
@@ -107,6 +110,57 @@ describe('QuoteAggregator', () => {
 
     expect(response.quotes.all).toHaveLength(0);
     expect(response.warnings).toEqual(['GIG Logistics: upstream unavailable']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[QuoteAggregator] All providers failed; no quotes available',
+      { failedProviderCount: 1, providerCount: 1 }
+    );
+  });
+
+  it('does not report provider failure when providers successfully return no quotes', async () => {
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    const registry = new ShippingProviderRegistry();
+    registry.register(createProvider());
+    const aggregator = new QuoteAggregator(registry);
+
+    const response = await aggregator.getQuotes(quoteRequest);
+
+    expect(response.quotes.all).toEqual([]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[QuoteAggregator] No providers returned quotes',
+      { failedProviderCount: 0, providerCount: 1 }
+    );
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      '[QuoteAggregator] All providers failed, using fallback quote'
+    );
+  });
+
+  it('counts an explicitly marked empty provider result as a failure', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    const registry = new ShippingProviderRegistry();
+    registry.register(
+      createProvider({
+        getQuotes: vi.fn(() =>
+          Promise.resolve(
+            quoteProviderFailure.mark([], new Error('upstream unavailable'))
+          )
+        ),
+      })
+    );
+    const aggregator = new QuoteAggregator(registry);
+
+    const response = await aggregator.getQuotes(quoteRequest);
+
+    expect(response.quotes.all).toEqual([]);
+    expect(response.warnings).toEqual(['GIG Logistics: upstream unavailable']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[QuoteAggregator] All providers failed; no quotes available',
+      { failedProviderCount: 1, providerCount: 1 }
+    );
   });
 
   it('calls only providers enabled by the merchant', async () => {

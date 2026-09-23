@@ -80,10 +80,12 @@ export async function fetchGiglQuote(
         status: response.status,
         error,
       });
-      return null;
+      throw new Error(`GIGL quote request failed (${response.status})`);
     }
     if (envelope?.status !== 200) {
-      return null;
+      throw new Error(
+        `GIGL quote request failed (${envelope?.status ?? 'unknown'})`
+      );
     }
     const priceData = apiClient.parseEnvelopeData(
       envelope,
@@ -150,6 +152,6 @@ export async function fetchGiglQuote(
       throw error;
     }
     io.log('error', 'Error fetching GIGL quote', { error: String(error) });
-    return null;
+    throw error;
   }
 }

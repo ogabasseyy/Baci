@@ -74,16 +74,26 @@ describe('resolveAdminGiglEligibility', () => {
     });
   });
 
-  it('applies the canonical provider default for missing settings or null providers', async () => {
+  it('keeps carriers opt-in when settings or providers are missing', async () => {
+    // The canonical default leaves shipping_providers empty (carriers are
+    // opt-in per merchant), so missing rows behave like an explicit [].
     await expect(
       resolveAdminGiglEligibility(client({ settings: null }), 'merchant-1')
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toMatchObject({
+      ok: false,
+      status: 422,
+      body: { code: 'GIGL_PROVIDER_DISABLED' },
+    });
     await expect(
       resolveAdminGiglEligibility(
         client({ settings: { shipping_providers: null } }),
         'merchant-1'
       )
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toMatchObject({
+      ok: false,
+      status: 422,
+      body: { code: 'GIGL_PROVIDER_DISABLED' },
+    });
   });
 
   it('keeps an explicit empty provider list disabled', async () => {

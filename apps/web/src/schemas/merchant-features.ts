@@ -1,3 +1,4 @@
+import { CARRIER_PROVIDER_IDS } from '@baci/shared/constants';
 import { isValidPhone } from '@baci/shared/lib';
 import { z } from 'zod';
 
@@ -71,7 +72,13 @@ const merchantFeatureSettingsFields = {
   preferred_local_gateway: z.enum(['paystack', 'korapay']),
   preferred_international_gateway: z.enum(['paystack', 'korapay']),
   // Shipping
-  shipping_providers: z.array(z.string()),
+  shipping_providers: z
+    .array(z.enum(CARRIER_PROVIDER_IDS))
+    .max(CARRIER_PROVIDER_IDS.length)
+    .refine(
+      (providers) => new Set(providers).size === providers.length,
+      'Shipping providers must be unique'
+    ),
   free_shipping_threshold: z.number().nullable(),
   shipping_markup_percentage: z.number(),
   // Checkout

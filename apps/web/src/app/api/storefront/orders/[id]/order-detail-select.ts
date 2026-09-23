@@ -17,6 +17,8 @@ id,
             payment_status,
             shipping_status,
             payment_method,
+            external_source,
+            import_job_id,
             merchant_id,
             fulfillment_details
 `;

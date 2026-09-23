@@ -768,6 +768,7 @@ describe('checkout success page', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({
+        id: 'order-123',
         order_number: 'ORD-1001',
         payment_method: 'invoice',
       }),
@@ -825,10 +826,14 @@ describe('checkout success page', () => {
 
     render(<CheckoutSuccessPage />);
 
-    expect(
-      await screen.findByRole('heading', { name: /order received/i })
-    ).toBeInTheDocument();
-    expect(mockClearCart).toHaveBeenCalled();
+    // Rejected lookups prove nothing: the page stays in its pending
+    // state with the derived number and keeps the cart for retry.
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /order being processed/i })
+      ).toBeInTheDocument()
+    );
+    expect(mockClearCart).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(screen.getByText('#ABCDEFGH')).toBeInTheDocument()
     );

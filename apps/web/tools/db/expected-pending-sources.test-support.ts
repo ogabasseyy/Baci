@@ -300,6 +300,16 @@ export const EXPECTED_PENDING_SOURCES = [
     sha256: 'e4cc677df89fc76136e7ad3d6439d07893df34d6e064f0941951ec1d0c2723c9',
   },
   {
+    repositoryPath:
+      'supabase/migrations/20260923150000_include_tracking_order_method_and_import_source.sql',
+    sha256: '8f48eadc61f6a052ba2d7ae7ff5c0386bb75fae35eca5625b52aedd00432260c',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260923150100_invoice_artifact_proof_bound_rpcs.sql',
+    sha256: '823c8e2531bd86f9c41e4dfdb8a0ba56bd163cae4db2b487487845356daec9ca',
+  },
+  {
     repositoryPath: 'supabase/migrations/20260921180000_get_santa_catalog.sql',
     sha256: 'ccb69b3c76fc8fccdd2832177f66e2fb508afef422f554adf0ba9d792a58b19a',
   },

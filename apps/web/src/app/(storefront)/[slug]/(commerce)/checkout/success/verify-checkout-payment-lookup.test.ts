@@ -206,6 +206,28 @@ describe('verifyCheckoutPaymentByLookup', () => {
     expect(h.clearCart).not.toHaveBeenCalled();
   });
 
+  it('fails legacy-spelled cancelled REDVAULT orders too', async () => {
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: 'order-12345678',
+          order_number: 'BAC-4b',
+          payment_method: 'uba_redvault',
+          payment_status: 'unpaid',
+          shipping_status: 'canceled',
+        }),
+    } as Response);
+    const h = handlers();
+
+    await verifyCheckoutPaymentByLookup(params(), h);
+
+    expect(h.setStatus).toHaveBeenCalledWith('failed');
+    expect(h.scheduleFailedRedirect).toHaveBeenCalledTimes(1);
+    expect(h.clearCart).not.toHaveBeenCalled();
+  });
+
   it('fails terminal-refunded REDVAULT orders without presenting success', async () => {
     vi.stubGlobal('fetch', mockFetch);
     mockFetch.mockResolvedValue({
@@ -242,16 +264,19 @@ describe('verifyCheckoutPaymentByLookup', () => {
     expect(h.clearCart).not.toHaveBeenCalled();
   });
 
-  it('falls back to derived success when a non-REDVAULT lookup fails', async () => {
+  it('stays pending with the cart intact when a non-REDVAULT lookup fails', async () => {
+    // An unproven lookup (stale token/order pair or transient failure)
+    // must never confirm success or discard the cart.
     vi.stubGlobal('fetch', mockFetch);
     mockFetch.mockResolvedValue(new Response(null, { status: 500 }));
     const h = handlers();
 
     await verifyCheckoutPaymentByLookup(params(), h);
 
-    expect(h.clearCart).toHaveBeenCalledTimes(1);
-    expect(h.setStatus).toHaveBeenCalledWith('success');
+    expect(h.clearCart).not.toHaveBeenCalled();
+    expect(h.setStatus).toHaveBeenCalledWith('pending');
     expect(h.setOrderNumber).toHaveBeenCalledWith('ORDER-12');
+    expect(h.capturePaymentCompleted).not.toHaveBeenCalled();
   });
 
   it('logs lookup failures but stays silent on aborts', async () => {
@@ -259,11 +284,17 @@ describe('verifyCheckoutPaymentByLookup', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     mockFetch.mockRejectedValueOnce(new Error('network down'));
-    await verifyCheckoutPaymentByLookup(params(), handlers());
+    const failedHandlers = handlers();
+    await verifyCheckoutPaymentByLookup(params(), failedHandlers);
     expect(errorSpy).toHaveBeenCalledWith(
       'Failed to fetch order details on success page:',
       expect.any(Error)
     );
+    // Non-abort errors are equally unproven: pending with the cart
+    // intact, never a success confirmation.
+    expect(failedHandlers.setStatus).toHaveBeenCalledWith('pending');
+    expect(failedHandlers.clearCart).not.toHaveBeenCalled();
+    expect(failedHandlers.capturePaymentCompleted).not.toHaveBeenCalled();
 
     errorSpy.mockClear();
     mockFetch.mockRejectedValueOnce(new DOMException('x', 'AbortError'));

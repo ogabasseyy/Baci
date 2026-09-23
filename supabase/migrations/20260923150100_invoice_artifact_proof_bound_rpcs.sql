@@ -109,13 +109,26 @@ BEGIN
     RETURN;
   END IF;
 
+  -- Idempotent initial log: the tracking token is a reusable bearer, so
+  -- repeat invocations (double submission, replay) must not grow
+  -- unbounded reminder history or let the caller vary server-owned
+  -- values after the first write.
+  IF EXISTS (
+    SELECT 1
+    FROM order_reminders r
+    WHERE r.order_id = p_order_id
+      AND r.channel = p_channel
+  ) THEN
+    RETURN;
+  END IF;
+
   INSERT INTO order_reminders (order_id, channel, payment_link)
   VALUES (p_order_id, p_channel, p_payment_link);
 END;
 $$;
 
 COMMENT ON FUNCTION public.insert_invoice_reminder(UUID, TEXT, TEXT, TEXT) IS
-  'Proof-bound initial invoice reminder log: the caller proves the order with its tracking token; inserts only the reminder row.';
+  'Proof-bound initial invoice reminder log: the caller proves the order with its tracking token; inserts only the reminder row, once per order and channel.';
 
 GRANT ALL ON FUNCTION public.get_invoice_artifact_order_items(UUID, TEXT) TO anon;
 GRANT ALL ON FUNCTION public.get_invoice_artifact_order_items(UUID, TEXT) TO authenticated;

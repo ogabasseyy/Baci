@@ -166,10 +166,20 @@ export async function verifyCheckoutPaymentByLookup(
     // Terminal states first: a fully refunded REDVAULT order keeps a
     // non-paid payment status, and a cancelled one can stay unpaid
     // with a cancelled shipping status. Neither is still processing.
+    // Legacy rows carry both cancelled and canceled spellings (other
+    // eligibility paths accept both): normalize before deciding whether
+    // settlement can continue.
+    const lookupShippingStatus =
+      typeof data?.shipping_status === 'string'
+        ? data.shipping_status.trim().toLowerCase()
+        : '';
+    const isCancelledShippingStatus =
+      lookupShippingStatus === 'cancelled' ||
+      lookupShippingStatus === 'canceled';
     const redvaultTerminalCancelled =
       lookupPaymentMethod === 'uba_redvault' &&
       data?.payment_status !== 'paid' &&
-      data?.shipping_status === 'cancelled';
+      isCancelledShippingStatus;
     const redvaultTerminalRefunded =
       lookupPaymentMethod === 'uba_redvault' &&
       data?.payment_status === 'refunded';
@@ -253,9 +263,11 @@ export async function verifyCheckoutPaymentByLookup(
       setStatus('pending');
       setOrderNumber(orderId.slice(0, 8).toUpperCase());
     } else {
-      // Fallback if API lookup fails
-      clearCart();
-      setStatus('success');
+      // Fallback if API lookup fails: the order is unproven (stale
+      // token/order pair, mismatched identity, or transient failure),
+      // so stay pending for retry instead of confirming a checkout
+      // that was never verified and clearing the cart.
+      setStatus('pending');
       setOrderNumber(orderId.slice(0, 8).toUpperCase());
     }
   } catch (error) {
@@ -279,8 +291,9 @@ export async function verifyCheckoutPaymentByLookup(
       setStatus('pending');
       setOrderNumber(orderId.slice(0, 8).toUpperCase());
     } else {
-      clearCart();
-      setStatus('success');
+      // Non-abort lookup error: same unproven-lookup rule as above —
+      // pending, never a success confirmation with a cleared cart.
+      setStatus('pending');
       setOrderNumber(orderId.slice(0, 8).toUpperCase());
     }
   } finally {

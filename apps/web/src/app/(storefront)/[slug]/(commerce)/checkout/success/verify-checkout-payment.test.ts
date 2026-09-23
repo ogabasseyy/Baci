@@ -238,13 +238,15 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
   });
 
-  it('keeps the ordinary unknown-order network fallback', async () => {
+  it('holds the ordinary unknown-order network fallback pending', async () => {
+    // An offline lookup proves nothing: stay pending with the cart
+    // intact instead of confirming an unverified checkout.
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     const callbacks = handlers();
 
     await verifyCheckoutPayment(params, callbacks);
 
-    expect(callbacks.clearCart).toHaveBeenCalledOnce();
-    expect(callbacks.setStatus).toHaveBeenCalledWith('success');
+    expect(callbacks.clearCart).not.toHaveBeenCalled();
+    expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
   });
 });

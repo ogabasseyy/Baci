@@ -1,141 +1,16 @@
 'use client';
 
-import { isSantaGrantedPriceWithinCeiling } from '@baci/shared/lib';
 import Image from 'next/image';
-import {
-  type Dispatch,
-  type SetStateAction,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
-import { SANTA_GREETING } from '@/ai/prompts/santa';
-import { useCart } from '@/hooks/use-cart';
-import type { Product } from '@/lib/products';
 import { ChatInput } from './chat-input';
 import { ChatMessage } from './chat-message';
-import { readSantaMerchantSlug } from './read-santa-merchant-slug';
 import { SantaChatHeader } from './santa-chat-header';
-import type { ChatMessage as ChatMessageType } from './types';
-import { parseSantaActions, stripSantaActions } from './types';
+import { stripSantaActions } from './types';
+import { useSantaChat } from './use-santa-chat';
 import { WelcomeScreen } from './welcome-screen';
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  imageUrl?: string;
-}
 
 interface SantaChatDialogProps {
   onClose?: () => void;
   isFullPage?: boolean;
-}
-
-interface StreamSantaReplyOptions {
-  updatedMessages: Message[];
-  abortControllerRef: { current: AbortController | null };
-  processedActionsRef: { current: Set<string> };
-  setMessages: Dispatch<SetStateAction<Message[]>>;
-  onCartAction: (productName: string, price: number) => Promise<void>;
-  expectedMerchantSlug?: string | null;
-  onMerchantSlug: (merchantSlug: string) => void;
-}
-
-// Module-scope helper: keeps throw-in-try out of the component body so
-// React Compiler can memoize SantaChatDialog.
-async function streamSantaReply({
-  updatedMessages,
-  abortControllerRef,
-  processedActionsRef,
-  setMessages,
-  onCartAction,
-  expectedMerchantSlug,
-  onMerchantSlug,
-}: StreamSantaReplyOptions): Promise<void> {
-  // Cancel any previous in-flight request
-  abortControllerRef.current?.abort();
-  const controller = new AbortController();
-  abortControllerRef.current = controller;
-
-  const response = await fetch('/api/chat/santa', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(expectedMerchantSlug
-        ? { 'x-baci-storefront-slug': expectedMerchantSlug }
-        : {}),
-    },
-    signal: controller.signal,
-    body: JSON.stringify({
-      messages: updatedMessages.map((m) => ({
-        role: m.role,
-        content: m.content,
-        imageUrl: m.imageUrl,
-      })),
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to get response from Santa');
-  }
-
-  // Adopt only the server-attested tenant; cart actions below refuse to run
-  // against a different storefront.
-  const merchantSlug = readSantaMerchantSlug(response);
-  if (merchantSlug) {
-    onMerchantSlug(merchantSlug);
-  }
-
-  // Handle streaming response
-  const reader = response.body?.getReader();
-  const decoder = new TextDecoder();
-  let assistantContent = '';
-  const assistantId = `assistant-${Date.now()}`;
-
-  // Add empty assistant message
-  setMessages((prev) => [
-    ...prev,
-    { id: assistantId, role: 'assistant', content: '' },
-  ]);
-
-  if (reader) {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      // toTextStreamResponse() returns raw UTF-8 text chunks
-      assistantContent += chunk;
-
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId ? { ...m, content: assistantContent } : m
-        )
-      );
-    }
-
-    // After streaming completes, check for cart actions. Process every
-    // directive once so display stripping cannot hide unfulfilled wishes.
-    const actions = parseSantaActions(assistantContent);
-    if (actions.length > 0 && !processedActionsRef.current.has(assistantId)) {
-      processedActionsRef.current.add(assistantId);
-      const actionResults = await Promise.allSettled(
-        actions.map((action) => onCartAction(action.productName, action.price))
-      );
-
-      actionResults.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          const action = actions[index];
-          console.error('[Santa Cart] Action failed:', {
-            productName: action?.productName,
-            price: action?.price,
-            reason: result.reason,
-          });
-        }
-      });
-    }
-  }
 }
 
 /**
@@ -148,191 +23,18 @@ export function SantaChatDialog({
   onClose,
   isFullPage = false,
 }: SantaChatDialogProps) {
-  const [showWelcome, setShowWelcome] = useState(true);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [cartNotification, setCartNotification] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const processedActionsRef = useRef<Set<string>>(new Set());
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
-
-  // Cart integration
-  const { addToCart, cart, cartCount, applyNegotiatedPrice, setMerchantSlug } =
-    useCart();
-
-  // Server-attested tenant, adopted from Santa response headers. Nothing is
-  // assumed on mount: cart actions wait for the first attested reply.
-  const [merchantSlug, setResolvedMerchantSlug] = useState<string | null>(null);
-
-  // Cleanup abort/timers on unmount
-  useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort();
-      if (notificationTimerRef.current)
-        clearTimeout(notificationTimerRef.current);
-    };
-  }, []);
-
-  const handleMerchantSlug = (slug: string) => {
-    setResolvedMerchantSlug(slug);
-    setMerchantSlug(slug);
-  };
-
-  const showNotification = (msg: string) => {
-    if (notificationTimerRef.current)
-      clearTimeout(notificationTimerRef.current);
-    setCartNotification(msg);
-    notificationTimerRef.current = setTimeout(
-      () => setCartNotification(null),
-      3000
-    );
-  };
-
-  /**
-   * Fetch product by name and add to cart with negotiated price
-   */
-  const handleAddToCart = async (
-    productName: string,
-    negotiatedPrice: number
-  ) => {
-    try {
-      const response = await fetch('/api/chat/santa/product', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(merchantSlug ? { 'x-baci-storefront-slug': merchantSlug } : {}),
-        },
-        body: JSON.stringify({ name: productName }),
-        signal: AbortSignal.timeout(8000),
-      });
-
-      if (!response.ok) {
-        console.error('[Santa Cart] Failed to fetch product');
-        return;
-      }
-
-      const resolvedMerchantSlug = readSantaMerchantSlug(response);
-      if (
-        merchantSlug &&
-        (!resolvedMerchantSlug || resolvedMerchantSlug !== merchantSlug)
-      ) {
-        console.error('[Santa Cart] Resolved tenant differs from storefront', {
-          expectedMerchantSlug: merchantSlug,
-          resolvedMerchantSlug,
-        });
-        showNotification(
-          'Open the resolved storefront before adding this wish'
-        );
-        return;
-      }
-
-      if (resolvedMerchantSlug) {
-        handleMerchantSlug(resolvedMerchantSlug);
-      }
-
-      const { product } = (await response.json()) as {
-        product: (Product & { max_discount_percentage?: number }) | null;
-      };
-
-      if (!product) {
-        console.error('[Santa Cart] Product not found:', productName);
-        showNotification(`Could not find "${productName}" in catalog`);
-        return;
-      }
-      if (product.manage_stock && (product.stock ?? 0) <= 0) {
-        showNotification(`"${productName}" is out of stock`);
-        return;
-      }
-
-      // addToCart merges into an existing line for the same product, and the
-      // negotiated unit price would then reprice previously added units too.
-      // Only negotiate fresh lines so the grant covers exactly the added unit.
-      const lineAlreadyExists = cart.some(
-        (item) => item.cartItemId === product.id
-      );
-      addToCart(product, 1);
-
-      const cartItemId = product.id;
-      if (
-        applyNegotiatedPrice &&
-        !lineAlreadyExists &&
-        negotiatedPrice < product.price &&
-        isSantaGrantedPriceWithinCeiling(
-          product.price,
-          negotiatedPrice,
-          product.max_discount_percentage ?? 0
-        )
-      ) {
-        applyNegotiatedPrice(cartItemId, negotiatedPrice);
-      }
-
-      showNotification(`${product.name} added to cart!`);
-    } catch (err) {
-      console.error('[Santa Cart] Error adding to cart:', err);
-    }
-  };
-
-  // Scroll to bottom on new messages
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Intentionally trigger scroll when messages array changes
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const handleStartChat = () => {
-    setShowWelcome(false);
-    // Add Santa's greeting
-    setMessages([
-      {
-        id: 'greeting',
-        role: 'assistant',
-        content: SANTA_GREETING,
-      },
-    ]);
-  };
-
-  const sendMessage = (userMessage: string, imageUrl?: string) => {
-    if (!userMessage.trim() && !imageUrl) return;
-
-    const userMsg: Message = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: userMessage,
-      imageUrl,
-    };
-
-    // Add user message to state
-    const updatedMessages = [...messages, userMsg];
-    setMessages(updatedMessages);
-    setIsLoading(true);
-    setError(null);
-
-    streamSantaReply({
-      updatedMessages,
-      abortControllerRef,
-      processedActionsRef,
-      setMessages,
-      onCartAction: handleAddToCart,
-      expectedMerchantSlug: merchantSlug,
-      onMerchantSlug: handleMerchantSlug,
-    })
-      .catch((err) => {
-        console.error('Santa chat error:', err);
-        setError(
-          "Oh dear, my elves are telling me there's a bit of a snowstorm interfering with our connection."
-        );
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-  };
-
-  const handleSendMessage = (message: Omit<ChatMessageType, 'role'>) => {
-    sendMessage(message.content, message.imageUrl);
-  };
+  const {
+    cartCount,
+    cartNotification,
+    error,
+    handleSendMessage,
+    handleStartChat,
+    isLoading,
+    merchantSlug,
+    messages,
+    messagesEndRef,
+    showWelcome,
+  } = useSantaChat();
 
   if (showWelcome) {
     return (

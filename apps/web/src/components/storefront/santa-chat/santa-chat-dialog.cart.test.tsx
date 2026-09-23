@@ -183,4 +183,83 @@ describe('SantaChatDialog cart tenant handling', () => {
       );
     });
   });
+
+  it('refuses the add when the product tenant differs from the reply tenant', async () => {
+    const consoleSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/chat/santa') {
+        return Promise.resolve(
+          makeStreamingResponse(
+            'ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000',
+            'winter-store'
+          )
+        );
+      }
+      if (url === '/api/chat/santa/product') {
+        const body = JSON.parse(String(init?.body)) as { name: string };
+        return Promise.resolve(
+          makeProductResponse(body.name, 450_000, 'other-store')
+        );
+      }
+      return Promise.reject(new Error(`Unexpected fetch URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<SantaChatDialog />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start chat' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send wish' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/chat/santa/product',
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+    // Let the rejected add settle, then assert nothing was added or adopted.
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[Santa Cart] Resolved tenant differs from storefront',
+        expect.objectContaining({ expectedMerchantSlug: 'winter-store' })
+      );
+    });
+    expect(cartMocks.addToCart).not.toHaveBeenCalled();
+    expect(cartMocks.setMerchantSlug).not.toHaveBeenCalledWith('other-store');
+    consoleSpy.mockRestore();
+  });
+
+  it('refuses the add when the reply carries no attested tenant', async () => {
+    const consoleSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/chat/santa') {
+        return Promise.resolve(
+          makeStreamingResponse('ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000')
+        );
+      }
+      return Promise.reject(new Error(`Unexpected fetch URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<SantaChatDialog />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start chat' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send wish' }));
+
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[Santa Cart] Missing resolved merchant slug'
+      );
+    });
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => input === '/api/chat/santa/product'
+      )
+    ).toBe(false);
+    expect(cartMocks.addToCart).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
 });

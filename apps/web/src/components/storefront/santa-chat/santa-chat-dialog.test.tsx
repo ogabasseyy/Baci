@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SANTA_MERCHANT_SLUG_HEADER } from '@/lib/agentic/santa-merchant-slug-header';
 import { SantaChatDialog } from './santa-chat-dialog';
 
 const cartMocks = vi.hoisted(() => ({
@@ -83,7 +84,10 @@ vi.mock('./chat-message', () => ({
   ),
 }));
 
-function makeStreamingResponse(content: string): Response {
+function makeStreamingResponse(
+  content: string,
+  merchantSlug?: string
+): Response {
   return new Response(
     new ReadableStream({
       start(controller) {
@@ -91,11 +95,20 @@ function makeStreamingResponse(content: string): Response {
         controller.close();
       },
     }),
-    { status: 200 }
+    {
+      headers: merchantSlug
+        ? { [SANTA_MERCHANT_SLUG_HEADER]: merchantSlug }
+        : undefined,
+      status: 200,
+    }
   );
 }
 
-function makeProductResponse(name: string, price: number): Response {
+function makeProductResponse(
+  name: string,
+  price: number,
+  merchantSlug?: string
+): Response {
   return new Response(
     JSON.stringify({
       product: {
@@ -105,7 +118,13 @@ function makeProductResponse(name: string, price: number): Response {
         price,
       },
     }),
-    { headers: { 'Content-Type': 'application/json' }, status: 200 }
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(merchantSlug ? { [SANTA_MERCHANT_SLUG_HEADER]: merchantSlug } : {}),
+      },
+      status: 200,
+    }
   );
 }
 
@@ -139,7 +158,8 @@ describe('SantaChatDialog', () => {
       if (url === '/api/chat/santa') {
         return Promise.resolve(
           makeStreamingResponse(
-            'Santa says yes. ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000 ACTION:ADD_TO_CART|PRODUCT:Case|PRICE:12,000'
+            'Santa says yes. ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000 ACTION:ADD_TO_CART|PRODUCT:Case|PRICE:12,000',
+            'winter-store'
           )
         );
       }
@@ -153,7 +173,8 @@ describe('SantaChatDialog', () => {
             resolve(
               makeProductResponse(
                 body.name,
-                body.name === 'Phone' ? 450_000 : 12_000
+                body.name === 'Phone' ? 450_000 : 12_000,
+                'winter-store'
               )
             );
           });
@@ -218,7 +239,10 @@ describe('SantaChatDialog', () => {
 
       if (url === '/api/chat/santa') {
         return Promise.resolve(
-          makeStreamingResponse('ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000')
+          makeStreamingResponse(
+            'ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000',
+            'winter-store'
+          )
         );
       }
 
@@ -255,7 +279,8 @@ describe('SantaChatDialog', () => {
       if (url === '/api/chat/santa') {
         return Promise.resolve(
           makeStreamingResponse(
-            'ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000 ACTION:ADD_TO_CART|PRODUCT:Case|PRICE:12,000'
+            'ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000 ACTION:ADD_TO_CART|PRODUCT:Case|PRICE:12,000',
+            'winter-store'
           )
         );
       }
@@ -266,7 +291,9 @@ describe('SantaChatDialog', () => {
         if (body.name === 'Case') {
           return Promise.resolve(new Response(null, { status: 404 }));
         }
-        return Promise.resolve(makeProductResponse(body.name, 450_000));
+        return Promise.resolve(
+          makeProductResponse(body.name, 450_000, 'winter-store')
+        );
       }
 
       return Promise.reject(new Error(`Unexpected fetch URL: ${url}`));

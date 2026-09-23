@@ -428,6 +428,11 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20260923110000_restrict_jumia_credential_rpc_to_manage.sql',
+    sha256: 'e2375cf103299dc39efa13454c7cbf5cd76d8a487356e67d73b6bfff35558916',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20260831153000_optimize_storefront_pdp_semantic_reads.sql',
     sha256: 'a402b932c082f876b44feb1cd98ef4d879641a0a5e075b52a05fb0a9b7df43dc',
   },

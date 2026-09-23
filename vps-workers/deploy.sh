@@ -238,7 +238,6 @@ crontab "$tmp_file"
 rm -f "$fragment_path"
 REMOTE_SH
 
-echo ""
 echo "==> Done."
 echo "    Reminder: create $REMOTE_DIR/.env if not already present:"
 echo "         NEXT_PUBLIC_SUPABASE_URL=..."

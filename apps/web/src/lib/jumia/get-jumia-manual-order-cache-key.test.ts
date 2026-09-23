@@ -2,12 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { getJumiaManualOrderCacheKey } from './get-jumia-manual-order-cache-key';
 
 describe('getJumiaManualOrderCacheKey', () => {
-  it('uses the neutral scope for a provider marketplace key', () => {
-    expect(getJumiaManualOrderCacheKey('Jumia Nigeria')).toBe('default');
+  it('preserves the selected marketplace scope', () => {
+    expect(getJumiaManualOrderCacheKey('Jumia Nigeria')).toBe('Jumia Nigeria');
   });
 
-  it('keeps the neutral scope for missing or existing default keys', () => {
+  it('trims surrounding whitespace from the selected scope', () => {
+    expect(getJumiaManualOrderCacheKey('  Jumia Nigeria  ')).toBe(
+      'Jumia Nigeria'
+    );
+  });
+
+  it('falls back to the neutral scope for missing or blank keys', () => {
     expect(getJumiaManualOrderCacheKey(undefined)).toBe('default');
+    expect(getJumiaManualOrderCacheKey(null)).toBe('default');
+    expect(getJumiaManualOrderCacheKey('')).toBe('default');
+    expect(getJumiaManualOrderCacheKey('   ')).toBe('default');
     expect(getJumiaManualOrderCacheKey('default')).toBe('default');
   });
 });

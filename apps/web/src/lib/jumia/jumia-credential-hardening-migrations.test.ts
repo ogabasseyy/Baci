@@ -42,6 +42,21 @@ describe('Jumia credential hardening migrations', () => {
     );
   });
 
+  it('restricts credential ciphertext reads to managing callers', () => {
+    const sql = readFileSync(
+      path.join(
+        migrationsRoot,
+        '20260923110000_restrict_jumia_credential_rpc_to_manage.sql'
+      ),
+      'utf8'
+    );
+
+    expect(sql).toMatch(
+      /check_staff_permission\(\s*v_user_id,\s*p_merchant_id,\s*'integrations',\s*'manage'\s*\)/i
+    );
+    expect(sql).not.toMatch(/'integrations',\s*'view'/i);
+  });
+
   it('keeps credential columns out of direct authenticated reads', () => {
     const sql = readFileSync(
       path.join(

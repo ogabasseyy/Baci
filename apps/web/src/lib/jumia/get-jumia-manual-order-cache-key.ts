@@ -1,11 +1,12 @@
 /**
- * Manual order sync cannot identify a Jumia business client. Every order
- * returned for the selected provider scope therefore belongs in the neutral
- * cache scope instead of whichever marketplace row started the request.
+ * Manual order syncs run inside the selected integration scope, so synced
+ * orders belong to that marketplace. Scoped order reads exclude the neutral
+ * cache scope for multi-marketplace shops, so always writing 'default'
+ * would hide newly synced orders (and move correctly scoped rows).
  */
 export function getJumiaManualOrderCacheKey(
   marketplaceKey: string | null | undefined
-): 'default' {
-  void marketplaceKey;
-  return 'default';
+): string {
+  const trimmed = marketplaceKey?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : 'default';
 }

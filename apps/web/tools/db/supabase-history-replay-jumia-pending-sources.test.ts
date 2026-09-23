@@ -18,7 +18,7 @@ describe('Jumia pending replay source rows', () => {
     expect(new Set(rows).size).toBe(rows.length);
     expect(versions).toEqual([...versions].sort());
     expect(rows.at(-1)).toContain(
-      '20260923100000_restore_jumia_authorization_credential_rpc.sql'
+      '20260923110000_restrict_jumia_credential_rpc_to_manage.sql'
     );
   });
 });

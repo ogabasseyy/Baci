@@ -1,11 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { StaffAccess } from '@/hooks/merchant/types';
 import {
-  buildDashboardNavItems,
   type DashboardNavFilterContext,
   filterDashboardNavItems,
-  flattenDashboardNavItems,
-} from './dashboard-nav';
+} from './dashboard-nav-filter';
+import { buildDashboardNavItems } from './dashboard-nav-items';
 
 const ownerAccess: StaffAccess = {
   isStaff: false,
@@ -25,33 +24,6 @@ function makeContext(
     ...overrides,
   };
 }
-
-describe('buildDashboardNavItems', () => {
-  it('sets the orders badge only when the count is positive', () => {
-    const withOrders = buildDashboardNavItems(5).find(
-      (item) => item.id === 'orders'
-    );
-    expect(withOrders?.badge).toBe(5);
-
-    const withoutOrders = buildDashboardNavItems(0).find(
-      (item) => item.id === 'orders'
-    );
-    expect(withoutOrders?.badge).toBeUndefined();
-  });
-});
-
-describe('flattenDashboardNavItems', () => {
-  it('flattens nested children after their parent', () => {
-    const ids = flattenDashboardNavItems(buildDashboardNavItems(0)).map(
-      (item) => item.id
-    );
-    expect(ids).toContain('marketing');
-    expect(ids).toContain('discount-codes');
-    expect(ids.indexOf('discount-codes')).toBeGreaterThan(
-      ids.indexOf('marketing')
-    );
-  });
-});
 
 describe('filterDashboardNavItems', () => {
   it('shows everything to owners except tenant-gated items', () => {

@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { cn } from '@/lib/utils';
-import type { DashboardNavItem } from './dashboard-nav';
+import type { DashboardNavItem } from './dashboard-nav-items';
 
 export function DashboardMobileNav({
   pathname,

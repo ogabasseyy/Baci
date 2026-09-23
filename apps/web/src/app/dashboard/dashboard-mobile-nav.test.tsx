@@ -32,11 +32,11 @@ vi.mock('@/components/notifications/notification-center', () => ({
 }));
 
 import { DashboardMobileNav } from './dashboard-mobile-nav';
+import { filterDashboardNavItems } from './dashboard-nav-filter';
 import {
   buildDashboardNavItems,
   type DashboardNavItem,
-  filterDashboardNavItems,
-} from './dashboard-nav';
+} from './dashboard-nav-items';
 
 const ownerItems: DashboardNavItem[] = filterDashboardNavItems(
   buildDashboardNavItems(0),

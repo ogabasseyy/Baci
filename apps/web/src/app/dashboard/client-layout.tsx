@@ -18,12 +18,10 @@ import { buildDashboardStoreUrl } from '@/lib/dashboard-store-url';
 import { DashboardHeaderActions } from './dashboard-header-actions';
 import { DashboardMobileBottomNav } from './dashboard-mobile-bottom-nav';
 import { DashboardMobileNav } from './dashboard-mobile-nav';
-import {
-  buildDashboardNavItems,
-  filterDashboardNavItems,
-  flattenDashboardNavItems,
-} from './dashboard-nav';
 import { DashboardNavCapsule } from './dashboard-nav-capsule';
+import { filterDashboardNavItems } from './dashboard-nav-filter';
+import { flattenDashboardNavItems } from './dashboard-nav-flatten';
+import { buildDashboardNavItems } from './dashboard-nav-items';
 import {
   buildSmartNavStorageKey,
   getSmartShortcutItems,
@@ -35,8 +33,8 @@ import { useOrdersCount } from './use-orders-count';
 
 // The original layout is now a client component to prevent hydration errors.
 
-// Re-exported so existing importers keep working; the type lives in ./dashboard-nav.
-export type { DashboardNavItem } from './dashboard-nav';
+// Re-exported so existing importers keep working; the type lives in ./dashboard-nav-items.
+export type { DashboardNavItem } from './dashboard-nav-items';
 
 // Module-scope helper: syncs the persisted smart-nav usage from localStorage
 // once the merchant id is known (post-hydration external-store read).

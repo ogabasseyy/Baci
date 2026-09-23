@@ -65,6 +65,8 @@ export interface Order extends OrderFinancialFields {
   source: string;
   /** Jumia provider shop id, retained so multi-shop orders resolve their own integration. */
   jumiaShopId?: string;
+  /** Jumia provider order id for synced rows; fulfillment endpoints address this, not the local id. */
+  jumiaOrderId?: string;
   tracking_number?: string;
   shipping_provider?: string;
   delivery_method?: string | null;
@@ -372,6 +374,7 @@ export async function getOrders(
       id: jOrder.jumia_order_id, // Use Jumia ID as ID
       orderNumber: jOrder.jumia_order_number,
       jumiaShopId: jOrder.jumia_shop_id ?? undefined,
+      jumiaOrderId: jOrder.jumia_order_id ?? undefined,
       customerName: formatPersonName(jOrder.customer_name || 'Jumia Customer'),
       total: Number.parseFloat(jOrder.total_amount),
       currency: 'NGN',

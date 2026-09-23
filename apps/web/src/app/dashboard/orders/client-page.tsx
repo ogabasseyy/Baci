@@ -547,7 +547,7 @@ export default function OrdersClientPage({
       {selectedJumiaOrder && getIntegrationIdForOrder(selectedJumiaOrder) && (
         <OrderManagerModal
           onClose={() => setSelectedJumiaOrder(null)}
-          orderId={selectedJumiaOrder.id}
+          orderId={selectedJumiaOrder.jumiaOrderId ?? selectedJumiaOrder.id}
           orderNumber={selectedJumiaOrder.orderNumber}
           integrationId={getIntegrationIdForOrder(selectedJumiaOrder) as string}
           canManage={canManageIntegrations}

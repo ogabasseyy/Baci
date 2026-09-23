@@ -14,6 +14,12 @@ USING (
       ROW_NUMBER() OVER (
         PARTITION BY product_id, variant_id, jumia_shop_id
         ORDER BY
+          -- A newer pending/error duplicate must never displace the row
+          -- that holds the live remote identity; deleting the synced row
+          -- would orphan stock sync and let a retry duplicate the listing.
+          (jumia_product_id IS NOT NULL) DESC,
+          (sync_status = 'synced') DESC,
+          (sync_status = 'pending') DESC,
           updated_at DESC NULLS LAST,
           created_at DESC NULLS LAST,
           id DESC

@@ -45,6 +45,7 @@ export interface DashboardOrderRecord {
   order_items?: DashboardOrderItem[];
   import_metadata?: {
     shopId?: unknown;
+    jumiaOrderId?: unknown;
     [key: string]: unknown;
   } | null;
 }
@@ -106,6 +107,13 @@ export function mapDashboardOrderRecord(
     jumiaShopId:
       typeof order.import_metadata?.shopId === 'string'
         ? order.import_metadata.shopId
+        : undefined,
+    // The fulfillment modal addresses Jumia by provider order ID, while
+    // the mapped id stays the local order UUID; legacy cache rows already
+    // use the provider ID as their id.
+    jumiaOrderId:
+      typeof order.import_metadata?.jumiaOrderId === 'string'
+        ? order.import_metadata.jumiaOrderId
         : undefined,
     tracking_number: order.tracking_number,
     shipping_provider: order.shipping_provider,

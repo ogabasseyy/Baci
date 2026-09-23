@@ -40,12 +40,22 @@ describe('mapDashboardOrderRecord', () => {
       {
         ...baseOrder,
         source: 'jumia',
-        import_metadata: { platform: 'jumia', shopId: 'shop-9' },
+        import_metadata: {
+          platform: 'jumia',
+          shopId: 'shop-9',
+          jumiaOrderId: 'provider-123',
+        },
       },
       { orderItemImageMap: new Map() }
     );
 
-    expect(result).toEqual(expect.objectContaining({ jumiaShopId: 'shop-9' }));
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'order-1',
+        jumiaShopId: 'shop-9',
+        jumiaOrderId: 'provider-123',
+      })
+    );
   });
 
   it('leaves the shop id undefined without marketplace metadata', () => {

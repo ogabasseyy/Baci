@@ -59,7 +59,7 @@ export const RECENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260813090000_dedupe_jumia_product_mappings_conflicts.sql',
-    sha256: '5f604a0cda3994bf87195a2537c7c35c2b4521ad749f36154b97928391f80402',
+    sha256: 'a0da88663ad92f55fc0931c7711425a6885484fc6ea76415a1639b211c30c695',
   },
   {
     repositoryPath:

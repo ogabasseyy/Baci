@@ -21,24 +21,6 @@ COMMENT ON FUNCTION private.supported_carrier_provider_ids() IS
 REVOKE ALL ON FUNCTION private.supported_carrier_provider_ids()
   FROM PUBLIC, anon, authenticated, service_role;
 
--- Grandfather the prior effective carrier default (gigl + topship) for
--- existing merchants: the app default flips to opt-in in this release, so
--- NULL rows and missing rows must keep their pre-change behavior instead of
--- being normalized to disabled below. New merchants still default to '[]'.
-UPDATE public.merchant_feature_settings
-SET shipping_providers = '["gigl", "topship"]'::jsonb
-WHERE shipping_providers IS NULL;
-
-INSERT INTO public.merchant_feature_settings (merchant_id, shipping_providers)
-SELECT m.id, '["gigl", "topship"]'::jsonb
-FROM public.merchants AS m
-WHERE NOT EXISTS (
-  SELECT 1
-  FROM public.merchant_feature_settings AS mfs
-  WHERE mfs.merchant_id = m.id
-)
-ON CONFLICT (merchant_id) DO NOTHING;
-
 -- Keep active integrations for existing merchants, but remove the retired
 -- Shiip placeholder and any malformed/duplicate values. This deliberately
 -- does not turn carriers off for existing stores.
@@ -202,14 +184,9 @@ BEGIN
 
   -- Existing orders remain fulfillable after a merchant changes settings; the
   -- guard applies only when a carrier quote or carrier selection is introduced.
-  -- Clearing a stale selected_quote_id while the provider is unchanged is
-  -- quote invalidation, not a new selection, so it stays allowed.
   IF TG_OP = 'UPDATE'
-    AND NEW.shipping_provider IS NOT DISTINCT FROM OLD.shipping_provider
-    AND (
-      NEW.selected_quote_id IS NOT DISTINCT FROM OLD.selected_quote_id
-      OR NEW.selected_quote_id IS NULL
-    ) THEN
+    AND NEW.selected_quote_id IS NOT DISTINCT FROM OLD.selected_quote_id
+    AND NEW.shipping_provider IS NOT DISTINCT FROM OLD.shipping_provider THEN
     RETURN NEW;
   END IF;
 

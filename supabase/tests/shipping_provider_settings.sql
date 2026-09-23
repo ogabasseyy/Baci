@@ -371,6 +371,31 @@ BEGIN
   END IF;
 END $$;
 
+-- Changing a carrier selection after opt-out must still be rejected.
+DO $$
+BEGIN
+  BEGIN
+    UPDATE public.orders
+    SET selected_quote_id = '00000000-0000-0000-0000-000000003009'
+    WHERE id = '00000000-0000-0000-0000-000000003011';
+
+    RAISE EXCEPTION 'changing a carrier selection after opt-out must be rejected';
+  EXCEPTION
+    WHEN OTHERS THEN
+      IF SQLERRM NOT LIKE '%shipping_quote_required%' THEN
+        RAISE;
+      END IF;
+  END;
+
+  IF EXISTS (
+    SELECT 1 FROM public.orders
+    WHERE id = '00000000-0000-0000-0000-000000003011'
+      AND selected_quote_id IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'rejected carrier selection change must not persist';
+  END IF;
+END $$;
+
 -- Mixed-case persisted settings are normalized by the guard before comparing
 -- the supported provider selected by a new carrier-backed order.
 UPDATE public.merchant_feature_settings

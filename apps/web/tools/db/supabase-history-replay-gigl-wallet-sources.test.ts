@@ -7,13 +7,13 @@ import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-
 describe('GIGL wallet replay sources', () => {
   it('keeps every branch migration in the explicit pending registry input', () => {
     const migrations = GIGL_WALLET_SHIPPING_PENDING_SOURCES.split('\n');
-    expect(migrations).toHaveLength(91);
+    expect(migrations).toHaveLength(93);
     expect(migrations.at(-1)).toContain(
-      '20260921100200_enforce_merchant_shipping_provider_policy.sql'
+      '20260923123000_allow_stale_shipping_quote_clear.sql'
     );
     const filenames = migrations.map((entry) => entry.split(' ')[1]);
     expect(filenames).toEqual([...filenames].sort());
-    expect(new Set(filenames).size).toBe(91);
+    expect(new Set(filenames).size).toBe(93);
 
     for (const entry of migrations) {
       const [digest, filename] = entry.split(' ');

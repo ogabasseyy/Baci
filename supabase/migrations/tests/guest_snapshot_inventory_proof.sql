@@ -15,6 +15,13 @@
 
 BEGIN;
 
+-- merchants writes fire the identity-audit trigger, whose canonical writer
+-- requires an audit actor (raises audit_actor_required/28000 without one):
+-- run fixtures as service_role like the other merchants-seeding replay
+-- checks (e.g. repair_booking_rpc, santa_catalog_projection).
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
 DO $$
 DECLARE
   v_merchant_id uuid := '9f000000-0000-4000-8000-000000000001';

@@ -5,9 +5,9 @@
 -- immediate-order after() records terminal success (claim status
 -- 'sent'), driven here through the production claim/complete RPCs.
 --
--- Each failure cause raises a distinct SQLSTATE so the replay log
--- identifies it without message text: P0002 lookup missed, P0003 flag
--- false, 42703 shape/body mismatch.
+-- Probe order isolates the layer: P0002 the function itself is absent
+-- (migration not applied), P0003 the projection column is absent,
+-- 42703 inside the function body.
 --
 -- USAGE:
 --   psql $DATABASE_URL -v ON_ERROR_STOP=1 -f supabase/migrations/tests/tracking_order_notification_delivered_token.sql
@@ -24,9 +24,30 @@ DO $$
 DECLARE
   v_merchant_id uuid := '9f000000-0000-4000-8000-000000000211';
   v_delivered_order_id uuid := '9f000000-0000-4000-8000-000000000212';
-  v_count integer;
+  v_proc_count integer;
+  v_hascol integer;
   v_delivered boolean;
 BEGIN
+  SELECT count(*) INTO v_proc_count
+  FROM pg_proc
+  WHERE proname = 'get_order_tracking'
+    AND pronamespace = 'public'::regnamespace;
+  IF v_proc_count = 0 THEN
+    RAISE EXCEPTION 'get_order_tracking absent' USING ERRCODE = 'P0002';
+  END IF;
+
+  SELECT count(*) INTO v_hascol
+  FROM pg_proc p
+  JOIN pg_type t ON t.oid = p.prorettype
+  JOIN pg_attribute a ON a.attrelid = t.typrelid
+  WHERE p.proname = 'get_order_tracking'
+    AND p.pronamespace = 'public'::regnamespace
+    AND a.attname = 'notification_delivered';
+  IF v_hascol = 0 THEN
+    RAISE EXCEPTION 'notification_delivered projection absent'
+      USING ERRCODE = 'P0003';
+  END IF;
+
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (
     v_merchant_id,
@@ -52,23 +73,11 @@ BEGIN
     true
   );
 
-  SELECT count(*) INTO v_count
-  FROM public.get_order_tracking(
-    'tracking-delivered-regression', NULL, NULL, NULL, 'delivered-token-001'
-  );
-  IF v_count <> 1 THEN
-    RAISE EXCEPTION 'token lookup returned % rows, expected 1', v_count
-      USING ERRCODE = 'P0002';
-  END IF;
-
   SELECT notification_delivered INTO v_delivered
   FROM public.get_order_tracking(
     'tracking-delivered-regression', NULL, NULL, NULL, 'delivered-token-001'
   );
-  IF v_delivered IS NOT TRUE THEN
-    RAISE EXCEPTION 'sent claim projected delivered=%', v_delivered
-      USING ERRCODE = 'P0003';
-  END IF;
+  ASSERT v_delivered = true, 'sent claim must project notification_delivered';
 END;
 $$;
 

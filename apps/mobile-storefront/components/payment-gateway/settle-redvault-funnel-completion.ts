@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import { releaseCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-release';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
 import {
   PAYMENT_COMPLETED_CLAIM_EVENT,
@@ -58,8 +59,17 @@ export async function settleRedvaultFunnelCompletion({
       PAYMENT_COMPLETED_CLAIM_EVENT
     );
     // Recheck after the claim await: leaving mid-claim must suppress
-    // the late emission as well as the cart side effect.
-    if (!claimed || !isMountedRef.current) {
+    // the late emission as well as the cart side effect. A granted claim
+    // on a gone screen is released (never-rejecting) so a later callback
+    // or reopened screen can still record the conversion.
+    if (!claimed) {
+      return;
+    }
+    if (!isMountedRef.current) {
+      await releaseCheckoutPurchaseTracking(
+        orderId,
+        PAYMENT_COMPLETED_CLAIM_EVENT
+      );
       return;
     }
     trackCheckoutPaymentCompleted({

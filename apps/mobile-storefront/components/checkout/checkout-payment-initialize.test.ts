@@ -152,6 +152,50 @@ describe('initializeGatewayAndRoute', () => {
     );
   });
 
+  it('sends the stamped order currency when initializing payment', async () => {
+    mockInitResponse({
+      success: true,
+      reference: 'ref-1',
+      authorization_url: 'https://pay.example/authorize',
+    });
+    const currencyResponse: OrderResponse = {
+      ...orderResponse,
+      order: { ...orderResponse.order, currency: 'KES' },
+    };
+
+    await initializeGatewayAndRoute(
+      createParams({ orderResponse: currencyResponse })
+    );
+
+    // A hardcoded default trips the server CURRENCY_MISMATCH guard for
+    // non-NGN orders, so the stamped currency travels on the request.
+    const fetchCalls = (global.fetch as jest.Mock).mock.calls as Array<
+      [unknown, { body?: unknown }]
+    >;
+    const requestBody = JSON.parse(
+      String(fetchCalls[0]?.[1]?.body ?? '{}')
+    ) as Record<string, unknown>;
+    expect(requestBody.currency).toBe('KES');
+  });
+
+  it('keeps the NGN default when the order carries no currency', async () => {
+    mockInitResponse({
+      success: true,
+      reference: 'ref-1',
+      authorization_url: 'https://pay.example/authorize',
+    });
+
+    await initializeGatewayAndRoute(createParams());
+
+    const fetchCalls = (global.fetch as jest.Mock).mock.calls as Array<
+      [unknown, { body?: unknown }]
+    >;
+    const requestBody = JSON.parse(
+      String(fetchCalls[0]?.[1]?.body ?? '{}')
+    ) as Record<string, unknown>;
+    expect(requestBody.currency).toBe('NGN');
+  });
+
   it('stamps each retried start with its issued reference', async () => {
     // A pending order retried: initialize issues a fresh reference per
     // attempt, and each start must carry its own for reconciliation.

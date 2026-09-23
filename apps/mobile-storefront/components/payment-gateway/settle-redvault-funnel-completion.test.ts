@@ -7,11 +7,18 @@ beforeEach(() => {
 
 const mockClaimCheckoutPurchaseTracking =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockReleaseCheckoutPurchaseTracking =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockTrackCheckoutPaymentCompleted = jest.fn((_input: unknown) => {});
 
 jest.mock('@/lib/claim-checkout-purchase-tracking', () => ({
   claimCheckoutPurchaseTracking: (...args: unknown[]) =>
     mockClaimCheckoutPurchaseTracking(...args),
+}));
+
+jest.mock('@/lib/claim-checkout-purchase-release', () => ({
+  releaseCheckoutPurchaseTracking: (...args: unknown[]) =>
+    mockReleaseCheckoutPurchaseTracking(...args),
 }));
 
 jest.mock('@/services/analytics', () => ({
@@ -93,5 +100,30 @@ describe('settleRedvaultFunnelCompletion', () => {
 
     expect(visible).toBe(false);
     expect(mockTrackCheckoutPaymentCompleted).not.toHaveBeenCalled();
+  });
+
+  it('releases the granted claim when the shopper leaves mid-claim', async () => {
+    const isMountedRef = { current: true };
+    mockClaimCheckoutPurchaseTracking.mockImplementationOnce(async () => {
+      isMountedRef.current = false;
+      return true;
+    });
+
+    await settleRedvaultFunnelCompletion(baseInput({ isMountedRef }));
+
+    // Otherwise every later callback treats the conversion as recorded
+    // and it is lost forever.
+    expect(mockReleaseCheckoutPurchaseTracking).toHaveBeenCalledWith(
+      'order-1',
+      'payment_completed'
+    );
+  });
+
+  it('does not release when the claim was denied', async () => {
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(false);
+
+    await settleRedvaultFunnelCompletion(baseInput());
+
+    expect(mockReleaseCheckoutPurchaseTracking).not.toHaveBeenCalled();
   });
 });

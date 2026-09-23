@@ -61,7 +61,11 @@ export async function initializeGatewayAndRoute({
         body: JSON.stringify({
           merchant_id: CHECKOUT_MERCHANT_ID,
           order_id: orderId,
-          currency: 'NGN',
+          // Stamped creation currency: the initialize API compares an
+          // explicitly supplied currency with the order snapshot, so the
+          // old hardcoded default broke non-NGN checkouts with
+          // CURRENCY_MISMATCH. Absent values keep the NGN default.
+          currency: orderResponse.order.currency || 'NGN',
           customer_email: customerEmail,
           customer_name: customerName,
           customer_phone: customerPhone,

@@ -216,6 +216,12 @@ export async function settleOrderCompletion(
         subtotal: verification.subtotal,
         tax: verification.tax,
         value: verification.total ?? purchaseTotal,
+        // Stamped order currency from the tracked-order lookup: without
+        // it the NGN default corrupts non-NGN completions and fallback
+        // purchase emissions.
+        ...(verification.currency
+          ? { currency: verification.currency }
+          : {}),
       });
       // Same unmount hazard across the fallible tracking call: stop
       // before clearCart when the screen is gone.

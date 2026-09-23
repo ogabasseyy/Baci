@@ -143,7 +143,7 @@ function createInput(
   };
 }
 
-function mockPaidVerification(total = 5000) {
+function mockPaidVerification(total = 5000, currency?: string) {
   global.fetch = jest.fn(async (url: string) => {
     if (String(url).includes('/api/payments/verify')) {
       return new Response(
@@ -167,6 +167,7 @@ function mockPaidVerification(total = 5000) {
           shipping_cost: 1500,
           discount_amount: 0,
           total,
+          ...(currency ? { currency } : {}),
         },
         customer: {
           name: 'Ada Buyer',
@@ -694,6 +695,23 @@ describe('createPaymentGatewayCompletionHandlers', () => {
         tax: 3375,
         value: 49875,
       })
+    );
+  });
+
+  it('forwards the verified order currency to completion tracking', async () => {
+    // Arrange: a non-NGN order confirmed through the tracked-order lookup.
+    mockPaidVerification(5000, 'KES');
+    const { input } = createInput();
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: without the stamped currency the Once helper falls back to
+    // NGN and the completion (plus any fallback purchase) misattributes.
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-1', currency: 'KES' })
     );
   });
 

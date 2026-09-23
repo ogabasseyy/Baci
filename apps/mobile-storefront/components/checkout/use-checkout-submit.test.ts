@@ -523,7 +523,7 @@ describe('useCheckoutSubmit', () => {
     expect(params.isOrderInFlight.current).toBe(false);
   });
 
-  it('emits invoice_generated for an unpaid invoice order with an amount due', async () => {
+  it('defers invoice_generated for an unpaid invoice order with an amount due', async () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
@@ -552,21 +552,20 @@ describe('useCheckoutSubmit', () => {
       await result.current(address);
     });
 
-    expect(trackCheckoutInvoiceGenerated).toHaveBeenCalledWith(
-      expect.objectContaining({
-        orderId: 'order-invoice-unpaid',
-        paymentMethod: 'invoice',
-      })
-    );
+    // The server builds the artifacts asynchronously in after(): submit
+    // must not book the conversion — the success screen captures it once
+    // the lookup carries the terminal delivery flag.
+    expect(trackCheckoutInvoiceGenerated).not.toHaveBeenCalled();
   });
 
-  it('emits invoice_generated for a zero-total unpaid invoice order', async () => {
+  it('defers invoice_generated for a zero-total unpaid invoice order', async () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
     });
     // A 100% discount zeroes the gateway amount while the order stays
-    // unpaid; the server still generates and emails the proforma.
+    // unpaid; the server still generates and emails the proforma — but
+    // asynchronously, so submit still must not record it.
     mockCreateOrder.mockResolvedValue({
       amountDueToGateway: 0,
       effectiveCheckoutGeneration: 'gen-1',
@@ -591,12 +590,7 @@ describe('useCheckoutSubmit', () => {
       await result.current(address);
     });
 
-    expect(trackCheckoutInvoiceGenerated).toHaveBeenCalledWith(
-      expect.objectContaining({
-        orderId: 'order-invoice-zero',
-        paymentMethod: 'invoice',
-      })
-    );
+    expect(trackCheckoutInvoiceGenerated).not.toHaveBeenCalled();
   });
 
   it('skips invoice_generated when wallet coverage pays a selected invoice order in full', async () => {

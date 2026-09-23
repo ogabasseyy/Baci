@@ -1,5 +1,8 @@
 export interface StorefrontOrderData {
   id: string;
+  // Terminal immediate-order after() delivery (invoice artifacts built
+  // and proforma emailed). Optional: older responses omit it.
+  notification_delivered?: boolean;
   order_number: string;
   short_id?: string;
   tracking_token?: string;

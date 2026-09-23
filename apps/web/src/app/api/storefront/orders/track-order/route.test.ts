@@ -155,6 +155,28 @@ describe('GET /api/storefront/orders/track-order', () => {
     expect(data.order.gift_wrapping_fee).toBe(250);
   });
 
+  it('forwards the terminal notification-delivery flag for invoice gating', async () => {
+    mockAnonClient.rpc.mockResolvedValueOnce({
+      data: [makeTrackedOrder({ notification_delivered: true })],
+      error: null,
+    });
+    mockAnonClient.rpc.mockResolvedValueOnce({
+      data: [makeTrackedOrder({})],
+      error: null,
+    });
+
+    const request = new NextRequest(
+      'https://example.com/api/storefront/orders/track-order?token=track-token-123&merchant_slug=test-store'
+    );
+
+    const delivered = await (await GET(request)).json();
+    expect(delivered.order.notification_delivered).toBe(true);
+    const pending = await (await GET(request)).json();
+    // Older RPC projections omit the flag: success screens read that as
+    // not delivered and keep their bounded refresh lane.
+    expect(pending.order.notification_delivered).toBe(false);
+  });
+
   it('normalizes a legacy canceled row to cancelled with no delivery estimate', async () => {
     mockAnonClient.rpc.mockResolvedValue({
       data: [makeTrackedOrder({ shipping_status: 'canceled' })],

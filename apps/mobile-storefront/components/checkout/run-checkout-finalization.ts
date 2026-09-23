@@ -8,7 +8,6 @@ import type { ShippingAddressInput } from '@/lib/validation';
 import type { createOrder } from '@/services/orders';
 import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import type { CartItem } from '@/stores/cart-store';
-import { maybeClaimCheckoutInvoice } from './checkout-invoice-claim';
 import type { CheckoutSnapshot } from './checkout-order-builders';
 import { runCheckoutPostOrderSideEffects } from './checkout-post-order-side-effects';
 import { runFinalizeCheckoutPayment } from './run-finalize-checkout-payment';
@@ -99,14 +98,10 @@ export async function runCheckoutFinalization({
       void releaseCheckoutPurchaseTracking(order.id);
     });
   }
-  // Claims the invoice_generated funnel event for unpaid invoice orders
-  // (skipped when wallet coverage pays the selected invoice in full).
-  await maybeClaimCheckoutInvoice({
-    selectedPayment,
-    order,
-    orderNumber,
-    itemsSnapshot,
-  });
+  // invoice_generated is captured on the order-success screen only after
+  // the server confirms terminal artifact delivery (see
+  // useInvoiceGeneratedCapture) — never optimistically here, where the
+  // after() generation may still fail.
   await runFinalizeCheckoutPayment({
     clearCart,
     customerEmail,

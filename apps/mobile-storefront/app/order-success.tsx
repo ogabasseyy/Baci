@@ -6,6 +6,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Linking } from 'react-native';
+import { useInvoiceGeneratedCapture } from '@/components/checkout/use-invoice-generated-capture';
 import { OrderReconciliationView } from '@/components/orders/OrderReconciliationView';
 import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
 import { isDeferredSettlementMethod } from '@/components/orders/order-success-content';
@@ -150,6 +151,16 @@ export default function OrderSuccessScreen() {
     reference,
     trackingToken,
     disabled: isReconciliation,
+  });
+  // invoice_generated is captured only after the server confirms terminal
+  // artifact delivery (never optimistically at creation): the hook polls
+  // the tracking lookup on a bounded lane until the flag lands.
+  useInvoiceGeneratedCapture({
+    customerEmail: customer?.email ?? null,
+    disabled: isReconciliation,
+    orderId,
+    paymentMethod,
+    trackingToken,
   });
 
   // While a presented post-order interstitial owns the full screen the

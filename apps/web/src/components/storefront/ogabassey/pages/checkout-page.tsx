@@ -141,7 +141,6 @@ import {
   clearCheckoutIdempotencyKey,
   getCheckoutIdempotencyKey,
 } from './checkout/checkout-idempotency';
-import { captureCheckoutInvoiceGenerated } from './checkout/capture-checkout-invoice-generated';
 import { captureCheckoutPaymentCompleted } from './checkout/capture-checkout-payment-completed';
 import { captureCheckoutPaymentFailed } from './checkout/capture-checkout-payment-failed';
 import { captureCheckoutPaymentStarted } from './checkout/capture-checkout-payment-started';
@@ -2090,19 +2089,11 @@ export const CheckoutPage: React.FC = () => {
           });
         } else if (paymentMethod === 'invoice') {
           // Zero due without paid coverage (e.g. a 100% discount): the
-          // server still generates and emails a proforma for
-          // invoice-method orders, so record the generation before the
-          // early return — otherwise the funnel shows a false drop-off.
-          captureCheckoutInvoiceGenerated({
-            currency: orderChargeCurrency,
-            itemCount: orderItems.reduce(
-              (count, item) => count + item.quantity,
-              0
-            ),
-            orderId: order.id,
-            orderNumber: createdOrderNumber,
-            total: order.total ?? total,
-          });
+          // server still generates and emails a proforma, but the
+          // generation is confirmed asynchronously in after() — the
+          // success page captures invoice_generated only once the
+          // lookup carries the terminal delivery flag, so recording it
+          // here would book a conversion for generation that may fail.
         }
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
@@ -2539,13 +2530,9 @@ export const CheckoutPage: React.FC = () => {
         // Don't proceed further - callbacks handle the flow
         return;
       } else if (paymentMethod === 'invoice') {
-        captureCheckoutInvoiceGenerated({
-          currency: orderChargeCurrency,
-          itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
-          orderId: order.id,
-          orderNumber: createdOrderNumber,
-          total: order.total ?? total,
-        });
+        // invoice_generated is captured on the success page only after
+        // the server confirms terminal artifact delivery (see
+        // useInvoiceGeneratedCapture) — never optimistically here.
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
         clearCheckoutSession();

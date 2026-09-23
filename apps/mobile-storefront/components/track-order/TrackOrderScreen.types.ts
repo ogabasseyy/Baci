@@ -40,6 +40,9 @@ export interface TrackOrderData {
     // Optional: older responses omit it and classify status-only.
     amount_paid?: number | null;
     currency: string;
+    // Terminal immediate-order after() delivery (invoice artifacts built
+    // and proforma emailed). Optional: older responses omit it.
+    notification_delivered?: boolean | null;
   };
   customer: {
     name: string;

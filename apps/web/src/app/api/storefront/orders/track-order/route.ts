@@ -80,6 +80,9 @@ interface TrackedOrder {
   merchant_phone?: string | null;
   items?: OrderItemRow[] | null;
   shipping_state?: string;
+  // Terminal after() delivery flag. Optional: older RPC projections
+  // omit it.
+  notification_delivered?: boolean | null;
 }
 
 function getCustomerOrderStatusKey(status: string): string {
@@ -276,6 +279,11 @@ export async function GET(request: NextRequest) {
         // response must forward it for guest classification.
         amount_paid: order.amount_paid ?? 0,
         currency: order.currency || 'NGN',
+        // Terminal after() delivery (invoice artifacts built and proforma
+        // emailed): mobile success screens gate invoice_generated on this
+        // instead of claiming it at order creation. Absent on older RPC
+        // projections, which read as not delivered.
+        notification_delivered: order.notification_delivered ?? false,
       },
       customer: {
         name: order.customer_name,

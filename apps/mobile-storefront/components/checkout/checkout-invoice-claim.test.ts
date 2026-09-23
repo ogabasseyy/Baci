@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import { trackCheckoutInvoiceGenerated } from '@/services/analytics';
-import type { CartItem } from '@/stores/cart-store';
-import { maybeClaimCheckoutInvoice } from './checkout-invoice-claim';
+import { maybeCaptureCheckoutInvoiceGenerated } from './checkout-invoice-claim';
 
 jest.mock('@/lib/claim-checkout-purchase-tracking', () => ({
   claimCheckoutPurchaseTracking: jest.fn(),
@@ -18,29 +17,21 @@ const baseOrder = {
   id: 'order-invoice-1',
   payment_status: 'unpaid',
   total: 5750,
+  notificationDelivered: true as const,
 };
 
-describe('maybeClaimCheckoutInvoice', () => {
+describe('maybeCaptureCheckoutInvoiceGenerated', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedClaim.mockResolvedValue(true);
   });
 
-  it('claims and emits invoice_generated for an unpaid invoice order', async () => {
-    await maybeClaimCheckoutInvoice({
+  it('claims and emits invoice_generated for a delivered unpaid invoice order', async () => {
+    await maybeCaptureCheckoutInvoiceGenerated({
       selectedPayment: 'invoice',
       order: baseOrder,
       orderNumber: 'INV-1',
-      itemsSnapshot: [
-        {
-          id: 'p1',
-          product_id: 'p1',
-          slug: 's',
-          name: 'Item',
-          price: 2875,
-          quantity: 2,
-        } satisfies CartItem,
-      ],
+      itemsSnapshot: [{ quantity: 2 }],
     });
 
     expect(mockedClaim).toHaveBeenCalledWith(
@@ -59,7 +50,7 @@ describe('maybeClaimCheckoutInvoice', () => {
   });
 
   it('forwards the stamped order currency on the invoice stage', async () => {
-    await maybeClaimCheckoutInvoice({
+    await maybeCaptureCheckoutInvoiceGenerated({
       selectedPayment: 'invoice',
       order: { ...baseOrder, currency: 'KES' },
       orderNumber: 'INV-1',
@@ -74,8 +65,33 @@ describe('maybeClaimCheckoutInvoice', () => {
     );
   });
 
+  it('withholds the event until terminal delivery is confirmed', async () => {
+    await maybeCaptureCheckoutInvoiceGenerated({
+      selectedPayment: 'invoice',
+      order: { ...baseOrder, notificationDelivered: false },
+      orderNumber: 'INV-1',
+      itemsSnapshot: [],
+    });
+
+    expect(mockedClaim).not.toHaveBeenCalled();
+    expect(mockedTrack).not.toHaveBeenCalled();
+  });
+
+  it('withholds the event when the flag is absent', async () => {
+    const { notificationDelivered: _dropped, ...order } = baseOrder;
+    await maybeCaptureCheckoutInvoiceGenerated({
+      selectedPayment: 'invoice',
+      order,
+      orderNumber: 'INV-1',
+      itemsSnapshot: [],
+    });
+
+    expect(mockedClaim).not.toHaveBeenCalled();
+    expect(mockedTrack).not.toHaveBeenCalled();
+  });
+
   it('skips a paid invoice order that routes straight to completion', async () => {
-    await maybeClaimCheckoutInvoice({
+    await maybeCaptureCheckoutInvoiceGenerated({
       selectedPayment: 'invoice',
       order: { ...baseOrder, payment_status: 'paid' },
       orderNumber: 'INV-2',
@@ -87,7 +103,7 @@ describe('maybeClaimCheckoutInvoice', () => {
   });
 
   it('skips non-invoice payment methods', async () => {
-    await maybeClaimCheckoutInvoice({
+    await maybeCaptureCheckoutInvoiceGenerated({
       selectedPayment: 'paystack',
       order: baseOrder,
       orderNumber: 'INV-3',
@@ -101,7 +117,7 @@ describe('maybeClaimCheckoutInvoice', () => {
   it('does not emit when an existing claim denies the duplicate', async () => {
     mockedClaim.mockResolvedValue(false);
 
-    await maybeClaimCheckoutInvoice({
+    await maybeCaptureCheckoutInvoiceGenerated({
       selectedPayment: 'invoice',
       order: baseOrder,
       orderNumber: 'INV-4',

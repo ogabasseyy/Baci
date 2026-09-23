@@ -5188,7 +5188,7 @@ describe('CheckoutPage', () => {
     }
   });
 
-  it('records invoice_generated for a zero-due invoice order the server left unpaid', async () => {
+  it('defers invoice_generated to the success page for a zero-due invoice order', async () => {
     window.localStorage.clear();
     vi.mocked(useCart).mockReturnValue({
       cart: [
@@ -5295,16 +5295,21 @@ describe('CheckoutPage', () => {
       expect(placeOrderButton).toBeDefined();
       fireEvent.click(placeOrderButton as HTMLButtonElement);
 
+      // Creation still records order_created, but invoice_generated waits
+      // for the success page's terminal-delivery confirmation (the server
+      // builds the artifacts asynchronously in after()).
       await waitFor(() => {
         expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
-          'invoice_generated',
+          'order_created',
           'order-123',
-          expect.objectContaining({
-            payment_method: 'invoice',
-            payment_status: 'unpaid',
-          })
+          expect.anything()
         );
       });
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+        'invoice_generated',
+        expect.anything(),
+        expect.anything()
+      );
       expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
         'payment_completed',
         expect.anything(),

@@ -305,7 +305,7 @@ describe('useCheckoutSubmit recovery', () => {
     expect(trackCheckoutRoutePurchaseCompleted).not.toHaveBeenCalled();
   });
 
-  it('emits one invoice event when a retry replays the created order', async () => {
+  it('emits no invoice event at submit when a retry replays the created order', async () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
@@ -340,14 +340,10 @@ describe('useCheckoutSubmit recovery', () => {
       await result.current(address);
     });
 
-    expect(mockTrackCheckoutInvoiceGenerated).toHaveBeenCalledTimes(1);
-    expect(mockTrackCheckoutInvoiceGenerated).toHaveBeenCalledWith(
-      expect.objectContaining({
-        orderId: 'order-invoice-1',
-        orderNumber: 'ORD-I1',
-        paymentMethod: 'invoice',
-        total: 1201500,
-      })
-    );
+    // Neither the first attempt nor the replay records the conversion at
+    // submit: generation is confirmed asynchronously in after(), and the
+    // success screen captures it once the lookup carries the terminal
+    // delivery flag (replay dedup then rests on the durable claim).
+    expect(mockTrackCheckoutInvoiceGenerated).not.toHaveBeenCalled();
   });
 });

@@ -150,6 +150,36 @@ describe('GET /api/storefront/orders/[id] public lookup', () => {
     expect(data).toMatchObject({ total: 11000, amount_paid: 4000 });
   });
 
+  it('forwards the terminal notification-delivery flag for invoice gating', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123?token=track-token-123&merchant_slug=test-store'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: null },
+    });
+    // The success page gates invoice_generated on terminal after()
+    // delivery: a sent claim projects true, while older RPC projections
+    // omit the flag and read as not delivered.
+    mockAnonClient.rpc
+      .mockResolvedValueOnce({
+        data: [{ ...mockOrderData, items: [], notification_delivered: true }],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [{ ...mockOrderData, items: [] }],
+        error: null,
+      });
+
+    const delivered = await (
+      await GET(request, { params: Promise.resolve({ id: 'order-uuid-123' }) })
+    ).json();
+    expect(delivered.notification_delivered).toBe(true);
+    const pending = await (
+      await GET(request, { params: Promise.resolve({ id: 'order-uuid-123' }) })
+    ).json();
+    expect(pending.notification_delivered).toBe(false);
+  });
+
   it('returns the active provisioned DVA for a guest Pay for Me lookup', async () => {
     const request = new NextRequest(
       'http://localhost/api/storefront/orders/order-uuid-123?token=track-token-123&merchant_slug=test-store'

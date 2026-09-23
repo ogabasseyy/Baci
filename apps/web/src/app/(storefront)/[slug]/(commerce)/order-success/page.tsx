@@ -24,6 +24,7 @@ import {
   resolveInvoicePresentation,
 } from './order-success-presentation';
 import { useBnplSettlement } from './use-bnpl-settlement';
+import { useInvoiceGeneratedCapture } from './use-invoice-generated-capture';
 import { usePayformeHandoffRefresh } from './use-payforme-handoff-refresh';
 
 // Default to 5 days for delivery logic if not available
@@ -142,6 +143,18 @@ function OrderSuccessContent() {
     orderToken,
     shouldRefresh:
       isPayForMeUnpaid && !payerHandoff.payerTransferAccount && !loading,
+  });
+  // invoice_generated is captured only after the server confirms terminal
+  // artifact delivery (never optimistically at creation): the hook
+  // captures an already-delivered lookup immediately and otherwise
+  // refreshes on a bounded lane until the flag lands.
+  useInvoiceGeneratedCapture({
+    lookupEmail,
+    merchantSlug: merchant?.slug,
+    onOrder: setOrder,
+    order,
+    orderId,
+    orderToken,
   });
   const { description, heading } = buildOrderSuccessCopy({
     hasRecoveryState,

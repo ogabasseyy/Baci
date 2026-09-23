@@ -275,6 +275,11 @@ export async function GET(
         tracking_token: token || null,
         items,
         virtual_account: guestVirtualAccount,
+        // Terminal after() delivery (invoice artifacts built and proforma
+        // emailed): success screens gate invoice_generated on this instead
+        // of claiming it at order creation. Absent on older RPC
+        // projections, which read as not delivered.
+        notification_delivered: order.notification_delivered ?? false,
       })
     );
   } catch (error) {

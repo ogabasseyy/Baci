@@ -30,9 +30,11 @@ import {
   buildChatMessages,
   CUSTOMER_CHAT_TIMEOUT_MS,
   createClientClosedRequestResponse,
+  createRouteDeadline,
   createStaticChatFallbackResponse,
   getSafeChatBackendErrorMessage,
   isChatAbortError,
+  withTimeout,
 } from '@/app/api/chat/route-helpers';
 import { runChatProviderChain } from '@/app/api/chat/run-chat-provider-chain';
 import { runOllamaChat } from '@/app/api/chat/run-ollama-chat';
@@ -79,35 +81,9 @@ function generateSessionId(ip: string): string {
     .slice(0, 16);
 }
 
-async function withTimeout<T>(
-  operation: Promise<T>,
-  timeoutMs: number,
-  timeoutMessage: string
-): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      operation,
-      new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(
-          () => reject(new Error(timeoutMessage)),
-          timeoutMs
-        );
-      }),
-    ]);
-  } finally {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
-  }
-}
-
 export async function POST(req: Request) {
   try {
-    // One absolute deadline for the whole route: tenant resolution, the LLM
-    // server, Ollama, and the provider chain each spend only what remains,
-    // so stacked full-length timeouts can never push past maxDuration and
-    // deny the static fallback.
-    const routeDeadline = Date.now() + CUSTOMER_CHAT_TIMEOUT_MS;
-    const remainingRouteMs = () => Math.max(0, routeDeadline - Date.now());
+    const remainingRouteMs = createRouteDeadline(CUSTOMER_CHAT_TIMEOUT_MS);
 
     const headersList = await headers();
     const forwardedFor = headersList.get('x-forwarded-for');

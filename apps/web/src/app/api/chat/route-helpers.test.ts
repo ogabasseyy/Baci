@@ -1,12 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   bufferTextResponse,
   buildChatMessages,
   CUSTOMER_CHAT_FALLBACK_TEXT,
   createClientClosedRequestResponse,
+  createRouteDeadline,
   createStaticChatFallbackResponse,
   getSafeChatBackendErrorMessage,
   isChatAbortError,
+  withTimeout,
 } from '@/app/api/chat/route-helpers';
 
 describe('chat route helpers', () => {
@@ -211,5 +213,45 @@ describe('chat route helpers', () => {
     );
     expect(response.headers.get('x-baci-chat-fallback')).toBe('static');
     expect(await response.text()).toBe(CUSTOMER_CHAT_FALLBACK_TEXT);
+  });
+
+  it('counts a route deadline down without going negative', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000);
+      const remainingMs = createRouteDeadline(500);
+
+      expect(remainingMs()).toBe(500);
+      vi.setSystemTime(1_300);
+      expect(remainingMs()).toBe(200);
+      vi.setSystemTime(2_000);
+      expect(remainingMs()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resolves timed operations before the deadline', async () => {
+    await expect(
+      withTimeout(Promise.resolve('ok'), 1_000, 'timed out')
+    ).resolves.toBe('ok');
+  });
+
+  it('rejects stalled operations with the timeout message', async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = withTimeout(
+        new Promise(() => {}),
+        100,
+        'Chat tenant lookup timed out'
+      );
+      const assertion = expect(pending).rejects.toThrow(
+        'Chat tenant lookup timed out'
+      );
+      await vi.advanceTimersByTimeAsync(100);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

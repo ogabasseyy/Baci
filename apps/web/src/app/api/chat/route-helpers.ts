@@ -149,3 +149,34 @@ export function createClientClosedRequestResponse(): Response {
     headers: { 'Content-Type': 'application/json' },
   });
 }
+
+/**
+ * One absolute deadline for a whole chat route: tenant resolution, the LLM
+ * server, Ollama, and the provider chain each spend only what remains, so
+ * stacked full-length timeouts can never push the handler past maxDuration.
+ */
+export function createRouteDeadline(timeoutMs: number): () => number {
+  const routeDeadline = Date.now() + timeoutMs;
+  return () => Math.max(0, routeDeadline - Date.now());
+}
+
+export async function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(timeoutMessage)),
+          timeoutMs
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}

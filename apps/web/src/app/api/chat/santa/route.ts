@@ -4,6 +4,7 @@ import { generateTextWithChain } from '@/ai/generate-text-with-chain';
 import { SANTA_ERROR_MESSAGES } from '@/ai/prompts/santa';
 import { AI_RATE_LIMITS, checkRateLimit } from '@/ai/provider';
 import { getCachedSantaProducts } from '@/ai/santa-data';
+import { createRouteDeadline, withTimeout } from '@/app/api/chat/route-helpers';
 import {
   type AgenticChatTenant,
   resolveAgenticChatTenant,
@@ -17,27 +18,6 @@ export const maxDuration = 30;
 const SANTA_ROUTE_DEADLINE_MS = 29_000;
 const SANTA_CATALOG_TIMEOUT_MS = 4_000;
 const SANTA_GENERATION_TIMEOUT_MS = 20_000;
-
-async function withTimeout<T>(
-  operation: Promise<T>,
-  timeoutMs: number,
-  timeoutMessage = 'Santa catalogue lookup timed out'
-): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      operation,
-      new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(
-          () => reject(new Error(timeoutMessage)),
-          timeoutMs
-        );
-      }),
-    ]);
-  } finally {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
-  }
-}
 
 // Define Zod schema for request validation
 const santaChatSchema = z.object({
@@ -67,7 +47,8 @@ async function generateSantaPrompt(
         tenant.priceNegotiationEnabled,
         tenant.currencyCode
       ),
-      catalogTimeoutMs
+      catalogTimeoutMs,
+      'Santa catalogue lookup timed out'
     );
     const merchantDisplayData = buildStorefrontDisplayData(tenant.businessName);
 
@@ -125,11 +106,7 @@ export async function POST(req: Request) {
       req.signal,
       AbortSignal.timeout(SANTA_ROUTE_DEADLINE_MS),
     ]);
-    // One absolute deadline for every pre-generation lookup: each stage may
-    // only spend what remains, so stacked full-length timeouts can never
-    // push the handler past maxDuration.
-    const routeDeadline = Date.now() + SANTA_ROUTE_DEADLINE_MS;
-    const remainingRouteMs = () => Math.max(0, routeDeadline - Date.now());
+    const remainingRouteMs = createRouteDeadline(SANTA_ROUTE_DEADLINE_MS);
 
     // Step 1: Get client identifier for rate limiting (IP-based for anonymous users)
     const headersList = await headers();

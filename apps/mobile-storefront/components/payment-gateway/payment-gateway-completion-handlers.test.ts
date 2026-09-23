@@ -339,9 +339,10 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
     mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue(null);
     mockClaimCheckoutPurchaseTracking.mockResolvedValue(true);
+    // Production route shape: Paystack rails with the uba_redvault
+    // method — never override gateway to uba_redvault here.
     const { input } = createInput({
       paymentMethod: 'uba_redvault',
-      gateway: 'uba_redvault',
       amount: 4000,
       orderTotal: 5000,
     });
@@ -375,7 +376,6 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     mockIsCheckoutPurchaseClaimed.mockResolvedValue(true);
     const { input } = createInput({
       paymentMethod: 'uba_redvault',
-      gateway: 'uba_redvault',
     });
     await createPaymentGatewayCompletionHandlers(
       input
@@ -383,6 +383,27 @@ describe('createPaymentGatewayCompletionHandlers', () => {
 
     expect(mockTrackCheckoutPaymentCompleted).not.toHaveBeenCalled();
     expect(input.clearCart).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the newer cart when the shopper leaves during the REDVAULT claim', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue(null);
+    const { input } = createInput({
+      paymentMethod: 'uba_redvault',
+    });
+    // Leave while the claim lookup is pending: the continuation must
+    // emit nothing and must not clear the cart built since.
+    mockClaimCheckoutPurchaseTracking.mockImplementationOnce(async () => {
+      input.refs.isMountedRef.current = false;
+      return true;
+    });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+
+    expect(mockTrackCheckoutPaymentCompleted).not.toHaveBeenCalled();
+    expect(input.clearCart).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
   });
 
   it('clears the persisted REDVAULT fence after verified success', async () => {

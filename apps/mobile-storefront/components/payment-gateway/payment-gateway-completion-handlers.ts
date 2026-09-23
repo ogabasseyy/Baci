@@ -154,6 +154,10 @@ export function createPaymentGatewayCompletionHandlers({
       orderNumber,
       orderTotal,
       paymentCompletionStartedRef,
+      // The rails gateway and the selected method differ on the native
+      // REDVAULT route (Paystack rails, `uba_redvault` method): lanes
+      // that attribute the conversion read this, never `gateway`.
+      paymentMethod,
       reference,
       scheduleDelayedNavigation,
       setErrorMessage,

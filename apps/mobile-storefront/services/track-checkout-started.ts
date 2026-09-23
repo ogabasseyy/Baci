@@ -20,6 +20,11 @@ export function trackCheckoutStarted(checkout: {
     CHECKOUT_FUNNEL_EVENTS.checkoutStarted,
     buildCheckoutFunnelProperties({
       channel: 'mobile_app',
+      // The legacy event above already receives the checkout currency:
+      // the canonical event must carry it too, or every non-NGN mobile
+      // start defaults to NGN and splits from its stamped downstream
+      // events.
+      currency: checkout.currency,
       itemCount: checkout.itemCount,
       source: 'mobile_app',
       subtotal: checkout.subtotal,

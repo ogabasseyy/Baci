@@ -5,7 +5,11 @@ import type { StorefrontOrderData as OrderData } from './fetch-storefront-order'
  * order keeps its commercial (380) document action; proforma
  * presentation is unpaid-only, matching resolveInvoiceTypeCode. A
  * refunded or partially paid invoice accepted money, so it keeps the
- * commercial presentation too — never "Proforma Invoice Ready".
+ * commercial presentation too — never "Proforma Invoice Ready". The
+ * same prior-payment evidence as the invoice-type resolver: wallet,
+ * savings, or partial-payment credit recorded in a positive
+ * amount_paid while the status stays unpaid/pending is accepted value,
+ * so the document is commercial even before the status flips.
  */
 export function resolveInvoicePresentation({
   order,
@@ -18,11 +22,14 @@ export function resolveInvoicePresentation({
     type === 'invoice' ||
     order?.payment_status === 'invoice' ||
     order?.payment_method === 'invoice';
+  const creditedAmount = Number(order?.amount_paid ?? 0);
+  const hasPriorPayment = Number.isFinite(creditedAmount) && creditedAmount > 0;
   const isInvoice =
     isInvoiceMethod &&
     order?.payment_status !== 'paid' &&
     order?.payment_status !== 'refunded' &&
-    order?.payment_status !== 'partially_paid';
+    order?.payment_status !== 'partially_paid' &&
+    !hasPriorPayment;
   return { isInvoice, isInvoiceMethod };
 }
 

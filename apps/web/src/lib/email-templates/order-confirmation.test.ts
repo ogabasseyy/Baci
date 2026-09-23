@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  generateOrderConfirmationEmail,
-  generateOrderConfirmationText,
-} from './order-confirmation';
+import { generateOrderConfirmationEmail } from './order-confirmation';
+import { generateOrderConfirmationText } from './order-confirmation-text';
 
 const baseOrderData = {
   orderNumber: 'ORD-001',

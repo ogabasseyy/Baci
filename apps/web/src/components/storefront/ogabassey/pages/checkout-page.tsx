@@ -183,7 +183,10 @@ import { isWalletOrderAutoDebitWebEnabled } from '@/config/wallet-order-auto-deb
 import { isEligibleForWalletFundedBankTransfer } from './checkout/wallet-funded-transfer-eligibility';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
-import { useCheckoutStartFunnel } from './checkout/hooks/use-checkout-start-funnel';
+import {
+  resolveCheckoutStartValues,
+  useResumedCheckoutStartFunnel,
+} from './checkout/hooks/use-resumed-checkout-start-funnel';
 import { readCheckoutAttemptGeneration, rotateCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
 import { DeferredWalletTransferConsentDialog as WalletTransferConsentDialog } from './checkout/components/DeferredWalletTransferConsentDialog';
@@ -835,19 +838,15 @@ export const CheckoutPage: React.FC = () => {
   const effectiveItemSubtotal = hasCheckoutCartItems
     ? itemSubtotal
     : resumedOrder?.subtotal || 0;
-  // A resumed start replays a stamped order, not a live cart: report the
-  // canonical total (shipping, tax, wrapping, and discounts included)
-  // and the stamped currency, matching the resumed payment_started and
-  // completion events. The subtotal-only/metric-currency variant would
-  // split one attempt across inconsistent values and relabel history
-  // after a merchant currency change.
-  const effectiveCheckoutCartTotal = hasCheckoutCartItems
-    ? checkoutCartTotal
-    : (resumedOrder?.total ?? checkoutCartTotal);
-  const effectiveCheckoutCurrency =
-    !hasCheckoutCartItems && resumedOrder?.currency
-      ? resumedOrder.currency
-      : currencyCode;
+  // Displayed totals share the funnel's stamped derivation (single
+  // source in the focused hook module): a resumed render shows the
+  // canonical order total, never the subtotal-only variant.
+  const { total: effectiveCheckoutCartTotal } = resolveCheckoutStartValues({
+    checkoutCartTotal,
+    currencyCode,
+    hasCheckoutCartItems,
+    resumedOrder,
+  });
 
   // Set once an order is created for this attempt: post-creation rerenders
   // (pending-order persist, widget state) must not re-emit checkout_started
@@ -858,14 +857,19 @@ export const CheckoutPage: React.FC = () => {
   // a repeat purchase of the same cart emits a fresh start, while a reload
   // mid-attempt keeps the same generation (unlike React useId, which is
   // deterministic per rendered tree and collides after reload).
-  useCheckoutStartFunnel({
+  // Start instrumentation (including the resumed-order stamped
+  // total/currency derivation) lives in the focused hook below so edits
+  // here leave this page smaller, not larger.
+  useResumedCheckoutStartFunnel({
     attemptId: `gen-${readCheckoutAttemptGeneration()}`,
-    currency: effectiveCheckoutCurrency,
+    checkoutCartTotal,
+    currencyCode,
     displayItems,
-    effectiveCheckoutCartTotal,
     effectiveItemSubtotal,
+    hasCheckoutCartItems,
     isHydrated: isHydrated && !checkoutOrderCreated,
     merchantId: merchant?.id,
+    resumedOrder,
   });
 
   const autoTriggerRef = useRef(false);
@@ -1889,6 +1893,19 @@ export const CheckoutPage: React.FC = () => {
         firstName,
         lastName,
         merchantId: merchant?.id ?? '',
+        // The prepared order initializes through the extracted handler:
+        // record its start here so the funnel does not jump from
+        // order_created straight to completion/failure.
+        onPaymentStarted: ({ orderId, currency, reference }) => {
+          paymentStarted = true;
+          initializedReference = reference;
+          captureCheckoutPaymentStarted({
+            currency,
+            orderId,
+            paymentMethod: 'uba_redvault',
+            reference,
+          });
+        },
       })
     ) {
       return;
@@ -2467,6 +2484,10 @@ export const CheckoutPage: React.FC = () => {
           isOrderInFlightRef.current = false;
           return;
         }
+        // The REDVAULT attempt opens now: record the start with the init
+        // reference so the funnel does not jump from order_created
+        // straight to completion/failure.
+        capturePaymentStarted(paymentResult.reference);
         if (createAccount && !user && accountPassword.length >= 6) {
           try {
             const supabase = createClient();
@@ -2636,7 +2657,10 @@ export const CheckoutPage: React.FC = () => {
                 paymentMethod,
                 reason: 'credit_direct_error',
                 reference: initializedReference,
-                total: paymentAmount,
+                // Canonical order total (same rule as the start/creation
+                // events): paymentAmount is only the residual provider
+                // charge after wallet/savings credit.
+                total: order.total ?? total,
               });
             }
             toast({
@@ -2755,7 +2779,9 @@ export const CheckoutPage: React.FC = () => {
                 orderNumber: createdOrderNumber,
                 paymentMethod,
                 reason: 'credpal_error',
-                total: paymentAmount,
+                // Canonical order total, matching the start event —
+                // paymentAmount is only the residual provider charge.
+                total: order.total ?? total,
               });
             }
             toast({
@@ -2926,7 +2952,9 @@ export const CheckoutPage: React.FC = () => {
             orderId: order.id,
             paymentMethod: 'bank_transfer',
             reason: 'bank_transfer_error',
-            total: paymentAmount,
+            // Canonical row total first (same rule as order_created):
+            // paymentAmount is only the residual DVA charge.
+            total: order.total ?? total,
           });
         }
         toast({

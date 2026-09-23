@@ -26,6 +26,12 @@ export interface RedvaultPreparedOrder {
   trackingToken?: string;
 }
 
+export interface RedvaultPaymentStarted {
+  orderId: string;
+  currency: string;
+  reference?: string;
+}
+
 export interface SubmitRedvaultPreparedOrderOptions {
   paymentMethod: PaymentMethod;
   redvaultOrderReady: RedvaultPreparedOrder | null;
@@ -43,6 +49,12 @@ export interface SubmitRedvaultPreparedOrderOptions {
   firstName: string;
   lastName: string;
   merchantId: string;
+  /**
+   * Records the funnel start when initialization opens the provider
+   * flow: without it the attempt jumps from order_created straight to
+   * completion/failure.
+   */
+  onPaymentStarted?: (start: RedvaultPaymentStarted) => void;
 }
 
 /**
@@ -69,6 +81,7 @@ export async function submitRedvaultPreparedOrder({
   firstName,
   lastName,
   merchantId,
+  onPaymentStarted,
 }: SubmitRedvaultPreparedOrderOptions): Promise<boolean> {
   // A REDVAULT order prepared by an earlier click initializes here, AFTER
   // validation and fingerprinting. The prepared order is bound to the
@@ -209,6 +222,11 @@ export async function submitRedvaultPreparedOrder({
       isOrderInFlightRef.current = false;
       return true;
     }
+    onPaymentStarted?.({
+      orderId: activeRedvaultOrder.orderId,
+      currency: activeRedvaultOrder.currency,
+      reference: paymentResult.reference,
+    });
     window.location.assign(paymentResult.authorizationUrl);
     return true;
   }

@@ -1711,9 +1711,12 @@ describe('CheckoutPage', () => {
   const renderFreshBNPLCheckout = ({
     featureSettings,
     orderId,
+    orderTotal,
   }: {
     featureSettings: Record<string, boolean | number>;
     orderId: string;
+    /** Canonical order total: when set, differs from the residual gateway due. */
+    orderTotal?: number;
   }) => {
     vi.mocked(useCart).mockReturnValue({
       cart: [
@@ -1775,6 +1778,7 @@ describe('CheckoutPage', () => {
                 id: orderId,
                 order_number: 'ORD-BNPL',
                 tracking_token: 'track-bnpl',
+                ...(orderTotal === undefined ? {} : { total: orderTotal }),
               },
               wallet: null,
             }),
@@ -2008,6 +2012,56 @@ describe('CheckoutPage', () => {
     }
   });
 
+  it('closes a Credit Direct failure at the canonical order total, not the residual due', async () => {
+    const { fetchMock } = renderFreshBNPLCheckout({
+      featureSettings: { credit_direct_enabled: true },
+      orderId: 'order-cd-canonical-total',
+      // Canonical total above the 5750 residual gateway due.
+      orderTotal: 6000,
+    });
+
+    try {
+      await driveFreshBNPLPlaceOrder(/credit direct/i);
+
+      await waitFor(() => {
+        expect(openCreditDirectCheckout).toHaveBeenCalled();
+      });
+      const callArgs = vi.mocked(openCreditDirectCheckout).mock.calls[0]?.[0];
+      await act(async () => {
+        await callArgs?.onPopup?.({
+          checkoutTransactionId: 'cd-popup-canonical-1',
+          sessionId: 'signed-session-canonical-1',
+        });
+      });
+      await waitFor(() => {
+        expect(paymentStartedCalls()).toHaveLength(1);
+      });
+      expect(paymentStartedCalls()[0]?.[1]).toEqual(
+        expect.objectContaining({ total: 6000 })
+      );
+
+      await act(async () => {
+        callArgs?.onError?.('declined');
+      });
+
+      await waitFor(() => {
+        expect(
+          mockCaptureClientEvent.mock.calls.some(
+            ([event]) => event === 'payment_failed'
+          )
+        ).toBe(true);
+      });
+      const failure = mockCaptureClientEvent.mock.calls.find(
+        ([event]) => event === 'payment_failed'
+      );
+      expect(failure?.[1]).toEqual(
+        expect.objectContaining({ reason: 'credit_direct_error', total: 6000 })
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it('emits fresh CredPal payment_started only after the widget loads', async () => {
     vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
     const { fetchMock } = renderFreshBNPLCheckout({
@@ -2134,6 +2188,52 @@ describe('CheckoutPage', () => {
           )
         ).toBe(true);
       });
+    } finally {
+      fetchMock.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('closes a CredPal failure at the canonical order total, not the residual due', async () => {
+    vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
+    const { fetchMock } = renderFreshBNPLCheckout({
+      featureSettings: { credpal_enabled: true },
+      orderId: 'order-credpal-canonical-total',
+      // Canonical total above the 5750 residual gateway due.
+      orderTotal: 6000,
+    });
+
+    try {
+      await driveFreshBNPLPlaceOrder(/credpal/i);
+
+      await waitFor(() => {
+        expect(openCredPalCheckout).toHaveBeenCalled();
+      });
+      const callArgs = vi.mocked(openCredPalCheckout).mock.calls[0]?.[0];
+      await act(async () => {
+        callArgs?.onLoad?.();
+      });
+      await waitFor(() => {
+        expect(paymentStartedCalls()).toHaveLength(1);
+      });
+
+      await act(async () => {
+        callArgs?.onError?.({ success: false, message: 'declined' });
+      });
+
+      await waitFor(() => {
+        expect(
+          mockCaptureClientEvent.mock.calls.some(
+            ([event]) => event === 'payment_failed'
+          )
+        ).toBe(true);
+      });
+      const failure = mockCaptureClientEvent.mock.calls.find(
+        ([event]) => event === 'payment_failed'
+      );
+      expect(failure?.[1]).toEqual(
+        expect.objectContaining({ reason: 'credpal_error', total: 6000 })
+      );
     } finally {
       fetchMock.mockRestore();
       vi.unstubAllEnvs();
@@ -7728,6 +7828,96 @@ describe('CheckoutPage', () => {
     expect(vi.mocked(useRouter)().push).not.toHaveBeenCalled();
     expect(screen.getByText('₦4,762.50')).toBeInTheDocument();
     fetchMock.mockRestore();
+  });
+
+  it('records a payment start with the init reference when REDVAULT opens', async () => {
+    mockCheckoutSubmissionState();
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        slug: 'ogabassey',
+        business_name: 'OgaBassey',
+        country: 'NG',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith('/api/payments/redvault/availability')) {
+        return Response.json({ available: true, reason: 'reviewed' });
+      }
+      if (url.startsWith('/api/shipping/')) {
+        return Response.json({ quotes: { all: [] }, states: ['Lagos'], locations: [] });
+      }
+      if (url === '/api/orders') {
+        return Response.json({
+          amountDueToGateway: 5_000,
+          order: { id: 'order-redvault', currency: 'NGN' },
+          redvault: {
+            quote: {
+              product_subtotal_kobo: 500_000,
+              eligible_subtotal_kobo: 500_000,
+              discount_kobo: 25_000,
+              assurance_fee_kobo: 0,
+              ineligible_subtotal_kobo: 0,
+              tax_kobo: 750,
+              shipping_kobo: 500,
+              gift_wrapping_kobo: 0,
+              payable_kobo: 476_250,
+              mixed_basket: false,
+            },
+          },
+        });
+      }
+      if (url === '/api/payments/initialize') {
+        return Response.json({
+          authorization_url: 'https://checkout.paystack.com/redvault',
+          reference: 'rv-ref-1',
+        });
+      }
+      return Response.json({});
+    });
+
+    try {
+      render(<CheckoutPage />);
+      fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+      fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+      fireEvent.click(await screen.findByRole('radio', { name: /pay with uba/i }));
+      fireEvent.click(
+        screen.getAllByRole('button', { name: /place order/i }).find(
+          (button) => !button.hasAttribute('disabled'),
+        ) as HTMLButtonElement,
+      );
+      await waitFor(() => {
+        expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/orders')).toBe(true);
+      });
+      fireEvent.click(await screen.findByRole('button', { name: /review and continue to uba/i }));
+
+      // Successful initialization records the start with the init
+      // reference — no jump from order_created to completion. (The
+      // subsequent authorization redirect is jsdom-untestable here.)
+      await waitFor(() => {
+        expect(
+          mockCaptureClientEvent.mock.calls.filter(
+            ([event]) => event === 'payment_started'
+          )
+        ).toHaveLength(1);
+      });
+      const startedCalls = mockCaptureClientEvent.mock.calls.filter(
+        ([event]) => event === 'payment_started'
+      );
+      expect(startedCalls).toHaveLength(1);
+      expect(startedCalls[0]?.[1]).toEqual(
+        expect.objectContaining({
+          payment_method: 'uba_redvault',
+          reference: 'rv-ref-1',
+        })
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   it('persists the REDVAULT fence before returning to the review step', async () => {

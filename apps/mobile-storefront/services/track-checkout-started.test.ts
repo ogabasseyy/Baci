@@ -19,4 +19,19 @@ describe('trackCheckoutStarted', () => {
       expect.objectContaining({ channel: 'mobile_app' })
     );
   });
+
+  it('stamps the canonical event with the checkout currency', () => {
+    trackCheckoutStarted({ itemCount: 1, subtotal: 2000, currency: 'USD' });
+
+    const funnelCall = jest
+      .mocked(trackEvent)
+      .mock.calls.find(
+        ([event, properties]) =>
+          event === 'checkout_started' &&
+          (properties as { channel?: string }).channel === 'mobile_app'
+      );
+    expect(funnelCall?.[1]).toEqual(
+      expect.objectContaining({ currency: 'USD' })
+    );
+  });
 });

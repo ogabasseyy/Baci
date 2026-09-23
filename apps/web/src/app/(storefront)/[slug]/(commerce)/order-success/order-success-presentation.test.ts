@@ -1,0 +1,90 @@
+import { describe, expect, it } from 'vitest';
+import type { StorefrontOrderData } from './fetch-storefront-order';
+import {
+  buildOrderSuccessCopy,
+  resolveInvoicePresentation,
+} from './order-success-presentation';
+
+function invoiceOrder(
+  overrides: Partial<StorefrontOrderData> = {}
+): StorefrontOrderData {
+  return {
+    id: 'order-1',
+    order_number: 'ORD-1',
+    payment_status: 'unpaid',
+    payment_method: 'invoice',
+    items: [],
+    subtotal: 10000,
+    shipping_cost: 1500,
+    total: 11500,
+    ...overrides,
+  };
+}
+
+describe('resolveInvoicePresentation', () => {
+  it('keeps proforma presentation for an uncredited unpaid invoice', () => {
+    expect(
+      resolveInvoicePresentation({ order: invoiceOrder(), type: 'invoice' })
+    ).toEqual({ isInvoice: true, isInvoiceMethod: true });
+  });
+
+  it('treats a credited unpaid invoice as a commercial document', () => {
+    // Wallet/savings credit accepted value while the status stays
+    // unpaid: the generated artifact is commercial, so the screen must
+    // not render proforma copy or a proforma download label.
+    expect(
+      resolveInvoicePresentation({
+        order: invoiceOrder({ amount_paid: 4000 }),
+        type: 'invoice',
+      })
+    ).toEqual({ isInvoice: false, isInvoiceMethod: true });
+  });
+
+  it('treats a credited pending invoice as a commercial document', () => {
+    expect(
+      resolveInvoicePresentation({
+        order: invoiceOrder({ payment_status: 'pending', amount_paid: 1 }),
+        type: 'invoice',
+      })
+    ).toEqual({ isInvoice: false, isInvoiceMethod: true });
+  });
+
+  it('keeps paid, refunded, and partially paid invoices commercial', () => {
+    for (const payment_status of ['paid', 'refunded', 'partially_paid']) {
+      expect(
+        resolveInvoicePresentation({
+          order: invoiceOrder({ payment_status }),
+          type: 'invoice',
+        })
+      ).toEqual({ isInvoice: false, isInvoiceMethod: true });
+    }
+  });
+
+  it('ignores zero or missing credit', () => {
+    expect(
+      resolveInvoicePresentation({
+        order: invoiceOrder({ amount_paid: 0 }),
+        type: 'invoice',
+      })
+    ).toEqual({ isInvoice: true, isInvoiceMethod: true });
+  });
+});
+
+describe('buildOrderSuccessCopy', () => {
+  it('renders confirmed copy for a credited invoice order', () => {
+    const { isInvoice } = resolveInvoicePresentation({
+      order: invoiceOrder({ amount_paid: 4000 }),
+      type: 'invoice',
+    });
+    const copy = buildOrderSuccessCopy({
+      hasRecoveryState: false,
+      hasValidatedOrder: true,
+      isInvoice,
+      isPayForMeUnpaid: false,
+      payerName: '',
+    });
+
+    expect(copy.heading).toBe('Order Confirmed!');
+    expect(copy.heading).not.toContain('Proforma');
+  });
+});

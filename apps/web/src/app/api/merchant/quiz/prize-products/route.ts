@@ -222,6 +222,7 @@ export async function GET(request: Request) {
         mapVariantProduct(product, variant)
       );
     }
+    if (product.has_variants === true) return [];
     return [mapBaseProduct(product)];
   });
   const page = paginatePrizeProducts({

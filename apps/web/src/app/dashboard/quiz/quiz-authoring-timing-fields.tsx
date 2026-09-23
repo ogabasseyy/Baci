@@ -46,17 +46,30 @@ export function QuizAuthoringTimingFields({
       </label>
       {timingKind === 'immediate' ? (
         <label className="grid gap-2 text-sm font-medium">
-          Universal live window (minutes)
+          Total quiz duration (seconds)
           <input
             className="h-11 rounded-md border bg-background px-3"
             min={1}
-            max={120}
+            max={7200}
+            step={1}
             type="number"
-            value={windowMinutes}
+            value={Math.round(Number(windowMinutes) * 60)}
             onBlur={() =>
-              onWindowMinutesChange(clampNumberInput(windowMinutes, 1, 120))
+              onWindowMinutesChange(
+                String(
+                  Number(
+                    clampNumberInput(
+                      String(Math.round(Number(windowMinutes) * 60)),
+                      1,
+                      7200
+                    )
+                  ) / 60
+                )
+              )
             }
-            onChange={(event) => onWindowMinutesChange(event.target.value)}
+            onChange={(event) =>
+              onWindowMinutesChange(String(Number(event.target.value) / 60))
+            }
           />
         </label>
       ) : (

@@ -5,8 +5,14 @@ import {
   requireQuizCsrf,
   requireQuizUser,
 } from '@/app/api/quiz/_shared/route-helpers';
+import { QuizAgeGateError } from '@/app/api/quiz/_shared/route-helpers-guards';
 import { resolveQuizDevice } from '@/lib/quiz/quiz-device-hash';
 import { postQuizStartV2 } from './v2-route';
+import { enforceQuizStartGuards } from './v2-start-guards';
+
+vi.mock('./v2-start-guards', () => ({
+  enforceQuizStartGuards: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('@/app/api/quiz/_shared/route-helpers', async () => {
   const actual = await vi.importActual<
@@ -99,6 +105,21 @@ beforeEach(() => {
 });
 
 describe('v2 quiz start route', () => {
+  it('returns the age restriction without issuing a start RPC', async () => {
+    const rpc = authenticated();
+    vi.mocked(enforceQuizStartGuards).mockRejectedValueOnce(
+      new QuizAgeGateError('Age restricted')
+    );
+    const response = await postQuizStartV2(request({}));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      code: 'quiz_age_restricted',
+    });
+    expect(rpc).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^start_quiz_attempt/),
+      expect.anything()
+    );
+  });
   it('authenticates before CSRF, validation, or RPC work', async () => {
     vi.mocked(requireQuizUser).mockResolvedValue({
       response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),

@@ -9,6 +9,7 @@ import type {
   QuizLaunchInput,
 } from './quiz-admin-actions';
 import { quizDatetimeLocalToIso } from './quiz-datetime-local';
+import { formatQuizDuration } from './quiz-duration';
 
 function formatPolicyInstant(value: string): string {
   // The offset-free field value is a policy-zone wall clock, not a
@@ -25,7 +26,7 @@ function timingSummary(configuration: QuizDraftConfiguration): string {
   if (configuration.timingKind === 'scheduled') {
     return `${formatPolicyInstant(configuration.scheduledStart)} to ${formatPolicyInstant(configuration.scheduledEnd)} (${QUIZ_DEFAULT_TIME_ZONE})`;
   }
-  return `Immediately, closing ${configuration.liveWindowMinutes} minutes later`;
+  return `Immediately, closing after ${formatQuizDuration(Math.round(configuration.liveWindowMinutes * 60))}`;
 }
 
 export function QuizLaunchDialog({

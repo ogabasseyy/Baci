@@ -121,7 +121,7 @@ describe('QuizAdminClient', () => {
       expect.objectContaining({
         mode: 'test',
         rulesVersion: 'test-v1',
-        timing: { kind: 'immediate', liveWindowSeconds: 300 },
+        timing: { kind: 'immediate', liveWindowSeconds: 10 },
       })
     );
     await waitFor(() =>

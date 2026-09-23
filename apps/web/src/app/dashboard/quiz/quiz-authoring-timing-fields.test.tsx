@@ -49,15 +49,15 @@ describe('QuizAuthoringTimingFields', () => {
   it('edits the live window and switches modes in immediate mode', () => {
     // Arrange & Act
     render(<QuizAuthoringTimingFields {...props} timingKind="immediate" />);
-    fireEvent.change(screen.getByLabelText(/universal live window/i), {
-      target: { value: '10' },
+    fireEvent.change(screen.getByLabelText(/total quiz duration/i), {
+      target: { value: '25' },
     });
     fireEvent.change(screen.getByLabelText(/launch timing/i), {
       target: { value: 'scheduled' },
     });
 
     // Assert
-    expect(props.onWindowMinutesChange).toHaveBeenCalledWith('10');
+    expect(props.onWindowMinutesChange).toHaveBeenCalledWith(String(25 / 60));
     expect(props.onTimingKindChange).toHaveBeenCalledWith('scheduled');
     expect(screen.queryByLabelText(/scheduled start/i)).toBeNull();
   });

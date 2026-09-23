@@ -251,6 +251,24 @@ describe('GET /api/merchant/quiz/prize-products', () => {
     expect(secondPage.nextCursor).toBeNull();
   });
 
+  it('does not return an unselectable parent when variant inventory is missing', async () => {
+    hydrateBuilder.in.mockResolvedValueOnce({
+      data: [{ ...baseProduct, has_variants: true }],
+      error: null,
+    });
+    variantsBuilder.order.mockResolvedValueOnce({ data: [], error: null });
+
+    const response = await GET(
+      new Request('http://localhost/api?search=Phone')
+    );
+
+    expect(await response.json()).toEqual({
+      nextCursor: null,
+      products: [],
+      total: null,
+    });
+  });
+
   it('drops cross-merchant hydration rows even if the database response is wrong', async () => {
     hydrateBuilder.in.mockResolvedValueOnce({
       data: [{ ...baseProduct, merchant_id: 'merchant-2' }],

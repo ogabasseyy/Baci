@@ -9,7 +9,10 @@ import { parseQuizV2Attempt } from '@/app/api/quiz/_shared/quiz-v2-projection';
 import {
   createRouteProof,
   invalidInputResponse,
+  isQuizAgeGateError,
   parseJsonBody,
+  prizeGuardErrorResponse,
+  quizAgeGateErrorResponse,
   quizRpcClientErrorResponse,
   rejectQuizIdentityMismatch,
   requireQuizCsrf,
@@ -23,6 +26,7 @@ import {
 } from '@/lib/quiz/quiz-device-hash';
 import { buildQuizDeviceProofSubject } from '@/lib/quiz/quiz-device-proof-subject';
 import { startQuizAttemptV2RouteSchema } from '@/schemas/quiz';
+import { enforceQuizStartGuards } from './v2-start-guards';
 
 const START_ACTION = 'start_quiz_attempt_v2';
 const DEVICE_ACTION = 'start_quiz_attempt_with_device_v2';
@@ -50,6 +54,18 @@ export async function postQuizStartV2(request: NextRequest) {
 
   const runtimeResponse = await requireQuizV2Runtime(auth.supabase);
   if (runtimeResponse) return runtimeResponse;
+
+  try {
+    await enforceQuizStartGuards(
+      auth.supabase,
+      parsed.data.eventId,
+      auth.user.id
+    );
+  } catch (error) {
+    return isQuizAgeGateError(error)
+      ? quizAgeGateErrorResponse(error)
+      : prizeGuardErrorResponse(error);
+  }
 
   const rawFingerprint = request.headers.get('X-Baci-Quiz-Device-Fingerprint');
   const fingerprint = readQuizDeviceFingerprint(request);

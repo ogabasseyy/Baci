@@ -3,6 +3,7 @@ import { isRepairPickupPaymentConfirmed } from './is-repair-pickup-payment-confi
 describe('isRepairPickupPaymentConfirmed', () => {
   it.each([
     'paid',
+    'booking',
     'booked',
     'retrying',
     'review',

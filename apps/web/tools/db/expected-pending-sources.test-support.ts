@@ -293,4 +293,9 @@ export const EXPECTED_PENDING_SOURCES = [
     repositoryPath: 'supabase/migrations/20260921180000_get_santa_catalog.sql',
     sha256: 'ccb69b3c76fc8fccdd2832177f66e2fb508afef422f554adf0ba9d792a58b19a',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260922120000_normalize_product_key_specs_gpu.sql',
+    sha256: '27140ce538838e4a31f6fbc2f9871eaa3697d02888aed5d3b360c5f68ccd2245',
+  },
 ].sort((a, b) => a.repositoryPath.localeCompare(b.repositoryPath));

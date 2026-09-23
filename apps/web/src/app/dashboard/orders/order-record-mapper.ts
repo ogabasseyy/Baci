@@ -45,6 +45,7 @@ export interface DashboardOrderRecord {
   order_items?: DashboardOrderItem[];
   import_metadata?: {
     shopId?: unknown;
+    [key: string]: unknown;
   } | null;
 }
 

@@ -42,15 +42,22 @@ function buildVpsChatSystemPrompt(
     );
   }
 
+  // When checkout is disabled the advertised schemas exclude payment and
+  // cancellation tools, so the model must not be told to reach for them —
+  // that produces unknown-tool loops instead of the support direction below.
+  const toolGuidance = checkoutEnabled
+    ? 'You have commerce tools for product search, product details, recommendations, payment account requests, payment status checks, and unpaid order cancellation. ' +
+      'Use tools before answering questions about live inventory, current prices, availability, checkout, payment status, or order cancellation. '
+    : 'You have read-only commerce tools for product search, product details, recommendations, and payment status checks; checkout, payment-account creation, and order cancellation are disabled. ' +
+      'Use tools before answering questions about live inventory, current prices, availability, or payment status. ' +
+      'For checkout, payment-account, or cancellation requests, direct the customer to the storefront or WhatsApp support without calling a tool. ';
+
   return (
     merchantDisplayData +
     ' ' +
     currencyGuidance +
     'Keep replies brief, helpful, and honest. ' +
-    (checkoutEnabled
-      ? 'You have commerce tools for product search, product details, recommendations, payment account requests, payment status checks, and unpaid order cancellation. '
-      : 'You have read-only commerce tools for product search, product details, recommendations, and payment status checks; checkout, payment-account creation, and order cancellation are disabled. ') +
-    'Use tools before answering questions about live inventory, current prices, availability, checkout, payment status, or order cancellation. ' +
+    toolGuidance +
     'Never invent stock, pricing, order, bank-account, or payment information; if a tool cannot complete an action, explain the tool result and suggest checkout or WhatsApp support.'
   );
 }

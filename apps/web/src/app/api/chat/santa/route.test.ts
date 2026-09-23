@@ -282,6 +282,27 @@ describe('POST /api/chat/santa', () => {
     );
   });
 
+  it('returns a bounded error when tenant resolution exceeds the route deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(resolveAgenticChatTenant).mockReturnValueOnce(
+        new Promise(() => {})
+      );
+      const pending = POST(
+        makeRequest({
+          messages: [{ role: 'user', content: 'Hello' }],
+        })
+      );
+      await vi.advanceTimersByTimeAsync(29_000);
+      const response = await pending;
+
+      expect(response.status).toBe(500);
+      expect(await response.text()).toContain('Santa is taking a break');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('falls through to the fallback model when the active model fails', async () => {
     // Arrange - keyless test env resolves to [google active, google fallback]
     respondByModel({

@@ -23,7 +23,8 @@ function buildSantaMerchantDisplayData(merchantName: string): string {
 
 async function withTimeout<T>(
   operation: Promise<T>,
-  timeoutMs: number
+  timeoutMs: number,
+  timeoutMessage = 'Santa catalogue lookup timed out'
 ): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -31,7 +32,7 @@ async function withTimeout<T>(
       operation,
       new Promise<T>((_, reject) => {
         timeoutId = setTimeout(
-          () => reject(new Error('Santa catalogue lookup timed out')),
+          () => reject(new Error(timeoutMessage)),
           timeoutMs
         );
       }),
@@ -186,8 +187,14 @@ export async function POST(req: Request) {
       .filter((message) => message.role === 'user')
       .at(-1)?.content;
 
-    // Step 5: Generate prompt with cached product data
-    const tenant = await resolveAgenticChatTenant(req);
+    // Step 5: Generate prompt with cached product data. The lookup shares
+    // the route deadline — an uncapped stall here would otherwise outlive
+    // maxDuration and hand the client an empty 504.
+    const tenant = await withTimeout(
+      resolveAgenticChatTenant(req),
+      SANTA_ROUTE_DEADLINE_MS,
+      'Santa tenant lookup timed out'
+    );
     if (!tenant) {
       return new Response(
         JSON.stringify({

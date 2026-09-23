@@ -109,6 +109,10 @@ describe('chat route helpers', () => {
       'checkout, payment-account creation'
     );
     expect(systemMessage.content).not.toContain('payment account requests');
+    expect(systemMessage.content).toContain('without calling a tool');
+    expect(systemMessage.content).not.toContain(
+      'availability, checkout, payment status, or order cancellation'
+    );
   });
 
   it('keeps safe live-data guidance for toolless VPS backends', () => {

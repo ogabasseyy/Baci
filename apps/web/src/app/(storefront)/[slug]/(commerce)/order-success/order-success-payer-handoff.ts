@@ -67,8 +67,15 @@ export function buildPayerHandoff({
   // shippable) status keeps the handoff.
   const isShippingCancelled =
     order?.shipping_status?.trim().toLowerCase() === 'cancelled';
+  // The ?type=payforme parameter is caller-controlled: an ordinary
+  // invoice or bank-transfer order opened with it must not offer Pay
+  // for Me instructions. Genuine Pay for Me orders keep their distinct
+  // stored method (never collapsed to invoice), so require it.
+  const isStoredPayForMeMethod =
+    order?.payment_method?.trim().toLowerCase() === 'payforme';
   const isPayForMeUnpaid =
     isPayForMe &&
+    isStoredPayForMeMethod &&
     order?.payment_status !== 'paid' &&
     order?.payment_status !== 'refunded' &&
     !isTerminalPayForMeStatus(order?.payment_status) &&

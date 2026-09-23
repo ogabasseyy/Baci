@@ -33,6 +33,29 @@ export function resolveInvoicePresentation({
   return { isInvoice, isInvoiceMethod };
 }
 
+/**
+ * Paid invoice-method document: the receipts archive computes
+ * current_document_kind as receipt once a paid order has shipped or
+ * been delivered, so this CTA must promise and link exactly the
+ * document the archive offers — a receipt download for shipped /
+ * delivered orders, the commercial invoice otherwise. Unpaid orders
+ * are proforma and never reach this resolver's consumers.
+ */
+export function resolvePaidInvoiceDocument({
+  order,
+}: {
+  order: OrderData | null;
+}): { kind: 'invoice' | 'receipt'; label: string } {
+  const shippedOrDelivered = ['shipped', 'delivered'].includes(
+    order?.shipping_status?.trim().toLowerCase() ?? ''
+  );
+  const isPaid = order?.payment_status?.trim().toLowerCase() === 'paid';
+  if (isPaid && shippedOrDelivered) {
+    return { kind: 'receipt', label: 'Download Receipt PDF' };
+  }
+  return { kind: 'invoice', label: 'Download Commercial Invoice PDF' };
+}
+
 export function buildOrderSuccessCopy({
   hasRecoveryState,
   hasValidatedOrder,

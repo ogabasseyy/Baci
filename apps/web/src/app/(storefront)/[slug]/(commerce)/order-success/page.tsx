@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  ArrowRight,
-  CheckCircle,
-  Download,
-  Loader2,
-  Mail,
-  Star,
-} from 'lucide-react';
+import { ArrowRight, CheckCircle, Loader2, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -21,6 +14,7 @@ import {
   fetchStorefrontOrderData,
   type StorefrontOrderData as OrderData,
 } from './fetch-storefront-order';
+import { OrderSuccessInvoiceCta } from './order-success-invoice-cta';
 import { OrderSuccessOrderSummary } from './order-success-order-summary';
 import { buildPayerHandoff } from './order-success-payer-handoff';
 import { OrderSuccessPayerHandoff } from './order-success-payer-handoff-view';
@@ -214,32 +208,15 @@ function OrderSuccessContent() {
               </Link>
             )}
 
-            {/* The receipts archive requires an account: guests would
-                only hit the login redirect, so they get the accurate
-                email action. Unpaid guests hold the proforma PDF from the
-                immediate invoice email; paid guests hold the order
-                confirmation email — no commercial-invoice PDF is emailed
-                on later gateway settlement, so the copy must not claim
-                one was sent. */}
-            {isInvoiceMethod &&
-              (user ? (
-                <Link
-                  href={asRoute(getHref('/receipts'))}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-store-border bg-store-background px-6 py-4 font-bold text-store-background-text transition-colors hover:bg-store-secondary"
-                >
-                  <Download size={18} />
-                  {isInvoice
-                    ? 'Download Proforma Invoice PDF'
-                    : 'Download Commercial Invoice PDF'}
-                </Link>
-              ) : (
-                <div className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-6 py-4 text-sm font-medium text-gray-600">
-                  <Mail size={18} />
-                  {isInvoice
-                    ? `Your proforma invoice PDF was sent to ${order?.customer_email || 'your email'}.`
-                    : `Your order confirmation was sent to ${order?.customer_email || 'your email'}.`}
-                </div>
-              ))}
+            {isInvoiceMethod && (
+              <OrderSuccessInvoiceCta
+                archiveHref={asRoute(getHref('/receipts'))}
+                isAuthed={Boolean(user)}
+                isInvoice={isInvoice}
+                merchantSlug={merchant?.slug}
+                order={order}
+              />
+            )}
 
             <Link
               href={asRoute(getHref('/'))}

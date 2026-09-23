@@ -30,38 +30,40 @@ export function OrderSuccessPayerHandoff({
     return null;
   }
   return (
-    <div className="mb-8 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-left">
-      <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">
+    <div className="mb-8 rounded-2xl border border-store-border bg-store-secondary p-4 text-left">
+      <p className="text-xs font-bold uppercase tracking-widest text-store-background-text/55 mb-2">
         Payment details for {payerName}
       </p>
-      <dl className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 space-y-1">
+      <dl className="rounded-lg border border-store-border bg-store-background px-3 py-2.5 text-sm text-store-background-text space-y-1">
         <div className="flex justify-between gap-4">
-          <dt className="text-gray-500">Amount due</dt>
-          <dd className="font-bold text-gray-900">{payerAmountText}</dd>
+          <dt className="text-store-background-text/55">Amount due</dt>
+          <dd className="font-bold text-store-background-text">
+            {payerAmountText}
+          </dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="text-gray-500">Order</dt>
-          <dd className="font-mono font-bold text-gray-900">
+          <dt className="text-store-background-text/55">Order</dt>
+          <dd className="font-mono font-bold text-store-background-text">
             {order.order_number}
           </dd>
         </div>
         {payerTransferAccount && (
           <>
             <div className="flex justify-between gap-4">
-              <dt className="text-gray-500">Bank</dt>
-              <dd className="font-bold text-gray-900">
+              <dt className="text-store-background-text/55">Bank</dt>
+              <dd className="font-bold text-store-background-text">
                 {payerTransferAccount.bank_name || 'See your order email'}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-gray-500">Account name</dt>
-              <dd className="font-bold text-gray-900">
+              <dt className="text-store-background-text/55">Account name</dt>
+              <dd className="font-bold text-store-background-text">
                 {payerTransferAccount.account_name || 'See your order email'}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-gray-500">Account number</dt>
-              <dd className="font-mono font-bold text-gray-900">
+              <dt className="text-store-background-text/55">Account number</dt>
+              <dd className="font-mono font-bold text-store-background-text">
                 {payerTransferAccount.account_number}
               </dd>
             </div>
@@ -69,7 +71,7 @@ export function OrderSuccessPayerHandoff({
         )}
       </dl>
       {!payerTransferAccount && payerOutstandingBalance > 0 && (
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-store-background-text/55">
           Your order email has the full transfer details — forward them to{' '}
           {payerName} along with the amount above.
         </p>
@@ -83,7 +85,7 @@ export function OrderSuccessPayerHandoff({
             () => onCopied(false)
           );
         }}
-        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 active:scale-[0.98]"
+        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-store-primary px-4 py-2.5 text-sm font-bold text-store-primary-text hover:bg-store-primary/90 active:scale-[0.98]"
       >
         {payerDetailsCopied ? <Check size={16} /> : <Copy size={16} />}
         {payerDetailsCopied ? 'Copied' : 'Copy details'}

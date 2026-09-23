@@ -9,6 +9,7 @@ function baseOrder(): StorefrontOrderData {
     total: 5000,
     amount_paid: 2000,
     payment_status: 'pending',
+    payment_method: 'payforme',
     shipping_status: 'pending',
     currency: 'NGN',
     virtual_account: {
@@ -55,6 +56,23 @@ describe('buildPayerHandoff', () => {
         order: baseOrder(),
         payerNameParam: null,
         type: 'standard',
+      }).isPayForMeUnpaid
+    ).toBe(false);
+  });
+
+  it('ignores a caller-supplied payforme type on other methods', () => {
+    expect(
+      buildPayerHandoff({
+        order: { ...baseOrder(), payment_method: 'invoice' },
+        payerNameParam: 'Zain',
+        type: 'payforme',
+      }).isPayForMeUnpaid
+    ).toBe(false);
+    expect(
+      buildPayerHandoff({
+        order: { ...baseOrder(), payment_method: undefined },
+        payerNameParam: 'Zain',
+        type: 'payforme',
       }).isPayForMeUnpaid
     ).toBe(false);
   });

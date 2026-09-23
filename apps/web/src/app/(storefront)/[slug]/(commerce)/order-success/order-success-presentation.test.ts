@@ -3,6 +3,7 @@ import type { StorefrontOrderData } from './fetch-storefront-order';
 import {
   buildOrderSuccessCopy,
   resolveInvoicePresentation,
+  resolvePaidInvoiceDocument,
 } from './order-success-presentation';
 
 function invoiceOrder(
@@ -86,5 +87,34 @@ describe('buildOrderSuccessCopy', () => {
 
     expect(copy.heading).toBe('Order Confirmed!');
     expect(copy.heading).not.toContain('Proforma');
+  });
+});
+
+describe('resolvePaidInvoiceDocument', () => {
+  it('offers the commercial invoice for a paid unshipped order', () => {
+    expect(
+      resolvePaidInvoiceDocument({
+        order: invoiceOrder({ payment_status: 'paid' }),
+      })
+    ).toEqual({ kind: 'invoice', label: 'Download Commercial Invoice PDF' });
+  });
+
+  it('offers the receipt once a paid order ships', () => {
+    expect(
+      resolvePaidInvoiceDocument({
+        order: invoiceOrder({
+          payment_status: 'paid',
+          shipping_status: 'shipped',
+        }),
+      })
+    ).toEqual({ kind: 'receipt', label: 'Download Receipt PDF' });
+    expect(
+      resolvePaidInvoiceDocument({
+        order: invoiceOrder({
+          payment_status: 'paid',
+          shipping_status: 'Delivered',
+        }),
+      })
+    ).toEqual({ kind: 'receipt', label: 'Download Receipt PDF' });
   });
 });

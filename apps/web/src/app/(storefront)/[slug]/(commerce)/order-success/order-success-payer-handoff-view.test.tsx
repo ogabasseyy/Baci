@@ -10,6 +10,7 @@ function baseOrder() {
     total: 5000,
     amount_paid: 0,
     payment_status: 'pending',
+    payment_method: 'payforme',
     shipping_status: 'pending',
     currency: 'NGN',
     virtual_account: {

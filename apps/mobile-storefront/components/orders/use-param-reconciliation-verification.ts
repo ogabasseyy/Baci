@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { verifyOrderPaymentForCompletion } from '@/components/payment-gateway/verify-order-payment';
 
 interface ParamReconciliationVerificationInput {
@@ -107,9 +107,10 @@ export function useParamReconciliationVerification({
     retryNonce,
   ]);
 
-  const retry = useCallback(() => {
+  // Plain closure: React Compiler handles memoization (AGENTS.md).
+  const retry = () => {
     setRetryNonce((nonce) => nonce + 1);
-  }, []);
+  };
 
   return { verified, exhausted, retry };
 }

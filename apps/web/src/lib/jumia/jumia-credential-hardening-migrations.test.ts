@@ -135,6 +135,21 @@ describe('Jumia credential hardening migrations', () => {
     );
   });
 
+  it('preserves the stored refresh token when OAuth omits a replacement', () => {
+    const sql = readFileSync(
+      path.join(
+        migrationsRoot,
+        '20260827110101_recheck_jumia_oauth_self_authorization_conflicts.sql'
+      ),
+      'utf8'
+    );
+
+    expect(sql).toMatch(
+      /refresh_token\s*=\s*COALESCE\(EXCLUDED\.refresh_token,\s*existing\.refresh_token\)/i
+    );
+    expect(sql).not.toMatch(/refresh_token\s*=\s*EXCLUDED\.refresh_token,/i);
+  });
+
   it('locks the provider shop before the disconnect purge locks rows', () => {
     const sql = readFileSync(
       path.join(

@@ -145,7 +145,9 @@ BEGIN
     shop_name = EXCLUDED.shop_name,
     country_code = EXCLUDED.country_code,
     access_token = EXCLUDED.access_token,
-    refresh_token = EXCLUDED.refresh_token,
+    -- Jumia may omit refresh_token when the previous token stays valid, so a
+    -- NULL replacement must not wipe the stored usable token.
+    refresh_token = COALESCE(EXCLUDED.refresh_token, existing.refresh_token),
     token_expires_at = EXCLUDED.token_expires_at,
     connection_method = 'oauth',
     jumia_authorization_id = NULL,

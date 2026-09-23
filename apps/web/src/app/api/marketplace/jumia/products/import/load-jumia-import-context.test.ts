@@ -140,6 +140,66 @@ describe('loadJumiaImportContext', () => {
     });
     expect(mockGetAllProducts).not.toHaveBeenCalled();
   });
+
+  it('fails closed for an OAuth shop with multiple active business clients', async () => {
+    const jumia = { shopId: 'shop-1', marketplaceKey: 'oauth' };
+    vi.mocked(verifyJumiaSingleMarketplaceScope).mockResolvedValue({
+      ok: false,
+      reason: 'multiple_active_marketplaces',
+    });
+
+    const result = await loadJumiaImportContext({
+      createJumiaClient: vi.fn().mockResolvedValue(jumia),
+    });
+
+    expect(verifyJumiaSingleMarketplaceScope).toHaveBeenCalledWith(jumia, {
+      strictOAuth: true,
+    });
+    expect(result).toEqual({
+      ok: false,
+      error:
+        'Jumia catalog import is unavailable when a shop has multiple active marketplaces',
+      status: 409,
+    });
+    expect(mockGetAllProducts).not.toHaveBeenCalled();
+  });
+
+  it('imports an OAuth shop with one active business client', async () => {
+    const jumia = { shopId: 'shop-1', marketplaceKey: 'oauth' };
+    mockGetAllProducts.mockResolvedValue([]);
+
+    const result = await loadJumiaImportContext({
+      createJumiaClient: vi.fn().mockResolvedValue(jumia),
+    });
+
+    expect(verifyJumiaSingleMarketplaceScope).toHaveBeenCalledWith(jumia, {
+      strictOAuth: true,
+    });
+    expect(result).toEqual({ ok: true, jumia, jumiaProducts: [] });
+    expect(mockGetAllProducts).toHaveBeenCalledWith(jumia, {
+      status: 'active',
+      shopId: 'shop-1',
+    });
+  });
+
+  it('returns a retryable error when OAuth scope cannot be verified', async () => {
+    const jumia = { shopId: 'shop-1', marketplaceKey: 'oauth' };
+    vi.mocked(verifyJumiaSingleMarketplaceScope).mockResolvedValue({
+      ok: false,
+      reason: 'provider_unavailable',
+    });
+
+    const result = await loadJumiaImportContext({
+      createJumiaClient: vi.fn().mockResolvedValue(jumia),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'Unable to verify the Jumia marketplace scope',
+      status: 502,
+    });
+    expect(mockGetAllProducts).not.toHaveBeenCalled();
+  });
 });
 
 describe('validateJumiaImportCurrency', () => {

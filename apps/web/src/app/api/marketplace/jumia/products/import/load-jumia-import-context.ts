@@ -58,12 +58,18 @@ export async function loadJumiaImportContext({
 
   try {
     const marketplaceKey = jumia.marketplaceKey?.trim();
+    // OAuth persistence collapses every business client of a shop into one
+    // integration row, and the catalog query filters by shop only; importing
+    // a multi-marketplace OAuth shop would mix sibling listings and store
+    // their prices under one currency, so it needs the same strict proof.
+    const isOAuthMarketplace = marketplaceKey === 'oauth';
     const isMarketplaceScoped =
-      marketplaceKey &&
-      marketplaceKey !== 'oauth' &&
-      marketplaceKey !== 'default';
-    if (isMarketplaceScoped) {
-      const scope = await verifyJumiaSingleMarketplaceScope(jumia);
+      marketplaceKey && !isOAuthMarketplace && marketplaceKey !== 'default';
+    if (isMarketplaceScoped || isOAuthMarketplace) {
+      const scope = await verifyJumiaSingleMarketplaceScope(
+        jumia,
+        isOAuthMarketplace ? { strictOAuth: true } : undefined
+      );
       if (!scope.ok) {
         if (scope.reason === 'provider_unavailable') {
           return {

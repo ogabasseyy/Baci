@@ -80,4 +80,42 @@ describe('verifyJumiaSingleMarketplaceScope', () => {
       reason: 'provider_unavailable',
     });
   });
+
+  it('accepts an OAuth shop with a single active marketplace in strict mode', async () => {
+    const client = createClient({
+      marketplaceKey: 'oauth',
+      getShops: vi.fn().mockResolvedValue([
+        {
+          id: 'shop-1',
+          businessClients: [{ code: 'NG-RETAIL', status: 'active' }],
+        },
+      ]),
+    });
+
+    await expect(
+      verifyJumiaSingleMarketplaceScope(client, { strictOAuth: true })
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it('rejects an OAuth shop with multiple active marketplaces in strict mode', async () => {
+    const client = createClient({
+      marketplaceKey: 'oauth',
+      getShops: vi.fn().mockResolvedValue([
+        {
+          id: 'shop-1',
+          businessClients: [
+            { code: 'NG-RETAIL', status: 'active' },
+            { code: 'NG-EXPRESS', status: 'active' },
+          ],
+        },
+      ]),
+    });
+
+    await expect(
+      verifyJumiaSingleMarketplaceScope(client, { strictOAuth: true })
+    ).resolves.toEqual({
+      ok: false,
+      reason: 'multiple_active_marketplaces',
+    });
+  });
 });

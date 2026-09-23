@@ -75,17 +75,18 @@ export async function reserveJumiaExportMappings(args: ReserveArgs): Promise<
     };
   }
 
-  const requestedSkus = args.exportVariations.map(
-    (variation) => variation.sellerSku
-  );
+  // Product creation is a top-level feed, so any live mapping in this
+  // product/shop/marketplace scope blocks another create. Gating on the
+  // requested SKU set would miss a synced mapping whose variant was
+  // renamed locally (or left out of a partial retry) and submit a
+  // duplicate create feed. Failed rows are cleared below and re-reserved.
   const { data: existingMappings, error: blockingError } = await args.supabase
     .from('jumia_product_mappings')
     .select('jumia_sku, sync_status')
     .eq('merchant_id', args.merchantId)
     .eq('product_id', productId)
     .eq('jumia_shop_id', args.shopId)
-    .eq('marketplace_key', args.marketplaceKey)
-    .in('jumia_sku', requestedSkus);
+    .eq('marketplace_key', args.marketplaceKey);
 
   if (blockingError) {
     return {

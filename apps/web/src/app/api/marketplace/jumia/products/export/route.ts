@@ -9,13 +9,13 @@ import {
 import { checkCsrfProtection } from '@/lib/csrf';
 import { JumiaClient } from '@/lib/jumia/client';
 import { JumiaApiError } from '@/lib/jumia/helpers';
-import { logger } from '@/lib/logger';
-import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
-import { jumiaExportProductSchema } from '@/schemas/jumia/export-product';
 import {
   loadJumiaMarketplaceCurrency,
   validateJumiaMarketplaceCurrencyForMerchant,
-} from './export-product-currency';
+} from '@/lib/jumia/jumia-marketplace-currency';
+import { logger } from '@/lib/logger';
+import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
+import { jumiaExportProductSchema } from '@/schemas/jumia/export-product';
 import { reserveJumiaExportMappings } from './export-product-reservation';
 import { resolveAuthorizedExportProduct } from './export-product-source';
 import { submitJumiaExportFeed } from './submit-jumia-export-feed';

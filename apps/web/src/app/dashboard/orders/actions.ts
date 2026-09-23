@@ -170,7 +170,7 @@ const ORDER_CONFIRMATION_SELECT = [
 // shared ORDER_WITH_ITEMS_QUERY (which also feeds carrier/email/invoice reads);
 // append them only here so fulfillment can name the pickup location / zone /
 // tier instead of the bare `MERCHANT` provider label.
-const ORDER_DETAILS_QUERY = `${ORDER_WITH_ITEMS_QUERY}, shipping_rate_id, shipping_rate_name, shipping_pickup_details`;
+const ORDER_DETAILS_QUERY = `${ORDER_WITH_ITEMS_QUERY}, shipping_rate_id, shipping_rate_name, shipping_pickup_details, import_metadata`;
 
 function getZeroOrderStats(): OrderStats {
   return {
@@ -266,7 +266,7 @@ export async function getOrders(
 
   let query = supabase
     .from('orders')
-    .select(ORDER_WITH_ITEMS_QUERY)
+    .select(`${ORDER_WITH_ITEMS_QUERY}, import_metadata`)
     .eq('merchant_id', authorizedMerchantId)
     .order('created_at', { ascending: false });
 

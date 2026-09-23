@@ -1,10 +1,10 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { flattenError } from 'zod';
-import { loadJumiaMarketplaceCurrency } from '@/app/api/marketplace/jumia/products/export/export-product-currency';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { JumiaClient } from '@/lib/jumia/client';
 import { JumiaApiError } from '@/lib/jumia/helpers';
+import { loadJumiaMarketplaceCurrency } from '@/lib/jumia/jumia-marketplace-currency';
 import { loadIntegrationScopedMappings } from '@/lib/jumia/product-mapping-scope';
 import { logger } from '@/lib/logger';
 import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';

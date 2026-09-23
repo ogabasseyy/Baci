@@ -262,6 +262,70 @@ describe('submitJumiaExportFeed', () => {
     expect(releaseJumiaExportReservation).toHaveBeenCalled();
   });
 
+  it('rejects an OAuth export when the shop exposes multiple marketplaces', async () => {
+    const { createProduct } = await import('@/lib/jumia/feeds');
+    const { releaseJumiaExportReservation } = await import(
+      './export-product-reservation'
+    );
+    vi.mocked(verifyJumiaSingleMarketplaceScope).mockResolvedValue({
+      ok: false,
+      reason: 'multiple_active_marketplaces',
+    });
+    vi.mocked(releaseJumiaExportReservation).mockResolvedValue(true);
+    const supabase = createScopeSupabase(1);
+
+    const result = await submitJumiaExportFeed({
+      jumia: { shopId: 'shop-1' } as never,
+      supabase: supabase as never,
+      merchantId: 'merchant-1',
+      productId: 'product-1',
+      shopId: 'shop-1',
+      marketplaceKey: 'oauth',
+      exportName: 'Phone',
+      brand: { code: 1, name: 'Generic' },
+      category: { code: 2 },
+      exportVariations: [{ sellerSku: 'SKU-1', price: 100, currency: 'NGN' }],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(verifyJumiaSingleMarketplaceScope).toHaveBeenCalledWith(
+      { shopId: 'shop-1' },
+      { strictOAuth: true }
+    );
+    expect(createProduct).not.toHaveBeenCalled();
+    expect(releaseJumiaExportReservation).toHaveBeenCalled();
+  });
+
+  it('allows an OAuth export when the shop has a single active marketplace', async () => {
+    const { createProduct } = await import('@/lib/jumia/feeds');
+    vi.mocked(createProduct).mockResolvedValue('feed-oauth');
+    const { finalizeJumiaExportReservation } = await import(
+      './export-product-reservation'
+    );
+    vi.mocked(finalizeJumiaExportReservation).mockResolvedValue(true);
+    const supabase = createScopeSupabase(1);
+
+    const result = await submitJumiaExportFeed({
+      jumia: { shopId: 'shop-1' } as never,
+      supabase: supabase as never,
+      merchantId: 'merchant-1',
+      productId: 'product-1',
+      shopId: 'shop-1',
+      marketplaceKey: 'oauth',
+      exportName: 'Phone',
+      brand: { code: 1, name: 'Generic' },
+      category: { code: 2 },
+      exportVariations: [{ sellerSku: 'SKU-1', price: 100, currency: 'NGN' }],
+    });
+
+    expect(result).toEqual({ ok: true, feedId: 'feed-oauth' });
+    expect(verifyJumiaSingleMarketplaceScope).toHaveBeenCalledWith(
+      { shopId: 'shop-1' },
+      { strictOAuth: true }
+    );
+    expect(createProduct).toHaveBeenCalled();
+  });
+
   it('releases the reservation when marketplace scope cannot be verified', async () => {
     const { releaseJumiaExportReservation } = await import(
       './export-product-reservation'

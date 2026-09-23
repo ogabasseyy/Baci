@@ -43,6 +43,9 @@ export interface DashboardOrderRecord {
   customer_phone?: string;
   notes?: string;
   order_items?: DashboardOrderItem[];
+  import_metadata?: {
+    shopId?: unknown;
+  } | null;
 }
 
 interface DashboardTransactionRecord {
@@ -96,6 +99,13 @@ export function mapDashboardOrderRecord(
     }),
     createdAt: new Date(order.created_at).getTime(),
     source: order.source,
+    // Synced marketplace rows carry their provider shop in import
+    // metadata; surface it so multi-shop orders resolve their own
+    // integration for fulfillment.
+    jumiaShopId:
+      typeof order.import_metadata?.shopId === 'string'
+        ? order.import_metadata.shopId
+        : undefined,
     tracking_number: order.tracking_number,
     shipping_provider: order.shipping_provider,
     delivery_method: order.delivery_method,

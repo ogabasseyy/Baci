@@ -22,15 +22,18 @@ function buildSupabase(
     eq: vi.fn(),
     in: vi.fn(),
   };
-  mappingQuery.eq.mockReturnValue(mappingQuery);
-  mappingQuery.in.mockResolvedValue({
-    data:
-      options.existingMappings ??
-      (options.existingMapping
-        ? [{ jumia_sku: 'SKU-1', sync_status: 'synced' }]
-        : []),
-    error: null,
-  });
+  mappingQuery.eq.mockImplementation((column: string) =>
+    column === 'marketplace_key'
+      ? Promise.resolve({
+          data:
+            options.existingMappings ??
+            (options.existingMapping
+              ? [{ jumia_sku: 'SKU-1', sync_status: 'synced' }]
+              : []),
+          error: null,
+        })
+      : mappingQuery
+  );
   const insert = vi.fn().mockResolvedValue({
     error: options.insertError ?? null,
   });
@@ -69,7 +72,7 @@ function buildSupabase(
     };
   });
 
-  return { from, insert, del };
+  return { from, insert, del, mappingQuery };
 }
 
 const baseArgs = {
@@ -188,6 +191,31 @@ describe('reserveJumiaExportMappings', () => {
       code: 'jumia_mapping_exists',
     });
     expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('blocks a retry when a live mapping exists outside the requested SKUs', async () => {
+    const { from, insert, mappingQuery } = buildSupabase({
+      existingMappings: [{ jumia_sku: 'SKU-OLD', sync_status: 'synced' }],
+    });
+
+    const result = await reserveJumiaExportMappings({
+      ...baseArgs,
+      exportVariations: [
+        { sellerSku: 'SKU-NEW', price: 1500, currency: 'NGN' },
+      ],
+      variantIdsBySku: new Map([['SKU-NEW', 'variant-1']]),
+      supabase: { from } as never,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 409,
+      error:
+        'This product is already mapped to Jumia for this integration. Update the existing listing instead.',
+      code: 'jumia_mapping_exists',
+    });
+    expect(insert).not.toHaveBeenCalled();
+    expect(mappingQuery.in).not.toHaveBeenCalled();
   });
 
   it('returns a server failure when the linked-product lookup fails', async () => {

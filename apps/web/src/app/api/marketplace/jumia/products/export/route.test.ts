@@ -98,7 +98,15 @@ const {
       if (table === 'jumia_product_mappings') {
         return {
           select: () => ({
-            eq: () => createMappingChain(),
+            eq: () => {
+              const chain = createMappingChain();
+              chain.eq.mockImplementation((column: string) =>
+                column === 'marketplace_key'
+                  ? Promise.resolve({ data: [], error: null })
+                  : chain
+              );
+              return chain;
+            },
           }),
           insert: (...a: unknown[]) => mockInsert(...a),
           update: (...a: unknown[]) => {
@@ -477,7 +485,6 @@ describe('Products Export POST', () => {
   it('returns 207 when mapping finalize fails after Jumia accepts the feed', async () => {
     mockCreateProduct.mockResolvedValue('feed-abc');
     mockMappingIn
-      .mockResolvedValueOnce({ data: [], error: null })
       .mockResolvedValueOnce({ error: { message: 'update fail' } })
       .mockResolvedValueOnce({ error: { message: 'update fail' } })
       .mockResolvedValueOnce({ data: [{ id: 'mapping-0' }], error: null });

@@ -7,6 +7,10 @@ import {
 } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { JumiaClient } from '@/lib/jumia/client';
+import {
+  loadJumiaMarketplaceCurrency,
+  validateJumiaMarketplaceCurrencyForMerchant,
+} from '@/lib/jumia/jumia-marketplace-currency';
 import { logger } from '@/lib/logger';
 import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { sanitizeText, stripHtmlTags } from '@/lib/sanitize-core';
@@ -92,6 +96,33 @@ export async function POST(req: NextRequest) {
       );
     }
     const { jumia, jumiaProducts } = context;
+
+    // Provider prices carry no currency; a marketplace/merchant mismatch
+    // would store foreign-denominated amounts as local prices.
+    const currencyResult = await loadJumiaMarketplaceCurrency(
+      supabase,
+      merchantId,
+      integrationId
+    );
+    if (!currencyResult.ok) {
+      return NextResponse.json(
+        { error: currencyResult.error },
+        { status: currencyResult.status }
+      );
+    }
+
+    const merchantCurrencyResult =
+      await validateJumiaMarketplaceCurrencyForMerchant(
+        supabase,
+        merchantId,
+        currencyResult.currency
+      );
+    if (!merchantCurrencyResult.ok) {
+      return NextResponse.json(
+        { error: merchantCurrencyResult.error },
+        { status: merchantCurrencyResult.status }
+      );
+    }
 
     if (!jumiaProducts.length) {
       return NextResponse.json({

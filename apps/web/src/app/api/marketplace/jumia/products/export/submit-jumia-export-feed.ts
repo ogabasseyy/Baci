@@ -67,44 +67,26 @@ export async function submitJumiaExportFeed(args: {
   // a shared shop must fail closed rather than creating a listing elsewhere.
   const normalizedMarketplaceKey =
     typeof marketplaceKey === 'string' ? marketplaceKey.trim() : '';
+  const isOAuthMarketplace = normalizedMarketplaceKey === 'oauth';
   const hasUnrepresentableMarketplaceScope =
-    normalizedMarketplaceKey !== '' &&
-    normalizedMarketplaceKey !== 'default' &&
-    normalizedMarketplaceKey !== 'oauth';
+    normalizedMarketplaceKey !== '' && normalizedMarketplaceKey !== 'default';
   if (hasUnrepresentableMarketplaceScope) {
-    const { data: activeIntegrations, error: scopeError } = await supabase
-      .from('marketplace_integrations')
-      .select('id')
-      .eq('merchant_id', merchantId)
-      .eq('platform', 'jumia')
-      .eq('shop_id', shopId)
-      .eq('is_active', true);
-    if (scopeError) {
-      logger.error({
-        message: 'Failed to verify Jumia product-feed marketplace scope',
-        error: scopeError,
-      });
-      await releaseUnscopedReservation({
-        supabase,
-        merchantId,
-        productId,
-        shopId,
-        marketplaceKey,
-        exportVariations,
-      });
-      return {
-        ok: false,
-        status: 500,
-        body: {
-          error: 'Unable to verify the selected Jumia marketplace. Try again.',
-        },
-      };
-    }
-    if ((activeIntegrations ?? []).length === 1) {
-      // This shop has one active destination, so shopId identifies it
-      // unambiguously despite the create-feed API lacking a selector.
-      const providerScope = await verifyJumiaSingleMarketplaceScope(jumia);
-      if (!providerScope.ok) {
+    // OAuth persistence collapses every business client of a shop into one
+    // integration row, so the row count cannot prove the shop is
+    // single-marketplace; provider metadata is the source of truth there.
+    if (!isOAuthMarketplace) {
+      const { data: activeIntegrations, error: scopeError } = await supabase
+        .from('marketplace_integrations')
+        .select('id')
+        .eq('merchant_id', merchantId)
+        .eq('platform', 'jumia')
+        .eq('shop_id', shopId)
+        .eq('is_active', true);
+      if (scopeError) {
+        logger.error({
+          message: 'Failed to verify Jumia product-feed marketplace scope',
+          error: scopeError,
+        });
         await releaseUnscopedReservation({
           supabase,
           merchantId,
@@ -113,16 +95,24 @@ export async function submitJumiaExportFeed(args: {
           marketplaceKey,
           exportVariations,
         });
-        if (providerScope.reason === 'provider_unavailable') {
-          return {
-            ok: false,
-            status: 502,
-            body: {
-              error:
-                'Unable to verify the selected Jumia marketplace. Try again.',
-            },
-          };
-        }
+        return {
+          ok: false,
+          status: 500,
+          body: {
+            error:
+              'Unable to verify the selected Jumia marketplace. Try again.',
+          },
+        };
+      }
+      if ((activeIntegrations ?? []).length !== 1) {
+        await releaseUnscopedReservation({
+          supabase,
+          merchantId,
+          productId,
+          shopId,
+          marketplaceKey,
+          exportVariations,
+        });
         return {
           ok: false,
           status: 400,
@@ -132,7 +122,14 @@ export async function submitJumiaExportFeed(args: {
           },
         };
       }
-    } else {
+    }
+    // This shop has one active destination, so shopId identifies it
+    // unambiguously despite the create-feed API lacking a selector.
+    const providerScope = await verifyJumiaSingleMarketplaceScope(
+      jumia,
+      isOAuthMarketplace ? { strictOAuth: true } : undefined
+    );
+    if (!providerScope.ok) {
       await releaseUnscopedReservation({
         supabase,
         merchantId,
@@ -141,6 +138,16 @@ export async function submitJumiaExportFeed(args: {
         marketplaceKey,
         exportVariations,
       });
+      if (providerScope.reason === 'provider_unavailable') {
+        return {
+          ok: false,
+          status: 502,
+          body: {
+            error:
+              'Unable to verify the selected Jumia marketplace. Try again.',
+          },
+        };
+      }
       return {
         ok: false,
         status: 400,

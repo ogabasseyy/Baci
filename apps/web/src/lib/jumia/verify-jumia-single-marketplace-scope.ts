@@ -21,13 +21,18 @@ type JumiaMarketplaceScopeResult =
     };
 
 export async function verifyJumiaSingleMarketplaceScope(
-  client: JumiaMarketplaceScopeClient
+  client: JumiaMarketplaceScopeClient,
+  options?: { strictOAuth?: boolean }
 ): Promise<JumiaMarketplaceScopeResult> {
   const marketplaceKey = client.marketplaceKey?.trim();
+  // Legacy OAuth integrations predate marketplace selectors, so callers
+  // that cannot represent ambiguity keep the historical pass-through.
+  // Callers with strictOAuth require provider proof of a single active
+  // business client because one OAuth shop can expose several.
   if (
     !marketplaceKey ||
-    marketplaceKey === 'oauth' ||
-    marketplaceKey === 'default'
+    marketplaceKey === 'default' ||
+    (marketplaceKey === 'oauth' && !options?.strictOAuth)
   ) {
     return { ok: true };
   }
@@ -53,6 +58,10 @@ export async function verifyJumiaSingleMarketplaceScope(
   );
   if (activeClients.length !== 1) {
     return { ok: false, reason: 'multiple_active_marketplaces' };
+  }
+
+  if (marketplaceKey === 'oauth') {
+    return { ok: true };
   }
 
   return activeClients[0].code === marketplaceKey

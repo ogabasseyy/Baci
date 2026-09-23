@@ -82,6 +82,10 @@ export function useShippingQuoteRefresh({
   // Track if we've already fetched for current address
   const lastFetchKey = useRef<string>('');
 
+  // Monotonic sequence so a superseded (slower, older) response can never
+  // overwrite the quotes/selection from a newer request.
+  const requestSequence = useRef(0);
+
   useEffect(() => {
     // Require minimum 2 characters for both city and state to avoid premature API calls
     if (
@@ -109,6 +113,8 @@ export function useShippingQuoteRefresh({
       setIsLoading(true);
       setError(null);
       lastFetchKey.current = fetchKey;
+      const requestId = requestSequence.current + 1;
+      requestSequence.current = requestId;
       // A new destination needs a new selection: re-select from the fresh
       // response instead of keeping a quote (and shipping_rate_id) that was
       // verified against the previous address.
@@ -127,6 +133,7 @@ export function useShippingQuoteRefresh({
         cartSubtotal,
       })
         .then((response) => {
+          if (requestId !== requestSequence.current) return;
           const normalized = normalizeShippingQuoteResponse(response);
           setQuotes(normalized.quotes);
           setSessionId(normalized.sessionId);
@@ -150,6 +157,7 @@ export function useShippingQuoteRefresh({
           }
         })
         .catch((err: unknown) => {
+          if (requestId !== requestSequence.current) return;
           console.error('Failed to fetch shipping quotes:', err);
           setError('Unable to get shipping options. Please try again.');
           if (hadSelection) {
@@ -160,6 +168,7 @@ export function useShippingQuoteRefresh({
           }
         })
         .finally(() => {
+          if (requestId !== requestSequence.current) return;
           setIsLoading(false);
         });
     };

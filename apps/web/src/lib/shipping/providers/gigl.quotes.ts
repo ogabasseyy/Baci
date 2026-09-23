@@ -225,8 +225,21 @@ async function getQuotesWithinTimeout(
       await Promise.all(stationPickupQuotes.map(expandStationQuote))
     ).flat();
     const allQuotes = [...homeQuotes, ...expandedStationQuotes];
-    if (allQuotes.length === 0 && batchFailure !== undefined) {
-      throw batchFailure;
+    if (allQuotes.length === 0) {
+      // An aborted request that yields nothing is a timeout, not successful
+      // no-coverage — mark it so the pickup fallback still engages.
+      if (signal.aborted) {
+        io.log('warn', 'GIGL quote selection timed out', {
+          timeoutMs: GIGL_QUOTE_TIMEOUT_MS,
+        });
+        return quoteProviderFailure.mark(
+          [],
+          new Error('GIGL quote request timed out')
+        );
+      }
+      if (batchFailure !== undefined) {
+        throw batchFailure;
+      }
     }
     return allQuotes;
   } catch (error) {

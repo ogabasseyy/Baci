@@ -1,9 +1,6 @@
+import { parseMerchantRateQuoteId } from '@baci/shared/lib';
 import { MERCHANT_PROVIDER_CODE } from '@/lib/shipping/types';
 import type { ShippingQuote } from '@/types/shipping-quote';
-
-const MERCHANT_RATE_QUOTE_ID_PREFIX = 'mrate_';
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface CheckoutShippingSelectionPayload {
   selected_quote_id: string | null;
@@ -38,11 +35,9 @@ export function buildCheckoutShippingSelectionPayload(
     };
   }
 
-  const rateId = quote.id.startsWith(MERCHANT_RATE_QUOTE_ID_PREFIX)
-    ? quote.id.slice(MERCHANT_RATE_QUOTE_ID_PREFIX.length)
-    : '';
+  const rateId = parseMerchantRateQuoteId(quote.id);
 
-  if (!UUID_PATTERN.test(rateId)) {
+  if (!rateId) {
     throw new Error(
       'The selected merchant delivery option is invalid. Please refresh shipping options.'
     );

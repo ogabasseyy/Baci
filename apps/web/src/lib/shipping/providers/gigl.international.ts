@@ -116,7 +116,7 @@ export async function getGiglInternationalQuotes(
       );
     }
 
-    return rates.flatMap((rate) => {
+    const quotes: ShippingQuote[] = rates.flatMap((rate) => {
       if (!hasInternationalBookingSelectors(rate)) {
         io.log('warn', 'Skipping GIGL international rate without selectors', {
           deliveryType: rate.DeliveryType,
@@ -160,6 +160,18 @@ export async function getGiglInternationalQuotes(
         },
       ];
     });
+    // A non-empty rates list filtered to zero quotes is a provider failure,
+    // not successful no-coverage, so the pickup fallback still engages.
+    if (rates.length > 0 && quotes.length === 0) {
+      io.log('warn', 'GIGL international rates lacked booking selectors', {
+        rateCount: rates.length,
+      });
+      return quoteProviderFailure.mark(
+        [],
+        new Error('GIGL international rates lacked booking selectors')
+      );
+    }
+    return quotes;
   } catch (error) {
     if (signal.aborted || isGiglAbortError(error)) {
       io.log('warn', 'GIGL international quote timed out', {

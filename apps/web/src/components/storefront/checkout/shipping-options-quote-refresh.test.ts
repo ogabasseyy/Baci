@@ -96,6 +96,48 @@ describe('useShippingQuoteRefresh', () => {
     expect(onSelect).toHaveBeenCalledWith(null, 'session-2');
   });
 
+  it('ignores a superseded response when requests overlap', async () => {
+    const onSelect = vi.fn();
+    let resolveFirst: ((value: unknown) => void) | undefined;
+    const first = new Promise<unknown>((resolve) => {
+      resolveFirst = resolve;
+    });
+    mockRequest.mockReturnValueOnce(first as never).mockResolvedValue({
+      quotes: [quote('q-new', 3000)],
+      sessionId: 'session-new',
+    });
+    const { result, rerender } = renderHook(
+      ({ address }: { address: string }) =>
+        useShippingQuoteRefresh(params({ onSelect, receiverAddress: address })),
+      { initialProps: { address: '12 Station Road' } }
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+
+    rerender({ address: '48 Marina Street' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(mockRequest).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveFirst?.({
+        quotes: [quote('q-old', 1000)],
+        sessionId: 'session-old',
+      });
+    });
+
+    expect(result.current.quotes.map((q) => q.id)).toEqual(['q-new']);
+    expect(result.current.sessionId).toBe('session-new');
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'q-new' }),
+      'session-new'
+    );
+  });
+
   it('surfaces an error and clears the selection when the refresh fails', async () => {
     const onSelect = vi.fn();
     mockRequest.mockRejectedValue(new Error('network down'));

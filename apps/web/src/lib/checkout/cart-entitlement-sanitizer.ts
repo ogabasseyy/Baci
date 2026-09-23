@@ -1,6 +1,10 @@
 import type { CartItem } from '@/hooks/cart';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 
+function roundCurrencyToCents(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 /**
  * Strips negotiation-related fields from cart items if the merchant is not entitled to price negotiation.
  */
@@ -89,10 +93,6 @@ export function calculateCartTotal(
  *
  * Residual divergences vs. the server — all advisory, since the server always
  * re-derives the authoritative fee at order time:
- *  - no per-item rounding is applied here (the server rounds each line), so at
- *    most sub-currency-unit drift is possible;
- *  - the client uses the item's own `assuranceRate`, whereas the server pins a
- *    single server-side assurance rate;
  *  - quiz-voucher items are priced at their cart `item.price`; if that is
  *    zeroed on the client they under-count relative to the DB catalog price.
  */
@@ -113,9 +113,12 @@ export function calculateCartCatalogSubtotal(
     const goodsTotal = catalogUnitPrice * quantity;
     // Assurance fee tracks the negotiated line price (mirrors the server's
     // `assurance_fee` basis), not the catalog price used for goods above.
+    // The rate is pinned to the server-authoritative default and rounded per
+    // line, exactly as `/api/orders` recomputes it — never the item's own
+    // `assuranceRate`.
     const assuranceBasis = getCartItemCheckoutUnitPrice(item) * quantity;
     const assuranceCost = item.hasAssurance
-      ? assuranceBasis * (item.assuranceRate ?? DEFAULT_ASSURANCE_RATE)
+      ? roundCurrencyToCents(assuranceBasis * DEFAULT_ASSURANCE_RATE)
       : 0;
     return total + goodsTotal + assuranceCost;
   }, 0);

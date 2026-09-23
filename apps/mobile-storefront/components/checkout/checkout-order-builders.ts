@@ -1,3 +1,4 @@
+import { parseMerchantRateQuoteId } from '@baci/shared/lib';
 import {
   getPickupStationAddressText,
   isProviderStationPickupQuote,
@@ -39,23 +40,14 @@ type CheckoutOrderRequest = Omit<CreateOrderRequest, 'items'> & {
   items: MobileCheckoutOrderItemPayload[];
 };
 
-const MERCHANT_RATE_QUOTE_ID_PREFIX = 'mrate_';
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 function getMerchantRateId(
   selectedQuote: ShippingQuote | undefined
 ): string | undefined {
-  if (
-    selectedQuote?.provider !== 'MERCHANT' ||
-    typeof selectedQuote.id !== 'string' ||
-    !selectedQuote.id.startsWith(MERCHANT_RATE_QUOTE_ID_PREFIX)
-  ) {
+  if (selectedQuote?.provider !== 'MERCHANT') {
     return undefined;
   }
 
-  const rateId = selectedQuote.id.slice(MERCHANT_RATE_QUOTE_ID_PREFIX.length);
-  return UUID_PATTERN.test(rateId) ? rateId : undefined;
+  return parseMerchantRateQuoteId(selectedQuote.id);
 }
 
 export function createCheckoutSnapshot(

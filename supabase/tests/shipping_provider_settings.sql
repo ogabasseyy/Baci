@@ -54,6 +54,83 @@ BEGIN
   END IF;
 END $$;
 
+-- Grandfathering: merchants that predate the opt-in flip keep gigl+topship.
+-- A NULL row and a missing row must both end up on the prior effective
+-- default instead of being normalized to disabled.
+INSERT INTO public.merchants (
+  id, email, business_name, slug, business_type, is_published
+)
+VALUES (
+  '00000000-0000-0000-0000-000000003020',
+  'shipping-provider-grandfather-null@example.com',
+  'Shipping Provider Grandfather Null',
+  'shipping-provider-grandfather-null',
+  'electronics',
+  true
+), (
+  '00000000-0000-0000-0000-000000003021',
+  'shipping-provider-grandfather-missing@example.com',
+  'Shipping Provider Grandfather Missing',
+  'shipping-provider-grandfather-missing',
+  'electronics',
+  true
+)
+ON CONFLICT (id) DO NOTHING;
+
+DELETE FROM public.merchant_feature_settings
+WHERE merchant_id IN (
+  '00000000-0000-0000-0000-000000003020',
+  '00000000-0000-0000-0000-000000003021'
+);
+
+INSERT INTO public.merchant_feature_settings (merchant_id, shipping_providers)
+VALUES ('00000000-0000-0000-0000-000000003020', NULL);
+
+-- Re-apply the migration's grandfathering statements (idempotent).
+UPDATE public.merchant_feature_settings
+SET shipping_providers = '["gigl", "topship"]'::jsonb
+WHERE shipping_providers IS NULL;
+
+INSERT INTO public.merchant_feature_settings (merchant_id, shipping_providers)
+SELECT m.id, '["gigl", "topship"]'::jsonb
+FROM public.merchants AS m
+WHERE m.id IN (
+  '00000000-0000-0000-0000-000000003020',
+  '00000000-0000-0000-0000-000000003021'
+)
+AND NOT EXISTS (
+  SELECT 1
+  FROM public.merchant_feature_settings AS mfs
+  WHERE mfs.merchant_id = m.id
+)
+ON CONFLICT (merchant_id) DO NOTHING;
+
+DO $$
+DECLARE
+  null_row_providers jsonb;
+  missing_row_providers jsonb;
+BEGIN
+  SELECT shipping_providers
+  INTO null_row_providers
+  FROM public.merchant_feature_settings
+  WHERE merchant_id = '00000000-0000-0000-0000-000000003020';
+
+  SELECT shipping_providers
+  INTO missing_row_providers
+  FROM public.merchant_feature_settings
+  WHERE merchant_id = '00000000-0000-0000-0000-000000003021';
+
+  IF null_row_providers IS DISTINCT FROM '["gigl", "topship"]'::jsonb THEN
+    RAISE EXCEPTION 'NULL shipping providers must grandfather to gigl+topship: %',
+      null_row_providers;
+  END IF;
+
+  IF missing_row_providers IS DISTINCT FROM '["gigl", "topship"]'::jsonb THEN
+    RAISE EXCEPTION 'missing settings rows must grandfather to gigl+topship: %',
+      missing_row_providers;
+  END IF;
+END $$;
+
 -- The storefront RPC returns only supported, enabled carrier ids.
 UPDATE public.merchant_feature_settings
 SET shipping_providers = '["gigl", "shiip", "gigl"]'::jsonb
@@ -275,30 +352,22 @@ BEGIN
   END IF;
 END $$;
 
--- Changing a carrier selection after opt-out must be rejected, even though
--- unrelated updates and unchanged selections remain mutable.
+-- Clearing a stale selected_quote_id after opt-out is quote invalidation, not
+-- a new carrier selection, so it stays allowed while the provider is
+-- unchanged. Unrelated updates and unchanged selections remain mutable.
+UPDATE public.orders
+SET selected_quote_id = NULL
+WHERE id = '00000000-0000-0000-0000-000000003011';
+
 DO $$
 BEGIN
-  BEGIN
-    UPDATE public.orders
-    SET selected_quote_id = NULL
-    WHERE id = '00000000-0000-0000-0000-000000003011';
-
-    RAISE EXCEPTION 'changing a carrier selection after opt-out must be rejected';
-  EXCEPTION
-    WHEN OTHERS THEN
-      IF SQLERRM NOT LIKE '%shipping_quote_required%' THEN
-        RAISE;
-      END IF;
-  END;
-
-  IF EXISTS (
+  IF NOT EXISTS (
     SELECT 1
     FROM public.orders
     WHERE id = '00000000-0000-0000-0000-000000003011'
       AND selected_quote_id IS NULL
   ) THEN
-    RAISE EXCEPTION 'rejected carrier selection change must not persist';
+    RAISE EXCEPTION 'clearing a stale carrier selection after opt-out must succeed';
   END IF;
 END $$;
 

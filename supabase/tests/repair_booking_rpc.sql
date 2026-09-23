@@ -65,19 +65,48 @@ BEGIN
   END IF;
 END $$;
 
--- The SECURITY INVOKER wrapper resolves private.create_repair_booking as the
--- caller, so anon, authenticated, and service_role all need schema USAGE
--- (lookup only; execution stays governed by the per-function EXECUTE grants).
+-- Lookup on the private schema stays revoked for browser roles (delegates
+-- boundary): the invoker wrapper reaches the implementation through the
+-- owner trampoline, so callers need USAGE only on public objects. Anon keeps
+-- its pre-existing private USAGE; authenticated must not regain it.
 DO $$
 BEGIN
-  IF NOT pg_catalog.has_schema_privilege('anon', 'private', 'USAGE') THEN
-    RAISE EXCEPTION 'anon must have USAGE on schema private for the booking wrapper';
-  END IF;
-  IF NOT pg_catalog.has_schema_privilege('authenticated', 'private', 'USAGE') THEN
-    RAISE EXCEPTION 'authenticated must have USAGE on schema private for the booking wrapper';
+  IF pg_catalog.has_schema_privilege('authenticated', 'private', 'USAGE') THEN
+    RAISE EXCEPTION 'authenticated must not have USAGE on schema private (delegates boundary)';
   END IF;
   IF NOT pg_catalog.has_schema_privilege('service_role', 'private', 'USAGE') THEN
     RAISE EXCEPTION 'service_role must have USAGE on schema private for the booking wrapper';
+  END IF;
+END $$;
+
+-- Trampoline: SECURITY DEFINER, pinned search_path, executable by the Data
+-- API roles, owned by postgres.
+DO $$
+DECLARE
+  is_definer boolean;
+  config text[];
+BEGIN
+  SELECT prosecdef, proconfig
+  INTO is_definer, config
+  FROM pg_proc
+  WHERE proname = 'create_repair_booking_as_owner'
+    AND pronamespace = 'public'::regnamespace;
+
+  IF NOT is_definer THEN
+    RAISE EXCEPTION 'public.create_repair_booking_as_owner must be SECURITY DEFINER';
+  END IF;
+  IF NOT config @> ARRAY['search_path='] THEN
+    RAISE EXCEPTION 'public.create_repair_booking_as_owner must pin an empty search_path';
+  END IF;
+  IF NOT has_function_privilege('anon',
+    'public.create_repair_booking_as_owner(uuid, text, text, text, text, text, text, timestamptz, text, text, uuid, uuid)',
+    'EXECUTE') THEN
+    RAISE EXCEPTION 'anon must have EXECUTE on the booking trampoline';
+  END IF;
+  IF NOT has_function_privilege('authenticated',
+    'public.create_repair_booking_as_owner(uuid, text, text, text, text, text, text, timestamptz, text, text, uuid, uuid)',
+    'EXECUTE') THEN
+    RAISE EXCEPTION 'authenticated must have EXECUTE on the booking trampoline';
   END IF;
 END $$;
 

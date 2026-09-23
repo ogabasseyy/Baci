@@ -6,7 +6,13 @@ import type { PaymentMethodType } from './PaymentMethodSelector';
 
 interface MaybeClaimCheckoutInvoiceParams {
   selectedPayment: PaymentMethodType | null;
-  order: { id: string; payment_status?: string; total: number };
+  order: {
+    id: string;
+    payment_status?: string;
+    total: number;
+    /** Stamped order currency for funnel attribution (absent keeps NGN). */
+    currency?: string | null;
+  };
   orderNumber: string;
   itemsSnapshot: CartItem[];
 }
@@ -38,6 +44,9 @@ export async function maybeClaimCheckoutInvoice({
       return;
     }
     trackCheckoutInvoiceGenerated({
+      // Stamped creation currency: the invoice stage must match the
+      // creation event and server order for non-NGN stores.
+      currency: order.currency ?? undefined,
       itemCount: itemsSnapshot.reduce(
         (count, item) => count + item.quantity,
         0

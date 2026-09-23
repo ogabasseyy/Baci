@@ -10,9 +10,9 @@ import { WALLET_FUNDING_POLLING } from '@/constants/wallet-funding';
 import { useWalletFundingPolling } from '@/hooks/use-wallet-funding-polling';
 import { setClipboardString } from '@/lib/clipboard';
 import type { WalletOrderFundingIntent } from '@/lib/order-wallet-funding-intent';
+import { resolveWalletFundedTotal } from '@/lib/wallet-funded-total';
 import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
-import { resolveWalletFundedTotal } from './wallet-funded-total';
 
 const copyToClipboard = async (text: string) => {
   return await setClipboardString(text);

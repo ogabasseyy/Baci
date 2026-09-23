@@ -49,7 +49,10 @@ describe('useCreditDirectConfirmationRedirect', () => {
   it('captures, cleans up, and navigates on confirmation', () => {
     const push = vi.fn();
     const clearCart = vi.fn();
-    window.sessionStorage.setItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY, '{}');
+    window.sessionStorage.setItem(
+      CHECKOUT_PENDING_ORDER_STORAGE_KEY,
+      JSON.stringify({ orderId: 'order-1', checkoutFingerprint: 'fp-1' })
+    );
     window.sessionStorage.setItem('checkout-form', '{}');
 
     renderHook(() =>
@@ -75,7 +78,9 @@ describe('useCreditDirectConfirmationRedirect', () => {
       window.sessionStorage.getItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY)
     ).toBeNull();
     expect(window.sessionStorage.getItem('checkout-form')).toBeNull();
+    // Scoped to the originating checkout fingerprint from the handoff.
     expect(clearCheckoutIdempotencyKey).toHaveBeenCalledTimes(1);
+    expect(clearCheckoutIdempotencyKey).toHaveBeenCalledWith('fp-1');
     expect(clearCreditDirectPopupMarker).toHaveBeenCalledWith('order-1');
     expect(push).toHaveBeenCalledWith(
       '/test-store/order-success?orderId=order-1&reference=txn-1&type=credit_direct&trackingToken=track-1'
@@ -114,6 +119,42 @@ describe('useCreditDirectConfirmationRedirect', () => {
 
     expect(captureBnplPaymentCompleted).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it('skips the idempotency clear when the handoff names another checkout', () => {
+    const push = vi.fn();
+    // A newer checkout overwrote the pending handoff while confirmation
+    // was polling: its recovery key must survive this order's cleanup.
+    window.sessionStorage.setItem(
+      CHECKOUT_PENDING_ORDER_STORAGE_KEY,
+      JSON.stringify({ orderId: 'order-2', checkoutFingerprint: 'fp-2' })
+    );
+
+    renderHook(() =>
+      useCreditDirectConfirmationRedirect(
+        options({
+          router: { push } as unknown as ReturnType<typeof useRouter>,
+        })
+      )
+    );
+
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(clearCheckoutIdempotencyKey).not.toHaveBeenCalled();
+  });
+
+  it('skips the idempotency clear when the handoff is gone', () => {
+    const push = vi.fn();
+
+    renderHook(() =>
+      useCreditDirectConfirmationRedirect(
+        options({
+          router: { push } as unknown as ReturnType<typeof useRouter>,
+        })
+      )
+    );
+
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(clearCheckoutIdempotencyKey).not.toHaveBeenCalled();
   });
 
   it('runs the cleanup exactly once per order and transaction', () => {

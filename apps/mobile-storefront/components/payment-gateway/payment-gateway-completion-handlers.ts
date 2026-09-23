@@ -10,11 +10,9 @@ import type {
   PaymentStatusSetter,
 } from './payment-gateway-controller.types';
 import type { OrderCompletionContext } from './payment-gateway-order-completion';
-import {
-  settleOrderCompletion,
-  verifyRedvaultCompletion,
-} from './payment-gateway-order-completion';
+import { settleOrderCompletion } from './payment-gateway-order-completion';
 import { handleVtuConfirmation } from './use-vtu-payment-completion';
+import { verifyRedvaultCompletion } from './verify-redvault-order-completion';
 
 interface PaymentGatewayCompletionHandlerInput
   extends Partial<PaymentGatewayParams> {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { resolveWalletFundedTotal } from '@/app/bank-transfer/wallet-funded-total';
+import { resolveWalletFundedTotal } from '@/lib/wallet-funded-total';
 
 describe('resolveWalletFundedTotal', () => {
   it('prefers the routed canonical total over the post-savings residual', () => {

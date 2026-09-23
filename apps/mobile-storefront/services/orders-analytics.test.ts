@@ -99,6 +99,20 @@ describe('trackCreatedOrderOnce', () => {
     );
   });
 
+  it('forwards the stamped order currency instead of the NGN default', async () => {
+    mockClaim.mockResolvedValue(true);
+    const order = buildOrder();
+    (order.order as { currency: string }).currency = 'KES';
+
+    await trackCreatedOrderOnce(order, buildRequest(), Date.now(), 'paystack');
+
+    expect(mockTrack).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currency: 'KES',
+      })
+    );
+  });
+
   it('skips emission for a replayed order whose claim is taken', async () => {
     mockClaim.mockResolvedValue(false);
 

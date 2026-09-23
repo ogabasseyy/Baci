@@ -71,7 +71,9 @@ jest.mock('@/services/analytics', () => ({
 }));
 
 jest.mock('@/services/tiktok-checkout-route-tracking', () => ({
-  trackCheckoutRoutePurchaseCompleted: jest.fn(),
+  // Async like the real tracker: the finalizer shares the in-flight
+  // emission promise with the completion lane.
+  trackCheckoutRoutePurchaseCompleted: jest.fn(async () => undefined),
 }));
 
 jest.mock('@/stores/cart-store', () => ({

@@ -149,7 +149,14 @@ async function runCryptoPaymentInitialization({
       orderNumber: order.order_number || order.id.slice(0, 8).toUpperCase(),
       paymentMethod: 'juicyway',
       reference: initData.reference || payment.payment_id || undefined,
-      value: orderResponse.amountDueToGateway,
+      // Revenue is the canonical full order total, not the residual due
+      // at the gateway after wallet/savings credit — matching the
+      // standard gateway path, order_created, and the eventual
+      // completion. amountDueToGateway stays on the provider init above,
+      // which is what the provider actually charges.
+      value: order.total,
+      // Stamped creation currency: absent values keep the NGN default.
+      ...(order.currency ? { currency: order.currency } : {}),
     });
     setIsProcessing(false);
     setShowCryptoSelection(false);

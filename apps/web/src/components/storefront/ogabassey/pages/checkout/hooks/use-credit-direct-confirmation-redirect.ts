@@ -7,8 +7,42 @@ import {
   clearCreditDirectPopupMarker,
   type CreditDirectPopupMarker,
 } from '../credit-direct-popup-return';
-import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '../pending-checkout-order';
+import {
+  CHECKOUT_PENDING_ORDER_STORAGE_KEY,
+  type PendingCheckoutOrderSnapshot,
+} from '../pending-checkout-order';
 import type { CreditDirectVerificationPhase } from './use-credit-direct-verification';
+
+/**
+ * Originating-checkout fingerprint from the pending-order handoff: the
+ * snapshot is written at submit time, so when it still names the
+ * confirming order its fingerprint identifies the stored idempotency
+ * key as ours. Returns undefined when the handoff is gone or already
+ * names another checkout — the caller must then skip the clear rather
+ * than drop a newer checkout's recovery key.
+ */
+function readConfirmingCheckoutFingerprint(
+  orderId: string
+): string | undefined {
+  try {
+    const raw = window.sessionStorage.getItem(
+      CHECKOUT_PENDING_ORDER_STORAGE_KEY
+    );
+    if (!raw) {
+      return undefined;
+    }
+    const snapshot = JSON.parse(raw) as Partial<PendingCheckoutOrderSnapshot>;
+    if (snapshot.orderId !== orderId) {
+      return undefined;
+    }
+    return typeof snapshot.checkoutFingerprint === 'string' &&
+      snapshot.checkoutFingerprint.trim().length > 0
+      ? snapshot.checkoutFingerprint
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 interface UseCreditDirectConfirmationRedirectOptions {
   phase: CreditDirectVerificationPhase;
@@ -76,13 +110,24 @@ export function useCreditDirectConfirmationRedirect({
       successQuery.set('email', lookupEmail);
     }
     clearCart?.();
+    // Read the originating fingerprint before the handoff below is
+    // removed: confirmation can land after a long polling interval, by
+    // which time another checkout may own the shared idempotency slot.
+    const confirmingCheckoutFingerprint =
+      readConfirmingCheckoutFingerprint(orderId);
     try {
       window.sessionStorage.removeItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY);
       window.sessionStorage.removeItem('checkout-form');
     } catch {
       // Storage cleanup is best-effort; confirmation must still navigate.
     }
-    void clearCheckoutIdempotencyKey();
+    // Scoped to the originating checkout (matching the other completion
+    // paths): when the handoff is gone or already names a newer
+    // checkout, skip the clear — an unscoped remove would delete the new
+    // checkout's recovery key and let its retry fork a duplicate order.
+    if (confirmingCheckoutFingerprint) {
+      void clearCheckoutIdempotencyKey(confirmingCheckoutFingerprint);
+    }
     clearCreditDirectPopupMarker(orderId);
     router.push(
       `${orderSuccessBasePath}?${successQuery.toString()}` as Route

@@ -36,7 +36,17 @@ export async function trackCreatedOrderOnce(
       order.order.payment_method.trim() !== ''
         ? order.order.payment_method
         : undefined;
+    // Stamped order currency for funnel attribution: without it every
+    // non-NGN creation lands in the NGN funnel while the gateway start
+    // and completion paths use the real currency. Absent values keep
+    // the builder default.
+    const finalizedCurrency =
+      typeof order.order.currency === 'string' &&
+      order.order.currency.trim() !== ''
+        ? order.order.currency
+        : undefined;
     trackCheckoutOrderCreated({
+      currency: finalizedCurrency,
       itemCount: request.items.reduce(
         (count, item) => count + item.quantity,
         0

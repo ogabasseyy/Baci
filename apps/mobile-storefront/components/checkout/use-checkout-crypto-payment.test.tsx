@@ -22,7 +22,15 @@ function mockInitOnce(init: Record<string, unknown>) {
 
 function pendingCryptoOrder() {
   return {
-    order: { id: 'order-1', order_number: 'ORD-1' },
+    // Full order total with stamped currency: the start must report
+    // revenue (12000 KES), not the residual due at the gateway (5000)
+    // after wallet/savings credit.
+    order: {
+      id: 'order-1',
+      order_number: 'ORD-1',
+      total: 12000,
+      currency: 'KES',
+    },
     orderResponse: { amountDueToGateway: 5000 },
     customerEmail: 'buyer@example.com',
     customerName: 'Ada Buyer',
@@ -78,6 +86,10 @@ describe('useCheckoutCryptoPayment juicyway start reference', () => {
         orderId: 'order-1',
         paymentMethod: 'juicyway',
         reference: 'juicy-ref-1',
+        // Canonical full order total + stamped currency, never the
+        // residual gateway charge.
+        value: 12000,
+        currency: 'KES',
       })
     );
     const state: CryptoPaymentState | null = result.current.cryptoPayment;

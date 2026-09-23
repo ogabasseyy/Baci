@@ -58,6 +58,22 @@ describe('maybeClaimCheckoutInvoice', () => {
     );
   });
 
+  it('forwards the stamped order currency on the invoice stage', async () => {
+    await maybeClaimCheckoutInvoice({
+      selectedPayment: 'invoice',
+      order: { ...baseOrder, currency: 'KES' },
+      orderNumber: 'INV-1',
+      itemsSnapshot: [],
+    });
+
+    expect(mockedTrack).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-invoice-1',
+        currency: 'KES',
+      })
+    );
+  });
+
   it('skips a paid invoice order that routes straight to completion', async () => {
     await maybeClaimCheckoutInvoice({
       selectedPayment: 'invoice',

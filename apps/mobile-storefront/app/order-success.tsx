@@ -6,6 +6,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Linking } from 'react-native';
+import { OrderReconciliationErrorView } from '@/components/orders/OrderReconciliationErrorView';
 import { OrderReconciliationView } from '@/components/orders/OrderReconciliationView';
 import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
 import { isDeferredSettlementMethod } from '@/components/orders/order-success-content';
@@ -114,14 +115,20 @@ export default function OrderSuccessScreen() {
   // reconciliation state; a verified-absent param falls through to the
   // ordinary success flow, while an inconclusive lookup stays pending
   // instead of coercing to either view.
-  const paramReconciliationVerified = useParamReconciliationVerification({
+  const {
+    verified: paramReconciliationVerified,
+    exhausted: isParamVerificationExhausted,
+    retry: retryParamVerification,
+  } = useParamReconciliationVerification({
     isParamReconciliation,
     orderId,
     trackingToken,
     reference,
   });
-  const isParamVerificationPending =
+  const isParamVerificationUnresolved =
     isParamReconciliation && paramReconciliationVerified === undefined;
+  const isParamVerificationPending =
+    isParamVerificationUnresolved && !isParamVerificationExhausted;
   const isReconciliation =
     (isParamReconciliation && paramReconciliationVerified === true) ||
     wasPaidOrder;
@@ -191,7 +198,7 @@ export default function OrderSuccessScreen() {
   } = useOrderSuccessSideEffects({
     isReconciliation,
     statusAuthoritative:
-      deferredStatusAuthoritative && !isParamVerificationPending,
+      deferredStatusAuthoritative && !isParamVerificationUnresolved,
     orderId,
     orderNumber,
     paymentMethod,
@@ -231,6 +238,21 @@ export default function OrderSuccessScreen() {
     // (a spoofed param must not borrow its credibility) nor the
     // reconciliation state.
     return null;
+  }
+
+  if (isParamVerificationUnresolved && isParamVerificationExhausted) {
+    // Bounded retries spent while the lookup stayed inconclusive: fail
+    // closed on an explicit error state with a manual retry — never the
+    // success banner, never the reconciliation state.
+    return (
+      <OrderReconciliationErrorView
+        colors={colors}
+        isDark={colorScheme === 'dark'}
+        orderNumber={orderNumber}
+        onRetry={retryParamVerification}
+        onContinueShopping={handleContinueShopping}
+      />
+    );
   }
 
   if (isReconciliation) {

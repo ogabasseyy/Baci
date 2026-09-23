@@ -76,6 +76,7 @@ describe('verifyCheckoutPaymentByLookup', () => {
       ok: true,
       json: () =>
         Promise.resolve({
+          id: 'order-12345678',
           order_number: 'BAC-1',
           payment_method: 'paystack',
           payment_status: 'paid',
@@ -113,6 +114,7 @@ describe('verifyCheckoutPaymentByLookup', () => {
       ok: true,
       json: () =>
         Promise.resolve({
+          id: 'order-12345678',
           order_number: 'BAC-2',
           payment_method: 'paystack',
           payment_status: 'refunded',
@@ -139,6 +141,7 @@ describe('verifyCheckoutPaymentByLookup', () => {
       ok: true,
       json: () =>
         Promise.resolve({
+          id: 'order-12345678',
           order_number: 'BAC-2',
           payment_method: 'paystack',
           payment_status: 'Cancelled',
@@ -164,6 +167,7 @@ describe('verifyCheckoutPaymentByLookup', () => {
       ok: true,
       json: () =>
         Promise.resolve({
+          id: 'order-12345678',
           order_number: 'BAC-3',
           payment_method: 'uba_redvault',
           payment_status: 'pending',
@@ -186,6 +190,7 @@ describe('verifyCheckoutPaymentByLookup', () => {
       ok: true,
       json: () =>
         Promise.resolve({
+          id: 'order-12345678',
           order_number: 'BAC-4',
           payment_method: 'uba_redvault',
           payment_status: 'unpaid',
@@ -207,6 +212,7 @@ describe('verifyCheckoutPaymentByLookup', () => {
       ok: true,
       json: () =>
         Promise.resolve({
+          id: 'order-12345678',
           order_number: 'BAC-5',
           payment_method: 'uba_redvault',
           payment_status: 'refunded',
@@ -340,6 +346,36 @@ describe('verifyCheckoutPaymentByLookup', () => {
     expect(h.clearCart).not.toHaveBeenCalled();
   });
 
+  it('rejects a tracking-token lookup that returns a different order', async () => {
+    // The token RPC resolves by token (p_order_id: null): a stale or
+    // mismatched URL must never clear the cart or record
+    // payment_completed under the URL order ID with another order's
+    // number, total, and currency.
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: 'order-other',
+          order_number: 'BAC-9',
+          payment_method: 'paystack',
+          payment_status: 'paid',
+          total: 99900,
+          currency: 'KES',
+        }),
+    } as Response);
+    const h = handlers();
+
+    await expect(verifyCheckoutPaymentByLookup(params(), h)).resolves.toBe(
+      true
+    );
+
+    expect(h.capturePaymentCompleted).not.toHaveBeenCalled();
+    // Failed-lookup fallback: derived number, never the stranger's.
+    expect(h.setOrderNumber).toHaveBeenCalledWith('ORDER-12');
+    expect(h.setOrderNumber).not.toHaveBeenCalledWith('BAC-9');
+  });
+
   it('prefers an explicit RPC payment_method over the REDVAULT context', async () => {
     // A stale session snapshot must not reclassify an order the RPC
     // positively identifies as another method.
@@ -348,6 +384,7 @@ describe('verifyCheckoutPaymentByLookup', () => {
       ok: true,
       json: () =>
         Promise.resolve({
+          id: 'order-12345678',
           order_number: 'BAC-8',
           payment_method: 'paystack',
           payment_status: 'paid',

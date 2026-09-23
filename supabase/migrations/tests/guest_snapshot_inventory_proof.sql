@@ -57,7 +57,7 @@ BEGIN
     (v_simple_product_id, v_merchant_id, 'Tracked Phone', 180000, 'active', 'serialized_strict'),
     (v_durable_product_id, v_merchant_id, 'Durable Phone', 180000, 'active', 'serialized_strict'),
     (v_bare_product_id, v_merchant_id, 'Bare Phone', 180000, 'active', 'serialized_strict'),
-    (v_variant_product_id, v_merchant_id, 'Variant Phone', 180000, 'active', 'inherit'),
+    (v_variant_product_id, v_merchant_id, 'Variant Phone', 180000, 'active', 'serialized_strict'),
     (v_mixed_product_id, v_merchant_id, 'Mixed Phone', 180000, 'active', 'serialized_strict'),
     (v_unlimited_product_id, v_merchant_id, 'Unlimited Phone', 180000, 'active', 'serialized_then_unlimited');
 

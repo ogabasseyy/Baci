@@ -126,18 +126,20 @@ describe('useDvaConfirmTransfer', () => {
     expect(result.current.isVerifyingDva).toBe(false);
   });
 
-  it('delays the cart clear so it never races navigation', async () => {
+  it('clears the completed cart synchronously before navigation', async () => {
     mockPaidTrackOrder();
     const deps = baseDeps();
     const { result } = renderHook(() => useDvaConfirmTransfer(deps));
 
     await confirmAndFlush(result.current.handleDvaConfirmTransfer);
 
-    expect(deps.clearCart).not.toHaveBeenCalled();
-    await act(async () => {
-      vi.advanceTimersByTime(500);
-    });
+    // No delayed timer: the completed cart clears inline, before the
+    // success push, so no stale callback can erase a newer cart.
     expect(deps.clearCart).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(
+      (deps.clearCart as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]
+    ).toBeLessThan(mockPush.mock.invocationCallOrder[0]);
   });
 
   it('keeps the modal open with a retry toast when no transfer is found', async () => {

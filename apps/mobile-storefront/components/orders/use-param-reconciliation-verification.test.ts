@@ -35,7 +35,8 @@ describe('useParamReconciliationVerification', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(result.current).toBe(true);
+    expect(result.current.verified).toBe(true);
+    expect(result.current.exhausted).toBe(false);
     expect(mockedVerify).toHaveBeenCalledTimes(1);
   });
 
@@ -53,7 +54,8 @@ describe('useParamReconciliationVerification', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(result.current).toBe(false);
+    expect(result.current.verified).toBe(false);
+    expect(result.current.exhausted).toBe(false);
   });
 
   it('recovers when a transient failure resolves before the retry budget', async () => {
@@ -78,21 +80,24 @@ describe('useParamReconciliationVerification', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(result.current).toBeUndefined();
+    expect(result.current.verified).toBeUndefined();
+    expect(result.current.exhausted).toBe(false);
 
     // Two bounded retries carry the transient failure to a verdict.
     await act(async () => {
       await jest.advanceTimersByTimeAsync(100);
     });
-    expect(result.current).toBeUndefined();
+    expect(result.current.verified).toBeUndefined();
+    expect(result.current.exhausted).toBe(false);
     await act(async () => {
       await jest.advanceTimersByTimeAsync(200);
     });
-    expect(result.current).toBe(true);
+    expect(result.current.verified).toBe(true);
+    expect(result.current.exhausted).toBe(false);
     expect(mockedVerify).toHaveBeenCalledTimes(3);
   });
 
-  it('stays pending once the retry budget is exhausted', async () => {
+  it('surfaces exhaustion without coercing a verdict', async () => {
     mockedVerify.mockResolvedValue({ paid: false, inconclusive: true });
 
     const { result } = renderHook(() =>
@@ -111,8 +116,43 @@ describe('useParamReconciliationVerification', () => {
       await jest.advanceTimersByTimeAsync(500);
     });
 
-    // No verdict coerced; no further attempts scheduled.
-    expect(result.current).toBeUndefined();
+    // No verdict coerced; no further attempts scheduled — but exhaustion
+    // is explicit so the screen can leave the blank pending state.
+    expect(result.current.verified).toBeUndefined();
+    expect(result.current.exhausted).toBe(true);
+    expect(mockedVerify).toHaveBeenCalledTimes(2);
+  });
+
+  it('restarts bounded verification on retry after exhaustion', async () => {
+    mockedVerify.mockResolvedValue({ paid: false, inconclusive: true });
+
+    const { result } = renderHook(() =>
+      useParamReconciliationVerification({
+        isParamReconciliation: true,
+        orderId: 'order-1',
+        maxAttempts: 1,
+        retryDelayMs: 100,
+      })
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.exhausted).toBe(true);
+    expect(mockedVerify).toHaveBeenCalledTimes(1);
+
+    // Manual retry clears exhaustion and runs the budget again; a verdict
+    // this time resolves instead of re-exhausting.
+    mockedVerify.mockResolvedValue({
+      paid: false,
+      reconciliation: 'order_cancelled',
+    });
+    await act(async () => {
+      result.current.retry();
+      await Promise.resolve();
+    });
+    expect(result.current.exhausted).toBe(false);
+    expect(result.current.verified).toBe(true);
     expect(mockedVerify).toHaveBeenCalledTimes(2);
   });
 
@@ -128,7 +168,8 @@ describe('useParamReconciliationVerification', () => {
     await act(async () => {
       await jest.advanceTimersByTimeAsync(500);
     });
-    expect(result.current).toBeUndefined();
+    expect(result.current.verified).toBeUndefined();
+    expect(result.current.exhausted).toBe(false);
     expect(mockedVerify).not.toHaveBeenCalled();
   });
 });

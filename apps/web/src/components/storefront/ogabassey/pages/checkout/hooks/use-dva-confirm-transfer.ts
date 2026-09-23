@@ -75,14 +75,15 @@ export interface DvaConfirmTransferDeps {
 
 /**
  * Owns the "Confirm Transfer Sent" lifecycle for the provisioned-DVA
- * modal: server-side verification, paid conversion, routing, and the
- * delayed cart clear — all tied to the modal attempt that started them.
+ * modal: server-side verification, paid conversion, the completed-cart
+ * clear, and routing — all tied to the modal attempt that started them.
  *
  * Closing the modal retires the attempt synchronously (a ref, visible
  * even before React re-renders), and the continuation rechecks after
  * every await: a late confirmation never clears state, routes, or
- * clears the cart — the delayed clear could otherwise erase a newer
- * cart.
+ * clears the cart. The completed cart is cleared synchronously before
+ * navigation (never via a delayed timer): a timer would survive
+ * navigation and could erase a newer cart started in the window.
  */
 export function useDvaConfirmTransfer({
   checkoutCart,
@@ -142,8 +143,7 @@ export function useDvaConfirmTransfer({
         }
         // The modal closed while the status request was pending (either
         // close action retires the attempt): the shopper chose "close and
-        // check later", so never clear state, route, or clear the cart —
-        // the delayed cart clear could otherwise erase a newer cart.
+        // check later", so never clear state, route, or clear the cart.
         if (confirmAttempt !== dvaConfirmAttemptRef.current) {
           return;
         }
@@ -173,6 +173,12 @@ export function useDvaConfirmTransfer({
         }
         clearCheckoutSession();
         setDvaData(null);
+        // Clear the completed cart synchronously before navigation: the
+        // success screen renders from the order id (never the cart), and
+        // a delayed timer would survive navigation and could erase a
+        // newer cart started in the window. No empty-cart redirect exists
+        // on the checkout page, so this cannot race the push below.
+        clearCart();
         const successQuery = new URLSearchParams({
           type: 'standard',
           orderId,
@@ -181,7 +187,6 @@ export function useDvaConfirmTransfer({
           successQuery.set('trackingToken', trackingToken);
         }
         router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-        setTimeout(clearCart, 500);
       })
       .catch(() => {
         toast({

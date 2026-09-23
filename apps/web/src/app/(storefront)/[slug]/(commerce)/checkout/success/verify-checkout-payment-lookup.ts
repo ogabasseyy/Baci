@@ -141,7 +141,16 @@ export async function verifyCheckoutPaymentByLookup(
       queryString ? `?${queryString}` : ''
     }`;
     const response = await fetch(url, { signal });
-    const data = response.ok ? await response.json() : null;
+    const rawData = response.ok ? await response.json() : null;
+    // A tracking-token lookup resolves by token (p_order_id: null), so a
+    // stale or mismatched URL can return a different order than the path
+    // orderId. Require identity before treating the lookup as success —
+    // otherwise the branches below clear the cart and record
+    // payment_completed under the URL order ID with another order's
+    // number, total, and currency. A mismatch falls through to the
+    // failed-lookup fallbacks like any other unproven lookup.
+    const data =
+      rawData && trackingToken && rawData.id !== orderId ? null : rawData;
     // The guest tracking RPC projects payment_status but never
     // payment_method, so a real tracking response carries no method.
     // Fall back to the proof-bound REDVAULT context (the session

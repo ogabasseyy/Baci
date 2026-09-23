@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { verifyOrderPaymentForCompletion } from '@/components/payment-gateway/verify-order-payment';
 
 interface ParamReconciliationVerificationInput {
@@ -16,12 +16,32 @@ interface ParamReconciliationVerificationInput {
   retryDelayMs?: number;
 }
 
+export interface ParamReconciliationVerification {
+  /**
+   * true = param proof-bound; false = verified absent (ordinary success
+   * flow); undefined = still resolving. Fail-closed: undefined is never
+   * success, and exhaustion (below) is never success either.
+   */
+  verified: boolean | undefined;
+  /**
+   * True once the bounded retries are spent while the lookup stays
+   * inconclusive (e.g. a network/API outage). The caller should leave
+   * the blank pending state for an explicit error state with `retry`.
+   */
+  exhausted: boolean;
+  /** Restart bounded verification after exhaustion (or re-run on demand). */
+  retry: () => void;
+}
+
 /**
  * Proof-binds the caller-controlled reconciliation route parameter
  * before the screen renders the reconciliation state. A verified-absent
  * param resolves false (ordinary success flow); an inconclusive lookup
  * retries with backoff and stays pending instead of coercing to either
- * view, so a spoofed param can never borrow success credibility.
+ * view, so a spoofed param can never borrow success credibility. Once
+ * the bounded attempts are spent while still inconclusive, `exhausted`
+ * flips so the caller can offer an explicit retry instead of stranding
+ * the deep link on a blank screen.
  * Extracted from the order-success screen (300-line file limit).
  */
 export function useParamReconciliationVerification({
@@ -31,11 +51,15 @@ export function useParamReconciliationVerification({
   reference,
   maxAttempts = 3,
   retryDelayMs = 750,
-}: ParamReconciliationVerificationInput): boolean | undefined {
+}: ParamReconciliationVerificationInput): ParamReconciliationVerification {
   const [verified, setVerified] = useState<boolean | undefined>(undefined);
+  const [exhausted, setExhausted] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retryNonce intentionally retriggers bounded verification after exhaustion; the attempt counter restarts inside the effect on each run.
   useEffect(() => {
     setVerified(undefined);
+    setExhausted(false);
     if (!isParamReconciliation || !orderId) {
       return;
     }
@@ -55,7 +79,12 @@ export function useParamReconciliationVerification({
           attempt += 1;
           if (attempt < maxAttempts) {
             retryTimer = setTimeout(runVerification, retryDelayMs * attempt);
+            return;
           }
+          // Bounded attempts spent while still inconclusive: stop
+          // scheduling, stay fail-closed (verified remains undefined),
+          // and surface exhaustion so the screen can offer a retry.
+          setExhausted(true);
           return;
         }
         setVerified(!!result.reconciliation);
@@ -75,7 +104,12 @@ export function useParamReconciliationVerification({
     reference,
     maxAttempts,
     retryDelayMs,
+    retryNonce,
   ]);
 
-  return verified;
+  const retry = useCallback(() => {
+    setRetryNonce((nonce) => nonce + 1);
+  }, []);
+
+  return { verified, exhausted, retry };
 }

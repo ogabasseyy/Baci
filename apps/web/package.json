@@ -14,7 +14,7 @@
     "format": "biome format --write .",
     "analyze": "next experimental-analyze --output",
     "docs": "node --experimental-loader=./tools/typedoc-typescript6.mjs ../../node_modules/typedoc/bin/typedoc",
-    "typecheck": "tsc --noEmit && pnpm typecheck:tools-workers",
+    "typecheck": "next typegen && tsc --noEmit && pnpm typecheck:tools-workers",
     "typecheck:tools-workers": "tsc --noEmit -p tsconfig.tools-workers.json",
     "test": "vitest run",
     "test:ci": "pnpm test && pnpm verify:quiz-assets",

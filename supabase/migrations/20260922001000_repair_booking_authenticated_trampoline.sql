@@ -52,7 +52,7 @@ BEGIN
     p_pickup_address,
     p_device_id,
     p_quote_id
-  ) AS booking(id uuid, ticket_number integer);
+  ) AS booking;
 END;
 $function$;
 
@@ -98,7 +98,7 @@ BEGIN
     p_pickup_address,
     p_device_id,
     p_quote_id
-  ) AS booking(id uuid, ticket_number integer);
+  ) AS booking;
 END;
 $function$;
 

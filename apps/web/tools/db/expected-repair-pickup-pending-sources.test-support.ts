@@ -247,6 +247,6 @@ export const EXPECTED_REPAIR_PICKUP_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260922001000_repair_booking_authenticated_trampoline.sql',
-    sha256: 'e01250d306248f2acaab80932532df9045061409ede6fe88bbfc164ed40ef299',
+    sha256: '1c74578c5ddacb12b624cf0625fc47a3eff73b30894f8ff7bc59d71b4c16752b',
   },
 ];

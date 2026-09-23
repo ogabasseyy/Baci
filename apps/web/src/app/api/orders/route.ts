@@ -44,6 +44,10 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import {
+  claimImmediateOrderNotification,
+  completeImmediateOrderNotification,
+} from '@/lib/immediate-order/notification-claim';
+import {
   buildImmediateInvoiceArtifacts,
   getOrderItemCondition,
   getOrderItemDisplayName,
@@ -2894,17 +2898,19 @@ export async function POST(request: NextRequest) {
       voucherOrderFullyCovered &&
       amountDueToGateway <= 0 &&
       (quizVoucherFinalized || order.payment_status === 'paid');
+    // No idempotencyReplayed gate: a replay whose first attempt never
+    // finished delivery must resume it (atomic claim below), not suppress
+    // it forever. Concurrent duplicates observe the fresh claim and skip.
     const shouldSendImmediateOrderNotifications =
-      !idempotencyReplayed &&
-      (isPayOnDelivery(effectivePaymentMethod) ||
-        effectivePaymentMethod === 'invoice' ||
-        // Pay for Me keeps its distinct stored method (never collapsed to
-        // invoice), so it needs its own dispatch branch: without this the
-        // requester gets no payment document to forward to their payer,
-        // and mobile suppresses its local notification as server-confirmed.
-        effectivePaymentMethod === 'payforme' ||
-        isWalletFullyPaid ||
-        isQuizVoucherFullyPaid);
+      isPayOnDelivery(effectivePaymentMethod) ||
+      effectivePaymentMethod === 'invoice' ||
+      // Pay for Me keeps its distinct stored method (never collapsed to
+      // invoice), so it needs its own dispatch branch: without this the
+      // requester gets no payment document to forward to their payer,
+      // and mobile suppresses its local notification as server-confirmed.
+      effectivePaymentMethod === 'payforme' ||
+      isWalletFullyPaid ||
+      isQuizVoucherFullyPaid;
     if (shouldSendImmediateOrderNotifications) {
       if (merchant.business_name && merchant.slug) {
         const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
@@ -3038,6 +3044,20 @@ export async function POST(request: NextRequest) {
         // Fire-and-forget: send email after response is delivered so slow/failing
         // ZeptoMail calls never block or time out the order creation response.
         after(async () => {
+          // Atomic delivery ownership: the first attempt's after() may
+          // never have run (process death between response and callback)
+          // or failed (provider error) — the replay with the same key
+          // reclaims the claim and delivers. Service-role RPCs: guest
+          // checkouts hold no session, and the claim table denies
+          // anon/authenticated outright (outbox precedent).
+          const notificationClaimClient = createAdminClient();
+          const notificationClaim = await claimImmediateOrderNotification(
+            notificationClaimClient,
+            order.id
+          );
+          if (!notificationClaim.shouldDeliver) {
+            return;
+          }
           try {
             let invoiceVirtualAccount: ReceiptOrder['virtual_account'] = null;
             let attachments:
@@ -3069,7 +3089,19 @@ export async function POST(request: NextRequest) {
               attachments,
               invoiceVirtualAccount,
             });
+            // Sent is terminal: replays observe it and skip. Failed
+            // releases the claim so the next replay resumes delivery.
+            await completeImmediateOrderNotification(
+              notificationClaimClient,
+              order.id,
+              true
+            );
           } catch (emailError) {
+            await completeImmediateOrderNotification(
+              notificationClaimClient,
+              order.id,
+              false
+            );
             logger.error({
               message: 'Error sending order confirmation email',
               error: emailError,
@@ -3078,20 +3110,25 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Notify merchant of a new order or invoice — fire-and-forget via after().
-      queueMerchantOrderNotifications({
-        supabase,
-        merchantId: merchant_id,
-        orderId: order.id,
-        orderNumber: orderNum,
-        customerName: customer_name,
-        orderTotal,
-        orderCurrency,
-        paymentMethod: effectivePaymentMethod,
-        paymentStatus: order.payment_status,
-        invoiceBalanceDue: Math.max(amountDueToGateway, 0),
-        isWalletFullyPaid,
-      });
+      // Notify merchant of a new order or invoice — fire-and-forget via
+      // after(). Fresh attempts only: unlike the customer payment
+      // document above, merchant creation pings carry no resume claim,
+      // so a replay must never duplicate them.
+      if (!idempotencyReplayed) {
+        queueMerchantOrderNotifications({
+          supabase,
+          merchantId: merchant_id,
+          orderId: order.id,
+          orderNumber: orderNum,
+          customerName: customer_name,
+          orderTotal,
+          orderCurrency,
+          paymentMethod: effectivePaymentMethod,
+          paymentStatus: order.payment_status,
+          invoiceBalanceDue: Math.max(amountDueToGateway, 0),
+          isWalletFullyPaid,
+        });
+      }
     }
 
     // The create RPC's RETURNS TABLE carries no currency column, so surface

@@ -10,7 +10,7 @@ import { OrderReconciliationView } from '@/components/orders/OrderReconciliation
 import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
 import { isDeferredSettlementMethod } from '@/components/orders/order-success-content';
 import { renderParamVerificationGate } from '@/components/orders/param-verification-gate';
-import { useGuestInvoicePaidState } from '@/components/orders/use-invoice-paid-state';
+import { useDeferredOrderStatusAuthority } from '@/components/orders/use-deferred-order-status-authority';
 import { useOrderSuccessSideEffects } from '@/components/orders/use-order-success-side-effects';
 import { useParamReconciliationVerification } from '@/components/orders/use-param-reconciliation-verification';
 import { useSettlementCompletion } from '@/components/orders/use-settlement-completion';
@@ -19,7 +19,6 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import { useReceiptPreview } from '@/hooks/use-receipt-preview';
-import { useReceiptDetail } from '@/hooks/use-receipts';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -63,32 +62,35 @@ export default function OrderSuccessScreen() {
   // keep the method-based tone until their lookup settles).
   const needsDeferredStatus =
     isDeferredSettlementMethod(paymentMethod) && !!orderId;
-  const { data: paidCheckOrder, isFetched: isReceiptCheckFetched } =
-    useReceiptDetail(needsDeferredStatus ? (orderId ?? null) : null);
-  const receiptPaymentStatus = paidCheckOrder?.payment_status;
-  const receiptPaidOrder = receiptPaymentStatus === 'paid';
-  const receiptRefundedOrder = receiptPaymentStatus === 'refunded';
-  // The receipt query is disabled without a signed-in user: only wait for
-  // it when it can actually run, otherwise the guest lookup below is the
-  // authority.
-  const receiptAuthoritative =
-    !needsDeferredStatus || !customer || isReceiptCheckFetched;
-  // Guests have no authenticated receipt query: resolve their paid state
-  // through the tracking token so externally-paid invoices stop showing
-  // proforma copy on return.
-  const guestInvoice = useGuestInvoicePaidState({
+  // Authority split: the authenticated receipt query owns signed-in
+  // status (only on a successful result — a failed request must not
+  // render paid/refunded as unpaid with side effects enabled); the
+  // tracking-token guest lookup runs only with no authenticated
+  // customer.
+  const {
+    deferredStatusAuthoritative,
+    guestInvoice,
+    isPaidOrder,
+    receiptAmountPaid,
+    receiptPaymentStatus,
+  } = useDeferredOrderStatusAuthority({
+    customer,
+    needsDeferredStatus,
     orderId,
     paymentMethod,
     trackingToken,
-    skip: receiptPaidOrder,
   });
-  const isPaidOrder = receiptPaidOrder || guestInvoice.status === 'paid';
+  const receiptRefundedOrder = receiptPaymentStatus === 'refunded';
   // A refunded invoice or Pay for Me order was previously paid: it must
   // never render proforma/request copy. Like a captured-but-cancelled
   // arrival it renders the reconciliation state — the money moved but no
   // active paid order exists.
   const wasPaidOrder =
     receiptRefundedOrder || guestInvoice.status === 'refunded';
+  // A cancelled invoice or Pay for Me order cannot be fulfilled: like a
+  // refund it renders reconciliation — never proforma/request copy with
+  // live payment instructions, and never success side effects.
+  const isCancelledOrder = guestInvoice.status === 'cancelled';
   // Partially paid accepted money without settling: commercial
   // presentation, but the order stays active — never the reconciliation
   // state above.
@@ -99,15 +101,7 @@ export default function OrderSuccessScreen() {
   // status stays unpaid/pending: same accepted-value evidence, so the
   // same commercial presentation on both authenticated and guest paths.
   const isCreditedOrder =
-    Number(paidCheckOrder?.amount_paid ?? 0) > 0 ||
-    guestInvoice.status === 'credited';
-  // Purchase-success side effects (notification, interstitial, permission
-  // soft-ask) wait until the deferred-order status is authoritative: both
-  // lookups begin unresolved, and a slow refunded lookup must not lose a
-  // race against the 1.5–2.5s timers and open an ad or soft ask for an
-  // order that is about to flip to reconciliation.
-  const deferredStatusAuthoritative =
-    receiptAuthoritative && guestInvoice.isResolved;
+    receiptAmountPaid > 0 || guestInvoice.status === 'credited';
   // The reconciliation route parameter is caller-controlled (public
   // scheme/universal links): a crafted deep link must not render
   // "Payment Received" on its word alone. Verified proof-bound (with
@@ -129,7 +123,8 @@ export default function OrderSuccessScreen() {
     isParamReconciliation && paramReconciliationVerified === undefined;
   const isReconciliation =
     (isParamReconciliation && paramReconciliationVerified === true) ||
-    wasPaidOrder;
+    wasPaidOrder ||
+    isCancelledOrder;
   // The proforma action opens this same preview: stamp the explicit kind so
   // the generated artifact and modal chrome read as a proforma, matching
   // the web success page (unpaid invoice orders only — paid orders keep the
@@ -138,6 +133,7 @@ export default function OrderSuccessScreen() {
     paymentMethod === 'invoice' &&
     !isPaidOrder &&
     !wasPaidOrder &&
+    !isCancelledOrder &&
     !isPartiallyPaidOrder &&
     !isCreditedOrder;
   const receiptPreview = useReceiptPreview({
@@ -283,7 +279,10 @@ export default function OrderSuccessScreen() {
         visible={receiptPreview.isOpen}
         html={receiptPreview.html}
         isPaid={receiptPreview.isPaid}
-        documentType={isProformaDocument ? 'proforma' : undefined}
+        // Same kind the artifact was generated with (explicit proforma
+        // action, derived proforma, or commercial fallback) — never a
+        // second local derivation that can disagree with the HTML.
+        documentType={receiptPreview.documentKind}
         onClose={receiptPreview.closePreview}
         onDismissed={() => setReceiptDismissed(true)}
       />

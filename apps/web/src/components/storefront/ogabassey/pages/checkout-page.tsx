@@ -17,6 +17,7 @@ import {
   CHECKOUT_FUNNEL_EVENTS,
   buildCheckoutFunnelProperties,
   getCheckoutPaymentIntent,
+  resolveFinalizedCheckoutPaymentMethod,
 } from '@baci/shared/contracts';
 import {
   AlertCircle,
@@ -260,21 +261,6 @@ const SHIPPING_RATE_REJECTION_CODES = new Set([
   'SHIPPING_RATE_ZONE_MISMATCH',
   'SHIPPING_RATE_CONDITION_UNMET',
 ]);
-
-/**
- * Server payment methods that prove the server actually finalized coverage
- * to value (mirrors /api/orders responseOrder): only these may override the
- * UI gateway in funnel attribution. Anything else (notably the persisted
- * `card` normalization) keeps the shopper-selected gateway so creation and
- * start/completion share one method.
- */
-const COVERAGE_FINALIZED_METHODS = new Set([
-  'store_credit',
-  'savings',
-  'wallet',
-  'quiz_voucher',
-]);
-
 
 // Module-scope helper: probes DVA settlement server-side so "Confirm
 // Transfer Sent" only records a conversion for a detected transfer.
@@ -1923,22 +1909,17 @@ export const CheckoutPage: React.FC = () => {
           ? order.currency.trim().toUpperCase()
           : currencyCode;
       // The server is authoritative only when it actually finalized
-      // coverage to wallet/savings/voucher for an order placed under
-      // another selection: attribute creation to the finalized method so
-      // creation and completion share one funnel instead of straddling
-      // proforma_invoice and pay_now. Any other server value (notably the
-      // persisted `card` normalization for ordinary Paystack/Korapay
-      // checkouts) must not override the UI gateway, or creation splits
-      // from the paystack/korapay start/completion events.
+      // coverage (see resolveFinalizedCheckoutPaymentMethod): attribute
+      // creation to the finalized method so creation and completion share
+      // one funnel. Any other server value keeps the UI gateway.
       const serverPaymentMethod =
         typeof order.payment_method === 'string'
-          ? order.payment_method.trim()
-          : '';
-      const finalizedPaymentMethod = COVERAGE_FINALIZED_METHODS.has(
-        serverPaymentMethod
-      )
-        ? serverPaymentMethod
-        : paymentMethod;
+          ? order.payment_method
+          : undefined;
+      const finalizedPaymentMethod = resolveFinalizedCheckoutPaymentMethod(
+        serverPaymentMethod,
+        paymentMethod
+      );
       captureCheckoutFunnelEventOnce(
         CHECKOUT_FUNNEL_EVENTS.orderCreated,
         order.id,

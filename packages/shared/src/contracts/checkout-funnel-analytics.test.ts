@@ -3,6 +3,7 @@ import {
   buildCheckoutFunnelProperties,
   CHECKOUT_FUNNEL_EVENTS,
   getCheckoutPaymentIntent,
+  resolveFinalizedCheckoutPaymentMethod,
 } from './checkout-funnel-analytics';
 
 describe('checkout funnel analytics contract', () => {
@@ -21,6 +22,28 @@ describe('checkout funnel analytics contract', () => {
     ['quiz_voucher'],
   ])('maps the fully credited settlement method %s to pay_now', (method) => {
     expect(getCheckoutPaymentIntent(method)).toBe('pay_now');
+  });
+
+  it.each([
+    ['wallet'],
+    ['store_credit'],
+    ['savings'],
+    ['quiz_voucher'],
+  ])('lets server coverage %s override the selected gateway', (coverage) => {
+    expect(resolveFinalizedCheckoutPaymentMethod(coverage, 'paystack')).toBe(
+      coverage
+    );
+  });
+
+  it.each([
+    ['card'],
+    ['paystack'],
+    [''],
+    ['unknown_method'],
+  ])('keeps the selected gateway when the server value %s is not coverage', (serverMethod) => {
+    expect(
+      resolveFinalizedCheckoutPaymentMethod(serverMethod, 'paystack')
+    ).toBe('paystack');
   });
 
   it('keeps the event names and shared properties stable across clients', () => {

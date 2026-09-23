@@ -8,6 +8,7 @@ import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-mer
 import type { GatewayVerificationResult } from '@/lib/payments/types';
 import { createServiceClient } from '@/lib/supabase/service';
 import { referenceSchema, verifyPaymentBodySchema } from '@/schemas/payments';
+import { authorizeSessionlessVerifyReference } from './authorize-verify-reference';
 import {
   getVerifiedAmount,
   verifyGatewayPayment,
@@ -22,7 +23,15 @@ export function GET(request: NextRequest) {
   return verifyGuestPaymentReferenceByQuery(request.nextUrl.searchParams);
 }
 
-async function verifyPaymentReference(reference: string) {
+async function verifyPaymentReference(
+  reference: string,
+  // Order the sessionless proof binds this reference to (tracking token
+  // or validated user-customer relationship). The service-client lookup
+  // below must name the same order, or the finalization target has
+  // drifted from the authorized one. Absent for session requests, whose
+  // CSRF-validated cookie is the authority.
+  expectedOrderId?: string | null
+) {
   const parsedReference = referenceSchema.safeParse(reference);
 
   if (!parsedReference.success) {
@@ -66,6 +75,21 @@ async function verifyPaymentReference(reference: string) {
         .eq('id', transaction.order_id)
         .maybeSingle()
     : { data: null };
+
+  if (expectedOrderId && transaction.order_id !== expectedOrderId) {
+    // The reference resolved to a different order than the sessionless
+    // proof authorized (stale binding, or a reference swapped between the
+    // proof check and this read). Fail closed with no existence oracle —
+    // identical to the proof denial below.
+    logger.warn({
+      message: 'Payment verification order binding mismatch',
+      reference: parsedReference.data,
+    });
+    return NextResponse.json(
+      { error: 'Verification unavailable' },
+      { status: 403 }
+    );
+  }
 
   if (!transaction.order_id) {
     // Wallet top-ups and other non-order references have their own
@@ -426,6 +450,32 @@ export async function POST(request: NextRequest) {
     return (
       csrf.response ??
       NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 })
+    );
+  }
+
+  // checkCsrfProtection accepts any syntactic `Authorization: Bearer ...`
+  // (mobile callers hold no CSRF token), so a Bearer-carrying request is
+  // sessionless whatever string it bears: bind its reference to the
+  // caller — tracking-token proof or validated user-customer relationship
+  // — before the service-client read/finalization path below. Session
+  // (cookie-CSRF) requests carry no such header and keep their existing
+  // authority. Denials are uniform (no existence oracle).
+  const authorizationHeader = request.headers.get('authorization');
+  if (authorizationHeader && /^bearer\s+.+$/i.test(authorizationHeader)) {
+    const authorization = await authorizeSessionlessVerifyReference(
+      request,
+      parsedBody.data.reference,
+      parsedBody.data.trackingToken
+    );
+    if (!authorization.authorized) {
+      return NextResponse.json(
+        { error: 'Verification unavailable' },
+        { status: 403 }
+      );
+    }
+    return verifyPaymentReference(
+      parsedBody.data.reference,
+      authorization.orderId
     );
   }
 

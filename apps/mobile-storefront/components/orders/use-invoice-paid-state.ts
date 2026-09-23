@@ -21,15 +21,19 @@ function toTrackedOrder(value: unknown): TrackOrderData['order'] | null {
 
 // Payment outcome for a guest deferred-settlement order (invoice, Pay for
 // Me): refunded is distinct from unpaid — the order was previously paid,
-// so it must never render proforma/request copy. Credited covers
-// pre-gateway wallet/savings credit recorded in amount_paid while the
-// status stays unpaid/pending: accepted value, commercial presentation,
-// but the order stays active (never reconciliation).
+// so it must never render proforma/request copy. Cancelled is terminal
+// non-payable — the order cannot be fulfilled, so it renders the
+// reconciliation state instead of proforma copy with live payment
+// instructions. Credited covers pre-gateway wallet/savings credit
+// recorded in amount_paid while the status stays unpaid/pending: accepted
+// value, commercial presentation, but the order stays active (never
+// reconciliation).
 export type GuestInvoicePaymentStatus =
   | 'paid'
   | 'refunded'
   | 'partially_paid'
   | 'credited'
+  | 'cancelled'
   | 'unpaid';
 
 export interface GuestInvoicePaymentState {
@@ -115,7 +119,18 @@ export function useGuestInvoicePaidState({
             return;
           }
           if (order && order.id === orderId) {
-            if (order.payment_status === 'paid') {
+            // Terminal cancellation first: a cancelled tracked order is
+            // non-payable whatever payment_status says (legacy rows keep
+            // payment pending on a cancelled order). Both spellings: the
+            // API normalizes the outward status, but tolerate the raw row
+            // for older responses.
+            const trackedStatus =
+              typeof order.status === 'string'
+                ? order.status.trim().toLowerCase()
+                : '';
+            if (trackedStatus === 'cancelled' || trackedStatus === 'canceled') {
+              setStatus('cancelled');
+            } else if (order.payment_status === 'paid') {
               setStatus('paid');
             } else if (order.payment_status === 'refunded') {
               // Previously paid, now refunded: distinct from unpaid so the

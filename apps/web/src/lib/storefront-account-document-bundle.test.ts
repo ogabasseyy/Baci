@@ -109,6 +109,26 @@ describe('buildStorefrontAccountDocumentBundle', () => {
           created_at: '2026-03-22T10:10:00.000Z',
           description: 'Card payment',
           metadata: { payment_method: 'card' },
+          status: 'completed',
+        },
+        // Non-payments never reach customer payment surfaces: a failed
+        // retry and a still-pending attempt moved no money, so neither
+        // belongs in the history card nor the receipt listing.
+        {
+          id: 'tx-2',
+          amount: 110000,
+          created_at: '2026-03-22T10:05:00.000Z',
+          description: 'Card payment',
+          metadata: { payment_method: 'card' },
+          status: 'failed',
+        },
+        {
+          id: 'tx-3',
+          amount: 110000,
+          created_at: '2026-03-22T10:06:00.000Z',
+          description: 'Card payment',
+          metadata: { payment_method: 'card' },
+          status: 'pending',
         },
       ],
       paymentAccount: {
@@ -144,7 +164,10 @@ describe('buildStorefrontAccountDocumentBundle', () => {
     expect(result.invoiceData.items[0]?.vat_category_code).toBe('S');
     expect(result.invoiceData.amount_paid).toBe(110000);
     expect(result.invoiceData.firs_irn).toBe('IRN-2026-001');
-    expect(result.order.transactions?.[0]?.id).toBe('tx-1');
+    expect(result.order.transactions?.map((entry) => entry.id)).toEqual([
+      'tx-1',
+    ]);
+    expect(result.receiptOrder.transactions).toHaveLength(1);
     expect(result.receiptOrder.virtual_account?.account_number).toBe(
       '1234567890'
     );

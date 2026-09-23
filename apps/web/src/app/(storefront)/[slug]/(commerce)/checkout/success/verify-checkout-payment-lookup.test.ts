@@ -105,10 +105,14 @@ describe('verifyCheckoutPaymentByLookup', () => {
     expect(h.capturePaymentCompleted).not.toHaveBeenCalled();
   });
 
-  it('fails ordinary cancelled lookups as unpaid instead of promising a refund', async () => {
+  it.each([
+    'Cancelled',
+    'canceled',
+  ])('fails ordinary %s lookups as unpaid instead of promising a refund', async (paymentStatus) => {
     // A cancelled row proves no capture (maintenance flips stale unpaid
     // orders): terminal unpaid failure with the cart intact — never the
-    // "Payment Received" reconciliation view.
+    // "Payment Received" reconciliation view. Both spellings normalize
+    // before either branch.
     vi.stubGlobal('fetch', mockFetch);
     mockFetch.mockResolvedValue({
       ok: true,
@@ -117,7 +121,7 @@ describe('verifyCheckoutPaymentByLookup', () => {
           id: 'order-12345678',
           order_number: 'BAC-2',
           payment_method: 'paystack',
-          payment_status: 'Cancelled',
+          payment_status: paymentStatus,
         }),
     } as Response);
     const h = handlers();
@@ -190,6 +194,33 @@ describe('verifyCheckoutPaymentByLookup', () => {
           payment_method: 'uba_redvault',
           payment_status: 'unpaid',
           shipping_status: 'canceled',
+        }),
+    } as Response);
+    const h = handlers();
+
+    await verifyCheckoutPaymentByLookup(params(), h);
+
+    expect(h.setStatus).toHaveBeenCalledWith('failed');
+    expect(h.scheduleFailedRedirect).toHaveBeenCalledTimes(1);
+    expect(h.clearCart).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'canceled',
+    'cancelled',
+  ])('fails REDVAULT orders with a %s payment status whatever the shipping state', async (paymentStatus) => {
+    // A canceled payment is terminal even when shipping never flipped:
+    // pending here would wait on money that can never settle.
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: 'order-12345678',
+          order_number: 'BAC-4c',
+          payment_method: 'uba_redvault',
+          payment_status: paymentStatus,
+          shipping_status: 'processing',
         }),
     } as Response);
     const h = handlers();

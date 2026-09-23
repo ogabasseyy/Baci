@@ -60,10 +60,10 @@ function baseDeps(
   };
 }
 
-function mockPaidTrackOrder() {
+function mockPaidTrackOrder(orderId = 'order-123') {
   (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
     ok: true,
-    json: async () => ({ order: { payment_status: 'paid' } }),
+    json: async () => ({ order: { id: orderId, payment_status: 'paid' } }),
   });
 }
 
@@ -158,6 +158,26 @@ describe('useDvaConfirmTransfer', () => {
     expect(mockCaptureCheckoutPaymentCompleted).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
     expect(deps.setDvaData).not.toHaveBeenCalled();
+    expect(result.current.isVerifyingDva).toBe(false);
+  });
+
+  it('treats a paid verdict for a different order as unconfirmed', async () => {
+    // A stale tracking token resolving an older paid order must not
+    // confirm the modal's newer order: no conversion, no routing, and the
+    // cart stays so the shopper can retry or check later.
+    mockPaidTrackOrder('order-OLDER');
+    const deps = baseDeps();
+    const { result } = renderHook(() => useDvaConfirmTransfer(deps));
+
+    await confirmAndFlush(result.current.handleDvaConfirmTransfer);
+
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Transfer not detected yet' })
+    );
+    expect(mockCaptureCheckoutPaymentCompleted).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(deps.setDvaData).not.toHaveBeenCalled();
+    expect(deps.clearCart).not.toHaveBeenCalled();
     expect(result.current.isVerifyingDva).toBe(false);
   });
 

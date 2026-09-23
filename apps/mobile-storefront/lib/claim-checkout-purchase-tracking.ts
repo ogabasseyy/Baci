@@ -6,10 +6,11 @@ import {
   addGrantedClaim,
   claimKey,
   isClaimGranted,
+  isOrphanedClaimLease,
   log,
   MAX_QUEUE_HOLD_MS,
-  persistClaims,
-  readStoredClaims,
+  persistClaimEnvelope,
+  readClaimEnvelope,
   STORAGE_TIMEOUT,
   serializeClaimTask,
   storageTimeout,
@@ -33,11 +34,18 @@ export async function isCheckoutPurchaseClaimed(
     return true;
   }
   try {
-    const stored = await readStoredClaims();
-    if (stored === STORAGE_TIMEOUT) {
+    const envelope = await readClaimEnvelope();
+    if (envelope === STORAGE_TIMEOUT) {
       return false;
     }
-    return stored.includes(claim);
+    if (!envelope.claims.includes(claim)) {
+      return false;
+    }
+    // An aged claim with no emission proof is orphaned (the process died
+    // between grant and dispatch): report unheld so a later poll recovers
+    // it instead of assuming a conversion that never happened. Removal
+    // happens on the next grant, inside the serialized claim task.
+    return !isOrphanedClaimLease(envelope.leases[claim]);
   } catch (error) {
     log.error('Failed to read checkout purchase tracking claim:', error);
     return false;
@@ -108,11 +116,17 @@ export async function isCheckoutPurchaseClaimedSettled(
     const observed = await serializeClaimTask(async () => {
       const settled = Promise.resolve();
       try {
-        const stored = await readStoredClaims();
-        if (stored === STORAGE_TIMEOUT) {
+        const envelope = await readClaimEnvelope();
+        if (envelope === STORAGE_TIMEOUT) {
           return { held: false, settled };
         }
-        return { held: stored.includes(claim), settled };
+        if (!envelope.claims.includes(claim)) {
+          return { held: false, settled };
+        }
+        return {
+          held: !isOrphanedClaimLease(envelope.leases[claim]),
+          settled,
+        };
       } catch (error) {
         log.error('Failed to read checkout purchase tracking claim:', error);
         return { held: false, settled };
@@ -122,6 +136,55 @@ export async function isCheckoutPurchaseClaimedSettled(
   } catch {
     return false;
   }
+}
+
+/**
+ * Records emission proof for a granted claim. The once-helper calls this
+ * after dispatching the conversion: a later restart then reads the claim
+ * as recorded at any age instead of orphaning it for recovery (which
+ * would double-emit). Bounded and never-rejecting like every claim
+ * operation.
+ */
+export function markCheckoutPurchaseEmitted(
+  orderId: string,
+  eventName = 'purchase'
+): Promise<void> {
+  if (!orderId) {
+    return Promise.resolve();
+  }
+  const claim = claimKey(orderId, eventName);
+  return serializeClaimTask(async () => {
+    const settled = Promise.resolve();
+    try {
+      // Read-modify-write inside the serialized task so the stamp cannot
+      // interleave with a concurrent grant or rollback and lose either.
+      const envelope = await readClaimEnvelope();
+      if (envelope === STORAGE_TIMEOUT) {
+        log.error('Failed to mark checkout purchase emitted: store timeout.');
+        return { settled };
+      }
+      const now = Date.now();
+      await Promise.race([
+        persistClaimEnvelope({
+          claims: envelope.claims,
+          leases: {
+            ...envelope.leases,
+            [claim]: {
+              claimedAt: envelope.leases[claim]?.claimedAt ?? now,
+              emittedAt: now,
+            },
+          },
+        }),
+        storageTimeout(),
+      ]);
+    } catch (error) {
+      log.error('Failed to mark checkout purchase emitted:', error);
+    }
+    return { settled };
+  }).then(
+    () => undefined,
+    () => undefined
+  );
 }
 
 export function claimCheckoutPurchaseTracking(
@@ -195,17 +258,40 @@ async function performClaim(
   try {
     // A wedged native store must not stall the checkout flow: bound every
     // storage operation and treat a timeout as unavailable (skip the
-    // emission, let navigation proceed) rather than queueing forever.
-    const stored = await readStoredClaims();
-    if (stored === STORAGE_TIMEOUT) {
+    // emission, let navigation proceed) rather than queueing forever. The
+    // grant and its lease persist in one envelope write, so a crash can
+    // never leave a claim without its lease (or vice versa); the whole
+    // read-modify-write runs inside this serialized task.
+    const envelope = await readClaimEnvelope();
+    if (envelope === STORAGE_TIMEOUT) {
       log.error('Checkout purchase tracking store read timed out.');
       return { claimed: false, settled };
     }
     const claim = claimKey(orderId, eventName);
-    if (stored.includes(claim)) {
-      return { claimed: false, settled };
+    let base = envelope.claims;
+    let leases = envelope.leases;
+    if (envelope.claims.includes(claim)) {
+      // A denied claim is usually a recorded conversion — except when its
+      // lease proves it orphaned (granted, never emitted, already aged):
+      // drop it here and fall through to grant anew so the paid order's
+      // conversion is still recorded instead of blocked forever.
+      if (!isOrphanedClaimLease(leases[claim])) {
+        return { claimed: false, settled };
+      }
+      log.error('Checkout purchase tracking claim orphaned; recovering:', {
+        claim,
+      });
+      base = envelope.claims.filter((entry) => entry !== claim);
+      const { [claim]: _orphaned, ...surviving } = leases;
+      leases = surviving;
     }
-    const write = persistClaims([...stored, claim]);
+    const write = persistClaimEnvelope({
+      claims: [...base, claim],
+      // The lease bounds crash recovery: without it a restart between
+      // grant and dispatch leaves a claim no later poll can distinguish
+      // from a recorded conversion.
+      leases: { ...leases, [claim]: { claimedAt: Date.now() } },
+    });
     const written = await Promise.race([
       write.then(() => true as const),
       storageTimeout(),
@@ -239,19 +325,25 @@ async function performClaim(
 // set, or the erased events would emit again on replay.
 async function removeClaimAfterLateWrite(claim: string): Promise<void> {
   try {
-    const stored = await readStoredClaims();
-    if (stored === STORAGE_TIMEOUT) {
+    const envelope = await readClaimEnvelope();
+    if (envelope === STORAGE_TIMEOUT) {
       return;
     }
-    const reconciled = computeReconciledClaims(stored, claim);
+    const reconciled = computeReconciledClaims(envelope.claims, claim);
     // Nothing to repair: the late claim never landed and no newer grants
     // exist. Skip the write so a healthy store is never rewritten here.
     if (reconciled === null) {
       return;
     }
+    // Leases pass through from the fresh read, and persistClaimEnvelope
+    // additionally repairs any lease a stale snapshot clobbered for a
+    // still-granted claim — so this rollback cannot resurrect an orphan.
     // Unioned at call time with the best-known set, so grants committed
     // after this value was computed still survive its landing.
-    const rollbackWrite = persistClaims(reconciled);
+    const rollbackWrite = persistClaimEnvelope({
+      claims: reconciled,
+      leases: envelope.leases,
+    });
     const written = await Promise.race([
       rollbackWrite.then(() => true as const),
       storageTimeout(),

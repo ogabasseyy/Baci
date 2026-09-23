@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { renderHook, waitFor } from '@testing-library/react-native';
+import { checkReferenceSettled } from '@/components/payment-gateway/verify-order-payment-reference-settlement';
 import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 import { useSettlementCompletion } from './use-settlement-completion';
 
@@ -7,7 +8,17 @@ jest.mock('@/services/analytics', () => ({
   trackCheckoutPaymentCompletedOnce: jest.fn(),
 }));
 
+// Proof-bound reference verification behind the settlement gate: resolved
+// per test, so each completing scenario proves its verification outcome.
+jest.mock(
+  '@/components/payment-gateway/verify-order-payment-reference-settlement',
+  () => ({
+    checkReferenceSettled: jest.fn(),
+  })
+);
+
 const mockTrackCompleted = jest.mocked(trackCheckoutPaymentCompletedOnce);
+const mockCheckReferenceSettled = jest.mocked(checkReferenceSettled);
 
 function trackedResponse(order: Record<string, unknown>) {
   return {
@@ -46,11 +57,17 @@ describe('useSettlementCompletion', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockTrackCompleted.mockResolvedValue('emitted');
+    // Fail closed by default: only tests that prove verification opt in.
+    mockCheckReferenceSettled.mockResolvedValue({
+      paid: false,
+      inconclusive: true,
+    });
   });
 
   it('completes when a pending order settles to paid on a later poll', async () => {
     jest.useFakeTimers();
     try {
+      mockCheckReferenceSettled.mockResolvedValue({ paid: true });
       mockFetchSequence([
         trackedResponse({
           id: 'order-settle-1',
@@ -85,11 +102,23 @@ describe('useSettlementCompletion', () => {
         },
       ]);
 
-      renderHook(() => useSettlementCompletion(baseParams));
+      renderHook(() =>
+        useSettlementCompletion({ ...baseParams, reference: 'JW-ONCHAIN-1' })
+      );
       await jest.advanceTimersByTimeAsync(0);
       expect(mockTrackCompleted).not.toHaveBeenCalled();
+      expect(mockCheckReferenceSettled).not.toHaveBeenCalled();
       await jest.advanceTimersByTimeAsync(1000);
 
+      // The paid row alone proves nothing: completion requires the
+      // proof-bound reference verification for this exact order.
+      await waitFor(() =>
+        expect(mockCheckReferenceSettled).toHaveBeenCalledWith(
+          'order-settle-1',
+          'JW-ONCHAIN-1',
+          'track-settle-1'
+        )
+      );
       await waitFor(() =>
         expect(mockTrackCompleted).toHaveBeenCalledWith({
           customerEmail: 'ada@example.com',
@@ -105,6 +134,7 @@ describe('useSettlementCompletion', () => {
           orderId: 'order-settle-1',
           orderNumber: 'ORD-SETTLE-1',
           paymentMethod: 'juicyway',
+          reference: 'JW-ONCHAIN-1',
           shipping: 0,
           subtotal: 100000,
           tax: 7500,
@@ -117,9 +147,88 @@ describe('useSettlementCompletion', () => {
     }
   });
 
+  it('never consumes the durable claim on a paid row without proof', async () => {
+    jest.useFakeTimers();
+    try {
+      const fetchCalls = mockFetchSequence([
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'paid',
+          subtotal: 25000,
+          shipping_cost: 0,
+          discount_amount: 0,
+          total: 25000,
+        }),
+      ]);
+
+      // No reference: there is nothing proof-bound to check, so the paid
+      // row must keep polling instead of recording completion.
+      renderHook(() => useSettlementCompletion(baseParams));
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(1000);
+      await jest.advanceTimersByTimeAsync(1000);
+
+      expect(fetchCalls()).toBe(3);
+      expect(mockCheckReferenceSettled).not.toHaveBeenCalled();
+      expect(mockTrackCompleted).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('keeps polling while verification is nonterminal, then completes on proof', async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetchSequence([
+        trackedResponse({
+          id: 'order-settle-1',
+          order_number: 'ORD-SETTLE-1',
+          payment_status: 'paid',
+          subtotal: 25000,
+          shipping_cost: 0,
+          discount_amount: 0,
+          total: 25000,
+        }),
+      ]);
+      mockCheckReferenceSettled
+        .mockResolvedValueOnce({ paid: false, inconclusive: true })
+        .mockResolvedValue({ paid: true });
+
+      renderHook(() =>
+        useSettlementCompletion({
+          ...baseParams,
+          paymentMethod: 'paystack',
+          reference: 'PSK-txn-10',
+          pollIntervalMs: 1000,
+          maxAttempts: 3,
+        })
+      );
+      await jest.advanceTimersByTimeAsync(0);
+      // A nonterminal verification is not a negative: no completion, and
+      // the lane retries proof on the next poll instead of stopping.
+      expect(mockTrackCompleted).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(1000);
+
+      await waitFor(() =>
+        expect(mockTrackCompleted).toHaveBeenCalledWith(
+          expect.objectContaining({
+            orderId: 'order-settle-1',
+            reference: 'PSK-txn-10',
+            value: 25000,
+          })
+        )
+      );
+      expect(mockTrackCompleted).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('forwards the tracked order currency to the settlement completion', async () => {
     jest.useFakeTimers();
     try {
+      mockCheckReferenceSettled.mockResolvedValue({ paid: true });
       mockFetchSequence([
         trackedResponse({
           id: 'order-settle-1',
@@ -133,7 +242,9 @@ describe('useSettlementCompletion', () => {
         }),
       ]);
 
-      renderHook(() => useSettlementCompletion(baseParams));
+      renderHook(() =>
+        useSettlementCompletion({ ...baseParams, reference: 'PSK-txn-11' })
+      );
       await jest.advanceTimersByTimeAsync(0);
 
       await waitFor(() =>
@@ -183,6 +294,7 @@ describe('useSettlementCompletion', () => {
   it('keeps a slow-lane watch past the fast budget for delayed settlements', async () => {
     jest.useFakeTimers();
     try {
+      mockCheckReferenceSettled.mockResolvedValue({ paid: true });
       const pending = trackedResponse({
         id: 'order-settle-1',
         order_number: 'ORD-SETTLE-1',
@@ -209,6 +321,7 @@ describe('useSettlementCompletion', () => {
         useSettlementCompletion({
           ...baseParams,
           paymentMethod: 'bank_transfer',
+          reference: 'DVA-attempt-1',
           slowPollIntervalMs: 1000,
           slowMaxAttempts: 2,
         })
@@ -241,6 +354,7 @@ describe('useSettlementCompletion', () => {
   it('polls pending CredPal orders to completion after approval', async () => {
     jest.useFakeTimers();
     try {
+      mockCheckReferenceSettled.mockResolvedValue({ paid: true });
       mockFetchSequence([
         trackedResponse({
           id: 'order-settle-1',
@@ -260,7 +374,11 @@ describe('useSettlementCompletion', () => {
       ]);
 
       renderHook(() =>
-        useSettlementCompletion({ ...baseParams, paymentMethod: 'credpal' })
+        useSettlementCompletion({
+          ...baseParams,
+          paymentMethod: 'credpal',
+          reference: 'CP-approval-1',
+        })
       );
       await jest.advanceTimersByTimeAsync(0);
       expect(mockTrackCompleted).not.toHaveBeenCalled();
@@ -283,6 +401,7 @@ describe('useSettlementCompletion', () => {
   it('forwards the route reference in a deferred pending-to-paid completion', async () => {
     jest.useFakeTimers();
     try {
+      mockCheckReferenceSettled.mockResolvedValue({ paid: true });
       mockFetchSequence([
         trackedResponse({
           id: 'order-settle-1',
@@ -333,6 +452,7 @@ describe('useSettlementCompletion', () => {
   it('reconciles a deferred juicyway settlement with its provider reference', async () => {
     jest.useFakeTimers();
     try {
+      mockCheckReferenceSettled.mockResolvedValue({ paid: true });
       mockFetchSequence([
         trackedResponse({
           id: 'order-settle-1',
@@ -405,6 +525,7 @@ describe('useSettlementCompletion', () => {
   it('keeps polling juicyway past the standard budget until the provider window ends', async () => {
     jest.useFakeTimers();
     try {
+      mockCheckReferenceSettled.mockResolvedValue({ paid: true });
       // On-chain confirmation can take up to ~30 minutes: settlement at
       // attempt 25 (past the old 18-attempt budget) must still record
       // completion under juicyway's default budget.
@@ -432,6 +553,7 @@ describe('useSettlementCompletion', () => {
       renderHook(() =>
         useSettlementCompletion({
           ...baseParams,
+          reference: 'JW-ONCHAIN-25',
           maxAttempts: undefined,
           pollIntervalMs: undefined,
         })
@@ -487,6 +609,7 @@ describe('useSettlementCompletion', () => {
   it('reschedules the polling lane after a released claim instead of stopping', async () => {
     jest.useFakeTimers();
     try {
+      mockCheckReferenceSettled.mockResolvedValue({ paid: true });
       // The order is already paid, but the first tracking attempt fails to
       // emit and releases its claim: the lane must poll again and record
       // completion on retry rather than returning as though it succeeded.
@@ -509,6 +632,7 @@ describe('useSettlementCompletion', () => {
         useSettlementCompletion({
           ...baseParams,
           paymentMethod: 'bank_transfer',
+          reference: 'DVA-attempt-2',
           pollIntervalMs: 1000,
           maxAttempts: 3,
         })
@@ -527,6 +651,7 @@ describe('useSettlementCompletion', () => {
   it('stops polling once another path has already recorded completion', async () => {
     jest.useFakeTimers();
     try {
+      mockCheckReferenceSettled.mockResolvedValue({ paid: true });
       const fetchCalls = mockFetchSequence([
         trackedResponse({
           id: 'order-settle-1',
@@ -544,6 +669,7 @@ describe('useSettlementCompletion', () => {
         useSettlementCompletion({
           ...baseParams,
           paymentMethod: 'bank_transfer',
+          reference: 'DVA-attempt-3',
           pollIntervalMs: 1000,
           maxAttempts: 3,
         })

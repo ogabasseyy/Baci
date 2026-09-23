@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { checkReferenceSettled } from '@/components/payment-gateway/verify-order-payment-reference-settlement';
 import type { TrackOrderData } from '@/components/track-order/TrackOrderScreen.types';
 import {
   TRACK_ORDER_API_BASE_URL,
@@ -165,31 +166,53 @@ export function useSettlementCompletion({
           return;
         }
         if (order && order.id === orderId && order.payment_status === 'paid') {
-          const { total: verifiedTotal, ...attribution } =
-            toTrackedCompletionAttribution(
-              order,
-              customer,
-              toTrackedItems(body)
-            );
-          const outcome = await trackCheckoutPaymentCompletedOnce({
-            ...attribution,
-            orderId,
-            orderNumber: orderNumber || order.order_number || orderId,
-            paymentMethod,
-            // This polling path wins the durable completion claim, so it
-            // must forward the route's provider reference: without it the
-            // deferred conversion cannot be reconciled to its transaction
-            // and the spent claim blocks any later richer capture.
-            ...(reference ? { reference } : {}),
-            value: verifiedTotal,
-          });
-          if (outcome !== 'released') {
-            return;
+          // The paid row alone is not completion proof: the finalizer
+          // flips payment_status before serialized-inventory confirmation
+          // converges, and consuming the durable claim now would block a
+          // later verified path from correcting it. Require the
+          // proof-bound reference verification (a paid verdict implies
+          // inventory_confirmed) before emitting; without a reference
+          // there is nothing proof-bound to check, so keep polling.
+          // A nonterminal verification is not a negative — the webhook or
+          // finalizer may simply not have converged yet.
+          const verifiedPaid = reference
+            ? (
+                await checkReferenceSettled(
+                  orderId,
+                  reference,
+                  trackingToken
+                ).catch(() => null)
+              )?.paid === true
+            : false;
+          if (verifiedPaid) {
+            const { total: verifiedTotal, ...attribution } =
+              toTrackedCompletionAttribution(
+                order,
+                customer,
+                toTrackedItems(body)
+              );
+            const outcome = await trackCheckoutPaymentCompletedOnce({
+              ...attribution,
+              orderId,
+              orderNumber: orderNumber || order.order_number || orderId,
+              paymentMethod,
+              // This polling path wins the durable completion claim, so it
+              // must forward the route's provider reference: without it the
+              // deferred conversion cannot be reconciled to its transaction
+              // and the spent claim blocks any later richer capture.
+              ...(reference ? { reference } : {}),
+              value: verifiedTotal,
+            });
+            if (outcome !== 'released') {
+              return;
+            }
+            // The claim was released after a failed emission (or never
+            // granted): the order is still paid but nothing was recorded,
+            // so fall through and reschedule the next poll instead of
+            // returning as though completion had been recorded.
           }
-          // The claim was released after a failed emission (or never
-          // granted): the order is still paid but nothing was recorded, so
-          // fall through and reschedule the next poll instead of returning
-          // as though completion had been recorded.
+          // Unverified (or reference-less) paid rows fall through the same
+          // way: the next poll retries proof instead of stopping.
         }
       } catch {
         // Transient lookup failure: retry until the attempt budget runs out.

@@ -155,6 +155,24 @@ describe('GET /api/storefront/orders/track-order', () => {
     expect(data.order.gift_wrapping_fee).toBe(250);
   });
 
+  it('normalizes a legacy canceled row to cancelled with no delivery estimate', async () => {
+    mockAnonClient.rpc.mockResolvedValue({
+      data: [makeTrackedOrder({ shipping_status: 'canceled' })],
+      error: null,
+    });
+
+    const request = new NextRequest(
+      'https://example.com/api/storefront/orders/track-order?token=track-token-123&merchant_slug=test-store'
+    );
+
+    const response = await GET(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.order.status).toBe('cancelled');
+    expect(data.estimated_delivery).toBeNull();
+  });
+
   it('keeps the customer timeline free of processing when the raw status is processing', async () => {
     mockAnonClient.rpc.mockResolvedValue({
       data: [

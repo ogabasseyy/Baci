@@ -42,13 +42,19 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   }),
 }));
 
-let mockUser: { id: string } | null = null;
+let mockCustomerSessionStatus: 'loading' | 'authenticated' | 'guest' = 'guest';
 
-vi.mock('@/contexts/auth-context', () => ({
-  useAuthSafe: () => ({
-    user: mockUser,
-  }),
-}));
+vi.mock(
+  '@/components/storefront/ogabassey/pages/checkout/hooks/use-storefront-customer-session',
+  () => ({
+    useStorefrontCustomerSession: () => ({
+      status: mockCustomerSessionStatus,
+      isAuthenticated: mockCustomerSessionStatus === 'authenticated',
+      waitForResolvedAuthenticated: async () =>
+        mockCustomerSessionStatus === 'authenticated',
+    }),
+  })
+);
 
 vi.mock('@/components/analytics/google-customer-reviews', () => ({
   GoogleCustomerReviews: (props: unknown) => {
@@ -65,7 +71,7 @@ vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
 describe('storefront order success page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUser = null;
+    mockCustomerSessionStatus = 'guest';
     mockSearchParams.mockReturnValue(
       new URLSearchParams({
         orderId: 'order-123',
@@ -624,8 +630,44 @@ describe('storefront order success page', () => {
     ).toBeNull();
   });
 
+  it('renders no invoice action while the customer session resolves', async () => {
+    mockCustomerSessionStatus = 'loading';
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'invoice',
+        trackingToken: 'track-token-123',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        items: [],
+        subtotal: 45000,
+        shipping_cost: 1500,
+        total: 49875,
+        payment_method: 'invoice',
+        payment_status: 'unpaid',
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    // Neither the download link nor the guest email notice may flash for
+    // the wrong audience while auth is unresolved.
+    await screen.findByText(/fetching your order summary/i);
+    expect(
+      screen.queryByRole('link', { name: /download proforma invoice pdf/i })
+    ).toBeNull();
+    expect(screen.queryByText(/was sent to/i)).toBeNull();
+  });
+
   it('keeps the archive download link for authenticated invoice orders', async () => {
-    mockUser = { id: 'user-1' };
+    mockCustomerSessionStatus = 'authenticated';
     mockSearchParams.mockReturnValue(
       new URLSearchParams({
         orderId: 'order-123',
@@ -705,13 +747,30 @@ describe('storefront order success page', () => {
     );
   });
 
-  it('renders invoice specific heading and description when type is invoice', async () => {
+  it('renders invoice specific heading and description for a stored invoice order', async () => {
     mockSearchParams.mockReturnValue(
       new URLSearchParams({
         orderId: 'order-123',
         type: 'invoice',
       })
     );
+    // Proforma copy follows the stored payment method, not the
+    // caller-controlled type hint: the fixture carries invoice.
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        payment_status: 'unpaid',
+        payment_method: 'invoice',
+        items: [{ id: 'item-1', gtin: ' 0123456789012 ', quantity: 1 }],
+        subtotal: 3500,
+        shipping_cost: 0,
+        total: 3500,
+      }),
+    });
 
     render(<OrderSuccessPage />);
 
@@ -723,6 +782,39 @@ describe('storefront order success page', () => {
         /we have prepared your proforma invoice and sent it to your email/i
       )
     ).toBeInTheDocument();
+  });
+
+  it('does not render invoice copy for a forged type hint on a paystack order', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'invoice',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        payment_status: 'pending',
+        payment_method: 'paystack',
+        items: [{ id: 'item-1', gtin: ' 0123456789012 ', quantity: 1 }],
+        subtotal: 3500,
+        shipping_cost: 0,
+        total: 3500,
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalled();
+    });
+    expect(
+      screen.queryByRole('heading', { name: /proforma invoice ready!/i })
+    ).toBeNull();
   });
 
   it('renders a refunded invoice as previously paid instead of proforma', async () => {

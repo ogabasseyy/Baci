@@ -209,6 +209,17 @@ export async function GET(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
+    // Token lookups resolve by token (p_order_id: null), so a URL whose
+    // path names order A but whose token belongs to order B returns B —
+    // including B's active transfer account below. Reject the mismatch
+    // before selecting or returning the account, as the checkout-success
+    // lookup does: a stale or mismatched deep link must never display
+    // and copy payment instructions for the wrong order under A's URL.
+    // Uniform 404 (no existence oracle).
+    if (token && !preferEmailLookup && order.id !== id) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
+
     const rawItems: OrderItem[] = Array.isArray(order.items) ? order.items : [];
     const productRouteDetails = await fetchProductRouteDetails(
       rawItems,

@@ -1,3 +1,4 @@
+import { resolveFinalizedCheckoutPaymentMethod } from '@baci/shared/contracts';
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import { createLogger } from '@/lib/logger';
 import { trackCheckoutOrderCreated } from '@/services/analytics';
@@ -28,14 +29,17 @@ export async function trackCreatedOrderOnce(
     )
       return;
 
-    // The server is authoritative when wallet/savings/quiz-voucher coverage
-    // changes the finalized method: attribute creation to it so creation and
-    // completion share one funnel (mirrors the web order_created fix).
-    const finalizedPaymentMethod =
-      typeof order.order.payment_method === 'string' &&
-      order.order.payment_method.trim() !== ''
+    // The server is authoritative only when it finalized coverage
+    // (resolveFinalizedCheckoutPaymentMethod): attribute creation to it so
+    // creation and completion share one funnel. Any other stored/selected
+    // mismatch keeps the funnel-start method.
+    const expectedPaymentMethod = paymentMethod ?? request.payment_method;
+    const finalizedPaymentMethod = resolveFinalizedCheckoutPaymentMethod(
+      typeof order.order.payment_method === 'string'
         ? order.order.payment_method
-        : undefined;
+        : undefined,
+      expectedPaymentMethod
+    );
     // Stamped order currency for funnel attribution: without it every
     // non-NGN creation lands in the NGN funnel while the gateway start
     // and completion paths use the real currency. Absent values keep
@@ -54,8 +58,7 @@ export async function trackCreatedOrderOnce(
       orderId: order.order.id,
       orderNumber: order.order.order_number ?? 'N/A',
       durationMs: Date.now() - startTime,
-      paymentMethod:
-        finalizedPaymentMethod ?? paymentMethod ?? request.payment_method,
+      paymentMethod: finalizedPaymentMethod,
       paymentStatus: order.order.payment_status,
       shipping: request.shipping_fee,
       subtotal: request.subtotal,

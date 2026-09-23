@@ -43,6 +43,13 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
 
   let html = '';
   let isPaid = false;
+  // The effective kind behind the generated artifact, mirroring the
+  // generator's own resolution (paid always renders the commercial
+  // receipt, even with a stale proforma kind). Returned so the modal
+  // chrome (title/share labels) reads from the same value the artifact
+  // was built with — never a second local derivation that can disagree
+  // with it.
+  let documentKind: ReceiptDocumentKind = 'invoice';
   if (isOpen) {
     // Same NGN-only rule as the web document builders: a
     // foreign-currency preview must not print the untyped naira account
@@ -121,6 +128,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       documentKind: derivedDocumentKind,
     });
     isPaid = receiptDetail.payment_status === 'paid';
+    documentKind = isPaid ? 'receipt' : (derivedDocumentKind ?? 'invoice');
   }
 
   const openPreview = (item: ReceiptListItem) => {
@@ -140,6 +148,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     isOpen,
     html,
     isPaid,
+    documentKind,
     openPreview,
     openPreviewByOrderId,
     closePreview,

@@ -87,6 +87,35 @@ describe('GET /api/storefront/orders/[id] public lookup', () => {
     });
   });
 
+  it('rejects a token lookup that resolves a different order than the path', async () => {
+    // A stale or mismatched deep link (path order A, token for order B)
+    // must never display order B — including its active transfer account
+    // — under A's URL. Uniform 404, no existence oracle.
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123?token=track-token-123&merchant_slug=test-store'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: null },
+    });
+    mockAnonClient.rpc.mockResolvedValue({
+      data: [
+        {
+          ...mockOrderData,
+          id: 'order-uuid-OTHER',
+        },
+      ],
+      error: null,
+    });
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(data).toStrictEqual({ error: 'Order not found' });
+  });
+
   it('returns the credited amount for a guest order with partial coverage', async () => {
     const request = new NextRequest(
       'http://localhost/api/storefront/orders/order-uuid-123?token=track-token-123&merchant_slug=test-store'

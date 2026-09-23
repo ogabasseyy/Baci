@@ -146,8 +146,14 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 // The route's stamped-currency read-back uses the service-role client (guest
 // checkouts cannot read orders under RLS), so every suite primes the admin
-// mock with a default NGN row; currency-aware fixtures override it.
-function primeAdminOrderCurrencyRead(currency: string | null = 'NGN') {
+// mock with a default NGN row; currency-aware fixtures override it. The
+// immediate-notification claim rides the same client: fresh-order suites
+// default to won (preserving pre-claim delivery), while the idempotency
+// suite defaults to sent (the replayed first attempt already delivered).
+function primeAdminOrderCurrencyRead(
+  currency: string | null = 'NGN',
+  notificationClaim: 'won' | 'sent' = 'won'
+) {
   mockCreateAdminClient.mockReturnValue({
     from: vi.fn(() => ({
       select: vi.fn().mockReturnThis(),
@@ -157,6 +163,17 @@ function primeAdminOrderCurrencyRead(currency: string | null = 'NGN') {
         error: null,
       }),
     })),
+    rpc: vi.fn(async (name: string) => {
+      if (name === 'claim_immediate_order_notification') {
+        return notificationClaim === 'won'
+          ? {
+              data: [{ claimed: true, claim_status: 'processing' }],
+              error: null,
+            }
+          : { data: [{ claimed: false, claim_status: 'sent' }], error: null };
+      }
+      return { data: null, error: null };
+    }),
   } as never);
 }
 
@@ -3202,7 +3219,8 @@ describe('POST /api/orders — non-NGN currency guards', () => {
 describe('POST /api/orders — checkout idempotency', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    primeAdminOrderCurrencyRead();
+    // Replays observe the first attempt's sent claim and skip redelivery.
+    primeAdminOrderCurrencyRead('NGN', 'sent');
     vi.mocked(authenticateApiRequest).mockResolvedValue({
       user: null,
       error: 'Not authenticated',
@@ -3304,6 +3322,62 @@ describe('POST /api/orders — checkout idempotency', () => {
     });
     expect(body.amountDueToGateway).toBe(0);
     expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(mockNotifyNewOrder).not.toHaveBeenCalled();
+    expect(mockNotifyPaymentReceived).not.toHaveBeenCalled();
+  });
+
+  it('resumes an unfinished wallet-paid notification on replay when nothing was sent', async () => {
+    // The first attempt died before after() delivery (no sent claim): the
+    // replay wins the atomic claim and sends the payment document instead
+    // of suppressing it forever. Merchant creation pings stay fresh-only.
+    primeAdminOrderCurrencyRead('NGN', 'won');
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () =>
+        buildMockSupabase({
+          create_storefront_order: {
+            data: [
+              {
+                ...baseOrderRow,
+                idempotency_replayed: true,
+                payment_method: 'credit_direct',
+                payment_status: 'bnpl_pending',
+                total: 300,
+              },
+            ],
+            error: null,
+          },
+          redeem_wallet_for_order: {
+            data: [
+              {
+                success: true,
+                redeemed_amount: 300,
+                new_balance: 200,
+                transaction_id: '99999999-aaaa-bbbb-cccc-dddddddddddd',
+              },
+            ],
+            error: null,
+          },
+        }) as unknown as never
+    );
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          payment_method: 'credit_direct',
+          use_wallet_credit: true,
+          wallet_amount: 300,
+        }),
+      })
+    );
+    const body = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(body.idempotency).toEqual({ replayed: true });
+    expect(mockSendEmail).toHaveBeenCalled();
     expect(mockNotifyNewOrder).not.toHaveBeenCalled();
     expect(mockNotifyPaymentReceived).not.toHaveBeenCalled();
   });
@@ -6053,6 +6127,19 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       eq: vi.fn(() => orderItemsQuery),
       order: orderItemsOrder,
     };
+    // Atomic immediate-notification claim (service-role RPCs): the winner
+    // runs after() delivery, losers skip. Defaults to claimed so the
+    // existing delivery assertions keep proving the send path; resume/skip
+    // tests override per case.
+    const notificationClaimRpc = vi.fn(async (name: string) => {
+      if (name === 'claim_immediate_order_notification') {
+        return {
+          data: [{ claimed: true, claim_status: 'processing' }],
+          error: null,
+        };
+      }
+      return { data: null, error: null };
+    });
     const backgroundSupabase = {
       from: vi.fn((table: string) => {
         // Serves the route's stamped-currency read-back (service-role client).
@@ -6082,11 +6169,13 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
           insert: vi.fn().mockResolvedValue({ error: null }),
         };
       }),
+      rpc: notificationClaimRpc,
     };
 
     return {
       accountUpsert,
       backgroundSupabase,
+      notificationClaimRpc,
       orderItemsOrder,
       orderItemsQuery,
       reminderInsert,

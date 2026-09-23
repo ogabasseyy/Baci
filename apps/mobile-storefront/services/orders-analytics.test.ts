@@ -99,6 +99,20 @@ describe('trackCreatedOrderOnce', () => {
     );
   });
 
+  it('keeps the funnel-start method when the server value is not coverage', async () => {
+    mockClaim.mockResolvedValue(true);
+    const order = buildOrder();
+    (order.order as { payment_method: string }).payment_method = 'card';
+
+    await trackCreatedOrderOnce(order, buildRequest(), Date.now(), 'paystack');
+
+    expect(mockTrack).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentMethod: 'paystack',
+      })
+    );
+  });
+
   it('forwards the stamped order currency instead of the NGN default', async () => {
     mockClaim.mockResolvedValue(true);
     const order = buildOrder();

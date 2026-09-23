@@ -25,6 +25,7 @@ export interface CryptoSuccessMessageDeps {
   paymentKind?: PaymentKind;
   reference?: string;
   scheduleDelayedNavigation: (navigate: () => void) => void;
+  setProcessingStatus: () => void;
   setSuccessStatus: () => void;
   trackingToken?: string;
   utilityType?: string;
@@ -71,6 +72,7 @@ export async function handleCryptoSuccessMessage(
     paymentKind,
     reference,
     scheduleDelayedNavigation,
+    setProcessingStatus,
     setSuccessStatus,
     trackingToken,
     utilityType,
@@ -115,7 +117,10 @@ export async function handleCryptoSuccessMessage(
   if (!markPaymentCompletionStarted()) {
     return;
   }
-  setSuccessStatus();
+  // Stay processing until verification decides: an early success would
+  // render success UI and terminally ignore later provider
+  // cancellation/error callbacks while verification is still running.
+  setProcessingStatus();
   // Prefer the canonical order total: `amount` is only the residual due
   // at the gateway after wallet/savings credits.
   const cryptoPurchaseTotal = orderTotal ?? amount ?? 0;
@@ -161,6 +166,7 @@ export async function handleCryptoSuccessMessage(
     // Captured money with no active paid order: route to the
     // reconciliation state instead of the generic confirmation, with
     // the cart intact for a fresh attempt.
+    setSuccessStatus();
     scheduleDelayedNavigation(() => {
       router.replace({
         pathname: '/order-success',
@@ -185,6 +191,7 @@ export async function handleCryptoSuccessMessage(
   if (isMountedRef && !isMountedRef.current) {
     return;
   }
+  setSuccessStatus();
   await clearCart();
   scheduleDelayedNavigation(() => {
     router.replace({

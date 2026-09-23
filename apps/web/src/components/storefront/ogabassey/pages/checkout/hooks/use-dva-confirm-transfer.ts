@@ -34,10 +34,12 @@ export interface DvaModalData {
 
 async function verifyDvaTransferStatus({
   merchantSlug,
+  orderId,
   reference,
   trackingToken,
 }: {
   merchantSlug?: string;
+  orderId: string;
   reference: string;
   trackingToken?: string | null;
 }): Promise<boolean> {
@@ -49,7 +51,14 @@ async function verifyDvaTransferStatus({
       return false;
     }
     const result = await response.json().catch(() => null);
-    return result?.order?.payment_status === 'paid';
+    // The token resolves whichever order it belongs to — a stale token
+    // (older paid order) must not confirm the modal's newer order: bind
+    // the paid verdict to the displayed order id, or a different order's
+    // payment records the conversion and routes under this order's URL.
+    return (
+      result?.order?.id === orderId &&
+      result?.order?.payment_status === 'paid'
+    );
   }
   const response = await fetch(
     `/api/payments/status?gateway=paystack&reference=${encodeURIComponent(reference)}`
@@ -129,6 +138,7 @@ export function useDvaConfirmTransfer({
     setIsVerifyingDva(true);
     verifyDvaTransferStatus({
       merchantSlug,
+      orderId,
       reference,
       trackingToken,
     })

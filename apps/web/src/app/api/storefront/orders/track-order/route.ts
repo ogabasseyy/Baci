@@ -258,7 +258,10 @@ export async function GET(request: NextRequest) {
       order: {
         id: order.id,
         order_number: order.order_number,
-        status: order.shipping_status,
+        // Outward key, not the raw row: legacy `canceled` rows must read
+        // as `cancelled` here (the timeline already normalizes), or
+        // tracking consumers treat the order as placed/nonterminal.
+        status: getCustomerOrderStatusKey(order.shipping_status),
         payment_status: order.payment_status,
         created_at: order.created_at,
         updated_at: order.updated_at,
@@ -455,7 +458,13 @@ function calculateEstimatedDelivery(order: {
   created_at: string;
   shipping_state?: string;
 }): { min: string; max: string } | null {
-  if (['delivered', 'cancelled'].includes(order.shipping_status)) {
+  // Normalized: a legacy `canceled` row is still a cancellation, never a
+  // shippable order with a delivery estimate.
+  if (
+    ['delivered', 'cancelled'].includes(
+      getCustomerOrderStatusKey(order.shipping_status)
+    )
+  ) {
     return null;
   }
 

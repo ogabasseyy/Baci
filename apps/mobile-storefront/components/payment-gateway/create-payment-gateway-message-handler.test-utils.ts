@@ -24,6 +24,7 @@ export function createHandler(
     (_terminalFailure: 'failed' | 'cancelled' | 'abandoned') => undefined
   );
   const scheduleDelayedNavigation = jest.fn<(navigate: () => void) => void>();
+  const setProcessingStatus = jest.fn();
   const setSuccessStatus = jest.fn();
   const handler = createPaymentGatewayMessageHandler({
     clearCart,
@@ -37,6 +38,7 @@ export function createHandler(
     markPaymentCompletionStarted,
     onTerminalVerificationFailure,
     scheduleDelayedNavigation,
+    setProcessingStatus,
     setSuccessStatus,
     ...overrides,
   });
@@ -50,6 +52,7 @@ export function createHandler(
     markPaymentCompletionStarted,
     onTerminalVerificationFailure,
     scheduleDelayedNavigation,
+    setProcessingStatus,
     setSuccessStatus,
   };
 }

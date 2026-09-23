@@ -81,4 +81,19 @@ describe('CheckoutReconciliationView', () => {
       /order (confirmed|placed|successful)/i
     );
   });
+
+  it('renders in storefront theme tokens, never a hardcoded palette', () => {
+    const { container } = render(
+      <CheckoutReconciliationView orderNumber="BAC-42" getHref={getHref} />
+    );
+
+    // Merchant palettes and dark-mode storefronts flow through the
+    // --store-* tokens; raw amber/gray/white/black utilities would pin
+    // this state to the default brand.
+    const classes = container.innerHTML;
+    expect(classes).toMatch(/store-(primary|secondary|background|border)/);
+    expect(classes).not.toMatch(
+      /amber-\d+|gray-\d+|bg-white|text-white|bg-black/
+    );
+  });
 });

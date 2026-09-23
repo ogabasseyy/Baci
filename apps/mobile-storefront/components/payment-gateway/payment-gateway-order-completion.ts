@@ -72,7 +72,10 @@ export async function settleOrderCompletion(
 
   paymentCompletionStartedRef.current = true;
   clearPendingLoadTimeout();
-  setPaymentStatus('success');
+  // Stay processing until verification decides: an early success would
+  // render "Payment Successful!" and terminally ignore later provider
+  // cancellation/error callbacks while verification is still running.
+  setPaymentStatus('processing');
   if (orderId && !redvaultVerified) {
     // Prefer the canonical order total: `amount` is only the residual due
     // at the gateway after wallet/savings credits.
@@ -148,6 +151,7 @@ export async function settleOrderCompletion(
       // reconciliation state instead of the generic confirmation. The
       // cart stays intact for a fresh attempt; settlement polling is
       // skipped there since a cancelled order can never become paid.
+      setPaymentStatus('success');
       scheduleDelayedNavigation(() => {
         router.replace({
           pathname: '/order-success',
@@ -183,6 +187,7 @@ export async function settleOrderCompletion(
       return;
     }
   }
+  setPaymentStatus('success');
   await clearCart();
   scheduleDelayedNavigation(() => {
     router.replace({

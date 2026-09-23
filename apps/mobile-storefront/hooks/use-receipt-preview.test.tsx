@@ -194,4 +194,39 @@ describe('useReceiptPreview document kind', () => {
       '<div class="doc-title">Receipt</div>'
     );
   });
+
+  it('reports the effective kind the artifact was built with', () => {
+    // Derived proforma: modal chrome must read proforma, not commercial.
+    mockReceiptDetail = unpaidProformaDetail('NGN');
+    const derived = renderHook(() => useReceiptPreview());
+    act(() => {
+      derived.result.current.openPreviewByOrderId('order-1');
+    });
+    expect(derived.result.current.documentKind).toBe('proforma');
+
+    // Stale explicit proforma on a paid order: the generator renders the
+    // commercial receipt, so the chrome must read receipt too.
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      payment_status: 'paid',
+    };
+    const overridden = renderHook(() =>
+      useReceiptPreview({ documentKind: 'proforma' })
+    );
+    act(() => {
+      overridden.result.current.openPreviewByOrderId('order-1');
+    });
+    expect(overridden.result.current.documentKind).toBe('receipt');
+
+    // Commercial default: unpaid non-invoice without a kind.
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      payment_method: 'paystack',
+    };
+    const commercial = renderHook(() => useReceiptPreview());
+    act(() => {
+      commercial.result.current.openPreviewByOrderId('order-1');
+    });
+    expect(commercial.result.current.documentKind).toBe('invoice');
+  });
 });

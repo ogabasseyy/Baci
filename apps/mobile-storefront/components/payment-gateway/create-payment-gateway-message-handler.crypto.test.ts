@@ -354,7 +354,13 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
   it('skips the conversion when crypto settlement is still pending', async () => {
     // Arrange: a crypto callback whose order is not paid yet.
     mockPendingCryptoVerification();
-    const { clearCart, handler, scheduleDelayedNavigation } = createHandler({
+    const {
+      clearCart,
+      handler,
+      scheduleDelayedNavigation,
+      setProcessingStatus,
+      setSuccessStatus,
+    } = createHandler({
       trackingToken: 'track-token-123',
     });
 
@@ -363,6 +369,14 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
 
     // Assert: no paid conversion, but the shopper still reaches success
     // (settlement polling may complete the order once the webhook lands).
+    // The gateway stays processing while verification runs and promotes
+    // to success only when navigation is scheduled — never before — so a
+    // cancellation landing mid-verification is still recorded.
+    expect(setProcessingStatus).toHaveBeenCalledTimes(1);
+    expect(setSuccessStatus).toHaveBeenCalledTimes(1);
+    expect(setProcessingStatus.mock.invocationCallOrder[0]).toBeLessThan(
+      setSuccessStatus.mock.invocationCallOrder[0] as number
+    );
     expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
     expect(clearCart).toHaveBeenCalledTimes(1);
     expect(scheduleDelayedNavigation).toHaveBeenCalledTimes(1);

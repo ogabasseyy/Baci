@@ -35,6 +35,7 @@ interface CreatePaymentGatewayMessageHandlerInput {
     terminalFailure: 'failed' | 'cancelled' | 'abandoned'
   ) => void;
   scheduleDelayedNavigation: (navigate: () => void) => void;
+  setProcessingStatus: () => void;
   setSuccessStatus: () => void;
   /**
    * Controller liveness: the crypto verification/tracking awaits can run
@@ -117,6 +118,7 @@ export function createPaymentGatewayMessageHandler({
   markPaymentCompletionStarted,
   onTerminalVerificationFailure,
   scheduleDelayedNavigation,
+  setProcessingStatus,
   setSuccessStatus,
   isMountedRef,
 }: CreatePaymentGatewayMessageHandlerInput) {
@@ -185,6 +187,7 @@ export function createPaymentGatewayMessageHandler({
         paymentKind,
         reference,
         scheduleDelayedNavigation,
+        setProcessingStatus,
         setSuccessStatus,
         trackingToken,
         utilityType,

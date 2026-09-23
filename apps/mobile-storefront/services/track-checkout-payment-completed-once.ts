@@ -3,6 +3,7 @@ import {
   awaitCreationPurchaseEmission,
   claimCheckoutPurchaseTracking,
   isCheckoutPurchaseClaimedSettled,
+  markCheckoutPurchaseEmitted,
 } from '@/lib/claim-checkout-purchase-tracking';
 import { createLogger } from '@/lib/logger';
 import { useCartStore } from '@/stores/cart-store';
@@ -143,6 +144,15 @@ export async function trackCheckoutPaymentCompletedOnce(
     // not leave a funnel payment_completed behind, or its retry would
     // double-count the conversion.
     trackCheckoutPaymentCompleted(input);
+    // Emission proof for crash recovery: a restart after this point reads
+    // the claim as recorded at any age. Without it, a crash between grant
+    // and dispatch would orphan the claim and a later poll could
+    // double-emit; with it, only never-dispatched (unmarked) aged claims
+    // are recoverable.
+    await markCheckoutPurchaseEmitted(
+      input.orderId,
+      PAYMENT_COMPLETED_CLAIM_EVENT
+    );
     return 'emitted';
   });
 }

@@ -86,13 +86,19 @@ export async function verifyCheckoutPaymentByLookup(
           : undefined;
     // Terminal states first: a fully refunded REDVAULT order keeps a
     // non-paid payment status, and a cancelled one can stay unpaid
-    // with a cancelled shipping status. Neither is still processing.
+    // with a cancelled shipping status. A canceled payment is terminal
+    // whatever shipping says (legacy rows flip payment without touching
+    // shipping) — both spellings normalize before either branch so the
+    // pending branch below can never wait on money that cannot settle.
+    // Neither terminal state is still processing.
     const isCancelledShippingStatus =
       normalizeTerminalStatus(data?.shipping_status) === 'cancelled';
+    const isCancelledPaymentStatus =
+      normalizeTerminalStatus(data?.payment_status) === 'cancelled';
     const redvaultTerminalCancelled =
       lookupPaymentMethod === 'uba_redvault' &&
       data?.payment_status !== 'paid' &&
-      isCancelledShippingStatus;
+      (isCancelledShippingStatus || isCancelledPaymentStatus);
     const redvaultTerminalRefunded =
       lookupPaymentMethod === 'uba_redvault' &&
       data?.payment_status === 'refunded';

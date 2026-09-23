@@ -625,3 +625,147 @@ function parseStoredClaimsForTest(raw: string | undefined): string[] {
     return [];
   }
 }
+
+describe('completion claim leases', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const START = 1_700_000_000_000;
+  const CLAIM = 'payment_completed:order-lease-1';
+  let nowSpy: jest.Spied<typeof Date.now>;
+  // Bound per test from a fresh module registry: the in-process grant set
+  // cannot be cleared any other way, and cross-restart recovery is exactly
+  // what these tests prove. The mocked AsyncStorage (the `storage` map)
+  // survives the reset, so it plays the role of the disk.
+  type TrackingModule = typeof import('./claim-checkout-purchase-tracking');
+  let fresh: TrackingModule;
+
+  function restart(): void {
+    jest.resetModules();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    fresh = require('./claim-checkout-purchase-tracking') as TrackingModule;
+  }
+
+  function readEnvelopeLeases(): Record<
+    string,
+    { claimedAt: number; emittedAt?: number }
+  > {
+    const raw = storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw) as { leases?: unknown };
+    return (parsed.leases ?? {}) as Record<
+      string,
+      { claimedAt: number; emittedAt?: number }
+    >;
+  }
+
+  beforeEach(() => {
+    nowSpy = jest.spyOn(Date, 'now').mockReturnValue(START);
+    restart();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('stamps a lease inside the grant envelope and keeps a fresh claim held', async () => {
+    await expect(
+      fresh.claimCheckoutPurchaseTracking('order-lease-1', 'payment_completed')
+    ).resolves.toBe(true);
+    // Grant and lease land in one versioned envelope write — never in a
+    // second key that could tear.
+    const raw = storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY) ?? '';
+    expect(JSON.parse(raw)).toMatchObject({ version: 2 });
+    expect(readEnvelopeLeases()[CLAIM]?.claimedAt).toBe(START);
+    await expect(
+      fresh.claimCheckoutPurchaseTracking('order-lease-1', 'payment_completed')
+    ).resolves.toBe(false);
+    await expect(
+      fresh.isCheckoutPurchaseClaimedSettled(
+        'order-lease-1',
+        'payment_completed'
+      )
+    ).resolves.toBe(true);
+  });
+
+  it('recovers an aged claim that was never emitted', async () => {
+    await expect(
+      fresh.claimCheckoutPurchaseTracking('order-lease-1', 'payment_completed')
+    ).resolves.toBe(true);
+    // A day later, after a restart: the claim reads unheld and the next
+    // grant recovers it for emission with a refreshed lease.
+    restart();
+    nowSpy.mockReturnValue(START + DAY_MS + 1000);
+    await expect(
+      fresh.isCheckoutPurchaseClaimedSettled(
+        'order-lease-1',
+        'payment_completed'
+      )
+    ).resolves.toBe(false);
+    await expect(
+      fresh.claimCheckoutPurchaseTracking('order-lease-1', 'payment_completed')
+    ).resolves.toBe(true);
+    expect(readEnvelopeLeases()[CLAIM]?.claimedAt).toBe(START + DAY_MS + 1000);
+  });
+
+  it('never recovers an emitted claim, however old', async () => {
+    await expect(
+      fresh.claimCheckoutPurchaseTracking('order-lease-1', 'payment_completed')
+    ).resolves.toBe(true);
+    await fresh.markCheckoutPurchaseEmitted(
+      'order-lease-1',
+      'payment_completed'
+    );
+    expect(readEnvelopeLeases()[CLAIM]?.emittedAt).toBe(START);
+    restart();
+    nowSpy.mockReturnValue(START + 7 * DAY_MS);
+    await expect(
+      fresh.claimCheckoutPurchaseTracking('order-lease-1', 'payment_completed')
+    ).resolves.toBe(false);
+    await expect(
+      fresh.isCheckoutPurchaseClaimedSettled(
+        'order-lease-1',
+        'payment_completed'
+      )
+    ).resolves.toBe(true);
+  });
+
+  it('never recovers a legacy claim with no lease record', async () => {
+    storage.set(
+      CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
+      JSON.stringify({ version: 2, claims: [CLAIM] })
+    );
+    nowSpy.mockReturnValue(START + 30 * DAY_MS);
+    await expect(
+      fresh.claimCheckoutPurchaseTracking('order-lease-1', 'payment_completed')
+    ).resolves.toBe(false);
+  });
+
+  it('repairs a stale lease for a still-granted claim on the next persist', async () => {
+    await expect(
+      fresh.claimCheckoutPurchaseTracking('order-lease-1', 'payment_completed')
+    ).resolves.toBe(true);
+    // A timed-out write lands late with a snapshot that predates the
+    // grant: the lease reads orphaned although the claim is held. The next
+    // persist must stamp it fresh instead of letting a later poll recover
+    // (and double-emit) it.
+    const raw = storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY) ?? '';
+    const stale = JSON.parse(raw) as {
+      version: number;
+      claims: string[];
+      leases: Record<string, { claimedAt: number }>;
+    };
+    stale.leases[CLAIM] = { claimedAt: START - 2 * DAY_MS };
+    storage.set(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY, JSON.stringify(stale));
+    await expect(
+      fresh.claimCheckoutPurchaseTracking('order-lease-2', 'payment_completed')
+    ).resolves.toBe(true);
+    expect(readEnvelopeLeases()[CLAIM]?.claimedAt).toBe(START);
+    await expect(
+      fresh.isCheckoutPurchaseClaimedSettled(
+        'order-lease-1',
+        'payment_completed'
+      )
+    ).resolves.toBe(true);
+  });
+});

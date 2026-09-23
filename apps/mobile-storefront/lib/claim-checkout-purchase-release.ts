@@ -3,8 +3,8 @@ import {
   deleteGrantedClaim,
   grantedClaimSnapshot,
   log,
-  persistClaims,
-  readStoredClaims,
+  persistClaimEnvelope,
+  readClaimEnvelope,
   STORAGE_TIMEOUT,
   serializeClaimTask,
   storageTimeout,
@@ -40,15 +40,21 @@ export function computeReconciledClaims(
 // late.
 export async function reconcileStoredClaims(): Promise<void> {
   try {
-    const stored = await readStoredClaims();
-    if (stored === STORAGE_TIMEOUT) {
+    const envelope = await readClaimEnvelope();
+    if (envelope === STORAGE_TIMEOUT) {
       return;
     }
-    const reconciled = computeReconciledClaims(stored);
+    const reconciled = computeReconciledClaims(envelope.claims);
     if (reconciled === null) {
       return;
     }
-    await Promise.race([persistClaims(reconciled), storageTimeout()]);
+    await Promise.race([
+      persistClaimEnvelope({
+        claims: reconciled,
+        leases: envelope.leases,
+      }),
+      storageTimeout(),
+    ]);
   } catch (error) {
     log.error('Failed to reconcile checkout purchase claims:', error);
   }
@@ -74,16 +80,20 @@ function scheduleReleaseRetry(claim: string, attemptsLeft: number): void {
   void serializeClaimTask(async () => {
     const settled = Promise.resolve();
     try {
-      const stored = await readStoredClaims();
-      if (stored === STORAGE_TIMEOUT) {
+      const envelope = await readClaimEnvelope();
+      if (envelope === STORAGE_TIMEOUT) {
         log.error('Checkout purchase tracking claim release retry timed out.');
         scheduleReleaseRetry(claim, attemptsLeft - 1);
         return { settled };
       }
-      if (!stored.includes(claim)) {
+      if (!envelope.claims.includes(claim)) {
         return { settled };
       }
-      const write = persistClaims(stored.filter((entry) => entry !== claim));
+      const { [claim]: _released, ...leases } = envelope.leases;
+      const write = persistClaimEnvelope({
+        claims: envelope.claims.filter((entry) => entry !== claim),
+        leases,
+      });
       const written = await Promise.race([
         write.then(() => true as const),
         storageTimeout(),
@@ -140,23 +150,37 @@ async function performRelease(
     return { settled };
   }
   const claim = claimKey(orderId, eventName);
-  // Drop from the in-process grant set BEFORE persisting: persistClaims
-  // re-merges every grant, so releasing after the write would resurrect
-  // the claim (and its reconciliations) instead of freeing it.
+  // Drop from the in-process grant set BEFORE persisting:
+  // persistClaimEnvelope re-merges every grant, so releasing after the
+  // write would resurrect the claim (and its reconciliations) instead of
+  // freeing it.
   deleteGrantedClaim(claim);
   try {
-    const stored = await readStoredClaims();
-    if (stored === STORAGE_TIMEOUT) {
+    const envelope = await readClaimEnvelope();
+    if (envelope === STORAGE_TIMEOUT) {
       log.error('Checkout purchase tracking store read timed out.');
       // The persisted claim remains: retry on a bounded schedule or the
       // next poll mistakes it for a recorded conversion and stops.
       scheduleReleaseRetry(claim, RELEASE_RETRY_ATTEMPTS);
       return { settled };
     }
-    if (!stored.includes(claim)) {
+    // The claim and its lease release in one envelope write, so no crash
+    // window can leave a lease without its claim (an orphan candidate
+    // that a later poll would recover and double-emit).
+    const { [claim]: _released, ...leases } = envelope.leases;
+    if (!envelope.claims.includes(claim)) {
+      if (claim in envelope.leases) {
+        await Promise.race([
+          persistClaimEnvelope({ claims: envelope.claims, leases }),
+          storageTimeout(),
+        ]);
+      }
       return { settled };
     }
-    const write = persistClaims(stored.filter((entry) => entry !== claim));
+    const write = persistClaimEnvelope({
+      claims: envelope.claims.filter((entry) => entry !== claim),
+      leases,
+    });
     const written = await Promise.race([
       write.then(() => true as const),
       storageTimeout(),

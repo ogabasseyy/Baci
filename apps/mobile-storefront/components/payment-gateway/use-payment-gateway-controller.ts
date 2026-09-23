@@ -225,6 +225,7 @@ export function usePaymentGatewayController() {
       );
     },
     scheduleDelayedNavigation,
+    setProcessingStatus: () => setPaymentStatus('processing'),
     setSuccessStatus: () => setPaymentStatus('success'),
     isMountedRef,
   });

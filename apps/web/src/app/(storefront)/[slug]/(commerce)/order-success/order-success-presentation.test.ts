@@ -69,6 +69,30 @@ describe('resolveInvoicePresentation', () => {
       })
     ).toEqual({ isInvoice: true, isInvoiceMethod: true });
   });
+
+  it('ignores a forged type=invoice hint on a non-invoice order', () => {
+    // Caller-controlled query must not override the stored method once
+    // the order loads: no proforma copy, no invoice downloads.
+    expect(
+      resolveInvoicePresentation({
+        order: invoiceOrder({
+          payment_status: 'pending',
+          payment_method: 'paystack',
+        }),
+        type: 'invoice',
+      })
+    ).toEqual({ isInvoice: false, isInvoiceMethod: false });
+  });
+
+  it('honors the type hint only before the order loads', () => {
+    expect(
+      resolveInvoicePresentation({ order: null, type: 'invoice' })
+    ).toEqual({ isInvoice: true, isInvoiceMethod: true });
+    expect(resolveInvoicePresentation({ order: null, type: null })).toEqual({
+      isInvoice: false,
+      isInvoiceMethod: false,
+    });
+  });
 });
 
 describe('buildOrderSuccessCopy', () => {

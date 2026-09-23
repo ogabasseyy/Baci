@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { GoogleCustomerReviews } from '@/components/analytics/google-customer-reviews';
-import { useAuthSafe } from '@/contexts/auth-context';
+import { useStorefrontCustomerSession } from '@/components/storefront/ogabassey/pages/checkout/hooks/use-storefront-customer-session';
 import { useCurrencyWithCountry } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
@@ -24,6 +24,7 @@ import {
   resolveInvoicePresentation,
 } from './order-success-presentation';
 import { useBnplSettlement } from './use-bnpl-settlement';
+import { usePayformeHandoffRefresh } from './use-payforme-handoff-refresh';
 
 // Default to 5 days for delivery logic if not available
 const DELIVERY_ESTIMATE_MS = 5 * 24 * 60 * 60 * 1000;
@@ -44,8 +45,15 @@ function OrderSuccessContent() {
     merchant?.country,
     merchant?.payout_currency
   );
-  const auth = useAuthSafe();
-  const user = auth?.user;
+  // AuthContext (useAuthSafe) only mounts in dashboard/platform trees —
+  // it is always null on the storefront and cannot distinguish a guest
+  // from a signed-in customer. Resolve the storefront cookie session
+  // explicitly: invoice downloads render only for an authenticated
+  // customer, and guests deterministically get the email notice (the
+  // download endpoints still enforce ownership server-side).
+  const customerSession = useStorefrontCustomerSession(
+    merchant?.slug ?? undefined
+  );
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -122,6 +130,19 @@ function OrderSuccessContent() {
     type: _type,
   });
   const { isPayForMeUnpaid, payerName } = payerHandoff;
+  // The retry-provisioned DVA can land after the first lookup (pre-response
+  // Paystack timeout → after() retry): refetch on a bounded lane while the
+  // handoff is unpaid and account-less so the bank details appear without
+  // a manual refresh.
+  usePayformeHandoffRefresh({
+    lookupEmail,
+    merchantSlug: merchant?.slug,
+    onOrder: setOrder,
+    orderId,
+    orderToken,
+    shouldRefresh:
+      isPayForMeUnpaid && !payerHandoff.payerTransferAccount && !loading,
+  });
   const { description, heading } = buildOrderSuccessCopy({
     hasRecoveryState,
     hasValidatedOrder,
@@ -208,10 +229,10 @@ function OrderSuccessContent() {
               </Link>
             )}
 
-            {isInvoiceMethod && (
+            {isInvoiceMethod && customerSession.status !== 'loading' && (
               <OrderSuccessInvoiceCta
                 archiveHref={asRoute(getHref('/receipts'))}
-                isAuthed={Boolean(user)}
+                isAuthed={customerSession.isAuthenticated}
                 isInvoice={isInvoice}
                 merchantSlug={merchant?.slug}
                 order={order}
@@ -230,7 +251,7 @@ function OrderSuccessContent() {
               <ArrowRight size={18} />
             </Link>
 
-            {hasValidatedOrder && user ? (
+            {hasValidatedOrder && customerSession.isAuthenticated ? (
               <Link
                 href={asRoute(getHref('/account/orders'))}
                 className="inline-flex items-center justify-center gap-2 px-6 py-4 bg-white text-gray-900 font-bold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors w-full"

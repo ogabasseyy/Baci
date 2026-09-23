@@ -18,10 +18,13 @@ export function resolveInvoicePresentation({
   order: OrderData | null;
   type: string | null;
 }): { isInvoice: boolean; isInvoiceMethod: boolean } {
-  const isInvoiceMethod =
-    type === 'invoice' ||
-    order?.payment_status === 'invoice' ||
-    order?.payment_method === 'invoice';
+  // The `type` query value is caller-controlled: once the order loads, the
+  // stored payment method rules — otherwise `?type=invoice` dresses any
+  // pending order (Paystack, bank transfer, …) in proforma copy and
+  // invoice downloads. The hint only applies pre-load (order null).
+  const isInvoiceMethod = order
+    ? order.payment_status === 'invoice' || order.payment_method === 'invoice'
+    : type === 'invoice';
   const creditedAmount = Number(order?.amount_paid ?? 0);
   const hasPriorPayment = Number.isFinite(creditedAmount) && creditedAmount > 0;
   const isInvoice =

@@ -61,6 +61,69 @@ export function parseTrackedOrderIds(raw: string | null): string[] {
   return [...new Set(filterClaimEntries(parsed))];
 }
 
-export function serializeTrackedOrderIds(claims: string[]): string {
-  return JSON.stringify({ version: CLAIM_STORE_VERSION, claims });
+export function serializeTrackedOrderIds(
+  claims: string[],
+  // Claim leases bound the crash-recovery window (grant without emission
+  // proof). Omitted when empty so legacy exact-envelope assertions keep
+  // passing and healthy stores are never rewritten with noise.
+  leases?: Record<string, { claimedAt: number; emittedAt?: number }>
+): string {
+  return JSON.stringify(
+    leases && Object.keys(leases).length > 0
+      ? { version: CLAIM_STORE_VERSION, claims, leases }
+      : { version: CLAIM_STORE_VERSION, claims }
+  );
+}
+
+function isClaimLeaseRecord(value: unknown): value is {
+  claimedAt: number;
+  emittedAt?: number;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as { claimedAt?: unknown; emittedAt?: unknown };
+  if (typeof record.claimedAt !== 'number') {
+    return false;
+  }
+  return record.emittedAt === undefined || typeof record.emittedAt === 'number';
+}
+
+export function parseClaimLeases(
+  raw: string | null
+): Record<string, { claimedAt: number; emittedAt?: number }> {
+  if (!raw) {
+    return {};
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (!isVersionedClaimStore(parsed)) {
+    return {};
+  }
+  const container = parsed as { leases?: unknown };
+  if (
+    !container.leases ||
+    typeof container.leases !== 'object' ||
+    Array.isArray(container.leases)
+  ) {
+    return {};
+  }
+  const leases: Record<string, { claimedAt: number; emittedAt?: number }> = {};
+  for (const [claim, lease] of Object.entries(
+    container.leases as Record<string, unknown>
+  )) {
+    if (isClaimLeaseRecord(lease)) {
+      leases[claim] = {
+        claimedAt: lease.claimedAt,
+        ...(lease.emittedAt === undefined
+          ? {}
+          : { emittedAt: lease.emittedAt }),
+      };
+    }
+  }
+  return leases;
 }

@@ -196,6 +196,21 @@ describe('useGuestInvoicePaidState', () => {
     expect(result.current.isResolved).toBe(true);
   });
 
+  it.each([
+    'cancelled',
+    'canceled',
+  ])('resolves %s for a cancelled guest invoice instead of unpaid', async (status) => {
+    // A cancelled tracked order cannot be fulfilled: terminal
+    // non-payable, never proforma/request copy with live payment
+    // instructions — even while payment_status still reads pending.
+    mockTrackedOrder('pending', 'order-inv-1', { status });
+
+    const { result } = renderHook(() => useGuestInvoicePaidState(baseParams));
+
+    await waitFor(() => expect(result.current.status).toBe('cancelled'));
+    expect(result.current.isResolved).toBe(true);
+  });
+
   it('resolves credited for a wallet-covered guest invoice instead of unpaid', async () => {
     mockTrackedOrder('unpaid', 'order-inv-1', { amount_paid: 20000 });
 

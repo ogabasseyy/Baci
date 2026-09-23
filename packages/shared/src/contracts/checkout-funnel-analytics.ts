@@ -83,6 +83,38 @@ export function buildCheckoutFunnelProperties(
   });
 }
 
+/**
+ * Server payment methods proving the server actually finalized coverage to
+ * value (mirrors /api/orders responseOrder). Only these may override the
+ * shopper-selected gateway in funnel attribution. Any other server value
+ * (notably the persisted `card` normalization for ordinary Paystack/Korapay
+ * checkouts) keeps the selected gateway so creation and start/completion
+ * share one method.
+ */
+export const COVERAGE_FINALIZED_PAYMENT_METHODS: ReadonlySet<string> = new Set([
+  'store_credit',
+  'savings',
+  'wallet',
+  'quiz_voucher',
+]);
+
+/**
+ * Resolves the payment method to attribute an order_created event to. The
+ * server is authoritative only when it finalized coverage (see
+ * {@link COVERAGE_FINALIZED_PAYMENT_METHODS}); every other mismatch keeps
+ * the selected method so the creation event stays in the funnel the shopper
+ * started.
+ */
+export function resolveFinalizedCheckoutPaymentMethod(
+  serverPaymentMethod: string | undefined,
+  selectedPaymentMethod: string
+): string {
+  const finalized = (serverPaymentMethod ?? '').trim();
+  if (finalized !== '' && COVERAGE_FINALIZED_PAYMENT_METHODS.has(finalized))
+    return finalized;
+  return selectedPaymentMethod;
+}
+
 export function getCheckoutPaymentIntent(
   paymentMethod: string
 ): CheckoutPaymentIntent | undefined {

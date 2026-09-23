@@ -63,6 +63,8 @@ export interface Order extends OrderFinancialFields {
   date: string;
   createdAt: number;
   source: string;
+  /** Jumia provider shop id, retained so multi-shop orders resolve their own integration. */
+  jumiaShopId?: string;
   tracking_number?: string;
   shipping_provider?: string;
   delivery_method?: string | null;
@@ -140,6 +142,7 @@ export interface JumiaOrderItem {
 export interface JumiaOrder {
   jumia_order_id: string;
   jumia_order_number: string;
+  jumia_shop_id: string | null;
   customer_name: string | null;
   total_amount: string;
   status: string;
@@ -311,7 +314,7 @@ export async function getOrders(
     let jumiaQuery = supabase
       .from('jumia_orders')
       .select(
-        'status, jumia_order_id, jumia_order_number, customer_name, total_amount, created_at_jumia, items'
+        'status, jumia_order_id, jumia_order_number, jumia_shop_id, customer_name, total_amount, created_at_jumia, items'
       )
       .eq('merchant_id', authorizedMerchantId)
       .is('baci_order_id', null);
@@ -368,6 +371,7 @@ export async function getOrders(
     return {
       id: jOrder.jumia_order_id, // Use Jumia ID as ID
       orderNumber: jOrder.jumia_order_number,
+      jumiaShopId: jOrder.jumia_shop_id ?? undefined,
       customerName: formatPersonName(jOrder.customer_name || 'Jumia Customer'),
       total: Number.parseFloat(jOrder.total_amount),
       currency: 'NGN',

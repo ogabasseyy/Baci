@@ -29,6 +29,7 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchant: vi.fn(() => ({
     merchant: { id: 'm-1', slug: 'test', currency: 'NGN' },
     loading: false,
+    hasPermission: vi.fn(() => true),
   })),
 }));
 vi.mock('@/hooks/use-toast', () => ({

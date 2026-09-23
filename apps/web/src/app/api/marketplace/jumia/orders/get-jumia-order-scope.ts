@@ -1,4 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getJumiaShopNonDefaultMarketplaceKeys } from '@/lib/jumia/shop-marketplace-scope';
+
+export { getJumiaShopNonDefaultMarketplaceKeys };
 
 type JumiaOrderScopeResult =
   | Readonly<{
@@ -54,26 +57,14 @@ export async function getJumiaOrderScope(
     };
   }
 
-  const { data: activeIntegrations, error: activeIntegrationsError } =
-    await supabase
-      .from('marketplace_integrations')
-      .select('marketplace_key')
-      .eq('merchant_id', merchantId)
-      .eq('platform', 'jumia')
-      .eq('is_active', true)
-      .eq('shop_id', integration.shop_id);
-  if (activeIntegrationsError) {
-    return {
-      kind: 'database_error',
-      message: activeIntegrationsError.message,
-    };
-  }
-
-  const nonDefaultMarketplaceKeys = new Set(
-    (activeIntegrations as Array<{ marketplace_key: string | null }> | null)
-      ?.map((row) => row.marketplace_key?.trim() || 'default')
-      .filter((key) => key !== 'default') ?? []
+  const nonDefaultMarketplaceKeys = await getJumiaShopNonDefaultMarketplaceKeys(
+    supabase,
+    merchantId,
+    integration.shop_id
   );
+  if (!(nonDefaultMarketplaceKeys instanceof Set)) {
+    return nonDefaultMarketplaceKeys;
+  }
 
   return {
     kind: 'ok',

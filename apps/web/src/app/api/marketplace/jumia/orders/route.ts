@@ -22,6 +22,7 @@ import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { sanitizeText } from '@/lib/sanitize-core';
 import { createClient } from '@/lib/supabase/server';
 import { getCachedJumiaOrders } from './get-cached-jumia-orders';
+import { getJumiaShopNonDefaultMarketplaceKeys } from './get-jumia-order-scope';
 
 export const GET = getCachedJumiaOrders;
 
@@ -106,6 +107,24 @@ export async function POST(request: NextRequest) {
         return jumiaErrorResponse(clientError);
       }
       throw clientError;
+    }
+
+    // A shop shared by several business clients returns one unattributable
+    // order set. Stamp the selected key only when the scope is unambiguous;
+    // otherwise keep the neutral scope (and fail closed to it on lookup
+    // errors) so sibling syncs cannot churn rows between marketplaces.
+    const shopMarketplaceKeys = await getJumiaShopNonDefaultMarketplaceKeys(
+      supabase,
+      merchantId,
+      jumiaClient.shopId
+    );
+    const ambiguousOrderScope =
+      !(shopMarketplaceKeys instanceof Set) || shopMarketplaceKeys.size > 1;
+    if (!(shopMarketplaceKeys instanceof Set)) {
+      logger.error({
+        message: 'Failed to resolve Jumia shop marketplace scope',
+        error: shopMarketplaceKeys.message,
+      });
     }
 
     // Fetch all orders from Jumia (auto-paginating) — last 7 days
@@ -200,7 +219,8 @@ export async function POST(request: NextRequest) {
         jumia_order_number: String(order.number),
         jumia_shop_id: jumiaClient.shopId,
         marketplace_key: getJumiaManualOrderCacheKey(
-          jumiaClient.marketplaceKey
+          jumiaClient.marketplaceKey,
+          { ambiguousScope: ambiguousOrderScope }
         ),
         status: order.status,
         customer_name: sanitizedCustomerName,

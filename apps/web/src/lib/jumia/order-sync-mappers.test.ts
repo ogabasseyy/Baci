@@ -10,6 +10,7 @@ import {
   type MarketplaceIntegrationRow,
   mapJumiaShippingStatus,
   readOrderSyncEnabled,
+  readStockSyncEnabled,
 } from './order-sync-mappers';
 
 const integration: MarketplaceIntegrationRow = {
@@ -93,6 +94,13 @@ describe('Jumia order sync mappers', () => {
     expect(readOrderSyncEnabled(null)).toBe(true);
     expect(readOrderSyncEnabled({ orders: true })).toBe(true);
     expect(readOrderSyncEnabled({ orders: false })).toBe(false);
+  });
+
+  it('treats stock sync as opt-in', () => {
+    expect(readStockSyncEnabled(null)).toBe(false);
+    expect(readStockSyncEnabled({})).toBe(false);
+    expect(readStockSyncEnabled({ stock: true })).toBe(true);
+    expect(readStockSyncEnabled({ stock: false })).toBe(false);
   });
 
   it('uses a fallback lookback and overlap for sync cursors', () => {

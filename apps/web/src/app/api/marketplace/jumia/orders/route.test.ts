@@ -13,12 +13,23 @@ const mocks = vi.hoisted(() => ({
     },
     from: vi.fn((table: string) => {
       if (table === 'marketplace_integrations') {
+        const scopeQuery: { eq: ReturnType<typeof vi.fn> } = {
+          eq: vi.fn((column: string) =>
+            column === 'shop_id'
+              ? Promise.resolve({
+                  data: [{ marketplace_key: 'Jumia Nigeria' }],
+                  error: null,
+                })
+              : scopeQuery
+          ),
+        };
         return {
           update: vi.fn(() => ({
             eq: vi.fn(() => ({
               eq: vi.fn(() => Promise.resolve({ error: null })),
             })),
           })),
+          select: vi.fn(() => scopeQuery),
         };
       }
 

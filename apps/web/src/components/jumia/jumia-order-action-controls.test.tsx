@@ -45,4 +45,20 @@ describe('JumiaOrderActionControls', () => {
     expect(screen.getByRole('button', { name: /print label/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /cancel/i })).toBeDisabled();
   });
+
+  it('omits mutation actions for viewers without manage permission', () => {
+    render(
+      <JumiaOrderActionControls
+        actionLoading={null}
+        blockedLabelUrl={null}
+        canManage={false}
+        handleAction={vi.fn()}
+        labelUrls={[]}
+        orderNumber="1001"
+      />
+    );
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByText(/view only/i)).toBeInTheDocument();
+  });
 });

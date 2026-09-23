@@ -12,6 +12,8 @@ export interface JumiaOrderSyncResult {
   canonicalUpdated: number;
   /** Merchant push notifications successfully sent for synced Jumia orders. */
   notified: number;
+  /** Stock updates pushed for self-authorized integrations with stock sync. */
+  stockUpdated: number;
   /**
    * Order-level processing failures that did not abort the whole integration.
    * Each increment should have a matching per-order entry in `errors`, for

@@ -74,7 +74,8 @@ export default function OrdersClientPage({
   },
 }: OrdersClientPageProps) {
   const searchParams = useSearchParams();
-  const { merchant, loading: merchantLoading } = useMerchant();
+  const { merchant, loading: merchantLoading, hasPermission } = useMerchant();
+  const canManageIntegrations = hasPermission('integrations', 'manage');
   const { loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | 'All'>(
@@ -95,7 +96,7 @@ export default function OrdersClientPage({
     null
   );
   const [jumiaIntegrations, setJumiaIntegrations] = useState<
-    Array<{ id: string; shop_name: string }>
+    Array<{ id: string; shop_id?: string | null; shop_name: string }>
   >([]);
   const [jumiaConnectLoading, setJumiaConnectLoading] = useState(true);
   const [jumiaConnectError, setJumiaConnectError] = useState<string | null>(
@@ -140,7 +141,12 @@ export default function OrdersClientPage({
           ? data.integrations.filter(
               (
                 i: unknown
-              ): i is { id: string; shop_name: string; [k: string]: unknown } =>
+              ): i is {
+                id: string;
+                shop_id?: string | null;
+                shop_name: string;
+                [k: string]: unknown;
+              } =>
                 typeof i === 'object' &&
                 i !== null &&
                 typeof (i as Record<string, unknown>).id === 'string'
@@ -167,8 +173,12 @@ export default function OrdersClientPage({
     return () => controller.abort();
   }, [merchantId]);
 
-  const getIntegrationIdForOrder = (_order: Order): string | null =>
-    resolveJumiaIntegrationId(jumiaIntegrations, requestedJumiaIntegrationId);
+  const getIntegrationIdForOrder = (order: Order): string | null =>
+    resolveJumiaIntegrationId(
+      jumiaIntegrations,
+      requestedJumiaIntegrationId,
+      order.jumiaShopId
+    );
 
   useEffect(() => {
     if (
@@ -540,6 +550,7 @@ export default function OrdersClientPage({
           orderId={selectedJumiaOrder.id}
           orderNumber={selectedJumiaOrder.orderNumber}
           integrationId={getIntegrationIdForOrder(selectedJumiaOrder) as string}
+          canManage={canManageIntegrations}
         />
       )}
     </div>

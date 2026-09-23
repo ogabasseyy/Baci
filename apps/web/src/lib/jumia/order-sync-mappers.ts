@@ -67,6 +67,11 @@ export function readOrderSyncEnabled(syncConfig: unknown): boolean {
   return orders !== false;
 }
 
+export function readStockSyncEnabled(syncConfig: unknown): boolean {
+  if (!syncConfig || typeof syncConfig !== 'object') return false;
+  return (syncConfig as { stock?: unknown }).stock === true;
+}
+
 export function getJumiaSyncLowerBound(
   lastSyncAt: string | null,
   nowMs = Date.now()

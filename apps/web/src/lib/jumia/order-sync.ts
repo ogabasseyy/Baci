@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import {
   JUMIA_EXTERNAL_SOURCE,
   type MarketplaceIntegrationRow,
+  readStockSyncEnabled,
 } from './order-sync-mappers';
 import {
   buildExistingJumiaCacheEntry,
@@ -16,11 +17,13 @@ import {
   upsertCanonicalOrder,
 } from './order-sync-operations';
 import { selectJumiaOrderSyncIntegrations } from './select-jumia-order-sync-integrations';
+import { getJumiaShopNonDefaultMarketplaceKeys } from './shop-marketplace-scope';
 import {
   JumiaSyncCursorUpdateError,
   type SyncJumiaOrderIntegrationDependencies,
   syncJumiaOrderIntegration,
 } from './sync-jumia-order-integration';
+import { syncJumiaStockForIntegration } from './sync-jumia-stock-integration';
 
 const JUMIA_ORDER_SYNC_ROUTE = 'jumia/order-sync';
 
@@ -49,6 +52,7 @@ export async function syncJumiaOrdersForActiveIntegrations(
     canonicalCreated: 0,
     canonicalUpdated: 0,
     notified: 0,
+    stockUpdated: 0,
     orderErrors: 0,
     errors: [],
   };
@@ -106,6 +110,49 @@ export async function syncJumiaOrdersForActiveIntegrations(
           sync_error_update_error: syncErrorUpdateError.message,
         });
       }
+    }
+  }
+
+  // OAuth integrations keep automatic stock sync in the legacy edge
+  // worker. Self-authorized integrations are excluded there, so the VPS
+  // loop pushes their stock here. Multi-marketplace shops fail closed:
+  // the stock feed has no business-client selector.
+  for (const integration of integrations) {
+    if (integration.connection_method !== 'self_authorization') continue;
+    if (!readStockSyncEnabled(integration.sync_config)) continue;
+    if (!integration.shop_id) continue;
+    try {
+      const shopKeys = await getJumiaShopNonDefaultMarketplaceKeys(
+        supabase,
+        integration.merchant_id,
+        integration.shop_id
+      );
+      if (!(shopKeys instanceof Set) || shopKeys.size > 1) {
+        logger.info({
+          message: 'Skipping Jumia stock sync for ambiguous shop scope',
+          integrationId: integration.id,
+          merchant_id: integration.merchant_id,
+          route: JUMIA_ORDER_SYNC_ROUTE,
+        });
+        continue;
+      }
+      const stock = await syncJumiaStockForIntegration({
+        supabase,
+        merchantId: integration.merchant_id,
+        integrationId: integration.id,
+      });
+      result.stockUpdated += stock.updated;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      result.errors.push(`${integration.merchant_id}/stock: ${message}`);
+      logger.error({
+        message: 'Jumia stock sync failed',
+        error,
+        integrationId: integration.id,
+        merchant_id: integration.merchant_id,
+        route: JUMIA_ORDER_SYNC_ROUTE,
+        sync_error: message,
+      });
     }
   }
 

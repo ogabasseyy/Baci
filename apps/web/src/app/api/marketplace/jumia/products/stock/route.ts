@@ -26,7 +26,7 @@ import { createClient } from '@/lib/supabase/server';
 import {
   getPushReadyJumiaStockMappings,
   loadJumiaStockMappings,
-} from './load-jumia-stock-mappings';
+} from '@/lib/jumia/load-jumia-stock-mappings';
 
 export async function POST(request: NextRequest) {
   try {

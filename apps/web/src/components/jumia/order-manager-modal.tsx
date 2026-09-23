@@ -48,6 +48,7 @@ interface OrderManagerModalProps {
   integrationId: string;
   isOpen?: boolean;
   onClose: () => void;
+  canManage?: boolean;
 }
 
 interface FetchItemsCallbacks {
@@ -91,6 +92,7 @@ export function OrderManagerModal({
   integrationId,
   isOpen = true,
   onClose,
+  canManage = true,
 }: OrderManagerModalProps) {
   const [items, setItems] = useState<JumiaOrderItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -230,6 +232,7 @@ export function OrderManagerModal({
             <JumiaOrderActionControls
               actionLoading={actionLoading}
               blockedLabelUrl={blockedLabelUrl}
+              canManage={canManage}
               handleAction={handleAction}
               labelUrls={labelUrls}
               orderNumber={orderNumber}

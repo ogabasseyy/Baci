@@ -60,6 +60,7 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
       canonicalCreated: 0,
       canonicalUpdated: 0,
       notified: 0,
+      stockUpdated: 0,
       orderErrors: 0,
       errors: [],
     });
@@ -190,6 +191,7 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
       canonicalCreated: 0,
       canonicalUpdated: 0,
       notified: 0,
+      stockUpdated: 0,
       orderErrors: 1,
       errors: ['merchant-1/jumia-order-1: item API timeout'],
     });

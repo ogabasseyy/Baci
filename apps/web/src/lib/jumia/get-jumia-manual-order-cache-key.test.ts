@@ -6,6 +6,15 @@ describe('getJumiaManualOrderCacheKey', () => {
     expect(getJumiaManualOrderCacheKey('Jumia Nigeria')).toBe('Jumia Nigeria');
   });
 
+  it('keeps the neutral scope when the shop scope is ambiguous', () => {
+    expect(
+      getJumiaManualOrderCacheKey('Jumia Nigeria', { ambiguousScope: true })
+    ).toBe('default');
+    expect(
+      getJumiaManualOrderCacheKey('Jumia Nigeria', { ambiguousScope: false })
+    ).toBe('Jumia Nigeria');
+  });
+
   it('trims surrounding whitespace from the selected scope', () => {
     expect(getJumiaManualOrderCacheKey('  Jumia Nigeria  ')).toBe(
       'Jumia Nigeria'

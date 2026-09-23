@@ -45,7 +45,8 @@ const FILTERED_LIST_CARD_CONTENT_VISIBILITY =
   'content-auto [contain-intrinsic-size:auto_190px] md:[contain-intrinsic-size:auto_240px]';
 
 interface CategoryPageResultsProps {
-  canUseClientFilters: boolean;
+  canShowFilters: boolean;
+  showPriceFilter: boolean;
   filters: FilterState;
   availableOptions: AvailableFilterOptions;
   onFilterChange: (section: keyof FilterState, value: string | number) => void;
@@ -73,7 +74,8 @@ interface CategoryPageResultsProps {
  * in the page; this only renders the pre-computed slices and callbacks.
  */
 export function CategoryPageResults({
-  canUseClientFilters,
+  canShowFilters,
+  showPriceFilter,
   filters,
   availableOptions,
   onFilterChange,
@@ -107,7 +109,7 @@ export function CategoryPageResults({
     <div className="max-w-[1400px] mx-auto px-4 md:px-6">
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Sidebar Filters (Desktop) */}
-        {canUseClientFilters && (
+        {canShowFilters && (
           <div className="hidden lg:block lg:col-span-1">
             <div className="sticky top-24">
               <CategoryFiltersSidebar
@@ -115,6 +117,7 @@ export function CategoryPageResults({
                 availableOptions={availableOptions}
                 onFilterChange={onFilterChange}
                 onClearFilters={onClearFilters}
+                showPriceFilter={showPriceFilter}
               />
               <div className="mt-6">
                 <AdUnit placementKey="PRODUCT_SIDEBAR" />
@@ -124,7 +127,7 @@ export function CategoryPageResults({
         )}
 
         {/* Product Grid */}
-        <div className={canUseClientFilters ? 'lg:col-span-3' : 'lg:col-span-4'}>
+        <div className={canShowFilters ? 'lg:col-span-3' : 'lg:col-span-4'}>
           {!hasKnownProducts ? (
             <div className="text-center py-20 bg-store-background rounded-2xl border border-store-background-text/10 shadow-sm">
               <div className="size-16 bg-store-background-text/5 rounded-full flex items-center justify-center mx-auto mb-4">

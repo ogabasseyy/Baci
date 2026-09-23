@@ -111,6 +111,7 @@ export interface FilterState {
   condition: string[];
   storage: string[];
   ram: string[];
+  graphics: string[];
   colors: string[];
   simType: string[];
   displayType: string[];
@@ -128,6 +129,7 @@ interface CategoryFiltersSidebarProps {
   onFilterChange: (section: keyof FilterState, value: string | number) => void;
   onClearFilters: () => void;
   className?: string;
+  showPriceFilter?: boolean;
 }
 
 export const CategoryFiltersSidebar: React.FC<CategoryFiltersSidebarProps> = ({
@@ -136,6 +138,7 @@ export const CategoryFiltersSidebar: React.FC<CategoryFiltersSidebarProps> = ({
   onFilterChange,
   onClearFilters,
   className = '',
+  showPriceFilter = true,
 }) => {
   return (
     <div
@@ -155,7 +158,8 @@ export const CategoryFiltersSidebar: React.FC<CategoryFiltersSidebarProps> = ({
       </div>
 
       {/* Price Range Filter */}
-      <div className="border-b border-gray-100 pb-6 mb-2">
+      {showPriceFilter && (
+        <div className="border-b border-gray-100 pb-6 mb-2">
         <h4 className="font-bold text-sm text-gray-900 mb-3">
           Price Range (₦)
         </h4>
@@ -196,24 +200,29 @@ export const CategoryFiltersSidebar: React.FC<CategoryFiltersSidebarProps> = ({
             />
           </div>
         </div>
-      </div>
+        </div>
+      )}
 
       {/* Dynamic Filter Sections */}
-      <FilterSection
-        title="Brand"
-        options={availableOptions.brand}
-        selectedOptions={filters.brand}
-        onChange={(val) => onFilterChange('brand', val)}
-        isOpenDefault={true}
-      />
+      {availableOptions.brand.length > 0 && (
+        <FilterSection
+          title="Brand"
+          options={availableOptions.brand}
+          selectedOptions={filters.brand}
+          onChange={(val) => onFilterChange('brand', val)}
+          isOpenDefault={true}
+        />
+      )}
 
-      <FilterSection
-        title="Condition"
-        options={availableOptions.condition}
-        selectedOptions={filters.condition}
-        onChange={(val) => onFilterChange('condition', val)}
-        isOpenDefault={true}
-      />
+      {availableOptions.condition.length > 0 && (
+        <FilterSection
+          title="Condition"
+          options={availableOptions.condition}
+          selectedOptions={filters.condition}
+          onChange={(val) => onFilterChange('condition', val)}
+          isOpenDefault={true}
+        />
+      )}
 
       {availableOptions.storage.length > 0 && (
         <FilterSection
@@ -230,6 +239,15 @@ export const CategoryFiltersSidebar: React.FC<CategoryFiltersSidebarProps> = ({
           options={availableOptions.ram}
           selectedOptions={filters.ram}
           onChange={(val) => onFilterChange('ram', val)}
+        />
+      )}
+
+      {availableOptions.graphics.length > 0 && (
+        <FilterSection
+          title="Graphics Card"
+          options={availableOptions.graphics}
+          selectedOptions={filters.graphics}
+          onChange={(val) => onFilterChange('graphics', val)}
         />
       )}
 

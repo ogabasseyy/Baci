@@ -1,12 +1,8 @@
 import type { RegisteredAddress } from '@baci/shared';
-import {
-  createClient as createSupabaseClient,
-  type SupabaseClient,
-} from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
 import { cache } from 'react';
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
-import { getSupabaseServiceRoleKey, getSupabaseUrl } from '@/env';
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
 import type {
@@ -15,7 +11,10 @@ import type {
 } from '@/lib/cached-category-page-shell-types';
 import {
   type CachedCategoryPageProductScope,
+  type CategoryPageProductFilters,
   categoryPageProductIdCache,
+  MAX_CATEGORY_GRAPHICS_VALUE_LENGTH,
+  normalizeCategoryGraphicsValue,
 } from '@/lib/category-page-product-id-cache';
 import { getCategoryPageShellData } from '@/lib/get-category-page-shell-data';
 import { hydrateAndSanitizePublicProducts } from '@/lib/hydrate-public-products';
@@ -50,7 +49,6 @@ import {
   unwrapStorefrontReadResultForCache,
 } from '@/lib/storefront-read-result';
 import type { VariantAttributeSource } from '@/lib/storefront-specs/variant-attributes';
-import { createTimeoutComposedFetch } from '@/lib/supabase/compose-fetch-signal';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
@@ -122,9 +120,6 @@ function combineUniqueRelatedBlogPosts<T extends RelatedBlogPostIdentity>(
 
   return uniquePosts;
 }
-
-/** Default transport bound for cached-data Supabase clients. */
-const CACHED_CLIENT_DEFAULT_TIMEOUT_MS = 10_000;
 
 function getStorefrontSnapshotSupabaseClient(): SupabaseClient<StorefrontDatabase> {
   // The runtime client is the same anonymous public client used by the rest of
@@ -313,76 +308,16 @@ export interface MerchantFeatureSettings {
   [key: string]: unknown;
 }
 
-const MERCHANT_PUBLIC_FEATURE_SETTINGS_SELECT: string = `
-  about_page_enabled,
-  agentic_checkout_enabled,
-  auto_blog_enabled,
-  blog_enabled,
-  blog_discover_image_validation_enabled,
-  checkout_collect_phone,
-  checkout_require_account,
-  checkout_show_order_notes,
-  contact_page_enabled,
-  credpal_enabled,
-  credit_direct_enabled,
-  credit_direct_max_amount,
-  credit_direct_min_amount,
-  custom_settings,
-  discount_codes_enabled,
-  faq_page_enabled,
-  facebook_pixel_id,
-  free_shipping_threshold,
-  google_analytics_id,
-  google_place_id,
-  google_reviews_enabled,
-  guest_checkout_enabled,
-  juicyway_enabled,
-  klump_enabled,
-  klump_max_amount,
-  klump_min_amount,
-  korapay_enabled,
-  loyalty_enabled,
-  low_stock_threshold,
-  order_tracking_enabled,
-  pay_on_delivery_enabled,
-  paystack_enabled,
-  preferred_international_gateway,
-  preferred_local_gateway,
-  privacy_page_enabled,
-  repairs_catalog_enabled,
-  reviews_enabled,
-  rewards_page_enabled,
-  shipping_insurance_enabled,
-  shipping_insurance_min_order_value,
-  shipping_insurance_opt_in_default,
-  shipping_providers,
-  show_recent_purchases,
-  show_stock_levels,
-  snapchat_pixel_id,
-  terms_page_enabled,
-  tiktok_pixel_id,
-  twitter_pixel_id,
-  vtu_airtime_enabled,
-  vtu_checkout_addon_amounts,
-  vtu_checkout_addon_enabled,
-  vtu_data_enabled,
-  vtu_electricity_enabled,
-  vtu_enabled,
-  vtu_loyalty_reward_enabled,
-  vtu_tv_enabled,
-  wallet_order_auto_debit_enabled,
-  wallet_paystack_dva_enabled,
-  customer_device_savings_enabled,
-  customer_device_savings_auto_debit_enabled,
-  customer_device_savings_break_fee_enabled,
-  wishlist_enabled
-`;
-
-const MERCHANT_PUBLIC_FEATURE_SETTINGS_LEGACY_SELECT =
-  MERCHANT_PUBLIC_FEATURE_SETTINGS_SELECT.replace(
-    /^\s*repairs_catalog_enabled,\n/m,
-    ''
-  );
+/**
+ * Public feature settings are never read from the `merchant_feature_settings`
+ * base table here: production revokes anonymous SELECT on it. The readable
+ * contract is the allowlisted `feature_settings` projection inside the
+ * SECURITY DEFINER `resolve_storefront_public_snapshot_v2` RPC (see
+ * `getCachedFeatureSettings`), whose key set must stay free of secret-bearing
+ * columns such as `facebook_capi_token`, `tiktok_access_token`,
+ * `ga4_api_secret`, and `paypal_client_secret` (pinned by
+ * `cache-invalidation-feature-projection.test.ts`).
+ */
 
 export interface CachedMerchant {
   id: string;
@@ -1601,11 +1536,13 @@ const CATEGORY_PAGE_PRODUCT_ID_ASSEMBLY_MAX_WINDOWS = 64;
  * loop terminates.
  */
 async function fetchAllCategoryPageProductIds({
+  filters,
   merchantId,
   scope,
   seedIds,
   totalProductCount,
 }: {
+  filters?: CategoryPageProductFilters;
   merchantId: string;
   scope: CachedCategoryPageProductScope;
   seedIds: string[];
@@ -1627,6 +1564,7 @@ async function fetchAllCategoryPageProductIds({
     }
 
     const window = await categoryPageProductIdCache.fetchProductIdWindow({
+      filters,
       merchantId,
       scope,
       from,
@@ -1674,9 +1612,11 @@ async function fetchAllCategoryPageProductIds({
  *                           (PR4b review round 4).
  */
 async function getCategoryPageProductIds({
+  filters,
   merchantId,
   scope,
 }: {
+  filters?: CategoryPageProductFilters;
   merchantId: string;
   scope: CachedCategoryPageProductScope;
 }): Promise<CachedCategoryPageProductIdsResult> {
@@ -1686,10 +1626,15 @@ async function getCategoryPageProductIds({
     productIds =
       scope.kind === 'legacy'
         ? await categoryPageProductIdCache.getLegacyProductIds({
+            filters,
             merchantId,
             scope,
           })
-        : await categoryPageProductIdCache.getProductIds({ merchantId, scope });
+        : await categoryPageProductIdCache.getProductIds({
+            filters,
+            merchantId,
+            scope,
+          });
   } catch (error) {
     console.error('Product ID query failed outside cache:', error);
     return {
@@ -1704,10 +1649,12 @@ async function getCategoryPageProductIds({
     const exactCount =
       scope.kind === 'legacy'
         ? await categoryPageProductIdCache.getLegacyProductTotalCount({
+            filters,
             merchantId,
             scope,
           })
         : await categoryPageProductIdCache.getProductTotalCount({
+            filters,
             merchantId,
             scope,
           });
@@ -1853,6 +1800,85 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+const CATEGORY_PAGE_GRAPHICS_FACET_CHUNK_SIZE = 200;
+
+async function getCachedCategoryPageGraphicsOptionsRead(
+  merchantId: string,
+  scope: CachedCategoryPageProductScope
+): Promise<string[]> {
+  'use cache';
+  cacheLife('storefront-page');
+  cacheTag(
+    'category-page-data',
+    'products',
+    'categories',
+    `products-${merchantId}`,
+    `categories-${merchantId}`
+  );
+
+  if (scope.kind === 'none') return [];
+
+  const idResult = await getCategoryPageProductIds({ merchantId, scope });
+  if (idResult.productsQueryFailed) {
+    throw new Error('Category graphics options product IDs unavailable');
+  }
+
+  // Accept the seed as complete only against an EXACT count: the count-failure
+  // fallback sets the total to the capped seed length, which would otherwise
+  // trivially satisfy the comparison and hide GPUs past the cache cap (their
+  // curated hubs would incorrectly 404). With no trustworthy total, pass
+  // null so assembly pages to exhaustion instead.
+  const productIds =
+    idResult.totalProductCountExact &&
+    idResult.productIds.length >= idResult.totalProductCount
+      ? idResult.productIds
+      : await fetchAllCategoryPageProductIds({
+          merchantId,
+          scope,
+          seedIds: idResult.productIds,
+          totalProductCount: idResult.totalProductCountExact
+            ? idResult.totalProductCount
+            : null,
+        });
+  const idChunks = Array.from(
+    {
+      length: Math.ceil(
+        productIds.length / CATEGORY_PAGE_GRAPHICS_FACET_CHUNK_SIZE
+      ),
+    },
+    (_, chunkIndex) =>
+      productIds.slice(
+        chunkIndex * CATEGORY_PAGE_GRAPHICS_FACET_CHUNK_SIZE,
+        (chunkIndex + 1) * CATEGORY_PAGE_GRAPHICS_FACET_CHUNK_SIZE
+      )
+  );
+  const supabase = getPublicSupabaseClient();
+  const rows = await mapWithConcurrency(idChunks, 3, async (productIdChunk) => {
+    const { data, error } = await supabase
+      .from('product_key_specs')
+      .select('gpu')
+      .in('product_id', productIdChunk)
+      .not('gpu', 'is', null);
+
+    if (error) throw error;
+    return (data || []) as Array<{ gpu?: string | null }>;
+  });
+
+  // Mirror the resolver's selectability bound: advertising an overlong GPU
+  // the shopper cannot select would serve the unfiltered catalog instead.
+  return Array.from(
+    new Set(
+      rows
+        .flat()
+        .map((row) => (row.gpu ? normalizeCategoryGraphicsValue(row.gpu) : ''))
+        .filter(
+          (gpu): gpu is string =>
+            gpu.length > 0 && gpu.length <= MAX_CATEGORY_GRAPHICS_VALUE_LENGTH
+        )
+    )
+  ).sort((left, right) => left.localeCompare(right));
+}
+
 /**
  * Every way a category product read can come back incomplete.
  *
@@ -1911,11 +1937,13 @@ function assertUnboundedCatalogueIsComplete(
 }
 
 async function getCachedCategoryPageProductsUncached({
+  filters,
   merchantId,
   productLimit,
   productOffset,
   scope,
 }: {
+  filters?: CategoryPageProductFilters;
   merchantId: string;
   productLimit?: number;
   productOffset?: number;
@@ -1935,6 +1963,7 @@ async function getCachedCategoryPageProductsUncached({
   };
 
   const idResult = await getCategoryPageProductIds({
+    filters,
     merchantId,
     scope,
   });
@@ -1966,6 +1995,7 @@ async function getCachedCategoryPageProductsUncached({
     // the complete catalogue, or an explicit typed failure (PR4b review r5).
     try {
       productWindow = await fetchAllCategoryPageProductIds({
+        filters,
         merchantId,
         scope,
         seedIds: idResult.productIds,
@@ -2002,6 +2032,7 @@ async function getCachedCategoryPageProductsUncached({
     // (PR4b review r5).
     try {
       productWindow = await categoryPageProductIdCache.fetchProductIdWindow({
+        filters,
         merchantId,
         scope,
         from: windowStart,
@@ -2092,15 +2123,61 @@ const getCachedCategoryPageProducts = cache(
     merchantId: string,
     scope: CachedCategoryPageProductScope,
     productOffset?: number,
-    productLimit?: number
+    productLimit?: number,
+    filters?: CategoryPageProductFilters
   ) =>
     getCachedCategoryPageProductsUncached({
+      filters,
       merchantId,
       productLimit,
       productOffset,
       scope,
     })
 );
+
+export async function getCachedCategoryPageGraphicsOptions(
+  merchantId: string,
+  categorySlug: string,
+  _storeSlug: string
+): Promise<string[]> {
+  try {
+    return await getCachedCategoryPageGraphicsOptionsStrict(
+      merchantId,
+      categorySlug
+    );
+  } catch (error) {
+    console.warn('Category graphics facet query failed outside cache:', {
+      categorySlug,
+      error,
+      merchantId,
+    });
+    return [];
+  }
+}
+
+/**
+ * Strict graphics-facet read that propagates query failures instead of
+ * converting them to an empty array. Use it wherever an empty result changes
+ * routing (hub 404s, filtered-listing fallbacks): return null / unavailable
+ * only after a successful read proves there is no inventory.
+ */
+export async function getCachedCategoryPageGraphicsOptionsStrict(
+  merchantId: string,
+  categorySlug: string
+): Promise<string[]> {
+  const shell = await getCategoryPageShellData(merchantId, categorySlug);
+  // A shell failure is an outage, not an empty facet: routing treats [] as
+  // "no inventory" (hub 404s, unfiltered listings), so propagate to the
+  // error boundary instead of returning a valid empty read.
+  if ('categoryQueryFailed' in shell && shell.categoryQueryFailed === true) {
+    throw new Error('Category graphics facet shell query failed');
+  }
+
+  return getCachedCategoryPageGraphicsOptionsRead(
+    merchantId,
+    shell.productScope
+  );
+}
 
 /**
  * Cache-friendly data fetcher for Category/Collection pages.
@@ -2114,14 +2191,16 @@ export async function getCachedCategoryPageData(
   categorySlug: string,
   _storeSlug: string,
   productOffset?: number,
-  productLimit?: number
+  productLimit?: number,
+  filters?: CategoryPageProductFilters
 ): Promise<CachedCategoryPageData> {
   const shell = await getCategoryPageShellData(merchantId, categorySlug);
   const productResult = await getCachedCategoryPageProducts(
     merchantId,
     shell.productScope,
     productOffset,
-    productLimit
+    productLimit,
+    filters
   );
 
   if (shell.isCollection) {
@@ -2305,126 +2384,6 @@ export async function getCachedProductRatingStats(productId: string) {
   }
 }
 
-/**
- * Create a Supabase client with Service Role key for secure operations.
- * SERVER-SIDE ONLY. Never use on client.
- */
-function getServiceSupabaseClient() {
-  const url = getSupabaseUrl();
-  const key = getSupabaseServiceRoleKey(); // Throws if on client or missing
-
-  return createSupabaseClient(url, key, {
-    global: {
-      // This client previously had NO transport bound at all — and it sits
-      // inside the hot merchant shell path via getCachedFeatureSettings.
-      fetch: createTimeoutComposedFetch(CACHED_CLIENT_DEFAULT_TIMEOUT_MS),
-    },
-  });
-}
-
-/**
- * Cached dashboard stats (Revenue, Orders, etc.)
- * Uses 'merchant' cacheLife profile (revalidate 60s)
- */
-export async function getCachedDashboardStats(merchantId: string) {
-  // PR4b review round 4: stays `'use cache: remote'` (demotion REVERTED).
-  // `dashboard-${merchantId}` is busted by revalidateProducts(),
-  // revalidateMerchant() AND revalidateMerchantPublication() — a merchant who
-  // adds a product expects the dashboard to reflect it, and a local entry on
-  // another instance would keep serving pre-mutation metrics until `cacheLife`
-  // expiry. Still fail-loud so a transient RPC error is never persisted as
-  // null; the dashboard action's own try/catch degrades to zero metrics
-  // outside the cache scope. A genuine null summary (no error) still returns
-  // null.
-  'use cache: remote';
-  cacheLife('merchant');
-  cacheTag('dashboard', `dashboard-${merchantId}`);
-
-  const supabase = getServiceSupabaseClient();
-
-  const { data: stats, error } = await supabase.rpc(
-    'get_sales_dashboard_stats',
-    { p_merchant_id: merchantId }
-  );
-
-  if (error) {
-    console.error('Error fetching cached dashboard stats:', error);
-    throw error;
-  }
-
-  return stats;
-}
-
-/**
- * Cached platform analytics (Admin).
- * Uses 'products' cacheLife profile (revalidate 5min)
- */
-export async function getCachedPlatformAnalytics(
-  startDate: string,
-  endDate: string
-) {
-  // PR4b review round 4: stays `'use cache: remote'` (demotion REVERTED).
-  // The admin "refresh analytics views" route calls revalidateAnalytics(),
-  // which busts the `analytics` tag — an EXPLICIT, user-triggered invalidation
-  // contract. Demoting it to local would leave the refresh button silently
-  // broken for any request served by another instance. Still fail-loud so a
-  // transient aggregate error is never cached as null; the admin route's
-  // enclosing try/catch returns 500 outside the cache scope.
-  'use cache: remote';
-  cacheLife('products');
-  cacheTag('analytics');
-
-  const supabase = getServiceSupabaseClient();
-
-  const { data: summaryData, error: summaryError } = await supabase.rpc(
-    'get_platform_analytics_summary',
-    {
-      p_start_date: startDate,
-      p_end_date: endDate,
-    }
-  );
-
-  if (summaryError) {
-    console.error('Error fetching cached platform analytics:', summaryError);
-    throw summaryError;
-  }
-
-  return summaryData;
-}
-
-function isMissingRepairsCatalogEnabledColumn(error: unknown): boolean {
-  if (!error || typeof error !== 'object') {
-    return false;
-  }
-
-  const maybeError = error as {
-    code?: unknown;
-    details?: unknown;
-    hint?: unknown;
-    message?: unknown;
-  };
-  const combined = [maybeError.message, maybeError.details, maybeError.hint]
-    .filter((value): value is string => typeof value === 'string')
-    .join(' ')
-    .toLowerCase();
-
-  return (
-    maybeError.code === '42703' && combined.includes('repairs_catalog_enabled')
-  );
-}
-
-async function queryMerchantFeatureSettings(
-  supabase: SupabaseClient,
-  merchantId: string,
-  selectColumns = MERCHANT_PUBLIC_FEATURE_SETTINGS_SELECT
-) {
-  return await supabase
-    .from('merchant_feature_settings')
-    .select(selectColumns)
-    .eq('merchant_id', merchantId)
-    .maybeSingle();
-}
-
 function normalizeMerchantFeatureSettings(
   merchantId: string,
   data: unknown
@@ -2441,44 +2400,14 @@ function normalizeMerchantFeatureSettings(
   } as MerchantFeatureSettings;
 }
 
-async function getPublicFeatureSettingsWithMigrationFallback(
-  supabase: SupabaseClient,
-  merchantId: string
-): Promise<MerchantFeatureSettings> {
-  const { data, error } = await queryMerchantFeatureSettings(
-    supabase,
-    merchantId
-  );
-
-  if (!error) {
-    return normalizeMerchantFeatureSettings(merchantId, data);
-  }
-
-  if (!isMissingRepairsCatalogEnabledColumn(error)) {
-    throw error;
-  }
-
-  console.warn(
-    'merchant_feature_settings.repairs_catalog_enabled is unavailable; using legacy public feature settings projection'
-  );
-  const { data: legacyData, error: legacyError } =
-    await queryMerchantFeatureSettings(
-      supabase,
-      merchantId,
-      MERCHANT_PUBLIC_FEATURE_SETTINGS_LEGACY_SELECT
-    );
-
-  if (legacyError) {
-    throw legacyError;
-  }
-
-  return normalizeMerchantFeatureSettings(merchantId, legacyData);
-}
-
 /**
  * Cached merchant feature settings.
- * Uses a server-only service-role query with an explicit public-safe column allowlist because
- * this table also stores private integration credentials.
+ * Reads the allowlisted feature projection from the SECURITY DEFINER
+ * `resolve_storefront_public_snapshot_v2` RPC via the anonymous public
+ * client. Production revokes anonymous SELECT on the secret-bearing
+ * `merchant_feature_settings` base table, so this path must never query it
+ * directly — and per AGENTS.md it must never use the service-role client
+ * for user-facing reads either.
  * Uses local Cache Components caching to avoid Vercel RemoteCacheHandler failures
  * on the hot storefront merchant shell path.
  */
@@ -2490,10 +2419,27 @@ export async function getCachedFeatureSettings(
   cacheTag(`features-${merchantId}`);
 
   try {
-    const supabase = getServiceSupabaseClient();
-    return await getPublicFeatureSettingsWithMigrationFallback(
-      supabase,
-      merchantId
+    const supabase = getPublicSupabaseClient();
+    const { data: merchant, error: merchantError } = await supabase
+      .from('merchants')
+      .select('slug')
+      .eq('id', merchantId)
+      .maybeSingle();
+
+    if (merchantError) throw merchantError;
+    if (!merchant || typeof merchant.slug !== 'string' || !merchant.slug) {
+      throw new Error('Feature settings merchant lookup found no merchant');
+    }
+
+    const row = unwrapStorefrontReadResultForCache(
+      await readStorefrontMerchantSnapshot(
+        getStorefrontSnapshotSupabaseClient(),
+        merchant.slug
+      )
+    );
+    return normalizeMerchantFeatureSettings(
+      merchantId,
+      row?.feature_settings ?? null
     );
   } catch (error) {
     console.error('Error fetching feature settings:', error);

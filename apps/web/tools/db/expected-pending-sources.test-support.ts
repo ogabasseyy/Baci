@@ -318,4 +318,9 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260922220000_guest_payment_reference_snapshot_minimal.sql',
     sha256: '02eeeffc747952e75c15025baa6556ae1013da364c698cd8e3261df43a706d38',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260922120000_normalize_product_key_specs_gpu.sql',
+    sha256: '27140ce538838e4a31f6fbc2f9871eaa3697d02888aed5d3b360c5f68ccd2245',
+  },
 ].sort((a, b) => a.repositoryPath.localeCompare(b.repositoryPath));

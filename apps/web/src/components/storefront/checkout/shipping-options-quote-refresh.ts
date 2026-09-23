@@ -65,8 +65,9 @@ export function useShippingQuoteRefresh({
     selectedQuoteIdRef.current = selectedQuoteId;
   });
 
-  // Track if we've already auto-selected
-  const hasAutoSelected = useRef(false);
+  // The selectedQuoteId prop is optional; remember quotes this hook emitted
+  // so an address edit still clears the parent when it omits that prop.
+  const hasEmittedSelectionRef = useRef(false);
 
   // Serialize the request items so the fetch effect only re-runs when cart
   // content actually changes (not when the array identity changes).
@@ -79,14 +80,26 @@ export function useShippingQuoteRefresh({
     }))
   );
 
-  // Track if we've already fetched for current address
-  const lastFetchKey = useRef<string>('');
-
   // Monotonic sequence so a superseded (slower, older) response can never
   // overwrite the quotes/selection from a newer request.
   const requestSequence = useRef(0);
 
   useEffect(() => {
+    const requestId = requestSequence.current + 1;
+    requestSequence.current = requestId;
+    // Clear the previous fee before the debounce. Continue can unmount this
+    // step before a new request starts.
+    setQuotes([]);
+    setSessionId('');
+    setError(null);
+    if (
+      selectedQuoteIdRef.current !== undefined ||
+      hasEmittedSelectionRef.current
+    ) {
+      onSelectRef.current(null, '');
+    }
+    hasEmittedSelectionRef.current = false;
+
     // Require minimum 2 characters for both city and state to avoid premature API calls
     if (
       !receiverCity ||
@@ -94,33 +107,18 @@ export function useShippingQuoteRefresh({
       receiverCity.length < 2 ||
       receiverState.length < 2
     ) {
+      setIsLoading(false);
       return;
     }
 
     if (!merchantId) {
+      setIsLoading(false);
       return;
     }
 
-    // Create a key for this specific fetch request
-    const fetchKey = `${merchantId}-${receiverCity}-${receiverState}-${receiverAddress}-${cartSubtotal}-${serializedCartItems}`;
-
-    // Skip if we've already fetched for this exact configuration
-    if (lastFetchKey.current === fetchKey && quotes.length > 0) {
-      return;
-    }
+    setIsLoading(true);
 
     const fetchQuotes = () => {
-      setIsLoading(true);
-      setError(null);
-      lastFetchKey.current = fetchKey;
-      const requestId = requestSequence.current + 1;
-      requestSequence.current = requestId;
-      // A new destination needs a new selection: re-select from the fresh
-      // response instead of keeping a quote (and shipping_rate_id) that was
-      // verified against the previous address.
-      hasAutoSelected.current = false;
-      const hadSelection = selectedQuoteIdRef.current !== undefined;
-
       const quoteItems = JSON.parse(serializedCartItems) as QuoteItemPayload[];
       requestShippingOptions({
         merchantId,
@@ -144,28 +142,18 @@ export function useShippingQuoteRefresh({
 
           // Auto-select cheapest from each fresh response so the parent
           // never keeps a quote verified against a previous address.
-          if (!hasAutoSelected.current && normalized.quotes.length > 0) {
+          if (normalized.quotes.length > 0) {
             const cheapest = normalized.quotes.reduce((min, q) =>
               q.price < min.price ? q : min
             );
             onSelectRef.current(cheapest, normalized.sessionId);
-            hasAutoSelected.current = true;
-          } else if (normalized.quotes.length === 0 && hadSelection) {
-            // The fresh response has nothing selectable: clear the parent's
-            // stale selection instead of submitting it against the new address.
-            onSelectRef.current(null, normalized.sessionId);
+            hasEmittedSelectionRef.current = true;
           }
         })
         .catch((err: unknown) => {
           if (requestId !== requestSequence.current) return;
           console.error('Failed to fetch shipping quotes:', err);
           setError('Unable to get shipping options. Please try again.');
-          if (hadSelection) {
-            // The refresh failed: the previous selection was verified
-            // against an older address/subtotal, so drop it instead of
-            // submitting it against the new request.
-            onSelectRef.current(null, '');
-          }
         })
         .finally(() => {
           if (requestId !== requestSequence.current) return;
@@ -175,7 +163,10 @@ export function useShippingQuoteRefresh({
 
     // Longer debounce to wait for user to finish typing
     const timer = setTimeout(fetchQuotes, 1000);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      requestSequence.current += 1;
+    };
   }, [
     receiverCity,
     receiverState,
@@ -184,7 +175,6 @@ export function useShippingQuoteRefresh({
     receiverPhone,
     serializedCartItems,
     cartSubtotal,
-    quotes.length,
     merchantId,
   ]);
 

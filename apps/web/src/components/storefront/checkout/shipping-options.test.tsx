@@ -245,7 +245,7 @@ describe('ShippingOptions', () => {
     });
 
     expect(mockApiPost).toHaveBeenCalledTimes(2);
-    expect(onSelect).toHaveBeenLastCalledWith(null, 'session-2');
+    expect(onSelect).toHaveBeenLastCalledWith(null, '');
   });
 
   it('clears the parent selection when a refresh request fails', async () => {

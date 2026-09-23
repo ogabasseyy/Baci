@@ -93,7 +93,85 @@ describe('useShippingQuoteRefresh', () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
 
-    expect(onSelect).toHaveBeenCalledWith(null, 'session-2');
+    expect(onSelect).toHaveBeenCalledWith(null, '');
+  });
+
+  it.each([
+    { change: 'address', address: '48 Marina Street', subtotal: 50000 },
+    { change: 'subtotal', address: '12 Station Road', subtotal: 60000 },
+  ])('clears the selected quote before the debounce when $change changes', async ({
+    address,
+    subtotal,
+  }) => {
+    const onSelect = vi.fn();
+    mockRequest.mockResolvedValue({
+      quotes: [quote('q-old', 4500)],
+      sessionId: 'session-old',
+    });
+    const { rerender, unmount } = renderHook(
+      ({ receiverAddress, cartSubtotal, selectedQuoteId }) =>
+        useShippingQuoteRefresh(
+          params({
+            onSelect,
+            receiverAddress,
+            cartSubtotal,
+            selectedQuoteId,
+          })
+        ),
+      {
+        initialProps: {
+          receiverAddress: '12 Station Road',
+          cartSubtotal: 50000,
+          selectedQuoteId: undefined as string | undefined,
+        },
+      }
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1100);
+    });
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'q-old' }),
+      'session-old'
+    );
+
+    rerender({
+      receiverAddress: address,
+      cartSubtotal: subtotal,
+      selectedQuoteId: 'q-old',
+    });
+
+    expect(onSelect).toHaveBeenLastCalledWith(null, '');
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1100);
+    });
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears a quote it selected even when the caller omits selectedQuoteId', async () => {
+    const onSelect = vi.fn();
+    mockRequest.mockResolvedValue({
+      quotes: [quote('q-old', 4500)],
+      sessionId: 'session-old',
+    });
+    const { rerender } = renderHook(
+      ({ address }: { address: string }) =>
+        useShippingQuoteRefresh(params({ onSelect, receiverAddress: address })),
+      { initialProps: { address: '12 Station Road' } }
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1100);
+    });
+    expect(onSelect).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'q-old' }),
+      'session-old'
+    );
+
+    rerender({ address: '48 Marina Street' });
+
+    expect(onSelect).toHaveBeenLastCalledWith(null, '');
+    expect(mockRequest).toHaveBeenCalledTimes(1);
   });
 
   it('ignores a superseded response when requests overlap', async () => {

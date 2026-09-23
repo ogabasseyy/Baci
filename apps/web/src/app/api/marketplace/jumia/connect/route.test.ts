@@ -389,6 +389,8 @@ describe('Connect POST', () => {
     const res = await POST(
       makePostRequest({
         connectionType: 'self_authorization',
+        operation: 'discover',
+        clientId: 'client-1',
         refreshToken: 'tok',
       })
     );
@@ -404,6 +406,8 @@ describe('Connect POST', () => {
     const res = await POST(
       makePostRequest({
         connectionType: 'self_authorization',
+        operation: 'discover',
+        clientId: 'client-1',
         refreshToken: 'tok',
       })
     );
@@ -428,6 +432,8 @@ describe('Connect POST', () => {
     const res = await POST(
       makePostRequest({
         connectionType: 'self_authorization',
+        operation: 'discover',
+        clientId: 'client-1',
         refreshToken: 'tok',
       })
     );

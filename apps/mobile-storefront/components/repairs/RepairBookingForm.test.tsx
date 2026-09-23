@@ -10,6 +10,12 @@ jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'light',
 }));
 
+jest.mock('./RepairPickupCheckout', () => {
+  const { Text } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return { RepairPickupCheckout: () => <Text>Pickup checkout</Text> };
+});
+
 import { RepairBookingForm } from './RepairBookingForm';
 
 const device = {
@@ -115,7 +121,7 @@ describe('RepairBookingForm', () => {
     );
   });
 
-  it('hides courier pickup until a mobile payment flow exists', () => {
+  it('routes pickup to fee review instead of creating an unpaid repair', () => {
     render(
       <RepairBookingForm
         device={device}
@@ -127,17 +133,36 @@ describe('RepairBookingForm', () => {
       />
     );
 
-    expect(screen.queryByLabelText('Pickup')).toBeNull();
-    expect(
-      screen.getByText(/Courier pickup will be available in a future update/i)
-    ).toBeTruthy();
+    fillValidForm();
+    fireEvent.press(screen.getByLabelText('Pickup'));
+    fireEvent.changeText(
+      screen.getByLabelText('Pickup address'),
+      '10 Test Street, Osogbo, Osun'
+    );
+    fireEvent.press(screen.getByLabelText('Submit repair request'));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText('Pickup checkout')).toBeTruthy();
+  });
+
+  it('blocks pickup submit without an address and keeps checkout closed', () => {
+    render(
+      <RepairBookingForm
+        device={device}
+        quote={quote}
+        isSubmitting={false}
+        serverError={null}
+        fieldErrors={null}
+        onSubmit={onSubmit}
+      />
+    );
 
     fillValidForm();
+    fireEvent.press(screen.getByLabelText('Pickup'));
     fireEvent.press(screen.getByLabelText('Submit repair request'));
 
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ serviceType: 'dropoff' })
-    );
+    expect(screen.getByText('Enter a valid pickup address.')).toBeTruthy();
+    expect(screen.queryByText('Pickup checkout')).toBeNull();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it('omits device/quote ids for the free-text path (no device)', () => {

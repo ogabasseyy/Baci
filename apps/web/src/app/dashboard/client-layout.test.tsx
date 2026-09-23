@@ -86,6 +86,7 @@ vi.mock('@/components/notifications/notification-center', () => ({
 }));
 
 import { useMerchant } from '@/hooks/use-merchant-client';
+import { useToast } from '@/hooks/use-toast';
 import DashboardClientLayout from './client-layout';
 
 const defaultMerchant: MerchantData = {
@@ -140,6 +141,14 @@ function setSmartNavUsage(usage: unknown) {
 }
 
 describe('DashboardClientLayout', () => {
+  it('does not subscribe to toast state', () => {
+    renderLayout();
+
+    // The layout never renders toasts; subscribing would re-render the
+    // whole shell on every toast fired anywhere in the dashboard.
+    expect(vi.mocked(useToast)).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     localStorage.clear();
     mockOpenUpgradeModal.mockClear();

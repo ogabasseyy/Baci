@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getCachedSantaProductList } from '@/ai/santa-data';
 import { resolveAgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
+import { SANTA_MERCHANT_SLUG_HEADER } from '@/lib/agentic/santa-merchant-slug-header';
 import { logger } from '@/lib/logger';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { sanitizeForLog } from '@/lib/sanitize-core';
@@ -25,7 +26,7 @@ async function handleProductLookup(
   // Every resolved response — including misses — echoes the resolving
   // tenant so clients can verify which storefront answered the lookup.
   const responseHeaders = {
-    'x-baci-santa-merchant-slug': tenant.merchantSlug,
+    [SANTA_MERCHANT_SLUG_HEADER]: tenant.merchantSlug,
   };
 
   try {

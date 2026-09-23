@@ -1,114 +1,21 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import {
+  API_ROUTE_MODULE_PATTERN,
+  DYNAMIC_ROUTE_MODULE_PATTERN,
+  EXPLICIT_STATIC_ROUTES,
+  EXPO_ROUTER_SPECIAL_FILES,
+  INDEX_ROUTE_MODULE_PATTERN,
+  LAYOUT_ROUTE_MODULE_PATTERN,
+  ROUTE_MODULE_EXTENSION_PATTERN,
+  ROUTE_PLATFORM_SEGMENT_PATTERN,
+  type RouteModule,
+  SHELL_DELEGATE_MODULES,
+  SHELL_EXEMPT_ROUTES,
+  SHELL_JSX_PATTERN,
+} from './route-shell-safety.test-utils';
 
 const APP_ROOT = path.resolve(__dirname, '../../app');
-const ROUTE_MODULE_EXTENSION_PATTERN =
-  /\.(?:(?:android|ios|native|web)\.)?(ts|tsx|js|jsx)$/;
-const ROUTE_PLATFORM_SEGMENT_PATTERN =
-  /\.(android|ios|native|web)\.(ts|tsx|js|jsx)$/;
-const API_ROUTE_MODULE_PATTERN = /\+api\.(ts|tsx|js|jsx)$/;
-const DYNAMIC_ROUTE_MODULE_PATTERN =
-  /^(?:\[[a-zA-Z0-9_-]+\]|\[\.\.\.[a-zA-Z0-9_-]+\]|\[\[\.\.\.[a-zA-Z0-9_-]+\]\])\.(ts|tsx|js|jsx)$/;
-const LAYOUT_ROUTE_MODULE_PATTERN = /^_layout\.(ts|tsx|js|jsx)$/;
-const INDEX_ROUTE_MODULE_PATTERN = /^index\.(ts|tsx|js|jsx)$/;
-const SHELL_JSX_PATTERN = /<StorefrontScreenShell(?=[\s/>])/;
-const SHELL_DELEGATE_MODULES = new Map<
-  string,
-  { modulePath: string; routeJsxPattern: RegExp }
->([
-  [
-    'unlock-orders/index.tsx',
-    {
-      modulePath: '../components/imei-check/unlock-orders-screen.tsx',
-      routeJsxPattern: /<UnlockOrdersScreen(?=[\s/>])/,
-    },
-  ],
-  [
-    'wallet/index.tsx',
-    {
-      modulePath: '../components/wallet/WalletScreenView.tsx',
-      routeJsxPattern: /<WalletScreen(?=[\s/>])/,
-    },
-  ],
-  [
-    'wallet/usdt.tsx',
-    {
-      modulePath: '../components/wallet/UsdtWalletFundingScreen.tsx',
-      routeJsxPattern: /<UsdtWalletFundingScreen(?=[\s/>])/,
-    },
-  ],
-]);
-
-type RouteModule = {
-  actualPath: string;
-  normalizedPath: string;
-};
-const EXPO_ROUTER_SPECIAL_FILES = new Set([
-  '+html.ts',
-  '+html.tsx',
-  '+html.js',
-  '+html.jsx',
-  '+middleware.ts',
-  '+middleware.tsx',
-  '+middleware.js',
-  '+middleware.jsx',
-  '+native-intent.ts',
-  '+native-intent.tsx',
-  '+native-intent.js',
-  '+native-intent.jsx',
-  '+not-found.ts',
-  '+not-found.tsx',
-  '+not-found.js',
-  '+not-found.jsx',
-]);
-
-const EXPLICIT_STATIC_ROUTES = new Set([
-  '(tabs)/account.tsx',
-  '(tabs)/cart-tab.tsx',
-  '(tabs)/categories.tsx',
-  '(tabs)/saved.tsx',
-  '(tabs)/wallet.tsx',
-  'account/verify.tsx',
-  'auth/callback.tsx',
-  'cart.tsx',
-  'auth/login.tsx',
-  'checkout.tsx',
-  'notifications.tsx',
-  'order-success.tsx',
-  'profile/delete-account.tsx',
-  'profile/edit.tsx',
-  'quiz/prize-checkout-simulation.tsx',
-  'search.tsx',
-  'utilities/history.tsx',
-  'wallet/manage-cards.tsx',
-  'wallet/savings/start.tsx',
-  'wallet/usdt.tsx',
-]);
-
-// Decreasing baseline: every route listed here currently does not render
-// StorefrontScreenShell. As routes migrate, this list must shrink.
-const SHELL_EXEMPT_ROUTES = new Set([
-  '(tabs)/cart-tab.tsx',
-  '(tabs)/index.tsx',
-  '(tabs)/wallet.tsx',
-  'account/verify.tsx',
-  'addresses/[id].tsx',
-  'auth/login.tsx',
-  'bank-transfer/index.tsx',
-  'bnpl-checkout/index.tsx',
-  'cart.tsx',
-  'checkout.tsx',
-  'compare/index.tsx',
-  'crypto-payment/index.tsx',
-  'faq/index.tsx',
-  'order-success.tsx',
-  'orders/[id].tsx',
-  'product/[slug].tsx',
-  'profile/edit.tsx',
-  'saved/index.tsx',
-  'search.tsx',
-  'track-order/index.tsx',
-]);
 
 function collectModuleFiles(currentPath: string): string[] {
   return readdirSync(currentPath, { withFileTypes: true }).flatMap((entry) => {

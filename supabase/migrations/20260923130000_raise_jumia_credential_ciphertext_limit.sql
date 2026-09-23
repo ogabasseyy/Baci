@@ -20,12 +20,22 @@ DO $$
 DECLARE
   v_conname text;
 BEGIN
+  -- pg_get_constraintdef renders BETWEEN as >= AND <=, so match the
+  -- column and the old ceiling rather than the source text.
   SELECT con.conname INTO v_conname
   FROM pg_catalog.pg_constraint AS con
   WHERE con.conrelid = 'public.jumia_authorizations'::pg_catalog.regclass
-    AND pg_catalog.pg_get_constraintdef(con.oid) LIKE '%credential_ciphertext%BETWEEN 32 AND 16384%';
+    AND pg_catalog.pg_get_constraintdef(con.oid) LIKE '%credential_ciphertext%16384%';
   IF v_conname IS NOT NULL THEN
     EXECUTE format('ALTER TABLE public.jumia_authorizations DROP CONSTRAINT %I', v_conname);
+  ELSIF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS existing
+    WHERE existing.conrelid = 'public.jumia_authorizations'::pg_catalog.regclass
+      AND existing.conname = 'jumia_authorizations_credential_ciphertext_check'
+  ) THEN
+    RAISE EXCEPTION 'expected 16k credential check on jumia_authorizations not found'
+      USING ERRCODE = '22023';
   END IF;
 END
 $$;

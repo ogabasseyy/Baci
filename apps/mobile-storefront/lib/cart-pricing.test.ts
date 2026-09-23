@@ -102,6 +102,21 @@ describe('cart-pricing', () => {
     expect(getCartItemEffectivePrice(items[0])).toBe(0);
   });
 
+  it('uses the retained catalog value for a below-catalog condition offer', () => {
+    const items = [
+      {
+        name: 'Used Pixel 8',
+        price: 320000,
+        catalog_price: 410000,
+        quantity: 1,
+        condition: 'used',
+      },
+    ] as CartItem[];
+
+    // A carrier tier between 320000 and 410000 must see 410000.
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(410000);
+  });
+
   it('charges accepted negotiated prices plus effective-basis assurance', () => {
     const items = [
       {

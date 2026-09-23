@@ -70,9 +70,10 @@ export function getCartCatalogSubtotalWithAssurance(
   items: readonly CartItem[]
 ): number {
   return items.reduce((total, item) => {
+    // Zero-priced quiz voucher lines and below-catalog condition-offer
+    // lines retain the catalog basis so conditional merchant rates still
+    // see the real subtotal.
     const basePrice =
-      item.voucher_token &&
-      item.voucher_award_id &&
       typeof item.catalog_price === 'number' &&
       isValidCartPrice(item.catalog_price)
         ? item.catalog_price

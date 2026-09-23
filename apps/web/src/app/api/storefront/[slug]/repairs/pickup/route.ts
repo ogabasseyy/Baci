@@ -50,7 +50,14 @@ export async function POST(
   }
   try {
     const merchant = await resolveRepairsCatalogMerchant(params.data.slug);
-    if (!merchant?.enabled) {
+    // A resume token proves this pay retries an already-created repair: let
+    // it reach the receipt replay/reconciliation path so an in-flight payment
+    // stays recoverable after the catalogue is disabled. Quotes and
+    // token-less (new) payment starts keep the 404, and the core still
+    // refuses to create new bookings while disabled.
+    const isReceiptBackedRetry =
+      input.data.action === 'pay' && input.data.resumeToken != null;
+    if (!merchant || (!merchant.enabled && !isReceiptBackedRetry)) {
       return NextResponse.json(
         { error: 'Repairs unavailable.' },
         { status: 404 }

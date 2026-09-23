@@ -132,6 +132,42 @@ describe('mobile repair pickup', () => {
     expect((await call({ action: 'quote', data })).status).toBe(404);
     expect(mocks.receiver).not.toHaveBeenCalled();
   });
+  it('keeps the 404 for token-less payment starts while disabled', async () => {
+    mocks.merchant.mockResolvedValue({ enabled: false });
+    const response = await call({
+      action: 'pay',
+      requestId: '14bf2192-16de-442b-bf75-700f4ff2aaca',
+      data,
+      expectedPickupFee: 3000,
+    });
+    expect(response.status).toBe(404);
+    expect(mocks.pay).not.toHaveBeenCalled();
+  });
+  it('lets receipt-backed payment retries replay after disablement', async () => {
+    mocks.merchant.mockResolvedValue({
+      enabled: false,
+      merchantId: 'trusted-merchant',
+    });
+    mocks.pay.mockResolvedValue({
+      success: false,
+      code: 'payment_initialization_unknown',
+      error: 'Reconciling',
+    });
+    const response = await call({
+      action: 'pay',
+      requestId: '14bf2192-16de-442b-bf75-700f4ff2aaca',
+      data,
+      expectedPickupFee: 3000,
+      resumeToken: 'in-flight',
+    });
+    expect(response.status).toBe(200);
+    expect(mocks.pay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'trusted-merchant',
+        resumeToken: 'in-flight',
+      })
+    );
+  });
   it('offers drop-off when there is no carrier quote', async () => {
     mocks.quote.mockResolvedValue({ quote: null });
     const response = await call({ action: 'quote', data });

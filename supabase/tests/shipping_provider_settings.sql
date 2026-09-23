@@ -9,6 +9,7 @@
 -- =============================================
 
 BEGIN;
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
 
 INSERT INTO public.merchants (
   id, email, business_name, slug, business_type, is_published

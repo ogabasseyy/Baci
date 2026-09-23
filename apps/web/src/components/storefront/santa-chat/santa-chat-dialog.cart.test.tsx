@@ -10,6 +10,17 @@ const cartMocks = vi.hoisted(() => ({
   setMerchantSlug: vi.fn(),
 }));
 
+const adoptedCarts = vi.hoisted(() => ({
+  current: {} as Record<string, Array<{ cartItemId: string }>>,
+}));
+
+vi.mock('@/hooks/cart/merchant-cart-storage', () => ({
+  getMerchantCartState: (slug: string | null | undefined) => ({
+    cart: (slug ? adoptedCarts.current[slug] : undefined) ?? [],
+    cartWideNegotiationActive: false,
+  }),
+}));
+
 vi.mock('next/link', () => ({
   default: ({
     children,
@@ -105,7 +116,8 @@ function makeStreamingResponse(
 function makeProductResponse(
   name: string,
   price: number,
-  merchantSlug?: string
+  merchantSlug?: string,
+  maxDiscountPercentage?: number
 ): Response {
   return new Response(
     JSON.stringify({
@@ -114,6 +126,7 @@ function makeProductResponse(
         merchant_id: merchantSlug ?? 'ogabassey',
         name,
         price,
+        max_discount_percentage: maxDiscountPercentage ?? 0,
       },
     }),
     {
@@ -129,6 +142,7 @@ function makeProductResponse(
 describe('SantaChatDialog cart tenant handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    adoptedCarts.current = {};
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
@@ -228,6 +242,74 @@ describe('SantaChatDialog cart tenant handling', () => {
     expect(cartMocks.addToCart).not.toHaveBeenCalled();
     expect(cartMocks.setMerchantSlug).not.toHaveBeenCalledWith('other-store');
     consoleSpy.mockRestore();
+  });
+
+  it('does not reprice saved units when the adopted cart already has the line', async () => {
+    // The useCart snapshot still holds the pre-switch cart (empty); the
+    // adopted merchant's saved cart already contains the line.
+    adoptedCarts.current['winter-store'] = [{ cartItemId: 'phone' }];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/chat/santa') {
+        return Promise.resolve(
+          makeStreamingResponse(
+            'ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:400000',
+            'winter-store'
+          )
+        );
+      }
+      if (url === '/api/chat/santa/product') {
+        const body = JSON.parse(String(init?.body)) as { name: string };
+        return Promise.resolve(
+          makeProductResponse(body.name, 450_000, 'winter-store', 20)
+        );
+      }
+      return Promise.reject(new Error(`Unexpected fetch URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<SantaChatDialog />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start chat' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send wish' }));
+
+    await waitFor(() => {
+      expect(cartMocks.addToCart).toHaveBeenCalled();
+    });
+    expect(cartMocks.applyNegotiatedPrice).not.toHaveBeenCalled();
+  });
+
+  it('applies the grant when the adopted cart has no such line', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/chat/santa') {
+        return Promise.resolve(
+          makeStreamingResponse(
+            'ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:400000',
+            'winter-store'
+          )
+        );
+      }
+      if (url === '/api/chat/santa/product') {
+        const body = JSON.parse(String(init?.body)) as { name: string };
+        return Promise.resolve(
+          makeProductResponse(body.name, 450_000, 'winter-store', 20)
+        );
+      }
+      return Promise.reject(new Error(`Unexpected fetch URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<SantaChatDialog />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start chat' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send wish' }));
+
+    await waitFor(() => {
+      expect(cartMocks.addToCart).toHaveBeenCalled();
+      expect(cartMocks.applyNegotiatedPrice).toHaveBeenCalledWith(
+        'phone',
+        400000
+      );
+    });
   });
 
   it('refuses the add when the reply carries no attested tenant', async () => {

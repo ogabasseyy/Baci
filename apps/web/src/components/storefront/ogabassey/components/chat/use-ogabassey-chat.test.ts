@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const chatMocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
@@ -9,6 +9,10 @@ const chatMocks = vi.hoisted(() => ({
   setIsCartOpen: vi.fn(),
   setMerchantSlug: vi.fn(),
   stripSantaActions: vi.fn((content: string) => content),
+}));
+
+const adoptedCarts = vi.hoisted(() => ({
+  current: {} as Record<string, Array<{ cartItemId: string }>>,
 }));
 
 // Mock useCart before importing the hook
@@ -21,6 +25,19 @@ vi.mock('@/hooks/cart', () => ({
     setMerchantSlug: chatMocks.setMerchantSlug,
   })),
 }));
+
+// The hook reads line existence from the adopted merchant's saved cart,
+// not the useCart snapshot, so the suite controls saved carts directly.
+vi.mock('@/hooks/cart/merchant-cart-storage', () => ({
+  getMerchantCartState: (slug: string | null | undefined) => ({
+    cart: (slug ? adoptedCarts.current[slug] : undefined) ?? [],
+    cartWideNegotiationActive: false,
+  }),
+}));
+
+afterEach(() => {
+  adoptedCarts.current = {};
+});
 
 // Mock Santa action helpers to avoid coupling these hook tests to parser details.
 vi.mock('@/components/storefront/santa-chat/types', () => ({
@@ -554,8 +571,11 @@ describe('useOgabasseyChat - handleSend', () => {
     expect(result.current.messages[1]?.santaActions?.[0]?.added).toBe(false);
   });
 
-  it('skips negotiation when the product line already exists in the cart', async () => {
-    chatMocks.cart = [{ cartItemId: 'product-9' }];
+  it('skips negotiation when the adopted cart already has the line', async () => {
+    // The useCart snapshot still holds the pre-switch cart (empty); the
+    // adopted merchant's saved cart already contains the line.
+    chatMocks.cart = [];
+    adoptedCarts.current.ogabassey = [{ cartItemId: 'product-9' }];
     chatMocks.parseSantaActions.mockReturnValueOnce([
       { type: 'ADD_TO_CART', productName: 'Pixel 9', price: 637000 },
     ]);

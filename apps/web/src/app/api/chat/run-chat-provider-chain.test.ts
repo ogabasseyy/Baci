@@ -316,7 +316,7 @@ describe('runChatProviderChain', () => {
 
   it('gives up quickly when the route budget is exhausted', async () => {
     vi.mocked(generateText).mockImplementation(
-      (({ abortSignal }) =>
+      (({ abortSignal }: { abortSignal?: AbortSignal }) =>
         new Promise((_resolve, reject) => {
           abortSignal?.addEventListener('abort', () =>
             reject(new Error('aborted'))

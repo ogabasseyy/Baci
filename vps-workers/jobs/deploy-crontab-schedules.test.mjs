@@ -52,9 +52,10 @@ describe('deploy crontab schedules', () => {
       deployScript,
       /\*\/2 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/cache-invalidations\.lock/
     );
+    assert.match(deployScript, /run-cache-invalidation-cron\.mjs/);
     assert.match(
       deployScript,
-      /run-web-cron\.mjs \/api\/cron\/drain-cache-invalidations/
+      /export CACHE_INVALIDATION_STATE_FILE=\$REMOTE_DIR\/state\/cache-invalidations\.json/
     );
     assert.doesNotMatch(deployScript, /process-storefront-purge-outbox/);
   });
@@ -168,6 +169,19 @@ describe('deploy crontab schedules', () => {
     assert.match(
       deployScript,
       />> \$REMOTE_DIR\/logs\/cleanup-remediation-storage\.log 2>&1/
+    );
+  });
+
+  it('keeps the REDVAULT refund worker unscheduled until restricted-role approval', () => {
+    const deployScript = readDeployScript();
+
+    assert.doesNotMatch(
+      deployScript,
+      /^\s*(\*\/\d+|\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s+.*process-redvault-refunds/m
+    );
+    assert.match(
+      deployScript,
+      /process-redvault-refunds stays unscheduled/
     );
   });
 

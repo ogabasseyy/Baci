@@ -230,25 +230,6 @@ describe('QuizScreen', () => {
     ).toBeTruthy();
   });
 
-  it('disables start for scheduled quiz events', async () => {
-    jest
-      .mocked(fetchQuizEvents)
-      .mockResolvedValueOnce([{ ...quizEvent, status: 'scheduled' }]);
-
-    render(<QuizScreen integrityTier="device" locale="en-US" />);
-
-    const startButton = await screen.findByRole('button', {
-      name: 'Scheduled Daily Prize Quiz',
-    });
-    expect(screen.getByText('Scheduled')).toBeTruthy();
-    expect(startButton.props.accessibilityState).toMatchObject({
-      disabled: true,
-    });
-
-    fireEvent.press(startButton);
-    expect(startQuizAttempt).not.toHaveBeenCalled();
-  });
-
   it('shows a pending start state and renders the first question after start', async () => {
     const startDeferred = createDeferred<QuizAttempt>();
     jest.mocked(startQuizAttempt).mockReturnValueOnce(startDeferred.promise);

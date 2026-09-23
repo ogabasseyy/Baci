@@ -250,11 +250,11 @@ describe('createBuilderAiVercelBootstrapClient', () => {
     await expect(
       client?.upsertAttestation({
         BUILDER_AI_PROVIDER_BINDING_PEPPER: 'pepper',
-        CEREBRAS_BUILDER_ACCOUNT_REF: 'account',
-        CEREBRAS_BUILDER_APPROVED_MODEL: 'model',
-        CEREBRAS_BUILDER_CREDENTIAL_BINDING_TAG: 'tag',
-        CEREBRAS_BUILDER_DEPLOYMENT_TIER: 'tier',
-        CEREBRAS_BUILDER_RELEASE_ATTESTED_AT: 'time',
+        GOOGLE_BUILDER_ACCOUNT_REF: 'account',
+        GOOGLE_BUILDER_APPROVED_MODEL: 'model',
+        GOOGLE_BUILDER_CREDENTIAL_BINDING_TAG: 'tag',
+        GOOGLE_BUILDER_DEPLOYMENT_TIER: 'tier',
+        GOOGLE_BUILDER_RELEASE_ATTESTED_AT: 'time',
         GROQ_BUILDER_ACCOUNT_REF: 'account',
         GROQ_BUILDER_APPROVED_MODEL: 'model',
         GROQ_BUILDER_CREDENTIAL_BINDING_TAG: 'tag',
@@ -281,11 +281,11 @@ describe('createBuilderAiVercelBootstrapClient', () => {
     await expect(
       client?.upsertAttestation({
         BUILDER_AI_PROVIDER_BINDING_PEPPER: 'pepper',
-        CEREBRAS_BUILDER_ACCOUNT_REF: 'account',
-        CEREBRAS_BUILDER_APPROVED_MODEL: 'model',
-        CEREBRAS_BUILDER_CREDENTIAL_BINDING_TAG: 'tag',
-        CEREBRAS_BUILDER_DEPLOYMENT_TIER: 'tier',
-        CEREBRAS_BUILDER_RELEASE_ATTESTED_AT: 'time',
+        GOOGLE_BUILDER_ACCOUNT_REF: 'account',
+        GOOGLE_BUILDER_APPROVED_MODEL: 'model',
+        GOOGLE_BUILDER_CREDENTIAL_BINDING_TAG: 'tag',
+        GOOGLE_BUILDER_DEPLOYMENT_TIER: 'tier',
+        GOOGLE_BUILDER_RELEASE_ATTESTED_AT: 'time',
         GROQ_BUILDER_ACCOUNT_REF: 'account',
         GROQ_BUILDER_APPROVED_MODEL: 'model',
         GROQ_BUILDER_CREDENTIAL_BINDING_TAG: 'tag',

@@ -162,13 +162,9 @@ function toScopedSemanticCandidate(
 export async function getCachedCategoryScopedSemanticInventory(
   merchantId: string,
   categorySlug: string,
-  storeSlug: string
+  _storeSlug: string
 ): Promise<CategoryScopedSemanticInventory> {
-  const shell = await getCachedCategoryPageShellData(
-    merchantId,
-    categorySlug,
-    storeSlug
-  );
+  const shell = await getCachedCategoryPageShellData(merchantId, categorySlug);
   const fallbackName = shell.fallbackName || categorySlug;
 
   if (shell.isCollection) {

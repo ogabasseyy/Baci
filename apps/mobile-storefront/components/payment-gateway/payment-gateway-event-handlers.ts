@@ -16,6 +16,7 @@ interface PaymentGatewayEventHandlerInput {
   clearPendingLoadTimeout: () => void;
   clearPendingNavigation: () => void;
   paymentKind?: string;
+  paymentMethod?: string;
   refs: PaymentGatewayRefs;
   returnTo?: string;
   scheduleDelayedNavigation: (navigate: () => void) => void;
@@ -24,13 +25,20 @@ interface PaymentGatewayEventHandlerInput {
   setPaymentStatus: PaymentStatusSetter;
 }
 
-const terminalStatuses = new Set(['error', 'processing', 'success']);
+const terminalStatuses = new Set([
+  'error',
+  'processing',
+  'pending',
+  'held',
+  'success',
+]);
 
 export function createPaymentGatewayEventHandlers({
   beginPaymentCompletion,
   clearPendingLoadTimeout,
   clearPendingNavigation,
   paymentKind,
+  paymentMethod,
   refs,
   returnTo,
   scheduleDelayedNavigation,
@@ -79,6 +87,17 @@ export function createPaymentGatewayEventHandlers({
       }
     },
     handleRetry: () => {
+      if (paymentMethod === 'uba_redvault') {
+        if (
+          refs.statusRef.current === 'processing' ||
+          refs.statusRef.current === 'success'
+        )
+          return;
+        refs.paymentCompletionStartedRef.current = false;
+        setErrorMessage(null);
+        beginPaymentCompletion();
+        return;
+      }
       refs.vtuConfirmationTokenRef.current += 1;
       refs.savingsAuthorizationAbortRef.current?.abort();
       refs.savingsAuthorizationAbortRef.current = null;
@@ -92,7 +111,8 @@ export function createPaymentGatewayEventHandlers({
     },
     handleShouldStartLoadWithRequest: (request: { url: string }) => {
       if (
-        (paymentKind === PAYMENT_KINDS.VTU ||
+        (paymentMethod === 'uba_redvault' ||
+          paymentKind === PAYMENT_KINDS.VTU ||
           paymentKind === PAYMENT_KINDS.WALLET ||
           paymentKind === PAYMENT_KINDS.SAVINGS_AUTH) &&
         isPaymentCompletionRedirect(request.url)

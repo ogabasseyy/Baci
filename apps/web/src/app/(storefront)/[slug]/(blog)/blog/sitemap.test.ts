@@ -149,6 +149,9 @@ describe('blog sitemap', () => {
 
     expect(mockGetMerchantByIdentifier).toHaveBeenCalledWith('ogabassey.com');
     expect(result[0].url).toBe('https://ogabassey.com/blog');
+    expect((result[0].lastModified as Date).toISOString()).toBe(
+      '2026-03-02T00:00:00.000Z'
+    );
     expect(result[1].url).toBe(
       'https://ogabassey.com/blog/factory-unlocked-iphones-explained'
     );
@@ -327,6 +330,52 @@ describe('blog sitemap', () => {
     // lastmod = the author's most recent post (Bassey John -> 2026-05-10)
     expect((bassey?.lastModified as Date).toISOString()).toBe(
       '2026-05-10T00:00:00.000Z'
+    );
+  });
+
+  it('ignores malformed timestamps instead of emitting an invalid sitemap date', async () => {
+    mockHeaders = new Map([['x-custom-domain', 'ogabassey.com']]);
+    mockGetMerchantByIdentifier.mockResolvedValue({
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      custom_domain: 'ogabassey.com',
+    });
+    mockEq.mockImplementation(() => ({ eq: mockEq, not: mockNot }));
+    mockNot.mockReturnValue({
+      data: [
+        {
+          slug: 'bassey-valid',
+          title: 'Bassey Valid Guide',
+          author_name: 'Bassey John',
+          published_at: '2026-05-01T00:00:00Z',
+          updated_at: '2026-05-02T00:00:00Z',
+          featured_image_url: null,
+        },
+        {
+          slug: 'bassey-invalid-date',
+          title: 'Bassey Invalid Date Guide',
+          author_name: 'Bassey John',
+          published_at: '2026-05-03T00:00:00Z',
+          updated_at: 'not-a-date',
+          featured_image_url: null,
+        },
+      ],
+      error: null,
+    });
+
+    const result = await sitemap();
+    const blog = result.find(
+      (entry) => entry.url === 'https://ogabassey.com/blog'
+    );
+    const author = result.find(
+      (entry) => entry.url === 'https://ogabassey.com/blog/author/bassey-john'
+    );
+
+    expect((blog?.lastModified as Date).toISOString()).toBe(
+      '2026-05-03T00:00:00.000Z'
+    );
+    expect((author?.lastModified as Date).toISOString()).toBe(
+      '2026-05-03T00:00:00.000Z'
     );
   });
 

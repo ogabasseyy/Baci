@@ -22,7 +22,9 @@ import {
 
 interface UseCheckoutStepActionsParams extends UseCheckoutSubmitParams {
   handleSubmit: UseFormHandleSubmit<ShippingAddressInput>;
+  isPrizeSimulation?: boolean;
   merchantPickupLocation?: MerchantPickupLocation;
+  onPrizeSimulationComplete?: () => void;
   resetPaymentSelection: () => void;
   setIsContactCollapsed: Dispatch<SetStateAction<boolean>>;
   setIsDeliveryCollapsed: Dispatch<SetStateAction<boolean>>;
@@ -32,7 +34,9 @@ interface UseCheckoutStepActionsParams extends UseCheckoutSubmitParams {
 
 export function useCheckoutStepActions({
   handleSubmit,
+  isPrizeSimulation = false,
   merchantPickupLocation,
+  onPrizeSimulationComplete,
   resetPaymentSelection,
   selectedPayment,
   setIsContactCollapsed,
@@ -48,12 +52,14 @@ export function useCheckoutStepActions({
     setStep,
   });
   const onAddressSubmit = (data: ShippingAddressInput) => {
-    trackCheckoutStep('shipping_info', {
-      state: data.state,
-      city: data.city,
-    });
+    if (!isPrizeSimulation) {
+      trackCheckoutStep('shipping_info', {
+        state: data.state,
+        city: data.city,
+      });
+    }
     resetPaymentSelection();
-    setStep('payment');
+    setStep(isPrizeSimulation ? 'review' : 'payment');
   };
   const handleAddressValidationError = (
     errors: FieldErrors<ShippingAddressInput>
@@ -146,13 +152,20 @@ export function useCheckoutStepActions({
     }
   };
 
-  const handlePlaceOrder = handleSubmit(onCheckoutSubmit, () => {
-    Alert.alert(
-      'Incomplete Details',
-      'Please fill in all required fields (Address, City, Phone) to place your order.',
-      [{ text: 'OK' }]
-    );
-  });
+  const handlePlaceOrder = isPrizeSimulation
+    ? () => {
+        if (submitParams.isOrderInFlight.current || !onPrizeSimulationComplete)
+          return;
+        submitParams.isOrderInFlight.current = true;
+        onPrizeSimulationComplete();
+      }
+    : handleSubmit(onCheckoutSubmit, () => {
+        Alert.alert(
+          'Incomplete Details',
+          'Please fill in all required fields (Address, City, Phone) to place your order.',
+          [{ text: 'OK' }]
+        );
+      });
 
   return {
     handleAddressValidationError,

@@ -42,9 +42,15 @@ describe('createTimeoutComposedFetch', () => {
   });
 
   it('aborts via the timeout even when a caller signal is present', async () => {
-    // AbortSignal.timeout uses Node-internal timers that fake timers cannot
-    // patch, so use a ~immediate timeout and poll for the abort.
-    const composedFetch = createTimeoutComposedFetch(1);
+    // AbortSignal.timeout uses Node-internal timers that can starve under CI
+    // load. Drive the timeout signal through a controllable AbortController so
+    // the AbortSignal.any composition is asserted deterministically.
+    const timeoutController = new AbortController();
+    const timeoutSpy = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(timeoutController.signal);
+
+    const composedFetch = createTimeoutComposedFetch(5_000);
     const callerController = new AbortController();
 
     await composedFetch('https://example.com/rest', {
@@ -52,14 +58,16 @@ describe('createTimeoutComposedFetch', () => {
     });
 
     const init = mockFetch.mock.calls[0][1] as RequestInit;
+    expect(init.signal?.aborted).toBe(false);
 
-    await vi.waitFor(
-      () => {
-        expect(init.signal?.aborted).toBe(true);
-      },
-      { interval: 25, timeout: 4_000 }
+    timeoutController.abort(
+      new DOMException('The operation was aborted.', 'TimeoutError')
     );
+
+    expect(init.signal?.aborted).toBe(true);
     expect((init.signal?.reason as DOMException).name).toBe('TimeoutError');
+    expect(timeoutSpy).toHaveBeenCalledWith(5_000);
+    timeoutSpy.mockRestore();
   });
 
   it('forwards the request input and remaining init options untouched', async () => {

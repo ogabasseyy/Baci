@@ -1,19 +1,19 @@
 import {
+  canonicalizeCommerceVariantAxis,
   formatCanonicalProductConditionLabel,
   normalizeCanonicalProductCondition,
+  normalizeCommerceVariantOption,
 } from '@baci/shared/lib';
 import type { Product as CartProduct } from '@/lib/products';
-import { isDisplayOnlyVariantAxis, isRenderableVariantAxis } from '@/lib/storefront-specs/non-renderable-variant-axes';
-import {
-  canonicalizeVariantAxis,
-  getAvailableOptionsForAxis,
-} from '@/components/storefront/ogabassey/variant-attributes';
+import { getAvailableOptionsForAxis } from '@/components/storefront/ogabassey/variant-attributes';
+import { isRenderableVariantAxis } from '@/lib/storefront-specs/non-renderable-variant-axes';
 
 export function formatVariantAxisLabel(axis: string) {
   const labels: Record<string, string> = {
     color: 'Color',
     condition: 'Condition',
     connectivity: 'Connectivity',
+    graphics: 'GPU',
     gpu: 'GPU',
     platform: 'Platform',
     processor: 'Processor',
@@ -41,15 +41,21 @@ export function getVariantAxisOptions(
   axis: string,
   fallbackAxisOptions: Record<string, string[]> = {}
 ) {
-  const normalizedAxis = canonicalizeVariantAxis(axis);
+  const normalizedAxis = canonicalizeCommerceVariantAxis(axis);
+  if (!normalizedAxis) {
+    return [];
+  }
+
   const options = new Set<string>();
 
   for (const variant of variants || []) {
     const normalizedAttributes: Record<string, string> = {};
 
     for (const [key, value] of Object.entries(variant.attributes || {})) {
-      const attributeAxis = canonicalizeVariantAxis(key);
-      const trimmedValue = typeof value === 'string' ? value.trim() : '';
+      const attributeAxis = canonicalizeCommerceVariantAxis(key);
+      const trimmedValue = attributeAxis
+        ? normalizeCommerceVariantOption(attributeAxis, value)
+        : '';
 
       if (attributeAxis && trimmedValue) {
         normalizedAttributes[attributeAxis] = trimmedValue;
@@ -70,23 +76,23 @@ export function getVariantAxisOptions(
     return Array.from(options);
   }
 
-  const fallbackOptions = fallbackAxisOptions[normalizedAxis] ?? [];
-  if (fallbackOptions.length !== 1) {
-    return [];
-  }
+  for (const [fallbackAxis, values] of Object.entries(fallbackAxisOptions)) {
+    if (canonicalizeCommerceVariantAxis(fallbackAxis) !== normalizedAxis) {
+      continue;
+    }
 
-  for (const fallbackValue of fallbackOptions) {
-    const normalizedValue =
-      normalizedAxis === 'condition'
-        ? normalizeCanonicalProductCondition(fallbackValue)
-        : fallbackValue.trim();
-
-    if (normalizedValue) {
-      options.add(normalizedValue);
+    for (const fallbackValue of values) {
+      const normalizedValue =
+        normalizedAxis === 'condition'
+          ? normalizeCanonicalProductCondition(fallbackValue)
+          : normalizeCommerceVariantOption(normalizedAxis, fallbackValue);
+      if (normalizedValue) {
+        options.add(normalizedValue);
+      }
     }
   }
 
-  return Array.from(options);
+  return options.size === 1 ? Array.from(options) : [];
 }
 
 function isRenderableCriticalVariantAxis(
@@ -103,7 +109,13 @@ export function getRenderableCriticalVariantAxes(
   variants: CartProduct['variants'],
   fallbackAxisOptions: Record<string, string[]> = {}
 ) {
-  return Array.from(new Set(axes.map(canonicalizeVariantAxis))).filter((axis) =>
+  return Array.from(
+    new Set(
+      axes
+        .map((axis) => canonicalizeCommerceVariantAxis(axis))
+        .filter((axis): axis is string => Boolean(axis))
+    )
+  ).filter((axis) =>
     isRenderableCriticalVariantAxis(axis, variants, fallbackAxisOptions)
   );
 }
@@ -115,9 +127,17 @@ export function getAvailableCriticalVariantOptions(
   fallbackAxisOptions: Record<string, string[]> = {}
 ) {
   const constraintSelections = Object.fromEntries(
-    Object.entries(explicitSelectedAttributes).filter(([entryAxis]) => {
-      const normalizedAxis = canonicalizeVariantAxis(entryAxis);
-      return !isDisplayOnlyVariantAxis(normalizedAxis);
+    Object.entries(explicitSelectedAttributes).flatMap(([entryAxis, value]) => {
+      const normalizedAxis = canonicalizeCommerceVariantAxis(entryAxis);
+      if (!normalizedAxis) {
+        return [];
+      }
+
+      const normalizedValue =
+        normalizedAxis === 'condition'
+          ? normalizeCanonicalProductCondition(value)
+          : normalizeCommerceVariantOption(normalizedAxis, value);
+      return normalizedValue ? [[normalizedAxis, normalizedValue]] : [];
     })
   );
   const options = getAvailableOptionsForAxis(

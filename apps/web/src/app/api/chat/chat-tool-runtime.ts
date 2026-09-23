@@ -65,7 +65,14 @@ function didAiSdkToolCreateSideEffect(
 
 export function createAiSdkAgenticChatTools(
   sessionId: string,
-  options: { onSideEffect?: (toolName: string) => void } = {}
+  options: {
+    onSideEffect?: (toolName: string) => void;
+    onToolResult?: (
+      toolName: string,
+      result: unknown,
+      context?: { quantity?: number }
+    ) => void;
+  } = {}
 ) {
   // The AI SDK executes a single step's tool calls concurrently (Promise.all).
   // A model that emits the SAME side-effecting call twice in one step (a common
@@ -103,6 +110,7 @@ export function createAiSdkAgenticChatTools(
       inputSchema: searchProductsSchema,
       execute: async (params: SearchProductsParams) => {
         const result = await handleSearchProducts(params);
+        options.onToolResult?.('searchProducts', result);
         return JSON.stringify(result);
       },
     },
@@ -111,6 +119,7 @@ export function createAiSdkAgenticChatTools(
       inputSchema: getProductDetailsSchema,
       execute: async (params: GetProductDetailsParams) => {
         const result = await handleGetProductDetails(params);
+        options.onToolResult?.('getProductDetails', result);
         return JSON.stringify(result);
       },
     },
@@ -122,9 +131,12 @@ export function createAiSdkAgenticChatTools(
         dedupeSideEffect(
           `createVirtualAccount:${JSON.stringify(params)}`,
           async () => {
-            const result = JSON.stringify(
-              await handleCreateVirtualAccount(params, sessionId)
+            const toolResult = await handleCreateVirtualAccount(
+              params,
+              sessionId
             );
+            options.onToolResult?.('createVirtualAccount', toolResult);
+            const result = JSON.stringify(toolResult);
             if (didAiSdkToolCreateSideEffect('createVirtualAccount', result)) {
               options.onSideEffect?.('createVirtualAccount');
             }
@@ -137,6 +149,7 @@ export function createAiSdkAgenticChatTools(
       inputSchema: checkPaymentStatusSchema,
       execute: async (params: CheckPaymentStatusParams) => {
         const result = await handleCheckPaymentStatus(params, sessionId);
+        options.onToolResult?.('checkPaymentStatus', result);
         return JSON.stringify(result);
       },
     },
@@ -149,7 +162,9 @@ export function createAiSdkAgenticChatTools(
       // Side-effecting: dedupe concurrent duplicate cancels of the same order.
       execute: (params: CancelOrderParams) =>
         dedupeSideEffect(`cancelOrder:${JSON.stringify(params)}`, async () => {
-          const result = JSON.stringify(await handleCancelOrder(params));
+          const toolResult = await handleCancelOrder(params);
+          options.onToolResult?.('cancelOrder', toolResult);
+          const result = JSON.stringify(toolResult);
           if (didAiSdkToolCreateSideEffect('cancelOrder', result)) {
             options.onSideEffect?.('cancelOrder');
           }
@@ -161,6 +176,7 @@ export function createAiSdkAgenticChatTools(
       inputSchema: getRecommendationsSchema,
       execute: async (params: GetRecommendationsParams) => {
         const result = await handleGetRecommendations(params);
+        options.onToolResult?.('getRecommendations', result);
         return JSON.stringify(result);
       },
     },
@@ -169,6 +185,9 @@ export function createAiSdkAgenticChatTools(
       inputSchema: addToCartSchema,
       execute: async (params: AddToCartParams) => {
         const result = await handleAddToCart(params);
+        options.onToolResult?.('addToCart', result, {
+          quantity: params.quantity,
+        });
         return JSON.stringify(result);
       },
     },

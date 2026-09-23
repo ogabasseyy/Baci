@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   repairBookingSearchParamsSchema,
+  repairMerchantIdentifierSchema,
   repairMerchantIdSchema,
+  repairPickupExpectedFeeSchema,
   repairPlaceDetailsSchema,
 } from './repair-actions';
 
@@ -18,6 +20,49 @@ describe('repairMerchantIdSchema', () => {
     expect(repairMerchantIdSchema.safeParse('not-a-uuid').success).toBe(false);
     expect(repairMerchantIdSchema.safeParse('').success).toBe(false);
     expect(repairMerchantIdSchema.safeParse(42).success).toBe(false);
+  });
+});
+
+describe('repairMerchantIdentifierSchema', () => {
+  it('trims and lowercases a valid storefront identifier', () => {
+    const result = repairMerchantIdentifierSchema.safeParse('  OgaBassey  ');
+
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error('Expected identifier to parse');
+    expect(result.data).toBe('ogabassey');
+  });
+
+  it('rejects blank, oversized, or non-string identifiers', () => {
+    expect(repairMerchantIdentifierSchema.safeParse('').success).toBe(false);
+    expect(repairMerchantIdentifierSchema.safeParse('   ').success).toBe(false);
+    expect(repairMerchantIdentifierSchema.safeParse(42).success).toBe(false);
+    expect(
+      repairMerchantIdentifierSchema.safeParse('a'.repeat(121)).success
+    ).toBe(false);
+  });
+});
+
+describe('repairPickupExpectedFeeSchema', () => {
+  it('coerces and accepts a positive pickup fee', () => {
+    const result = repairPickupExpectedFeeSchema.safeParse('8250');
+
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error('Expected fee to parse');
+    expect(result.data).toBe(8250);
+  });
+
+  it('rejects non-finite, non-positive, or oversized fees', () => {
+    expect(repairPickupExpectedFeeSchema.safeParse(-1).success).toBe(false);
+    expect(repairPickupExpectedFeeSchema.safeParse(0).success).toBe(false);
+    expect(repairPickupExpectedFeeSchema.safeParse('pickup').success).toBe(
+      false
+    );
+    expect(
+      repairPickupExpectedFeeSchema.safeParse(Number.POSITIVE_INFINITY).success
+    ).toBe(false);
+    expect(repairPickupExpectedFeeSchema.safeParse(10_000_001).success).toBe(
+      false
+    );
   });
 });
 

@@ -9,6 +9,27 @@ export const eventPipelineCredentialPaths = [
       ] as const
   ),
   [
+    'apps/web/src/app/api/payments/initialize/route.ts',
+    'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
+    'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+    'apps/web/src/lib/supabase/scoped-jwt.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
+    'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+    'apps/web/src/lib/supabase/scoped-jwt.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+    'apps/web/src/lib/supabase/scoped-jwt.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
     'apps/web/src/app/api/orders/route.ts',
     'apps/web/src/lib/order-notification-dispatch.ts',
     'apps/web/src/lib/expo-push.ts',
@@ -142,6 +163,22 @@ export const eventPipelineCredentialPaths = [
     'apps/web/src/env.ts',
   ],
   [
+    'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
+    'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
+    'apps/web/src/lib/supabase/service.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
+    'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+    'apps/web/src/lib/supabase/service.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
     'apps/web/src/app/api/internal/compare-page-status/[identifier]/route.ts',
     'apps/web/src/env.ts',
   ],
@@ -233,6 +270,11 @@ export const eventPipelineCredentialPaths = [
     'apps/web/src/lib/agentic/scoped-supabase.ts',
     'apps/web/src/lib/supabase/scoped-jwt.ts',
     'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/payments/file-inventory-confirmation-review.ts',
+    'apps/web/src/lib/supabase/admin.ts',
     'apps/web/src/env.ts',
   ],
 ] as const;

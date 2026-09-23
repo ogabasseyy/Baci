@@ -1,6 +1,6 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { createLogger } from '../lib/logger';
-import { hydrateCustomer } from './auth-helpers';
+import { hydrateCustomer } from './auth-customer-hydration';
 import type { AuthStoreSet } from './auth-store.types';
 
 const log = createLogger('AuthStore');

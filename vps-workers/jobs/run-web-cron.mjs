@@ -9,15 +9,13 @@ import { config } from 'dotenv';
 // These paths expose CRON_SECRET-gated wrappers that delegate to the underlying
 // scheduled work. The VPS worker must not call OAuth callbacks.
 const WEB_CRON_CONFIG = new Map([
-  [
-    '/api/cron/drain-cache-invalidations',
-    { method: 'GET', timeoutMs: 90_000 },
-  ],
+  ['/api/cron/drain-cache-invalidations', { method: 'GET', timeoutMs: 90_000 }],
   ['/api/ai-jobs/worker', { method: 'GET', timeoutMs: 15 * 60_000 }],
   ['/api/cron/alert-stuck-bnpl', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/cron/merchant-signup-health', { method: 'GET', timeoutMs: 60_000 }],
   ['/api/cron/cleanup-orders', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/cron/process-settlements', { method: 'POST', timeoutMs: 5 * 60_000 }],
+  ['/api/cron/process-redvault-refunds', { method: 'POST', timeoutMs: 5 * 60_000 }],
   ['/api/cron/petrock-reconcile', { method: 'GET', timeoutMs: 5 * 60_000 }],
   [
     '/api/cron/publish-scheduled-posts',
@@ -61,6 +59,8 @@ const WEB_CRON_CONFIG = new Map([
 
 const RESPONSE_PREVIEW_LIMIT = 500;
 const DEFAULT_TIMEOUT_MS = 30_000;
+export const CACHE_INVALIDATION_DEAD_LETTER_CODE =
+  'cache_invalidation_dead_letter';
 
 function readTimeoutMs(value, fallbackMs = DEFAULT_TIMEOUT_MS) {
   const parsed = Number(value);
@@ -127,6 +127,7 @@ export async function runWebCron({
   env = process.env,
   fetchFn = fetch,
   logger = console,
+  allowCacheDeadLetter = false,
 }) {
   const cronSecret = env.CRON_SECRET;
   if (!cronSecret) {
@@ -167,6 +168,20 @@ export async function runWebCron({
 
   if (!response.ok) {
     const preview = formatBodyPreview(body);
+    let bodyPayload;
+    try {
+      bodyPayload = JSON.parse(body);
+    } catch {
+      bodyPayload = null;
+    }
+    if (
+      allowCacheDeadLetter &&
+      new URL(url).pathname === '/api/cron/drain-cache-invalidations' &&
+      response.status === 503 &&
+      bodyPayload?.code === CACHE_INVALIDATION_DEAD_LETTER_CODE
+    ) {
+      return { status: response.status, body, cacheDeadLetter: true };
+    }
     throw new Error(
       `Web cron ${path} failed with HTTP ${response.status}: ${preview}`
     );

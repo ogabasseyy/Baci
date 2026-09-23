@@ -30,7 +30,7 @@ export function isDisplayOnlyVariantAxis(axis: string): boolean {
 
 /**
  * Determines whether a variant axis should be rendered as an interactive picker.
- * Excludes non-renderable metadata axes and single-option condition/warranty axes.
+ * A selector is useful only when the customer can choose between multiple values.
  */
 export function isRenderableVariantAxis(
   axis: string,
@@ -44,11 +44,5 @@ export function isRenderableVariantAxis(
     return false;
   }
 
-  // Condition and warranty are informational metadata when single-option,
-  // but become selectable SKU dimensions when multiple options exist.
-  if (axis === 'condition' || axis === 'warranty') {
-    return optionCount > 1;
-  }
-
-  return optionCount > 0;
+  return optionCount > 1;
 }

@@ -1,11 +1,16 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import type { QuizResult, QuizV2Result } from '@/services/quiz-types';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import type {
+  QuizPrizeProduct,
+  QuizResult,
+  QuizV2Result,
+} from '@/services/quiz-types';
 import type { QuizV2LifecycleStatus } from '@/stores/quiz-recovery-envelope';
 import { QuizPrizeClaimPanel } from './QuizPrizeClaimPanel';
+import { QuizResultsActions } from './QuizResultsActions';
 import { QuizResultsStandings } from './QuizResultsStandings';
 import type { createQuizStyles } from './QuizScreen.styles';
+import { QuizTestPrizeSimulationPanel } from './QuizTestPrizeSimulationPanel';
 import { useQuizEventTimer } from './use-quiz-event-timer';
 import { useQuizResultsLeaderboard } from './use-quiz-results-leaderboard';
 import { useQuizServerClock } from './use-quiz-server-clock';
@@ -37,6 +42,8 @@ interface QuizResultsPanelProps {
   allowPendingResultsExit?: boolean;
   onReturnToQuizList?: () => void;
   serverNow?: string | null;
+  submittedAt?: string | null;
+  simulatedPrize?: QuizPrizeProduct | null;
   styles: QuizStyles;
   v2Result: QuizV2Result | null;
 }
@@ -50,10 +57,11 @@ export function QuizResultsPanel({
   allowPendingResultsExit = false,
   onReturnToQuizList,
   serverNow = null,
+  submittedAt = null,
+  simulatedPrize = null,
   styles,
   v2Result,
 }: QuizResultsPanelProps) {
-  const router = useRouter();
   const { offsetMs } = useQuizServerClock(serverNow);
   const eventTimer = useQuizEventTimer({
     eventEndsAt,
@@ -63,7 +71,7 @@ export function QuizResultsPanel({
     serverClockOffsetMs: offsetMs,
   });
   const shouldLoadLeaderboard =
-    (lifecycle === 'final' || lifecycle === 'pending_results') &&
+    lifecycle === 'final' &&
     v2Result?.availability !== 'unavailable' &&
     Boolean(eventId && expectedUserId);
   const { leaderboard, leaderboardError, participantCount } =
@@ -74,11 +82,17 @@ export function QuizResultsPanel({
       expectedUserId,
       lifecycle,
     });
+  const currentPlayer =
+    leaderboard?.currentPlayer ??
+    leaderboard?.entries.find((entry) => entry.isCurrentCustomer);
   const finishTime = formatFinishTime(
-    leaderboard?.currentPlayer?.submittedAt ??
-      leaderboard?.entries.find((entry) => entry.isCurrentCustomer)?.submittedAt
+    currentPlayer?.submittedAt ?? submittedAt ?? serverNow
   );
   if (lifecycle !== 'idle') {
+    const canReturnToQuizList = Boolean(
+      onReturnToQuizList &&
+        (lifecycle !== 'pending_results' || allowPendingResultsExit)
+    );
     const title =
       v2Result?.availability === 'unavailable'
         ? v2Result.reason === 'tester_revoked'
@@ -92,173 +106,142 @@ export function QuizResultsPanel({
               ? `You placed #${v2Result.rank}`
               : 'Quiz complete';
     return (
-      <ScrollView
-        accessibilityRole="alert"
-        contentContainerStyle={{ flexGrow: 1 }}
-        style={styles.screen}
-        testID="quiz-results-scroll"
-      >
-        <View style={styles.resultCard}>
-          <View style={styles.resultIcon}>
-            <Ionicons
-              name={
-                lifecycle === 'pending_results'
-                  ? 'checkmark-circle-outline'
-                  : 'trophy-outline'
-              }
-              size={28}
-              color={styles.resultTitle.color}
-            />
-          </View>
-          <Text style={styles.resultTitle}>{title}</Text>
-          {v2Result?.availability === 'final' ? (
-            <View style={styles.scoreSummary}>
-              <Text style={styles.scoreValue}>{v2Result.score}</Text>
-              <Text style={styles.scoreLabel}>
-                points · {v2Result.totalQuestions} questions
-              </Text>
-            </View>
-          ) : null}
-          {v2Result?.availability === 'unavailable' ? (
-            <Text style={styles.eventMeta}>
-              {v2Result.reason === 'tester_revoked'
-                ? 'Your tester access was removed before this result was published.'
-                : 'We could not find this quiz attempt. Return to the quiz list and try again.'}
-            </Text>
-          ) : lifecycle === 'pending_results' ? (
-            <View style={styles.finishTimeCard}>
-              <Text style={styles.finishTimeLabel}>You finished at</Text>
-              <Text style={styles.finishTimeValue}>
-                {finishTime ?? 'Recorded'}
-              </Text>
-              <Text style={styles.finishTimeHint}>
-                Finish time will be used as a tie breaker
-              </Text>
-            </View>
-          ) : (
-            <Text style={styles.eventMeta}>Your quiz attempt is closed.</Text>
-          )}
-          {lifecycle === 'pending_results' ? (
-            <Text style={styles.leaderboardCountdownLabel}>
-              {eventTimer.hasEnded
-                ? 'The quiz has closed and final results are being prepared.'
-                : 'The leaderboard will appear when the quiz ends in'}
-            </Text>
-          ) : null}
-          {lifecycle === 'pending_results' && !eventTimer.hasEnded ? (
-            <Text accessibilityRole="timer" style={styles.leaderboardCountdown}>
-              {formatCountdown(eventTimer.remainingSeconds)}
-            </Text>
-          ) : null}
-          {shouldLoadLeaderboard ? (
-            <QuizResultsStandings
-              leaderboard={leaderboard}
-              leaderboardError={leaderboardError}
-              participantCount={participantCount}
-              styles={styles}
-            />
-          ) : null}
-          {v2Result?.availability === 'final' ? (
-            <>
-              {v2Result.prizeClaim ? (
-                <QuizPrizeClaimPanel
-                  prizeClaim={v2Result.prizeClaim}
-                  styles={styles}
-                />
-              ) : null}
-              <View style={styles.resultActionBox}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="View past quiz leaderboards"
-                  onPress={() => router.push('/quiz/leaderboards')}
-                  style={styles.resultAction}
-                >
-                  <Text style={styles.secondaryButtonText}>
-                    View past leaderboards
-                  </Text>
-                  <Ionicons
-                    name="arrow-forward"
-                    size={20}
-                    color={styles.secondaryButtonText.color}
-                  />
-                </Pressable>
-              </View>
-            </>
-          ) : null}
-          {onReturnToQuizList &&
-          (lifecycle !== 'pending_results' || allowPendingResultsExit) ? (
-            <View style={styles.resultActionBox}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={
+      <View accessibilityRole="alert" style={styles.resultsLayout}>
+        <ScrollView
+          contentContainerStyle={styles.resultsScrollContent}
+          style={styles.resultsScroll}
+          testID="quiz-results-scroll"
+        >
+          <View style={styles.resultCard}>
+            <View style={styles.resultIcon}>
+              <Ionicons
+                name={
                   lifecycle === 'pending_results'
-                    ? 'Play again'
-                    : 'Return to quiz list'
+                    ? 'checkmark-circle-outline'
+                    : 'trophy-outline'
                 }
-                onPress={onReturnToQuizList}
-                style={styles.resultAction}
-              >
-                <Text style={styles.secondaryButtonText}>
-                  {lifecycle === 'pending_results'
-                    ? 'Play again'
-                    : 'Back to quizzes'}
-                </Text>
-                <Ionicons
-                  name="arrow-back"
-                  size={20}
-                  color={styles.secondaryButtonText.color}
-                />
-              </Pressable>
+                size={28}
+                color={styles.resultTitle.color}
+              />
             </View>
-          ) : null}
-        </View>
-      </ScrollView>
+            <Text style={styles.resultTitle}>{title}</Text>
+            {v2Result?.availability === 'final' ? (
+              <View style={styles.scoreSummary}>
+                <Text style={styles.scoreValue}>{v2Result.score}</Text>
+                <Text style={styles.scoreLabel}>
+                  points · {v2Result.totalQuestions} questions
+                </Text>
+              </View>
+            ) : null}
+            {v2Result?.availability === 'unavailable' ? (
+              <Text style={styles.eventMeta}>
+                {v2Result.reason === 'tester_revoked'
+                  ? 'Your tester access was removed before this result was published.'
+                  : 'We could not find this quiz attempt. Return to the quiz list and try again.'}
+              </Text>
+            ) : lifecycle === 'pending_results' ? (
+              <View style={styles.finishTimeCard}>
+                <Text style={styles.finishTimeLabel}>You finished at</Text>
+                <Text style={styles.finishTimeValue}>
+                  {finishTime ?? 'Recorded'}
+                </Text>
+                <Text style={styles.finishTimeHint}>
+                  Finish time will be used as a tie breaker
+                </Text>
+              </View>
+            ) : null}
+            {lifecycle === 'pending_results' ? (
+              eventTimer.hasEnded ? (
+                <ActivityIndicator
+                  accessibilityLabel="Opening final standings"
+                  color={styles.finalStandingsTitle.color}
+                />
+              ) : (
+                <Text style={styles.leaderboardCountdownLabel}>
+                  The leaderboard will appear when the quiz ends in
+                </Text>
+              )
+            ) : null}
+            {lifecycle === 'pending_results' && !eventTimer.hasEnded ? (
+              <Text
+                accessibilityRole="timer"
+                style={styles.leaderboardCountdown}
+              >
+                {formatCountdown(eventTimer.remainingSeconds)}
+              </Text>
+            ) : null}
+            {lifecycle === 'final' && shouldLoadLeaderboard ? (
+              <QuizResultsStandings
+                leaderboard={leaderboard}
+                leaderboardError={leaderboardError}
+                participantCount={participantCount}
+                styles={styles}
+              />
+            ) : null}
+            {v2Result?.availability === 'final' && v2Result.prizeClaim ? (
+              <QuizPrizeClaimPanel
+                prizeClaim={v2Result.prizeClaim}
+                styles={styles}
+              />
+            ) : v2Result?.availability === 'final' && simulatedPrize ? (
+              <QuizTestPrizeSimulationPanel
+                prize={simulatedPrize}
+                styles={styles}
+              />
+            ) : null}
+          </View>
+        </ScrollView>
+        <QuizResultsActions
+          onReturnToQuizList={
+            canReturnToQuizList ? onReturnToQuizList : undefined
+          }
+          returnLabel={
+            lifecycle === 'pending_results' ? 'Play again' : 'Back to quizzes'
+          }
+          showHistory={v2Result?.availability === 'final'}
+          styles={styles}
+        />
+      </View>
     );
   }
   if (!legacyResult) return null;
   return (
-    <ScrollView
+    <View
       accessibilityLabel={`Quiz result: ${legacyResult.correctAnswers} of ${legacyResult.totalQuestions} correct`}
       accessibilityRole="alert"
-      contentContainerStyle={{ flexGrow: 1 }}
-      style={styles.screen}
-      testID="quiz-results-scroll"
+      style={styles.resultsLayout}
     >
-      <View style={[styles.resultCard, { margin: 20 }]}>
-        <Text style={styles.resultTitle}>Result</Text>
-        <Text style={styles.resultScore}>
-          {legacyResult.correctAnswers} of {legacyResult.totalQuestions} correct
-        </Text>
-        {legacyResult.prizeClaim ? (
-          <QuizPrizeClaimPanel
-            prizeClaim={legacyResult.prizeClaim}
-            styles={styles}
-          />
-        ) : (
-          <Text style={styles.eventMeta}>
-            {legacyResult.prizeEligible
-              ? 'Prize entry recorded'
-              : 'Practice result only'}
+      <ScrollView
+        contentContainerStyle={styles.resultsScrollContent}
+        style={styles.resultsScroll}
+        testID="quiz-results-scroll"
+      >
+        <View style={styles.resultCard}>
+          <Text style={styles.resultTitle}>Result</Text>
+          <Text style={styles.resultScore}>
+            {legacyResult.correctAnswers} of {legacyResult.totalQuestions}{' '}
+            correct
           </Text>
-        )}
-        {onReturnToQuizList ? (
-          <View style={styles.resultActionBox}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Return to quiz list"
-              onPress={onReturnToQuizList}
-              style={styles.resultAction}
-            >
-              <Text style={styles.secondaryButtonText}>Back to quizzes</Text>
-              <Ionicons
-                name="arrow-back"
-                size={20}
-                color={styles.secondaryButtonText.color}
-              />
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
-    </ScrollView>
+          {legacyResult.prizeClaim ? (
+            <QuizPrizeClaimPanel
+              prizeClaim={legacyResult.prizeClaim}
+              styles={styles}
+            />
+          ) : (
+            <Text style={styles.eventMeta}>
+              {legacyResult.prizeEligible
+                ? 'Prize entry recorded'
+                : 'Practice result only'}
+            </Text>
+          )}
+        </View>
+      </ScrollView>
+      <QuizResultsActions
+        onReturnToQuizList={onReturnToQuizList}
+        returnLabel="Back to quizzes"
+        showHistory={false}
+        styles={styles}
+      />
+    </View>
   );
 }

@@ -21,7 +21,7 @@ vi.mock('ai', () => ({
 }));
 
 const providers = [
-  { model: { id: 'cerebras' } as never, name: 'cerebras:gemma-4-31b' },
+  { model: { id: 'google' } as never, name: 'google:gemma-4-31b-it' },
   { model: { id: 'groq' } as never, name: 'groq:openai/gpt-oss-120b' },
 ];
 const validPlan = {

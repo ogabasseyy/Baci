@@ -4,6 +4,19 @@
  * Shared across integrations (MyCover, Juicyway, etc.)
  */
 
+/** Count digits after stripping separators (spaces, dashes, plus, etc.). */
+export function countPhoneDigits(phone: string): number {
+  return phone.replace(/\D/g, '').length;
+}
+
+/** Fail-closed gate for courier / payment flows that need a usable phone. */
+export function hasMinimumPhoneDigits(
+  phone: string,
+  minimumDigits = 10
+): boolean {
+  return countPhoneDigits(phone) >= minimumDigits;
+}
+
 /**
  * Format phone number to E.164 format (+234...)
  */

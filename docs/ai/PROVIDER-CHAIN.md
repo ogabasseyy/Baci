@@ -157,12 +157,19 @@ suspension of every account, including the one serving production.
 
 `/api/builder/ai-edit` is intentionally separate from the general chain. It
 generates a validated, non-persisted edit plan rather than a complete storefront
-configuration. Its required, credential-attested order is Cerebras
-`gemma-4-31b`, then Groq `openai/gpt-oss-120b`; a pinned OpenRouter
+configuration. Its required, credential-attested target order is Google-hosted
+`gemma-4-31b-it`, then Groq `openai/gpt-oss-120b`; a pinned OpenRouter
 `google/gemma-4-31b-it:free` transport may be appended only after an explicit,
 dated approval for that exact model.
 
-Both reliable provider keys require a fresh deployment-bundle attestation:
+During the staged provider switch, a still-valid Cerebras `gemma-4-31b` plus
+Groq attestation remains a temporary runtime-only fallback. The first deployment
+therefore keeps Builder AI available while the bootstrap route writes the new
+`GOOGLE_BUILDER_*` binding rows for the next deployment snapshot. Once Google
+materializes successfully after that deployment, it takes precedence and the
+Cerebras transition path can be removed.
+
+Both providers in the selected reliable pair require a fresh deployment-bundle attestation:
 non-secret account reference, deployment tier label, exact approved model,
 release timestamp, and a provider-domain-separated HMAC binding tag derived
 from the active key and a deployment-only pepper. This is an integrity binding,

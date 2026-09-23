@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const chatMocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
+  applyNegotiatedPrice: vi.fn(),
+  cart: [] as Array<{ cartItemId: string }>,
   parseSantaActions: vi.fn(),
   setIsCartOpen: vi.fn(),
   stripSantaActions: vi.fn((content: string) => content),
@@ -12,6 +14,8 @@ const chatMocks = vi.hoisted(() => ({
 vi.mock('@/hooks/cart', () => ({
   useCart: vi.fn(() => ({
     addToCart: chatMocks.addToCart,
+    applyNegotiatedPrice: chatMocks.applyNegotiatedPrice,
+    cart: chatMocks.cart,
     setIsCartOpen: chatMocks.setIsCartOpen,
   })),
 }));
@@ -42,6 +46,7 @@ function makeStreamingResponse(text: string) {
 describe('useOgabasseyChat - initial state', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    chatMocks.cart = [];
     chatMocks.parseSantaActions.mockReturnValue([]);
     chatMocks.stripSantaActions.mockImplementation((content: string) => content);
     window.localStorage.clear();
@@ -386,28 +391,244 @@ describe('useOgabasseyChat - handleSend', () => {
       makeStreamingResponse('raw Santa directives')
     );
 
-    const { result } = renderHook(() => useOgabasseyChat({ isSanta: true }));
+    const { result } = renderHook(() =>
+      useOgabasseyChat({ isSanta: true, storefrontSlug: 'ogabassey' })
+    );
 
     await act(async () => {
       await result.current.handleSend('I want two phones');
     });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      headers: new Headers({ 'x-baci-santa-merchant-slug': 'ogabassey' }),
+      json: async () => ({
+        product: {
+          id: 'product-9',
+          merchant_id: 'merchant-9',
+          name: 'Pixel 9',
+          slug: 'pixel-9',
+          description: '',
+          price: 650000,
+          max_discount_percentage: 2,
+          image: '',
+          imageLarge: '',
+          imageHint: 'Pixel 9',
+          status: 'active',
+          stock: 1,
+          manage_stock: true,
+          brand: '',
+          sku: '',
+          gtin: '',
+          mpn: '',
+        },
+      }),
+      ok: true,
+    });
 
     await act(async () => {
-      result.current.handleAddSantaWishToCart(1, 1);
+      await result.current.handleAddSantaWishToCart(1, 1);
     });
 
     expect(chatMocks.addToCart).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Pixel 9',
-        price: 500000,
+        price: 650000,
       }),
       1
     );
+    // A 23% model grant exceeds the 2% product ceiling: the wish is still
+    // fulfilled at catalog price, but the untrusted price is not applied.
+    expect(chatMocks.applyNegotiatedPrice).not.toHaveBeenCalled();
     expect(result.current.messages[1]?.santaActions).toEqual([
       { productName: 'iPhone 15', price: 600000, added: false },
       { productName: 'Pixel 9', price: 500000, added: true },
     ]);
     expect(chatMocks.setIsCartOpen).toHaveBeenCalledWith(true);
+  });
+
+  it('applies a Santa grant inside the server product ceiling', async () => {
+    chatMocks.parseSantaActions.mockReturnValueOnce([
+      { type: 'ADD_TO_CART', productName: 'Pixel 9', price: 637000 },
+    ]);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeStreamingResponse('raw Santa directive')
+    );
+
+    const { result } = renderHook(() =>
+      useOgabasseyChat({ isSanta: true, storefrontSlug: 'ogabassey' })
+    );
+
+    await act(async () => {
+      await result.current.handleSend('I want a phone');
+    });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      headers: new Headers({ 'x-baci-santa-merchant-slug': 'ogabassey' }),
+      json: async () => ({
+        product: {
+          id: 'product-9',
+          merchant_id: 'merchant-9',
+          name: 'Pixel 9',
+          slug: 'pixel-9',
+          description: '',
+          price: 650000,
+          max_discount_percentage: 2,
+          image: '',
+          imageLarge: '',
+          imageHint: 'Pixel 9',
+          status: 'active',
+          stock: 1,
+          manage_stock: true,
+          brand: '',
+          sku: '',
+          gtin: '',
+          mpn: '',
+        },
+      }),
+      ok: true,
+    });
+
+    await act(async () => {
+      await result.current.handleAddSantaWishToCart(1);
+    });
+
+    expect(chatMocks.addToCart).toHaveBeenCalled();
+    expect(chatMocks.applyNegotiatedPrice).toHaveBeenCalledWith(
+      'product-9',
+      637000
+    );
+    expect(result.current.messages[1]?.santaActions?.[0]?.added).toBe(true);
+  });
+
+  it('does not mark the action added when the product is out of stock', async () => {
+    chatMocks.parseSantaActions.mockReturnValueOnce([
+      { type: 'ADD_TO_CART', productName: 'Pixel 9', price: 637000 },
+    ]);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeStreamingResponse('raw Santa directive')
+    );
+
+    const { result } = renderHook(() =>
+      useOgabasseyChat({ isSanta: true, storefrontSlug: 'ogabassey' })
+    );
+
+    await act(async () => {
+      await result.current.handleSend('I want a phone');
+    });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      headers: new Headers({ 'x-baci-santa-merchant-slug': 'ogabassey' }),
+      json: async () => ({
+        product: {
+          id: 'product-9',
+          merchant_id: 'merchant-9',
+          name: 'Pixel 9',
+          slug: 'pixel-9',
+          description: '',
+          price: 650000,
+          max_discount_percentage: 2,
+          image: '',
+          imageLarge: '',
+          imageHint: 'Pixel 9',
+          status: 'active',
+          stock: 0,
+          manage_stock: true,
+          brand: '',
+          sku: '',
+          gtin: '',
+          mpn: '',
+        },
+      }),
+      ok: true,
+    });
+
+    await act(async () => {
+      await result.current.handleAddSantaWishToCart(1);
+    });
+
+    expect(chatMocks.addToCart).not.toHaveBeenCalled();
+    expect(chatMocks.applyNegotiatedPrice).not.toHaveBeenCalled();
+    expect(chatMocks.setIsCartOpen).not.toHaveBeenCalled();
+    expect(result.current.messages[1]?.santaActions?.[0]?.added).toBe(false);
+  });
+
+  it('skips negotiation when the product line already exists in the cart', async () => {
+    chatMocks.cart = [{ cartItemId: 'product-9' }];
+    chatMocks.parseSantaActions.mockReturnValueOnce([
+      { type: 'ADD_TO_CART', productName: 'Pixel 9', price: 637000 },
+    ]);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeStreamingResponse('raw Santa directive')
+    );
+
+    const { result } = renderHook(() =>
+      useOgabasseyChat({ isSanta: true, storefrontSlug: 'ogabassey' })
+    );
+
+    await act(async () => {
+      await result.current.handleSend('I want a phone');
+    });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      headers: new Headers({ 'x-baci-santa-merchant-slug': 'ogabassey' }),
+      json: async () => ({
+        product: {
+          id: 'product-9',
+          merchant_id: 'merchant-9',
+          name: 'Pixel 9',
+          slug: 'pixel-9',
+          description: '',
+          price: 650000,
+          max_discount_percentage: 2,
+          image: '',
+          imageLarge: '',
+          imageHint: 'Pixel 9',
+          status: 'active',
+          stock: 5,
+          manage_stock: true,
+          brand: '',
+          sku: '',
+          gtin: '',
+          mpn: '',
+        },
+      }),
+      ok: true,
+    });
+
+    await act(async () => {
+      await result.current.handleAddSantaWishToCart(1);
+    });
+
+    // The unit is still added (it merges), but negotiating would reprice the
+    // pre-existing units, so the grant price must not be applied.
+    expect(chatMocks.addToCart).toHaveBeenCalled();
+    expect(chatMocks.applyNegotiatedPrice).not.toHaveBeenCalled();
+    expect(result.current.messages[1]?.santaActions?.[0]?.added).toBe(true);
+  });
+
+  it('does not add a malformed product lookup response to the cart', async () => {
+    chatMocks.parseSantaActions.mockReturnValueOnce([
+      { type: 'ADD_TO_CART', productName: 'Pixel 9', price: 500000 },
+    ]);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      makeStreamingResponse('raw Santa directive')
+    );
+    const { result } = renderHook(() =>
+      useOgabasseyChat({ isSanta: true, storefrontSlug: 'ogabassey' })
+    );
+    await act(async () => {
+      await result.current.handleSend('I want a phone');
+    });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      headers: new Headers({ 'x-baci-santa-merchant-slug': 'ogabassey' }),
+      json: async () => ({
+        product: { id: 'product-9', name: 'Pixel 9', price: 650000 },
+      }),
+      ok: true,
+    });
+
+    await act(async () => {
+      await result.current.handleAddSantaWishToCart(1);
+    });
+
+    expect(chatMocks.addToCart).not.toHaveBeenCalled();
+    expect(result.current.messages[1]?.santaActions?.[0]?.added).toBe(false);
   });
 
   it('safely ignores an out-of-bounds Santa action index', async () => {

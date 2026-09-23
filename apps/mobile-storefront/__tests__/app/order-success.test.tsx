@@ -1,92 +1,45 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, waitFor } from '@testing-library/react-native';
+import {
+  mockAuthStoreModule,
+  mockColorSchemeModule,
+  mockExpoRouterModule,
+  mockOpenPreviewByOrderId,
+  mockOrderSuccessView,
+  mockOrderSuccessViewModule,
+  mockPermissionBoosterModule,
+  mockPostOrderInterstitialModule,
+  mockPushNotificationsModule,
+  mockReceiptPreviewModalModule,
+  mockReceiptPreviewModule,
+  mockScheduleLocalNotification,
+  mockSearchParamsHolder,
+  setupOrderSuccessMocks,
+} from './order-success.test-utils';
+
+jest.mock('expo-router', () => mockExpoRouterModule());
+jest.mock('@/components/orders/OrderSuccessView', () =>
+  mockOrderSuccessViewModule()
+);
+jest.mock('@/components/receipts/ReceiptPreviewModal', () =>
+  mockReceiptPreviewModalModule()
+);
+jest.mock('@/components/useColorScheme', () => mockColorSchemeModule());
+jest.mock('@/hooks/use-permission-booster', () =>
+  mockPermissionBoosterModule()
+);
+jest.mock('@/hooks/use-receipt-preview', () => mockReceiptPreviewModule());
+jest.mock('@/stores/auth-store', () => mockAuthStoreModule());
+jest.mock('@/services/push-notifications', () => mockPushNotificationsModule());
+jest.mock('@/lib/post-order-interstitial', () =>
+  mockPostOrderInterstitialModule()
+);
+
 import OrderSuccessScreen from '@/app/order-success';
-
-const mockScheduleLocalNotification =
-  jest.fn<(...args: unknown[]) => Promise<void>>();
-const mockRequestPermission = jest.fn(async () => 'granted');
-const mockTriggerSystemPrompt = jest.fn();
-const mockMarkDenied = jest.fn();
-const mockOpenPreviewByOrderId = jest.fn();
-const mockClosePreview = jest.fn();
-const mockOrderSuccessView = jest.fn();
-let mockSearchParams: Record<string, string> = {
-  orderId: 'order-1',
-  orderNumber: 'BAC-001',
-  paymentMethod: 'paystack',
-  reference: 'pay-ref',
-  trackingToken: 'tracking-token',
-};
-
-jest.mock('expo-router', () => ({
-  router: {
-    replace: jest.fn(),
-  },
-  useLocalSearchParams: () => mockSearchParams,
-}));
-
-jest.mock('@/components/orders/OrderSuccessView', () => ({
-  OrderSuccessView: (props: { onViewDocument?: () => void }) => {
-    const { View } =
-      jest.requireActual<typeof import('react-native')>('react-native');
-    mockOrderSuccessView(props);
-    return <View testID="order-success-view" />;
-  },
-}));
-
-jest.mock('@/components/receipts/ReceiptPreviewModal', () => ({
-  ReceiptPreviewModal: ({ visible }: { visible: boolean }) => {
-    const { View } =
-      jest.requireActual<typeof import('react-native')>('react-native');
-    return visible ? <View testID="receipt-preview-modal" /> : null;
-  },
-}));
-
-jest.mock('@/components/useColorScheme', () => ({
-  useColorScheme: () => 'light',
-}));
-
-jest.mock('@/hooks/use-permission-booster', () => ({
-  usePermissionBooster: () => ({
-    markDenied: mockMarkDenied,
-    requestPermission: mockRequestPermission,
-    triggerSystemPrompt: mockTriggerSystemPrompt,
-  }),
-}));
-
-jest.mock('@/hooks/use-receipt-preview', () => ({
-  useReceiptPreview: () => ({
-    closePreview: mockClosePreview,
-    html: '',
-    isLoading: false,
-    isOpen: false,
-    isPaid: false,
-    openPreviewByOrderId: mockOpenPreviewByOrderId,
-  }),
-}));
-
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: { customer: null }) => unknown) =>
-    selector({ customer: null }),
-}));
-
-jest.mock('@/services/push-notifications', () => ({
-  scheduleLocalNotification: (...args: unknown[]) =>
-    mockScheduleLocalNotification(...args),
-}));
 
 describe('OrderSuccessScreen', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockScheduleLocalNotification.mockResolvedValue(undefined);
-    mockOrderSuccessView.mockClear();
-    mockSearchParams = {
-      orderId: 'order-1',
-      orderNumber: 'BAC-001',
-      paymentMethod: 'paystack',
-      reference: 'pay-ref',
-      trackingToken: 'tracking-token',
-    };
+    setupOrderSuccessMocks();
   });
 
   it('schedules the order received notification only after the success screen loads', async () => {
@@ -107,7 +60,7 @@ describe('OrderSuccessScreen', () => {
   });
 
   it('does not schedule an order notification when order identity is missing', async () => {
-    mockSearchParams = {};
+    mockSearchParamsHolder.current = {};
 
     render(<OrderSuccessScreen />);
 
@@ -121,7 +74,7 @@ describe('OrderSuccessScreen', () => {
     'payforme',
     'pay_on_delivery',
   ])('does not schedule a duplicate local order notification for server-confirmed %s success screens', async (paymentMethod) => {
-    mockSearchParams = {
+    mockSearchParamsHolder.current = {
       orderId: 'order-1',
       orderNumber: 'BAC-001',
       paymentMethod,
@@ -136,7 +89,7 @@ describe('OrderSuccessScreen', () => {
   });
 
   it('falls back to orderId when orderNumber is blank', async () => {
-    mockSearchParams = {
+    mockSearchParamsHolder.current = {
       orderId: 'order-1',
       orderNumber: '   ',
       paymentMethod: 'paystack',

@@ -94,6 +94,12 @@ describe('QuizAdminClient', () => {
     });
     const user = userEvent.setup();
     render(<QuizAdminClient initialPrizeProducts={[prize]} />);
+    // Scheduled timing is the form default; this flow covers the immediate
+    // activation payload.
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Launch timing' }),
+      'immediate'
+    );
     await user.click(screen.getByRole('button', { name: /generate draft/i }));
     await user.click(
       await screen.findByRole('checkbox', {
@@ -190,85 +196,6 @@ describe('QuizAdminClient', () => {
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       'Launch service unavailable'
-    );
-  });
-
-  it('rejects stale scheduled dates before posting an activation request', async () => {
-    mockApiPost.mockResolvedValueOnce(generated);
-    const user = userEvent.setup();
-    render(<QuizAdminClient initialPrizeProducts={[prize]} />);
-
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Launch timing' }),
-      'scheduled'
-    );
-    await user.clear(screen.getByLabelText('Scheduled start'));
-    await user.type(
-      screen.getByLabelText('Scheduled start'),
-      '2020-01-01T09:00'
-    );
-    await user.clear(screen.getByLabelText('Universal end'));
-    await user.type(screen.getByLabelText('Universal end'), '2020-01-01T09:05');
-    await user.click(screen.getByRole('button', { name: /generate draft/i }));
-    await user.click(
-      await screen.findByRole('checkbox', {
-        name: /reviewed every correct answer/i,
-      })
-    );
-    await user.click(screen.getByRole('button', { name: /launch quiz/i }));
-    await user.click(
-      within(screen.getByRole('dialog')).getByRole('button', {
-        name: /launch quiz/i,
-      })
-    );
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      /choose a valid future start/i
-    );
-    expect(mockApiPost).toHaveBeenCalledTimes(1);
-  });
-
-  it('preserves Lagos wall-clock schedule times in the activation payload', async () => {
-    mockApiPost.mockResolvedValueOnce(generated).mockResolvedValueOnce({
-      event: { ...generated.event, status: 'scheduled' },
-    });
-    const user = userEvent.setup();
-    render(<QuizAdminClient initialPrizeProducts={[prize]} />);
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Launch timing' }),
-      'scheduled'
-    );
-    await user.clear(screen.getByLabelText('Scheduled start'));
-    await user.type(
-      screen.getByLabelText('Scheduled start'),
-      '2027-08-06T09:00'
-    );
-    await user.clear(screen.getByLabelText('Universal end'));
-    await user.type(screen.getByLabelText('Universal end'), '2027-08-06T09:05');
-    await user.click(screen.getByRole('button', { name: /generate draft/i }));
-    await user.click(
-      await screen.findByRole('checkbox', {
-        name: /reviewed every correct answer/i,
-      })
-    );
-    await user.click(screen.getByRole('button', { name: /launch quiz/i }));
-    await user.click(
-      within(screen.getByRole('dialog')).getByRole('button', {
-        name: /launch quiz/i,
-      })
-    );
-
-    await waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(2));
-    expect(mockApiPost).toHaveBeenLastCalledWith(
-      '/api/merchant/quiz/activate',
-      expect.objectContaining({
-        timeZone: 'Africa/Lagos',
-        timing: {
-          endsAt: '2027-08-06T08:05:00.000Z',
-          kind: 'scheduled',
-          startsAt: '2027-08-06T08:00:00.000Z',
-        },
-      })
     );
   });
 

@@ -9,6 +9,8 @@ export type PaymentGatewayStatus =
   | 'loading'
   | 'ready'
   | 'processing'
+  | 'held'
+  | 'pending'
   | 'success'
   | 'error';
 

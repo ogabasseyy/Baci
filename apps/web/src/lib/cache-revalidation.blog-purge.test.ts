@@ -42,6 +42,8 @@ describe('revalidateBlogPosts Cloudflare purge', () => {
     expect(mockAfter).toHaveBeenCalledTimes(1);
     expect(mockPurgeCloudflareUrls).toHaveBeenCalledWith([
       'https://ogabassey.com/blog',
+      'https://ogabassey.com/blog/news-sitemap.xml',
+      'https://ogabassey.com/blog/sitemap.xml',
       'https://ogabassey.com/blog/test-post',
       'https://ogabassey.com/blog/test-post/opengraph-image',
       'https://ogabassey.com/blog/category/buying-guides',
@@ -49,6 +51,8 @@ describe('revalidateBlogPosts Cloudflare purge', () => {
       'https://ogabassey.com/blog/author/bassey-john',
       'https://ogabassey.com/blog/author/bolakale',
       'https://www.ogabassey.com/blog',
+      'https://www.ogabassey.com/blog/news-sitemap.xml',
+      'https://www.ogabassey.com/blog/sitemap.xml',
       'https://www.ogabassey.com/blog/test-post',
       'https://www.ogabassey.com/blog/test-post/opengraph-image',
       'https://www.ogabassey.com/blog/category/buying-guides',
@@ -66,11 +70,15 @@ describe('revalidateBlogPosts Cloudflare purge', () => {
 
     expect(mockPurgeCloudflareUrls).toHaveBeenCalledWith([
       'https://ogabassey.com/blog',
+      'https://ogabassey.com/blog/news-sitemap.xml',
+      'https://ogabassey.com/blog/sitemap.xml',
       'https://ogabassey.com/blog/test-post',
       'https://ogabassey.com/blog/test-post/opengraph-image',
       'https://ogabassey.com/blog/author/bassey-john',
       'https://ogabassey.com/blog/author/bolakale',
       'https://www.ogabassey.com/blog',
+      'https://www.ogabassey.com/blog/news-sitemap.xml',
+      'https://www.ogabassey.com/blog/sitemap.xml',
       'https://www.ogabassey.com/blog/test-post',
       'https://www.ogabassey.com/blog/test-post/opengraph-image',
       'https://www.ogabassey.com/blog/author/bassey-john',

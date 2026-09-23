@@ -60,6 +60,26 @@ describe('POST /api/shipping/quotes merchant-configured rates', () => {
     );
   });
 
+  it('passes the merchant carrier allowlist to quote aggregation', async () => {
+    const { response } = await postQuotes(NG_MERCHANT, {
+      ...lagosRatesPayload,
+      shipping_providers: ['gigl'],
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockGetQuotes).toHaveBeenCalledWith(expect.any(Object), ['GIGL']);
+  });
+
+  it('passes an explicit empty carrier allowlist without falling back to all providers', async () => {
+    const { response } = await postQuotes(NG_MERCHANT, {
+      ...EMPTY_RATES_PAYLOAD,
+      shipping_providers: [],
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockGetQuotes).toHaveBeenCalledWith(expect.any(Object), []);
+  });
+
   it('re-buckets featured picks after merging and never marks a 0-estimate merchant rate as fastest', async () => {
     const { json } = await postQuotes(NG_MERCHANT, lagosRatesPayload, {
       supports_merchant_rates: true,
@@ -228,11 +248,12 @@ describe('POST /api/shipping/quotes merchant-configured rates', () => {
     ).toBe(true);
   });
 
-  it('still returns carrier quotes for an NG merchant when the merchant-rate RPC errors', async () => {
-    // The rate RPC fails (load failure), but the NG merchant's currency/country
-    // came from trusted (authenticated) context, so the fail-closed guard does
-    // not fire: carriers are still merged and persisted, and no merchant rate
-    // leaks from the failed load.
+  it('fails closed with an empty provider allowlist for a trusted NG merchant when the merchant-rate RPC errors', async () => {
+    mockGetQuotes.mockResolvedValue({
+      quotes: { featured: [], all: [] },
+      sessionId: 'session-1',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
     const { json, response, supabase } = await postQuotes(
       NG_MERCHANT,
       lagosRatesPayload,
@@ -241,17 +262,10 @@ describe('POST /api/shipping/quotes merchant-configured rates', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mockGetQuotes).toHaveBeenCalled();
-    expect(json.quotes.all).toEqual([
-      expect.objectContaining({ id: GIGL_QUOTE_ID, provider: 'GIGL' }),
-    ]);
-    expect(
-      json.quotes.all.some((quote: { id: string }) =>
-        quote.id.startsWith('mrate_')
-      )
-    ).toBe(false);
-    expect(json.warnings).toBeUndefined();
-    expect(supabase.shippingQuotesTable.upsert).toHaveBeenCalledTimes(1);
+    expect(mockGetQuotes).toHaveBeenCalledWith(expect.any(Object), []);
+    expect(json.quotes.all).toEqual([]);
+    expect(json.quotes.featured).toEqual([]);
+    expect(supabase.shippingQuotesTable.upsert).not.toHaveBeenCalled();
   });
 
   it('returns the empty + unavailable-rates response for a non-NG merchant when the merchant-rate RPC errors', async () => {

@@ -1,9 +1,13 @@
 'use client';
 
+import { useAirportQuoteRecovery } from './checkout/hooks/use-airport-quote-recovery';
+import { isAirportDeliveryReady } from './checkout/is-airport-delivery-ready';
+import { canShowDeliveryMethods } from './checkout/can-show-delivery-methods';
+
+import { DeferredCryptoSelectorModal as CryptoSelectorModal } from './checkout/components/DeferredCryptoSelectorModal';
 import {
   isAirportDeliveryEligible,
   isPickupEligible,
-  resolveEligibleWebStorefrontDeliveryMethod,
 } from '@baci/shared';
 import {
   AlertCircle,
@@ -14,7 +18,6 @@ import {
   Plane,
   ShieldCheck,
   ShoppingBag,
-  Store,
   Truck,
   Check,
   Copy,
@@ -25,6 +28,13 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { SmartQuoteLoader } from '../components/SmartQuoteLoader';
+import { DoorDeliveryQuoteOptions } from './checkout/components/DoorDeliveryQuoteOptions';
+import { isCheckoutDeliveryAddressReady } from './checkout/is-checkout-delivery-address-ready';
+import {
+  checkoutShippingQuoteDeliveryPreference,
+  shouldDiscoverCheckoutPickupQuotes,
+  shouldFetchCheckoutShippingQuotes,
+} from './checkout/should-fetch-checkout-shipping-quotes';
 import {
   DiscountCodeInput,
   type DiscountResult,
@@ -32,6 +42,12 @@ import {
 import { MobileOrderSummary } from '../components/MobileCheckoutComponents';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
+import { resolveMerchantDeliveryMethod } from './checkout/resolve-merchant-delivery-method';
+import { buildCheckoutBillingAddress } from './checkout/build-checkout-billing-address';
+import { useCryptoPaymentInitializer } from './checkout/use-crypto-payment-initializer';
+import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
+import { persistPendingCheckoutOrder } from './checkout/persist-pending-checkout-order';
+import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
 import { useEffect, useState, useRef } from 'react';
 import { useCart } from '@/hooks/cart';
 import type { CartItem } from '@/hooks/cart';
@@ -47,13 +63,13 @@ import type {
   PendingCryptoOrder,
   ResumedOrder,
 } from './checkout/types';
+import { mapApiOrderToResumedOrder } from './checkout/map-api-order-to-resumed-order';
 import {
-  usePersistedForm,
   usePersistedState,
 } from '@/hooks/use-persisted-state';
 import { useAuthSafe } from '@/contexts/auth-context';
 import { PhoneInput } from '@/components/ui/phone-input';
-import { CheckoutAuthModal } from '@/components/storefront/checkout-auth-modal';
+import { DeferredCheckoutAuthModal as CheckoutAuthModal } from './checkout/components/DeferredCheckoutAuthModal';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import {
   AddressAutocomplete,
@@ -96,6 +112,12 @@ import {
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
 import {
+  submitRedvaultPreparedOrder,
+  type RedvaultPreparedOrder,
+  type RedvaultStatus,
+} from './checkout/handlers/redvault-prepared-order-submit';
+import { resolveRedvaultSubmitFence } from './checkout/handlers/redvault-submit-fence';
+import {
   clearCheckoutIdempotencyKey,
   getCheckoutIdempotencyKey,
 } from './checkout/checkout-idempotency';
@@ -108,17 +130,23 @@ import { persistCreditDirectPopupReference } from './checkout/persist-credit-dir
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
 import { selectRejectedVoucherLines } from './checkout/select-rejected-voucher-lines';
 import { PaymentStep } from './checkout/components/PaymentStep';
+import type { RedvaultQuoteSummary } from './checkout/components/redvault/RedvaultPaymentOption';
+import {
+  initializeRedvaultPayment,
+  parseRedvaultOrderQuote,
+} from './checkout/redvault-payment-response';
+import { getRedvaultCompatibleCheckoutValues } from './checkout/redvault-compatible-checkout-values';
 import { AirportDeliveryOptions } from './checkout/components/AirportDeliveryOptions';
 import {
   invalidatePendingQuoteRequests,
   loadCheckoutShippingQuotes,
 } from './checkout/hooks/checkout-shipping-quote-loader';
+import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 import {
   calculateDeliveryCost,
   KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST,
   createSelectDeliveryMethod,
   getAirDeliveryQuotes,
-  getDeliveryEstimateLabel,
   getDoorDeliveryQuotes,
   getForwardableSelectedQuoteId,
   getMerchantRateId,
@@ -138,8 +166,8 @@ import { isWalletOrderAutoDebitWebEnabled } from '@/config/wallet-order-auto-deb
 import { isEligibleForWalletFundedBankTransfer } from './checkout/wallet-funded-transfer-eligibility';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
-import { WalletFundedTransferModal } from './checkout/components/WalletFundedTransferModal';
-import { WalletTransferConsentDialog } from './checkout/components/WalletTransferConsentDialog';
+import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
+import { DeferredWalletTransferConsentDialog as WalletTransferConsentDialog } from './checkout/components/DeferredWalletTransferConsentDialog';
 
 /**
  * Discriminated union for checkout item rendering. The `kind` tag is set at
@@ -218,6 +246,8 @@ function raiseCheckoutError(message: string): never {
   throw new Error(message);
 }
 
+
+
 /**
  * /api/orders rejection codes raised by the merchant-shipping-rate money guard.
  * They all mean "the fee the client quoted no longer matches the merchant's
@@ -287,35 +317,19 @@ async function loadResumedCheckoutOrder({
     );
     if (res.ok) {
       const orderData = await res.json();
-      setResumedOrder({
-        id: orderData.id,
-        short_id: orderData.short_id,
-        subtotal: orderData.subtotal,
-        shipping_cost: orderData.shipping_cost || 0,
-        total: orderData.total,
-        customer_name: orderData.customer_name,
-        customer_email: orderData.customer_email,
-        customer_phone: orderData.customer_phone,
-        tracking_token: orderData.tracking_token,
-        shipping_address: orderData.shipping_address || {
-          address: '',
-          city: '',
-          state: '',
-          phone: '',
-        },
-        items: orderData.items || [],
-      });
+      const resumed = mapApiOrderToResumedOrder(orderData);
+      setResumedOrder(resumed);
 
       // Pre-fill form with order data
-      const [first, ...rest] = (orderData.customer_name || '').split(' ');
+      const [first, ...rest] = (resumed.customer_name || '').split(' ');
       setCheckoutFields({
         firstName: first || '',
         lastName: rest.join(' ') || '',
-        customerEmail: orderData.customer_email || '',
-        customerPhone: orderData.customer_phone || '',
-        newAddressStreet: orderData.shipping_address?.address || '',
-        newAddressState: orderData.shipping_address?.state || '',
-        newAddressCity: orderData.shipping_address?.city || '',
+        customerEmail: resumed.customer_email || '',
+        customerPhone: resumed.customer_phone || '',
+        newAddressStreet: resumed.shipping_address?.address || '',
+        newAddressState: resumed.shipping_address?.state || '',
+        newAddressCity: resumed.shipping_address?.city || '',
         // Skip directly to payment step for resumed orders
         currentStep: 'payment',
         completedSteps: { contact: true, delivery: true },
@@ -443,65 +457,6 @@ async function loadWalletBalance({
   }
 }
 
-interface RequestCryptoPaymentInitializationParams {
-  merchantId: string;
-  pendingOrder: PendingCryptoOrder;
-  chain: CryptoChain;
-  currency: CryptoCurrency;
-  /** Merchant-resolved fiat order currency (server derives from order). */
-  orderCurrency: string;
-}
-
-async function requestCryptoPaymentInitialization({
-  merchantId,
-  pendingOrder,
-  chain,
-  currency,
-  orderCurrency,
-}: RequestCryptoPaymentInitializationParams): Promise<CryptoPaymentData> {
-  const paymentResponse = await fetch('/api/payments/initialize', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      merchant_id: merchantId,
-      order_id: pendingOrder.orderId,
-      currency: orderCurrency,
-      customer_email: pendingOrder.customerEmail,
-      customer_name: pendingOrder.customerName,
-      customer_phone: pendingOrder.customerPhone,
-      gateway: 'juicyway',
-      billing_address: pendingOrder.billingAddress,
-      items: pendingOrder.items,
-      crypto_chain: chain,
-      crypto_currency: currency,
-    }),
-  });
-
-  if (!paymentResponse.ok) {
-    const errorData = await paymentResponse.json();
-    throw new Error(errorData.details || errorData.error || 'Payment initialization failed');
-  }
-
-  const paymentResult = await paymentResponse.json();
-
-  if (paymentResult.success && paymentResult.crypto_payment) {
-    return {
-      address: paymentResult.crypto_payment.address,
-      chain: paymentResult.crypto_payment.chain,
-      currency: paymentResult.crypto_payment.currency,
-      amount: paymentResult.crypto_payment.amount / 100,
-      confirmation_time: paymentResult.crypto_payment.confirmation_time,
-      orderId: pendingOrder.orderId,
-      trackingToken: pendingOrder.trackingToken,
-      reference: paymentResult.reference,
-      sessionId: paymentResult.session_id || '',
-      paymentId: paymentResult.crypto_payment.payment_id || '', // Payment ID for verification
-      qrcode: paymentResult.crypto_payment.qrcode,
-    };
-  }
-
-  throw new Error('Failed to generate crypto payment address');
-}
 
 interface RequestDvaInitializationParams {
   merchantId: string;
@@ -519,7 +474,7 @@ interface DvaBillingAddress {
   city: string;
   state?: string;
   country: string;
-  zip_code: string;
+  zip_code?: string;
 }
 
 async function requestDvaInitialization({
@@ -566,6 +521,7 @@ export const CheckoutPage: React.FC = () => {
   const { cart, clearCart, isHydrated, removeFromCart } = useCart();
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
+  const redvaultAvailability = useRedvaultPaymentAvailability(merchant?.id);
 
   // Address-form country: the merchant's own market (ISO-2, upper-case), NG as
   // the pilot default when unset. Drives the state list source, the Places
@@ -637,17 +593,7 @@ export const CheckoutPage: React.FC = () => {
     setValue: setCheckoutField,
     setValues: setCheckoutFields,
     clear: clearCheckoutSession,
-  } = usePersistedForm('checkout-form', {
-    firstName: '',
-    lastName: '',
-    customerEmail: '',
-    customerPhone: '',
-    newAddressStreet: '',
-    newAddressState: '',
-    newAddressCity: '',
-    currentStep: 'contact' as 'contact' | 'delivery' | 'payment',
-    completedSteps: { contact: false, delivery: false },
-  });
+  } = useCheckoutFormState();
 
   // Destructure for convenience (these are reactive)
   const {
@@ -658,6 +604,13 @@ export const CheckoutPage: React.FC = () => {
     newAddressStreet,
     newAddressState,
     newAddressCity,
+    deliveryCoordinates,
+    deliveryMethod,
+    airportType,
+    airportRequiresQuote,
+    selectedQuoteId: persistedSelectedQuoteId,
+    selectedProviderRateId: persistedSelectedProviderRateId,
+    newsletterOptIn,
     currentStep: rawCurrentStep,
     completedSteps: rawCompletedSteps,
   } = checkoutForm;
@@ -671,7 +624,6 @@ export const CheckoutPage: React.FC = () => {
   const setLastName = (v: string) => setCheckoutField('lastName', v);
   const setCustomerEmail = (v: string) => setCheckoutField('customerEmail', v);
   const setCustomerPhone = (v: string) => setCheckoutField('customerPhone', v);
-  const setNewAddressStreet = (v: string) => setCheckoutField('newAddressStreet', v);
   const setNewAddressState = (v: string) => setCheckoutField('newAddressState', v);
   const setNewAddressCity = (v: string) => setCheckoutField('newAddressCity', v);
   const setCurrentStep = (v: 'contact' | 'delivery' | 'payment') => setCheckoutField('currentStep', v);
@@ -714,7 +666,7 @@ export const CheckoutPage: React.FC = () => {
   // Non-persisted UI state
   const [createAccount, setCreateAccount] = useState(false);
   const [accountPassword, setAccountPassword] = useState('');
-  const [newsletterOptIn, setNewsletterOptIn] = useState(true);
+  const setNewsletterOptIn = (value: boolean) => setCheckoutField('newsletterOptIn', value);
   const [showPasswordInput, setShowPasswordInput] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -801,11 +753,10 @@ export const CheckoutPage: React.FC = () => {
       city: string;
       state: string;
       country: string;
-      zip_code: string;
+      zip_code?: string;
     };
     items: Array<{ name: string; type: 'physical' | 'digital' }>;
   } | null>(null);
-  const [isInitializingCrypto, setIsInitializingCrypto] = useState(false);
 
   // Mobile app order resume state
   // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
@@ -832,31 +783,7 @@ export const CheckoutPage: React.FC = () => {
     gatewayParam === 'credpal' || gatewayParam === 'credit_direct'
       ? gatewayParam
       : null;
-  const [resumedOrder, setResumedOrder] = useState<{
-    id: string;
-    short_id: string;
-    subtotal: number;
-    shipping_cost: number;
-    total: number;
-    customer_name: string;
-    customer_email: string;
-    customer_phone: string;
-    tracking_token?: string;
-    shipping_address: {
-      address: string;
-      city: string;
-      state: string;
-      phone: string;
-    };
-    items: Array<{
-      id: string;
-      product_id: string;
-      product_name: string;
-      quantity: number;
-      price: number;
-      image_url?: string;
-    }>;
-  } | null>(null);
+  const [resumedOrder, setResumedOrder] = useState<ResumedOrder | null>(null);
   const [isLoadingResumedOrder, setIsLoadingResumedOrder] = useState(!!resumeOrderId);
   const [resumeOrderError, setResumeOrderError] = useState<string | null>(null);
 
@@ -903,6 +830,10 @@ export const CheckoutPage: React.FC = () => {
   const autoTriggerRef = useRef(false);
   // Double-submit protection: prevents race conditions from rapid clicks
   const isOrderInFlightRef = useRef(false);
+  usePaymentReturnReset(() => {
+    setIsProcessing(false);
+    isOrderInFlightRef.current = false;
+  });
 
   // Storefront customer sign-in state. The `(commerce)` checkout route mounts
   // neither `AuthProvider` nor `CustomerAuthProvider`, so `useAuthSafe()` above
@@ -949,36 +880,26 @@ export const CheckoutPage: React.FC = () => {
     }
   };
 
-  // Initialize crypto payment with selected options. The fetch + throw flow
-  // lives in module-scope `requestCryptoPaymentInitialization`; the promise
-  // chain replaces try/catch/finally, which would bail React Compiler.
+  const cryptoInitializer = useCryptoPaymentInitializer({
+    onReady: (payment) => {
+      setShowCryptoSelector(false);
+      setCryptoPaymentData(payment);
+    },
+    onError: (error) => toast({
+      title: 'Crypto Payment Failed',
+      description: error instanceof Error ? error.message : 'Failed to initialize crypto payment',
+      variant: 'destructive',
+    }),
+  });
   const initializeCryptoPayment = async () => {
     if (!pendingCryptoOrder || !merchant) return;
-
-    setIsInitializingCrypto(true);
-    await requestCryptoPaymentInitialization({
+    await cryptoInitializer.initialize({
       merchantId: merchant.id,
       pendingOrder: pendingCryptoOrder,
       chain: selectedCryptoChain,
       currency: selectedCryptoCurrency,
       orderCurrency: pendingCryptoOrder.orderCurrency,
-    })
-      .then((cryptoPayment) => {
-        setShowCryptoSelector(false);
-        setCryptoPaymentData(cryptoPayment);
-      })
-      .catch((error: unknown) => {
-        console.error('Crypto payment initialization error:', error);
-        toast({
-          title: 'Crypto Payment Failed',
-          description:
-            error instanceof Error ? error.message : 'Failed to initialize crypto payment',
-          variant: 'destructive',
-        });
-      })
-      .finally(() => {
-        setIsInitializingCrypto(false);
-      });
+    }).catch(() => undefined);
   };
 
   // Verify crypto payment status by polling the API
@@ -1129,8 +1050,10 @@ export const CheckoutPage: React.FC = () => {
     };
   }, []);
 
-  // Retrieve gift data if passed from cart
-  const giftWrappingCost = Number(searchParams.get('giftWrappingCost')) || 0;
+  // Prefer the persisted fee on resume (deep-link URLs omit giftWrappingCost).
+  const giftWrappingCost =
+    resumedOrder?.gift_wrapping_fee ??
+    (Number(searchParams.get('giftWrappingCost')) || 0);
 
   // Saved Addresses (Future integration: Fetch from API)
   const [addresses, _setAddresses] = useState<SavedAddress[]>([]); // Empty for now, forcing new address
@@ -1138,8 +1061,9 @@ export const CheckoutPage: React.FC = () => {
 
   const [selectedAddressId, setSelectedAddressId] = useState<number>(0);
   const [isNewAddressMode, setIsNewAddressMode] = useState(true);
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('door');
-  const [airportType, setAirportType] = useState<'delivery' | 'pickup'>('delivery');
+  const setDeliveryMethod = (value: DeliveryMethod) => setCheckoutField('deliveryMethod', value);
+  const setAirportType = (value: 'delivery' | 'pickup') =>
+    setCheckoutField('airportType', value);
 
   // Shipping State
   const [shippingStates, setShippingStates] = useState<string[]>([]);
@@ -1147,12 +1071,19 @@ export const CheckoutPage: React.FC = () => {
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
   const [shippingQuotes, setShippingQuotes] = useState<ShippingQuote[]>([]);
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
-  const [selectedQuoteId, setSelectedQuoteId] = useState<string>('');
+  const selectedQuoteId = persistedSelectedQuoteId || '';
+  const selectedProviderRateId = persistedSelectedProviderRateId || '';
+  const setSelectedQuoteId = (id: string) => {
+    setCheckoutField('selectedQuoteId', id);
+    const matched = shippingQuotes.find(
+      (quote) => String(quote.id) === String(id),
+    );
+    setCheckoutField(
+      'selectedProviderRateId',
+      matched?.providerRateId?.trim() || '',
+    );
+  };
   const [resolvedQuoteRequestKey, setResolvedQuoteRequestKey] = useState('');
-  const [deliveryCoordinates, setDeliveryCoordinates] = useState<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
   const quoteRequestSequence = useRef(0);
   const quoteAbortController = useRef<AbortController | null>(null);
   const stationPickupQuote = getStationPickupQuote(shippingQuotes);
@@ -1186,23 +1117,30 @@ export const CheckoutPage: React.FC = () => {
     setSelectedQuoteId,
     shippingQuotes,
   });
-  const resetQuotesForAddressChange = () => {
+  const resetQuotesForAddressChange = (options?: {
+    preserveDeliveryMethod?: boolean;
+  }) => {
     invalidatePendingQuoteRequests(
       quoteRequestSequence,
       quoteAbortController,
     );
     setIsLoadingQuotes(false);
-    setDeliveryCoordinates(null);
     setResolvedQuoteRequestKey('');
     resetDeliveryQuotesForAddressChange({
       setDeliveryMethod,
       setSelectedQuoteId,
       setShippingQuotes,
+      // Drop stale autocomplete coordinates so a later saved-address selection
+      // cannot price/route with the previous place's lat/lng.
+      clearDeliveryCoordinates: () =>
+        setCheckoutFields({ deliveryCoordinates: null }),
+      preserveDeliveryMethod: options?.preserveDeliveryMethod,
     });
   };
-  const eligibleDeliveryMethod = resolveEligibleWebStorefrontDeliveryMethod(
+  const eligibleDeliveryMethod = resolveMerchantDeliveryMethod(
     deliveryMethod,
     newAddressState,
+    merchant?.slug,
   );
   if (eligibleDeliveryMethod !== deliveryMethod) {
     setDeliveryMethod(eligibleDeliveryMethod);
@@ -1246,11 +1184,16 @@ export const CheckoutPage: React.FC = () => {
       return Boolean(selectedQuoteId && selectedQuoteMatchesDeliveryMethod);
     }
     // For airport, a type (pickup/delivery) must be selected
-    if (deliveryMethod === 'airport') return !!airportType;
+    if (deliveryMethod === 'airport') return isAirportDeliveryReady(airportRequiresQuote, selectedQuoteMatchesDeliveryMethod);
     // Pickup is valid as long as the current state is eligible.
     return true;
   })();
   const isDeliveryValid = isHydrated ? rawIsDeliveryValid : false;
+  useAirportQuoteRecovery(
+    isHydrated && deliveryMethod === 'airport' && airportRequiresQuote && !selectedQuoteMatchesDeliveryMethod,
+    currentStep,
+    () => setCheckoutFields({ currentStep: 'delivery', completedSteps: { ...completedSteps, delivery: false } }),
+  );
 
   // Note: newAddressState, newAddressCity, newAddressStreet are now part of checkoutForm (persisted)
 
@@ -1260,6 +1203,31 @@ export const CheckoutPage: React.FC = () => {
   // declaration before first access)
   const [paymentTab, setPaymentTab] = useState<'full' | 'installments'>('full');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('');
+  const [redvaultSummary, setRedvaultSummary] =
+    useState<RedvaultQuoteSummary | null>(null);
+  const [redvaultStatus, setRedvaultStatus] =
+    useState<RedvaultStatus>('idle');
+  const [redvaultOrderReady, setRedvaultOrderReady] =
+    useState<RedvaultPreparedOrder | null>(null);
+  const selectPaymentMethod = (nextMethod: PaymentMethod) => {
+    if (isOrderInFlightRef.current || redvaultStatus === 'pending' || redvaultStatus === 'held') return;
+    if (
+      nextMethod !== paymentMethod &&
+      (nextMethod === 'uba_redvault' || paymentMethod === 'uba_redvault')
+    ) {
+      // Retain a stored REDVAULT fence: after an indeterminate init the
+      // order may be persisted and capturing, so only the submit-time
+      // resolver (which validates server state and blocks a second order
+      // while unresolved) may clear it — never the method switch itself.
+      if (pendingCheckoutOrder?.paymentMethod !== 'uba_redvault') {
+        clearPendingCheckoutOrder();
+      }
+      setRedvaultSummary(null);
+      setRedvaultStatus('idle');
+      setRedvaultOrderReady(null);
+    }
+    setPaymentMethod(nextMethod);
+  };
 
   // Fetch resumed order from mobile app when orderId is in URL.
   // The async try/catch/finally flow lives in module-scope
@@ -1277,7 +1245,7 @@ export const CheckoutPage: React.FC = () => {
       setResumedOrder,
       setCheckoutFields,
       setPaymentTab,
-      setPaymentMethod,
+      setPaymentMethod: selectPaymentMethod,
       setResumeOrderError,
     });
   }, [
@@ -1388,38 +1356,75 @@ export const CheckoutPage: React.FC = () => {
             activeAbortController: quoteAbortController,
             currentRequestKey: resolvedQuoteRequestKey,
             force,
+            preferredSelectedQuoteId: selectedQuoteId || undefined,
+            preferredProviderRateId: selectedProviderRateId || undefined,
             requestSequence: quoteRequestSequence,
             setResolvedQuoteRequestKey,
             setIsLoadingQuotes,
             setSelectedQuoteId,
+            setSelectedProviderRateId: (providerRateId: string) =>
+              setCheckoutField('selectedProviderRateId', providerRateId),
             setShippingQuotes,
+            onPreferredQuoteMissing: () => setCurrentStep('delivery'),
+            requirePreferredQuoteMatch: currentStep === 'payment',
           },
         )
       : resetQuotesForAddressChange();
 
-  // Trigger provider quotes after the address and delivery preference are known.
+  const isNewDeliveryAddressReady = isCheckoutDeliveryAddressReady({
+    address: newAddressStreet,
+    city: newAddressCity,
+    state: newAddressState,
+    country: getCountryByCode(merchantCountry)?.name ?? 'Nigeria',
+  });
+
+  // Trigger provider quotes only for a hydrated, complete delivery address.
   useEffect(() => {
-    if (deliveryMethod === 'door' || deliveryMethod === 'pickup_station') {
+    if (!isHydrated) return;
+    if (deliveryMethod === 'door' || deliveryMethod === 'pickup_station' || deliveryMethod === 'airport') {
       if (!merchant?.id) {
         resetQuotesForAddressChange();
         return;
       }
 
       if (isNewAddressMode) {
-        // STRICT: Only fetch if BOTH State AND City are explicitly selected
-        // Do NOT use fallbacks - wait for proper location input
-        if (newAddressState && newAddressCity) {
+        const hasCityState = Boolean(
+          newAddressCity.trim() && newAddressState.trim(),
+        );
+        if (
+          shouldFetchCheckoutShippingQuotes({
+            deliveryMethod,
+            isStreetReady: isNewDeliveryAddressReady,
+            hasCityState,
+          }) ||
+          shouldDiscoverCheckoutPickupQuotes({
+            isStreetReady: isNewDeliveryAddressReady,
+            hasCityState,
+          })
+        ) {
           fetchShippingQuotes(
-            newAddressStreet || `${newAddressCity}, ${newAddressState}`, // Use city+state as fallback address for API
+            newAddressStreet,
             newAddressState,
             newAddressCity,
             customerPhone,
             firstName,
             lastName,
             customerEmail,
-            deliveryMethod === 'pickup_station' ? 'pickup_station' : 'door',
+            checkoutShippingQuoteDeliveryPreference({
+              deliveryMethod,
+              isStreetReady: isNewDeliveryAddressReady,
+            }),
             false,
           );
+        } else {
+          // City/state alone can expose airport/store pickup; clearing unavailable
+          // door quotes must not force those methods back to door.
+          resetQuotesForAddressChange({
+            // Inside this quote effect, method is door/pickup_station/airport.
+            preserveDeliveryMethod:
+              deliveryMethod === 'airport' ||
+              deliveryMethod === 'pickup_station',
+          });
         }
       } else {
         const saved = addresses.find((a) => a.id === selectedAddressId);
@@ -1456,8 +1461,10 @@ export const CheckoutPage: React.FC = () => {
     deliveryMethod,
     selectedAddressId,
     isNewAddressMode,
-    // Trigger on State/City change for new address. 
-    // NOT triggering on newAddressStreet change to avoid excessive API calls while typing.
+    // Manual typing clears the detected location until the debounce settles.
+    isHydrated,
+    isNewDeliveryAddressReady,
+    newAddressStreet,
     newAddressState,
     newAddressCity,
     // Trigger if we switch back to a saved address
@@ -1576,25 +1583,25 @@ export const CheckoutPage: React.FC = () => {
           )
         : Math.min(appliedDiscount.discount_value, effectiveCheckoutCartTotal)))
     : 0;
-  // `total` is NET of the discount so wallet credit, remaining-amount gating,
-  // the displayed total, and the order payload all agree.
-  const total = Math.max(
-    0,
-    effectiveCheckoutCartTotal +
-      deliveryCost +
-      giftWrappingCost +
-      (orderTotals?.taxAmount ?? 0) -
-      discountAmount
-  );
-
   // Wallet credit calculation (2025: can't redeem more than order total).
   // The customer wallet is an NGN-denominated ledger, so redemption is only
   // offered on NGN orders — mirrors the server-side guard in /api/orders.
   const walletCurrencySupported = currencyCode === 'NGN';
-  const walletAmountUsed =
-    payWithWallet && walletCurrencySupported
-      ? Math.min(walletBalance, total)
-      : 0;
+  const checkoutValues = getRedvaultCompatibleCheckoutValues({
+    baseTotal:
+      effectiveCheckoutCartTotal +
+      deliveryCost +
+      giftWrappingCost +
+      (orderTotals?.taxAmount ?? 0),
+    discountAmount,
+    discountCode: appliedDiscount?.code,
+    paymentMethod,
+    payWithWallet,
+    walletBalance,
+    walletCurrencySupported,
+  });
+  const total = checkoutValues.total;
+  const walletAmountUsed = checkoutValues.walletAmountUsed;
   const remainingAmount = total - walletAmountUsed;
 
 
@@ -1779,7 +1786,7 @@ export const CheckoutPage: React.FC = () => {
 
   const handlePlaceOrder = async () => {
     // Double-submit protection: prevent race conditions from rapid clicks
-    if (isOrderInFlightRef.current) {
+    if (isOrderInFlightRef.current || redvaultStatus === 'pending' || redvaultStatus === 'held') {
       return;
     }
     isOrderInFlightRef.current = true;
@@ -1816,8 +1823,8 @@ export const CheckoutPage: React.FC = () => {
     }
 
     if (
-      (deliveryMethod === 'door' || deliveryMethod === 'pickup_station') &&
-      !selectedQuoteId
+      ((deliveryMethod === 'door' || deliveryMethod === 'pickup_station') && !selectedQuoteId) ||
+      (deliveryMethod === 'airport' && !isAirportDeliveryReady(airportRequiresQuote, selectedQuoteMatchesDeliveryMethod))
     ) {
       toast({
         title: 'Select Delivery Option',
@@ -1861,6 +1868,16 @@ export const CheckoutPage: React.FC = () => {
         title: 'Payment Unavailable',
         description:
           'Korapay is not available for this store yet. Please choose a different payment method.',
+        variant: 'destructive',
+      });
+      isOrderInFlightRef.current = false;
+      return;
+    }
+
+    if (paymentMethod === 'uba_redvault' && !redvaultAvailability.available) {
+      toast({
+        title: 'Payment Unavailable',
+        description: 'Pay with UBA is not available right now. Please choose a different payment method.',
         variant: 'destructive',
       });
       isOrderInFlightRef.current = false;
@@ -2007,8 +2024,8 @@ export const CheckoutPage: React.FC = () => {
     // block in `place-order.ts`. Treat empty string as no quote too —
     // the state hook initializes selectedQuoteId to `''` (line ~573).
     if (
-      (deliveryMethod === 'door' || deliveryMethod === 'pickup_station') &&
-      !selectedQuoteId
+      ((deliveryMethod === 'door' || deliveryMethod === 'pickup_station') && !selectedQuoteId) ||
+      (deliveryMethod === 'airport' && !isAirportDeliveryReady(airportRequiresQuote, selectedQuoteMatchesDeliveryMethod))
     ) {
       toast({
         title: 'Delivery option required',
@@ -2049,7 +2066,7 @@ export const CheckoutPage: React.FC = () => {
     }
 
     const normalizedPaymentMethod = normalizeOrderPaymentMethod(paymentMethod);
-    const checkoutFingerprint = buildPendingCheckoutFingerprint({
+    const checkoutFingerprint = (paymentMethod === 'uba_redvault' ? 'uba_redvault:' : '') + buildPendingCheckoutFingerprint({
       merchantId: merchant.id,
       customerEmail,
       customerName: `${firstName} ${lastName}`.trim(),
@@ -2071,11 +2088,39 @@ export const CheckoutPage: React.FC = () => {
         price: item.price,
         has_assurance: item.has_assurance,
         assurance_fee: item.assurance_fee,
+        variantId: item.variantId,
+        variantAttributes: item.variantAttributes,
       })),
-      useWalletCredit: payWithWallet && walletAmountUsed > 0,
+      useWalletCredit: checkoutValues.useWalletCredit,
       walletAmountUsed,
-      discountCode: appliedDiscount?.code ?? null,
+      discountCode: checkoutValues.discountCode,
+      giftWrappingCost,
     });
+
+    // A REDVAULT order prepared by an earlier click initializes through
+    // the extracted submit handler (stale-fingerprint cancel, guest
+    // signup/attach, initialization, and redirect/hold handling).
+    if (
+      await submitRedvaultPreparedOrder({
+        paymentMethod,
+        redvaultOrderReady,
+        checkoutFingerprint,
+        waitForResolvedStorefrontCustomerAuth,
+        isOrderInFlightRef,
+        setIsProcessing,
+        setRedvaultStatus,
+        setRedvaultOrderReady,
+        clearPendingCheckoutOrder,
+        createAccount,
+        user,
+        accountPassword,
+        firstName,
+        lastName,
+        merchantId: merchant?.id ?? '',
+      })
+    ) {
+      return;
+    }
 
     try {
       let order: {
@@ -2119,8 +2164,32 @@ export const CheckoutPage: React.FC = () => {
         shippingRateId: merchantRateId ?? undefined,
       });
 
-      if (reusablePendingOrder.clearStoredOrder) {
-        clearPendingCheckoutOrder();
+      // The REDVAULT pending-order fence verdict (paid routing, blocking
+      // cancels, live replay) lives in the extracted submit handler.
+      if (
+        await resolveRedvaultSubmitFence({
+          fence: reusablePendingOrder,
+          checkoutFingerprint,
+          customerEmail,
+          merchantId: merchant.id,
+          firstName,
+          lastName,
+          customerPhone,
+          finalAddress,
+          finalCity,
+          finalState,
+          merchantCountry,
+          waitForResolvedStorefrontCustomerAuth,
+          isOrderInFlightRef,
+          setIsProcessing,
+          setRedvaultStatus,
+          clearPendingCheckoutOrder,
+          clearCheckoutSession,
+          clearCart,
+          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
+        })
+      ) {
+        return;
       }
 
       if (reusablePendingOrder.reusableOrder) {
@@ -2181,7 +2250,7 @@ export const CheckoutPage: React.FC = () => {
                 deliveryCost +
                 giftWrappingCost +
                 (orderTotals?.taxAmount ?? 0) -
-                discountAmount
+                checkoutValues.discountAmount
             ),
             client_total: Math.max(
               0,
@@ -2189,10 +2258,10 @@ export const CheckoutPage: React.FC = () => {
                 deliveryCost +
                 giftWrappingCost +
                 (orderTotals?.taxAmount ?? 0) -
-                discountAmount
+                checkoutValues.discountAmount
             ),
-            ...(appliedDiscount?.code
-              ? { discount_code: appliedDiscount.code }
+            ...(checkoutValues.discountCode
+              ? { discount_code: checkoutValues.discountCode }
               : {}),
             payment_method: normalizedPaymentMethod,
             payment_status: 'unpaid',
@@ -2224,7 +2293,7 @@ export const CheckoutPage: React.FC = () => {
                     selectedQuoteId,
                   ) ?? null),
             // Wallet redemption (2025: auto-apply at checkout)
-            use_wallet_credit: payWithWallet && walletAmountUsed > 0,
+            use_wallet_credit: checkoutValues.useWalletCredit,
             wallet_amount: walletAmountUsed,
             // Link customer to auth user (2025: unified customer identity)
             user_id: user?.id,
@@ -2279,8 +2348,15 @@ export const CheckoutPage: React.FC = () => {
 
         const orderData = await orderResponse.json();
         order = orderData.order;
+        if (paymentMethod === 'uba_redvault') {
+          const summary = parseRedvaultOrderQuote(orderData);
+          setRedvaultSummary(summary);
+          amountDueToGateway = summary.payableKobo / 100;
+        }
         walletResult = orderData.wallet;
-        amountDueToGateway = orderData.amountDueToGateway ?? total;
+        if (paymentMethod !== 'uba_redvault') {
+          amountDueToGateway = orderData.amountDueToGateway ?? total;
+        }
       }
 
       // The ORDER row's stamped currency is authoritative for payment
@@ -2293,9 +2369,55 @@ export const CheckoutPage: React.FC = () => {
         typeof order.currency === 'string' && order.currency.trim()
           ? order.currency.trim().toUpperCase()
           : currencyCode;
+      const billingAddress = buildCheckoutBillingAddress(
+        finalAddress,
+        finalCity,
+        finalState,
+        merchantCountry
+      );
+
+      // Persist the fence before any early return: the REDVAULT review
+      // branch below returns before payment, so a reload mid-review would
+      // otherwise lose the snapshot and let a method switch open a second
+      // order while this one still reserves inventory.
+      const pendingSnapshot: PendingCheckoutOrderSnapshot = {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        trackingToken: order.tracking_token,
+        merchantId: merchant.id,
+        customerEmail,
+        customerPhone,
+        checkoutFingerprint,
+        paymentMethod: normalizedPaymentMethod,
+        amountDueToGateway,
+        createdAt: new Date().toISOString(),
+      };
+      persistPendingCheckoutOrder(pendingSnapshot);
+      setPendingCheckoutOrder(pendingSnapshot);
+
+      if (paymentMethod === 'uba_redvault' && !redvaultOrderReady) {
+        setRedvaultOrderReady({
+          billingAddress,
+          customerEmail,
+          customerName: `${firstName} ${lastName}`.trim(),
+          customerPhone,
+          currency: orderChargeCurrency,
+          orderId: order.id,
+          checkoutFingerprint,
+          trackingToken: order.tracking_token,
+        });
+        setIsProcessing(false);
+        isOrderInFlightRef.current = false;
+        return;
+      }
 
       // 1b. Create account if requested (Awaited to ensure session is set before moving to next page)
-      if (createAccount && !user && accountPassword.length >= 6) {
+      if (
+        paymentMethod !== 'uba_redvault' &&
+        createAccount &&
+        !user &&
+        accountPassword.length >= 6
+      ) {
         try {
           const supabase = createClient();
           await supabase.auth.signUp({
@@ -2318,18 +2440,6 @@ export const CheckoutPage: React.FC = () => {
         }
       }
 
-      setPendingCheckoutOrder({
-        orderId: order.id,
-        orderNumber: order.order_number,
-        trackingToken: order.tracking_token,
-        merchantId: merchant.id,
-        customerEmail,
-        customerPhone,
-        checkoutFingerprint,
-        amountDueToGateway,
-        createdAt: new Date().toISOString(),
-      });
-
       const paymentAmount = amountDueToGateway ?? total;
 
       if (
@@ -2350,18 +2460,10 @@ export const CheckoutPage: React.FC = () => {
         setWalletBalance(walletResult.newBalance);
       }
 
-      const billingAddress = {
-        line1: finalAddress,
-        city: finalCity || 'Lagos',
-        state: finalState || 'Lagos',
-        country: 'NG',
-        zip_code: '100001',
-      };
-
       // 2. Handle payment based on method
       // Special case: If wallet fully covers the order, no payment gateway needed
       // Order API already marks it as paid, just redirect to success
-      if (paymentAmount <= 0) {
+      if (paymentMethod !== 'uba_redvault' && paymentAmount <= 0) {
         clearPendingCheckoutOrder();
         await clearCheckoutIdempotencyKey(checkoutFingerprint);
         clearCheckoutSession();
@@ -2433,6 +2535,56 @@ export const CheckoutPage: React.FC = () => {
         }
 
         await handleBankTransfer(order, paymentAmount, billingAddress);
+        return;
+      }
+
+      if (paymentMethod === 'uba_redvault') {
+        setRedvaultStatus('pending');
+        const paymentResult = await initializeRedvaultPayment({
+          merchantId: merchant.id,
+          orderId: order.id,
+          currency: orderChargeCurrency,
+          customerEmail,
+          customerName: `${firstName} ${lastName}`.trim(),
+          customerPhone,
+          trackingToken: order.tracking_token,
+          billingAddress,
+        }).catch((error: unknown) => {
+          setRedvaultStatus('error');
+          throw error;
+        });
+        if (paymentResult.kind === 'pending_reconciliation') {
+          setIsProcessing(false);
+          isOrderInFlightRef.current = false;
+          return;
+        }
+        if (paymentResult.kind === 'captured_held') {
+          setRedvaultStatus('held');
+          setIsProcessing(false);
+          isOrderInFlightRef.current = false;
+          return;
+        }
+        if (createAccount && !user && accountPassword.length >= 6) {
+          try {
+            const supabase = createClient();
+            await supabase.auth.signUp({
+              email: customerEmail,
+              password: accountPassword,
+              options: {
+                data: {
+                  first_name: firstName,
+                  last_name: lastName,
+                  phone: customerPhone,
+                  source: 'checkout',
+                  signup_type: 'customer',
+                },
+              },
+            });
+          } catch (authError) {
+            console.error('Silent signup background error:', authError);
+          }
+        }
+        window.location.assign(paymentResult.authorizationUrl);
         return;
       }
 
@@ -2910,138 +3062,29 @@ export const CheckoutPage: React.FC = () => {
           </div>
         </div>
       </div>
-      <CheckoutAuthModal
+      {isAuthModalOpen && <CheckoutAuthModal
         isOpen={isAuthModalOpen}
         onOpenChange={setIsAuthModalOpen}
         onSuccess={() => setIsAuthModalOpen(false)}
-      />
+      />}
 
       {/* Crypto Selector Modal */}
       {showCryptoSelector && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="sticky top-0 bg-linear-to-r from-store-primary to-store-primary/80 p-4 flex items-center justify-between rounded-t-2xl">
-              <div className="flex items-center gap-2">
-                <div className="size-8 bg-white/20 rounded-lg flex items-center justify-center">
-                  <CreditCard size={16} className="text-white" />
-                </div>
-                <h2 className="font-bold text-white">Select Crypto Payment</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCryptoSelector(false);
-                  setPendingCryptoOrder(null);
-                  isOrderInFlightRef.current = false;
-                }}
-                className="size-8 rounded-lg bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 space-y-6">
-              {/* Currency Selection */}
-              <div className="space-y-3">
-                <label className="text-sm font-bold text-gray-700">Select Stablecoin</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleCryptoCurrencyChange('USDT')}
-                    className={`p-4 rounded-xl border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-offset-2 ${selectedCryptoCurrency === 'USDT'
-                      ? 'border-store-primary bg-store-primary/5'
-                      : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                  >
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-gray-900">USDT</p>
-                      <p className="text-xs text-gray-500">Tether USD</p>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleCryptoCurrencyChange('USDC')}
-                    className={`p-4 rounded-xl border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-offset-2 ${selectedCryptoCurrency === 'USDC'
-                      ? 'border-store-primary bg-store-primary/5'
-                      : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                  >
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-gray-900">USDC</p>
-                      <p className="text-xs text-gray-500">USD Coin</p>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Network Selection */}
-              <div className="space-y-3">
-                <label className="text-sm font-bold text-gray-700">Select Network</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {cryptoChainSupport[selectedCryptoCurrency].map((chain) => (
-                    <button
-                      key={chain}
-                      type="button"
-                      onClick={() => setSelectedCryptoChain(chain)}
-                      className={`p-4 rounded-xl border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-offset-2 ${selectedCryptoChain === chain
-                        ? 'border-store-primary bg-store-primary/5'
-                        : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                    >
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-gray-900">{chain}</p>
-                        <p className="text-xs text-gray-500">
-                          {chainDisplayNames[chain]?.replace(` (${chain === 'TRX' ? 'TRC-20' : 'ERC-20'})`, '') || chain}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Network Info */}
-              <div className="bg-gray-50 rounded-xl p-4">
-                <div className="flex items-center gap-3">
-                  <Clock size={18} className="text-gray-500" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {selectedCryptoChain === 'TRX' && '1-3 minutes'}
-                      {selectedCryptoChain === 'ETH' && '5-30 minutes'}
-                      {selectedCryptoChain === 'MATIC' && '1-5 minutes'}
-                      {selectedCryptoChain === 'AVAXC' && '1-5 minutes'}
-                    </p>
-                    <p className="text-xs text-gray-500">Expected confirmation time</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Continue Button */}
-              <button
-                type="button"
-                onClick={initializeCryptoPayment}
-                disabled={isInitializingCrypto}
-                className="w-full py-3.5 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors shadow-lg shadow-store-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isInitializingCrypto ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    Generating Address…
-                  </>
-                ) : (
-                  <>
-                    Continue with {selectedCryptoCurrency} on {selectedCryptoChain}
-                  </>
-                )}
-              </button>
-
-              <p className="text-center text-xs text-gray-400">
-                You'll receive a wallet address to send your {selectedCryptoCurrency} payment
-              </p>
-            </div>
-          </div>
-        </div>
+        <CryptoSelectorModal
+          selectedCryptoCurrency={selectedCryptoCurrency}
+          selectedCryptoChain={selectedCryptoChain}
+          supportedChains={cryptoChainSupport[selectedCryptoCurrency]}
+          isInitializingCrypto={cryptoInitializer.isInitializing}
+          onCurrencyChange={(currency) => { cryptoInitializer.cancel(); handleCryptoCurrencyChange(currency); }}
+          onChainChange={(chain) => { cryptoInitializer.cancel(); setSelectedCryptoChain(chain); }}
+          onInitialize={initializeCryptoPayment}
+          onClose={() => {
+            cryptoInitializer.cancel();
+            setShowCryptoSelector(false);
+            setPendingCryptoOrder(null);
+            isOrderInFlightRef.current = false;
+          }}
+        />
       )}
 
       {/* Crypto Payment Modal */}
@@ -3388,17 +3431,19 @@ export const CheckoutPage: React.FC = () => {
 
         {/* MOBILE ORDER SUMMARY (Collapsible) */}
         {/* MOBILE ORDER SUMMARY (Collapsible) */}
-        <MobileOrderSummary
+        {paymentMethod !== 'uba_redvault' && <MobileOrderSummary
           cart={mobileSummaryCart}
           cartTotal={effectiveCheckoutCartTotal}
-          deliveryCost={deliveryCost || resumedOrder?.shipping_cost || 0}
-          deliveryMethod={deliveryMethod}
+          deliveryCost={resumedOrder ? resumedOrder.shipping_cost : deliveryCost}
+          taxAmount={resumedOrder?.tax_amount ?? orderTotals?.taxAmount ?? 0}
+          discountAmount={resumedOrder?.discount_amount ?? checkoutValues.discountAmount}
+          deliveryMethod={resumedOrder ? null : deliveryMethod}
           giftWrappingCost={giftWrappingCost}
           walletBalance={walletBalance}
-          payWithWallet={payWithWallet}
+          payWithWallet={checkoutValues.payWithWallet}
           walletAmountUsed={walletAmountUsed}
-          remainingAmount={remainingAmount > 0 ? remainingAmount : resumedOrder?.total || remainingAmount}
-        />
+          remainingAmount={resumedOrder?.total ?? remainingAmount}
+        />}
 
         {/* Hidden in the resumed-order flow: that path charges the persisted
             resumedOrder.total and skips order creation, so a discount applied
@@ -3756,7 +3801,12 @@ export const CheckoutPage: React.FC = () => {
                             useThemedInput={true}
                             onChange={(val) => {
                               const newVal = typeof val === 'string' ? val : val.target.value;
-                              setNewAddressStreet(newVal);
+                              setCheckoutFields({
+                                newAddressStreet: newVal,
+                                newAddressCity: '',
+                                newAddressState: '',
+                                deliveryCoordinates: null,
+                              });
 
                               // Reset state/city if address is cleared or changed significantly
                               if (!newVal || newVal.length < 10) {
@@ -3788,29 +3838,26 @@ export const CheckoutPage: React.FC = () => {
                             }}
                             onSelect={(place: PlaceDetails) => {
                               clearInferredLocationDebounce();
-                              setNewAddressStreet(place.formattedAddress);
                               resetQuotesForAddressChange();
-                              if (
-                                Number.isFinite(place.location?.latitude) &&
-                                Number.isFinite(place.location?.longitude)
-                              ) {
-                                setDeliveryCoordinates({
-                                  latitude: place.location?.latitude ?? 0,
-                                  longitude: place.location?.longitude ?? 0,
-                                });
-                              }
-                              if (place.state) {
-                                setNewAddressState(place.state);
-                              }
-                              if (place.city) {
-                                setNewAddressCity(place.city);
-                              }
+                              setCheckoutFields({
+                                newAddressStreet: place.formattedAddress,
+                                newAddressState: place.state || '',
+                                newAddressCity: place.city || '',
+                                deliveryCoordinates:
+                                  Number.isFinite(place.location?.latitude) &&
+                                  Number.isFinite(place.location?.longitude)
+                                    ? {
+                                        latitude: place.location?.latitude ?? 0,
+                                        longitude: place.location?.longitude ?? 0,
+                                      }
+                                    : null,
+                              });
                             }}
                             placeholder="Start typing your address..."
                             country={merchantCountry}
                             className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus-visible:ring-0 focus:border-store-primary text-sm text-gray-900 placeholder:text-gray-400"
                           />
-                          {isHydrated && newAddressState && newAddressCity && (
+                          {isHydrated && isNewDeliveryAddressReady && (
                             <p className="text-xs text-green-600 flex items-center gap-1">
                               <Check size={12} /> Detected: {newAddressCity}, {newAddressState}
                             </p>
@@ -3820,7 +3867,7 @@ export const CheckoutPage: React.FC = () => {
                     </div>
 
                     {/* STEP 2: Delivery Method Cards - ONLY show AFTER address is detected */}
-                    {isHydrated && ((newAddressState && newAddressCity) || (!isNewAddressMode && selectedAddressId)) && (
+                    {canShowDeliveryMethods({ isHydrated, isNewAddressMode, selectedAddressId, city: newAddressCity, state: newAddressState }) && (
                       <>
                         <div className="mt-6 pt-4 border-t border-gray-100">
                           <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">
@@ -3845,7 +3892,8 @@ export const CheckoutPage: React.FC = () => {
                               }
                               if (
                                 method === 'pickup' &&
-                                (!isPickupEligible(newAddressState) ||
+                                (merchant?.slug !== 'ogabassey' ||
+                                  !isPickupEligible(newAddressState) ||
                                   hasMerchantPickupQuote)
                               ) {
                                 // Hide the hardcoded in-store pickup once the
@@ -3982,6 +4030,7 @@ export const CheckoutPage: React.FC = () => {
                         {deliveryMethod === 'airport' && (
                           <AirportDeliveryOptions
                             airportType={airportType}
+                            requiresProviderQuote={airportRequiresQuote}
                             city={newAddressCity}
                             state={newAddressState}
                             selectedQuoteId={selectedQuoteId}
@@ -3991,139 +4040,42 @@ export const CheckoutPage: React.FC = () => {
                             airDeliveryQuotes={airDeliveryQuotes}
                             onSelectAirportType={(type) => {
                               setAirportType(type);
+                              setCheckoutField('airportRequiresQuote', false);
                               setSelectedQuoteId('');
                             }}
-                            onSelectQuote={setSelectedQuoteId}
+                            onSelectQuote={(id) => {
+                              setCheckoutField('airportRequiresQuote', true);
+                              setSelectedQuoteId(id);
+                            }}
                           />
                         )}
 
                         {/* Door Delivery - Quote Selector */}
                         {deliveryMethod === 'door' && (
-                          <div className="mt-6 border-t border-gray-100 pt-4">
-                            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">
-                              Select Delivery Option
-                            </label>
-
-                            {/* Keep the async delivery-options area at a stable
-                                height. Multiple quotes scroll inside the box
-                                instead of growing it after the loader swap. */}
-                            <div className="h-[320px] overflow-y-auto overscroll-contain pr-1">
-                            {isLoadingQuotes ? (
-                              <SmartQuoteLoader />
-                            ) : doorDeliveryQuotes.length > 0 ? (
-                              <div className="space-y-3">
-                                {doorDeliveryQuotes.map((quote) => (
-                                  <label
-                                    key={quote.id}
-                                    className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer hover:border-store-primary/60 transition-all focus-within:ring-2 focus-within:ring-store-primary focus-within:ring-offset-2 ${selectedQuoteId === quote.id
-                                      ? 'border-store-primary bg-store-primary/5 ring-1 ring-store-primary'
-                                      : 'border-gray-100 bg-white'
-                                      }`}
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <input
-                                        type="radio"
-                                        name="shipping_quote"
-                                        checked={selectedQuoteId === quote.id}
-                                        onChange={() => setSelectedQuoteId(quote.id)}
-                                        className="size-4 text-store-primary focus:ring-store-primary border-gray-300"
-                                      />
-                                      <div>
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-sm font-bold text-gray-900">{quote.displayName}</span>
-                                          {isMerchantQuote(quote) ? (
-                                            <span className="inline-flex items-center gap-1 text-[10px] bg-store-primary/10 text-store-primary px-1.5 py-0.5 rounded font-bold">
-                                              <Store size={11} /> Store
-                                            </span>
-                                          ) : (
-                                            <>
-                                              {quote.carrierName.includes('GIG') && <span className="text-[10px] bg-black text-white px-1.5 py-0.5 rounded font-bold">GIGL</span>}
-                                              {quote.carrierName.includes('Topship') && <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold">Best Value</span>}
-                                            </>
-                                          )}
-                                        </div>
-                                        {getDeliveryEstimateLabel(quote) && (
-                                          <p className="text-xs text-gray-500 mt-0.5">
-                                            Est. Delivery: {getDeliveryEstimateLabel(quote)}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <span className="font-bold text-sm text-gray-900">
-                                      {formatAmountInCurrency(quote.price, quote.currency, AUTO_FRACTION_OPTIONS)}
-                                    </span>
-                                  </label>
-                                ))}
-                              </div>
-                            ) : stationPickupQuote ? (
-                              <div className="rounded-xl border border-store-primary/20 bg-store-primary/5 p-5">
-                                <div className="flex items-start gap-3">
-                                  <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-store-primary/10 text-store-primary">
-                                    <Building2 size={22} />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <h4 className="text-sm font-bold text-store-background-text">
-                                      {getPickupStationCopy(stationPickupQuote).doorUnavailableTitle}
-                                    </h4>
-                                    <p className="mt-1 text-xs text-store-background-text/65">
-                                      {getPickupStationCopy(stationPickupQuote).doorUnavailableBody}
-                                    </p>
-                                    <p className="mt-3 text-xs font-medium text-store-background-text">
-                                      {getStationPickupAddressText(stationPickupQuote) ||
-                                        stationPickupQuote.displayName}
-                                    </p>
-                                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                      <span className="text-sm font-bold text-store-background-text">
-                                        {formatAmountInCurrency(stationPickupQuote.price, stationPickupQuote.currency, AUTO_FRACTION_OPTIONS)}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedQuoteId(stationPickupQuote.id);
-                                          setDeliveryMethod('pickup_station');
-                                        }}
-                                        className="inline-flex items-center justify-center rounded-full bg-store-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-store-primary/90"
-                                      >
-                                        {getPickupStationCopy(stationPickupQuote).chooseButtonLabel}
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (newAddressState && newAddressCity) {
-                                    fetchShippingQuotes(
-                                      newAddressStreet || `${newAddressCity}, ${newAddressState}`,
-                                      newAddressState,
-                                      newAddressCity,
-                                      customerPhone,
-                                      firstName,
-                                      lastName,
-                                      customerEmail
-                                    );
-                                  }
-                                }}
-                                className="w-full bg-linear-to-r from-amber-50 to-orange-50 border-2 border-dashed border-amber-300 rounded-xl p-5 flex flex-col items-center gap-3 hover:border-amber-400 hover:shadow-md transition-all group cursor-pointer"
-                              >
-                                <div className="size-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
-                                  <Truck size={24} />
-                                </div>
-                                <div className="text-center">
-                                  <h4 className="text-sm font-bold text-gray-900">🚚 Oops! Rates took a detour</h4>
-                                  <p className="text-xs text-amber-700 mt-1">
-                                    Our delivery partners are a bit slow today. Tap here to try again!
-                                  </p>
-                                </div>
-                                <span className="text-xs font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full group-hover:bg-amber-200 transition-colors">
-                                  ↻ Refresh Rates
-                                </span>
-                              </button>
-                            )}
-                            </div>
-                          </div>
+                          <DoorDeliveryQuoteOptions
+                            isLoadingQuotes={isLoadingQuotes}
+                            doorDeliveryQuotes={doorDeliveryQuotes}
+                            stationPickupQuote={stationPickupQuote}
+                            selectedQuoteId={selectedQuoteId}
+                            onSelectQuote={setSelectedQuoteId}
+                            onSelectStationPickup={(quoteId) => {
+                              setSelectedQuoteId(quoteId);
+                              setDeliveryMethod('pickup_station');
+                            }}
+                            onRefreshRates={() => {
+                              if (isNewDeliveryAddressReady) {
+                                fetchShippingQuotes(
+                                  newAddressStreet,
+                                  newAddressState,
+                                  newAddressCity,
+                                  customerPhone,
+                                  firstName,
+                                  lastName,
+                                  customerEmail,
+                                );
+                              }
+                            }}
+                          />
                         )}
                       </>
                     )}
@@ -4154,7 +4106,7 @@ export const CheckoutPage: React.FC = () => {
               paymentTab={paymentTab}
               setPaymentTab={setPaymentTab}
               paymentMethod={paymentMethod}
-              setPaymentMethod={setPaymentMethod}
+              setPaymentMethod={selectPaymentMethod}
               isProcessing={isProcessing}
               isPayForMeValid={isPayForMeValid}
               isDeliveryValid={isDeliveryValid}
@@ -4170,6 +4122,10 @@ export const CheckoutPage: React.FC = () => {
               remainingAmount={remainingAmount}
               orderAmount={total}
               currency={currencyCode}
+              redvaultAvailable={redvaultAvailability.available}
+              redvaultStatus={redvaultStatus}
+              redvaultSummary={redvaultSummary}
+              redvaultOrderReady={Boolean(redvaultOrderReady)}
             />
 
           </div>
@@ -4270,7 +4226,7 @@ export const CheckoutPage: React.FC = () => {
                 )}
 
                 {/* Wallet Credit Section (2025: progressive disclosure - only show if balance > 0 or loading). NGN-ledger: hidden on non-NGN orders. */}
-                {walletCurrencySupported && (walletLoading || walletBalance > 0) && user && (
+                {paymentMethod !== 'uba_redvault' && walletCurrencySupported && (walletLoading || walletBalance > 0) && user && (
                   <div className="py-2 animate-in fade-in">
                     {walletLoading ? (
                       <div className="flex items-center gap-2 text-gray-500">
@@ -4317,11 +4273,11 @@ export const CheckoutPage: React.FC = () => {
                 {/* Total or Amount Due */}
                 <div className="flex justify-between text-gray-900 font-bold text-lg">
                   <span>
-                    {remainingAmount > 0 && payWithWallet
+                    {remainingAmount > 0 && checkoutValues.payWithWallet
                       ? 'Amount Due'
                       : 'Total'}
                   </span>
-                  <span>{formatCurrencyAuto(remainingAmount)}</span>
+                  <span>{paymentMethod === 'uba_redvault' ? (redvaultSummary ? formatCurrencyAuto(redvaultSummary.payableKobo / 100) : 'Confirmed after order validation') : formatCurrencyAuto(remainingAmount)}</span>
                 </div>
               </div>
 

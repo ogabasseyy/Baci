@@ -21,6 +21,7 @@ interface CheckoutBottomActionProps {
   itemCount: number;
   onContinue: () => void;
   onPlaceOrder: () => void;
+  prizeSimulation?: boolean;
   selectedPayment: PaymentMethodType | null;
   step: CheckoutStep;
   total: number;
@@ -36,20 +37,23 @@ export function CheckoutBottomAction({
   itemCount,
   onContinue,
   onPlaceOrder,
+  prizeSimulation = false,
   selectedPayment,
   step,
   total,
 }: CheckoutBottomActionProps) {
   const isReview = step === 'review';
-  const isReviewDisabled = isProcessing || !selectedPayment;
+  const isReviewDisabled =
+    isProcessing || (!prizeSimulation && !selectedPayment);
   const isActionDisabled = isReview ? isReviewDisabled : !canContinue;
   const useDisabledAppearance = isActionDisabled && !isProcessing;
   const actionColor = useDisabledAppearance ? colors.muted : BRAND.primary;
   const actionTextColor = useDisabledAppearance
     ? colors.textSecondary
     : BRAND.onPrimary;
-  const reviewLabel =
-    selectedPayment === 'invoice'
+  const reviewLabel = prizeSimulation
+    ? 'Complete test checkout'
+    : selectedPayment === 'invoice'
       ? 'Generate Invoice'
       : selectedPayment === 'payforme'
         ? 'Pay for Me'
@@ -86,7 +90,9 @@ export function CheckoutBottomAction({
           accessibilityRole="button"
           accessibilityLabel={
             isReview
-              ? `${selectedPayment === 'invoice' ? 'Generate invoice' : selectedPayment === 'payforme' ? 'Prepare pay for me order' : 'Place order'} for ${formatPrice(total)}`
+              ? prizeSimulation
+                ? 'Complete test prize checkout'
+                : `${selectedPayment === 'invoice' ? 'Generate invoice' : selectedPayment === 'payforme' ? 'Prepare pay for me order' : 'Place order'} for ${formatPrice(total)}`
               : `Continue to ${step === 'address' ? 'payment' : 'review'}`
           }
           accessibilityState={{

@@ -20,6 +20,7 @@ describe('getQuizMobileAdsConfig', () => {
       })
     ).toEqual({
       bannerUnitId: 'ca-app-pub-3940256099942544/9214589741',
+      rewardedUnitId: 'ca-app-pub-3940256099942544/5224354917',
       enabled: true,
     });
     expect(
@@ -30,6 +31,7 @@ describe('getQuizMobileAdsConfig', () => {
       })
     ).toEqual({
       bannerUnitId: 'ca-app-pub-3940256099942544/2435281174',
+      rewardedUnitId: 'ca-app-pub-3940256099942544/1712485313',
       enabled: true,
     });
   });
@@ -50,6 +52,10 @@ describe('getQuizMobileAdsConfig', () => {
         'ca-app-pub-1234567890123456/3333333333',
       EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID:
         'ca-app-pub-1234567890123456/4444444444',
+      EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID:
+        'ca-app-pub-1234567890123456/5555555555',
+      EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID:
+        'ca-app-pub-1234567890123456/6666666666',
       EXPO_PUBLIC_QUIZ_ADS_ENABLED: 'true',
     };
 
@@ -61,6 +67,7 @@ describe('getQuizMobileAdsConfig', () => {
       })
     ).toEqual({
       bannerUnitId: 'ca-app-pub-1234567890123456/3333333333',
+      rewardedUnitId: 'ca-app-pub-1234567890123456/5555555555',
       enabled: true,
     });
     expect(
@@ -71,6 +78,24 @@ describe('getQuizMobileAdsConfig', () => {
       })
     ).toEqual({
       bannerUnitId: 'ca-app-pub-1234567890123456/4444444444',
+      rewardedUnitId: 'ca-app-pub-1234567890123456/6666666666',
+      enabled: true,
+    });
+  });
+
+  it('keeps the banner placement enabled when a production rewarded ID is absent', () => {
+    expect(
+      getQuizMobileAdsConfig({
+        development: false,
+        environment: {
+          EXPO_PUBLIC_QUIZ_ADS_ENABLED: 'true',
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID:
+            'ca-app-pub-1234567890123456/3333333333',
+        },
+        platform: 'android',
+      })
+    ).toEqual({
+      bannerUnitId: 'ca-app-pub-1234567890123456/3333333333',
       enabled: true,
     });
   });

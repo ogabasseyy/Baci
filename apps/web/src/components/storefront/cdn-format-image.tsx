@@ -50,15 +50,26 @@ export type CdnFormatImageProps = Omit<
   // state need it to detect images that were already `complete` before
   // hydration attached onLoad (SSR'd native <img> + warm browser cache).
   ref?: Ref<HTMLImageElement>;
+  /**
+   * Render the universal `<img>` tier only, skipping the AVIF `<source>`
+   * (and its preload). For surfaces swapped in over an already-fetched
+   * JPEG — e.g. the homepage grid after its AVIF-free static fallback —
+   * so the browser reuses the cached bytes instead of downloading the
+   * same image again in another format.
+   */
+  disableAvifTier?: boolean;
 };
 
 export function CdnFormatImage({
   onError,
   onLoad,
   ref,
+  disableAvifTier = false,
   ...input
 }: CdnFormatImageProps) {
-  const { avifSource, imgProps } = getOgabasseyImageFormatProps(input);
+  const { avifSource: computedAvifSource, imgProps } =
+    getOgabasseyImageFormatProps(input);
+  const avifSource = disableAvifTier ? null : computedAvifSource;
   const [failedAvifSrcSet, setFailedAvifSrcSet] = useState<string | null>(null);
   const isAvifDisabled =
     avifSource !== null && failedAvifSrcSet === avifSource.srcSet;

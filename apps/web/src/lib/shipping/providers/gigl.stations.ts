@@ -249,7 +249,6 @@ export class GiglStationsService {
 
     const hasCoordinates =
       Number.isFinite(location.latitude) && Number.isFinite(location.longitude);
-    if (cityStation && !options?.preferNearest) return { station: cityStation };
 
     if (hasCoordinates && this.nearestDirectoryLookup) {
       try {

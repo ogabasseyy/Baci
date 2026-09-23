@@ -23,6 +23,7 @@ import {
   WelcomeHeader,
 } from '@/components/dashboard';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useAdminTabScrollToTop } from '@/hooks/useAdminTabScrollToTop';
 import { type TimePeriod, useDashboardStats } from '@/hooks/useDashboardStats';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useOrders } from '@/hooks/useOrders';
@@ -63,6 +64,7 @@ function formatMetric(value: number): string {
 }
 
 export default function HomeScreen() {
+  const scrollRef = useAdminTabScrollToTop<ScrollView>('index');
   if (__DEV__) {
     console.log('[HomeScreen] Rendering');
   }
@@ -191,6 +193,7 @@ export default function HomeScreen() {
       edges={['top']}
     >
       <ScrollView
+        ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}

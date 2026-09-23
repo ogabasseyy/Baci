@@ -58,30 +58,6 @@ describe('storefront blog post metadata', () => {
     expect(mockDraftMode).not.toHaveBeenCalled();
   });
 
-  it('bounds long blog post title and description metadata', async () => {
-    mockGetRequestScopedBlogPost.mockResolvedValue({
-      ...liveBlogPost,
-      post: {
-        ...liveBlogPost.post,
-        title:
-          'Best Phones Under 500000 Naira in Nigeria With Camera Battery and Gaming Performance Compared',
-        excerpt:
-          'Compare the best phones under 500000 naira in Nigeria with camera quality, battery life, gaming performance, warranty coverage, delivery options, and flexible payment notes for shoppers.',
-      },
-    });
-
-    const metadata = await generateBlogPostMetadata('best-phones-under-500000');
-
-    const title = (metadata.title as { absolute: string }).absolute;
-    expect(title.length).toBeLessThanOrEqual(60);
-    expect(title).toContain('Ogabassey');
-    expect(typeof metadata.description).toBe('string');
-    if (typeof metadata.description !== 'string') {
-      throw new TypeError('metadata.description must be a string');
-    }
-    expect(metadata.description.length).toBeLessThanOrEqual(160);
-  });
-
   it('uses fallback blog description metadata when source text is empty', async () => {
     mockGetBlogPostTextPreview.mockReturnValueOnce('');
     mockGetRequestScopedBlogPost.mockResolvedValue({

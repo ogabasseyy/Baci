@@ -122,7 +122,7 @@ export function useBNPLCheckoutController({
     getAppNavigation().returnToApp();
   };
 
-  const handleNavigationUrl = (url: string) => {
+  const handleNavigationUrl = async (url: string) => {
     const effect = resolveBNPLNavigationUrlEffect(url, {
       apiBaseUrl,
       merchantDomain,
@@ -140,7 +140,7 @@ export function useBNPLCheckoutController({
 
     setCheckoutStatus(effect.status);
     if (effect.status === 'success') {
-      clearCart();
+      await clearCart();
       getAppNavigation().scheduleOrderSuccess({
         gateway,
         orderId,

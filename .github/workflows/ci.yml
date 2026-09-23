@@ -39,13 +39,13 @@ jobs:
       cwv_runner: ${{ steps.gate.outputs.cwv_runner }}
       deploy_scripts: ${{ steps.gate.outputs.deploy_scripts }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).
-      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         if: github.event_name != 'merge_group'
         with:
@@ -99,7 +99,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -118,7 +118,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -141,7 +141,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
@@ -169,7 +169,7 @@ jobs:
     # summary and Actions post-job cleanup.
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
@@ -231,7 +231,7 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5, 6]
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           # The full web suite verifies immutable historical event-pipeline
@@ -240,6 +240,14 @@ jobs:
           filter: ''
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
+      - name: Hydrate storefront inventory authority
+        run: |
+          set -euo pipefail
+          source_sha="$(jq -r '.originMainSha' docs/superpowers/evidence/storefront-edge/task-1a-inventory.json)"
+          if ! git cat-file -e "${source_sha}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$source_sha"
+          fi
+          git cat-file -e "${source_sha}^{commit}"
       - name: Run web vitest shard
         run: pnpm --filter @baci/web exec vitest run --shard=${{ matrix.shard }}/6
 
@@ -252,7 +260,7 @@ jobs:
     env:
       BACI_REPLAY_COMMAND_TIMEOUT_MS: 1800000
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
@@ -294,6 +302,8 @@ jobs:
           --sql-check supabase/tests/storefront_pdp_preflight_relation_category.sql
           --sql-check supabase/tests/storefront_cluster_guide_candidates_rpc.sql
           --sql-check supabase/tests/storefront_cluster_guide_classifier_behavior.sql
+          --sql-check supabase/tests/storefront_comparison_revisions.sql
+          --sql-check supabase/tests/storefront_comparison_revision_trigger_coverage.sql
           --sql-check supabase/migrations/tests/admin_order_transaction_discount_cleanup.sql
           --sql-check supabase/migrations/tests/persist_quiz_award_amount_snapshot.sql
           --sql-check supabase/tests/search_products_not_archived_nulls.sql
@@ -309,6 +319,19 @@ jobs:
           --sql-check supabase/migrations/tests/quiz_runtime_gate_stale_health_v2.sql
           --sql-check supabase/migrations/tests/quiz_score_repair_quiescence_gate_v2.sql
           --sql-check supabase/migrations/tests/public_shipping_sender_projection.sql
+          --sql-check supabase/migrations/tests/repair_pickup_payment_confirmation.sql
+          --sql-check supabase/migrations/tests/repair_pickup_receiver_projection.sql
+          --sql-check supabase/migrations/tests/find_resumable_repair_pickup.sql
+          --sql-check supabase/migrations/tests/claim_repair_pickup_booking_terminal.sql
+          --sql-check supabase/migrations/tests/claim_repair_pickup_booking_manual_fulfilled.sql
+          --sql-check supabase/migrations/tests/normalize_nigerian_repair_pickup_receiver_phone.sql
+          --sql-check supabase/migrations/tests/repair_pickup_receiver_fulfillment.sql
+          --sql-check supabase/migrations/tests/gigl_tracking_orderless_repair_unlink.sql
+          --sql-check supabase/tests/uba_redvault_refund_inventory_p1_regressions.sql
+          --sql-check supabase/migrations/tests/manual_order_document_date_sync.sql
+          --sql-check supabase/tests/feed_offer_manifest_offer_change_regressions.sql
+          --sql-check supabase/migrations/tests/normalize_product_key_specs_gpu.sql
+          --sql-check supabase/migrations/tests/santa_catalog_projection.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL
@@ -323,12 +346,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
+      - name: Run backfill scripts unit tests
+        run: pnpm exec vitest run scripts/lib
       - name: Test Migration Version Guard
         run: bash .github/scripts/check-migration-versions.test.sh
       - name: Test Migration Applier Collision Handling
@@ -338,6 +363,8 @@ jobs:
       - name: Run CI Test Planner Unit Tests
         if: needs.changes.outputs.web == 'true'
         run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs
+      - name: Verify iOS native patch contracts
+        uses: ./.github/actions/verify-ios-native-patch-contracts
       - name: Run storefront origin cost-contract tests
         if: needs.changes.outputs.web == 'true'
         run: >-
@@ -354,6 +381,8 @@ jobs:
           .github/scripts/deploy-with-retry-current-main.test.mjs
           .github/scripts/deploy-with-retry.test.mjs
           .github/scripts/run-pinned-vercel.test.mjs
+          .github/scripts/assert-vercel-pulled-sensitive-env.test.mjs
+          .github/scripts/ensure-vercel-sensitive-env.test.mjs
           .github/scripts/inject-prebuilt-env-secret.jwk.test.mjs
           .github/scripts/inject-prebuilt-env-secret.test.mjs
           .github/scripts/sync-cloudflare-vercel-production-env.test.mjs
@@ -430,7 +459,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -494,7 +523,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - if: needs.changes.outputs.mobile_admin == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
@@ -525,7 +554,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none

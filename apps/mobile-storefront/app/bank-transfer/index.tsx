@@ -136,12 +136,12 @@ export default function BankTransferScreen() {
   const merchantSlug = walletRouteData?.merchantSlug;
   const isWalletFunded = validatedParams.mode === 'wallet_funded';
 
-  const routeToOrderSuccess = ({
+  const routeToOrderSuccess = async ({
     successReference,
   }: {
     successReference?: string;
   }) => {
-    clearCart();
+    await clearCart();
     try {
       const persistOpts = useCartStore.persist.getOptions();
       const partialize = persistOpts.partialize ?? ((state: unknown) => state);

@@ -26,5 +26,6 @@ SELECT set_config('request.jwt.claim.role', 'anon', true);
 \ir storefront_public_read_snapshots/006_merchant_assertions.sql
 \ir storefront_public_read_snapshots/007_pdp_assertions.sql
 \ir storefront_public_read_snapshots/008_semantic_enrichment_assertions.sql
+\ir storefront_public_read_snapshots/009_semantic_read_indexes.sql
 
 ROLLBACK;

@@ -55,7 +55,7 @@ vi.mock('@/lib/builder-ai/materialize-builder-ai-provider-chain', () => ({
 import { POST } from './route';
 
 const providers = [
-  { model: { id: 'cerebras' } as never, name: 'cerebras:gemma-4-31b' },
+  { model: { id: 'google' } as never, name: 'google:gemma-4-31b-it' },
   { model: { id: 'groq' } as never, name: 'groq:openai/gpt-oss-120b' },
 ];
 
@@ -120,7 +120,7 @@ describe('legacy builder route auth and CSRF boundary', () => {
     vi.unstubAllEnvs();
   });
 
-  it('authenticates cookie callers with valid CSRF before retrying Cerebras', async () => {
+  it('authenticates cookie callers with valid CSRF before retrying Google', async () => {
     ai.generateText
       .mockRejectedValueOnce(new Error('primary unavailable'))
       .mockResolvedValueOnce(fallbackPlan());
@@ -145,10 +145,10 @@ describe('legacy builder route auth and CSRF boundary', () => {
     });
   });
 
-  it('retries Cerebras before using Groq and preserves the legacy config response', async () => {
+  it('retries Google before using Groq and preserves the legacy config response', async () => {
     ai.generateText
-      .mockRejectedValueOnce(new Error('cerebras transient failure'))
-      .mockRejectedValueOnce(new Error('cerebras transient failure'))
+      .mockRejectedValueOnce(new Error('google transient failure'))
+      .mockRejectedValueOnce(new Error('google transient failure'))
       .mockResolvedValueOnce(fallbackPlan());
 
     const response = await POST(

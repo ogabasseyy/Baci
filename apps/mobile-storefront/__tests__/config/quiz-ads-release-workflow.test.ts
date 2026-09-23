@@ -10,6 +10,10 @@ const releaseWorkflows = [
     ],
     name: 'Android',
     oppositeBannerUnitSecret: 'EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID',
+    rewardedUnitSecrets: [
+      'EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID',
+      'EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID',
+    ],
     path: '../../../../.github/workflows/android-storefront-release.yml',
     platform: 'android',
   },
@@ -18,6 +22,10 @@ const releaseWorkflows = [
     buildPhases: ['Generate iOS project via Expo prebuild', 'Fastlane release'],
     name: 'iOS',
     oppositeBannerUnitSecret: 'EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID',
+    rewardedUnitSecrets: [
+      'EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID',
+      'EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID',
+    ],
     path: '../../../../.github/workflows/ios-storefront-release.yml',
     platform: 'ios',
   },
@@ -53,6 +61,7 @@ describe('quiz ads in storefront release workflows', () => {
     oppositeBannerUnitSecret,
     path: workflowPath,
     platform,
+    rewardedUnitSecrets,
   }) => {
     const workflowSource = readFileSync(
       path.resolve(__dirname, workflowPath),
@@ -70,6 +79,13 @@ describe('quiz ads in storefront release workflows', () => {
           [oppositeBannerUnitSecret]: 'configured',
         })
       ).toBe('false');
+      for (const rewardedUnitSecret of rewardedUnitSecrets) {
+        expect(stepSource).toMatch(
+          new RegExp(
+            `${rewardedUnitSecret}:\\s*\\$\\{\\{\\s*secrets\\.${rewardedUnitSecret}\\s*\\}\\}`
+          )
+        );
+      }
     }
 
     expect(workflowSource).not.toContain(

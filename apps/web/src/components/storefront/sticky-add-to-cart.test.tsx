@@ -21,7 +21,7 @@ vi.mock('@/components/themed', () => ({
   ),
 }));
 
-vi.mock('@/components/ui/animated-icons', () => ({
+vi.mock('@/components/ui/quantity-button', () => ({
   QuantityButton: ({
     onClick,
     type,

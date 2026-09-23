@@ -1,5 +1,5 @@
 import { FlashList, type ListRenderItemInfo } from '@shopify/flash-list';
-import type { ReactElement } from 'react';
+import type { ReactElement, RefObject } from 'react';
 import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -19,6 +19,9 @@ interface ProductsListShellProps<T> {
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   renderItem: (info: ListRenderItemInfo<T>) => ReactElement | null;
   refreshing: boolean;
+  scrollRef?: RefObject<{
+    scrollToOffset: (options: { offset: number; animated?: boolean }) => void;
+  } | null>;
 }
 
 export function ProductsListShell<T>({
@@ -32,9 +35,11 @@ export function ProductsListShell<T>({
   onScroll,
   renderItem,
   refreshing,
+  scrollRef,
 }: ProductsListShellProps<T>) {
   return (
     <FlashList
+      ref={scrollRef as never}
       data={data}
       renderItem={renderItem}
       keyExtractor={keyExtractor}

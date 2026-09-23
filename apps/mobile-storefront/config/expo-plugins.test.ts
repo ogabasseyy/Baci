@@ -3,6 +3,51 @@ import type { ExpoConfig } from 'expo/config';
 import { createExpoPlugins } from './expo-plugins';
 
 describe('createExpoPlugins', () => {
+  it('builds iOS Expo consumers from source to prevent the build575 JSI ABI mismatch', () => {
+    const plugins = createExpoPlugins({
+      facebookSdkPlugin: null,
+      sentryPlugin: null,
+      tiktokBusinessPlugin: null,
+    });
+    const buildProperties = plugins.find(
+      (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-build-properties'
+    );
+
+    expect(buildProperties).toEqual([
+      'expo-build-properties',
+      expect.objectContaining({
+        ios: expect.objectContaining({ usePrecompiledModules: false }),
+      }),
+    ]);
+  });
+
+  it('does not set buildReactNativeFromSource; withReactNativeFromSource owns includeBuild', () => {
+    const plugins = createExpoPlugins({
+      facebookSdkPlugin: null,
+      sentryPlugin: null,
+      tiktokBusinessPlugin: null,
+    });
+    const buildPropertiesPlugin = plugins.find(
+      (plugin): plugin is [string, Record<string, unknown>] =>
+        Array.isArray(plugin) &&
+        plugin[0] === 'expo-build-properties' &&
+        typeof plugin[1] === 'object' &&
+        plugin[1] !== null &&
+        !Array.isArray(plugin[1])
+    );
+    const androidValue = buildPropertiesPlugin?.[1]?.android;
+    const android =
+      typeof androidValue === 'object' &&
+      androidValue !== null &&
+      !Array.isArray(androidValue)
+        ? (androidValue as Record<string, unknown>)
+        : undefined;
+
+    expect(android).toBeDefined();
+    expect(android).not.toHaveProperty('buildReactNativeFromSource');
+    expect(plugins).toContain('./config/withReactNativeFromSource.js');
+  });
+
   it('configures minification, resource shrinking, and class repackaging for Android release builds', () => {
     const plugins = createExpoPlugins({
       facebookSdkPlugin: null,

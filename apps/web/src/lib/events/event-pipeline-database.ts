@@ -1,19 +1,25 @@
-import { eventPipelineAdsServicePaths } from '@/lib/events/event-pipeline-ads-service-paths';
 import { eventPipelineAdminImporters } from '@/lib/events/event-pipeline-authority-paths';
+import { eventPipelineAuthorityServicePaths } from '@/lib/events/event-pipeline-authority-service-paths';
+import { eventPipelineChatCredentialPaths } from '@/lib/events/event-pipeline-chat-credential-paths';
 import { eventPipelineCredentialPaths } from '@/lib/events/event-pipeline-credential-paths';
 import {
   eventPipelineFrozenRoutes,
   frozenEventPipelineAuthoritySources,
 } from '@/lib/events/event-pipeline-frozen-authority-sources';
+import { EVENT_PIPELINE_FUNCTION_NAMES } from '@/lib/events/event-pipeline-function-names';
 import { eventPipelineJumiaCredentialPaths } from '@/lib/events/event-pipeline-jumia-credential-paths';
-import { eventPipelineJumiaServicePaths } from '@/lib/events/event-pipeline-jumia-service-paths';
 import { eventPipelineLegacySdkImporters } from '@/lib/events/event-pipeline-legacy-sdk-importers';
+import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
+import { eventPipelineRepairPickupCredentialPaths } from '@/lib/events/event-pipeline-repair-pickup-credential-paths';
+import { eventPipelineShippingCredentialPaths } from '@/lib/events/event-pipeline-shipping-credential-paths';
 import {
   eventPipelineAdminAdjacentFunctions,
   eventPipelineExpenseCleanupAdjacentFunctions,
   eventPipelineVpsRuntimeCallers,
 } from '@/lib/events/event-pipeline-vps-runtime-callers';
 import type { Database, Json } from '@/types/supabase';
+
+export { EVENT_PIPELINE_FUNCTION_NAMES };
 export function toEventPipelineJson(
   value: unknown,
   ancestors = new WeakSet<object>()
@@ -93,27 +99,6 @@ export function validateEventPipelineSelection(
       findings.push(`${path}: unauthorized ${table} column ${name}`);
   }
 }
-export const EVENT_PIPELINE_FUNCTION_NAMES = [
-  'claim_event_deliveries_v1',
-  'cleanup_domain_event_pipeline_v1',
-  'dead_letter_ingress_event_v1',
-  'enqueue_domain_event_v1',
-  'finish_event_delivery_v1',
-  'get_domain_event_queue_metrics_v1',
-  'get_event_pipeline_operations_v1',
-  'is_event_ingress_capability_v1',
-  'list_event_pipeline_deliveries_v1',
-  'list_event_pipeline_ingress_failures_v1',
-  'read_domain_events_v1',
-  'record_analytics_domain_event_v1',
-  'record_event_worker_heartbeat_v1',
-  'record_platform_domain_event_v1',
-  'replay_event_deliveries_batch_v1',
-  'replay_event_delivery_v1',
-  'replay_ingress_dead_letter_v1',
-  'route_domain_event_v1',
-  'select_event_pipeline_replay_ids_v1',
-] as const satisfies readonly (keyof Database['public']['Functions'])[];
 const columns = (value: string) => value.split(' ');
 // biome-ignore format: compact RPC ownership map preserves the 300-line verifier gate.
 const runtimeCallers = {
@@ -151,6 +136,10 @@ export const EVENT_PIPELINE_BOUNDARY = {
     credentialPaths: [
       ...eventPipelineCredentialPaths,
       ...eventPipelineJumiaCredentialPaths,
+      ...eventPipelineRepairPickupCredentialPaths,
+      ...eventPipelineRedvaultCredentialPaths,
+      ...eventPipelineShippingCredentialPaths,
+      ...eventPipelineChatCredentialPaths,
     ],
     factoryModules: [
       'apps/web/src/lib/supabase/admin.ts',
@@ -168,23 +157,23 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/app/api/orders/route.ts',
       'apps/web/src/lib/platform-admin-auth.ts',
     ],
-    servicePaths: [
-      ...eventPipelineAdsServicePaths,
-      ...eventPipelineJumiaServicePaths,
-    ],
     serviceImporters: [
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',
       'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
       'apps/web/src/app/api/cron/gigl-tracking/route.ts',
+      'apps/web/src/app/api/cron/process-redvault-refunds/route.ts',
       'apps/web/src/app/api/analytics/conversion/route.ts',
       'apps/web/src/app/api/events/route.ts',
       'apps/web/src/lib/events/event-pipeline-service-role-test-client.ts',
       'apps/web/src/lib/ads/server-credential-client.ts',
       'apps/web/src/lib/ads/server-spend-client.ts',
       'apps/web/src/lib/jumia/server-credential-client.ts',
+      'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
+      'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
     ],
+    servicePaths: eventPipelineAuthorityServicePaths,
     operationalServiceImporters: [
       'apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts',
     ],

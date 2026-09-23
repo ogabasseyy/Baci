@@ -156,6 +156,30 @@ describe('supabase-history-replay sources', () => {
     );
   });
 
+  it('registers the append-only sales collision repair for replay verification', () => {
+    expect(rows(PENDING_SOURCES)).toContain(
+      '2676132ef759384de03f6ad7eeed2f7e1e38abac02013aaca634bfb957106482 20260907111036_repair_sales_exclusion_wallet_version_collision.sql'
+    );
+  });
+
+  it('registers the public active product offers policy for replay verification', () => {
+    expect(rows(PENDING_SOURCES)).toContain(
+      '06b8543596df16e6fa5fb5d24c6c2ef7418d34845c9189853a3187f34883b7a2 20260918000000_public_active_product_offers.sql'
+    );
+  });
+
+  it('registers the offer-change feed manifest trigger for replay verification', () => {
+    expect(rows(PENDING_SOURCES)).toContain(
+      '7de47f950351dfd8945be917d091dc50fd5ca80948566b20eb617c5c43e83718 20260920200000_stale_feed_manifest_on_offer_change.sql'
+    );
+  });
+
+  it('registers the storefront order idempotency hash probe for replay verification', () => {
+    expect(rows(PENDING_SOURCES)).toContain(
+      '2e7f253690d3f5b6671934792f502c734e8bb14a914bff74cfcfec86adcba7b2 20260911200000_probe_storefront_order_idempotency_hash.sql'
+    );
+  });
+
   it('keeps the quiz-live pending-source cohort unique and lexically ordered', () => {
     const repositoryPaths = EXPECTED_QUIZ_LIVE_PENDING_SOURCES.map(
       ({ repositoryPath }) => repositoryPath

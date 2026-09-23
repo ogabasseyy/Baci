@@ -3,6 +3,7 @@ import { EXPECTED_CATALOG_CACHE_PENDING_SOURCES } from './expected-catalog-cache
 import { EXPECTED_EXPENSE_PENDING_SOURCES } from './expected-expense-pending-sources.test-support';
 import { EXPECTED_GIGL_TRACKING_HARDENING_PENDING_SOURCES } from './expected-gigl-tracking-hardening-pending-sources.test-support';
 import { EXPECTED_GIGL_TRACKING_PENDING_SOURCES } from './expected-gigl-tracking-pending-sources.test-support';
+import { EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './expected-gigl-wallet-shipping-pending-sources.test-support';
 import { EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES } from './expected-merchant-invoice-pending-sources.test-support';
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
 import { EXPECTED_PAYSTACK_PENDING_SOURCES } from './expected-paystack-pending-sources.test-support';
@@ -10,10 +11,23 @@ import { AUDIT_PENDING_SOURCES } from './expected-pending-audit-sources.test-sup
 import { PAYMENT_INGRESS_AND_PROVENANCE_PENDING_SOURCES } from './expected-pending-payment-ingress-sources.test-support';
 import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.test-fixture';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
+import { EXPECTED_REPAIR_PICKUP_PENDING_SOURCES } from './expected-repair-pickup-pending-sources.test-support';
 import { EXPECTED_SEARCH_PENDING_SOURCES } from './expected-search-pending-sources.test-support';
 import { EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES } from './expected-storefront-order-pending-sources.test-support';
 import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-outbox-pending-sources.test-fixture';
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
+import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
+
+const REDVAULT_PENDING_SOURCES = REDVAULT_PENDING_REPLAY_SOURCE_ROWS.split(
+  '\n'
+).map((row) => {
+  const [sha256, filename] = row.split(' ');
+  return {
+    repositoryPath: `supabase/migrations/${filename}`,
+    sha256,
+  };
+});
+
 export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
@@ -411,6 +425,53 @@ export const EXPECTED_PENDING_SOURCES = [
     repositoryPath:
       'supabase/migrations/20260902100000_restore_jumia_authorization_credential_rpc.sql',
     sha256: '8d048cf502721cc58c666a6651e9289b9997a3d2cdc7044c7656317c0c8b3e5e',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260831153000_optimize_storefront_pdp_semantic_reads.sql',
+    sha256: 'a402b932c082f876b44feb1cd98ef4d879641a0a5e075b52a05fb0a9b7df43dc',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260901123000_repair_storefront_semantic_inventory_indexes.sql',
+    sha256: '2999879d1a4127e4b703c8cb18a88f276ced6b2512331c1383402fdf36fff76d',
+  },
+  ...EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20260905183000_share_storefront_cache_invalidation_causal_identity.sql',
+    sha256: 'e87f8b3e8fecf098cc148d4efc75c75f62a96e0b4bdc98cdb904a91157a33c42',
+  },
+  ...EXPECTED_REPAIR_PICKUP_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20260907111036_repair_sales_exclusion_wallet_version_collision.sql',
+    sha256: '2676132ef759384de03f6ad7eeed2f7e1e38abac02013aaca634bfb957106482',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260911100000_add_storefront_comparison_revisions.sql',
+    sha256: '4c4264dd85683ca3302fd0f8cea0b01a13c8730c44b85af52b53b53028de5517',
+  },
+  ...REDVAULT_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20260918000000_public_active_product_offers.sql',
+    sha256: '06b8543596df16e6fa5fb5d24c6c2ef7418d34845c9189853a3187f34883b7a2',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260920200000_stale_feed_manifest_on_offer_change.sql',
+    sha256: '7de47f950351dfd8945be917d091dc50fd5ca80948566b20eb617c5c43e83718',
+  },
+  {
+    repositoryPath: 'supabase/migrations/20260921180000_get_santa_catalog.sql',
+    sha256: 'ccb69b3c76fc8fccdd2832177f66e2fb508afef422f554adf0ba9d792a58b19a',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260922120000_normalize_product_key_specs_gpu.sql',
+    sha256: '27140ce538838e4a31f6fbc2f9871eaa3697d02888aed5d3b360c5f68ccd2245',
   },
 ]
   .sort((left, right) =>

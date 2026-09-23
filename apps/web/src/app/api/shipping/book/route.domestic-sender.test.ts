@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { shippingQuoteEnvTestMock } from '@/lib/shipping/shipping-quote-env.test-mock';
 import {
   buildDomesticSenderBookingRequest,
   buildDomesticSenderSupabaseMock,
   domesticSenderShipmentInsertPayloads,
 } from './route.domestic-sender.test-fixtures';
+
+vi.mock('@/env', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/env')>();
+  return { ...actual, ...shippingQuoteEnvTestMock };
+});
 
 const mockCheckCsrfProtection = vi.fn();
 const mockCookies = vi.fn();
@@ -136,13 +142,25 @@ describe('bugfix: ignore request-controlled domestic sender', () => {
           receiver: {
             name: 'Jane Customer',
             phone: '+2348022222222',
-            address: '2 Customer Road',
-            city: 'Lagos',
-            state: 'Lagos',
-            country: 'Nigeria',
-            countryCode: 'NG',
+            address: '123 Queen Street West',
+            city: 'Toronto',
+            state: 'Ontario',
+            country: 'Canada',
+            countryCode: 'CA',
+            postalCode: 'M5V 3L9',
           },
-          items: [{ name: 'Phone', quantity: 1, weight: 1, value: 500000 }],
+          items: [
+            {
+              name: 'Phone',
+              quantity: 1,
+              weight: 1,
+              value: 500000,
+              hsCode: '851712',
+              length: 10,
+              width: 8,
+              height: 6,
+            },
+          ],
         },
       })
     );
@@ -165,7 +183,6 @@ describe('bugfix: ignore request-controlled domestic sender', () => {
       expect.objectContaining({
         quoteId: '33333333-3333-4333-8333-333333333333',
         providerRateId: 'GIGL_IKEJA_1',
-        quoteMetadata: { refreshed: true },
         sender: expect.objectContaining({
           city: 'Ikeja',
           state: 'Lagos',
@@ -215,13 +232,25 @@ describe('bugfix: ignore request-controlled domestic sender', () => {
           receiver: {
             name: 'Jane Customer',
             phone: '+2348022222222',
-            address: '2 Customer Road',
-            city: 'Lagos',
-            state: 'Lagos',
-            country: 'Nigeria',
-            countryCode: 'NG',
+            address: '123 Queen Street West',
+            city: 'Toronto',
+            state: 'Ontario',
+            country: 'Canada',
+            countryCode: 'CA',
+            postalCode: 'M5V 3L9',
           },
-          items: [{ name: 'Phone', quantity: 1, weight: 1, value: 500000 }],
+          items: [
+            {
+              name: 'Phone',
+              quantity: 1,
+              weight: 1,
+              value: 500000,
+              hsCode: '851712',
+              length: 10,
+              width: 8,
+              height: 6,
+            },
+          ],
         },
       })
     );

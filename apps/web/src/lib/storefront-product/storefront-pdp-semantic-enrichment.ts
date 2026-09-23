@@ -1,8 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PublishedClusterPost } from '@/lib/storefront-content/content-cluster-types';
 import type { StorefrontClusterGuideRequest } from '@/lib/storefront-content/storefront-cluster-guide-request';
+import { createStorefrontPdpSemanticCooldownResult } from '@/lib/storefront-product/create-storefront-pdp-semantic-cooldown-result';
 import { PDP_SEMANTIC_INVENTORY_LIMIT } from '@/lib/storefront-product/pdp-semantic-inventory-limit';
-import { runStorefrontPdpSemanticRpc } from '@/lib/storefront-product/storefront-pdp-semantic-rpc';
+import { runStorefrontPdpSemanticRpcWithCooldown } from '@/lib/storefront-product/run-storefront-pdp-semantic-rpc-with-cooldown';
+import { storefrontPdpSemanticReadCooldown } from '@/lib/storefront-product/storefront-pdp-semantic-read-cooldown-singleton';
 import type { StorefrontDatabase } from '@/types/storefront-database';
 import type { Json } from '@/types/supabase';
 import {
@@ -214,6 +216,10 @@ export async function readStorefrontPdpSemanticEnrichment(
   client: SupabaseClient<StorefrontDatabase>,
   input: ReadStorefrontPdpSemanticEnrichmentInput
 ): Promise<StorefrontReadResult<ProductSeoLinkData>> {
+  if (storefrontPdpSemanticReadCooldown.isCoolingDown(input.merchantId)) {
+    return createStorefrontPdpSemanticCooldownResult();
+  }
+
   const query = client.rpc('get_storefront_pdp_semantic_enrichment_v1', {
     p_category_slug: input.clusterRequest.p_category_slug,
     p_cluster_guide_limit: PDP_SEMANTIC_CLUSTER_GUIDE_LIMIT,
@@ -225,10 +231,15 @@ export async function readStorefrontPdpSemanticEnrichment(
     p_product_id: input.productId,
     p_search_query: input.clusterRequest.p_search_query,
   });
-  const { response, trace } = await runStorefrontPdpSemanticRpc(query, {
-    deadlineMs: PDP_SEMANTIC_ENRICHMENT_TOTAL_DEADLINE_MS,
-    traceThresholdMs: PDP_SEMANTIC_ENRICHMENT_TRACE_THRESHOLD_MS,
-  });
+  const { response, trace } = await runStorefrontPdpSemanticRpcWithCooldown(
+    query,
+    {
+      deadlineMs: PDP_SEMANTIC_ENRICHMENT_TOTAL_DEADLINE_MS,
+      traceThresholdMs: PDP_SEMANTIC_ENRICHMENT_TRACE_THRESHOLD_MS,
+    },
+    input.merchantId
+  );
+
   const result = resolveStorefrontReadResult({
     operation: 'pdp_semantic_enrichment',
     response,
@@ -243,7 +254,15 @@ export async function readStorefrontPdpSemanticEnrichment(
     });
   }
 
-  if (result.status === 'unavailable') return result;
+  if (result.status === 'unavailable') {
+    if (result.error.retryable) {
+      storefrontPdpSemanticReadCooldown.markFailure(input.merchantId);
+    } else {
+      storefrontPdpSemanticReadCooldown.clear(input.merchantId);
+    }
+    return result;
+  }
+  storefrontPdpSemanticReadCooldown.clear(input.merchantId);
   if (result.status === 'not_found') return unavailableIntegrityResult();
 
   const row = result.value;

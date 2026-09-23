@@ -178,6 +178,26 @@ describe('getCustomDomainForSlug', () => {
       expect(result).toBeNull();
     });
 
+    it('retains the existing negative DB fallback result for five minutes', async () => {
+      mockMaybeSingle.mockResolvedValue({ data: null });
+
+      await expect(
+        getCustomDomainForSlug('negative-not-cached')
+      ).resolves.toBeNull();
+      const firstReadCount = mockFrom.mock.calls.length;
+      vi.advanceTimersByTime(299_999);
+      await expect(
+        getCustomDomainForSlug('negative-not-cached')
+      ).resolves.toBeNull();
+
+      expect(mockFrom.mock.calls.length).toBe(firstReadCount);
+      vi.advanceTimersByTime(2);
+      await expect(
+        getCustomDomainForSlug('negative-not-cached')
+      ).resolves.toBeNull();
+      expect(mockFrom.mock.calls.length).toBeGreaterThan(firstReadCount);
+    });
+
     it('returns null on database error', async () => {
       mockMaybeSingle.mockRejectedValue(new Error('DB connection failed'));
 

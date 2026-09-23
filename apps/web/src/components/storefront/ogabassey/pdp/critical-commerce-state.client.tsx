@@ -12,16 +12,17 @@ import {
   canonicalizeVariantAxis,
 } from '@/components/storefront/ogabassey/variant-attributes';
 import { pruneSelectionsByVariantAvailability } from '@/components/storefront/ogabassey/variant-selection-pruning';
+import { recoverHiddenSelectionsFromUniqueVariant } from '@/components/storefront/ogabassey/recover-hidden-variant-selections';
 import { useCart } from '@/hooks/cart';
 import {
   buildVariantCartProduct,
   compactVariantOptions,
   DEFAULT_CRITICAL_PRICE_CURRENCY,
   getVariantAxesWithMultipleOptions,
-  normalizeCriticalVariantAttributes,
   normalizeCriticalVariantProduct,
   pickInitialSelectedAttributes,
 } from './critical-commerce-selection';
+import { buildCriticalInitialVariantIntent } from './critical-commerce-initial-intent';
 import {
   OgabasseyPdpCriticalCommerceContext,
   type OgabasseyPdpCriticalCommerceProviderProps,
@@ -57,27 +58,12 @@ export function OgabasseyPdpCriticalCommerceProvider({
   const hiddenRequiredVariantAxes = requiredVariantAxes.filter(
     (axis) => !renderableVariantAxes.includes(axis)
   );
-  const normalizedInitialVariantAttributes =
-    normalizeCriticalVariantAttributes(initialVariantSelection?.attributes);
-  const explicitVariantCondition =
-    normalizeCanonicalProductCondition(
-      normalizedInitialVariantAttributes.condition ??
-        initialVariantSelection?.condition
-    ) || undefined;
-  const normalizedInitialSelectionAttributes = explicitVariantCondition
-    ? {
-        ...normalizedInitialVariantAttributes,
-        condition: explicitVariantCondition,
-      }
-    : normalizedInitialVariantAttributes;
-  const resolverInitialVariantAttributes = Object.fromEntries(
-    Object.entries(normalizedInitialVariantAttributes).filter(
-      ([axis]) => axis !== 'condition'
-    )
-  );
-  const initialExplicitSelectedAxes = Object.keys(
-    normalizedInitialSelectionAttributes
-  );
+  const initialVariantIntent = buildCriticalInitialVariantIntent({
+    attributes: initialVariantSelection?.attributes,
+    condition: initialVariantSelection?.condition,
+    requiredAxes: [...requiredVariantAxes, ...renderableVariantAxes],
+  });
+  const explicitVariantCondition = initialVariantIntent.explicitCondition;
   // PDP opens on the cheapest buyable variant unless the route supplied an
   // explicit condition. Preserve URL intent first, then fall back to the
   // PDP-only price-first default; feeds/cart keep the shared condition-first
@@ -100,7 +86,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
     : null;
   const initialDisplayVariantSelection = selectionCartProduct.has_variants
     ? (resolveVariantDisplaySelection(selectionCartProduct, {
-        attributes: resolverInitialVariantAttributes,
+        attributes: initialVariantIntent.resolverAttributes,
         condition: explicitVariantCondition,
         variantId: initialVariantSelection?.variantId,
       }) ?? defaultVariantSelection)
@@ -109,7 +95,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
     Record<string, string>
   >(() =>
     pickInitialSelectedAttributes({
-      explicitAttributes: normalizedInitialSelectionAttributes,
+      explicitAttributes: initialVariantIntent.selectedAttributes,
       fallbackAxisOptions: variantAxisOptions,
       renderableVariantAxes,
       selection: initialDisplayVariantSelection,
@@ -119,7 +105,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
     string | undefined
   >(initialVariantSelection?.variantId);
   const [explicitSelectedAxes, setExplicitSelectedAxes] = useState<string[]>(
-    () => initialExplicitSelectedAxes
+    () => initialVariantIntent.explicitSelectedAxes
   );
   const selectedVariantCondition = selectedAttributes.condition;
   const resolverSelectedAttributes = Object.fromEntries(
@@ -227,18 +213,31 @@ export function OgabasseyPdpCriticalCommerceProvider({
       return;
     }
 
-    setSelectedVariantId(undefined);
-    setExplicitSelectedAxes((current) =>
-      current.includes(normalizedAxis) ? current : [...current, normalizedAxis]
-    );
-    setSelectedAttributes((current) => {
-      const next = { ...current, [normalizedAxis]: value.trim() };
-      return pruneSelectionsByVariantAvailability(
-        next,
+    const nextSelection = recoverHiddenSelectionsFromUniqueVariant(
+      pruneSelectionsByVariantAvailability(
+        {
+          ...selectedAttributes,
+          [normalizedAxis]: value.trim(),
+        },
         normalizedAxis,
         variants
-      );
+      ),
+      hiddenRequiredVariantAxes,
+      variants
+    );
+
+    setSelectedVariantId(undefined);
+    setExplicitSelectedAxes((current) => {
+      const nextAxes = new Set(current);
+      nextAxes.add(normalizedAxis);
+      for (const hiddenAxis of hiddenRequiredVariantAxes) {
+        if (nextSelection[hiddenAxis]?.trim()) {
+          nextAxes.add(hiddenAxis);
+        }
+      }
+      return [...nextAxes];
     });
+    setSelectedAttributes(nextSelection);
   }
 
   function handleAddToCart() {

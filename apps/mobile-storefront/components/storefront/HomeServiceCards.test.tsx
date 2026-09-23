@@ -10,6 +10,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import * as ReactNative from 'react-native';
 import { Animated, StyleSheet } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
+import { BRAND, withAlpha } from '@/constants/Colors';
 
 const mockPush = jest.fn();
 const defaultDimensions = {
@@ -53,15 +54,12 @@ function findAncestorWithWidth(instance: ReactTestInstance, width: number) {
 }
 
 describe('HomeServiceCards', () => {
-  let animationStop: jest.Mock;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    animationStop = jest.fn();
     jest.spyOn(Animated, 'loop').mockReturnValue({
       reset: jest.fn(),
       start: jest.fn(),
-      stop: animationStop,
+      stop: jest.fn(),
     } as unknown as ReturnType<typeof Animated.loop>);
   });
 
@@ -81,33 +79,15 @@ describe('HomeServiceCards', () => {
     expect(screen.getByText('SuperQuiz')).toBeTruthy();
   });
 
-  it('starts one shared moving outline animation', () => {
-    render(<HomeServiceCards />);
-
-    expect(Animated.loop).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps the moving outline out of the native animated graph', () => {
+  it('does not schedule continuous border animation while home service cards are mounted', () => {
     const timing = jest.spyOn(Animated, 'timing');
-    const rendered = render(<HomeServiceCards />);
 
-    try {
-      expect(timing).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ useNativeDriver: false })
-      );
-    } finally {
-      rendered.unmount();
-      timing.mockRestore();
-    }
-  });
-
-  it('stops the moving outline animation on unmount', () => {
-    const { unmount } = render(<HomeServiceCards />);
-
+    const { rerender, unmount } = render(<HomeServiceCards />);
+    rerender(<HomeServiceCards placement="aboveUtility" />);
     unmount();
 
-    expect(animationStop).toHaveBeenCalledTimes(1);
+    expect(Animated.loop).not.toHaveBeenCalled();
+    expect(timing).not.toHaveBeenCalled();
   });
 
   it('keeps the full-size shortcut dimensions from the mobile visual baseline', () => {
@@ -122,6 +102,8 @@ describe('HomeServiceCards', () => {
     expect(StyleSheet.flatten(card?.props.style)).toMatchObject({
       height: 42,
       width: 114,
+      borderWidth: 1,
+      borderColor: withAlpha(BRAND.primary, 0.48),
     });
   });
 

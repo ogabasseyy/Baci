@@ -148,6 +148,40 @@ describe('useUpdateOrderStatus', () => {
     );
   });
 
+  it('preserves wallet booking codes from failed status updates', async () => {
+    networkMock.getSession.mockResolvedValue({
+      data: { session: { access_token: 'token-1' } },
+    });
+    networkMock.fetch.mockResolvedValue({
+      ok: false,
+      status: 409,
+      statusText: 'Conflict',
+      text: async () =>
+        JSON.stringify({
+          error: 'Insufficient merchant wallet balance.',
+          code: 'MERCHANT_WALLET_INSUFFICIENT',
+          availableBalance: 1200,
+          chargedAmount: 4500,
+          shortfall: 3300,
+        }),
+    });
+
+    const mutation = useUpdateOrderStatus() as unknown as {
+      mutationFn: (vars: {
+        orderId: string;
+        status: string;
+      }) => Promise<unknown>;
+    };
+
+    await expect(
+      mutation.mutationFn({ orderId: 'order-1', status: 'shipped' })
+    ).rejects.toMatchObject({
+      name: 'OrderStatusUpdateError',
+      code: 'MERCHANT_WALLET_INSUFFICIENT',
+      message: 'Insufficient merchant wallet balance.',
+    });
+  });
+
   it('throws sanitized API errors from failed status updates', async () => {
     networkMock.getSession.mockResolvedValue({
       data: { session: { access_token: 'token-1' } },

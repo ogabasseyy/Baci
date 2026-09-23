@@ -105,3 +105,8 @@ describe('AirportDeliveryOptions', () => {
     expect(onSelectQuote).toHaveBeenCalledWith('air-quote');
   });
 });
+
+it('does not silently select a local fee while restoring a provider airport quote', () => {
+  renderAirportOptions({ requiresProviderQuote: true });
+  for (const radio of screen.getAllByRole('radio')) expect(radio).not.toBeChecked();
+});

@@ -4,14 +4,23 @@ import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { Hero } from '@/components/storefront/ogabassey/components/Hero';
 import type { LaunchProductSlide } from '@/components/storefront/ogabassey/components/LaunchCarousel';
-import { StoreNotPublished } from '@/components/storefront/store-not-published';
+import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-storefront';
 import { OGABASSEY_TITLE } from '@/config/ogabassey';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
+import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { resolveMerchantContextIdentifier } from '@/lib/storefront-route-identifier';
 import { OgabasseyHomeDynamicContent } from './ogabassey-home-dynamic-content';
+import { OgabasseyHomeHeroReserveFallback } from './ogabassey-home-hero-reserve-fallback';
+import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
+import { OgabasseyHomeRecoveryHero } from './ogabassey-home-recovery-hero';
 
 interface OgabasseyHomePageContentProps {
+  /** Skip Hero's H1 when a parent already committed the document title. */
+  omitDocumentHeading?: boolean;
+  /** Optional alternate layout: omit the mobile carousel while preserving
+   *  the publication-checked desktop grid. */
+  omitMobileCarousel?: boolean;
   /** Static per-route path prefix supplied by the parent. */
   pathPrefix: string;
   /** Cached shell data is safe to prepare before request resolution, but must
@@ -33,10 +42,12 @@ export function resolveOgabasseyHomePathPrefix(
 
 /**
  * Request-scoped publication boundary for the homepage shopping surface. The
- * static parent may prepare and preload slide data, but this component is the
- * sole owner of the visible Hero and its PDP links.
+ * static parent prepares slide data and critical styles; this component owns
+ * the visible product Hero, utility panel, and PDP links on both viewports.
  */
 export async function OgabasseyHomePageContent({
+  omitDocumentHeading = false,
+  omitMobileCarousel = false,
   pathPrefix,
   shellMerchantId,
   shellSlides,
@@ -58,6 +69,8 @@ export async function OgabasseyHomePageContent({
 
   const isDevelopment = process.env.NODE_ENV === 'development';
   if (!merchant.is_published && !isDevelopment) {
+    const StoreNotPublished = await loadUnpublishedStorefront();
+
     return <StoreNotPublished businessName={merchant.business_name} />;
   }
 
@@ -70,10 +83,33 @@ export async function OgabasseyHomePageContent({
   return (
     <>
       {requestMerchantShellSlides ? (
-        <Hero slides={requestMerchantShellSlides} />
-      ) : (
+        <Hero
+          prioritizeMobileHeroImage
+          omitDocumentHeading={omitDocumentHeading}
+          omitMobileCarousel={omitMobileCarousel}
+          slides={requestMerchantShellSlides}
+        />
+      ) : omitDocumentHeading ? null : (
         <h1 className="sr-only">{OGABASSEY_TITLE}</h1>
       )}
+      {!requestMerchantShellSlides ? (
+        <Suspense
+          fallback={
+            <OgabasseyHomeHeroReserveFallback
+              omitMobileCarousel={omitMobileCarousel}
+            />
+          }
+        >
+          <OgabasseyHomeRecoveryHero
+            merchant={merchant}
+            omitMobileCarousel={omitMobileCarousel}
+            productsPromise={loadOgabasseyLaunchProducts(
+              merchant.id,
+              resolveMerchantCurrencyConfig(merchant)
+            )}
+          />
+        </Suspense>
+      ) : null}
       <Suspense fallback={null}>
         <OgabasseyHomeDynamicContent
           merchant={merchant}

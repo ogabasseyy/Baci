@@ -16,6 +16,7 @@
       "path": "components/checkout/CheckoutScreenView.tsx",
       "justification": "Reviewed Android hardware-back handling, list virtualization, and monospace font selection."
     },
+    "components/quiz/QuizPrizeCheckoutSimulationScreen.tsx",
     {
       "path": "components/checkout/CheckoutScreenView.styles.ts",
       "justification": "Reviewed platform-specific monospace font selection for the crypto payment address."
@@ -247,6 +248,18 @@
     {
       "path": "lib/notifications.ts",
       "justification": "Reviewed web and Android notification channel handling."
+    },
+    {
+      "path": "config/mobile-ad-placements.ts",
+      "justification": "Reviewed Android/iOS default-platform branch for ad unit ID resolution; web and unknown platforms resolve to disabled, and all EXPO_PUBLIC_* reads use static dot notation for release inlining."
+    },
+    {
+      "path": "lib/post-order-interstitial.ts",
+      "justification": "Reviewed web guard that skips the native post-order interstitial off Android/iOS, with cancellation before presentation once checkout completes or the screen unmounts."
+    },
+    {
+      "path": "lib/quiz-start-interstitial.ts",
+      "justification": "Reviewed web guard that skips the native pre-quiz interstitial off Android/iOS, with cancellation before presentation once live play starts or the lobby unmounts."
     },
     {
       "path": "lib/performance-trace.ts",

@@ -40,17 +40,21 @@ import { isGo54Configured, registerDomain } from '@/lib/go54';
 import { verifyPayment as verifyKorapayPayment } from '@/lib/korapay';
 import { logger } from '@/lib/logger';
 import { confirmPaystackDvaByOrderAccount } from '@/lib/payments/confirm-paystack-dva-by-order-account';
+import { confirmPaystackMerchantWalletDva } from '@/lib/payments/confirm-paystack-merchant-wallet-dva';
 import { confirmPaystackWalletDvaTopUp } from '@/lib/payments/confirm-paystack-wallet-dva-top-up';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import { isMerchantInvoicePartialBalanceReview } from '@/lib/payments/is-merchant-invoice-partial-balance-review';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import { processWalletFundedOrderPayment } from '@/lib/payments/process-wallet-funded-order-payment';
+import { recordOrderUpdateFailureSettlement } from '@/lib/payments/record-order-update-failure-settlement';
 import { scheduleWalletTopUpCreditNotification } from '@/lib/payments/schedule-wallet-top-up-credit-notification';
-import { extractVerifiedGatewayFeeNgn } from '@/lib/payments/verified-gateway-fee';
 import {
   calculatePlatformFee,
   verifyTransaction as verifyPaystackPayment,
 } from '@/lib/paystack';
+import { handlePaystackMerchantWalletAssignmentFailure } from '@/lib/paystack-merchant-wallet-assignment-failure-webhook';
+import { handlePaystackMerchantWalletAssignmentSuccess } from '@/lib/paystack-merchant-wallet-assignment-success-webhook';
+import { dispatchRepairPickupPayment } from '@/lib/repairs/dispatch-repair-pickup-payment';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -638,6 +642,23 @@ export async function POST(request: NextRequest) {
       event: body.event,
     });
 
+    if (
+      gateway === 'paystack' &&
+      (body.event === 'dedicatedaccount.assign.success' ||
+        body.event === 'dedicatedaccount.assign.failed')
+    ) {
+      if (body.event === 'dedicatedaccount.assign.failed') {
+        return handlePaystackMerchantWalletAssignmentFailure(
+          createServiceClient(),
+          body as unknown as Record<string, unknown>
+        );
+      }
+      return handlePaystackMerchantWalletAssignmentSuccess(
+        createServiceClient(),
+        body as unknown as Record<string, unknown>
+      );
+    }
+
     // Extract reference and check event type based on gateway
     let reference: string;
     let isSuccessEvent = false;
@@ -778,6 +799,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (verifiedAmount) {
+      const repairPickupPayment = await dispatchRepairPickupPayment({
+        gateway,
+        gatewayResponse,
+        reference,
+        supabase,
+        verifiedAmount: verifiedAmount.amount,
+      });
+      if (repairPickupPayment) {
+        return repairPickupPayment;
+      }
+    }
+
     let resolvedAgenticTransaction: AgenticPaystackDvaTransaction | null = null;
     if (gateway === 'paystack') {
       const receiverAccountNumber = getPaystackDvaReceiverAccountNumber(body);
@@ -803,6 +837,28 @@ export async function POST(request: NextRequest) {
       // so the webhook's normal flow flips it to completed and runs
       // side effects via the A1 outbox. Ambiguous matches file a
       // `reconciliation_review` row and return 409.
+      if (!resolvedAgenticTransaction) {
+        const merchantWalletDva = await confirmPaystackMerchantWalletDva({
+          supabase,
+          accountNumber: receiverAccountNumber,
+          gatewayReference: reference,
+          verifiedAmount,
+          paystackResponse: gatewayResponse,
+        });
+        if (merchantWalletDva.kind === 'review') {
+          return NextResponse.json(merchantWalletDva.body, {
+            status: merchantWalletDva.status,
+          });
+        }
+        if (merchantWalletDva.kind === 'match') {
+          return NextResponse.json({
+            success: true,
+            balance: merchantWalletDva.balance,
+            firstCredit: merchantWalletDva.firstCredit,
+          });
+        }
+      }
+
       if (!resolvedAgenticTransaction) {
         const orderAccountResult = await confirmPaystackDvaByOrderAccount({
           supabase,
@@ -1446,6 +1502,29 @@ export async function POST(request: NextRequest) {
           wonTransactionFlip: false,
         });
 
+        // The held capture is durably recorded: acknowledge with 200 so
+        // Paystack stops redelivering. Anything else retries for 72h and
+        // re-invokes verification/review handling for settled work.
+        if (
+          finalizeOutcome.kind === 'captured_held' ||
+          finalizeOutcome.kind === 'capture_evidence_review'
+        ) {
+          return NextResponse.json(
+            {
+              code:
+                finalizeOutcome.kind === 'captured_held'
+                  ? 'REDVAULT_CAPTURE_HELD'
+                  : 'REDVAULT_CAPTURE_EVIDENCE_REVIEW',
+              error:
+                finalizeOutcome.kind === 'captured_held'
+                  ? 'Payment capture is pending eligibility confirmation'
+                  : 'Payment capture evidence requires review',
+              status: 'pending',
+            },
+            { status: 200 }
+          );
+        }
+
         if (finalizeOutcome.kind === 'inventory_failed') {
           return NextResponse.json(finalizeOutcome.payload, {
             status: finalizeOutcome.status,
@@ -1464,6 +1543,7 @@ export async function POST(request: NextRequest) {
           );
         }
         if (
+          finalizeOutcome.kind === 'capture_hold_failed' ||
           finalizeOutcome.kind === 'completion_failed' ||
           finalizeOutcome.kind === 'order_fetch_failed' ||
           finalizeOutcome.kind === 'inventory_cleanup_failed' ||
@@ -2703,6 +2783,44 @@ export async function POST(request: NextRequest) {
         wonTransactionFlip: true,
       });
 
+      // The held capture is durably recorded: acknowledge with 200 so
+      // Paystack stops redelivering. Anything else retries for 72h and
+      // re-invokes verification/review handling for settled work.
+      if (
+        finalizeOutcome.kind === 'captured_held' ||
+        finalizeOutcome.kind === 'capture_evidence_review'
+      ) {
+        return NextResponse.json(
+          {
+            code:
+              finalizeOutcome.kind === 'captured_held'
+                ? 'REDVAULT_CAPTURE_HELD'
+                : 'REDVAULT_CAPTURE_EVIDENCE_REVIEW',
+            error:
+              finalizeOutcome.kind === 'captured_held'
+                ? 'Payment capture is pending eligibility confirmation'
+                : 'Payment capture evidence requires review',
+            status: 'pending',
+          },
+          { status: 200 }
+        );
+      }
+
+      if (finalizeOutcome.kind === 'capture_hold_failed') {
+        logger.error({
+          message: 'Failed to record REDVAULT capture hold',
+          orderId: transaction.order_id,
+          error: finalizeOutcome.error,
+        });
+        return NextResponse.json(
+          {
+            code: 'ORDER_PAYMENT_COMPLETION_FAILED',
+            error: 'Order payment completion failed',
+          },
+          { status: 500 }
+        );
+      }
+
       if (finalizeOutcome.kind === 'completion_failed') {
         if (isMerchantInvoicePartialBalanceReview(finalizeOutcome.error)) {
           return NextResponse.json(
@@ -2725,38 +2843,38 @@ export async function POST(request: NextRequest) {
         // flip, unlike the historical swallow-to-200 behavior that wedged
         // ORD-260711-00NT-5.
         try {
-          const grossAmount = Number(transaction.amount) || 0;
-          const gatewayFee = extractVerifiedGatewayFeeNgn(
+          const fallbackSettlement = await recordOrderUpdateFailureSettlement({
             gateway,
-            gatewayResponse
-          );
-          const platformFee =
-            Number(transaction.platform_fee) ||
-            calculatePlatformFee(grossAmount * 100).platformFee / 100;
-          const { error: fallbackSettlementError } = await supabase.rpc(
-            'record_merchant_settlement',
-            {
-              p_merchant_id: transaction.merchant_id,
-              p_source_type: 'order',
-              p_source_id: transaction.order_id,
-              p_gateway: gateway,
-              p_gateway_reference: transaction.gateway_reference ?? reference,
-              p_gross_amount: grossAmount,
-              p_gateway_fee: gatewayFee,
-              p_platform_fee: platformFee,
-              p_description: `Order payment via ${gateway} (order update failed)`,
-              p_metadata: {
-                [`${gateway}_reference`]: reference,
-                verified_gateway_fee: gatewayFee,
-                order_update_failed: true,
+            gatewayReference: transaction.gateway_reference,
+            gatewayResponse,
+            grossAmount: Number(transaction.amount) || 0,
+            merchantId: transaction.merchant_id,
+            orderId: transaction.order_id,
+            platformFee: transaction.platform_fee,
+            reference,
+            supabase,
+          });
+          if (fallbackSettlement.kind === 'economics_load_failed') {
+            logger.error({
+              message:
+                'Failed to load order economics for completion-failure settlement fallback',
+              error: fallbackSettlement.error,
+              orderId: transaction.order_id,
+              reference,
+            });
+            return NextResponse.json(
+              {
+                code: 'ORDER_PAYMENT_COMPLETION_FAILED',
+                error: 'Order payment completion failed',
               },
-            }
-          );
-          if (fallbackSettlementError) {
+              { status: 500 }
+            );
+          }
+          if (fallbackSettlement.kind === 'settlement_failed') {
             logger.warn({
               message:
                 'record_merchant_settlement errored on order-update-fail fallback path',
-              error: fallbackSettlementError,
+              error: fallbackSettlement.error,
               orderId: transaction.order_id,
               reference,
             });

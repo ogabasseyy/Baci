@@ -9,7 +9,7 @@ interface CliLogger {
   info(message: string, summary: string): void;
 }
 
-const LOOP_DELAY_MS = 5_000;
+const LOOP_DELAY_MS = 1_000;
 type Delay = (milliseconds: number) => Promise<void>;
 
 const defaultDelay: Delay = (milliseconds) =>

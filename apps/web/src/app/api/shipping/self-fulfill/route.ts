@@ -1,8 +1,3 @@
-/**
- * Self-Fulfillment API
- * Mark an order as self-fulfilled with merchant's own shipping
- */
-
 import { type NextRequest, NextResponse } from 'next/server';
 import {
   authenticateApiRequest,
@@ -13,6 +8,7 @@ import {
   SelfFulfillmentSchema,
   SelfFulfillmentUpdateSchema,
 } from '@/schemas/shipping';
+import { mapSelfFulfillRpcError } from './map-self-fulfill-rpc-error';
 
 async function notifySelfFulfillmentStatusChange(
   customerUserId: string,
@@ -42,13 +38,15 @@ async function notifySelfFulfillmentStatusChange(
   }
 }
 
-// =============================================================================
 // POST /api/shipping/self-fulfill - Mark order as self-fulfilled
-// =============================================================================
 
 export async function POST(request: NextRequest) {
   try {
-    // CSRF protection
+    const auth = await authenticateApiRequest(request);
+    if (auth.error || !auth.user || !auth.supabase) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { valid: csrfValid, response: csrfResponse } =
       await checkCsrfProtection(request);
     if (!csrfValid) {
@@ -56,11 +54,6 @@ export async function POST(request: NextRequest) {
         csrfResponse ??
         NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
       );
-    }
-
-    const auth = await authenticateApiRequest(request);
-    if (auth.error || !auth.user || !auth.supabase) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const merchantId = await getMerchantIdForApiUser(auth.supabase);
@@ -75,7 +68,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    // Validate request
     const parseResult = SelfFulfillmentSchema.safeParse(body);
     if (!parseResult.success) {
       const details = parseResult.error.flatten();
@@ -90,7 +82,6 @@ export async function POST(request: NextRequest) {
 
     const data = parseResult.data;
 
-    // Verify the order belongs to this merchant
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .select(
@@ -104,7 +95,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
-    // Check if already shipped
     if (
       order.shipping_status === 'shipped' ||
       order.shipping_status === 'delivered'
@@ -115,7 +105,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build self-fulfillment data
     const selfFulfillmentData = {
       trackingNumber: data.trackingNumber || null,
       dispatchPhone: data.dispatchPhone ?? null,
@@ -125,24 +114,24 @@ export async function POST(request: NextRequest) {
       fulfilledBy: user.id,
     };
 
-    // Update order with self-fulfillment details
-    const { error: updateError } = await supabase
-      .from('orders')
-      .update({
-        shipping_status: 'shipped',
-        fulfillment_type: 'self',
-        self_fulfillment_data: selfFulfillmentData,
-        tracking_number: data.trackingNumber,
-        shipping_provider: data.carrierName || 'Self-Delivery',
-      })
-      .eq('id', data.orderId)
-      .eq('merchant_id', merchantId);
-
-    if (updateError) {
-      console.error('Error updating order:', updateError);
+    const { error: fulfillError } = await supabase.rpc(
+      'self_fulfill_order_with_wallet_release',
+      {
+        p_order_id: data.orderId,
+        p_self_fulfillment_data: selfFulfillmentData,
+        p_carrier_name: data.carrierName || 'Self-Delivery',
+        p_tracking_number: data.trackingNumber ?? null,
+      }
+    );
+    if (fulfillError) {
+      console.error('Error self-fulfilling order:', fulfillError);
+      const mapped = mapSelfFulfillRpcError(fulfillError);
       return NextResponse.json(
-        { error: 'Failed to update order' },
-        { status: 500 }
+        {
+          error: mapped.error,
+          ...(mapped.code ? { code: mapped.code } : {}),
+        },
+        { status: mapped.status }
       );
     }
 
@@ -196,13 +185,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// =============================================================================
 // PATCH /api/shipping/self-fulfill - Update self-fulfillment details
-// =============================================================================
 
 export async function PATCH(request: NextRequest) {
   try {
-    // CSRF protection
+    const auth = await authenticateApiRequest(request);
+    if (auth.error || !auth.user || !auth.supabase) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { valid: csrfValid, response: csrfResponse } =
       await checkCsrfProtection(request);
     if (!csrfValid) {
@@ -210,11 +201,6 @@ export async function PATCH(request: NextRequest) {
         csrfResponse ??
         NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
       );
-    }
-
-    const auth = await authenticateApiRequest(request);
-    if (auth.error || !auth.user || !auth.supabase) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const merchantId = await getMerchantIdForApiUser(auth.supabase);
@@ -242,7 +228,6 @@ export async function PATCH(request: NextRequest) {
 
     const { orderId, ...updates } = parseResult.data;
 
-    // Verify the order belongs to this merchant and is self-fulfilled
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .select('id, merchant_id, fulfillment_type, self_fulfillment_data')
@@ -261,14 +246,12 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Merge updates with existing data
     const updatedData = {
       ...order.self_fulfillment_data,
       ...updates,
       updatedAt: new Date().toISOString(),
     };
 
-    // Update order
     const { error: updateError } = await supabase
       .from('orders')
       .update({

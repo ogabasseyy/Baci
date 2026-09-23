@@ -8,11 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { HoverPrefetchLink } from '@/components/ui/hover-prefetch-link';
-import { SafeHtml } from '@/components/ui/safe-html';
-import { removeDuplicateLegacyFeaturedImage } from '@/lib/blog-legacy-featured-image-dedupe';
 import { rewriteStorefrontContentHref } from '@/lib/storefront-content-link-rewriting';
 import { isDeadStorefrontContentHref } from '@/lib/storefront-content-link-targets';
 import { getStorefrontProductHref } from '@/lib/storefront-product-href';
+import { BlogLegacyContent } from './BlogLegacyContent';
 import { BlogVideoPanel } from './BlogVideoPanel';
 import { resolveContentLinks } from './blog-content-link-resolution';
 import { buildBlogUrl, resolveBlogPostContent } from './blog-post-content';
@@ -153,16 +152,10 @@ export async function BlogPostBody({
             priorityInlineImageSrc={hasPreloadedHeroImage ? null : undefined}
           />
         ) : (
-          <SafeHtml
-            data-testid="blog-post-legacy-content"
-            html={removeDuplicateLegacyFeaturedImage(
-              legacyHtml,
-              post.featured_image_url
-            )}
+          <BlogLegacyContent
+            html={legacyHtml}
+            featuredImageUrl={post.featured_image_url}
             trustedPriorityImageSources={legacyPriorityImageSources}
-            normalizeHeadingHierarchy={true}
-            normalizeSeoAnchors={true}
-            className="prose dark:prose-invert prose-baci max-w-none w-full [&_a]:text-store-primary!"
           />
         )}
       </div>

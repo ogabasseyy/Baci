@@ -67,7 +67,8 @@ describe('useQuizPersistedRecovery terminal envelopes', () => {
       'user-1',
       'event-1',
       expect.any(Function),
-      expect.any(Function)
+      expect.any(Function),
+      expect.objectContaining({ userId: 'user-1' })
     );
     rerender({ enabled: false });
     rerender({ enabled: true });
@@ -77,7 +78,8 @@ describe('useQuizPersistedRecovery terminal envelopes', () => {
       'user-1',
       'event-2',
       expect.any(Function),
-      expect.any(Function)
+      expect.any(Function),
+      expect.objectContaining({ userId: 'user-1' })
     );
   });
 

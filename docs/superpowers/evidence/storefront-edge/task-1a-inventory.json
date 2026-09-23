@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "f415d227f45d47042ceca4482ac20cef54708290",
+  "originMainSha": "1a17267486ea25aa961a07afebe0b10d5fdcb9ec",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "1cf2facad1299dfb48176819defc2173c1072bce1f66a2e208899e39c6bcadb6",
-  "routingProxyInputSha256": "8af36ecee7646c3f5fb6f8fea671733df793705ef2598a72b51e05376c9b2ccb",
+  "routeTreeSha256": "510670933a2bc615f50c94ba44e5d799f30fda4331029234d06569550bf63121",
+  "routingProxyInputSha256": "c4fcde7d2d0b7da60c3d999e7fed95991b6438113297063523099fa4ce4d118a",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -492,20 +492,6 @@
       "routePattern": "/api/orders/update-payment-ref",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/orders/update-payment-ref/route.ts"
-    },
-    {
-      "decision": "origin_dynamic",
-      "id": "api-route:orders/[id]/route.ts",
-      "methods": [
-        "GET",
-        "HEAD",
-        "OPTIONS",
-        "PATCH"
-      ],
-      "reason": "exact_storefront_api_route",
-      "routePattern": "/api/orders/{id}",
-      "sourceKind": "api_route",
-      "sourcePath": "apps/web/src/app/api/orders/[id]/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -1286,6 +1272,18 @@
       "routePattern": "/api/storefront/orders/{id}",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/orders/[id]/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/orders/[id]/cancel/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/orders/{id}/cancel",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/orders/[id]/cancel/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -4481,52 +4479,6 @@
     },
     {
       "decision": "origin_dynamic",
-      "id": "machine:vercel-insights-script",
-      "methods": [
-        "GET",
-        "HEAD"
-      ],
-      "reason": "explicit_storefront_machine_family",
-      "routePattern": "/_vercel/insights/script.js",
-      "sourceKind": "machine_family",
-      "sourcePath": "apps/web/src/components/analytics/deferred-platform-insights.tsx"
-    },
-    {
-      "decision": "origin_dynamic",
-      "id": "machine:vercel-insights-view",
-      "methods": [
-        "POST"
-      ],
-      "reason": "explicit_storefront_machine_family",
-      "routePattern": "/_vercel/insights/view",
-      "sourceKind": "machine_family",
-      "sourcePath": "apps/web/src/components/analytics/deferred-platform-insights.tsx"
-    },
-    {
-      "decision": "origin_dynamic",
-      "id": "machine:vercel-speed-insights-script",
-      "methods": [
-        "GET",
-        "HEAD"
-      ],
-      "reason": "explicit_storefront_machine_family",
-      "routePattern": "/_vercel/speed-insights/script.js",
-      "sourceKind": "machine_family",
-      "sourcePath": "apps/web/src/components/analytics/deferred-platform-insights.tsx"
-    },
-    {
-      "decision": "origin_dynamic",
-      "id": "machine:vercel-speed-insights-vitals",
-      "methods": [
-        "POST"
-      ],
-      "reason": "explicit_storefront_machine_family",
-      "routePattern": "/_vercel/speed-insights/vitals",
-      "sourceKind": "machine_family",
-      "sourcePath": "apps/web/src/components/analytics/deferred-platform-insights.tsx"
-    },
-    {
-      "decision": "origin_dynamic",
       "id": "machine:well-known-agent-auth-claim",
       "methods": [
         "GET",
@@ -7118,6 +7070,18 @@
     },
     {
       "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{category}/graphics/{graphicsSlug}",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "storefront:(blog)/blog/[...catchAll]/route.ts:options:slug-prefixed",
       "methods": [
         "OPTIONS"
@@ -7975,6 +7939,22 @@
       }
     },
     {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/{category}/graphics/{graphicsSlug}",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
       "decision": "edge_release",
       "reason": "public_release_surface",
       "id": "storefront:(catalog)/(listing)/[category]/compare/page.tsx:slug-prefixed",
@@ -8306,5 +8286,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "6ee58d9b7b1d32a352f50cd2e07989e489abb73bfea27610592af4b6f4fd89e5"
+  "inventorySha256": "263035096099567c3b62d0c96a60c2fa762845aeb21d5c880c7a7abcccc33a45"
 }

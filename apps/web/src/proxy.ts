@@ -24,6 +24,7 @@ import {
   buildStorefrontDocumentCacheHeaders,
   type StorefrontDocumentCacheKind,
 } from '@/config/storefront-cdn-cache-control';
+import { selectStorefrontDocumentCacheKind } from '@/config/storefront-document-cache-kind';
 import { STOREFRONT_FEED_ROUTES } from '@/config/storefront-feed-routes';
 import {
   getStorefrontForwardedBotUserAgent,
@@ -356,10 +357,9 @@ function isAuthenticatedInternalRequest(request: NextRequest): boolean {
 // matches the
 // zone cache rule's existing Edge TTL (Ops-1), so freshness on custom domains
 // is unchanged until the dashboard rule is flipped to "respect origin" — after
-// which this header becomes the single source of truth. PDPs retain the 300s
-// self-healing window because high-cardinality product operations intentionally
-// purge listings only; non-policy storefronts stay Vercel-only because they
-// have no Cloudflare purge target.
+// which this header becomes the single source of truth. PDPs with an explicit
+// durable purge policy use 1800s downstream freshness; other PDPs retain 300s.
+// Non-policy storefronts stay Vercel-only because they have no Cloudflare target.
 function applyStorefrontDocumentCacheHeaders(
   response: NextResponse,
   kind: StorefrontDocumentCacheKind,
@@ -4749,16 +4749,18 @@ function applySecurityHeaders(
         routeType,
         hasQuery
       );
-    let cacheKind: StorefrontDocumentCacheKind = 'non-cacheable';
-    if (!hasAuthSessionHint && cacheable) {
-      const cachePolicy = getStorefrontPublicCachePolicy(pathname, hostname);
-      cacheKind = cachePolicy
-        ? isStorefrontPdpDocument(pathname, hostname, routeType) ||
-          !canUseLongDownstreamStorefrontCache(pathname, hostname, routeType)
-          ? 'cacheable-self-healing'
-          : 'cacheable'
-        : 'cacheable-vercel-only';
-    }
+    const cachePolicy = getStorefrontPublicCachePolicy(pathname, hostname);
+    const cacheKind = selectStorefrontDocumentCacheKind({
+      cacheable: !hasAuthSessionHint && cacheable,
+      hasPurgePolicy: Boolean(cachePolicy),
+      isPdp: isStorefrontPdpDocument(pathname, hostname, routeType),
+      durablePdpPurge: cachePolicy?.durablePdpPurge === true,
+      canUseLongCache: canUseLongDownstreamStorefrontCache(
+        pathname,
+        hostname,
+        routeType
+      ),
+    });
     applyStorefrontDocumentCacheHeaders(
       response,
       cacheKind,

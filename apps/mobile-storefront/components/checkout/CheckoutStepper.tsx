@@ -21,6 +21,7 @@ interface CheckoutStepperProps {
   itemCount: number;
   colors: ColorsScheme;
   isDark: boolean;
+  isPrizeSimulation?: boolean;
 }
 
 export function CheckoutStepper({
@@ -29,8 +30,12 @@ export function CheckoutStepper({
   itemCount,
   colors,
   isDark,
+  isPrizeSimulation = false,
 }: CheckoutStepperProps) {
-  const currentIndex = ALL_STEPS.indexOf(step);
+  const steps: readonly CheckoutStep[] = isPrizeSimulation
+    ? ['address', 'review']
+    : ALL_STEPS;
+  const currentIndex = Math.max(0, steps.indexOf(step));
 
   return (
     <View style={styles.stepIndicator}>
@@ -53,7 +58,7 @@ export function CheckoutStepper({
         </View>
       </View>
       <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>
-        Step {currentIndex + 1} of 3
+        Step {currentIndex + 1} of {steps.length}
       </Text>
       <View
         style={[
@@ -68,12 +73,12 @@ export function CheckoutStepper({
         <View
           style={[
             styles.stepProgressActive,
-            { width: `${((currentIndex + 1) / 3) * 100}%` },
+            { width: `${((currentIndex + 1) / steps.length) * 100}%` },
           ]}
         />
       </View>
       <View style={styles.stepPills}>
-        {ALL_STEPS.map((s, index) => {
+        {steps.map((s, index) => {
           const isActive = s === step;
           const isCompleted = index < currentIndex;
           const isClickable = index <= currentIndex;

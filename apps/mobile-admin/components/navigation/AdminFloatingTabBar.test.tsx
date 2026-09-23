@@ -6,7 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminFloatingTabBar } from './AdminFloatingTabBar';
 
 const navigationMocks = vi.hoisted(() => ({
+  scrollAdminTabToTop: vi.fn(),
   useWarmAdminTabScreens: vi.fn(),
+}));
+
+vi.mock('@/lib/admin-tab-scroll-to-top', () => ({
+  scrollAdminTabToTop: navigationMocks.scrollAdminTabToTop,
 }));
 
 vi.mock('./useWarmAdminTabScreens', () => ({
@@ -178,7 +183,7 @@ function styleContains(
   );
 }
 
-function createProps(): BottomTabBarProps {
+function createProps(focusedIndex = 0): BottomTabBarProps {
   const routes = [
     { key: 'index-key', name: 'index', params: {} },
     { key: 'orders-key', name: 'orders', params: { status: 'open' } },
@@ -236,7 +241,7 @@ function createProps(): BottomTabBarProps {
     },
     state: {
       history: [],
-      index: 0,
+      index: focusedIndex,
       key: 'admin-tabs-key',
       routeNames: routes.map((route) => route.name),
       routes,
@@ -343,5 +348,65 @@ describe('AdminFloatingTabBar', () => {
     fireEvent.click(ordersTab);
 
     expect(props.navigation.dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not scroll on one press of the focused tab', () => {
+    render(<AdminFloatingTabBar {...createProps()} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Home' }));
+    expect(navigationMocks.scrollAdminTabToTop).not.toHaveBeenCalled();
+  });
+
+  it('scrolls after a focused tab is pressed twice quickly', () => {
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValue(100);
+    render(<AdminFloatingTabBar {...createProps()} />);
+    const homeTab = screen.getByRole('tab', { name: 'Home' });
+
+    fireEvent.click(homeTab);
+    now.mockReturnValue(300);
+    fireEvent.click(homeTab);
+
+    expect(navigationMocks.scrollAdminTabToTop).toHaveBeenCalledOnce();
+    expect(navigationMocks.scrollAdminTabToTop).toHaveBeenCalledWith('index');
+    now.mockRestore();
+  });
+
+  it('bugfix: counts pressIn tab-switch as first double-tap press', () => {
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValue(100);
+    const { rerender } = render(<AdminFloatingTabBar {...createProps()} />);
+    const ordersTab = screen.getByRole('tab', { name: 'Orders' });
+
+    fireEvent.mouseDown(ordersTab);
+    fireEvent.click(ordersTab);
+
+    rerender(<AdminFloatingTabBar {...createProps(1)} />);
+    now.mockReturnValue(300);
+    fireEvent.click(screen.getByRole('tab', { name: 'Orders' }));
+
+    expect(navigationMocks.scrollAdminTabToTop).toHaveBeenCalledOnce();
+    expect(navigationMocks.scrollAdminTabToTop).toHaveBeenCalledWith('orders');
+    now.mockRestore();
+  });
+
+  it('does not scroll when the second focused press is too late', () => {
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValue(100);
+    render(<AdminFloatingTabBar {...createProps()} />);
+    const homeTab = screen.getByRole('tab', { name: 'Home' });
+
+    fireEvent.click(homeTab);
+    now.mockReturnValue(451);
+    fireEvent.click(homeTab);
+
+    expect(navigationMocks.scrollAdminTabToTop).not.toHaveBeenCalled();
+    now.mockRestore();
+  });
+
+  it('does not scroll when the second press targets a different tab', () => {
+    render(<AdminFloatingTabBar {...createProps()} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Home' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Orders' }));
+    expect(navigationMocks.scrollAdminTabToTop).not.toHaveBeenCalled();
   });
 });

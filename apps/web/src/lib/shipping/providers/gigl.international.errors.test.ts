@@ -143,7 +143,11 @@ describe('GiglProvider international quote errors', () => {
 
     expect(quotes).toHaveLength(1);
     expect(quotes[0]).toMatchObject({
-      price: 95_000,
+      price: 104_500,
+      providerCost: 95_000,
+      platformMargin: 9_500,
+      marginBasisPoints: 1000,
+      pricingVersion: 'gigl_platform_margin_v1',
       providerRateId: 'GIGL_INTL_2_1_3_1',
     });
   });

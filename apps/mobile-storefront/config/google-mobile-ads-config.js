@@ -9,6 +9,14 @@ const SAMPLE_BANNER_UNIT_IDS = new Set([
   'ca-app-pub-3940256099942544/9214589741',
   'ca-app-pub-3940256099942544/2435281174',
 ]);
+const SAMPLE_REWARDED_UNIT_IDS = new Set([
+  'ca-app-pub-3940256099942544/5224354917',
+  'ca-app-pub-3940256099942544/1712485313',
+]);
+const SAMPLE_UNIT_IDS = new Set([
+  ...SAMPLE_BANNER_UNIT_IDS,
+  ...SAMPLE_REWARDED_UNIT_IDS,
+]);
 const TRACKING_USAGE_DESCRIPTION =
   'We use your activity to measure advertising performance and show more relevant offers across apps and websites.';
 
@@ -69,6 +77,14 @@ function buildGoogleMobileAdsExpoPlugin(environment) {
         UNIT_ID_PATTERN,
         SAMPLE_BANNER_UNIT_IDS
       );
+    }
+    for (const key of [
+      'EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID',
+      'EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID',
+    ]) {
+      if (environment[key]?.trim()) {
+        requiredIdentifier(environment, key, UNIT_ID_PATTERN, SAMPLE_UNIT_IDS);
+      }
     }
   }
 

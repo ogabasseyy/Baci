@@ -55,17 +55,188 @@ describe('enrichShippingAddressWithQuoteDestination', () => {
     });
   });
 
-  it('keeps the original address for non-international quotes', async () => {
+  it('keeps the original address for non-GIGL quotes', async () => {
     await expect(
       enrichShippingAddressWithQuoteDestination(
         createSupabaseRpcMock({
-          provider_rate_id: 'gigl:service-centre:5',
+          provider: 'TOPSHIP',
+          provider_rate_id: 'topship:express:1',
           quote_request: null,
         }) as unknown as SupabaseClient,
         'quote-1',
         shippingAddress
       )
     ).resolves.toEqual(shippingAddress);
+  });
+
+  it('rejects expired domestic GIGL quotes before checkout', async () => {
+    await expect(
+      enrichShippingAddressWithQuoteDestination(
+        createSupabaseRpcMock({
+          expires_at: new Date(Date.now() - 60_000).toISOString(),
+          price: 2500,
+          provider_rate_id: 'gigl:service-centre:5',
+          quote_request: {
+            merchantId: 'merchant-current',
+            sessionId: 'session-1',
+            shipmentType: 'domestic',
+            receiver: {
+              name: 'Jane Receiver',
+              phone: '',
+              address: '123 Queen Street West',
+              city: 'Lagos',
+              state: 'Lagos',
+            },
+            items: [{ name: 'Phone', quantity: 1, weight: 1, value: 100_000 }],
+          },
+        }) as unknown as SupabaseClient,
+        'quote-1',
+        {
+          address: '123 Queen Street West',
+          city: 'Lagos',
+          state: 'Lagos',
+          country: undefined,
+          countryCode: undefined,
+          postalCode: undefined,
+        },
+        {
+          merchantId: 'merchant-current',
+          items: [checkoutPhoneItem],
+          shippingFee: 2500,
+          shippingProvider: 'GIGL',
+        }
+      )
+    ).rejects.toMatchObject({
+      code: 'INTERNATIONAL_QUOTE_EXPIRED',
+      status: 400,
+    });
+  });
+
+  it('accepts domestic GIGL quotes when checkout stores a composed street, city, state address', async () => {
+    await expect(
+      enrichShippingAddressWithQuoteDestination(
+        createSupabaseRpcMock({
+          price: 2500,
+          provider_rate_id: 'gigl:door-delivery:5',
+          quote_request: {
+            merchantId: 'merchant-current',
+            sessionId: 'session-1',
+            shipmentType: 'domestic',
+            receiver: {
+              name: 'Jane Receiver',
+              phone: '',
+              address: '12 Admiralty Way',
+              city: 'Lagos',
+              state: 'Lagos',
+            },
+            items: [{ name: 'Phone', quantity: 1, weight: 1, value: 100_000 }],
+          },
+        }) as unknown as SupabaseClient,
+        'quote-1',
+        {
+          address: '12 Admiralty Way, Lagos, Lagos',
+          city: 'Lagos',
+          state: 'Lagos',
+          country: undefined,
+          countryCode: undefined,
+          postalCode: undefined,
+        },
+        {
+          merchantId: 'merchant-current',
+          items: [checkoutPhoneItem],
+          shippingFee: 2500,
+          shippingProvider: 'GIGL',
+        }
+      )
+    ).resolves.toMatchObject({
+      address: '12 Admiralty Way, Lagos, Lagos',
+      city: 'Lagos',
+      state: 'Lagos',
+    });
+  });
+
+  it('rejects domestic GIGL quote destinations that do not match checkout address', async () => {
+    await expect(
+      enrichShippingAddressWithQuoteDestination(
+        createSupabaseRpcMock({
+          price: 2500,
+          provider_rate_id: 'gigl:service-centre:5',
+          quote_request: {
+            merchantId: 'merchant-current',
+            sessionId: 'session-1',
+            shipmentType: 'domestic',
+            receiver: {
+              name: 'Jane Receiver',
+              phone: '',
+              address: '123 Queen Street West',
+              city: 'Abuja',
+              state: 'FCT',
+            },
+            items: [{ name: 'Phone', quantity: 1, weight: 1, value: 100_000 }],
+          },
+        }) as unknown as SupabaseClient,
+        'quote-1',
+        {
+          address: '123 Queen Street West',
+          city: 'Lagos',
+          state: 'Lagos',
+          country: undefined,
+          countryCode: undefined,
+          postalCode: undefined,
+        },
+        {
+          merchantId: 'merchant-current',
+          items: [checkoutPhoneItem],
+          shippingFee: 2500,
+          shippingProvider: 'GIGL',
+        }
+      )
+    ).rejects.toMatchObject({
+      code: 'INTERNATIONAL_QUOTE_DESTINATION_MISMATCH',
+      status: 400,
+    });
+  });
+
+  it('rejects domestic GIGL quotes when the checkout shipping fee changes', async () => {
+    await expect(
+      enrichShippingAddressWithQuoteDestination(
+        createSupabaseRpcMock({
+          price: 2500,
+          provider_rate_id: 'gigl:service-centre:5',
+          quote_request: {
+            merchantId: 'merchant-current',
+            sessionId: 'session-1',
+            shipmentType: 'domestic',
+            receiver: {
+              name: 'Jane Receiver',
+              phone: '',
+              address: '123 Queen Street West',
+              city: 'Lagos',
+              state: 'Lagos',
+            },
+            items: [{ name: 'Phone', quantity: 1, weight: 1, value: 100_000 }],
+          },
+        }) as unknown as SupabaseClient,
+        'quote-1',
+        {
+          address: '123 Queen Street West',
+          city: 'Lagos',
+          state: 'Lagos',
+          country: undefined,
+          countryCode: undefined,
+          postalCode: undefined,
+        },
+        {
+          merchantId: 'merchant-current',
+          items: [checkoutPhoneItem],
+          shippingFee: 1,
+          shippingProvider: 'GIGL',
+        }
+      )
+    ).rejects.toMatchObject({
+      code: 'INTERNATIONAL_QUOTE_ORDER_MISMATCH',
+      status: 400,
+    });
   });
 
   it('rejects saved international quote destinations that do not match checkout address', async () => {

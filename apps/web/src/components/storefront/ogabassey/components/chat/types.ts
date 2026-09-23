@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { createElement, type ReactElement } from 'react';
 import { joinRouteBasePath } from '@/lib/routes';
+import type { StorefrontAgentUiEvent } from '@/schemas/storefront-agent-ui-contract';
 
 export interface SantaCartAction {
   productName: string;
@@ -43,6 +44,8 @@ export function resolveSuggestionNavigationPath(
 export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
+  /** Validated, temporary UI requested by server-owned commerce tool results. */
+  uiEvents?: StorefrontAgentUiEvent[];
   /**
    * @deprecated Use `santaActions` for new code. Kept only so older
    * Ogabassey chat message render paths can read previously shaped messages

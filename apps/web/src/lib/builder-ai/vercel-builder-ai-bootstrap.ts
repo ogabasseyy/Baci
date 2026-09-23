@@ -1,5 +1,6 @@
 const VERCEL_API_ORIGIN = 'https://api.vercel.com';
 const TOKEN_HASH_KEY = 'BUILDER_AI_ATTEST_SMOKE_TOKEN_SHA256';
+const MAX_CONTROL_PLANE_LIST_PAGES = 2;
 
 export function builderAiBootstrapComment(runId: string): string {
   return `baci-builder-ai-bootstrap:${runId}`;
@@ -15,11 +16,11 @@ export interface BuilderAiVercelBootstrapClient {
 
 export interface BuilderAiAttestationEnvironment {
   BUILDER_AI_PROVIDER_BINDING_PEPPER: string;
-  CEREBRAS_BUILDER_ACCOUNT_REF: string;
-  CEREBRAS_BUILDER_APPROVED_MODEL: string;
-  CEREBRAS_BUILDER_CREDENTIAL_BINDING_TAG: string;
-  CEREBRAS_BUILDER_DEPLOYMENT_TIER: string;
-  CEREBRAS_BUILDER_RELEASE_ATTESTED_AT: string;
+  GOOGLE_BUILDER_ACCOUNT_REF: string;
+  GOOGLE_BUILDER_APPROVED_MODEL: string;
+  GOOGLE_BUILDER_CREDENTIAL_BINDING_TAG: string;
+  GOOGLE_BUILDER_DEPLOYMENT_TIER: string;
+  GOOGLE_BUILDER_RELEASE_ATTESTED_AT: string;
   GROQ_BUILDER_ACCOUNT_REF: string;
   GROQ_BUILDER_APPROVED_MODEL: string;
   GROQ_BUILDER_CREDENTIAL_BINDING_TAG: string;
@@ -137,8 +138,11 @@ export function createBuilderAiVercelBootstrapClient(
         const rows: unknown[] = [];
         const seenCursors = new Set<string>();
         let cursor: string | null = null;
+        let listedPages = 0;
 
         do {
+          if (listedPages >= MAX_CONTROL_PLANE_LIST_PAGES) return false;
+          listedPages += 1;
           const cursorQuery = cursor
             ? `?until=${encodeURIComponent(cursor)}`
             : '';

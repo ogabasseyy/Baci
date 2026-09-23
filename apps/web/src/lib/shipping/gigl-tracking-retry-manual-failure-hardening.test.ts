@@ -112,6 +112,11 @@ describe('GIGL manual failure hardening migrations', () => {
     ).toContain(
       'changing a GIGL shipment merchant must deactivate its monitor'
     );
+    expect(
+      readMigration(
+        '20260905140000_restore_gigl_repair_pickup_tracking_hardening.sql'
+      )
+    ).toContain('v_manual_terminal_failed');
   });
 
   it('does not require the skipped hardening output before applying its successor', () => {

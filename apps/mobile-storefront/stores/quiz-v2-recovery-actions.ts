@@ -49,7 +49,8 @@ export function createQuizV2RecoveryResponseApplier({
           response.attemptId ?? fallback.attemptId,
           fallback.eventId,
           response.eventEndsAt ?? fallback.eventEndsAt,
-          response.serverNow ?? fallback.serverNow
+          response.serverNow ?? fallback.serverNow,
+          null
         ),
         lockedOptionId: null,
         expiryRetryable: false,
@@ -78,7 +79,8 @@ export function createQuizV2RecoveryResponseApplier({
         fallback.attemptId,
         fallback.eventId,
         response.eventEndsAt ?? fallback.eventEndsAt,
-        response.serverNow ?? fallback.serverNow
+        response.serverNow ?? fallback.serverNow,
+        response.submittedAt ?? null
       ),
       lockedOptionId: null,
       expiryRetryable: false,

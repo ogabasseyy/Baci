@@ -300,6 +300,30 @@ async function verifyPaymentReference(reference: string) {
   });
 
   if (
+    finalizeOutcome.kind === 'captured_held' ||
+    finalizeOutcome.kind === 'capture_evidence_review'
+  ) {
+    return NextResponse.json(
+      {
+        code:
+          finalizeOutcome.kind === 'captured_held'
+            ? 'REDVAULT_CAPTURE_HELD'
+            : 'REDVAULT_CAPTURE_EVIDENCE_REVIEW',
+        error:
+          finalizeOutcome.kind === 'captured_held'
+            ? 'Payment capture is pending eligibility confirmation'
+            : 'Payment capture evidence requires review',
+        orderNumber:
+          existingOrder?.order_number ||
+          transaction.gateway_reference.slice(0, 8).toUpperCase(),
+        status: 'pending',
+      },
+      { status: 202 }
+    );
+  }
+
+  if (
+    finalizeOutcome.kind === 'capture_hold_failed' ||
     finalizeOutcome.kind === 'completion_failed' ||
     finalizeOutcome.kind === 'order_fetch_failed' ||
     // Captured money that must not reopen the order, with no ops trail:

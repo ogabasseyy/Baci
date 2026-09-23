@@ -62,6 +62,7 @@ describe('resolveBookingQuoteForSender', () => {
       quote,
       'GIGL',
       {
+        orderId: 'order-1',
         merchantSender,
         usesStoredInternationalSender: true,
         expectedShippingFee: 2500,
@@ -81,6 +82,7 @@ describe('resolveBookingQuoteForSender', () => {
         quote,
         'GIGL',
         {
+          orderId: 'order-1',
           merchantSender,
           usesStoredInternationalSender: false,
           expectedShippingFee: 2500,
@@ -91,7 +93,8 @@ describe('resolveBookingQuoteForSender', () => {
         supabase,
         quote,
         'GIGL',
-        merchantSender
+        merchantSender,
+        { orderId: 'order-1', expectedShippingFee: 2500 }
       );
       expect(result.id).toBe('quote-refreshed');
     });
@@ -106,6 +109,7 @@ describe('resolveBookingQuoteForSender', () => {
 
       await expect(
         resolveBookingQuoteForSender(supabase as never, quote, 'GIGL', {
+          orderId: 'order-1',
           merchantSender,
           usesStoredInternationalSender: false,
           expectedShippingFee: 2500,
@@ -119,6 +123,7 @@ describe('resolveBookingQuoteForSender', () => {
     it('requires a registered sender for domestic refreshes', async () => {
       await expect(
         resolveBookingQuoteForSender({} as never, quote, 'GIGL', {
+          orderId: 'order-1',
           usesStoredInternationalSender: false,
           expectedShippingFee: 2500,
         })

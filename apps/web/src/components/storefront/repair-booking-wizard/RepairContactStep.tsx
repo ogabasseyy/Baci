@@ -34,17 +34,19 @@ interface RepairContactStepProps {
   shippingQuote: ShippingCalculationResult | null;
   isCalculatingShipping: boolean;
   onAddressSelect: (place: PlaceDetails) => void;
+  onRetryShipping?: () => void;
 }
 
 /**
  * Step 1 of the repair booking wizard: contact details, drop-off/pickup
- * choice (with a live Topship shipping estimate for pickup), and an
+ * choice (with a live GIGL shipping estimate for pickup), and an
  * optional preferred date.
  */
 export function RepairContactStep({
   control,
   isCalculatingShipping,
   onAddressSelect,
+  onRetryShipping = () => undefined,
   serviceType,
   shippingQuote,
 }: RepairContactStepProps) {
@@ -186,18 +188,33 @@ export function RepairContactStep({
               {shippingQuote && !isCalculatingShipping && (
                 <div
                   className={cn(
-                    'mt-2 flex items-center rounded-md border p-2 text-sm font-medium',
-                    shippingQuote.isFree
-                      ? 'border-green-200 bg-green-50 text-green-700'
-                      : 'border-blue-200 bg-blue-50 text-blue-700'
+                    'mt-2 flex items-center justify-between gap-3 rounded-md border p-2 text-sm font-medium',
+                    shippingQuote.error
+                      ? 'border-destructive/30 bg-destructive/5 text-destructive'
+                      : shippingQuote.isFree
+                        ? 'border-green-200 bg-green-50 text-green-700'
+                        : 'border-blue-200 bg-blue-50 text-blue-700'
                   )}
                 >
-                  {shippingQuote.isFree ? (
-                    <CheckCircle className="mr-2 size-4" />
-                  ) : (
-                    <Truck className="mr-2 size-4" />
-                  )}
-                  {shippingQuote.message || shippingQuote.formattedPrice}
+                  <span className="flex items-center">
+                    {shippingQuote.isFree ? (
+                      <CheckCircle className="mr-2 size-4" />
+                    ) : (
+                      <Truck className="mr-2 size-4" />
+                    )}
+                    {shippingQuote.error ||
+                      shippingQuote.message ||
+                      shippingQuote.formattedPrice}
+                  </span>
+                  {shippingQuote.error ? (
+                    <button
+                      className="shrink-0 underline"
+                      onClick={onRetryShipping}
+                      type="button"
+                    >
+                      Try again
+                    </button>
+                  ) : null}
                 </div>
               )}
               <FormMessage />

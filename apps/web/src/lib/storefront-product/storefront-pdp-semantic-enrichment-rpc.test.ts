@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StorefrontDatabase } from '@/types/storefront-database';
 import { readStorefrontPdpSemanticEnrichment } from './storefront-pdp-semantic-enrichment';
+import { storefrontPdpSemanticReadCooldown } from './storefront-pdp-semantic-read-cooldown-singleton';
 
 const loggerMocks = vi.hoisted(() => ({ warn: vi.fn() }));
 
@@ -26,12 +27,14 @@ function createClient(response: unknown) {
   const rpc = vi.fn(() => ({ abortSignal }));
   return {
     client: { rpc } as unknown as SupabaseClient<StorefrontDatabase>,
+    rpc,
   };
 }
 
 describe('readStorefrontPdpSemanticEnrichment RPC boundary traces', () => {
   beforeEach(() => {
     loggerMocks.warn.mockClear();
+    storefrontPdpSemanticReadCooldown.reset();
   });
 
   afterEach(() => {
@@ -75,6 +78,45 @@ describe('readStorefrontPdpSemanticEnrichment RPC boundary traces', () => {
     );
   });
 
+  it('skips a repeated retryable read during the merchant cooldown', async () => {
+    const { client, rpc } = createClient({
+      data: null,
+      error: { code: '57014', message: 'statement timeout' },
+      status: 500,
+    });
+
+    const firstResult = await readStorefrontPdpSemanticEnrichment(client, {
+      merchantId: 'merchant-cooldown',
+      productId: 'product-1',
+      includeGuides: true,
+      clusterRequest,
+    });
+    const secondResult = await readStorefrontPdpSemanticEnrichment(client, {
+      merchantId: 'merchant-cooldown',
+      productId: 'product-2',
+      includeGuides: true,
+      clusterRequest,
+    });
+
+    expect(firstResult).toEqual({
+      status: 'unavailable',
+      error: expect.objectContaining({
+        kind: 'timeout',
+        operation: 'pdp_semantic_enrichment',
+        retryable: true,
+      }),
+    });
+    expect(secondResult).toEqual({
+      status: 'unavailable',
+      error: {
+        kind: 'timeout',
+        operation: 'pdp_semantic_enrichment',
+        retryable: true,
+      },
+    });
+    expect(rpc).toHaveBeenCalledOnce();
+  });
+
   it('traces a native client abort without logging merchant or product inputs', async () => {
     const merchantSentinel = 'merchant-sensitive-sentinel';
     const productSentinel = 'product-sensitive-sentinel';
@@ -86,8 +128,9 @@ describe('readStorefrontPdpSemanticEnrichment RPC boundary traces', () => {
     timeoutController.abort(timeoutError);
     vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeoutController.signal);
     const abortSignal = vi.fn().mockRejectedValue(timeoutError);
+    const rpc = vi.fn(() => ({ abortSignal }));
     const client = {
-      rpc: vi.fn(() => ({ abortSignal })),
+      rpc,
     } as unknown as SupabaseClient<StorefrontDatabase>;
 
     await expect(
@@ -98,6 +141,23 @@ describe('readStorefrontPdpSemanticEnrichment RPC boundary traces', () => {
         clusterRequest,
       })
     ).rejects.toBe(timeoutError);
+
+    await expect(
+      readStorefrontPdpSemanticEnrichment(client, {
+        merchantId: merchantSentinel,
+        productId: productSentinel,
+        includeGuides: true,
+        clusterRequest,
+      })
+    ).resolves.toEqual({
+      status: 'unavailable',
+      error: {
+        kind: 'timeout',
+        operation: 'pdp_semantic_enrichment',
+        retryable: true,
+      },
+    });
+    expect(rpc).toHaveBeenCalledOnce();
 
     expect(loggerMocks.warn).toHaveBeenCalledWith(
       expect.objectContaining({

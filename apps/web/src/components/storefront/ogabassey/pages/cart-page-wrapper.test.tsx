@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCart } from '@/hooks/cart';
 import { createClient } from '@/lib/supabase/client';
@@ -77,6 +77,36 @@ describe('CartPageWrapper', () => {
         'item_id=55555555-5555-4555-8555-555555555555&quiz_award_id=44444444-4444-4444-8444-444444444444&quiz_voucher_token=signed-token'
       ) as ReturnType<typeof useSearchParams>
     );
+  });
+
+  it('shows loading instead of an empty cart while a refreshed cart hydrates', () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>
+    );
+    mockUseCart({ isHydrated: false });
+
+    const { rerender } = render(<CartPageWrapper merchantId="merchant-1" />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading your cart');
+    expect(screen.queryByText('Cart page')).not.toBeInTheDocument();
+
+    mockUseCart({ isHydrated: true, cart: [{ id: 'persisted-product' }] });
+    rerender(<CartPageWrapper merchantId="merchant-1" />);
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByText('Cart page')).toBeInTheDocument();
+  });
+
+  it('renders the cart after hydration when storage contains no items', () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>
+    );
+    mockUseCart({ isHydrated: true, cart: [] });
+
+    render(<CartPageWrapper merchantId="merchant-1" />);
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByText('Cart page')).toBeInTheDocument();
   });
 
   it('adds quiz prize products to cart with voucher metadata from the URL', async () => {

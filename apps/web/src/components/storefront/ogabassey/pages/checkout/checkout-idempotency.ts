@@ -27,8 +27,9 @@ async function hashCheckoutFingerprint(checkoutFingerprint: string) {
 }
 
 function readStoredKey(): StoredCheckoutIdempotency | null {
+  // An inaccessible store cannot establish whether a previous attempt exists.
+  const raw = window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY);
   try {
-    const raw = window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY);
     if (!raw) {
       return null;
     }
@@ -56,16 +57,27 @@ function readStoredKey(): StoredCheckoutIdempotency | null {
 
 export async function getCheckoutIdempotencyKey(checkoutFingerprint: string) {
   if (checkoutFingerprint.trim().length === 0) {
-    return crypto.randomUUID();
+    throw new Error(
+      'Unable to preserve checkout recovery. Please reload and try again.'
+    );
   }
 
   const checkoutFingerprintHash =
     await hashCheckoutFingerprint(checkoutFingerprint);
   if (!checkoutFingerprintHash) {
-    return crypto.randomUUID();
+    throw new Error(
+      'Unable to preserve checkout recovery. Please reload and try again.'
+    );
   }
 
-  const stored = readStoredKey();
+  let stored: StoredCheckoutIdempotency | null;
+  try {
+    stored = readStoredKey();
+  } catch {
+    throw new Error(
+      'Unable to read checkout recovery. Please enable browser storage and try again.'
+    );
+  }
   const now = Date.now();
   if (
     stored?.checkoutFingerprintHash === checkoutFingerprintHash &&
@@ -81,13 +93,17 @@ export async function getCheckoutIdempotencyKey(checkoutFingerprint: string) {
       JSON.stringify({ checkoutFingerprintHash, createdAt: now, key })
     );
   } catch {
-    return key;
+    throw new Error(
+      'Unable to save checkout recovery. Please enable browser storage and try again.'
+    );
   }
 
   return key;
 }
 
-export async function clearCheckoutIdempotencyKey(checkoutFingerprint?: string) {
+export async function clearCheckoutIdempotencyKey(
+  checkoutFingerprint?: string
+) {
   try {
     if (checkoutFingerprint) {
       if (checkoutFingerprint.trim().length === 0) {

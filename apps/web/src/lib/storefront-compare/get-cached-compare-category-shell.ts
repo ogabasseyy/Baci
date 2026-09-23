@@ -1,9 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
 import type { CachedCategoryPageProductScope } from '@/lib/category-page-product-id-cache';
+import { createStorefrontReadDeadline } from '@/lib/create-storefront-read-deadline';
+import { getCategoryFallbackName } from '@/lib/get-category-fallback-name';
+import {
+  prepareStorefrontSingleAttemptQuery,
+  type StorefrontSingleAttemptQuery,
+} from '@/lib/prepare-storefront-single-attempt-query';
 import { getPublicSupabaseClient } from '@/lib/public-supabase-client';
 import { STOREFRONT_SPECIAL_COLLECTION_SLUGS } from '@/lib/storefront-special-collection-slugs';
 import type { StorefrontDatabase } from '@/types/storefront-database';
+import type { StorefrontComparisonRevision } from './get-published-storefront-comparison-revision';
 
 export interface CompareCategoryShell {
   fallbackName: string;
@@ -42,33 +49,29 @@ function getSpecialCollectionName(categorySlug: string): string {
   }
 }
 
-function getCategoryFallbackName(categorySlug: string): string {
-  let decodedSlug = categorySlug;
-  try {
-    decodedSlug = decodeURIComponent(categorySlug);
-  } catch {
-    // Keep fallback naming total for malformed inputs from internal callers.
-  }
-
-  return decodedSlug
-    .replace(/-/g, ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
 export async function getCachedCompareCategoryShell(
   merchantId: string,
   categorySlug: string,
-  _storeSlug: string
+  // This is deliberately part of the local Cache Components key. A shared
+  // manifest must never be refilled from an instance's pre-invalidation shell.
+  _comparisonRevision?: StorefrontComparisonRevision
 ): Promise<CompareCategoryShell> {
   'use cache';
-  cacheLife('storefront-page');
-  cacheTag(
-    'category-page-data',
-    'products',
-    'categories',
-    `products-${merchantId}`,
-    `categories-${merchantId}`
-  );
+  cacheLife('products');
+  // Nested tags propagate to the outer cache: a revision snapshot must not
+  // inherit the broad stock-driven product invalidation tags.
+  if (_comparisonRevision) {
+    cacheTag(`comparison-revision-${merchantId}-${_comparisonRevision}`);
+  } else {
+    cacheTag(
+      'category-page-data',
+      'products',
+      'categories',
+      `products-${merchantId}`,
+      `categories-${merchantId}`,
+      `comparison-revision-${merchantId}-local`
+    );
+  }
 
   if (isSpecialCollectionSlug(categorySlug)) {
     return {
@@ -84,83 +87,107 @@ export async function getCachedCompareCategoryShell(
 
   const supabase =
     getPublicSupabaseClient() as unknown as SupabaseClient<StorefrontDatabase>;
+  const deadline = createStorefrontReadDeadline(3_000);
+  const run = <T>(query: StorefrontSingleAttemptQuery<T>): Promise<T> =>
+    Promise.race([
+      Promise.resolve(
+        prepareStorefrontSingleAttemptQuery(query, deadline.signal)
+      ),
+      deadline.promise,
+    ]);
   const categoryQuery = supabase
     .from('categories')
     .select('id, name, is_active')
     .eq('merchant_id', merchantId)
     .eq('slug', categorySlug)
-    .single() as unknown as Promise<{
+    .single() as unknown as StorefrontSingleAttemptQuery<{
     data: CategoryRow | null;
     error: unknown;
   }>;
-  const { data: categoryRow, error: categoryError } = await categoryQuery;
+  try {
+    const { data: categoryRow, error: categoryError } =
+      await run(categoryQuery);
 
-  const noRows =
-    categoryError &&
-    typeof categoryError === 'object' &&
-    categoryError !== null &&
-    Reflect.get(categoryError, 'code') === 'PGRST116';
-  if (categoryError && !noRows) throw categoryError;
+    const noRows =
+      categoryError &&
+      typeof categoryError === 'object' &&
+      categoryError !== null &&
+      Reflect.get(categoryError, 'code') === 'PGRST116';
+    if (categoryError && !noRows) throw categoryError;
 
-  let hiddenCategoryState: CategorySlugState | null = null;
-  if (!categoryRow) {
-    const { data, error } = await supabase.rpc(
-      'get_storefront_category_slug_state',
-      { p_merchant_id: merchantId, p_slug: categorySlug }
+    let hiddenCategoryState: CategorySlugState | null = null;
+    if (!categoryRow) {
+      const rpcQuery = supabase.rpc('get_storefront_category_slug_state', {
+        p_merchant_id: merchantId,
+        p_slug: categorySlug,
+      }) as unknown as StorefrontSingleAttemptQuery<{
+        data: CategorySlugState[] | null;
+        error: unknown;
+      }>;
+      const { data, error } = await run(rpcQuery);
+      if (error) throw error;
+      const states = data as CategorySlugState[] | null;
+      hiddenCategoryState = states?.[0] ?? null;
+    }
+
+    const isInactiveCategory =
+      categoryRow?.is_active === false ||
+      hiddenCategoryState?.is_active === false;
+    const fallbackName =
+      categoryRow?.name || getCategoryFallbackName(categorySlug);
+
+    if (isInactiveCategory) {
+      return {
+        fallbackName,
+        isCollection: false,
+        productScope: { kind: 'none' },
+      };
+    }
+
+    if (!categoryRow?.id) {
+      return {
+        fallbackName,
+        isCollection: false,
+        productScope: { kind: 'legacy', categoryName: fallbackName },
+      };
+    }
+
+    const scopeQuery = supabase
+      .from('categories')
+      .select('id')
+      .eq('merchant_id', merchantId)
+      .eq('is_active', true)
+      .or(
+        `id.eq.${categoryRow.id},parent_id.eq.${categoryRow.id}`
+      ) as unknown as StorefrontSingleAttemptQuery<{
+      data: Array<{ id?: string | null }> | null;
+      error: unknown;
+    }>;
+    const { data: categoryScope, error: categoryScopeError } =
+      await run(scopeQuery);
+    if (categoryScopeError) throw categoryScopeError;
+
+    const categoryIds = Array.from(
+      new Set(
+        [
+          categoryRow.id,
+          ...((categoryScope || []) as Array<{ id?: string | null }>).map(
+            (item) => item.id
+          ),
+        ].filter((id): id is string => typeof id === 'string' && id.length > 0)
+      )
     );
-    if (error) throw error;
-    const states = data as CategorySlugState[] | null;
-    hiddenCategoryState = states?.[0] ?? null;
-  }
 
-  const isInactiveCategory =
-    categoryRow?.is_active === false ||
-    hiddenCategoryState?.is_active === false;
-  const fallbackName =
-    categoryRow?.name || getCategoryFallbackName(categorySlug);
-
-  if (isInactiveCategory) {
     return {
       fallbackName,
       isCollection: false,
-      productScope: { kind: 'none' },
+      productScope: {
+        kind: 'category',
+        categoryId: categoryRow.id,
+        categoryIds,
+      },
     };
+  } finally {
+    deadline.cleanup();
   }
-
-  if (!categoryRow?.id) {
-    return {
-      fallbackName,
-      isCollection: false,
-      productScope: { kind: 'legacy', categoryName: fallbackName },
-    };
-  }
-
-  const { data: categoryScope, error: categoryScopeError } = await supabase
-    .from('categories')
-    .select('id')
-    .eq('merchant_id', merchantId)
-    .eq('is_active', true)
-    .or(`id.eq.${categoryRow.id},parent_id.eq.${categoryRow.id}`);
-  if (categoryScopeError) throw categoryScopeError;
-
-  const categoryIds = Array.from(
-    new Set(
-      [
-        categoryRow.id,
-        ...((categoryScope || []) as Array<{ id?: string | null }>).map(
-          (item) => item.id
-        ),
-      ].filter((id): id is string => typeof id === 'string' && id.length > 0)
-    )
-  );
-
-  return {
-    fallbackName,
-    isCollection: false,
-    productScope: {
-      kind: 'category',
-      categoryId: categoryRow.id,
-      categoryIds,
-    },
-  };
 }

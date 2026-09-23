@@ -66,6 +66,7 @@ function CriticalCommerceStateProbe() {
       <p>explicit axes:{commerce.explicitSelectedAxes.join(',')}</p>
       <p>selected condition:{commerce.selectedAttributes.condition || ''}</p>
       <p>selected storage:{commerce.selectedAttributes.storage || ''}</p>
+      <p>selected ram:{commerce.selectedAttributes.ram || ''}</p>
       <button
         onClick={() => commerce.handleAttributeSelection('condition', 'new')}
         type="button"
@@ -85,10 +86,27 @@ function CriticalCommerceStateProbe() {
         Select 256GB storage
       </button>
       <button
+        onClick={() => commerce.handleAttributeSelection('ram', '16GB')}
+        type="button"
+      >
+        Select 16GB RAM
+      </button>
+      <button
         onClick={() => commerce.handleAttributeSelection('ram', '8GB')}
         type="button"
       >
         Select 8GB RAM
+      </button>
+      <button
+        onClick={() =>
+          commerce.handleAttributeSelection(
+            'processor',
+            'Intel Core Ultra 7 155H'
+          )
+        }
+        type="button"
+      >
+        Select Intel Core Ultra 7 processor
       </button>
       <button
         disabled={!commerce.canAddToCart}
@@ -629,7 +647,7 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
     });
   });
 
-  it('preselects single-option visible axes from the default SKU', () => {
+  it('does not render fixed axes from the default SKU as choices', () => {
     render(
       <OgabasseyPdpCriticalCommerceProvider
         cartProduct={{
@@ -660,11 +678,12 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
       </OgabasseyPdpCriticalCommerceProvider>
     );
 
-    expect(screen.getByText('axes:storage')).toBeInTheDocument();
-    expect(screen.getByText('selected storage:128GB')).toBeInTheDocument();
+    expect(screen.getByText('axes:')).toBeInTheDocument();
+    expect(screen.getByText('selected storage:')).toBeInTheDocument();
+    expect(screen.getByText('blocked')).toBeInTheDocument();
   });
 
-  it('preselects metadata-only single-option axes for critical variants', () => {
+  it('uses fixed metadata without rendering a selector for it', () => {
     render(
       <OgabasseyPdpCriticalCommerceProvider
         cartProduct={{
@@ -688,56 +707,8 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
       </OgabasseyPdpCriticalCommerceProvider>
     );
 
-    expect(screen.getByText('axes:storage')).toBeInTheDocument();
-    expect(screen.getByText('selected storage:128GB')).toBeInTheDocument();
+    expect(screen.getByText('axes:')).toBeInTheDocument();
+    expect(screen.getByText('selected storage:')).toBeInTheDocument();
     expect(screen.getByText('ready')).toBeInTheDocument();
-  });
-
-  it('blocks checkout when a visible change prunes an explicit hidden SKU axis', () => {
-    render(
-      <OgabasseyPdpCriticalCommerceProvider
-        cartProduct={{
-          ...variantCartProduct,
-          variants: [
-            {
-              attributes: { color: 'Black', storage: '128GB' },
-              id: 'variant-black-128',
-              merchant_id: 'merchant-1',
-              price_override: 237_674.42,
-              product_id: 'redmi-pad-2',
-              stock_quantity: 4,
-            },
-            {
-              attributes: { color: 'Blue', storage: '256GB' },
-              id: 'variant-blue-256',
-              merchant_id: 'merchant-1',
-              price_override: 278_418.6,
-              product_id: 'redmi-pad-2',
-              stock_quantity: 6,
-            },
-          ],
-        }}
-        initialVariantSelection={{
-          attributes: { color: 'Black', storage: '128GB' },
-          variantId: 'variant-black-128',
-        }}
-        variantAxes={['storage']}
-        variantCount={2}
-      >
-        <CriticalCommerceStateProbe />
-      </OgabasseyPdpCriticalCommerceProvider>
-    );
-
-    expect(screen.getByText('ready')).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /select 256gb storage/i })
-    );
-
-    expect(screen.getByText('blocked')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));
-
-    expect(cartMocks.addToCart).not.toHaveBeenCalled();
   });
 });

@@ -8,7 +8,11 @@ import {
   createRepairBooking,
 } from '@/lib/repairs/create-repair-core';
 import { getRepairCenterAddress } from '@/lib/repairs/repair-center-address';
-import { topshipProvider } from '@/lib/shipping/providers/topship';
+import {
+  REPAIR_PICKUP_DECLARED_VALUE,
+  REPAIR_PICKUP_PROVIDER,
+} from '@/lib/repairs/repair-pickup-constants';
+import { shippingService } from '@/lib/shipping';
 import { isValidMerchantIdentifier } from '@/lib/validation';
 import type { RepairBookingInput } from '@/lib/validations/repair';
 import { repairPlaceDetailsSchema } from '@/schemas/repair-actions';
@@ -38,6 +42,22 @@ export async function createRepair(
   data: RepairBookingInput,
   merchantId: string
 ): Promise<CreateRepairResult> {
+  if (!data || typeof data !== 'object') {
+    return {
+      success: false,
+      code: 'validation_failed',
+      error: 'Enter valid repair details.',
+    };
+  }
+
+  if (data.serviceType === 'pickup') {
+    return {
+      success: false,
+      code: 'unavailable',
+      error: 'Courier pickup must be paid before booking.',
+    };
+  }
+
   // Shared core: app-layer rate limit + Zod validation + booking RPC (which
   // re-validates the merchant/active quote and snapshots the price server-side).
   const result = await createRepairBooking(data, merchantId);
@@ -75,7 +95,7 @@ export async function calculateRepairShipping(
   place: PlaceDetails,
   merchantIdentifier: string
 ): Promise<ShippingCalculationResult> {
-  // Rate limit first — this fans out to the paid Topship quoting API and is
+  // Rate limit first — this calls the GIGL quoting API and is
   // callable by anonymous storefront customers.
   const allowed = await ensureActionRateLimit('repair-shipping', {
     requests: 10,
@@ -121,66 +141,48 @@ export async function calculateRepairShipping(
     return dropOffOnly;
   }
 
-  // The pickup destination is the merchant's PRIVATE repair-center address
-  // (server-side read; the raw address never reaches the client). When it is
-  // unset, pickup quoting is disabled and we degrade to drop-off only.
   const repairCenter = await getRepairCenterAddress(merchant.id);
   if (!repairCenter) {
     return dropOffOnly;
   }
 
   try {
-    // 1. Free local pickup when the customer is in the repair center's state.
-    const centerState = repairCenter.state.trim().toLowerCase();
-    const centerCity = repairCenter.city.trim().toLowerCase();
-    const isLocal =
-      placeDetails.state.trim().toLowerCase() === centerState ||
-      placeDetails.formattedAddress.toLowerCase().includes(centerState) ||
-      (centerCity.length > 0 &&
-        placeDetails.city.trim().toLowerCase() === centerCity);
-
-    if (isLocal) {
-      return {
-        isFree: true,
-        price: 0,
-        formattedPrice: 'Free',
-        message: 'Free local pickup available!',
-      };
-    }
-
-    // 2. Calculate via Topship for other locations (customer -> repair center).
-    const quotes = await topshipProvider.getQuotes({
-      sessionId: `repair-${Date.now()}`,
-      shipmentType: 'domestic',
-      items: [
-        {
-          name: 'Device for Repair',
-          quantity: 1,
-          weight: 1,
-          value: 50000,
-          category: 'gadgets',
+    // Calculate GIGL doorstep collection (customer -> repair center).
+    const quotes = await shippingService.getProviderQuotes(
+      REPAIR_PICKUP_PROVIDER,
+      {
+        sessionId: `repair-${Date.now()}`,
+        shipmentType: 'domestic',
+        items: [
+          {
+            name: 'Device for Repair',
+            quantity: 1,
+            weight: 1,
+            value: REPAIR_PICKUP_DECLARED_VALUE,
+            category: 'gadgets',
+          },
+        ],
+        receiver: {
+          name: repairCenter.name,
+          phone: repairCenter.phone,
+          email: repairCenter.email,
+          address: repairCenter.address,
+          city: repairCenter.city,
+          state: repairCenter.state,
+          country: repairCenter.country,
+          countryCode: repairCenter.countryCode,
         },
-      ],
-      receiver: {
-        name: repairCenter.name,
-        phone: repairCenter.phone,
-        email: repairCenter.email,
-        address: repairCenter.address,
-        city: repairCenter.city,
-        state: repairCenter.state,
-        country: repairCenter.country,
-        countryCode: repairCenter.countryCode,
-      },
-      sender: {
-        name: 'Customer',
-        phone: '0000000000',
-        address: placeDetails.formattedAddress,
-        city: placeDetails.city || placeDetails.state,
-        state: placeDetails.state,
-        country: placeDetails.country || 'Nigeria',
-        countryCode: 'NG',
-      },
-    });
+        sender: {
+          name: 'Customer',
+          phone: '0000000000',
+          address: placeDetails.formattedAddress,
+          city: placeDetails.city || placeDetails.state,
+          state: placeDetails.state,
+          country: placeDetails.country || 'Nigeria',
+          countryCode: 'NG',
+        },
+      }
+    );
 
     if (!quotes || quotes.length === 0) {
       return {
@@ -192,7 +194,7 @@ export async function calculateRepairShipping(
     }
 
     const validQuotes = quotes
-      .filter((q) => q.price > 0)
+      .filter((q) => q.price > 0 && !q.isStationPickup)
       .sort((a, b) => a.price - b.price);
 
     if (validQuotes.length === 0) {

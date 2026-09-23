@@ -1,0 +1,121 @@
+{
+  "profiles": ["mobile", "desktop"],
+  "coldRuns": 3,
+  "routes": [
+    { "family": "home", "path": "/" },
+    { "family": "category", "path": "/smartphones" },
+    { "family": "pdp", "path": "/smartphones/iphone-14" },
+    { "family": "products", "path": "/products" },
+    { "family": "compare", "path": "/compare" },
+    { "family": "search", "path": "/search?q=iphone" },
+    { "family": "blog", "path": "/blog" },
+    {
+      "family": "article",
+      "path": "/blog/hp-elitebook-x-flip-g1i-who-should-pay-for-the-32gb-flip-business-laptop-1788846889"
+    },
+    { "family": "repairs", "path": "/repairs" },
+    { "family": "imei", "path": "/imei-check" },
+    { "family": "content", "path": "/about" },
+    { "family": "faq", "path": "/faq" },
+    { "family": "compare-category", "path": "/smartphones/compare" },
+    {
+      "family": "cart",
+      "path": "/cart",
+      "note": "HTTP preflight on localhost:3105 returned 200 with streamed SSR and no H1; client-rendered state is expected and must be verified separately."
+    },
+    { "family": "repair-intake", "path": "/repair" },
+    { "family": "quiz", "path": "/quiz" },
+    { "family": "swap", "path": "/swap" },
+    { "family": "reviews", "path": "/reviews" },
+    { "family": "rewards", "path": "/pages/rewards" },
+    { "family": "contact", "path": "/contact" },
+    { "family": "privacy", "path": "/privacy" },
+    { "family": "returns", "path": "/returns" },
+    { "family": "shipping", "path": "/shipping" },
+    { "family": "terms", "path": "/terms" },
+    {
+      "family": "account-login",
+      "path": "/account/login",
+      "note": "HTTP preflight on localhost:3105 returned 200 with streamed SSR and no H1; client-rendered login content is expected and must be verified separately."
+    }
+  ],
+  "skippedFamilies": [
+    {
+      "family": "catalog-dynamic",
+      "paths": [
+        "/smartphones/brands/{brandSlug}",
+        "/smartphones/brands/{brandSlug}/families/{familySlug}",
+        "/smartphones/best-under/{priceBandSlug}"
+      ],
+      "reason": "Requires a current published catalog fixture; do not invent dynamic slugs."
+    },
+    {
+      "family": "pdp-compatibility",
+      "paths": ["/product/{productSlug}", "/products/{productSlug}"],
+      "reason": "Requires a current published product slug fixture; canonical PDP is covered above."
+    },
+    {
+      "family": "blog-dynamic",
+      "paths": ["/blog/category/{categorySlug}", "/blog/author/{authorSlug}"],
+      "reason": "Requires current published category/author fixtures; do not use a 404 placeholder."
+    },
+    {
+      "family": "commerce-stateful",
+      "paths": [
+        "/checkout",
+        "/checkout/bnpl",
+        "/checkout/crypto",
+        "/checkout/success",
+        "/order-success",
+        "/wallet",
+        "/track-order"
+      ],
+      "reason": "Requires a deterministic order/payment/tracking fixture or can mutate customer/provider state; excluded from anonymous cold runs."
+    },
+    {
+      "family": "customer-stateful",
+      "paths": [
+        "/account/orders",
+        "/account/orders/{orderId}",
+        "/account/addresses",
+        "/account/settings",
+        "/receipts",
+        "/receipts/claim/{token}",
+        "/delete-account",
+        "/my-account"
+      ],
+      "reason": "Requires authenticated customer or receipt fixtures; excluded to avoid sensitive state in performance artifacts."
+    },
+    {
+      "family": "utility-stateful",
+      "paths": [
+        "/member-status",
+        "/repair/status",
+        "/repairs/status",
+        "/unlock-orders"
+      ],
+      "reason": "Requires member/status/order identifiers not present as a verified anonymous fixture."
+    },
+    {
+      "family": "content-aliases",
+      "paths": [
+        "/pages/about",
+        "/pages/blog",
+        "/pages/contact",
+        "/pages/faq",
+        "/pages/privacy",
+        "/pages/terms",
+        "/privacy-policy",
+        "/terms-and-conditions",
+        "/terms-of-service"
+      ],
+      "reason": "Public aliases are valid route families but are intentionally omitted from the baseline to avoid duplicate-document samples; add when alias behavior is under test.",
+      "observed": "/terms-of-service redirected to /terms during the localhost:3105 preflight."
+    },
+    {
+      "family": "warranty",
+      "paths": ["/warranty"],
+      "reason": "Missing published fixture: localhost:3105 returned a 200 streamed NEXT_HTTP_ERROR_FALLBACK response with an empty H1 during preflight; excluded until a published fixture is available."
+    }
+  ]
+}

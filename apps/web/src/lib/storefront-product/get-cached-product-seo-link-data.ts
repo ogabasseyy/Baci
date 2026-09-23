@@ -1,64 +1,117 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { cacheLife, cacheTag } from 'next/cache';
-import { getPublicSupabaseClient } from '@/lib/cached-data';
-import { buildStorefrontClusterGuideRequest } from '@/lib/storefront-content/storefront-cluster-guide-request';
-import { unwrapStorefrontReadResultForCache } from '@/lib/storefront-read-result';
-import type { StorefrontDatabase } from '@/types/storefront-database';
+import { getPublishedClusterPosts } from '@/lib/storefront-content/get-published-cluster-posts';
+import { isPublishedClusterPost } from '@/lib/storefront-content/is-published-cluster-post';
+import { isSupportedClusterCategory } from '@/lib/storefront-content/storefront-cluster-guide-request';
+import { getCachedPdpProductGuidePosts } from './get-cached-pdp-product-guide-posts';
 import {
-  type ProductSeoLinkData,
-  readStorefrontPdpSemanticEnrichment,
-} from './storefront-pdp-semantic-enrichment';
+  getCachedPdpSemanticInventory,
+  PDP_SEMANTIC_TOTAL_TIMEOUT_MS,
+} from './get-cached-pdp-semantic-inventory';
+import { runStorefrontPdpSemanticRpcWithCooldown } from './run-storefront-pdp-semantic-rpc-with-cooldown';
+import type { ProductSeoLinkData } from './storefront-pdp-semantic-enrichment';
 
 export type { ProductSeoLinkData };
 
-// Strict local-cache SEO enrichment. Keep this unit off `use cache: remote` and
-// nested remote-cache helpers. Any snapshot failure throws before this cache can
-// commit; the server component degrades the optional section outside the cache.
+export interface ProductSeoLinkDataInput {
+  blogEnabled: boolean;
+  categorySlug: string;
+  merchantId: string;
+  productBrand: string | null | undefined;
+  productId: string;
+  productName: string;
+  productSlug: string;
+  storeSlug: string;
+}
+
+// This function deliberately owns no cache directive. Its three bounded reads
+// have different reuse keys and freshness windows: category inventory is shared
+// by every PDP in a category, cluster guides are shared by their context, and
+// product-linked guides are keyed by product. Keeping orchestration uncached
+// means a partial guide failure cannot be persisted as a complete empty model.
 export async function getCachedProductSeoLinkData(
-  merchantId: string,
-  categorySlug: string,
-  productId: string,
-  productSlug: string,
-  productName: string,
-  productBrand: string | null | undefined,
-  blogEnabled: boolean
+  input: ProductSeoLinkDataInput
 ): Promise<ProductSeoLinkData> {
-  'use cache';
-  try {
-    cacheLife('products');
-    cacheTag(
-      'products',
-      `products-${merchantId}`,
-      'blog-posts',
-      `seo-links-${merchantId}-${categorySlug}-${productId || 'category'}`
-    );
-  } catch {
-    // Unit tests do not run with Next cacheComponents enabled.
+  const {
+    blogEnabled,
+    categorySlug,
+    merchantId,
+    productBrand,
+    productId,
+    productName,
+    productSlug,
+  } = input;
+  // Inventory is the only required leg. Do not fan out two more Supabase
+  // reads while it is already timing out; once it succeeds, the optional guide
+  // legs run in parallel and can fail open independently.
+  const inventoryScope = `${merchantId}:${categorySlug}`;
+  const { response: inventory } = await runStorefrontPdpSemanticRpcWithCooldown(
+    () => getCachedPdpSemanticInventory(merchantId, categorySlug),
+    {
+      deadlineMs: PDP_SEMANTIC_TOTAL_TIMEOUT_MS,
+      traceThresholdMs: 1_000,
+    },
+    inventoryScope,
+    () => []
+  );
+
+  if (!blogEnabled) {
+    return {
+      guidePosts: [],
+      inventory,
+      priorityGuidePostSlugs: [],
+    };
   }
 
-  const client =
-    getPublicSupabaseClient() as unknown as SupabaseClient<StorefrontDatabase>;
-  const clusterRequest = buildStorefrontClusterGuideRequest({
-    pageKind: 'product',
-    categorySlug,
-    brands: productBrand ? [productBrand] : [],
-    productNames: productName ? [productName] : [],
-    productSlugs: productSlug ? [productSlug] : [],
-  });
-  const enrichment = unwrapStorefrontReadResultForCache(
-    await readStorefrontPdpSemanticEnrichment(client, {
-      clusterRequest,
-      includeGuides: blogEnabled,
+  const clusterGuidePromise = isSupportedClusterCategory(categorySlug)
+    ? getPublishedClusterPosts(merchantId, {
+        brands: productBrand ? [productBrand] : [],
+        categorySlug,
+        pageKind: 'product',
+        productNames: productName ? [productName] : [],
+        productSlugs: productSlug ? [productSlug] : [],
+      })
+        .then((posts) => posts.filter(isPublishedClusterPost))
+        .catch((error: unknown) => {
+          console.warn('Failed to load PDP cluster guide posts', {
+            categorySlug,
+            error,
+            merchantId,
+          });
+          return [];
+        })
+    : Promise.resolve([]);
+  const productGuidePromise = getCachedPdpProductGuidePosts(
+    merchantId,
+    productId
+  ).catch((error: unknown) => {
+    console.warn('Failed to load PDP product guide posts', {
+      error,
       merchantId,
       productId,
-    })
-  );
+    });
+    return [];
+  });
 
-  return (
-    enrichment ?? {
-      guidePosts: [],
-      inventory: [],
-      priorityGuidePostSlugs: [],
-    }
-  );
+  const [clusterGuidePosts, productGuidePosts] = await Promise.all([
+    clusterGuidePromise,
+    productGuidePromise,
+  ]);
+  const guidePosts = mergeGuidePosts(productGuidePosts, clusterGuidePosts);
+
+  return {
+    guidePosts,
+    inventory,
+    priorityGuidePostSlugs: productGuidePosts.map((post) => post.slug),
+  };
+}
+
+function mergeGuidePosts(
+  productGuidePosts: ProductSeoLinkData['guidePosts'],
+  clusterGuidePosts: ProductSeoLinkData['guidePosts']
+): ProductSeoLinkData['guidePosts'] {
+  const seen = new Set<string>();
+  return [...productGuidePosts, ...clusterGuidePosts].filter((post) => {
+    if (seen.has(post.slug)) return false;
+    seen.add(post.slug);
+    return true;
+  });
 }

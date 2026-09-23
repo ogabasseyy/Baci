@@ -14,6 +14,7 @@ import { createAnonClient } from '@/lib/supabase/anon';
 import { createClient } from '@/lib/supabase/server';
 import { fetchProductRouteDetails } from './fetch-product-route-details';
 import { mapOrderItemsWithRoutes } from './map-order-items-with-routes';
+import { orderDetailSelect } from './order-detail-select';
 import type { OrderItem } from './order-item-types';
 import { resolveMerchantIdBySlug } from './resolve-merchant-id-by-slug';
 
@@ -73,25 +74,7 @@ export async function GET(
 
       const { data: order, error: orderError } = await supabase
         .from('orders')
-        .select(
-          `
-            id,
-            order_number,
-            tracking_token,
-            subtotal,
-            shipping_fee,
-            total,
-            customer_name,
-            customer_email,
-            customer_phone,
-            shipping_address,
-            payment_status,
-            shipping_status,
-            payment_method,
-            merchant_id,
-            fulfillment_details
-          `
-        )
+        .select(orderDetailSelect)
         .eq('id', id)
         .single();
 
@@ -273,6 +256,9 @@ export async function GET(
         order_number: order.order_number,
         short_id: order.order_number,
         subtotal: order.subtotal,
+        tax_amount: order.tax_amount ?? 0,
+        discount_amount: order.discount_amount ?? 0,
+        gift_wrapping_fee: order.gift_wrapping_fee ?? 0,
         shipping_cost: order.shipping_cost ?? order.shipping_fee ?? 0,
         total: order.total,
         customer_name: order.customer_name,

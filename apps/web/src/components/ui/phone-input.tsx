@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { limitPhoneInputDigits } from './limit-phone-input-digits';
 
 type PhoneInputProps = Omit<
   React.ComponentProps<'input'>,
@@ -59,34 +60,13 @@ const PhoneInput = ({
       international
       countryCallingCodeEditable={false}
       {...props}
+      limitMaxLength
     />
   );
 };
 PhoneInput.displayName = 'PhoneInput';
 
 const InputComponent = ({ ref, className, onChange, ...props }: InputProps) => {
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value;
-
-    // 1. Sanitize: Allow only numbers, spaces, and +
-    value = value.replace(/[^0-9+\s]/g, '');
-
-    // 2. Strip leading zero after country code (except for Italy +39)
-    if (value.startsWith('+') && !value.startsWith('+39')) {
-      // Handle space case: +234 0...
-      if (value.match(/^\+\d+\s0/)) {
-        value = value.replace(/(\+\d+\s)0/, '$1');
-      }
-      // Handle no-space case: +2340...
-      else if (value.match(/^\+\d+0/)) {
-        value = value.replace(/(\+\d+)0/, '$1');
-      }
-    }
-
-    e.target.value = value;
-    onChange?.(e);
-  };
-
   return (
     <Input
       className={cn(
@@ -94,7 +74,10 @@ const InputComponent = ({ ref, className, onChange, ...props }: InputProps) => {
         className
       )}
       {...props}
-      onChange={handleChange}
+      onChange={(event) => {
+        event.target.value = limitPhoneInputDigits(event.target.value);
+        onChange?.(event);
+      }}
       ref={ref}
     />
   );

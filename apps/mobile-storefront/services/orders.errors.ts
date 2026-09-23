@@ -4,6 +4,7 @@ import {
   RetryExhaustedError,
   TimeoutError,
 } from '@/lib/api';
+import { DeferredOfflineMutationError } from '@/lib/deferred-offline-mutation-error';
 import { createLogger } from '@/lib/logger';
 import { trackError } from '@/services/analytics';
 
@@ -210,6 +211,9 @@ export function mapCreateOrderException(
   error: unknown,
   startTime: number
 ): OrderError {
+  if (error instanceof DeferredOfflineMutationError) {
+    throw error;
+  }
   if (error instanceof OrderError) return error;
 
   if (error instanceof RetryExhaustedError) {

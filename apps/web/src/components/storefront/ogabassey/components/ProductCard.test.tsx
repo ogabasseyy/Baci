@@ -32,7 +32,7 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: vi.fn(() => ({ merchant: { id: 'm-1', slug: 'test' } })),
 }));
 vi.mock('@/lib/routes', () => ({ asRoute: vi.fn((p: string) => p) }));
-vi.mock('@/lib/seo-utils', () => ({
+vi.mock('@/lib/product-url', () => ({
   getProductUrl: vi.fn(() => '/test/product'),
 }));
 vi.mock('../providers/v2-comparison-context', () => ({

@@ -27,10 +27,14 @@ describe('buildStorefrontBlogPurgeUrls', () => {
 
     expect(urls).toEqual([
       'https://ogabassey.com/blog',
+      'https://ogabassey.com/blog/news-sitemap.xml',
+      'https://ogabassey.com/blog/sitemap.xml',
       'https://ogabassey.com/blog/post-a',
       'https://ogabassey.com/blog/post-a/opengraph-image',
       ...authorUrls('ogabassey.com'),
       'https://www.ogabassey.com/blog',
+      'https://www.ogabassey.com/blog/news-sitemap.xml',
+      'https://www.ogabassey.com/blog/sitemap.xml',
       'https://www.ogabassey.com/blog/post-a',
       'https://www.ogabassey.com/blog/post-a/opengraph-image',
       ...authorUrls('www.ogabassey.com'),
@@ -76,10 +80,14 @@ describe('buildStorefrontBlogPurgeUrls', () => {
     // the actually-cached mixed-case /blog/Best-Phones-2026 entry.
     expect(urls).toEqual([
       'https://ogabassey.com/blog',
+      'https://ogabassey.com/blog/news-sitemap.xml',
+      'https://ogabassey.com/blog/sitemap.xml',
       'https://ogabassey.com/blog/Best-Phones-2026',
       'https://ogabassey.com/blog/Best-Phones-2026/opengraph-image',
       ...authorUrls('ogabassey.com'),
       'https://www.ogabassey.com/blog',
+      'https://www.ogabassey.com/blog/news-sitemap.xml',
+      'https://www.ogabassey.com/blog/sitemap.xml',
       'https://www.ogabassey.com/blog/Best-Phones-2026',
       'https://www.ogabassey.com/blog/Best-Phones-2026/opengraph-image',
       ...authorUrls('www.ogabassey.com'),
@@ -96,10 +104,14 @@ describe('buildStorefrontBlogPurgeUrls', () => {
     // so the hostname set is emitted once; the blank slug is dropped.
     expect(urls).toEqual([
       'https://ogabassey.com/blog',
+      'https://ogabassey.com/blog/news-sitemap.xml',
+      'https://ogabassey.com/blog/sitemap.xml',
       'https://ogabassey.com/blog/post-a',
       'https://ogabassey.com/blog/post-a/opengraph-image',
       ...authorUrls('ogabassey.com'),
       'https://www.ogabassey.com/blog',
+      'https://www.ogabassey.com/blog/news-sitemap.xml',
+      'https://www.ogabassey.com/blog/sitemap.xml',
       'https://www.ogabassey.com/blog/post-a',
       'https://www.ogabassey.com/blog/post-a/opengraph-image',
       ...authorUrls('www.ogabassey.com'),
@@ -115,12 +127,16 @@ describe('buildStorefrontBlogPurgeUrls', () => {
 
     expect(urls).toEqual([
       'https://ogabassey.com/blog',
+      'https://ogabassey.com/blog/news-sitemap.xml',
+      'https://ogabassey.com/blog/sitemap.xml',
       'https://ogabassey.com/blog/post-a',
       'https://ogabassey.com/blog/post-a/opengraph-image',
       'https://ogabassey.com/blog/category/buying-guides',
       'https://ogabassey.com/blog/category/reviews',
       ...authorUrls('ogabassey.com'),
       'https://www.ogabassey.com/blog',
+      'https://www.ogabassey.com/blog/news-sitemap.xml',
+      'https://www.ogabassey.com/blog/sitemap.xml',
       'https://www.ogabassey.com/blog/post-a',
       'https://www.ogabassey.com/blog/post-a/opengraph-image',
       'https://www.ogabassey.com/blog/category/buying-guides',
@@ -134,9 +150,13 @@ describe('buildStorefrontBlogPurgeUrls', () => {
 
     expect(urls).toEqual([
       'https://ogabassey.com/blog',
+      'https://ogabassey.com/blog/news-sitemap.xml',
+      'https://ogabassey.com/blog/sitemap.xml',
       'https://ogabassey.com/blog/category/reviews',
       ...authorUrls('ogabassey.com'),
       'https://www.ogabassey.com/blog',
+      'https://www.ogabassey.com/blog/news-sitemap.xml',
+      'https://www.ogabassey.com/blog/sitemap.xml',
       'https://www.ogabassey.com/blog/category/reviews',
       ...authorUrls('www.ogabassey.com'),
     ]);
@@ -153,9 +173,13 @@ describe('buildStorefrontBlogPurgeUrls', () => {
     // normalized duplicates / blanks are dropped.
     expect(urls).toEqual([
       'https://ogabassey.com/blog',
+      'https://ogabassey.com/blog/news-sitemap.xml',
+      'https://ogabassey.com/blog/sitemap.xml',
       'https://ogabassey.com/blog/category/Reviews',
       ...authorUrls('ogabassey.com'),
       'https://www.ogabassey.com/blog',
+      'https://www.ogabassey.com/blog/news-sitemap.xml',
+      'https://www.ogabassey.com/blog/sitemap.xml',
       'https://www.ogabassey.com/blog/category/Reviews',
       ...authorUrls('www.ogabassey.com'),
     ]);

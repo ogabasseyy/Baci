@@ -52,6 +52,7 @@ export interface OrderDetailsRecord {
     | string
     | null;
   shipping_fee?: number | null;
+  shipping_funding_source?: 'customer_checkout' | 'merchant_wallet' | null;
   airport_type?: string | null;
   shipping_provider?: string | null;
   shipping_status: ShippingStatus;
@@ -67,6 +68,8 @@ export interface OrderDetailsRecord {
   tax_exclusive_amount?: number | null;
   tax_inclusive_amount?: number | null;
   total: number;
+  transaction_date?: string | null;
+  invoice_issue_date?: string | null;
   updated_at: string;
   virtual_account?: {
     assignment_customer_email_source?: string | null;

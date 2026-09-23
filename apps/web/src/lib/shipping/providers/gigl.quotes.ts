@@ -85,13 +85,15 @@ async function getQuotesWithinTimeout(
     const fetchSelections = (
       station: GiglStation,
       selections: GiglQuoteSelection[],
-      selectionSignal = signal
+      selectionSignal = signal,
+      isExpectedAbort?: () => boolean
     ) =>
       runGiglQuoteSelections({
         selections,
         signal: selectionSignal,
         timeoutMs: GIGL_QUOTE_TIMEOUT_MS,
         log: io.log,
+        isExpectedAbort,
         fetchQuote: ({ deliveryType, pickupOption }) =>
           fetchGiglQuote(
             apiClient,
@@ -138,7 +140,8 @@ async function getQuotesWithinTimeout(
     const prefetchedPickupQuotes = fetchSelections(
       receiverStation,
       createGiglQuoteSelections(PickupOptions.ServiceCentre),
-      pickupSignal
+      pickupSignal,
+      () => pickupController.signal.aborted && !signal.aborted
     );
     void prefetchedPickupQuotes.catch(() => undefined);
     const homeQuotes = (await homeQuotesPromise).filter(

@@ -28,18 +28,29 @@ function tokenize(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.flatMap(tokenizeContentText)));
 }
 
+function isPhraseBoundary(value: string | undefined): boolean {
+  return value === undefined || /[^a-z0-9]/.test(value);
+}
+
 function hasPhrase(haystack: string, needle: string) {
   const normalizedNeedle = normalizeText(needle);
   if (normalizedNeedle.length === 0) {
     return false;
   }
-  const escapedNeedle = normalizedNeedle.replace(
-    /[.*+?^${}()|[\]\\]/gu,
-    '\\$&'
-  );
-  return new RegExp(`(?:^|[^a-z0-9])${escapedNeedle}(?:$|[^a-z0-9])`, 'u').test(
-    haystack
-  );
+  let searchFrom = 0;
+  for (;;) {
+    const matchIndex = haystack.indexOf(normalizedNeedle, searchFrom);
+    if (matchIndex === -1) {
+      return false;
+    }
+    if (
+      isPhraseBoundary(haystack[matchIndex - 1]) &&
+      isPhraseBoundary(haystack[matchIndex + normalizedNeedle.length])
+    ) {
+      return true;
+    }
+    searchFrom = matchIndex + 1;
+  }
 }
 
 function inferCategorySlug(

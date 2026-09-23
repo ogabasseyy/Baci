@@ -57,13 +57,16 @@ export interface PendingCryptoOrder {
     city: string;
     state: string;
     country: string;
-    zip_code: string;
+    zip_code?: string;
   };
   items: Array<{ name: string; type: 'physical' | 'digital' }>;
   trackingToken?: string;
 }
 
 export interface ResumedOrder {
+  tax_amount?: number;
+  discount_amount?: number;
+  gift_wrapping_fee?: number;
   id: string;
   short_id: string;
   subtotal: number;
@@ -96,6 +99,7 @@ export type CryptoVerificationStatus = 'idle' | 'checking' | 'confirmed' | 'pend
 export type DeliveryMethod = 'pickup' | 'door' | 'airport' | 'pickup_station';
 export type CheckoutStep = 'contact' | 'delivery' | 'payment';
 export type PaymentMethod =
+  | 'uba_redvault'
   | 'paystack'
   | 'korapay'
   | 'juicyway'

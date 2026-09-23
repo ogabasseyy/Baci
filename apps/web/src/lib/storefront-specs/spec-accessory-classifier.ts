@@ -36,6 +36,30 @@ const ACCESSORY_CATEGORY_MARKERS = [
   'instant film',
 ];
 
+function isMarkerBoundary(value: string | undefined): boolean {
+  return value === undefined || /[^a-z]/.test(value);
+}
+
+function containsMarkerWord(normalized: string, marker: string): boolean {
+  for (const form of [marker, `${marker}s`]) {
+    let searchFrom = 0;
+    for (;;) {
+      const matchIndex = normalized.indexOf(form, searchFrom);
+      if (matchIndex === -1) {
+        break;
+      }
+      if (
+        isMarkerBoundary(normalized[matchIndex - 1]) &&
+        isMarkerBoundary(normalized[matchIndex + form.length])
+      ) {
+        return true;
+      }
+      searchFrom = matchIndex + 1;
+    }
+  }
+  return false;
+}
+
 export function isAccessoryLikeCategory(categoryName: string) {
   const normalized = categoryName
     .trim()
@@ -44,6 +68,6 @@ export function isAccessoryLikeCategory(categoryName: string) {
     .replace(/\s+/g, ' ');
 
   return ACCESSORY_CATEGORY_MARKERS.some((marker) =>
-    new RegExp(`(^|[^a-z])${marker}(s)?([^a-z]|$)`).test(normalized)
+    containsMarkerWord(normalized, marker)
   );
 }

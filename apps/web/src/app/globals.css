@@ -42,6 +42,11 @@
   color utility to any element that depends on these defaults.
 */
 @layer base {
+  :root {
+    /* Modal/dialog scrim; storefront color tokens live here (not storefront-core). */
+    --store-overlay: #000000;
+  }
+
   *,
   ::after,
   ::before,

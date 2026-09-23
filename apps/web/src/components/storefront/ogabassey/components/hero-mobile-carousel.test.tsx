@@ -126,6 +126,19 @@ describe('HeroMobileCarousel', () => {
     expect(lcpImg).toHaveAttribute('fetchpriority', 'high');
   });
 
+  it('lazy-loads the first slide image when it cannot be LCP', () => {
+    const { container } = render(
+      <HeroMobileCarousel prioritizeFirstImage={false} slides={SLIDES} />
+    );
+
+    const firstImage = screen.getByRole('img', {
+      name: 'Samsung Galaxy A27 5G',
+    });
+    expect(container.querySelector('picture')).not.toBeInTheDocument();
+    expect(firstImage).toHaveAttribute('loading', 'lazy');
+    expect(firstImage).not.toHaveAttribute('fetchpriority', 'high');
+  });
+
   it('shows the progress-bar slide controls when there are multiple slides', () => {
     render(<HeroMobileCarousel slides={SLIDES} />);
 
@@ -157,6 +170,19 @@ describe('HeroMobileCarousel', () => {
     expect(
       screen.queryByRole('group', { name: /hero carousel slide controls/i })
     ).toBeNull();
+  });
+
+  it('keeps an invisible controls slot for a single slide (fallback parity)', () => {
+    // The streaming reserve fallback bets on a multi-slide hero; the
+    // resolved single-slide hero keeps the same row slot invisibly so the
+    // fallback-to-content swap moves nothing.
+    const { container } = render(<HeroMobileCarousel slides={[SLIDES[0]]} />);
+
+    const slot = container.querySelector(
+      '[data-ogabassey-mobile-controls-skeleton="reserved"]'
+    );
+    expect(slot).not.toBeNull();
+    expect(slot).toHaveClass('invisible');
   });
 
   it('keeps the hero media inside the clipped carousel panel', () => {

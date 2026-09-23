@@ -66,7 +66,7 @@ describe('POST /api/payments/juicyway/webhook durable event handoff', () => {
         };
       }
       if (table === 'orders') {
-        return {
+        return webhookTest.wrapOrdersTableMock({
           eq: vi.fn().mockReturnThis(),
           maybeSingle: vi.fn().mockResolvedValue({
             data: {
@@ -80,7 +80,7 @@ describe('POST /api/payments/juicyway/webhook durable event handoff', () => {
             error: null,
           }),
           select: vi.fn().mockReturnThis(),
-        };
+        });
       }
       throw new Error(`Unexpected table ${table}`);
     });
@@ -141,7 +141,7 @@ describe('POST /api/payments/juicyway/webhook durable event handoff', () => {
         };
       }
       if (table === 'orders') {
-        return {
+        return webhookTest.wrapOrdersTableMock({
           eq: vi.fn().mockReturnThis(),
           maybeSingle: vi.fn().mockResolvedValue({
             data: {
@@ -155,7 +155,7 @@ describe('POST /api/payments/juicyway/webhook durable event handoff', () => {
             error: null,
           }),
           select: vi.fn().mockReturnThis(),
-        };
+        });
       }
       throw new Error(`Unexpected table ${table}`);
     });

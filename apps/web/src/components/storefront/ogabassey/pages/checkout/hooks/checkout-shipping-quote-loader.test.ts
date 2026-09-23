@@ -62,6 +62,231 @@ function createState() {
 }
 
 describe('loadCheckoutShippingQuotes', () => {
+  it.each([
+    { address: 'Ikeja, Lagos, Nigeria', expectedCalls: 0 },
+    { address: '2 Olaide Tomori Street', expectedCalls: 1 },
+  ])('checks a Nigerian street before loading rates: $address', async ({ address, expectedCalls }) => {
+    const state = createState();
+    await loadCheckoutShippingQuotes({ ...receiver, address, city: 'Ikeja', state: 'Lagos', country: 'Nigeria' }, cart, state);
+    expect(global.fetch).toHaveBeenCalledTimes(expectedCalls);
+  });
+
+  it.each([
+    '',
+    '   ',
+    'Port Harcourt, Rivers',
+  ])('does not calculate delivery for an unset street (%s)', async (address) => {
+    const state = createState();
+    await loadCheckoutShippingQuotes({ ...receiver, address }, cart, state);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(state.setShippingQuotes).toHaveBeenCalledWith([]);
+    expect(state.setSelectedQuoteId).toHaveBeenCalledWith('');
+  });
+
+  describe('bugfix: allow streetless pickup quotes through the loader', () => {
+    it('fetches pickup_station quotes with city/state when street is empty', async () => {
+      const state = createState();
+      await loadCheckoutShippingQuotes(
+        {
+          ...receiver,
+          address: '',
+          city: 'Ikeja',
+          state: 'Lagos',
+          deliveryPreference: 'pickup_station',
+        },
+        cart,
+        state,
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(
+        String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body),
+      );
+      expect(body.deliveryPreference).toBe('pickup_station');
+      expect(body.receiver.address).toBe('Ikeja, Lagos');
+      expect(body.receiver.city).toBe('Ikeja');
+      expect(body.receiver.state).toBe('Lagos');
+    });
+  });
+
+  describe('bugfix: restore the chosen shipping service after refresh', () => {
+    it('keeps a previously selected door quote when it is still in the response', async () => {
+      const state = {
+        ...createState(),
+        preferredSelectedQuoteId: 'door-quote-2',
+      };
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            quotes: {
+              all: [
+                {
+                  carrierName: 'GIG Logistics',
+                  currency: 'NGN',
+                  displayName: 'Standard',
+                  estimatedDays: 3,
+                  id: 'door-quote-1',
+                  insuranceIncluded: true,
+                  pickupIncluded: true,
+                  price: 2000,
+                  provider: 'GIGL',
+                  serviceTier: 'Standard',
+                },
+                {
+                  carrierName: 'GIG Logistics',
+                  currency: 'NGN',
+                  displayName: 'Express',
+                  estimatedDays: 1,
+                  id: 'door-quote-2',
+                  insuranceIncluded: true,
+                  pickupIncluded: true,
+                  price: 4000,
+                  provider: 'GIGL',
+                  serviceTier: 'Express',
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+      await loadCheckoutShippingQuotes(receiver, cart, state);
+      expect(state.setSelectedQuoteId).toHaveBeenCalledWith('door-quote-2');
+    });
+
+    it('restores a carrier choice by providerRateId when quote UUIDs rotate', async () => {
+      const setSelectedProviderRateId = vi.fn();
+      const state = {
+        ...createState(),
+        preferredSelectedQuoteId: 'stale-uuid',
+        preferredProviderRateId: 'GIGL_30_1',
+        setSelectedProviderRateId,
+      };
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            quotes: {
+              all: [
+                {
+                  carrierName: 'GIG Logistics',
+                  currency: 'NGN',
+                  displayName: 'Standard',
+                  estimatedDays: 3,
+                  id: 'fresh-uuid-1',
+                  insuranceIncluded: true,
+                  pickupIncluded: true,
+                  price: 2000,
+                  provider: 'GIGL',
+                  providerRateId: 'GIGL_30_0',
+                  serviceTier: 'Standard',
+                },
+                {
+                  carrierName: 'GIG Logistics',
+                  currency: 'NGN',
+                  displayName: 'Express',
+                  estimatedDays: 1,
+                  id: 'fresh-uuid-2',
+                  insuranceIncluded: true,
+                  pickupIncluded: true,
+                  price: 4000,
+                  provider: 'GIGL',
+                  providerRateId: 'GIGL_30_1',
+                  serviceTier: 'Express',
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+      await loadCheckoutShippingQuotes(receiver, cart, state);
+      expect(state.setSelectedQuoteId).toHaveBeenCalledWith('fresh-uuid-2');
+      expect(setSelectedProviderRateId).toHaveBeenCalledWith('GIGL_30_1');
+    });
+
+    it('clears selection and asks for delivery reselection when a required restore vanishes', async () => {
+      const onPreferredQuoteMissing = vi.fn();
+      const setSelectedProviderRateId = vi.fn();
+      const state = {
+        ...createState(),
+        preferredSelectedQuoteId: 'gone-uuid',
+        preferredProviderRateId: 'GONE_RATE',
+        requirePreferredQuoteMatch: true,
+        setSelectedProviderRateId,
+        onPreferredQuoteMissing,
+      };
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            quotes: {
+              all: [
+                {
+                  carrierName: 'GIG Logistics',
+                  currency: 'NGN',
+                  displayName: 'Standard',
+                  estimatedDays: 3,
+                  id: 'door-quote-1',
+                  insuranceIncluded: true,
+                  pickupIncluded: true,
+                  price: 2000,
+                  provider: 'GIGL',
+                  providerRateId: 'GIGL_30_0',
+                  serviceTier: 'Standard',
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+
+      await loadCheckoutShippingQuotes(receiver, cart, state);
+
+      expect(state.setSelectedQuoteId).toHaveBeenCalledWith('');
+      expect(setSelectedProviderRateId).toHaveBeenCalledWith('');
+      expect(onPreferredQuoteMissing).toHaveBeenCalledTimes(1);
+    });
+
+    it('still defaults to the first door quote on a method switch when restore is not required', async () => {
+      const onPreferredQuoteMissing = vi.fn();
+      const state = {
+        ...createState(),
+        preferredSelectedQuoteId: 'door-only-id',
+        preferredProviderRateId: 'DOOR_RATE',
+        requirePreferredQuoteMatch: false,
+        onPreferredQuoteMissing,
+      };
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            quotes: {
+              all: [
+                {
+                  carrierName: 'GIG Logistics',
+                  currency: 'NGN',
+                  displayName: 'Standard',
+                  estimatedDays: 3,
+                  id: 'door-quote-1',
+                  insuranceIncluded: true,
+                  pickupIncluded: true,
+                  price: 2000,
+                  provider: 'GIGL',
+                  providerRateId: 'GIGL_30_0',
+                  serviceTier: 'Standard',
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+
+      await loadCheckoutShippingQuotes(receiver, cart, state);
+
+      expect(state.setSelectedQuoteId).toHaveBeenCalledWith('door-quote-1');
+      expect(onPreferredQuoteMissing).not.toHaveBeenCalled();
+    });
+  });
+
   beforeEach(() => {
     global.fetch = vi.fn().mockResolvedValue(quoteResponse());
   });
@@ -177,7 +402,10 @@ describe('loadCheckoutShippingQuotes', () => {
   });
 
   it.each([
-    ['non-successful response', () => Promise.resolve(new Response('bad', { status: 503 }))],
+    [
+      'non-successful response',
+      () => Promise.resolve(new Response('bad', { status: 503 })),
+    ],
     ['network failure', () => Promise.reject(new Error('offline'))],
   ])('clears stale quotes after a %s', async (_label, fetchResult) => {
     global.fetch = vi.fn(fetchResult);
@@ -197,7 +425,7 @@ describe('loadCheckoutShippingQuotes', () => {
     await loadCheckoutShippingQuotes({ ...receiver, city: '' }, cart, state);
 
     expect(global.fetch).not.toHaveBeenCalled();
-    expect(state.setIsLoadingQuotes).not.toHaveBeenCalled();
+    expect(state.setIsLoadingQuotes).not.toHaveBeenCalledWith(true);
   });
 
   it('ignores a stale response when a newer request finishes first', async () => {
@@ -218,8 +446,8 @@ describe('loadCheckoutShippingQuotes', () => {
       cart,
       state
     );
-    const firstSignal = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]
-      ?.signal as AbortSignal;
+    const firstSignal = (global.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[1]?.signal as AbortSignal;
     expect(firstSignal.aborted).toBe(true);
 
     resolveSecond(quoteResponse('new-quote'));
@@ -236,20 +464,49 @@ describe('loadCheckoutShippingQuotes', () => {
   it('ignores a response after the caller invalidates pending requests', async () => {
     let resolveRequest: (response: Response) => void = () => undefined;
     global.fetch = vi.fn(
-      () => new Promise<Response>((resolve) => (resolveRequest = resolve)),
+      () => new Promise<Response>((resolve) => (resolveRequest = resolve))
     );
     const state = createState();
     const pendingRequest = loadCheckoutShippingQuotes(receiver, cart, state);
 
     invalidatePendingQuoteRequests(
       state.requestSequence,
-      state.activeAbortController,
+      state.activeAbortController
     );
     resolveRequest(quoteResponse('stale-quote'));
     await pendingRequest;
 
     expect(state.setShippingQuotes).not.toHaveBeenCalled();
-    expect(state.setSelectedQuoteId).toHaveBeenCalledTimes(1);
+    // Selection may clear when the request starts; it must not restore from a
+    // response that arrived after invalidation.
+    expect(state.setSelectedQuoteId).not.toHaveBeenCalledWith('stale-quote');
+  });
+
+  it('bugfix: clears selected quote as soon as the request key changes', async () => {
+    let resolveRequest: (response: Response) => void = () => undefined;
+    global.fetch = vi.fn(
+      () => new Promise<Response>((resolve) => (resolveRequest = resolve))
+    );
+    const state = {
+      ...createState(),
+      setSelectedProviderRateId: vi.fn(),
+    };
+    state.setSelectedQuoteId.mockClear();
+
+    const pending = loadCheckoutShippingQuotes(
+      receiver,
+      [{ ...cart[0], quantity: 2 }],
+      {
+        ...state,
+        currentRequestKey: JSON.stringify({ prior: true }),
+        preferredSelectedQuoteId: 'old-quote',
+      }
+    );
+
     expect(state.setSelectedQuoteId).toHaveBeenCalledWith('');
+    expect(state.setSelectedProviderRateId).toHaveBeenCalledWith('');
+
+    resolveRequest(quoteResponse('new-quote'));
+    await pending;
   });
 });

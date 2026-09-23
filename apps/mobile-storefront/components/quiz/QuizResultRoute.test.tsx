@@ -7,9 +7,11 @@ jest.mock('./QuizResultsPanel', () => ({
   QuizResultsPanel: ({
     allowPendingResultsExit,
     onReturnToQuizList,
+    simulatedPrize,
   }: {
     allowPendingResultsExit: boolean;
     onReturnToQuizList: () => void;
+    simulatedPrize?: { name: string } | null;
   }) => {
     const React = jest.requireActual('react') as typeof import('react');
     const { Button, Text } = jest.requireActual(
@@ -19,6 +21,13 @@ jest.mock('./QuizResultsPanel', () => ({
       React.Fragment,
       null,
       React.createElement(Text, null, String(allowPendingResultsExit)),
+      simulatedPrize
+        ? React.createElement(
+            Text,
+            null,
+            `Simulated prize: ${simulatedPrize.name}`
+          )
+        : null,
       React.createElement(Button, {
         onPress: onReturnToQuizList,
         title: 'return',
@@ -53,8 +62,10 @@ describe('QuizResultRoute', () => {
     const dismissRecovery = jest.fn();
     const onReset = jest.fn();
     const onRetryRecovery = jest.fn();
+    const backHandlerRef = { current: null as (() => void) | null };
     render(
       <QuizResultRoute
+        backHandlerRef={backHandlerRef}
         dismissRecovery={dismissRecovery}
         events={[
           {
@@ -90,7 +101,7 @@ describe('QuizResultRoute', () => {
     );
 
     expect(screen.getByText('true')).toBeTruthy();
-    fireEvent.press(screen.getByRole('button', { name: 'return' }));
+    act(() => backHandlerRef.current?.());
     expect(dismissRecovery).toHaveBeenCalledWith('event-1');
     expect(onReset).toHaveBeenCalledTimes(1);
     expect(onRetryRecovery).toHaveBeenCalledTimes(1);
@@ -193,5 +204,62 @@ describe('QuizResultRoute', () => {
 
     fireEvent.press(screen.getByRole('button', { name: 'return' }));
     expect(dismissRecovery).toHaveBeenCalledWith('event-1');
+  });
+
+  it('offers the selected prize as a simulation only to the test winner', () => {
+    const renderTestResult = (rank: number) =>
+      render(
+        <QuizResultRoute
+          dismissRecovery={jest.fn()}
+          events={[
+            {
+              endsAt: '2026-08-16T12:05:00.000Z',
+              id: 'event-1',
+              maxAttempts: 1,
+              mode: 'test',
+              prizeName: 'iPhone XR',
+              prizeProduct: {
+                condition: 'used',
+                id: 'product-1',
+                imageUrl: 'https://example.com/iphone.jpg',
+                name: 'iPhone XR',
+                variantId: null,
+              },
+              questionCount: 1,
+              startsAt: '2026-08-16T12:00:00.000Z',
+              status: 'completed',
+              title: 'Prize quiz',
+            },
+          ]}
+          expectedUserId="user-1"
+          lifecycle="final"
+          onReset={jest.fn()}
+          onRetryRecovery={jest.fn()}
+          result={null}
+          styles={styles}
+          terminalContext={{
+            attemptId: 'attempt-1',
+            eventEndsAt: '2026-08-16T12:05:00.000Z',
+            eventId: 'event-1',
+            serverNow: '2026-08-16T12:05:00.000Z',
+            contractVersion: 2,
+          }}
+          v2Result={{
+            attemptId: 'attempt-1',
+            availability: 'final',
+            availableAt: '2026-08-16T12:05:00.000Z',
+            rank,
+            score: 1,
+            totalQuestions: 1,
+          }}
+        />
+      );
+
+    const winner = renderTestResult(1);
+    expect(screen.getByText('Simulated prize: iPhone XR')).toBeTruthy();
+    winner.unmount();
+
+    renderTestResult(2);
+    expect(screen.queryByText('Simulated prize: iPhone XR')).toBeNull();
   });
 });

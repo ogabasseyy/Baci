@@ -1,26 +1,13 @@
-import { Alert } from 'react-native';
 import { useMerchant } from '@/hooks/use-merchant';
 import type { ShippingAddressInput } from '@/lib/validation';
-import {
-  buildSavingsOrderFields,
-  buildWalletOrderFields,
-  getFullyPaidStoreCreditPaymentMethod,
-} from '@/lib/wallet-payment-helpers';
+import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutStep } from '@/services/analytics';
-import {
-  pickChangedPriceById,
-  repriceCartItems,
-} from '@/services/cart-reprice';
 import { createOrder } from '@/services/orders';
-import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { useCartStore } from '@/stores/cart-store';
+import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
+import { acquireCheckoutSubmitFence } from './acquire-checkout-submit-fence';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
-import {
-  buildCheckoutOrderRequest,
-  createCheckoutSnapshot,
-} from './checkout-order-builders';
-import { finalizeCheckoutPayment } from './checkout-payment-finalization';
-import { runCheckoutPostOrderSideEffects } from './checkout-post-order-side-effects';
+import { createCheckoutSnapshot } from './checkout-order-builders';
 import {
   blockIfMixedPrizeCart,
   cartHasVoucherLine,
@@ -28,13 +15,20 @@ import {
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
+import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
+import { tryCaptureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
+import { isBnplPayment } from './is-bnpl-payment';
+import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
+import { runCheckoutFinalization } from './run-checkout-finalization';
+import { runRedvaultPostOrderBranch } from './run-redvault-post-order-branch';
+import { trackSubmittedCheckoutGeneration } from './track-submitted-checkout-generation';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 
 export type { UseCheckoutSubmitParams };
-
 export function useCheckoutSubmit({
   accountPassword,
+  onRedvaultOrder,
   appliedDiscountCode,
   availablePaymentMethods,
   clearCart,
@@ -72,20 +66,14 @@ export function useCheckoutSubmit({
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
   return async (address: ShippingAddressInput) => {
     const itemsSnapshot = [...useCartStore.getState().items];
-    const groupNegotiationSnapshot =
-      useCartStore.getState().cartWideNegotiationActive;
-
-    // Checkout-time safety net: never let a prize voucher check out alongside
-    // paid items (the prize redeems on its own order and the cart is cleared).
+    const {
+      checkoutGeneration: checkoutGenerationSnapshot,
+      cartWideNegotiationActive: groupNegotiationSnapshot,
+    } = useCartStore.getState();
     if (blockIfMixedPrizeCart(itemsSnapshot)) {
       return;
     }
-    // A voucher-only cart (₦0 prize) must take the standard order path, which
-    // returns the pre-reserved order already paid and routes to success — never
-    // a BNPL/financing flow (those bypass the fully-paid route and would open a
-    // ₦0 loan while leaving the voucher in the cart).
     const isVoucherOnlyCart = cartHasVoucherLine(itemsSnapshot);
-
     if (
       !validateCheckoutSubmission({
         availablePaymentMethods,
@@ -106,24 +94,43 @@ export function useCheckoutSubmit({
     ) {
       return;
     }
-
-    isOrderInFlight.current = true;
+    // REDVAULT fence preamble (extracted): validates a possibly-stale
+    // fenced order before any new order is created below. The acquire
+    // helper holds the in-flight latch across the fence await and owns
+    // its release on decline; the main flow below reuses the held latch
+    // through its own try/finally.
+    const submitFence = await acquireCheckoutSubmitFence({
+      accountPassword,
+      address,
+      clearCart,
+      customer,
+      isAuthenticated,
+      isOrderInFlight,
+      onRedvaultOrder,
+      saveAsDefaultAddress,
+      saveDetails,
+      selectedPayment,
+      selectedSavedAddressId,
+    });
+    if (!submitFence) {
+      return;
+    }
+    const { customerEmail, customerName, customerPhone } = submitFence;
+    // The in-flight latch is already held (acquired before the fence
+    // await above) and releases in the finally below.
     setIsProcessing(true);
-
+    // Hoisted for the rollback path, which re-freezes these on cart restore.
+    let submitCreditFields: Record<string, unknown> | undefined;
+    let submitHadSortMarker: boolean | undefined;
+    // Inconclusive marker read: the catch path skips cleanup.
+    let rollbackCaptureInconclusive = false;
+    const submittedGeneration = trackSubmittedCheckoutGeneration(
+      checkoutGenerationSnapshot
+    );
     try {
-      if (itemsSnapshot.length > 0) {
-        const reprice = await repriceCartItems(itemsSnapshot, merchantId);
-        if (reprice.changes.length > 0) {
-          useCartStore.getState().repriceItems(pickChangedPriceById(reprice));
-          Alert.alert(
-            'Prices updated',
-            'Some prices changed since you added these items. Your cart has been updated to the latest prices — please review the new total and tap checkout again.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
+      if (await abortIfCartPricesStale(itemsSnapshot, merchantId)) {
+        return;
       }
-
       const snapshot = createCheckoutSnapshot(
         itemsSnapshot,
         deliveryFee,
@@ -139,25 +146,13 @@ export function useCheckoutSubmit({
           walletBalance,
           walletSelection,
         });
-
       trackCheckoutStep('review');
-      const customerEmail = customer?.email || address.email;
-      const customerPhone = address.phone;
-      const customerName = `${address.firstName} ${address.lastName}`;
-      // A voucher-only cart is a ₦0 prize: force a non-POD method so the voucher
-      // RPC marks the pre-reserved order paid (it keys payment_status off
-      // p_payment_method — 'pod'/'pay_on_delivery' → pending, else → paid). With
-      // POD the prize order would be left pending while the cart is cleared.
       const paymentMethodForOrder = isVoucherOnlyCart
         ? 'card'
         : selectedPayment === 'payforme'
           ? 'invoice'
           : selectedPayment;
-      const isBNPL =
-        selectedPayment === 'credpal' ||
-        selectedPayment === 'credit_direct' ||
-        selectedPayment === 'klump';
-
+      const isBNPL = isBnplPayment(selectedPayment);
       if (isBNPL && !isVoucherOnlyCart) {
         await submitBnplCheckout({
           address,
@@ -171,6 +166,7 @@ export function useCheckoutSubmit({
           itemsSnapshot,
           liveSavingsSelection,
           liveWalletSelection,
+          checkoutGeneration: checkoutGenerationSnapshot,
           mobileCheckoutIdempotencyRef,
           paymentMethodForOrder,
           paymentSettings,
@@ -181,78 +177,105 @@ export function useCheckoutSubmit({
         });
         return;
       }
-
-      const orderResponse = await createOrder({
-        ...buildCheckoutOrderRequest({
-          address,
-          customerEmail,
-          customerName,
-          customerPhone,
-          deliveryMethod,
-          discountCode: appliedDiscountCode,
-          itemsSnapshot,
-          paymentMethodForOrder,
-          selectedQuote,
-          shippingProvider: getShippingProvider(),
-          snapshot,
-        }),
-        ...(appliedDiscountCode
-          ? {}
-          : buildSavingsOrderFields(liveSavingsSelection)),
-        ...buildWalletOrderFields(liveWalletSelection),
-      });
-      const { order } = orderResponse;
-      const orderNumber =
-        order.order_number || order.id.slice(0, 8).toUpperCase();
-      const completedPaymentMethod =
-        getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
-
-      void trackCheckoutRoutePurchaseCompleted({
-        customerEmail,
-        customerPhone,
-        items: itemsSnapshot,
-        orderId: order.id,
-        orderNumber,
-        paymentMethod: completedPaymentMethod,
-        shipping: snapshot.deliveryFee,
-        subtotal: snapshot.subtotal,
-        tax: snapshot.taxAmount,
-        total: order.total,
-        userId: user?.id ?? undefined,
-      });
-
-      await finalizeCheckoutPayment({
-        clearCart,
+      const { creditFields, orderRequest } = buildCheckoutSubmitOrderRequest({
+        address,
+        appliedDiscountCode,
         customerEmail,
         customerName,
         customerPhone,
+        deliveryMethod,
+        itemsSnapshot,
+        liveSavingsSelection,
+        liveWalletSelection,
+        paymentMethodForOrder,
+        selectedQuote,
+        shippingProvider: getShippingProvider(),
+        snapshot,
+      });
+      const orderResponse = await createOrder(orderRequest, {
+        checkoutGeneration: checkoutGenerationSnapshot,
+      });
+      submittedGeneration.track(orderResponse);
+      const rollbackCapture = await tryCaptureCheckoutSubmitRollbackState(
+        submittedGeneration.current(),
+        creditFields
+      );
+      if (!rollbackCapture.ok) {
+        // Fail closed before finalization: without a conclusive sort
+        // mode, a failed finalize would empty the cart with no rollback
+        // path. The created order stands; the cart stays intact for retry.
+        rollbackCaptureInconclusive = true;
+        throw new Error(
+          'Checkout verification timed out; your cart is unchanged.'
+        );
+      }
+      submitCreditFields = rollbackCapture.creditFields;
+      submitHadSortMarker = rollbackCapture.hadSortMarker;
+      const { order } = orderResponse;
+      const completedPaymentMethod =
+        getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
+      const orderNumber =
+        order.order_number || order.id.slice(0, 8).toUpperCase();
+      if (
+        await runRedvaultPostOrderBranch({
+          accountPassword,
+          address,
+          checkoutGeneration: submittedGeneration.current(),
+          completedPaymentMethod,
+          customer,
+          customerEmail,
+          customerName,
+          customerPhone,
+          isAuthenticated,
+          itemsSnapshot,
+          onRedvaultOrder,
+          order,
+          orderNumber,
+          orderResponse,
+          saveAsDefaultAddress,
+          saveDetails,
+          selectedPayment,
+          selectedSavedAddressId,
+          snapshot,
+        })
+      ) {
+        return;
+      }
+      await runCheckoutFinalization({
+        accountPassword,
+        address,
+        clearCart,
+        completedPaymentMethod,
+        customer,
+        customerEmail,
+        customerName,
+        customerPhone,
+        isAuthenticated,
         isOrderInFlight,
+        itemsSnapshot,
+        order,
         orderNumber,
         orderResponse,
-        runPostOrderSideEffects: () => {
-          void runCheckoutPostOrderSideEffects({
-            accountPassword,
-            address,
-            customerEmail,
-            customerId: customer?.id,
-            isAuthenticated,
-            saveAsDefaultAddress,
-            saveDetails,
-            selectedSavedAddressId,
-          });
-        },
+        saveAsDefaultAddress,
+        saveDetails,
         selectedPayment,
+        selectedSavedAddressId,
         setIsProcessing,
         setPendingOrder,
         setShowCryptoSelection,
-        shouldCreateWalletFundedBankTransferOrder:
-          walletFundedBankTransferOptionEnabled &&
-          selectedPayment === 'bank_transfer',
+        snapshot,
+        user,
+        walletFundedBankTransferOptionEnabled,
       });
     } catch (error) {
-      const cartStore = useCartStore.getState();
-      if (cartStore.items.length === 0) {
-        cartStore.restoreItems(itemsSnapshot, groupNegotiationSnapshot);
+      if (!rollbackCaptureInconclusive) {
+        await restoreEmptiedCheckoutCart({
+          cartWideNegotiationActive: groupNegotiationSnapshot,
+          checkoutGeneration: submittedGeneration.current(),
+          creditFields: submitCreditFields,
+          hadSortMarker: submitHadSortMarker,
+          itemsSnapshot,
+        });
       }
       handleCheckoutSubmitError(error, selectedPayment);
     } finally {

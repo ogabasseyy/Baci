@@ -62,6 +62,32 @@ export function handleCheckoutSubmitError(
 
     pruneRejectedQuizVoucherLines(error);
 
+    if (error.code === 'CHECKOUT_ORDER_NOT_REUSABLE') {
+      Alert.alert(
+        'Check your existing order',
+        'This checkout is already linked to an order whose status or details have changed. Check your orders, or start a new checkout if that order was cancelled and you still want these items.',
+        [
+          { text: 'View orders', onPress: () => router.push('/orders') },
+          {
+            text: 'Start a new checkout',
+            onPress: () => useCartStore.getState().advanceCheckoutGeneration(),
+          },
+          { text: 'Close', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+    if (error.code === 'CHECKOUT_IDEMPOTENCY_CONFLICT') {
+      Alert.alert(
+        'Check your existing order',
+        'This checkout is already linked to an order whose status or details have changed. Check your orders before starting another purchase. If you checked out as a guest, use your order email or contact support.',
+        [
+          { text: 'View orders', onPress: () => router.push('/orders') },
+          { text: 'Close', style: 'cancel' },
+        ]
+      );
+      return;
+    }
     if (error.code === 'NETWORK_ERROR') {
       Alert.alert(
         'No Connection',

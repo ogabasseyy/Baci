@@ -11,6 +11,7 @@ interface NegotiationWarningModalProps {
   pendingItem: CartItem | null;
   hasNonNegotiableCartItem?: boolean;
   onClose: () => void;
+  onDismissed?: () => void;
   onNegotiateItem: (item: CartItem) => void;
   onBulkNegotiate: () => void;
   triggerHaptic: () => void;
@@ -22,6 +23,7 @@ export default function NegotiationWarningModal({
   pendingItem,
   hasNonNegotiableCartItem = false,
   onClose,
+  onDismissed,
   onNegotiateItem,
   onBulkNegotiate,
   triggerHaptic,
@@ -43,6 +45,7 @@ export default function NegotiationWarningModal({
       transparent
       animationType="fade"
       accessibilityViewIsModal
+      onDismiss={onDismissed}
       onRequestClose={onClose}
     >
       <View style={styles.warningOverlay}>

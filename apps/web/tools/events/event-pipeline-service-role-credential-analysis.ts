@@ -13,7 +13,7 @@ type CredentialReaderLedgers = {
 const defaultLedgers: CredentialReaderLedgers = {
   approvedTask6ReaderHashes: {
     'apps/web/src/lib/supabase/service.ts':
-      '68d2fa91da0b05fe2b13a9da430ca82993f175292c78b22b0531ec58b92bb811',
+      '43192ae0f0c1ea208b50ca1a400b9e0aab769a46b71630a35dec0c01facda759',
   },
   // These are pre-existing factory, worker, or route readers. They are not part
   // of the temporary three-edge Task 6 analytics exception. Tracked operational
@@ -64,7 +64,7 @@ const defaultLedgers: CredentialReaderLedgers = {
     'apps/web/src/app/api/ai-jobs/worker/route.ts':
       '3cd51c9f0c4aeba362afd3d37e1a4b2d29107bedb6bdf2f75c9860cdc28fa42a',
     'apps/web/src/app/api/shipping/self-fulfill/route.ts':
-      'cb7a3220da0b16017bd9d56c5d1aeeb87438088a0603e03f88bd10958b0209da',
+      'd86b574dac4cf45c72cc54eb7ad1178af4bbb6064a5a3e73e9309ea73d20a221',
     'apps/web/src/app/api/shipping/webhooks/[provider]/route.ts':
       '2a2713042ae099e9deb7ac4be9e05631fbf72d18789689a26fa0e4896f2189d5',
     'apps/web/src/env.ts':
@@ -104,7 +104,7 @@ const defaultLedgers: CredentialReaderLedgers = {
     'scripts-tmp/upload-game-covers.ts':
       'c54726f6a965a6f318d36d6168e5528cd3722f5db30feff63492ba9d0a482738',
     'scripts/backfill-feed-images.ts':
-      '20a87b3ad4b928ac65efc9d39b0b1ad3f8d1e944c56ac13dc6918baafe1195c6',
+      '886b5b73e584f182375dce74ac4561792d3cbcbea3902b9708f2490d648881e9',
   },
   testSupportReaderHashes: {
     'apps/web/src/lib/events/event-pipeline-service-role-test-client.ts':

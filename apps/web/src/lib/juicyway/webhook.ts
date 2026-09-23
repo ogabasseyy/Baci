@@ -14,6 +14,10 @@ export async function verifyWebhookSignature(
   checksum: string,
   businessId: string
 ): Promise<boolean> {
+  // Business IDs are identifiers; deployment whitespace is not part of the key.
+  const normalizedBusinessId = businessId.trim();
+  if (!normalizedBusinessId) return false;
+
   // Sort data alphabetically and stringify
   const sortedData = Object.keys(data)
     .sort()
@@ -27,7 +31,7 @@ export async function verifyWebhookSignature(
 
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
-    encoder.encode(businessId),
+    encoder.encode(normalizedBusinessId),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']

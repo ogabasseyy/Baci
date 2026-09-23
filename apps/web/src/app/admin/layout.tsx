@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { AppSansFont } from '@/app/app-sans-font';
 import '@/app/globals.css';
 import { type ReactNode, Suspense } from 'react';
 import { CsrfInitializer } from '@/components/csrf-initializer';
@@ -7,9 +8,11 @@ import { AdminShell } from './admin-shell';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <Suspense fallback={<AdminLayoutFallback />}>
-      <AdminLayoutContent>{children}</AdminLayoutContent>
-    </Suspense>
+    <AppSansFont>
+      <Suspense fallback={<AdminLayoutFallback />}>
+        <AdminLayoutContent>{children}</AdminLayoutContent>
+      </Suspense>
+    </AppSansFont>
   );
 }
 

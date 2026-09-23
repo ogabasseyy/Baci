@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
-import { createQuizStyles, type QuizThemeColors } from './QuizScreen.styles';
+import { createQuizStyles } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 const mockColors: QuizThemeColors = {
   background: '#ffffff',

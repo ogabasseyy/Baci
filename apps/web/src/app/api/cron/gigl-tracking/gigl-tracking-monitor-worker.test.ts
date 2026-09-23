@@ -83,6 +83,36 @@ describe('processClaimedGiglTrackingMonitors', () => {
     ).toEqual([{ ...monitor, state: 'paused' }]);
   });
 
+  it('bugfix: processes orderless repair-pickup monitor claims without dropping them', async () => {
+    const orderless = { ...monitor, order_id: null };
+    expect(claimedGiglTrackingMonitorsSchema.parse([orderless])).toEqual([
+      orderless,
+    ]);
+
+    const supabase = createSupabase();
+    const summary = await processClaimedGiglTrackingMonitors(
+      supabase as never,
+      [orderless],
+      'worker-1',
+      async () => new Map([['GIGL-1', result]])
+    );
+
+    expect(summary).toEqual({
+      applied: 1,
+      claimed: 1,
+      failed: 0,
+      paused: 0,
+      success: true,
+    });
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'apply_gigl_tracking_result',
+      expect.objectContaining({
+        p_shipment_id: orderless.shipment_id,
+        p_tracking_epoch_id: orderless.tracking_epoch_id,
+      })
+    );
+  });
+
   it('records a failure when the batch response omits a claimed waybill', async () => {
     const supabase = createSupabase();
     const summary = await processClaimedGiglTrackingMonitors(

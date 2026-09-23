@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react-native';
 import type { QuizLeaderboard } from '@/services/quiz-types';
 import { QuizResultsStandings } from './QuizResultsStandings';
-import { createQuizStyles, type QuizThemeColors } from './QuizScreen.styles';
+import { createQuizStyles } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 const colors: QuizThemeColors = {
   background: '#000',
@@ -45,6 +46,8 @@ describe('QuizResultsStandings', () => {
     );
 
     expect(screen.getByText('Final standings')).toBeTruthy();
+    expect(screen.getByText('12.00s')).toBeTruthy();
+    expect(screen.getByLabelText('Avatar for Bassey')).toBeTruthy();
     expect(screen.getByText('4 participants')).toBeTruthy();
     expect(screen.getByText('Bassey  (You)')).toBeTruthy();
   });

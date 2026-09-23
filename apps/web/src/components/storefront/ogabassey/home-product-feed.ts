@@ -3,7 +3,7 @@ import {
   getImagePayloadAlt,
   getImagePayloadUrl,
 } from '@baci/shared/lib';
-import { prioritizeSmartphoneProducts } from '@baci/shared/storefront';
+import { prioritizeSmartphoneProducts } from '@baci/shared/storefront/prioritize-smartphone-products';
 import type { Product as StorefrontProduct } from '@/lib/products';
 import {
   COMPACT_OPTIONS,

@@ -1,6 +1,8 @@
 import { Text, View } from 'react-native';
 import type { QuizLeaderboardEntry } from '@/services/quiz-types';
+import { formatQuizStandingTime } from './format-quiz-standing-time';
 import type { createQuizLeaderboardStyles } from './QuizLeaderboardScreen.styles';
+import { QuizPlayerAvatar } from './QuizPlayerAvatar';
 
 interface QuizLeaderboardRowProps {
   entry: QuizLeaderboardEntry;
@@ -8,6 +10,8 @@ interface QuizLeaderboardRowProps {
 }
 
 export function QuizLeaderboardRow({ entry, styles }: QuizLeaderboardRowProps) {
+  const finishTime = formatQuizStandingTime(entry.totalTimeSeconds);
+
   return (
     <View
       accessibilityLabel={`Rank ${entry.rank}, ${entry.displayName}, score ${entry.score}`}
@@ -22,9 +26,18 @@ export function QuizLeaderboardRow({ entry, styles }: QuizLeaderboardRowProps) {
       >
         #{entry.rank}
       </Text>
-      <Text numberOfLines={1} style={styles.name}>
-        {entry.displayName}
-      </Text>
+      <QuizPlayerAvatar
+        accentColor={styles.rank.color}
+        displayName={entry.displayName}
+        surfaceColor={styles.currentRankRow.backgroundColor}
+      />
+      <View style={styles.identity}>
+        <Text numberOfLines={1} style={styles.name}>
+          {entry.displayName}
+          {entry.isCurrentCustomer ? '  (You)' : ''}
+        </Text>
+        {finishTime ? <Text style={styles.time}>{finishTime}</Text> : null}
+      </View>
       <Text style={styles.score}>{entry.score} pts</Text>
     </View>
   );

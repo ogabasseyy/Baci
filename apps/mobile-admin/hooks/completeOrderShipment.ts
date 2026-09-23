@@ -139,6 +139,9 @@ export async function completeOrderShipment({
   queryClient.invalidateQueries({ queryKey: ['orders'] });
   queryClient.invalidateQueries({ queryKey: ['order-counts'] });
   queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+  if (mode === 'provider') {
+    queryClient.invalidateQueries({ queryKey: ['merchant-wallet'] });
+  }
 
   // Only offer the "Send Order Details to Rider" WhatsApp action when a rider
   // number was actually provided — otherwise the action would dead-end.

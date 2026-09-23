@@ -38,6 +38,10 @@ describe('CompareIndexPageContent', () => {
     expect(
       screen.getByRole('heading', { name: 'Smartphones comparisons' })
     ).toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveClass(
+      'bg-store-background',
+      'text-store-background-text'
+    );
     expect(screen.getByText(/available from Demo Store/i)).toBeInTheDocument();
     expect(
       screen.getByRole('link', {

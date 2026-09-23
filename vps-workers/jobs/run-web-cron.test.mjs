@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildWebCronUrl, runWebCron } from './run-web-cron.mjs';
+import {
+  buildWebCronUrl,
+  CACHE_INVALIDATION_DEAD_LETTER_CODE,
+  runWebCron,
+} from './run-web-cron.mjs';
 
 const noop = () => undefined;
 const noopLogger = {
@@ -64,7 +68,79 @@ describe('web cron worker', () => {
             ),
           logger: noopLogger,
         }),
-      /HTTP 503:.*cache_invalidation_dead_letter/
+      (error) =>
+        error instanceof Error &&
+        error.message.includes(`HTTP 503`) &&
+        error.message.includes(CACHE_INVALIDATION_DEAD_LETTER_CODE)
+    );
+  });
+
+  it('returns the known cache dead-letter response only with explicit opt-in', async () => {
+    const fetchFn = () =>
+      new Response(JSON.stringify({ code: 'cache_invalidation_dead_letter' }), {
+        status: 503,
+      });
+    const result = await runWebCron({
+      path: '/api/cron/drain-cache-invalidations',
+      env: {
+        BACI_WEB_BASE_URL: 'https://ogabassey.com',
+        CRON_SECRET: 'secret',
+      },
+      fetchFn,
+      allowCacheDeadLetter: true,
+      logger: noopLogger,
+    });
+    assert.deepEqual(result, {
+      cacheDeadLetter: true,
+      status: 503,
+      body: JSON.stringify({ code: CACHE_INVALIDATION_DEAD_LETTER_CODE }),
+    });
+    const queryResult = await runWebCron({
+      path: '/api/cron/drain-cache-invalidations?source=adaptive',
+      env: {
+        BACI_WEB_BASE_URL: 'https://ogabassey.com',
+        CRON_SECRET: 'secret',
+      },
+      fetchFn,
+      allowCacheDeadLetter: true,
+      logger: noopLogger,
+    });
+    assert.equal(queryResult.cacheDeadLetter, true);
+    await assert.rejects(
+      () =>
+        runWebCron({
+          path: '/api/cron/drain-cache-invalidations',
+          env: {
+            BACI_WEB_BASE_URL: 'https://ogabassey.com',
+            CRON_SECRET: 'secret',
+          },
+          fetchFn: () =>
+            new Response(
+              JSON.stringify({
+                code: `${CACHE_INVALIDATION_DEAD_LETTER_CODE}_near_match`,
+              }),
+              { status: 503 }
+            ),
+          allowCacheDeadLetter: true,
+          logger: noopLogger,
+        }),
+      /HTTP 503:/
+    );
+    await assert.rejects(
+      () =>
+        runWebCron({
+          path: '/api/cron/drain-cache-invalidations',
+          env: {
+            BACI_WEB_BASE_URL: 'https://ogabassey.com',
+            CRON_SECRET: 'secret',
+          },
+          fetchFn,
+          logger: noopLogger,
+        }),
+      (error) =>
+        error instanceof Error &&
+        error.message.includes('HTTP 503') &&
+        error.message.includes(CACHE_INVALIDATION_DEAD_LETTER_CODE)
     );
   });
 

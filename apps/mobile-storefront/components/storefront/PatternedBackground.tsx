@@ -1,8 +1,8 @@
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { BRAND } from '@/constants/Colors';
 import { GadgetPattern } from './GadgetPattern';
 
-const PATTERN_HEIGHT = 1500;
 const DARK_PATTERN_COLOR = '#ffffff';
 const DARK_PATTERN_OPACITY = 0.04;
 const LIGHT_PATTERN_OPACITY = 0.07;
@@ -16,17 +16,23 @@ export function PatternedBackground({
   backgroundColor,
   isDark,
 }: PatternedBackgroundProps) {
+  const [patternHeight, setPatternHeight] = useState(0);
+
   return (
     <>
       <View
         style={[StyleSheet.absoluteFill, { backgroundColor }]}
         testID="patterned-background-base"
       />
-      <View style={[StyleSheet.absoluteFill, styles.patternClip]}>
+      <View
+        onLayout={(event) => setPatternHeight(event.nativeEvent.layout.height)}
+        style={[StyleSheet.absoluteFill, styles.patternClip]}
+        testID="patterned-background-clip"
+      >
         <GadgetPattern
           colorScheme={isDark ? 'dark' : 'light'}
           opacity={isDark ? DARK_PATTERN_OPACITY : LIGHT_PATTERN_OPACITY}
-          height={PATTERN_HEIGHT}
+          height={patternHeight}
           color={isDark ? DARK_PATTERN_COLOR : BRAND.primary}
         />
       </View>

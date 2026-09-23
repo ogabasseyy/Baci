@@ -34,6 +34,8 @@ export function buildStorefrontBlogPurgeUrls(
   for (const identifier of identifiers) {
     for (const hostname of resolvePurgeHostnames(identifier)) {
       urls.add(`https://${hostname}/blog`);
+      urls.add(`https://${hostname}/blog/news-sitemap.xml`);
+      urls.add(`https://${hostname}/blog/sitemap.xml`);
       for (const slug of dedupedSlugs) {
         urls.add(`https://${hostname}/blog/${encodeURIComponent(slug)}`);
         urls.add(

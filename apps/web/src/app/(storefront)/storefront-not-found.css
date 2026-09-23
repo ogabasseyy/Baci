@@ -1,0 +1,9 @@
+@import "tailwindcss" source(none);
+@import "./storefront-foundation.css";
+@config "../../../tailwind.storefront-home.config.mjs";
+
+/* Next includes the not-found boundary on successful routes too. Never pull
+   the full storefront stylesheet into that shared boundary. */
+@source "./[slug]/storefront-not-found-content.tsx";
+@source "../../components/themed/themed-button.tsx";
+@source "../../components/ui/button.tsx";

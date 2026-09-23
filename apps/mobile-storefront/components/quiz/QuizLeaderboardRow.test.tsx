@@ -36,7 +36,9 @@ describe('QuizLeaderboardRow', () => {
       screen.getByLabelText('Rank 2, Player-AB12CD34, score 18')
     ).toBeTruthy();
     expect(screen.getByText('#2')).toBeTruthy();
-    expect(screen.getByText('Player-AB12CD34')).toBeTruthy();
+    expect(screen.getByText('Player-AB12CD34  (You)')).toBeTruthy();
     expect(screen.getByText('18 pts')).toBeTruthy();
+    expect(screen.getByText('2:00.00')).toBeTruthy();
+    expect(screen.getByLabelText('Avatar for Player-AB12CD34')).toBeTruthy();
   });
 });

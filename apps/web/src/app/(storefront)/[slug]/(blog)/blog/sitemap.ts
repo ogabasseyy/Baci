@@ -13,7 +13,8 @@ import {
   getBlogCategorySlug,
 } from './blog-category-routing';
 
-export const preferredRegion = 'dub1';
+// Region pinning lives in vercel.json `regions` (dub1) — `preferredRegion`
+// is deprecated and removed.
 
 const MIN_CATEGORY_HUB_POSTS = 3;
 
@@ -26,6 +27,16 @@ interface BlogCategorySitemapPost {
 interface BlogCategorySitemapEntry {
   category: string;
   lastModified: string;
+}
+
+function parseValidDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getPostLastModified(post: BlogCategorySitemapPost): Date | null {
+  return parseValidDate(post.updated_at) ?? parseValidDate(post.published_at);
 }
 
 function getBlogCategorySitemapEntries<TPost extends BlogCategorySitemapPost>(
@@ -43,7 +54,7 @@ function getBlogCategorySitemapEntries<TPost extends BlogCategorySitemapPost>(
 
   for (const post of posts) {
     const category = post.category?.trim();
-    const lastModified = post.updated_at || post.published_at;
+    const lastModified = getPostLastModified(post);
     if (!category || !lastModified || !isPublicBlogCategory(category)) {
       continue;
     }
@@ -59,7 +70,7 @@ function getBlogCategorySitemapEntries<TPost extends BlogCategorySitemapPost>(
         category,
         count: 1,
         labels: new Set([category]),
-        lastModified,
+        lastModified: lastModified.toISOString(),
       });
       continue;
     }
@@ -67,10 +78,11 @@ function getBlogCategorySitemapEntries<TPost extends BlogCategorySitemapPost>(
     existing.count += 1;
     existing.labels.add(category);
     if (
-      new Date(lastModified).getTime() >
-      new Date(existing.lastModified).getTime()
+      lastModified.getTime() >
+      (parseValidDate(existing.lastModified)?.getTime() ??
+        Number.NEGATIVE_INFINITY)
     ) {
-      existing.lastModified = lastModified;
+      existing.lastModified = lastModified.toISOString();
     }
   }
 
@@ -118,27 +130,35 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const publicPosts = filterPublicBlogPosts(posts || []);
   const categoryEntries = getBlogCategorySitemapEntries(publicPosts);
+  const latestBlogDate = publicPosts.reduce<Date | null>((latest, post) => {
+    const candidate = getPostLastModified(post);
+    if (!candidate || (latest && candidate.getTime() <= latest.getTime())) {
+      return latest;
+    }
+    return candidate;
+  }, null);
 
   const entries: MetadataRoute.Sitemap = [
     {
       url: `${storeUrl}/blog`,
-      lastModified: new Date(),
+      ...(latestBlogDate ? { lastModified: latestBlogDate } : {}),
       changeFrequency: 'daily',
       priority: 1,
     },
   ];
 
   for (const categoryEntry of categoryEntries) {
+    const lastModified = parseValidDate(categoryEntry.lastModified);
     entries.push({
       url: `${storeUrl}/blog/category/${getBlogCategorySlug(categoryEntry.category)}`,
-      lastModified: new Date(categoryEntry.lastModified),
+      ...(lastModified ? { lastModified } : {}),
       changeFrequency: 'weekly',
       priority: 0.7,
     });
   }
 
   for (const post of publicPosts) {
-    const lastModified = post.updated_at || post.published_at;
+    const lastModified = getPostLastModified(post);
     if (!lastModified) {
       continue;
     }
@@ -146,7 +166,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     entries.push({
       url: `${storeUrl}/blog/${post.slug}`,
-      lastModified: new Date(lastModified),
+      lastModified,
       changeFrequency: 'monthly',
       priority: 0.8,
       ...(imageUrls.length > 0 && { images: imageUrls }),
@@ -162,14 +182,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (!profile) {
       continue;
     }
-    let lastModified: string | null = null;
+    let lastModified: Date | null = null;
     for (const post of publicPosts) {
       if (post.author_name !== profile.name) {
         continue;
       }
-      const timestamp = post.updated_at || post.published_at;
-      if (timestamp && (!lastModified || timestamp > lastModified)) {
-        lastModified = timestamp;
+      const candidate = getPostLastModified(post);
+      if (
+        candidate &&
+        (!lastModified || candidate.getTime() > lastModified.getTime())
+      ) {
+        lastModified = candidate;
       }
     }
     if (!lastModified) {
@@ -177,7 +200,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
     entries.push({
       url: `${storeUrl}/blog/author/${authorSlug}`,
-      lastModified: new Date(lastModified),
+      lastModified,
       changeFrequency: 'weekly',
       priority: 0.6,
     });

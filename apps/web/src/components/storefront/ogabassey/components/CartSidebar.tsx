@@ -23,6 +23,7 @@ import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { asRoute } from '@/lib/routes';
 import { getStorefrontProductHref } from '@/lib/storefront-product-href';
 import { AdUnit } from './AdUnit';
+import { CartSidebarTotal } from './cart-sidebar-total';
 // import { ActionTooltip } from './Tooltip';
 import { EmptyState } from './empty-state';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
@@ -476,22 +477,7 @@ export const CartSidebar: React.FC = () => {
             {/* Footer / Checkout */}
             {displayCart.length > 0 && (
               <div className="border-t border-gray-100 bg-gray-50 p-6 space-y-4 shrink-0">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Subtotal</span>
-                    <span>₦{displayCartTotal.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Shipping</span>
-                    <span className="text-store-primary">
-                      Calculated at checkout
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xl font-bold text-gray-900 pt-2 border-t border-gray-200">
-                    <span>Total</span>
-                    <span>₦{displayCartTotal.toLocaleString()}</span>
-                  </div>
-                </div>
+                <CartSidebarTotal total={displayCartTotal} />
 
                 {/* Negotiate Total Button */}
                 {hasPriceNegotiation && !hasNonNegotiableCartItem && (

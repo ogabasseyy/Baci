@@ -5,6 +5,10 @@ import {
   requestTrackingPermissionStatus,
 } from '@/lib/tracking-transparency';
 import {
+  hasRequiredAuthorizedAdTrackingModules,
+  isFacebookTrackingConfigured,
+} from './ad-tracking-authorized-modules';
+import {
   FB_APP_ID,
   FB_CLIENT_TOKEN,
   getAdTrackingModules,
@@ -12,10 +16,10 @@ import {
   getIsTikTokInitialized,
   getIsTrackingAllowed,
   IS_TIKTOK_BUSINESS_CONFIGURED,
+  initializeTikTokBusinessIfNeeded,
   loadNativeModules,
   adTrackingLog as log,
   setIsInitialized,
-  setIsTikTokInitialized,
   setIsTrackingAllowed,
 } from './ad-tracking-state';
 import { toTikTokEventData } from './tiktok-event-data';
@@ -67,24 +71,13 @@ export function generateEventIdSync(): string {
   return `${timestamp}_${random}`;
 }
 
-function hasRequiredAuthorizedAdTrackingModules(
-  modules: ReturnType<typeof getAdTrackingModules>
-): boolean {
-  if (FB_APP_ID && FB_CLIENT_TOKEN && !modules.FBSettings) {
-    return false;
-  }
-  if (IS_TIKTOK_BUSINESS_CONFIGURED && !modules.TikTokBusiness) {
-    return false;
-  }
-  return true;
-}
-
 async function initializeAuthorizedAdTracking(): Promise<boolean> {
   let modules = getAdTrackingModules();
-  if (
-    Platform.OS !== 'web' &&
-    (!modules.FBSettings || !modules.TikTokBusiness)
-  ) {
+  const needsFacebookLoad =
+    isFacebookTrackingConfigured() && !modules.FBSettings;
+  const needsTikTokLoad =
+    IS_TIKTOK_BUSINESS_CONFIGURED && !modules.TikTokBusiness;
+  if (Platform.OS !== 'web' && (needsFacebookLoad || needsTikTokLoad)) {
     await loadNativeModules();
     modules = getAdTrackingModules();
   }
@@ -116,18 +109,7 @@ async function initializeAuthorizedAdTracking(): Promise<boolean> {
     modules.TikTokBusiness &&
     !getIsTikTokInitialized()
   ) {
-    try {
-      const initialized = await modules.TikTokBusiness.initialize?.();
-      setIsTikTokInitialized(
-        Boolean(initialized || modules.TikTokBusiness.isInitialized?.())
-      );
-      if (getIsTikTokInitialized()) {
-        log.info('TikTok SDK initialized (backup)');
-      }
-    } catch (error) {
-      setIsTikTokInitialized(false);
-      log.warn('TikTok SDK initialization failed:', error);
-    }
+    await initializeTikTokBusinessIfNeeded(modules.TikTokBusiness);
   }
 
   return true;

@@ -1,154 +1,221 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCachedProductSeoLinkData } from './get-cached-product-seo-link-data';
+import {
+  getCachedProductSeoLinkData,
+  type ProductSeoLinkDataInput,
+} from './get-cached-product-seo-link-data';
+import { storefrontPdpSemanticReadCooldown } from './storefront-pdp-semantic-read-cooldown-singleton';
 
 const mocks = vi.hoisted(() => ({
-  cacheLife: vi.fn(),
-  cacheTag: vi.fn(),
-  client: { rpc: vi.fn() },
-  readStorefrontPdpSemanticEnrichment: vi.fn(),
+  getCachedPdpProductGuidePosts: vi.fn(),
+  getCachedPdpSemanticInventory: vi.fn(),
+  getPublishedClusterPosts: vi.fn(),
 }));
 
-vi.mock('next/cache', () => ({
-  cacheLife: (...args: string[]) => mocks.cacheLife(...args),
-  cacheTag: (...args: string[]) => mocks.cacheTag(...args),
+vi.mock('./get-cached-pdp-product-guide-posts', () => ({
+  getCachedPdpProductGuidePosts: (...args: unknown[]) =>
+    mocks.getCachedPdpProductGuidePosts(...args),
 }));
 
-vi.mock('@/lib/cached-data', () => ({
-  getPublicSupabaseClient: () => mocks.client,
+vi.mock('./get-cached-pdp-semantic-inventory', () => ({
+  getCachedPdpSemanticInventory: (...args: unknown[]) =>
+    mocks.getCachedPdpSemanticInventory(...args),
+  PDP_SEMANTIC_TOTAL_TIMEOUT_MS: 5_000,
 }));
 
-vi.mock('./storefront-pdp-semantic-enrichment', () => ({
-  readStorefrontPdpSemanticEnrichment: (...args: unknown[]) =>
-    mocks.readStorefrontPdpSemanticEnrichment(...args),
+vi.mock('@/lib/storefront-content/get-published-cluster-posts', () => ({
+  getPublishedClusterPosts: (...args: unknown[]) =>
+    mocks.getPublishedClusterPosts(...args),
 }));
 
-const moduleDir = dirname(fileURLToPath(import.meta.url));
-const source = [
-  'get-cached-product-seo-link-data.ts',
-  'storefront-pdp-semantic-enrichment.ts',
-]
-  .map((file) => readFileSync(join(moduleDir, file), 'utf8'))
-  .join('\n');
+const inventory = [
+  {
+    category_slug: 'laptops',
+    name: 'MacBook Pro',
+    price: 4500000,
+    slug: 'macbook-pro',
+  },
+];
+const productGuidePosts = [
+  { slug: 'lenovo-legion-guide', title: 'Lenovo Legion Guide' },
+];
+const clusterGuidePosts = [
+  {
+    category: 'Laptops',
+    excerpt: 'Duplicate linked guide',
+    featured_image_url: null,
+    keywords: ['lenovo'],
+    published_at: '2026-08-31T10:00:00.000Z',
+    reading_time_minutes: 5,
+    slug: 'lenovo-legion-guide',
+    tags: ['laptops'],
+    title: 'Duplicate linked guide',
+  },
+  {
+    category: 'Laptops',
+    excerpt: 'Best laptops',
+    featured_image_url: null,
+    keywords: ['laptops'],
+    published_at: '2026-08-30T10:00:00.000Z',
+    reading_time_minutes: 5,
+    slug: 'best-laptops',
+    tags: ['laptops'],
+    title: 'Best laptops',
+  },
+];
 
-const seoLinkData = {
-  inventory: [],
-  guidePosts: [],
-  priorityGuidePostSlugs: [],
+const defaultInput: ProductSeoLinkDataInput = {
+  blogEnabled: true,
+  categorySlug: 'laptops',
+  merchantId: 'merchant-1',
+  productBrand: 'Lenovo',
+  productId: 'prod-1',
+  productName: 'Lenovo Legion 5',
+  productSlug: 'legion-5',
+  storeSlug: 'ogabassey',
 };
+
+function loadSeoLinkData(overrides: Partial<ProductSeoLinkDataInput> = {}) {
+  return getCachedProductSeoLinkData({ ...defaultInput, ...overrides });
+}
 
 describe('getCachedProductSeoLinkData', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.readStorefrontPdpSemanticEnrichment.mockResolvedValue({
-      status: 'found',
-      value: seoLinkData,
+    storefrontPdpSemanticReadCooldown.reset();
+    mocks.getCachedPdpSemanticInventory.mockResolvedValue(inventory);
+    mocks.getCachedPdpProductGuidePosts.mockResolvedValue(productGuidePosts);
+    mocks.getPublishedClusterPosts.mockResolvedValue(clusterGuidePosts);
+  });
+
+  it('reuses category inventory and independently merges linked guide priority', async () => {
+    const result = await loadSeoLinkData();
+
+    expect(result).toEqual({
+      inventory,
+      guidePosts: [productGuidePosts[0], clusterGuidePosts[1]],
+      priorityGuidePostSlugs: ['lenovo-legion-guide'],
     });
-  });
-
-  it('keeps SEO link enrichment off the remote cache handler and remote helpers', () => {
-    expect(source).toContain("'use cache';");
-    expect(source).not.toContain("'use cache: remote';");
-    expect(source).not.toContain('getCachedCategoryPageData');
-    expect(source).not.toContain('getPublishedClusterPosts');
-    expect(source).not.toContain('getPublishedProductGuidePosts');
-    expect(source).not.toContain('getCachedFeatureSettings');
-  });
-
-  it('tags the local cache and delegates to one semantic snapshot', async () => {
-    const result = await getCachedProductSeoLinkData(
+    expect(mocks.getCachedPdpSemanticInventory).toHaveBeenCalledWith(
       'merchant-1',
-      'laptops',
-      'prod-1',
-      'legion-5',
-      'Lenovo Legion 5',
-      'Lenovo',
-      true
+      'laptops'
     );
-
-    expect(result).toBe(seoLinkData);
-    expect(mocks.cacheLife).toHaveBeenCalledWith('products');
-    expect(mocks.cacheTag).toHaveBeenCalledWith(
-      'products',
-      'products-merchant-1',
-      'blog-posts',
-      'seo-links-merchant-1-laptops-prod-1'
-    );
-    expect(mocks.readStorefrontPdpSemanticEnrichment).toHaveBeenCalledWith(
-      mocks.client,
+    expect(mocks.getPublishedClusterPosts).toHaveBeenCalledWith(
+      'merchant-1',
       expect.objectContaining({
-        clusterRequest: expect.objectContaining({
-          p_category_slug: 'laptops',
-          p_search_query: expect.stringContaining('"lenovo legion 5"'),
-        }),
-        includeGuides: true,
-        merchantId: 'merchant-1',
-        productId: 'prod-1',
+        brands: ['Lenovo'],
+        categorySlug: 'laptops',
+        pageKind: 'product',
+        productNames: ['Lenovo Legion 5'],
+        productSlugs: ['legion-5'],
       })
     );
+    expect(mocks.getCachedPdpProductGuidePosts).toHaveBeenCalledWith(
+      'merchant-1',
+      'prod-1'
+    );
   });
 
-  it('continues when Next cache APIs are unavailable in a unit-test runtime', async () => {
-    mocks.cacheLife.mockImplementationOnce(() => {
-      throw new Error('cache unavailable');
+  it('does not query guide data when the merchant blog is disabled', async () => {
+    await expect(loadSeoLinkData({ blogEnabled: false })).resolves.toEqual({
+      inventory,
+      guidePosts: [],
+      priorityGuidePostSlugs: [],
     });
 
-    await expect(
-      getCachedProductSeoLinkData(
-        'merchant-1',
-        'laptops',
-        'prod-1',
-        'legion-5',
-        'Lenovo Legion 5',
-        'Lenovo',
-        true
-      )
-    ).resolves.toBe(seoLinkData);
+    expect(mocks.getPublishedClusterPosts).not.toHaveBeenCalled();
+    expect(mocks.getCachedPdpProductGuidePosts).not.toHaveBeenCalled();
   });
 
-  it('throws transient snapshot failures before an empty enrichment can be cached', async () => {
-    mocks.readStorefrontPdpSemanticEnrichment.mockResolvedValueOnce({
-      status: 'unavailable',
-      error: {
-        code: '57014',
-        kind: 'timeout',
-        operation: 'pdp_semantic_enrichment',
-        retryable: true,
+  it('skips a repeated inventory timeout while the shared cooldown is active', async () => {
+    mocks.getCachedPdpSemanticInventory.mockRejectedValueOnce(
+      new DOMException('inventory timed out', 'TimeoutError')
+    );
+
+    await expect(loadSeoLinkData({ blogEnabled: false })).rejects.toMatchObject(
+      { name: 'TimeoutError' }
+    );
+    await expect(
+      loadSeoLinkData({ blogEnabled: false })
+    ).resolves.toMatchObject({ inventory: [] });
+    expect(mocks.getCachedPdpSemanticInventory).toHaveBeenCalledTimes(1);
+  });
+
+  it('queries inventory for a different merchant and category after another scope times out', async () => {
+    mocks.getCachedPdpSemanticInventory.mockRejectedValueOnce(
+      new DOMException('inventory timed out', 'TimeoutError')
+    );
+
+    await expect(loadSeoLinkData({ blogEnabled: false })).rejects.toMatchObject(
+      { name: 'TimeoutError' }
+    );
+    await expect(
+      loadSeoLinkData({
+        blogEnabled: false,
+        categorySlug: 'phones',
+        merchantId: 'merchant-2',
+      })
+    ).resolves.toMatchObject({ inventory });
+
+    expect(mocks.getCachedPdpSemanticInventory).toHaveBeenCalledTimes(2);
+    expect(mocks.getCachedPdpSemanticInventory).toHaveBeenLastCalledWith(
+      'merchant-2',
+      'phones'
+    );
+  });
+
+  it('skips cluster guide reads for unsupported route categories', async () => {
+    await expect(
+      loadSeoLinkData({ categorySlug: 'unsupported-category' })
+    ).resolves.toMatchObject({ guidePosts: productGuidePosts });
+
+    expect(mocks.getPublishedClusterPosts).not.toHaveBeenCalled();
+    expect(mocks.getCachedPdpProductGuidePosts).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the PDP optional model usable when a guide read times out', async () => {
+    mocks.getPublishedClusterPosts.mockRejectedValueOnce(
+      new Error('cluster guide timeout')
+    );
+    mocks.getCachedPdpProductGuidePosts.mockRejectedValueOnce(
+      new Error('product guide timeout')
+    );
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {
+      // Suppress expected optional guide fallback warnings.
+    });
+
+    await expect(loadSeoLinkData()).resolves.toEqual({
+      inventory,
+      guidePosts: [],
+      priorityGuidePostSlugs: [],
+    });
+
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+    warnSpy.mockRestore();
+  });
+
+  it('drops malformed cluster guide rows instead of failing the PDP', async () => {
+    mocks.getPublishedClusterPosts.mockResolvedValueOnce([
+      {
+        ...clusterGuidePosts[1],
+        tags: 'not-an-array',
       },
-    });
+    ]);
 
-    await expect(
-      getCachedProductSeoLinkData(
-        'merchant-1',
-        'laptops',
-        'prod-1',
-        'legion-5',
-        'Lenovo Legion 5',
-        'Lenovo',
-        true
-      )
-    ).rejects.toMatchObject({
-      failure: expect.objectContaining({ code: '57014' }),
+    await expect(loadSeoLinkData()).resolves.toEqual({
+      inventory,
+      guidePosts: productGuidePosts,
+      priorityGuidePostSlugs: ['lenovo-legion-guide'],
     });
   });
 
-  it('caches a genuine enrichment miss as an explicit empty optional model', async () => {
-    mocks.readStorefrontPdpSemanticEnrichment.mockResolvedValueOnce({
-      status: 'not_found',
-    });
+  it('lets inventory failures escape so the component can omit only the optional section', async () => {
+    mocks.getCachedPdpSemanticInventory.mockRejectedValueOnce(
+      new Error('inventory timeout')
+    );
 
-    await expect(
-      getCachedProductSeoLinkData(
-        'merchant-1',
-        'laptops',
-        'missing-product',
-        'missing-product',
-        'Missing Product',
-        null,
-        true
-      )
-    ).resolves.toEqual(seoLinkData);
+    await expect(loadSeoLinkData()).rejects.toThrow('inventory timeout');
+
+    expect(mocks.getPublishedClusterPosts).not.toHaveBeenCalled();
+    expect(mocks.getCachedPdpProductGuidePosts).not.toHaveBeenCalled();
   });
 });

@@ -55,6 +55,51 @@ describe('buildSentryExpoConfiguration', () => {
     warn.mockRestore();
   });
 
+  it('enables local native capture without a symbol-upload token', () => {
+    const result = buildSentryExpoConfiguration(
+      {
+        EXPO_PUBLIC_SENTRY_DSN: completeEnvironment.EXPO_PUBLIC_SENTRY_DSN,
+        SENTRY_ORG: 'ogabassey',
+        SENTRY_PROJECT: 'storefront',
+      },
+      { required: false }
+    );
+
+    expect(result.plugin).toEqual([
+      '@sentry/react-native/expo',
+      expect.objectContaining({
+        useNativeInit: true,
+        disableAutoUpload: true,
+        experimental_android: expect.objectContaining({
+          autoUploadNativeSymbols: false,
+          autoUploadProguardMapping: false,
+        }),
+        options: expect.objectContaining({ environment: 'development' }),
+      }),
+    ]);
+  });
+
+  it('bugfix: disables uploads when org or project is missing despite auth token', () => {
+    const result = buildSentryExpoConfiguration(
+      {
+        EXPO_PUBLIC_SENTRY_DSN: completeEnvironment.EXPO_PUBLIC_SENTRY_DSN,
+        SENTRY_AUTH_TOKEN: completeEnvironment.SENTRY_AUTH_TOKEN,
+      },
+      { required: false }
+    );
+
+    expect(result.plugin).toEqual([
+      '@sentry/react-native/expo',
+      expect.objectContaining({
+        disableAutoUpload: true,
+        experimental_android: expect.objectContaining({
+          autoUploadNativeSymbols: false,
+          autoUploadProguardMapping: false,
+        }),
+      }),
+    ]);
+  });
+
   it('keeps generated native Sentry credentials out of git on both platforms', () => {
     const ignoreRules = readFileSync(
       resolve(__dirname, '../.gitignore'),

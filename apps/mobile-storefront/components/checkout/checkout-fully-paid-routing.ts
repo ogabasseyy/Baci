@@ -17,7 +17,7 @@ export async function routeStoreCreditSuccess({
   setIsProcessing,
   trackingToken,
 }: {
-  clearCart: () => void;
+  clearCart: () => void | Promise<void>;
   orderId: string;
   orderNumber: string;
   orderResponse: OrderResponse;
@@ -56,7 +56,7 @@ export async function routeFullyPaidPrizeSuccess({
   setIsProcessing,
   trackingToken,
 }: {
-  clearCart: () => void;
+  clearCart: () => void | Promise<void>;
   isOrderInFlight: MutableRefObject<boolean>;
   orderId: string;
   orderNumber: string;

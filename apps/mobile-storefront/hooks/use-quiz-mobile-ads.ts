@@ -16,6 +16,7 @@ interface QuizMobileAdsState {
   canRequestAds: boolean;
   enabled: boolean;
   initialized: boolean;
+  rewardedUnitId: string | null;
 }
 
 const DISABLED_STATE: QuizMobileAdsState = {
@@ -23,6 +24,7 @@ const DISABLED_STATE: QuizMobileAdsState = {
   canRequestAds: false,
   enabled: false,
   initialized: false,
+  rewardedUnitId: null,
 };
 
 export function useQuizMobileAds({
@@ -31,6 +33,9 @@ export function useQuizMobileAds({
   requested,
 }: UseQuizMobileAdsOptions): QuizMobileAdsState {
   const bannerUnitId = config.enabled ? config.bannerUnitId : null;
+  const rewardedUnitId = config.enabled
+    ? (config.rewardedUnitId ?? null)
+    : null;
   const [state, setState] = useState<QuizMobileAdsState>(DISABLED_STATE);
 
   useEffect(() => {
@@ -53,6 +58,7 @@ export function useQuizMobileAds({
       canRequestAds: false,
       enabled: true,
       initialized: false,
+      rewardedUnitId,
     });
 
     void (async () => {
@@ -79,13 +85,14 @@ export function useQuizMobileAds({
         canRequestAds: result.canRequestAds,
         enabled: true,
         initialized: true,
+        rewardedUnitId,
       });
     })();
 
     return () => {
       active = false;
     };
-  }, [ageVerified, bannerUnitId, config.enabled, requested]);
+  }, [ageVerified, bannerUnitId, config.enabled, requested, rewardedUnitId]);
 
   return state;
 }

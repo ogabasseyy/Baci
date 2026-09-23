@@ -52,4 +52,20 @@ describe('buildLegacyOrderIdempotencyPayload', () => {
       hashOrderIdempotencyPayload(preMetadataPayload)
     );
   });
+
+  it('forwards item-sort options to the shared builder', () => {
+    const legacy = buildLegacyOrderIdempotencyPayload(input, {
+      itemSort: 'locale',
+    });
+    const expected = buildOrderIdempotencyPayload(
+      {
+        ...input,
+        delivery_method: undefined,
+        airport_type: undefined,
+      },
+      { itemSort: 'locale' }
+    );
+
+    expect(legacy).toEqual(expected);
+  });
 });

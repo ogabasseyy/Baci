@@ -3,7 +3,6 @@ import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { CatalogListingLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import {
-  getCachedCategoryPageData,
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
@@ -36,6 +35,7 @@ import {
   normalizeCategoryPageProducts,
   resolveCategoryPageName,
 } from './category-page-content-helpers';
+import { loadFilteredCategoryPageData } from './load-filtered-category-page-data';
 
 interface PageProps {
   params: Promise<{
@@ -43,6 +43,8 @@ interface PageProps {
     category: string; // Category slug
   }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+  /** Demote when a parent route already committed the page H1. */
+  titleHeading?: 'h1' | 'h2';
 }
 
 function buildCategoryNotFoundMetadata(
@@ -104,13 +106,20 @@ export async function generateMetadata({
   }
 
   const productOffset = (currentPage - 1) * STOREFRONT_PRODUCTS_PER_PAGE;
-  const data = await getCachedCategoryPageData(
-    merchant.id,
+  // Carry the hub token so metadata (title, description, page count) matches
+  // the listing body on validated over-cap hub transitions. The loader
+  // validates the token before lifting the cardinality cap.
+  const metadataHubSlug = resolvedSearchParams.graphicsHub;
+  const { data } = await loadFilteredCategoryPageData({
     category,
-    slug,
+    merchantId: merchant.id,
+    productLimit: STOREFRONT_PRODUCTS_PER_PAGE,
     productOffset,
-    STOREFRONT_PRODUCTS_PER_PAGE
-  );
+    rawGraphics: resolvedSearchParams.graphics,
+    storeSlug: slug,
+    trustedHubSlug:
+      typeof metadataHubSlug === 'string' ? metadataHubSlug : undefined,
+  });
 
   if (!data.isCollection && data.isInactiveCategory) {
     return buildCategoryNotFoundMetadata();

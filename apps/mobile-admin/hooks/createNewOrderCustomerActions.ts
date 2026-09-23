@@ -29,6 +29,13 @@ interface CreateNewOrderCustomerActionsParams {
     first_name: string;
     last_name: string;
     phone: string;
+    city?: string;
+    state?: string;
+    zip_code?: string;
+    country?: string;
+    country_code?: string;
+    latitude?: number;
+    longitude?: number;
   }) => Promise<SelectableCustomer>;
   merchantId?: string;
   newCustomer: NewCustomerDraft;
@@ -56,6 +63,13 @@ function normalizeNewCustomerDraft(newCustomer: NewCustomerDraft) {
     firstName: sanitizeCustomerName(newCustomer.firstName),
     lastName: sanitizeCustomerName(newCustomer.lastName),
     phone: newCustomer.phone ? sanitizePhone(newCustomer.phone) : '',
+    city: newCustomer.city?.trim() ?? '',
+    state: newCustomer.state?.trim() ?? '',
+    country: newCustomer.country?.trim() ?? '',
+    countryCode: newCustomer.countryCode?.trim() ?? '',
+    postalCode: newCustomer.postalCode?.trim() ?? '',
+    latitude: newCustomer.latitude,
+    longitude: newCustomer.longitude,
   };
 }
 
@@ -93,6 +107,13 @@ export function createNewOrderCustomerActions({
       id: item.id,
       name: getCustomerDisplayName(item),
       phone: item.phone || '',
+      city: item.city || '',
+      state: item.state || '',
+      country: item.country || '',
+      countryCode: item.country_code || '',
+      postalCode: item.zip_code || '',
+      latitude: item.latitude ?? undefined,
+      longitude: item.longitude ?? undefined,
     });
     setShowCustomerModal(false);
     setCustomerSearch('');
@@ -142,7 +163,7 @@ export function createNewOrderCustomerActions({
         let query = supabase
           .from('customers')
           .select(
-            'id, customer_type, company_name, full_name, first_name, last_name, email, phone, address'
+            'id, customer_type, company_name, full_name, first_name, last_name, email, phone, address, city, state, zip_code, country, country_code, latitude, longitude'
           )
           .eq('merchant_id', merchantId)
           .is('deleted_at', null);
@@ -181,9 +202,26 @@ export function createNewOrderCustomerActions({
         first_name: isCompany ? '' : normalizedCustomer.firstName,
         last_name: isCompany ? '' : normalizedCustomer.lastName,
         phone: normalizedCustomer.phone,
+        city: normalizedCustomer.city || undefined,
+        state: normalizedCustomer.state || undefined,
+        zip_code: normalizedCustomer.postalCode || undefined,
+        country: normalizedCustomer.country || undefined,
+        country_code: normalizedCustomer.countryCode || undefined,
+        latitude: normalizedCustomer.latitude,
+        longitude: normalizedCustomer.longitude,
       });
 
       handleSelectCustomer(customer);
+      setCustomer((previous) => ({
+        ...previous,
+        city: normalizedCustomer.city,
+        state: normalizedCustomer.state,
+        country: normalizedCustomer.country,
+        countryCode: normalizedCustomer.countryCode,
+        postalCode: normalizedCustomer.postalCode,
+        latitude: normalizedCustomer.latitude,
+        longitude: normalizedCustomer.longitude,
+      }));
       setIsCreatingCustomer(false);
       resetNewCustomerForm();
       setSelectedCountryCode(DEFAULT_COUNTRY_CODE);

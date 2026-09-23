@@ -187,7 +187,7 @@ export const Footer: React.FC = () => {
 
         <div className="mt-8 pt-4 border-t border-gray-800 text-center text-[10px] text-gray-500">
           <span suppressHydrationWarning>
-            &copy; {new Date().getFullYear()}
+            &copy;
             {legalName ? ` ${legalName}.` : ''} All rights reserved.
           </span>
         </div>

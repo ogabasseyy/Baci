@@ -8,6 +8,8 @@ repo_root="$(cd "$script_dir/../.." && pwd)"
 cd "$repo_root"
 
 bash "$script_dir/apply-pending-migrations.test.sh"
+node --test "$script_dir/repair-sales-migration-collision.test.mjs"
+node --test "$script_dir/repair-sales-migration-collision.sql.test.mjs"
 bash "$script_dir/deferred-production-migrations.test.sh"
 bash "$script_dir/apply-pending-migrations-version-collision.test.sh"
 bash "$script_dir/historical-migration-repair-spec.test.sh"

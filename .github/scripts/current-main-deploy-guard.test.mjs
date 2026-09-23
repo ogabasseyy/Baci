@@ -9,6 +9,22 @@ import { verifyCurrentMainDeployment } from './current-main-deploy-guard.mjs';
 const expectedSha = 'a'.repeat(40);
 const currentSha = 'b'.repeat(40);
 
+test('tests helper-only sales repair changes and rejects deployments superseded by them', async () => {
+  const helper = '.github/scripts/repair-sales-migration-collision.sh';
+  const filters = YAML.parse(
+    readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8')
+  );
+  const groups = Object.values(filters);
+  const deployment = YAML.parse(
+    readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8')
+  );
+  assert.ok(deployment.migrations.includes(helper));
+  for (const filename of [helper, helper.replace('.sh', '.test.mjs'), helper.replace('.sh', '.sql.test.mjs')]) {
+    assert.ok(groups.some((patterns) => patterns.includes(filename)));
+  }
+  await assert.rejects(verifySupersededFile(helper), /superseded deployment SHA/);
+});
+
 function response(body, { ok = true, status = 200 } = {}) {
   return {
     ok,

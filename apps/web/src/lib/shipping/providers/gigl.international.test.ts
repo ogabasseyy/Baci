@@ -118,7 +118,11 @@ describe('GiglProvider international shipments', () => {
       carrierName: 'GIG Logistics',
       displayName: 'GIG Logistics - International Express',
       isStationPickup: false,
-      price: 114_534,
+      price: 125_987.94,
+      providerCost: 114_534.49,
+      platformMargin: 11_453.45,
+      marginBasisPoints: 1000,
+      pricingVersion: 'gigl_platform_margin_v1',
       currency: 'NGN',
       providerRateId: 'GIGL_INTL_2_0_0_1',
     });
@@ -255,7 +259,7 @@ describe('GiglProvider international shipments', () => {
 
     expect(quotes).toHaveLength(1);
     expect(quotes[0]).toMatchObject({
-      price: 95_000,
+      price: 104_500,
       providerRateId: 'GIGL_INTL_2_1_3_1',
     });
   });

@@ -60,7 +60,9 @@ function authenticated(
     Promise.resolve(
       name === 'quiz_runtime_contract_version'
         ? { data: 2, error: null }
-        : answerResult
+        : name === 'get_quiz_attempt_submission_time_v2'
+          ? { data: '2026-08-05T10:04:12.345Z', error: null }
+          : answerResult
     )
   );
   vi.mocked(requireQuizUser).mockResolvedValue({
@@ -134,7 +136,7 @@ describe('v2 quiz answer route', () => {
         subjectId: `${ATTEMPT_ID}:${QUESTION_ID}`,
       })
     );
-    expect(rpc).toHaveBeenLastCalledWith('submit_quiz_answer_v2', {
+    expect(rpc).toHaveBeenNthCalledWith(2, 'submit_quiz_answer_v2', {
       p_answer: 'A',
       p_attempt_id: ATTEMPT_ID,
       p_client_answered_at: undefined,
@@ -142,7 +144,10 @@ describe('v2 quiz answer route', () => {
       p_route_proof: { proof_id: 'proof' },
       p_user_id: USER_ID,
     });
-    expect(await response.json()).toEqual(pending);
+    expect(await response.json()).toEqual({
+      ...pending,
+      submittedAt: '2026-08-05T10:04:12.345Z',
+    });
   });
 
   it('maps owner-safe RPC errors without leaking internal details', async () => {

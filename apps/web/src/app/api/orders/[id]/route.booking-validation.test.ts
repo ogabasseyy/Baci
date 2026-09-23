@@ -34,8 +34,8 @@ vi.mock('@/lib/payments/file-inventory-confirmation-review', () => ({
   fileInventoryConfirmationFailureReview: vi.fn(),
 }));
 
-vi.mock('@/lib/shipping/book-order-shipment', () => ({
-  bookOrderShipment: vi.fn(),
+vi.mock('@/lib/shipping/run-claimed-order-wallet-or-checkout-booking', () => ({
+  runClaimedOrderWalletOrCheckoutBooking: vi.fn(),
 }));
 
 vi.mock('@/lib/shipping/order-shipment-booking-lock', () => ({
@@ -72,12 +72,12 @@ import {
 import { checkCsrfProtection } from '@/lib/csrf';
 import { ensurePaidOrderInventoryConfirmed } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { fileInventoryConfirmationFailureReview } from '@/lib/payments/file-inventory-confirmation-review';
-import { bookOrderShipment } from '@/lib/shipping/book-order-shipment';
 import {
   claimOrderShipmentBooking,
   clearOrderShipmentBookingLock,
 } from '@/lib/shipping/order-shipment-booking-lock';
 import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
+import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
 import { PATCH } from './route';
 
 type ExistingOrder = {
@@ -260,7 +260,7 @@ describe('PATCH /api/orders/[id] booking validation failures', () => {
       user: createMockUser(),
       supabase,
     });
-    vi.mocked(bookOrderShipment).mockRejectedValue(
+    vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockRejectedValue(
       new OrderShipmentBookingError(message, 400, code)
     );
 

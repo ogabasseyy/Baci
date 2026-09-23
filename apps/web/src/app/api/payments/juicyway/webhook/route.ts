@@ -19,10 +19,10 @@ import {
   handlePaymentForCancelledOrder,
   isOrderClampedAsCancelled,
 } from '@/lib/payments/handle-payment-for-cancelled-order';
-import { calculateJuicywayPlatformFee } from '@/lib/payments/juicyway-platform-fee';
 import { shouldRequireJuicywaySettlementMetadata } from '@/lib/payments/juicyway-settlement-metadata-compatibility';
 import { JUICYWAY_UNDERPAYMENT_TOLERANCE } from '@/lib/payments/juicyway-settlement-policy';
 import { handleJuicywayWalletTopUpIfNeeded } from '@/lib/payments/juicyway-wallet-top-up';
+import { recordJuicywayOrderSettlement } from '@/lib/payments/record-juicyway-order-settlement';
 import { scheduleLegacyPurchaseConversion } from '@/lib/payments/schedule-legacy-purchase-conversion';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
@@ -69,78 +69,6 @@ function isFromJuicywayIP(request: NextRequest): boolean {
   }
 
   return JUICYWAY_IPS.includes(ip);
-}
-
-// Idempotent merchant settlement for a captured Juicyway order payment.
-// `record_merchant_settlement` upserts on (source_type, source_id,
-// gateway_reference), so the paid-flip winner and any 0-row loser can both
-// call this safely. Locked to service_role — Juicyway calls us anonymously,
-// so this goes through the admin client (trust boundary is the signature
-// verification at the top of the handler).
-async function recordJuicywaySettlement(
-  transaction: {
-    amount: number | string | null;
-    merchant_id: string;
-    order_id: string | null;
-    platform_fee: number | string | null;
-  },
-  reference: string
-): Promise<boolean> {
-  try {
-    const grossAmount = Number(transaction.amount);
-    if (!Number.isFinite(grossAmount) || grossAmount <= 0) {
-      throw new Error('Invalid Juicyway settlement gross amount');
-    }
-    // Δ-0b: Juicyway verify response carries no fee; default to 0 honestly.
-    const gatewayFee = 0;
-    const platformFee =
-      transaction.platform_fee == null
-        ? calculateJuicywayPlatformFee(grossAmount)
-        : Number(transaction.platform_fee);
-    if (!Number.isFinite(platformFee) || platformFee < 0) {
-      throw new Error('Invalid Juicyway settlement platform fee');
-    }
-
-    const adminSupabase = createAdminClient();
-    const { error: settlementError } = await adminSupabase.rpc(
-      'record_merchant_settlement',
-      {
-        p_merchant_id: transaction.merchant_id,
-        p_source_type: 'order',
-        p_source_id: transaction.order_id,
-        p_gateway: 'juicyway',
-        p_gateway_reference: reference,
-        p_gross_amount: grossAmount,
-        p_gateway_fee: gatewayFee,
-        p_platform_fee: platformFee,
-        p_description: 'Order payment via Juicyway',
-        // Δ-29 / Δ-59: traceability — Juicyway's gateway-side ref lives
-        // in metadata for downstream reconciliation queries.
-        p_metadata: { juicyway_reference: reference },
-      }
-    );
-
-    if (settlementError) {
-      logger.warn({
-        message: 'Failed to record merchant settlement',
-        error: settlementError,
-        reference,
-      });
-      return false;
-    }
-    logger.info({
-      message: 'Merchant settlement recorded (Juicyway)',
-      reference,
-      grossAmount,
-    });
-    return true;
-  } catch (settlementError) {
-    logger.warn({
-      message: 'Settlement recording error',
-      error: settlementError,
-    });
-    return false;
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -691,7 +619,8 @@ export async function POST(request: NextRequest) {
           orderId: transaction.order_id,
           reference,
         });
-        const settled = await recordJuicywaySettlement(
+        const settled = await recordJuicywayOrderSettlement(
+          createAdminClient(),
           {
             amount: transaction.amount,
             merchant_id: transaction.merchant_id,
@@ -1089,7 +1018,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Record settlement for merchant wallet tracking
-    const settlementRecorded = await recordJuicywaySettlement(
+    const settlementRecorded = await recordJuicywayOrderSettlement(
+      createAdminClient(),
       {
         amount: transaction.amount,
         merchant_id: transaction.merchant_id,

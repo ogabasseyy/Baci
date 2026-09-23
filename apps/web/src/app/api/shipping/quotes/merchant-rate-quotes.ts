@@ -18,7 +18,7 @@ import { matchShippingZone } from '@/lib/shipping/merchant-rates/match-zone';
 import { resolveSubdivisionCode } from '@/lib/shipping/merchant-rates/subdivisions';
 import { computedRatesToShippingQuotes } from '@/lib/shipping/merchant-rates/to-shipping-quotes';
 import type { MerchantShippingRate } from '@/lib/shipping/merchant-rates/types';
-import type { ShippingQuote } from '@/lib/shipping/types';
+import type { ShippingProviderCode, ShippingQuote } from '@/lib/shipping/types';
 
 export interface MerchantRateQuoteInput {
   merchantId: string;
@@ -79,6 +79,12 @@ export interface MerchantRateQuoteResult {
    * suppress paths are unaffected.
    */
   loadFailed?: boolean;
+  /**
+   * Merchant-enabled carrier codes from the same anonymous-safe RPC. Missing
+   * only while an older RPC deployment is still rolling out; [] is an
+   * explicit choice to disable all carrier providers.
+   */
+  enabledProviderCodes?: ShippingProviderCode[];
 }
 
 /**
@@ -149,6 +155,7 @@ export async function getMerchantRateQuotes(
       resolvedCurrency: rpcResolvedCurrency,
       resolvedCountry:
         payload.merchantCountry?.trim().toUpperCase() || undefined,
+      enabledProviderCodes: payload.enabledProviderCodes,
     };
     const expectedCurrency = (rpcResolvedCurrency ?? input.merchantCurrency)
       .trim()

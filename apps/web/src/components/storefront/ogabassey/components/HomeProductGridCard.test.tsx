@@ -199,17 +199,17 @@ describe('HomeProductGridCard', () => {
     ).toBeInTheDocument();
   });
 
-  it('eagerly loads initially visible home feed images without high fetch priority', () => {
+  it('keeps even immediately mounted home feed images lazy and low-priority', () => {
     render(
       <HomeProductGridCard product={baseProduct} deferImageLoading={false} />
     );
 
     const image = screen.getByRole('img', { name: baseProduct.name });
 
-    expect(image).toHaveAttribute('loading', 'eager');
+    expect(image).toHaveAttribute('loading', 'lazy');
     expect(
       image.getAttribute('fetchPriority') ?? image.getAttribute('fetchpriority')
-    ).toBe('auto');
+    ).toBe('low');
   });
 
   it('renders lazy product images without hidden styles after activation', () => {

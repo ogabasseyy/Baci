@@ -74,4 +74,19 @@ describe('CheckoutStepper', () => {
       screen.getByRole('button', { name: /go to review step/i })
     ).toBeTruthy();
   });
+
+  it('hides payment and uses a two-step flow for prize simulation', () => {
+    render(<CheckoutStepper {...baseProps} isPrizeSimulation step="review" />);
+
+    expect(screen.getByText('Step 2 of 2')).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: /go to payment step/i })
+    ).toBeNull();
+    expect(
+      screen.getByRole('button', { name: /go to delivery step/i })
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /go to review step/i })
+    ).toBeTruthy();
+  });
 });

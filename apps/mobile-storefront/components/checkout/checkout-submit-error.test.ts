@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import { OrderError } from '@/services/orders.errors';
 import type { CartItem } from '@/stores/cart-store.types';
@@ -54,13 +55,65 @@ function normalLine(id: string): CartItem {
 
 describe('handleCheckoutSubmitError', () => {
   beforeEach(() => {
+    jest.mocked(router.push).mockClear();
     mockRemoveItem.mockClear();
     mockCartItems = [];
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const { useCartStore } = jest.requireMock('@/stores/cart-store') as {
+      useCartStore: { getState: () => unknown };
+    };
+    useCartStore.getState = () => ({
+      items: mockCartItems,
+      removeItem: mockRemoveItem,
+    });
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it('directs the customer to the existing order for an idempotency conflict', () => {
+    handleCheckoutSubmitError(
+      new OrderError(
+        'Refresh checkout and start a new order',
+        'CHECKOUT_IDEMPOTENCY_CONFLICT'
+      ),
+      'paystack'
+    );
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Check your existing order',
+      expect.stringContaining(
+        'Check your orders before starting another purchase'
+      ),
+      expect.any(Array)
+    );
+    const buttons = jest.mocked(Alert.alert).mock.calls.at(-1)?.[2];
+    buttons?.find((button) => button.text === 'View orders')?.onPress?.();
+    expect(router.push).toHaveBeenCalledWith('/orders');
+  });
+
+  it('lets the shopper start a replacement checkout after a cancelled non-reusable order', () => {
+    const advanceCheckoutGeneration = jest.fn();
+    const { useCartStore } = jest.requireMock('@/stores/cart-store') as {
+      useCartStore: { getState: () => unknown };
+    };
+    useCartStore.getState = () => ({
+      items: mockCartItems,
+      removeItem: mockRemoveItem,
+      advanceCheckoutGeneration,
+    });
+    handleCheckoutSubmitError(
+      new OrderError(
+        'This checkout order can no longer be reused.',
+        'CHECKOUT_ORDER_NOT_REUSABLE'
+      ),
+      'paystack'
+    );
+    const buttons = jest.mocked(Alert.alert).mock.calls.at(-1)?.[2];
+    buttons
+      ?.find((button) => button.text === 'Start a new checkout')
+      ?.onPress?.();
+    expect(advanceCheckoutGeneration).toHaveBeenCalledTimes(1);
   });
 
   it('prunes voucher-backed lines when the order rejects an unredeemable voucher', () => {

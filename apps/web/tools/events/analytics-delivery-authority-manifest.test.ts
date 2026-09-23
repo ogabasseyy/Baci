@@ -4,7 +4,7 @@ import { analyticsDeliveryAuthorityManifest as manifest } from './analytics-deli
 describe('analytics delivery authority manifest', () => {
   it('records the temporary authority expiry', () => {
     expect(manifest.temporaryAuthorityExpiresAt).toBe(
-      '2026-09-16T00:00:00.000Z'
+      '2026-09-30T00:00:00.000Z'
     );
     expect(manifest.queueOnlyDeliveryActivated).toBe(false);
   });
@@ -22,7 +22,7 @@ describe('analytics delivery authority manifest', () => {
       'apps/web/src/lib/analytics/trusted-server-ad-platform-fanout.ts':
         '2f330fb4efcd9cbcbef7a524f43232572082908e4f73e27d72a8cbb8636380b5',
       'apps/web/src/lib/supabase/service.ts':
-        '68d2fa91da0b05fe2b13a9da430ca82993f175292c78b22b0531ec58b92bb811',
+        '43192ae0f0c1ea208b50ca1a400b9e0aab769a46b71630a35dec0c01facda759',
     });
   });
 

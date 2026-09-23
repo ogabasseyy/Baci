@@ -16,6 +16,13 @@ export interface Customer {
   last_name: string | null;
   phone: string | null;
   address: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+  country: string | null;
+  country_code: string | null;
+  latitude: number | null;
+  longitude: number | null;
   total_orders: number;
   total_spent: number;
   store_credit: number;

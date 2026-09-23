@@ -13,18 +13,18 @@ const claim = {
 };
 
 describe('cacheInvalidationDrainCronResponseSchemas', () => {
-  it('accepts at most one cron claim batch', () => {
+  it('accepts at most the claim RPC batch ceiling', () => {
+    const five = Array.from({ length: 5 }, (_, index) => ({
+      ...claim,
+      target_id: `shop-${index}`,
+    }));
     expect(
-      cacheInvalidationDrainCronResponseSchemas.claims.safeParse([
-        claim,
-        { ...claim, target_id: 'shop-two' },
-      ]).success
+      cacheInvalidationDrainCronResponseSchemas.claims.safeParse(five).success
     ).toBe(true);
     expect(
       cacheInvalidationDrainCronResponseSchemas.claims.safeParse([
-        claim,
-        { ...claim, target_id: 'shop-two' },
-        { ...claim, target_id: 'shop-three' },
+        ...five,
+        { ...claim, target_id: 'shop-overflow' },
       ]).success
     ).toBe(false);
   });

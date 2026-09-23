@@ -45,6 +45,7 @@ describe('useQuizMobileAds', () => {
       canRequestAds: false,
       enabled: false,
       initialized: false,
+      rewardedUnitId: null,
     });
     expect(mockGetFeatureFlagValue).not.toHaveBeenCalled();
     expect(mockInitializeQuizMobileAds).not.toHaveBeenCalled();
@@ -61,6 +62,7 @@ describe('useQuizMobileAds', () => {
         canRequestAds: true,
         enabled: true,
         initialized: true,
+        rewardedUnitId: null,
       })
     );
   });
@@ -94,6 +96,7 @@ describe('useQuizMobileAds', () => {
       canRequestAds: false,
       enabled: false,
       initialized: true,
+      rewardedUnitId: null,
     });
     expect(mockInitializeQuizMobileAds).not.toHaveBeenCalled();
   });
@@ -111,6 +114,7 @@ describe('useQuizMobileAds', () => {
       canRequestAds: false,
       enabled: true,
       initialized: true,
+      rewardedUnitId: null,
     });
   });
 
@@ -129,6 +133,7 @@ describe('useQuizMobileAds', () => {
       canRequestAds: false,
       enabled: false,
       initialized: true,
+      rewardedUnitId: null,
     });
   });
 

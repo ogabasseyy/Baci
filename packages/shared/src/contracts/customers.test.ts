@@ -5,6 +5,7 @@ import {
   buildCustomerNameFields,
   buildCustomerRecordNameFields,
   buildCustomerSearchFilter,
+  CUSTOMER_ADMIN_COLUMNS,
   getCustomerDisplayName,
   normalizeCustomerType,
   splitCustomerFullName,
@@ -191,5 +192,15 @@ describe('customer contracts', () => {
 
   it('returns null when every address fragment is empty', () => {
     expect(buildCustomerAddressLine('', ' ', null, undefined)).toBeNull();
+  });
+
+  it('includes structured locality columns in the admin customer projection', () => {
+    expect(CUSTOMER_ADMIN_COLUMNS).toContain('city');
+    expect(CUSTOMER_ADMIN_COLUMNS).toContain('state');
+    expect(CUSTOMER_ADMIN_COLUMNS).toContain('zip_code');
+    expect(CUSTOMER_ADMIN_COLUMNS).toContain('country');
+    expect(CUSTOMER_ADMIN_COLUMNS).toContain('country_code');
+    expect(CUSTOMER_ADMIN_COLUMNS).toContain('latitude');
+    expect(CUSTOMER_ADMIN_COLUMNS).toContain('longitude');
   });
 });

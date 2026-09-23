@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { getDeliveryEstimate } from './product-delivery-estimate';
 
 describe('getDeliveryEstimate', () => {
+  it('returns a placeholder before the delivery date is initialized', () => {
+    expect(getDeliveryEstimate('Lagos')).toBe('Available shortly');
+  });
+
   const FIXED_DATE = new Date('2024-01-10T12:00:00Z');
 
   it('returns a 1–2 day window for Lagos', () => {

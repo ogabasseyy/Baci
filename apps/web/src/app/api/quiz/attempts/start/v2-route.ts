@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { enrichQuizV2AttemptWithSubmissionTime } from '@/app/api/quiz/_shared/quiz-v2-attempt-submission';
 import {
   readQuizDeviceFingerprint,
   requireQuizV2Contract,
@@ -142,7 +143,20 @@ export async function postQuizStartV2(request: NextRequest) {
     return withCookie(rpcErrorResponse());
   }
 
-  const result = parseQuizV2Attempt(data);
+  const enriched = await enrichQuizV2AttemptWithSubmissionTime(
+    auth.supabase,
+    data
+  );
+  if (enriched.error) {
+    logger.error({
+      event: 'start_quiz_attempt_v2_submission_time_failed',
+      eventId: parsed.data.eventId,
+      message: 'Could not read the authoritative quiz submission time',
+      userId: auth.user.id,
+    });
+    return withCookie(rpcErrorResponse());
+  }
+  const result = parseQuizV2Attempt(enriched.attempt);
   if (!result.success) {
     logger.error({
       event: 'start_quiz_attempt_v2_invalid_projection',

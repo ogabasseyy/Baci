@@ -147,6 +147,20 @@ describe('resolveQuoteMerchantContext', () => {
 
   it('does not trust spoofed storefront headers on the platform host', async () => {
     const supabase = createSupabase();
+    const publicRpc = vi.fn().mockResolvedValue({
+      data: {
+        business_name: 'Body Merchant',
+        business_address: '1 Allen Avenue, Ikeja, Lagos',
+        country: 'NG',
+      },
+      error: null,
+    });
+    const anonymousFrom = vi.fn();
+    mockCreateServerClient.mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+      from: anonymousFrom,
+      rpc: publicRpc,
+    });
 
     const result = await resolveQuoteMerchantContext({
       data: {
@@ -164,9 +178,19 @@ describe('resolveQuoteMerchantContext', () => {
     expect(result).toEqual({
       ok: true,
       merchantId: 'merchant-body',
-      senderInfo: sender,
+      senderInfo: expect.objectContaining({
+        name: 'Body Merchant',
+        city: 'Ikeja',
+        state: 'Lagos',
+      }),
+      merchantCountry: 'NG',
+      merchantPayoutCurrency: undefined,
     });
     expect(supabase.from).not.toHaveBeenCalled();
+    expect(anonymousFrom).not.toHaveBeenCalled();
+    expect(publicRpc).toHaveBeenCalledWith('get_storefront_shipping_sender', {
+      p_merchant_id: 'merchant-body',
+    });
   });
 
   it('surfaces trusted storefront slug lookup errors instead of falling back to caller merchantId', async () => {

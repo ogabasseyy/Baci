@@ -1,10 +1,10 @@
-import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCachedMaintainedCompareRouteManifest } from './get-cached-maintained-compare-route-manifest';
 
 const mockCacheLife = vi.fn();
 const mockCacheTag = vi.fn();
 const mockGetCachedCompareCategoryInventory = vi.fn();
+const mockGetPublishedStorefrontComparisonRevision = vi.fn();
 
 vi.mock('next/cache', () => ({
   cacheLife: (...args: string[]) => mockCacheLife(...args),
@@ -14,6 +14,11 @@ vi.mock('next/cache', () => ({
 vi.mock('./get-cached-compare-category-inventory', () => ({
   getCachedCompareCategoryInventory: (...args: unknown[]) =>
     mockGetCachedCompareCategoryInventory(...args),
+}));
+
+vi.mock('./get-published-storefront-comparison-revision', () => ({
+  getPublishedStorefrontComparisonRevision: (...args: unknown[]) =>
+    mockGetPublishedStorefrontComparisonRevision(...args),
 }));
 
 const products = [
@@ -45,6 +50,7 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
       fallbackName: 'Smartphones',
       products,
     });
+    mockGetPublishedStorefrontComparisonRevision.mockResolvedValue('42');
   });
 
   it('returns serializable category manifest slugs from the bounded inventory', async () => {
@@ -61,9 +67,53 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
     expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
       'merchant-1',
       'smartphones',
-      'ogabassey'
+      '42'
+    );
+    expect(mockGetPublishedStorefrontComparisonRevision).toHaveBeenCalledWith(
+      'merchant-1'
     );
     expect(mockCacheLife).toHaveBeenCalledWith('products');
+    expect(mockCacheTag).toHaveBeenCalledWith(
+      'comparison-revision-merchant-1-42'
+    );
+  });
+
+  it('propagates an inventory read failure instead of returning a cacheable empty manifest', async () => {
+    // Any cached manifest must only receive a complete approval set. Converting
+    // an infrastructure error to [] would persist a false "unapproved" answer.
+    mockGetCachedCompareCategoryInventory.mockRejectedValueOnce(
+      new Error('inventory unavailable')
+    );
+
+    await expect(
+      getCachedMaintainedCompareRouteManifest(
+        'merchant-1',
+        'smartphones',
+        'ogabassey',
+        'https://ogabassey.com'
+      )
+    ).rejects.toThrow('inventory unavailable');
+  });
+
+  it('falls back to a local manifest when the revision authority is unavailable', async () => {
+    mockGetPublishedStorefrontComparisonRevision.mockRejectedValueOnce(
+      new Error('revision unavailable')
+    );
+
+    await expect(
+      getCachedMaintainedCompareRouteManifest(
+        'merchant-1',
+        'smartphones',
+        'ogabassey',
+        'https://ogabassey.com'
+      )
+    ).resolves.toContain('left-phone-vs-right-phone');
+
+    expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
+      'merchant-1',
+      'smartphones',
+      undefined
+    );
     expect(mockCacheTag).toHaveBeenCalledWith(
       'products-merchant-1',
       'categories-merchant-1',
@@ -74,21 +124,30 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
     );
   });
 
-  it('keeps comparison slugs out of the cached loader API and loader wiring', () => {
-    // Vitest does not execute Next's Cache Components transform, so assert the
-    // source contract that defines its cache key and the consumer wiring.
-    const manifestSource = readFileSync(
-      'src/lib/storefront-compare/get-cached-maintained-compare-route-manifest.ts',
-      'utf8'
-    );
-    const loaderSource = readFileSync(
-      'src/lib/storefront-compare/load-compare-page.ts',
-      'utf8'
-    );
+  it('falls back to a local manifest when the revision authority returns null', async () => {
+    mockGetPublishedStorefrontComparisonRevision.mockResolvedValueOnce(null);
 
-    expect(manifestSource).toContain("'use cache';");
-    expect(manifestSource).not.toContain('comparisonSlug');
-    expect(loaderSource).toContain('getCachedMaintainedCompareRouteManifest(');
-    expect(loaderSource).not.toContain('getMaintainedCompareRouteManifest(');
+    await expect(
+      getCachedMaintainedCompareRouteManifest(
+        'merchant-1',
+        'smartphones',
+        'ogabassey',
+        'https://ogabassey.com'
+      )
+    ).resolves.toContain('left-phone-vs-right-phone');
+
+    expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
+      'merchant-1',
+      'smartphones',
+      undefined
+    );
+    expect(mockCacheTag).toHaveBeenCalledWith(
+      'products-merchant-1',
+      'categories-merchant-1',
+      'features-merchant-1',
+      'merchants',
+      'merchant-id-merchant-1',
+      'merchant-ogabassey'
+    );
   });
 });

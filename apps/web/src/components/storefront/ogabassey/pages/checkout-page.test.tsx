@@ -33,15 +33,20 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: vi.fn(() => ({
     merchant: {
       id: 'merchant-1',
-      slug: 'test-store',
+      slug: 'ogabassey',
       business_name: 'Test Store',
       vat_registration_status: 'registered',
       vat_rate: 7.5,
       country: 'NG',
     },
-    basePath: '/test-store',
+    basePath: '/ogabassey',
   })),
 }));
+
+vi.mock('./checkout/hooks/use-checkout-form-state', async () => {
+  const { useCheckoutFormTestState } = await import('./checkout/checkout-form-state.test-support');
+  return { useCheckoutFormState: useCheckoutFormTestState };
+});
 
 vi.mock('@/hooks/use-persisted-state', () => ({
   usePersistedForm: vi.fn(() => ({
@@ -218,7 +223,7 @@ function mockCheckoutSubmissionState() {
   vi.mocked(useMerchantSafe).mockReturnValue({
     merchant: {
       id: 'merchant-1',
-      slug: 'test-store',
+      slug: 'ogabassey',
       business_name: 'Test Store',
       vat_registration_status: 'registered',
       vat_rate: 7.5,
@@ -227,7 +232,7 @@ function mockCheckoutSubmissionState() {
         pay_on_delivery_enabled: true,
       },
     },
-    basePath: '/test-store',
+    basePath: '/ogabassey',
   } as unknown as ReturnType<typeof useMerchantSafe>);
   vi.mocked(usePersistedForm).mockReturnValue({
     values: {
@@ -286,13 +291,13 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedState).mockReturnValue(
       [null, vi.fn(), vi.fn()] as unknown as ReturnType<typeof usePersistedState>
@@ -435,7 +440,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
@@ -444,7 +449,7 @@ describe('CheckoutPage', () => {
           klump_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -494,7 +499,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
@@ -503,7 +508,7 @@ describe('CheckoutPage', () => {
           klump_enabled: false,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -528,7 +533,7 @@ describe('CheckoutPage', () => {
 
     render(<CheckoutPage />);
 
-    fireEvent.click(screen.getByRole('button', { name: /pay in installments/i }));
+    expect(screen.queryByRole('button', { name: /pay in installments/i })).not.toBeInTheDocument();
 
     expect(screen.queryByText('Klump')).not.toBeInTheDocument();
     fetchMock.mockRestore();
@@ -560,7 +565,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
@@ -569,7 +574,7 @@ describe('CheckoutPage', () => {
           klump_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -647,7 +652,7 @@ describe('CheckoutPage', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/storefront/orders/ord-1?merchant_slug=test-store&token=tok-123'
+        '/api/storefront/orders/ord-1?merchant_slug=ogabassey&token=tok-123'
       );
     });
 
@@ -689,7 +694,7 @@ describe('CheckoutPage', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/storefront/orders/ord-1?merchant_slug=test-store&token=tok-123&email=resume%40example.com'
+        '/api/storefront/orders/ord-1?merchant_slug=ogabassey&token=tok-123&email=resume%40example.com'
       );
     });
 
@@ -730,7 +735,7 @@ describe('CheckoutPage', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/storefront/orders/ord-1?merchant_slug=test-store&email=legacy%40example.com'
+        '/api/storefront/orders/ord-1?merchant_slug=ogabassey&email=legacy%40example.com'
       );
     });
 
@@ -746,7 +751,7 @@ describe('CheckoutPage', () => {
         vat_rate: 7.5,
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams({
@@ -825,7 +830,7 @@ describe('CheckoutPage', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/storefront/orders/ord-1?merchant_slug=test-store&token=tok-123'
+        '/api/storefront/orders/ord-1?merchant_slug=ogabassey&token=tok-123'
       );
     });
     expect(openCredPalCheckout).not.toHaveBeenCalled();
@@ -1086,7 +1091,7 @@ describe('CheckoutPage', () => {
         }
       );
       expect(routerPush).toHaveBeenCalledWith(
-        '/test-store/checkout/bnpl?orderId=ord-1&gateway=credit_direct&merchant_slug=test-store&creditDirectCompletion=cd-client-success-1&trackingToken=tok-123&email=ada%40example.com'
+        '/ogabassey/checkout/bnpl?orderId=ord-1&gateway=credit_direct&merchant_slug=ogabassey&creditDirectCompletion=cd-client-success-1&trackingToken=tok-123&email=ada%40example.com'
       );
       expect(
         routerPush.mock.calls.some(([href]) => String(href).includes('/order-success'))
@@ -1126,7 +1131,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
@@ -1135,7 +1140,7 @@ describe('CheckoutPage', () => {
           credit_direct_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -1246,7 +1251,7 @@ describe('CheckoutPage', () => {
         }
       );
       expect(routerPush).toHaveBeenCalledWith(
-        '/test-store/checkout/bnpl?orderId=order-cd&gateway=credit_direct&merchant_slug=test-store&creditDirectCompletion=cd-client-success-2&trackingToken=track-cd&email=ada%40example.com'
+        '/ogabassey/checkout/bnpl?orderId=order-cd&gateway=credit_direct&merchant_slug=ogabassey&creditDirectCompletion=cd-client-success-2&trackingToken=track-cd&email=ada%40example.com'
       );
       expect(
         routerPush.mock.calls.some(([href]) => String(href).includes('/order-success'))
@@ -1279,7 +1284,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
@@ -1290,7 +1295,7 @@ describe('CheckoutPage', () => {
           paystack_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -1374,7 +1379,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'NG',
@@ -1382,7 +1387,7 @@ describe('CheckoutPage', () => {
           pay_on_delivery_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -1494,7 +1499,7 @@ describe('CheckoutPage', () => {
     scrollSpy.mockRestore();
   });
 
-  it('persists the merchant country in shipping_address for a non-NG (IN) order', async () => {
+  it.each(['delivery', 'korapay'])('persists the merchant country for a non-NG order paid with %s and a Nigerian phone', async (method) => {
     const scrollSpy = vi
       .spyOn(window, 'scrollTo')
       .mockImplementation(() => undefined);
@@ -1517,22 +1522,24 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'IN',
+        payout_currency: method === 'korapay' ? 'NGN' : 'INR',
         feature_settings: {
           pay_on_delivery_enabled: true,
+          korapay_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
         firstName: 'Ada',
         lastName: 'Buyer',
         customerEmail: 'ada@example.com',
-        customerPhone: '+919812345678',
+        customerPhone: '+2348034096325',
         newAddressStreet: '12 Marine Drive',
         newAddressState: 'Maharashtra',
         newAddressCity: 'Mumbai',
@@ -1546,7 +1553,7 @@ describe('CheckoutPage', () => {
 
     const merchantRateQuote = {
       carrierName: 'Standard Delivery',
-      currency: 'INR',
+      currency: method === 'korapay' ? 'NGN' : 'INR',
       displayName: 'Standard Delivery',
       estimatedDays: 0,
       id: 'mrate_1a2b3c4d-0000-4000-8000-00000000000a',
@@ -1568,6 +1575,9 @@ describe('CheckoutPage', () => {
             text: async () => '',
           } as Response;
         }
+        if (url === '/api/payments/initialize') {
+          return Response.json({ success: true, authorization_url: 'https://checkout.paystack.com/test', reference: 'reference' });
+        }
         if (url === '/api/orders') {
           return {
             ok: true,
@@ -1577,7 +1587,7 @@ describe('CheckoutPage', () => {
                 id: 'order-123',
                 order_number: 'ORD-123',
                 tracking_token: 'track-123',
-                currency: 'INR',
+                currency: method === 'korapay' ? 'NGN' : 'INR',
               },
               wallet: null,
             }),
@@ -1602,7 +1612,7 @@ describe('CheckoutPage', () => {
       ).toBe(true);
     });
 
-    fireEvent.click(await screen.findByText(/pay on delivery/i));
+    fireEvent.click(await screen.findByText(method === 'delivery' ? /pay on delivery/i : /^Korapay$/));
     await waitFor(() => {
       const placeOrderButton = screen
         .getAllByRole('button', { name: /place order/i })
@@ -1616,6 +1626,15 @@ describe('CheckoutPage', () => {
         fetchMock.mock.calls.some(([url]) => String(url) === '/api/orders')
       ).toBe(true);
     });
+
+    if (method === 'korapay') {
+      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/payments/initialize')).toBe(true));
+      const initialization = fetchMock.mock.calls.find(([url]) => String(url) === '/api/payments/initialize');
+      const body = JSON.parse(String(initialization?.[1]?.body));
+      expect(body.billing_address.country).toBe('IN');
+      expect(body.billing_address.zip_code).toBeUndefined();
+      expect(body.customer_phone).toBe('+2348034096325');
+    }
 
     const orderBody = JSON.parse(
       String(
@@ -1660,7 +1679,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'NG',
@@ -1668,7 +1687,7 @@ describe('CheckoutPage', () => {
           pay_on_delivery_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -1807,12 +1826,12 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -1937,12 +1956,12 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -2075,12 +2094,12 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -2211,7 +2230,7 @@ describe('CheckoutPage', () => {
     } as unknown as ReturnType<typeof usePersistedForm>);
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: null,
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
 
     const fetchMock = vi
@@ -2267,13 +2286,13 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
 
     rerender(<CheckoutPage />);
@@ -2563,13 +2582,13 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -2646,13 +2665,13 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
         country: 'NG',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -2724,6 +2743,7 @@ describe('CheckoutPage', () => {
   });
 
   it('sends a stable idempotency key when creating an order', async () => {
+    const storageSpy = vi.spyOn(Storage.prototype, 'setItem');
     const scrollSpy = vi
       .spyOn(window, 'scrollTo')
       .mockImplementation(() => undefined);
@@ -2740,6 +2760,8 @@ describe('CheckoutPage', () => {
           quantity: 1,
           image: '',
           slug: 'test-product',
+          variantId: 'variant-blue',
+          variantAttributes: { color: ' Blue ', storage: '128GB' },
         },
       ],
       cartTotal: 5000,
@@ -2749,7 +2771,7 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'registered',
         vat_rate: 7.5,
@@ -2758,7 +2780,7 @@ describe('CheckoutPage', () => {
           pay_on_delivery_enabled: true,
         },
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -2823,6 +2845,13 @@ describe('CheckoutPage', () => {
       ).toBeNull();
     });
 
+    const savedAttempt = storageSpy.mock.calls.find(([key]) => key === 'storefront-checkout-pending-order');
+    expect(savedAttempt).toBeDefined();
+    const snapshot = JSON.parse(String(savedAttempt?.[1]));
+    expect(JSON.parse(snapshot.checkoutFingerprint).items[0]).toMatchObject({
+      variantId: 'variant-blue', variantAttributes: { color: 'blue', storage: '128gb' },
+    });
+    storageSpy.mockRestore();
     fetchMock.mockRestore();
     randomUuidSpy.mockRestore();
     scrollSpy.mockRestore();
@@ -3007,19 +3036,13 @@ describe('CheckoutPage', () => {
         target: { value: 'Lekki, Lagos' },
       });
 
-      expect(setValue).toHaveBeenCalledWith(
-        'newAddressStreet',
-        'Lekki, Lagos'
-      );
-      expect(setValue).not.toHaveBeenCalledWith(
-        'newAddressState',
-        expect.any(String)
-      );
-      expect(setValue).not.toHaveBeenCalledWith(
-        'newAddressCity',
-        expect.any(String)
-      );
-      expect(setValues).not.toHaveBeenCalled();
+      expect(setValues).toHaveBeenCalledWith({
+        newAddressStreet: 'Lekki, Lagos',
+        newAddressCity: '',
+        newAddressState: '',
+        deliveryCoordinates: null,
+      });
+      setValues.mockClear();
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(499);
@@ -3342,7 +3365,7 @@ describe('CheckoutPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps delivery quotes in a fixed scroll region so multi-quote loading does not reflow #main-content', async () => {
+  it('does not reserve an empty fixed-height region below delivery quotes', async () => {
     mockCheckoutSubmissionState();
 
     const fetchMock = vi
@@ -3369,7 +3392,7 @@ describe('CheckoutPage', () => {
 
     expect(
       container.querySelector('[class*="h-[320px]"]')
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
 
     fetchMock.mockRestore();
   });
@@ -3394,12 +3417,12 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'IN',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -3476,7 +3499,7 @@ describe('CheckoutPage', () => {
     // the NG /api/shipping/locations fetch starts.
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: undefined,
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -3531,12 +3554,12 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'IN',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     rerender(<CheckoutPage />);
 
@@ -3587,12 +3610,12 @@ describe('CheckoutPage', () => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       merchant: {
         id: 'merchant-1',
-        slug: 'test-store',
+        slug: 'ogabassey',
         business_name: 'Test Store',
         vat_registration_status: 'not_registered',
         country: 'IN',
       },
-      basePath: '/test-store',
+      basePath: '/ogabassey',
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(usePersistedForm).mockReturnValue({
       values: {
@@ -3694,6 +3717,497 @@ describe('CheckoutPage', () => {
       'NG'
     );
 
+    fetchMock.mockRestore();
+  });
+
+  it.each(['REDVAULT_RECONCILIATION_REQUIRED', 'REDVAULT_CAPTURE_HELD'])('uses server availability and renders %s without a paid transition', async code => {
+    mockCheckoutSubmissionState();
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        slug: 'ogabassey',
+        business_name: 'OgaBassey',
+        country: 'NG',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith('/api/payments/redvault/availability')) {
+        return Response.json({ available: true, reason: 'reviewed' });
+      }
+      if (url.startsWith('/api/shipping/')) {
+        return Response.json({ quotes: { all: [] }, states: ['Lagos'], locations: [] });
+      }
+      if (url === '/api/orders') {
+        return Response.json({
+          amountDueToGateway: 5_000,
+          order: { id: 'order-redvault', currency: 'NGN' },
+          redvault: {
+            quote: {
+              product_subtotal_kobo: 500_000,
+              eligible_subtotal_kobo: 500_000,
+              discount_kobo: 25_000,
+              assurance_fee_kobo: 0,
+              ineligible_subtotal_kobo: 0,
+              tax_kobo: 750,
+              shipping_kobo: 500,
+              gift_wrapping_kobo: 0,
+              payable_kobo: 476_250,
+              mixed_basket: false,
+            },
+          },
+        });
+      }
+      if (url === '/api/payments/initialize') {
+        return Response.json(
+          { code },
+          { status: 202 },
+        );
+      }
+      return Response.json({});
+    });
+
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+    fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+    fireEvent.click(await screen.findByRole('radio', { name: /pay with uba/i }));
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /place order/i }).find(
+        (button) => !button.hasAttribute('disabled'),
+      ) as HTMLButtonElement,
+    );
+
+    // The first submit creates the order and opens the REDVAULT review step;
+    // confirming the review issues payment initialization.
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/orders')).toBe(true);
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /review and continue to uba/i }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/payments/initialize')).toBe(true);
+    });
+    const orderCall = fetchMock.mock.calls.find(([url]) => String(url) === '/api/orders');
+    expect(JSON.parse(String(orderCall?.[1]?.body))).toMatchObject({
+      payment_method: 'uba_redvault',
+    });
+    const initialization = fetchMock.mock.calls.find(([url]) => String(url) === '/api/payments/initialize');
+    expect(JSON.parse(String(initialization?.[1]?.body))).toMatchObject({
+      gateway: 'paystack',
+      payment_method: 'uba_redvault',
+    });
+    expect(screen.queryByText(/order success/i)).not.toBeInTheDocument();
+    if (code === 'REDVAULT_RECONCILIATION_REQUIRED') {
+      expect(screen.getByRole('status')).toHaveTextContent(/awaiting reconciliation/i);
+      expect(screen.queryByText(/Payment received/)).not.toBeInTheDocument();
+    } else {
+      expect(screen.getByRole('alert')).toHaveTextContent(/Payment received/);
+    }
+    expect(vi.mocked(useRouter)().push).not.toHaveBeenCalled();
+    expect(screen.getByText('₦4,762.50')).toBeInTheDocument();
+    fetchMock.mockRestore();
+  });
+
+  it('persists the REDVAULT fence before returning to the review step', async () => {
+    mockCheckoutSubmissionState();
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        slug: 'ogabassey',
+        business_name: 'OgaBassey',
+        country: 'NG',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith('/api/payments/redvault/availability')) {
+        return Response.json({ available: true, reason: 'reviewed' });
+      }
+      if (url.startsWith('/api/shipping/')) {
+        return Response.json({ quotes: { all: [] }, states: ['Lagos'], locations: [] });
+      }
+      if (url === '/api/orders') {
+        return Response.json({
+          amountDueToGateway: 5_000,
+          order: { id: 'order-redvault', currency: 'NGN' },
+          redvault: {
+            quote: {
+              product_subtotal_kobo: 500_000,
+              eligible_subtotal_kobo: 500_000,
+              discount_kobo: 25_000,
+              assurance_fee_kobo: 0,
+              ineligible_subtotal_kobo: 0,
+              tax_kobo: 750,
+              shipping_kobo: 500,
+              gift_wrapping_kobo: 0,
+              payable_kobo: 476_250,
+              mixed_basket: false,
+            },
+          },
+        });
+      }
+      return Response.json({});
+    });
+    const { CHECKOUT_PENDING_ORDER_STORAGE_KEY } = await import(
+      './checkout/pending-checkout-order'
+    );
+
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+    fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+    fireEvent.click(await screen.findByRole('radio', { name: /pay with uba/i }));
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /place order/i }).find(
+        (button) => !button.hasAttribute('disabled'),
+      ) as HTMLButtonElement,
+    );
+
+    // The review step renders only after order creation returns; the fence
+    // must already be persisted so a reload cannot lose it.
+    await screen.findByRole('button', { name: /review and continue to uba/i });
+    const snapshot = window.sessionStorage.getItem(
+      CHECKOUT_PENDING_ORDER_STORAGE_KEY
+    );
+    expect(snapshot).not.toBeNull();
+    expect(JSON.parse(snapshot as string)).toMatchObject({
+      orderId: 'order-redvault',
+      paymentMethod: 'uba_redvault',
+    });
+    fetchMock.mockRestore();
+  });
+
+  it('attaches the guest checkout to the new account before REDVAULT initialization', async () => {
+    mockCheckoutSubmissionState();
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        slug: 'ogabassey',
+        business_name: 'OgaBassey',
+        country: 'NG',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    const sequence: string[] = [];
+    const rpcMock = vi.fn(async (fn: string) => {
+      sequence.push(`rpc:${fn}`);
+      return { data: true, error: null };
+    });
+    const { createClient } = await import('@/lib/supabase/client');
+    vi.mocked(createClient).mockReturnValue({
+      auth: {
+        getUser: vi.fn(),
+        getSession: vi.fn(async () => ({
+          data: { session: { user: { id: 'new-user' } } },
+          error: null,
+        })),
+        onAuthStateChange: vi.fn(() => ({
+          data: { subscription: { unsubscribe: vi.fn() } },
+        })),
+        signUp: vi.fn(async () => ({
+          data: { session: { user: { id: 'new-user' } } },
+          error: null,
+        })),
+      },
+      from: vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+      })),
+      rpc: rpcMock,
+    } as unknown as ReturnType<typeof createClient>);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      sequence.push(`fetch:${url}`);
+      if (url.startsWith('/api/payments/redvault/availability')) {
+        return Response.json({ available: true, reason: 'reviewed' });
+      }
+      if (url.startsWith('/api/shipping/')) {
+        return Response.json({ quotes: { all: [] }, states: ['Lagos'], locations: [] });
+      }
+      if (url === '/api/orders') {
+        return Response.json({
+          amountDueToGateway: 5_000,
+          order: { id: 'order-redvault', currency: 'NGN', tracking_token: 'track-redvault' },
+          redvault: {
+            quote: {
+              product_subtotal_kobo: 500_000,
+              eligible_subtotal_kobo: 500_000,
+              discount_kobo: 25_000,
+              assurance_fee_kobo: 0,
+              ineligible_subtotal_kobo: 0,
+              tax_kobo: 750,
+              shipping_kobo: 500,
+              gift_wrapping_kobo: 0,
+              payable_kobo: 476_250,
+              mixed_basket: false,
+            },
+          },
+        });
+      }
+      if (url === '/api/payments/initialize') {
+        return Response.json(
+          { code: 'REDVAULT_RECONCILIATION_REQUIRED' },
+          { status: 202 },
+        );
+      }
+      return Response.json({});
+    });
+
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /save my information/i })
+    );
+    fireEvent.change(screen.getByPlaceholderText('Min. 6 characters'), {
+      target: { value: 'guest-password-1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+    fireEvent.click(await screen.findByRole('radio', { name: /pay with uba/i }));
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /place order/i }).find(
+        (button) => !button.hasAttribute('disabled'),
+      ) as HTMLButtonElement,
+    );
+    await screen.findByRole('button', { name: /review and continue to uba/i });
+    fireEvent.click(
+      await screen.findByRole('button', { name: /review and continue to uba/i })
+    );
+
+    await waitFor(() => {
+      expect(rpcMock).toHaveBeenCalledWith(
+        'attach_redvault_guest_application_to_customer',
+        { p_order_id: 'order-redvault', p_tracking_token: 'track-redvault' }
+      );
+    });
+    await waitFor(() => {
+      expect(
+        sequence.some((entry) => entry === 'fetch:/api/payments/initialize')
+      ).toBe(true);
+    });
+    expect(sequence.indexOf('rpc:attach_redvault_guest_application_to_customer')).toBeLessThan(
+      sequence.indexOf('fetch:/api/payments/initialize')
+    );
+    fetchMock.mockRestore();
+  });
+
+  it('does not serialize an ordinary discount or wallet credit after selecting REDVAULT', async () => {
+    mockCheckoutSubmissionState();
+    vi.mocked(useAuthSafe).mockReturnValue({
+      user: {
+        id: 'customer-1',
+        email: 'ada@example.com',
+        user_metadata: {},
+      },
+    } as unknown as ReturnType<typeof useAuthSafe>);
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        slug: 'ogabassey',
+        business_name: 'OgaBassey',
+        country: 'NG',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith('/api/payments/redvault/availability')) {
+        return Response.json({ available: true, reason: 'reviewed' });
+      }
+      if (url.startsWith('/api/storefront/customer/wallet')) {
+        return Response.json({ balance: 1_000 });
+      }
+      if (url === '/api/storefront/discount/validate') {
+        return Response.json({
+          valid: true,
+          code: 'SAVE10',
+          discount_type: 'fixed',
+          discount_value: 1_000,
+          discount_amount: 1_000,
+        });
+      }
+      if (url.startsWith('/api/shipping/')) {
+        return Response.json({ quotes: { all: [] }, states: ['Lagos'], locations: [] });
+      }
+      if (url === '/api/orders') {
+        return Response.json({
+          amountDueToGateway: 5_000,
+          order: { id: 'order-redvault', currency: 'NGN' },
+          redvault: {
+            quote: {
+              product_subtotal_kobo: 500_000,
+              eligible_subtotal_kobo: 500_000,
+              discount_kobo: 25_000,
+              ineligible_subtotal_kobo: 0,
+              tax_kobo: 750,
+              shipping_kobo: 500,
+              gift_wrapping_kobo: 0,
+              payable_kobo: 476_250,
+              mixed_basket: false,
+            },
+          },
+        });
+      }
+      if (url === '/api/payments/initialize') {
+        return Response.json({ code: 'REDVAULT_CAPTURE_HELD' }, { status: 202 });
+      }
+      return Response.json({});
+    });
+
+    render(<CheckoutPage />);
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/storefront/customer/wallet'))).toBe(true);
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Discount code' }), {
+      target: { value: 'save10' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await screen.findByText('SAVE10');
+
+    fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+    fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+    fireEvent.click(await screen.findByRole('radio', { name: /pay with uba/i }));
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /place order/i }).find(
+        (button) => !button.hasAttribute('disabled'),
+      ) as HTMLButtonElement,
+    );
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/orders')).toBe(true);
+    });
+    const orderCall = fetchMock.mock.calls.find(([url]) => String(url) === '/api/orders');
+    const body = JSON.parse(String(orderCall?.[1]?.body));
+    expect(body).toMatchObject({
+      payment_method: 'uba_redvault',
+      expected_total: 5_750,
+      client_total: 5_750,
+      use_wallet_credit: false,
+      wallet_amount: 0,
+    });
+    expect(body).not.toHaveProperty('discount_code');
+    fetchMock.mockRestore();
+  });
+
+  it('retains a stored REDVAULT fence when switching payment methods', async () => {
+    mockCheckoutSubmissionState();
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        slug: 'ogabassey',
+        business_name: 'OgaBassey',
+        country: 'NG',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+        feature_settings: {
+          pay_on_delivery_enabled: true,
+        },
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    const clearPendingCheckoutOrder = vi.fn();
+    vi.mocked(usePersistedState).mockReturnValue([
+      {
+        orderId: 'order-redvault',
+        orderNumber: 'ORD-RV',
+        trackingToken: 'track-rv',
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348000000000',
+        checkoutFingerprint: 'fp',
+        paymentMethod: 'uba_redvault',
+        amountDueToGateway: 5000,
+        createdAt: new Date().toISOString(),
+      },
+      vi.fn(),
+      clearPendingCheckoutOrder,
+    ] as unknown as ReturnType<typeof usePersistedState>);
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.startsWith('/api/payments/redvault/availability')) {
+          return Response.json({ available: true, reason: 'reviewed' });
+        }
+        return Response.json({ states: ['Lagos'], locations: [] });
+      });
+
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /continue to payment/i })
+    );
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /pay on delivery/i })
+    );
+    fireEvent.click(await screen.findByRole('radio', { name: /pay with uba/i }));
+
+    // Only the submit-time resolver (which validates server state) may
+    // clear a REDVAULT fence — the method switch must retain it so an
+    // indeterminate init cannot orphan a capturing order.
+    expect(clearPendingCheckoutOrder).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+
+  it('still clears a non-REDVAULT snapshot when switching methods', async () => {
+    mockCheckoutSubmissionState();
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      merchant: {
+        id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        slug: 'ogabassey',
+        business_name: 'OgaBassey',
+        country: 'NG',
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+        feature_settings: {
+          pay_on_delivery_enabled: true,
+        },
+      },
+      basePath: '/ogabassey',
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    const clearPendingCheckoutOrder = vi.fn();
+    vi.mocked(usePersistedState).mockReturnValue([
+      {
+        orderId: 'order-card',
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348000000000',
+        checkoutFingerprint: 'fp',
+        paymentMethod: 'card',
+        amountDueToGateway: 5000,
+        createdAt: new Date().toISOString(),
+      },
+      vi.fn(),
+      clearPendingCheckoutOrder,
+    ] as unknown as ReturnType<typeof usePersistedState>);
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.startsWith('/api/payments/redvault/availability')) {
+          return Response.json({ available: true, reason: 'reviewed' });
+        }
+        return Response.json({ states: ['Lagos'], locations: [] });
+      });
+
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /continue to payment/i })
+    );
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /pay with uba/i })
+    );
+
+    expect(clearPendingCheckoutOrder).toHaveBeenCalled();
     fetchMock.mockRestore();
   });
 });

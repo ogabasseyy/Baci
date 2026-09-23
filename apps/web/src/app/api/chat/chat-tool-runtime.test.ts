@@ -18,6 +18,25 @@ vi.mock('@/ai/chat-order-cancellation', () => ({
 import { createAiSdkAgenticChatTools } from '@/app/api/chat/chat-tool-runtime';
 
 describe('chat tool runtime', () => {
+  it.each([
+    'searchProducts',
+    'addToCart',
+  ] as const)('propagates %s rejection without reporting a product result', async (name) => {
+    const error = new Error('Catalog unavailable');
+    const onToolResult = vi.fn();
+    const tools = createAiSdkAgenticChatTools('session-1', { onToolResult });
+    const handler =
+      name === 'searchProducts'
+        ? mocks.handleSearchProducts
+        : mocks.handleAddToCart;
+    handler.mockRejectedValueOnce(error);
+    const execution =
+      name === 'searchProducts'
+        ? tools.searchProducts.execute({ query: 'iPhone' })
+        : tools.addToCart.execute({ productId: 'p1', quantity: 2 });
+    await expect(execution).rejects.toBe(error);
+    expect(onToolResult).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.handleSearchProducts.mockResolvedValue({
@@ -80,6 +99,35 @@ describe('chat tool runtime', () => {
     expect(mocks.handleCheckPaymentStatus).toHaveBeenCalledWith(
       { orderId: 'order-1' },
       'session-1'
+    );
+  });
+
+  it('reports trusted product tool results to the presentation collector', async () => {
+    const onToolResult = vi.fn();
+    const tools = createAiSdkAgenticChatTools('session-1', { onToolResult });
+
+    await tools.searchProducts.execute({ query: 'iPhone' });
+
+    expect(onToolResult).toHaveBeenCalledWith('searchProducts', {
+      products: [{ id: 'p1', name: 'iPhone 11' }],
+      total: 1,
+    });
+  });
+
+  it('passes the validated cart quantity with add-to-cart presentation data', async () => {
+    mocks.handleAddToCart.mockResolvedValueOnce({
+      id: 'p1',
+      name: 'iPhone 11',
+    });
+    const onToolResult = vi.fn();
+    const tools = createAiSdkAgenticChatTools('session-1', { onToolResult });
+
+    await tools.addToCart.execute({ productId: 'p1', quantity: 2 });
+
+    expect(onToolResult).toHaveBeenCalledWith(
+      'addToCart',
+      { id: 'p1', name: 'iPhone 11' },
+      { quantity: 2 }
     );
   });
 

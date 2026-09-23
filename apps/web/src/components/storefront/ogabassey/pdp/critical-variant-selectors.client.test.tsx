@@ -183,11 +183,11 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
     expect(onAttributeSelection).toHaveBeenCalledWith('condition', 'open_box');
   });
 
-  it('disables options that cannot produce a real SKU from explicit selections', () => {
+  it('lets users switch to another real SKU option so conflicts can be pruned', () => {
+    const onAttributeSelection = vi.fn();
     render(
       <OgabasseyPdpCriticalVariantSelectors
-        explicitSelectedAxes={['storage']}
-        onAttributeSelection={vi.fn()}
+        onAttributeSelection={onAttributeSelection}
         renderableVariantAxes={['storage', 'ram']}
         selectedAttributes={{ storage: '256GB' }}
         variantCount={2}
@@ -195,12 +195,13 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
       />
     );
 
-    expect(
-      screen.getByRole('button', { name: /select 4gb ram/i })
-    ).toBeDisabled();
-    expect(
-      screen.getByRole('button', { name: /select 8gb ram/i })
-    ).toBeEnabled();
+    const alternative = screen.getByRole('button', {
+      name: /select 4gb ram/i,
+    });
+    expect(alternative).toBeEnabled();
+
+    fireEvent.click(alternative);
+    expect(onAttributeSelection).toHaveBeenCalledWith('ram', '4GB');
   });
 
   it('renders options for legacy-cased variant attribute keys', () => {

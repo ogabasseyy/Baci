@@ -1,13 +1,14 @@
 // biome-ignore format: Compact import keeps this coordinator within the module budget.
-import type { QuizV2Attempt } from '@/services/quiz-types';
 import {
   initialQuizV2State,
   loadQuizRecoveryEnvelope,
   type QuizV2StoreActions,
   type V2StartContext,
 } from './quiz-recovery-envelope';
+import { createQuizV2AttemptApplier } from './quiz-v2-attempt-applier';
 import { createQuizV2ExpiryAction } from './quiz-v2-expiry-action';
 import { createQuizV2RecoveryResponseApplier } from './quiz-v2-recovery-actions';
+import { getQuizRecoverySnapshot } from './quiz-v2-recovery-snapshot';
 import {
   clearRecoveredQuizAttempt,
   clearTerminalRecovery,
@@ -27,50 +28,16 @@ export function createQuizV2StoreActions({
   set,
 }: QuizV2StoreAccess): QuizV2StoreActions {
   let lastReconciledAt = 0;
-  let reconciliationInFlight = false;
+  let reconciliationInFlightGeneration: number | null = null;
+  let lastReconciledGeneration: number | null = null;
   let retryInFlightGeneration: number | null = null;
   let startInFlightGeneration: number | null = null;
+  const pendingStarts = new Map<number, V2StartContext>();
   let lifecycleEpoch = 0;
   // biome-ignore format: Compact dependency bundle keeps this coordinator within the module budget.
   const access = { get, getGeneration, getMessage, set };
   const persist = createQuizAttemptPersistence(access);
-  const apply = async (attempt: QuizV2Attempt) => {
-    if (attempt.status === 'in_progress') {
-      set({
-        status: 'question',
-        v2Attempt: attempt,
-        v2LifecycleStatus: 'in_progress',
-        lockedOptionId: null,
-        terminalContext: null,
-        expiryRetryable: false,
-        error: null,
-      });
-      await persist(attempt, null).catch(() => undefined);
-      return;
-    }
-    set({
-      status: 'result',
-      v2Attempt: null,
-      v2LifecycleStatus:
-        attempt.status === 'event_cancelled'
-          ? 'event_cancelled'
-          : 'pending_results',
-      terminalContext: createQuizTerminalContext(
-        attempt.attemptId,
-        attempt.eventId,
-        attempt.eventEndsAt,
-        attempt.serverNow
-      ),
-      lockedOptionId: null,
-      expiryRetryable: false,
-      error: null,
-    });
-    await persist(attempt, null).catch(() => undefined);
-    if (attempt.status === 'event_cancelled')
-      await clearRecoveredQuizAttempt(access, attempt.eventId).catch(
-        () => undefined
-      );
-  };
+  const apply = createQuizV2AttemptApplier({ access, persist });
   const applyRecoveryResponse = createQuizV2RecoveryResponseApplier({
     access,
     apply,
@@ -91,6 +58,15 @@ export function createQuizV2StoreActions({
       if (['starting', 'submitting'].includes(get().status))
         return Promise.resolve();
       startInFlightGeneration = generation;
+      set({
+        ...initialQuizV2State,
+        status: 'starting',
+        selectedEventId: context.eventId,
+        attemptIntegrityTier: context.integrityTier,
+        startRequestId: context.startRequestId,
+        recoveryUserId: context.userId,
+        error: null,
+      });
       return (async () => {
         const existing = await loadQuizRecoveryEnvelope(
           context.userId,
@@ -99,15 +75,7 @@ export function createQuizV2StoreActions({
         if (generation !== getGeneration()) return;
         // biome-ignore format: Keep request-id selection compact for module-size guard.
         const startRequestId = resolveQuizStartRequestId(existing, context.startRequestId);
-        set({
-          ...initialQuizV2State,
-          status: 'starting',
-          selectedEventId: context.eventId,
-          attemptIntegrityTier: context.integrityTier,
-          startRequestId,
-          recoveryUserId: context.userId,
-          error: null,
-        });
+        set({ startRequestId });
         try {
           await saveQuizStartRequest(context, generation, startRequestId);
         } catch {
@@ -115,6 +83,7 @@ export function createQuizV2StoreActions({
         }
         if (generation !== getGeneration()) return;
         try {
+          pendingStarts.set(generation, { ...context, startRequestId });
           const attempt = await starter(startRequestId);
           if (generation === getGeneration()) await apply(attempt);
         } catch (error) {
@@ -122,29 +91,49 @@ export function createQuizV2StoreActions({
             set({ status: 'ready', error: getMessage(error) });
         }
       })().finally(() => {
+        pendingStarts.delete(generation);
         if (startInFlightGeneration === generation)
           startInFlightGeneration = null;
       });
     },
-    recoverEvent: async (userId, eventId, recoverer, resender) => {
+    recoverEvent: async (userId, eventId, recoverer, resender, snapshot) => {
       if (get().status === 'submitting') return 'retry';
+      const retainedRequestId =
+        get().recoveryUserId === userId && get().selectedEventId === eventId
+          ? get().startRequestId
+          : null;
+      const startWasPending = [...pendingStarts.values()].some(
+        (start) =>
+          start.userId === userId &&
+          start.eventId === eventId &&
+          start.startRequestId === retainedRequestId
+      );
       const generation = getGeneration();
+      // biome-ignore format: Keep the extracted snapshot call within the coordinator's module budget.
+      const scanned = getQuizRecoverySnapshot(userId, eventId, snapshot, get(), generation);
       set({
         status: 'starting',
         recoveryUserId: userId,
         selectedEventId: eventId,
+        startRequestId: scanned?.startRequestId ?? retainedRequestId,
       });
       try {
-        const envelope = await loadQuizRecoveryEnvelope(userId, eventId);
+        const envelope = await loadQuizRecoveryEnvelope(userId, eventId).catch(
+          () => scanned
+        );
         const recovered = await recoverer();
         if (generation !== getGeneration()) return 'retry';
+        if (recovered.availability === 'none' && startWasPending) {
+          set({ status: 'ready' });
+          return 'retry';
+        }
         if (
           recovered.availability === 'active' &&
           recovered.attempt &&
           isQuizOpenAtServerTime(recovered)
         ) {
           set({
-            startRequestId: envelope?.startRequestId ?? null,
+            startRequestId: envelope?.startRequestId ?? retainedRequestId,
             v2Attempt: recovered.attempt,
           });
           if (
@@ -178,6 +167,11 @@ export function createQuizV2StoreActions({
           recovered.attempt?.serverNow ?? recovered.serverNow;
         set({
           status: cancelled || pending || expiredActive ? 'result' : 'ready',
+          startRequestId: ['none', 'unavailable'].includes(
+            recovered.availability
+          )
+            ? null
+            : get().startRequestId,
           v2Attempt: null,
           v2LifecycleStatus: cancelled
             ? 'event_cancelled'
@@ -185,15 +179,14 @@ export function createQuizV2StoreActions({
               ? 'pending_results'
               : 'idle',
           terminalContext:
-            cancelled || pending || expiredActive
-              ? terminalAttemptId
-                ? createQuizTerminalContext(
-                    terminalAttemptId,
-                    eventId,
-                    terminalEventEndsAt,
-                    terminalServerNow
-                  )
-                : null
+            terminalAttemptId && (cancelled || pending || expiredActive)
+              ? createQuizTerminalContext(
+                  terminalAttemptId,
+                  eventId,
+                  terminalEventEndsAt,
+                  terminalServerNow,
+                  recovered.submittedAt ?? envelope?.submittedAt ?? null
+                )
               : null,
           error: null,
         });
@@ -213,18 +206,22 @@ export function createQuizV2StoreActions({
       }
     },
     reconcileLifecycle: async (reconciler, nowMs = Date.now()) => {
+      const generation = getGeneration();
       if (
-        reconciliationInFlight ||
+        reconciliationInFlightGeneration === generation ||
         get().status !== 'question' ||
         get().lockedOptionId ||
-        (lastReconciledAt > 0 &&
+        (lastReconciledGeneration === generation &&
+          lastReconciledAt > 0 &&
           nowMs - lastReconciledAt < QUIZ_RECONCILIATION_INTERVAL_MS)
       )
         return;
-      reconciliationInFlight = true;
+      reconciliationInFlightGeneration = generation;
       try {
         const response = await reconciler();
+        if (generation !== getGeneration()) return;
         lastReconciledAt = nowMs;
+        lastReconciledGeneration = generation;
         const attempt = get().v2Attempt;
         if (
           response.availability === 'active' &&
@@ -234,7 +231,8 @@ export function createQuizV2StoreActions({
           await apply(response.attempt);
         else if (attempt) await applyRecoveryResponse(response, attempt);
       } finally {
-        reconciliationInFlight = false;
+        if (reconciliationInFlightGeneration === generation)
+          reconciliationInFlightGeneration = null;
       }
     },
     expireActiveEvent,

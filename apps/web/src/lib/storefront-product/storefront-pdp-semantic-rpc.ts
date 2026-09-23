@@ -1,16 +1,28 @@
 import { logger } from '@/lib/logger';
 
-type AbortableQuery<T> = PromiseLike<T> & {
+export type AbortableQuery<T> = PromiseLike<T> & {
   abortSignal?: (signal: AbortSignal) => PromiseLike<T>;
 };
 
-type BoundaryTrace = {
+export interface StorefrontPdpSemanticRpcOptions {
+  deadlineMs: number;
+  traceThresholdMs: number;
+}
+
+export type StorefrontPdpSemanticBoundaryTrace = {
   elapsedMs: number;
   errorCode?: string;
   errorName?: string;
   outcome: 'slow_response' | 'throw' | 'timeout_response';
   responseStatus?: number;
 };
+
+export interface StorefrontPdpSemanticRpcResult<T> {
+  response: T;
+  trace: (
+    fields: Omit<StorefrontPdpSemanticBoundaryTrace, 'elapsedMs'>
+  ) => void;
+}
 
 function readStringField(value: unknown, field: string): string | undefined {
   if (!value || typeof value !== 'object') return undefined;
@@ -53,8 +65,8 @@ function createAbortDeadlinePromise(signal: AbortSignal) {
 /** Runs one bounded PDP semantic RPC and traces only slow/failed boundaries. */
 export async function runStorefrontPdpSemanticRpc<T>(
   query: AbortableQuery<T>,
-  options: { deadlineMs: number; traceThresholdMs: number }
-) {
+  options: StorefrontPdpSemanticRpcOptions
+): Promise<StorefrontPdpSemanticRpcResult<T>> {
   const timeoutSignal = AbortSignal.timeout(options.deadlineMs);
   const boundedQuery =
     typeof query.abortSignal === 'function'
@@ -62,7 +74,9 @@ export async function runStorefrontPdpSemanticRpc<T>(
       : query;
   const deadline = createAbortDeadlinePromise(timeoutSignal);
   const startedAt = performance.now();
-  const trace = (fields: Omit<BoundaryTrace, 'elapsedMs'>) => {
+  const trace = (
+    fields: Omit<StorefrontPdpSemanticBoundaryTrace, 'elapsedMs'>
+  ) => {
     logger.warn({
       message: 'Storefront PDP semantic RPC boundary trace',
       operation: 'pdp_semantic_enrichment',

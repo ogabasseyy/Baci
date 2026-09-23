@@ -12,15 +12,22 @@ interface GetQuizMobileAdsConfigOptions {
 
 export type QuizMobileAdsConfig =
   | { enabled: false }
-  | { bannerUnitId: string; enabled: true };
+  | { bannerUnitId: string; enabled: true; rewardedUnitId?: string };
 
 const BANNER_UNIT_ID_PATTERN = /^ca-app-pub-\d+\/\d+$/;
 const TEST_BANNER_UNIT_IDS = {
   android: 'ca-app-pub-3940256099942544/9214589741',
   ios: 'ca-app-pub-3940256099942544/2435281174',
 } as const;
+const TEST_REWARDED_UNIT_IDS = {
+  android: 'ca-app-pub-3940256099942544/5224354917',
+  ios: 'ca-app-pub-3940256099942544/1712485313',
+} as const;
 const TEST_BANNER_UNIT_ID_VALUES = new Set<string>(
   Object.values(TEST_BANNER_UNIT_IDS)
+);
+const TEST_REWARDED_UNIT_ID_VALUES = new Set<string>(
+  Object.values(TEST_REWARDED_UNIT_IDS)
 );
 
 function getDefaultPlatform(): QuizMobileAdsPlatform {
@@ -38,6 +45,10 @@ export function getQuizMobileAdsConfig(
       process.env.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID,
     EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID:
       process.env.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID,
+    EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID:
+      process.env.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID,
+    EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID:
+      process.env.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID,
   };
   if (environment.EXPO_PUBLIC_QUIZ_ADS_ENABLED !== 'true') {
     return { enabled: false };
@@ -48,7 +59,11 @@ export function getQuizMobileAdsConfig(
 
   const development = options.development ?? __DEV__;
   if (development) {
-    return { bannerUnitId: TEST_BANNER_UNIT_IDS[platform], enabled: true };
+    return {
+      bannerUnitId: TEST_BANNER_UNIT_IDS[platform],
+      enabled: true,
+      rewardedUnitId: TEST_REWARDED_UNIT_IDS[platform],
+    };
   }
 
   const environmentKey =
@@ -70,5 +85,20 @@ export function getQuizMobileAdsConfig(
     );
   }
 
-  return { bannerUnitId, enabled: true };
+  const rewardedUnitId = (
+    platform === 'android'
+      ? environment.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID
+      : environment.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID
+  )?.trim();
+  const hasValidRewardedUnitId =
+    Boolean(rewardedUnitId) &&
+    BANNER_UNIT_ID_PATTERN.test(rewardedUnitId ?? '') &&
+    !TEST_BANNER_UNIT_ID_VALUES.has(rewardedUnitId ?? '') &&
+    !TEST_REWARDED_UNIT_ID_VALUES.has(rewardedUnitId ?? '');
+
+  return {
+    bannerUnitId,
+    enabled: true,
+    ...(hasValidRewardedUnitId ? { rewardedUnitId } : {}),
+  };
 }

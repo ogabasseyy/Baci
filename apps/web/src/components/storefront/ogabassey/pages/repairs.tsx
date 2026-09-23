@@ -16,14 +16,15 @@ import {
   Zap,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect } from 'react';
 import { RepairDevicePicker } from '@/components/storefront/repairs/RepairDevicePicker';
 import { asRoute } from '@/lib/routes';
+import { RepairsLabHero } from './repairs-lab-hero';
 import { RepairsRecyclingSection } from './repairs-recycling-section';
 
 interface OgabasseyV2RepairsProps {
   basePath?: string;
   storeSlug?: string;
+  omitHero?: boolean;
   /**
    * Catalogue device groups. `undefined` means the repairs catalogue flag is
    * off for this merchant — keep today's static services grid so nothing
@@ -36,12 +37,9 @@ interface OgabasseyV2RepairsProps {
 export function OgabasseyV2Repairs({
   basePath,
   groups,
+  omitHero = false,
   storeSlug,
 }: OgabasseyV2RepairsProps) {
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
-
   const services = [
     {
       title: 'Screen Renewal',
@@ -79,58 +77,15 @@ export function OgabasseyV2Repairs({
   const swapLink = asRoute(`${normalizedBasePath}/swap`);
 
   return (
-    <div className="min-h-screen bg-store-secondary pb-24 md:pb-12 pt-4 md:pt-8 flex flex-col text-store-background-text">
+    <div
+      className={`min-h-screen bg-store-secondary pb-24 md:pb-12 flex flex-col text-store-background-text ${
+        omitHero ? 'pt-0' : 'pt-4 md:pt-8'
+      }`}
+    >
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 w-full flex-1 flex flex-col">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-2">
-          <div className="bg-store-primary/10 p-2 rounded-lg text-store-primary">
-            <Wrench size={24} />
-          </div>
-          <h1 className="text-2xl font-bold text-store-background-text">
-            Repair Lab
-          </h1>
-        </div>
-        <p className="text-store-background-text/55 text-sm mb-8 max-w-xl">
-          Extend the life of your devices. Expert repairs that save you money
-          and help the planet.
-        </p>
-
-        {/* Hero Card - Brand Focused */}
-        <div className="bg-store-background-text text-store-background rounded-3xl p-8 md:p-12 mb-12 relative overflow-hidden shadow-xl">
-          <div className="relative z-10 max-w-lg">
-            <span className="inline-flex items-center gap-1.5 bg-store-primary/20 backdrop-blur-md border border-store-primary/30 text-store-primary text-xs font-bold px-3 py-1 rounded-full mb-4 uppercase tracking-wider">
-              <Sparkles size={12} /> Premium Service
-            </span>
-            <h2 className="text-3xl md:text-5xl font-extrabold mb-4 leading-tight">
-              Don't Ditch It. <br />
-              <span className="text-store-primary">Fix It.</span>
-            </h2>
-            <p className="text-store-background/70 mb-8 text-sm md:text-base leading-relaxed">
-              Every device repaired is one less in a landfill. Our certified
-              technicians use genuine parts to give your gadget a second life.
-            </p>
-            <div className="flex flex-wrap gap-4">
-              <Link
-                href={repairLink}
-                className="bg-store-primary text-store-primary-text font-bold py-3.5 px-8 rounded-xl hover:bg-store-primary/90 transition-colors shadow-lg active:scale-95 shadow-store-primary/20"
-              >
-                Book a Repair
-              </Link>
-              <Link
-                href={swapLink}
-                className="bg-store-background/10 text-store-background border border-store-background/20 font-bold py-3.5 px-8 rounded-xl hover:bg-store-background/20 transition-colors active:scale-95 backdrop-blur-xs"
-              >
-                Trade-in Instead
-              </Link>
-            </div>
-          </div>
-
-          {/* Abstract Tech Pattern */}
-          <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_1px_1px,var(--store-background)_1px,transparent_0)] bg-[length:18px_18px]" />
-
-          {/* Red Glow Effect */}
-          <div className="absolute -right-20 -bottom-20 size-96 bg-store-primary rounded-full blur-[120px] opacity-20" />
-        </div>
+        {omitHero ? null : (
+          <RepairsLabHero repairHref={repairLink} swapHref={swapLink} />
+        )}
 
         {/* The Repair Impact */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">

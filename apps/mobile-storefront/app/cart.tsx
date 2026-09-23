@@ -13,6 +13,7 @@ import { useCartReprice } from '@/components/cart/use-cart-reprice';
 import { warmCheckoutEntry } from '@/components/checkout/checkout-entry-prefetch';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
 import { useHaptics } from '@/hooks/use-haptics';
 import { isValidCartStore } from '@/lib/cart-validation';
@@ -28,6 +29,10 @@ export default function CartScreen() {
   const { light: triggerHaptic } = useHaptics();
   const [isIdentityModalOpen, setIsIdentityModalOpen] = useState(false);
   const [isRetryingCartLoad, setIsRetryingCartLoad] = useState(false);
+  // iOS keeps the native price-change modal rendered through its fade
+  // dismissal. Track dismissal separately so CART_MPU stays unmounted until
+  // the modal-owned screen is actually gone.
+  const [priceChangeDismissed, setPriceChangeDismissed] = useState(true);
   const pendingOperations = useRef<Set<string>>(new Set());
 
   const cartStore = useCartStore(
@@ -158,6 +163,20 @@ export default function CartScreen() {
 
   // Reconcile cart prices against the live catalog when the cart opens.
   const { priceChanges, dismissPriceChanges } = useCartReprice();
+  const isPriceChangeVisible = priceChanges.length > 0;
+
+  useEffect(() => {
+    if (isPriceChangeVisible) setPriceChangeDismissed(false);
+  }, [isPriceChangeVisible]);
+
+  useEffect(() => {
+    if (isPriceChangeVisible || priceChangeDismissed) return undefined;
+    const fallback = setTimeout(
+      () => setPriceChangeDismissed(true),
+      MODAL_DISMISS_FALLBACK_MS
+    );
+    return () => clearTimeout(fallback);
+  }, [isPriceChangeVisible, priceChangeDismissed]);
 
   const handleRetryCartLoad = () => {
     setIsRetryingCartLoad(true);
@@ -221,6 +240,7 @@ export default function CartScreen() {
         hasNonNegotiableCartItem={hasNonNegotiableCartItem}
         insetsTop={insets.top}
         isIdentityModalOpen={isIdentityModalOpen}
+        isPriceChangeModalOpen={isPriceChangeVisible || !priceChangeDismissed}
         itemCount={itemCount}
         items={items}
         onBulkNegotiate={openTotalNegotiation}
@@ -253,9 +273,10 @@ export default function CartScreen() {
         updateQuantity={updateQuantity}
       />
       <PriceChangeModal
-        visible={priceChanges.length > 0}
+        visible={isPriceChangeVisible}
         changes={priceChanges}
         onClose={dismissPriceChanges}
+        onDismissed={() => setPriceChangeDismissed(true)}
         colors={colors}
       />
     </>

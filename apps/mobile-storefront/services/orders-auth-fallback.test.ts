@@ -1,5 +1,9 @@
 import { jest } from '@jest/globals';
 import { AuthRefreshDiscardedError, type Session } from '@supabase/supabase-js';
+import { sessionFixture } from './orders-auth-fallback.test-utils';
+
+const userAId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const userBId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 const mockGetUser = jest.fn<
   (jwt?: string) => Promise<{
@@ -22,6 +26,9 @@ const mockFetchWithRetry = jest.fn<
     options: unknown
   ) => Promise<unknown>
 >(async () => ({
+  headers: {
+    get: () => null,
+  },
   json: async () => ({
     amountDueToGateway: 102_000,
     order: {
@@ -64,28 +71,21 @@ const orderRequest = {
   subtotal: 100_000,
 };
 
-function sessionFixture(
-  accessToken: string,
-  refreshToken: string,
-  userId = 'user-a'
-): Session {
+jest.mock('@/stores/cart-store', () => ({
+  useCartStore: {
+    getState: () => ({ checkoutGeneration: 'cart-one' }),
+  },
+}));
+
+jest.mock('@react-native-async-storage/async-storage', () => {
+  const storage = new Map<string, string>();
   return {
-    access_token: accessToken,
-    expires_at: 1_800_000_000,
-    expires_in: 3_600,
-    refresh_token: refreshToken,
-    token_type: 'bearer',
-    user: {
-      app_metadata: {},
-      aud: 'authenticated',
-      created_at: '2026-08-30T00:00:00Z',
-      id: userId,
-      role: 'authenticated',
-      updated_at: '2026-08-30T00:00:00Z',
-      user_metadata: {},
+    getItem: async (key: string) => storage.get(key) ?? null,
+    setItem: async (key: string, value: string) => {
+      storage.set(key, value);
     },
   };
-}
+});
 
 jest.mock('@react-native-community/netinfo', () => ({
   fetch: jest.fn(async () => ({
@@ -103,7 +103,10 @@ jest.mock('expo-constants', () => ({
 }));
 
 jest.mock('expo-crypto', () => ({
-  randomUUID: () => 'test-uuid',
+  randomUUID: () => require('node:crypto').randomUUID(),
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  digestStringAsync: async (_algorithm: string, value: string) =>
+    require('node:crypto').createHash('sha256').update(value).digest('hex'),
 }));
 
 jest.mock('@/lib/logger', () => ({
@@ -146,9 +149,13 @@ jest.mock('@/lib/api', () => ({
 }));
 
 jest.mock('./orders-session', () => ({
-  getCheckoutStoredSession: async () => {
+  getCheckoutStoredSession: async () => (await mockGetSession()).data.session,
+}));
+
+jest.mock('./read-checkout-stored-session', () => ({
+  readCheckoutStoredSession: async () => {
     const { data } = await mockGetSession();
-    return data.session;
+    return { session: data.session, timedOut: false };
   },
 }));
 
@@ -242,7 +249,7 @@ describe('createOrder checkout auth fallback', () => {
       error: new AuthRefreshDiscardedError(),
     });
     mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-a' } },
+      data: { user: { id: userAId } },
       error: null,
     });
 
@@ -260,7 +267,7 @@ describe('createOrder checkout auth fallback', () => {
     const accountASession = sessionFixture(
       'account-a-token',
       'account-a-refresh-token',
-      'user-a'
+      userAId
     );
     mockGetSession.mockResolvedValue({ data: { session: accountASession } });
     mockRefreshSession.mockResolvedValue({
@@ -268,7 +275,7 @@ describe('createOrder checkout auth fallback', () => {
       error: null,
     });
     mockGetUser.mockImplementation(async (jwt) => ({
-      data: { user: { id: jwt ? 'user-a' : 'user-b' } },
+      data: { user: { id: jwt ? userAId : userBId } },
       error: null,
     }));
 
@@ -285,6 +292,6 @@ describe('createOrder checkout auth fallback', () => {
         string,
         unknown
       >
-    ).toMatchObject({ user_id: 'user-a' });
+    ).toMatchObject({ user_id: userAId });
   });
 });

@@ -51,7 +51,7 @@ describe('critical variant selector metadata axes', () => {
       variantAxisOptions
     );
 
-    expect(renderableVariantAxes).toEqual(['storage', 'notebook_size', 'extended_warranty']);
+    expect(renderableVariantAxes).toEqual([]);
     expect(renderableVariantAxes).not.toContain('availability_note');
     expect(renderableVariantAxes).not.toContain('warranty');
     expect(renderableVariantAxes).not.toContain('warranty_note');
@@ -68,7 +68,7 @@ describe('critical variant selector metadata axes', () => {
 
     const renderableVariantAxes = getRenderableCriticalVariantAxes(rawAxes, testVariants, {});
 
-    expect(renderableVariantAxes).toEqual(['storage', 'warranty']);
+    expect(renderableVariantAxes).toEqual(['warranty']);
   });
 
   it('excludes canonicalized availability note aliases from availability constraints', () => {

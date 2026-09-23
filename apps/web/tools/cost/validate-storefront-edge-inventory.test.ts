@@ -52,6 +52,18 @@ describe('validateStorefrontEdgeInventory', () => {
     )
       throw new Error('checked-in inventory source authority is missing');
     const sourceSha = artifact.originMainSha;
+    // A branch-only authority disappears from fresh CI clones after squash merge.
+    // Keep this checked-in artifact anchored in the checkout's reachable history.
+    await expect(
+      execFileAsync('git', [
+        '-C',
+        repoRoot,
+        'merge-base',
+        '--is-ancestor',
+        sourceSha,
+        'HEAD',
+      ])
+    ).resolves.toMatchObject({ stdout: '' });
     // Act
     const result = await validateStorefrontEdgeInventory({
       repoRoot,
@@ -63,16 +75,30 @@ describe('validateStorefrontEdgeInventory', () => {
     // Assert
     expect(result).toEqual({
       inventorySha256:
-        '6ee58d9b7b1d32a352f50cd2e07989e489abb73bfea27610592af4b6f4fd89e5',
-      rowCount: 559,
-      storefrontEntrypointCount: 76,
+        '263035096099567c3b62d0c96a60c2fa762845aeb21d5c880c7a7abcccc33a45',
+      rowCount: 557,
+      storefrontEntrypointCount: 77,
     });
   });
 
-  it('accepts an exact artifact regenerated from the checked-out tree', async () => {
+  it('accepts an exact artifact in a checkout without an origin/main ref', async () => {
     // Arrange
     const { artifact, inputPath, originMainSha, repoRoot } =
       await arrangeInventory();
+    await execFileAsync('git', [
+      '-C',
+      repoRoot,
+      'update-ref',
+      '-d',
+      'refs/remotes/origin/main',
+    ]);
+    const { stdout: refs } = await execFileAsync('git', [
+      '-C',
+      repoRoot,
+      'for-each-ref',
+      'refs/remotes/origin/main',
+    ]);
+    expect(refs).toBe('');
 
     // Act
     const result = await validateStorefrontEdgeInventory({
@@ -86,7 +112,7 @@ describe('validateStorefrontEdgeInventory', () => {
     expect(result).toEqual({
       inventorySha256: artifact.inventorySha256,
       rowCount: artifact.rows.length,
-      storefrontEntrypointCount: 76,
+      storefrontEntrypointCount: 77,
     });
   });
 

@@ -628,9 +628,11 @@ describe('BNPLCheckoutScreen', () => {
     jest.useFakeTimers();
     await renderReadyBNPLCheckoutScreen();
 
-    fireEvent.press(
-      screen.getByLabelText('mock-bnpl-native-success-navigation')
-    );
+    await act(async () => {
+      fireEvent.press(
+        screen.getByLabelText('mock-bnpl-native-success-navigation')
+      );
+    });
 
     expect(mockClearCart).toHaveBeenCalledTimes(1);
 

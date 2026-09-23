@@ -11,8 +11,9 @@ const getTrimmedString = (value: unknown) =>
   typeof value === 'string' ? value.trim() : '';
 
 interface CreatePaymentGatewayMessageHandlerInput {
+  confirmRedvaultPayment?: () => void;
   amount?: number;
-  clearCart: () => void;
+  clearCart: () => void | Promise<void>;
   confirmVtuPaymentSuccess: (input: {
     amount: number;
     customerIdentifier?: string;
@@ -103,6 +104,7 @@ function handleClipboardText({
 
 export function createPaymentGatewayMessageHandler({
   amount,
+  confirmRedvaultPayment,
   clearCart,
   confirmVtuPaymentSuccess,
   copiedGatewayTextRef,
@@ -123,7 +125,7 @@ export function createPaymentGatewayMessageHandler({
     current: null,
   };
 
-  return (event: { nativeEvent: { data: string } }) => {
+  return async (event: { nativeEvent: { data: string } }) => {
     let data: unknown;
     try {
       data = JSON.parse(event.nativeEvent.data);
@@ -155,6 +157,16 @@ export function createPaymentGatewayMessageHandler({
         successMessage: 'Account number copied.',
         text: data.text,
       });
+      return;
+    }
+
+    if (confirmRedvaultPayment) {
+      if (
+        data.type === 'crypto_success' ||
+        data.type === 'success' ||
+        data.type === 'payment_success'
+      )
+        confirmRedvaultPayment();
       return;
     }
 
@@ -198,7 +210,7 @@ export function createPaymentGatewayMessageHandler({
 
       markPaymentCompletionStarted();
       setSuccessStatus();
-      clearCart();
+      await clearCart();
       scheduleDelayedNavigation(() => {
         router.replace({
           pathname: '/order-success',

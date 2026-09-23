@@ -31,6 +31,9 @@ import { useComparison } from '../contexts/ComparisonContext';
 import { useSaved } from '../contexts/SavedContext';
 import { products } from '../data/products';
 import type { Product } from '../types';
+import { getDeliveryEstimate as formatDeliveryEstimate } from './product-details-page/product-delivery-estimate';
+import { getProductSuggestionRank } from './product-details-page/get-product-suggestion-rank';
+import { useDeliveryToday } from './product-details-page/use-delivery-today';
 
 // Fallback Mock data if product is not found
 const FALLBACK_PRODUCT = {
@@ -97,17 +100,6 @@ interface OgabasseyV2ProductDetailsProps {
   storeSlug?: string;
   productId: string;
 }
-
-// Deterministic pseudo-random rank so comparison suggestions stay random per
-// mount (seeded once) but stable across re-renders — render must stay pure.
-const getSuggestionRank = (id: string, seed: string): number => {
-  const key = `${seed}:${id}`;
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) {
-    hash = (hash * 31 + key.charCodeAt(i)) | 0;
-  }
-  return hash;
-};
 
 export const OgabasseyV2ProductDetails: React.FC<
   OgabasseyV2ProductDetailsProps
@@ -226,9 +218,7 @@ export const OgabasseyV2ProductDetails: React.FC<
   // Selection Logic
   const [_isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
   const [_missingFields, setMissingFields] = useState<string[]>([]);
-
-  // Stable per-mount shuffle seed (impure call lives in the initializer only)
-  const [suggestionSeed] = useState(() => Math.random().toString(36).slice(2));
+  const deliveryToday = useDeliveryToday();
 
   // Comparison Logic - Compute comparable items
   const comparableProducts = (() => {
@@ -251,8 +241,8 @@ export const OgabasseyV2ProductDetails: React.FC<
         )
         .toSorted(
           (a, b) =>
-            getSuggestionRank(String(a.id), suggestionSeed) -
-            getSuggestionRank(String(b.id), suggestionSeed)
+            getProductSuggestionRank(String(a.id), String(productData.id)) -
+            getProductSuggestionRank(String(b.id), String(productData.id))
         )
         .slice(0, 2 - finalItems.length);
       finalItems = [...finalItems, ...suggestions];
@@ -460,21 +450,7 @@ export const OgabasseyV2ProductDetails: React.FC<
   };
 
   const getDeliveryEstimate = () => {
-    const today = new Date();
-    const minDays = deliveryLocation === 'Lagos' ? 1 : 3;
-    const maxDays = deliveryLocation === 'Lagos' ? 2 : 5;
-
-    const formatDate = (daysToAdd: number) => {
-      const date = new Date(today);
-      date.setDate(today.getDate() + daysToAdd);
-      return date.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-      });
-    };
-
-    return `${formatDate(minDays)} - ${formatDate(maxDays)}`;
+    return formatDeliveryEstimate(deliveryLocation, deliveryToday);
   };
 
   const handleToggleSaved = () => {

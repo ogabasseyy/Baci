@@ -129,7 +129,8 @@ describe('useQuizPersistedRecovery', () => {
       'user-1',
       'event-later',
       expect.any(Function),
-      expect.any(Function)
+      expect.any(Function),
+      expect.objectContaining({ userId: 'user-1' })
     );
   });
 });

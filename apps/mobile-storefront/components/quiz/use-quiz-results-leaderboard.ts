@@ -5,8 +5,8 @@ import { fetchQuizLiveLeaderboard } from '@/services/quiz-live-leaderboard';
 import type { QuizLeaderboard } from '@/services/quiz-types';
 import type { QuizV2LifecycleStatus } from '@/stores/quiz-recovery-envelope';
 
-const FINAL_RETRY_INTERVAL_MS = 5_000;
 const LIVE_REFRESH_INTERVAL_MS = 5_000;
+const FINAL_RETRY_INTERVAL_MS = 5_000;
 
 interface UseQuizResultsLeaderboardInput {
   enabled: boolean;
@@ -31,7 +31,7 @@ export function useQuizResultsLeaderboard({
   const isLive = lifecycle === 'pending_results' && !eventHasEnded;
 
   useEffect(() => {
-    const eventKey = `${eventId ?? ''}:${expectedUserId ?? ''}:${isLive ? 'live' : 'final'}`;
+    const eventKey = `${eventId ?? ''}:${expectedUserId ?? ''}`;
     const eventChanged = previousEventKey.current !== eventKey;
     if (eventChanged) {
       previousEventKey.current = eventKey;
@@ -59,6 +59,9 @@ export function useQuizResultsLeaderboard({
     const load = async () => {
       if (!active || !appIsActive || loadInFlight) return;
       loadInFlight = true;
+      // A transient finalization failure must not strand the result screen.
+      // Keep a bounded retry loop until the immutable published board arrives;
+      // once it succeeds the success path disables further polling.
       let retryDelayMs: number | null = isLive
         ? LIVE_REFRESH_INTERVAL_MS
         : FINAL_RETRY_INTERVAL_MS;

@@ -1,9 +1,8 @@
 'use client';
 
 import { resolveDefaultVariantSelection } from '@baci/shared/lib';
-import { Check, ExternalLink, Minus, Plus, X } from 'lucide-react';
+import { Check, Minus, Plus, X } from 'lucide-react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { ThemedBadge, ThemedButton } from '@/components/themed';
 import {
@@ -18,8 +17,8 @@ import { useCart } from '@/hooks/use-cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useToast } from '@/hooks/use-toast';
 import type { Product, ProductVariant } from '@/lib/products';
-import { getProductUrl } from '@/lib/seo-utils';
 import { cn } from '@/lib/utils';
+import { QuickViewDetailsLink } from './quick-view-details-link';
 
 interface QuickViewModalProps {
   /** Product to display */
@@ -30,6 +29,8 @@ interface QuickViewModalProps {
   onClose: () => void;
   /** Merchant slug for checkout context */
   merchantSlug?: string;
+  /** Routing prefix; empty for merchant domains and subdomains. */
+  basePath?: string;
 }
 
 /**
@@ -50,6 +51,7 @@ export function QuickViewModal({
   isOpen,
   onClose,
   merchantSlug,
+  basePath = '',
 }: QuickViewModalProps) {
   const { formatCurrency } = useCurrency();
   const { addToCart, setMerchantSlug } = useCart();
@@ -467,14 +469,11 @@ export function QuickViewModal({
             </div>
 
             {/* Link to Full Product Page */}
-            <Link
-              href={getProductUrl(product)}
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              onClick={onClose}
-            >
-              View Full Details
-              <ExternalLink className="size-4" />
-            </Link>
+            <QuickViewDetailsLink
+              product={product}
+              basePath={basePath}
+              onClose={onClose}
+            />
           </div>
         </div>
       </DialogContent>

@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { isValidBuilderAiJsonTransportSmokeResult } from './run-builder-ai-json-transport-smoke';
+import { generateText } from 'ai';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  isValidBuilderAiJsonTransportSmokeResult,
+  runBuilderAiJsonTransportSmoke,
+} from './run-builder-ai-json-transport-smoke';
+
+vi.mock('ai', () => ({
+  generateText: vi.fn(),
+  Output: { json: vi.fn(() => 'json-output') },
+}));
 
 const requestedPlan = {
   operations: [
@@ -14,6 +23,25 @@ const requestedPlan = {
 };
 
 describe('isValidBuilderAiJsonTransportSmokeResult', () => {
+  it('sends an explicit kind envelope to structured-output models', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce({
+      output: requestedPlan,
+    } as never);
+
+    await expect(
+      runBuilderAiJsonTransportSmoke(
+        { model: {} as never, name: 'google:gemma-4-31b-it' },
+        new AbortController().signal
+      )
+    ).resolves.toBe(true);
+
+    expect(generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining('"kind":"update_component"'),
+      })
+    );
+  });
+
   it('accepts the one exact transport edit applied by the worker', () => {
     expect(isValidBuilderAiJsonTransportSmokeResult(requestedPlan)).toBe(true);
   });

@@ -14,6 +14,7 @@ function renderAppConfig(sentryEnv: Record<string, string | undefined>) {
   };
   for (const key of [
     'EXPO_PUBLIC_SENTRY_DSN',
+    'EXPO_PUBLIC_SENTRY_ENVIRONMENT',
     'SENTRY_AUTH_TOKEN',
     'SENTRY_ORG',
     'SENTRY_PROJECT',
@@ -51,13 +52,18 @@ describe('Expo app config Sentry integration', () => {
     ]);
   });
 
-  it('omits the Sentry plugin from the final list when local setup is incomplete', () => {
+  it('enables native capture without upload credentials for local development', () => {
     const config = renderAppConfig({
       EXPO_PUBLIC_SENTRY_DSN: 'https://public@example.ingest.sentry.io/1',
     });
 
-    expect(config.plugins).not.toContainEqual(
-      expect.arrayContaining(['@sentry/react-native/expo'])
-    );
+    expect(config.plugins).toContainEqual([
+      '@sentry/react-native/expo',
+      expect.objectContaining({
+        disableAutoUpload: true,
+        useNativeInit: true,
+        options: expect.objectContaining({ environment: 'development' }),
+      }),
+    ]);
   });
 });

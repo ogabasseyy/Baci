@@ -2,7 +2,11 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
+import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
+import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
+import { eventPipelineShippingCredentialPaths } from './event-pipeline-shipping-credential-paths';
 
 const modulePath = resolve(
   process.cwd(),
@@ -35,6 +39,27 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/app/api/agentic/catalog/search/route.ts',
         'apps/web/src/lib/agentic/mutation-request.ts',
         'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/payments/initialize/route.ts',
+        'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
+        'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
+        'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
         'apps/web/src/env.ts',
       ],
       [
@@ -171,6 +196,22 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/env.ts',
       ],
       [
+        'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
+        'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
+        'apps/web/src/lib/supabase/service.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
+        'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+        'apps/web/src/lib/supabase/service.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
         'apps/web/src/app/api/internal/compare-page-status/[identifier]/route.ts',
         'apps/web/src/env.ts',
       ],
@@ -264,7 +305,16 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/lib/agentic/jwt-signing-material.ts',
         'apps/web/src/env.ts',
       ],
+      [
+        'apps/web/src/lib/payments/file-inventory-confirmation-review.ts',
+        'apps/web/src/lib/supabase/admin.ts',
+        'apps/web/src/env.ts',
+      ],
       ...eventPipelineJumiaCredentialPaths,
+      ...eventPipelineRepairPickupCredentialPaths,
+      ...eventPipelineRedvaultCredentialPaths,
+      ...eventPipelineShippingCredentialPaths,
+      ...eventPipelineChatCredentialPaths,
     ]);
   });
 });

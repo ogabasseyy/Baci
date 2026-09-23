@@ -6,9 +6,19 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { CHAT_PRODUCT_PROJECTION } from '@/ai/chat-product-projection';
+import {
+  type ChatProductResult,
+  createChatProductResult,
+} from '@/ai/chat-product-result';
+import {
+  type AgenticChatTenant,
+  resolveAgenticChatTenant,
+} from '@/lib/agentic/agentic-chat-tenant';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import { sanitizeSearchQuery } from '@/lib/sanitize-core';
 import { searchStorefrontProducts } from '@/lib/storefront-search';
+import { createPublicClient } from '@/lib/supabase/public';
 import type {
   AddToCartParams,
   CheckPaymentStatusParams,
@@ -18,18 +28,40 @@ import type {
   SearchProductsParams,
 } from './chat-tools';
 
-// Ogabassey merchant ID (hardcoded for now, can be made dynamic)
-const OGABASSEY_MERCHANT_ID = '3bc72679-c0f7-4db4-9054-6a4a4a95a498';
-const OGABASSEY_MERCHANT_SLUG = 'ogabassey';
-
 type ChatToolSupabaseClient = Pick<SupabaseClient, 'from' | 'rpc'>;
 
-function createChatToolSupabaseClient(
+interface ChatCheckoutTenantClient {
+  tenant: AgenticChatTenant;
+  supabase: ChatToolSupabaseClient;
+}
+
+async function resolveChatCatalogTenant(): Promise<AgenticChatTenant | null> {
+  return await resolveAgenticChatTenant();
+}
+
+function createChatCatalogSupabaseClient(): ChatToolSupabaseClient {
+  return createPublicClient({ clientInfo: 'baci-chat-catalog' });
+}
+
+async function createCheckoutToolTenantClient(
+  sessionId: string
+): Promise<ChatCheckoutTenantClient | null> {
+  const tenant = await resolveAgenticChatTenant();
+  if (!tenant?.agenticCheckoutEnabled) return null;
+
+  return {
+    tenant,
+    supabase: createScopedClient(tenant, sessionId),
+  };
+}
+
+function createScopedClient(
+  tenant: AgenticChatTenant,
   sessionId?: string
 ): ChatToolSupabaseClient {
   return createAgenticScopedSupabaseClient({
-    merchantId: OGABASSEY_MERCHANT_ID,
-    merchantSlug: OGABASSEY_MERCHANT_SLUG,
+    merchantId: tenant.merchantId,
+    merchantSlug: tenant.merchantSlug,
     sessionId,
   });
 }
@@ -37,18 +69,6 @@ function createChatToolSupabaseClient(
 // ============================================
 // SEARCH PRODUCTS
 // ============================================
-
-interface ProductSearchResult {
-  id: string;
-  name: string;
-  price: number;
-  description: string | null;
-  brand: string | null;
-  category: string | null;
-  image_url: string | null;
-  stock: number | null;
-  status: string;
-}
 
 function buildChatSearchText(params: SearchProductsParams): string {
   return [params.query, params.category]
@@ -72,8 +92,12 @@ function orderProductsByRankedIds<T extends { id: string }>(
 
 export async function handleSearchProducts(
   params: SearchProductsParams
-): Promise<{ products: ProductSearchResult[]; total: number }> {
-  const supabase = createChatToolSupabaseClient();
+): Promise<{ products: ChatProductResult[]; total: number }> {
+  const tenant = await resolveChatCatalogTenant();
+  if (!tenant) return { products: [], total: 0 };
+
+  const supabase = createChatCatalogSupabaseClient();
+  const merchantId = tenant.merchantId;
   const searchText = buildChatSearchText(params);
   let ranked: Awaited<ReturnType<typeof searchStorefrontProducts>> | null =
     null;
@@ -87,22 +111,20 @@ export async function handleSearchProducts(
           minPrice: params.minPrice ?? null,
         },
         limit: 10,
-        merchantId: OGABASSEY_MERCHANT_ID,
+        merchantId,
         query: searchText,
         trackAnalytics: false,
       });
     } catch (error) {
       console.error('[Chat Tools] Search ranking error:', error);
-      return { products: [], total: 0 };
+      throw new Error('Catalog search temporarily unavailable');
     }
   }
 
   let query = supabase
     .from('products')
-    .select(
-      'id, name, price, description, brand, category, images, stock, status'
-    )
-    .eq('merchant_id', OGABASSEY_MERCHANT_ID)
+    .select(CHAT_PRODUCT_PROJECTION)
+    .eq('merchant_id', merchantId)
     .eq('status', 'active')
     .order('price', { ascending: false })
     .limit(10);
@@ -126,21 +148,10 @@ export async function handleSearchProducts(
 
   if (error) {
     console.error('[Chat Tools] Search error:', error);
-    return { products: [], total: 0 };
+    throw new Error('Catalog search temporarily unavailable');
   }
 
-  const mappedProducts = (data || []).map((p) => ({
-    id: p.id,
-    name: p.name,
-    price: p.price,
-    description: p.description,
-    brand: p.brand,
-    category: p.category,
-    image_url:
-      Array.isArray(p.images) && p.images[0]?.url ? p.images[0].url : null,
-    stock: p.stock,
-    status: p.status,
-  }));
+  const mappedProducts = (data || []).map(createChatProductResult);
   const products = ranked
     ? orderProductsByRankedIds(mappedProducts, ranked.productIds)
     : mappedProducts;
@@ -154,17 +165,19 @@ export async function handleSearchProducts(
 
 export async function handleGetProductDetails(
   params: GetProductDetailsParams
-): Promise<ProductSearchResult | null> {
-  const supabase = createChatToolSupabaseClient();
+): Promise<ChatProductResult | null> {
+  const tenant = await resolveChatCatalogTenant();
+  if (!tenant) return null;
+
+  const supabase = createChatCatalogSupabaseClient();
+  const merchantId = tenant.merchantId;
 
   try {
     const { data, error } = await supabase
       .from('products')
-      .select(
-        'id, name, price, description, brand, category, images, stock, status'
-      )
+      .select(CHAT_PRODUCT_PROJECTION)
       .eq('id', params.productId)
-      .eq('merchant_id', OGABASSEY_MERCHANT_ID)
+      .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .single();
 
@@ -175,20 +188,7 @@ export async function handleGetProductDetails(
       return null;
     }
 
-    return {
-      id: data.id,
-      name: data.name,
-      price: data.price,
-      description: data.description,
-      brand: data.brand,
-      category: data.category,
-      image_url:
-        Array.isArray(data.images) && data.images[0]?.url
-          ? data.images[0].url
-          : null,
-      stock: data.stock,
-      status: data.status,
-    };
+    return createChatProductResult(data);
   } catch (err) {
     console.error('[Chat Tools] Product detail error:', err);
     return null;
@@ -214,7 +214,17 @@ export async function handleCreateVirtualAccount(
   params: CreateVirtualAccountParams,
   sessionId: string
 ): Promise<VirtualAccountResult> {
-  const supabase = createChatToolSupabaseClient(sessionId);
+  const scoped = await createCheckoutToolTenantClient(sessionId);
+  if (!scoped) {
+    return {
+      success: false,
+      error:
+        'Bank transfer payment is temporarily unavailable. Please use card payment at checkout or contact support.',
+    };
+  }
+
+  const { supabase } = scoped;
+  const merchantId = scoped.tenant.merchantId;
 
   try {
     // 1. Create the chat order first
@@ -226,7 +236,7 @@ export async function handleCreateVirtualAccount(
     const { data: order, error: orderError } = await supabase
       .from('chat_orders')
       .insert({
-        merchant_id: OGABASSEY_MERCHANT_ID,
+        merchant_id: merchantId,
         session_id: sessionId,
         customer_email: params.customerEmail,
         customer_name: params.customerName,
@@ -287,7 +297,11 @@ export async function handleCheckPaymentStatus(
   params: CheckPaymentStatusParams,
   sessionId: string
 ): Promise<PaymentStatusResult> {
-  const supabase = createChatToolSupabaseClient(sessionId);
+  const scoped = await createCheckoutToolTenantClient(sessionId);
+  if (!scoped) return { status: 'not_found' };
+
+  const { supabase } = scoped;
+  const merchantId = scoped.tenant.merchantId;
 
   try {
     let order: {
@@ -309,7 +323,7 @@ export async function handleCheckPaymentStatus(
           'id, status, paid_at, created_at, subtotal, virtual_account_number, virtual_account_bank, metadata'
         )
         .eq('id', params.orderId)
-        .eq('merchant_id', OGABASSEY_MERCHANT_ID)
+        .eq('merchant_id', merchantId)
         .eq('session_id', sessionId)
         .maybeSingle();
 
@@ -326,7 +340,7 @@ export async function handleCheckPaymentStatus(
           'id, status, paid_at, created_at, subtotal, virtual_account_number, virtual_account_bank, metadata'
         )
         .eq('customer_email', params.customerEmail)
-        .eq('merchant_id', OGABASSEY_MERCHANT_ID)
+        .eq('merchant_id', merchantId)
         .eq('session_id', sessionId)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -384,8 +398,12 @@ export async function handleCheckPaymentStatus(
 
 export async function handleGetRecommendations(
   params: GetRecommendationsParams
-): Promise<ProductSearchResult[]> {
-  const supabase = createChatToolSupabaseClient();
+): Promise<ChatProductResult[]> {
+  const tenant = await resolveChatCatalogTenant();
+  if (!tenant) return [];
+
+  const supabase = createChatCatalogSupabaseClient();
+  const merchantId = tenant.merchantId;
 
   try {
     // First get the source product
@@ -393,7 +411,7 @@ export async function handleGetRecommendations(
       .from('products')
       .select('id, name, price, category, brand')
       .eq('id', params.productId)
-      .eq('merchant_id', OGABASSEY_MERCHANT_ID)
+      .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .maybeSingle();
 
@@ -405,10 +423,8 @@ export async function handleGetRecommendations(
 
     let query = supabase
       .from('products')
-      .select(
-        'id, name, price, description, brand, category, images, stock, status'
-      )
-      .eq('merchant_id', OGABASSEY_MERCHANT_ID)
+      .select(CHAT_PRODUCT_PROJECTION)
+      .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .neq('id', params.productId)
       .limit(3);
@@ -443,18 +459,7 @@ export async function handleGetRecommendations(
       return [];
     }
 
-    return (data || []).map((p) => ({
-      id: p.id,
-      name: p.name,
-      price: p.price,
-      description: p.description,
-      brand: p.brand,
-      category: p.category,
-      image_url:
-        Array.isArray(p.images) && p.images[0]?.url ? p.images[0].url : null,
-      stock: p.stock,
-      status: p.status,
-    }));
+    return (data || []).map(createChatProductResult);
   } catch (err) {
     console.error('[Chat Tools] Recommendations error:', err);
     return [];
@@ -480,7 +485,7 @@ function getComplementaryCategories(category: string | null): string[] {
 
 export function handleAddToCart(
   params: AddToCartParams
-): Promise<ProductSearchResult | null> {
+): Promise<ChatProductResult | null> {
   // Just return the product details - actual cart management happens on frontend
   return handleGetProductDetails({ productId: params.productId });
 }

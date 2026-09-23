@@ -1,0 +1,4 @@
+export const FEED_CONSTANTS = {
+  TITLE_MAX_LENGTH: 150,
+  UNLIMITED_STOCK_QUANTITY: 9999,
+} as const;

@@ -170,7 +170,8 @@ export function useQuizPersistedRecovery({
                 expectedUserId: userId,
                 questionId,
               });
-            }
+            },
+            envelope
           );
           recoveryOwnsStatus = false;
           const recoveryStillOwnsEvent = canRecoverRef.current(

@@ -14,6 +14,96 @@ describe('createQuizV2StoreActions recovery', () => {
   beforeEach(() => resetQuizV2StoreActionMocks());
   afterEach(() => jest.clearAllMocks());
 
+  it.each([
+    'none',
+    'unavailable',
+  ] as const)('clears the resume marker for nonrecoverable %s responses', async (availability) => {
+    const harness = createHarness();
+    harness.set({
+      recoveryUserId: 'user-1',
+      selectedEventId: 'event-1',
+      startRequestId: 'request',
+    });
+    await harness.actions.recoverEvent(
+      'user-1',
+      'event-1',
+      async () => {
+        expect(harness.getState()).toMatchObject({
+          recoveryUserId: 'user-1',
+          selectedEventId: 'event-1',
+          startRequestId: 'request',
+        });
+        return response({ availability, attempt: undefined });
+      },
+      async () => activeAttempt
+    );
+    expect(harness.getState()).toMatchObject({
+      status: 'ready',
+      startRequestId: null,
+    });
+  });
+
+  it('recovers the server attempt even when local storage cannot be read', async () => {
+    const harness = createHarness();
+    mockLoadRecoveryEnvelope.mockRejectedValueOnce(
+      new Error('storage unavailable')
+    );
+    await harness.actions.recoverEvent(
+      'user-1',
+      'event-1',
+      async () => response({}),
+      async () => activeAttempt
+    );
+    expect(harness.getState()).toMatchObject({
+      status: 'question',
+      v2Attempt: activeAttempt,
+      error: null,
+    });
+    expect(harness.getState().startRequestId).toBe(
+      '11111111-1111-4111-8111-111111111111'
+    );
+  });
+
+  it.each([
+    'user-1',
+    'other-user',
+  ])('scopes unfinished start protection to the recovering account %s', async (userId) => {
+    const harness = createHarness();
+    harness.set({ status: 'ready' });
+    let finish!: (value: QuizV2Attempt) => void;
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const pending = harness.actions.startEventV2(
+      {
+        userId: 'user-1',
+        eventId: 'event-1',
+        integrityTier: 'basic',
+        startRequestId: 'request',
+      },
+      () =>
+        new Promise<QuizV2Attempt>((resolve) => {
+          finish = resolve;
+          started();
+        })
+    );
+    await ready;
+    harness.setGeneration(1);
+    harness.set({ status: 'ready' });
+    await harness.actions.recoverEvent(
+      userId,
+      'event-1',
+      async () => response({ availability: 'none', attempt: undefined }),
+      async () => activeAttempt
+    );
+    expect(harness.getState().startRequestId).toBe(
+      userId === 'user-1' ? 'request' : null
+    );
+    finish(activeAttempt);
+    await pending;
+  });
+
   it('keeps the terminal attempt id returned after a lost start response', async () => {
     mockLoadRecoveryEnvelope.mockResolvedValueOnce(null);
     const harness = createHarness();

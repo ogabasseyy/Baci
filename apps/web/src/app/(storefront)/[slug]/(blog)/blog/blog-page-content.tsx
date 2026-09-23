@@ -1,45 +1,49 @@
 import { notFound, permanentRedirect, redirect } from 'next/navigation';
-import type { ComponentType } from 'react';
 import { InformationalClusterIndex } from '@/components/storefront/ogabassey/seo/informational-cluster-index';
 import { getBlogAuthorPageLinks } from '@/lib/blog-authors';
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
 import { buildBlogOrganizationId } from '@/lib/blog-organization-id';
 import { buildBlogOrganizationSchema } from '@/lib/blog-organization-schema';
-import { getBlogStructuredDataImageUrls } from '@/lib/blog-structured-data-images';
 import { getCachedBlogListing } from '@/lib/cached-data';
+import type { JsonLdScriptData } from '@/lib/json-ld-types';
 import { filterPublicBlogCategories } from '@/lib/public-blog-content-quality';
 import { asRoute } from '@/lib/routes';
-import { generateBreadcrumbSchema, generateSlug } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
 import { buildBlogClusterCollections } from '@/lib/storefront-content/build-blog-cluster-collections';
 import {
   clampBlogSearchQuery,
   evaluateStorefrontSlugSafety,
 } from '@/lib/storefront-slug-safety';
-import type { BlogPostData, TemplateBlogPageProps } from '@/templates/registry';
-import { getTemplate } from '@/templates/registry';
 import { BlogCategoryGuide } from './blog-category-guide';
 import {
   buildBlogCategoryHref,
-  findBlogCategoryLabelBySlug,
-  getBlogCategorySlug,
   isOgabasseyBlogStaticTenant,
 } from './blog-category-routing';
 import { BlogDiscoverySection } from './blog-discovery-section';
+import {
+  appendPreservedBlogCategoryRedirectParams,
+  findPublicCategoryLabel,
+} from './blog-listing-category-redirect';
 import { preloadOgabasseyRootBlogListingHeroImage } from './blog-listing-hero-image-preload';
 import { parseBlogListingPage } from './blog-listing-page-params';
-import { BlogListingPagination } from './blog-listing-pagination';
 import { buildBlogListingRouteHref } from './blog-listing-route';
 import { buildBlogListingSchemaUrl } from './blog-listing-schema-url';
+import { BlogListingTemplatePage } from './blog-listing-template-page';
 import {
   type BlogSearchParamValue,
   toSingleBlogSearchParam,
 } from './blog-search-params';
+import { buildBlogListingPageSchemas } from './build-blog-listing-page-schemas';
 import { DefaultBlogUi } from './default-blog-ui';
-import { TemplateBlogRenderer } from './template-blog-renderer';
+import { ogabasseyBlogLcpSnapshot } from './ogabassey-blog-lcp-snapshot';
+import {
+  shouldHideCommittedBlogSnapshot,
+  shouldHideLiveBlogFeaturedStory,
+} from './should-hide-live-blog-featured-story';
 
 export interface BlogPageProps {
   categoryOverride?: string;
+  hideFeaturedStory?: boolean;
   isCleanCategoryRoute?: boolean;
   itemListSchemaUrl?: string;
   params: Promise<{ slug: string }>;
@@ -51,61 +55,9 @@ export interface BlogPageProps {
   }>;
 }
 
-const BLOG_CATEGORY_REDIRECT_FILTER_PARAMS = new Set([
-  'category',
-  'page',
-  'search',
-]);
-
-function findPublicCategoryLabel(
-  publicCategories: string[],
-  category: string
-): string | null {
-  const trimmedCategory = category.trim();
-  const normalizedCategory = trimmedCategory.toLowerCase();
-
-  return (
-    publicCategories.find(
-      (publicCategory) =>
-        publicCategory.trim().toLowerCase() === normalizedCategory
-    ) ??
-    findBlogCategoryLabelBySlug(
-      publicCategories,
-      getBlogCategorySlug(trimmedCategory)
-    )
-  );
-}
-
-function appendPreservedBlogCategoryRedirectParams(
-  href: string,
-  searchParamValues: Record<string, BlogSearchParamValue>
-): string {
-  const preservedParams = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(searchParamValues)) {
-    if (BLOG_CATEGORY_REDIRECT_FILTER_PARAMS.has(key)) {
-      continue;
-    }
-
-    const values = Array.isArray(value) ? value : [value];
-    for (const paramValue of values) {
-      if (paramValue === undefined) {
-        continue;
-      }
-      preservedParams.append(key, paramValue);
-    }
-  }
-
-  const queryString = preservedParams.toString();
-  if (!queryString) {
-    return href;
-  }
-
-  return `${href}${href.includes('?') ? '&' : '?'}${queryString}`;
-}
-
 export async function BlogPageContent({
   categoryOverride,
+  hideFeaturedStory = false,
   isCleanCategoryRoute = false,
   itemListSchemaUrl,
   params,
@@ -134,6 +86,21 @@ export async function BlogPageContent({
     notFound();
   }
   const { merchant, posts, categories, totalPosts, searchQuery } = data;
+  const liveFeaturedSlug = posts[0]?.slug;
+  const snapshotSlug = ogabasseyBlogLcpSnapshot.featuredPost.slug;
+  const hideLiveFeatured = shouldHideLiveBlogFeaturedStory({
+    liveFeaturedSlug,
+    preferSnapshot: hideFeaturedStory,
+    snapshotSlug,
+  });
+  const hideCommittedSnapshot = shouldHideCommittedBlogSnapshot({
+    liveFeaturedSlug,
+    preferSnapshot: hideFeaturedStory,
+    snapshotSlug,
+  });
+  const committedSnapshotMarker = hideCommittedSnapshot ? (
+    <div data-blog-live-featured="" hidden />
+  ) : null;
   const effectiveSearchQuery = searchQuery ?? search;
   const totalPages = Math.max(
     1,
@@ -147,7 +114,6 @@ export async function BlogPageContent({
       ? organizationSchema['@id']
       : buildBlogOrganizationId(baseUrl);
   const basePath = baseUrl;
-  const templateBasePath = baseUrl;
   const authorLinks = getBlogAuthorPageLinks(slug);
 
   if (!isCleanCategoryRoute && category && !search && currentPage === 1) {
@@ -221,184 +187,75 @@ export async function BlogPageContent({
       reading_time_minutes: post.reading_time_minutes,
     })),
   });
-  preloadOgabasseyRootBlogListingHeroImage({
+  if (!hideLiveFeatured) {
+    preloadOgabasseyRootBlogListingHeroImage({
+      category,
+      posts,
+      searchQuery: effectiveSearchQuery,
+      templateId: merchant.template_id,
+    });
+  }
+  const schemas = buildBlogListingPageSchemas({
+    baseUrl,
     category,
+    currentPage,
+    isCleanCategoryRoute,
+    itemListSchemaUrl,
+    merchantLogoUrl: merchant.logo_url,
+    merchantName: merchant.business_name,
+    organizationId,
     posts,
     searchQuery: effectiveSearchQuery,
-    templateId: merchant.template_id,
+    totalPosts,
   });
-  const blogSchema = {
-    '@context': 'https://schema.org',
-    '@type': 'Blog',
-    '@id': `${baseUrl}/blog#blog`,
-    name: `${merchant.business_name} Blog`,
-    description: `Read the latest articles, news, and insights from ${merchant.business_name}.`,
-    url: `${baseUrl}/blog`,
-    publisher: {
-      '@type': 'Organization',
-      '@id': organizationId,
-      name: merchant.business_name,
-      logo: merchant.logo_url
-        ? {
-            '@type': 'ImageObject',
-            url: merchant.logo_url,
-          }
-        : undefined,
-    },
-    blogPost: posts.slice(0, 10).map((post) => {
-      const imageUrls = getBlogStructuredDataImageUrls(post);
-      return {
-        '@type': 'BlogPosting',
-        headline: post.title,
-        description: post.excerpt || '',
-        url: `${baseUrl}/blog/${post.slug}`,
-        datePublished: post.published_at,
-        author: {
-          '@type': 'Person',
-          name: post.author_name || merchant.business_name,
-        },
-        ...(imageUrls.length > 0 ? { image: imageUrls } : {}),
-      };
-    }),
-  };
-  const itemListPosts = posts.slice(0, 10);
-  const itemListPositionOffset = (currentPage - 1) * BLOG_LISTING_PAGE_SIZE;
-  const itemListSchemaSearch = effectiveSearchQuery?.trim() || undefined;
-  const hasItemListSchemaSearch = Boolean(itemListSchemaSearch);
-  const effectiveItemListSchemaUrl =
-    isCleanCategoryRoute &&
-    (!category || hasItemListSchemaSearch || currentPage !== 1)
-      ? undefined
-      : itemListSchemaUrl;
-
-  const itemListSchema =
-    itemListPosts.length > 0
-      ? {
-          '@context': 'https://schema.org',
-          '@type': 'ItemList',
-          name: `${merchant.business_name} Blog articles`,
-          url:
-            effectiveItemListSchemaUrl ??
-            buildBlogListingSchemaUrl({
-              baseUrl,
-              category,
-              page: currentPage,
-              search: itemListSchemaSearch,
-            }),
-          numberOfItems: totalPosts,
-          itemListElement: itemListPosts.map((post, index) => ({
-            '@type': 'ListItem',
-            position: itemListPositionOffset + index + 1,
-            url: `${baseUrl}/blog/${post.slug}`,
-            name: post.title,
-          })),
-        }
-      : undefined;
-  const breadcrumbSchema = generateBreadcrumbSchema([
-    {
-      name: merchant.business_name,
-      url: baseUrl,
-    },
-    {
-      name: 'Blog',
-      url: `${baseUrl}/blog`,
-    },
-  ]);
-  const isOgabasseyBlogTenant = isOgabasseyBlogStaticTenant(slug);
   const categoryGuide =
     category && !effectiveSearchQuery ? (
       <BlogCategoryGuide
         category={category}
-        isOgabasseyBlogTenant={isOgabasseyBlogTenant}
+        isOgabasseyBlogTenant={isOgabasseyBlogStaticTenant(slug)}
         merchantName={merchant.business_name}
         totalPosts={totalPosts}
       />
     ) : undefined;
   const templateId = merchant.template_id;
-  if (templateId && templateId !== 'default' && templateId !== 'puck') {
-    const template = getTemplate(templateId);
-    if (template) {
-      let templateBlogUi: {
-        BlogComponent: ComponentType<TemplateBlogPageProps>;
-        categories: { name: string; slug: string }[];
-        posts: BlogPostData[];
-      } | null = null;
-      try {
-        const components = await template.getComponents();
-        if (components.Blog) {
-          templateBlogUi = {
-            BlogComponent: components.Blog,
-            categories: publicCategories.map((cat) => ({
-              name: cat,
-              slug: generateSlug(cat),
-            })),
-            posts: posts.map((p) => ({
-              id: p.id,
-              title: p.title,
-              slug: p.slug,
-              excerpt: p.excerpt || '',
-              category: p.category || '',
-              author_name: p.author_name || merchant.business_name,
-              published_at: p.published_at,
-              featured_image_url: p.featured_image_url || '',
-              reading_time_minutes: p.reading_time_minutes || 3,
-            })),
-          };
-        }
-      } catch (error) {
-        console.error(
-          'Failed to load Blog component for template',
-          templateId,
-          ':',
-          error
-        );
-      }
-      if (templateBlogUi) {
-        return (
-          <>
-            {paginationHeadLinks}
-            <TemplateBlogRenderer
-              blogSchema={blogSchema}
-              breadcrumbSchema={breadcrumbSchema}
-              organizationSchema={organizationSchema}
-              itemListSchema={
-                hasItemListSchemaSearch ? undefined : itemListSchema
-              }
-              BlogComponent={templateBlogUi.BlogComponent}
-              basePath={templateBasePath}
-              blogPosts={templateBlogUi.posts}
-              categories={templateBlogUi.categories}
-              categoryGuide={categoryGuide}
-              category={category}
-              searchQuery={effectiveSearchQuery}
-            />
-            <BlogListingPagination
-              storeBasePath={basePath}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              category={category}
-              search={effectiveSearchQuery}
-            />
-            <InformationalClusterIndex collections={guideCollections} />
-            <BlogDiscoverySection
-              baseUrl={baseUrl}
-              authors={authorLinks}
-              categories={publicCategories}
-              posts={posts}
-            />
-          </>
-        );
-      }
+  if (templateId) {
+    const templatePage = await BlogListingTemplatePage({
+      authorLinks,
+      basePath,
+      blogSchema: schemas.blogSchema as JsonLdScriptData,
+      breadcrumbSchema: schemas.breadcrumbSchema as JsonLdScriptData,
+      category,
+      categoryGuide,
+      committedSnapshotMarker,
+      currentPage,
+      effectiveSearchQuery,
+      guideCollections,
+      hasItemListSchemaSearch: schemas.hasItemListSchemaSearch,
+      hideLiveFeatured,
+      itemListSchema: schemas.itemListSchema as JsonLdScriptData | undefined,
+      merchantName: merchant.business_name,
+      organizationSchema: organizationSchema as JsonLdScriptData,
+      paginationHeadLinks,
+      posts,
+      publicCategories,
+      storeUrl: baseUrl,
+      templateId,
+      totalPages,
+    });
+    if (templatePage) {
+      return templatePage;
     }
   }
+
   return (
     <>
+      {committedSnapshotMarker}
       {paginationHeadLinks}
       <DefaultBlogUi
-        blogSchema={blogSchema}
-        breadcrumbSchema={breadcrumbSchema}
-        organizationSchema={organizationSchema}
-        itemListSchema={itemListSchema}
+        blogSchema={schemas.blogSchema as JsonLdScriptData}
+        breadcrumbSchema={schemas.breadcrumbSchema as JsonLdScriptData}
+        organizationSchema={organizationSchema as JsonLdScriptData}
+        itemListSchema={schemas.itemListSchema as JsonLdScriptData | undefined}
         basePath={basePath}
         categories={publicCategories}
         categoryGuide={categoryGuide}

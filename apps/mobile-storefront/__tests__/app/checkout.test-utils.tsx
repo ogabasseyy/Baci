@@ -3,6 +3,8 @@ import { render } from '@testing-library/react-native';
 import type React from 'react';
 import { Alert } from 'react-native';
 import type { PaymentSettings } from '@/hooks/useMerchantPaymentSettings';
+import './checkout-cart-store.test-utils';
+import './checkout.commerce-brain.test-utils';
 import './checkout.component-mocks.test-utils';
 import { createCheckoutFetchMock } from './checkout.fetch.test-utils';
 
@@ -105,38 +107,6 @@ export function getPaymentInitializeCalls() {
   });
 }
 
-const mockCartState = {
-  clearCart: jest.fn(),
-  items: [
-    {
-      condition: 'New',
-      id: 'cart-item-1',
-      image_url: 'https://example.com/item.jpg',
-      name: 'iPhone 11 Pro Max',
-      price: 470000,
-      product_id: 'product-1',
-      quantity: 1,
-      slug: 'iphone-11-pro-max',
-      storage: '64GB',
-    },
-  ],
-  subtotal: () => 470000,
-};
-const mockUseCartStore = Object.assign(
-  (selector: (state: typeof mockCartState) => unknown) =>
-    selector(mockCartState),
-  {
-    getState: () => mockCartState,
-    persist: {
-      getOptions: () => ({
-        name: 'cart-storage',
-        partialize: (state: unknown) => state,
-        version: 0,
-      }),
-    },
-  }
-);
-
 let originalFetch: typeof global.fetch = global.fetch;
 
 jest.mock('expo-router', () => ({
@@ -226,12 +196,6 @@ jest.mock('@/hooks/use-auth-guard', () => ({
   useAuthStatus: () => mockUseAuthStatus(),
 }));
 
-jest.mock('@/stores/cart-store', () => ({
-  formatPrice: (value: number) =>
-    `₦${new Intl.NumberFormat('en-NG').format(value)}`,
-  useCartStore: mockUseCartStore,
-}));
-
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: () => ({
     data: {
@@ -255,27 +219,6 @@ jest.mock('@/hooks/use-merchant', () => ({
 }));
 
 jest.mock('@/lib/supabase', () => ({
-  calculateCommerce: jest.fn(
-    (
-      _name: string,
-      params: {
-        assuranceFee: number;
-        shippingFee: number;
-        subtotal: number;
-        taxRate: number;
-      }
-    ) => {
-      const taxAmount = Math.round(params.subtotal * params.taxRate);
-      return Promise.resolve({
-        taxAmount,
-        total:
-          params.subtotal +
-          params.shippingFee +
-          params.assuranceFee +
-          taxAmount,
-      });
-    }
-  ),
   supabase: {
     from: jest.fn(() => ({
       eq: jest.fn(() => ({
@@ -458,7 +401,7 @@ export function teardownCheckoutTest() {
   jest.useRealTimers();
 }
 
-function createCheckoutQueryClient() {
+export function createCheckoutQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {

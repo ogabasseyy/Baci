@@ -3,6 +3,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NewOrderQuickAddDialog } from './NewOrderQuickAddDialog';
+import {
+  makeQuickAddDialogController as makeController,
+  quickAddProductMatch,
+} from './NewOrderQuickAddDialog.test-fixtures';
 
 const keyboardState = vi.hoisted(() => ({
   dismiss: vi.fn(),
@@ -44,6 +48,8 @@ vi.mock('react-native', async () => {
           onSubmitEditing,
           placeholder,
           returnKeyType,
+          multiline,
+          scrollEnabled,
           submitBehavior,
           value,
         }: {
@@ -51,6 +57,8 @@ vi.mock('react-native', async () => {
           onSubmitEditing?: () => void;
           placeholder?: string;
           returnKeyType?: string;
+          multiline?: boolean;
+          scrollEnabled?: boolean;
           submitBehavior?: string;
           value?: string;
         },
@@ -58,6 +66,8 @@ vi.mock('react-native', async () => {
       ) =>
         React.createElement('input', {
           'data-return-key-type': returnKeyType,
+          'data-multiline': multiline ? 'true' : 'false',
+          'data-scroll-enabled': scrollEnabled ? 'true' : 'false',
           'data-submit-behavior': submitBehavior,
           onChange: (event: { target: { value: string } }) =>
             onChangeText?.(event.target.value),
@@ -92,67 +102,6 @@ vi.mock('./new-order.shared', () => ({
   parseDecimalInput: (text: string) => text.replace(/[^0-9.]/g, ''),
 }));
 
-type ControllerShape = {
-  colors: {
-    card: string;
-    border: string;
-    inputBg: string;
-    success: string;
-    text: string;
-    textMuted: string;
-    textOnPrimary: string;
-    textSecondary: string;
-  };
-  formatPrice: (amount: number) => string;
-  customItem: { name: string; price: string };
-  handleAddCustomItem: ReturnType<typeof vi.fn>;
-  handleContinueAsCustomItem: ReturnType<typeof vi.fn>;
-  handleUseQuickAddProductMatch: ReturnType<typeof vi.fn>;
-  isLoadingQuickAddProductMatches: boolean;
-  quickAddProductMatches: Array<{
-    condition?: string | null;
-    has_variants: boolean;
-    id: string;
-    images: string[];
-    matchReason: 'exact-name' | 'token-match' | 'variant-and-price';
-    name: string;
-    parent_product_id?: string | null;
-    price: number;
-    score: number;
-    sku: string | null;
-    variant_attributes: unknown;
-  }>;
-  setCustomItem: ReturnType<typeof vi.fn>;
-  setShowCustomItemModal: ReturnType<typeof vi.fn>;
-  showCustomItemModal: boolean;
-};
-
-const makeController = (
-  overrides: Partial<ControllerShape> = {}
-): ControllerShape => ({
-  colors: {
-    border: '#e2e8f0',
-    card: '#ffffff',
-    inputBg: '#f8fafc',
-    success: '#16a34a',
-    text: '#0f172a',
-    textMuted: '#94a3b8',
-    textOnPrimary: '#ffffff',
-    textSecondary: '#64748b',
-  },
-  customItem: { name: '', price: '' },
-  formatPrice: (amount) => `₦${amount.toLocaleString('en-US')}`,
-  handleAddCustomItem: vi.fn(),
-  handleContinueAsCustomItem: vi.fn(),
-  handleUseQuickAddProductMatch: vi.fn(),
-  isLoadingQuickAddProductMatches: false,
-  quickAddProductMatches: [],
-  setCustomItem: vi.fn(),
-  setShowCustomItemModal: vi.fn(),
-  showCustomItemModal: true,
-  ...overrides,
-});
-
 describe('NewOrderQuickAddDialog', () => {
   beforeEach(() => {
     keyboardState.dismiss.mockReset();
@@ -176,6 +125,30 @@ describe('NewOrderQuickAddDialog', () => {
       screen.getByPlaceholderText('Item Name (e.g. Red Cake, Delivery)')
     ).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Amount (0.00)')).toBeInTheDocument();
+    expect(screen.getByText('NGN')).toBeInTheDocument();
+  });
+
+  it('lets long item names wrap and shows the merchant store currency', () => {
+    const controller = makeController({
+      merchant: { payout_currency: ' usd ' },
+    });
+
+    render(
+      <NewOrderQuickAddDialog
+        controller={
+          controller as unknown as React.ComponentProps<
+            typeof NewOrderQuickAddDialog
+          >['controller']
+        }
+      />
+    );
+
+    const nameInput = screen.getByPlaceholderText(
+      'Item Name (e.g. Red Cake, Delivery)'
+    );
+    expect(nameInput).toHaveAttribute('data-multiline', 'true');
+    expect(nameInput).toHaveAttribute('data-scroll-enabled', 'false');
+    expect(screen.getByText('USD')).toBeInTheDocument();
   });
 
   it('moves focus from item name to amount and dismisses from the final input', () => {
@@ -240,14 +213,12 @@ describe('NewOrderQuickAddDialog', () => {
     const priceInput = screen.getByPlaceholderText('Amount (0.00)');
     fireEvent.change(priceInput, { target: { value: 'abc' } });
 
-    // setCustomItem is called with a setter function — invoke it to inspect the result
     expect(controller.setCustomItem).toHaveBeenCalledTimes(1);
     const updater = controller.setCustomItem.mock.calls[0][0] as (prev: {
       name: string;
       price: string;
     }) => { name: string; price: string };
     const result = updater({ name: '', price: '' });
-    // Non-numeric input should be stripped to an empty string
     expect(result.price).toBe('');
   });
 
@@ -272,22 +243,9 @@ describe('NewOrderQuickAddDialog', () => {
   });
 
   it('shows matching products and lets the merchant use an existing row', () => {
-    const match = {
-      condition: null,
-      has_variants: false,
-      id: 'product-1',
-      images: [],
-      matchReason: 'variant-and-price' as const,
-      name: 'iPhone 11 Pro 64GB Premium Used',
-      parent_product_id: 'iphone-11-pro',
-      price: 180000,
-      score: 90,
-      sku: null,
-      variant_attributes: { storage: '64GB' },
-    };
     const controller = makeController({
       customItem: { name: 'iPhone 11 Pro 64gb Premium Used', price: '180000' },
-      quickAddProductMatches: [match],
+      quickAddProductMatches: [quickAddProductMatch],
     });
 
     render(
@@ -314,7 +272,7 @@ describe('NewOrderQuickAddDialog', () => {
     );
 
     expect(controller.handleUseQuickAddProductMatch).toHaveBeenCalledWith(
-      match
+      quickAddProductMatch
     );
     expect(
       screen.getByRole('button', { name: 'Continue as Custom' })

@@ -1,4 +1,4 @@
-type SupportedGateway = 'paystack' | 'korapay' | 'juicyway';
+export type SupportedGateway = 'paystack' | 'korapay' | 'juicyway';
 
 export function extractVerifiedGatewayFeeNgn(
   gateway: SupportedGateway,

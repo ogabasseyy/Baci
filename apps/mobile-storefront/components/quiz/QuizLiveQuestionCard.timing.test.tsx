@@ -1,7 +1,8 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { act, render, screen } from '@testing-library/react-native';
 import { QuizLiveQuestionCard } from './QuizLiveQuestionCard';
-import { createQuizStyles, type QuizThemeColors } from './QuizScreen.styles';
+import { createQuizStyles } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 jest.mock('./QuizMusicPlayer', () => {
   const { Text, View } = require('react-native');

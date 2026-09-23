@@ -139,11 +139,14 @@ describe('storefront edge inventory review regressions', () => {
           routePattern: '/api/events',
         }),
         expect.objectContaining({
-          methods: ['GET', 'HEAD', 'OPTIONS', 'PATCH'],
-          routePattern: '/api/orders/{id}',
+          methods: ['OPTIONS', 'POST'],
+          routePattern: '/api/orders',
         }),
       ])
     );
+    expect(
+      inventory.rows.some((row) => row.routePattern === '/api/orders/{id}')
+    ).toBe(false);
     expect(
       inventory.rows.some((row) => row.routePattern === '/api/orders/{*path}')
     ).toBe(false);

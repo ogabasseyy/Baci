@@ -11,15 +11,8 @@ export const CUSTOMER_CHAT_TIMEOUT_MS = 60_000;
 export const CUSTOMER_CHAT_FALLBACK_TEXT =
   "I'm sorry, our AI assistant is temporarily busy. Please use the store search, checkout, or WhatsApp support and we'll help you from there.";
 
-const DEFAULT_CHAT_MERCHANT_NAME = 'Ogabassey';
-
-function normalizeMerchantName(merchantName?: string): string {
-  const normalized = merchantName?.trim().replace(/\s+/g, ' ').slice(0, 100);
-  return normalized || DEFAULT_CHAT_MERCHANT_NAME;
-}
-
 function buildVpsChatSystemPrompt(
-  merchantName: string,
+  merchantName: string | undefined,
   toolsEnabled: boolean,
   checkoutEnabled: boolean,
   currency: CurrencyConfig
@@ -75,7 +68,7 @@ export function buildChatMessages(
     symbol: '₦',
   };
   const systemPrompt = buildVpsChatSystemPrompt(
-    normalizeMerchantName(options.merchantName),
+    options.merchantName,
     options.toolsEnabled === true,
     options.checkoutEnabled !== false,
     currency

@@ -136,6 +136,24 @@ export const TOOL_DESCRIPTIONS = {
 } as const;
 
 // ============================================
+// CHECKOUT-GATED TOOL NAMES
+// ============================================
+
+/**
+ * Single source of truth for the tools a checkout-disabled tenant must
+ * neither see nor execute. The AI SDK tool factory, the Ollama tool
+ * catalogue, and the Ollama execution gate all derive from this list so
+ * one cannot drift and leak a checkout tool to a read-only tenant.
+ */
+export const CHECKOUT_TOOL_NAMES = [
+  'createVirtualAccount',
+  'checkPaymentStatus',
+  'cancelOrder',
+] as const;
+
+export type CheckoutToolName = (typeof CHECKOUT_TOOL_NAMES)[number];
+
+// ============================================
 // TYPE EXPORTS
 // ============================================
 

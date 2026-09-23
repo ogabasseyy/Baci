@@ -14,9 +14,8 @@ import { createChatPresentationEventCollector } from './create-chat-presentation
 const GEMINI_PROVIDER_PREFIX = 'google:';
 const GEMINI_PROVIDER_TIMEOUT_MS = 25_000;
 function buildTextOnlyFallbackSystemPrompt(merchantName: string): string {
-  const displayName = merchantName.trim().replace(/\s+/g, ' ').slice(0, 100);
   return (
-    `${buildStorefrontDisplayData(displayName || 'Ogabassey')} ` +
+    `${buildStorefrontDisplayData(merchantName)} ` +
     'Keep replies brief, helpful, and honest. ' +
     'You do not have access to live inventory, current prices, checkout actions, orders, or payment status in this recovery mode. ' +
     'Never claim that you searched stock, added an item, generated a bank account, confirmed payment, or cancelled an order. ' +

@@ -49,4 +49,14 @@ describe('SantaPage', () => {
 
     await expect(SantaPage()).rejects.toThrow('NEXT_NOT_FOUND');
   });
+
+  it('returns not found when no Santa merchant is configured', async () => {
+    mocks.getConfiguredAgenticMerchantSlug.mockReturnValue(undefined);
+    mocks.getMerchantForUser.mockResolvedValue({
+      merchant: { slug: 'ogabassey' },
+    });
+
+    await expect(SantaPage()).rejects.toThrow('NEXT_NOT_FOUND');
+    expect(mocks.notFound).toHaveBeenCalledTimes(1);
+  });
 });

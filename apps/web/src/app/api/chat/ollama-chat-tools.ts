@@ -1,11 +1,7 @@
-import { TOOL_DESCRIPTIONS } from '@/ai/chat-tools';
+import { CHECKOUT_TOOL_NAMES, TOOL_DESCRIPTIONS } from '@/ai/chat-tools';
 import type { OllamaChatTool } from '@/lib/ollama-chat';
 
-const CHECKOUT_TOOL_NAMES = new Set([
-  'createVirtualAccount',
-  'checkPaymentStatus',
-  'cancelOrder',
-]);
+const CHECKOUT_TOOL_NAME_SET: Set<string> = new Set(CHECKOUT_TOOL_NAMES);
 
 const STRING_SCHEMA = { type: 'string' } as const;
 const NUMBER_SCHEMA = { type: 'number' } as const;
@@ -171,6 +167,6 @@ export function getOllamaAgenticChatTools(
   }
 
   return ollamaAgenticChatTools.filter(
-    (tool) => !CHECKOUT_TOOL_NAMES.has(tool.function.name)
+    (tool) => !CHECKOUT_TOOL_NAME_SET.has(tool.function.name)
   );
 }

@@ -1,24 +1,17 @@
 import { buildStorefrontDisplayData } from '@/lib/agentic/storefront-display-data';
 import type { CurrencyConfig } from '@/lib/currency';
 
-const DEFAULT_AGENTIC_MERCHANT_NAME = 'Ogabassey';
 const DEFAULT_AGENTIC_CURRENCY: CurrencyConfig = {
   code: 'NGN',
   locale: 'en-NG',
   symbol: '₦',
 };
 
-function normalizeMerchantName(merchantName: string): string {
-  const normalized = merchantName.trim().replace(/\s+/g, ' ').slice(0, 100);
-  return normalized || DEFAULT_AGENTIC_MERCHANT_NAME;
-}
-
 export function buildAgenticSystemPrompt(
   merchantName: string,
   options: { checkoutEnabled?: boolean; currency?: CurrencyConfig } = {}
 ): string {
-  const displayName = normalizeMerchantName(merchantName);
-  const merchantDisplayData = buildStorefrontDisplayData(displayName);
+  const merchantDisplayData = buildStorefrontDisplayData(merchantName);
   const checkoutEnabled = options.checkoutEnabled !== false;
   const currency = options.currency ?? DEFAULT_AGENTIC_CURRENCY;
   const capabilityList = checkoutEnabled

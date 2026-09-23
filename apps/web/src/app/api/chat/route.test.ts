@@ -233,6 +233,11 @@ vi.mock('@/ai/chat-tools', () => ({
   cancelOrderSchema: { parse: vi.fn() },
   getRecommendationsSchema: { parse: vi.fn() },
   addToCartSchema: { parse: vi.fn() },
+  CHECKOUT_TOOL_NAMES: [
+    'createVirtualAccount',
+    'checkPaymentStatus',
+    'cancelOrder',
+  ],
   TOOL_DESCRIPTIONS: {
     searchProducts: 'Search products',
     getProductDetails: 'Get product details',

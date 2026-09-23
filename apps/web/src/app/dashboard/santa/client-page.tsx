@@ -7,17 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { BagLoader } from '@/components/ui/bag-loader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useMerchant } from '@/hooks/use-merchant-client';
+import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
 import {
   getRecentInteractions,
   getSantaStats,
   type SantaInteraction,
   type SantaStats,
 } from './actions';
-
-const MONEY_FORMATTER = new Intl.NumberFormat('en-NG', {
-  style: 'currency',
-  currency: 'NGN',
-});
 
 export default function SantaClientPage() {
   const { merchant, loading: merchantLoading } = useMerchant();
@@ -70,7 +66,10 @@ export default function SantaClientPage() {
 
   // Helper to format currency
   const formatMoney = (amount: number) => {
-    return MONEY_FORMATTER.format(amount);
+    return formatMerchantCurrency(amount, {
+      country: merchant?.country,
+      payout_currency: merchant?.payout_currency,
+    });
   };
 
   return (

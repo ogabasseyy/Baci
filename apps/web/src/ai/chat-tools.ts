@@ -21,8 +21,14 @@ export const searchProductsSchema = z.object({
     .string()
     .describe('Search query for products (e.g., "iPhone 15", "gaming laptop")'),
   category: z.string().optional().describe('Optional category filter'),
-  maxPrice: z.number().optional().describe('Maximum price in Naira'),
-  minPrice: z.number().optional().describe('Minimum price in Naira'),
+  maxPrice: z
+    .number()
+    .optional()
+    .describe('Maximum price in the storefront currency'),
+  minPrice: z
+    .number()
+    .optional()
+    .describe('Minimum price in the storefront currency'),
 });
 
 export const getProductDetailsSchema = z.object({
@@ -30,7 +36,7 @@ export const getProductDetailsSchema = z.object({
 });
 
 export const createVirtualAccountSchema = z.object({
-  amount: z.number().describe('Total amount to pay in Naira'),
+  amount: z.number().describe('Total amount to pay in the storefront currency'),
   customerEmail: z.email().describe('Customer email address'),
   customerName: z.string().describe('Customer full name'),
   customerPhone: z.string().optional().describe('Customer phone number'),
@@ -128,6 +134,24 @@ export const TOOL_DESCRIPTIONS = {
   addToCart:
     "Prepare a product card that the customer must confirm before it is added to their cart. Never claim the item was added until the customer taps the card's add button.",
 } as const;
+
+// ============================================
+// CHECKOUT-GATED TOOL NAMES
+// ============================================
+
+/**
+ * Single source of truth for the tools a checkout-disabled tenant must
+ * neither see nor execute. The AI SDK tool factory, the Ollama tool
+ * catalogue, and the Ollama execution gate all derive from this list so
+ * one cannot drift and leak a checkout tool to a read-only tenant.
+ */
+export const CHECKOUT_TOOL_NAMES = [
+  'createVirtualAccount',
+  'checkPaymentStatus',
+  'cancelOrder',
+] as const;
+
+export type CheckoutToolName = (typeof CHECKOUT_TOOL_NAMES)[number];
 
 // ============================================
 // TYPE EXPORTS

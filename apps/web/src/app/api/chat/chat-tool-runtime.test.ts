@@ -297,4 +297,16 @@ describe('chat tool runtime', () => {
       expect(mocks.handleCancelOrder).toHaveBeenCalledTimes(2);
     });
   });
+
+  it('removes commerce tools when agentic checkout is disabled', () => {
+    const tools = createAiSdkAgenticChatTools('session-1', {
+      agenticCheckoutEnabled: false,
+    });
+
+    expect(tools).not.toHaveProperty('cancelOrder');
+    expect(tools).not.toHaveProperty('createVirtualAccount');
+    expect(tools).not.toHaveProperty('checkPaymentStatus');
+    expect(tools).toHaveProperty('searchProducts');
+    expect(tools).toHaveProperty('getProductDetails');
+  });
 });

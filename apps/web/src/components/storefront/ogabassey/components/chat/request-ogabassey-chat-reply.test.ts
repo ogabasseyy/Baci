@@ -148,4 +148,35 @@ describe('requestOgabasseyChatReply', () => {
     });
     expect(JSON.parse(String(request?.body))).not.toHaveProperty('sessionId');
   });
+
+  it('returns the attested tenant slug when the response carries one', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response('Ho ho ho!', {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'x-baci-santa-merchant-slug': 'winter-store',
+        },
+      })
+    );
+
+    await expect(
+      requestOgabasseyChatReply(true, [], 'I want a gift', 'winter-store')
+    ).resolves.toEqual({
+      events: [],
+      text: 'Ho ho ho!',
+      merchantSlug: 'winter-store',
+    });
+  });
+
+  it('omits the tenant slug when the response carries none', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response('Ho ho ho!', {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      })
+    );
+
+    await expect(
+      requestOgabasseyChatReply(true, [], 'I want a gift', 'ogabassey')
+    ).resolves.toEqual({ events: [], text: 'Ho ho ho!' });
+  });
 });

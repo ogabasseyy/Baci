@@ -74,8 +74,6 @@ export async function logSantaInteraction({
   tenant: AgenticChatTenant;
   userMessage: string | undefined;
 }): Promise<void> {
-  if (!tenant.agenticCheckoutEnabled) return;
-
   const interaction = getInteractionType(response);
   const requestedPrice = getRequestedPrice(userMessage);
   // Discounts are measured against the catalog price, never the customer's

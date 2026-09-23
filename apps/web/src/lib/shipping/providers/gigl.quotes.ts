@@ -145,9 +145,18 @@ async function getQuotesWithinTimeout(
       () => pickupController.signal.aborted && !signal.aborted
     );
     void prefetchedPickupQuotes.catch(() => undefined);
-    const homeQuotes = (await homeQuotesPromise).filter(
-      (quote): quote is ShippingQuote => quote !== null
-    );
+    // A fully failed home batch must not abort the provider: record the
+    // outage for aggregate diagnostics but keep trying station pickup, so a
+    // partial home-delivery outage still yields pickup quotes.
+    let batchFailure: unknown;
+    let homeQuotes: ShippingQuote[] = [];
+    try {
+      homeQuotes = (await homeQuotesPromise).filter(
+        (quote): quote is ShippingQuote => quote !== null
+      );
+    } catch (error) {
+      batchFailure = error;
+    }
     const hasRoadHome = homeQuotes.some(
       (quote) => quote.serviceTier === 'GoStandard'
     );
@@ -157,7 +166,12 @@ async function getQuotesWithinTimeout(
     }
     let pickupResolution = receiverResolution;
     let pickupStation = receiverStation;
-    let pickupQuotes = await prefetchedPickupQuotes;
+    let pickupQuotes: (ShippingQuote | null)[] = [];
+    try {
+      pickupQuotes = await prefetchedPickupQuotes;
+    } catch (error) {
+      batchFailure ??= error;
+    }
     if (!receiverResolution?.serviceCentres?.length && !signal.aborted) {
       const nearestResolution = await stationsService.resolveStationForLocation(
         request.receiver,
@@ -171,11 +185,18 @@ async function getQuotesWithinTimeout(
         if (nearestResolution.station.StationId === receiverStation.StationId) {
           pickupResolution = nearestResolution;
         } else {
-          const nearestQuotes = await fetchSelections(
-            nearestResolution.station,
-            createGiglQuoteSelections(PickupOptions.ServiceCentre),
-            signal
-          );
+          // A failed nearest repricing must not discard the quoted
+          // station's pickup quotes: fall back to expanding those.
+          let nearestQuotes: (ShippingQuote | null)[] = [];
+          try {
+            nearestQuotes = await fetchSelections(
+              nearestResolution.station,
+              createGiglQuoteSelections(PickupOptions.ServiceCentre),
+              signal
+            );
+          } catch {
+            nearestQuotes = [];
+          }
           if (nearestQuotes.some((quote) => quote !== null)) {
             pickupResolution = nearestResolution;
             pickupQuotes = nearestQuotes;
@@ -203,7 +224,11 @@ async function getQuotesWithinTimeout(
     const expandedStationQuotes = (
       await Promise.all(stationPickupQuotes.map(expandStationQuote))
     ).flat();
-    return [...homeQuotes, ...expandedStationQuotes];
+    const allQuotes = [...homeQuotes, ...expandedStationQuotes];
+    if (allQuotes.length === 0 && batchFailure !== undefined) {
+      throw batchFailure;
+    }
+    return allQuotes;
   } catch (error) {
     if (signal.aborted || isGiglAbortError(error)) {
       io.log('warn', 'GIGL quote timed out', {

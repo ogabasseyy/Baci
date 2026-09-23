@@ -88,11 +88,6 @@ describe('ollama chat tools', () => {
   it('filters commerce tools when agentic checkout is disabled', () => {
     expect(
       getOllamaAgenticChatTools(false).map((tool) => tool.function.name)
-    ).toEqual([
-      'searchProducts',
-      'getProductDetails',
-      'checkPaymentStatus',
-      'getRecommendations',
-    ]);
+    ).toEqual(['searchProducts', 'getProductDetails', 'getRecommendations']);
   });
 });

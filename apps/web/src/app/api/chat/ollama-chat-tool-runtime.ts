@@ -29,6 +29,7 @@ type AgenticChatToolName = (typeof AGENTIC_CHAT_TOOL_NAME_LIST)[number];
 
 const CHECKOUT_TOOL_NAMES = new Set<AgenticChatToolName>([
   'createVirtualAccount',
+  'checkPaymentStatus',
   'cancelOrder',
 ]);
 

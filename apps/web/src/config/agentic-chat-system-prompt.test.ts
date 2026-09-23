@@ -24,6 +24,7 @@ describe('buildAgenticSystemPrompt', () => {
     expect(prompt).toContain('Agentic checkout, payment-account creation');
     expect(prompt).not.toContain('Use createVirtualAccount');
     expect(prompt).not.toContain('Use cancelOrder');
+    expect(prompt).not.toContain('**Payment Status**');
   });
 
   it('uses the resolved tenant currency for price guidance', () => {

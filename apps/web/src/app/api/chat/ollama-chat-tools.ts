@@ -1,7 +1,11 @@
 import { TOOL_DESCRIPTIONS } from '@/ai/chat-tools';
 import type { OllamaChatTool } from '@/lib/ollama-chat';
 
-const CHECKOUT_TOOL_NAMES = new Set(['createVirtualAccount', 'cancelOrder']);
+const CHECKOUT_TOOL_NAMES = new Set([
+  'createVirtualAccount',
+  'checkPaymentStatus',
+  'cancelOrder',
+]);
 
 const STRING_SCHEMA = { type: 'string' } as const;
 const NUMBER_SCHEMA = { type: 'number' } as const;

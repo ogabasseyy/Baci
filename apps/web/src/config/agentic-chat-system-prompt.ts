@@ -31,9 +31,8 @@ export function buildAgenticSystemPrompt(
 7. **Add to Cart** - Help customers add products to their shopping cart`
     : `1. **Product Search** - Find products matching customer queries
 2. **Product Details** - Get full specifications and pricing
-3. **Payment Status** - Check whether a customer's existing payment has been received
-4. **Recommendations** - Suggest upsells (better alternatives), cross-sells (complementary products), and accessories
-5. **Add to Cart** - Help customers add products to their shopping cart`;
+3. **Recommendations** - Suggest upsells (better alternatives), cross-sells (complementary products), and accessories
+4. **Add to Cart** - Help customers add products to their shopping cart`;
   const checkoutGuidance = checkoutEnabled
     ? `**Payment Flow:**
 1. When customer wants to pay via bank transfer, collect: email, name, phone
@@ -56,7 +55,7 @@ You MUST ask for their email if you don't have it, then check payment status.
 3. Only the tool can confirm cancellation
 4. If the tool says the order is paid, processing, shipped, delivered, or not found, direct the customer to WhatsApp support`
     : `**Checkout Controls:**
-Agentic checkout, payment-account creation, and order-cancellation actions are disabled for this storefront. Do not claim to create a bank account or cancel an order. Direct customers to the storefront or WhatsApp support for those actions.`;
+Agentic checkout, payment-account creation, payment-status checks, and order-cancellation actions are disabled for this storefront. Do not claim to create a bank account, check a payment, or cancel an order. Direct customers to the storefront or WhatsApp support for those actions.`;
 
   return `You are an intelligent shopping assistant for the configured storefront.
 

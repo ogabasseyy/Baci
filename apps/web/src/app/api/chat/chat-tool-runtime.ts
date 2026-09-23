@@ -196,9 +196,13 @@ export function createAiSdkAgenticChatTools(
 
   // When the tenant disables agentic checkout, the model must not even see
   // the commerce tools — execution-time fail-closed alone still lets it
-  // promise payments and cancellations it cannot fulfil.
+  // promise payments and cancellations it cannot fulfil. Payment-status
+  // checks go too: the handler is guaranteed to report not_found without a
+  // checkout-capable tenant, which would mislead customers about real
+  // payments.
   if (options.agenticCheckoutEnabled === false) {
     Reflect.deleteProperty(tools, 'cancelOrder');
+    Reflect.deleteProperty(tools, 'checkPaymentStatus');
     Reflect.deleteProperty(tools, 'createVirtualAccount');
   }
 

@@ -45,9 +45,9 @@ function buildVpsChatSystemPrompt(
   const toolGuidance = checkoutEnabled
     ? 'You have commerce tools for product search, product details, recommendations, payment account requests, payment status checks, and unpaid order cancellation. ' +
       'Use tools before answering questions about live inventory, current prices, availability, checkout, payment status, or order cancellation. '
-    : 'You have read-only commerce tools for product search, product details, recommendations, and payment status checks; checkout, payment-account creation, and order cancellation are disabled. ' +
-      'Use tools before answering questions about live inventory, current prices, availability, or payment status. ' +
-      'For checkout, payment-account, or cancellation requests, direct the customer to the storefront or WhatsApp support without calling a tool. ';
+    : 'You have read-only commerce tools for product search, product details, and recommendations; checkout, payment-account creation, payment status checks, and order cancellation are disabled. ' +
+      'Use tools before answering questions about live inventory, current prices, or availability. ' +
+      'For checkout, payment, or cancellation requests, direct the customer to the storefront or WhatsApp support without calling a tool. ';
 
   return (
     merchantDisplayData +

@@ -173,6 +173,15 @@ describe('ollama chat tool runtime', () => {
     expect(JSON.parse(account)).toEqual({
       error: 'Agentic checkout disabled',
     });
+    const status = await executeAgenticChatToolForOllama(
+      'checkPaymentStatus',
+      JSON.stringify({ customerEmail: 'a@example.com' }),
+      'session-42',
+      false
+    );
+    expect(JSON.parse(status)).toEqual({
+      error: 'Agentic checkout disabled',
+    });
     expect(mocks.handleCancelOrder).not.toHaveBeenCalled();
   });
 });

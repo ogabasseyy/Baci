@@ -48,6 +48,7 @@ it.each([
     agenticCheckoutEnabled: true,
     currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
     merchantName: 'Demo Store',
+    timeoutMs: 60_000,
     messages: [{ role: 'user', content: 'Show phones' }],
     sessionId: 'session',
   });
@@ -103,6 +104,7 @@ it.each([
     agenticCheckoutEnabled: true,
     currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
     merchantName: 'Demo Store',
+    timeoutMs: 60_000,
     messages: [{ role: 'user', content: 'Show phones' }],
     sessionId: 'session',
   });

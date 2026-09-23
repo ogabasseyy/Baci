@@ -77,6 +77,7 @@ describe('runChatProviderChain', () => {
       agenticCheckoutEnabled: true,
       currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
       merchantName: 'Demo Store',
+      timeoutMs: 60_000,
       messages: [{ content: 'Hello', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -134,6 +135,7 @@ describe('runChatProviderChain', () => {
       agenticCheckoutEnabled: true,
       currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
       merchantName: 'Demo Store',
+      timeoutMs: 60_000,
       messages: [{ role: 'user', content: 'Show phones' }],
       sessionId: 'session-1',
     });
@@ -170,6 +172,7 @@ describe('runChatProviderChain', () => {
       agenticCheckoutEnabled: true,
       currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
       merchantName: 'Demo Store',
+      timeoutMs: 60_000,
       messages: [{ content: 'Hello', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -204,6 +207,7 @@ describe('runChatProviderChain', () => {
       agenticCheckoutEnabled: true,
       currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
       merchantName: 'Demo Store',
+      timeoutMs: 60_000,
       messages: [{ content: 'Create a payment account', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -243,6 +247,7 @@ describe('runChatProviderChain', () => {
       agenticCheckoutEnabled: true,
       currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
       merchantName: 'Demo Store',
+      timeoutMs: 60_000,
       messages: [{ content: 'Show me phones', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -296,6 +301,7 @@ describe('runChatProviderChain', () => {
       agenticCheckoutEnabled: true,
       currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
       merchantName: 'Demo Store',
+      timeoutMs: 60_000,
       messages: [{ content: 'Tell me about this phone', role: 'user' }],
       sessionId: 'session-1',
     });
@@ -307,4 +313,27 @@ describe('runChatProviderChain', () => {
     expect(result.providerName).toBe('google:gemini-2.5-flash');
     expect(generateText).toHaveBeenCalledTimes(1);
   });
+
+  it('gives up quickly when the route budget is exhausted', async () => {
+    vi.mocked(generateText).mockImplementation(
+      (({ abortSignal }) =>
+        new Promise((_resolve, reject) => {
+          abortSignal?.addEventListener('abort', () =>
+            reject(new Error('aborted'))
+          );
+        })) as unknown as typeof generateText
+    );
+
+    await expect(
+      runChatProviderChain({
+        abortSignal: new AbortController().signal,
+        agenticCheckoutEnabled: true,
+        currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
+        merchantName: 'Demo Store',
+        messages: [{ content: 'Show phones', role: 'user' }],
+        sessionId: 'session-1',
+        timeoutMs: 5,
+      })
+    ).rejects.toThrow();
+  }, 10_000);
 });

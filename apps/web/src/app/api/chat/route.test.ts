@@ -535,11 +535,11 @@ describe('POST /api/chat', () => {
     expect(response.status).toBe(200);
     expect(text).toBe('AI response');
     expect(createOllamaAgenticChatResponse).toHaveBeenCalledOnce();
-    expect(createOllamaAgenticChatResponse).toHaveBeenCalledWith(
-      expect.objectContaining({
-        timeoutMs: 60_000,
-      })
-    );
+    const ollamaTimeoutMs = vi.mocked(createOllamaAgenticChatResponse).mock
+      .calls[0]?.[0]?.timeoutMs;
+    // The Ollama stage spends the remaining route budget, not a fresh 60s.
+    expect(ollamaTimeoutMs).toBeLessThanOrEqual(60_000);
+    expect(ollamaTimeoutMs).toBeGreaterThan(59_000);
     expect(generateText).toHaveBeenCalledOnce();
     expect(warnSpy).toHaveBeenCalledWith(
       '[Agentic Chat] Ollama request failed; falling back to Gemini:',

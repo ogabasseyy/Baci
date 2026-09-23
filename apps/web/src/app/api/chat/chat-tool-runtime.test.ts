@@ -305,7 +305,8 @@ describe('chat tool runtime', () => {
 
     expect(tools).not.toHaveProperty('cancelOrder');
     expect(tools).not.toHaveProperty('createVirtualAccount');
+    expect(tools).not.toHaveProperty('checkPaymentStatus');
     expect(tools).toHaveProperty('searchProducts');
-    expect(tools).toHaveProperty('checkPaymentStatus');
+    expect(tools).toHaveProperty('getProductDetails');
   });
 });

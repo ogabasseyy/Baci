@@ -10,7 +10,6 @@ import type { CurrencyConfig } from '@/lib/currency';
 import type { StorefrontAgentUiEvent } from '@/schemas/storefront-agent-ui-contract';
 import { createAiSdkAgenticChatTools } from './chat-tool-runtime';
 import { createChatPresentationEventCollector } from './create-chat-presentation-event-collector';
-import { CUSTOMER_CHAT_TIMEOUT_MS } from './route-helpers';
 
 const GEMINI_PROVIDER_PREFIX = 'google:';
 const GEMINI_PROVIDER_TIMEOUT_MS = 25_000;
@@ -49,6 +48,7 @@ export async function runChatProviderChain({
   merchantName,
   messages,
   sessionId,
+  timeoutMs,
 }: {
   abortSignal: AbortSignal;
   agenticCheckoutEnabled: boolean;
@@ -56,6 +56,7 @@ export async function runChatProviderChain({
   merchantName: string;
   messages: ModelMessage[];
   sessionId: string;
+  timeoutMs: number;
 }): Promise<AgenticChatProviderResult> {
   let sideEffectExecuted = false;
   let activeProviderName: string | null = null;
@@ -89,7 +90,7 @@ export async function runChatProviderChain({
       !provider.name.startsWith(GEMINI_PROVIDER_PREFIX) &&
       !provider.opportunistic
   );
-  const deadline = Date.now() + CUSTOMER_CHAT_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
   const remainingTimeoutMs = () => Math.max(0, deadline - Date.now());
   const onProviderError = (providerName: string, error: unknown) => {
     // Snapshot only the just-finished attempt. A subsequent empty collector

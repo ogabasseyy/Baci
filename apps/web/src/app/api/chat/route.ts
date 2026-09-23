@@ -102,6 +102,13 @@ async function withTimeout<T>(
 
 export async function POST(req: Request) {
   try {
+    // One absolute deadline for the whole route: tenant resolution, the LLM
+    // server, Ollama, and the provider chain each spend only what remains,
+    // so stacked full-length timeouts can never push past maxDuration and
+    // deny the static fallback.
+    const routeDeadline = Date.now() + CUSTOMER_CHAT_TIMEOUT_MS;
+    const remainingRouteMs = () => Math.max(0, routeDeadline - Date.now());
+
     const headersList = await headers();
     const forwardedFor = headersList.get('x-forwarded-for');
     const realIp = headersList.get('x-real-ip');
@@ -155,7 +162,7 @@ export async function POST(req: Request) {
     // the handler past maxDuration before the providers start.
     const tenant = await withTimeout(
       resolveAgenticChatTenant(req),
-      CUSTOMER_CHAT_TIMEOUT_MS,
+      remainingRouteMs(),
       'Chat tenant lookup timed out'
     ).catch(() => null);
     if (!tenant) {
@@ -199,7 +206,7 @@ export async function POST(req: Request) {
             toolsEnabled: false,
           }),
           signal: req.signal,
-          timeoutMs: CUSTOMER_CHAT_TIMEOUT_MS,
+          timeoutMs: remainingRouteMs(),
         });
         const bufferedResponse = await bufferTextResponse(llmResponse);
         return withChatTenantHeader(
@@ -231,6 +238,7 @@ export async function POST(req: Request) {
           basicAuth: getOllamaBasicAuth(),
           currency: getCurrencyConfig(undefined, tenant.currencyCode),
           merchantName: tenant.businessName,
+          timeoutMs: remainingRouteMs(),
           executeToolCall: (call) =>
             executeAgenticChatToolForOllama(
               call.function.name,
@@ -254,6 +262,7 @@ export async function POST(req: Request) {
         currency: getCurrencyConfig(undefined, tenant.currencyCode),
         merchantName: tenant.businessName,
         sessionId,
+        timeoutMs: remainingRouteMs(),
       });
     } catch (error) {
       if (isChatAbortError(error, req.signal)) {

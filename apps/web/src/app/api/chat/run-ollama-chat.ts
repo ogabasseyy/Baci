@@ -5,11 +5,7 @@ import { createChatPresentationEventCollector } from './create-chat-presentation
 import { negotiateChatAgentUiResponse } from './negotiate-chat-agent-ui-response';
 import { getOllamaAgenticChatTools } from './ollama-chat-tools';
 import { recoverOllamaChatResponse } from './recover-ollama-chat-response';
-import {
-  bufferTextResponse,
-  buildChatMessages,
-  CUSTOMER_CHAT_TIMEOUT_MS,
-} from './route-helpers';
+import { bufferTextResponse, buildChatMessages } from './route-helpers';
 
 const SIDE_EFFECTING_OLLAMA_TOOL_NAMES = new Set([
   'createVirtualAccount',
@@ -75,6 +71,7 @@ export async function runOllamaChat(
     basicAuth?: string;
     currency: CurrencyConfig;
     merchantName: string;
+    timeoutMs: number;
     executeToolCall: (call: OllamaToolCall) => Promise<string>;
   }
 ): Promise<Response | null> {
@@ -123,7 +120,7 @@ export async function runOllamaChat(
         }
       },
       signal: req.signal,
-      timeoutMs: CUSTOMER_CHAT_TIMEOUT_MS,
+      timeoutMs: options.timeoutMs,
     });
     const bufferedResponse = await bufferTextResponse(ollamaResponse);
     return await negotiateChatAgentUiResponse(

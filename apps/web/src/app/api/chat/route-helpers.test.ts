@@ -106,6 +106,9 @@ describe('chat route helpers', () => {
 
     expect(systemMessage.content).toContain('read-only commerce tools');
     expect(systemMessage.content).toContain(
+      'product search, product details, and recommendations'
+    );
+    expect(systemMessage.content).toContain(
       'checkout, payment-account creation'
     );
     expect(systemMessage.content).not.toContain('payment account requests');

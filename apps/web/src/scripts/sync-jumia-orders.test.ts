@@ -33,6 +33,7 @@ describe('runJumiaOrderSyncCli', () => {
       canonicalCreated: 1,
       canonicalUpdated: 1,
       notified: 1,
+      stockUpdated: 0,
       orderErrors: 0,
       errors: [],
     };
@@ -58,6 +59,7 @@ describe('runJumiaOrderSyncCli', () => {
       canonicalCreated: 0,
       canonicalUpdated: 0,
       notified: 0,
+      stockUpdated: 0,
       orderErrors: 0,
       errors: ['merchant-1: reauthorization required'],
     });

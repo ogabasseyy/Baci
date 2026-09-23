@@ -72,6 +72,7 @@ const result = {
   canonicalCreated: 0,
   canonicalUpdated: 0,
   notified: 0,
+  stockUpdated: 0,
   orderErrors: 0,
   errors: [],
 };

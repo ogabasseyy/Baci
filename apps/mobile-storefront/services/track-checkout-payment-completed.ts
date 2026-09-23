@@ -7,6 +7,7 @@ export function trackCheckoutPaymentCompleted(input: {
   paymentMethod: string;
   reference?: string;
   value?: number;
+  currency?: string;
 }): void {
   trackCheckoutPaymentEvent(
     CHECKOUT_FUNNEL_EVENTS.paymentCompleted,

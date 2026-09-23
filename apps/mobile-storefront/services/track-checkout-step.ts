@@ -10,7 +10,8 @@ import { trackEvent } from './analytics-core';
 
 export function trackCheckoutStep(
   step: CheckoutStepName,
-  properties?: AnalyticsProperties
+  properties?: AnalyticsProperties,
+  currency?: string
 ): void {
   trackEvent(
     ECOMMERCE_ANALYTICS_EVENTS.checkoutStepCompleted,
@@ -21,6 +22,7 @@ export function trackCheckoutStep(
     buildCheckoutFunnelProperties({
       channel: 'mobile_app',
       checkoutStep: step,
+      currency,
       properties,
       source: 'mobile_app',
     })

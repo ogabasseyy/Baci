@@ -140,6 +140,32 @@ describe('OrderSuccessScreen', () => {
     expect(mockOrderReconciliationView).not.toHaveBeenCalled();
   });
 
+  it('stays pending when reconciliation verification is inconclusive', async () => {
+    mockSearchParamsHolder.current = {
+      ...mockSearchParamsHolder.current,
+      reconciliation: 'order_cancelled',
+    };
+    // A timeout or transient lookup failure is neither proof nor
+    // disproof: the screen must not fall through to the ordinary
+    // confirmation (or its purchase side effects) for an unverified
+    // captured-but-cancelled arrival.
+    mockVerifyOrderPaymentForCompletion.mockResolvedValue({
+      paid: false,
+      inconclusive: true,
+    });
+
+    render(<OrderSuccessScreen />);
+
+    await waitFor(() => {
+      expect(mockVerifyOrderPaymentForCompletion).toHaveBeenCalled();
+    });
+    expect(mockOrderSuccessView).not.toHaveBeenCalled();
+    expect(mockOrderReconciliationView).not.toHaveBeenCalled();
+    expect(mockScheduleLocalNotification).not.toHaveBeenCalled();
+    expect(mockMaybeShowPostOrderInterstitial).not.toHaveBeenCalled();
+    expect(mockRequestPermission).not.toHaveBeenCalled();
+  });
+
   it('withholds side effects until a slow refunded lookup resolves', async () => {
     jest.useFakeTimers();
     try {

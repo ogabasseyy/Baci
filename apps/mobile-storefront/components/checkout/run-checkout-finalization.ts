@@ -1,4 +1,5 @@
 import type { MutableRefObject } from 'react';
+import { releaseCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-release';
 import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
 import type { createOrder } from '@/services/orders';
@@ -69,6 +70,10 @@ export async function runCheckoutFinalization({
   // order id never double-counts; finalization clears the cart only after
   // the payment route is confirmed.
   if (await claimCheckoutPurchaseTracking(order.id)) {
+    // Fire-and-forget, but a rejection rolls the claim back: the held
+    // claim is the completion lane's "purchase already sent" signal, and
+    // a failed emission must not pose as a recorded purchase or the
+    // completion would emit the funnel without any ad purchase at all.
     void trackCheckoutRoutePurchaseCompleted({
       customerEmail,
       customerPhone,
@@ -81,6 +86,8 @@ export async function runCheckoutFinalization({
       tax: snapshot.taxAmount,
       total: order.total,
       userId: user?.id ?? undefined,
+    }).catch(() => {
+      void releaseCheckoutPurchaseTracking(order.id);
     });
   }
   // Claims the invoice_generated funnel event for unpaid invoice orders

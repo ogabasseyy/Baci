@@ -27,4 +27,22 @@ describe('trackCheckoutPaymentEvent', () => {
       })
     );
   });
+
+  it('stamps the checkout currency instead of the default', () => {
+    trackCheckoutPaymentEvent(
+      'payment_completed',
+      {
+        orderId: 'o3',
+        paymentMethod: 'korapay',
+        value: 200,
+        currency: 'USD',
+      },
+      'paid'
+    );
+
+    expect(trackEvent).toHaveBeenCalledWith(
+      'payment_completed',
+      expect.objectContaining({ currency: 'USD' })
+    );
+  });
 });

@@ -883,9 +883,91 @@ describe('useBNPLCheckoutController', () => {
       'bnpl_provider_error',
       'order-123',
       'credit_direct',
+      undefined,
+      undefined,
       undefined
     );
     expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+  });
+
+  it('attributes the validated order total on BNPL failures', async () => {
+    mockRouteParams = {
+      gateway: 'credit_direct',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+      orderTotal: '5750',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'navigation',
+            url: 'https://usebaci.com/ogabassey/checkout?error=declined',
+          }),
+        },
+      });
+    });
+
+    // The full order revenue — never a residual due.
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
+      'bnpl_provider_error',
+      'order-123',
+      'credit_direct',
+      undefined,
+      undefined,
+      5750
+    );
+  });
+
+  it('keeps the same order total on the start and the later failure', async () => {
+    mockRouteParams = {
+      gateway: 'credpal',
+      orderId: 'order-123',
+      // Wallet credit covered all but 750 of the 5750 order: the opened
+      // attempt starts with revenue and must fail with the same value.
+      amount: '750',
+      orderTotal: '5750',
+    };
+    const { result } = renderControllerHook();
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'bnpl_provider_opened',
+            gateway: 'credpal',
+            orderId: 'order-123',
+          }),
+        },
+      });
+    });
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledWith(
+      expect.objectContaining({ value: 5750 })
+    );
+
+    await act(async () => {
+      result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({
+            type: 'bnpl_provider_error',
+            gateway: 'credpal',
+            orderId: 'order-123',
+            message: 'Provider declined the application',
+          }),
+        },
+      });
+    });
+
+    expect(trackCheckoutPaymentFailed).toHaveBeenCalledWith(
+      'bnpl_provider_error',
+      'order-123',
+      'credpal',
+      undefined,
+      undefined,
+      5750
+    );
   });
 
   it('matches an SDK failure to its opened provider via the bridged error', async () => {
@@ -932,6 +1014,8 @@ describe('useBNPLCheckoutController', () => {
       'bnpl_provider_error',
       'order-123',
       'credpal',
+      undefined,
+      undefined,
       undefined
     );
     expect(trackCheckoutPaymentFailed).toHaveBeenCalledTimes(1);
@@ -968,6 +1052,8 @@ describe('useBNPLCheckoutController', () => {
       'bnpl_load_error',
       'order-123',
       'credit_direct',
+      undefined,
+      undefined,
       undefined
     );
   });
@@ -1104,6 +1190,8 @@ describe('useBNPLCheckoutController', () => {
       'bnpl_load_error',
       'order-123',
       'credit_direct',
+      undefined,
+      undefined,
       undefined
     );
     expect(trackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
@@ -1190,6 +1278,8 @@ describe('useBNPLCheckoutController', () => {
       'bnpl_load_error',
       'order-123',
       'credit_direct',
+      undefined,
+      undefined,
       undefined
     );
   });

@@ -24,4 +24,19 @@ describe('trackCheckoutInvoiceGenerated', () => {
       expect.objectContaining({ payment_status: 'unpaid' })
     );
   });
+
+  it('stamps the checkout currency instead of the default', () => {
+    trackCheckoutInvoiceGenerated({
+      orderId: 'o2',
+      orderNumber: 'N2',
+      total: 200,
+      itemCount: 1,
+      currency: 'USD',
+    });
+
+    expect(trackEvent).toHaveBeenCalledWith(
+      'invoice_generated',
+      expect.objectContaining({ currency: 'USD' })
+    );
+  });
 });

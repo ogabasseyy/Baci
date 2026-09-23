@@ -21,6 +21,12 @@ export interface TrackedOrderVerification {
   reconciliation?: 'order_cancelled' | 'order_skipped';
   terminalFailure?: 'failed' | 'cancelled' | 'abandoned';
   pending?: TrackedCompletionAttribution;
+  /**
+   * Transport/parse failure (not a verified unpaid row): callers that
+   * must not treat absence-of-proof as proof-of-absence stay pending
+   * on this instead of coercing to a definitive negative.
+   */
+  inconclusive?: boolean;
 }
 
 function toTrackedOrder(value: unknown): TrackOrderData['order'] | null {
@@ -92,7 +98,7 @@ export async function checkTrackedOrderPaid(
 ): Promise<TrackedOrderVerification> {
   const read = await readTrackedOrder(orderId, trackingToken);
   if (!read) {
-    return { paid: false };
+    return { paid: false, inconclusive: true };
   }
   const attribution = toTrackedCompletionAttribution(
     read.order,

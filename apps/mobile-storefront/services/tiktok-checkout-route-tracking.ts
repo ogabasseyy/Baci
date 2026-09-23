@@ -28,6 +28,11 @@ export interface CheckoutPurchaseInput {
   tax?: number;
   total?: number;
   userId?: string;
+  /**
+   * Stamped order currency. Absent values keep the NGN default so
+   * callers without a currency source render exactly as before.
+   */
+  currency?: string;
 }
 
 function toAdItems(items: CheckoutTrackingItem[]) {
@@ -42,19 +47,27 @@ function toAdItems(items: CheckoutTrackingItem[]) {
 export function trackCheckoutRouteStarted({
   items,
   subtotal,
+  currency,
 }: {
   items: CheckoutTrackingItem[];
   subtotal: number;
+  /**
+   * Stamped checkout currency. Absent values keep the NGN default so
+   * callers without a currency source render exactly as before; a
+   * provided currency must reach every downstream stage, not just the
+   * first event.
+   */
+  currency?: string;
 }) {
   const itemCount = items.reduce((acc, item) => acc + item.quantity, 0);
   trackCheckoutStarted({
-    currency: 'NGN',
+    ...(currency ? { currency } : {}),
     itemCount,
     subtotal,
   });
 
   return trackAdCheckoutStarted({
-    currency: 'NGN',
+    ...(currency ? { currency } : {}),
     itemCount,
     items: toAdItems(items),
     subtotal,
@@ -77,6 +90,7 @@ export async function trackCheckoutRoutePurchaseCompleted({
   subtotal = total,
   tax = 0,
   userId,
+  currency,
 }: CheckoutPurchaseInput): Promise<void> {
   // Await the fallible ad purchase BEFORE the legacy order_completed
   // event: if the ad emission rejects, the shared completion claim rolls
@@ -84,7 +98,7 @@ export async function trackCheckoutRoutePurchaseCompleted({
   // first would let that escaped event double-count the conversion on
   // retry, since a released claim cannot un-emit it.
   await trackAdPurchase({
-    currency: 'NGN',
+    currency: currency ?? 'NGN',
     email: customerEmail,
     items: toAdItems(items),
     orderId,
@@ -99,7 +113,7 @@ export async function trackCheckoutRoutePurchaseCompleted({
   });
 
   trackOrderCompleted({
-    currency: 'NGN',
+    currency: currency ?? 'NGN',
     itemCount: items.reduce((acc, item) => acc + item.quantity, 0),
     orderId,
     orderNumber,

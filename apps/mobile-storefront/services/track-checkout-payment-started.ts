@@ -8,6 +8,7 @@ export async function trackCheckoutPaymentStarted(input: {
   paymentMethod: string;
   reference?: string;
   value?: number;
+  currency?: string;
 }): Promise<void> {
   // Chain behind the order-created emission for this order so the funnel
   // keeps causal order even though creation is recorded fire-and-forget.

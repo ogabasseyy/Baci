@@ -16,11 +16,17 @@ export function trackCheckoutOrderCreated(order: {
   subtotal?: number;
   shipping?: number;
   tax?: number;
+  /**
+   * Checkout currency: absent values keep the builder default so
+   * callers without a currency source render exactly as before.
+   */
+  currency?: string;
 }): void {
   trackEvent(
     CHECKOUT_FUNNEL_EVENTS.orderCreated,
     buildCheckoutFunnelProperties({
       channel: 'mobile_app',
+      currency: order.currency,
       durationMs: order.durationMs,
       itemCount: order.itemCount,
       orderId: order.orderId,

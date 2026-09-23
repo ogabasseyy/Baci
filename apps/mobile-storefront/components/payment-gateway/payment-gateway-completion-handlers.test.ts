@@ -367,6 +367,15 @@ describe('createPaymentGatewayCompletionHandlers', () => {
       'payment_completed'
     );
     expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    // The success route preserves the selected method: routing the
+    // REDVAULT success as `paystack` would join the settlement poll set
+    // and risk a late ad-purchase repeat.
+    expect(router.replace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pathname: '/order-success',
+        params: expect.objectContaining({ paymentMethod: 'uba_redvault' }),
+      })
+    );
   });
 
   it('skips the funnel emission when another path recorded the conversion', async () => {

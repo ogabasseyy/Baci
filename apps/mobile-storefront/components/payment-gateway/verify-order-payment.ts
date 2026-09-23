@@ -39,6 +39,15 @@ export interface OrderPaymentVerification extends TrackedCompletionAttribution {
    * capture) use `terminalFailure` instead.
    */
   reconciliation?: 'order_cancelled' | 'order_skipped';
+  /**
+   * Transport/parse failure (not a verified unpaid row): callers that
+   * must not treat absence-of-proof as proof-of-absence — the
+   * order-success reconciliation-param check — stay pending on this
+   * instead of coercing to false. The gateway completion flow ignores
+   * it: `{paid:false}` without a terminal outcome stays transient and
+   * keeps settlement polling, exactly as before.
+   */
+  inconclusive?: boolean;
 }
 
 const RECONCILING_FINALIZATION_OUTCOMES = new Set([
@@ -112,9 +121,13 @@ async function checkReferenceSettled(
         }),
       }
     );
-    const data = toVerifyReferenceResponse(
-      await response.json().catch(() => null)
-    );
+    const rawBody = await response.json().catch(() => null);
+    if (response.ok && rawBody == null) {
+      // 200 with an unparseable body: the server answered but proved
+      // nothing — inconclusive, never a verified negative.
+      return { paid: false, inconclusive: true };
+    }
+    const data = toVerifyReferenceResponse(rawBody);
     // Only a completed finalization counts: the endpoint also reports
     // success for cancelled/skipped orders, which are not paid conversions.
     // The identity check fails closed: the route's orderId and the
@@ -179,7 +192,8 @@ async function checkReferenceSettled(
     }
     return { paid: true, total: finiteOrUndefined(data.orderTotal) };
   } catch {
-    return { paid: false };
+    // Network failure or timeout: the lookup proved nothing either way.
+    return { paid: false, inconclusive: true };
   }
 }
 
@@ -197,6 +211,7 @@ export async function verifyOrderPaymentForCompletion({
     return { paid: false };
   }
   let pendingAttribution: TrackedCompletionAttribution | undefined;
+  let inconclusive = false;
   if (trackingToken) {
     const tracked: TrackedOrderVerification = await checkTrackedOrderPaid(
       orderId,
@@ -207,6 +222,11 @@ export async function verifyOrderPaymentForCompletion({
     // settles the order.
     if (tracked.paid || tracked.reconciliation) {
       return tracked;
+    }
+    // A failed transport proves nothing: remember it, but a definitive
+    // reference outcome below still wins outright.
+    if (tracked.inconclusive) {
+      inconclusive = true;
     }
     if (tracked.terminalFailure === 'cancelled' && reference) {
       // A cancelled row proves no capture was recorded — but the supplied
@@ -247,5 +267,5 @@ export async function verifyOrderPaymentForCompletion({
     }
     return settled;
   }
-  return { paid: false };
+  return inconclusive ? { paid: false, inconclusive: true } : { paid: false };
 }

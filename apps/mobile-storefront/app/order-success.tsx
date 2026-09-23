@@ -110,8 +110,9 @@ export default function OrderSuccessScreen() {
   // The reconciliation route parameter is caller-controlled (public
   // scheme/universal links): a crafted deep link must not render
   // "Payment Received" on its word alone. Verify it proof-bound before
-  // rendering the reconciliation state; an unverified param falls
-  // through to the ordinary success flow.
+  // rendering the reconciliation state; a verified-absent param falls
+  // through to the ordinary success flow, while an inconclusive lookup
+  // stays pending instead of coercing to either view.
   const [paramReconciliationVerified, setParamReconciliationVerified] =
     useState<boolean | undefined>(undefined);
   useEffect(() => {
@@ -125,9 +126,17 @@ export default function OrderSuccessScreen() {
       trackingToken,
       reference,
     }).then((result) => {
-      if (!cancelled) {
-        setParamReconciliationVerified(!!result.reconciliation);
+      if (cancelled) {
+        return;
       }
+      // Inconclusive (transport/parse failure) is neither proof nor
+      // disproof: stay pending instead of coercing to false, which would
+      // render the ordinary success view under a caller-controlled
+      // (spoofable) parameter. A remount re-verifies.
+      if (result.inconclusive && !result.reconciliation) {
+        return;
+      }
+      setParamReconciliationVerified(!!result.reconciliation);
     });
     return () => {
       cancelled = true;

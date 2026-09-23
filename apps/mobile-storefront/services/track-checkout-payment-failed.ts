@@ -10,14 +10,18 @@ export function trackCheckoutPaymentFailed(
   reason: string,
   orderId?: string,
   paymentMethod?: string,
-  reference?: string
+  reference?: string,
+  currency?: string,
+  value?: number
 ): Promise<void> {
   const emit = () => {
     trackEvent(
       CHECKOUT_FUNNEL_EVENTS.paymentFailed,
       buildCheckoutFunnelProperties({
         channel: 'mobile_app',
+        currency,
         orderId,
+        total: value,
         paymentIntent: paymentMethod
           ? getCheckoutPaymentIntent(paymentMethod)
           : undefined,

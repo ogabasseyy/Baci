@@ -25,4 +25,20 @@ describe('trackCheckoutOrderCreated', () => {
       expect.objectContaining({ order_id: 'o1' })
     );
   });
+
+  it('stamps the checkout currency instead of the default', () => {
+    trackCheckoutOrderCreated({
+      orderId: 'o2',
+      orderNumber: 'N2',
+      total: 200,
+      itemCount: 1,
+      paymentMethod: 'paystack',
+      currency: 'USD',
+    });
+
+    expect(trackEvent).toHaveBeenCalledWith(
+      'order_created',
+      expect.objectContaining({ currency: 'USD' })
+    );
+  });
 });

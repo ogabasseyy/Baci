@@ -1896,14 +1896,16 @@ export const CheckoutPage: React.FC = () => {
         // The prepared order initializes through the extracted handler:
         // record its start here so the funnel does not jump from
         // order_created straight to completion/failure.
-        onPaymentStarted: ({ orderId, currency, reference }) => {
+        onPaymentStarted: ({ orderId, currency, reference, total, orderNumber }) => {
           paymentStarted = true;
           initializedReference = reference;
           captureCheckoutPaymentStarted({
             currency,
             orderId,
+            orderNumber,
             paymentMethod: 'uba_redvault',
             reference,
+            total,
           });
         },
       })
@@ -2251,6 +2253,11 @@ export const CheckoutPage: React.FC = () => {
           orderId: order.id,
           checkoutFingerprint,
           trackingToken: order.tracking_token,
+          // Stamped for the prepared start: the full revenue value and
+          // number, matching the fresh-path start event — never the
+          // residual gateway due.
+          total: order.total ?? total,
+          orderNumber: createdOrderNumber,
         });
         setIsProcessing(false);
         isOrderInFlightRef.current = false;

@@ -4,7 +4,6 @@
  * migrations are detectable on read.
  */
 const CLAIM_STORE_VERSION = 2;
-const COMPLETION_EVENT_NAME = 'payment_completed';
 
 function filterClaimEntries(values: unknown): string[] {
   if (!Array.isArray(values)) {
@@ -44,25 +43,22 @@ export function parseTrackedOrderIds(raw: string | null): string[] {
     return [];
   }
   // One-time upgrade migration for the version-1 layout: pre-namespacing
-  // checkouts recorded the native purchase under the bare order id, while
-  // completion now claims `payment_completed:<orderId>`. Carry each bare id
-  // forward as a completion claim so reopening a previously paid order (or
-  // reaching its settlement screen) cannot emit Order Completed plus the
-  // ad-platform purchase a second time.
+  // checkouts recorded the native purchase under the bare order id. Carry
+  // those ids forward unchanged so the legacy ad-purchase dedupe survives
+  // — and nothing else. In particular, never synthesize
+  // `payment_completed:<id>` entries here: v1 acquired the bare claim at
+  // order creation even for methods that settle later (bank transfer,
+  // BNPL), so a synthesized completion claim would permanently suppress
+  // the new canonical payment_completed for outstanding orders that
+  // settle after the upgrade. Reopening a previously paid order stays
+  // safe without it: the completion lane skips the ad purchase whenever
+  // the bare purchase claim is held, so only the (never previously
+  // emitted) funnel event goes out.
   //
-  // This runs on the unversioned layout only — never by matching bare ids
-  // at claim time — because current code also stores bare ids for
-  // order_created, and those must not suppress new completions. The first
-  // successful write persists the versioned envelope, so later reads skip
-  // this branch; until then the migration recomputes identically per read.
-  const legacy = filterClaimEntries(parsed);
-  const migrated = new Set(legacy);
-  for (const entry of legacy) {
-    if (!entry.includes(':')) {
-      migrated.add(`${COMPLETION_EVENT_NAME}:${entry}`);
-    }
-  }
-  return [...migrated];
+  // This runs on the unversioned layout only. The first successful write
+  // persists the versioned envelope, so later reads skip this branch;
+  // until then the migration recomputes identically per read.
+  return [...new Set(filterClaimEntries(parsed))];
 }
 
 export function serializeTrackedOrderIds(claims: string[]): string {

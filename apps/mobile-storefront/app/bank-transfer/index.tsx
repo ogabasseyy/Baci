@@ -12,6 +12,7 @@ import { setClipboardString } from '@/lib/clipboard';
 import type { WalletOrderFundingIntent } from '@/lib/order-wallet-funding-intent';
 import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
+import { resolveWalletFundedTotal } from './wallet-funded-total';
 
 const copyToClipboard = async (text: string) => {
   return await setClipboardString(text);
@@ -137,20 +138,13 @@ export default function BankTransferScreen() {
       // The funding intent is confirmed: record the conversion before the
       // success route clears the cart (purchase capture needs cart items).
       if (orderId) {
-        // Report the canonical full order value: `amount` is only the
-        // shortfall collected after existing wallet balance, and restored
-        // or legacy links may omit the routed `orderTotal`. The completed
-        // intent's target is authoritative.
-        const intentTotal = Number(intent.targetOrderAmount);
-        const requestedTotal = Number(orderTotal);
-        const shortfall = Number(amount);
-        const fundedTotal = Number.isFinite(intentTotal)
-          ? intentTotal
-          : Number.isFinite(requestedTotal)
-            ? requestedTotal
-            : Number.isFinite(shortfall)
-              ? shortfall
-              : 0;
+        // Canonical full order value (single-source helper): the routed
+        // total wins over the post-savings intent residual.
+        const fundedTotal = resolveWalletFundedTotal({
+          orderTotal,
+          targetOrderAmount: intent.targetOrderAmount,
+          amount,
+        });
         // First completion wins the durable claim; replays emit nothing.
         // Snapshot the cart synchronously: the claim await below yields,
         // and the success route may clear the cart before it resolves.

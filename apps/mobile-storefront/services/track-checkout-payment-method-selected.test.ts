@@ -11,12 +11,21 @@ describe('trackCheckoutPaymentMethodSelected', () => {
     jest.clearAllMocks();
   });
 
-  it('emits the funnel method event', () => {
-    trackCheckoutPaymentMethodSelected('invoice');
+  it('emits the funnel payment_method_selected event', () => {
+    trackCheckoutPaymentMethodSelected('paystack');
 
     expect(trackEvent).toHaveBeenCalledWith(
       'checkout_payment_method_selected',
-      expect.objectContaining({ payment_method: 'invoice' })
+      expect.objectContaining({ payment_method: 'paystack' })
+    );
+  });
+
+  it('stamps the checkout currency instead of the default', () => {
+    trackCheckoutPaymentMethodSelected('korapay', 'USD');
+
+    expect(trackEvent).toHaveBeenCalledWith(
+      'checkout_payment_method_selected',
+      expect.objectContaining({ currency: 'USD' })
     );
   });
 });

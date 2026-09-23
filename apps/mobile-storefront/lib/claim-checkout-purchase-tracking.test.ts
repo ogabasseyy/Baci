@@ -72,17 +72,25 @@ it('does not re-track a persisted claim after process memory is gone', async () 
   await expect(claimCheckoutPurchaseTracking('order-1')).resolves.toBe(false);
 });
 
-it('migrates legacy bare purchase claims so upgrades cannot double-emit completion', async () => {
+it('keeps the completion key claimable for legacy bare purchase claims', async () => {
   // Pre-namespacing checkouts stored the native purchase under the bare
-  // order id: reopening that order after the upgrade must not grant a
-  // fresh payment_completed claim.
+  // order id — including for orders created but not yet paid. The
+  // migration carries the bare id forward as purchase dedupe only and
+  // must still grant a fresh payment_completed claim: suppressing it
+  // would permanently silence the canonical completion for outstanding
+  // orders that settle after the upgrade. Reopening a paid order stays
+  // safe because the completion lane skips the ad purchase whenever the
+  // bare purchase claim is held.
   storage.set(
     CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY,
     JSON.stringify(['order-legacy'])
   );
   await expect(
     claimCheckoutPurchaseTracking('order-legacy', 'payment_completed')
-  ).resolves.toBe(false);
+  ).resolves.toBe(true);
+  // Release the grant: the in-memory grant set outlives this test and
+  // would otherwise leak into the envelope test below.
+  await releaseCheckoutPurchaseTracking('order-legacy', 'payment_completed');
 });
 
 it('does not let a new order_created bare claim suppress its completion', async () => {
@@ -111,7 +119,10 @@ it('persists the versioned envelope on the first post-upgrade write', async () =
     storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY)
   );
   expect(stored).toContain('order-fresh');
-  expect(stored).toContain('payment_completed:order-legacy');
+  // The legacy bare id survives as purchase dedupe; no completion claim
+  // is synthesized for it (see the test above).
+  expect(stored).toContain('order-legacy');
+  expect(stored).not.toContain('payment_completed:order-legacy');
   const raw = storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY) ?? '';
   expect(JSON.parse(raw)).toMatchObject({ version: 2 });
 });

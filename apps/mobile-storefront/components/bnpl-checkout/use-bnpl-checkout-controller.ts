@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WebView } from 'react-native-webview';
-import { trackCheckoutPaymentFailed } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 import {
   buildBNPLCheckoutUrl,
@@ -19,6 +18,7 @@ import { createBNPLLoadTimers } from './bnpl-checkout-timers';
 import { createBNPLWebViewErrorHandlers } from './bnpl-checkout-webview-error-handlers';
 import { createBNPLLoadHandlers } from './bnpl-load-handlers';
 import { createBNPLOpenWindowHandler } from './bnpl-open-window-handler';
+import { useBNPLFailureRecorder } from './use-bnpl-failure-recorder';
 import { useIsMountedRef } from './use-is-mounted-ref';
 
 type BNPLCheckoutParams = Parameters<typeof parseBNPLParams>[0];
@@ -77,21 +77,10 @@ export function useBNPLCheckoutController({
   const [prevBnplUrl, setPrevBnplUrl] = useState(bnplUrl);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const hasReturnedToAppRef = useRef(false);
-  // Attempt-scoped failure marker: duplicate provider error redirects and
-  // late load-error callbacks for the same attempt must emit a single
-  // payment_failed. A ref (not state) so the guard holds synchronously
-  // across rerenders; reset only by Retry.
-  const failureRecordedRef = useRef(false);
-  const recordCheckoutFailure: BNPLRecordCheckoutFailure = (
-    reason,
-    reference
-  ) => {
-    if (failureRecordedRef.current) {
-      return;
-    }
-    failureRecordedRef.current = true;
-    void trackCheckoutPaymentFailed(reason, orderId, gateway, reference);
-  };
+  // Attempt-scoped failure recorder (single payment_failed per attempt;
+  // reset only by Retry): the focused hook below owns the guard.
+  const { recordCheckoutFailure, resetCheckoutFailure } =
+    useBNPLFailureRecorder({ orderId, gateway, orderTotal });
   const statusRef = useRef<BNPLCheckoutStatus>('loading');
   const isMountedRef = useIsMountedRef();
   const documentUrlRef = useRef(bnplUrl);
@@ -219,7 +208,7 @@ export function useBNPLCheckoutController({
 
   const handleRetry = () => {
     clearPendingLoadTimeout();
-    failureRecordedRef.current = false;
+    resetCheckoutFailure();
     // A new attempt must emit its own payment_started: without this reset
     // a retried provider flow that opens and fails again produces an
     // unmatched payment_failed and corrupts retry funnel measurements.

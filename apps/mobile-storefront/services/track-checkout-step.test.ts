@@ -19,4 +19,13 @@ describe('trackCheckoutStep', () => {
       expect.objectContaining({ channel: 'mobile_app' })
     );
   });
+
+  it('stamps the checkout currency instead of the default', () => {
+    trackCheckoutStep('payment_method', { payment_method: 'paystack' }, 'USD');
+
+    expect(trackEvent).toHaveBeenCalledWith(
+      'checkout_step_completed',
+      expect.objectContaining({ currency: 'USD' })
+    );
+  });
 });

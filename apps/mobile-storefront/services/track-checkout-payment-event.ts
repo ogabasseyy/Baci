@@ -12,6 +12,7 @@ export function trackCheckoutPaymentEvent(
     paymentMethod: string;
     reference?: string;
     value?: number;
+    currency?: string;
   },
   paymentStatus?: string
 ): void {
@@ -19,6 +20,7 @@ export function trackCheckoutPaymentEvent(
     event,
     buildCheckoutFunnelProperties({
       channel: 'mobile_app',
+      currency: input.currency,
       orderId: input.orderId,
       orderNumber: input.orderNumber,
       paymentIntent: getCheckoutPaymentIntent(input.paymentMethod),

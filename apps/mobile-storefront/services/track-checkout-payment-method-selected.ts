@@ -6,12 +6,14 @@ import {
 import { trackEvent } from './analytics-core';
 
 export function trackCheckoutPaymentMethodSelected(
-  paymentMethod: string
+  paymentMethod: string,
+  currency?: string
 ): void {
   trackEvent(
     CHECKOUT_FUNNEL_EVENTS.paymentMethodSelected,
     buildCheckoutFunnelProperties({
       channel: 'mobile_app',
+      currency,
       paymentIntent: getCheckoutPaymentIntent(paymentMethod),
       paymentMethod,
       source: 'mobile_app',

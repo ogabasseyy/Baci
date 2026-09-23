@@ -124,7 +124,13 @@ describe('submitRedvaultPreparedOrder', () => {
       })
     );
     const onPaymentStarted = vi.fn();
-    const options = buildOptions({ onPaymentStarted });
+    const options = buildOptions({
+      onPaymentStarted,
+      redvaultOrderReady: preparedOrder({
+        total: 5000,
+        orderNumber: 'ORD-RV-1',
+      }),
+    });
 
     await expect(submitRedvaultPreparedOrder(options)).resolves.toBe(true);
     expect(onPaymentStarted).toHaveBeenCalledTimes(1);
@@ -132,6 +138,8 @@ describe('submitRedvaultPreparedOrder', () => {
       orderId: 'order-1',
       currency: 'NGN',
       reference: 'rv-ref-1',
+      total: 5000,
+      orderNumber: 'ORD-RV-1',
     });
   });
 

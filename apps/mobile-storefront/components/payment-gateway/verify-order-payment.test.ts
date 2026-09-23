@@ -453,6 +453,73 @@ describe('verifyOrderPaymentForCompletion', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('marks the result inconclusive when the lookup transport fails', async () => {
+    // Track-order unreachable and no reference to fall back to: the
+    // caller must stay pending rather than coerce this to a verified
+    // negative.
+    mockFetch(() => {
+      throw new Error('network down');
+    });
+
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+      })
+    ).resolves.toEqual({ paid: false, inconclusive: true });
+  });
+
+  it('marks the result inconclusive when reference verification throws', async () => {
+    mockFetch((url: string) => {
+      if (String(url).includes('/api/payments/verify')) {
+        throw new Error('network down');
+      }
+      return new Response(JSON.stringify(pendingTrackedOrder), {
+        status: 200,
+      });
+    });
+
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false, inconclusive: true });
+  });
+
+  it('marks a 200 with an unparseable body inconclusive, never negative', async () => {
+    mockFetch(
+      () => new Response(undefined as unknown as BodyInit, { status: 200 })
+    );
+
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false, inconclusive: true });
+  });
+
+  it('lets a definitive reference outcome win over a failed lookup', async () => {
+    mockFetch((url: string) => {
+      if (String(url).includes('/api/payments/verify')) {
+        return new Response(JSON.stringify(completedVerification), {
+          status: 200,
+        });
+      }
+      throw new Error('network down');
+    });
+
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: true, total: 5000 });
+  });
+
   it('verifies the reference before rejecting a cancelled tracked row', async () => {
     // Late capture settles through the verify endpoint after the tracked
     // row was flipped to cancelled: the row alone must not report an

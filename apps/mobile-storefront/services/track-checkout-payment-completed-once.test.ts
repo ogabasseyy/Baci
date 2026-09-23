@@ -198,4 +198,64 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
     expect(completedMock).not.toHaveBeenCalled();
     expect(purchaseMock).not.toHaveBeenCalled();
   });
+
+  it('emits funnel-only when creation already sent the purchase', async () => {
+    // The checkout finalization claims the default purchase key and
+    // emits the ad purchase right after order creation; the completion
+    // lane must not send it a second time for the same order. Seeded
+    // as a versioned envelope so the v1 upgrade migration cannot
+    // synthesize a completion claim from the bare purchase id.
+    storage.set(
+      'checkout-purchase-tracking-v1',
+      JSON.stringify({ version: 2, claims: ['order-settled'] })
+    );
+
+    await expect(
+      trackCheckoutPaymentCompletedOnce({
+        orderId: 'order-settled',
+        orderNumber: 'BAC-SETTLED',
+        paymentMethod: 'paystack',
+        value: 5750,
+      })
+    ).resolves.toBe('emitted');
+
+    expect(completedMock).toHaveBeenCalledTimes(1);
+    expect(completedMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-settled' })
+    );
+    expect(purchaseMock).not.toHaveBeenCalled();
+  });
+
+  it('never repeats the purchase across the create-to-settle sequence and its replay', async () => {
+    const { claimCheckoutPurchaseTracking } = await import(
+      '@/lib/claim-checkout-purchase-tracking'
+    );
+    // Creation-time claim, as runCheckoutFinalization performs it.
+    await expect(claimCheckoutPurchaseTracking('order-seq')).resolves.toBe(
+      true
+    );
+
+    await expect(
+      trackCheckoutPaymentCompletedOnce({
+        orderId: 'order-seq',
+        paymentMethod: 'korapay',
+        value: 9000,
+      })
+    ).resolves.toBe('emitted');
+
+    expect(purchaseMock).not.toHaveBeenCalled();
+    expect(completedMock).toHaveBeenCalledTimes(1);
+
+    // A remount replay records nothing further.
+    await expect(
+      trackCheckoutPaymentCompletedOnce({
+        orderId: 'order-seq',
+        paymentMethod: 'korapay',
+        value: 9000,
+      })
+    ).resolves.toBe('already_emitted');
+
+    expect(purchaseMock).not.toHaveBeenCalled();
+    expect(completedMock).toHaveBeenCalledTimes(1);
+  });
 });

@@ -7854,7 +7854,12 @@ describe('CheckoutPage', () => {
       if (url === '/api/orders') {
         return Response.json({
           amountDueToGateway: 5_000,
-          order: { id: 'order-redvault', currency: 'NGN' },
+          order: {
+            id: 'order-redvault',
+            currency: 'NGN',
+            total: 5000,
+            order_number: 'ORD-RV-1',
+          },
           redvault: {
             quote: {
               product_subtotal_kobo: 500_000,
@@ -7909,10 +7914,14 @@ describe('CheckoutPage', () => {
         ([event]) => event === 'payment_started'
       );
       expect(startedCalls).toHaveLength(1);
+      // Full revenue value and number stamped at creation — never the
+      // residual gateway due.
       expect(startedCalls[0]?.[1]).toEqual(
         expect.objectContaining({
           payment_method: 'uba_redvault',
           reference: 'rv-ref-1',
+          total: 5000,
+          order_number: 'ORD-RV-1',
         })
       );
     } finally {

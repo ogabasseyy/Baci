@@ -10,11 +10,13 @@ export function trackCheckoutInvoiceGenerated(order: {
   total: number;
   itemCount: number;
   paymentMethod?: string;
+  currency?: string;
 }): void {
   trackEvent(
     CHECKOUT_FUNNEL_EVENTS.invoiceGenerated,
     buildCheckoutFunnelProperties({
       channel: 'mobile_app',
+      currency: order.currency,
       itemCount: order.itemCount,
       orderId: order.orderId,
       orderNumber: order.orderNumber,

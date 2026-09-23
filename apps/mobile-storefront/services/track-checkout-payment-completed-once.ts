@@ -40,6 +40,13 @@ type CheckoutPaymentCompletionInput = CheckoutCompletionAttribution & {
   paymentMethod: string;
   reference?: string;
   value?: number;
+  /**
+   * Stamped order currency: forwarded to the funnel payment_completed
+   * (via the shared event builder) and the ad/legacy purchase so a
+   * non-NGN attempt keeps one currency on every stage. Absent values
+   * keep the NGN default.
+   */
+  currency?: string;
 };
 
 // Shared with the REDVAULT completion path, which emits the funnel event
@@ -82,32 +89,43 @@ export async function trackCheckoutPaymentCompletedOnce(
       );
       return held ? 'already_emitted' : 'released';
     }
+    // The checkout finalization already emits the ad purchase under the
+    // default purchase claim right after order creation: repeating it
+    // here would double-count every normally settled order, so the
+    // completion lane emits the funnel event only when that purchase
+    // already went out.
+    const purchaseAlreadySent = await isCheckoutPurchaseClaimed(
+      input.orderId
+    );
     const total = input.value ?? 0;
-    try {
-      // Awaited (not discarded): if the ad purchase rejects — e.g.
-      // generateEventId fails on Expo Crypto — the claim rolls back so a
-      // later settlement poll or revisit can emit, instead of suppressing
-      // the conversion forever behind an unhandled rejection.
-      await trackCheckoutRoutePurchaseCompleted({
-        customerEmail: input.customerEmail,
-        customerPhone: input.customerPhone,
-        items: input.items ?? useCartStore.getState().items,
-        orderId: input.orderId,
-        orderNumber: input.orderNumber || input.orderId,
-        paymentMethod: input.paymentMethod,
-        shipping: input.shipping ?? 0,
-        subtotal: input.subtotal ?? total,
-        tax: input.tax ?? 0,
-        total,
-        userId: input.userId,
-      });
-    } catch (error) {
-      log.error('Checkout purchase tracking failed; claim released:', error);
-      await releaseCheckoutPurchaseTracking(
-        input.orderId,
-        PAYMENT_COMPLETED_CLAIM_EVENT
-      );
-      return 'released';
+    if (!purchaseAlreadySent) {
+      try {
+        // Awaited (not discarded): if the ad purchase rejects — e.g.
+        // generateEventId fails on Expo Crypto — the claim rolls back so a
+        // later settlement poll or revisit can emit, instead of suppressing
+        // the conversion forever behind an unhandled rejection.
+        await trackCheckoutRoutePurchaseCompleted({
+          customerEmail: input.customerEmail,
+          customerPhone: input.customerPhone,
+          items: input.items ?? useCartStore.getState().items,
+          orderId: input.orderId,
+          orderNumber: input.orderNumber || input.orderId,
+          paymentMethod: input.paymentMethod,
+          shipping: input.shipping ?? 0,
+          subtotal: input.subtotal ?? total,
+          tax: input.tax ?? 0,
+          total,
+          ...(input.currency ? { currency: input.currency } : {}),
+          userId: input.userId,
+        });
+      } catch (error) {
+        log.error('Checkout purchase tracking failed; claim released:', error);
+        await releaseCheckoutPurchaseTracking(
+          input.orderId,
+          PAYMENT_COMPLETED_CLAIM_EVENT
+        );
+        return 'released';
+      }
     }
     // After the fallible emission succeeds: a rolled-back attempt must
     // not leave a funnel payment_completed behind, or its retry would

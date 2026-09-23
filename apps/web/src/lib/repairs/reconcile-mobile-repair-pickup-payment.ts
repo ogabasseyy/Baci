@@ -10,7 +10,22 @@ export async function reconcileMobileRepairPickupPayment(
   if (result.success || !result.reference) return result;
   try {
     const verified = await verifyTransaction(result.reference);
-    if (!verified.success) return result;
+    if (!verified.success) {
+      // Paystack authoritatively reports unknown references with HTTP 404, so
+      // a 404 proves no charge can exist for this reference: fail definitively
+      // so the client retires the unknown attempt and starts a fresh payment
+      // instead of replaying an unreclaimable unknown receipt forever. Every
+      // other verification failure (network, 5xx, auth) stays unknown because
+      // the provider state is still ambiguous.
+      if (verified.code === 'HTTP_404')
+        return {
+          ...result,
+          code: 'payment_initialization_failed',
+          error:
+            'The previous payment attempt did not reach Paystack. Start a new payment to continue.',
+        };
+      return result;
+    }
     const payment = verified.data;
     const claim = repairPickupPaymentClaims.verify(
       payment.metadata,

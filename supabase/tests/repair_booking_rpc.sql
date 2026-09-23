@@ -65,6 +65,22 @@ BEGIN
   END IF;
 END $$;
 
+-- The SECURITY INVOKER wrapper resolves private.create_repair_booking as the
+-- caller, so anon, authenticated, and service_role all need schema USAGE
+-- (lookup only; execution stays governed by the per-function EXECUTE grants).
+DO $$
+BEGIN
+  IF NOT pg_catalog.has_schema_privilege('anon', 'private', 'USAGE') THEN
+    RAISE EXCEPTION 'anon must have USAGE on schema private for the booking wrapper';
+  END IF;
+  IF NOT pg_catalog.has_schema_privilege('authenticated', 'private', 'USAGE') THEN
+    RAISE EXCEPTION 'authenticated must have USAGE on schema private for the booking wrapper';
+  END IF;
+  IF NOT pg_catalog.has_schema_privilege('service_role', 'private', 'USAGE') THEN
+    RAISE EXCEPTION 'service_role must have USAGE on schema private for the booking wrapper';
+  END IF;
+END $$;
+
 -- Private fn: SECURITY DEFINER, empty search_path, anon can EXECUTE (invoker wrapper).
 DO $$
 DECLARE
@@ -509,6 +525,92 @@ BEGIN
         RAISE;
       END IF;
   END;
+END $$;
+
+-- The template exception keeps unpublished (draft) stores closed: the
+-- storefront layout renders StoreNotPublished for unpublished slugs, so the
+-- anon-executable wrapper must reject their free-form bookings too.
+INSERT INTO public.merchants (
+  id, email, business_name, slug, business_type, is_published, template_id
+)
+VALUES (
+  '00000000-0000-0000-0000-000000003016',
+  'repair-rpc-template-draft@example.com',
+  'Repair RPC Template Draft',
+  'repair-rpc-template-draft',
+  'fashion',
+  false,
+  'ogabassey'
+)
+ON CONFLICT (id) DO UPDATE
+SET business_type = EXCLUDED.business_type,
+    is_published = EXCLUDED.is_published,
+    template_id = EXCLUDED.template_id;
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM *
+    FROM public.create_repair_booking(
+      '00000000-0000-0000-0000-000000003016',
+      'Ada Lovelace',
+      'ada@example.com',
+      '08012345678',
+      'Smartphone',
+      'iPhone 15',
+      'The screen is cracked and the battery drains quickly.',
+      NULL,
+      'dropoff',
+      NULL,
+      NULL,
+      NULL
+    );
+
+    RAISE EXCEPTION 'unpublished template merchant must not receive a free-form repair booking';
+  EXCEPTION
+    WHEN OTHERS THEN
+      IF SQLERRM NOT LIKE '%catalog_disabled%' THEN
+        RAISE;
+      END IF;
+  END;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.repairs AS r
+    WHERE r.merchant_id = '00000000-0000-0000-0000-000000003016'
+  ) THEN
+    RAISE EXCEPTION 'unpublished template merchant must not receive a free-form repair booking';
+  END IF;
+END $$;
+
+-- Direct callers run the SECURITY INVOKER wrapper as their own role: an
+-- authenticated session must resolve and execute the booking end to end.
+DO $$
+DECLARE
+  created record;
+BEGIN
+  SET LOCAL ROLE authenticated;
+  SELECT *
+  INTO created
+  FROM public.create_repair_booking(
+    '00000000-0000-0000-0000-000000003006',
+    'Ada Lovelace',
+    'ada@example.com',
+    '08012345678',
+    'Smartphone',
+    'iPhone 15',
+    'The screen is cracked and the battery drains quickly.',
+    NULL,
+    'dropoff',
+    NULL,
+    NULL,
+    NULL
+  );
+  RESET ROLE;
+
+  IF created.id IS NULL THEN
+    RAISE EXCEPTION 'authenticated callers must receive a repair booking';
+  END IF;
 END $$;
 
 ROLLBACK;

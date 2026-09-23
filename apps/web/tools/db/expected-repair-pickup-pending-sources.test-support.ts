@@ -234,4 +234,14 @@ export const EXPECTED_REPAIR_PICKUP_PENDING_SOURCES = [
       'supabase/migrations/20260922000700_enforce_invoker_repair_booking_wrapper.sql',
     sha256: '421d572509d58e976c3eb53a9f09944f47833dd67de8fdf301fca4f51eb90941',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260922000800_require_published_template_repair_exception.sql',
+    sha256: 'a5628fdb548c5af0da5adb952764705fa82458aa6a1510848e69893cf81dc6f9',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260922000900_restore_repair_booking_private_schema_usage.sql',
+    sha256: '614aaca013d85cbd7e2933c11877fc66cdf172b06f34e4ed5a5bd5d529cd5828',
+  },
 ];

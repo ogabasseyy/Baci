@@ -93,6 +93,31 @@ it('keeps a verified success on the unknown receipt until the webhook fulfills',
       'Payment received. Check this repair ticket for pickup confirmation.',
   });
 });
+it('fails definitively when verification proves the reference never reached Paystack', async () => {
+  verify.mockResolvedValue({
+    success: false,
+    error: 'Transaction reference not found',
+    code: 'HTTP_404',
+  });
+  expect(
+    await reconcileMobileRepairPickupPayment(reconcilable, merchantId)
+  ).toEqual({
+    ...reconcilable,
+    code: 'payment_initialization_failed',
+    error:
+      'The previous payment attempt did not reach Paystack. Start a new payment to continue.',
+  });
+});
+it('keeps an ambiguous verification failure unknown for a later retry', async () => {
+  verify.mockResolvedValue({
+    success: false,
+    error: 'timeout',
+    code: 'NETWORK_ERROR',
+  });
+  expect(
+    await reconcileMobileRepairPickupPayment(reconcilable, merchantId)
+  ).toEqual(reconcilable);
+});
 it('keeps a pending verification unknown for a later retry', async () => {
   verify.mockResolvedValue(verified('pending'));
   expect(

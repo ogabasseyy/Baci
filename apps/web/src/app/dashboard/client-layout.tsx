@@ -70,7 +70,6 @@ import {
 } from '@/components/ui/tooltip';
 import { useAuth } from '@/contexts/auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
-import { useToast } from '@/hooks/use-toast';
 import { COUNTRIES, getCountryByCode } from '@/lib/countries';
 import { isRepairsBusinessType } from '@/lib/repairs/repairs-feature';
 import { asRoute } from '@/lib/routes';
@@ -274,7 +273,6 @@ export default function DashboardClientLayout({
   const [isCapsuleExpanded, setIsCapsuleExpanded] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [smartNavUsage, setSmartNavUsage] = useState<SmartNavUsage>({});
-  useToast(); // Keep toast available for potential future use
 
   // Orders count for sidebar badge - fetched lazily to not block initial render
   const [ordersCount, setOrdersCount] = useState(0);
@@ -337,7 +335,11 @@ export default function DashboardClientLayout({
     const isDevelopment = process.env.NODE_ENV === 'development';
 
     if (isDevelopment) {
-      // In development, use localhost with direct slug path
+      // Use the running origin instead of a hardcoded port so any dev port
+      // works. Falls back to :3000 during SSR, where window is unavailable.
+      if (typeof window !== 'undefined') {
+        return `${window.location.origin}/${merchant.slug}`;
+      }
       return `http://localhost:3000/${merchant.slug}`;
     }
 

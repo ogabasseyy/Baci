@@ -15,7 +15,7 @@ import {
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { type CartItem, useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { analytics } from '@/lib/analytics';
@@ -88,14 +88,24 @@ export const CartSidebar: React.FC = () => {
   const hasPriceNegotiation =
     cartMerchantContextMatches && hasStorefrontPriceNegotiation(merchant);
 
-  const displayCart = sanitizeCartItems(cart, hasPriceNegotiation);
+  const displayCart = useMemo(
+    () => sanitizeCartItems(cart, hasPriceNegotiation),
+    [cart, hasPriceNegotiation]
+  );
 
-  const displayCartTotal = calculateCartTotal(cart, hasPriceNegotiation);
+  const displayCartTotal = useMemo(
+    () => calculateCartTotal(cart, hasPriceNegotiation),
+    [cart, hasPriceNegotiation]
+  );
 
-  const hasNonNegotiableCartItem = displayCart.some(
-    (item) =>
-      !isQuizVoucherCartItem(item) &&
-      !isProductNegotiable({ brand: item.brand, name: item.name })
+  const hasNonNegotiableCartItem = useMemo(
+    () =>
+      displayCart.some(
+        (item) =>
+          !isQuizVoucherCartItem(item) &&
+          !isProductNegotiable({ brand: item.brand, name: item.name })
+      ),
+    [displayCart]
   );
 
   const getHref = (path: string) =>
@@ -103,6 +113,18 @@ export const CartSidebar: React.FC = () => {
 
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const router = useRouter();
+  const isMountedRef = useRef(true);
+  const checkoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (checkoutTimerRef.current) {
+        clearTimeout(checkoutTimerRef.current);
+      }
+    };
+  }, []);
 
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
@@ -113,15 +135,9 @@ export const CartSidebar: React.FC = () => {
       displayCart.length > 0 &&
       cartMerchantContextMatches
     ) {
-      // Map cart items to Product structure expected by analytics
+      // Cart items already satisfy the Product shape analytics expects.
       const analyticsProducts = displayCart.map((item) => ({
-        product: {
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          category: item.category,
-          brand: item.brand,
-        } as any, // Cast to avoid full Product type mismatch if needed
+        product: item,
         quantity: item.quantity,
       }));
 
@@ -217,7 +233,7 @@ export const CartSidebar: React.FC = () => {
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
               <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <ShoppingBag className="text-red-600" />
+                <ShoppingBag className="text-store-primary" />
                 Your Cart
                 <span className="text-sm font-medium text-gray-500 ml-2">
                   ({displayCart.length} items)
@@ -225,7 +241,7 @@ export const CartSidebar: React.FC = () => {
               </h2>
               <button type="button"
                 onClick={() => setIsCartOpen(false)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500 hover:text-red-600"
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500 hover:text-store-primary"
                 aria-label="Close cart"
               >
                 <X size={24} />
@@ -300,13 +316,13 @@ export const CartSidebar: React.FC = () => {
                             <div className="flex justify-between items-start">
                               <Link
                                 href={productHref}
-                                className="font-bold text-gray-900 line-clamp-1 text-sm hover:text-red-600 transition-colors"
+                                className="font-bold text-gray-900 line-clamp-1 text-sm hover:text-store-primary transition-colors"
                               >
                                 {item.name}
                               </Link>
                               <button type="button"
                                 onClick={() => removeFromCart(item.cartItemId)}
-                                className="text-gray-400 hover:text-red-600 p-1 -mt-1 -mr-1"
+                                className="text-gray-400 hover:text-store-primary p-1 -mt-1 -mr-1"
                                 aria-label="Remove item"
                               >
                                 <Trash2 size={16} />
@@ -459,7 +475,7 @@ export const CartSidebar: React.FC = () => {
                                     <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
                                       <ShieldCheck
                                         size={12}
-                                        className="text-red-600"
+                                        className="text-store-primary"
                                       />
                                       {merchant?.slug === 'ogabassey' ? 'Ogabassey Assurance' : 'Order Protection'}
                                     </span>
@@ -512,7 +528,7 @@ export const CartSidebar: React.FC = () => {
                     onClick={openTotalNegotiation}
                     className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors border border-gray-200"
                   >
-                    <Calculator size={18} className="text-red-600" />
+                    <Calculator size={18} className="text-store-primary" />
                     Negotiate Total Amount
                   </button>
                 )}
@@ -524,13 +540,17 @@ export const CartSidebar: React.FC = () => {
                     setIsCartOpen(false);
                     // Navigate to checkout
                     router.push(asRoute(getHref('/checkout')));
-                    // Reset loading state after a delay (in case user comes back)
-                    setTimeout(() => {
-                      setIsCheckoutLoading(false);
+                    // Reset loading state after a delay (in case user comes back).
+                    // Skip the reset when navigation unmounted the sidebar.
+                    const timer = setTimeout(() => {
+                      if (isMountedRef.current) {
+                        setIsCheckoutLoading(false);
+                      }
                     }, 2000);
+                    checkoutTimerRef.current = timer;
                   }}
                   disabled={isCheckoutLoading}
-                  className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-red-200 group disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full bg-store-primary hover:bg-store-primary/90 text-store-primary-text font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg group disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isCheckoutLoading ? (
                     <div className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

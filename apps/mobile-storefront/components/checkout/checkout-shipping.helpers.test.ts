@@ -466,6 +466,50 @@ describe('checkout-shipping.helpers', () => {
     expect(requestBody.cart_subtotal).toBe(2080);
   });
 
+  it.each([
+    { catalogPrice: 205000, supportsRates: true, subtotal: 205000 },
+    { catalogPrice: undefined, supportsRates: false, subtotal: 0 },
+  ])('quotes a voucher with catalog price $catalogPrice safely', async ({
+    catalogPrice,
+    supportsRates,
+    subtotal,
+  }) => {
+    const fetchMock = jest.fn<typeof fetch>().mockResolvedValue({
+      json: async () => ({ quotes: { all: [] } }),
+      ok: true,
+    } as Response);
+    global.fetch = fetchMock as unknown as typeof fetch;
+    await fetchShippingQuotes({
+      apiUrl: 'https://example.com',
+      city: 'Lagos',
+      customer: null,
+      items: [
+        createCartItem({
+          price: 0,
+          compare_at_price: 300000,
+          catalog_price: catalogPrice,
+          voucher_token: 'signed-token',
+          voucher_award_id: 'award-1',
+        }),
+      ],
+      quoteContextKey: 'Lagos|Lagos',
+      setIsLoadingQuotes: jest.fn(),
+      setResolvedShippingQuoteContextKey: jest.fn(),
+      setSelectedQuoteId: jest.fn(),
+      setShippingQuotes: jest.fn(),
+      shouldResetSelection: true,
+      state: 'Lagos',
+      watchedAddress: '1 Marina',
+      watchedEmail: 'ada@example.com',
+      watchedFirstName: 'Ada',
+      watchedLastName: 'Lovelace',
+      watchedPhone: '08031234567',
+    });
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(requestBody.supports_merchant_rates).toBe(supportsRates);
+    expect(requestBody.cart_subtotal).toBe(subtotal);
+  });
+
   it('keeps merchant pickup quotes when city filtering carrier stations', async () => {
     const fetchMock = jest.fn<typeof fetch>().mockResolvedValue({
       json: async () => ({

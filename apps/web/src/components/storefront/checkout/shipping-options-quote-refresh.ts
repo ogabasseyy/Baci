@@ -30,7 +30,7 @@ interface UseShippingQuoteRefreshParams {
 
 /**
  * Fetches shipping quotes for the current destination and keeps the parent's
- * selection in sync: auto-selects the cheapest quote from each fresh
+ * selection in sync: auto-selects the cheapest door quote from each fresh
  * response, and clears the parent selection when the fresh response is empty
  * or the refresh fails, so a quote verified against a previous
  * address/subtotal is never submitted.
@@ -140,10 +140,12 @@ export function useShippingQuoteRefresh({
             console.warn('Shipping quote warnings:', normalized.warnings);
           }
 
-          // Auto-select cheapest from each fresh response so the parent
-          // never keeps a quote verified against a previous address.
-          if (normalized.quotes.length > 0) {
-            const cheapest = normalized.quotes.reduce((min, q) =>
+          // Pickup requires an explicit choice on this address-first checkout.
+          const doorQuotes = normalized.quotes.filter(
+            (quote) => !quote.isStationPickup
+          );
+          if (doorQuotes.length > 0) {
+            const cheapest = doorQuotes.reduce((min, q) =>
               q.price < min.price ? q : min
             );
             onSelectRef.current(cheapest, normalized.sessionId);

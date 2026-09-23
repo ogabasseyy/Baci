@@ -172,7 +172,13 @@ export const fetchShippingQuotes = async ({
       body: JSON.stringify({
         ...(merchantId ? { merchantId } : {}),
         deliveryPreference,
-        supports_merchant_rates: true,
+        supports_merchant_rates: items.every(
+          (item) =>
+            !(item.voucher_token && item.voucher_award_id) ||
+            (typeof item.catalog_price === 'number' &&
+              Number.isFinite(item.catalog_price) &&
+              item.catalog_price >= 0)
+        ),
         cart_subtotal: getCartCatalogSubtotalWithAssurance(items),
         receiver: {
           name:

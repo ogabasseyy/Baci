@@ -85,6 +85,23 @@ describe('cart-pricing', () => {
     expect(getCartCatalogSubtotalWithAssurance(items)).toBe(472000);
   });
 
+  it('uses the retained catalog value for a zero-priced prize voucher', () => {
+    const items = [
+      {
+        name: 'Prize Phone',
+        price: 0,
+        compare_at_price: 300000,
+        catalog_price: 205000,
+        quantity: 1,
+        voucher_token: 'signed-token',
+        voucher_award_id: 'award-1',
+      },
+    ] as CartItem[];
+
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(205000);
+    expect(getCartItemEffectivePrice(items[0])).toBe(0);
+  });
+
   it('charges accepted negotiated prices plus effective-basis assurance', () => {
     const items = [
       {

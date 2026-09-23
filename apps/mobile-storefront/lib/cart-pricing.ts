@@ -70,7 +70,13 @@ export function getCartCatalogSubtotalWithAssurance(
   items: readonly CartItem[]
 ): number {
   return items.reduce((total, item) => {
-    const basePrice = getCartItemBasePrice(item);
+    const basePrice =
+      item.voucher_token &&
+      item.voucher_award_id &&
+      typeof item.catalog_price === 'number' &&
+      isValidCartPrice(item.catalog_price)
+        ? item.catalog_price
+        : getCartItemBasePrice(item);
     const assuranceFee = item.hasAssurance
       ? roundQuoteCurrency(
           getCartItemEffectivePrice(item) * item.quantity * QUOTE_ASSURANCE_RATE

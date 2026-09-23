@@ -82,6 +82,45 @@ describe('useShippingQuoteRefresh', () => {
     );
   });
 
+  it('does not auto-select a cheaper station pickup over door delivery', async () => {
+    const onSelect = vi.fn();
+    mockRequest.mockResolvedValue({
+      quotes: [
+        { ...quote('pickup', 0), isStationPickup: true },
+        quote('door', 4500),
+      ],
+      sessionId: 'session-1',
+    });
+    renderHook(() => useShippingQuoteRefresh(params({ onSelect })));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    expect(onSelect).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'door' }),
+      'session-1'
+    );
+  });
+
+  it('requires an explicit choice when only station pickup is available', async () => {
+    const onSelect = vi.fn();
+    mockRequest.mockResolvedValue({
+      quotes: [{ ...quote('pickup', 0), isStationPickup: true }],
+      sessionId: 'session-1',
+    });
+    renderHook(() => useShippingQuoteRefresh(params({ onSelect })));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    expect(onSelect).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'pickup' }),
+      'session-1'
+    );
+  });
+
   it('clears a stale parent selection when the fresh response is empty', async () => {
     const onSelect = vi.fn();
     mockRequest.mockResolvedValue({ quotes: [], sessionId: 'session-2' });

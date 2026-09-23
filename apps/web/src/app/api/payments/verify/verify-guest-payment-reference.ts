@@ -27,6 +27,13 @@ export interface GuestPaymentReferenceSnapshot {
   orderPaymentStatus: string | null;
   orderShippingStatus: string | null;
   orderTotal: number | null;
+  /**
+   * True only when every serialized-tracked order item is durably held
+   * in at least its ordered quantity (see the snapshot RPC). Paid row
+   * alone is not success: the finalizer flips payment_status before the
+   * inventory-confirm step converges.
+   */
+  inventoryConfirmed: boolean;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -69,6 +76,9 @@ function toSnapshot(
         ? row.order_shipping_status
         : null,
     orderTotal: toFiniteNumber(row.order_total),
+    // Fail closed when the column is absent (pre-migration row shape):
+    // a paid order without the proof stays pending.
+    inventoryConfirmed: row.inventory_confirmed === true,
   };
 }
 
@@ -124,15 +134,15 @@ export async function verifyGuestPaymentReference(
 ) {
   const derivedOrderNumber = guestOrderNumber(snapshot);
 
-  // Completed transaction on a paid order (reads only): the paid order
-  // row is itself the completed finalization — the flip commits inside
-  // the finalizer's atomic RPC, so settlement polling must converge here
-  // instead of waiting on another pass. Invoice repair, inventory
-  // confirmation, and outbox side effects stay with the
-  // finalizer-owned paths (webhook / cron / session verify).
+  // Completed transaction on a paid order with the inventory proof
+  // (reads only): the paid row plus durably-held units is the completed
+  // finalization — settlement polling converges here instead of waiting
+  // on another pass. Invoice repair and outbox side effects stay with
+  // the finalizer-owned paths (webhook / cron / session verify).
   if (
     snapshot.transactionStatus === 'completed' &&
-    snapshot.orderPaymentStatus === 'paid'
+    snapshot.orderPaymentStatus === 'paid' &&
+    snapshot.inventoryConfirmed
   ) {
     const paidTotal = snapshot.orderTotal;
     const paidCurrency =
@@ -149,6 +159,24 @@ export async function verifyGuestPaymentReference(
       ...(paidCurrency ? { currency: paidCurrency } : {}),
       // Locally-finalized paid order: semantically a completed finalization.
       finalizationOutcome: 'completed',
+    });
+  }
+
+  if (
+    snapshot.transactionStatus === 'completed' &&
+    snapshot.orderPaymentStatus === 'paid'
+  ) {
+    // Paid row before the inventory proof: the provider already
+    // confirmed (that is how the row got paid), so skip another provider
+    // round-trip and report pending with the proof-bound identity —
+    // settlement polling converges once the finalizer's confirm step
+    // lands. Never success: unconfirmed units may still expire or be
+    // missing.
+    return NextResponse.json({
+      success: false,
+      status: 'pending',
+      orderId: snapshot.orderId,
+      orderNumber: derivedOrderNumber,
     });
   }
 

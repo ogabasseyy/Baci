@@ -134,6 +134,7 @@ describe('/api/payments/verify tracking-token authorization', () => {
         snapshotRow({
           transaction_status: 'completed',
           order_payment_status: 'paid',
+          inventory_confirmed: true,
         }),
       ],
       error: null,
@@ -156,6 +157,65 @@ describe('/api/payments/verify tracking-token authorization', () => {
       orderTotal: 5000,
       currency: 'NGN',
       finalizationOutcome: 'completed',
+    });
+    expect(mockVerifyPaystack).not.toHaveBeenCalled();
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
+  });
+
+  it('keeps a paid order pending until inventory is confirmed', async () => {
+    mockRpc.mockResolvedValue({
+      data: [
+        snapshotRow({
+          transaction_status: 'completed',
+          order_payment_status: 'paid',
+          inventory_confirmed: false,
+        }),
+      ],
+      error: null,
+    });
+
+    const response = await POST(
+      guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
+    );
+    const body = await response.json();
+
+    // Paid row before the inventory proof: the provider already
+    // confirmed, so no second provider round-trip — pending with the
+    // proof-bound identity until the finalizer's confirm step lands.
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: false,
+      status: 'pending',
+      orderId: 'order-9',
+      orderNumber: 'ORD-9',
+    });
+    expect(mockVerifyPaystack).not.toHaveBeenCalled();
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the inventory proof column is absent', async () => {
+    mockRpc.mockResolvedValue({
+      data: [
+        snapshotRow({
+          transaction_status: 'completed',
+          order_payment_status: 'paid',
+        }),
+      ],
+      error: null,
+    });
+
+    const response = await POST(
+      guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
+    );
+    const body = await response.json();
+
+    // Pre-migration row shape carries no proof: stay pending rather
+    // than treating the paid row as success.
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: false,
+      status: 'pending',
+      orderId: 'order-9',
     });
     expect(mockVerifyPaystack).not.toHaveBeenCalled();
     expect(mockCreateServiceClient).not.toHaveBeenCalled();

@@ -60,6 +60,18 @@ describe('buildPayerHandoff', () => {
     ).toBe(false);
   });
 
+  it('treats both cancellation spellings as terminal for shipping', () => {
+    for (const shipping_status of ['cancelled', 'canceled']) {
+      expect(
+        buildPayerHandoff({
+          order: { ...baseOrder(), shipping_status },
+          payerNameParam: null,
+          type: 'payforme',
+        }).isPayForMeUnpaid
+      ).toBe(false);
+    }
+  });
+
   it('ignores a caller-supplied payforme type on other methods', () => {
     expect(
       buildPayerHandoff({

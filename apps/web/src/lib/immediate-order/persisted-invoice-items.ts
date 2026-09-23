@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger';
-import type { createAdminClient } from '@/lib/supabase/admin';
+import type { createClient } from '@/lib/supabase/server';
 import {
   getOptionalString,
   getStringRecord,
@@ -108,11 +108,24 @@ async function delayPersistedInvoiceItemRetry(attempt: number) {
 
 export async function loadPersistedInvoiceOrderItems({
   orderId,
+  trackingToken,
   supabase,
 }: {
   orderId: string;
-  supabase: ReturnType<typeof createAdminClient>;
+  trackingToken: string | null;
+  supabase: ReturnType<typeof createClient>;
 }) {
+  // Proof-bound read (no admin client, AGENTS.md): the tracking token
+  // minted at creation authorizes exactly this order's canonical item
+  // snapshots through get_invoice_artifact_order_items.
+  if (!trackingToken) {
+    logger.error({
+      message:
+        'Persisted order items unavailable for invoice email; missing tracking proof',
+      orderId,
+    });
+    return null;
+  }
   let lastError: unknown = null;
 
   for (
@@ -120,13 +133,10 @@ export async function loadPersistedInvoiceOrderItems({
     attempt <= PERSISTED_INVOICE_ITEMS_LOOKUP_ATTEMPTS;
     attempt += 1
   ) {
-    const { data, error } = await supabase
-      .from('order_items')
-      .select(
-        'id, product_id, variant_id, variant_attributes, variant_name, condition, name, quantity, price, has_assurance, assurance_fee, item_description, line_extension_amount, vat_category_code, vat_rate, vat_amount, sellers_item_id, unit_code'
-      )
-      .eq('order_id', orderId)
-      .order('line_id', { ascending: true });
+    const { data, error } = await supabase.rpc(
+      'get_invoice_artifact_order_items',
+      { p_order_id: orderId, p_tracking_token: trackingToken }
+    );
 
     if (!error) {
       const normalizedItems = normalizePersistedInvoiceOrderItems(data);

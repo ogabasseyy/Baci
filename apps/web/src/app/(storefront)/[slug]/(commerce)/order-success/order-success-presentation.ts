@@ -46,11 +46,18 @@ export function resolvePaidInvoiceDocument({
 }: {
   order: OrderData | null;
 }): { kind: 'invoice' | 'receipt'; label: string } {
+  // Same eligibility as getCurrentDocumentKind
+  // (storefront-account-document-data, the receipts archive authority):
+  // every paid imported historical order is receipt-eligible regardless
+  // of shipping status; other paid orders need shipped/delivered.
+  const isPaid = order?.payment_status?.trim().toLowerCase() === 'paid';
+  const isImportedHistoricalOrder = Boolean(
+    order?.external_source || order?.import_job_id
+  );
   const shippedOrDelivered = ['shipped', 'delivered'].includes(
     order?.shipping_status?.trim().toLowerCase() ?? ''
   );
-  const isPaid = order?.payment_status?.trim().toLowerCase() === 'paid';
-  if (isPaid && shippedOrDelivered) {
+  if (isPaid && (isImportedHistoricalOrder || shippedOrDelivered)) {
     return { kind: 'receipt', label: 'Download Receipt PDF' };
   }
   return { kind: 'invoice', label: 'Download Commercial Invoice PDF' };

@@ -13,7 +13,6 @@ import {
   resolveReceiptLogoDataUri,
 } from '@/lib/receipt-pdf-generator';
 import { redactOrderTrackingLinkForLog } from '@/lib/redact-order-tracking-link-for-log';
-import { createAdminClient } from '@/lib/supabase/admin';
 import {
   getCreditedAmountPaid,
   getImmediateEmailAmountDue,
@@ -35,6 +34,11 @@ export async function buildImmediateInvoiceArtifacts(
   ctx: ImmediateOrderNotificationContext
 ): Promise<ImmediateInvoiceArtifacts> {
   const { order, orderNum, merchant } = ctx;
+  // No admin client (AGENTS.md): reads go through the proof-bound
+  // get_invoice_artifact_order_items RPC, DVA persistence through the
+  // proof-bound reserve RPC, and the reminder through the proof-bound
+  // insert_invoice_reminder RPC — all on the request-scoped client.
+  const requestSupabase = ctx.supabase;
   let attachments:
     | Array<{ name: string; content: string; mime_type: string }>
     | undefined;
@@ -57,8 +61,6 @@ export async function buildImmediateInvoiceArtifacts(
     ctx.orderTotal,
     invoiceAmountPaid
   );
-  let backgroundSupabase: ReturnType<typeof createAdminClient> | null = null;
-
   try {
     const invoiceTimingOrder = {
       ...(order as Record<string, unknown>),
@@ -71,10 +73,10 @@ export async function buildImmediateInvoiceArtifacts(
     // storefront order RPC persists canonical product/variant snapshots.
     // Render invoice artifacts from those persisted rows after the
     // validated order exists.
-    backgroundSupabase ??= createAdminClient();
     const persistedInvoiceItems = await loadPersistedInvoiceOrderItems({
       orderId: order.id,
-      supabase: backgroundSupabase,
+      trackingToken: ctx.trackingToken,
+      supabase: requestSupabase,
     });
     if (!persistedInvoiceItems) {
       logger.error({
@@ -94,11 +96,9 @@ export async function buildImmediateInvoiceArtifacts(
     // the PDF and later receipt lookups carry no virtual account for an
     // impossible payment.
     if (emailAmountDue > 0) {
-      backgroundSupabase ??= createAdminClient();
-      const invoiceDvaSupabase = backgroundSupabase;
       const invoiceOutcome = await provisionInvoiceMethodDva({
         persistAssignment: (assignment) =>
-          persistPaystackDvaAssignment(invoiceDvaSupabase, assignment),
+          persistPaystackDvaAssignment(requestSupabase, assignment),
         customerEmail: ctx.customerEmail,
         customerName: ctx.customerName,
         customerPhone: ctx.customerPhone ?? null,
@@ -240,15 +240,20 @@ export async function buildImmediateInvoiceArtifacts(
       });
     }
 
-    // Log standard initial reminder row in order_reminders
-    backgroundSupabase ??= createAdminClient();
-    const { error: reminderInsertError } = await backgroundSupabase
-      .from('order_reminders')
-      .insert({
-        order_id: order.id,
-        channel: 'email',
-        payment_link: ctx.paymentLink,
+    // Log standard initial reminder row in order_reminders through
+    // the proof-bound insert (request client, no admin).
+    let reminderInsertError: unknown = null;
+    if (ctx.trackingToken) {
+      const { error } = await requestSupabase.rpc('insert_invoice_reminder', {
+        p_channel: 'email',
+        p_order_id: order.id,
+        p_payment_link: ctx.paymentLink,
+        p_tracking_token: ctx.trackingToken,
       });
+      reminderInsertError = error;
+    } else {
+      reminderInsertError = new Error('missing tracking proof');
+    }
 
     if (reminderInsertError) {
       logger.error({

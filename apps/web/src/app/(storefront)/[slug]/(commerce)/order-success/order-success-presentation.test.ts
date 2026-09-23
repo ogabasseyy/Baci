@@ -99,6 +99,25 @@ describe('resolvePaidInvoiceDocument', () => {
     ).toEqual({ kind: 'invoice', label: 'Download Commercial Invoice PDF' });
   });
 
+  it('offers the receipt for paid imported orders regardless of shipping', () => {
+    expect(
+      resolvePaidInvoiceDocument({
+        order: invoiceOrder({
+          payment_status: 'paid',
+          external_source: 'bumpa',
+        }),
+      })
+    ).toEqual({ kind: 'receipt', label: 'Download Receipt PDF' });
+    expect(
+      resolvePaidInvoiceDocument({
+        order: invoiceOrder({
+          payment_status: 'paid',
+          import_job_id: 'job-1',
+        }),
+      })
+    ).toEqual({ kind: 'receipt', label: 'Download Receipt PDF' });
+  });
+
   it('offers the receipt once a paid order ships', () => {
     expect(
       resolvePaidInvoiceDocument({

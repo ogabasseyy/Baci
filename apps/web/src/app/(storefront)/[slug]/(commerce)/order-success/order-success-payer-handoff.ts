@@ -65,8 +65,13 @@ export function buildPayerHandoff({
   // cancellation retires the order the same way even while the payment
   // row stays unpaid. Only an active (non-terminal, non-paid,
   // shippable) status keeps the handoff.
+  // Both cancellation spellings retire the order: legacy rows carry
+  // the alternate "canceled" while newer paths write "cancelled"
+  // (other eligibility paths accept both).
+  const normalizedShippingStatus = order?.shipping_status?.trim().toLowerCase();
   const isShippingCancelled =
-    order?.shipping_status?.trim().toLowerCase() === 'cancelled';
+    normalizedShippingStatus === 'cancelled' ||
+    normalizedShippingStatus === 'canceled';
   // The ?type=payforme parameter is caller-controlled: an ordinary
   // invoice or bank-transfer order opened with it must not offer Pay
   // for Me instructions. Genuine Pay for Me orders keep their distinct

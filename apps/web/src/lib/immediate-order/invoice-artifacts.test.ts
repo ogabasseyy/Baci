@@ -3,14 +3,6 @@ import { provisionInvoiceMethodDva } from '@/lib/provision-invoice-method-dva';
 import { buildImmediateInvoiceArtifacts } from './invoice-artifacts';
 import { loadPersistedInvoiceOrderItems } from './persisted-invoice-items';
 
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: vi.fn(() => ({
-    from: vi.fn(() => ({
-      insert: vi.fn(async () => ({ error: null })),
-    })),
-  })),
-}));
-
 vi.mock('./persisted-invoice-items', () => ({
   loadPersistedInvoiceOrderItems: vi.fn(),
 }));
@@ -26,9 +18,12 @@ vi.mock('@/lib/logger', () => ({
 const mockedLoadItems = vi.mocked(loadPersistedInvoiceOrderItems);
 const mockedProvisionDva = vi.mocked(provisionInvoiceMethodDva);
 
+const mockRpc = vi.fn(async () => ({ error: null, data: null }));
+
 function baseContext() {
+  mockRpc.mockClear();
   return {
-    supabase: {},
+    supabase: { rpc: mockRpc },
     order: {
       id: 'order-1',
       amount_paid: 0,
@@ -60,6 +55,7 @@ function baseContext() {
     },
     replyToEmail: 'support@test.store',
     paymentLink: 'https://pay.example.com/o/order-1',
+    trackingToken: 'tok-1',
     shippingAddress: {
       address: '12 Market St',
       city: 'Lagos',
@@ -84,5 +80,32 @@ describe('buildImmediateInvoiceArtifacts', () => {
       invoiceVirtualAccount: null,
     });
     expect(mockedProvisionDva).not.toHaveBeenCalled();
+  });
+
+  it('logs the reminder through the proof-bound insert', async () => {
+    mockedLoadItems.mockResolvedValue([
+      {
+        id: 'item-1',
+        product_id: 'p1',
+        name: 'Phone',
+        productName: undefined,
+        condition: undefined,
+        variantName: undefined,
+        variant_name: undefined,
+        quantity: 1,
+        price: 5000,
+      },
+    ]);
+    mockedProvisionDva.mockResolvedValue({ outcome: 'skipped' });
+
+    const result = await buildImmediateInvoiceArtifacts(baseContext());
+
+    expect(mockRpc).toHaveBeenCalledWith('insert_invoice_reminder', {
+      p_channel: 'email',
+      p_order_id: 'order-1',
+      p_payment_link: 'https://pay.example.com/o/order-1',
+      p_tracking_token: 'tok-1',
+    });
+    expect(result.attachments?.[0]?.mime_type).toBe('application/pdf');
   });
 });

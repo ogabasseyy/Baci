@@ -280,6 +280,8 @@ export async function GET(
         payment_status: order.payment_status,
         shipping_status: order.shipping_status,
         payment_method: order.payment_method,
+        external_source: order.external_source ?? null,
+        import_job_id: order.import_job_id ?? null,
         merchant_id: order.merchant_id,
         tracking_token: token || null,
         items,

@@ -9,6 +9,8 @@ export interface StorefrontOrderData {
   shipping_address?: Record<string, unknown>;
   payment_status?: string;
   payment_method?: string;
+  external_source?: string | null;
+  import_job_id?: string | null;
   shipping_status?: string;
   merchant_id?: string;
   currency?: string;

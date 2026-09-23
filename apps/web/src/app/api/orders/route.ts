@@ -3021,6 +3021,10 @@ export async function POST(request: NextRequest) {
           replyToEmail,
           senderName,
           paymentLink,
+          trackingToken:
+            typeof order.tracking_token === 'string'
+              ? order.tracking_token
+              : null,
           notes,
           shippingAddress: shippingAddressForOrder,
         };

@@ -80,6 +80,11 @@ export interface ImmediateOrderNotificationContext {
   replyToEmail: string;
   senderName?: string;
   paymentLink: string;
+  /**
+   * Tracking token minted at creation: the proof for the proof-bound
+   * invoice-artifact RPCs (never an admin client, AGENTS.md).
+   */
+  trackingToken: string | null;
   notes?: string;
   shippingAddress: OrderCreateInput['shipping_address'];
 }

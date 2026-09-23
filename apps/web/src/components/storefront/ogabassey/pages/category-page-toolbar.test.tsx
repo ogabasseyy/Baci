@@ -26,7 +26,7 @@ function renderToolbar(
       paginationProductCount={42}
       viewMode="grid"
       onViewModeChange={onViewModeChange}
-      canUseClientFilters={true}
+      canShowFilters={true}
       onOpenMobileFilter={onOpenMobileFilter}
       {...overrides}
     />
@@ -69,7 +69,7 @@ describe('CategoryPageToolbar', () => {
   });
 
   it('hides the mobile filter trigger when client filters are disabled', () => {
-    renderToolbar({ canUseClientFilters: false });
+    renderToolbar({ canShowFilters: false });
 
     expect(
       screen.queryByRole('button', { name: /filters/i })

@@ -96,6 +96,7 @@ export interface Product {
   simType?: string;
   displayType?: string;
   displaySize?: string;
+  graphics?: string;
   // New fields for Interactive Grid
   images?: string[];
   spec?: string;

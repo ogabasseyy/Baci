@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { JumiaAuthorizationDecryptionError } from '@/lib/jumia/authorization-crypto';
 import { releaseJumiaAuthorizationRefreshLease } from '@/lib/jumia/jumia-authorization-refresh-lease';
 import { validateJumiaSelfAuthorization } from '@/lib/jumia/self-authorization';
 import type { JumiaSelfAuthorizationCredentials } from '@/schemas/jumia/self-authorization';
@@ -24,8 +25,10 @@ export async function validateJumiaSelfAuthorizationForConnect(args: {
 }): Promise<ValidatedSelfAuthorization> {
   // A fresh discovery whose credentials already back an active grant must
   // serialize its exchange with worker refreshes just like a resumed one.
-  // The fresh-discovery claim is best-effort: an unreadable stored grant
-  // must not block explicit reauthorization with submitted credentials.
+  // Only an undecryptable stored grant (stale ciphertext no live refresh can
+  // use) may continue without a lease. Database, authorization, and lease
+  // failures fail closed: exchanging credentials without serialization can
+  // consume the submitted refresh token before persistence runs.
   let authorizationLease: Awaited<
     ReturnType<typeof claimJumiaResumedAuthorization>
   >;
@@ -45,9 +48,12 @@ export async function validateJumiaSelfAuthorizationForConnect(args: {
         supabase: args.supabase,
       });
     } catch (error) {
+      if (!(error instanceof JumiaAuthorizationDecryptionError)) {
+        throw error;
+      }
       console.error(
         '[Jumia Connect] Continuing fresh discovery without a refresh lease:',
-        error instanceof Error ? error.message : String(error)
+        error.message
       );
       authorizationLease = null;
     }

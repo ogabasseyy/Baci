@@ -19,6 +19,13 @@ type SerializedAuthorization = {
   data: string;
 };
 
+export class JumiaAuthorizationDecryptionError extends Error {
+  constructor() {
+    super('Jumia authorization could not be decrypted');
+    this.name = 'JumiaAuthorizationDecryptionError';
+  }
+}
+
 function buildAuthorizationContext(
   merchantId: string,
   clientKeyHash: string
@@ -55,7 +62,7 @@ function parseCiphertext(ciphertext: string): SerializedAuthorization {
     }
     return parsed as SerializedAuthorization;
   } catch {
-    throw new Error('Jumia authorization could not be decrypted');
+    throw new JumiaAuthorizationDecryptionError();
   }
 }
 
@@ -123,7 +130,7 @@ function decrypt(
     }
     return parsed as JumiaAuthorizationCredentials;
   } catch {
-    throw new Error('Jumia authorization could not be decrypted');
+    throw new JumiaAuthorizationDecryptionError();
   }
 }
 

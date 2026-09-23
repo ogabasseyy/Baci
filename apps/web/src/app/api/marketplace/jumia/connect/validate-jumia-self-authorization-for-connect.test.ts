@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { JumiaAuthorizationDecryptionError } from '@/lib/jumia/authorization-crypto';
 import { releaseJumiaAuthorizationRefreshLease } from '@/lib/jumia/jumia-authorization-refresh-lease';
 import { validateJumiaSelfAuthorization } from '@/lib/jumia/self-authorization';
 import { claimJumiaResumedAuthorization } from './claim-jumia-resumed-authorization';
@@ -181,7 +182,7 @@ describe('validateJumiaSelfAuthorizationForConnect', () => {
 
   it('bypasses an unreadable stored grant for explicit reauthorization', async () => {
     vi.mocked(claimJumiaResumedAuthorization).mockRejectedValue(
-      new Error('stored grant could not be decrypted')
+      new JumiaAuthorizationDecryptionError()
     );
     vi.mocked(validateJumiaSelfAuthorization).mockImplementationOnce(
       async (submitted) => {
@@ -201,6 +202,46 @@ describe('validateJumiaSelfAuthorizationForConnect', () => {
 
     expect(claimJumiaResumedAuthorization).toHaveBeenCalled();
     expect(persistRotatedJumiaCredentialsWithLease).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the refresh lease cannot be claimed', async () => {
+    const failure = new Error(
+      'Jumia authorization refresh is still in progress'
+    );
+    vi.mocked(claimJumiaResumedAuthorization).mockRejectedValue(failure);
+
+    await expect(
+      validateJumiaSelfAuthorizationForConnect({
+        clientKeyHash: 'hash-1',
+        encryptionKey: 'key',
+        merchantId: 'merchant-1',
+        onCredentialsRotated: vi.fn(),
+        submittedCredentials: credentials,
+        supabase: {} as never,
+      })
+    ).rejects.toBe(failure);
+
+    expect(validateJumiaSelfAuthorization).not.toHaveBeenCalled();
+    expect(persistRotatedJumiaCredentials).not.toHaveBeenCalled();
+    expect(persistRotatedJumiaCredentialsWithLease).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the stored grant cannot be loaded', async () => {
+    const failure = new Error('Failed to load existing Jumia authorization');
+    vi.mocked(claimJumiaResumedAuthorization).mockRejectedValue(failure);
+
+    await expect(
+      validateJumiaSelfAuthorizationForConnect({
+        clientKeyHash: 'hash-1',
+        encryptionKey: 'key',
+        merchantId: 'merchant-1',
+        onCredentialsRotated: vi.fn(),
+        submittedCredentials: credentials,
+        supabase: {} as never,
+      })
+    ).rejects.toBe(failure);
+
+    expect(validateJumiaSelfAuthorization).not.toHaveBeenCalled();
   });
 
   it('releases a resumed refresh lease when validation fails before rotation', async () => {

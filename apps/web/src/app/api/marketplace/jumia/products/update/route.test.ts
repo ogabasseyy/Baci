@@ -273,4 +273,30 @@ describe('POST /api/marketplace/jumia/products/update', () => {
     expect(mockPushStatusUpdates).not.toHaveBeenCalled();
     expect(mockPushPriceUpdates).not.toHaveBeenCalled();
   });
+
+  it('verifies OAuth scope before mutating mappings', async () => {
+    mockForIntegration.mockResolvedValue({
+      shopId: 'shop-1',
+      marketplaceKey: 'oauth',
+    });
+
+    const response = await POST(
+      makeRequest({
+        integrationId: INTEGRATION_ID,
+        overrides: { is_active: false },
+        productId: PRODUCT_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      success: false,
+      feedIds: [],
+      errors: ['Unable to verify the Jumia shop marketplace scope. Try again.'],
+    });
+    expect(mockMappingUpdate).not.toHaveBeenCalled();
+    expect(mockPushStatusUpdates).not.toHaveBeenCalled();
+    expect(mockPushPriceUpdates).not.toHaveBeenCalled();
+  });
 });

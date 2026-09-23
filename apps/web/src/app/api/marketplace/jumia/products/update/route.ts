@@ -17,6 +17,7 @@ import {
   pushPriceUpdates,
   pushStatusUpdates,
 } from './jumia-product-update-feeds';
+import { verifyJumiaUpdateOAuthScope } from './verify-jumia-update-oauth-scope';
 
 export async function POST(request: NextRequest) {
   try {
@@ -166,6 +167,29 @@ export async function POST(request: NextRequest) {
         );
       }
       marketplaceCurrency = currencyResult.currency;
+    }
+    // The push helpers refuse unscoped OAuth feeds, so verify scope before
+    // mutating local mappings; otherwise the response reports failure while
+    // local prices/statuses reflect changes Jumia never accepted.
+    if (
+      Object.hasOwn(overrides, 'is_active') ||
+      (needsPriceUpdate && marketplaceCurrency)
+    ) {
+      const updateScope = await verifyJumiaUpdateOAuthScope(client);
+      if (!updateScope.ok) {
+        return NextResponse.json(
+          {
+            success: false,
+            feedIds: [],
+            errors: [
+              updateScope.reason === 'provider_unavailable'
+                ? 'Unable to verify the Jumia shop marketplace scope. Try again.'
+                : 'Jumia product update cannot target a selected marketplace when the OAuth shop exposes multiple business clients.',
+            ],
+          },
+          { status: 409 }
+        );
+      }
     }
     const mappingUpdate: Record<string, unknown> = {
       updated_at: new Date().toISOString(),

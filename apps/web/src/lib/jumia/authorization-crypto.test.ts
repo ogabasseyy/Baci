@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { jumiaAuthorizationCrypto } from '@/lib/jumia/authorization-crypto';
+import {
+  JumiaAuthorizationDecryptionError,
+  jumiaAuthorizationCrypto,
+} from '@/lib/jumia/authorization-crypto';
 
 const KEY = Buffer.alloc(32, 7).toString('base64');
 const OTHER_KEY = Buffer.alloc(32, 8).toString('base64');
@@ -120,6 +123,18 @@ describe('Jumia authorization encryption', () => {
     expect(() =>
       jumiaAuthorizationCrypto.encrypt(CREDENTIALS, '', CONTEXT)
     ).toThrow('Jumia authorization encryption key must be 32 bytes');
+  });
+
+  it('throws a typed error so callers can distinguish stale ciphertext', () => {
+    const ciphertext = jumiaAuthorizationCrypto.encrypt(
+      CREDENTIALS,
+      KEY,
+      CONTEXT
+    );
+
+    expect(() =>
+      jumiaAuthorizationCrypto.decrypt(ciphertext, OTHER_KEY, CONTEXT)
+    ).toThrow(JumiaAuthorizationDecryptionError);
   });
 
   it('surfaces invalid encryption key errors separately from decryption failures', () => {

@@ -79,29 +79,23 @@ describe('verifyOrderPaymentForCompletion', () => {
     ).resolves.toEqual({ paid: true, total: 5000 });
   });
 
-  it('preserves the reference currency when no tracking token exists', async () => {
-    mockFetch((url: string) =>
-      String(url).includes('/api/payments/verify')
-        ? new Response(
-            JSON.stringify({
-              ...completedVerification,
-              orderTotal: 5750,
-              currency: 'KES',
-            }),
-            { status: 200 }
-          )
-        : new Response('{}', { status: 500 })
-    );
+  it('reports inconclusive when a guest has no tracking token', async () => {
+    const fetchMock = mockFetch(() => new Response('{}', { status: 500 }));
 
-    // No token: the tracked-order lookup never runs, so the verified
-    // currency must travel on the reference result itself — otherwise
-    // completion defaults a KES payment to NGN.
+    // No token: there is no proof to send (the GET entry requires it),
+    // so report inconclusive without calling — the reconciliation hook
+    // retries instead of coercing to unpaid.
     await expect(
       verifyOrderPaymentForCompletion({
         orderId: 'order-1',
         reference: 'ref-1',
       })
-    ).resolves.toEqual({ paid: true, total: 5750, currency: 'KES' });
+    ).resolves.toEqual({ paid: false, inconclusive: true });
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes('/api/payments/verify')
+      )
+    ).toBe(false);
   });
 
   it('prefers the normalized reference currency over lookup attribution', async () => {
@@ -200,7 +194,7 @@ describe('verifyOrderPaymentForCompletion', () => {
     });
   });
 
-  it('forwards the tracking token so guests authorize reference verification', async () => {
+  it('proves guest reference verification through the GET entry', async () => {
     const fetchMock = mockFetch((url: string) =>
       String(url).includes('/api/payments/verify')
         ? new Response(JSON.stringify(completedVerification), { status: 200 })
@@ -213,18 +207,19 @@ describe('verifyOrderPaymentForCompletion', () => {
       reference: 'ref-1',
     });
 
-    // Sessionless guests have no Bearer [REDACTED] the verify route uses the token
-    // as proof-bound authorization; without it the route returns 403
-    // and the client would collapse terminal outcomes to transient.
+    // Sessionless guests verify through the read-only GET entry (POST
+    // never serves a CSRF failure): the token travels as a query proof.
     const verifyCall = fetchMock.mock.calls.find(([url]) =>
       String(url).includes('/api/payments/verify')
     );
     expect(verifyCall).toBeDefined();
-    const verifyInit = verifyCall?.[1] as { body?: unknown } | undefined;
-    expect(JSON.parse(verifyInit?.body as string)).toEqual({
-      reference: 'ref-1',
-      trackingToken: 'track-1',
-    });
+    const [verifyUrl, verifyInit] = verifyCall as unknown as [
+      string,
+      { method?: string },
+    ];
+    expect(verifyInit?.method).toBe('GET');
+    expect(verifyUrl).toContain('reference=ref-1');
+    expect(verifyUrl).toContain('trackingToken=track-1');
   });
 
   it('rejects a matching-reference redirect whose verification is pending', async () => {
@@ -269,6 +264,7 @@ describe('verifyOrderPaymentForCompletion', () => {
     await expect(
       verifyOrderPaymentForCompletion({
         orderId: 'order-1',
+        trackingToken: 'track-1',
         reference: 'ref-1',
       })
     ).resolves.toEqual({ paid: false, reconciliation: outcome });
@@ -370,13 +366,17 @@ describe('verifyOrderPaymentForCompletion', () => {
           )
     );
 
+    // Neither source proved anything about order-1 (the lookup row belongs
+    // to another order, the reference envelope too), so the result stays
+    // inconclusive: the reconciliation hook retries instead of coercing
+    // the order to definitively unpaid.
     await expect(
       verifyOrderPaymentForCompletion({
         orderId: 'order-1',
         trackingToken: 'track-1',
         reference: 'ref-1',
       })
-    ).resolves.toEqual({ paid: false });
+    ).resolves.toEqual({ paid: false, inconclusive: true });
   });
 
   it('rejects a completed envelope that carries no order identity', async () => {
@@ -478,7 +478,7 @@ describe('verifyOrderPaymentForCompletion', () => {
     ).resolves.toEqual({ paid: false });
   });
 
-  it('sends the native Bearer [REDACTED] when a session exists', async () => {
+  it('sends the session credential when a session exists', async () => {
     mockGetSession.mockResolvedValueOnce({
       access_token: 'native-token-1',
     } as never);

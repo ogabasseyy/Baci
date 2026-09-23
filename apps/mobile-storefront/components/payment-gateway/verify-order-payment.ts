@@ -100,31 +100,40 @@ async function checkReferenceSettled(
   trackingToken?: string | null
 ): Promise<OrderPaymentVerification> {
   try {
-    // The verify route enforces CSRF protection, which accepts Bearer
-    // authentication for native callers. Guests have no session and rely
-    // on the tracking-token lookup above (a proof-bound GET with no CSRF
-    // requirement) instead. Forward that same token so the route can
-    // authorize this reference verification proof-bound.
+    // The verify route enforces CSRF protection on POST, which accepts
+    // session header auth for native callers. Guests have no session:
+    // they prove their order through the read-only GET entry with the
+    // creation tracking token (CSRF covers non-GET requests only).
+    // Without a token there is no proof to send — report inconclusive
+    // so the reconciliation hook retries instead of coercing to unpaid.
     let accessToken: string | null = null;
     try {
       accessToken = (await getSession())?.access_token ?? null;
     } catch {
       accessToken = null;
     }
+    if (!accessToken && !trackingToken) {
+      return { paid: false, inconclusive: true };
+    }
+    const verifyUrl = accessToken
+      ? `${CHECKOUT_API_BASE_URL}/api/payments/verify`
+      : `${CHECKOUT_API_BASE_URL}/api/payments/verify?reference=${encodeURIComponent(reference)}&trackingToken=${encodeURIComponent(trackingToken ?? '')}`;
     const response = await fetchWithTimeout(
-      `${CHECKOUT_API_BASE_URL}/api/payments/verify`,
-      {
-        timeout: VERIFY_TIMEOUT_MS,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-        body: JSON.stringify({
-          reference,
-          ...(trackingToken ? { trackingToken } : {}),
-        }),
-      }
+      verifyUrl,
+      accessToken
+        ? {
+            timeout: VERIFY_TIMEOUT_MS,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+              reference,
+              ...(trackingToken ? { trackingToken } : {}),
+            }),
+          }
+        : { timeout: VERIFY_TIMEOUT_MS, method: 'GET' }
     );
     const rawBody = await response.json().catch(() => null);
     if (response.ok && rawBody == null) {
@@ -281,7 +290,13 @@ export async function verifyOrderPaymentForCompletion({
         currency: settled.currency ?? pendingAttribution.currency,
       };
     }
-    return settled;
+    if (settled.paid || settled.reconciliation || settled.terminalFailure) {
+      return settled;
+    }
+    // A nonterminal reference envelope proves nothing new: keep the
+    // lookup's inconclusive flag so the reconciliation-parameter hook
+    // retries instead of treating the order as definitively unpaid.
+    return inconclusive ? { paid: false, inconclusive: true } : settled;
   }
   return inconclusive ? { paid: false, inconclusive: true } : { paid: false };
 }

@@ -85,6 +85,16 @@ export interface VerifyCheckoutPaymentLookupParams {
   signal?: AbortSignal;
 }
 
+// Legacy rows carry both cancelled and canceled spellings for payment
+// and shipping status (other eligibility paths accept both): normalize
+// before either branch so a legacy cancellation can never present a
+// false success or pend forever.
+function normalizeTerminalStatus(value: unknown): string {
+  const normalized =
+    typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return normalized === 'canceled' ? 'cancelled' : normalized;
+}
+
 export interface VerifyCheckoutPaymentLookupHandlers {
   clearCart: () => void;
   scheduleFailedRedirect: () => void;
@@ -166,16 +176,8 @@ export async function verifyCheckoutPaymentByLookup(
     // Terminal states first: a fully refunded REDVAULT order keeps a
     // non-paid payment status, and a cancelled one can stay unpaid
     // with a cancelled shipping status. Neither is still processing.
-    // Legacy rows carry both cancelled and canceled spellings (other
-    // eligibility paths accept both): normalize before deciding whether
-    // settlement can continue.
-    const lookupShippingStatus =
-      typeof data?.shipping_status === 'string'
-        ? data.shipping_status.trim().toLowerCase()
-        : '';
     const isCancelledShippingStatus =
-      lookupShippingStatus === 'cancelled' ||
-      lookupShippingStatus === 'canceled';
+      normalizeTerminalStatus(data?.shipping_status) === 'cancelled';
     const redvaultTerminalCancelled =
       lookupPaymentMethod === 'uba_redvault' &&
       data?.payment_status !== 'paid' &&
@@ -213,10 +215,7 @@ export async function verifyCheckoutPaymentByLookup(
         data.order_number || data.short_id || orderId.slice(0, 8).toUpperCase()
       );
     } else if (data && (data.order_number || data.short_id)) {
-      const lookupPaymentStatus =
-        typeof data.payment_status === 'string'
-          ? data.payment_status.trim().toLowerCase()
-          : '';
+      const lookupPaymentStatus = normalizeTerminalStatus(data.payment_status);
       if (RECONCILING_LOOKUP_PAYMENT_STATUSES.has(lookupPaymentStatus)) {
         // A refunded order is terminal reconciliation, not a confirmed
         // purchase: the cart stays intact for a fresh attempt.

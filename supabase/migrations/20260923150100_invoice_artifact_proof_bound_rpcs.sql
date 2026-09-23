@@ -112,7 +112,18 @@ BEGIN
   -- Idempotent initial log: the tracking token is a reusable bearer, so
   -- repeat invocations (double submission, replay) must not grow
   -- unbounded reminder history or let the caller vary server-owned
-  -- values after the first write.
+  -- values after the first write. The EXISTS check alone is racy under
+  -- parallel replay, and a uniqueness constraint would also block later
+  -- merchant-authored reminders on the same key — so serialize concurrent
+  -- initial inserts on a transaction-scoped advisory lock over the
+  -- order/channel key instead. The lock is narrowly scoped (initial
+  -- system reminders only) and released at commit.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(
+      'invoice_reminder:' || p_order_id::text || ':' || p_channel,
+      0
+    )
+  );
   IF EXISTS (
     SELECT 1
     FROM order_reminders r
@@ -128,7 +139,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.insert_invoice_reminder(UUID, TEXT, TEXT, TEXT) IS
-  'Proof-bound initial invoice reminder log: the caller proves the order with its tracking token; inserts only the reminder row, once per order and channel.';
+  'Proof-bound initial invoice reminder log: the caller proves the order with its tracking token; inserts only the reminder row, once per order and channel (concurrent inserts serialized on an advisory lock).';
 
 GRANT ALL ON FUNCTION public.get_invoice_artifact_order_items(UUID, TEXT) TO anon;
 GRANT ALL ON FUNCTION public.get_invoice_artifact_order_items(UUID, TEXT) TO authenticated;

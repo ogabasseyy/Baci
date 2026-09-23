@@ -112,7 +112,12 @@ export async function checkTrackedOrderPaid(
     // order, so surface reconciliation instead of the transient shape.
     return { paid: false, reconciliation: 'order_skipped' };
   }
-  if (trackedPaymentStatus === 'cancelled') {
+  // Tolerate the US spelling: older rows (and some writers) store
+  // 'canceled' while the rest of the flow compares 'cancelled'.
+  if (
+    trackedPaymentStatus === 'cancelled' ||
+    trackedPaymentStatus === 'canceled'
+  ) {
     // An ordinary cancelled row proves no capture (maintenance flips
     // stale unpaid orders to cancelled): unpaid terminal failure with
     // the error/retry path — never the "Payment Received"

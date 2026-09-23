@@ -30,7 +30,7 @@ vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: () => mockCreateAnonClient(),
 }));
 
-import { POST } from './route';
+import { GET, POST } from './route';
 
 const REFERENCE = 'BAC-VERIFY-9';
 const TRACKING_TOKEN = 'track-token-9';
@@ -55,16 +55,45 @@ function snapshotRow(overrides = {}) {
   };
 }
 
-function guestRequest(body: unknown) {
-  // No session, no CSRF pair: the guest native caller.
-  return new NextRequest('http://localhost:3000/api/payments/verify', {
-    body: JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json' },
-    method: 'POST',
-  });
+function guestRequest(params: { reference?: string; trackingToken?: string }) {
+  // No session, no CSRF pair: the guest native caller proves its order
+  // through the read-only GET entry (CSRF covers non-GET only).
+  const query = new URLSearchParams();
+  if (params.reference !== undefined) {
+    query.set('reference', params.reference);
+  }
+  if (params.trackingToken !== undefined) {
+    query.set('trackingToken', params.trackingToken);
+  }
+  return new NextRequest(
+    `http://localhost:3000/api/payments/verify?${query.toString()}`,
+    { method: 'GET' }
+  );
 }
 
 describe('/api/payments/verify tracking-token authorization', () => {
+  it('rejects POST verifications that fail CSRF validation', async () => {
+    // Sessionless callers verify through the read-only GET entry;
+    // POST never serves a CSRF failure, even with a valid token.
+    mockRpc.mockResolvedValue({ data: [snapshotRow()], error: null });
+
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/payments/verify', {
+        body: JSON.stringify({
+          reference: REFERENCE,
+          trackingToken: TRACKING_TOKEN,
+        }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.error).toBe('Invalid CSRF token');
+    expect(mockVerifyPaystack).not.toHaveBeenCalled();
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockCheckCsrf.mockResolvedValue({ valid: false });
@@ -77,7 +106,7 @@ describe('/api/payments/verify tracking-token authorization', () => {
   it('serves a guest verification without touching the service-role client', async () => {
     mockRpc.mockResolvedValue({ data: [snapshotRow()], error: null });
 
-    const response = await POST(
+    const response = await GET(
       guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
     );
     const body = await response.json();
@@ -113,7 +142,7 @@ describe('/api/payments/verify tracking-token authorization', () => {
       data: { status: 'success', amount: 500000, currency: 'NGN' },
     });
 
-    const response = await POST(
+    const response = await GET(
       guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
     );
     const body = await response.json();
@@ -140,7 +169,7 @@ describe('/api/payments/verify tracking-token authorization', () => {
       error: null,
     });
 
-    const response = await POST(
+    const response = await GET(
       guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
     );
     const body = await response.json();
@@ -174,7 +203,7 @@ describe('/api/payments/verify tracking-token authorization', () => {
       error: null,
     });
 
-    const response = await POST(
+    const response = await GET(
       guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
     );
     const body = await response.json();
@@ -204,7 +233,7 @@ describe('/api/payments/verify tracking-token authorization', () => {
       error: null,
     });
 
-    const response = await POST(
+    const response = await GET(
       guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
     );
     const body = await response.json();
@@ -224,21 +253,23 @@ describe('/api/payments/verify tracking-token authorization', () => {
   it('rejects a mismatched tracking token without verifying', async () => {
     mockRpc.mockResolvedValue({ data: [], error: null });
 
-    const response = await POST(
+    const response = await GET(
       guestRequest({ reference: REFERENCE, trackingToken: 'wrong-token' })
     );
     const body = await response.json();
 
     expect(response.status).toBe(403);
-    expect(body.error).toBe('Invalid CSRF token');
+    expect(body.error).toBe('Verification unavailable');
     expect(mockVerifyPaystack).not.toHaveBeenCalled();
     expect(mockCreateServiceClient).not.toHaveBeenCalled();
   });
 
   it('rejects a guest verification with no token at all', async () => {
-    const response = await POST(guestRequest({ reference: REFERENCE }));
+    const response = await GET(guestRequest({ reference: REFERENCE }));
+    const body = await response.json();
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('Invalid reference or tracking token');
     expect(mockCreateAnonClient).not.toHaveBeenCalled();
     expect(mockVerifyPaystack).not.toHaveBeenCalled();
     expect(mockCreateServiceClient).not.toHaveBeenCalled();
@@ -247,7 +278,7 @@ describe('/api/payments/verify tracking-token authorization', () => {
   it('fails closed when the snapshot RPC errors', async () => {
     mockRpc.mockResolvedValue({ data: null, error: new Error('db down') });
 
-    const response = await POST(
+    const response = await GET(
       guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
     );
 
@@ -277,7 +308,7 @@ describe('/api/payments/verify tracking-token authorization', () => {
       data: { status: 'failed' },
     });
 
-    const response = await POST(
+    const response = await GET(
       guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
     );
     const body = await response.json();
@@ -295,7 +326,7 @@ describe('/api/payments/verify tracking-token authorization', () => {
       error: null,
     });
 
-    const response = await POST(
+    const response = await GET(
       guestRequest({ reference: REFERENCE, trackingToken: TRACKING_TOKEN })
     );
 

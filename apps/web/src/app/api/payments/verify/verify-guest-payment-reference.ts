@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import type { GatewayVerificationResult } from '@/lib/payments/types';
 import { createAnonClient } from '@/lib/supabase/anon';
+import { referenceSchema } from '@/schemas/payments';
 import {
   getVerifiedAmount,
   verifyGatewayPayment,
@@ -89,6 +91,44 @@ function toSnapshot(
  * lookup errors (fail closed with no existence oracle). Never touches a
  * service-role table client.
  */
+const guestVerificationQuerySchema = z.object({
+  reference: referenceSchema,
+  trackingToken: z.string().trim().min(1).max(256),
+});
+
+/**
+ * Read-only GET entry for the guest tracking-token proof: CSRF validation
+ * covers non-GET requests only, so sessionless callers verify here
+ * instead of POSTing through a CSRF failure. Fails closed with a
+ * uniform 403 (no existence oracle) when the proof is missing or the
+ * snapshot RPC returns no row.
+ */
+export async function verifyGuestPaymentReferenceByQuery(
+  searchParams: URLSearchParams
+) {
+  const parsed = guestVerificationQuerySchema.safeParse({
+    reference: searchParams.get('reference'),
+    trackingToken: searchParams.get('trackingToken'),
+  });
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Invalid reference or tracking token' },
+      { status: 400 }
+    );
+  }
+  const snapshot = await getGuestPaymentReferenceSnapshot(
+    parsed.data.reference,
+    parsed.data.trackingToken
+  );
+  if (!snapshot) {
+    return NextResponse.json(
+      { error: 'Verification unavailable' },
+      { status: 403 }
+    );
+  }
+  return verifyGuestPaymentReference(snapshot);
+}
+
 export async function getGuestPaymentReferenceSnapshot(
   reference: string,
   trackingToken: string

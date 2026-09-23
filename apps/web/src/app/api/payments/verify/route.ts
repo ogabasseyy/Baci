@@ -12,10 +12,15 @@ import {
   getVerifiedAmount,
   verifyGatewayPayment,
 } from './verify-gateway-payment';
-import {
-  getGuestPaymentReferenceSnapshot,
-  verifyGuestPaymentReference,
-} from './verify-guest-payment-reference';
+import { verifyGuestPaymentReferenceByQuery } from './verify-guest-payment-reference';
+
+// Read-only guest verification: CSRF validation covers non-GET requests
+// only, so sessionless callers prove their order here with the
+// creation tracking token (narrow snapshot RPC, no service client)
+// instead of POSTing through a CSRF failure.
+export function GET(request: NextRequest) {
+  return verifyGuestPaymentReferenceByQuery(request.nextUrl.searchParams);
+}
 
 async function verifyPaymentReference(reference: string) {
   const parsedReference = referenceSchema.safeParse(reference);
@@ -392,13 +397,6 @@ async function verifyPaymentReference(reference: string) {
   });
 }
 
-export function GET() {
-  return NextResponse.json(
-    { error: 'Method not allowed. Use POST to verify a payment.' },
-    { headers: { Allow: 'POST' }, status: 405 }
-  );
-}
-
 export async function POST(request: NextRequest) {
   const csrf = await checkCsrfProtection(request);
 
@@ -423,27 +421,8 @@ export async function POST(request: NextRequest) {
   }
 
   if (!csrf.valid) {
-    // Guest native checkouts carry no session: serve them through the
-    // proof-bound guest path instead of rejecting with 403 (which the
-    // client would collapse into transient and confirm unpaid orders).
-    // The per-order tracking token is a secret known only to the shopper
-    // (URL) and the merchant; the snapshot RPC returns a row only for
-    // the reference's own order, and the guest verifier is read-only —
-    // transaction/order reads come from that snapshot and
-    // payment-finalization writes stay on the gateway webhook boundary.
-    // A sessionless request therefore never reaches the generic
-    // service-role client below. Fails closed (including on lookup
-    // errors) with no existence oracle beyond the uniform 403.
-    const trackingToken = parsedBody.data.trackingToken;
-    if (typeof trackingToken === 'string') {
-      const snapshot = await getGuestPaymentReferenceSnapshot(
-        parsedBody.data.reference,
-        trackingToken
-      );
-      if (snapshot) {
-        return verifyGuestPaymentReference(snapshot);
-      }
-    }
+    // Sessionless callers verify through the read-only GET entry with
+    // their creation tracking token; POST never serves a CSRF failure.
     return (
       csrf.response ??
       NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 })

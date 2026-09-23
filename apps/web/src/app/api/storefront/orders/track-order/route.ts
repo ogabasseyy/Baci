@@ -90,6 +90,7 @@ function getCustomerOrderStatusKey(status: string): string {
     case 'delivered':
       return 'delivered';
     case 'cancelled':
+    case 'canceled':
     case 'refunded':
       return 'cancelled';
     case 'returned':

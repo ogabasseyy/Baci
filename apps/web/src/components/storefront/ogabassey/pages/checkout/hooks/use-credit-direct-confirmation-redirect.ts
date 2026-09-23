@@ -14,33 +14,39 @@ import {
 import type { CreditDirectVerificationPhase } from './use-credit-direct-verification';
 
 /**
- * Originating-checkout fingerprint from the pending-order handoff: the
- * snapshot is written at submit time, so when it still names the
- * confirming order its fingerprint identifies the stored idempotency
- * key as ours. Returns undefined when the handoff is gone or already
- * names another checkout — the caller must then skip the clear rather
- * than drop a newer checkout's recovery key.
+ * How the idempotency cleanup may treat the shared slot, derived from
+ * the pending-order handoff written at submit time:
+ * - `scoped`: the handoff still names the confirming order and carries
+ *   its fingerprint — clear only that checkout's key.
+ * - `unscoped`: the handoff is gone, unreadable, or names this order
+ *   without a fingerprint. No newer checkout could own the slot without
+ *   leaving its own snapshot, so the legacy unconditional clear stands.
+ * - `skip`: the handoff already names a different order — its recovery
+ *   key must survive this order's cleanup.
  */
-function readConfirmingCheckoutFingerprint(
-  orderId: string
-): string | undefined {
+type ConfirmingCheckoutScope =
+  | { kind: 'scoped'; fingerprint: string }
+  | { kind: 'unscoped' }
+  | { kind: 'skip' };
+
+function readConfirmingCheckoutScope(orderId: string): ConfirmingCheckoutScope {
   try {
     const raw = window.sessionStorage.getItem(
       CHECKOUT_PENDING_ORDER_STORAGE_KEY
     );
     if (!raw) {
-      return undefined;
+      return { kind: 'unscoped' };
     }
     const snapshot = JSON.parse(raw) as Partial<PendingCheckoutOrderSnapshot>;
     if (snapshot.orderId !== orderId) {
-      return undefined;
+      return { kind: 'skip' };
     }
     return typeof snapshot.checkoutFingerprint === 'string' &&
       snapshot.checkoutFingerprint.trim().length > 0
-      ? snapshot.checkoutFingerprint
-      : undefined;
+      ? { kind: 'scoped', fingerprint: snapshot.checkoutFingerprint }
+      : { kind: 'unscoped' };
   } catch {
-    return undefined;
+    return { kind: 'unscoped' };
   }
 }
 
@@ -110,11 +116,10 @@ export function useCreditDirectConfirmationRedirect({
       successQuery.set('email', lookupEmail);
     }
     clearCart?.();
-    // Read the originating fingerprint before the handoff below is
-    // removed: confirmation can land after a long polling interval, by
-    // which time another checkout may own the shared idempotency slot.
-    const confirmingCheckoutFingerprint =
-      readConfirmingCheckoutFingerprint(orderId);
+    // Read the handoff scope before it is removed below: confirmation
+    // can land after a long polling interval, by which time another
+    // checkout may own the shared idempotency slot.
+    const confirmingCheckoutScope = readConfirmingCheckoutScope(orderId);
     try {
       window.sessionStorage.removeItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY);
       window.sessionStorage.removeItem('checkout-form');
@@ -122,11 +127,13 @@ export function useCreditDirectConfirmationRedirect({
       // Storage cleanup is best-effort; confirmation must still navigate.
     }
     // Scoped to the originating checkout (matching the other completion
-    // paths): when the handoff is gone or already names a newer
-    // checkout, skip the clear — an unscoped remove would delete the new
-    // checkout's recovery key and let its retry fork a duplicate order.
-    if (confirmingCheckoutFingerprint) {
-      void clearCheckoutIdempotencyKey(confirmingCheckoutFingerprint);
+    // paths): only a handoff naming a newer checkout skips the clear —
+    // an unscoped remove there would delete the new checkout's recovery
+    // key and let its retry fork a duplicate order.
+    if (confirmingCheckoutScope.kind === 'scoped') {
+      void clearCheckoutIdempotencyKey(confirmingCheckoutScope.fingerprint);
+    } else if (confirmingCheckoutScope.kind === 'unscoped') {
+      void clearCheckoutIdempotencyKey();
     }
     clearCreditDirectPopupMarker(orderId);
     router.push(

@@ -142,7 +142,7 @@ describe('useCreditDirectConfirmationRedirect', () => {
     expect(clearCheckoutIdempotencyKey).not.toHaveBeenCalled();
   });
 
-  it('skips the idempotency clear when the handoff is gone', () => {
+  it('falls back to the legacy clear when the handoff is gone', () => {
     const push = vi.fn();
 
     renderHook(() =>
@@ -153,8 +153,31 @@ describe('useCreditDirectConfirmationRedirect', () => {
       )
     );
 
+    // No newer checkout could own the slot without leaving its own
+    // snapshot, so the unconditional clear stands.
     expect(push).toHaveBeenCalledTimes(1);
-    expect(clearCheckoutIdempotencyKey).not.toHaveBeenCalled();
+    expect(clearCheckoutIdempotencyKey).toHaveBeenCalledTimes(1);
+    expect(clearCheckoutIdempotencyKey).toHaveBeenCalledWith();
+  });
+
+  it('falls back to the legacy clear when the handoff names this order without a fingerprint', () => {
+    const push = vi.fn();
+    window.sessionStorage.setItem(
+      CHECKOUT_PENDING_ORDER_STORAGE_KEY,
+      JSON.stringify({ orderId: 'order-1' })
+    );
+
+    renderHook(() =>
+      useCreditDirectConfirmationRedirect(
+        options({
+          router: { push } as unknown as ReturnType<typeof useRouter>,
+        })
+      )
+    );
+
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(clearCheckoutIdempotencyKey).toHaveBeenCalledTimes(1);
+    expect(clearCheckoutIdempotencyKey).toHaveBeenCalledWith();
   });
 
   it('runs the cleanup exactly once per order and transaction', () => {

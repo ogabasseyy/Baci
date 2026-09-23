@@ -6,10 +6,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Linking } from 'react-native';
-import { OrderReconciliationErrorView } from '@/components/orders/OrderReconciliationErrorView';
 import { OrderReconciliationView } from '@/components/orders/OrderReconciliationView';
 import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
 import { isDeferredSettlementMethod } from '@/components/orders/order-success-content';
+import { renderParamVerificationGate } from '@/components/orders/param-verification-gate';
 import { useGuestInvoicePaidState } from '@/components/orders/use-invoice-paid-state';
 import { useOrderSuccessSideEffects } from '@/components/orders/use-order-success-side-effects';
 import { useParamReconciliationVerification } from '@/components/orders/use-param-reconciliation-verification';
@@ -127,8 +127,6 @@ export default function OrderSuccessScreen() {
   });
   const isParamVerificationUnresolved =
     isParamReconciliation && paramReconciliationVerified === undefined;
-  const isParamVerificationPending =
-    isParamVerificationUnresolved && !isParamVerificationExhausted;
   const isReconciliation =
     (isParamReconciliation && paramReconciliationVerified === true) ||
     wasPaidOrder;
@@ -232,27 +230,18 @@ export default function OrderSuccessScreen() {
         }
       : undefined;
 
-  if (isParamVerificationPending) {
-    // The reconciliation parameter is still unverified: render nothing
-    // until the proof-bound check resolves — neither the success banner
-    // (a spoofed param must not borrow its credibility) nor the
-    // reconciliation state.
-    return null;
-  }
-
-  if (isParamVerificationUnresolved && isParamVerificationExhausted) {
-    // Bounded retries spent while the lookup stayed inconclusive: fail
-    // closed on an explicit error state with a manual retry — never the
-    // success banner, never the reconciliation state.
-    return (
-      <OrderReconciliationErrorView
-        colors={colors}
-        isDark={colorScheme === 'dark'}
-        orderNumber={orderNumber}
-        onRetry={retryParamVerification}
-        onContinueShopping={handleContinueShopping}
-      />
-    );
+  const paramVerificationGate = renderParamVerificationGate({
+    isParamReconciliation,
+    paramReconciliationVerified,
+    isParamVerificationExhausted,
+    retryParamVerification,
+    colors,
+    isDark: colorScheme === 'dark',
+    orderNumber,
+    onContinueShopping: handleContinueShopping,
+  });
+  if (paramVerificationGate !== undefined) {
+    return paramVerificationGate;
   }
 
   if (isReconciliation) {

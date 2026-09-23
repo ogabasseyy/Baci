@@ -735,6 +735,9 @@ describe('checkout success page', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({
+        // Token lookups must carry the order identity: the lookup
+        // requires data.id === orderId before treating it as success.
+        id: 'order-123',
         currency: 'GHS',
         order_number: 'ORD-1001',
         payment_method: 'paystack',

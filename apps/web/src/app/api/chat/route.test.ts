@@ -424,6 +424,29 @@ describe('POST /api/chat', () => {
     expect(response.status).toBe(503);
   });
 
+  it('returns 503 when tenant resolution never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const { resolveAgenticChatTenant } = await import(
+        '@/lib/agentic/agentic-chat-tenant'
+      );
+      vi.mocked(resolveAgenticChatTenant).mockReturnValueOnce(
+        new Promise(() => {})
+      );
+      const pending = POST(
+        makeRequest({
+          messages: [{ role: 'user', content: 'Show me phones' }],
+        })
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+      const response = await pending;
+
+      expect(response.status).toBe(503);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('uses VPS Gemma through Ollama when configured', async () => {
     // Arrange
     ollamaBaseUrl = 'https://ollama.example.com';

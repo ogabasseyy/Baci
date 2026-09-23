@@ -79,6 +79,27 @@ function generateSessionId(ip: string): string {
     .slice(0, 16);
 }
 
+async function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(timeoutMessage)),
+          timeoutMs
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const headersList = await headers();
@@ -129,8 +150,14 @@ export async function POST(req: Request) {
 
     // The chat tools self-resolve this same tenant; resolving here fails the
     // whole request closed (503) instead of letting providers run unscoped,
-    // and attests the resolving tenant on every response below.
-    const tenant = await resolveAgenticChatTenant(req);
+    // and attests the resolving tenant on every response below. The lookup
+    // shares the request-wide deadline so a stalled dependency cannot push
+    // the handler past maxDuration before the providers start.
+    const tenant = await withTimeout(
+      resolveAgenticChatTenant(req),
+      CUSTOMER_CHAT_TIMEOUT_MS,
+      'Chat tenant lookup timed out'
+    ).catch(() => null);
     if (!tenant) {
       return new Response(
         JSON.stringify({ error: 'Chat is unavailable for this storefront' }),

@@ -303,6 +303,36 @@ describe('POST /api/chat/santa', () => {
     }
   });
 
+  it('caps the catalog lookup to the remaining route budget', async () => {
+    vi.useFakeTimers();
+    try {
+      const start = Date.now();
+      vi.setSystemTime(start);
+      vi.mocked(getCachedSantaProducts).mockReturnValueOnce(
+        new Promise(() => {})
+      );
+      const pending = POST(
+        makeRequest({
+          messages: [{ role: 'user', content: 'Hello' }],
+        })
+      );
+      // 28s elapse before the lookups settle: only 1s of route budget left,
+      // so the 4s catalog cap must expire after 1s, not 4s.
+      vi.setSystemTime(start + 28_000);
+      await vi.advanceTimersByTimeAsync(1_000);
+      const response = await pending;
+
+      expect(response.status).toBe(200);
+      expect(generateText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          system: expect.stringContaining('do not emit any ACTION:ADD_TO_CART'),
+        })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('falls through to the fallback model when the active model fails', async () => {
     // Arrange - keyless test env resolves to [google active, google fallback]
     respondByModel({

@@ -321,7 +321,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260923120000_guest_snapshot_inventory_proof.sql',
-    sha256: '8fd697ac58e3ba10553563c1b039cc6855c7d995',
+    sha256: '3864292ba62afad64de22549f334e2080fc558602bc31a94c6cdc9d233974614',
   },
   {
     repositoryPath:

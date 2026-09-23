@@ -6,15 +6,14 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Linking } from 'react-native';
-import { useInvoiceGeneratedCapture } from '@/components/checkout/use-invoice-generated-capture';
 import { OrderReconciliationView } from '@/components/orders/OrderReconciliationView';
 import { OrderSuccessView } from '@/components/orders/OrderSuccessView';
 import { isDeferredSettlementMethod } from '@/components/orders/order-success-content';
 import { renderParamVerificationGate } from '@/components/orders/param-verification-gate';
 import { useDeferredOrderStatusAuthority } from '@/components/orders/use-deferred-order-status-authority';
+import { useOrderSuccessCompletionPolling } from '@/components/orders/use-order-success-completion-polling';
 import { useOrderSuccessSideEffects } from '@/components/orders/use-order-success-side-effects';
 import { useParamReconciliationVerification } from '@/components/orders/use-param-reconciliation-verification';
-import { useSettlementCompletion } from '@/components/orders/use-settlement-completion';
 import { ReceiptPreviewModal } from '@/components/receipts/ReceiptPreviewModal';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -140,26 +139,16 @@ export default function OrderSuccessScreen() {
   const receiptPreview = useReceiptPreview({
     documentKind: isProformaDocument ? 'proforma' : undefined,
   });
-  // Asynchronous settlement (Juicyway on-chain detection, standard bank
-  // transfers) is confirmed after the shopper leaves checkout: poll the
-  // server-confirmed order state and complete the funnel only once this
-  // order is paid.
-  useSettlementCompletion({
+  // Server-confirmation polling (async settlement paid-completion and
+  // delivery-gated invoice_generated capture) lives in a dedicated hook
+  // so this screen stays under the 300-line route limit.
+  useOrderSuccessCompletionPolling({
+    customerEmail: customer?.email,
+    disabled: isReconciliation,
     orderId,
     orderNumber,
     paymentMethod,
     reference,
-    trackingToken,
-    disabled: isReconciliation,
-  });
-  // invoice_generated is captured only after the server confirms terminal
-  // artifact delivery (never optimistically at creation): the hook polls
-  // the tracking lookup on a bounded lane until the flag lands.
-  useInvoiceGeneratedCapture({
-    customerEmail: customer?.email ?? null,
-    disabled: isReconciliation,
-    orderId,
-    paymentMethod,
     trackingToken,
   });
 

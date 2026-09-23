@@ -418,12 +418,12 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20260902090000_harden_jumia_orphan_sweep_shared_refs.sql',
+      'supabase/migrations/20260923090000_harden_jumia_orphan_sweep_shared_refs.sql',
     sha256: 'edf5e142f5f73cf423326dfe6d2c85684fa2d830315c484adc04d74503363c92',
   },
   {
     repositoryPath:
-      'supabase/migrations/20260902100000_restore_jumia_authorization_credential_rpc.sql',
+      'supabase/migrations/20260923100000_restore_jumia_authorization_credential_rpc.sql',
     sha256: '8d048cf502721cc58c666a6651e9289b9997a3d2cdc7044c7656317c0c8b3e5e',
   },
   {

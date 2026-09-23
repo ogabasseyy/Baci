@@ -29,7 +29,7 @@ describe('Jumia credential hardening migrations', () => {
     const sql = readFileSync(
       path.join(
         migrationsRoot,
-        '20260902100000_restore_jumia_authorization_credential_rpc.sql'
+        '20260923100000_restore_jumia_authorization_credential_rpc.sql'
       ),
       'utf8'
     );

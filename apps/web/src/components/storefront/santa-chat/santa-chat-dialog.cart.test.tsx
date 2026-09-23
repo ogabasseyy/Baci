@@ -11,7 +11,7 @@ const cartMocks = vi.hoisted(() => ({
 }));
 
 const adoptedCarts = vi.hoisted(() => ({
-  current: {} as Record<string, Array<{ cartItemId: string }>>,
+  current: {} as Record<string, Array<{ cartItemId?: string; id?: string }>>,
 }));
 
 vi.mock('@/hooks/cart/merchant-cart-storage', () => ({
@@ -248,6 +248,40 @@ describe('SantaChatDialog cart tenant handling', () => {
     // The useCart snapshot still holds the pre-switch cart (empty); the
     // adopted merchant's saved cart already contains the line.
     adoptedCarts.current['winter-store'] = [{ cartItemId: 'phone' }];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/chat/santa') {
+        return Promise.resolve(
+          makeStreamingResponse(
+            'ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:400000',
+            'winter-store'
+          )
+        );
+      }
+      if (url === '/api/chat/santa/product') {
+        const body = JSON.parse(String(init?.body)) as { name: string };
+        return Promise.resolve(
+          makeProductResponse(body.name, 450_000, 'winter-store', 20)
+        );
+      }
+      return Promise.reject(new Error(`Unexpected fetch URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<SantaChatDialog />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start chat' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send wish' }));
+
+    await waitFor(() => {
+      expect(cartMocks.addToCart).toHaveBeenCalled();
+    });
+    expect(cartMocks.applyNegotiatedPrice).not.toHaveBeenCalled();
+  });
+
+  it('does not reprice a legacy adopted line without cartItemId', async () => {
+    // Historical persisted lines predate cartItemId but still merge by
+    // product id, so the grant must not apply to them either.
+    adoptedCarts.current['winter-store'] = [{ id: 'phone' }];
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === '/api/chat/santa') {

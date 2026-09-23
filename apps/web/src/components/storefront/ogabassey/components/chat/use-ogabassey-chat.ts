@@ -3,6 +3,7 @@
 import { isSantaGrantedPriceWithinCeiling } from '@baci/shared/lib';
 import { useEffect, useRef, useState } from 'react';
 import { useCart } from '@/hooks/cart';
+import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
 import { getMerchantCartState } from '@/hooks/cart/merchant-cart-storage';
 import { SANTA_MERCHANT_SLUG_HEADER } from '@/lib/agentic/santa-merchant-slug-header';
 import {
@@ -216,12 +217,15 @@ export function useOgabasseyChat({
       // addToCart merges into an existing line for the same product, and the
       // negotiated unit price would then reprice previously added units too.
       // Only negotiate fresh lines so the grant covers exactly the added unit.
-      // Existence is read from the adopted merchant's saved cart — the exact
-      // cart setMerchantSlug loaded above and addToCart merges into — never
-      // the hook's `cart` snapshot, which still holds the pre-switch cart.
-      const lineAlreadyExists = getMerchantCartState(
-        expectedMerchantSlug
-      ).cart.some((item) => item.cartItemId === product.id);
+      // Existence uses the shared merge matcher against the adopted
+      // merchant's saved cart — the exact cart setMerchantSlug loaded above
+      // and addToCart merges into — never the hook's `cart` snapshot, which
+      // still holds the pre-switch cart.
+      const lineAlreadyExists =
+        findMergingCartLineIndex(
+          getMerchantCartState(expectedMerchantSlug).cart,
+          product
+        ) >= 0;
       addToCart(product, 1);
       // The model price is untrusted: only honor it inside the
       // server-computed per-product ceiling, otherwise keep catalog price.

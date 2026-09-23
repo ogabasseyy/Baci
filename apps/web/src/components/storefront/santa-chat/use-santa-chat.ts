@@ -3,6 +3,7 @@
 import { isSantaGrantedPriceWithinCeiling } from '@baci/shared/lib';
 import { useEffect, useRef, useState } from 'react';
 import { SANTA_GREETING } from '@/ai/prompts/santa';
+import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
 import { getMerchantCartState } from '@/hooks/cart/merchant-cart-storage';
 import { useCart } from '@/hooks/use-cart';
 import type { Product } from '@/lib/products';
@@ -128,12 +129,15 @@ export function useSantaChat() {
       // addToCart merges into an existing line for the same product, and the
       // negotiated unit price would then reprice previously added units too.
       // Only negotiate fresh lines so the grant covers exactly the added unit.
-      // Existence is read from the adopted merchant's saved cart — the exact
-      // cart setMerchantSlug loaded above and addToCart merges into — never
-      // the hook's `cart` snapshot, which still holds the pre-switch cart.
-      const lineAlreadyExists = getMerchantCartState(
-        resolvedMerchantSlug
-      ).cart.some((item) => item.cartItemId === product.id);
+      // Existence uses the shared merge matcher against the adopted
+      // merchant's saved cart — the exact cart setMerchantSlug loaded above
+      // and addToCart merges into — never the hook's `cart` snapshot, which
+      // still holds the pre-switch cart.
+      const lineAlreadyExists =
+        findMergingCartLineIndex(
+          getMerchantCartState(resolvedMerchantSlug).cart,
+          product
+        ) >= 0;
       addToCart(product, 1);
 
       const cartItemId = product.id;

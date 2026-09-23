@@ -17,6 +17,7 @@ import {
   saveMerchantSlugToStorage,
 } from './cart-storage';
 import type { AddToCartOptions, CartContextType, CartItem } from './cart-types';
+import { findMergingCartLineIndex } from './find-merging-cart-line';
 import { getMerchantCartState } from './merchant-cart-storage';
 import {
   applyValidationResults,
@@ -381,14 +382,11 @@ export function StorefrontCartProvider({
         productForCart.id,
         normalizedOptions
       );
-      const existingIndex = previousCart.findIndex((item) => {
-        if (item.cartItemId === cartItemId) return true;
-        if (item.id !== product.id) return false;
-        if (item.variantId !== normalizedOptions?.variantId) return false;
-        if (normalizedOptions?.color || normalizedOptions?.storage)
-          return false;
-        return !item.cartItemId;
-      });
+      const existingIndex = findMergingCartLineIndex(
+        previousCart,
+        product,
+        normalizedOptions
+      );
 
       let result: CartItem[];
       if (existingIndex >= 0) {

@@ -28,6 +28,13 @@ const oauthShopDiscovery =
   'apps/web/src/app/api/marketplace/jumia/connect/exchange/discover-jumia-oauth-shops.ts';
 const exchangeRoute =
   'apps/web/src/app/api/marketplace/jumia/connect/exchange/route.ts';
+const expoPush = 'apps/web/src/lib/expo-push.ts';
+const supabaseAdmin = 'apps/web/src/lib/supabase/admin.ts';
+const ordersRoute = 'apps/web/src/app/api/marketplace/jumia/orders/route.ts';
+const manualOrderSync =
+  'apps/web/src/app/api/marketplace/jumia/orders/sync-jumia-manual-orders.ts';
+const stockSyncIntegration =
+  'apps/web/src/lib/jumia/sync-jumia-stock-integration.ts';
 
 const clientCredentialSuffixes = [
   [client, envPath],
@@ -279,4 +286,9 @@ export const eventPipelineJumiaCredentialPaths = [
     envPath,
   ],
   ...withPrefix([oauthPersistence], clientCredentialSuffixes),
+  ...withPrefix([stockSyncIntegration], clientCredentialSuffixes),
+  [manualOrderSync, expoPush, envPath],
+  [manualOrderSync, expoPush, supabaseAdmin, envPath],
+  [ordersRoute, manualOrderSync, expoPush, envPath],
+  [ordersRoute, manualOrderSync, expoPush, supabaseAdmin, envPath],
 ] as const;

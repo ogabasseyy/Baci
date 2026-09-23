@@ -47,7 +47,7 @@ function scopeQuery(rows: Array<{ marketplace_key: string | null }>) {
 
 function supabaseMock(options: {
   scopeRows: Array<{ marketplace_key: string | null }>;
-  upserted: Array<Record<string, unknown>>;
+  upserted: Record<string, unknown>[];
 }) {
   return {
     from: vi.fn((table: string) => {
@@ -99,7 +99,7 @@ describe('syncJumiaManualOrders', () => {
   });
 
   it('stamps the selected key when the shop scope is unambiguous', async () => {
-    const upserted: Array<Record<string, unknown>> = [];
+    const upserted: Record<string, unknown>[] = [];
     const supabase = supabaseMock({
       scopeRows: [{ marketplace_key: 'Jumia Nigeria' }],
       upserted,
@@ -118,7 +118,7 @@ describe('syncJumiaManualOrders', () => {
   });
 
   it('keeps the neutral key when the shop scope is ambiguous', async () => {
-    const upserted: Array<Record<string, unknown>> = [];
+    const upserted: Record<string, unknown>[] = [];
     const supabase = supabaseMock({
       scopeRows: [
         { marketplace_key: 'Jumia Nigeria' },
@@ -141,7 +141,7 @@ describe('syncJumiaManualOrders', () => {
 
   it('returns zeros when the provider has no orders', async () => {
     mocks.getAllOrders.mockResolvedValue([]);
-    const upserted: Array<Record<string, unknown>> = [];
+    const upserted: Record<string, unknown>[] = [];
     const supabase = supabaseMock({
       scopeRows: [{ marketplace_key: 'Jumia Nigeria' }],
       upserted,

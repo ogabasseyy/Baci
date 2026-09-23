@@ -1,6 +1,7 @@
 import type { JumiaClient } from '@/lib/jumia/client';
 import { updatePrice, updateStatus } from '@/lib/jumia/feeds';
 import type { IntegrationScopedMapping } from '@/lib/jumia/product-mapping-scope';
+import { verifyJumiaSingleMarketplaceScope } from '@/lib/jumia/verify-jumia-single-marketplace-scope';
 import { logger } from '@/lib/logger';
 
 interface SalePriceResult {
@@ -171,6 +172,28 @@ function getBusinessClientStatusPayload(
     : {};
 }
 
+async function getJumiaOAuthScopeError(
+  client: JumiaClient,
+  feedLabel: 'Status' | 'Price'
+): Promise<string | null> {
+  // OAuth integrations emit no business-client selector, so the status/price
+  // payloads cannot address one marketplace of many. Require provider proof
+  // of a single active business client before pushing.
+  if (client.marketplaceKey?.trim() !== 'oauth') {
+    return null;
+  }
+  const scope = await verifyJumiaSingleMarketplaceScope(client, {
+    strictOAuth: true,
+  });
+  if (scope.ok) {
+    return null;
+  }
+  if (scope.reason === 'provider_unavailable') {
+    return `${feedLabel} update skipped: unable to verify the Jumia shop marketplace scope. Try again.`;
+  }
+  return `${feedLabel} update skipped: Jumia ${feedLabel.toLowerCase()} updates cannot target a selected marketplace when the OAuth shop exposes multiple business clients.`;
+}
+
 export async function pushStatusUpdates(
   client: JumiaClient,
   mappings: IntegrationScopedMapping[],
@@ -185,6 +208,12 @@ export async function pushStatusUpdates(
         ? 'Status update skipped: one or more product variants have not been assigned a Jumia product ID yet (feed may still be processing)'
         : 'Status update skipped: product has not been assigned a Jumia product ID yet (feed may still be processing)'
     );
+    return;
+  }
+
+  const scopeError = await getJumiaOAuthScopeError(client, 'Status');
+  if (scopeError) {
+    feedErrors.push(scopeError);
     return;
   }
 
@@ -231,6 +260,12 @@ export async function pushPriceUpdates(
         ? 'Price update skipped: one or more product variants have not been assigned a Jumia product ID yet (feed may still be processing)'
         : 'Price update skipped: product has not been assigned a Jumia product ID yet (feed may still be processing)'
     );
+    return;
+  }
+
+  const scopeError = await getJumiaOAuthScopeError(client, 'Price');
+  if (scopeError) {
+    feedErrors.push(scopeError);
     return;
   }
 

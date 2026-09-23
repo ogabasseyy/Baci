@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockGetAllProducts } = vi.hoisted(() => ({
+const {
+  mockGetAllProducts,
+  mockLoadJumiaMarketplaceCurrency,
+  mockValidateJumiaMarketplaceCurrencyForMerchant,
+} = vi.hoisted(() => ({
   mockGetAllProducts: vi.fn(),
+  mockLoadJumiaMarketplaceCurrency: vi.fn(),
+  mockValidateJumiaMarketplaceCurrencyForMerchant: vi.fn(),
 }));
 
 vi.mock('@/lib/jumia/catalog', () => ({
@@ -13,9 +19,17 @@ vi.mock('@/lib/logger', () => ({
 vi.mock('@/lib/jumia/verify-jumia-single-marketplace-scope', () => ({
   verifyJumiaSingleMarketplaceScope: vi.fn(),
 }));
+vi.mock('@/lib/jumia/jumia-marketplace-currency', () => ({
+  loadJumiaMarketplaceCurrency: mockLoadJumiaMarketplaceCurrency,
+  validateJumiaMarketplaceCurrencyForMerchant:
+    mockValidateJumiaMarketplaceCurrencyForMerchant,
+}));
 
 import { verifyJumiaSingleMarketplaceScope } from '@/lib/jumia/verify-jumia-single-marketplace-scope';
-import { loadJumiaImportContext } from './load-jumia-import-context';
+import {
+  loadJumiaImportContext,
+  validateJumiaImportCurrency,
+} from './load-jumia-import-context';
 
 describe('loadJumiaImportContext', () => {
   beforeEach(() => {
@@ -125,5 +139,71 @@ describe('loadJumiaImportContext', () => {
       status: 409,
     });
     expect(mockGetAllProducts).not.toHaveBeenCalled();
+  });
+});
+
+describe('validateJumiaImportCurrency', () => {
+  const args = {
+    supabase: {} as never,
+    merchantId: 'merchant-1',
+    integrationId: 'integration-1',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('passes when the marketplace currency matches the merchant payout currency', async () => {
+    mockLoadJumiaMarketplaceCurrency.mockResolvedValue({
+      ok: true,
+      currency: 'NGN',
+    });
+    mockValidateJumiaMarketplaceCurrencyForMerchant.mockResolvedValue({
+      ok: true,
+    });
+
+    await expect(validateJumiaImportCurrency(args)).resolves.toEqual({
+      ok: true,
+    });
+    expect(
+      mockValidateJumiaMarketplaceCurrencyForMerchant
+    ).toHaveBeenCalledWith({}, 'merchant-1', 'NGN');
+  });
+
+  it('fails closed when the marketplace currency cannot be loaded', async () => {
+    mockLoadJumiaMarketplaceCurrency.mockResolvedValue({
+      ok: false,
+      status: 400,
+      error: 'Jumia integration is missing a marketplace country code',
+    });
+
+    await expect(validateJumiaImportCurrency(args)).resolves.toEqual({
+      ok: false,
+      status: 400,
+      error: 'Jumia integration is missing a marketplace country code',
+    });
+    expect(
+      mockValidateJumiaMarketplaceCurrencyForMerchant
+    ).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the merchant payout currency mismatches', async () => {
+    mockLoadJumiaMarketplaceCurrency.mockResolvedValue({
+      ok: true,
+      currency: 'NGN',
+    });
+    mockValidateJumiaMarketplaceCurrencyForMerchant.mockResolvedValue({
+      ok: false,
+      status: 400,
+      error:
+        'Jumia marketplace currency NGN does not match merchant payout currency GHS',
+    });
+
+    await expect(validateJumiaImportCurrency(args)).resolves.toEqual({
+      ok: false,
+      status: 400,
+      error:
+        'Jumia marketplace currency NGN does not match merchant payout currency GHS',
+    });
   });
 });

@@ -1,6 +1,6 @@
 import type { getAllProducts } from '@/lib/jumia/catalog';
 
-type FlatJumiaImportEntry = {
+export type FlatJumiaImportEntry = {
   sku: string;
   name: string;
   description: string;

@@ -164,6 +164,47 @@ describe('updateStock', () => {
     expect(client.request).not.toHaveBeenCalled();
   });
 
+  it('fails closed for an OAuth shop with multiple active business clients', async () => {
+    const client = Object.assign(createMockClient({ feedId: 'FEED-003' }), {
+      shopId: 'shop-1',
+      marketplaceKey: 'oauth',
+      getShops: vi.fn().mockResolvedValue([
+        {
+          id: 'shop-1',
+          businessClients: [
+            { code: 'NG-RETAIL', status: 'active' },
+            { code: 'GH-RETAIL', status: 'active' },
+          ],
+        },
+      ]),
+    });
+
+    await expect(
+      updateStock(client, [{ sellerSku: 'SKU-1', id: 'VAR-1', stock: 50 }])
+    ).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringContaining('business-client selector'),
+    });
+    expect(client.request).not.toHaveBeenCalled();
+  });
+
+  it('pushes stock for an OAuth shop with a single active business client', async () => {
+    const client = Object.assign(createMockClient({ feedId: 'FEED-003' }), {
+      shopId: 'shop-1',
+      marketplaceKey: 'oauth',
+      getShops: vi.fn().mockResolvedValue([
+        {
+          id: 'shop-1',
+          businessClients: [{ code: 'NG-RETAIL', status: 'active' }],
+        },
+      ]),
+    });
+
+    await expect(
+      updateStock(client, [{ sellerSku: 'SKU-1', id: 'VAR-1', stock: 50 }])
+    ).resolves.toBe('FEED-003');
+  });
+
   it('throws when sellerSku is empty', async () => {
     const client = createMockClient({ feedId: 'FEED-003' });
 

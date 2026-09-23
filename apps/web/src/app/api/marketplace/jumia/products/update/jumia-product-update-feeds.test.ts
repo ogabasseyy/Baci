@@ -2,10 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockUpdateStatus = vi.fn();
 const mockUpdatePrice = vi.fn();
+const mockVerifyScope = vi.fn();
 
 vi.mock('@/lib/jumia/feeds', () => ({
   updateStatus: (...args: unknown[]) => mockUpdateStatus(...args),
   updatePrice: (...args: unknown[]) => mockUpdatePrice(...args),
+}));
+vi.mock('@/lib/jumia/verify-jumia-single-marketplace-scope', () => ({
+  verifyJumiaSingleMarketplaceScope: (...args: unknown[]) =>
+    mockVerifyScope(...args),
 }));
 
 import {
@@ -210,6 +215,63 @@ describe('pushStatusUpdates', () => {
       { id: 'JUMIA-1', sellerSku: 'SKU-1', status: 'active' },
     ]);
   });
+
+  it('fails closed when an OAuth shop exposes multiple business clients', async () => {
+    mockVerifyScope.mockResolvedValue({
+      ok: false,
+      reason: 'multiple_active_marketplaces',
+    });
+    const feedIds: string[] = [];
+    const feedErrors: string[] = [];
+
+    await pushStatusUpdates(
+      { shopId: 'shop-1', marketplaceKey: 'oauth' } as never,
+      [
+        {
+          id: 'map-1',
+          jumia_product_id: 'JUMIA-1',
+          jumia_sku: 'SKU-1',
+        } as never,
+      ],
+      true,
+      feedIds,
+      feedErrors
+    );
+
+    expect(mockVerifyScope).toHaveBeenCalledWith(
+      expect.objectContaining({ marketplaceKey: 'oauth' }),
+      { strictOAuth: true }
+    );
+    expect(feedIds).toEqual([]);
+    expect(feedErrors).toEqual([
+      'Status update skipped: Jumia status updates cannot target a selected marketplace when the OAuth shop exposes multiple business clients.',
+    ]);
+    expect(mockUpdateStatus).not.toHaveBeenCalled();
+  });
+
+  it('pushes a status feed for an OAuth shop with one active business client', async () => {
+    mockVerifyScope.mockResolvedValue({ ok: true });
+    mockUpdateStatus.mockResolvedValue('feed-status-oauth');
+    const feedIds: string[] = [];
+    const feedErrors: string[] = [];
+
+    await pushStatusUpdates(
+      { shopId: 'shop-1', marketplaceKey: 'oauth' } as never,
+      [
+        {
+          id: 'map-1',
+          jumia_product_id: 'JUMIA-1',
+          jumia_sku: 'SKU-1',
+        } as never,
+      ],
+      true,
+      feedIds,
+      feedErrors
+    );
+
+    expect(feedIds).toEqual(['feed-status-oauth']);
+    expect(feedErrors).toEqual([]);
+  });
 });
 
 describe('pushPriceUpdates', () => {
@@ -397,5 +459,77 @@ describe('pushPriceUpdates', () => {
 
     expect(feedIds).toEqual([]);
     expect(feedErrors[0]).toContain('Price update failed');
+  });
+
+  it('fails closed when an OAuth shop exposes multiple business clients', async () => {
+    mockVerifyScope.mockResolvedValue({
+      ok: false,
+      reason: 'multiple_active_marketplaces',
+    });
+    const feedIds: string[] = [];
+    const feedErrors: string[] = [];
+
+    await pushPriceUpdates(
+      { shopId: 'shop-1', marketplaceKey: 'oauth' } as never,
+      [
+        {
+          id: 'map-1',
+          jumia_product_id: 'JUMIA-1',
+          jumia_sku: 'SKU-1',
+          jumia_price: 1500,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+        } as never,
+      ],
+      { jumia_price: 1500 },
+      'NGN',
+      feedIds,
+      feedErrors
+    );
+
+    expect(mockVerifyScope).toHaveBeenCalledWith(
+      expect.objectContaining({ marketplaceKey: 'oauth' }),
+      { strictOAuth: true }
+    );
+    expect(feedIds).toEqual([]);
+    expect(feedErrors).toEqual([
+      'Price update skipped: Jumia price updates cannot target a selected marketplace when the OAuth shop exposes multiple business clients.',
+    ]);
+    expect(mockUpdatePrice).not.toHaveBeenCalled();
+  });
+
+  it('reports unverifiable OAuth scope as retryable', async () => {
+    mockVerifyScope.mockResolvedValue({
+      ok: false,
+      reason: 'provider_unavailable',
+    });
+    const feedIds: string[] = [];
+    const feedErrors: string[] = [];
+
+    await pushPriceUpdates(
+      { shopId: 'shop-1', marketplaceKey: 'oauth' } as never,
+      [
+        {
+          id: 'map-1',
+          jumia_product_id: 'JUMIA-1',
+          jumia_sku: 'SKU-1',
+          jumia_price: 1500,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+        } as never,
+      ],
+      { jumia_price: 1500 },
+      'NGN',
+      feedIds,
+      feedErrors
+    );
+
+    expect(feedIds).toEqual([]);
+    expect(feedErrors).toEqual([
+      'Price update skipped: unable to verify the Jumia shop marketplace scope. Try again.',
+    ]);
+    expect(mockUpdatePrice).not.toHaveBeenCalled();
   });
 });

@@ -7,21 +7,15 @@ import {
 } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { JumiaClient } from '@/lib/jumia/client';
-import {
-  loadJumiaMarketplaceCurrency,
-  validateJumiaMarketplaceCurrencyForMerchant,
-} from '@/lib/jumia/jumia-marketplace-currency';
 import { logger } from '@/lib/logger';
 import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
-import { sanitizeText, stripHtmlTags } from '@/lib/sanitize-core';
 import { flattenJumiaImportProducts } from './flatten-jumia-import-products';
-import { loadJumiaImportContext } from './load-jumia-import-context';
-import { loadJumiaImportMappings } from './load-jumia-import-mappings';
 import {
-  type JumiaImportMappingRow,
-  type JumiaImportProductRow,
-  upsertJumiaImportMappings,
-} from './upsert-jumia-import-mappings';
+  loadJumiaImportContext,
+  validateJumiaImportCurrency,
+} from './load-jumia-import-context';
+import { loadJumiaImportMappings } from './load-jumia-import-mappings';
+import { persistJumiaImportEntries } from './upsert-jumia-import-mappings';
 
 const ImportSchema = z.object({
   integrationId: z.uuid(),
@@ -97,30 +91,15 @@ export async function POST(req: NextRequest) {
     }
     const { jumia, jumiaProducts } = context;
 
-    // Provider prices carry no currency; a marketplace/merchant mismatch
-    // would store foreign-denominated amounts as local prices.
-    const currencyResult = await loadJumiaMarketplaceCurrency(
+    const currencyCheck = await validateJumiaImportCurrency({
       supabase,
       merchantId,
-      integrationId
-    );
-    if (!currencyResult.ok) {
+      integrationId,
+    });
+    if (!currencyCheck.ok) {
       return NextResponse.json(
-        { error: currencyResult.error },
-        { status: currencyResult.status }
-      );
-    }
-
-    const merchantCurrencyResult =
-      await validateJumiaMarketplaceCurrencyForMerchant(
-        supabase,
-        merchantId,
-        currencyResult.currency
-      );
-    if (!merchantCurrencyResult.ok) {
-      return NextResponse.json(
-        { error: merchantCurrencyResult.error },
-        { status: merchantCurrencyResult.status }
+        { error: currencyCheck.error },
+        { status: currencyCheck.status }
       );
     }
 
@@ -130,13 +109,6 @@ export async function POST(req: NextRequest) {
         summary: { total: 0, created: 0, linked: 0, updated: 0, errors: 0 },
       });
     }
-
-    let created = 0;
-    let linked = 0;
-    let errors = 0;
-    const warningMessages: string[] = [];
-    // TODO: Implement update-on-reimport to populate this counter
-    const updated = 0;
 
     const { flatEntries, skippedNoSkuCount, missingPriceCount } =
       flattenJumiaImportProducts(jumiaProducts);
@@ -179,10 +151,6 @@ export async function POST(req: NextRequest) {
     }
 
     const existingProducts = existingProductsData || [];
-    const productBySku = new Map(
-      existingProducts.filter((p) => p.sku).map((p) => [p.sku, p])
-    );
-    const existingProductIds = new Set(existingProducts.map((p) => p.id));
 
     const mappingsResult = await loadJumiaImportMappings({
       supabase,
@@ -199,114 +167,19 @@ export async function POST(req: NextRequest) {
     }
     const { mappedSkus } = mappingsResult;
 
-    // 3. Process each variation
-    const mappingRows: JumiaImportMappingRow[] = [];
-    const newProductRows: JumiaImportProductRow[] = [];
-    const pendingNewProductMappings = new Map<
-      string,
-      Omit<JumiaImportMappingRow, 'product_id'>
-    >();
-
-    for (const entry of flatEntries) {
-      const { sku } = entry;
-
-      const product = productBySku.get(sku);
-      const localProductId = product?.id;
-      const mappingBase = {
-        merchant_id: merchantId,
-        jumia_sku: sku,
-        jumia_seller_sku: sku,
-        jumia_shop_id: jumia.shopId,
-        marketplace_key: jumia.marketplaceKey,
-        variant_id: null,
-        jumia_price: entry.price,
-        jumia_product_id: entry.productId,
-        is_active: true,
-        sync_status: 'synced',
-        last_synced_at: new Date().toISOString(),
-      };
-
-      if (localProductId) {
-        // LINK EXISTING
-        if (!mappedSkus.has(sku)) {
-          mappingRows.push({ ...mappingBase, product_id: localProductId });
-        }
-      } else {
-        // CREATE NEW PRODUCT
-        newProductRows.push({
-          merchant_id: merchantId,
-          name:
-            sanitizeText(stripHtmlTags(entry.name)) || 'Imported Jumia Product',
-          description: sanitizeText(stripHtmlTags(entry.description)) || '',
-          price: entry.price,
-          sku,
-          // Jumia product listing doesn't include stock; merchant sets stock after import
-          stock_level: 0,
-          is_active: false,
-          images: entry.images,
-        });
-        pendingNewProductMappings.set(sku, mappingBase);
-      }
-    }
-
-    // Upsert products (idempotent on SKU conflicts from repeated imports)
-    let insertedProducts: { id: string; sku: string }[] = [];
-    if (newProductRows.length) {
-      const { data: newProductsData, error: upsertError } = await supabase
-        .from('products')
-        .upsert(newProductRows, { onConflict: 'merchant_id,sku' })
-        .select('id, sku');
-
-      if (upsertError || !newProductsData) {
-        logger.error({
-          message: 'Product bulk upsert failed',
-          error: upsertError,
-        });
-        errors += newProductRows.length;
-      } else {
-        insertedProducts = newProductsData;
-      }
-    }
-
-    for (const product of insertedProducts) {
-      const mappingBase = pendingNewProductMappings.get(product.sku);
-      if (mappingBase) {
-        mappingRows.push({ ...mappingBase, product_id: product.id });
-      }
-    }
-
-    // Upsert mappings (idempotent on repeated imports)
-    if (mappingRows.length) {
-      const { error: mappingUpsertError } = await upsertJumiaImportMappings({
+    const { created, linked, errors, warningMessages } =
+      await persistJumiaImportEntries({
         supabase,
-        rows: mappingRows,
+        merchantId,
+        shopId: jumia.shopId,
+        marketplaceKey: jumia.marketplaceKey,
+        flatEntries,
+        existingProducts,
+        mappedSkus,
       });
 
-      if (mappingUpsertError) {
-        logger.error({
-          message: 'Mapping bulk upsert failed',
-          error: mappingUpsertError,
-        });
-        // Partial failure: products created but mappings failed
-        if (insertedProducts.length > 0) {
-          const msg = `${insertedProducts.length} products created but mapping upsert failed; re-run to link`;
-          warningMessages.push(msg);
-          logger.warn({ message: msg, error: mappingUpsertError });
-          // Count products as created even though mappings failed
-          created += insertedProducts.length;
-        }
-        errors += mappingRows.length;
-      } else {
-        const newProductIds = new Set(insertedProducts.map((p) => p.id));
-        for (const row of mappingRows) {
-          if (existingProductIds.has(row.product_id)) {
-            linked += 1;
-          } else if (newProductIds.has(row.product_id)) {
-            created += 1;
-          }
-        }
-      }
-    }
+    // TODO: Implement update-on-reimport to populate this counter
+    const updated = 0;
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,10 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAllProducts } from '@/lib/jumia/catalog';
 import type { JumiaClient } from '@/lib/jumia/client';
+import {
+  loadJumiaMarketplaceCurrency,
+  validateJumiaMarketplaceCurrencyForMerchant,
+} from '@/lib/jumia/jumia-marketplace-currency';
 import { verifyJumiaSingleMarketplaceScope } from '@/lib/jumia/verify-jumia-single-marketplace-scope';
 import { logger } from '@/lib/logger';
 
@@ -101,4 +106,53 @@ export async function loadJumiaImportContext({
       status: 502,
     };
   }
+}
+
+type ValidateJumiaImportCurrencyArgs = {
+  supabase: SupabaseClient;
+  merchantId: string;
+  integrationId: string;
+};
+
+type ValidateJumiaImportCurrencyResult =
+  | { ok: true }
+  | { ok: false; error: string; status: number };
+
+/**
+ * Provider prices carry no currency; a marketplace/merchant mismatch would
+ * store foreign-denominated amounts as local prices.
+ */
+export async function validateJumiaImportCurrency({
+  supabase,
+  merchantId,
+  integrationId,
+}: ValidateJumiaImportCurrencyArgs): Promise<ValidateJumiaImportCurrencyResult> {
+  const currencyResult = await loadJumiaMarketplaceCurrency(
+    supabase,
+    merchantId,
+    integrationId
+  );
+  if (!currencyResult.ok) {
+    return {
+      ok: false,
+      error: currencyResult.error,
+      status: currencyResult.status,
+    };
+  }
+
+  const merchantCurrencyResult =
+    await validateJumiaMarketplaceCurrencyForMerchant(
+      supabase,
+      merchantId,
+      currencyResult.currency
+    );
+  if (!merchantCurrencyResult.ok) {
+    return {
+      ok: false,
+      error: merchantCurrencyResult.error,
+      status: merchantCurrencyResult.status,
+    };
+  }
+
+  return { ok: true };
 }

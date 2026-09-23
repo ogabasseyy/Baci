@@ -190,8 +190,12 @@ export async function updateStock(
     return { ...item, sellerSku, id };
   });
   // The stock-feed contract has no business-client selector. Refuse to send
-  // an unscoped feed when a shop has multiple active marketplaces.
-  const marketplaceScope = await verifyJumiaSingleMarketplaceScope(client);
+  // an unscoped feed when a shop has multiple active marketplaces. OAuth
+  // shops require provider proof because one OAuth shop can expose several
+  // business clients that the stock payload cannot address.
+  const marketplaceScope = await verifyJumiaSingleMarketplaceScope(client, {
+    strictOAuth: true,
+  });
   if (!marketplaceScope.ok) {
     const status =
       marketplaceScope.reason === 'provider_unavailable' ? 502 : 400;

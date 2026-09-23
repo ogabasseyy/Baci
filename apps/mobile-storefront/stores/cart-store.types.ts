@@ -7,6 +7,8 @@ export interface CartItem {
   name: string;
   brand?: string;
   price: number;
+  /** Catalog unit price retained for a zero-priced quiz voucher line. */
+  catalog_price?: number;
   compare_at_price?: number;
   quantity: number;
   image_url?: string;

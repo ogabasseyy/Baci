@@ -129,7 +129,7 @@ describe('PATCH /api/merchant/features persistence', () => {
     expect(testState.insertPayload).toMatchObject({
       merchant_id: MERCHANT_ID,
       custom_settings: { integrationCardsCollapsed: true },
-      shipping_providers: ['gigl', 'topship'],
+      shipping_providers: [],
       klump_enabled: false,
       vtu_customer_cashback_enabled: false,
     });
@@ -159,7 +159,7 @@ describe('PATCH /api/merchant/features persistence', () => {
       merchant_id: MERCHANT_ID,
       loyalty_enabled: true,
       rewards_page_enabled: true,
-      shipping_providers: ['gigl', 'topship'],
+      shipping_providers: [],
     });
     expect(testState.updatePayload).toMatchObject({
       loyalty_enabled: true,

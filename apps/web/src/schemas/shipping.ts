@@ -164,12 +164,10 @@ export const QuoteRequestSchema = z
      * still resolves the merchant's currency (to correctly gate/suppress the
      * NGN carriers) but never merges merchant rates into the returned quotes.
      *
-     * This exists because `/api/shipping/quotes` is shared with the mobile
-     * storefront, which auto-selects the cheapest `quotes.all` entry and
-     * validates its `selected_quote_id` as a UUID before order submit — it
-     * cannot yet send `shipping_rate_id`, so a merchant rate selected there
-     * would break checkout. Legacy web checkout also benefits (defense in
-     * depth) but keeps its own client-side filter.
+     * Maintained web and mobile checkout clients set this flag and convert a
+     * selected `mrate_<uuid>` quote into a bare `shipping_rate_id` at order
+     * creation. Older or third-party clients can leave it absent until they
+     * implement that same order contract.
      */
     supports_merchant_rates: z.boolean().optional().default(false),
   })

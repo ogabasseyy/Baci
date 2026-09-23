@@ -2,6 +2,10 @@ import {
   filterByLocationPhrase,
   resolveLocationStateLabel,
 } from '@baci/shared/lib';
+import {
+  getCartCatalogSubtotalWithAssurance,
+  getCartItemEffectivePrice,
+} from '@/lib/cart-pricing';
 import { CONFIG } from '@/lib/config';
 import {
   getPreferredShippingQuoteId,
@@ -168,6 +172,14 @@ export const fetchShippingQuotes = async ({
       body: JSON.stringify({
         ...(merchantId ? { merchantId } : {}),
         deliveryPreference,
+        supports_merchant_rates: items.every(
+          (item) =>
+            !(item.voucher_token && item.voucher_award_id) ||
+            (typeof item.catalog_price === 'number' &&
+              Number.isFinite(item.catalog_price) &&
+              item.catalog_price >= 0)
+        ),
+        cart_subtotal: getCartCatalogSubtotalWithAssurance(items),
         receiver: {
           name:
             `${watchedFirstName} ${watchedLastName}`.trim() ||
@@ -185,7 +197,7 @@ export const fetchShippingQuotes = async ({
         items: items.map((item) => ({
           name: item.name,
           quantity: item.quantity,
-          value: item.negotiatedPrice ?? item.price,
+          value: getCartItemEffectivePrice(item),
           // Cart lines do not currently persist package weight; backend quotes
           // expect a numeric value, so we keep the existing conservative default.
           weight: 1,
@@ -204,9 +216,21 @@ export const fetchShippingQuotes = async ({
         deliveryPreference === 'pickup_station'
           ? quotes.filter((quote) => quote.isStationPickup === true)
           : quotes;
+      // City filtering applies to carrier stations only: merchant pickup
+      // rates were already matched to the destination zone by the backend,
+      // so a carrier match must not remove them from the selectable list.
+      const carrierStationQuotes = stationPickupQuotes.filter(
+        (quote) => quote.provider !== 'MERCHANT'
+      );
+      const merchantPickupQuotes = stationPickupQuotes.filter(
+        (quote) => quote.provider === 'MERCHANT'
+      );
       const selectableQuotes =
         deliveryPreference === 'pickup_station'
-          ? filterPickupQuotesByCity(stationPickupQuotes, city, state)
+          ? [
+              ...filterPickupQuotesByCity(carrierStationQuotes, city, state),
+              ...merchantPickupQuotes,
+            ]
           : stationPickupQuotes;
       setShippingQuotes(selectableQuotes);
       setResolvedShippingQuoteContextKey(quoteContextKey);

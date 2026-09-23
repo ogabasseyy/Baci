@@ -19,6 +19,7 @@ export * from './negotiation-item-info';
 export * from './negotiation-policy';
 export * from './order-item-analytics-profit';
 export * from './order-item-display';
+export * from './parse-merchant-rate-quote-id';
 export * from './parse-santa-action';
 export * from './product-condition';
 export * from './product-default-variant';

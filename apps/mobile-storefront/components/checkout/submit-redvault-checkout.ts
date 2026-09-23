@@ -4,7 +4,9 @@ import type { createOrder } from '@/services/orders';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 
 type CreateOrderResult = Awaited<ReturnType<typeof createOrder>>;
-type RedvaultCallback = NonNullable<UseCheckoutSubmitParams['onRedvaultOrder']>;
+export type RedvaultCallback = NonNullable<
+  UseCheckoutSubmitParams['onRedvaultOrder']
+>;
 type TrackingContext = Parameters<
   typeof saveRedvaultPurchaseTrackingContext
 >[1];

@@ -8,6 +8,7 @@ import { AgentUiEventRenderer } from './agent-ui-event-renderer';
 const mocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
   cart: [] as { id: string; quantity: number }[],
+  merchant: null as { country?: string; payout_currency?: string } | null,
   setIsCartOpen: vi.fn(),
 }));
 
@@ -20,7 +21,10 @@ vi.mock('@/hooks/cart', () => ({
 }));
 
 vi.mock('@/hooks/merchant', () => ({
-  useMerchantSafe: () => ({ basePath: '/ogabassey' }),
+  useMerchantSafe: () => ({
+    basePath: '/ogabassey',
+    merchant: mocks.merchant,
+  }),
 }));
 
 vi.mock('@/components/storefront/cdn-format-image', () => ({
@@ -235,5 +239,25 @@ describe('AgentUiEventRenderer', () => {
     );
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('formats card prices in the resolved merchant currency', () => {
+    mocks.merchant = { country: 'GH', payout_currency: 'GHS' };
+
+    try {
+      render(<AgentUiEventRenderer events={[event()]} />);
+
+      expect(screen.getByText('GH₵1,200,000')).toBeInTheDocument();
+    } finally {
+      mocks.merchant = null;
+    }
+  });
+
+  it('falls back to naira pricing without merchant context', () => {
+    mocks.merchant = null;
+
+    render(<AgentUiEventRenderer events={[event()]} />);
+
+    expect(screen.getByText('₦1,200,000')).toBeInTheDocument();
   });
 });

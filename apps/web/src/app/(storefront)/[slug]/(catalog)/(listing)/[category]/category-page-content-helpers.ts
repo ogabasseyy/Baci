@@ -33,6 +33,13 @@ const CONDITION_MAP: Record<string, OgabasseyProduct['condition']> = {
   refurbished: 'refurbished',
 };
 
+function getGraphicsCard(
+  productKeySpecs: ProductKeySpecsRecord | null | undefined
+): string | undefined {
+  const gpu = productKeySpecs?.gpu;
+  return typeof gpu === 'string' && gpu.trim() ? gpu.trim() : undefined;
+}
+
 export function resolveCategoryPageName(
   data: CategoryPageData,
   categorySlug: string
@@ -81,6 +88,7 @@ export function normalizeCategoryPageProducts(
       stock: normalized.stock,
       category_slug: normalized.category_slug,
       product_key_specs: normalized.product_key_specs ?? undefined,
+      graphics: getGraphicsCard(normalized.product_key_specs),
     };
   });
 }

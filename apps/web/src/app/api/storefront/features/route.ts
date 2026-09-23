@@ -184,9 +184,11 @@ export async function GET(request: NextRequest) {
     }
     const resolvedMerchantId = merchant.id;
 
-    // Read the public-safe feature projection via the service role so anonymous
-    // and signed-in customers see real values (the anon-key table read only
-    // returns rows to the owner/staff under the merchant_feature_settings RLS).
+    // Read the public-safe feature projection via the SECURITY DEFINER
+    // snapshot RPC (see getCachedFeatureSettings) so anonymous and signed-in
+    // customers see real values. Neither the anon-key base-table read (denied
+    // by the merchant_feature_settings RLS/revoke) nor the service-role
+    // client (banned for user-facing paths by AGENTS.md) may be used here.
     const settings = (await getCachedFeatureSettings(resolvedMerchantId)) ?? {};
 
     // Derive Paystack subaccount presence via the cached, published-scoped

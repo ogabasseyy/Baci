@@ -16115,6 +16115,15 @@ export type Database = {
           status: string;
         }[];
       };
+      get_santa_catalog: {
+        Args: { p_merchant_id: string };
+        Returns: {
+          brand: string | null;
+          max_margin_discount_percentage: number;
+          name: string;
+          price: number;
+        }[];
+      };
       acknowledge_recovery_code_set: {
         Args: { p_code_set_id: string; p_user_id: string };
         Returns: boolean;
@@ -18907,6 +18916,14 @@ export type Database = {
       };
       is_legacy_storefront_order_idempotency_key: {
         Args: { p_checkout_idempotency_key: string; p_merchant_id: string };
+        Returns: boolean;
+      };
+      is_storefront_order_idempotency_hash: {
+        Args: {
+          p_checkout_idempotency_key: string;
+          p_checkout_request_hash: string;
+          p_merchant_id: string;
+        };
         Returns: boolean;
       };
       has_merchant_access: {

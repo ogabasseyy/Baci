@@ -20,21 +20,16 @@ const MIGRATION_SOURCE = readFileSync(
 );
 
 describe('cache invalidation feature projection', () => {
-  it('tracks every scalar selected by the public feature-settings cache', () => {
-    const selectBlock = CACHED_DATA_SOURCE.match(
-      /const MERCHANT_PUBLIC_FEATURE_SETTINGS_SELECT: string = `([\s\S]*?)`;?/
-    )?.[1];
-    expect(selectBlock).toBeDefined();
-
-    const publicScalarColumns = selectBlock
-      ?.split(',')
-      .map((column) => column.trim())
-      .filter((column) => column && column !== 'custom_settings');
-
-    expect(publicScalarColumns).not.toHaveLength(0);
-    for (const column of publicScalarColumns ?? []) {
-      expect(MIGRATION_SOURCE).toContain(`'${column}'`);
-    }
+  it('reads public feature settings through the snapshot RPC, never the base table', () => {
+    // Production revokes anonymous SELECT on the secret-bearing
+    // merchant_feature_settings table, so the cached read must go through
+    // the SECURITY DEFINER snapshot projection.
+    expect(CACHED_DATA_SOURCE).toContain(
+      'resolve_storefront_public_snapshot_v2'
+    );
+    expect(CACHED_DATA_SOURCE).not.toMatch(
+      /\.from\('merchant_feature_settings'\)/
+    );
   });
 
   it('tracks only the custom settings published by the public snapshot', () => {

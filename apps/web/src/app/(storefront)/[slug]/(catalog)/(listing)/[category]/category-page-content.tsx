@@ -1,23 +1,18 @@
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
-import type { BreadcrumbList, CollectionPage, FAQPage } from 'schema-dts';
-import { JsonLd, type JsonLdData } from '@/components/seo/json-ld';
+import { JsonLd } from '@/components/seo/json-ld';
 import { CategoryPage as OgabasseyCategoryPage } from '@/components/storefront/ogabassey/pages/category-page';
 import { V2ComparisonScope } from '@/components/storefront/ogabassey/providers/v2-comparison-scope';
 import { CategoryHubSections } from '@/components/storefront/ogabassey/seo/category-hub-sections';
-import {
-  getCachedCategoryPageData,
-  getMerchantByIdentifier,
-} from '@/lib/cached-data';
+import { getMerchantByIdentifier } from '@/lib/cached-data';
 import type { RawDbProduct } from '@/lib/normalize-product';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
-import {
-  generateBreadcrumbSchema,
-  generateCollectionPageSchema,
-  generateFAQSchema,
-} from '@/lib/seo-utils';
 import { buildRequestScopedStoreUrl, buildStoreUrl } from '@/lib/store-url';
+import {
+  buildHubPaginationBasePath,
+  resolveCarriedHubSlug,
+} from '@/lib/storefront-category/gaming-laptop-graphics-hubs';
 import {
   parseStorefrontPageParam,
   STOREFRONT_PRODUCTS_PER_PAGE,
@@ -34,9 +29,12 @@ import {
   resolveCategoryPageName,
   toCollectionSchemaProduct,
 } from './category-page-content-helpers';
+import { buildCategoryPageContentSchemas } from './category-page-content-schema';
 import { CategoryPageCrawlSummary } from './category-page-crawl-summary';
 import { CategoryPageDeferredCompareLinks } from './category-page-deferred-compare-links';
+import { loadGraphicsHubLinks } from './category-page-graphics-hub-links';
 import { loadCategoryHubContent } from './load-category-hub-content';
+import { loadFilteredCategoryPageData } from './load-filtered-category-page-data';
 
 interface PageProps {
   params: Promise<{
@@ -44,8 +42,16 @@ interface PageProps {
     category: string;
   }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-  /** Demote when a parent route already committed the page H1. */
   titleHeading?: 'h1' | 'h2';
+  canonicalBaseUrl?: string;
+  seoPageName?: string;
+  /**
+   * Curated hub pages pass facet-derived graphics values (not raw query
+   * strings), so the untrusted-request cardinality cap is lifted for them.
+   */
+  trustedGraphics?: boolean;
+  /** Curated hub slug; validates hub-token transitions from the hub. */
+  hubSlug?: string;
 }
 function renderCategoryNotFoundContent({
   slug,
@@ -66,12 +72,16 @@ function renderCategoryNotFoundContent({
 }
 
 export async function CategoryPageContent({
+  canonicalBaseUrl,
   params,
   searchParams,
+  seoPageName,
   titleHeading = 'h1',
+  trustedGraphics = false,
+  hubSlug,
 }: PageProps) {
   const { slug, category } = await params;
-  const { page } = await searchParams;
+  const { graphics, graphicsHub, page } = await searchParams;
   const merchant = await getMerchantByIdentifier(slug);
 
   if (!merchant) {
@@ -93,13 +103,17 @@ export async function CategoryPageContent({
   }
 
   const productOffset = (currentPage - 1) * STOREFRONT_PRODUCTS_PER_PAGE;
-  const data = await getCachedCategoryPageData(
-    merchant.id,
-    category,
-    slug,
-    productOffset,
-    STOREFRONT_PRODUCTS_PER_PAGE
-  );
+  const { data, graphicsOptions, selectedGraphics } =
+    await loadFilteredCategoryPageData({
+      category,
+      merchantId: merchant.id,
+      productLimit: STOREFRONT_PRODUCTS_PER_PAGE,
+      productOffset,
+      rawGraphics: graphics,
+      storeSlug: slug,
+      trustedGraphics,
+      trustedHubSlug: typeof graphicsHub === 'string' ? graphicsHub : undefined,
+    });
 
   if (!data.isCollection && data.isInactiveCategory) {
     return renderCategoryNotFoundContent({ slug });
@@ -171,6 +185,13 @@ export async function CategoryPageContent({
     merchant,
     await headers()
   );
+  const graphicsHubLinks = await loadGraphicsHubLinks({
+    category,
+    graphicsOptions,
+    requestScopedBaseUrl,
+    slug,
+    store: merchant,
+  });
   const hubContent = buildCategoryPageHubModel({
     data,
     categorySlug: category,
@@ -178,51 +199,37 @@ export async function CategoryPageContent({
     merchantBusinessName: merchant.business_name,
     storeUrl: requestScopedBaseUrl,
     products: normalizedProducts,
+    ...(graphicsHubLinks.length > 0
+      ? { comparisonLinks: graphicsHubLinks }
+      : {}),
     guidePosts,
     brandAuthorityEntries,
   });
+  const canonicalCategoryUrl = canonicalBaseUrl ?? `${baseUrl}/${category}`;
   const paginatedCategoryUrl =
     currentPage > 1
-      ? `${baseUrl}/${category}?page=${currentPage}`
-      : `${baseUrl}/${category}`;
+      ? `${canonicalCategoryUrl}?page=${currentPage}`
+      : canonicalCategoryUrl;
 
-  const collectionSchema = generateCollectionPageSchema({
-    name: categoryName,
-    description: hubContent.intro.description,
-    url: paginatedCategoryUrl,
-    products: collectionSchemaProducts,
-    merchantName: merchant.business_name,
-    country: merchant.country || 'NG',
-    currency: resolveMerchantCurrencyConfig(merchant).code,
-  }) as unknown as JsonLdData<CollectionPage>;
-
-  const breadcrumbItems = [{ name: merchant.business_name, url: baseUrl }];
   const parent = data.category?.parent as unknown as {
     name: string;
     slug: string;
   } | null;
-
-  if (!data.isCollection && parent) {
-    breadcrumbItems.push({
-      name: parent.name,
-      url: `${baseUrl}/${parent.slug}`,
+  const { breadcrumbSchema, collectionSchema, faqSchema } =
+    buildCategoryPageContentSchemas({
+      baseUrl,
+      canonicalCategoryUrl,
+      categoryName,
+      country: merchant.country,
+      currencyCode: resolveMerchantCurrencyConfig(merchant).code,
+      hubContent,
+      isCollection: data.isCollection,
+      merchantBusinessName: merchant.business_name,
+      paginatedCategoryUrl,
+      parent,
+      products: collectionSchemaProducts,
+      seoPageName,
     });
-  }
-
-  breadcrumbItems.push({
-    name: categoryName,
-    url: `${baseUrl}/${category}`,
-  });
-
-  const breadcrumbSchema = generateBreadcrumbSchema(
-    breadcrumbItems
-  ) as unknown as JsonLdData<BreadcrumbList>;
-  const faqSchema =
-    hubContent.faqItems.length > 0
-      ? (generateFAQSchema(
-          hubContent.faqItems
-        ) as unknown as JsonLdData<FAQPage>)
-      : null;
   const comparisonLinks = hubContent.comparisonLinks ?? [];
 
   return (
@@ -233,8 +240,22 @@ export async function CategoryPageContent({
 
       <V2ComparisonScope storageNamespace={merchant.id}>
         <OgabasseyCategoryPage
-          // CategoryPage client bundle. Injected as a ReactNode slot.
           hubSections={<CategoryHubSections hub={hubContent} />}
+          hubSlug={resolveCarriedHubSlug({
+            graphicsOptions,
+            hubSlug,
+            rawGraphics: graphics,
+            trustedHubSlug:
+              typeof graphicsHub === 'string' ? graphicsHub : undefined,
+          })}
+          // Curated hub pages keep their own pagination route
+          // (/gaming-laptops/graphics/[slug]?page=N) instead of the generic
+          // listing pagination path (?graphics=...), which is noindex.
+          paginationBasePath={buildHubPaginationBasePath({
+            baseUrl,
+            canonicalBaseUrl,
+            requestScopedBaseUrl,
+          })}
           currentPage={categoryPageCurrentPage}
           productsArePrePaginated={productsArePrePaginated}
           categoryImage={
@@ -242,6 +263,8 @@ export async function CategoryPageContent({
           }
           itemsPerPage={STOREFRONT_PRODUCTS_PER_PAGE}
           products={categoryPageProducts}
+          graphicsOptions={graphicsOptions}
+          selectedGraphics={selectedGraphics}
           titleHeading={titleHeading}
           totalProductCount={
             productsArePrePaginated

@@ -31,7 +31,11 @@ const pickupRoute =
 const repairAction = 'apps/web/src/app/actions/repair.ts';
 const repairPickupPaymentAction =
   'apps/web/src/app/actions/repair-pickup-payment.ts';
-
+const storefrontPickupRoute =
+  'apps/web/src/app/api/storefront/[slug]/repairs/pickup/route.ts';
+const catalogAccess = 'apps/web/src/lib/repairs/repairs-catalog-access.ts';
+const startMobilePayment =
+  'apps/web/src/lib/repairs/start-mobile-repair-pickup-payment.ts';
 const receiverJwtEnv = [
   receiverClient,
   scopedJwt,
@@ -184,4 +188,35 @@ export const eventPipelineRepairPickupCredentialPaths = [
   [repairPickupPaymentAction, startPayment, findResumable, ...receiverJwtEnv],
   [repairPickupPaymentAction, startPayment, markAwaiting, ...receiverJwtEnv],
   [repairPickupPaymentAction, startPayment, bindPending, ...receiverJwtEnv],
+  [storefrontPickupRoute, ...centerReceiverJwtEnv],
+  [storefrontPickupRoute, catalogAccess, cachedData, envPath],
+  [storefrontPickupRoute, startMobilePayment, ...receiverJwtEnv],
+  [
+    storefrontPickupRoute,
+    startMobilePayment,
+    startPayment,
+    ...centerReceiverJwtEnv,
+  ],
+  [
+    storefrontPickupRoute,
+    startMobilePayment,
+    startPayment,
+    findResumable,
+    ...receiverJwtEnv,
+  ],
+  [
+    storefrontPickupRoute,
+    startMobilePayment,
+    startPayment,
+    markAwaiting,
+    ...receiverJwtEnv,
+  ],
+  [
+    storefrontPickupRoute,
+    startMobilePayment,
+    startPayment,
+    bindPending,
+    ...receiverJwtEnv,
+  ],
+  [startMobilePayment, ...receiverJwtEnv],
 ] as const;

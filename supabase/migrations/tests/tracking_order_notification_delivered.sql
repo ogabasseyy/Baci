@@ -9,6 +9,9 @@
 -- notification_delivered so the web and mobile success lookups can gate
 -- the funnel event on it instead of claiming it at order creation.
 --
+-- Claim state is driven through the production RPC path (claim +
+-- complete), exactly as the after() callback does it.
+--
 -- USAGE:
 --   psql $DATABASE_URL -v ON_ERROR_STOP=1 -f supabase/migrations/tests/tracking_order_notification_delivered.sql
 --
@@ -57,16 +60,19 @@ BEGIN
     'pending-token-002'
   );
 
-  -- Terminal after() success marks the claim sent.
-  INSERT INTO public.immediate_order_notification_claims (
-    order_id, merchant_id, status, sent_at
-  )
-  VALUES (v_delivered_order_id, v_merchant_id, 'sent', now());
-  -- A failed (releasable) claim is not delivery.
-  INSERT INTO public.immediate_order_notification_claims (
-    order_id, merchant_id, status
-  )
-  VALUES (v_pending_order_id, v_merchant_id, 'failed');
+  -- Terminal after() success marks the claim sent, through the same RPCs
+  -- the route uses.
+  PERFORM public.claim_immediate_order_notification(v_delivered_order_id);
+  PERFORM public.complete_immediate_order_notification(
+    v_delivered_order_id,
+    true
+  );
+  -- A failed (releasable) delivery is not delivery.
+  PERFORM public.claim_immediate_order_notification(v_pending_order_id);
+  PERFORM public.complete_immediate_order_notification(
+    v_pending_order_id,
+    false
+  );
 
   -- Token lookup projects delivered for the sent order.
   SELECT notification_delivered INTO v_delivered

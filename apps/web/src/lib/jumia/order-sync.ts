@@ -127,7 +127,19 @@ export async function syncJumiaOrdersForActiveIntegrations(
         integration.merchant_id,
         integration.shop_id
       );
-      if (!(shopKeys instanceof Set) || shopKeys.size > 1) {
+      if (!(shopKeys instanceof Set)) {
+        const message = `Failed to resolve Jumia stock scope for ${integration.merchant_id}: ${shopKeys.message}`;
+        result.errors.push(message);
+        logger.error({
+          message: 'Failed to resolve Jumia stock scope',
+          error: shopKeys.message,
+          integrationId: integration.id,
+          merchant_id: integration.merchant_id,
+          route: JUMIA_ORDER_SYNC_ROUTE,
+        });
+        continue;
+      }
+      if (shopKeys.size > 1) {
         logger.info({
           message: 'Skipping Jumia stock sync for ambiguous shop scope',
           integrationId: integration.id,

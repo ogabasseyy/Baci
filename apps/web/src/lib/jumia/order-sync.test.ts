@@ -404,4 +404,39 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
     );
     expect(updatePayload).not.toHaveProperty('last_sync_at');
   });
+
+  it('records stock-scope lookup failures instead of silently skipping', async () => {
+    const marketplaceQuery = createQuery(
+      {
+        data: [
+          {
+            id: 'integration-1',
+            merchant_id: 'merchant-1',
+            shop_id: 'shop-1',
+            connection_method: 'self_authorization',
+            jumia_authorization_id: 'authorization-1',
+            last_sync_at: null,
+            sync_config: { orders: false, stock: true },
+          },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 2 }
+    );
+    const scopeQuery = createQuery(
+      { data: null, error: { message: 'db down' } },
+      { terminalEqCall: 4 }
+    );
+    const supabase = createSupabaseMock({
+      marketplace_integrations: [marketplaceQuery, scopeQuery],
+    });
+
+    const result = await syncJumiaOrdersForActiveIntegrations(supabase);
+
+    expect(result.stockUpdated).toBe(0);
+    expect(result.errors).toEqual([
+      'Failed to resolve Jumia stock scope for merchant-1: db down',
+    ]);
+    expect(mocks.forIntegration).not.toHaveBeenCalled();
+  });
 });

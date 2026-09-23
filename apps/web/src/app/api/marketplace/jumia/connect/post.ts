@@ -65,6 +65,26 @@ export function createJumiaConnectPost(
         );
       }
 
+      // Validate the body before any database work so malformed payloads
+      // fail fast with 400 instead of running merchant/feature lookups or
+      // falling into the outer 500 handler.
+      let rawBody: unknown;
+      try {
+        rawBody = await request.json();
+      } catch {
+        return NextResponse.json(
+          { error: 'Invalid JSON body' },
+          { status: 400 }
+        );
+      }
+      const parsed = jumiaConnectRequestSchema.safeParse(rawBody);
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: 'Invalid input', details: flattenError(parsed.error) },
+          { status: 400 }
+        );
+      }
+
       const merchantContext = await getMerchantForApiRequest(supabase, user.id);
       if (!merchantContext) {
         return NextResponse.json(
@@ -96,14 +116,6 @@ export function createJumiaConnectPost(
       }
       if (!featureAccess.allowed) {
         return merchantFeatureUpgradeResponse('marketplace_sync');
-      }
-
-      const parsed = jumiaConnectRequestSchema.safeParse(await request.json());
-      if (!parsed.success) {
-        return NextResponse.json(
-          { error: 'Invalid input', details: flattenError(parsed.error) },
-          { status: 400 }
-        );
       }
 
       if (parsed.data.connectionType === 'self_authorization') {

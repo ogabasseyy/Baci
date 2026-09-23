@@ -20,13 +20,13 @@ import {
   jumiaErrorResponse,
 } from '@/lib/jumia/client';
 import { updateStock } from '@/lib/jumia/feeds';
-import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
-import { getEffectiveStock } from '@/lib/product-stock';
-import { createClient } from '@/lib/supabase/server';
 import {
   getPushReadyJumiaStockMappings,
   loadJumiaStockMappings,
 } from '@/lib/jumia/load-jumia-stock-mappings';
+import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
+import { getEffectiveStock } from '@/lib/product-stock';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
   try {

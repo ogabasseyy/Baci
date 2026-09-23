@@ -210,7 +210,7 @@ describe('Jumia order sync notification markers', () => {
         canonicalUpdated: 1,
         notified: 1,
         stockUpdated: 0,
-      orderErrors: 0,
+        orderErrors: 0,
       })
     );
   });
@@ -287,7 +287,7 @@ describe('Jumia order sync notification markers', () => {
         canonicalCreated: 1,
         notified: 0,
         stockUpdated: 0,
-      orderErrors: 0,
+        orderErrors: 0,
       })
     );
   });

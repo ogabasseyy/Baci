@@ -43,6 +43,47 @@ export async function isCheckoutPurchaseClaimed(
   }
 }
 
+/**
+ * Serialized variant of isCheckoutPurchaseClaimed for denied-claim
+ * disambiguation. A raw read can catch a timed-out write's phantom
+ * persisted claim before its rollback lands and mistake it for a recorded
+ * conversion (stopping settlement retries, or clearing retained context,
+ * although nothing was emitted). Routing the read through the claim chain
+ * waits for the serialized compensation to settle first, so the answer
+ * reflects post-rollback state. An unreadable store still reports false
+ * (favour retrying over assuming recorded).
+ */
+export async function isCheckoutPurchaseClaimedSettled(
+  orderId: string,
+  eventName = 'purchase'
+): Promise<boolean> {
+  if (!orderId) {
+    return false;
+  }
+  const claim = claimKey(orderId, eventName);
+  if (isClaimGranted(claim)) {
+    return true;
+  }
+  try {
+    const observed = await serializeClaimTask(async () => {
+      const settled = Promise.resolve();
+      try {
+        const stored = await readStoredClaims();
+        if (stored === STORAGE_TIMEOUT) {
+          return { held: false, settled };
+        }
+        return { held: stored.includes(claim), settled };
+      } catch (error) {
+        log.error('Failed to read checkout purchase tracking claim:', error);
+        return { held: false, settled };
+      }
+    });
+    return observed.held;
+  } catch {
+    return false;
+  }
+}
+
 export function claimCheckoutPurchaseTracking(
   orderId: string,
   eventName = 'purchase'
@@ -187,7 +228,13 @@ async function removeClaimAfterLateWrite(claim: string): Promise<void> {
     // and union is idempotent, so the extra pass is safe. No further
     // compensation — the residual needs consecutive stalls at every
     // level to matter.
-    void rollbackWrite.then(
+    //
+    // Awaited, not detached: the claim chain advances on this
+    // compensation's settlement, so denied-claim disambiguation reads
+    // enqueued behind it observe post-rollback state instead of the
+    // phantom. A write that never settles still releases the queue via
+    // MAX_QUEUE_HOLD, and reconcileStoredClaims never rejects.
+    await rollbackWrite.then(
       () => reconcileStoredClaims().catch(() => undefined),
       () => undefined
     );

@@ -2,7 +2,7 @@ import { releaseCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-r
 import {
   awaitCreationPurchaseEmission,
   claimCheckoutPurchaseTracking,
-  isCheckoutPurchaseClaimed,
+  isCheckoutPurchaseClaimedSettled,
 } from '@/lib/claim-checkout-purchase-tracking';
 import { createLogger } from '@/lib/logger';
 import { useCartStore } from '@/stores/cart-store';
@@ -81,10 +81,12 @@ export async function trackCheckoutPaymentCompletedOnce(
     if (!claimed) {
       // A denied claim usually means another path already recorded the
       // conversion — but it can also mean the store was unreadable and
-      // nothing was granted. Check which: polling callers must keep their
-      // lane when nothing is recorded, yet stop when the conversion is
-      // already safe, and a bare boolean cannot tell those apart.
-      const held = await isCheckoutPurchaseClaimed(
+      // nothing was granted. Check which through the serialized chain: a
+      // raw read could catch a timed-out write's phantom claim before its
+      // rollback lands and stop polling although nothing was recorded.
+      // Polling callers must keep their lane when nothing is recorded,
+      // yet stop when the conversion is already safe.
+      const held = await isCheckoutPurchaseClaimedSettled(
         input.orderId,
         PAYMENT_COMPLETED_CLAIM_EVENT
       );
@@ -106,7 +108,7 @@ export async function trackCheckoutPaymentCompletedOnce(
         ? true
         : creationOutcome === 'failed'
           ? false
-          : await isCheckoutPurchaseClaimed(input.orderId);
+          : await isCheckoutPurchaseClaimedSettled(input.orderId);
     const total = input.value ?? 0;
     if (!purchaseAlreadySent) {
       try {

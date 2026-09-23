@@ -6,10 +6,12 @@
 -- sessionless verify path performs no service-role reads and must not
 -- invoke the confirming RPC (it locks the order and writes holds), so the
 -- proof is computed here, read-only, mirroring
--- private.confirm_order_inventory_reservations' skip + success conditions:
--- off-policy items are unconstrained; every other item needs at least its
+-- private.confirm_order_inventory_reservations' fail-closed set: only
+-- serialized_strict items can hold the proof — each needs at least its
 -- ordered quantity durably held (sold, or reserved with no expiry) and no
--- attached-but-unconfirmed unit. Anchor resolution intentionally avoids
+-- attached-but-unconfirmed unit. Unlimited-fallback orders finalize with
+-- missing units by design, and off-policy items are unconstrained.
+-- Anchor resolution intentionally avoids
 -- ensure_product_inventory_anchor_variant (a writer): the claim step at
 -- order creation already ensures anchors, and ensure creates missing
 -- anchors with 'inherit', which falls back to the product policy — the
@@ -72,11 +74,17 @@ AS $$
                     ELSE oi.variant_id
                   END
             WHERE oi.order_id = o.id
+              -- Only serialized_strict blocks the finalizer (confirm
+              -- emits its missing-unit exception solely for strict, and
+              -- the webhook ensure rejects solely on those codes), so
+              -- only strict items can hold the proof. Unlimited-fallback
+              -- orders finalize legitimately with missing units and must
+              -- not pend forever; off-policy items are unconstrained.
               AND COALESCE(
                     NULLIF(vv.inventory_tracking_policy, 'inherit'),
                     p.inventory_tracking_policy,
                     'off'
-                  ) <> 'off'
+                  ) = 'serialized_strict'
               AND (
                 (SELECT count(*)::integer
                    FROM public.variant_inventory AS vi
@@ -104,7 +112,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.get_guest_payment_reference_snapshot(text, text) IS
-  'Proof-bound guest read model for payment reference verification: returns verification fields (identity, status, amounts, inventory proof) only — never raw provider payloads or fee data. inventory_confirmed is true only when every serialized-tracked order item is durably held (sold or reserved with no expiry) in at least its ordered quantity; off-policy items are unconstrained. Returns a row only when the gateway reference belongs to an order carrying the supplied tracking token. Used by POST /api/payments/verify for sessionless checkouts (read-only; finalization stays on the webhook boundary).';
+  'Proof-bound guest read model for payment reference verification: returns verification fields (identity, status, amounts, inventory proof) only — never raw provider payloads or fee data. inventory_confirmed is true only when every serialized_strict order item is durably held (sold or reserved with no expiry) in at least its ordered quantity; unlimited-fallback and off-policy items are unconstrained. Returns a row only when the gateway reference belongs to an order carrying the supplied tracking token. Used by POST /api/payments/verify for sessionless checkouts (read-only; finalization stays on the webhook boundary).';
 
 REVOKE ALL ON FUNCTION public.get_guest_payment_reference_snapshot(text, text)
   FROM PUBLIC;

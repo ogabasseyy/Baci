@@ -1,6 +1,10 @@
 import { CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY } from '@/config/checkout-storage';
 import { releaseCheckoutPurchaseTracking } from './claim-checkout-purchase-release';
-import { claimCheckoutPurchaseTracking } from './claim-checkout-purchase-tracking';
+import {
+  claimCheckoutPurchaseTracking,
+  isCheckoutPurchaseClaimed,
+  isCheckoutPurchaseClaimedSettled,
+} from './claim-checkout-purchase-tracking';
 
 const storage = new Map<string, string>();
 const mockGetItem = jest.fn(async (key: string) => storage.get(key) ?? null);
@@ -209,6 +213,45 @@ it('leaves no phantom claim when a timed-out write lands late', async () => {
     await expect(claimCheckoutPurchaseTracking('order-late')).resolves.toBe(
       true
     );
+  } finally {
+    jest.useRealTimers();
+    mockSetItem.mockImplementation(async (key: string, value: string) => {
+      storage.set(key, value);
+    });
+  }
+});
+
+it('waits for timed-out write compensation before reporting held', async () => {
+  jest.useFakeTimers();
+  try {
+    // Writes land after the three-second caller timeout: the claim call
+    // reports failure while the late write (a phantom persisted claim)
+    // and its rollback are still settling.
+    mockSetItem.mockImplementation(
+      (key: string, value: string) =>
+        new Promise<void>((resolve) => {
+          setTimeout(() => {
+            storage.set(key, value);
+            resolve();
+          }, 3500);
+        })
+    );
+    const first = claimCheckoutPurchaseTracking('order-settled-read');
+    await jest.advanceTimersByTimeAsync(3000);
+    await expect(first).resolves.toBe(false);
+
+    // The late write has landed but the rollback has not run yet: the
+    // raw read observes the phantom claim here.
+    await jest.advanceTimersByTimeAsync(500);
+    await expect(isCheckoutPurchaseClaimed('order-settled-read')).resolves.toBe(
+      true
+    );
+
+    // The settled read waits behind the serialized compensation instead
+    // of mistaking the phantom for a recorded conversion.
+    const settled = isCheckoutPurchaseClaimedSettled('order-settled-read');
+    await jest.advanceTimersByTimeAsync(8000);
+    await expect(settled).resolves.toBe(false);
   } finally {
     jest.useRealTimers();
     mockSetItem.mockImplementation(async (key: string, value: string) => {

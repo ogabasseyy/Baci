@@ -79,6 +79,67 @@ describe('verifyOrderPaymentForCompletion', () => {
     ).resolves.toEqual({ paid: true, total: 5000 });
   });
 
+  it('preserves the reference currency when no tracking token exists', async () => {
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(
+            JSON.stringify({
+              ...completedVerification,
+              orderTotal: 5750,
+              currency: 'KES',
+            }),
+            { status: 200 }
+          )
+        : new Response('{}', { status: 500 })
+    );
+
+    // No token: the tracked-order lookup never runs, so the verified
+    // currency must travel on the reference result itself — otherwise
+    // completion defaults a KES payment to NGN.
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: true, total: 5750, currency: 'KES' });
+  });
+
+  it('prefers the normalized reference currency over lookup attribution', async () => {
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(
+            JSON.stringify({
+              ...completedVerification,
+              orderTotal: 5750,
+              currency: 'KES',
+            }),
+            { status: 200 }
+          )
+        : new Response(
+            JSON.stringify({
+              order: {
+                id: 'order-1',
+                order_number: 'ORD-1',
+                payment_status: 'pending',
+                total: 5750,
+                currency: 'GHS',
+              },
+            }),
+            { status: 200 }
+          )
+    );
+
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual(
+      expect.objectContaining({ paid: true, currency: 'KES' })
+    );
+  });
+
   it('retains the pending lookup attribution after reference finalization', async () => {
     const pendingGuestOrder = {
       order: {

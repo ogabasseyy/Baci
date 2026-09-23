@@ -29,6 +29,8 @@ DECLARE
   v_variant_id uuid := '9f000000-0000-4000-8000-000000000109';
   v_mixed_product_id uuid := '9f000000-0000-4000-8000-000000000110';
   v_mixed_anchor_id uuid := '9f000000-0000-4000-8000-000000000111';
+  v_unlimited_product_id uuid := '9f000000-0000-4000-8000-000000000112';
+  v_unlimited_anchor_id uuid := '9f000000-0000-4000-8000-000000000113';
 BEGIN
   INSERT INTO public.merchants (id, user_id, email, business_name, slug)
   VALUES (
@@ -49,7 +51,8 @@ BEGIN
     (v_durable_product_id, v_merchant_id, 'Durable Phone', 180000, 'active', 'serialized_strict'),
     (v_bare_product_id, v_merchant_id, 'Bare Phone', 180000, 'active', 'serialized_strict'),
     (v_variant_product_id, v_merchant_id, 'Variant Phone', 180000, 'active', 'inherit'),
-    (v_mixed_product_id, v_merchant_id, 'Mixed Phone', 180000, 'active', 'serialized_strict');
+    (v_mixed_product_id, v_merchant_id, 'Mixed Phone', 180000, 'active', 'serialized_strict'),
+    (v_unlimited_product_id, v_merchant_id, 'Unlimited Phone', 180000, 'active', 'serialized_then_unlimited');
 
   INSERT INTO public.product_variants (
     id, product_id, merchant_id, attributes, price_override,
@@ -60,12 +63,14 @@ BEGIN
     (v_durable_anchor_id, v_durable_product_id, v_merchant_id, '{"is_anchor": true}'::jsonb, 0, 'inherit', true),
     (v_bare_anchor_id, v_bare_product_id, v_merchant_id, '{"is_anchor": true}'::jsonb, 0, 'inherit', true),
     (v_mixed_anchor_id, v_mixed_product_id, v_merchant_id, '{"is_anchor": true}'::jsonb, 0, 'inherit', true),
+    (v_unlimited_anchor_id, v_unlimited_product_id, v_merchant_id, '{"is_anchor": true}'::jsonb, 0, 'inherit', true),
     (v_variant_id, v_variant_product_id, v_merchant_id, '{"storage": "128GB"}'::jsonb, 180000, 'serialized_strict', false);
 
   UPDATE public.products SET has_variants = false, inventory_anchor_variant_id = v_anchor_id WHERE id = v_simple_product_id;
   UPDATE public.products SET has_variants = false, inventory_anchor_variant_id = v_durable_anchor_id WHERE id = v_durable_product_id;
   UPDATE public.products SET has_variants = false, inventory_anchor_variant_id = v_bare_anchor_id WHERE id = v_bare_product_id;
   UPDATE public.products SET has_variants = false, inventory_anchor_variant_id = v_mixed_anchor_id WHERE id = v_mixed_product_id;
+  UPDATE public.products SET has_variants = false, inventory_anchor_variant_id = v_unlimited_anchor_id WHERE id = v_unlimited_product_id;
   UPDATE public.products SET has_variants = true WHERE id = v_variant_product_id;
 
   -- One paid order per scenario, each with a completed transaction.
@@ -79,7 +84,8 @@ BEGIN
     ('9f000000-0000-4000-8000-000000000203', v_merchant_id, 'ORD-PROOF-C', 'Proof Customer', 'paid', 180000, 180000, 'physical', 'track-proof-c'),
     ('9f000000-0000-4000-8000-000000000204', v_merchant_id, 'ORD-PROOF-D', 'Proof Customer', 'paid', 180000, 180000, 'physical', 'track-proof-d'),
     ('9f000000-0000-4000-8000-000000000205', v_merchant_id, 'ORD-PROOF-E', 'Proof Customer', 'paid', 180000, 180000, 'physical', 'track-proof-e'),
-    ('9f000000-0000-4000-8000-000000000206', v_merchant_id, 'ORD-PROOF-F', 'Proof Customer', 'paid', 360000, 360000, 'physical', 'track-proof-f');
+    ('9f000000-0000-4000-8000-000000000206', v_merchant_id, 'ORD-PROOF-F', 'Proof Customer', 'paid', 360000, 360000, 'physical', 'track-proof-f'),
+    ('9f000000-0000-4000-8000-000000000207', v_merchant_id, 'ORD-PROOF-G', 'Proof Customer', 'paid', 180000, 180000, 'physical', 'track-proof-g');
 
   INSERT INTO public.order_items (
     id, order_id, product_id, variant_id, name, price, quantity, product_match_status
@@ -90,7 +96,8 @@ BEGIN
     ('9f000000-0000-4000-8000-000000000303', '9f000000-0000-4000-8000-000000000203', v_durable_product_id, NULL, 'Durable Phone', 180000, 1, 'unreviewed'),
     ('9f000000-0000-4000-8000-000000000304', '9f000000-0000-4000-8000-000000000204', v_bare_product_id, NULL, 'Bare Phone', 180000, 1, 'unreviewed'),
     ('9f000000-0000-4000-8000-000000000305', '9f000000-0000-4000-8000-000000000205', v_variant_product_id, v_variant_id, 'Variant Phone', 180000, 1, 'unreviewed'),
-    ('9f000000-0000-4000-8000-000000000306', '9f000000-0000-4000-8000-000000000206', v_mixed_product_id, NULL, 'Mixed Phone', 180000, 2, 'unreviewed');
+    ('9f000000-0000-4000-8000-000000000306', '9f000000-0000-4000-8000-000000000206', v_mixed_product_id, NULL, 'Mixed Phone', 180000, 2, 'unreviewed'),
+    ('9f000000-0000-4000-8000-000000000307', '9f000000-0000-4000-8000-000000000207', v_unlimited_product_id, NULL, 'Unlimited Phone', 180000, 1, 'unreviewed');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -102,7 +109,8 @@ BEGIN
     ('9f000000-0000-4000-8000-000000000403', v_merchant_id, '9f000000-0000-4000-8000-000000000203', 'payment', 180000, 'NGN', 'completed', 'paystack', 'GUEST-PROOF-C'),
     ('9f000000-0000-4000-8000-000000000404', v_merchant_id, '9f000000-0000-4000-8000-000000000204', 'payment', 180000, 'NGN', 'completed', 'paystack', 'GUEST-PROOF-D'),
     ('9f000000-0000-4000-8000-000000000405', v_merchant_id, '9f000000-0000-4000-8000-000000000205', 'payment', 180000, 'NGN', 'completed', 'paystack', 'GUEST-PROOF-E'),
-    ('9f000000-0000-4000-8000-000000000406', v_merchant_id, '9f000000-0000-4000-8000-000000000206', 'payment', 360000, 'NGN', 'completed', 'paystack', 'GUEST-PROOF-F');
+    ('9f000000-0000-4000-8000-000000000406', v_merchant_id, '9f000000-0000-4000-8000-000000000206', 'payment', 360000, 'NGN', 'completed', 'paystack', 'GUEST-PROOF-F'),
+    ('9f000000-0000-4000-8000-000000000407', v_merchant_id, '9f000000-0000-4000-8000-000000000207', 'payment', 180000, 'NGN', 'completed', 'paystack', 'GUEST-PROOF-G');
 
   -- B: still an expiring hold (claim ran, confirm has not). C: durable
   -- hold (confirm converged, or claimed after payment). E: sold unit.
@@ -178,6 +186,14 @@ BEGIN
   FROM public.get_guest_payment_reference_snapshot('GUEST-PROOF-F', 'track-proof-f') AS s;
   IF v_confirmed IS DISTINCT FROM false THEN
     RAISE EXCEPTION 'paid order with a stray expiring hold must read inventory_confirmed=false';
+  END IF;
+
+  -- G: unlimited-fallback items finalize with missing units by design —
+  -- the proof must not hold them pending.
+  SELECT s.inventory_confirmed INTO v_confirmed
+  FROM public.get_guest_payment_reference_snapshot('GUEST-PROOF-G', 'track-proof-g') AS s;
+  IF v_confirmed IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'paid unlimited-fallback order with no units must read inventory_confirmed=true';
   END IF;
 END $$;
 

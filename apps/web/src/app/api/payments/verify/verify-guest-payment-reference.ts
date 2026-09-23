@@ -28,8 +28,9 @@ export interface GuestPaymentReferenceSnapshot {
   orderShippingStatus: string | null;
   orderTotal: number | null;
   /**
-   * True only when every serialized-tracked order item is durably held
-   * in at least its ordered quantity (see the snapshot RPC). Paid row
+   * True only when every serialized_strict order item is durably held
+   * in at least its ordered quantity (see the snapshot RPC;
+   * unlimited-fallback and off-policy items are unconstrained). Paid row
    * alone is not success: the finalizer flips payment_status before the
    * inventory-confirm step converges.
    */

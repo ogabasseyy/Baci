@@ -69,6 +69,8 @@ jest.mock('@/lib/claim-checkout-purchase-tracking', () => ({
     mockClaimCheckoutPurchaseTracking(...args),
   isCheckoutPurchaseClaimed: (...args: unknown[]) =>
     mockIsCheckoutPurchaseClaimed(...args),
+  isCheckoutPurchaseClaimedSettled: (...args: unknown[]) =>
+    mockIsCheckoutPurchaseClaimed(...args),
 }));
 jest.mock('@/lib/claim-checkout-purchase-release', () => ({
   releaseCheckoutPurchaseTracking: (...args: unknown[]) =>

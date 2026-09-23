@@ -226,6 +226,7 @@ export function usePaymentGatewayController() {
     },
     scheduleDelayedNavigation,
     setSuccessStatus: () => setPaymentStatus('success'),
+    isMountedRef,
   });
 
   const handleClose = () => {

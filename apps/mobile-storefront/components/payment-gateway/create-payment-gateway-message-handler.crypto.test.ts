@@ -310,6 +310,28 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
     });
   });
 
+  it('keeps a new cart when the shopper leaves during crypto verification', async () => {
+    // Arrange: the screen unmounts while the verification/tracking
+    // awaits are in flight.
+    const isMountedRef = { current: true };
+    mockTrackCheckoutPaymentCompletedOnce.mockImplementationOnce(async () => {
+      isMountedRef.current = false;
+      return true;
+    });
+    const { clearCart, handler } = createHandler({
+      trackingToken: 'track-token-123',
+      isMountedRef,
+    });
+
+    // Act
+    await sendMessage(handler, { type: 'crypto_success' });
+
+    // Assert: the paid conversion is still recorded, but the stale
+    // handler must not erase the cart built since unmounting.
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(1);
+    expect(clearCart).not.toHaveBeenCalled();
+  });
+
   it('skips the conversion when crypto settlement is still pending', async () => {
     // Arrange: a crypto callback whose order is not paid yet.
     mockPendingCryptoVerification();

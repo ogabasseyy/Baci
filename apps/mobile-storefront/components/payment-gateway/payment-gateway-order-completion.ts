@@ -3,7 +3,7 @@ import type { RefObject } from 'react';
 import { releaseCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-release';
 import {
   claimCheckoutPurchaseTracking,
-  isCheckoutPurchaseClaimed,
+  isCheckoutPurchaseClaimedSettled,
 } from '@/lib/claim-checkout-purchase-tracking';
 import { clearPersistedRedvaultOrderWithRetry } from '@/lib/pending-redvault-order';
 import {
@@ -119,10 +119,12 @@ export async function verifyRedvaultCompletion(
             throw trackingError;
           }
           await clearRedvaultPurchaseTrackingContext(orderId || '');
-        } else if (await isCheckoutPurchaseClaimed(orderId || '')) {
+        } else if (await isCheckoutPurchaseClaimedSettled(orderId || '')) {
           // The claim is actually held, so the purchase went out
           // through another path: the saved context is stale and must
-          // not linger in AsyncStorage indefinitely.
+          // not linger in AsyncStorage indefinitely. Settled read: a
+          // phantom timed-out write must not destroy the only snapshot
+          // copy before its rollback lands.
           await clearRedvaultPurchaseTrackingContext(orderId || '');
         }
         // Otherwise the store itself was unavailable (a denial is not

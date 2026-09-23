@@ -42,6 +42,13 @@ interface CreatePaymentGatewayMessageHandlerInput {
   ) => void;
   scheduleDelayedNavigation: (navigate: () => void) => void;
   setSuccessStatus: () => void;
+  /**
+   * Controller liveness: the crypto verification/tracking awaits can run
+   * for seconds, and a shopper who left and built a new cart must not
+   * have it erased by this stale handler. Optional so existing callers
+   * and tests without a controller keep today's behavior.
+   */
+  isMountedRef?: MutableRefObject<boolean>;
 }
 
 const getFiniteNumber = (value: unknown) => {
@@ -128,6 +135,7 @@ export function createPaymentGatewayMessageHandler({
   onTerminalVerificationFailure,
   scheduleDelayedNavigation,
   setSuccessStatus,
+  isMountedRef,
 }: CreatePaymentGatewayMessageHandlerInput) {
   const pendingGatewayTextRef: MutableRefObject<string | null> = {
     current: null,
@@ -274,6 +282,13 @@ export function createPaymentGatewayMessageHandler({
             },
           });
         });
+        return;
+      }
+      // The verification and tracking awaits above can run for seconds:
+      // a shopper who left and built a new cart must not have it erased
+      // by this stale handler. Navigation stays self-guarded inside
+      // scheduleDelayedNavigation.
+      if (isMountedRef && !isMountedRef.current) {
         return;
       }
       await clearCart();

@@ -79,8 +79,13 @@ interface VerifyReferenceResponse {
   finalizationOutcome?: string;
   orderId?: string;
   orderTotal?: number;
+  currency?: string;
   code?: string;
   reference?: string;
+}
+
+function verifiedCurrency(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 function toVerifyReferenceResponse(value: unknown): VerifyReferenceResponse {
@@ -190,7 +195,16 @@ async function checkReferenceSettled(
       }
       return { paid: false };
     }
-    return { paid: true, total: finiteOrUndefined(data.orderTotal) };
+    // The endpoint returns the normalized transaction currency on the
+    // finalized branches: keep it alongside the total so completions
+    // without a tracked-order lookup (no token, failed lookup) still
+    // settle in the stamped currency instead of defaulting to NGN.
+    const currency = verifiedCurrency(data.currency);
+    return {
+      paid: true,
+      total: finiteOrUndefined(data.orderTotal),
+      ...(currency ? { currency } : {}),
+    };
   } catch {
     // Network failure or timeout: the lookup proved nothing either way.
     return { paid: false, inconclusive: true };
@@ -257,12 +271,14 @@ export async function verifyOrderPaymentForCompletion({
     );
     // The reference finalized payment after the lookup saw pending: retain
     // the lookup's identity and breakdown so the durable claim is consumed
-    // whole. The verify total wins when finite (same order, same total).
+    // whole. The verify total and normalized currency win when present
+    // (same order, same money).
     if (settled.paid && pendingAttribution) {
       return {
         paid: true,
         ...pendingAttribution,
         total: settled.total ?? pendingAttribution.total,
+        currency: settled.currency ?? pendingAttribution.currency,
       };
     }
     return settled;

@@ -59,6 +59,7 @@ VALUES
   'pickup',
   '12 Station Road, Osogbo',
   'pending',
+  'awaiting_payment',
   now() - interval '10 minutes'
 );
 
@@ -219,7 +220,7 @@ BEGIN
   FROM public.bind_repair_pickup_pending_payment_reference(
     '84a63d82-0000-4000-8000-000000000010',
     '84a63d82-0000-4000-8000-000000000001',
-    'RPU-TESTPENDING0001'
+    'RPU-TESTPENDING00001'
   ) AS bind_result;
 
   IF bound_row IS NULL OR bound_row.bound IS NOT TRUE THEN

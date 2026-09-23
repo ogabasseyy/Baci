@@ -13,7 +13,7 @@ import {
   SHELL_DELEGATE_MODULES,
   SHELL_EXEMPT_ROUTES,
   SHELL_JSX_PATTERN,
-} from './route-shell-safety.fixtures';
+} from './route-shell-safety.test-utils';
 
 const APP_ROOT = path.resolve(__dirname, '../../app');
 

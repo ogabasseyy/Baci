@@ -260,10 +260,8 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
   });
 
   it('waits for the in-flight creation emission instead of trusting the bare claim', async () => {
-    const {
-      claimCheckoutPurchaseTracking,
-      trackCreationPurchaseEmission,
-    } = await import('@/lib/claim-checkout-purchase-tracking');
+    const { claimCheckoutPurchaseTracking, trackCreationPurchaseEmission } =
+      await import('@/lib/claim-checkout-purchase-tracking');
     let resolveCreation!: () => void;
     const creationEmission = new Promise<void>((resolve) => {
       resolveCreation = resolve;
@@ -299,10 +297,8 @@ describe('trackCheckoutPaymentCompletedOnce', () => {
   });
 
   it('emits the purchase itself when the in-flight creation emission rejects', async () => {
-    const {
-      claimCheckoutPurchaseTracking,
-      trackCreationPurchaseEmission,
-    } = await import('@/lib/claim-checkout-purchase-tracking');
+    const { claimCheckoutPurchaseTracking, trackCreationPurchaseEmission } =
+      await import('@/lib/claim-checkout-purchase-tracking');
     const { releaseCheckoutPurchaseTracking } = await import(
       '@/lib/claim-checkout-purchase-release'
     );

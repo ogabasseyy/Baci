@@ -95,7 +95,14 @@ BEGIN
   IF NOT is_definer THEN
     RAISE EXCEPTION 'public.create_repair_booking_as_owner must be SECURITY DEFINER';
   END IF;
-  IF NOT config @> ARRAY['search_path='] THEN
+  -- proconfig serializes an empty search_path as search_path= or search_path=""
+  -- depending on the server version; accept either (same pattern as the
+  -- wrapper and private-function checks in this file).
+  IF config IS NULL OR NOT EXISTS (
+    SELECT 1 FROM unnest(config) AS entry
+    WHERE entry LIKE 'search_path=%'
+      AND trim(both '"' from split_part(entry, '=', 2)) = ''
+  ) THEN
     RAISE EXCEPTION 'public.create_repair_booking_as_owner must pin an empty search_path';
   END IF;
   IF NOT has_function_privilege('anon',

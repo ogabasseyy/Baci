@@ -49,6 +49,10 @@ const payment = {
 };
 
 describe('RepairPickupCheckout', () => {
+  // Full render + multi-stage async waits exceed the 5s default on slow
+  // machines; the waits resolve as soon as UI settles, so this only extends
+  // the ceiling instead of masking hangs.
+  jest.setTimeout(15_000);
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(repairPickupSession.load).mockResolvedValue(null);

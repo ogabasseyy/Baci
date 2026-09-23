@@ -70,8 +70,8 @@ import {
 } from '@/components/ui/tooltip';
 import { useAuth } from '@/contexts/auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
-import { useToast } from '@/hooks/use-toast';
 import { COUNTRIES, getCountryByCode } from '@/lib/countries';
+import { buildDashboardStoreUrl } from '@/lib/dashboard-store-url';
 import { isRepairsBusinessType } from '@/lib/repairs/repairs-feature';
 import { asRoute } from '@/lib/routes';
 import { cn } from '@/lib/utils';
@@ -274,7 +274,6 @@ export default function DashboardClientLayout({
   const [isCapsuleExpanded, setIsCapsuleExpanded] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [smartNavUsage, setSmartNavUsage] = useState<SmartNavUsage>({});
-  useToast(); // Keep toast available for potential future use
 
   // Orders count for sidebar badge - fetched lazily to not block initial render
   const [ordersCount, setOrdersCount] = useState(0);
@@ -331,27 +330,7 @@ export default function DashboardClientLayout({
     ? getCountryByCode(merchant.country)
     : null;
 
-  const getStoreUrl = () => {
-    if (!merchant?.slug) return '#';
-
-    const isDevelopment = process.env.NODE_ENV === 'development';
-
-    if (isDevelopment) {
-      // In development, use localhost with direct slug path
-      return `http://localhost:3000/${merchant.slug}`;
-    }
-
-    // In production, prioritize custom domain
-    if (merchant.custom_domain) {
-      return `https://${merchant.custom_domain}`;
-    }
-
-    // Fallback to subdomain URL
-    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
-    return `https://${merchant.slug}.${rootDomain}`;
-  };
-
-  const storeUrl = getStoreUrl();
+  const storeUrl = buildDashboardStoreUrl(merchant);
 
   const handleSignOut = async () => {
     await signOut();

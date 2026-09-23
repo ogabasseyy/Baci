@@ -36,7 +36,7 @@ describe('loadJumiaStockMappings', () => {
   it('excludes deactivated and inventory-opted-out mappings', async () => {
     const query = {
       eq: vi.fn(() => query),
-      or: vi.fn(() => query),
+      or: vi.fn((): unknown => query),
       select: vi.fn(),
     };
     query.select.mockReturnValue(query);

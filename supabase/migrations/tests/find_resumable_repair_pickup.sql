@@ -216,6 +216,19 @@ DECLARE
   rebound_id uuid;
   bound_row record;
 BEGIN
+  -- The preceding block leaves merchant ...099 in the receiver claims; point
+  -- them back at the fixture merchant for this block's capability checks.
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claims',
+    jsonb_build_object(
+      'role', 'repair_pickup_receiver',
+      'repair_pickup_receiver_context', 'server-quote',
+      'repair_pickup_receiver_merchant_id',
+      '84a63d82-0000-4000-8000-000000000001'
+    )::text,
+    true
+  );
+
   SELECT bind_result.bound INTO bound_row
   FROM public.bind_repair_pickup_pending_payment_reference(
     '84a63d82-0000-4000-8000-000000000010',

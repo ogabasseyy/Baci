@@ -1,3 +1,4 @@
+import { readSantaMerchantSlug } from '@/components/storefront/santa-chat/read-santa-merchant-slug';
 import {
   storefrontAgentUiContract,
   type StorefrontAgentUiEvent,
@@ -10,6 +11,8 @@ const OGABASSEY_CHAT_SESSION_STORAGE_KEY = 'ogabassey_chat_session_id';
 interface OgabasseyChatReply {
   events: StorefrontAgentUiEvent[];
   text: string;
+  /** Server-attested tenant slug, when the response carried a valid one. */
+  merchantSlug?: string;
 }
 
 function createChatSessionId(): string {
@@ -85,10 +88,15 @@ export async function requestOgabasseyChatReply(
 
   if (!response.ok) throw new Error('Chat service unavailable');
 
+  const merchantSlug = readSantaMerchantSlug(response);
   const responseText = await readResponseText(response);
   const contentType = response.headers?.get('content-type') ?? '';
   if (!contentType.includes(storefrontAgentUiContract.mediaType)) {
-    return { events: [], text: responseText };
+    return {
+      events: [],
+      text: responseText,
+      ...(merchantSlug ? { merchantSlug } : {}),
+    };
   }
 
   let decoded: unknown;
@@ -106,5 +114,6 @@ export async function requestOgabasseyChatReply(
   return {
     events: parsed.data.events,
     text: parsed.data.text,
+    ...(merchantSlug ? { merchantSlug } : {}),
   };
 }

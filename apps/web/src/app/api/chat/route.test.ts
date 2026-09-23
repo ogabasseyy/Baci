@@ -28,6 +28,21 @@ let llmError: Error | null = null;
 let llmStreamError: Error | null = null;
 let llmResponseText = 'LLM response';
 let chatProvider: 'auto' | 'gemini' | 'llm' | 'ollama' = 'auto';
+let mockTenant: {
+  agenticCheckoutEnabled: boolean;
+  businessName: string;
+  currencyCode: string;
+  merchantId: string;
+  merchantSlug: string;
+  priceNegotiationEnabled: boolean;
+} | null = {
+  agenticCheckoutEnabled: true,
+  businessName: 'Demo Store',
+  currencyCode: 'NGN',
+  merchantId: 'merchant-1',
+  merchantSlug: 'demo-store',
+  priceNegotiationEnabled: true,
+};
 
 // ---- Mocks ----
 
@@ -62,6 +77,10 @@ vi.mock('@/ai/provider', () => ({
   ),
   activeTextModel: 'mock-model',
   fallbackTextModel: 'mock-fallback-model',
+}));
+
+vi.mock('@/lib/agentic/agentic-chat-tenant', () => ({
+  resolveAgenticChatTenant: vi.fn(async () => mockTenant),
 }));
 
 vi.mock('@/env', () => ({
@@ -214,6 +233,11 @@ vi.mock('@/ai/chat-tools', () => ({
   cancelOrderSchema: { parse: vi.fn() },
   getRecommendationsSchema: { parse: vi.fn() },
   addToCartSchema: { parse: vi.fn() },
+  CHECKOUT_TOOL_NAMES: [
+    'createVirtualAccount',
+    'checkPaymentStatus',
+    'cancelOrder',
+  ],
   TOOL_DESCRIPTIONS: {
     searchProducts: 'Search products',
     getProductDetails: 'Get product details',
@@ -298,6 +322,14 @@ describe('POST /api/chat', () => {
     llmStreamError = null;
     llmResponseText = 'LLM response';
     chatProvider = 'auto';
+    mockTenant = {
+      agenticCheckoutEnabled: true,
+      businessName: 'Demo Store',
+      currencyCode: 'NGN',
+      merchantId: 'merchant-1',
+      merchantSlug: 'demo-store',
+      priceNegotiationEnabled: true,
+    };
     generateTextWithChainMock.mockImplementation(generateRouteChainAttempt);
   });
 
@@ -378,8 +410,46 @@ describe('POST /api/chat', () => {
     expect(response.headers.get('Content-Type')).toBe(
       'text/plain; charset=utf-8'
     );
+    expect(response.headers.get('x-baci-santa-merchant-slug')).toBe(
+      'demo-store'
+    );
     const text = await response.text();
     expect(text).toBe('AI response');
+  });
+
+  it('returns 503 when no configured tenant resolves', async () => {
+    mockTenant = null;
+
+    const response = await POST(
+      makeRequest({
+        messages: [{ role: 'user', content: 'Show me phones' }],
+      })
+    );
+
+    expect(response.status).toBe(503);
+  });
+
+  it('returns 503 when tenant resolution never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const { resolveAgenticChatTenant } = await import(
+        '@/lib/agentic/agentic-chat-tenant'
+      );
+      vi.mocked(resolveAgenticChatTenant).mockReturnValueOnce(
+        new Promise(() => {})
+      );
+      const pending = POST(
+        makeRequest({
+          messages: [{ role: 'user', content: 'Show me phones' }],
+        })
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+      const response = await pending;
+
+      expect(response.status).toBe(503);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('uses VPS Gemma through Ollama when configured', async () => {
@@ -470,11 +540,12 @@ describe('POST /api/chat', () => {
     expect(response.status).toBe(200);
     expect(text).toBe('AI response');
     expect(createOllamaAgenticChatResponse).toHaveBeenCalledOnce();
-    expect(createOllamaAgenticChatResponse).toHaveBeenCalledWith(
-      expect.objectContaining({
-        timeoutMs: 60_000,
-      })
-    );
+    const ollamaTimeoutMs = vi.mocked(createOllamaAgenticChatResponse).mock
+      .calls[0]?.[0]?.timeoutMs;
+    // The Ollama stage holds back one chain attempt for the Gemini fallback
+    // instead of spending the whole remaining route budget.
+    expect(ollamaTimeoutMs).toBeLessThanOrEqual(35_000);
+    expect(ollamaTimeoutMs).toBeGreaterThan(34_000);
     expect(generateText).toHaveBeenCalledOnce();
     expect(warnSpy).toHaveBeenCalledWith(
       '[Agentic Chat] Ollama request failed; falling back to Gemini:',
@@ -939,7 +1010,9 @@ describe('POST /api/chat', () => {
     expect(generateText).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'mock-model',
-        system: expect.stringContaining('Ogabassey AI'),
+        system: expect.stringContaining(
+          'intelligent shopping assistant for the configured storefront'
+        ),
         tools: expect.objectContaining({
           searchProducts: expect.objectContaining({
             description: 'Search products',
@@ -1076,6 +1149,24 @@ describe('POST /api/chat', () => {
     expect(llmMessages?.[0]?.content).not.toContain('commerce tools');
     expect(createOllamaAgenticChatResponse).not.toHaveBeenCalled();
     expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it('holds back one chain attempt when calling the LLM server', async () => {
+    llmServerUrl = TEST_LLM_SERVER_URL;
+    llmServerBearer = TEST_LLM_SERVER_BEARER;
+
+    const response = await POST(
+      makeRequest({
+        messages: [{ role: 'user', content: 'Show me phones' }],
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const llmTimeoutMs = vi.mocked(createLlmChatResponse).mock.calls[0]?.[0]
+      ?.timeoutMs;
+    // 60s route budget minus the 25s Gemini-fallback reserve.
+    expect(llmTimeoutMs).toBeLessThanOrEqual(35_000);
+    expect(llmTimeoutMs).toBeGreaterThan(34_000);
   });
 
   it('prefers LLM server over Ollama when both are configured', async () => {

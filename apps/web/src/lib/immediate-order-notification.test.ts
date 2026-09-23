@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import * as barrel from './immediate-order-notification';
 import {
   getCreditedAmountPaid,
   getImmediateEmailAmountDue,
 } from './immediate-order/invoice-credit';
+import * as barrel from './immediate-order-notification';
 
 // The order-create route consumes this surface; the split into
 // ./immediate-order/* must keep every name available from the barrel.
@@ -35,8 +35,11 @@ const EXPECTED_EXPORTS = [
 ];
 
 describe('immediate-order-notification barrel', () => {
+  // Static snapshot of the namespace: dynamic member access on the
+  // namespace import itself trips noDynamicNamespaceImportAccess.
+  const barrelSurface: Record<string, unknown> = { ...barrel };
   it.each(EXPECTED_EXPORTS)('re-exports %s', (name) => {
-    expect(barrel[name as keyof typeof barrel]).toBeDefined();
+    expect(barrelSurface[name]).toBeDefined();
   });
 
   it('exposes the credited-balance rule used by email, PDF, and DVA guard', () => {
@@ -47,9 +50,9 @@ describe('immediate-order-notification barrel', () => {
         500
       )
     ).toBe(3000);
-    expect(
-      getCreditedAmountPaid({ id: 'order-1' } as never, 1000, 500)
-    ).toBe(1500);
+    expect(getCreditedAmountPaid({ id: 'order-1' } as never, 1000, 500)).toBe(
+      1500
+    );
   });
 
   it('floors the email amount due at zero', () => {

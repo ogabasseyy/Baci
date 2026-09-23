@@ -23,7 +23,7 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-function mockPaidCryptoVerification(total = 49875) {
+function mockPaidCryptoVerification(total = 49875, currency?: string) {
   global.fetch = jest.fn(async (url: string) => {
     if (String(url).includes('/api/payments/verify')) {
       return new Response(
@@ -45,6 +45,7 @@ function mockPaidCryptoVerification(total = 49875) {
           shipping_cost: 1500,
           discount_amount: 0,
           total,
+          ...(currency ? { currency } : {}),
         },
         customer: {
           name: 'Guest Buyer',
@@ -308,6 +309,24 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
         reconciliation: 'order_cancelled',
       }),
     });
+  });
+
+  it('forwards the verified currency into crypto completion', async () => {
+    // Arrange: a non-NGN crypto order confirmed through the tracked
+    // lookup (the reference call stays pending here).
+    mockPaidCryptoVerification(49875, 'KES');
+    const { handler } = createHandler({
+      trackingToken: 'track-token-123',
+    });
+
+    // Act
+    await sendMessage(handler, { type: 'crypto_success' });
+
+    // Assert: without the stamped currency the funnel event and any
+    // fallback purchase fall back to NGN.
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-123', currency: 'KES' })
+    );
   });
 
   it('keeps a new cart when the shopper leaves during crypto verification', async () => {

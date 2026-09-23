@@ -7,6 +7,7 @@ import {
   claimKey,
   isClaimGranted,
   log,
+  MAX_QUEUE_HOLD_MS,
   persistClaims,
   readStoredClaims,
   STORAGE_TIMEOUT,
@@ -43,15 +44,42 @@ export async function isCheckoutPurchaseClaimed(
   }
 }
 
+// Timed-out write compensations still in flight, by claim. The chain can
+// release past them via MAX_QUEUE_HOLD while a rollback is still landing,
+// so settled reads drain this claim's set explicitly instead of relying
+// on chain position alone. Entries self-remove on settle.
+const pendingCompensations = new Map<string, Set<Promise<void>>>();
+
+function trackCompensation(claim: string, compensation: Promise<void>): void {
+  let inflight = pendingCompensations.get(claim);
+  if (!inflight) {
+    inflight = new Set();
+    pendingCompensations.set(claim, inflight);
+  }
+  inflight.add(compensation);
+  const drop = () => {
+    const remaining = pendingCompensations.get(claim);
+    if (remaining) {
+      remaining.delete(compensation);
+      if (remaining.size === 0) {
+        pendingCompensations.delete(claim);
+      }
+    }
+  };
+  compensation.then(drop, drop);
+}
+
 /**
  * Serialized variant of isCheckoutPurchaseClaimed for denied-claim
  * disambiguation. A raw read can catch a timed-out write's phantom
  * persisted claim before its rollback lands and mistake it for a recorded
  * conversion (stopping settlement retries, or clearing retained context,
- * although nothing was emitted). Routing the read through the claim chain
- * waits for the serialized compensation to settle first, so the answer
- * reflects post-rollback state. An unreadable store still reports false
- * (favour retrying over assuming recorded).
+ * although nothing was emitted). The read first drains this claim's
+ * tracked compensations (the chain may have released past them via
+ * MAX_QUEUE_HOLD), then runs through the claim chain, so the answer
+ * reflects post-rollback state. A compensation that outlasts the queue
+ * hold, like an unreadable store, reports unheld — favour retrying over
+ * assuming recorded.
  */
 export async function isCheckoutPurchaseClaimedSettled(
   orderId: string,
@@ -63,6 +91,18 @@ export async function isCheckoutPurchaseClaimedSettled(
   const claim = claimKey(orderId, eventName);
   if (isClaimGranted(claim)) {
     return true;
+  }
+  const pending = pendingCompensations.get(claim);
+  if (pending && pending.size > 0) {
+    const drained = await Promise.race([
+      Promise.all([...pending]).then(() => true as const),
+      new Promise<boolean>((resolve) => {
+        setTimeout(() => resolve(false), MAX_QUEUE_HOLD_MS);
+      }),
+    ]);
+    if (!drained) {
+      return false;
+    }
   }
   try {
     const observed = await serializeClaimTask(async () => {
@@ -175,13 +215,12 @@ async function performClaim(
       // until this write settles, and a late success is compensated so no
       // phantom claim suppresses the replay.
       log.error('Checkout purchase tracking store write timed out.');
-      return {
-        claimed: false,
-        settled: write.then(
-          () => removeClaimAfterLateWrite(claim),
-          () => undefined
-        ),
-      };
+      const compensation = write.then(
+        () => removeClaimAfterLateWrite(claim),
+        () => undefined
+      );
+      trackCompensation(claim, compensation);
+      return { claimed: false, settled: compensation };
     }
     addGrantedClaim(claim);
     return { claimed: true, settled };

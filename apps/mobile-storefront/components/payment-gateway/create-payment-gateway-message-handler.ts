@@ -256,6 +256,12 @@ export function createPaymentGatewayMessageHandler({
           subtotal: cryptoVerification.subtotal,
           tax: cryptoVerification.tax,
           value: cryptoVerification.total ?? cryptoPurchaseTotal,
+          // Verified order currency: absent values fall back to NGN for
+          // the funnel event and any fallback purchase, mislabeling
+          // every non-NGN crypto conversion.
+          ...(cryptoVerification.currency
+            ? { currency: cryptoVerification.currency }
+            : {}),
         });
       } else if (cryptoVerification.terminalFailure) {
         // Definitive gateway outcome: the payment cannot settle, so keep

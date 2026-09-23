@@ -63,7 +63,7 @@ export const CLAIM_STORAGE_TIMEOUT_MS = 3000;
 // settles. Past this point the queue is released so later claims still get
 // their turn; a write that lands afterwards is still compensated by the
 // rollback attached to the raw write promise.
-const MAX_QUEUE_HOLD_MS = 10_000;
+export const MAX_QUEUE_HOLD_MS = 10_000;
 export const STORAGE_TIMEOUT = Symbol('claim-storage-timeout');
 
 export function storageTimeout(): Promise<typeof STORAGE_TIMEOUT> {

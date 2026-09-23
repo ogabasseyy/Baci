@@ -260,6 +260,57 @@ it('waits for timed-out write compensation before reporting held', async () => {
   }
 });
 
+it('drains tracked compensation past the queue hold before reporting held', async () => {
+  jest.useFakeTimers();
+  try {
+    // The claim write lands after the ten-second queue hold, so the
+    // chain has already released while the rollback is still landing —
+    // chain position alone cannot prove the phantom is gone.
+    let writeCalls = 0;
+    mockSetItem.mockImplementation((key: string, value: string) => {
+      writeCalls += 1;
+      const delayMs = writeCalls === 1 ? 12_000 : 1_000;
+      return new Promise<void>((resolve) => {
+        setTimeout(() => {
+          storage.set(key, value);
+          resolve();
+        }, delayMs);
+      });
+    });
+    const first = claimCheckoutPurchaseTracking('order-hold-expiry');
+    await jest.advanceTimersByTimeAsync(3000);
+    await expect(first).resolves.toBe(false);
+
+    // t=12s: the late write has landed while the rollback is still in
+    // flight — the raw read observes the phantom claim here.
+    await jest.advanceTimersByTimeAsync(9000);
+    await expect(isCheckoutPurchaseClaimed('order-hold-expiry')).resolves.toBe(
+      true
+    );
+
+    // The settled read drains the tracked compensation (rollback lands
+    // ~t=13s) instead of trusting the released chain: by t=13.5s — long
+    // before its own ten-second drain bound (t=22s) — it must already
+    // report unheld. A timeout-bound read would still be pending here.
+    let outcome: boolean | 'pending' = 'pending';
+    const settled = isCheckoutPurchaseClaimedSettled('order-hold-expiry').then(
+      (held) => {
+        outcome = held;
+        return held;
+      }
+    );
+    await jest.advanceTimersByTimeAsync(1500);
+    expect(outcome).toBe(false);
+    await jest.advanceTimersByTimeAsync(20_000);
+    await expect(settled).resolves.toBe(false);
+  } finally {
+    jest.useRealTimers();
+    mockSetItem.mockImplementation(async (key: string, value: string) => {
+      storage.set(key, value);
+    });
+  }
+});
+
 it('reconciles newer claims when a timed-out write lands after them', async () => {
   jest.useFakeTimers();
   try {

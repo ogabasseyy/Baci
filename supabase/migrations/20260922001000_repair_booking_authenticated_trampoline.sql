@@ -25,11 +25,11 @@ CREATE OR REPLACE FUNCTION public.create_repair_booking_as_owner(
   p_device_type text,
   p_device_model text,
   p_issue_description text,
-  p_preferred_date timestamptz,
-  p_service_type text,
-  p_pickup_address text,
-  p_device_id uuid,
-  p_quote_id uuid
+  p_preferred_date timestamptz DEFAULT NULL,
+  p_service_type text DEFAULT 'dropoff',
+  p_pickup_address text DEFAULT NULL,
+  p_device_id uuid DEFAULT NULL,
+  p_quote_id uuid DEFAULT NULL
 )
 RETURNS TABLE (id uuid, ticket_number integer)
 LANGUAGE plpgsql
@@ -71,11 +71,11 @@ CREATE OR REPLACE FUNCTION public.create_repair_booking(
   p_device_type text,
   p_device_model text,
   p_issue_description text,
-  p_preferred_date timestamptz,
-  p_service_type text,
-  p_pickup_address text,
-  p_device_id uuid,
-  p_quote_id uuid
+  p_preferred_date timestamptz DEFAULT NULL,
+  p_service_type text DEFAULT 'dropoff',
+  p_pickup_address text DEFAULT NULL,
+  p_device_id uuid DEFAULT NULL,
+  p_quote_id uuid DEFAULT NULL
 )
 RETURNS TABLE (id uuid, ticket_number integer)
 LANGUAGE plpgsql

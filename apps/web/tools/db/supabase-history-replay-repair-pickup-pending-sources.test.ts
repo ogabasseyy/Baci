@@ -62,7 +62,7 @@ describe('repair pickup pending replay sources', () => {
       '421d572509d58e976c3eb53a9f09944f47833dd67de8fdf301fca4f51eb90941 20260922000700_enforce_invoker_repair_booking_wrapper.sql',
       'a5628fdb548c5af0da5adb952764705fa82458aa6a1510848e69893cf81dc6f9 20260922000800_require_published_template_repair_exception.sql',
       '614aaca013d85cbd7e2933c11877fc66cdf172b06f34e4ed5a5bd5d529cd5828 20260922000900_restore_repair_booking_private_schema_usage.sql',
-      '35be715a9138a7cb8f427a8209eea71ba301a2ce90e09eaf7f551979ca76588d 20260922001000_repair_booking_authenticated_trampoline.sql',
+      'e01250d306248f2acaab80932532df9045061409ede6fe88bbfc164ed40ef299 20260922001000_repair_booking_authenticated_trampoline.sql',
     ]);
   });
 });

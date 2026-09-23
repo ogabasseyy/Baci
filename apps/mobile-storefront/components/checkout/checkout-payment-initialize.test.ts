@@ -169,9 +169,10 @@ describe('initializeGatewayAndRoute', () => {
 
     // A hardcoded default trips the server CURRENCY_MISMATCH guard for
     // non-NGN orders, so the stamped currency travels on the request.
-    const fetchCalls = (global.fetch as jest.Mock).mock.calls as Array<
-      [unknown, { body?: unknown }]
-    >;
+    const fetchCalls = (global.fetch as jest.Mock).mock.calls as [
+      unknown,
+      { body?: unknown },
+    ][];
     const requestBody = JSON.parse(
       String(fetchCalls[0]?.[1]?.body ?? '{}')
     ) as Record<string, unknown>;
@@ -187,9 +188,10 @@ describe('initializeGatewayAndRoute', () => {
 
     await initializeGatewayAndRoute(createParams());
 
-    const fetchCalls = (global.fetch as jest.Mock).mock.calls as Array<
-      [unknown, { body?: unknown }]
-    >;
+    const fetchCalls = (global.fetch as jest.Mock).mock.calls as [
+      unknown,
+      { body?: unknown },
+    ][];
     const requestBody = JSON.parse(
       String(fetchCalls[0]?.[1]?.body ?? '{}')
     ) as Record<string, unknown>;

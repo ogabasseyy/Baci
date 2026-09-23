@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import { releaseCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-release';
+import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
 import {
   PAYMENT_COMPLETED_CLAIM_EVENT,

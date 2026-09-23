@@ -17,6 +17,9 @@ export type StartRepairPickupPaymentResult =
       id?: string;
       ticketNumber?: number;
       resumeToken?: string;
+      reference?: string;
+      amountKobo?: number;
+      currency?: string;
       quote?: { formattedPrice: string; price: number };
     };
 
@@ -26,4 +29,15 @@ export interface StartRepairPickupPaymentInput {
   merchantId: string;
   merchantIdentifier: string;
   resumeToken?: string | null;
+  onPaymentInitializationCheckpoint?: (
+    result: StartRepairPickupPaymentResult
+  ) => Promise<void>;
+  /**
+   * Runs immediately before the Paystack initialization request, after the
+   * merchant lookup, quote, repair setup, and reference binding. Receipt
+   * owners use it to fence execution (claim the receipt) at the latest safe
+   * moment so a crash earlier stays reclaimable; the completion writes
+   * require fencing to have happened.
+   */
+  onBeforeProviderInitialization?: () => Promise<void>;
 }

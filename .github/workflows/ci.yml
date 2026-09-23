@@ -322,6 +322,8 @@ jobs:
           --sql-check supabase/migrations/tests/repair_pickup_payment_confirmation.sql
           --sql-check supabase/migrations/tests/repair_pickup_receiver_projection.sql
           --sql-check supabase/migrations/tests/find_resumable_repair_pickup.sql
+          --sql-check supabase/migrations/tests/mobile_repair_pickup_payment_receipts.sql
+          --sql-check supabase/migrations/tests/mobile_repair_pickup_claim_lease.sql
           --sql-check supabase/migrations/tests/claim_repair_pickup_booking_terminal.sql
           --sql-check supabase/migrations/tests/claim_repair_pickup_booking_manual_fulfilled.sql
           --sql-check supabase/migrations/tests/normalize_nigerian_repair_pickup_receiver_phone.sql
@@ -330,6 +332,7 @@ jobs:
           --sql-check supabase/tests/uba_redvault_refund_inventory_p1_regressions.sql
           --sql-check supabase/migrations/tests/manual_order_document_date_sync.sql
           --sql-check supabase/tests/feed_offer_manifest_offer_change_regressions.sql
+          --sql-check supabase/tests/repair_booking_rpc.sql
           --sql-check supabase/migrations/tests/normalize_product_key_specs_gpu.sql
           --sql-check supabase/migrations/tests/santa_catalog_projection.sql
           --sql-check supabase/migrations/tests/guest_snapshot_inventory_proof.sql

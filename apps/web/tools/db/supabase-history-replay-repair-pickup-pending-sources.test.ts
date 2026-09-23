@@ -49,6 +49,20 @@ describe('repair pickup pending replay sources', () => {
       '22402b6953e5aba04b3f1358fd823995bc002347a13633abced3bdccce2562e3 20260905140100_retire_orderless_gigl_monitors_without_repair.sql',
       '078802ea9e418b605b64123622a0375ce4b819da2c0f2699d6bee63cd56bea4a 20260905140200_fulfill_paid_repair_pickup_receiver.sql',
       '93b58684a23f79656f82654cd0b325469375ebfcb0ab57833213e3ec91153fa9 20260905140300_gigl_monitor_fast_path_merchant_identity.sql',
+      '14b6dadfeb4ccbb0b15e1278b5d9a565a707b9af385eff108cc35e9f2e2189b0 20260907201000_mobile_repair_pickup_payment_receipts.sql',
+      '376775c5c684f7bf4d94f8e2534d541a8d72046014f8b2d0c13bd1e25687bbbd 20260921100000_harden_repair_booking_rate_limit.sql',
+      'd0cadea6856e12a16f88d39d6291d9d0eff314e72d1f5703a966bb4c6b336a6f 20260921100100_add_repair_booking_rate_limit_index.sql',
+      'eda54c4669ad9e645e73e6264ae61690afd1a0cfad8fe0ab5a3c1454c39da959 20260922000000_lease_mobile_repair_pickup_claims.sql',
+      '163baf57cebf174698d659d3d37c871acd6954ce8cadb2b3c9f02f8cb7e1909d 20260922000100_add_merchant_created_at_repair_index.sql',
+      'a0ab3247329ae38fb03985ee798c00dff7d3ada4360a9bc7f3cc2d638b9528c0 20260922000200_require_digits_in_repair_booking_phone.sql',
+      'eb60234d95e4110df1184d85cc54816fc0326cbb5b0498d4fb345d9dbc4d3b34 20260922000300_allow_owner_pre_provider_failure_completion.sql',
+      'e48d46a1d7831db1fb4b930924cbd6611419a13b2835bf652124a2625d00bcb1 20260922000400_retain_template_backed_repair_booking_eligibility.sql',
+      '57d98f45ff2f7a33ed8a99393c47b35ca9e3e4dbf1c049072164987275474924 20260922000500_allow_unavailable_owner_pre_provider_failure_completion.sql',
+      'b809187110edc080ae7e300af6ec7ed8ac50d016d149d04d097eec53bba2bccf 20260922000600_limit_template_booking_exception_to_free_form.sql',
+      '421d572509d58e976c3eb53a9f09944f47833dd67de8fdf301fca4f51eb90941 20260922000700_enforce_invoker_repair_booking_wrapper.sql',
+      'a5628fdb548c5af0da5adb952764705fa82458aa6a1510848e69893cf81dc6f9 20260922000800_require_published_template_repair_exception.sql',
+      '614aaca013d85cbd7e2933c11877fc66cdf172b06f34e4ed5a5bd5d529cd5828 20260922000900_restore_repair_booking_private_schema_usage.sql',
+      '1c74578c5ddacb12b624cf0625fc47a3eff73b30894f8ff7bc59d71b4c16752b 20260922001000_repair_booking_authenticated_trampoline.sql',
     ]);
   });
 });

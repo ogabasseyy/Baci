@@ -298,6 +298,7 @@ jobs:
           --sql-check supabase/tests/paystack_order_dva_balance_refresh_permissions.sql
           --sql-check supabase/tests/paystack_order_dva_balance_refresh_history.sql
           --sql-check supabase/tests/agentic_paystack_dva_alias_conflict.sql
+          --sql-check supabase/tests/shipping_provider_settings.sql
           --sql-check supabase/tests/negotiation_customer_contact.sql
           --sql-check supabase/tests/storefront_pdp_preflight_relation_category.sql
           --sql-check supabase/tests/storefront_cluster_guide_candidates_rpc.sql

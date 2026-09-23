@@ -63,6 +63,7 @@ const createOrderRequestSchemaBase = z.object({
     notes: z.string().optional(),
   }),
   selected_quote_id: z.uuid().optional(),
+  shipping_rate_id: z.uuid().optional(),
   shipping_provider: z.string().optional(),
   delivery_method: z.enum(['door', 'airport', 'pickup_station']).optional(),
   airport_type: z.enum(['delivery', 'pickup']).optional(),

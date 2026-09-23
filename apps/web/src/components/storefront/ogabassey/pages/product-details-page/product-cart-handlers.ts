@@ -110,7 +110,8 @@ export function createProductCartHandlers({
         selectedImage,
         selectedCondition,
         selectedAttributes,
-        selectedColor !== null ? productData.colors[selectedColor]?.name : undefined
+        selectedColor !== null ? productData.colors[selectedColor]?.name : undefined,
+        { hasVariantPricing: selectedVariantId != null }
       ),
       1,
       buildSelectionMetadata()

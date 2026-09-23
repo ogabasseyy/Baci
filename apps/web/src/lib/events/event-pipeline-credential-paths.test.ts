@@ -91,29 +91,4 @@ describe('event-pipeline credential paths', () => {
       ])
     );
   });
-
-  it('records the audited immediate-order notification edges', () => {
-    expect(eventPipelineCredentialPaths).toEqual(
-      expect.arrayContaining([
-        [
-          'apps/web/src/app/api/orders/route.ts',
-          'apps/web/src/lib/immediate-order-notification.ts',
-          'apps/web/src/lib/immediate-order/confirmation-email.ts',
-          'apps/web/src/lib/zeptomail.ts',
-          'apps/web/src/env.ts',
-        ],
-        [
-          'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
-          'apps/web/src/lib/supabase/admin.ts',
-          'apps/web/src/env.ts',
-        ],
-        [
-          'apps/web/src/lib/immediate-order/payforme-dva.ts',
-          'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
-          'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-          'apps/web/src/env.ts',
-        ],
-      ])
-    );
-  });
 });

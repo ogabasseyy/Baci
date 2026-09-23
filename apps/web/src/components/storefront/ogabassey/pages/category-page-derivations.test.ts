@@ -55,6 +55,7 @@ describe('buildAvailableFilterOptions', () => {
     const products = [
       buildProduct({
         brand: 'Samsung',
+        graphics: 'NVIDIA RTX 4070',
         ram: '8GB',
         storage: ['128GB', '256GB'],
         colors: ['Black'],
@@ -62,6 +63,7 @@ describe('buildAvailableFilterOptions', () => {
       buildProduct({
         id: '2',
         brand: 'Apple',
+        graphics: 'Integrated Graphics',
         ram: '8GB',
         storage: '512GB',
         colors: [{ name: 'Blue', value: '#0000ff' }],
@@ -73,6 +75,10 @@ describe('buildAvailableFilterOptions', () => {
     expect(options.brand).toEqual(['Apple', 'Samsung']);
     expect(options.ram).toEqual(['8GB']);
     expect(options.storage).toEqual(['128GB', '256GB', '512GB']);
+    expect(options.graphics).toEqual([
+      'Integrated Graphics',
+      'NVIDIA RTX 4070',
+    ]);
     expect(options.colors).toEqual(['Black', 'Blue']);
   });
 });
@@ -114,6 +120,29 @@ describe('filterCategoryProducts', () => {
     );
 
     expect(result.map((p) => p.id)).toEqual(['mid']);
+  });
+
+  it('does not impose a maximum price until the shopper enters one', () => {
+    const products = [buildProduct({ rawPrice: 25_000_000 })];
+
+    expect(filterCategoryProducts(products, buildFilters(), true)).toEqual(
+      products
+    );
+  });
+
+  it('keeps only products matching an active graphics facet', () => {
+    const products = [
+      buildProduct({ id: 'rtx', graphics: 'NVIDIA RTX 4070' }),
+      buildProduct({ id: 'integrated', graphics: 'Integrated Graphics' }),
+    ];
+
+    const result = filterCategoryProducts(
+      products,
+      buildFilters({ graphics: ['NVIDIA RTX 4070'] }),
+      true
+    );
+
+    expect(result.map((product) => product.id)).toEqual(['rtx']);
   });
 
   it('matches a product when any selected color is present', () => {

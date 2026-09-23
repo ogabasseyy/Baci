@@ -31,14 +31,14 @@ CREATE OR REPLACE FUNCTION public.create_repair_booking_as_owner(
   p_device_id uuid,
   p_quote_id uuid
 )
-RETURNS TABLE (booking_id uuid, ticket_number integer)
+RETURNS TABLE (id uuid, ticket_number integer)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
 BEGIN
   RETURN QUERY
-  SELECT booking.booking_id, booking.ticket_number
+  SELECT booking.id, booking.ticket_number
   FROM private.create_repair_booking(
     p_merchant_id,
     p_customer_name,
@@ -52,7 +52,7 @@ BEGIN
     p_pickup_address,
     p_device_id,
     p_quote_id
-  ) AS booking(booking_id uuid, ticket_number integer);
+  ) AS booking(id uuid, ticket_number integer);
 END;
 $function$;
 
@@ -77,14 +77,14 @@ CREATE OR REPLACE FUNCTION public.create_repair_booking(
   p_device_id uuid,
   p_quote_id uuid
 )
-RETURNS TABLE (booking_id uuid, ticket_number integer)
+RETURNS TABLE (id uuid, ticket_number integer)
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = ''
 AS $function$
 BEGIN
   RETURN QUERY
-  SELECT booking.booking_id, booking.ticket_number
+  SELECT booking.id, booking.ticket_number
   FROM public.create_repair_booking_as_owner(
     p_merchant_id,
     p_customer_name,
@@ -98,7 +98,7 @@ BEGIN
     p_pickup_address,
     p_device_id,
     p_quote_id
-  ) AS booking(booking_id uuid, ticket_number integer);
+  ) AS booking(id uuid, ticket_number integer);
 END;
 $function$;
 

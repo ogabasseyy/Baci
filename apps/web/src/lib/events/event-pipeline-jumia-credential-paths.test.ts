@@ -20,6 +20,12 @@ describe('eventPipelineJumiaCredentialPaths', () => {
 
   it('includes callback and client persistence paths', () => {
     expect(eventPipelineJumiaCredentialPaths).toContainEqual([
+      'apps/web/src/scripts/sync-jumia-orders.ts',
+      'apps/web/src/lib/jumia/order-sync.ts',
+      'apps/web/src/lib/jumia/client.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineJumiaCredentialPaths).toContainEqual([
       'apps/web/src/app/api/marketplace/jumia/callback/runtime-impl.ts',
       'apps/web/src/env.ts',
     ]);

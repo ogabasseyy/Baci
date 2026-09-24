@@ -314,6 +314,20 @@ describe('Products Export POST', () => {
     expect(json.error).toBe('Invalid input');
   });
 
+  it.each([
+    ['zero brand code', { brand: { code: 0, name: 'BrandX' } }],
+    ['blank brand name', { brand: { code: 1, name: '   ' } }],
+    ['zero category code', { category: { code: 0 } }],
+  ])('returns 400 before reserving for %s', async (_label, override) => {
+    const res = await POST(makePostRequest({ ...VALID_BODY, ...override }));
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('Invalid input');
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(mockCreateProduct).not.toHaveBeenCalled();
+  });
+
   it('returns 402 before exporting products when marketplace sync is locked', async () => {
     mockRequireMerchantFeatureAccess.mockResolvedValueOnce(
       Response.json(

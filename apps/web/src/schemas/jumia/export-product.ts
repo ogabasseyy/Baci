@@ -6,8 +6,11 @@ export const jumiaExportProductSchema = z.object({
   merchantId: z.uuid().optional(),
   productId: z.uuid(),
   name: z.string().trim().min(1),
-  brand: z.object({ code: z.number(), name: z.string() }),
-  category: z.object({ code: z.number() }),
+  brand: z.object({
+    code: z.number().finite().positive(),
+    name: z.string().trim().min(1),
+  }),
+  category: z.object({ code: z.number().finite().positive() }),
   description: z.string().optional(),
   images: z
     .array(z.object({ url: z.url(), primary: z.boolean().optional() }))

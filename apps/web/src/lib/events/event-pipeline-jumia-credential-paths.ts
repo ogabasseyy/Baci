@@ -274,6 +274,15 @@ export const eventPipelineJumiaCredentialPaths = [
     ['apps/web/src/lib/jumia/order-sync.ts'],
     clientCredentialSuffixes
   ),
+  // The five-minute VPS worker reaches the same order-sync closure; its
+  // ciphertext reads travel on the restricted credential client.
+  ...withPrefix(
+    [
+      'apps/web/src/scripts/sync-jumia-orders.ts',
+      'apps/web/src/lib/jumia/order-sync.ts',
+    ],
+    clientCredentialSuffixes
+  ),
   ['apps/web/src/lib/jumia/self-authorization.ts', jumiaHelpers, envPath],
   [
     'apps/web/src/app/api/cron/purge-jumia-self-authorization-discoveries/route.ts',

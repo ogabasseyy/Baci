@@ -17,6 +17,16 @@
 
 BEGIN;
 
+-- customers.user_id references auth.users: seed the owner rows as the
+-- session superuser (service_role cannot write the auth schema).
+INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+VALUES
+  ('9f000000-0000-4000-8000-000000000259', '00000000-0000-0000-0000-000000000000',
+    'authenticated', 'authenticated', 'delivered-lookup-owner@example.com', 'test', now(), now(), now(), '{}', '{}'),
+  ('9f000000-0000-4000-8000-000000000258', '00000000-0000-0000-0000-000000000000',
+    'authenticated', 'authenticated', 'delivered-lookup-other@example.com', 'test', now(), now(), now(), '{}', '{}');
+
 SET LOCAL ROLE service_role;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 
@@ -29,14 +39,6 @@ DECLARE
   v_theirs_order_id uuid := '9f000000-0000-4000-8000-000000000255';
   v_token uuid;
 BEGIN
-  -- customers.user_id references auth.users: the owner rows must exist.
-  INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
-    email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
-  VALUES
-    ('9f000000-0000-4000-8000-000000000259', '00000000-0000-0000-0000-000000000000',
-      'authenticated', 'authenticated', 'delivered-lookup-owner@example.com', 'test', now(), now(), now(), '{}', '{}'),
-    ('9f000000-0000-4000-8000-000000000258', '00000000-0000-0000-0000-000000000000',
-      'authenticated', 'authenticated', 'delivered-lookup-other@example.com', 'test', now(), now(), now(), '{}', '{}');
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (
     v_merchant_id,

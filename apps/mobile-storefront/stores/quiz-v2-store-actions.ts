@@ -81,7 +81,8 @@ export function createQuizV2StoreActions({
     const terminal =
       expiredActive ||
       response.availability === 'pending_results' ||
-      response.availability === 'cancelled';
+      response.availability === 'cancelled' ||
+      response.availability === 'unavailable';
     if (terminal) {
       set({
         status: 'result',

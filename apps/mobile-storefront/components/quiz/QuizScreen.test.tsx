@@ -198,6 +198,7 @@ jest.mock('@/services/quiz-results', () => ({
 }));
 jest.mock('@/services/quiz-leaderboard', () => ({
   fetchQuizLeaderboard: jest.fn(),
+  fetchQuizParticipantCount: jest.fn(async () => 0),
 }));
 
 describe('QuizScreen', () => {

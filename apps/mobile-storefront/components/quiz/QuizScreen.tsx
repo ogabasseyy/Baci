@@ -4,7 +4,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { getQuizMobileAdsConfig } from '@/config/quiz-mobile-ads';
 import { useTheme } from '@/hooks/useTheme';
 import { createLogger } from '@/lib/logger';
-import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
 import {
   fetchQuizEvents,
   type QuizIntegrityTier,
@@ -14,19 +13,19 @@ import { submitQuizAnswerV2 } from '@/services/quiz-attempts';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQuizStore } from '@/stores/quiz-store';
 import { createQuizV2LifecycleHandlers } from './create-quiz-v2-lifecycle-handlers';
-import { QuizDateOfBirthGateModal } from './QuizDateOfBirthGateModal';
 import { QuizErrorPanel } from './QuizErrorPanel';
 import { QuizEventsList } from './QuizEventsList';
 import { QuizGameplayAdFooter } from './QuizGameplayAdFooter';
+import { QuizGateModals } from './QuizGateModals';
 import { QuizLiveQuestionCard } from './QuizLiveQuestionCard';
 import { createQuizLobbyStyles } from './QuizLobby.styles';
 import { QuizMusicPlayer } from './QuizMusicPlayer';
 import { QuizQuestionCard } from './QuizQuestionCard';
-import { QuizResultsPanel } from './QuizResultsPanel';
+import { QuizResultsSection } from './QuizResultsSection';
 import { createQuizStyles } from './QuizScreen.styles';
 import { getQuizErrorMessage, shouldShowEventList } from './QuizScreen.utils';
-import { QuizUsernameGateModal } from './QuizUsernameGateModal';
 import { createQuizAnswerHandlers } from './quiz-answer-handlers';
+import { useQuizMobileAdsPrewarm } from './use-quiz-mobile-ads-prewarm';
 import { useQuizMusicState } from './use-quiz-music-state';
 import { useQuizQuestionTimer } from './use-quiz-question-timer';
 import { useQuizResultPolling } from './use-quiz-result-polling';
@@ -106,8 +105,10 @@ export function QuizScreen({
   useQuizResultPolling({
     attemptId: terminalContext?.attemptId ?? null,
     enabled: status === 'result' && v2LifecycleStatus === 'pending_results',
+    eventEndsAt: terminalContext?.eventEndsAt ?? null,
     expectedUserId: useAuthStore.getState().user?.id ?? null,
     onResult: setV2Result,
+    serverNow: terminalContext?.serverNow ?? null,
   });
 
   useEffect(() => {
@@ -125,13 +126,7 @@ export function QuizScreen({
     };
   }, [loadEvents, setError, status]);
 
-  const quizAdsEnabled = getQuizMobileAdsConfig().enabled;
-
-  useEffect(() => {
-    if (quizAdsEnabled) {
-      initializeQuizMobileAds().catch(() => null);
-    }
-  }, [quizAdsEnabled]);
+  useQuizMobileAdsPrewarm(getQuizMobileAdsConfig().enabled);
 
   const { dobGate, requestStart, usernameGate } = useQuizStartFlow({
     events,
@@ -263,21 +258,14 @@ export function QuizScreen({
         </ScrollView>
       ) : null}
 
-      {status === 'result' && music.shouldPlay ? (
-        <View style={styles.musicContainer}>
-          <QuizMusicPlayer gameEndsIn={music.gameEndsIn} />
-        </View>
-      ) : null}
-
       {status === 'result' ? (
-        <QuizResultsPanel
-          eventId={terminalContext?.eventId}
-          eventEndsAt={terminalContext?.eventEndsAt}
+        <QuizResultsSection
           expectedUserId={useAuthStore.getState().user?.id ?? null}
           legacyResult={result}
           lifecycle={v2LifecycleStatus}
-          serverNow={terminalContext?.serverNow}
+          music={music}
           styles={styles}
+          terminalContext={terminalContext}
           v2Result={v2Result}
         />
       ) : null}
@@ -286,26 +274,7 @@ export function QuizScreen({
         active={status === 'question' || status === 'submitting'}
       />
 
-      <QuizUsernameGateModal
-        onCancel={usernameGate.cancelGate}
-        onSuccess={() => {
-          usernameGate.confirmGate();
-        }}
-        visible={usernameGate.isGateVisible}
-      />
-      <QuizDateOfBirthGateModal
-        errorMessage={dobGate.correctionError}
-        initialValue={
-          dobGate.correctionError
-            ? (dobGate.dateOfBirth ?? undefined)
-            : undefined
-        }
-        onCancel={dobGate.cancelGate}
-        onSuccess={() => {
-          dobGate.confirmGate(dobGate.generation);
-        }}
-        visible={dobGate.isGateVisible}
-      />
+      <QuizGateModals dobGate={dobGate} usernameGate={usernameGate} />
     </View>
   );
 }

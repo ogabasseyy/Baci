@@ -71,4 +71,35 @@ describe('QuizAuthoringForm', () => {
       expect.objectContaining({ totalQuizDurationSeconds: 90 })
     );
   });
+
+  it('defaults live launches to the suggested contract window', async () => {
+    const onGenerate = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <QuizAuthoringForm
+        disabled={false}
+        initialProducts={[prize]}
+        isGenerating={false}
+        onGenerate={onGenerate}
+      />
+    );
+
+    await user.selectOptions(screen.getByLabelText('Mode'), 'live');
+
+    expect(screen.getByText(/Total quiz duration: 2m/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /extend play time/i }));
+    const totalDuration = screen.getByLabelText(
+      /total quiz duration \(seconds\)/i
+    );
+    expect(totalDuration).toHaveAttribute('min', '50');
+    expect(totalDuration).toHaveAttribute('max', '140');
+    await user.click(screen.getByRole('button', { name: /generate draft/i }));
+
+    expect(onGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'live',
+        totalQuizDurationSeconds: 120,
+      })
+    );
+  });
 });

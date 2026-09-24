@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   fetchQuizLeaderboard,
   fetchQuizLiveLeaderboard,
+  fetchQuizParticipantCount,
 } from '@/services/quiz-leaderboard';
 import type { QuizLeaderboard } from '@/services/quiz-types';
 import type { QuizV2LifecycleStatus } from '@/stores/quiz-recovery-envelope';
@@ -46,12 +47,18 @@ export function useQuizResultsLeaderboard({
     let retryId: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
       try {
-        const result =
-          lifecycle === 'pending_results' && !eventHasEnded
-            ? await fetchQuizLiveLeaderboard({ eventId, expectedUserId })
-            : await fetchQuizLeaderboard({ eventId, expectedUserId });
+        const liveStandings = lifecycle === 'pending_results' && !eventHasEnded;
+        const result = liveStandings
+          ? await fetchQuizLiveLeaderboard({ eventId, expectedUserId })
+          : await fetchQuizLeaderboard({ eventId, expectedUserId });
         if (!active) return;
-        setParticipantCount(result.participantCount);
+        const liveParticipantCount = liveStandings
+          ? await fetchQuizParticipantCount({ eventId, expectedUserId }).catch(
+              () => null
+            )
+          : null;
+        if (!active) return;
+        setParticipantCount(liveParticipantCount ?? result.participantCount);
         if (result.status === 'published' || result.status === 'live') {
           setLeaderboard(result);
           hasLeaderboard.current = true;

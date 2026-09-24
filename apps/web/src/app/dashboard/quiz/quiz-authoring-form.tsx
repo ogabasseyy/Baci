@@ -1,5 +1,9 @@
 'use client';
 
+import {
+  getQuizWindowBounds,
+  getSuggestedQuizLiveWindowSeconds,
+} from '@baci/shared/constants';
 import { Loader2, Sparkles } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useState } from 'react';
@@ -78,9 +82,24 @@ export function QuizAuthoringForm({
   const questionCount = topics.length * clampNumber(Number(perTopic), 1, 20);
   const timePerQuestionSeconds = clampNumber(Number(time), 5, 60);
   const expectedPlaySeconds = questionCount * timePerQuestionSeconds;
-  const totalQuizDurationSeconds = Math.max(
-    expectedPlaySeconds,
-    requestedTotalDurationSeconds ?? expectedPlaySeconds
+  const windowInputsValid =
+    Number.isInteger(questionCount) &&
+    questionCount > 0 &&
+    Number.isInteger(timePerQuestionSeconds) &&
+    timePerQuestionSeconds > 0;
+  const windowBounds = windowInputsValid
+    ? getQuizWindowBounds(mode, questionCount, timePerQuestionSeconds)
+    : { maximumSeconds: null as number | null, minimumSeconds: 0 };
+  const defaultTotalDurationSeconds =
+    mode === 'live' && windowInputsValid
+      ? getSuggestedQuizLiveWindowSeconds(questionCount, timePerQuestionSeconds)
+      : expectedPlaySeconds;
+  const desiredTotalDurationSeconds =
+    requestedTotalDurationSeconds ?? defaultTotalDurationSeconds;
+  const totalQuizDurationSeconds = clampNumber(
+    desiredTotalDurationSeconds,
+    windowBounds.minimumSeconds,
+    windowBounds.maximumSeconds ?? desiredTotalDurationSeconds
   );
   const closesAt =
     timingKind === 'scheduled' && scheduledEnd
@@ -215,6 +234,9 @@ export function QuizAuthoringForm({
           {timingKind === 'immediate' ? (
             <QuizDurationField
               expectedPlaySeconds={expectedPlaySeconds}
+              maximumSeconds={windowBounds.maximumSeconds}
+              minimumSeconds={windowBounds.minimumSeconds}
+              mode={mode}
               onDurationChange={setRequestedTotalDurationSeconds}
               totalDurationSeconds={totalQuizDurationSeconds}
             />

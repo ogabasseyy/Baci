@@ -10,6 +10,9 @@ describe('QuizDurationField', () => {
     render(
       <QuizDurationField
         expectedPlaySeconds={70}
+        maximumSeconds={190}
+        minimumSeconds={70}
+        mode="test"
         onDurationChange={onDurationChange}
         totalDurationSeconds={70}
       />
@@ -30,6 +33,9 @@ describe('QuizDurationField', () => {
     render(
       <QuizDurationField
         expectedPlaySeconds={70}
+        maximumSeconds={190}
+        minimumSeconds={70}
+        mode="test"
         onDurationChange={onDurationChange}
         totalDurationSeconds={120}
       />
@@ -40,6 +46,34 @@ describe('QuizDurationField', () => {
       screen.getByRole('button', { name: /use expected play time/i })
     );
 
+    expect(onDurationChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('clamps live extensions to the shared window bounds', async () => {
+    const onDurationChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <QuizDurationField
+        expectedPlaySeconds={20}
+        maximumSeconds={140}
+        minimumSeconds={50}
+        mode="live"
+        onDurationChange={onDurationChange}
+        totalDurationSeconds={120}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /extend play time/i }));
+    const input = screen.getByLabelText(/total quiz duration \(seconds\)/i);
+    expect(input).toHaveAttribute('min', '50');
+    expect(input).toHaveAttribute('max', '140');
+    await user.clear(input);
+    await user.type(input, '10');
+
+    expect(onDurationChange).toHaveBeenLastCalledWith(50);
+    await user.click(
+      screen.getByRole('button', { name: /use suggested window/i })
+    );
     expect(onDurationChange).toHaveBeenLastCalledWith(null);
   });
 });

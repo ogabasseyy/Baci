@@ -3,6 +3,7 @@ import { act, render, screen } from '@testing-library/react-native';
 import {
   fetchQuizLeaderboard,
   fetchQuizLiveLeaderboard,
+  fetchQuizParticipantCount,
 } from '@/services/quiz-leaderboard';
 import { QuizResultsPanel } from './QuizResultsPanel';
 import { createQuizStyles, type QuizThemeColors } from './QuizScreen.styles';
@@ -23,6 +24,7 @@ jest.mock('expo-router', () => ({
 jest.mock('@/services/quiz-leaderboard', () => ({
   fetchQuizLeaderboard: jest.fn(),
   fetchQuizLiveLeaderboard: jest.fn(),
+  fetchQuizParticipantCount: jest.fn(async () => 0),
 }));
 
 const colors: QuizThemeColors = {
@@ -44,6 +46,8 @@ describe('QuizResultsPanel', () => {
   beforeEach(() => {
     jest.mocked(fetchQuizLeaderboard).mockReset();
     jest.mocked(fetchQuizLiveLeaderboard).mockReset();
+    jest.mocked(fetchQuizParticipantCount).mockReset();
+    jest.mocked(fetchQuizParticipantCount).mockResolvedValue(0);
   });
 
   it('celebrates completion and explains the server-recorded tie-break time', async () => {

@@ -153,4 +153,63 @@ describe('useQuizResultPolling', () => {
 
     await waitFor(() => expect(fetchQuizResult).toHaveBeenCalledTimes(2));
   });
+
+  it('delays polling until the server-adjusted event end', async () => {
+    jest.setSystemTime(new Date('2026-08-09T20:00:00.000Z'));
+    jest.mocked(fetchQuizResult).mockResolvedValue({
+      attemptId: 'attempt-1',
+      availability: 'final',
+      availableAt: '2026-08-09T20:01:05.000Z',
+      rank: 1,
+      score: 4,
+      totalQuestions: 5,
+    });
+
+    renderHook(() =>
+      useQuizResultPolling({
+        attemptId: 'attempt-1',
+        enabled: true,
+        eventEndsAt: '2026-08-09T20:01:00.000Z',
+        expectedUserId: 'user-1',
+        onResult: jest.fn(),
+        serverNow: '2026-08-09T20:00:00.000Z',
+      })
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(30_000);
+      await Promise.resolve();
+    });
+    expect(fetchQuizResult).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(30_000);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(fetchQuizResult).toHaveBeenCalledTimes(1));
+  });
+
+  it('polls immediately when the event end is unknown', async () => {
+    jest.mocked(fetchQuizResult).mockResolvedValue({
+      attemptId: 'attempt-1',
+      availability: 'final',
+      availableAt: '2026-08-09T20:01:05.000Z',
+      rank: 1,
+      score: 4,
+      totalQuestions: 5,
+    });
+
+    renderHook(() =>
+      useQuizResultPolling({
+        attemptId: 'attempt-1',
+        enabled: true,
+        eventEndsAt: null,
+        expectedUserId: 'user-1',
+        onResult: jest.fn(),
+        serverNow: null,
+      })
+    );
+
+    await waitFor(() => expect(fetchQuizResult).toHaveBeenCalledTimes(1));
+  });
 });

@@ -4,25 +4,26 @@ import { useState } from 'react';
 import { clampNumber, clampNumberInput } from './quiz-admin-actions';
 import { formatQuizDuration } from './quiz-duration';
 
-const MAX_TOTAL_DURATION_SECONDS = 120 * 60;
-
 export function QuizDurationField({
   expectedPlaySeconds,
+  maximumSeconds,
+  minimumSeconds,
+  mode,
   onDurationChange,
   totalDurationSeconds,
 }: {
   expectedPlaySeconds: number;
+  maximumSeconds: number | null;
+  minimumSeconds: number;
+  mode: 'test' | 'live';
   onDurationChange: (seconds: number | null) => void;
   totalDurationSeconds: number;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [inputValue, setInputValue] = useState('');
-  const maximumDurationSeconds = Math.max(
-    MAX_TOTAL_DURATION_SECONDS,
-    expectedPlaySeconds
-  );
+  const maximumDurationSeconds = maximumSeconds ?? Number.MAX_SAFE_INTEGER;
 
-  const resetToExpectedPlay = () => {
+  const resetToDefault = () => {
     setInputValue('');
     setIsExpanded(false);
     onDurationChange(null);
@@ -50,15 +51,15 @@ export function QuizDurationField({
           <input
             aria-label="Total quiz duration (seconds)"
             className="h-11 rounded-md border bg-background px-3"
-            min={expectedPlaySeconds}
-            max={maximumDurationSeconds}
+            min={minimumSeconds}
+            max={maximumSeconds ?? undefined}
             type="number"
             value={inputValue}
             onBlur={() =>
               setInputValue(
                 clampNumberInput(
                   inputValue,
-                  expectedPlaySeconds,
+                  minimumSeconds,
                   maximumDurationSeconds
                 )
               )
@@ -69,7 +70,7 @@ export function QuizDurationField({
               onDurationChange(
                 clampNumber(
                   Number(nextValue),
-                  expectedPlaySeconds,
+                  minimumSeconds,
                   maximumDurationSeconds
                 )
               );
@@ -81,10 +82,12 @@ export function QuizDurationField({
           </p>
           <button
             className="w-fit text-xs font-semibold text-muted-foreground underline underline-offset-4"
-            onClick={resetToExpectedPlay}
+            onClick={resetToDefault}
             type="button"
           >
-            Use expected play time
+            {mode === 'live'
+              ? 'Use suggested window'
+              : 'Use expected play time'}
           </button>
         </>
       ) : (

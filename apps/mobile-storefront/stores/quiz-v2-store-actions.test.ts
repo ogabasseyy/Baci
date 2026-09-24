@@ -129,6 +129,26 @@ describe('createQuizV2StoreActions terminal expiry', () => {
     });
   });
 
+  it('expiry_treats_unavailable_as_terminal', async () => {
+    const harness = createHarness();
+
+    await harness.actions.expireActiveEvent(async () =>
+      response({ availability: 'unavailable', attempt: undefined })
+    );
+
+    expect(harness.getState()).toMatchObject({
+      status: 'result',
+      v2Attempt: null,
+      v2LifecycleStatus: 'pending_results',
+      expiryRetryable: false,
+      terminalContext: {
+        attemptId: activeAttempt.attemptId,
+        eventId: activeAttempt.eventId,
+        contractVersion: 2,
+      },
+    });
+  });
+
   it('expiry_rejects_expired_active_response', async () => {
     const harness = createHarness();
 

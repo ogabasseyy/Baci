@@ -128,4 +128,34 @@ describe('Jumia actions all-items detection', () => {
     expect(m.cancel).not.toHaveBeenCalled();
     expect(m.syncStatus).not.toHaveBeenCalled();
   });
+
+  it('fails closed when item ownership cannot be verified', async () => {
+    m.user.mockResolvedValue({ data: { user: { id: 'U' } } });
+    m.client.mockResolvedValue({});
+    m.orderItems.mockRejectedValue(new Error('provider timeout'));
+    m.cancel.mockResolvedValue({
+      success: { total: 1 },
+      error: { total: 0 },
+    });
+    const { POST } = await import('./route');
+
+    const response = await POST(
+      new NextRequest('http://localhost', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'cancel',
+          integrationId: '550e8400-e29b-41d4-a716-446655440000',
+          orderId: 'ORDER-1',
+          itemIds: ['ITEM-1'],
+        }),
+      })
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Unable to verify order items with Jumia. Try again.',
+    });
+    expect(m.cancel).not.toHaveBeenCalled();
+    expect(m.syncStatus).not.toHaveBeenCalled();
+  });
 });

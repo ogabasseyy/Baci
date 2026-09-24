@@ -230,7 +230,7 @@ export async function pushPriceUpdates(
   currency: string,
   feedIds: string[],
   feedErrors: string[]
-): Promise<void> {
+): Promise<{ submittedSkus: string[] }> {
   const readyMappings = mappings.filter((mapping) => mapping.jumia_product_id);
   if (readyMappings.length !== mappings.length) {
     feedErrors.push(
@@ -238,13 +238,13 @@ export async function pushPriceUpdates(
         ? 'Price update skipped: one or more product variants have not been assigned a Jumia product ID yet (feed may still be processing)'
         : 'Price update skipped: product has not been assigned a Jumia product ID yet (feed may still be processing)'
     );
-    return;
+    return { submittedSkus: [] };
   }
 
   const scopeError = await getJumiaOAuthScopeError(client, 'Price');
   if (scopeError) {
     feedErrors.push(scopeError);
-    return;
+    return { submittedSkus: [] };
   }
 
   const priceItems = readyMappings.flatMap((mapping) => {
@@ -279,16 +279,18 @@ export async function pushPriceUpdates(
   });
 
   if (priceItems.length === 0) {
-    return;
+    return { submittedSkus: [] };
   }
 
   try {
     const priceFeedId = await updatePrice(client, priceItems);
     feedIds.push(priceFeedId);
+    return { submittedSkus: priceItems.map((item) => item.sellerSku) };
   } catch (err) {
     logger.error({ message: 'Jumia price feed failed', error: err });
     feedErrors.push(
       `Price update failed: ${err instanceof Error ? err.message : 'Unknown error'}`
     );
+    return { submittedSkus: [] };
   }
 }

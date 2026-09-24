@@ -15,6 +15,7 @@ import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
 import { integrationIdSchema } from '@/schemas/marketplace';
 import { executePackAction } from './pack-action';
+import { resolveJumiaActionTargetItems } from './resolve-jumia-action-target-items';
 import { updateJumiaActionOrderStatus } from './sync-jumia-action-status';
 
 /** Derive overall action status from Jumia success/error totals */
@@ -141,31 +142,13 @@ export async function POST(request: NextRequest) {
     } else {
       // Explicit IDs can still cover the whole order: the order modal always
       // sends the full item list. Compare against the provider's complete set.
-      try {
-        const orderItems = await getOrderItems(jumiaClient, orderId);
-        const orderItemIds = new Set(
-          orderItems?.items?.map((item) => item.id) ?? []
-        );
-        const suppliedIds = new Set(targetItemIds);
-        const foreignIds = [...suppliedIds].filter(
-          (id) => !orderItemIds.has(id)
-        );
-        if (foreignIds.length > 0) {
-          // Acting on another order's items would leave that order's local
-          // status stale, since only orderId is ever updated below.
-          return NextResponse.json(
-            { error: 'Some items do not belong to this order' },
-            { status: 400 }
-          );
-        }
-        isAllItems =
-          orderItemIds.size > 0 &&
-          suppliedIds.size === orderItemIds.size &&
-          orderItems.items.every((item) => suppliedIds.has(item.id));
-      } catch (error: unknown) {
-        // Proceed with the supplied IDs; only the order-level status sync is skipped.
-        logger.warn({ message: 'Jumia all-items check failed', error });
-      }
+      const resolved = await resolveJumiaActionTargetItems(
+        jumiaClient,
+        orderId,
+        targetItemIds
+      );
+      if (!resolved.ok) return resolved.response;
+      isAllItems = resolved.isAllItems;
     }
 
     if (targetItemIds.length === 0) {

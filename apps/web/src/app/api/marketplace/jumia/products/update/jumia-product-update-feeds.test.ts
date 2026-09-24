@@ -375,6 +375,73 @@ describe('pushPriceUpdates', () => {
     ]);
   });
 
+  it('returns the submitted SKUs when some variants have no price', async () => {
+    mockUpdatePrice.mockResolvedValue('feed-price-partial');
+    const feedIds: string[] = [];
+    const feedErrors: string[] = [];
+
+    const result = await pushPriceUpdates(
+      { shopId: 'shop-1', marketplaceKey: 'default' } as never,
+      [
+        {
+          id: 'map-1',
+          jumia_product_id: 'JUMIA-1',
+          jumia_sku: 'SKU-1',
+          jumia_price: 1000,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+        } as never,
+        {
+          id: 'map-2',
+          jumia_product_id: 'JUMIA-2',
+          jumia_sku: 'SKU-2',
+          jumia_price: null,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+        } as never,
+      ],
+      { jumia_prices: { 'SKU-1': 900 } },
+      'NGN',
+      feedIds,
+      feedErrors
+    );
+
+    expect(result).toEqual({ submittedSkus: ['SKU-1'] });
+    expect(feedIds).toEqual(['feed-price-partial']);
+    expect(feedErrors).toHaveLength(1);
+  });
+
+  it('returns no submitted SKUs when feed submission fails', async () => {
+    mockUpdatePrice.mockRejectedValue(new Error('provider down'));
+    const feedIds: string[] = [];
+    const feedErrors: string[] = [];
+
+    const result = await pushPriceUpdates(
+      { shopId: 'shop-1', marketplaceKey: 'default' } as never,
+      [
+        {
+          id: 'map-1',
+          jumia_product_id: 'JUMIA-1',
+          jumia_sku: 'SKU-1',
+          jumia_price: 1000,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+        } as never,
+      ],
+      { jumia_prices: { 'SKU-1': 900 } },
+      'NGN',
+      feedIds,
+      feedErrors
+    );
+
+    expect(result).toEqual({ submittedSkus: [] });
+    expect(feedIds).toEqual([]);
+    expect(feedErrors).toHaveLength(1);
+  });
+
   it('uses per-variant prices and scopes feeds to a selected business client', async () => {
     mockUpdatePrice.mockResolvedValue('feed-price-variants');
     const feedIds: string[] = [];

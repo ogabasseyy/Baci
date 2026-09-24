@@ -241,10 +241,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let priceFeedAccepted = false;
+    let submittedPriceSkus: string[] = [];
     if (needsPriceUpdate && marketplaceCurrency) {
-      const priceErrorsBefore = feedErrors.length;
-      await pushPriceUpdates(
+      const pricePush = await pushPriceUpdates(
         client,
         mappings,
         overrides,
@@ -252,17 +251,23 @@ export async function POST(request: NextRequest) {
         feedIds,
         feedErrors
       );
-      priceFeedAccepted = feedErrors.length === priceErrorsBefore;
+      submittedPriceSkus = pricePush.submittedSkus;
     }
 
     // Persist only what Jumia accepted: committing beforehand would leave
-    // local prices ahead of the provider when submission fails.
-    if (overrides.jumia_prices && priceFeedAccepted) {
+    // local prices ahead of the provider when submission fails, while a
+    // partial feed must still persist its submitted subset.
+    if (overrides.jumia_prices) {
+      const submittedPrices = Object.fromEntries(
+        Object.entries(overrides.jumia_prices).filter(([sku]) =>
+          submittedPriceSkus.includes(sku)
+        )
+      );
       const priceResult = await applyJumiaVariantPriceUpdates({
         supabase,
         merchantId,
         mappings: readyMappings,
-        prices: overrides.jumia_prices,
+        prices: submittedPrices,
       });
       if (!priceResult.ok) {
         return NextResponse.json({ error: priceResult.error }, { status: 500 });

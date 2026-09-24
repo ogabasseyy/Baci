@@ -314,6 +314,7 @@ describe('POST /api/marketplace/jumia/products/update', () => {
       ok: true,
       currency: 'NGN',
     });
+    mockPushPriceUpdates.mockResolvedValue({ submittedSkus: ['SKU-1'] });
 
     const response = await POST(
       makeRequest({
@@ -340,6 +341,7 @@ describe('POST /api/marketplace/jumia/products/update', () => {
     });
     mockPushPriceUpdates.mockImplementationOnce(async (...args: unknown[]) => {
       (args[5] as string[]).push('Price feed rejected');
+      return { submittedSkus: [] as string[] };
     });
 
     const response = await POST(
@@ -355,5 +357,79 @@ describe('POST /api/marketplace/jumia/products/update', () => {
     expect(body.success).toBe(false);
     expect(body.errors).toEqual(['Price feed rejected']);
     expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('persists the submitted subset of a partial price feed', async () => {
+    vi.mocked(loadJumiaMarketplaceCurrency).mockResolvedValue({
+      ok: true,
+      currency: 'NGN',
+    });
+    mockMappingsOrder.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'map-1',
+          product_id: PRODUCT_ID,
+          variant_id: null,
+          jumia_sku: 'SKU-1',
+          jumia_seller_sku: 'SKU-1',
+          jumia_product_id: 'JUMIA-1',
+          jumia_price: 1000,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+          is_active: true,
+          sync_inventory: true,
+          sync_price: false,
+          sync_status: 'synced',
+          last_synced_at: null,
+          sync_error: null,
+          created_at: '2026-08-13T10:00:00Z',
+          updated_at: '2026-08-13T10:00:00Z',
+        },
+        {
+          id: 'map-2',
+          product_id: PRODUCT_ID,
+          variant_id: null,
+          jumia_sku: 'SKU-2',
+          jumia_seller_sku: 'SKU-2',
+          jumia_product_id: 'JUMIA-2',
+          jumia_price: null,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+          is_active: true,
+          sync_inventory: true,
+          sync_price: false,
+          sync_status: 'synced',
+          last_synced_at: null,
+          sync_error: null,
+          created_at: '2026-08-13T10:00:00Z',
+          updated_at: '2026-08-13T10:00:00Z',
+        },
+      ],
+      error: null,
+    });
+    mockPushPriceUpdates.mockImplementationOnce(async (...args: unknown[]) => {
+      (args[5] as string[]).push(
+        'Price update skipped for SKU-2: no price available (override or existing)'
+      );
+      return { submittedSkus: ['SKU-1'] };
+    });
+
+    const response = await POST(
+      makeRequest({
+        integrationId: INTEGRATION_ID,
+        overrides: { jumia_prices: { 'SKU-1': 900 } },
+        productId: PRODUCT_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(false);
+    expect(mockRpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
+      p_merchant_id: MERCHANT_ID,
+      p_updates: [{ id: 'map-1', price: 900 }],
+    });
   });
 });

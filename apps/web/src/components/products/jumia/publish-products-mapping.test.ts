@@ -1,86 +1,47 @@
 import { describe, expect, it } from 'vitest';
 import { isJumiaProductFullyMapped } from './publish-products-mapping';
 
-const product = {
-  id: 'product-1',
-  name: 'Phone',
-  price: 100,
-  sku: 'PHONE',
-  variants: [
-    { sku: 'PHONE-BLACK', price_override: 100 },
-    { sku: 'PHONE-WHITE', price_override: 100 },
-  ],
-};
-
 describe('isJumiaProductFullyMapped', () => {
-  it('does not block a product when only one variant is mapped', () => {
+  it('blocks a product when any mapping is not an error', () => {
     expect(
-      isJumiaProductFullyMapped(product, [
-        { sellerSku: 'PHONE-BLACK', syncStatus: 'synced' },
-        { sellerSku: 'PHONE-WHITE', syncStatus: 'error' },
-      ])
-    ).toBe(false);
-  });
-
-  it('blocks a product when every sellable variant is mapped', () => {
-    expect(
-      isJumiaProductFullyMapped(product, [
+      isJumiaProductFullyMapped([
         { sellerSku: 'PHONE-BLACK', syncStatus: 'synced' },
         { sellerSku: 'PHONE-WHITE', syncStatus: 'pending' },
       ])
     ).toBe(true);
   });
 
-  it('uses the product SKU when there are no sellable variants', () => {
+  it('blocks a partially mapped product instead of offering a create retry', () => {
+    // The server rejects a create retry with 409 jumia_mapping_exists when
+    // any non-error mapping exists, so the accepted variant must block the
+    // rejected one from another create submission.
     expect(
-      isJumiaProductFullyMapped(
-        { id: 'product-2', name: 'Case', price: 10, sku: 'CASE' },
-        [{ sellerSku: 'CASE', syncStatus: 'synced' }]
-      )
+      isJumiaProductFullyMapped([
+        { sellerSku: 'PHONE-BLACK', syncStatus: 'synced' },
+        { sellerSku: 'PHONE-WHITE', syncStatus: 'error' },
+      ])
     ).toBe(true);
   });
 
-  it('keeps legacy mapped products blocked when their local SKU is absent', () => {
+  it('keeps a mapped product blocked after its local SKU changes', () => {
     expect(
-      isJumiaProductFullyMapped(
-        { id: 'product-3', name: 'Legacy case', price: 10 },
-        [{ sellerSku: 'LEGACY-CASE', syncStatus: 'synced' }]
-      )
+      isJumiaProductFullyMapped([
+        { sellerSku: 'CASE-OLD', syncStatus: 'synced' },
+      ])
     ).toBe(true);
   });
 
-  it('keeps a simple mapped product blocked after its local SKU changes', () => {
+  it('does not block a product when every mapping failed', () => {
     expect(
-      isJumiaProductFullyMapped(
-        { id: 'product-4', name: 'Case', price: 10, sku: 'CASE-NEW' },
-        [{ sellerSku: 'CASE-OLD', syncStatus: 'synced' }]
-      )
-    ).toBe(true);
+      isJumiaProductFullyMapped([
+        { sellerSku: 'PHONE-BLACK', syncStatus: 'error' },
+        { sellerSku: 'PHONE-WHITE', syncStatus: 'error' },
+      ])
+    ).toBe(false);
   });
 
-  it('keeps a mapped variant blocked after its local SKU changes', () => {
-    expect(
-      isJumiaProductFullyMapped(
-        {
-          ...product,
-          variants: [
-            { id: 'variant-black', sku: 'PHONE-BLACK-NEW' },
-            { id: 'variant-white', sku: 'PHONE-WHITE-NEW' },
-          ],
-        },
-        [
-          {
-            variantId: 'variant-black',
-            sellerSku: 'PHONE-BLACK-OLD',
-            syncStatus: 'synced',
-          },
-          {
-            variantId: 'variant-white',
-            sellerSku: 'PHONE-WHITE-OLD',
-            syncStatus: 'pending',
-          },
-        ]
-      )
-    ).toBe(true);
+  it('does not block a product without mappings', () => {
+    expect(isJumiaProductFullyMapped(undefined)).toBe(false);
+    expect(isJumiaProductFullyMapped([])).toBe(false);
   });
 });

@@ -381,6 +381,48 @@ describe('Jumia dashboard order data', () => {
     expect(ordersQuery.or).not.toHaveBeenCalled();
   });
 
+  it('applies status filters to scoped legacy Jumia rows', async () => {
+    const ordersQuery = createQuery({ data: [], error: null });
+    const jumiaQuery = createQuery({
+      data: [
+        {
+          jumia_order_id: 'legacy-refunded',
+          jumia_order_number: 'JUMIA-REFUNDED',
+          customer_name: 'Refunded Customer',
+          total_amount: '12000',
+          status: 'canceled',
+          created_at_jumia: '2026-04-25T09:00:00.000Z',
+          items: [],
+        },
+        {
+          jumia_order_id: 'legacy-pending',
+          jumia_order_number: 'JUMIA-PENDING',
+          customer_name: 'Pending Customer',
+          total_amount: '8000',
+          status: 'pending',
+          created_at_jumia: '2026-04-25T10:00:00.000Z',
+          items: [],
+        },
+      ],
+      error: null,
+    });
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'orders') return ordersQuery;
+      if (table === 'jumia_orders') return jumiaQuery;
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    const orders = await getOrders(MERCHANT_ID, {
+      source: 'jumia',
+      paymentStatus: 'Refunded',
+    });
+
+    expect(mocks.from).toHaveBeenCalledWith('jumia_orders');
+    expect(orders.map((order) => order.orderNumber)).toEqual([
+      'JUMIA-REFUNDED',
+    ]);
+  });
+
   it('scopes source=agentic to persisted agentic order rows', async () => {
     const ordersQuery = createQuery({ data: [], error: null });
     mocks.from.mockImplementation((table: string) => {

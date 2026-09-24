@@ -555,11 +555,9 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
 
     expect(result.synced).toBe(0);
     expect(result.canonicalCreated).toBe(1);
-    expect(result.notified).toBe(1);
+    expect(result.notified).toBe(0);
     expect(result.orderErrors).toBe(1);
-    expect(notifyUpdateQuery.update).toHaveBeenCalledWith({
-      notification_sent: true,
-    });
+    expect(notifyUpdateQuery.update).not.toHaveBeenCalled();
     expect(result.errors).toEqual(
       expect.arrayContaining([
         expect.stringContaining(

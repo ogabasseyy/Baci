@@ -216,6 +216,25 @@ function isActiveFilter<T extends string>(
   return Boolean(value && value !== 'All');
 }
 
+/**
+ * Applies the dashboard status filters to a mapped unlinked Jumia cache
+ * row. Canonical orders are filtered natively by the database query, but
+ * cache rows loaded under a Jumia scope bypass it; without this, views
+ * like Jumia + Refunded would include unrelated pending orders.
+ */
+function matchesJumiaCacheStatusFilters(
+  mapped: { paymentStatus: string; shippingStatus: string },
+  filters: { paymentStatus?: string; shippingStatus?: string }
+): boolean {
+  if (isActiveFilter(filters.paymentStatus)) {
+    if (mapped.paymentStatus !== filters.paymentStatus) return false;
+  }
+  if (isActiveFilter(filters.shippingStatus)) {
+    if (mapped.shippingStatus !== filters.shippingStatus) return false;
+  }
+  return true;
+}
+
 export async function getOrders(
   merchantId: string,
   filters: OrderFilters = {}
@@ -332,7 +351,7 @@ export async function getOrders(
     let jumiaQuery = supabase
       .from('jumia_orders')
       .select(
-        'status, jumia_order_id, jumia_order_number, jumia_shop_id, marketplace_key, customer_name, total_amount, created_at_jumia, items'
+        'status, jumia_order_id, jumia_order_number, jumia_shop_id, marketplace_key, customer_name, total_amount, currency, created_at_jumia, items'
       )
       .eq('merchant_id', authorizedMerchantId)
       .is('baci_order_id', null);
@@ -376,9 +395,14 @@ export async function getOrders(
   );
 
   // Normalize Jumia Orders
-  const normalizedJumiaOrders = jumiaOrders.map(
-    (jOrder) => mapJumiaDashboardOrder(jOrder) as Order
-  );
+  const normalizedJumiaOrders = jumiaOrders
+    .map((jOrder) => mapJumiaDashboardOrder(jOrder) as Order)
+    .filter((mapped) =>
+      matchesJumiaCacheStatusFilters(mapped, {
+        paymentStatus: paymentStatusFilter,
+        shippingStatus: shippingStatusFilter,
+      })
+    );
 
   // Merge and Sort
   const allOrders = [...realOrders, ...normalizedJumiaOrders].sort(

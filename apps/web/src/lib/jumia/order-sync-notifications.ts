@@ -83,7 +83,10 @@ export async function hasSentJumiaOrderNotification(
       .eq('merchant_id', merchantId)
       .eq('notification_type', 'new_order')
       .eq('payload->>jumia_order_id', jumiaOrderId)
-      .in('status', ['sent', 'partial_failure']);
+      // Only fully delivered pushes suppress a resend. A partial_failure
+      // row means some devices never got the alert, so the next run must
+      // deliver again (at-least-once) rather than skip.
+      .in('status', ['sent']);
     if (error || !data) return false;
     return data.length > 0;
   } catch {
@@ -107,9 +110,10 @@ export interface SendJumiaOrderNotificationArgs {
 /**
  * Sends the new-order push unless a previous run already delivered it,
  * then persists the notification marker. Reports delivery through
- * `onNotified` as soon as the provider accepts the push (even when a
- * later marker write fails). Throws when delivery or the marker write
- * fails so the sync cursor parks the order for retry.
+ * `onNotified` once every recipient succeeds (even when a later marker
+ * write fails). Throws when delivery or the marker write fails so the
+ * sync cursor parks the order for retry; partial delivery stays
+ * unmarked so the failed subset is retried on the next run.
  */
 export async function sendJumiaOrderNotification(
   supabase: SupabaseClient,
@@ -144,7 +148,14 @@ export async function sendJumiaOrderNotification(
     failed: 0,
     errors: [],
   };
-  if (notificationResult.sent > 0) {
+  // A partial batch (some pushes accepted, some rejected) must not mark
+  // the order notified: the parked cursor's next run would otherwise skip
+  // delivery and the failed devices would never be alerted.
+  const fullyNotified =
+    notificationResult.sent > 0 &&
+    notificationResult.failed === 0 &&
+    notificationResult.errors.length === 0;
+  if (fullyNotified) {
     args.onNotified();
     // The push provider accepted the notification. Keep duplicated Jumia
     // pages in this run from rebuilding a stale cache row as unnotified.

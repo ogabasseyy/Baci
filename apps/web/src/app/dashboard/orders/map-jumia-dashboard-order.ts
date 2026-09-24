@@ -15,6 +15,7 @@ export interface JumiaOrder {
   marketplace_key: string | null;
   customer_name: string | null;
   total_amount: string;
+  currency?: string | null;
   status: string;
   created_at_jumia: string;
   items?: JumiaOrderItem[];
@@ -44,7 +45,7 @@ export function mapJumiaDashboardOrder(jOrder: JumiaOrder) {
     jumiaOrderId: jOrder.jumia_order_id ?? undefined,
     customerName: formatPersonName(jOrder.customer_name || 'Jumia Customer'),
     total: Number.parseFloat(jOrder.total_amount),
-    currency: 'NGN',
+    currency: jOrder.currency?.trim() || 'NGN',
     shippingStatus,
     paymentStatus,
     paymentMethod: 'Jumia Payout',

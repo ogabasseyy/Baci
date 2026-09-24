@@ -122,7 +122,7 @@ export function usePublishProductsDialog({
   const loadError = productsLoadError ?? mappedProductsLoadError;
 
   const getPublishBlockReason = (product: PublishProduct): string | null => {
-    if (isJumiaProductFullyMapped(product, mappedProducts.get(product.id))) {
+    if (isJumiaProductFullyMapped(mappedProducts.get(product.id))) {
       return 'Already published to this Jumia integration.';
     }
     const productReason = getJumiaPublishBlockReason(product);

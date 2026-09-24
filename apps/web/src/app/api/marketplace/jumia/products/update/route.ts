@@ -10,6 +10,7 @@ import { logger } from '@/lib/logger';
 import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { createClient } from '@/lib/supabase/server';
 import { jumiaProductUpdateSchema } from '@/schemas/jumia-product-update';
+import { applyJumiaVariantPriceUpdates } from './apply-jumia-variant-price-updates';
 import {
   getJumiaPriceOverrideError,
   getJumiaProductUpdateReadiness,
@@ -228,24 +229,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (overrides.jumia_prices) {
-      for (const mapping of readyMappings) {
-        const price = overrides.jumia_prices[mapping.jumia_sku];
-        if (price == null) continue;
-        const { error: priceUpdateError } = await supabase
-          .from('jumia_product_mappings')
-          .update({ jumia_price: price, updated_at: new Date().toISOString() })
-          .eq('id', mapping.id)
-          .eq('merchant_id', merchantId);
-        if (priceUpdateError) {
-          logger.error({
-            message: 'Local per-variant price update failed',
-            error: priceUpdateError,
-          });
-          return NextResponse.json(
-            { error: 'Failed to update local mapping' },
-            { status: 500 }
-          );
-        }
+      // Applied atomically: a mid-loop failure rolls back earlier rows so
+      // local prices never diverge from what the provider feed receives.
+      const priceResult = await applyJumiaVariantPriceUpdates({
+        supabase,
+        merchantId,
+        mappings: readyMappings,
+        prices: overrides.jumia_prices,
+      });
+      if (!priceResult.ok) {
+        return NextResponse.json({ error: priceResult.error }, { status: 500 });
       }
     }
 

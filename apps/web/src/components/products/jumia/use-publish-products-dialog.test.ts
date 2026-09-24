@@ -431,7 +431,7 @@ describe('usePublishProductsDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('keeps a partially mapped variant product retryable', async () => {
+  it('blocks a partially mapped variant product from create retries', async () => {
     const fetchMock = createFetchMock({
       'mapped-product-ids': async () => ({
         ok: true,
@@ -486,9 +486,13 @@ describe('usePublishProductsDialog', () => {
 
     const [firstProduct] = result.current.products;
     if (!firstProduct) throw new Error('Expected a loaded product');
-    expect(result.current.getPublishBlockReason(firstProduct)).toBe(null);
+    // The accepted variant blocks another create (the server would 409),
+    // so the rejected variant recovers through the listing update flow.
+    expect(result.current.getPublishBlockReason(firstProduct)).toBe(
+      'Already published to this Jumia integration.'
+    );
     act(() => result.current.toggleProduct('prod-1'));
-    expect(result.current.selectedIds).toEqual(new Set(['prod-1']));
+    expect(result.current.selectedIds).toEqual(new Set([]));
   });
 
   it('reports an accepted 207 export as reconciliation pending', async () => {

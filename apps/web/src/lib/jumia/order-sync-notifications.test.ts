@@ -42,6 +42,7 @@ import {
   getJumiaNotificationAttemptKey,
   hasSentJumiaOrderNotification,
   markJumiaNotificationSent,
+  sendJumiaOrderNotification,
 } from './order-sync-notifications';
 
 describe('Jumia order sync notification markers', () => {
@@ -76,10 +77,7 @@ describe('Jumia order sync notification markers', () => {
       'payload->>jumia_order_id',
       'jumia-order-1'
     );
-    expect(attemptsQuery.in).toHaveBeenCalledWith('status', [
-      'sent',
-      'partial_failure',
-    ]);
+    expect(attemptsQuery.in).toHaveBeenCalledWith('status', ['sent']);
   });
 
   it('fails open when the delivery lookup errors', async () => {
@@ -114,6 +112,46 @@ describe('Jumia order sync notification markers', () => {
         'jumia-order-1'
       )
     ).resolves.toBe(false);
+  });
+
+  it('leaves partially failed push deliveries unmarked for retry', async () => {
+    const attemptsQuery = createQuery(
+      { data: [], error: null },
+      { terminalIn: true }
+    );
+    const markerQuery = createQuery({
+      data: { jumia_order_id: order.id },
+      error: null,
+    });
+    const supabase = createSupabaseMock({
+      push_notification_attempts: [attemptsQuery],
+      jumia_orders: [markerQuery],
+    });
+    const notifySyncedJumiaOrder = vi.fn().mockResolvedValue({
+      sent: 1,
+      failed: 1,
+      errors: [],
+    });
+    const onNotified = vi.fn();
+    const existingJumiaOrders = new Map();
+
+    await expect(
+      sendJumiaOrderNotification(supabase, {
+        merchantId: 'merchant-1',
+        integrationId: 'integration-1',
+        order,
+        canonicalOrderId: 'baci-order-1',
+        notificationKey: getJumiaNotificationAttemptKey('merchant-1', order.id),
+        attemptedNotificationKeys: new Set<string>(),
+        existingJumiaOrders,
+        notifySyncedJumiaOrder,
+        buildExistingJumiaCacheEntry: vi.fn(),
+        onNotified,
+      })
+    ).rejects.toThrow('Failed to notify merchant for Jumia order');
+    expect(markerQuery.update).not.toHaveBeenCalled();
+    expect(onNotified).not.toHaveBeenCalled();
+    expect(existingJumiaOrders.size).toBe(0);
   });
 
   it('retries notification_sent updates and scopes them to the merchant', async () => {

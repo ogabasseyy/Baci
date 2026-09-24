@@ -36,6 +36,16 @@ describe('mapJumiaDashboardOrder', () => {
     });
   });
 
+  it('passes through the stored currency and defaults to NGN when blank', () => {
+    expect(
+      mapJumiaDashboardOrder(jumiaOrder({ currency: 'DZD' })).currency
+    ).toBe('DZD');
+    expect(
+      mapJumiaDashboardOrder(jumiaOrder({ currency: '  ' })).currency
+    ).toBe('NGN');
+    expect(mapJumiaDashboardOrder(jumiaOrder()).currency).toBe('NGN');
+  });
+
   it('maps canceled and failed Jumia statuses', () => {
     expect(
       mapJumiaDashboardOrder(jumiaOrder({ status: 'canceled' }))

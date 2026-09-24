@@ -2,11 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createServiceClient: vi.fn(),
+  createJumiaCredentialServiceClient: vi.fn(),
   syncJumiaOrdersForActiveIntegrations: vi.fn(),
 }));
 
 vi.mock('../lib/supabase/service', () => ({
   createServiceClient: mocks.createServiceClient,
+}));
+
+vi.mock('../lib/jumia/server-credential-client', () => ({
+  createJumiaCredentialServiceClient:
+    mocks.createJumiaCredentialServiceClient,
 }));
 
 vi.mock('../lib/jumia/order-sync', () => ({
@@ -27,6 +33,7 @@ describe('runJumiaOrderSyncCli', () => {
 
   it('runs the Jumia sync and exits cleanly when there are no errors', async () => {
     const supabase = { service: true };
+    const credentialClient = { credentialService: true };
     const result = {
       integrations: 1,
       synced: 2,
@@ -39,13 +46,15 @@ describe('runJumiaOrderSyncCli', () => {
     };
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     mocks.createServiceClient.mockReturnValue(supabase);
+    mocks.createJumiaCredentialServiceClient.mockReturnValue(credentialClient);
     mocks.syncJumiaOrdersForActiveIntegrations.mockResolvedValue(result);
 
     const exitCode = await runJumiaOrderSyncCli();
 
     expect(exitCode).toBe(0);
     expect(mocks.syncJumiaOrdersForActiveIntegrations).toHaveBeenCalledWith(
-      supabase
+      supabase,
+      { credentialClient }
     );
     expect(JSON.parse(logSpy.mock.calls[0]?.[0] ?? '{}')).toMatchObject(result);
   });

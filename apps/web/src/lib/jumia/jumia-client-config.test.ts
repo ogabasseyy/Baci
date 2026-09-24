@@ -194,6 +194,49 @@ describe('jumia-client-config', () => {
     );
   });
 
+  it('reads the grant through the restricted credential client when provided', async () => {
+    const { getJumiaAuthorizationEncryptionKey } = await import('@/env');
+    vi.mocked(getJumiaAuthorizationEncryptionKey).mockReturnValue('test-key');
+    mockLoadGrant.mockResolvedValue({
+      credential_ciphertext: 'opaque-ciphertext',
+      token_expires_at: '2026-04-01T10:00:00.000Z',
+      refresh_token_expires_at: '2026-05-01T10:00:00.000Z',
+      rotation_version: 3,
+      client_key_hash: 'c'.repeat(64),
+    });
+    mockDecrypt.mockReturnValue({
+      clientId: 'client-id',
+      refreshToken: 'shared-refresh',
+      accessToken: 'shared-access',
+    });
+    const supabase = createMockSupabase({
+      data: {
+        id: 'int-123',
+        merchant_id: 'merchant-abc',
+        shop_id: 'shop-456',
+        country_code: 'NG',
+        marketplace_key: 'default',
+        access_token: null,
+        refresh_token: null,
+        token_expires_at: null,
+        connection_method: 'self_authorization',
+        jumia_authorization_id: 'auth-1',
+      },
+      error: null,
+    });
+    const credentialClient = { credential: true };
+
+    await loadJumiaIntegrationConfig(supabase, 'merchant-abc', 'int-123', {
+      credentialClient: credentialClient as never,
+    });
+
+    expect(mockLoadGrant).toHaveBeenCalledWith(
+      credentialClient,
+      'auth-1',
+      'merchant-abc'
+    );
+  });
+
   it('throws when the self-authorization grant is unavailable', async () => {
     const { getJumiaAuthorizationEncryptionKey } = await import('@/env');
     vi.mocked(getJumiaAuthorizationEncryptionKey).mockReturnValue('test-key');

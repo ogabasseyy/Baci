@@ -3,6 +3,7 @@ import { JumiaClient } from '@/lib/jumia/client';
 import type { JumiaOrderSyncResult } from '@/lib/jumia/order-sync-result';
 import { getAllOrders, getOrderItems } from '@/lib/jumia/orders';
 import { logger } from '@/lib/logger';
+import type { JumiaCredentialServiceClient } from '@/lib/supabase/service';
 import {
   JUMIA_EXTERNAL_SOURCE,
   type MarketplaceIntegrationRow,
@@ -44,7 +45,8 @@ const syncJumiaOrderIntegrationDependencies = {
 } satisfies SyncJumiaOrderIntegrationDependencies;
 
 export async function syncJumiaOrdersForActiveIntegrations(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  options?: { credentialClient?: JumiaCredentialServiceClient }
 ): Promise<JumiaOrderSyncResult> {
   const result: JumiaOrderSyncResult = {
     integrations: 0,
@@ -56,6 +58,25 @@ export async function syncJumiaOrdersForActiveIntegrations(
     orderErrors: 0,
     errors: [],
   };
+  // Ciphertext grant reads must travel on the restricted credential client,
+  // never the generic worker database client.
+  const credentialClient = options?.credentialClient;
+  const dependencies = credentialClient
+    ? {
+        ...syncJumiaOrderIntegrationDependencies,
+        createClient: (
+          clientSupabase: SupabaseClient,
+          merchantId: string,
+          integrationId: string
+        ) =>
+          JumiaClient.forIntegration(
+            clientSupabase,
+            merchantId,
+            integrationId,
+            { credentialClient }
+          ),
+      }
+    : syncJumiaOrderIntegrationDependencies;
 
   const { data, error } = await supabase
     .from('marketplace_integrations')
@@ -77,7 +98,7 @@ export async function syncJumiaOrdersForActiveIntegrations(
         supabase,
         integration,
         result,
-        syncJumiaOrderIntegrationDependencies
+        dependencies
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -152,6 +173,7 @@ export async function syncJumiaOrdersForActiveIntegrations(
         supabase,
         merchantId: integration.merchant_id,
         integrationId: integration.id,
+        ...(credentialClient ? { credentialClient } : {}),
       });
       result.stockUpdated += stock.updated;
       if (stock.trackingFailures > 0) {

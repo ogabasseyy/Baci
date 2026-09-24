@@ -77,6 +77,10 @@ export function ConnectJumiaDialog({
     if (!result.ok) {
       if (result.discoveryId && result.retryable) {
         setActiveDiscoveryId(result.discoveryId);
+        // The server rotated the submitted refresh token before failing, so
+        // the recovery handle is the only way to resume; persist it before
+        // a reload can strand the merchant on the dead credential.
+        jumiaDiscoveryResumeStorage.write(clientId, result.discoveryId);
         setDiscoveredShops([]);
         setSelectedShopIds(new Set());
         setRefreshToken('');

@@ -45,7 +45,12 @@ export async function getCachedJumiaOrderItems(args: {
     jumia_order_number: string | null;
     items: unknown;
   } | null;
-  if (!row || !Array.isArray(row.items)) return { kind: 'missing' };
+  // The order sync seeds new cache rows with an empty items placeholder and
+  // never backfills line details, so an empty array means uncached rather
+  // than an order with no lines.
+  if (!row || !Array.isArray(row.items) || row.items.length === 0) {
+    return { kind: 'missing' };
+  }
 
   return {
     kind: 'ok',

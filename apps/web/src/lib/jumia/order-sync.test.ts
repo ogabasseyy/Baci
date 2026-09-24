@@ -154,6 +154,49 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
     });
   });
 
+  it('forwards the restricted credential client when creating Jumia clients', async () => {
+    const marketplaceQuery = createQuery(
+      {
+        data: [
+          {
+            id: 'integration-1',
+            merchant_id: 'merchant-1',
+            shop_id: 'shop-1',
+            connection_method: 'self_authorization',
+            jumia_authorization_id: 'authorization-1',
+            last_sync_at: '2026-04-25T07:00:00.000Z',
+            sync_config: { orders: true },
+          },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 2 }
+    );
+    const existingJumiaQuery = createQuery({ data: [], error: null });
+    const existingCanonicalQuery = createQuery({ data: [], error: null });
+    const syncCursorQuery = createQuery({ error: null }, { terminalEqCall: 1 });
+    const supabase = createSupabaseMock({
+      marketplace_integrations: [marketplaceQuery, syncCursorQuery],
+      jumia_orders: [existingJumiaQuery],
+      orders: [existingCanonicalQuery],
+    });
+
+    mocks.forIntegration.mockResolvedValue({ client: true });
+    vi.mocked(getAllOrders).mockResolvedValue([]);
+    const credentialClient = { credential: true };
+
+    await syncJumiaOrdersForActiveIntegrations(supabase, {
+      credentialClient: credentialClient as never,
+    });
+
+    expect(mocks.forIntegration).toHaveBeenCalledWith(
+      supabase,
+      'merchant-1',
+      'integration-1',
+      { credentialClient }
+    );
+  });
+
   it('keeps the sync cursor in place when every Jumia order fails', async () => {
     const marketplaceQuery = createQuery(
       {

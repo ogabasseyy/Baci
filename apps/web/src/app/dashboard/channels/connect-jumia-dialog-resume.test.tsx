@@ -117,4 +117,35 @@ describe('ConnectJumiaDialog resumable discovery', () => {
     expect(screen.getByText('First Shop')).toBeInTheDocument();
     expect(screen.getByText('Second Shop')).toBeInTheDocument();
   });
+
+  it('persists the recovery handle when discovery fails retryably', async () => {
+    mockDiscoverJumiaShops.mockResolvedValueOnce({
+      ok: false,
+      error: 'Jumia rotated the token and timed out',
+      discoveryId: '00000000-0000-4000-8000-000000000077',
+      retryable: true,
+    });
+
+    const user = userEvent.setup();
+    const { unmount } = render(<ConnectJumiaDialog {...defaultProps} />);
+
+    await user.click(
+      screen.getByRole('button', { name: /enter refresh token/i })
+    );
+    await user.type(screen.getByLabelText(/client id/i), 'client-id');
+    await user.type(screen.getByLabelText(/refresh token/i), 'consumed-token');
+    await user.click(screen.getByRole('button', { name: /discover shops/i }));
+    await waitFor(() => {
+      expect(mockDiscoverJumiaShops).toHaveBeenCalled();
+    });
+
+    unmount();
+    render(<ConnectJumiaDialog {...defaultProps} />);
+
+    expect(screen.getByLabelText(/client id/i)).toHaveValue('client-id');
+    expect(
+      screen.getByRole('button', { name: /discover shops/i })
+    ).toBeEnabled();
+    expect(screen.getByLabelText(/refresh token/i)).toHaveValue('');
+  });
 });

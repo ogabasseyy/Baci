@@ -7,6 +7,7 @@ import {
 } from '@/lib/jumia/load-jumia-stock-mappings';
 import { updateJumiaStockTracking } from '@/lib/jumia/update-jumia-stock-tracking';
 import { getEffectiveStock } from '@/lib/product-stock';
+import type { JumiaCredentialServiceClient } from '@/lib/supabase/service';
 
 export interface JumiaStockSyncResult {
   updated: number;
@@ -25,8 +26,9 @@ export async function syncJumiaStockForIntegration(args: {
   supabase: SupabaseClient;
   merchantId: string;
   integrationId: string;
+  credentialClient?: JumiaCredentialServiceClient;
 }): Promise<JumiaStockSyncResult> {
-  const { supabase, merchantId, integrationId } = args;
+  const { supabase, merchantId, integrationId, credentialClient } = args;
   const empty: JumiaStockSyncResult = {
     updated: 0,
     skipped: 0,
@@ -36,7 +38,8 @@ export async function syncJumiaStockForIntegration(args: {
   const jumiaClient = await JumiaClient.forIntegration(
     supabase,
     merchantId,
-    integrationId
+    integrationId,
+    credentialClient ? { credentialClient } : undefined
   );
   const { mappings, error: mappingsError } = await loadJumiaStockMappings(
     supabase,

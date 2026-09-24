@@ -374,7 +374,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260831130000_scope_jumia_marketplace_country_constraint.sql',
-    sha256: '752cf9ccc7753d35a995cd8a4fc2cbee00fe3c8fc0ff54ccde52113baaecb7e6',
+    sha256: 'cc516a1093b1d9e6a3a188c1b19bf571c32079fa76dfc2b77e2ace75a73b4ea4',
   },
   {
     repositoryPath:

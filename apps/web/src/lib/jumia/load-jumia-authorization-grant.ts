@@ -28,7 +28,8 @@ export async function loadJumiaAuthorizationGrant(
 ): Promise<JumiaAuthorizationGrantRow> {
   // User-facing routes pass their authenticated client so the SECURITY
   // DEFINER RPC can enforce the merchant/staff permission checks. Worker
-  // callers may still pass their dedicated service client explicitly.
+  // callers must pass the restricted credential client built by
+  // createJumiaCredentialServiceClient, never the generic service client.
   const credentialClient = supabase as unknown as JumiaCredentialRpcClient;
   const { data, error } = await credentialClient.rpc(
     'load_jumia_authorization_credentials',

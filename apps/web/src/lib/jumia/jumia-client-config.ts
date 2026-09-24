@@ -3,6 +3,7 @@ import { getJumiaAuthorizationEncryptionKey } from '@/env';
 import { jumiaAuthorizationCrypto } from '@/lib/jumia/authorization-crypto';
 import { JumiaApiError } from '@/lib/jumia/helpers';
 import { loadJumiaAuthorizationGrant } from '@/lib/jumia/load-jumia-authorization-grant';
+import type { JumiaCredentialServiceClient } from '@/lib/supabase/service';
 
 const INTEGRATION_COLUMNS =
   'id, merchant_id, shop_id, country_code, marketplace_key, access_token, refresh_token, token_expires_at, connection_method, jumia_authorization_id' as const;
@@ -39,7 +40,8 @@ export type JumiaClientConfig = {
 
 async function toJumiaClientConfig(
   row: JumiaIntegrationRow,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  credentialClient?: JumiaCredentialServiceClient
 ): Promise<JumiaClientConfig> {
   let refreshToken = row.refresh_token || '';
   let accessToken = row.access_token;
@@ -58,7 +60,7 @@ async function toJumiaClientConfig(
         'Jumia authorization encryption is not configured'
       );
     const authorization = await loadJumiaAuthorizationGrant(
-      supabase,
+      credentialClient ?? supabase,
       row.jumia_authorization_id,
       row.merchant_id
     );
@@ -99,7 +101,8 @@ async function toJumiaClientConfig(
 export async function loadJumiaIntegrationConfig(
   supabase: SupabaseClient,
   merchantId: string,
-  integrationId: string
+  integrationId: string,
+  options?: { credentialClient?: JumiaCredentialServiceClient }
 ): Promise<JumiaClientConfig> {
   const { data, error } = await supabase
     .from('marketplace_integrations')
@@ -117,7 +120,11 @@ export async function loadJumiaIntegrationConfig(
     );
   }
 
-  return toJumiaClientConfig(data as JumiaIntegrationRow, supabase);
+  return toJumiaClientConfig(
+    data as JumiaIntegrationRow,
+    supabase,
+    options?.credentialClient
+  );
 }
 
 export async function loadSingleJumiaMerchantIntegrationConfig(

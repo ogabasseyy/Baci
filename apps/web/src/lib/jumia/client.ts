@@ -14,6 +14,7 @@ import {
 } from '@/lib/jumia/jumia-client-config';
 import { refreshJumiaClientAccessToken } from '@/lib/jumia/jumia-client-token-persistence';
 import { waitForJumiaRequestSlot } from '@/lib/jumia/jumia-rate-limiter';
+import type { JumiaCredentialServiceClient } from '@/lib/supabase/service';
 import type { JumiaShop } from '@/schemas/jumia';
 import { JumiaShopsResponseSchema } from '@/schemas/jumia';
 
@@ -76,10 +77,16 @@ export class JumiaClient {
   static async forIntegration(
     supabase: SupabaseClient,
     merchantId: string,
-    integrationId: string
+    integrationId: string,
+    options?: { credentialClient?: JumiaCredentialServiceClient }
   ): Promise<JumiaClient> {
     return new JumiaClient(
-      await loadJumiaIntegrationConfig(supabase, merchantId, integrationId)
+      await loadJumiaIntegrationConfig(
+        supabase,
+        merchantId,
+        integrationId,
+        options
+      )
     );
   }
 

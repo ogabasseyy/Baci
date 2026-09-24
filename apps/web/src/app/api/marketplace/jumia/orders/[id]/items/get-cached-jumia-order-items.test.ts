@@ -112,4 +112,24 @@ describe('getCachedJumiaOrderItems', () => {
       })
     ).resolves.toEqual({ kind: 'missing' });
   });
+
+  it('treats the empty sync placeholder as uncached', async () => {
+    const { from } = createSupabase({
+      data: {
+        jumia_order_id: 'order-1',
+        jumia_order_number: 'J-1',
+        items: [],
+      },
+      error: null,
+    });
+
+    await expect(
+      getCachedJumiaOrderItems({
+        supabase: { from } as never,
+        merchantId: 'merchant-1',
+        integrationId: 'integration-1',
+        orderId: 'order-1',
+      })
+    ).resolves.toEqual({ kind: 'missing' });
+  });
 });

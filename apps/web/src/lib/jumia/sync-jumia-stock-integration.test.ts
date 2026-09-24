@@ -94,6 +94,45 @@ describe('syncJumiaStockForIntegration', () => {
     });
   });
 
+  it('forwards the restricted credential client to the Jumia client', async () => {
+    const update = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'jumia_product_mappings') {
+          const query = mappingsQuery([
+            {
+              id: 'mapping-1',
+              product_id: 'product-1',
+              variant_id: null,
+              jumia_seller_sku: 'SKU-1',
+              jumia_product_id: 'pid-1',
+              baci_stock_at_last_sync: 2,
+            },
+          ]);
+          return { ...query, update };
+        }
+        return inQuery([{ id: 'product-1', stock: 5, stock_quantity: 5 }]);
+      }),
+    };
+    const credentialClient = { credential: true };
+
+    await syncJumiaStockForIntegration({
+      supabase: supabase as never,
+      merchantId: 'merchant-1',
+      integrationId: 'integration-1',
+      credentialClient: credentialClient as never,
+    });
+
+    expect(mocks.forIntegration).toHaveBeenCalledWith(
+      supabase,
+      'merchant-1',
+      'integration-1',
+      { credentialClient }
+    );
+  });
+
   it('propagates tracking failures without failing the sync', async () => {
     const update = vi.fn(() => ({
       eq: vi.fn().mockResolvedValue({ error: { message: 'denied' } }),

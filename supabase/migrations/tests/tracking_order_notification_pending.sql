@@ -22,8 +22,68 @@ DECLARE
   v_merchant_id uuid := '9f000000-0000-4000-8000-000000000221';
   v_delivered_order_id uuid := '9f000000-0000-4000-8000-000000000222';
   v_pending_order_id uuid := '9f000000-0000-4000-8000-000000000223';
+  v_proc_count integer;
+  v_sig_count integer;
+  v_col text;
+  v_col_count integer;
   v_delivered boolean;
 BEGIN
+  SELECT count(*) INTO v_proc_count
+  FROM pg_proc
+  WHERE proname = 'get_order_tracking'
+    AND pronamespace = 'public'::regnamespace;
+  IF v_proc_count = 0 THEN
+    RAISE EXCEPTION 'get_order_tracking absent' USING ERRCODE = 'P0002';
+  END IF;
+
+  SELECT count(*) INTO v_sig_count
+  FROM pg_proc p
+  WHERE p.proname = 'get_order_tracking'
+    AND p.pronamespace = 'public'::regnamespace
+    AND position(
+      'notification_delivered' in pg_get_function_result(p.oid)
+    ) > 0;
+  IF v_sig_count = 0 THEN
+    RAISE EXCEPTION 'notification_delivered projection absent'
+      USING ERRCODE = 'P0003';
+  END IF;
+
+  FOR v_col IN
+    SELECT unnest(ARRAY[
+      'orders.amount_paid', 'orders.cancelled_at', 'orders.currency',
+      'orders.customer_email', 'orders.customer_name', 'orders.customer_phone',
+      'orders.delivered_at', 'orders.discount_amount', 'orders.external_source',
+      'orders.gift_wrapping_fee', 'orders.id', 'orders.import_job_id',
+      'orders.merchant_id', 'orders.order_number', 'orders.paid_at',
+      'orders.payment_method', 'orders.payment_status', 'orders.shipped_at',
+      'orders.shipping_address', 'orders.shipping_fee', 'orders.shipping_provider',
+      'orders.shipping_status', 'orders.subtotal', 'orders.tax_amount',
+      'orders.total', 'orders.tracking_number', 'orders.tracking_token',
+      'merchants.business_name', 'merchants.id', 'merchants.logo_url',
+      'merchants.phone', 'merchants.slug', 'merchants.support_email',
+      'merchants.support_phone', 'order_items.condition', 'order_items.id',
+      'order_items.image_url', 'order_items.line_id', 'order_items.name',
+      'order_items.order_id', 'order_items.price', 'order_items.product_id',
+      'order_items.quantity', 'order_items.variant_name', 'products.id',
+      'products.images', 'order_payment_accounts.account_name',
+      'order_payment_accounts.account_number',
+      'order_payment_accounts.assigned_at',
+      'order_payment_accounts.assignment_customer_email_source',
+      'order_payment_accounts.bank_name', 'order_payment_accounts.created_at',
+      'order_payment_accounts.expires_at', 'order_payment_accounts.order_id',
+      'order_payment_accounts.provider'
+    ])
+  LOOP
+    SELECT count(*) INTO v_col_count
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = split_part(v_col, '.', 1)
+      AND column_name = split_part(v_col, '.', 2);
+    IF v_col_count = 0 THEN
+      RAISE EXCEPTION 'body column absent: %', v_col USING ERRCODE = 'P0004';
+    END IF;
+  END LOOP;
+
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (
     v_merchant_id,

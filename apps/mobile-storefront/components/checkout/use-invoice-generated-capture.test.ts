@@ -56,7 +56,9 @@ function pendingTrackedOrder(overrides: Record<string, unknown> = {}) {
   return trackedResponse({
     id: 'order-invoice-1',
     order_number: 'INV-1',
+    payment_method: 'invoice',
     payment_status: 'unpaid',
+    shipping_status: 'pending',
     total: 10000,
     currency: 'NGN',
     ...overrides,
@@ -86,6 +88,9 @@ describe('useInvoiceGeneratedCapture', () => {
           expect.objectContaining({
             selectedPayment: 'invoice',
             orderNumber: 'INV-1',
+            order: expect.objectContaining({
+              shippingStatus: 'pending',
+            }),
           })
         )
       );
@@ -175,20 +180,45 @@ describe('useInvoiceGeneratedCapture', () => {
     }
   });
 
-  it('skips a delivered zero-total tracked row (no method proof)', async () => {
+  it('skips a delivered tracked row whose stored method is not invoice', async () => {
     jest.useFakeTimers();
     try {
+      // A guest can open a delivered Pay-for-Me order with a
+      // caller-controlled paymentMethod=invoice: the stored method —
+      // not the route param — gates the durable claim.
       mockFetchSequence([
-        pendingTrackedOrder({ notification_delivered: true, total: 0 }),
+        pendingTrackedOrder({
+          notification_delivered: true,
+          payment_method: 'payforme',
+        }),
       ]);
 
       renderHook(() => useInvoiceGeneratedCapture(baseParams));
       await jest.advanceTimersByTimeAsync(0);
       await jest.advanceTimersByTimeAsync(60_000);
 
-      // The tracked projection carries no payment_method: a zero-total
-      // row could be a non-invoice order completing on the paid path,
-      // so it must not consume the durable invoice_generated claim.
+      expect(mockCaptureInvoice).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('skips a delivered tracked row when the stored method is missing', async () => {
+    jest.useFakeTimers();
+    try {
+      // Older projections omit payment_method: fail closed rather
+      // than booking a proforma conversion for an unproven row.
+      mockFetchSequence([
+        pendingTrackedOrder({
+          notification_delivered: true,
+          payment_method: undefined,
+        }),
+      ]);
+
+      renderHook(() => useInvoiceGeneratedCapture(baseParams));
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(60_000);
+
       expect(mockCaptureInvoice).not.toHaveBeenCalled();
     } finally {
       jest.useRealTimers();

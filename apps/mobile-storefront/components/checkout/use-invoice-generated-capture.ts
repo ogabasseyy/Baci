@@ -122,16 +122,17 @@ export function useInvoiceGeneratedCapture({
       if (order.id !== orderId || order.payment_status === 'paid') {
         return order.payment_status === 'paid';
       }
-      // The tracked projection carries no payment_method, so it cannot
-      // prove this row is an invoice order: require a positive total
-      // before consuming the durable invoice_generated claim. A
-      // zero-total non-invoice row (fully covered/credited, completing
-      // on the paid path) must never book a proforma conversion; the
-      // storefront branch below still serves method-proven orders.
+      // Same gate as the storefront branch: the tracked method must
+      // prove this row is an invoice order (a guest can open a
+      // delivered Pay-for-Me/POD order with a caller-controlled
+      // paymentMethod=invoice), and the raw shipping status feeds the
+      // proforma predicate so shipping-cancelled rows classify like
+      // the storefront path instead of misbooking.
       if (
+        order.payment_method === 'invoice' &&
+        order.payment_status !== 'paid' &&
         order.notification_delivered === true &&
-        typeof order.total === 'number' &&
-        order.total > 0
+        typeof order.total === 'number'
       ) {
         await maybeCaptureCheckoutInvoiceGenerated({
           selectedPayment: 'invoice',
@@ -141,9 +142,10 @@ export function useInvoiceGeneratedCapture({
             total: order.total,
             currency: order.currency ?? undefined,
             notificationDelivered: true,
-            // Prior-payment evidence for the proforma predicate (the
-            // tracking projection carries no shipping column).
+            // Prior-payment + shipping evidence for the proforma
+            // predicate (credited/shipping-cancelled are commercial).
             amountPaid: order.amount_paid ?? undefined,
+            shippingStatus: order.shipping_status ?? undefined,
           },
           orderNumber: order.order_number,
           itemsSnapshot: toQuantityList(items),

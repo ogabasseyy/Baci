@@ -177,6 +177,29 @@ describe('GET /api/storefront/orders/track-order', () => {
     expect(pending.order.notification_delivered).toBe(false);
   });
 
+  it('forwards the stored method and raw shipping status for invoice gating', async () => {
+    mockAnonClient.rpc.mockResolvedValueOnce({
+      data: [makeTrackedOrder({ payment_method: 'invoice' })],
+      error: null,
+    });
+    mockAnonClient.rpc.mockResolvedValueOnce({
+      data: [makeTrackedOrder({})],
+      error: null,
+    });
+
+    const request = new NextRequest(
+      'https://example.com/api/storefront/orders/track-order?token=track-token-123&merchant_slug=test-store'
+    );
+
+    const method = await (await GET(request)).json();
+    expect(method.order.payment_method).toBe('invoice');
+    expect(method.order.shipping_status).toBe('pending');
+    const legacy = await (await GET(request)).json();
+    // Older RPC projections omit the method: mobile gates fail closed.
+    expect(legacy.order.payment_method).toBeNull();
+    expect(legacy.order.shipping_status).toBe('pending');
+  });
+
   it('normalizes a legacy canceled row to cancelled with no delivery estimate', async () => {
     mockAnonClient.rpc.mockResolvedValue({
       data: [makeTrackedOrder({ shipping_status: 'canceled' })],

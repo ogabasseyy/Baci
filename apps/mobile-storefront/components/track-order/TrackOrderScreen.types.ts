@@ -43,6 +43,10 @@ export interface TrackOrderData {
     // Terminal immediate-order after() delivery (invoice artifacts built
     // and proforma emailed). Optional: older responses omit it.
     notification_delivered?: boolean | null;
+    // Stored payment method + raw shipping status for the
+    // invoice_generated gate. Optional: older responses omit them.
+    payment_method?: string | null;
+    shipping_status?: string | null;
   };
   customer: {
     name: string;

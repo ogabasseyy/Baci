@@ -83,6 +83,8 @@ interface TrackedOrder {
   // Terminal after() delivery flag. Optional: older RPC projections
   // omit it.
   notification_delivered?: boolean | null;
+  // Stored payment method. Optional: older RPC projections omit it.
+  payment_method?: string | null;
 }
 
 function getCustomerOrderStatusKey(status: string): string {
@@ -284,6 +286,13 @@ export async function GET(request: NextRequest) {
         // instead of claiming it at order creation. Absent on older RPC
         // projections, which read as not delivered.
         notification_delivered: order.notification_delivered ?? false,
+        // Authoritative method + raw shipping status for the mobile
+        // invoice_generated gate: the tracked path must prove the row
+        // is an invoice order (not Pay-for-Me/POD opened with a
+        // caller-controlled method) and see shipping cancellation,
+        // exactly like the storefront lookup branch.
+        payment_method: order.payment_method ?? null,
+        shipping_status: order.shipping_status,
       },
       customer: {
         name: order.customer_name,

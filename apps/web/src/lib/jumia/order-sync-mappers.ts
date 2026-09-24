@@ -157,6 +157,14 @@ function sanitizeHttpsUrl(value: string): string | null {
   }
 }
 
+export function resolveJumiaOrderMarketplaceKey(
+  integration: MarketplaceIntegrationRow
+): string {
+  return integration.orderSyncScope === 'shared'
+    ? 'default'
+    : integration.marketplace_key?.trim() || 'default';
+}
+
 export function buildJumiaCacheRow(
   integration: MarketplaceIntegrationRow,
   order: JumiaOrder,
@@ -169,10 +177,7 @@ export function buildJumiaCacheRow(
     jumia_order_id: order.id,
     jumia_order_number: sanitizeText(order.number, 120),
     jumia_shop_id: integration.shop_id || JUMIA_DEFAULT_SHOP_ID,
-    marketplace_key:
-      integration.orderSyncScope === 'shared'
-        ? 'default'
-        : integration.marketplace_key?.trim() || 'default',
+    marketplace_key: resolveJumiaOrderMarketplaceKey(integration),
     status: sanitizeText(order.status, 80),
     customer_name: getCustomerName(order),
     customer_phone: '',
@@ -257,6 +262,7 @@ export function buildCanonicalJumiaOrderPayload(
     import_metadata: {
       platform: JUMIA_EXTERNAL_SOURCE,
       shopId: integration.shop_id || JUMIA_DEFAULT_SHOP_ID,
+      marketplaceKey: resolveJumiaOrderMarketplaceKey(integration),
       jumiaOrderId: order.id,
       jumiaOrderNumber: orderNumber,
       jumiaStatus,

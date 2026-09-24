@@ -29,6 +29,10 @@ import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { createClient } from '@/lib/supabase/server';
 
+// PostgREST filters travel on the URL; keep id lists small enough for
+// proxy and server limits regardless of catalog size.
+const STOCK_LOOKUP_CHUNK_SIZE = 100;
+
 export async function POST(request: NextRequest) {
   try {
     const { valid, response } = await checkCsrfProtection(request);
@@ -168,11 +172,16 @@ export async function POST(request: NextRequest) {
     const productStockMap = new Map<string, number>();
     let fetchErrors = 0;
 
-    if (variantIds.length > 0) {
+    for (
+      let start = 0;
+      start < variantIds.length;
+      start += STOCK_LOOKUP_CHUNK_SIZE
+    ) {
       const { data: variants, error: variantsError } = await supabase
         .from('product_variants')
         .select('id, stock_quantity')
-        .in('id', variantIds);
+        .eq('merchant_id', merchantId)
+        .in('id', variantIds.slice(start, start + STOCK_LOOKUP_CHUNK_SIZE));
 
       if (variantsError) {
         fetchErrors++;
@@ -189,11 +198,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (productOnlyIds.length > 0) {
+    for (
+      let start = 0;
+      start < productOnlyIds.length;
+      start += STOCK_LOOKUP_CHUNK_SIZE
+    ) {
       const { data: products, error: productsError } = await supabase
         .from('products')
         .select('id, stock, stock_quantity')
-        .in('id', productOnlyIds);
+        .eq('merchant_id', merchantId)
+        .in('id', productOnlyIds.slice(start, start + STOCK_LOOKUP_CHUNK_SIZE));
 
       if (productsError) {
         fetchErrors++;

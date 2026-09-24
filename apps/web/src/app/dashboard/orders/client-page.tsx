@@ -96,7 +96,12 @@ export default function OrdersClientPage({
     null
   );
   const [jumiaIntegrations, setJumiaIntegrations] = useState<
-    Array<{ id: string; shop_id?: string | null; shop_name: string }>
+    Array<{
+      id: string;
+      shop_id?: string | null;
+      marketplace_key?: string | null;
+      shop_name: string;
+    }>
   >([]);
   const [jumiaConnectLoading, setJumiaConnectLoading] = useState(true);
   const [jumiaConnectError, setJumiaConnectError] = useState<string | null>(
@@ -177,7 +182,8 @@ export default function OrdersClientPage({
     resolveJumiaIntegrationId(
       jumiaIntegrations,
       requestedJumiaIntegrationId,
-      order.jumiaShopId
+      order.jumiaShopId,
+      order.jumiaMarketplaceKey
     );
 
   useEffect(() => {

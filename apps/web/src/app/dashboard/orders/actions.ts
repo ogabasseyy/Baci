@@ -65,6 +65,8 @@ export interface Order extends OrderFinancialFields {
   source: string;
   /** Jumia provider shop id, retained so multi-shop orders resolve their own integration. */
   jumiaShopId?: string;
+  /** Jumia marketplace key, retained so same-shop business clients resolve their own integration. */
+  jumiaMarketplaceKey?: string;
   /** Jumia provider order id for synced rows; fulfillment endpoints address this, not the local id. */
   jumiaOrderId?: string;
   tracking_number?: string;
@@ -145,6 +147,7 @@ export interface JumiaOrder {
   jumia_order_id: string;
   jumia_order_number: string;
   jumia_shop_id: string | null;
+  marketplace_key: string | null;
   customer_name: string | null;
   total_amount: string;
   status: string;
@@ -316,7 +319,7 @@ export async function getOrders(
     let jumiaQuery = supabase
       .from('jumia_orders')
       .select(
-        'status, jumia_order_id, jumia_order_number, jumia_shop_id, customer_name, total_amount, created_at_jumia, items'
+        'status, jumia_order_id, jumia_order_number, jumia_shop_id, marketplace_key, customer_name, total_amount, created_at_jumia, items'
       )
       .eq('merchant_id', authorizedMerchantId)
       .is('baci_order_id', null);
@@ -374,6 +377,7 @@ export async function getOrders(
       id: jOrder.jumia_order_id, // Use Jumia ID as ID
       orderNumber: jOrder.jumia_order_number,
       jumiaShopId: jOrder.jumia_shop_id ?? undefined,
+      jumiaMarketplaceKey: jOrder.marketplace_key ?? undefined,
       jumiaOrderId: jOrder.jumia_order_id ?? undefined,
       customerName: formatPersonName(jOrder.customer_name || 'Jumia Customer'),
       total: Number.parseFloat(jOrder.total_amount),

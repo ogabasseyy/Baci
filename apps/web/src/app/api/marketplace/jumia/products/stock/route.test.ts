@@ -24,17 +24,20 @@ const mockSupabase = {
   auth: { getUser: mockGetUser },
   from: vi.fn((table: string) => {
     if (table === 'jumia_product_mappings') {
+      const terminal = {
+        order: () => ({ range: () => mockMappingsSelect() }),
+      };
       const makeChain = (remainingEq: number, remainingOr: number) => ({
         eq: (field: string, value: unknown) => {
           mappingFilters.push({ field, value });
           return remainingEq === 1 && remainingOr === 0
-            ? mockMappingsSelect()
+            ? terminal
             : makeChain(remainingEq - 1, remainingOr);
         },
         or: (filter: string) => {
           mappingFilters.push({ field: 'or', value: filter });
           return remainingOr === 1 && remainingEq === 0
-            ? mockMappingsSelect()
+            ? terminal
             : makeChain(remainingEq, remainingOr - 1);
         },
       });
@@ -48,12 +51,12 @@ const mockSupabase = {
     }
     if (table === 'product_variants') {
       return {
-        select: () => ({ in: () => mockVariantsIn() }),
+        select: () => ({ eq: () => ({ in: () => mockVariantsIn() }) }),
       };
     }
     if (table === 'products') {
       return {
-        select: () => ({ in: () => mockProductsIn() }),
+        select: () => ({ eq: () => ({ in: () => mockProductsIn() }) }),
       };
     }
     return {};

@@ -16,6 +16,10 @@ export interface JumiaStockSyncResult {
   feedId: string | null;
 }
 
+// PostgREST filters travel on the URL; keep id lists small enough for
+// proxy and server limits regardless of catalog size.
+const STOCK_LOOKUP_CHUNK_SIZE = 100;
+
 /**
  * Pushes changed local stock levels for one integration's synced mappings.
  * Shares the manual stock endpoint's mapping, computation, and tracking
@@ -76,11 +80,18 @@ export async function syncJumiaStockForIntegration(args: {
 
   const variantStockMap = new Map<string, number>();
   const productStockMap = new Map<string, number>();
-  if (variantIds.length > 0) {
+  for (
+    let start = 0;
+    start < variantIds.length;
+    start += STOCK_LOOKUP_CHUNK_SIZE
+  ) {
+    // The worker runs as service-role, so scope explicitly: a mapping must
+    // never publish another merchant's stock to its own Jumia SKU.
     const { data: variants, error: variantsError } = await supabase
       .from('product_variants')
       .select('id, stock_quantity')
-      .in('id', variantIds);
+      .eq('merchant_id', merchantId)
+      .in('id', variantIds.slice(start, start + STOCK_LOOKUP_CHUNK_SIZE));
     if (variantsError) {
       throw new Error(
         `Failed to fetch variant stock: ${variantsError.message}`
@@ -93,11 +104,16 @@ export async function syncJumiaStockForIntegration(args: {
       );
     }
   }
-  if (productOnlyIds.length > 0) {
+  for (
+    let start = 0;
+    start < productOnlyIds.length;
+    start += STOCK_LOOKUP_CHUNK_SIZE
+  ) {
     const { data: products, error: productsError } = await supabase
       .from('products')
       .select('id, stock, stock_quantity')
-      .in('id', productOnlyIds);
+      .eq('merchant_id', merchantId)
+      .in('id', productOnlyIds.slice(start, start + STOCK_LOOKUP_CHUNK_SIZE));
     if (productsError) {
       throw new Error(
         `Failed to fetch product stock: ${productsError.message}`

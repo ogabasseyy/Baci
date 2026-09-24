@@ -74,4 +74,83 @@ describe('resolveJumiaIntegrationId', () => {
       )
     ).toBeNull();
   });
+
+  it('disambiguates same-shop integrations by marketplace key', () => {
+    expect(
+      resolveJumiaIntegrationId(
+        [
+          {
+            id: 'integration-retail',
+            shop_id: 'shop-1',
+            marketplace_key: 'NG-RETAIL',
+          },
+          {
+            id: 'integration-express',
+            shop_id: 'shop-1',
+            marketplace_key: 'NG-EXPRESS',
+          },
+        ],
+        null,
+        'shop-1',
+        'NG-EXPRESS'
+      )
+    ).toBe('integration-express');
+  });
+
+  it('returns null when same-shop integrations share no requested key', () => {
+    expect(
+      resolveJumiaIntegrationId(
+        [
+          {
+            id: 'integration-retail',
+            shop_id: 'shop-1',
+            marketplace_key: 'NG-RETAIL',
+          },
+          {
+            id: 'integration-express',
+            shop_id: 'shop-1',
+            marketplace_key: 'NG-EXPRESS',
+          },
+        ],
+        null,
+        'shop-1'
+      )
+    ).toBeNull();
+    expect(
+      resolveJumiaIntegrationId(
+        [
+          {
+            id: 'integration-retail',
+            shop_id: 'shop-1',
+            marketplace_key: 'NG-RETAIL',
+          },
+        ],
+        null,
+        'shop-1',
+        'NG-EXPRESS'
+      )
+    ).toBeNull();
+  });
+
+  it('prefers the row marketplace key over a stale link scope', () => {
+    expect(
+      resolveJumiaIntegrationId(
+        [
+          {
+            id: 'integration-retail',
+            shop_id: 'shop-1',
+            marketplace_key: 'NG-RETAIL',
+          },
+          {
+            id: 'integration-express',
+            shop_id: 'shop-1',
+            marketplace_key: 'NG-EXPRESS',
+          },
+        ],
+        'integration-retail',
+        'shop-1',
+        'NG-EXPRESS'
+      )
+    ).toBeNull();
+  });
 });

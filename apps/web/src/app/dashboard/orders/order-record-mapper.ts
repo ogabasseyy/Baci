@@ -108,6 +108,12 @@ export function mapDashboardOrderRecord(
       typeof order.import_metadata?.shopId === 'string'
         ? order.import_metadata.shopId
         : undefined,
+    // Two integrations can share one shop id across business clients;
+    // the marketplace key disambiguates them for fulfillment.
+    jumiaMarketplaceKey:
+      typeof order.import_metadata?.marketplaceKey === 'string'
+        ? order.import_metadata.marketplaceKey
+        : undefined,
     // The fulfillment modal addresses Jumia by provider order ID, while
     // the mapped id stays the local order UUID; legacy cache rows already
     // use the provider ID as their id.

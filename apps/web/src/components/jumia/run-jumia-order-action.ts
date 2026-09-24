@@ -11,6 +11,9 @@ export type JumiaOrderAction =
 type ActionResponse = {
   error?: string;
   message?: string;
+  status?: 'full' | 'partial' | 'failed';
+  successCount?: number;
+  errorCount?: number;
   labels?: Array<{ label?: string }>;
 };
 
@@ -75,6 +78,29 @@ export async function runJumiaOrderAction(
     }
 
     if (action !== 'print_label') {
+      // The actions route answers HTTP 200 with per-item totals; every
+      // item can fail while the transport succeeds.
+      if (data.status === 'failed') {
+        toast({
+          title: 'Action Failed',
+          description:
+            data.message ||
+            'Jumia rejected every item; nothing was packed, shipped, or cancelled.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (data.status === 'partial') {
+        toast({
+          title: 'Partial Success',
+          description:
+            data.message ||
+            `${data.successCount ?? 0} succeeded, ${data.errorCount ?? 0} failed.`,
+          variant: 'destructive',
+        });
+        refetch();
+        return;
+      }
       toast({
         title: 'Success',
         description: data.message || 'Action completed',

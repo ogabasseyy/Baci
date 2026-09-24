@@ -21,20 +21,20 @@ function mappingsQuery(rows: unknown[]) {
   const query: Record<string, unknown> = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn(() => query),
-    or: vi.fn((filter: string) =>
-      filter.startsWith('sync_inventory')
-        ? Promise.resolve({ data: rows, error: null })
-        : query
-    ),
+    or: vi.fn(() => query),
+    order: vi.fn(() => query),
+    range: vi.fn(() => Promise.resolve({ data: rows, error: null })),
   };
   return query;
 }
 
 function inQuery(rows: unknown[]) {
-  return {
+  const query: Record<string, ReturnType<typeof vi.fn>> = {
     select: vi.fn().mockReturnThis(),
+    eq: vi.fn(() => query),
     in: vi.fn().mockResolvedValue({ data: rows, error: null }),
   };
+  return query;
 }
 
 describe('syncJumiaStockForIntegration', () => {
@@ -131,6 +131,104 @@ describe('syncJumiaStockForIntegration', () => {
       'integration-1',
       { credentialClient }
     );
+  });
+
+  it('scopes privileged stock lookups to the mapping merchant', async () => {
+    const update = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+    const variantsQuery = inQuery([{ id: 'variant-1', stock_quantity: 7 }]);
+    const productsQuery = inQuery([
+      { id: 'product-1', stock: 5, stock_quantity: 5 },
+    ]);
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'jumia_product_mappings') {
+          const query = mappingsQuery([
+            {
+              id: 'mapping-1',
+              product_id: 'product-1',
+              variant_id: 'variant-1',
+              jumia_seller_sku: 'SKU-1',
+              jumia_product_id: 'pid-1',
+              baci_stock_at_last_sync: 2,
+            },
+            {
+              id: 'mapping-2',
+              product_id: 'product-1',
+              variant_id: null,
+              jumia_seller_sku: 'SKU-2',
+              jumia_product_id: 'pid-2',
+              baci_stock_at_last_sync: 2,
+            },
+          ]);
+          return { ...query, update };
+        }
+        if (table === 'product_variants') return variantsQuery;
+        return productsQuery;
+      }),
+    };
+
+    await syncJumiaStockForIntegration({
+      supabase: supabase as never,
+      merchantId: 'merchant-1',
+      integrationId: 'integration-1',
+    });
+
+    expect(variantsQuery.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+    expect(productsQuery.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+    expect(mocks.updateStock).toHaveBeenCalledWith(
+      expect.objectContaining({ shopId: 'shop-1' }),
+      [
+        { sellerSku: 'SKU-1', id: 'pid-1', stock: 7 },
+        { sellerSku: 'SKU-2', id: 'pid-2', stock: 5 },
+      ]
+    );
+  });
+
+  it('chunks large stock lookups within URL limits', async () => {
+    const update = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+    const mappings = Array.from({ length: 250 }, (_, index) => ({
+      id: `mapping-${index}`,
+      product_id: `product-${index}`,
+      variant_id: null,
+      jumia_seller_sku: `SKU-${index}`,
+      jumia_product_id: `pid-${index}`,
+      baci_stock_at_last_sync: 2,
+    }));
+    const productsIn = vi.fn((_field: string, ids: string[]) =>
+      Promise.resolve({
+        data: ids.map((id) => ({ id, stock: 5, stock_quantity: 5 })),
+        error: null,
+      })
+    );
+    const productsQuery: Record<string, ReturnType<typeof vi.fn>> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn(() => productsQuery),
+      in: productsIn,
+    };
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'jumia_product_mappings') {
+          const query = mappingsQuery(mappings);
+          return { ...query, update };
+        }
+        return productsQuery;
+      }),
+    };
+
+    const result = await syncJumiaStockForIntegration({
+      supabase: supabase as never,
+      merchantId: 'merchant-1',
+      integrationId: 'integration-1',
+    });
+
+    expect(productsIn).toHaveBeenCalledTimes(3);
+    expect(productsIn.mock.calls[0]?.[1]).toHaveLength(100);
+    expect(productsIn.mock.calls[2]?.[1]).toHaveLength(50);
+    expect(result.updated).toBe(250);
   });
 
   it('propagates tracking failures without failing the sync', async () => {

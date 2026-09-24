@@ -34,4 +34,21 @@ describe('Jumia product mapping staff-write hardening migration', () => {
       /CREATE POLICY jumia_product_mappings_delete_policy[\s\S]*?FOR DELETE[\s\S]*?'integrations',[\s\S]*?'manage'/
     );
   });
+
+  it('requires referenced products and variants to belong to the mapping merchant', () => {
+    for (const policy of ['insert_policy', 'update_policy']) {
+      const block = migration.match(
+        new RegExp(
+          `CREATE POLICY jumia_product_mappings_${policy}[\\s\\S]*?\\);`
+        )
+      )?.[0];
+      expect(block).toBeDefined();
+      expect(block).toMatch(
+        /FROM public\.products AS product[\s\S]*?product\.id = product_id[\s\S]*?product\.merchant_id = merchant_id/
+      );
+      expect(block).toMatch(
+        /variant_id IS NULL[\s\S]*?FROM public\.product_variants AS variant[\s\S]*?variant\.id = variant_id[\s\S]*?variant\.merchant_id = merchant_id/
+      );
+    }
+  });
 });

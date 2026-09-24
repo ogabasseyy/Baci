@@ -43,6 +43,7 @@ describe('mapDashboardOrderRecord', () => {
         import_metadata: {
           platform: 'jumia',
           shopId: 'shop-9',
+          marketplaceKey: 'NG-main',
           jumiaOrderId: 'provider-123',
         },
       },
@@ -53,6 +54,7 @@ describe('mapDashboardOrderRecord', () => {
       expect.objectContaining({
         id: 'order-1',
         jumiaShopId: 'shop-9',
+        jumiaMarketplaceKey: 'NG-main',
         jumiaOrderId: 'provider-123',
       })
     );

@@ -64,6 +64,59 @@ describe('runJumiaOrderAction', () => {
     expect(actionCallbacks.setActionLoading).toHaveBeenLastCalledWith(null);
   });
 
+  it('reports per-item failures instead of success on HTTP 200', async () => {
+    fetchWithCsrf.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ status: 'failed', successCount: 0, errorCount: 2 }),
+        { status: 200 }
+      )
+    );
+    const actionCallbacks = callbacks();
+
+    await runJumiaOrderAction(
+      'cancel',
+      'order-1',
+      'integration-1',
+      ['item-1', 'item-2'],
+      actionCallbacks
+    );
+
+    expect(actionCallbacks.toast).toHaveBeenCalledWith({
+      title: 'Action Failed',
+      description:
+        'Jumia rejected every item; nothing was packed, shipped, or cancelled.',
+      variant: 'destructive',
+    });
+    expect(actionCallbacks.refetch).not.toHaveBeenCalled();
+    expect(actionCallbacks.setActionLoading).toHaveBeenLastCalledWith(null);
+  });
+
+  it('reports partial outcomes with counts and refreshes', async () => {
+    fetchWithCsrf.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ status: 'partial', successCount: 1, errorCount: 2 }),
+        { status: 200 }
+      )
+    );
+    const actionCallbacks = callbacks();
+
+    await runJumiaOrderAction(
+      'ready_to_ship',
+      'order-1',
+      'integration-1',
+      ['item-1', 'item-2', 'item-3'],
+      actionCallbacks
+    );
+
+    expect(actionCallbacks.toast).toHaveBeenCalledWith({
+      title: 'Partial Success',
+      description: '1 succeeded, 2 failed.',
+      variant: 'destructive',
+    });
+    expect(actionCallbacks.refetch).toHaveBeenCalledOnce();
+    expect(actionCallbacks.setActionLoading).toHaveBeenLastCalledWith(null);
+  });
+
   it('opens a returned print label and exposes it when the popup is blocked', async () => {
     fetchWithCsrf.mockResolvedValueOnce(
       new Response(

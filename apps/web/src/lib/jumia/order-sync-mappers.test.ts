@@ -154,6 +154,22 @@ describe('Jumia order sync mappers', () => {
     });
   });
 
+  it('carries the marketplace key in canonical import metadata', () => {
+    const payload = buildCanonicalJumiaOrderPayload(
+      integration,
+      order,
+      'tracking-token',
+      [item]
+    );
+
+    expect(payload.import_metadata).toMatchObject({
+      platform: 'jumia',
+      shopId: 'shop-1',
+      marketplaceKey: 'NG-main',
+      jumiaOrderId: 'JUMIA/ORDER 1',
+    });
+  });
+
   it('marks canceled non-prepaid Jumia orders as unpaid', () => {
     const payload = buildCanonicalJumiaOrderPayload(
       integration,

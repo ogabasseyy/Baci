@@ -166,7 +166,7 @@ describe('loadPrizeProducts', () => {
 
     expect(mockSupabase.from).toHaveBeenCalledWith('product_variants');
     expect(mockVariantProductIds).toEqual([PARENT_ID, PARENT2_ID]);
-    expect(mockVariantLimits).toEqual([101, 100]);
+    expect(mockVariantLimits).toEqual([101, 101]);
     expect(result.error).toBeNull();
     expect(result.products).toHaveLength(1);
     expect(result.products[0]).toMatchObject({
@@ -231,34 +231,33 @@ describe('loadPrizeProducts', () => {
     });
   });
 
-  it('stops hydrating parents once the initial page is full', async () => {
+  it('hydrates a bounded chunk per round and stops at the fill point', async () => {
+    const parentIds = Array.from(
+      { length: 12 },
+      (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`
+    );
     mockProductsQuery.limit.mockResolvedValueOnce({
-      count: 2,
-      data: [
-        parentRow(PARENT_ID, 'First parent'),
-        parentRow(PARENT2_ID, 'Second parent'),
-      ],
+      count: 12,
+      data: parentIds.map((id, index) => parentRow(id, `Parent ${index}`)),
       error: null,
     });
-    variantRowsByParent[PARENT_ID] = variantRows(
-      PARENT_ID,
-      '11111111-1111-4111-8111',
-      100
-    );
-    variantRowsByParent[PARENT2_ID] = variantRows(
-      PARENT2_ID,
-      '22222222-2222-4222-8222',
-      50
-    );
+    parentIds.forEach((id, parentIndex) => {
+      variantRowsByParent[id] = variantRows(
+        id,
+        `11111111-1111-4111-8${String(parentIndex).padStart(3, '0')}`,
+        10
+      );
+    });
 
     const result = await loadPrizeProducts('merchant-1');
 
-    expect(mockVariantProductIds).toEqual([PARENT_ID]);
+    expect(mockVariantProductIds).toHaveLength(10);
+    expect(mockVariantLimits).toEqual(new Array(10).fill(101));
     expect(result.error).toBeNull();
     expect(result.products).toHaveLength(100);
     expect(result.nextCursor).not.toBeNull();
     expect(decodePrizeProductCursor(result.nextCursor as string)).toEqual({
-      productOffset: 1,
+      productOffset: 10,
       variantOffset: 0,
     });
   });

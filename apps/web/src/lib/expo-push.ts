@@ -68,6 +68,8 @@ export interface NotificationSendResult {
   sent: number;
   failed: number;
   errors: string[];
+  /** Tokens whose ticket was accepted, for retrying only the failed subset. */
+  succeededTokens?: string[];
 }
 
 /**
@@ -81,7 +83,10 @@ export type NotificationChannel =
   | 'admin'
   | 'promotions';
 
-type MerchantNotificationOptions = DeliveryStartOptions;
+type MerchantNotificationOptions = DeliveryStartOptions & {
+  /** Skip these tokens (already delivered on an earlier partial attempt). */
+  excludeTokens?: string[];
+};
 
 // ── Core send functions ──────────────────────────────────────────────────────
 
@@ -152,7 +157,7 @@ export async function notifyMerchant(
       .eq('app_type', 'admin'),
     options?.requiredShipmentUpdateCapability
   );
-  const { data: tokens, error } = await tokenQuery;
+  const { data: fetchedTokens, error } = await tokenQuery;
 
   if (error) {
     console.error('Error fetching push tokens:', error);
@@ -171,7 +176,14 @@ export async function notifyMerchant(
     return result;
   }
 
-  if (!tokens || tokens.length === 0) {
+  // Retries exclude tokens an earlier partial attempt already reached, so
+  // delivered devices never get duplicates.
+  const excludedTokens = new Set(options?.excludeTokens ?? []);
+  const tokens = (fetchedTokens ?? []).filter(
+    (token) => !excludedTokens.has(token.token)
+  );
+
+  if (tokens.length === 0) {
     const result = { sent: 0, failed: 0, errors: [] };
     await recordPushAttempt(supabase, {
       merchantId,
@@ -511,6 +523,7 @@ export async function processTickets(
 ): Promise<NotificationSendResult> {
   let sent = 0;
   let failed = 0;
+  const succeededTokens: string[] = [];
   // Aggregate failures by error code so a 200-token send with one broken
   // token logs one actionable line instead of raw per-ticket noise.
   const errorAggregates = new Map<
@@ -533,6 +546,7 @@ export async function processTickets(
     const ticket = tickets[i];
     if (ticket.status === 'ok') {
       sent++;
+      succeededTokens.push(tokens[i].token);
       // Store ok tickets for receipt polling (they have a ticket.id)
       ticketsToStore.push({
         ticket_id: ticket.id,
@@ -644,7 +658,7 @@ export async function processTickets(
     }
   }
 
-  return { sent, failed, errors };
+  return { sent, failed, errors, succeededTokens };
 }
 
 export interface PushAttemptContext extends TicketContext {
@@ -688,6 +702,9 @@ export async function recordPushAttempt(
     context.notificationType ??
     (typeof context.payload?.type === 'string' ? context.payload.type : null);
 
+  // Persist per-token delivery state: retries read the union of delivered
+  // tokens across partial attempts and resend only to the failed subset.
+  const deliveredTokens = context.result.succeededTokens ?? [];
   const { error } = await supabase.from('push_notification_attempts').insert({
     merchant_id: context.merchantId ?? null,
     user_id: context.userId ?? null,
@@ -696,7 +713,12 @@ export async function recordPushAttempt(
     notification_type: notificationType,
     title: context.title,
     body: context.body,
-    payload: context.payload ?? {},
+    payload: {
+      ...(context.payload ?? {}),
+      ...(deliveredTokens.length > 0
+        ? { delivered_tokens: deliveredTokens }
+        : {}),
+    },
     token_count: context.tokenCount,
     sent_count: context.result.sent,
     failed_count: context.result.failed,

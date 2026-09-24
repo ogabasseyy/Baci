@@ -154,6 +154,62 @@ describe('Jumia order sync notification markers', () => {
     expect(existingJumiaOrders.size).toBe(0);
   });
 
+  it('resends only to tokens missed by earlier partial attempts', async () => {
+    const attemptsQuery = createQuery(
+      { data: [], error: null },
+      { terminalIn: true }
+    );
+    const deliveredQuery = createQuery(
+      {
+        data: [
+          { payload: { delivered_tokens: ['token-a'] } },
+          { payload: { delivered_tokens: ['token-b', 123] } },
+          { payload: {} },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 3 }
+    );
+    const markerQuery = createQuery({
+      data: { jumia_order_id: order.id },
+      error: null,
+    });
+    const supabase = createSupabaseMock({
+      push_notification_attempts: [attemptsQuery, deliveredQuery],
+      jumia_orders: [markerQuery],
+    });
+    const notifySyncedJumiaOrder = vi.fn().mockResolvedValue({
+      sent: 1,
+      failed: 0,
+      errors: [],
+    });
+    const onNotified = vi.fn();
+
+    await sendJumiaOrderNotification(supabase, {
+      merchantId: 'merchant-1',
+      integrationId: 'integration-1',
+      order,
+      canonicalOrderId: 'baci-order-1',
+      notificationKey: getJumiaNotificationAttemptKey('merchant-1', order.id),
+      attemptedNotificationKeys: new Set<string>(),
+      existingJumiaOrders: new Map(),
+      notifySyncedJumiaOrder,
+      buildExistingJumiaCacheEntry: vi.fn(),
+      onNotified,
+    });
+
+    expect(notifySyncedJumiaOrder).toHaveBeenCalledWith(
+      'merchant-1',
+      order,
+      'baci-order-1',
+      { excludeTokens: ['token-a', 'token-b'] }
+    );
+    expect(markerQuery.update).toHaveBeenCalledWith({
+      notification_sent: true,
+    });
+    expect(onNotified).toHaveBeenCalledTimes(1);
+  });
+
   it('retries notification_sent updates and scopes them to the merchant', async () => {
     const failedQuery = createQuery({ error: { message: 'write timeout' } });
     const successQuery = createQuery({

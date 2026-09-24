@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockCreateAnonClient, mockPurge } = vi.hoisted(() => ({
-  mockCreateAnonClient: vi.fn<() => object>(() => ({})),
+const { mockCreateAdminClient, mockPurge } = vi.hoisted(() => ({
+  mockCreateAdminClient: vi.fn<() => object>(() => ({})),
   mockPurge: vi.fn(),
 }));
 
@@ -14,8 +14,8 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn() },
 }));
 
-vi.mock('@/lib/supabase/anon', () => ({
-  createAnonClient: mockCreateAnonClient,
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: mockCreateAdminClient,
 }));
 
 vi.mock(
@@ -32,7 +32,7 @@ describe('purge Jumia self-authorization discoveries cron route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPurge.mockResolvedValue(3);
-    mockCreateAnonClient.mockReturnValue({});
+    mockCreateAdminClient.mockReturnValue({});
   });
 
   it('returns 401 without the cron secret', async () => {
@@ -43,7 +43,7 @@ describe('purge Jumia self-authorization discoveries cron route', () => {
     );
     expect(response.status).toBe(401);
     expect(mockPurge).not.toHaveBeenCalled();
-    expect(mockCreateAnonClient).not.toHaveBeenCalled();
+    expect(mockCreateAdminClient).not.toHaveBeenCalled();
   });
 
   it('purges expired discoveries when authorized', async () => {
@@ -60,7 +60,7 @@ describe('purge Jumia self-authorization discoveries cron route', () => {
     await expect(response.json()).resolves.toEqual({ deleted: 3 });
     expect(mockPurge).toHaveBeenCalledTimes(1);
     expect(mockPurge).toHaveBeenCalledWith(
-      mockCreateAnonClient.mock.results[0]?.value
+      mockCreateAdminClient.mock.results[0]?.value
     );
   });
 

@@ -108,6 +108,45 @@ export interface SendJumiaOrderNotificationArgs {
 }
 
 /**
+ * Returns the union of tokens already reached by earlier partial attempts
+ * for this order, so a retry resends only to the failed subset instead of
+ * duplicating alerts on delivered devices.
+ */
+export async function getDeliveredJumiaNotificationTokens(
+  supabase: SupabaseClient,
+  merchantId: string,
+  jumiaOrderId: string
+): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('push_notification_attempts')
+      .select('payload')
+      .eq('merchant_id', merchantId)
+      .eq('payload->>jumia_order_id', jumiaOrderId)
+      .eq('status', 'partial_failure');
+    if (error || !data) {
+      return [];
+    }
+    const delivered = new Set<string>();
+    for (const row of data) {
+      const tokens = (row.payload as Record<string, unknown> | null)
+        ?.delivered_tokens;
+      if (!Array.isArray(tokens)) continue;
+      for (const token of tokens) {
+        if (typeof token === 'string') {
+          delivered.add(token);
+        }
+      }
+    }
+    return [...delivered];
+  } catch {
+    // A failed lookup must not fail the order: fall back to notifying all
+    // tokens, matching hasSentJumiaOrderNotification's mercy rule.
+    return [];
+  }
+}
+
+/**
  * Sends the new-order push unless a previous run already delivered it,
  * then persists the notification marker. Reports delivery through
  * `onNotified` once every recipient succeeds (even when a later marker
@@ -129,10 +168,16 @@ export async function sendJumiaOrderNotification(
     return;
   }
   args.attemptedNotificationKeys.add(args.notificationKey);
+  const deliveredTokens = await getDeliveredJumiaNotificationTokens(
+    supabase,
+    args.merchantId,
+    args.order.id
+  );
   const rawNotificationResult = await args.notifySyncedJumiaOrder(
     args.merchantId,
     args.order,
-    args.canonicalOrderId
+    args.canonicalOrderId,
+    deliveredTokens.length > 0 ? { excludeTokens: deliveredTokens } : undefined
   );
   if (!rawNotificationResult) {
     logger.warn({

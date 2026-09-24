@@ -321,7 +321,12 @@ describe('notifyMerchant', () => {
     expect(mockChain.eq).toHaveBeenCalledWith('is_active', true);
     expect(mockChain.eq).toHaveBeenCalledWith('app_type', 'admin');
 
-    expect(result).toEqual({ sent: 2, failed: 0, errors: [] });
+    expect(result).toEqual({
+      sent: 2,
+      failed: 0,
+      errors: [],
+      succeededTokens: ['ExponentPushToken[m1]', 'ExponentPushToken[m2]'],
+    });
   });
 
   it('returns zeros when no tokens found', async () => {
@@ -665,6 +670,81 @@ describe('notifyMerchant', () => {
       })
     );
   });
+
+  it('skips excluded tokens so retries never duplicate delivered alerts', async () => {
+    const mockChain = createChainableMock([
+      { token: 'ExponentPushToken[m1]' },
+      { token: 'ExponentPushToken[m2]' },
+    ]);
+
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn().mockReturnValue(mockChain),
+    } as never);
+
+    mockSendPushNotificationsAsync.mockResolvedValueOnce([
+      { status: 'ok', id: 'ticket-2' },
+    ]);
+
+    const result = await notifyMerchant(
+      'merchant-123',
+      'Test',
+      'Body',
+      {},
+      'orders',
+      {
+        excludeTokens: ['ExponentPushToken[m1]'],
+      }
+    );
+
+    expect(mockSendPushNotificationsAsync).toHaveBeenCalledTimes(1);
+    expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+      expect.objectContaining({ to: 'ExponentPushToken[m2]' }),
+    ]);
+    expect(result).toEqual({
+      sent: 1,
+      failed: 0,
+      errors: [],
+      succeededTokens: ['ExponentPushToken[m2]'],
+    });
+  });
+
+  it('persists delivered tokens on the attempt for per-token retries', async () => {
+    const mockChain = createChainableMock([
+      { token: 'ExponentPushToken[m1]' },
+      { token: 'ExponentPushToken[m2]' },
+    ]);
+
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn().mockReturnValue(mockChain),
+    } as never);
+
+    mockSendPushNotificationsAsync.mockResolvedValueOnce([
+      { status: 'ok', id: 'ticket-1' },
+      {
+        status: 'error',
+        message: 'bad token',
+        details: { error: 'UnknownError' },
+      },
+    ]);
+
+    const result = await notifyMerchant('merchant-123', 'Test', 'Body', {
+      type: 'new_order',
+      jumia_order_id: 'order-1',
+    });
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(mockChain.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'partial_failure',
+        payload: {
+          type: 'new_order',
+          jumia_order_id: 'order-1',
+          delivered_tokens: ['ExponentPushToken[m1]'],
+        },
+      })
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -692,7 +772,12 @@ describe('notifyCustomer', () => {
       expect.anything()
     );
 
-    expect(result).toEqual({ sent: 1, failed: 0, errors: [] });
+    expect(result).toEqual({
+      sent: 1,
+      failed: 0,
+      errors: [],
+      succeededTokens: ['ExponentPushToken[c1]'],
+    });
   });
 
   it('scopes token lookup to the merchant when options.merchantId is provided', async () => {
@@ -800,7 +885,12 @@ describe('notifyAdminUserDevices', () => {
     expect(mockChain.eq).toHaveBeenCalledWith('user_id', 'user-123');
     expect(mockChain.eq).toHaveBeenCalledWith('is_active', true);
     expect(mockChain.eq).toHaveBeenCalledWith('app_type', 'admin');
-    expect(result).toEqual({ sent: 1, failed: 0, errors: [] });
+    expect(result).toEqual({
+      sent: 1,
+      failed: 0,
+      errors: [],
+      succeededTokens: ['ExponentPushToken[a1]'],
+    });
   });
 
   it('returns zeroed result and skips send when no tokens are found', async () => {

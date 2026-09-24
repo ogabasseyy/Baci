@@ -479,7 +479,7 @@ describe('POST /api/marketplace/jumia/products/stock', () => {
     expect(body.success).toBe(false);
     expect(body.updated).toBe(0);
     expect(body.fetchErrors).toBe(1);
-    expect(body.message).toContain('could not read current inventory');
+    expect(body.message).toContain('nothing was pushed');
     expect(mockUpdateStock).not.toHaveBeenCalled();
   });
 
@@ -533,6 +533,54 @@ describe('POST /api/marketplace/jumia/products/stock', () => {
         last_feed_id: 'feed-retry',
       })
     );
+  });
+
+  it('reports failure when a rejected feed cursor cannot be reset', async () => {
+    setupAuth();
+    mockForIntegration.mockResolvedValue({
+      shopId: 'shop-1',
+      marketplaceKey: 'default',
+    });
+    mockMappingsSelect.mockResolvedValue({
+      data: [
+        {
+          id: 'm1',
+          product_id: 'p1',
+          variant_id: null,
+          jumia_seller_sku: 'SKU-001',
+          jumia_product_id: 'JP-001',
+          baci_stock_at_last_sync: 5,
+          last_feed_id: 'feed-rejected',
+        },
+      ],
+      error: null,
+    });
+    mockProductsIn.mockResolvedValue({
+      data: [{ id: 'p1', stock: 0, stock_quantity: 5 }],
+      error: null,
+    });
+    mockGetFeedStatus.mockResolvedValue({
+      status: 'failed',
+      total: 1,
+      completed: 0,
+      failed: 1,
+      feedItems: [],
+    });
+    // The cursor reset fails, so the mapping keeps its rejected stock value
+    // and delta resolution finds nothing to push.
+    mockMappingUpdate.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'reset write failed' },
+    });
+    mockMappingUpdate.mockResolvedValue({ data: { id: 'm1' }, error: null });
+
+    const res = await POST(makeRequest(INT_ID));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(false);
+    expect(body.updated).toBe(0);
+    expect(body.reconciliationFailures).toBe(1);
+    expect(mockUpdateStock).not.toHaveBeenCalled();
   });
 
   it('skips unchanged stock when the prior stock feed was accepted', async () => {

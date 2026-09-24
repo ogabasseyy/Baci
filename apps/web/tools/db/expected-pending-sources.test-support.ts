@@ -443,6 +443,11 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20260924130000_revoke_anon_jumia_discovery_purge_rpc.sql',
+    sha256: 'fc9190ea972d1555dce8f28942d7fd8a81f140ced847aeddb31b9048347f8737',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20260831153000_optimize_storefront_pdp_semantic_reads.sql',
     sha256: 'a402b932c082f876b44feb1cd98ef4d879641a0a5e075b52a05fb0a9b7df43dc',
   },

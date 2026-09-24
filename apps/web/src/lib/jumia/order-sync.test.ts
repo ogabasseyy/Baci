@@ -147,7 +147,8 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
         source: 'jumia',
         jumia_order_id: order.id,
       }),
-      'orders'
+      'orders',
+      undefined
     );
     expect(notifyUpdateQuery.update).toHaveBeenCalledWith({
       notification_sent: true,

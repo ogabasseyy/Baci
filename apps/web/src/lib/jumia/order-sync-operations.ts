@@ -240,7 +240,8 @@ function getJumiaOrderAmount(order: JumiaOrder) {
 export async function notifySyncedJumiaOrder(
   merchantId: string,
   order: JumiaOrder,
-  baciOrderId: string
+  baciOrderId: string,
+  options?: { excludeTokens?: string[] }
 ): Promise<NotificationSendResult> {
   const amount = getJumiaOrderAmount(order);
   const result = await notifyMerchant(
@@ -256,7 +257,8 @@ export async function notifySyncedJumiaOrder(
       amount: amount.value,
       currency: amount.currency,
     },
-    'orders'
+    'orders',
+    options
   );
   return result ?? { sent: 0, failed: 0, errors: [] };
 }

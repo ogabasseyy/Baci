@@ -176,15 +176,18 @@ export async function POST(request: NextRequest) {
     const skipped = initialSkipped + resolutionSkipped;
 
     if (stockUpdates.length === 0) {
-      if (fetchErrors > 0) {
-        // Nothing was read: reporting "up to date" would mask the failure.
+      if (fetchErrors > 0 || reconciliation.failures > 0) {
+        // Nothing was pushed: reporting "up to date" would mask the failure.
         return NextResponse.json({
           success: false,
           updated: 0,
           skipped,
-          fetchErrors,
+          ...(fetchErrors > 0 && { fetchErrors }),
+          ...(reconciliation.failures > 0 && {
+            reconciliationFailures: reconciliation.failures,
+          }),
           message:
-            'Stock sync could not read current inventory levels for some products',
+            'Stock sync could not complete for some products; nothing was pushed',
         });
       }
       return NextResponse.json({
@@ -227,6 +230,9 @@ export async function POST(request: NextRequest) {
       feedId,
       ...(trackingFailures > 0 && { trackingFailures }),
       ...(fetchErrors > 0 && { fetchErrors: fetchErrors }),
+      ...(reconciliation.failures > 0 && {
+        reconciliationFailures: reconciliation.failures,
+      }),
       message: `Pushed ${stockUpdates.length} stock updates to Jumia`,
     });
   } catch (error) {

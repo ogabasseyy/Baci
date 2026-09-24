@@ -3,7 +3,7 @@ import { getCronSecret } from '@/env';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { purgeExpiredJumiaSelfAuthorizationDiscoveries } from '@/lib/jumia/purge-expired-jumia-self-authorization-discoveries';
 import { logger } from '@/lib/logger';
-import { createAnonClient } from '@/lib/supabase/anon';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function GET(request: NextRequest) {
   const cronSecret = getCronSecret();
@@ -21,8 +21,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Server-only role: the purge RPC must never be executable with the
+    // public anon key, which would bypass this route's CRON_SECRET check.
     const deleted = await purgeExpiredJumiaSelfAuthorizationDiscoveries(
-      createAnonClient()
+      createAdminClient()
     );
     return NextResponse.json({ deleted });
   } catch (error) {

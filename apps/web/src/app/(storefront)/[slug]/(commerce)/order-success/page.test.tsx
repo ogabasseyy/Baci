@@ -18,7 +18,9 @@ const mockCaptureCheckoutFunnelEventOnce = vi.hoisted(() => vi.fn());
 // 04b: BNPL capture requires the paid verify verdict, not the paid row
 // alone. Defaults to verified so the capture tests prove the
 // verify-then-capture path; denial tests override per case.
-const mockVerifyBnplSettlementProof = vi.hoisted(() => vi.fn(async () => true));
+const mockVerifyBnplSettlementProof = vi.hoisted(() =>
+  vi.fn(async (..._args: unknown[]) => true)
+);
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => mockSearchParams(),

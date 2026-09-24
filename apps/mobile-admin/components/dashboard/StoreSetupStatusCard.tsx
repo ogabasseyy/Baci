@@ -6,13 +6,11 @@ import { SPACING } from '@/constants/theme';
 import { ProgressCard } from './ProgressCard';
 
 interface StoreSetupStatusCardProps {
-  isLive: boolean;
   isLoading: boolean;
   readiness: MobileStoreReadiness | null | undefined;
 }
 
 export function StoreSetupStatusCard({
-  isLive,
   isLoading,
   readiness,
 }: StoreSetupStatusCardProps) {
@@ -23,7 +21,7 @@ export function StoreSetupStatusCard({
   const isRequiredSetupIncomplete = !readiness.isReady;
   if (
     !isRequiredSetupIncomplete &&
-    isLive &&
+    readiness.isPublished &&
     readiness.overallProgress >= STORE_SETUP_COMPLETE_PROGRESS
   ) {
     return null;
@@ -34,7 +32,7 @@ export function StoreSetupStatusCard({
     : 'Finish setting up your store';
   const subtitle = isRequiredSetupIncomplete
     ? 'Complete your store setup to start selling'
-    : isLive
+    : readiness.isPublished
       ? 'Complete the remaining optional steps to get the most from your store.'
       : 'Your store is ready to launch. Finish the extras or publish now.';
 

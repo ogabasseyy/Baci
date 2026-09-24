@@ -252,7 +252,6 @@ export default function HomeScreen() {
         </View>
 
         <StoreSetupStatusCard
-          isLive={isLive}
           isLoading={isReadinessLoading}
           readiness={readiness}
         />

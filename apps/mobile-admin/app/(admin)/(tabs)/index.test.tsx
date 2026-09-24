@@ -36,7 +36,6 @@ describe('HomeScreen', () => {
     render(<HomeScreen />);
 
     expect(mocks.storeSetupStatusCardProps).toEqual({
-      isLive: true,
       isLoading: false,
       readiness: {
         isReady: true,
@@ -47,7 +46,6 @@ describe('HomeScreen', () => {
   });
 
   it('forwards incomplete setup readiness to the setup status card', () => {
-    mocks.isLive = false;
     mocks.readiness = {
       isReady: false,
       isPublished: false,
@@ -57,7 +55,6 @@ describe('HomeScreen', () => {
     render(<HomeScreen />);
 
     expect(mocks.storeSetupStatusCardProps).toEqual({
-      isLive: false,
       isLoading: false,
       readiness: {
         isReady: false,
@@ -74,7 +71,6 @@ describe('HomeScreen', () => {
     render(<HomeScreen />);
 
     expect(mocks.storeSetupStatusCardProps).toEqual({
-      isLive: true,
       isLoading: true,
       readiness: null,
     });

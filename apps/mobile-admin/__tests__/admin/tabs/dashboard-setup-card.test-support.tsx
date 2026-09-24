@@ -8,7 +8,6 @@ type StoreReadinessMock = {
 };
 
 type StoreSetupStatusCardMockProps = {
-  isLive: boolean;
   isLoading: boolean;
   readiness: StoreReadinessMock | null | undefined;
 };

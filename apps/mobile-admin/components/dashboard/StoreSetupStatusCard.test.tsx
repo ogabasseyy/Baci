@@ -77,7 +77,6 @@ describe('StoreSetupStatusCard', () => {
   it('shows required setup progress until the store is ready', () => {
     render(
       <StoreSetupStatusCard
-        isLive={false}
         isLoading={false}
         readiness={buildReadiness({ isReady: false, overallProgress: 71 })}
       />
@@ -92,9 +91,8 @@ describe('StoreSetupStatusCard', () => {
   it('keeps setup available before publishing when required setup is complete', () => {
     render(
       <StoreSetupStatusCard
-        isLive={false}
         isLoading={false}
-        readiness={buildReadiness()}
+        readiness={buildReadiness({ isPublished: false })}
       />
     );
 
@@ -111,7 +109,6 @@ describe('StoreSetupStatusCard', () => {
   it('keeps setup available after publishing while optional steps remain', () => {
     render(
       <StoreSetupStatusCard
-        isLive
         isLoading={false}
         readiness={buildReadiness({ overallProgress: 82 })}
       />
@@ -130,7 +127,6 @@ describe('StoreSetupStatusCard', () => {
   it('hides while readiness is loading', () => {
     render(
       <StoreSetupStatusCard
-        isLive={false}
         isLoading
         readiness={buildReadiness({ isReady: false, overallProgress: 71 })}
       />
@@ -140,22 +136,29 @@ describe('StoreSetupStatusCard', () => {
   });
 
   it('hides when readiness is unavailable', () => {
-    render(
-      <StoreSetupStatusCard isLive={false} isLoading={false} readiness={null} />
-    );
+    render(<StoreSetupStatusCard isLoading={false} readiness={null} />);
 
     expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('hides only after the published store reaches complete setup', () => {
     render(
-      <StoreSetupStatusCard
-        isLive
-        isLoading={false}
-        readiness={buildReadiness()}
-      />
+      <StoreSetupStatusCard isLoading={false} readiness={buildReadiness()} />
     );
 
     expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('keeps the publish path when a complete store is unpublished', () => {
+    render(
+      <StoreSetupStatusCard
+        isLoading={false}
+        readiness={buildReadiness({ isPublished: false })}
+      />
+    );
+
+    screen.getByText(
+      'Your store is ready to launch. Finish the extras or publish now.'
+    );
   });
 });

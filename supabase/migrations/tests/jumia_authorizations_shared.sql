@@ -341,12 +341,12 @@ BEGIN
     RAISE EXCEPTION 'Jumia credential loading worker function is missing';
   END IF;
 
-  IF NOT has_function_privilege(
+  IF has_function_privilege(
     'authenticated',
     to_regprocedure('public.load_jumia_authorization_credentials(uuid,uuid)'),
     'EXECUTE'
   ) THEN
-    RAISE EXCEPTION 'authenticated callers cannot load Jumia authorization credentials';
+    RAISE EXCEPTION 'authenticated callers can load Jumia authorization credentials directly';
   END IF;
 
   IF has_function_privilege(

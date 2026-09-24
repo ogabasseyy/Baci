@@ -1,7 +1,13 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { hasPermission } from '@/lib/api-permissions';
+import {
+  getMerchantForApiRequest,
+  toUserAccess,
+} from '@/lib/get-merchant-for-api-request';
 import { JumiaApiError } from '@/lib/jumia/jumia-api-error';
+import { createJumiaCredentialServiceClient } from '@/lib/jumia/server-credential-client';
 
 type JumiaCredentialRpcClient = {
   rpc: (
@@ -21,16 +27,47 @@ type JumiaAuthorizationGrantRow = {
   client_key_hash: string;
 };
 
+/**
+ * Resolves the server-only client for the credential RPC after enforcing
+ * the owner/manage check the RPC body used to run for requester JWTs.
+ * Throws 403 when the caller is not authorized for this merchant.
+ */
+async function authorizedCredentialClient(
+  supabase: SupabaseClient,
+  userId: string,
+  merchantId: string
+): Promise<SupabaseClient> {
+  const merchantContext = await getMerchantForApiRequest(supabase, userId, {
+    requestedMerchantId: merchantId,
+  });
+  if (
+    !merchantContext ||
+    merchantContext.merchantId !== merchantId ||
+    !hasPermission(toUserAccess(merchantContext), 'integrations', 'manage')
+  ) {
+    throw new JumiaApiError(403, 'Jumia authorization grant access denied');
+  }
+  return createJumiaCredentialServiceClient();
+}
+
 export async function loadJumiaAuthorizationGrant(
   supabase: SupabaseClient,
   authorizationId: string,
   merchantId: string
 ): Promise<JumiaAuthorizationGrantRow> {
-  // User-facing routes pass their authenticated client so the SECURITY
-  // DEFINER RPC can enforce the merchant/staff permission checks. Worker
-  // callers must pass the restricted credential client built by
-  // createJumiaCredentialServiceClient, never the generic service client.
-  const credentialClient = supabase as unknown as JumiaCredentialRpcClient;
+  // The grant RPC is executable by the server credential role only: browser
+  // clients must never invoke it directly, even with a manage-authorized
+  // JWT. User-facing callers pass their requester client; the owner/manage
+  // check runs here before the server-only credential client executes the
+  // call. Privileged callers (workers) pass a sessionless credential client,
+  // which is used as-is — anything else fails closed with 42501.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const rpcClient = user
+    ? await authorizedCredentialClient(supabase, user.id, merchantId)
+    : supabase;
+  const credentialClient = rpcClient as unknown as JumiaCredentialRpcClient;
   const { data, error } = await credentialClient.rpc(
     'load_jumia_authorization_credentials',
     {

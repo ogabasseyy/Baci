@@ -102,6 +102,26 @@ describe('Jumia credential hardening migrations', () => {
     expect(sql.match(/'integrations',\s*'manage'/gi)).toHaveLength(2);
   });
 
+  it('revokes browser-reachable execution of the credential RPC', () => {
+    const sql = readFileSync(
+      path.join(
+        migrationsRoot,
+        '20260924140000_revoke_jumia_credential_rpc_from_authenticated.sql'
+      ),
+      'utf8'
+    );
+
+    expect(sql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.load_jumia_authorization_credentials\(uuid, uuid\)[\s\S]*?FROM PUBLIC, anon, authenticated/i
+    );
+    expect(sql).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.load_jumia_authorization_credentials\(uuid, uuid\)[\s\S]*?TO service_role/i
+    );
+    expect(sql).not.toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.load_jumia_authorization_credentials\(uuid, uuid\)[\s\S]*?TO authenticated/i
+    );
+  });
+
   it('overrides the active-view experiment with manage-only credential RPCs', () => {
     const sql = readFileSync(
       path.join(

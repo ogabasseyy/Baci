@@ -60,12 +60,15 @@ describe('resolveJumiaDashboardOrderScope', () => {
         'integration-1'
       )
     ).resolves.toBeNull();
+  });
+
+  it('throws when the lookup fails so callers surface the error', async () => {
     await expect(
       resolveJumiaDashboardOrderScope(
         supabase({ data: null, error: { message: 'offline' } }),
         'merchant-1',
         'integration-1'
       )
-    ).resolves.toBeNull();
+    ).rejects.toThrow('Failed to resolve Jumia dashboard order scope');
   });
 });

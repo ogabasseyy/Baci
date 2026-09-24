@@ -11,7 +11,10 @@ import {
 } from './quiz-admin-actions';
 import { formatQuizDuration } from './quiz-duration';
 import { QuizDurationField } from './quiz-duration-field';
-import { getQuizDurationWindow } from './quiz-duration-window';
+import {
+  getQuizDurationWindow,
+  isScheduledQuizWindowValid,
+} from './quiz-duration-window';
 import { QuizPlanSummary } from './quiz-plan-summary';
 import { QuizPrizeProductPicker } from './quiz-prize-product-picker';
 import { QuizTopicInput } from './quiz-topic-input';
@@ -90,10 +93,18 @@ export function QuizAuthoringForm({
     timingKind === 'scheduled' && scheduledEnd
       ? new Date(scheduledEnd).toLocaleString()
       : `After ${formatQuizDuration(totalQuizDurationSeconds)}`;
+  const scheduledEndAfterStart =
+    Boolean(scheduledStart && scheduledEnd) &&
+    Date.parse(scheduledEnd) > Date.parse(scheduledStart);
   const timingValid =
     timingKind === 'immediate' ||
-    (Boolean(scheduledStart && scheduledEnd) &&
-      Date.parse(scheduledEnd) > Date.parse(scheduledStart));
+    isScheduledQuizWindowValid({
+      mode,
+      questionCount,
+      scheduledEnd,
+      scheduledStart,
+      timePerQuestionSeconds,
+    });
   const canSubmit =
     !disabled &&
     !isGenerating &&
@@ -266,7 +277,9 @@ export function QuizAuthoringForm({
       </p>
       {!timingValid ? (
         <p className="mt-2 text-sm text-destructive" role="alert">
-          Universal end must be after the scheduled start.
+          {scheduledEndAfterStart
+            ? `Scheduled window must be within the ${mode} bounds of ${formatQuizDuration(windowBounds.minimumSeconds)} to ${formatQuizDuration(windowBounds.maximumSeconds)}.`
+            : 'Universal end must be after the scheduled start.'}
         </p>
       ) : null}
       <button

@@ -119,6 +119,31 @@ describe('useQuizStartFlow', () => {
     await waitFor(() => expect(mockStartQuizAttempt).toHaveBeenCalled());
   });
 
+  it('drops a second start while ad readiness is pending', async () => {
+    let resolveReady!: () => void;
+    const readyPromise = new Promise<void>((resolve) => {
+      resolveReady = resolve;
+    });
+    mockEnsureQuizMobileAdsReady.mockReturnValueOnce(readyPromise);
+    renderHook(() => useQuizStartFlow({ integrityTier: 'device', startEvent }));
+
+    dobOnStart('event-1');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // A second event accepted while the first start still awaits ads.
+    dobOnStart('event-2');
+
+    await act(async () => {
+      resolveReady();
+      await readyPromise;
+    });
+    await waitFor(() => expect(mockStartQuizAttempt).toHaveBeenCalledTimes(1));
+    expect(mockStartQuizAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: 'event-1' })
+    );
+  });
+
   it('starts without ads when ad readiness fails', async () => {
     mockEnsureQuizMobileAdsReady.mockRejectedValueOnce(
       new Error('consent unavailable')

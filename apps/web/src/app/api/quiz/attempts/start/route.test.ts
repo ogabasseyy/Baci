@@ -777,7 +777,7 @@ describe('start quiz attempt route', () => {
     });
     expect(from).toHaveBeenCalledWith('quiz_events');
     expect(eventGuardBuilder.select).toHaveBeenCalledWith(
-      'merchant_id, regulatory_basis, regulatory_jurisdiction, regulatory_evidence_ref, compliance_verified'
+      'merchant_id, mode, regulatory_basis, regulatory_jurisdiction, regulatory_evidence_ref, compliance_verified'
     );
     expect(eventGuardBuilder.eq).toHaveBeenCalledWith('id', EVENT_ID);
     expect(rpc).not.toHaveBeenCalled();

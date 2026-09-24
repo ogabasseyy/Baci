@@ -41,6 +41,7 @@ export type ServerSupabaseClient = {
 type QuizAwardPrizeGuardEventRow = {
   compliance_verified?: boolean | null;
   merchant_id?: string | null;
+  mode?: string | null;
   regulatory_basis?: string | null;
   regulatory_evidence_ref?: string | null;
   regulatory_jurisdiction?: string | null;
@@ -70,7 +71,7 @@ export async function enforceEventPrizeGuard(
   const { data, error } = await supabase
     .from('quiz_events')
     .select(
-      'merchant_id, regulatory_basis, regulatory_jurisdiction, regulatory_evidence_ref, compliance_verified'
+      'merchant_id, mode, regulatory_basis, regulatory_jurisdiction, regulatory_evidence_ref, compliance_verified'
     )
     .eq('id', eventId)
     .maybeSingle();
@@ -92,16 +93,20 @@ export async function enforceEventPrizeGuard(
     });
   }
 
-  // Fail closed for missing rows: production prize flows require positive
-  // compliance evidence from the event row.
-  enforcePrizeProductionGuard(
-    {
-      regulatory_basis: eventRow?.regulatory_basis,
-      regulatory_evidence_ref: eventRow?.regulatory_evidence_ref,
-      regulatory_jurisdiction: eventRow?.regulatory_jurisdiction,
-    },
-    eventRow?.compliance_verified === true
-  );
+  // Test-mode rehearsals never populate regulatory evidence (test activation
+  // bypasses the live launch RPC and rejects compliance payloads), so exempt
+  // only explicit test rows. Fail closed for missing rows and every other
+  // mode: production prize flows require positive compliance evidence.
+  if (eventRow?.mode !== 'test') {
+    enforcePrizeProductionGuard(
+      {
+        regulatory_basis: eventRow?.regulatory_basis,
+        regulatory_evidence_ref: eventRow?.regulatory_evidence_ref,
+        regulatory_jurisdiction: eventRow?.regulatory_jurisdiction,
+      },
+      eventRow?.compliance_verified === true
+    );
+  }
 
   return {
     merchantId:

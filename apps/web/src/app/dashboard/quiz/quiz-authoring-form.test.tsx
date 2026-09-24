@@ -102,4 +102,39 @@ describe('QuizAuthoringForm', () => {
       })
     );
   });
+
+  it('rejects scheduled test windows beyond the shared maximum', async () => {
+    const onGenerate = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <QuizAuthoringForm
+        disabled={false}
+        initialProducts={[prize]}
+        isGenerating={false}
+        onGenerate={onGenerate}
+      />
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText('Launch timing'),
+      'scheduled'
+    );
+    const start = Date.now() + 3_600_000;
+    const end = start + 25 * 3_600_000;
+    const toLocalInput = (value: number) =>
+      new Date(value).toISOString().slice(0, 16);
+    await user.clear(screen.getByLabelText('Scheduled start'));
+    await user.type(
+      screen.getByLabelText('Scheduled start'),
+      toLocalInput(start)
+    );
+    await user.clear(screen.getByLabelText('Universal end'));
+    await user.type(screen.getByLabelText('Universal end'), toLocalInput(end));
+
+    expect(
+      screen.getByText(/Scheduled window must be within the test bounds/)
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /generate draft/i }));
+    expect(onGenerate).not.toHaveBeenCalled();
+  });
 });

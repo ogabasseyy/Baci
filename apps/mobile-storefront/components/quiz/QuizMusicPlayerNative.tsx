@@ -55,6 +55,7 @@ export function QuizMusicPlayerNative({
   const playbackRef = useRef(playback);
   playbackRef.current = playback;
   const initialPlaybackRef = useRef(initialPlayback);
+  const lastReportedRef = useRef(initialPlayback);
   const onPlaybackChangeRef = useRef(onPlaybackChange);
   onPlaybackChangeRef.current = onPlaybackChange;
   const playlist = useAudioPlaylist({
@@ -89,11 +90,35 @@ export function QuizMusicPlayerNative({
         };
         setPlayback(next);
         playbackRef.current = next;
+        lastReportedRef.current = next;
         onPlaybackChangeRef.current?.(next);
       }
     );
     return () => subscription.remove();
   }, [playlist]);
+
+  useEffect(() => {
+    const incoming = initialPlayback;
+    const last = lastReportedRef.current;
+    if (
+      incoming.currentTrackIndex === last.currentTrackIndex &&
+      incoming.isPlaying === last.isPlaying &&
+      incoming.positionSeconds === last.positionSeconds
+    ) {
+      return;
+    }
+    lastReportedRef.current = incoming;
+    setPlayback(incoming);
+    playbackRef.current = incoming;
+    safelyControlPlaylist(() => playlist.skipTo(incoming.currentTrackIndex));
+    if (incoming.positionSeconds > 0) {
+      safelyControlPlaylist(() => {
+        void playlist.seekTo(incoming.positionSeconds).catch(() => undefined);
+      });
+    }
+    if (incoming.isPlaying) safelyControlPlaylist(() => playlist.play());
+    else safelyControlPlaylist(() => playlist.pause());
+  }, [initialPlayback, playlist]);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,6 +200,7 @@ export function QuizMusicPlayerNative({
             else safelyControlPlaylist(() => playlist.play());
             setPlayback(next);
             playbackRef.current = next;
+            lastReportedRef.current = next;
             onPlaybackChange?.(next);
           }}
           style={styles.playButton}

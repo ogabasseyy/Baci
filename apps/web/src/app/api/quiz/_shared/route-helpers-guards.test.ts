@@ -62,7 +62,7 @@ describe('quiz route helper prize guards', () => {
 
     expect(supabase.from).toHaveBeenCalledWith('quiz_events');
     expect(queryBuilder.select).toHaveBeenCalledWith(
-      'merchant_id, regulatory_basis, regulatory_jurisdiction, regulatory_evidence_ref, compliance_verified'
+      'merchant_id, mode, regulatory_basis, regulatory_jurisdiction, regulatory_evidence_ref, compliance_verified'
     );
     expect(queryBuilder.eq).toHaveBeenCalledWith('id', 'event-1');
     expect(enforcePrizeProductionGuard).toHaveBeenCalledWith(
@@ -88,6 +88,22 @@ describe('quiz route helper prize guards', () => {
       eventId: 'event-1',
       message: 'Quiz event prize guard lookup failed',
     });
+    expect(enforcePrizeProductionGuard).not.toHaveBeenCalled();
+  });
+
+  it('exempts test-mode events while still returning the merchant', async () => {
+    const { supabase } = mockSupabaseResult({
+      data: {
+        compliance_verified: null,
+        merchant_id: 'merchant-1',
+        mode: 'test',
+      },
+      error: null,
+    });
+
+    const result = await enforceEventPrizeGuard(supabase, 'event-test');
+
+    expect(result).toEqual({ merchantId: 'merchant-1' });
     expect(enforcePrizeProductionGuard).not.toHaveBeenCalled();
   });
 

@@ -11,7 +11,10 @@ import {
   useAudioPlaylist,
   useAudioPlaylistStatus,
 } from 'expo-audio';
-import { QuizMusicPlayerNative } from './QuizMusicPlayerNative';
+import {
+  type QuizMusicPlaybackState,
+  QuizMusicPlayerNative,
+} from './QuizMusicPlayerNative';
 
 let mockTrackChanged:
   | ((data: { currentIndex: number; previousIndex: number }) => void)
@@ -214,5 +217,59 @@ describe('QuizMusicPlayerNative', () => {
       isPlaying: true,
       positionSeconds: 37,
     });
+  });
+
+  it('applies restored playback that arrives after mount', () => {
+    const { rerender } = render(
+      <QuizMusicPlayerNative
+        initialPlayback={{
+          currentTrackIndex: 0,
+          isPlaying: true,
+          positionSeconds: 12,
+        }}
+      />
+    );
+    mockPlaylist.seekTo.mockClear();
+    mockPlaylist.skipTo.mockClear();
+
+    rerender(
+      <QuizMusicPlayerNative
+        initialPlayback={{
+          currentTrackIndex: 0,
+          isPlaying: true,
+          positionSeconds: 37,
+        }}
+      />
+    );
+
+    expect(mockPlaylist.skipTo).toHaveBeenCalledWith(0);
+    expect(mockPlaylist.seekTo).toHaveBeenCalledWith(37);
+  });
+
+  it('ignores its own playback echoes', () => {
+    const onPlaybackChange = jest.fn();
+    const { rerender } = render(
+      <QuizMusicPlayerNative onPlaybackChange={onPlaybackChange} />
+    );
+    fireEvent.press(screen.getByRole('button', { name: 'Pause quiz music' }));
+    const echoed = onPlaybackChange.mock.calls[
+      onPlaybackChange.mock.calls.length - 1
+    ][0] as QuizMusicPlaybackState;
+    mockPlaylist.pause.mockClear();
+    mockPlaylist.play.mockClear();
+    mockPlaylist.seekTo.mockClear();
+    mockPlaylist.skipTo.mockClear();
+
+    rerender(
+      <QuizMusicPlayerNative
+        initialPlayback={echoed}
+        onPlaybackChange={onPlaybackChange}
+      />
+    );
+
+    expect(mockPlaylist.skipTo).not.toHaveBeenCalled();
+    expect(mockPlaylist.seekTo).not.toHaveBeenCalled();
+    expect(mockPlaylist.play).not.toHaveBeenCalled();
+    expect(mockPlaylist.pause).not.toHaveBeenCalled();
   });
 });

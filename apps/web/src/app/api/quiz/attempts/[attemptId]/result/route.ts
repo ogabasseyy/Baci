@@ -122,6 +122,7 @@ export async function GET(
             message: 'Quiz prize claim projection was invalid',
             userId: auth.user.id,
           });
+          return rpcErrorResponse();
         }
       }
     } catch {

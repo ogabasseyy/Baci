@@ -85,7 +85,9 @@ export function useQuizStartFlow({
   // and this mounted flow; never manufacture acceptance for a v2 request.
   const acceptedTermsEventIdsRef = useRef(new Set<string>());
 
-  const handleStart = async (eventId: string) => {
+  const startInFlightRef = useRef(false);
+
+  const handleStartInner = async (eventId: string) => {
     resetQuizMobileAdsAttempt();
     await ensureQuizMobileAdsReady().catch(() => undefined);
     const event = events.find((candidate) => candidate.id === eventId);
@@ -213,6 +215,16 @@ export function useQuizStartFlow({
         throw error;
       }
     });
+  };
+
+  const handleStart = async (eventId: string) => {
+    if (startInFlightRef.current) return;
+    startInFlightRef.current = true;
+    try {
+      await handleStartInner(eventId);
+    } finally {
+      startInFlightRef.current = false;
+    }
   };
 
   const dobGate = useQuizDateOfBirthGate((eventId) => {

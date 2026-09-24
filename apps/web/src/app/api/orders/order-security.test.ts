@@ -123,6 +123,18 @@ const mockSupabase = {
       if (name === 'get_order_variant_overrides') {
         return Promise.resolve({ data: [], error: null });
       }
+      // Immediate-notification delivery is gated on the proof-bound
+      // claim (tracking token verified inside the RPC): the winner
+      // delivers, completions record terminal state.
+      if (name === 'claim_immediate_order_notification_with_proof') {
+        return Promise.resolve({
+          data: [{ claimed: true }],
+          error: null,
+        });
+      }
+      if (name === 'complete_immediate_order_notification_with_proof') {
+        return Promise.resolve({ data: null, error: null });
+      }
       return Promise.resolve({
         data: [
           {
@@ -132,6 +144,9 @@ const mockSupabase = {
             subtotal: 1000,
             shipping_fee: 0,
             customer_id: 'customer-id',
+            // Production orders always carry a tracking token (NOT NULL
+            // default): the proof-bound claim needs it to authorize.
+            tracking_token: 'tok-order-1',
           },
         ],
         error: null,
@@ -155,14 +170,6 @@ const adminOrderReadQuery = {
 
 const mockAdminSupabase = {
   from: vi.fn(() => adminOrderReadQuery),
-  // The route gates immediate (POD/invoice/wallet) delivery on the
-  // atomic claim/complete RPCs: the winner delivers, losers skip.
-  rpc: vi.fn(async (functionName: string) => {
-    if (functionName === 'claim_immediate_order_notification') {
-      return { data: [{ claimed: true }], error: null };
-    }
-    return { data: null, error: null };
-  }),
 };
 
 mockCreateAdminClient.mockReturnValue(mockAdminSupabase);

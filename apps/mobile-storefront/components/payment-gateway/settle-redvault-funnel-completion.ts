@@ -1,6 +1,9 @@
 import type { RefObject } from 'react';
 import { releaseCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-release';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import {
+  claimCheckoutPurchaseTracking,
+  markCheckoutPurchaseEmitted,
+} from '@/lib/claim-checkout-purchase-tracking';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
 import {
   PAYMENT_COMPLETED_CLAIM_EVENT,
@@ -79,6 +82,9 @@ export async function settleRedvaultFunnelCompletion({
       ...(reference ? { reference } : {}),
       value: purchaseTotal,
     });
+    // Emission proof for crash recovery: without it an aged lease reads
+    // orphaned after a restart and the completion event double-emits.
+    await markCheckoutPurchaseEmitted(orderId, PAYMENT_COMPLETED_CLAIM_EVENT);
   });
   return isMountedRef.current;
 }

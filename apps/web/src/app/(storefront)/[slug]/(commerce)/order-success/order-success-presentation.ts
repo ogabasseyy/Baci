@@ -11,6 +11,19 @@ import type { StorefrontOrderData as OrderData } from './fetch-storefront-order'
  * amount_paid while the status stays unpaid/pending is accepted value,
  * so the document is commercial even before the status flips.
  */
+/**
+ * True for terminally cancelled orders in either status column and
+ * either spelling. Cancelled orders show no payment document actions:
+ * the server will not fulfill the lookup token, and any proforma/QR
+ * rendered now would describe an order that cannot be paid.
+ */
+export function isCancelledOrderStatus(
+  value: string | null | undefined
+): boolean {
+  const normalized = (value ?? '').trim().toLowerCase();
+  return normalized === 'cancelled' || normalized === 'canceled';
+}
+
 export function resolveInvoicePresentation({
   order,
   type,
@@ -32,7 +45,9 @@ export function resolveInvoicePresentation({
     order?.payment_status !== 'paid' &&
     order?.payment_status !== 'refunded' &&
     order?.payment_status !== 'partially_paid' &&
-    !hasPriorPayment;
+    !hasPriorPayment &&
+    !isCancelledOrderStatus(order?.payment_status) &&
+    !isCancelledOrderStatus(order?.shipping_status);
   return { isInvoice, isInvoiceMethod };
 }
 

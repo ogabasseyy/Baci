@@ -85,4 +85,15 @@ describe('sendImmediateOrderConfirmationEmail', () => {
       expect.objectContaining({ attachments })
     );
   });
+
+  it('rejects a failed provider delivery so the claim completes as failed', async () => {
+    mockedSendEmail.mockResolvedValue({ success: false } as never);
+
+    await expect(
+      sendImmediateOrderConfirmationEmail(baseContext(), {
+        attachments: undefined,
+        invoiceVirtualAccount: null as never,
+      })
+    ).rejects.toThrow('ORDER_CONFIRMATION_EMAIL_FAILED');
+  });
 });

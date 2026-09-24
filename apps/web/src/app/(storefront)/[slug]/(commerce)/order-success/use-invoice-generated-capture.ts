@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { captureCheckoutInvoiceGenerated } from '@/components/storefront/ogabassey/pages/checkout/capture-checkout-invoice-generated';
 import {
   fetchStorefrontOrderData,
@@ -53,6 +53,16 @@ export function useInvoiceGeneratedCapture({
   orderId: string | null;
   orderToken: string | null;
 }): void {
+  // Attempt budget retained across effect restarts: onOrder refreshes
+  // replace the order object (new identity), which must not reset the
+  // 12-attempt bound — otherwise the lane never expires. Keyed by
+  // order so a new order starts a fresh budget.
+  const attemptsRef = useRef(0);
+  const budgetOrderRef = useRef<string | null>(null);
+  if (budgetOrderRef.current !== orderId) {
+    budgetOrderRef.current = orderId;
+    attemptsRef.current = 0;
+  }
   useEffect(() => {
     if (!orderId || !order || !isUnpaidInvoiceOrder(order)) {
       return;
@@ -64,13 +74,12 @@ export function useInvoiceGeneratedCapture({
       return;
     }
     let cancelled = false;
-    let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       if (cancelled) {
         return;
       }
-      attempts += 1;
+      attemptsRef.current += 1;
       const data = await fetchStorefrontOrderData(
         orderId,
         merchantSlug,
@@ -94,7 +103,7 @@ export function useInvoiceGeneratedCapture({
           return;
         }
       }
-      if (attempts < INVOICE_GENERATED_CAPTURE_MAX_ATTEMPTS) {
+      if (attemptsRef.current < INVOICE_GENERATED_CAPTURE_MAX_ATTEMPTS) {
         timer = setTimeout(
           () => void poll(),
           INVOICE_GENERATED_CAPTURE_INTERVAL_MS
@@ -111,5 +120,18 @@ export function useInvoiceGeneratedCapture({
         clearTimeout(timer);
       }
     };
-  }, [lookupEmail, merchantSlug, onOrder, order, orderId, orderToken]);
+    // Depend on order primitives (not the order object identity):
+    // refreshes replace the object while the primitives are unchanged,
+    // and an identity dep would restart the lane pointlessly. The
+    // budget ref still bounds total attempts across restarts.
+  }, [
+    lookupEmail,
+    merchantSlug,
+    onOrder,
+    order?.notification_delivered,
+    order?.payment_method,
+    order?.payment_status,
+    orderId,
+    orderToken,
+  ]);
 }

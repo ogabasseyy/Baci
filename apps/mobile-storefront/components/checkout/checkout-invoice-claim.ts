@@ -1,4 +1,7 @@
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import {
+  claimCheckoutPurchaseTracking,
+  markCheckoutPurchaseEmitted,
+} from '@/lib/claim-checkout-purchase-tracking';
 import { trackCheckoutInvoiceGenerated } from '@/services/analytics';
 import { serializeAfterOrderCreated } from '@/services/serialize-after-order-created';
 import type { PaymentMethodType } from './PaymentMethodSelector';
@@ -67,5 +70,8 @@ export async function maybeCaptureCheckoutInvoiceGenerated({
       paymentMethod: 'invoice',
       total: order.total,
     });
+    // Emission proof for crash recovery: without it an aged lease reads
+    // orphaned after a restart and the invoice event double-emits.
+    await markCheckoutPurchaseEmitted(order.id, 'invoice_generated');
   });
 }

@@ -44,8 +44,8 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import {
-  claimImmediateOrderNotification,
-  completeImmediateOrderNotification,
+  claimImmediateOrderNotificationWithProof,
+  completeImmediateOrderNotificationWithProof,
 } from '@/lib/immediate-order/notification-claim';
 import {
   buildImmediateInvoiceArtifacts,
@@ -3049,13 +3049,15 @@ export async function POST(request: NextRequest) {
         // replay with the same key reclaims the claim and delivers. Claiming
         // here also keeps email dispatch first in the after() body so the
         // confirmation send starts before the response settles.
-        // Service-role RPCs: guest checkouts hold no session, and the claim
-        // table denies anon/authenticated outright (outbox precedent).
-        const notificationClaimClient = createAdminClient();
-        const notificationClaim = await claimImmediateOrderNotification(
-          notificationClaimClient,
-          order.id
-        );
+        // Proof-bound claim on the request-scoped client (AGENTS.md: never
+        // the admin client for user-facing operations): the RPC verifies
+        // the creation tracking token before touching claim state.
+        const notificationClaim =
+          await claimImmediateOrderNotificationWithProof(
+            notificationCtx.supabase,
+            order.id,
+            notificationCtx.trackingToken
+          );
         if (notificationClaim.shouldDeliver) {
           after(async () => {
             try {
@@ -3065,7 +3067,9 @@ export async function POST(request: NextRequest) {
                 | undefined;
               if (effectivePaymentMethod === 'invoice') {
                 // Invoice-only artifacts (persisted items, DVA, PDF,
-                // reminders); failures still render the email below.
+                // reminders); a failure rejects so the claim completes
+                // failed and a replay retries instead of sending an
+                // attachment-less message marked sent.
                 ({ attachments, invoiceVirtualAccount } =
                   await buildImmediateInvoiceArtifacts(notificationCtx));
               }
@@ -3091,15 +3095,17 @@ export async function POST(request: NextRequest) {
               });
               // Sent is terminal: replays observe it and skip. Failed
               // releases the claim so the next replay resumes delivery.
-              await completeImmediateOrderNotification(
-                notificationClaimClient,
+              await completeImmediateOrderNotificationWithProof(
+                notificationCtx.supabase,
                 order.id,
+                notificationCtx.trackingToken,
                 true
               );
             } catch (emailError) {
-              await completeImmediateOrderNotification(
-                notificationClaimClient,
+              await completeImmediateOrderNotificationWithProof(
+                notificationCtx.supabase,
                 order.id,
+                notificationCtx.trackingToken,
                 false
               );
               logger.error({

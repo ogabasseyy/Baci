@@ -1,16 +1,21 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import {
+  claimCheckoutPurchaseTracking,
+  markCheckoutPurchaseEmitted,
+} from '@/lib/claim-checkout-purchase-tracking';
 import { trackCheckoutInvoiceGenerated } from '@/services/analytics';
 import { maybeCaptureCheckoutInvoiceGenerated } from './checkout-invoice-claim';
 
 jest.mock('@/lib/claim-checkout-purchase-tracking', () => ({
   claimCheckoutPurchaseTracking: jest.fn(),
+  markCheckoutPurchaseEmitted: jest.fn(),
 }));
 jest.mock('@/services/analytics', () => ({
   trackCheckoutInvoiceGenerated: jest.fn(),
 }));
 
 const mockedClaim = jest.mocked(claimCheckoutPurchaseTracking);
+const mockedMark = jest.mocked(markCheckoutPurchaseEmitted);
 const mockedTrack = jest.mocked(trackCheckoutInvoiceGenerated);
 
 const baseOrder = {
@@ -46,6 +51,11 @@ describe('maybeCaptureCheckoutInvoiceGenerated', () => {
         total: 5750,
         itemCount: 2,
       })
+    );
+    // Emission proof so a post-restart recovery reads recorded, not orphaned.
+    expect(mockedMark).toHaveBeenCalledWith(
+      'order-invoice-1',
+      'invoice_generated'
     );
   });
 

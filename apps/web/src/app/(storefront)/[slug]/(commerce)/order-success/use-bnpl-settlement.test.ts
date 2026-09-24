@@ -46,13 +46,20 @@ function input(overrides = {}) {
 }
 
 describe('useBnplSettlement', () => {
+  const mockFetch = vi.fn();
   beforeEach(() => {
     vi.useFakeTimers();
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ success: true, orderId: 'order-1' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
     delete (window as { ReactNativeWebView?: unknown }).ReactNativeWebView;
   });
 
@@ -121,7 +128,7 @@ describe('useBnplSettlement', () => {
     expect(mockFetchOrder).toHaveBeenCalledTimes(2);
   });
 
-  it('captures the deferred conversion when the order reads paid', () => {
+  it('captures the deferred conversion when the reference verifies paid', async () => {
     const paid = { ...pendingOrder(), payment_status: 'paid' };
     renderHook(() =>
       useBnplSettlement(
@@ -129,6 +136,12 @@ describe('useBnplSettlement', () => {
       )
     );
 
+    await act(async () => {});
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '/api/payments/verify?reference=ref-7&trackingToken=tok-1'
+      )
+    );
     expect(mockCapture).toHaveBeenCalledWith(
       CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
       'order-1',
@@ -141,7 +154,7 @@ describe('useBnplSettlement', () => {
     );
   });
 
-  it('accepts the credpalRef alias for settlement attribution', () => {
+  it('accepts the credpalRef alias for settlement attribution', async () => {
     const paid = { ...pendingOrder(), payment_status: 'paid' };
     renderHook(() =>
       useBnplSettlement(
@@ -154,11 +167,44 @@ describe('useBnplSettlement', () => {
       )
     );
 
+    await act(async () => {});
     expect(mockCapture).toHaveBeenCalledWith(
       CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
       'order-1',
       expect.objectContaining({ reference: 'cp-txn-3' })
     );
+  });
+
+  it('withholds capture when the reference verifies as non-success', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: false,
+          status: 'pending',
+          orderId: 'order-1',
+        }),
+    });
+    const paid = { ...pendingOrder(), payment_status: 'paid' };
+    renderHook(() =>
+      useBnplSettlement(input({ order: paid, referenceParam: 'ref-7' }))
+    );
+
+    await act(async () => {});
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
+  it('withholds capture without a reference to verify', async () => {
+    const paid = { ...pendingOrder(), payment_status: 'paid' };
+    renderHook(() =>
+      useBnplSettlement(
+        input({ order: paid, referenceParam: null, credpalRefParam: null })
+      )
+    );
+
+    await act(async () => {});
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockCapture).not.toHaveBeenCalled();
   });
 
   it('identity-gates the capture against stale orders from another route', () => {

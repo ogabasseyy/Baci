@@ -29,6 +29,24 @@ describe('resolveInvoicePresentation', () => {
     ).toEqual({ isInvoice: true, isInvoiceMethod: true });
   });
 
+  it.each([
+    { payment_status: 'cancelled', shipping_status: 'pending' },
+    { payment_status: 'canceled', shipping_status: 'pending' },
+    { payment_status: 'pending', shipping_status: 'cancelled' },
+    { payment_status: 'pending', shipping_status: 'canceled' },
+    { payment_status: 'Cancelled', shipping_status: 'pending' },
+  ])('suppresses proforma actions for cancelled orders ($payment_status/$shipping_status)', ({
+    payment_status,
+    shipping_status,
+  }) => {
+    expect(
+      resolveInvoicePresentation({
+        order: invoiceOrder({ payment_status, shipping_status }),
+        type: 'invoice',
+      })
+    ).toEqual({ isInvoice: false, isInvoiceMethod: true });
+  });
+
   it('treats a credited unpaid invoice as a commercial document', () => {
     // Wallet/savings credit accepted value while the status stays
     // unpaid: the generated artifact is commercial, so the screen must

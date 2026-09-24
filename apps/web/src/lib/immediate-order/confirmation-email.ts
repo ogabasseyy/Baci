@@ -87,12 +87,15 @@ export async function sendImmediateOrderConfirmationEmail(
       emailErrorCode: emailResult.errorCode,
       emailErrorDetails: emailResult.errorDetails,
     });
-  } else {
-    logger.info({
-      message: 'Order confirmation email sent',
-      orderId: ctx.order.id,
-      paymentMethod: ctx.effectivePaymentMethod,
-      messageId: emailResult.messageId,
-    });
+    // Reject so the caller completes the claim as failed (retryable):
+    // resolving here would mark the notification sent and permanently
+    // suppress the confirmation/proforma email on replay.
+    throw new Error('ORDER_CONFIRMATION_EMAIL_FAILED');
   }
+  logger.info({
+    message: 'Order confirmation email sent',
+    orderId: ctx.order.id,
+    paymentMethod: ctx.effectivePaymentMethod,
+    messageId: emailResult.messageId,
+  });
 }

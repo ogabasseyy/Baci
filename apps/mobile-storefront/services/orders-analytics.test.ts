@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import {
+  claimCheckoutPurchaseTracking,
+  markCheckoutPurchaseEmitted,
+} from '@/lib/claim-checkout-purchase-tracking';
 import { trackCheckoutOrderCreated } from '@/services/analytics';
 import type { CreateOrderRequest, OrderResponse } from './orders.schemas';
 import { trackCreatedOrderOnce } from './orders-analytics';
 
 jest.mock('@/lib/claim-checkout-purchase-tracking', () => ({
   claimCheckoutPurchaseTracking: jest.fn(),
+  markCheckoutPurchaseEmitted: jest.fn(),
 }));
 
 jest.mock('@/services/analytics', () => ({
@@ -13,6 +17,7 @@ jest.mock('@/services/analytics', () => ({
 }));
 
 const mockClaim = jest.mocked(claimCheckoutPurchaseTracking);
+const mockMark = jest.mocked(markCheckoutPurchaseEmitted);
 const mockTrack = jest.mocked(trackCheckoutOrderCreated);
 
 function buildOrder(): OrderResponse {
@@ -68,6 +73,8 @@ describe('trackCreatedOrderOnce', () => {
       tax: 0,
       total: 21500,
     });
+    // Emission proof so a post-restart recovery reads recorded, not orphaned.
+    expect(mockMark).toHaveBeenCalledWith('order-1', 'order_created');
   });
 
   it('falls back to the request payment method and N/A order number', async () => {

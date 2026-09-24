@@ -122,4 +122,22 @@ describe('useInvoiceGeneratedCapture', () => {
     expect(mockFetchOrder).toHaveBeenCalledTimes(12);
     expect(mockCapture).not.toHaveBeenCalled();
   });
+
+  it('does not reset the budget when refreshes replace the order object', async () => {
+    mockFetchOrder.mockResolvedValue(watchedOrder());
+    const { rerender } = renderHook(
+      ({ order }) => useInvoiceGeneratedCapture(input({ order })),
+      { initialProps: { order: watchedOrder() } }
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 5000);
+      // Same primitives, new identity: the lane must not restart.
+      rerender({ order: watchedOrder() });
+      await vi.advanceTimersByTimeAsync(12 * 5000 + 60_000);
+    });
+
+    expect(mockFetchOrder).toHaveBeenCalledTimes(12);
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
 });

@@ -45,10 +45,10 @@ export async function buildImmediateInvoiceArtifacts(
   let emailedInvoiceTypeCode: string | undefined;
   let invoiceVirtualAccount: ReceiptOrder['virtual_account'] = null;
   // Amount already covered, derived BEFORE the fallible invoice work:
-  // if persisted-item loading or DVA provisioning throws, the catch
-  // still renders the email, and a zero here would instruct the full
-  // price despite credit already applied (P1 overpayment guard — same
-  // rule as the attached PDF).
+  // if persisted-item loading or DVA provisioning throws, the failure
+  // propagates (claim completes failed, replay retries), and a zero
+  // here would instruct the full price despite credit already applied
+  // (P1 overpayment guard — same rule as the attached PDF).
   const invoiceAmountPaid = getCreditedAmountPaid(
     order,
     ctx.savingsAmountUsed,
@@ -61,7 +61,11 @@ export async function buildImmediateInvoiceArtifacts(
     ctx.orderTotal,
     invoiceAmountPaid
   );
-  try {
+  // Core artifact failures (persisted items, DVA, PDF) propagate: the
+  // caller completes the claim as failed so a replay retries instead of
+  // sending an attachment-less message marked sent. Only auxiliary
+  // sub-steps (Peppol XML, logo, reminder row) degrade locally.
+  {
     const invoiceTimingOrder = {
       ...(order as Record<string, unknown>),
       created_at:
@@ -89,9 +93,9 @@ export async function buildImmediateInvoiceArtifacts(
     const invoiceItems = persistedInvoiceItems;
 
     // System-owned DVA/reminder records are written after the validated
-    // order exists; customers do not own these tables through RLS, so
-    // the server-only admin client is scoped to this post-response side
-    // effect and order.id.
+    // order exists through proof-bound RPCs on the request-scoped
+    // client (no admin): DVA persistence through the reserve RPC, the
+    // reminder through the insert RPC.
     // A zero-due order has nothing to transfer: skip provisioning so
     // the PDF and later receipt lookups carry no virtual account for an
     // impossible payment.
@@ -241,16 +245,21 @@ export async function buildImmediateInvoiceArtifacts(
     }
 
     // Log standard initial reminder row in order_reminders through
-    // the proof-bound insert (request client, no admin).
+    // the proof-bound insert (request client, no admin). Auxiliary:
+    // a reminder failure must never fail artifact generation.
     let reminderInsertError: unknown = null;
     if (ctx.trackingToken) {
-      const { error } = await requestSupabase.rpc('insert_invoice_reminder', {
-        p_channel: 'email',
-        p_order_id: order.id,
-        p_payment_link: ctx.paymentLink,
-        p_tracking_token: ctx.trackingToken,
-      });
-      reminderInsertError = error;
+      try {
+        const { error } = await requestSupabase.rpc('insert_invoice_reminder', {
+          p_channel: 'email',
+          p_order_id: order.id,
+          p_payment_link: ctx.paymentLink,
+          p_tracking_token: ctx.trackingToken,
+        });
+        reminderInsertError = error;
+      } catch (rpcError) {
+        reminderInsertError = rpcError;
+      }
     } else {
       reminderInsertError = new Error('missing tracking proof');
     }
@@ -276,12 +285,6 @@ export async function buildImmediateInvoiceArtifacts(
       message: 'Generated branded invoice PDF and logged initial reminder',
       orderId: order.id,
       orderNumber: orderNum,
-    });
-  } catch (err) {
-    logger.error({
-      message: 'Failed to generate invoice PDF or log initial reminder',
-      orderId: order.id,
-      error: err,
     });
   }
 

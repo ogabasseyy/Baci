@@ -54,6 +54,93 @@ export async function claimImmediateOrderNotification(
 }
 
 /**
+ * Proof-bound claim for user-facing routes (AGENTS.md: never use the
+ * admin/service-role client for user-facing operations). Verifies the
+ * order's creation tracking token inside the RPC before touching claim
+ * state; safe on the request-scoped client. Never rejects: a failed or
+ * denied proof skips delivery (logged) rather than breaking checkout.
+ */
+export async function claimImmediateOrderNotificationWithProof(
+  supabase: SupabaseClient,
+  orderId: string,
+  trackingToken: string | null
+): Promise<ImmediateOrderNotificationClaim> {
+  const skipped = { shouldDeliver: false };
+  if (!trackingToken) {
+    logger.error({
+      message:
+        'Immediate order notification proof claim skipped: missing tracking token',
+      orderId,
+    });
+    return skipped;
+  }
+  try {
+    const { data, error } = await supabase.rpc(
+      'claim_immediate_order_notification_with_proof',
+      { p_order_id: orderId, p_tracking_token: trackingToken }
+    );
+    if (error) {
+      logger.error({
+        message:
+          'Immediate order notification proof claim failed; skipping delivery',
+        error,
+        orderId,
+      });
+      return skipped;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || typeof row !== 'object' || row.claimed !== true) {
+      return skipped;
+    }
+    return { shouldDeliver: true };
+  } catch (error) {
+    logger.error({
+      message:
+        'Immediate order notification proof claim raised; skipping delivery',
+      error,
+      orderId,
+    });
+    return skipped;
+  }
+}
+
+/**
+ * Proof-bound delivery completion for user-facing routes. Best-effort
+ * and never-rejecting like the claim itself.
+ */
+export async function completeImmediateOrderNotificationWithProof(
+  supabase: SupabaseClient,
+  orderId: string,
+  trackingToken: string | null,
+  sent: boolean
+): Promise<void> {
+  if (!trackingToken) {
+    return;
+  }
+  try {
+    const { error } = await supabase.rpc(
+      'complete_immediate_order_notification_with_proof',
+      { p_order_id: orderId, p_tracking_token: trackingToken, p_sent: sent }
+    );
+    if (error) {
+      logger.error({
+        message: 'Immediate order notification proof completion failed',
+        error,
+        orderId,
+        sent,
+      });
+    }
+  } catch (error) {
+    logger.error({
+      message: 'Immediate order notification proof completion raised',
+      error,
+      orderId,
+      sent,
+    });
+  }
+}
+
+/**
  * Records after() delivery: sent (terminal — replays skip) or failed
  * (releasable — the next replay resumes). Best-effort and never-rejecting
  * like the claim itself.

@@ -13,7 +13,11 @@ import type {
   ReceiptMerchant,
   ReceiptOrder,
 } from '@baci/shared';
-import { generateReceiptHtml, showMerchantBankDetails } from '@baci/shared';
+import {
+  generateReceiptHtml,
+  resolveInvoiceTypeCode,
+  showMerchantBankDetails,
+} from '@baci/shared';
 import { useState } from 'react';
 import type { ReceiptListItem } from '@/types/receipt';
 import { useMerchantReceiptInfo, useReceiptDetail } from './use-receipts';
@@ -109,21 +113,24 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     };
 
     // Archive callers open by order id without an explicit kind: derive
-    // it from the loaded order so a never-paid invoice keeps its
-    // proforma labeling instead of falling back to the generic
-    // commercial "Invoice". Matches the success-screen classification:
-    // only invoices with no prior-payment evidence (never paid,
-    // refunded, partially paid, or wallet/savings credited) are
-    // proforma.
+    // it from the loaded order through the shared server rule so a
+    // never-paid invoice keeps its proforma labeling instead of falling
+    // back to the generic commercial "Invoice" — while an explicit
+    // stored type code (e.g. 381) survives the derivation untouched.
+    // Matches the success-screen classification: only invoices with no
+    // prior-payment evidence (never paid, refunded, partially paid, or
+    // wallet/savings credited) are proforma.
+    const resolvedTypeCode = resolveInvoiceTypeCode({
+      paymentMethod: receiptDetail.payment_method,
+      isPaid: receiptDetail.payment_status === 'paid',
+      wasPaid: receiptDetail.payment_status === 'refunded',
+      paymentStatus: receiptDetail.payment_status,
+      amountPaid: receiptDetail.amount_paid,
+      storedTypeCode: receiptDetail.invoice_type_code,
+    });
     const derivedDocumentKind =
       options.documentKind ??
-      (receiptDetail.payment_method === 'invoice' &&
-      receiptDetail.payment_status !== 'paid' &&
-      receiptDetail.payment_status !== 'refunded' &&
-      receiptDetail.payment_status !== 'partially_paid' &&
-      Number(receiptDetail.amount_paid ?? 0) <= 0
-        ? 'proforma'
-        : undefined);
+      (resolvedTypeCode === '325' ? 'proforma' : undefined);
     html = generateReceiptHtml(orderData, merchant, {
       documentKind: derivedDocumentKind,
     });

@@ -1,5 +1,8 @@
 import { resolveFinalizedCheckoutPaymentMethod } from '@baci/shared/contracts';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
+import {
+  claimCheckoutPurchaseTracking,
+  markCheckoutPurchaseEmitted,
+} from '@/lib/claim-checkout-purchase-tracking';
 import { createLogger } from '@/lib/logger';
 import { trackCheckoutOrderCreated } from '@/services/analytics';
 import type { CreateOrderRequest, OrderResponse } from './orders.schemas';
@@ -65,6 +68,12 @@ export async function trackCreatedOrderOnce(
       tax: request.tax_amount,
       total: order.order.total,
     });
+    // Emission proof for crash recovery: without it an aged lease reads
+    // orphaned after a restart and the creation event double-emits.
+    await markCheckoutPurchaseEmitted(
+      order.order.id,
+      ORDER_CREATED_CLAIM_EVENT
+    );
   });
 }
 

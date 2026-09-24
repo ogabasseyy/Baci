@@ -10,6 +10,7 @@ import {
   fetchStorefrontOrderData,
   type StorefrontOrderData,
 } from './fetch-storefront-order';
+import { verifyBnplSettlementProof } from './verify-bnpl-settlement-proof';
 
 // CredPal and Klump approve asynchronously: the launcher navigates here
 // while the order is still pending, so the success path polls the
@@ -256,20 +257,43 @@ export function useBnplSettlement({
     ) {
       return;
     }
-    const settledTotal = Number(order.total);
-    // Stamped order currency: a merchant that changed payout currency
-    // after the order must not relabel this deferred completion.
-    const settledCurrency =
-      typeof order.currency === 'string' && order.currency.trim()
-        ? order.currency.trim().toUpperCase()
-        : undefined;
-    capturePendingBnplSettlement({
-      orderId,
-      orderNumber: order.order_number || order.short_id,
-      paymentMethod: order.payment_method || bnplType,
-      reference: bnplReference ?? undefined,
-      ...(Number.isFinite(settledTotal) ? { total: settledTotal } : {}),
-      ...(settledCurrency ? { currency: settledCurrency } : {}),
-    });
-  }, [bnplType, orderId, order, bnplReference]);
+    // No reference means nothing proof-bound to check: keep polling
+    // instead of booking revenue on the paid row alone.
+    if (!bnplReference || !orderToken) {
+      return;
+    }
+    let cancelled = false;
+    const verifyThenCapture = async () => {
+      // Paid verdict implies inventory proof; transient paid rows
+      // verify as non-success and never capture (once-guarded anyway).
+      const verified = await verifyBnplSettlementProof({
+        orderId: order.id,
+        orderToken,
+        reference: bnplReference,
+      });
+      if (cancelled || !verified) {
+        return;
+      }
+      const settledTotal = Number(order.total);
+      // Stamped order currency: a merchant that changed payout
+      // currency after the order must not relabel this deferred
+      // completion.
+      const settledCurrency =
+        typeof order.currency === 'string' && order.currency.trim()
+          ? order.currency.trim().toUpperCase()
+          : undefined;
+      capturePendingBnplSettlement({
+        orderId,
+        orderNumber: order.order_number || order.short_id,
+        paymentMethod: order.payment_method || bnplType,
+        reference: bnplReference,
+        ...(Number.isFinite(settledTotal) ? { total: settledTotal } : {}),
+        ...(settledCurrency ? { currency: settledCurrency } : {}),
+      });
+    };
+    void verifyThenCapture();
+    return () => {
+      cancelled = true;
+    };
+  }, [bnplType, orderId, order, bnplReference, orderToken]);
 }

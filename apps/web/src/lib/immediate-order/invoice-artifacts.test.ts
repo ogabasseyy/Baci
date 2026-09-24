@@ -69,17 +69,35 @@ describe('buildImmediateInvoiceArtifacts', () => {
     vi.clearAllMocks();
   });
 
-  it('degrades gracefully when persisted items are unavailable', async () => {
+  it('rejects when persisted items are unavailable so the claim stays retryable', async () => {
     mockedLoadItems.mockResolvedValue(null);
+
+    await expect(buildImmediateInvoiceArtifacts(baseContext())).rejects.toThrow(
+      'PERSISTED_INVOICE_ITEMS_UNAVAILABLE'
+    );
+    expect(mockedProvisionDva).not.toHaveBeenCalled();
+  });
+
+  it('still resolves when the auxiliary reminder insert fails', async () => {
+    mockedLoadItems.mockResolvedValue([
+      {
+        id: 'item-1',
+        product_id: 'p1',
+        name: 'Phone',
+        productName: undefined,
+        condition: undefined,
+        variantName: undefined,
+        variant_name: undefined,
+        quantity: 1,
+        price: 5000,
+      },
+    ]);
+    mockedProvisionDva.mockResolvedValue({ outcome: 'skipped' });
+    mockRpc.mockRejectedValueOnce(new Error('reminder boom'));
 
     const result = await buildImmediateInvoiceArtifacts(baseContext());
 
-    expect(result).toEqual({
-      attachments: undefined,
-      emailedInvoiceTypeCode: undefined,
-      invoiceVirtualAccount: null,
-    });
-    expect(mockedProvisionDva).not.toHaveBeenCalled();
+    expect(result.attachments?.[0]?.mime_type).toBe('application/pdf');
   });
 
   it('logs the reminder through the proof-bound insert', async () => {

@@ -7,6 +7,8 @@ beforeEach(() => {
 
 const mockClaimCheckoutPurchaseTracking =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockMarkCheckoutPurchaseEmitted =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockReleaseCheckoutPurchaseTracking =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockTrackCheckoutPaymentCompleted = jest.fn((_input: unknown) => {});
@@ -14,6 +16,8 @@ const mockTrackCheckoutPaymentCompleted = jest.fn((_input: unknown) => {});
 jest.mock('@/lib/claim-checkout-purchase-tracking', () => ({
   claimCheckoutPurchaseTracking: (...args: unknown[]) =>
     mockClaimCheckoutPurchaseTracking(...args),
+  markCheckoutPurchaseEmitted: (...args: unknown[]) =>
+    mockMarkCheckoutPurchaseEmitted(...args),
 }));
 
 jest.mock('@/lib/claim-checkout-purchase-release', () => ({
@@ -61,6 +65,11 @@ describe('settleRedvaultFunnelCompletion', () => {
         paymentMethod: 'uba_redvault',
         value: 5000,
       })
+    );
+    // Emission proof so a post-restart recovery reads recorded, not orphaned.
+    expect(mockMarkCheckoutPurchaseEmitted).toHaveBeenCalledWith(
+      'order-1',
+      'payment_completed'
     );
   });
 

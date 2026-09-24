@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   claimImmediateOrderNotification,
+  claimImmediateOrderNotificationWithProof,
   completeImmediateOrderNotification,
+  completeImmediateOrderNotificationWithProof,
 } from './notification-claim';
 
 vi.mock('@/lib/logger', () => ({
@@ -87,5 +89,60 @@ describe('immediate order notification claim', () => {
     await expect(
       completeImmediateOrderNotification(clientFor(rpc), 'order-1', true)
     ).resolves.toBeUndefined();
+  });
+
+  it('claims through the proof RPC with the tracking token', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{ claimed: true, claim_status: 'processing' }],
+      error: null,
+    });
+
+    await expect(
+      claimImmediateOrderNotificationWithProof(
+        clientFor(rpc),
+        'order-1',
+        'tok-1'
+      )
+    ).resolves.toEqual({ shouldDeliver: true });
+    expect(rpc).toHaveBeenCalledWith(
+      'claim_immediate_order_notification_with_proof',
+      { p_order_id: 'order-1', p_tracking_token: 'tok-1' }
+    );
+  });
+
+  it('skips proof delivery without calling the RPC when the token is missing', async () => {
+    const rpc = vi.fn();
+
+    await expect(
+      claimImmediateOrderNotificationWithProof(clientFor(rpc), 'order-1', null)
+    ).resolves.toEqual({ shouldDeliver: false });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('records proof completions with the tracking token', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+
+    await completeImmediateOrderNotificationWithProof(
+      clientFor(rpc),
+      'order-1',
+      'tok-1',
+      true
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'complete_immediate_order_notification_with_proof',
+      { p_order_id: 'order-1', p_tracking_token: 'tok-1', p_sent: true }
+    );
+  });
+
+  it('skips proof completion without calling the RPC when the token is missing', async () => {
+    const rpc = vi.fn();
+
+    await completeImmediateOrderNotificationWithProof(
+      clientFor(rpc),
+      'order-1',
+      null,
+      true
+    );
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

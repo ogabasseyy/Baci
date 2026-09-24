@@ -20,6 +20,7 @@ export {
   type VatBreakdownOrder,
 } from './receipt-money';
 export { compareReceiptListDesc, type ReceiptSortable } from './receipt-sort';
+export { resolveInvoiceTypeCode } from './resolve-invoice-type-code';
 export { sanitizeSvg } from './sanitize-svg';
 export { showMerchantBankDetails } from './show-merchant-bank-details';
 export type {

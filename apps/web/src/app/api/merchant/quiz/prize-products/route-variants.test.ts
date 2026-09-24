@@ -177,4 +177,52 @@ describe('GET /api/merchant/quiz/prize-products variants', () => {
       total: null,
     });
   });
+
+  it('excludes serialized-inventory anchors from selectable variants', async () => {
+    const anchorId = '88888888-8888-4888-8888-888888888888';
+    hydrateBuilder.in.mockResolvedValueOnce({
+      data: [{ ...baseProduct, has_variants: true }],
+      error: null,
+    });
+    variantsBuilder.order.mockResolvedValueOnce({
+      data: [
+        {
+          attributes: { color: 'Anchor' },
+          condition: 'new',
+          created_at: '2026-08-01T08:00:00.000Z',
+          id: anchorId,
+          images: [],
+          is_inventory_anchor: true,
+          merchant_id: 'merchant-1',
+          price_override: null,
+          primary_image: null,
+          product_id: PRODUCT_ID,
+          sku: null,
+          stock_quantity: 5,
+        },
+        {
+          attributes: { color: 'Blue' },
+          condition: 'new',
+          created_at: '2026-08-01T10:00:00.000Z',
+          id: VARIANT_ID,
+          images: [],
+          is_inventory_anchor: false,
+          merchant_id: 'merchant-1',
+          price_override: null,
+          primary_image: null,
+          product_id: PRODUCT_ID,
+          sku: null,
+          stock_quantity: 2,
+        },
+      ],
+      error: null,
+    });
+
+    const payload = await (
+      await GET(new Request('http://localhost/api'))
+    ).json();
+
+    expect(payload.products).toHaveLength(1);
+    expect(payload.products[0]).toMatchObject({ variantId: VARIANT_ID });
+  });
 });

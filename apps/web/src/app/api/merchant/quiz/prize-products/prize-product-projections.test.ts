@@ -42,6 +42,7 @@ describe('prize product projections', () => {
       'primary_image',
       'images',
       'sku',
+      'is_inventory_anchor',
     ]) {
       expect(columns).toContain(column);
     }

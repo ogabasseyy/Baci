@@ -213,6 +213,6 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260924090000_quiz_start_guard_context_v2.sql',
-    sha256: 'af078c1071ff34ba07c0d09c7c5e1beee7717c5201b8f35fb9149a258afcd9ab',
+    sha256: 'ad1b4afac28db2099449ef0f63208ef0401ea9bad9e9f0dfbee1041effd83bd2',
   },
 ].sort((a, b) => a.repositoryPath.localeCompare(b.repositoryPath));

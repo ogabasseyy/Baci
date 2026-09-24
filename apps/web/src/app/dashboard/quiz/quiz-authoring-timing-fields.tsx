@@ -55,19 +55,24 @@ export function QuizAuthoringTimingFields({
             step={1}
             type="number"
             value={Math.round(Number(windowMinutes) * 60)}
-            onBlur={() =>
-              onWindowMinutesChange(
-                String(
-                  Number(
-                    clampNumberInput(
-                      String(Math.round(Number(windowMinutes) * 60)),
-                      1,
-                      QUIZ_AUTHORING_MAX_DURATION_SECONDS
-                    )
-                  ) / 60
-                )
-              )
-            }
+            onBlur={() => {
+              // Blur only clamps the displayed value; reporting an
+              // unchanged duration would mark the window as manually
+              // edited and skip the automatic duration resync after
+              // generation changes the question count.
+              const clamped = String(
+                Number(
+                  clampNumberInput(
+                    String(Math.round(Number(windowMinutes) * 60)),
+                    1,
+                    QUIZ_AUTHORING_MAX_DURATION_SECONDS
+                  )
+                ) / 60
+              );
+              if (Number(clamped) !== Number(windowMinutes)) {
+                onWindowMinutesChange(clamped);
+              }
+            }}
             onChange={(event) =>
               onWindowMinutesChange(String(Number(event.target.value) / 60))
             }

@@ -61,4 +61,44 @@ describe('QuizAuthoringTimingFields', () => {
     expect(props.onTimingKindChange).toHaveBeenCalledWith('scheduled');
     expect(screen.queryByLabelText(/scheduled start/i)).toBeNull();
   });
+
+  it('does not mark an unchanged duration as edited on blur', () => {
+    // Arrange: focus-and-tab without typing must leave the untouched
+    // window alone so generation keeps its automatic duration resync.
+    const onWindowMinutesChange = vi.fn();
+    render(
+      <QuizAuthoringTimingFields
+        {...props}
+        timingKind="immediate"
+        windowMinutes="5"
+        onWindowMinutesChange={onWindowMinutesChange}
+      />
+    );
+
+    // Act
+    fireEvent.blur(screen.getByLabelText(/total quiz duration/i));
+
+    // Assert
+    expect(onWindowMinutesChange).not.toHaveBeenCalled();
+  });
+
+  it('clamps an out-of-range duration on blur', () => {
+    // Arrange
+    const onWindowMinutesChange = vi.fn();
+    render(
+      <QuizAuthoringTimingFields
+        {...props}
+        timingKind="immediate"
+        windowMinutes="99999"
+        onWindowMinutesChange={onWindowMinutesChange}
+      />
+    );
+
+    // Act
+    fireEvent.blur(screen.getByLabelText(/total quiz duration/i));
+
+    // Assert
+    expect(onWindowMinutesChange).toHaveBeenCalledTimes(1);
+    expect(onWindowMinutesChange).toHaveBeenCalledWith(String(7200 / 60));
+  });
 });

@@ -10,10 +10,14 @@
 -- (20260804123000): contract v2, a listed lifecycle status, a non-deleted
 -- customer relationship with the event merchant, plus tester entitlement
 -- (or merchant access) for test events and the shared regulatory-readiness
--- helper for live events. Anything else returns found=false, so callers
--- cannot distinguish missing, draft, cancelled, or unapproved events from
--- ones they may not see. service_role bypasses the caller checks for
--- trusted replay/admin paths but remains scoped to v2 listed-lifecycle rows.
+-- helper for live events. It also mirrors the listing's structural
+-- predicates (timing, question, attempt, timezone, and prize-setting
+-- validity), so rows the listing deliberately hides resolve found=false
+-- here too instead of leaking mode, merchant, and approval verdicts.
+-- Anything else returns found=false, so callers cannot distinguish
+-- missing, draft, cancelled, malformed, or unapproved events from ones
+-- they may not see. service_role bypasses the caller checks for trusted
+-- replay/admin paths but remains scoped to list-visible rows.
 --
 -- Startability (active window, rules acceptance, attempt caps) stays with the
 -- security-definer start RPCs, which reject precisely; this projection only
@@ -42,6 +46,38 @@ BEGIN
   WHERE event.id = p_event_id
     AND event.contract_version = 2
     AND event.status IN ('scheduled', 'active', 'completed')
+    -- Structural-visibility mirror of list_quiz_events_v2: rows failing
+    -- these predicates never appear in the listing, so the projection
+    -- must not resolve them either.
+    AND event.starts_at IS NOT NULL
+    AND event.ends_at IS NOT NULL
+    AND event.ends_at > event.starts_at
+    AND event.question_count BETWEEN 1 AND 50
+    AND event.time_per_question_seconds BETWEEN 5 AND 60
+    AND event.maximum_play_seconds
+      = event.question_count * event.time_per_question_seconds
+    AND event.live_window_seconds = pg_catalog.floor(
+      EXTRACT(EPOCH FROM (event.ends_at - event.starts_at))
+    )::integer
+    AND event.max_attempts BETWEEN 1 AND 50
+    AND (event.mode <> 'live' OR event.max_attempts = 1)
+    AND pg_catalog.length(pg_catalog.btrim(event.time_zone)) > 0
+    AND pg_catalog.length(pg_catalog.btrim(event.rules_version)) > 0
+    AND event.settings->>'prize_product_id'
+      ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    AND pg_catalog.length(
+      pg_catalog.btrim(event.settings->>'prize_product_name')
+    ) > 0
+    AND pg_catalog.length(
+      pg_catalog.btrim(event.settings->>'prize_name')
+    ) > 0
+    AND COALESCE(event.settings->>'prize_product_condition', '')
+      IN ('', 'new', 'used', 'open_box', 'refurbished')
+    AND (
+      NULLIF(event.settings->>'prize_variant_id', '') IS NULL
+      OR event.settings->>'prize_variant_id'
+        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    )
     AND (
       auth.role() = 'service_role'
       OR (

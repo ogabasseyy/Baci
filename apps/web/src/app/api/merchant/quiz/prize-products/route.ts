@@ -192,7 +192,10 @@ export async function GET(request: Request) {
     }
     variants = (Array.isArray(variantData) ? variantData : [])
       .filter(isVariantRow)
-      .filter((variant) => variant.merchant_id === access.merchantId);
+      .filter((variant) => variant.merchant_id === access.merchantId)
+      // Serialized-inventory anchors are internal rows the prize reserve
+      // RPC rejects; never offer them as selectable prize variants.
+      .filter((variant) => variant.is_inventory_anchor !== true);
   }
 
   const productById = new Map(products.map((product) => [product.id, product]));

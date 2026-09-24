@@ -109,7 +109,10 @@ export async function loadPrizeProducts(merchantId: string) {
       }
       const variants = (Array.isArray(fetched.data) ? fetched.data : [])
         .filter(isVariantRow)
-        .filter((row) => row.merchant_id === merchantId);
+        .filter((row) => row.merchant_id === merchantId)
+        // Serialized-inventory anchors are internal rows the prize reserve
+        // RPC rejects; never offer them as selectable prize variants.
+        .filter((row) => row.is_inventory_anchor !== true);
       const expanded = expandPrizeProduct(item, variants).flatMap((product) => {
         const parsed = quizPrizeProductSchema.safeParse(product);
         return parsed.success ? [parsed.data] : [];

@@ -4,65 +4,68 @@
 BEGIN;
 
 SET LOCAL session_replication_role = replica;
+-- Every v2 fixture satisfies the table CHECKs (runtime window/counts,
+-- regulatory triple) so the inserts run; visibility differences below
+-- come only from the projection's own predicates. Fixed stamps keep the
+-- 3720-second live window exact instead of clock-relative.
 INSERT INTO public.quiz_events(
   id, merchant_id, slug, title, status, starts_at, ends_at,
   live_window_seconds, compliance_verified,
   mode, contract_version, rules_version, attempts_terminalized_at,
   finalization_state, claim_window_seconds, regulatory_basis,
-  regulatory_jurisdiction, regulatory_evidence_ref
+  regulatory_jurisdiction, regulatory_evidence_ref, settings
 ) VALUES (
   '75000000-0000-4000-8000-000000000001',
   '75000000-0000-4000-8000-000000000002',
   'start-guard-approved-live', 'Start guard approved live', 'active',
-  pg_catalog.clock_timestamp() - interval '2 minutes',
-  pg_catalog.clock_timestamp() + interval '1 hour', 60, true,
+  '2026-09-24T10:00:00+00', '2026-09-24T11:02:00+00', 3720, true,
   'live', 2, 'guard-v2', NULL,
   'pending', 60, 'free_skill_competition', 'Nigeria',
-  'automated migration replay evidence'
+  'automated migration replay evidence',
+  '{"prize_product_id": "66000000-0000-4000-8000-000000000000", "prize_product_name": "Prize Phone", "prize_name": "Quiz Prize"}'
 ), (
   '75000000-0000-4000-8000-000000000003',
   '75000000-0000-4000-8000-000000000002',
-  'start-guard-unverified-live', 'Start guard unverified live', 'active',
-  pg_catalog.clock_timestamp() - interval '2 minutes',
-  pg_catalog.clock_timestamp() + interval '1 hour', 60, false,
+  'start-guard-malformed-live', 'Start guard malformed live', 'active',
+  '2026-09-24T10:00:00+00', '2026-09-24T11:02:00+00', 3720, true,
   'live', 2, 'guard-v2', NULL,
   'pending', 60, 'free_skill_competition', 'Nigeria',
-  'automated migration replay evidence'
+  'automated migration replay evidence',
+  '{}'
 ), (
   '75000000-0000-4000-8000-000000000004',
   '75000000-0000-4000-8000-000000000002',
   'start-guard-private-test', 'Start guard private test', 'active',
-  pg_catalog.clock_timestamp() - interval '2 minutes',
-  pg_catalog.clock_timestamp() + interval '1 hour', 60, false,
+  '2026-09-24T10:00:00+00', '2026-09-24T11:02:00+00', 3720, false,
   'test', 2, 'guard-v2', NULL,
-  'pending', 60, NULL, NULL, NULL
+  'pending', 60, NULL, NULL, NULL,
+  '{"prize_product_id": "66000000-0000-4000-8000-000000000000", "prize_product_name": "Prize Phone", "prize_name": "Quiz Prize"}'
 ), (
   '75000000-0000-4000-8000-000000000005',
   '75000000-0000-4000-8000-000000000002',
   'start-guard-draft-live', 'Start guard draft live', 'draft',
-  pg_catalog.clock_timestamp() - interval '2 minutes',
-  pg_catalog.clock_timestamp() + interval '1 hour', 60, true,
+  '2026-09-24T10:00:00+00', '2026-09-24T11:02:00+00', 3720, true,
   'live', 2, 'guard-v2', NULL,
   'pending', 60, 'free_skill_competition', 'Nigeria',
-  'automated migration replay evidence'
+  'automated migration replay evidence',
+  '{"prize_product_id": "66000000-0000-4000-8000-000000000000", "prize_product_name": "Prize Phone", "prize_name": "Quiz Prize"}'
 ), (
   '75000000-0000-4000-8000-000000000006',
   '75000000-0000-4000-8000-000000000002',
   'start-guard-v1-live', 'Start guard v1 live', 'active',
-  pg_catalog.clock_timestamp() - interval '2 minutes',
-  pg_catalog.clock_timestamp() + interval '1 hour', 60, true,
+  '2026-09-24T10:00:00+00', '2026-09-24T11:02:00+00', 60, true,
   'live', 1, 'guard-v1', NULL,
   'pending', 60, 'free_skill_competition', 'Nigeria',
-  'automated migration replay evidence'
+  'automated migration replay evidence',
+  '{}'
 ), (
   '75000000-0000-4000-8000-000000000007',
   '75000000-0000-4000-8000-000000000002',
-  'start-guard-null-basis-live', 'Start guard null basis live', 'active',
-  pg_catalog.clock_timestamp() - interval '2 minutes',
-  pg_catalog.clock_timestamp() + interval '1 hour', 60, true,
-  'live', 2, 'guard-v2', NULL,
-  'pending', 60, NULL, 'Nigeria',
-  'automated migration replay evidence'
+  'start-guard-service-test', 'Start guard service test', 'active',
+  '2026-09-24T10:00:00+00', '2026-09-24T11:02:00+00', 3720, false,
+  'test', 2, 'guard-v2', NULL,
+  'pending', 60, NULL, NULL, NULL,
+  '{"prize_product_id": "66000000-0000-4000-8000-000000000000", "prize_product_name": "Prize Phone", "prize_name": "Quiz Prize"}'
 );
 INSERT INTO public.customers(id, merchant_id, user_id) VALUES
   (
@@ -124,12 +127,13 @@ BEGIN
     RAISE EXCEPTION 'guard context exposed compliance evidence';
   END IF;
 
-  -- Unapproved live events are indistinguishable from missing ones.
+  -- Structurally malformed live events (missing prize settings here)
+  -- are indistinguishable from missing ones even for entitled callers.
   v_context := public.get_quiz_start_guard_context_v2(
     '75000000-0000-4000-8000-000000000003'
   );
   IF (v_context ->> 'found')::boolean IS NOT FALSE THEN
-    RAISE EXCEPTION 'unverified live event leaked its context';
+    RAISE EXCEPTION 'malformed live event leaked its context';
   END IF;
 
   -- Testers see their private test event.
@@ -186,6 +190,12 @@ BEGIN
   IF (v_context ->> 'found')::boolean IS NOT FALSE THEN
     RAISE EXCEPTION 'private test leaked to a non-tester';
   END IF;
+  v_context := public.get_quiz_start_guard_context_v2(
+    '75000000-0000-4000-8000-000000000007'
+  );
+  IF (v_context ->> 'found')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'untestered test event leaked to a non-tester';
+  END IF;
 END;
 $$;
 
@@ -225,7 +235,8 @@ BEGIN
 END;
 $$;
 
--- service_role bypasses caller checks; incomplete approvals read boolean false.
+-- service_role bypasses caller checks but stays scoped to list-visible
+-- rows; test events read prize_approved boolean false.
 SELECT pg_catalog.set_config(
   'request.jwt.claims',
   '{"role":"service_role"}',
@@ -237,12 +248,27 @@ DECLARE
   v_context jsonb;
 BEGIN
   v_context := public.get_quiz_start_guard_context_v2(
+    '75000000-0000-4000-8000-000000000001'
+  );
+  IF (v_context ->> 'found')::boolean IS NOT TRUE
+    OR NOT COALESCE((v_context ->> 'prize_approved')::boolean, false)
+  THEN
+    RAISE EXCEPTION 'service_role lost the approved live event';
+  END IF;
+  v_context := public.get_quiz_start_guard_context_v2(
     '75000000-0000-4000-8000-000000000007'
   );
   IF (v_context ->> 'found')::boolean IS NOT TRUE
+    OR (v_context ->> 'mode') IS DISTINCT FROM 'test'
     OR COALESCE((v_context ->> 'prize_approved')::boolean, true)
   THEN
-    RAISE EXCEPTION 'null-basis record did not read boolean false';
+    RAISE EXCEPTION 'service_role test read did not resolve boolean false';
+  END IF;
+  v_context := public.get_quiz_start_guard_context_v2(
+    '75000000-0000-4000-8000-000000000003'
+  );
+  IF (v_context ->> 'found')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'malformed live event leaked to service_role';
   END IF;
   IF v_context ? 'regulatory_basis'
     OR v_context ? 'regulatory_jurisdiction'

@@ -767,7 +767,8 @@ export interface PaystackCustomer {
  * Required before creating a DVA
  */
 export async function createOrGetCustomer(
-  data: CustomerData
+  data: CustomerData,
+  init?: { signal?: AbortSignal }
 ): Promise<PaystackResult<PaystackCustomer>> {
   if (!data.email) {
     return {
@@ -779,6 +780,7 @@ export async function createOrGetCustomer(
 
   const result = await paystackRequest<PaystackCustomer>('/customer', {
     method: 'POST',
+    ...(init?.signal ? { signal: init.signal } : {}),
     body: JSON.stringify({
       email: data.email,
       first_name: data.first_name,
@@ -806,6 +808,7 @@ export async function createDedicatedAccount(
     firstName?: string;
     lastName?: string;
     metadata?: Record<string, unknown>;
+    signal?: AbortSignal;
   } = {}
 ): Promise<PaystackResult<DedicatedAccountResponse>> {
   // Validate customer code format
@@ -823,12 +826,14 @@ export async function createDedicatedAccount(
     firstName,
     lastName,
     metadata,
+    signal,
   } = options;
 
   const result = await paystackRequest<DedicatedAccountResponse>(
     '/dedicated_account',
     {
       method: 'POST',
+      ...(signal ? { signal } : {}),
       body: JSON.stringify({
         customer: customerCode,
         preferred_bank: preferredBank,
@@ -970,7 +975,8 @@ export async function createDedicatedAccountForWallet(
  * Fetch existing DVAs for a customer
  */
 export async function getDedicatedAccounts(
-  customerCode: string
+  customerCode: string,
+  init?: { signal?: AbortSignal }
 ): Promise<PaystackResult<DedicatedAccountResponse[]>> {
   if (!customerCode?.startsWith('CUS_')) {
     return {
@@ -981,7 +987,8 @@ export async function getDedicatedAccounts(
   }
 
   const result = await paystackRequest<DedicatedAccountResponse[]>(
-    `/dedicated_account?customer=${encodeURIComponent(customerCode)}`
+    `/dedicated_account?customer=${encodeURIComponent(customerCode)}`,
+    init?.signal ? { signal: init.signal } : undefined
   );
 
   return result;
@@ -1039,6 +1046,7 @@ export async function generatePaymentAccount(data: {
   lastName?: string;
   phone?: string;
   orderId?: string;
+  signal?: AbortSignal;
 }): Promise<
   PaystackResult<{
     bank_name: string;
@@ -1048,13 +1056,16 @@ export async function generatePaymentAccount(data: {
   }>
 > {
   // Step 1: Create or get customer
-  const customerResult = await createOrGetCustomer({
-    email: data.email,
-    first_name: data.firstName,
-    last_name: data.lastName,
-    phone: data.phone,
-    metadata: data.orderId ? { order_id: data.orderId } : undefined,
-  });
+  const customerResult = await createOrGetCustomer(
+    {
+      email: data.email,
+      first_name: data.firstName,
+      last_name: data.lastName,
+      phone: data.phone,
+      metadata: data.orderId ? { order_id: data.orderId } : undefined,
+    },
+    data.signal ? { signal: data.signal } : undefined
+  );
 
   if (!customerResult.success) {
     return customerResult;
@@ -1063,7 +1074,10 @@ export async function generatePaymentAccount(data: {
   const customerCode = customerResult.data.customer_code;
 
   // Step 2: Check for existing DVA
-  const existingResult = await getDedicatedAccounts(customerCode);
+  const existingResult = await getDedicatedAccounts(
+    customerCode,
+    data.signal ? { signal: data.signal } : undefined
+  );
   if (existingResult.success && existingResult.data.length > 0) {
     const existing = existingResult.data[0];
     return {
@@ -1082,6 +1096,7 @@ export async function generatePaymentAccount(data: {
     phone: data.phone,
     firstName: data.firstName,
     lastName: data.lastName,
+    ...(data.signal ? { signal: data.signal } : {}),
   });
   if (!dvaResult.success) {
     return dvaResult;

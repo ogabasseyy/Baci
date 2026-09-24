@@ -1,3 +1,4 @@
+import { useIsMountedRef } from '@/components/bnpl-checkout/use-is-mounted-ref';
 import { useMerchant } from '@/hooks/use-merchant';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
@@ -15,6 +16,7 @@ import {
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
+import { createSubmittedOrderIdentity } from './checkout-submit-order-identity';
 import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
 import { tryCaptureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
@@ -64,6 +66,9 @@ export function useCheckoutSubmit({
 }: UseCheckoutSubmitParams) {
   const { data: merchant } = useMerchant();
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
+  // Late completion-tracking resolutions must not erase a newly created
+  // cart or navigate away from the shopper's screen.
+  const isMountedRef = useIsMountedRef();
   return async (address: ShippingAddressInput) => {
     const itemsSnapshot = [...useCartStore.getState().items];
     const {
@@ -119,6 +124,7 @@ export function useCheckoutSubmit({
     // The in-flight latch is already held (acquired before the fence
     // await above) and releases in the finally below.
     setIsProcessing(true);
+    const orderIdentity = createSubmittedOrderIdentity();
     // Hoisted for the rollback path, which re-freezes these on cart restore.
     let submitCreditFields: Record<string, unknown> | undefined;
     let submitHadSortMarker: boolean | undefined;
@@ -147,11 +153,12 @@ export function useCheckoutSubmit({
           walletSelection,
         });
       trackCheckoutStep('review');
+      // Pay-for-me keeps its own persisted identity: collapsing it to
+      // 'invoice' would misclassify its documents as proforma and skip
+      // the server payforme dispatch branch.
       const paymentMethodForOrder = isVoucherOnlyCart
         ? 'card'
-        : selectedPayment === 'payforme'
-          ? 'invoice'
-          : selectedPayment;
+        : selectedPayment;
       const isBNPL = isBnplPayment(selectedPayment);
       if (isBNPL && !isVoucherOnlyCart) {
         await submitBnplCheckout({
@@ -168,6 +175,7 @@ export function useCheckoutSubmit({
           liveWalletSelection,
           checkoutGeneration: checkoutGenerationSnapshot,
           mobileCheckoutIdempotencyRef,
+          onOrderCreated: orderIdentity.captureCreatedOrder,
           paymentMethodForOrder,
           paymentSettings,
           selectedPayment,
@@ -195,6 +203,7 @@ export function useCheckoutSubmit({
       const orderResponse = await createOrder(orderRequest, {
         checkoutGeneration: checkoutGenerationSnapshot,
       });
+      orderIdentity.captureCreatedOrder(orderResponse.order.id);
       submittedGeneration.track(orderResponse);
       const rollbackCapture = await tryCaptureCheckoutSubmitRollbackState(
         submittedGeneration.current(),
@@ -251,6 +260,7 @@ export function useCheckoutSubmit({
         customerName,
         customerPhone,
         isAuthenticated,
+        isMountedRef,
         isOrderInFlight,
         itemsSnapshot,
         order,
@@ -277,7 +287,11 @@ export function useCheckoutSubmit({
           itemsSnapshot,
         });
       }
-      handleCheckoutSubmitError(error, selectedPayment);
+      handleCheckoutSubmitError(
+        error,
+        selectedPayment,
+        orderIdentity.createdOrderId
+      );
     } finally {
       setIsProcessing(false);
       isOrderInFlight.current = false;

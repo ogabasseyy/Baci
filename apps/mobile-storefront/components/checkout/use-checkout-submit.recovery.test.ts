@@ -32,6 +32,7 @@ const mockRestoreItems = jest.fn<
 const mockUseMerchant = jest.fn() as jest.MockedFunction<
   () => { data: { id: string } | null }
 >;
+const mockTrackCheckoutInvoiceGenerated = jest.fn();
 let cartItems: CartItem[] = [];
 
 jest.mock('@/services/cart-reprice', () => ({
@@ -63,6 +64,8 @@ jest.mock('@/lib/wallet-payment-helpers', () => ({
 }));
 
 jest.mock('@/services/analytics', () => ({
+  trackCheckoutInvoiceGenerated: (...args: unknown[]) =>
+    mockTrackCheckoutInvoiceGenerated(...args),
   trackCheckoutStep: jest.fn(),
 }));
 
@@ -257,13 +260,15 @@ describe('useCheckoutSubmit recovery', () => {
       await result.current(address);
     });
 
+    // createOrder threw before committing: no order id is threaded.
     expect(handleCheckoutSubmitError).toHaveBeenCalledWith(
       checkoutError,
-      'paystack'
+      'paystack',
+      undefined
     );
   });
 
-  it('tracks a recovered order on the first observed replay response', async () => {
+  it('does not count a replay response as a new purchase completion', async () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
@@ -279,6 +284,17 @@ describe('useCheckoutSubmit recovery', () => {
     const { trackCheckoutRoutePurchaseCompleted } = jest.requireMock(
       '@/services/tiktok-checkout-route-tracking'
     ) as { trackCheckoutRoutePurchaseCompleted: ReturnType<typeof jest.fn> };
+    // Replay precondition: the first attempt already recorded the
+    // purchase, so the durable claim is held before this submit runs.
+    const { claimCheckoutPurchaseTracking } = jest.requireActual(
+      '@/lib/claim-checkout-purchase-tracking'
+    ) as {
+      claimCheckoutPurchaseTracking: (
+        orderId: string,
+        event?: string
+      ) => Promise<boolean>;
+    };
+    await claimCheckoutPurchaseTracking('order-replay-1');
     const params = createParams();
     const { result } = renderHook(() => useCheckoutSubmit(params));
 
@@ -286,8 +302,48 @@ describe('useCheckoutSubmit recovery', () => {
       await result.current(address);
     });
 
-    expect(trackCheckoutRoutePurchaseCompleted).toHaveBeenCalledWith(
-      expect.objectContaining({ orderId: 'order-replay-1' })
-    );
+    expect(trackCheckoutRoutePurchaseCompleted).not.toHaveBeenCalled();
+  });
+
+  it('emits no invoice event at submit when a retry replays the created order', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    const order = {
+      created_at: '2026-07-09T12:00:00.000Z',
+      id: 'order-invoice-1',
+      order_number: 'ORD-I1',
+      payment_status: 'pending',
+      shipping_status: 'pending',
+      total: 1201500,
+    };
+    mockCreateOrder
+      .mockResolvedValueOnce({
+        amountDueToGateway: 1201500,
+        effectiveCheckoutGeneration: 'gen-1',
+        order,
+        wallet: null,
+      })
+      .mockResolvedValueOnce({
+        amountDueToGateway: 1201500,
+        effectiveCheckoutGeneration: 'gen-1',
+        idempotency: { replayed: true },
+        order,
+        wallet: null,
+      });
+    const params = createParams({ selectedPayment: 'invoice' });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+      await result.current(address);
+    });
+
+    // Neither the first attempt nor the replay records the conversion at
+    // submit: generation is confirmed asynchronously in after(), and the
+    // success screen captures it once the lookup carries the terminal
+    // delivery flag (replay dedup then rests on the durable claim).
+    expect(mockTrackCheckoutInvoiceGenerated).not.toHaveBeenCalled();
   });
 });

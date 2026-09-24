@@ -125,6 +125,13 @@ const OrdinaryOrderResponseSchema = z.object({
     order_number: z.string().nullable(),
     total: z.number(),
     payment_status: z.string(),
+    // Authoritative method after server-side coverage (wallet, store_credit,
+    // savings, quiz_voucher) is applied. Optional: older responses omit it
+    // and callers fall back to the UI selection.
+    payment_method: z.string().nullish(),
+    // Stamped order currency for funnel attribution. Optional: older
+    // responses omit it and callers keep the NGN default.
+    currency: z.string().nullish(),
     shipping_status: z.string(),
     created_at: z.string().default(() => new Date().toISOString()),
     tracking_token: z.string().nullable().optional(),

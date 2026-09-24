@@ -8,13 +8,24 @@ const CSRF_HEADERS = {
 };
 
 describe('/api/payments/verify method boundary', () => {
-  it('rejects GET so verification cannot be triggered by prefetch or forged navigation', async () => {
-    const response = await GET();
-    const body = await response.json();
+  it('serves sessionless verification over GET, gated by the creation tracking token', async () => {
+    const missing = await GET(
+      new NextRequest('http://localhost:3000/api/payments/verify')
+    );
+    expect(missing.status).toBe(400);
 
-    expect(response.status).toBe(405);
-    expect(response.headers.get('allow')).toBe('POST');
-    expect(body.error).toContain('Use POST');
+    // A reference alone proves nothing: without the tracking token the
+    // read-only entry refuses, so forged navigations cannot probe order
+    // state by reference.
+    const unproven = await GET(
+      new NextRequest(
+        'http://localhost:3000/api/payments/verify?reference=txn-ref-123'
+      )
+    );
+    const body = await unproven.json();
+
+    expect(unproven.status).toBe(400);
+    expect(body.error).toContain('tracking token');
   });
 
   it('requires a JSON POST body before validating a reference', async () => {

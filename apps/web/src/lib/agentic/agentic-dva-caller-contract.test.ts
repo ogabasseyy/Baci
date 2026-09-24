@@ -51,7 +51,7 @@ const expectedCallers: Record<PrivilegedFunction, readonly string[]> = {
     'apps/web/mcp-server/server.ts',
     'apps/web/src/app/api/orders/[id]/generate-dva/route.ts',
     'apps/web/src/app/api/orders/[id]/ship-on-credit/provision-credit-order-dva.ts',
-    'apps/web/src/app/api/orders/route.ts',
+    'apps/web/src/lib/provision-invoice-method-dva.ts',
   ],
   getDedicatedAccounts: [
     'apps/web/src/lib/customer-wallet-payment-accounts.ts',

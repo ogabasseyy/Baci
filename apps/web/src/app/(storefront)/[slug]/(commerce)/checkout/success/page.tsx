@@ -18,17 +18,14 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense } from 'react';
 import { AdUnit } from '@/components/storefront/ogabassey/components/AdUnit';
-import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { asRoute } from '@/lib/routes';
-import {
-  type CheckoutVerificationStatus,
-  verifyCheckoutPayment,
-} from './verify-checkout-payment';
+import { CheckoutReconciliationView } from './checkout-reconciliation-view';
+import { useCheckoutSuccessVerification } from './use-checkout-success-verification';
 
 /**
  * 2025 Best Practice: Order Confirmation Page
@@ -45,32 +42,6 @@ const orderSteps = [
   { id: 'shipped', label: 'Shipped', icon: Truck },
   { id: 'delivered', label: 'Delivered', icon: MapPin },
 ];
-
-function hasMatchingPendingRedvaultOrder(orderId: string | null): boolean {
-  if (!orderId || typeof window === 'undefined') {
-    return false;
-  }
-
-  try {
-    const raw = sessionStorage.getItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY);
-    if (!raw) {
-      return false;
-    }
-    const pendingOrder: unknown = JSON.parse(raw);
-    if (!pendingOrder || typeof pendingOrder !== 'object') {
-      return false;
-    }
-    const snapshot = pendingOrder as {
-      orderId?: unknown;
-      paymentMethod?: unknown;
-    };
-    return (
-      snapshot.orderId === orderId && snapshot.paymentMethod === 'uba_redvault'
-    );
-  } catch {
-    return false;
-  }
-}
 
 export default function CheckoutSuccessPage() {
   return (
@@ -96,6 +67,7 @@ function CheckoutSuccessContent() {
   const router = useRouter();
   const reference = searchParams.get('reference');
   const orderId = searchParams.get('orderId');
+  const paymentMethodParam = searchParams.get('paymentMethod');
   const trackingToken = searchParams.get('trackingToken');
   const { clearCart } = useCart();
   const merchantContext = useMerchantSafe();
@@ -105,66 +77,17 @@ function CheckoutSuccessContent() {
   const getHref = (path: string) =>
     path.startsWith('http') ? path : `${basePath}${path}`;
 
-  const [status, setStatus] = useState<CheckoutVerificationStatus>('pending');
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [orderNumber, setOrderNumber] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler handles memoization
-  useEffect(() => {
-    // Track the failed-redirect timer so navigating away from this page
-    // cancels it — without the cleanup, a user who leaves within the 4s
-    // window gets yanked back to /checkout.
-    const timerHandle: { current: ReturnType<typeof setTimeout> | null } = {
-      current: null,
-    };
-    const redirectToCheckout = () => {
-      router.push(asRoute(getHref('/checkout')));
-    };
-
-    verifyCheckoutPayment(
-      {
-        merchantSlug: merchantContext?.merchant?.slug,
-        orderId,
-        pendingRedvaultOrder: hasMatchingPendingRedvaultOrder(orderId),
-        reference,
-        trackingToken,
-      },
-      {
-        clearCart,
-        redirectToCheckout,
-        scheduleFailedRedirect: () => {
-          timerHandle.current = setTimeout(redirectToCheckout, 4000);
-        },
-        setIsVerifying,
-        setOrderNumber,
-        setPaymentMethod,
-        setStatus,
-      }
-    );
-
-    return () => {
-      if (timerHandle.current !== null) {
-        clearTimeout(timerHandle.current);
-      }
-    };
-  }, [
-    reference,
-    orderId,
-    trackingToken,
-    merchantContext,
-    clearCart,
-    router,
-    basePath,
-  ]);
-
-  useEffect(() => {
-    if (status !== 'success' || typeof window === 'undefined') {
-      return;
-    }
-
-    sessionStorage.removeItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY);
-  }, [status]);
+  const { status, isVerifying, orderNumber, paymentMethod } =
+    useCheckoutSuccessVerification({
+      merchantSlug: merchantContext?.merchant?.slug,
+      orderId,
+      paymentMethodParam,
+      reference,
+      trackingToken,
+      clearCart,
+      router,
+      basePath,
+    });
 
   // Failed State
   if (status === 'failed') {
@@ -210,6 +133,13 @@ function CheckoutSuccessContent() {
     );
   }
 
+  // Captured-but-cancelled/refunded: reconciliation state, never success.
+  if (status === 'reconciling') {
+    return (
+      <CheckoutReconciliationView orderNumber={orderNumber} getHref={getHref} />
+    );
+  }
+
   // Success & Pending States (main redesigned page)
   const isConfirmed = status === 'success';
   const isInvoice =
@@ -246,7 +176,7 @@ function CheckoutSuccessContent() {
           >
             {isConfirmed
               ? isInvoice
-                ? 'Invoice Generated!'
+                ? 'Proforma Invoice Ready!'
                 : 'Order Received!'
               : 'Order Being Processed'}
           </motion.h1>
@@ -380,7 +310,7 @@ function CheckoutSuccessContent() {
                   </h3>
                   <p className="text-sm text-gray-600">
                     {isInvoice
-                      ? "We've generated a compliant e-invoice and sent it to your email with payment instructions."
+                      ? "We've prepared your proforma invoice and sent it to your email. Share it with your company or procurement team."
                       : "You'll receive an email with your order details and tracking information once your order is confirmed."}
                   </p>
                 </div>
@@ -435,7 +365,7 @@ function CheckoutSuccessContent() {
                 </h3>
                 <p className="text-gray-300 text-sm mb-4">
                   {isInvoice
-                    ? 'Your e-invoice is generated and ready to download. You can settle the invoice at any time to activate your order processing.'
+                    ? 'Your proforma invoice is ready to download and share with your company or procurement team.'
                     : 'Your invoice is available from your order details in your account. Your receipt will appear there and in the documents archive once the order has shipped.'}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -447,7 +377,7 @@ function CheckoutSuccessContent() {
                   >
                     <Download className="size-4" />
                     {isInvoice
-                      ? 'Download Invoice PDF'
+                      ? 'Download Proforma Invoice PDF'
                       : 'View Order Documents'}
                   </Link>
                 </div>

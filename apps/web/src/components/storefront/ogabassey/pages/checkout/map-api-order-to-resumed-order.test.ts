@@ -35,6 +35,35 @@ describe('bugfix: restore gift-wrapping fees in resumed summaries', () => {
   });
 });
 
+describe('resumed funnel currency', () => {
+  it('carries the stamped order currency, normalized to uppercase', () => {
+    const resumed = mapApiOrderToResumedOrder({
+      id: 'order-3',
+      currency: 'usd',
+      total: 100,
+      customer_name: 'Ada Lovelace',
+      customer_email: 'ada@example.com',
+      customer_phone: '+2348000000000',
+      items: [],
+    });
+
+    expect(resumed.currency).toBe('USD');
+  });
+
+  it('leaves currency undefined when the payload omits it', () => {
+    const resumed = mapApiOrderToResumedOrder({
+      id: 'order-4',
+      total: 100,
+      customer_name: 'Ada Lovelace',
+      customer_email: 'ada@example.com',
+      customer_phone: '+2348000000000',
+      items: [],
+    });
+
+    expect(resumed.currency).toBeUndefined();
+  });
+});
+
 describe('bugfix: authenticated resume only exposes shipping_fee', () => {
   it('falls back to shipping_fee when shipping_cost is absent', () => {
     const resumed = mapApiOrderToResumedOrder({

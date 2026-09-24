@@ -192,6 +192,24 @@ describe('PaymentGatewayParamsSchema', () => {
     }
   });
 
+  it('coerces an optional canonical order total for order payments', () => {
+    const result = PaymentGatewayParamsSchema.safeParse({
+      amount: '5000',
+      authorizationUrl: 'https://checkout.paystack.com/test',
+      gateway: 'paystack',
+      orderId: 'order-1',
+      orderTotal: '21500',
+      paymentKind: 'order',
+      reference: 'ref-123',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amount).toBe(5000);
+      expect(result.data.orderTotal).toBe(21500);
+    }
+  });
+
   it('preserves valid returnTo paths for wallet top-up payments', () => {
     const result = PaymentGatewayParamsSchema.safeParse({
       amount: '2500',

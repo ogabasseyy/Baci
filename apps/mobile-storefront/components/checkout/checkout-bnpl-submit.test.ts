@@ -6,6 +6,7 @@ import {
   it,
   jest,
 } from '@jest/globals';
+import { BNPLParamsSchema } from '@/components/bnpl-checkout/bnpl-params.schema';
 import type { ShippingAddressInput } from '@/lib/validation';
 import type { OrderResponse } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
@@ -29,6 +30,7 @@ const mockGetKlumpDisabledReason =
 const mockGetMobileCheckoutIdempotencyKey =
   jest.fn<(...params: unknown[]) => string>();
 const mockRouterPush = jest.fn();
+const mockTrackCheckoutPaymentStarted = jest.fn();
 
 jest.mock('react-native', () => ({
   Alert: {
@@ -71,6 +73,11 @@ jest.mock('@/services/orders', () => ({
       this.code = code;
     }
   },
+}));
+
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentStarted: (...args: unknown[]) =>
+    mockTrackCheckoutPaymentStarted(...args),
 }));
 
 jest.mock('./checkout-order-builders', () => ({
@@ -177,6 +184,7 @@ describe('submitBnplCheckout', () => {
       savings: null,
       wallet: null,
     });
+    mockTrackCheckoutPaymentStarted.mockReset();
     global.fetch = jest.fn() as unknown as typeof fetch;
   });
 
@@ -198,6 +206,7 @@ describe('submitBnplCheckout', () => {
     expect(params.isOrderInFlight.current).toBe(false);
     expect(params.setIsProcessing).toHaveBeenCalledWith(false);
     expect(mockCreateOrder).not.toHaveBeenCalled();
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
   });
 
   it('uses the order service retry identity before routing BNPL', async () => {
@@ -207,25 +216,154 @@ describe('submitBnplCheckout', () => {
 
     expect(mockCreateOrder).toHaveBeenCalledWith(
       expect.objectContaining({ payment_method: 'credit_direct' }),
-      { checkoutGeneration: 'gen-1' }
+      {
+        analyticsPaymentMethod: 'credit_direct',
+        checkoutGeneration: 'gen-1',
+      }
     );
     expect(mockCreateOrder.mock.calls[0][0]).not.toHaveProperty(
       'idempotency_key'
     );
     expect(params.isOrderInFlight.current).toBe(false);
     expect(params.setIsProcessing).toHaveBeenCalledWith(false);
+    // No start before navigation: the provider initializes later inside
+    // the launcher, and the checkout controller records the start only
+    // once the launcher confirms the flow opened.
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
     expect(mockRouterPush).toHaveBeenCalledWith({
       pathname: '/bnpl-checkout',
       params: expect.objectContaining({
-        amount: '21500',
+        amount: '21500.00',
         customerEmail: 'ada@example.com',
         gateway: 'credit_direct',
         merchantDomain: 'ogabassey.com',
         merchantSlug: 'ogabassey',
         orderId: 'order-1',
+        // Canonical total rides along for completion attribution while the
+        // provider charges the residual amount.
+        orderTotal: '21500.00',
         trackingToken: 'tracking-token',
       }),
     });
+  });
+
+  it('normalizes floating-point artifacts to schema-valid money params', async () => {
+    // 230604.65 + 199.99 === 230804.63999999998: String(...) would fail
+    // the schema's at-most-two-decimal regex and land on the
+    // invalid-parameters screen instead of the provider.
+    const floatSubtotal = 230604.65 + 199.99;
+    expect(String(floatSubtotal)).toContain('9999999');
+    const params = {
+      ...createParams(),
+      snapshot: { ...snapshot, subtotal: floatSubtotal },
+    };
+    mockCreateOrder.mockResolvedValue({
+      amountDueToGateway: floatSubtotal,
+      order: {
+        created_at: '2026-05-30T12:00:00.000Z',
+        id: 'order-1',
+        order_number: 'BAC-001',
+        payment_status: 'pending',
+        shipping_status: 'pending',
+        total: 21500,
+        tracking_token: 'tracking-token',
+      },
+      savings: null,
+      wallet: null,
+    });
+
+    await submitBnplCheckout(params);
+
+    const routed = (
+      mockRouterPush.mock.calls[0]?.[0] as {
+        params: Record<string, string>;
+      }
+    ).params;
+    expect(routed.amount).toBe('230804.64');
+    expect(routed.subtotal).toBe('230804.64');
+    expect(
+      BNPLParamsSchema.safeParse({
+        gateway: 'credit_direct',
+        orderId: 'order-1',
+        ...routed,
+      }).success
+    ).toBe(true);
+  });
+
+  it('maps a non-JSON Klump initialize response to PAYMENT_INIT_ERROR', async () => {
+    const params = {
+      ...createParams(),
+      selectedPayment: 'klump' as const,
+    };
+    const mockFetch = global.fetch as jest.Mock;
+    mockFetch.mockImplementationOnce(async () => ({
+      ok: true,
+      json: async (): Promise<unknown> => {
+        throw new SyntaxError('Unexpected token < in JSON');
+      },
+    }));
+
+    await expect(submitBnplCheckout(params)).rejects.toMatchObject({
+      code: 'PAYMENT_INIT_ERROR',
+    });
+
+    expect(mockCreateOrder).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it('reports the nested order id when Klump init fails after creation', async () => {
+    const onOrderCreated = jest.fn();
+    const params = {
+      ...createParams(),
+      selectedPayment: 'klump' as const,
+      onOrderCreated,
+    };
+    const mockFetch = global.fetch as jest.Mock;
+    mockFetch.mockImplementationOnce(async () => ({
+      ok: true,
+      json: async (): Promise<unknown> => {
+        throw new SyntaxError('Unexpected token < in JSON');
+      },
+    }));
+
+    await expect(submitBnplCheckout(params)).rejects.toMatchObject({
+      code: 'PAYMENT_INIT_ERROR',
+    });
+
+    // The order committed before init threw: the outer submit threads this
+    // id into failure handling (init failures stay out of the funnel, but
+    // the committed identity is still available to the error path).
+    expect(onOrderCreated).toHaveBeenCalledWith('order-1');
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
+  });
+
+  it('defers the Klump start until the launcher bridges onOpen', async () => {
+    const params = {
+      ...createParams(),
+      selectedPayment: 'klump' as const,
+    };
+    const mockFetch = global.fetch as jest.Mock;
+    mockFetch.mockImplementationOnce(async () => ({
+      ok: true,
+      json: async () => ({
+        success: true,
+        authorization_url: 'https://klump.example/pay',
+        reference: 'klump-ref-1',
+      }),
+    }));
+    mockBuildKlumpBnplRouteParams.mockReturnValue({
+      pathname: '/bnpl-checkout',
+    });
+
+    await submitBnplCheckout(params);
+
+    // A successful initialize only provides the launcher URL — the
+    // provider UI has not opened, so recording a start here would strand
+    // it unmatched when the WebView fails before Klump's onOpen. The
+    // checkout controller records the start from bnpl_provider_opened.
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
+    expect(mockRouterPush).toHaveBeenCalled();
   });
 
   it('preserves the existing checkout identity when the server rejects reuse', async () => {

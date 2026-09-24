@@ -117,6 +117,7 @@ jest.mock('@/lib/logger', () => ({
 }));
 
 jest.mock('@/services/analytics', () => ({
+  trackCheckoutOrderCreated: jest.fn(),
   trackEvent: jest.fn(),
   trackError: jest.fn(),
 }));

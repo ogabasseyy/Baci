@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import type { PaymentMethodType } from '@/components/checkout/PaymentMethodSelector';
-import { trackError } from '@/services/analytics';
+import { trackCheckoutPaymentFailed, trackError } from '@/services/analytics';
 import { OrderError } from '@/services/orders';
 import { useCartStore } from '@/stores/cart-store';
 import { selectRejectedVoucherLineIds } from './select-rejected-voucher-lines';
@@ -49,11 +49,59 @@ function pruneRejectedQuizVoucherLines(error: OrderError): void {
   }
 }
 
+// Raised before an order exists or a provider flow starts: offline clients,
+// invalid carts, expired sessions, order-creation conflicts (a reusable
+// order that changed, or a duplicate idempotent submission), and every
+// createOrder transport/server failure (timeouts, exhausted retries, 5xx,
+// unparseable responses, merchant lookups) are not payment declines and must
+// not enter the funnel as payment_failed. Only codes raised after a payment
+// flow actually opened (i.e. after payment_started) record a funnel payment
+// failure.
+const PRE_ORDER_ERROR_CODES = new Set([
+  'NETWORK_ERROR',
+  'VALIDATION_ERROR',
+  'AUTH_ERROR',
+  'CHECKOUT_IDEMPOTENCY_CONFLICT',
+  'CHECKOUT_ORDER_NOT_REUSABLE',
+  'TIMEOUT_ERROR',
+  'RETRY_EXHAUSTED',
+  'SERVER_ERROR',
+  'UNKNOWN_ERROR',
+  'NOT_FOUND',
+  // Malformed or version-skewed order API success payloads surface before
+  // any provider initialization, even when the server committed the order.
+  'RESPONSE_PARSE_ERROR',
+  'RESPONSE_VALIDATION_ERROR',
+]);
+
+// Provider initialization failures (rejected/timed-out Paystack, Korapay,
+// DVA, Klump, or crypto initialize calls, including malformed initialize
+// responses). The order already exists when these throw, but every
+// initializer emits payment_started only after a successful initialization,
+// so no payment flow opened and a funnel failure would be unmatched. The
+// diagnostic trackError below still fires; only the funnel event is
+// suppressed.
+const PRE_START_ERROR_CODES = new Set([
+  'PAYMENT_INIT_ERROR',
+  'PAYMENT_INIT_TIMEOUT',
+]);
+
 export function handleCheckoutSubmitError(
   error: unknown,
-  selectedPayment: PaymentMethodType
+  selectedPayment: PaymentMethodType,
+  // Committed order id when createOrder succeeded before the failure
+  // (e.g. a provider-init throw): threading it lets the funnel failure
+  // serialize behind order_created and join to the order instead of
+  // arriving first with an undefined id.
+  orderId?: string
 ) {
   if (error instanceof OrderError) {
+    if (
+      !PRE_ORDER_ERROR_CODES.has(error.code) &&
+      !PRE_START_ERROR_CODES.has(error.code)
+    ) {
+      void trackCheckoutPaymentFailed(error.code, orderId, selectedPayment);
+    }
     trackError('checkout_failed', error.message, {
       step: 'place_order',
       paymentMethod: selectedPayment,
@@ -128,6 +176,10 @@ export function handleCheckoutSubmitError(
     error instanceof Error ? error.message : 'Unknown error',
     { step: 'place_order', paymentMethod: selectedPayment }
   );
+  // A non-OrderError (e.g. an ordinary throw from the preceding
+  // repriceCartItems call) carries no evidence that an order or payment
+  // attempt started, so it must not enter the funnel as payment_failed —
+  // payment-stage failures arrive as OrderError codes instead.
   Alert.alert('Error', 'Failed to place order. Please try again.', [
     { text: 'OK' },
   ]);

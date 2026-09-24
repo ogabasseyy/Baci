@@ -74,7 +74,7 @@ describe('PaymentIntentAccordion', () => {
     expect(screen.getByText('Pay in Full')).toBeTruthy();
     expect(screen.getByText('Pay Small Small')).toBeTruthy();
     expect(screen.getByText('Pay for Me')).toBeTruthy();
-    expect(screen.getByText('Generate Invoice')).toBeTruthy();
+    expect(screen.getByText('Get a Proforma Invoice')).toBeTruthy();
   });
 
   it('hides method groups the merchant has not enabled', () => {
@@ -83,7 +83,7 @@ describe('PaymentIntentAccordion', () => {
     expect(screen.getByText('Pay in Full')).toBeTruthy();
     expect(screen.queryByText('Pay Small Small')).toBeNull();
     expect(screen.queryByText('Pay for Me')).toBeNull();
-    expect(screen.queryByText('Generate Invoice')).toBeNull();
+    expect(screen.queryByText('Get a Proforma Invoice')).toBeNull();
   });
 
   it('filters terminal pay-later intents by the enabled method ids', () => {
@@ -93,7 +93,7 @@ describe('PaymentIntentAccordion', () => {
       availableMethodIds: ['invoice'],
     });
 
-    expect(screen.getByText('Generate Invoice')).toBeTruthy();
+    expect(screen.getByText('Get a Proforma Invoice')).toBeTruthy();
     expect(screen.queryByText('Pay for Me')).toBeNull();
   });
 

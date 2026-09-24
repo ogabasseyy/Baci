@@ -100,8 +100,11 @@ jest.mock('@tanstack/react-query', () => ({
 }));
 
 jest.mock('@/stores/cart-store', () => ({
-  useCartStore: (selector: (state: { clearCart: () => void }) => unknown) =>
-    selector({ clearCart: mockClearCart }),
+  useCartStore: Object.assign(
+    (selector: (state: { clearCart: () => void }) => unknown) =>
+      selector({ clearCart: mockClearCart }),
+    { getState: () => ({ items: [] }) }
+  ),
 }));
 
 let mockAuthUser: { id: string } | null = null;

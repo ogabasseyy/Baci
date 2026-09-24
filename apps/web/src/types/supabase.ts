@@ -18385,6 +18385,29 @@ export type Database = {
           vat_registration_status: string;
         }[];
       };
+      get_invoice_artifact_order_items: {
+        Args: { p_order_id: string; p_tracking_token: string };
+        Returns: {
+          assurance_fee: number;
+          condition: string;
+          has_assurance: boolean;
+          id: string;
+          item_description: string;
+          line_extension_amount: number;
+          name: string;
+          price: number;
+          product_id: string;
+          quantity: number;
+          sellers_item_id: string;
+          unit_code: string;
+          variant_attributes: Json;
+          variant_id: string;
+          variant_name: string;
+          vat_amount: number;
+          vat_category_code: string;
+          vat_rate: number;
+        }[];
+      };
       get_order_tracking: {
         Args: {
           p_email?: string;
@@ -18402,7 +18425,9 @@ export type Database = {
           customer_phone: string;
           delivered_at: string;
           discount_amount: number;
+          external_source: string;
           id: string;
+          import_job_id: string;
           items: Json;
           merchant_business_name: string;
           merchant_id: string;
@@ -18413,6 +18438,7 @@ export type Database = {
           merchant_support_phone: string;
           order_number: string;
           paid_at: string;
+          payment_method: string;
           payment_status: string;
           shipped_at: string;
           shipping_address: Json;
@@ -18937,6 +18963,15 @@ export type Database = {
       };
       increment_hero_image_usage: {
         Args: { image_id: string };
+        Returns: undefined;
+      };
+      insert_invoice_reminder: {
+        Args: {
+          p_channel: string;
+          p_order_id: string;
+          p_payment_link: string;
+          p_tracking_token: string;
+        };
         Returns: undefined;
       };
       invoke_cleanup_pending_transactions: { Args: never; Returns: undefined };

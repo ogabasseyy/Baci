@@ -68,6 +68,9 @@ export const ReceiptDetailSchema = z.object({
   id: z.string(),
   order_number: z.string(),
   payment_status: z.string(),
+  // Cancellation often lands on the shipping column only: the success
+  // screen's terminal predicate needs it for signed-in shoppers.
+  shipping_status: z.string().nullable().optional(),
   payment_method: z.string().nullable(),
   total: z.number(),
   subtotal: z.number(),
@@ -86,6 +89,9 @@ export const ReceiptDetailSchema = z.object({
   customer_email: z.string(),
   customer_phone: z.string().nullable(),
   shipping_address: ShippingAddressSchema.nullable(),
+  // Stored Peppol type code (orders.invoice_type_code, default 380):
+  // an explicit non-default code survives the proforma derivation.
+  invoice_type_code: z.string().nullable().optional(),
   items: z.array(OrderItemSchema),
   virtual_account: VirtualAccountSchema.nullable(),
   transactions: z.array(TransactionSchema),

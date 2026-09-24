@@ -6,6 +6,11 @@ import type { CryptoPaymentData } from './types';
 
 type Input = Parameters<typeof requestCryptoPaymentInitialization>[0];
 type RunningRequest = { controller: AbortController; promise: Promise<CryptoPaymentData> };
+type SessionIdentity = Pick<Input, 'merchantId' | 'pendingOrder' | 'chain' | 'currency'>;
+
+function sessionKey({ merchantId, pendingOrder, chain, currency }: SessionIdentity) {
+  return JSON.stringify([merchantId, pendingOrder.orderId, chain, currency]);
+}
 
 /** Session identity survives dismissal; cancelled attempts cannot update the UI. */
 export function useCryptoPaymentInitializer(options: {
@@ -31,8 +36,16 @@ export function useCryptoPaymentInitializer(options: {
     setIsInitializing(false);
   }
 
+  // Drops the cached session so the next initialize POSTs a replacement.
+  // Called when deposit verification terminally fails: without this a
+  // same-network retry reuses the failed session's payment id and can
+  // never receive the new reference the attempt-key logic expects.
+  function evictSession(input: SessionIdentity) {
+    sessions.current.delete(sessionKey(input));
+  }
+
   function initialize(input: Input): Promise<CryptoPaymentData> {
-    const key = JSON.stringify([input.merchantId, input.pendingOrder.orderId, input.chain, input.currency]);
+    const key = sessionKey(input);
     const version = generation.current;
     const running = requests.current.get(key);
     if (running) {
@@ -66,5 +79,5 @@ export function useCryptoPaymentInitializer(options: {
     return promise;
   }
 
-  return { initialize, cancel, isInitializing };
+  return { initialize, cancel, evictSession, isInitializing };
 }

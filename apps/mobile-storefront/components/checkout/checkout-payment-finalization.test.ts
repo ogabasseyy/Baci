@@ -13,9 +13,21 @@ import {
   mockFetch,
   mockRouterPush,
   mockRouterReplace,
+  mockStartWalletFundedBankTransferCheckout,
 } from './checkout-payment-finalization.test-utils';
 
 let finalizeCheckoutPayment: typeof import('./checkout-payment-finalization')['finalizeCheckoutPayment'];
+
+const mockTrackCheckoutPaymentStarted = jest.fn();
+const mockTrackCheckoutPaymentCompletedOnce = jest.fn(
+  async (_input: unknown) => true
+);
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentCompletedOnce: (input: unknown) =>
+    mockTrackCheckoutPaymentCompletedOnce(input),
+  trackCheckoutPaymentStarted: (...args: unknown[]) =>
+    mockTrackCheckoutPaymentStarted(...args),
+}));
 
 describe('finalizeCheckoutPayment', () => {
   beforeAll(async () => {
@@ -185,7 +197,135 @@ describe('finalizeCheckoutPayment', () => {
         reference: 'pay-ref',
       }),
     });
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledWith({
+      orderId: 'order-1',
+      orderNumber: 'BAC-001',
+      paymentMethod: 'paystack',
+      reference: 'pay-ref',
+      value: 25000,
+    });
     expect(runPostOrderSideEffects).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips payment start when gateway initialization fails', async () => {
+    const setIsProcessing = jest.fn();
+    const runPostOrderSideEffects = jest.fn();
+    const isOrderInFlight = { current: true };
+    mockFetch.mockResolvedValue({
+      json: async () => ({ error: 'gateway down', success: false }),
+      ok: true,
+    } as Response);
+
+    await expect(
+      finalizeCheckoutPayment({
+        clearCart: jest.fn<() => void | Promise<void>>(),
+        customerEmail: 'ada@example.com',
+        customerName: 'Ada Customer',
+        customerPhone: '08012345678',
+        isOrderInFlight,
+        orderNumber: 'BAC-001',
+        orderResponse: createOrderResponse(),
+        runPostOrderSideEffects,
+        selectedPayment: 'paystack',
+        setIsProcessing,
+        setPendingOrder: jest.fn(),
+        setShowCryptoSelection: jest.fn(),
+        shouldCreateWalletFundedBankTransferOrder: false,
+      })
+    ).rejects.toMatchObject({ code: 'PAYMENT_INIT_ERROR' });
+
+    expect(mockTrackCheckoutPaymentStarted).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(runPostOrderSideEffects).not.toHaveBeenCalled();
+  });
+
+  it('stamps wallet-funded starts with each created intent id', async () => {
+    // An expired intent recreated for the same order: each start must
+    // carry its own intent so completions reconcile per attempt.
+    mockStartWalletFundedBankTransferCheckout
+      .mockResolvedValueOnce('intent-1')
+      .mockResolvedValueOnce('intent-2');
+    const finalizeParams = {
+      clearCart: jest.fn<() => void | Promise<void>>(),
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Customer',
+      customerPhone: '08012345678',
+      orderNumber: 'BAC-001',
+      orderResponse: createOrderResponse(),
+      runPostOrderSideEffects: jest.fn(),
+      selectedPayment: 'bank_transfer' as const,
+      setIsProcessing: jest.fn(),
+      setPendingOrder: jest.fn(),
+      setShowCryptoSelection: jest.fn(),
+      shouldCreateWalletFundedBankTransferOrder: true,
+    };
+
+    await finalizeCheckoutPayment({
+      ...finalizeParams,
+      isOrderInFlight: { current: true },
+    });
+    await finalizeCheckoutPayment({
+      ...finalizeParams,
+      isOrderInFlight: { current: true },
+    });
+
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledTimes(2);
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        orderId: 'order-1',
+        paymentMethod: 'bank_transfer',
+        reference: 'intent-1',
+      })
+    );
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        orderId: 'order-1',
+        paymentMethod: 'bank_transfer',
+        reference: 'intent-2',
+      })
+    );
+  });
+
+  it('records the full order total on wallet-funded starts under partial credit', async () => {
+    // Savings covered all but 750 of the 5750 order: the intent funds
+    // the residual, but started revenue is the whole order.
+    mockStartWalletFundedBankTransferCheckout.mockResolvedValueOnce('intent-1');
+
+    await finalizeCheckoutPayment({
+      clearCart: jest.fn<() => void | Promise<void>>(),
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Customer',
+      customerPhone: '08012345678',
+      isOrderInFlight: { current: true },
+      orderNumber: 'BAC-001',
+      orderResponse: createOrderResponse({
+        amountDueToGateway: 750,
+        order: {
+          id: 'order-1',
+          payment_status: 'pending',
+          tracking_token: 'tracking-token',
+          total: 5750,
+        },
+      }),
+      runPostOrderSideEffects: jest.fn(),
+      selectedPayment: 'bank_transfer' as const,
+      setIsProcessing: jest.fn(),
+      setPendingOrder: jest.fn(),
+      setShowCryptoSelection: jest.fn(),
+      shouldCreateWalletFundedBankTransferOrder: true,
+    });
+
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentStarted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-1',
+        paymentMethod: 'bank_transfer',
+        reference: 'intent-1',
+        value: 5750,
+      })
+    );
   });
 
   it('requires persisted summary review before REDVAULT initialization', async () => {

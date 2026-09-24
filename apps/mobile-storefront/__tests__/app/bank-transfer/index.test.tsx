@@ -139,6 +139,7 @@ describe('BankTransferScreen', () => {
           orderId: 'order-123',
           orderNumber: 'ORD-123',
           paymentMethod: 'bank_transfer',
+          reference: 'dva-ref-123',
           trackingToken: 'track-token-123',
         },
       });
@@ -170,6 +171,7 @@ describe('BankTransferScreen', () => {
           orderId: 'order-123',
           orderNumber: 'ORD-123',
           paymentMethod: 'bank_transfer',
+          reference: 'dva-ref-123',
         },
       });
     });
@@ -196,6 +198,7 @@ describe('BankTransferScreen', () => {
           orderId: 'order-123',
           orderNumber: 'ORD-123',
           paymentMethod: 'bank_transfer',
+          reference: 'dva-ref-123',
           trackingToken: 'track-token-123',
         },
       });
@@ -259,13 +262,16 @@ describe('BankTransferScreen', () => {
         merchantSlug: 'ogabassey',
       });
       expect(mockClearCart).toHaveBeenCalledTimes(1);
+      // The forwarded reference is the finalized transaction's gateway
+      // reference (resolvable by the success screen's settlement proof),
+      // not the funding-intent UUID.
       expect(router.replace).toHaveBeenCalledWith({
         pathname: '/order-success',
         params: {
           orderId: 'order-123',
           orderNumber: 'ORD-123',
           paymentMethod: 'bank_transfer',
-          reference: 'intent-123',
+          reference: 'WALLET-DVA-ORDER-order-123',
           trackingToken: 'track-token-123',
         },
       });

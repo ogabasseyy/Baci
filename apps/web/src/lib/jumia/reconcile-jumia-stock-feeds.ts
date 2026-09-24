@@ -28,12 +28,33 @@ export interface JumiaStockFeedReconciliation {
  *
  * This runs at the start of every stock sync (manual and scheduled):
  * - rejected feeds reset the stock cursor to NULL so the mapping is retried;
- * - accepted feeds clear `last_feed_id` so they are not re-checked;
+ * - accepted feeds clear `last_feed_id` so they are not re-checked, but
+ *   rejected items inside an accepted feed still reset their cursor;
  * - lookup failures and still-processing feeds are left untouched.
  *
  * Reset mappings are patched in place so the caller re-pushes them in the
  * same run. Never throws: reconciliation must not block the stock sync.
  */
+
+/**
+ * Selects the bounded feed window for one sync, rotating the starting offset
+ * by UTC day. A fixed head slice would let stuck lookup-error feeds starve
+ * newer feeds forever; rotation inspects every outstanding feed over time
+ * without persisting a cursor.
+ */
+export function selectStockFeedIdsForReconciliation(
+  feedIds: readonly string[],
+  limit: number,
+  nowMs: number
+): string[] {
+  const ordered = [...new Set(feedIds)].sort();
+  if (ordered.length <= limit) return ordered;
+  const offset = Math.floor(nowMs / 86_400_000) % ordered.length;
+  return Array.from(
+    { length: limit },
+    (_, index) => ordered[(offset + index) % ordered.length] as string
+  );
+}
 export async function reconcileJumiaStockFeeds(
   supabase: SupabaseClient,
   client: JumiaClient,
@@ -53,9 +74,11 @@ export async function reconcileJumiaStockFeeds(
   );
   if (candidates.length === 0) return result;
 
-  const feedIds = [
-    ...new Set(candidates.map((mapping) => mapping.last_feed_id as string)),
-  ].slice(0, MAX_FEEDS_PER_REQUEST);
+  const feedIds = selectStockFeedIdsForReconciliation(
+    candidates.map((mapping) => mapping.last_feed_id as string),
+    MAX_FEEDS_PER_REQUEST,
+    Date.now()
+  );
 
   for (const feedId of feedIds) {
     const mappingsForFeed = candidates.filter(
@@ -91,23 +114,16 @@ export async function reconcileJumiaStockFeeds(
       continue;
     }
 
-    if (isAcceptedFeedStatus(feed.status)) {
-      for (const mapping of mappingsForFeed) {
-        if (await confirmStockFeed(supabase, mapping)) {
-          result.feedsConfirmed++;
-        } else {
-          result.failures++;
-        }
-      }
-      continue;
-    }
-
-    // Non-terminal feed: settle per item, leave pending items for the next run.
+    // Settle terminal items first: an overall 'completed' feed can still
+    // carry rejected items, and confirming those mappings would strand the
+    // rejected SKU's advanced cursor.
     for (const item of feed.feedItems) {
       const mapping = mappingsForFeed.find(
-        (candidate) => candidate.jumia_seller_sku === item.sellerSKU
+        (candidate) =>
+          candidate.last_feed_id === feedId &&
+          candidate.jumia_seller_sku === item.sellerSKU
       );
-      if (!mapping?.last_feed_id) continue;
+      if (!mapping) continue;
       if (isFailedFeedStatus(item.status)) {
         if (await resetStockCursor(supabase, mapping)) {
           result.cursorsReset++;
@@ -122,6 +138,21 @@ export async function reconcileJumiaStockFeeds(
         }
       }
     }
+
+    if (isAcceptedFeedStatus(feed.status)) {
+      // Feed-level success settles the remainder; mappings settled above no
+      // longer carry this feed id.
+      for (const mapping of mappingsForFeed) {
+        if (mapping.last_feed_id !== feedId) continue;
+        if (await confirmStockFeed(supabase, mapping)) {
+          result.feedsConfirmed++;
+        } else {
+          result.failures++;
+        }
+      }
+    }
+    // Otherwise the feed is still processing: pending mappings keep their
+    // feed id for the next run.
   }
 
   return result;

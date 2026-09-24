@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getJumiaShopNonDefaultMarketplaceKeys } from '@/lib/jumia/shop-marketplace-scope';
 
-export { getJumiaShopNonDefaultMarketplaceKeys };
+export { getJumiaShopNonDefaultMarketplaceKeys } from '@/lib/jumia/shop-marketplace-scope';
 
 type JumiaOrderScopeResult =
   | Readonly<{
@@ -29,7 +28,7 @@ export async function getJumiaOrderScope(
 ): Promise<JumiaOrderScopeResult> {
   const { data: integration, error } = await supabase
     .from('marketplace_integrations')
-    .select('shop_id, marketplace_key, country_code')
+    .select('shop_id, marketplace_key')
     .eq('id', integrationId)
     .eq('merchant_id', merchantId)
     .eq('platform', 'jumia')
@@ -57,32 +56,13 @@ export async function getJumiaOrderScope(
     };
   }
 
-  // Reads must use the same country-aware scope the manual sync wrote
-  // with, except for OAuth integrations whose provider queries are
-  // shop-wide.
-  const nonDefaultMarketplaceKeys = await getJumiaShopNonDefaultMarketplaceKeys(
-    supabase,
-    merchantId,
-    integration.shop_id,
-    {
-      countryCode:
-        marketplaceKey === 'oauth'
-          ? undefined
-          : typeof integration.country_code === 'string'
-            ? integration.country_code
-            : undefined,
-    }
-  );
-  if (!(nonDefaultMarketplaceKeys instanceof Set)) {
-    return nonDefaultMarketplaceKeys;
-  }
-
+  // Reads must include the neutral scope: multi-marketplace shops store
+  // their unattributable orders with marketplace_key = 'default', so
+  // excluding it would leave per-integration views empty even though the
+  // sync succeeded.
   return {
     kind: 'ok',
-    cachedMarketplaceKeys:
-      nonDefaultMarketplaceKeys.size > 1
-        ? [marketplaceKey]
-        : [marketplaceKey, 'default'],
+    cachedMarketplaceKeys: [marketplaceKey, 'default'],
     marketplaceKey,
     shopId: integration.shop_id,
   };

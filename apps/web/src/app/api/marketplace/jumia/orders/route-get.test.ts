@@ -85,19 +85,7 @@ describe('Jumia orders GET', () => {
         error: null,
       }),
     };
-    let integrationEqCalls = 0;
-    integrationQuery.eq.mockImplementation(() => {
-      integrationEqCalls += 1;
-      return integrationEqCalls === 8
-        ? Promise.resolve({
-            data: [
-              { marketplace_key: 'NG-main' },
-              { marketplace_key: 'NG-express' },
-            ],
-            error: null,
-          })
-        : integrationQuery;
-    });
+    integrationQuery.eq.mockReturnValue(integrationQuery);
 
     const orderQuery = {
       eq: vi.fn(),
@@ -129,14 +117,15 @@ describe('Jumia orders GET', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(integrationSelect).toHaveBeenCalledWith(
-      'shop_id, marketplace_key, country_code'
-    );
+    expect(integrationSelect).toHaveBeenCalledWith('shop_id, marketplace_key');
     expect(integrationQuery.eq).toHaveBeenCalledWith('id', INTEGRATION_ID);
     expect(orderQuery.eq).toHaveBeenCalledWith(
       'jumia_shop_id',
       'jumia-shop-123'
     );
-    expect(orderQuery.in).toHaveBeenCalledWith('marketplace_key', ['NG-main']);
+    expect(orderQuery.in).toHaveBeenCalledWith('marketplace_key', [
+      'NG-main',
+      'default',
+    ]);
   });
 });

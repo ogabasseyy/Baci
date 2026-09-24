@@ -6,6 +6,7 @@ import {
   isProductRow,
   isVariantRow,
 } from '@/app/api/merchant/quiz/prize-products/prize-product-mapping';
+import { paginatePrizeProducts } from '@/app/api/merchant/quiz/prize-products/prize-product-pagination';
 import {
   PRODUCT_PROJECTION,
   VARIANT_PROJECTION,
@@ -29,11 +30,6 @@ export const metadata: Metadata = {
 
 const INITIAL_PRIZE_PRODUCT_LIMIT = 100;
 
-function productOffsetCursor(productOffset: number): string {
-  // Matches the product-offset/zero-variant cursor consumed by the prize API.
-  return String((productOffset * (productOffset + 1)) / 2);
-}
-
 export async function loadPrizeProducts(merchantId: string) {
   const supabase = createClient(await cookies());
   const { count, data, error } = await supabase
@@ -42,6 +38,8 @@ export async function loadPrizeProducts(merchantId: string) {
     .eq('merchant_id', merchantId)
     .eq('status', 'active')
     .order('updated_at', { ascending: false })
+    // Match the API candidate order so continuation cursors resume coherently.
+    .order('id', { ascending: true })
     .limit(INITIAL_PRIZE_PRODUCT_LIMIT);
 
   if (error) {
@@ -53,7 +51,8 @@ export async function loadPrizeProducts(merchantId: string) {
     };
   }
 
-  const rows = (Array.isArray(data) ? data : [])
+  const candidates = Array.isArray(data) ? data : [];
+  const rows = candidates
     .filter(isProductRow)
     .filter((row) => row.merchant_id === merchantId);
   // Mirror the prize API: expand variant parents into selectable variant rows
@@ -85,31 +84,32 @@ export async function loadPrizeProducts(merchantId: string) {
       variantsByProduct.set(variant.product_id, [...current, variant]);
     }
   }
-  const products = rows
-    .flatMap((row) =>
-      expandPrizeProduct(row, variantsByProduct.get(row.id) ?? [])
-    )
-    .flatMap((product) => {
+  // Expansion multiplies rows: one parent can carry a large variant matrix.
+  // Paginate at the expanded-row boundary with the shared helper so a
+  // truncated page carries the variant offset instead of dropping variants
+  // that normal pagination could never reach. Dropped rows keep empty groups
+  // so group positions stay aligned with candidate offsets, like the API.
+  const groups = candidates.map((item) => {
+    if (!isProductRow(item) || item.merchant_id !== merchantId) return [];
+    return expandPrizeProduct(
+      item,
+      variantsByProduct.get(item.id) ?? []
+    ).flatMap((product) => {
       const parsed = quizPrizeProductSchema.safeParse(product);
       return parsed.success ? [parsed.data] : [];
-    })
-    // Expansion multiplies rows: one parent can carry a large variant matrix.
-    // Cap the serialized initial page at the candidate limit so the dashboard
-    // payload never exceeds its pre-expansion size; search and pagination
-    // cover the rest. The continuation cursor still counts candidate rows.
-    .slice(0, INITIAL_PRIZE_PRODUCT_LIMIT);
-
+    });
+  });
   const total = typeof count === 'number' && count >= 0 ? count : null;
-  const nextCursor =
-    total !== null &&
-    rows.length === INITIAL_PRIZE_PRODUCT_LIMIT &&
-    total > rows.length
-      ? productOffsetCursor(rows.length)
-      : null;
+  const page = paginatePrizeProducts({
+    groups,
+    hasMoreCandidates: total !== null && total > candidates.length,
+    limit: INITIAL_PRIZE_PRODUCT_LIMIT,
+    start: { productOffset: 0, variantOffset: 0 },
+  });
 
   const response = quizPrizeProductsResponseSchema.safeParse({
-    nextCursor,
-    products,
+    nextCursor: page.nextCursor,
+    products: page.products,
     total,
   });
   if (!response.success) {

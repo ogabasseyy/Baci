@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { decodePrizeProductCursor } from '@/app/api/merchant/quiz/prize-products/prize-product-pagination';
 
 const mockEnsurePermission = vi.fn();
 const mockIsMerchantPermissionRedirectError = vi.fn((error: unknown) => {
@@ -267,6 +268,63 @@ describe('QuizDashboardPage', () => {
 
     expect(result.error).toBeNull();
     expect(result.products).toHaveLength(100);
+    expect(result.nextCursor).not.toBeNull();
+    expect(decodePrizeProductCursor(result.nextCursor as string)).toEqual({
+      productOffset: 0,
+      variantOffset: 100,
+    });
+  });
+
+  it('carries the parent and variant offset across a truncated page', async () => {
+    mockProductsQuery.limit.mockResolvedValueOnce({
+      count: 2,
+      data: [
+        {
+          default_variant_id: null,
+          has_variants: true,
+          id: '55555555-5555-4555-8555-555555555555',
+          merchant_id: 'merchant-1',
+          name: 'First parent',
+          price: 100,
+        },
+        {
+          default_variant_id: null,
+          has_variants: true,
+          id: '77777777-7777-4777-8777-777777777777',
+          merchant_id: 'merchant-1',
+          name: 'Second parent',
+          price: 200,
+        },
+      ],
+      error: null,
+    });
+    mockVariantsQuery.order.mockResolvedValueOnce({
+      data: [
+        ...Array.from({ length: 60 }, (_, index) => ({
+          id: `11111111-1111-4111-8111-${String(index).padStart(12, '0')}`,
+          merchant_id: 'merchant-1',
+          product_id: '55555555-5555-4555-8555-555555555555',
+          stock_quantity: 1,
+        })),
+        ...Array.from({ length: 60 }, (_, index) => ({
+          id: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
+          merchant_id: 'merchant-1',
+          product_id: '77777777-7777-4777-8777-777777777777',
+          stock_quantity: 1,
+        })),
+      ],
+      error: null,
+    });
+
+    const result = await loadPrizeProducts('merchant-1');
+
+    expect(result.error).toBeNull();
+    expect(result.products).toHaveLength(100);
+    expect(result.nextCursor).not.toBeNull();
+    expect(decodePrizeProductCursor(result.nextCursor as string)).toEqual({
+      productOffset: 1,
+      variantOffset: 40,
+    });
   });
 
   it('returns the exact inventory total and a continuation cursor after a capped load', async () => {

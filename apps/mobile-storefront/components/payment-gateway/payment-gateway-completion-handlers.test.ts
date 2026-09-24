@@ -55,6 +55,8 @@ const mockLoadRedvaultPurchaseTrackingContext =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockClaimCheckoutPurchaseTracking =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockMarkCheckoutPurchaseEmitted =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockIsCheckoutPurchaseClaimed =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockReleaseCheckoutPurchaseTracking =
@@ -67,6 +69,8 @@ const mockTrackCheckoutRoutePurchaseCompleted =
 jest.mock('@/lib/claim-checkout-purchase-tracking', () => ({
   claimCheckoutPurchaseTracking: (...args: unknown[]) =>
     mockClaimCheckoutPurchaseTracking(...args),
+  markCheckoutPurchaseEmitted: (...args: unknown[]) =>
+    mockMarkCheckoutPurchaseEmitted(...args),
   isCheckoutPurchaseClaimed: (...args: unknown[]) =>
     mockIsCheckoutPurchaseClaimed(...args),
   isCheckoutPurchaseClaimedSettled: (...args: unknown[]) =>

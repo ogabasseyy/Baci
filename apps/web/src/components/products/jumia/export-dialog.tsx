@@ -83,6 +83,14 @@ export function ExportToJumiaDialog({
     })
       .then((result) => {
         if (result.ok) {
+          if ('partial' in result && result.partial) {
+            toast({
+              title: 'Export Submitted',
+              description: `${result.message} Feed ID: ${result.feedId}`,
+            });
+            setOpen(false);
+            return;
+          }
           toast({
             title: 'Export Started',
             description: `Feed ID: ${result.feedId}`,

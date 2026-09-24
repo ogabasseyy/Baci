@@ -5,6 +5,7 @@ import {
   getPushReadyJumiaStockMappings,
   loadJumiaStockMappings,
 } from '@/lib/jumia/load-jumia-stock-mappings';
+import { reconcileJumiaStockFeeds } from '@/lib/jumia/reconcile-jumia-stock-feeds';
 import { updateJumiaStockTracking } from '@/lib/jumia/update-jumia-stock-tracking';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { JumiaCredentialServiceClient } from '@/lib/supabase/service';
@@ -61,6 +62,19 @@ export async function syncJumiaStockForIntegration(args: {
     );
   }
   if (!mappings || mappings.length === 0) return empty;
+
+  // Settle previously accepted stock feeds first: a later rejection resets
+  // the cursor so the mapping is retried instead of skipped forever.
+  const reconciliation = await reconcileJumiaStockFeeds(supabase, jumiaClient, {
+    mappings,
+  });
+  if (reconciliation.failures > 0) {
+    console.error(
+      '[Jumia Stock Sync] Stock feed reconciliation failed for',
+      reconciliation.failures,
+      'mapping(s)'
+    );
+  }
 
   const { pushReady, skipped: initialSkipped } =
     getPushReadyJumiaStockMappings(mappings);

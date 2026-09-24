@@ -3,7 +3,8 @@ import { sanitizeText, stripHtmlTags } from '@/lib/sanitize-core';
 
 type ExportResponse =
   | { success: true; feedId: string }
-  | { success: false; error: string; feedErrors?: string[] };
+  | { success: false; error: string; feedErrors?: string[] }
+  | { success: false; partial: true; feedId: string; error: string };
 
 type SubmitJumiaExportParams = {
   product: {
@@ -22,6 +23,7 @@ type SubmitJumiaExportParams = {
 
 type ExportResult =
   | { ok: true; feedId: string }
+  | { ok: true; feedId: string; partial: true; message: string }
   | { ok: false; message: string };
 
 const MAX_DISPLAYED_FEED_ERRORS = 3;
@@ -119,8 +121,25 @@ export async function submitJumiaExport(
     return { ok: false, message: 'Invalid response from server' };
   }
 
+  // HTTP 207 makes res.ok true: Jumia accepted the feed but local mapping
+  // finalization failed. Report it as partial (like the bulk publisher) so
+  // the merchant waits for reconciliation instead of retrying into the
+  // retained reservation.
+  if (res.status === 207 && 'partial' in data && data.partial === true) {
+    return {
+      ok: true,
+      feedId: data.feedId,
+      partial: true,
+      message: sanitizeText(
+        data.error || 'Jumia accepted the feed; reconciliation is pending.'
+      ),
+    };
+  }
+
   if (!data.success) {
-    const feedDetail = buildFeedErrorDetail(data.feedErrors);
+    const feedDetail = buildFeedErrorDetail(
+      'feedErrors' in data ? data.feedErrors : undefined
+    );
     let message = sanitizeText(data.error || 'Export failed') + feedDetail;
     if (message.length > MAX_TOTAL_FEED_ERROR_LENGTH) {
       message = `${message.slice(0, MAX_TOTAL_FEED_ERROR_LENGTH)}... (truncated)`;

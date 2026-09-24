@@ -50,10 +50,11 @@ export async function executePackAction(args: {
         trackingCode: args.trackingCode,
       }))
   );
-  const status = computeStatus(
-    result.success?.total ?? 0,
-    result.error?.total ?? 0
-  );
+  // Items without a shipment provider are never submitted to Jumia; they count
+  // as failures so the result cannot report "full" for a partial pack.
+  const failedItems =
+    (result.error?.total ?? 0) + selection.skippedItems.length;
+  const status = computeStatus(result.success?.total ?? 0, failedItems);
   const sync =
     status === 'full' && selection.skippedItems.length === 0 && args.isAllItems
       ? await args.updateOrderStatus(args.orderId, args.merchantId, 'Packed')
@@ -61,7 +62,7 @@ export async function executePackAction(args: {
   return {
     status,
     successCount: result.success?.total ?? 0,
-    errorCount: result.error?.total ?? 0,
+    errorCount: failedItems,
     packages: result.success?.packages ?? [],
     ...(selection.skippedItems.length > 0 && {
       skippedItems: selection.skippedItems,

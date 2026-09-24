@@ -93,6 +93,7 @@ describe('loadJumiaStockMappings', () => {
         jumia_seller_sku: 'sku-1',
         jumia_product_id: 'jumia-1',
         baci_stock_at_last_sync: 1,
+        last_feed_id: null,
       },
       {
         id: 'mapping-2',
@@ -101,6 +102,7 @@ describe('loadJumiaStockMappings', () => {
         jumia_seller_sku: null,
         jumia_product_id: 'jumia-2',
         baci_stock_at_last_sync: 1,
+        last_feed_id: null,
       },
     ]);
 

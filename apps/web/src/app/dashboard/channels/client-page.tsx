@@ -45,6 +45,8 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   merchant_not_found: 'Merchant account not found — please log in again',
   oauth_not_configured:
     'Jumia OAuth is not configured — please contact support or try again later',
+  no_shops_discovered:
+    'Connected but no active shops discovered — please check your Jumia Vendor Center',
 };
 
 export default function ChannelsClientPage() {

@@ -50,4 +50,38 @@ describe('executePackAction', () => {
 
     expect(mockGetShipmentProviders).not.toHaveBeenCalled();
   });
+
+  it('reports partial when provider discovery skips items Jumia never sees', async () => {
+    const { packOrderV2 } = await import('@/lib/jumia/fulfillment');
+    vi.mocked(packOrderV2).mockResolvedValue({
+      success: { total: 1, packages: [] },
+    } as never);
+    // Discovery returns a provider only for ITEM-1; ITEM-2 is skipped.
+    mockGetShipmentProviders.mockResolvedValueOnce({
+      orderItems: [
+        {
+          id: 'ITEM-1',
+          shipmentProviders: [{ id: 'SP-1', trackingCodeRequired: false }],
+        },
+      ],
+    });
+    const updateOrderStatus = vi.fn();
+
+    const result = await executePackAction({
+      client: {} as never,
+      targetItemIds: ['ITEM-1', 'ITEM-2'],
+      isAllItems: true,
+      orderId: 'ORDER-1',
+      merchantId: 'MERCHANT-1',
+      updateOrderStatus,
+    });
+
+    expect(result).toMatchObject({
+      status: 'partial',
+      successCount: 1,
+      errorCount: 1,
+      skippedItems: ['ITEM-2'],
+    });
+    expect(updateOrderStatus).not.toHaveBeenCalled();
+  });
 });

@@ -80,6 +80,28 @@ describe('submitJumiaExport', () => {
     });
   });
 
+  it('treats an accepted 207 export as partial success', async () => {
+    mockFetchWithCsrf.mockResolvedValue({
+      ok: true,
+      status: 207,
+      json: async () => ({
+        success: false,
+        partial: true,
+        feedId: 'feed-1',
+        error: 'Feed-status reconciliation will recover the accepted feed.',
+      }),
+    });
+
+    const result = await submitJumiaExport(params);
+
+    expect(result).toEqual({
+      ok: true,
+      feedId: 'feed-1',
+      partial: true,
+      message: 'Feed-status reconciliation will recover the accepted feed.',
+    });
+  });
+
   it('propagates transport failures for the dialog error boundary', async () => {
     mockFetchWithCsrf.mockRejectedValue(new Error('network unavailable'));
 

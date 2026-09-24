@@ -7,6 +7,7 @@ export interface JumiaStockMapping {
   jumia_seller_sku: string | null;
   jumia_product_id: string | null;
   baci_stock_at_last_sync: number | null;
+  last_feed_id: string | null;
 }
 
 const STOCK_MAPPING_PAGE_SIZE = 500;
@@ -21,7 +22,7 @@ export async function loadJumiaStockMappings(
     const { data, error } = await supabase
       .from('jumia_product_mappings')
       .select(
-        'id, product_id, variant_id, jumia_seller_sku, jumia_product_id, baci_stock_at_last_sync'
+        'id, product_id, variant_id, jumia_seller_sku, jumia_product_id, baci_stock_at_last_sync, last_feed_id'
       )
       .eq('merchant_id', args.merchantId)
       .eq('jumia_shop_id', args.shopId)

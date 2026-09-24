@@ -170,6 +170,45 @@ describe('ExportToJumiaDialog', () => {
     );
   });
 
+  it('shows "Export Submitted" toast when the feed is accepted as 207 partial', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 207,
+        json: () =>
+          Promise.resolve({
+            success: false,
+            partial: true,
+            feedId: 'FEED-207',
+            error: 'Reconciliation is pending.',
+          }),
+      })
+    );
+
+    const onOpenChange = vi.fn();
+    render(
+      <ExportToJumiaDialog {...defaultProps} open onOpenChange={onOpenChange} />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select Category' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select Brand' }));
+    fireEvent.click(screen.getByText('Export Product'));
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Export Submitted',
+          description: 'Reconciliation is pending. Feed ID: FEED-207',
+        })
+      );
+    });
+    expect(mockToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Export Failed' })
+    );
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it('shows "Export Failed" toast when fetch returns non-ok', async () => {
     vi.stubGlobal(
       'fetch',

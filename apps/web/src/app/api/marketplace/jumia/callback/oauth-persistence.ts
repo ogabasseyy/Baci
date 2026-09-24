@@ -12,7 +12,7 @@ type JumiaOAuthPersistenceResult =
   | { status: 'database_error' }
   | { status: 'shop_discovery_failed' }
   | { status: 'shop_already_self_authorized'; shopIds: string[] }
-  | { status: 'success'; shopIds: string[] };
+  | { status: 'success'; shopIds: string[]; isFallback: boolean };
 
 export async function persistJumiaOAuthConnection(args: {
   merchantId: string;
@@ -164,5 +164,8 @@ export async function persistJumiaOAuthConnection(args: {
           !existingActiveShopIds.has(integration.shop_id)
       )
       .map((integration) => integration.shop_id),
+    // An empty shop discovery persists only an inactive fallback row, so the
+    // caller must not report the connection as successful.
+    isFallback: isFallbackShop,
   };
 }

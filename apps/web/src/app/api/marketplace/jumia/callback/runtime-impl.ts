@@ -17,7 +17,7 @@ import { getMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { runJumiaOAuthCallbackDiagnostic } from './oauth-diagnostic';
 import { parseJumiaOAuthDiagnosticContext } from './oauth-diagnostic-context';
 import { exchangeJumiaOAuthTokens } from './oauth-exchange';
-import { persistJumiaOAuthConnection } from './oauth-persistence';
+import { redirectForJumiaOAuthPersistence } from './oauth-persistence-redirect';
 import { jumiaOAuthCallbackRedirect } from './oauth-redirect';
 
 /** RFC 6749 standard error codes plus common Jumia-specific ones. */
@@ -236,43 +236,16 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const persistence = await persistJumiaOAuthConnection({
-      merchantId,
-      supabase: auth.supabase,
-      tokens,
-    });
-    if (
-      persistence.status === 'database_error' ||
-      persistence.status === 'shop_discovery_failed'
-    ) {
-      return jumiaOAuthCallbackRedirect.create(request, {
-        error: persistence.status,
-      });
-    }
-    if (persistence.status === 'shop_already_self_authorized') {
-      return jumiaOAuthCallbackRedirect.create(request, {
-        error: 'shop_already_self_authorized',
-        shops: persistence.shopIds.join(','),
-      });
-    }
     // VARIANT-TEST: REMOVE — append variant outcome to the browser URL.
     const variantResult = variant
       ? `${variant}:has_refresh=${tokens.refresh_token ? 'true' : 'false'},re_exp=${tokens.refresh_expires_in ?? 'null'}`
       : undefined;
-    const redirectQuery: Record<string, string | undefined> =
-      persistence.shopIds.length > 0
-        ? {
-            success: 'jumia_connected',
-            shops: persistence.shopIds.join(','),
-          }
-        : {
-            success: 'jumia_connected',
-          };
-    if (variantResult) {
-      redirectQuery.variant_result = variantResult;
-    }
-    const response = jumiaOAuthCallbackRedirect.create(request, redirectQuery);
-    return jumiaOAuthCallbackRedirect.clear(response);
+    return redirectForJumiaOAuthPersistence(request, {
+      merchantId,
+      supabase: auth.supabase,
+      tokens,
+      variantResult,
+    });
   } catch (error) {
     if (
       error instanceof Error &&

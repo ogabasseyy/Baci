@@ -11,6 +11,7 @@ const mockToUserAccess = vi.fn();
 const mockForIntegration = vi.fn();
 const mockRequireMerchantFeatureAccess = vi.fn();
 const mockUpdateStock = vi.fn();
+const mockGetFeedStatus = vi.fn();
 
 const mockMappingsSelect = vi.fn();
 const mockVariantsIn = vi.fn();
@@ -92,6 +93,7 @@ vi.mock('@/lib/jumia/client', () => ({
 }));
 vi.mock('@/lib/jumia/feeds', () => ({
   updateStock: (...args: unknown[]) => mockUpdateStock(...args),
+  getFeedStatus: (...args: unknown[]) => mockGetFeedStatus(...args),
 }));
 vi.mock('@/lib/merchant-feature-gates', () => ({
   requireMerchantFeatureAccess: (...args: unknown[]) =>
@@ -424,5 +426,100 @@ describe('POST /api/marketplace/jumia/products/stock', () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error).toBe('Stock sync failed');
+  });
+
+  it('re-pushes mappings whose previously accepted stock feed was rejected', async () => {
+    setupAuth();
+    mockForIntegration.mockResolvedValue({
+      shopId: 'shop-1',
+      marketplaceKey: 'default',
+    });
+    mockMappingsSelect.mockResolvedValue({
+      data: [
+        {
+          id: 'm1',
+          product_id: 'p1',
+          variant_id: null,
+          jumia_seller_sku: 'SKU-001',
+          jumia_product_id: 'JP-001',
+          baci_stock_at_last_sync: 5,
+          last_feed_id: 'feed-rejected',
+        },
+      ],
+      error: null,
+    });
+    mockProductsIn.mockResolvedValue({
+      data: [{ id: 'p1', stock: 0, stock_quantity: 5 }],
+      error: null,
+    });
+    mockGetFeedStatus.mockResolvedValue({
+      status: 'failed',
+      total: 1,
+      completed: 0,
+      failed: 1,
+      feedItems: [],
+    });
+    mockUpdateStock.mockResolvedValue('feed-retry');
+    mockMappingUpdate.mockResolvedValue({ error: null });
+
+    const res = await POST(makeRequest(INT_ID));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.updated).toBe(1);
+    expect(body.feedId).toBe('feed-retry');
+    // Cursor reset (NULL) precedes the fresh tracking write for the retry.
+    expect(mockMappingUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ baci_stock_at_last_sync: null })
+    );
+    expect(mockMappingUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baci_stock_at_last_sync: 5,
+        last_feed_id: 'feed-retry',
+      })
+    );
+  });
+
+  it('skips unchanged stock when the prior stock feed was accepted', async () => {
+    setupAuth();
+    mockForIntegration.mockResolvedValue({
+      shopId: 'shop-1',
+      marketplaceKey: 'default',
+    });
+    mockMappingsSelect.mockResolvedValue({
+      data: [
+        {
+          id: 'm1',
+          product_id: 'p1',
+          variant_id: null,
+          jumia_seller_sku: 'SKU-001',
+          jumia_product_id: 'JP-001',
+          baci_stock_at_last_sync: 5,
+          last_feed_id: 'feed-accepted',
+        },
+      ],
+      error: null,
+    });
+    mockProductsIn.mockResolvedValue({
+      data: [{ id: 'p1', stock: 0, stock_quantity: 5 }],
+      error: null,
+    });
+    mockGetFeedStatus.mockResolvedValue({
+      status: 'completed',
+      total: 1,
+      completed: 1,
+      failed: 0,
+      feedItems: [],
+    });
+    mockMappingUpdate.mockResolvedValue({ error: null });
+
+    const res = await POST(makeRequest(INT_ID));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.updated).toBe(0);
+    expect(mockUpdateStock).not.toHaveBeenCalled();
+    // Confirmation clears the feed pointer without touching the cursor.
+    expect(mockMappingUpdate).toHaveBeenCalledWith({ last_feed_id: null });
   });
 });

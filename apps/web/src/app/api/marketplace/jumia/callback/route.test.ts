@@ -346,6 +346,28 @@ describe('Jumia callback route', () => {
     );
   });
 
+  it('redirects with no_shops_discovered when discovery returns no shops', async () => {
+    mockGetShops.mockResolvedValue([]);
+
+    const response = await GET(makeCallbackRequest());
+
+    expect(response.status).toBe(307);
+    const location = response.headers.get('location') ?? '';
+    expect(location).toContain('error=no_shops_discovered');
+    expect(location).not.toContain('success=jumia_connected');
+  });
+
+  it('keeps the success redirect when reconnecting already-active shops', async () => {
+    mockExistingIntegrations = [{ shop_id: 'shop-1', is_active: true }];
+
+    const response = await GET(makeCallbackRequest());
+
+    expect(response.status).toBe(307);
+    const location = response.headers.get('location') ?? '';
+    expect(location).toContain('success=jumia_connected');
+    expect(location).not.toContain('error=');
+  });
+
   it('redirects with invalid_state when the OAuth state does not match', async () => {
     const response = await GET(
       makeCallbackRequest({

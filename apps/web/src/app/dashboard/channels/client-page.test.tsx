@@ -574,6 +574,20 @@ describe('ChannelsClientPage', () => {
       expect(mockReplace).toHaveBeenCalledWith('/dashboard/channels');
     });
 
+    it('shows incomplete-connection guidance when no shops are discovered', () => {
+      mockSearchParams = new URLSearchParams('error=no_shops_discovered');
+      setupHook({});
+      render(<ChannelsClientPage />);
+
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Connection Error',
+        description:
+          'Connected but no active shops discovered — please check your Jumia Vendor Center',
+        variant: 'destructive',
+      });
+      expect(mockReplace).toHaveBeenCalledWith('/dashboard/channels');
+    });
+
     it('shows fallback error for unknown error code', () => {
       mockSearchParams = new URLSearchParams('error=unknown_code');
       setupHook({});

@@ -82,10 +82,35 @@ describe('persistJumiaOAuthConnection', () => {
         supabase: supabase as never,
         tokens,
       })
-    ).resolves.toEqual({ status: 'success', shopIds: ['shop-1'] });
+    ).resolves.toEqual({
+      status: 'success',
+      shopIds: ['shop-1'],
+      isFallback: false,
+    });
     expect(supabase.rpc).toHaveBeenCalledWith(
       'persist_jumia_oauth_integrations_atomically',
       expect.objectContaining({ p_merchant_id: 'merchant-1' })
+    );
+  });
+
+  it('flags empty shop discovery as a fallback so the callback cannot report success', async () => {
+    getShops.mockResolvedValueOnce([]);
+    const supabase = makeSupabase();
+
+    await expect(
+      persistJumiaOAuthConnection({
+        merchantId: 'merchant-1',
+        supabase: supabase as never,
+        tokens,
+      })
+    ).resolves.toEqual({ status: 'success', shopIds: [], isFallback: true });
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'persist_jumia_oauth_integrations_atomically',
+      expect.objectContaining({
+        p_integrations: expect.arrayContaining([
+          expect.objectContaining({ shop_id: 'oauth', is_active: false }),
+        ]),
+      })
     );
   });
 

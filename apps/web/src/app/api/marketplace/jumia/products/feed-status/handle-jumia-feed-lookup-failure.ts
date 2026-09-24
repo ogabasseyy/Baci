@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { JumiaApiError } from '@/lib/jumia/helpers';
 import type { PendingFeedMapping } from '@/lib/jumia/jumia-feed-reconciliation-batch';
 import { logger } from '@/lib/logger';
+import { AMBIGUOUS_JUMIA_EXPORT_ERROR } from '../export/mark-ambiguous-jumia-export';
 import { jumiaFeedReconciliation } from './jumia-feed-reconciliation';
 
 type FeedLookupFailureResult =
@@ -10,6 +11,10 @@ type FeedLookupFailureResult =
       failed: number;
       status: 'NOT_FOUND' | 'ERROR';
       feedFailed: number;
+      preservedForManualResolution: Array<{
+        mappingId: string;
+        sellerSku: string | null;
+      }>;
     }
   | { kind: 'response'; response: Response };
 
@@ -31,14 +36,18 @@ export async function handleJumiaFeedLookupFailure(args: {
   merchantId: string;
   supabase: SupabaseClient;
 }): Promise<FeedLookupFailureResult> {
-  const isPermanentLookupFailure = hasStatus(args.error, 404);
-  if (isPermanentLookupFailure && args.mappingsForFeed.length > 0) {
+  const isMissingFeedLookup = hasStatus(args.error, 404);
+  if (isMissingFeedLookup && args.mappingsForFeed.length > 0) {
     try {
-      const failed = await jumiaFeedReconciliation.markMappingsAsFeedError(
+      // A 404 does not prove rejection: an accepted feed ages out of Jumia's
+      // retention window. Marking these mappings as error would let the
+      // export reservation delete them and submit a duplicate create feed,
+      // so preserve them as ambiguous pending manual resolution instead.
+      await jumiaFeedReconciliation.markMappingsAsPendingForManualResolution(
         args.supabase,
         args.merchantId,
         args.mappingsForFeed,
-        'Jumia product feed was not found'
+        AMBIGUOUS_JUMIA_EXPORT_ERROR
       );
       logger.error({
         message: 'Failed to read Jumia feed status',
@@ -47,13 +56,17 @@ export async function handleJumiaFeedLookupFailure(args: {
       });
       return {
         kind: 'continue',
-        failed,
+        failed: 0,
         status: 'NOT_FOUND',
-        feedFailed: args.mappingsForFeed.length,
+        feedFailed: 0,
+        preservedForManualResolution: args.mappingsForFeed.map((mapping) => ({
+          mappingId: mapping.id,
+          sellerSku: mapping.jumia_seller_sku,
+        })),
       };
     } catch (markError) {
       logger.error({
-        message: 'Failed to mark missing Jumia product feed',
+        message: 'Failed to preserve missing Jumia product feed',
         error: markError,
         feed_id: args.feedId,
       });
@@ -77,5 +90,6 @@ export async function handleJumiaFeedLookupFailure(args: {
     failed: 0,
     status: 'ERROR',
     feedFailed: 0,
+    preservedForManualResolution: [],
   };
 }

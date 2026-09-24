@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { markMappingsAsFeedError } = vi.hoisted(() => ({
-  markMappingsAsFeedError: vi.fn(),
+const { markMappingsAsPendingForManualResolution } = vi.hoisted(() => ({
+  markMappingsAsPendingForManualResolution: vi.fn(),
 }));
 vi.mock('./jumia-feed-reconciliation', () => ({
-  jumiaFeedReconciliation: { markMappingsAsFeedError },
+  jumiaFeedReconciliation: { markMappingsAsPendingForManualResolution },
 }));
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }));
 vi.mock('@/lib/jumia/client', () => ({
@@ -19,6 +19,7 @@ vi.mock('@/lib/jumia/client', () => ({
 }));
 
 import { JumiaApiError } from '@/lib/jumia/client';
+import { AMBIGUOUS_JUMIA_EXPORT_ERROR } from '../export/mark-ambiguous-jumia-export';
 import { handleJumiaFeedLookupFailure } from './handle-jumia-feed-lookup-failure';
 
 describe('handleJumiaFeedLookupFailure', () => {
@@ -26,8 +27,8 @@ describe('handleJumiaFeedLookupFailure', () => {
     vi.clearAllMocks();
   });
 
-  it('marks a missing feed and lets the batch continue', async () => {
-    markMappingsAsFeedError.mockResolvedValueOnce(2);
+  it('preserves a missing feed as ambiguous and lets the batch continue', async () => {
+    markMappingsAsPendingForManualResolution.mockResolvedValueOnce(1);
 
     const result = await handleJumiaFeedLookupFailure({
       error: new JumiaApiError(404, 'missing'),
@@ -46,15 +47,18 @@ describe('handleJumiaFeedLookupFailure', () => {
 
     expect(result).toEqual({
       kind: 'continue',
-      failed: 2,
+      failed: 0,
       status: 'NOT_FOUND',
-      feedFailed: 1,
+      feedFailed: 0,
+      preservedForManualResolution: [
+        { mappingId: 'mapping-1', sellerSku: 'SKU-1' },
+      ],
     });
-    expect(markMappingsAsFeedError).toHaveBeenCalledWith(
+    expect(markMappingsAsPendingForManualResolution).toHaveBeenCalledWith(
       expect.anything(),
       'merchant-1',
       expect.any(Array),
-      'Jumia product feed was not found'
+      AMBIGUOUS_JUMIA_EXPORT_ERROR
     );
   });
 
@@ -72,7 +76,8 @@ describe('handleJumiaFeedLookupFailure', () => {
       failed: 0,
       status: 'ERROR',
       feedFailed: 0,
+      preservedForManualResolution: [],
     });
-    expect(markMappingsAsFeedError).not.toHaveBeenCalled();
+    expect(markMappingsAsPendingForManualResolution).not.toHaveBeenCalled();
   });
 });

@@ -355,13 +355,17 @@ describe('Jumia feed status route', () => {
       expect.objectContaining({ feedId: 'feed-current', status: 'COMPLETED' }),
     ]);
     expect(body.updated).toBe(1);
-    expect(body.failed).toBe(1);
+    expect(body.failed).toBe(0);
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({
-        sync_status: 'error',
-        sync_error: 'Jumia product feed was not found',
+        sync_status: 'pending',
+        sync_error: 'ambiguous_submission_requires_manual_resolution',
+        last_feed_id: null,
       })
     );
+    expect(body.manualResolutionRequired).toEqual([
+      { mappingId: 'mapping-missing', sellerSku: 'SKU-MISSING' },
+    ]);
   });
 
   it('returns 500 when an individual feed mapping update fails', async () => {

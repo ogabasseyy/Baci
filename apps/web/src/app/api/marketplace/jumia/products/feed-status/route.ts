@@ -279,6 +279,9 @@ export async function POST(request: NextRequest) {
           completed: 0,
           failed: lookupFailure.feedFailed,
         });
+        for (const preserved of lookupFailure.preservedForManualResolution) {
+          manualResolutionRequired.push(preserved);
+        }
         continue;
       }
       return handleJumiaFeedProcessingFailure({ error, feedId });

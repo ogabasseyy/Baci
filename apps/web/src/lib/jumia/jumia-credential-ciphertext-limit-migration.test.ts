@@ -29,10 +29,25 @@ describe('Jumia credential ciphertext limit migration', () => {
     const guards = migration.match(
       /char_length\(p_credential_ciphertext\) NOT BETWEEN 32 AND 32768/g
     );
-    // base persist, ordered persist, and the rotate overload.
-    expect(guards).toHaveLength(3);
+    // base persist, ordered persist, the rotate overload, and both
+    // discovery handoff RPCs.
+    expect(guards).toHaveLength(5);
     expect(migration).not.toMatch(
       /char_length\(p_credential_ciphertext\) NOT BETWEEN 32 AND 16384/
     );
+  });
+
+  it('recreates the discovery handoff RPCs with the raised limit', () => {
+    for (const rpc of [
+      'create_jumia_self_authorization_discovery',
+      'update_claimed_jumia_self_authorization_discovery',
+    ]) {
+      expect(migration).toMatch(
+        new RegExp(
+          `CREATE OR REPLACE FUNCTION public\\.${rpc}[\\s\\S]*?BETWEEN 32 AND 32768`,
+          'i'
+        )
+      );
+    }
   });
 });

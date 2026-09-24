@@ -614,3 +614,116 @@ REVOKE ALL ON FUNCTION public.rotate_jumia_authorization_credentials(
 GRANT EXECUTE ON FUNCTION public.rotate_jumia_authorization_credentials(
   uuid, text, timestamptz, bigint, uuid
 ) TO authenticated, service_role;
+
+-- Discovery handoff RPCs (bodies copied verbatim from the latest
+-- definitions). The discoveries table CHECK above accepts 32k
+-- ciphertexts, so these guards must match: a rotated refresh token
+-- near the API ceiling would otherwise pass the table but fail the
+-- recovery-discovery write.
+CREATE OR REPLACE FUNCTION public.create_jumia_self_authorization_discovery(
+  p_merchant_id uuid,
+  p_client_key_hash text,
+  p_credential_ciphertext text
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_user_id uuid := (SELECT auth.uid());
+  v_discovery_id uuid;
+BEGIN
+  IF v_user_id IS NULL OR NOT (
+    EXISTS (
+      SELECT 1
+      FROM public.merchants AS merchant
+      WHERE merchant.id = p_merchant_id
+        AND merchant.user_id = v_user_id
+    )
+    OR public.check_staff_permission(
+      v_user_id,
+      p_merchant_id,
+      'integrations',
+      'manage'
+    )
+  ) THEN
+    RAISE EXCEPTION 'Not authorized to manage Jumia connections'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF p_client_key_hash !~ '^[a-f0-9]{64}$'
+    OR char_length(p_credential_ciphertext) NOT BETWEEN 32 AND 32768
+  THEN
+    RAISE EXCEPTION 'Invalid Jumia discovery metadata'
+      USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO public.jumia_self_authorization_discoveries (
+    merchant_id,
+    user_id,
+    client_key_hash,
+    credential_ciphertext,
+    expires_at
+  ) VALUES (
+    p_merchant_id,
+    v_user_id,
+    p_client_key_hash,
+    p_credential_ciphertext,
+    now() + interval '10 minutes'
+  )
+  RETURNING id INTO v_discovery_id;
+
+  RETURN v_discovery_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.update_claimed_jumia_self_authorization_discovery(
+  p_discovery_id uuid,
+  p_merchant_id uuid,
+  p_claim_token uuid,
+  p_credential_ciphertext text
+)
+RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  v_user_id uuid := (SELECT auth.uid());
+  v_updated integer;
+BEGIN
+  IF v_user_id IS NULL
+    OR char_length(p_credential_ciphertext) NOT BETWEEN 32 AND 32768
+  THEN
+    RETURN false;
+  END IF;
+
+  UPDATE public.jumia_self_authorization_discoveries AS discovery
+  SET credential_ciphertext = p_credential_ciphertext,
+      claim_expires_at = now() + interval '2 minutes'
+  WHERE discovery.id = p_discovery_id
+    AND discovery.merchant_id = p_merchant_id
+    AND discovery.user_id = v_user_id
+    AND discovery.claim_token = p_claim_token
+    AND discovery.claim_expires_at > now()
+    AND discovery.expires_at > now();
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  RETURN v_updated = 1;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.create_jumia_self_authorization_discovery(
+  uuid,
+  text,
+  text
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.update_claimed_jumia_self_authorization_discovery(
+  uuid, uuid, uuid, text
+) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.create_jumia_self_authorization_discovery(
+  uuid,
+  text,
+  text
+) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_claimed_jumia_self_authorization_discovery(
+  uuid, uuid, uuid, text
+) TO authenticated;

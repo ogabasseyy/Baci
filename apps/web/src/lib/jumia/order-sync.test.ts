@@ -257,6 +257,58 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
     );
   });
 
+  it('never advances the cursor past unpersisted orders on repeated full failures', async () => {
+    const marketplaceQuery = createQuery(
+      {
+        data: [
+          {
+            id: 'integration-1',
+            merchant_id: 'merchant-1',
+            shop_id: 'shop-1',
+            last_sync_at: '2026-04-25T07:00:00.000Z',
+            sync_config: {
+              orders: true,
+              jumia_full_failure: {
+                cursor: '2026-04-25T07:00:00.000Z',
+                count: 5,
+              },
+            },
+          },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 2 }
+    );
+    const existingJumiaQuery = createQuery({ data: [], error: null });
+    const existingCanonicalQuery = createQuery({ data: [], error: null });
+    const syncCursorQuery = createQuery({ error: null }, { terminalEqCall: 1 });
+    const supabase = createSupabaseMock({
+      marketplace_integrations: [marketplaceQuery, syncCursorQuery],
+      jumia_orders: [existingJumiaQuery],
+      orders: [existingCanonicalQuery],
+    });
+
+    mocks.forIntegration.mockResolvedValue({ client: true });
+    vi.mocked(getAllOrders).mockResolvedValue([order]);
+    vi.mocked(getOrderItems).mockRejectedValue(new Error('item API timeout'));
+
+    const result = await syncJumiaOrdersForActiveIntegrations(supabase);
+
+    expect(result.orderErrors).toBe(1);
+    const updatePayload = syncCursorQuery.update.mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    expect(updatePayload).not.toHaveProperty('last_sync_at');
+    expect(updatePayload?.sync_config).toEqual(
+      expect.objectContaining({
+        jumia_full_failure: expect.objectContaining({
+          cursor: '2026-04-25T07:00:00.000Z',
+          count: 6,
+        }),
+      })
+    );
+  });
+
   it('parks the sync cursor at the earliest failed Jumia order', async () => {
     const secondOrder = {
       ...order,

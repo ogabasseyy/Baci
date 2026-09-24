@@ -155,6 +155,14 @@ const adminOrderReadQuery = {
 
 const mockAdminSupabase = {
   from: vi.fn(() => adminOrderReadQuery),
+  // The route gates immediate (POD/invoice/wallet) delivery on the
+  // atomic claim/complete RPCs: the winner delivers, losers skip.
+  rpc: vi.fn(async (functionName: string) => {
+    if (functionName === 'claim_immediate_order_notification') {
+      return { data: [{ claimed: true }], error: null };
+    }
+    return { data: null, error: null };
+  }),
 };
 
 mockCreateAdminClient.mockReturnValue(mockAdminSupabase);

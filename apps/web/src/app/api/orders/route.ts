@@ -3043,71 +3043,72 @@ export async function POST(request: NextRequest) {
 
         // Fire-and-forget: send email after response is delivered so slow/failing
         // ZeptoMail calls never block or time out the order creation response.
-        after(async () => {
-          // Atomic delivery ownership: the first attempt's after() may
-          // never have run (process death between response and callback)
-          // or failed (provider error) — the replay with the same key
-          // reclaims the claim and delivers. Service-role RPCs: guest
-          // checkouts hold no session, and the claim table denies
-          // anon/authenticated outright (outbox precedent).
-          const notificationClaimClient = createAdminClient();
-          const notificationClaim = await claimImmediateOrderNotification(
-            notificationClaimClient,
-            order.id
-          );
-          if (!notificationClaim.shouldDeliver) {
-            return;
-          }
-          try {
-            let invoiceVirtualAccount: ReceiptOrder['virtual_account'] = null;
-            let attachments:
-              | Array<{ name: string; content: string; mime_type: string }>
-              | undefined;
-            if (effectivePaymentMethod === 'invoice') {
-              // Invoice-only artifacts (persisted items, DVA, PDF,
-              // reminders); failures still render the email below.
-              ({ attachments, invoiceVirtualAccount } =
-                await buildImmediateInvoiceArtifacts(notificationCtx));
-            }
-            if (effectivePaymentMethod === 'payforme') {
-              // Pay for Me skips the invoice-only artifacts above and
-              // provisions through the proof-bound reservation RPC —
-              // never the service-role client (AGENTS.md).
-              const retryVirtualAccount = await provisionPayformeRetryDva(
-                notificationCtx,
-                preResponsePayforme
-              );
-              if (retryVirtualAccount) {
-                invoiceVirtualAccount = retryVirtualAccount;
+        // Atomic delivery ownership is decided BEFORE the response (not in
+        // after()): the first attempt's after() may never run (process death
+        // between response and callback) or fail (provider error) — the
+        // replay with the same key reclaims the claim and delivers. Claiming
+        // here also keeps email dispatch first in the after() body so the
+        // confirmation send starts before the response settles.
+        // Service-role RPCs: guest checkouts hold no session, and the claim
+        // table denies anon/authenticated outright (outbox precedent).
+        const notificationClaimClient = createAdminClient();
+        const notificationClaim = await claimImmediateOrderNotification(
+          notificationClaimClient,
+          order.id
+        );
+        if (notificationClaim.shouldDeliver) {
+          after(async () => {
+            try {
+              let invoiceVirtualAccount: ReceiptOrder['virtual_account'] = null;
+              let attachments:
+                | Array<{ name: string; content: string; mime_type: string }>
+                | undefined;
+              if (effectivePaymentMethod === 'invoice') {
+                // Invoice-only artifacts (persisted items, DVA, PDF,
+                // reminders); failures still render the email below.
+                ({ attachments, invoiceVirtualAccount } =
+                  await buildImmediateInvoiceArtifacts(notificationCtx));
               }
+              if (effectivePaymentMethod === 'payforme') {
+                // Pay for Me skips the invoice-only artifacts above and
+                // provisions through the proof-bound reservation RPC —
+                // never the service-role client (AGENTS.md).
+                const retryVirtualAccount = await provisionPayformeRetryDva(
+                  notificationCtx,
+                  preResponsePayforme
+                );
+                if (retryVirtualAccount) {
+                  invoiceVirtualAccount = retryVirtualAccount;
+                }
+              }
+              // Rendered here (not with emailData above) so the proforma
+              // body carries the provisioned DVA as bank-transfer payment
+              // instructions — the tracking link shows status only and
+              // cannot take payment.
+              await sendImmediateOrderConfirmationEmail(notificationCtx, {
+                attachments,
+                invoiceVirtualAccount,
+              });
+              // Sent is terminal: replays observe it and skip. Failed
+              // releases the claim so the next replay resumes delivery.
+              await completeImmediateOrderNotification(
+                notificationClaimClient,
+                order.id,
+                true
+              );
+            } catch (emailError) {
+              await completeImmediateOrderNotification(
+                notificationClaimClient,
+                order.id,
+                false
+              );
+              logger.error({
+                message: 'Error sending order confirmation email',
+                error: emailError,
+              });
             }
-            // Rendered here (not with emailData above) so the proforma
-            // body carries the provisioned DVA as bank-transfer payment
-            // instructions — the tracking link shows status only and
-            // cannot take payment.
-            await sendImmediateOrderConfirmationEmail(notificationCtx, {
-              attachments,
-              invoiceVirtualAccount,
-            });
-            // Sent is terminal: replays observe it and skip. Failed
-            // releases the claim so the next replay resumes delivery.
-            await completeImmediateOrderNotification(
-              notificationClaimClient,
-              order.id,
-              true
-            );
-          } catch (emailError) {
-            await completeImmediateOrderNotification(
-              notificationClaimClient,
-              order.id,
-              false
-            );
-            logger.error({
-              message: 'Error sending order confirmation email',
-              error: emailError,
-            });
-          }
-        });
+          });
+        }
       }
 
       // Notify merchant of a new order or invoice — fire-and-forget via

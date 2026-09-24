@@ -128,7 +128,7 @@ const mockSupabase = {
       // delivers, completions record terminal state.
       if (name === 'claim_immediate_order_notification_with_proof') {
         return Promise.resolve({
-          data: [{ claimed: true }],
+          data: [{ claimed: true, claim_token: 'lease-sec-1' }],
           error: null,
         });
       }

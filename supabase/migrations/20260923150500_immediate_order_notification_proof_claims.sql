@@ -17,7 +17,8 @@ CREATE OR REPLACE FUNCTION public.claim_immediate_order_notification_with_proof(
 )
 RETURNS TABLE (
   claimed boolean,
-  claim_status text
+  claim_status text,
+  claim_token uuid
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -26,7 +27,7 @@ AS $$
 BEGIN
   IF p_order_id IS NULL OR p_tracking_token IS NULL
     OR trim(p_tracking_token) = '' THEN
-    RETURN QUERY SELECT false, 'unknown'::text;
+    RETURN QUERY SELECT false, 'unknown'::text, NULL::uuid;
     RETURN;
   END IF;
 
@@ -36,12 +37,15 @@ BEGIN
     WHERE o.id = p_order_id
       AND o.tracking_token = p_tracking_token
   ) THEN
-    RETURN QUERY SELECT false, 'unknown'::text;
+    RETURN QUERY SELECT false, 'unknown'::text, NULL::uuid;
     RETURN;
   END IF;
 
   RETURN QUERY
-    SELECT inner_claim.claimed, inner_claim.claim_status
+    SELECT
+      inner_claim.claimed,
+      inner_claim.claim_status,
+      inner_claim.claim_token
     FROM public.claim_immediate_order_notification(p_order_id)
       AS inner_claim;
 END;
@@ -53,12 +57,14 @@ GRANT EXECUTE ON FUNCTION public.claim_immediate_order_notification_with_proof(u
   TO anon, authenticated, service_role;
 
 COMMENT ON FUNCTION public.claim_immediate_order_notification_with_proof(uuid, text) IS
-  'Proof-bound delivery claim for user-facing order creation: verifies the creation tracking token, then delegates to the service-role claim. Used by POST /api/orders on the request-scoped client (no admin).';
+  'Proof-bound delivery claim for user-facing order creation: verifies the creation tracking token, then delegates to the service-role claim, returning the lease token the winner must present at completion. Used by POST /api/orders on the request-scoped client (no admin).';
 
+DROP FUNCTION IF EXISTS public.complete_immediate_order_notification_with_proof(uuid, text, boolean);
 CREATE OR REPLACE FUNCTION public.complete_immediate_order_notification_with_proof(
   p_order_id uuid,
   p_tracking_token text,
-  p_sent boolean
+  p_sent boolean,
+  p_claim_token uuid
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -80,16 +86,18 @@ BEGIN
     RETURN;
   END IF;
 
-  PERFORM public.complete_immediate_order_notification(p_order_id, p_sent);
+  PERFORM public.complete_immediate_order_notification(
+    p_order_id, p_sent, p_claim_token
+  );
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.complete_immediate_order_notification_with_proof(uuid, text, boolean)
+REVOKE ALL ON FUNCTION public.complete_immediate_order_notification_with_proof(uuid, text, boolean, uuid)
   FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.complete_immediate_order_notification_with_proof(uuid, text, boolean)
+GRANT EXECUTE ON FUNCTION public.complete_immediate_order_notification_with_proof(uuid, text, boolean, uuid)
   TO anon, authenticated, service_role;
 
-COMMENT ON FUNCTION public.complete_immediate_order_notification_with_proof(uuid, text, boolean) IS
-  'Proof-bound delivery completion for user-facing order creation: verifies the creation tracking token, then records sent (terminal) or failed (releasable). Used by POST /api/orders after() on the request-scoped client (no admin).';
+COMMENT ON FUNCTION public.complete_immediate_order_notification_with_proof(uuid, text, boolean, uuid) IS
+  'Proof-bound delivery completion for user-facing order creation: verifies the creation tracking token, then records sent (terminal) or failed (releasable). Lease-fenced: the claim token holder alone may complete. Used by POST /api/orders after() on the request-scoped client (no admin).';
 
 COMMIT;

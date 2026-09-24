@@ -81,6 +81,63 @@ describe('verifyCheckoutPaymentByLookup', () => {
     expect(h.setIsVerifying).toHaveBeenCalledWith(false);
   });
 
+  it.each([
+    'pending',
+    'unpaid',
+    'processing',
+  ])('keeps %s lookups pending with the cart intact (existence is not capture)', async (paymentStatus) => {
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: 'order-12345678',
+          order_number: 'BAC-3',
+          payment_method: 'paystack',
+          payment_status: paymentStatus,
+        }),
+    } as Response);
+    const h = handlers();
+
+    await expect(verifyCheckoutPaymentByLookup(params(), h)).resolves.toBe(
+      true
+    );
+
+    expect(h.setStatus).toHaveBeenCalledWith('pending');
+    expect(h.setOrderNumber).toHaveBeenCalledWith('BAC-3');
+    expect(h.clearCart).not.toHaveBeenCalled();
+    expect(h.capturePaymentCompleted).not.toHaveBeenCalled();
+    expect(h.scheduleFailedRedirect).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'failed',
+    'abandoned',
+  ])('fails terminal %s lookups with the cart intact', async (paymentStatus) => {
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: 'order-12345678',
+          order_number: 'BAC-4',
+          payment_method: 'paystack',
+          payment_status: paymentStatus,
+        }),
+    } as Response);
+    const h = handlers();
+
+    await expect(verifyCheckoutPaymentByLookup(params(), h)).resolves.toBe(
+      true
+    );
+
+    expect(h.setStatus).toHaveBeenCalledWith('failed');
+    expect(h.setOrderNumber).toHaveBeenCalledWith('BAC-4');
+    expect(h.scheduleFailedRedirect).toHaveBeenCalledTimes(1);
+    expect(h.clearCart).not.toHaveBeenCalled();
+    expect(h.capturePaymentCompleted).not.toHaveBeenCalled();
+  });
+
   it('routes refunded lookups to reconciling with the cart intact', async () => {
     vi.stubGlobal('fetch', mockFetch);
     mockFetch.mockResolvedValue({

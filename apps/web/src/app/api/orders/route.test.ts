@@ -499,7 +499,13 @@ function buildMockSupabase(
       // to won so the existing delivery assertions keep proving the send
       // path; replay/skip tests override per case.
       claim_immediate_order_notification_with_proof: {
-        data: [{ claimed: true, claim_status: 'processing' }],
+        data: [
+          {
+            claimed: true,
+            claim_status: 'processing',
+            claim_token: 'lease-default-1',
+          },
+        ],
         error: null,
       },
       complete_immediate_order_notification_with_proof: {
@@ -3384,7 +3390,13 @@ describe('POST /api/orders — checkout idempotency', () => {
           // The replay wins the atomic proof claim (request client) and
           // delivers the unfinished wallet-paid notification.
           claim_immediate_order_notification_with_proof: {
-            data: [{ claimed: true, claim_status: 'processing' }],
+            data: [
+              {
+                claimed: true,
+                claim_status: 'processing',
+                claim_token: 'lease-resume-1',
+              },
+            ],
             error: null,
           },
           redeem_wallet_for_order: {
@@ -7660,6 +7672,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
             p_order_id: 'order-id',
             p_tracking_token: 'track-default-1',
             p_sent: false,
+            p_claim_token: 'lease-default-1',
           }
         ),
       { timeout: 1000 }
@@ -8477,6 +8490,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
             p_order_id: 'order-id',
             p_tracking_token: 'track-default-1',
             p_sent: false,
+            p_claim_token: 'lease-default-1',
           }
         ),
       { timeout: 1000 }

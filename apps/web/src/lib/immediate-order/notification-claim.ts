@@ -9,6 +9,13 @@ export interface ImmediateOrderNotificationClaim {
    * caller must skip, never double-send.
    */
   shouldDeliver: boolean;
+  /**
+   * Lease token minted by the winning claim; the winner must present it
+   * at completion. Null unless shouldDeliver — a missing token on a won
+   * claim is treated as a skip (completing without the lease would no-op
+   * and risk a duplicate send on replay).
+   */
+  claimToken: string | null;
 }
 
 /**
@@ -20,11 +27,16 @@ export interface ImmediateOrderNotificationClaim {
  * Never rejects: a claim failure skips delivery (logged) rather than
  * breaking checkout or risking an unguarded duplicate send.
  */
+function parseClaimToken(row: Record<string, unknown>): string | null {
+  const token = row.claim_token;
+  return typeof token === 'string' && token.length > 0 ? token : null;
+}
+
 export async function claimImmediateOrderNotification(
   supabase: SupabaseClient,
   orderId: string
 ): Promise<ImmediateOrderNotificationClaim> {
-  const skipped = { shouldDeliver: false };
+  const skipped = { shouldDeliver: false, claimToken: null };
   try {
     const { data, error } = await supabase.rpc(
       'claim_immediate_order_notification',
@@ -42,7 +54,16 @@ export async function claimImmediateOrderNotification(
     if (!row || typeof row !== 'object' || row.claimed !== true) {
       return skipped;
     }
-    return { shouldDeliver: true };
+    const claimToken = parseClaimToken(row as Record<string, unknown>);
+    if (!claimToken) {
+      logger.error({
+        message:
+          'Immediate order notification claim won without a lease token; skipping delivery',
+        orderId,
+      });
+      return skipped;
+    }
+    return { shouldDeliver: true, claimToken };
   } catch (error) {
     logger.error({
       message: 'Immediate order notification claim raised; skipping delivery',
@@ -65,7 +86,7 @@ export async function claimImmediateOrderNotificationWithProof(
   orderId: string,
   trackingToken: string | null
 ): Promise<ImmediateOrderNotificationClaim> {
-  const skipped = { shouldDeliver: false };
+  const skipped = { shouldDeliver: false, claimToken: null };
   if (!trackingToken) {
     logger.error({
       message:
@@ -92,7 +113,16 @@ export async function claimImmediateOrderNotificationWithProof(
     if (!row || typeof row !== 'object' || row.claimed !== true) {
       return skipped;
     }
-    return { shouldDeliver: true };
+    const claimToken = parseClaimToken(row as Record<string, unknown>);
+    if (!claimToken) {
+      logger.error({
+        message:
+          'Immediate order notification proof claim won without a lease token; skipping delivery',
+        orderId,
+      });
+      return skipped;
+    }
+    return { shouldDeliver: true, claimToken };
   } catch (error) {
     logger.error({
       message:
@@ -112,15 +142,21 @@ export async function completeImmediateOrderNotificationWithProof(
   supabase: SupabaseClient,
   orderId: string,
   trackingToken: string | null,
-  sent: boolean
+  sent: boolean,
+  claimToken: string | null
 ): Promise<void> {
-  if (!trackingToken) {
+  if (!trackingToken || !claimToken) {
     return;
   }
   try {
     const { error } = await supabase.rpc(
       'complete_immediate_order_notification_with_proof',
-      { p_order_id: orderId, p_tracking_token: trackingToken, p_sent: sent }
+      {
+        p_order_id: orderId,
+        p_tracking_token: trackingToken,
+        p_sent: sent,
+        p_claim_token: claimToken,
+      }
     );
     if (error) {
       logger.error({
@@ -148,12 +184,16 @@ export async function completeImmediateOrderNotificationWithProof(
 export async function completeImmediateOrderNotification(
   supabase: SupabaseClient,
   orderId: string,
-  sent: boolean
+  sent: boolean,
+  claimToken: string | null
 ): Promise<void> {
+  if (!claimToken) {
+    return;
+  }
   try {
     const { error } = await supabase.rpc(
       'complete_immediate_order_notification',
-      { p_order_id: orderId, p_sent: sent }
+      { p_order_id: orderId, p_sent: sent, p_claim_token: claimToken }
     );
     if (error) {
       logger.error({

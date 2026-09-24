@@ -642,6 +642,44 @@ describe('storefront order success page', () => {
     ).toBeNull();
   });
 
+  it('suppresses invoice actions for cancelled orders', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'invoice',
+        trackingToken: 'track-token-123',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        items: [],
+        subtotal: 45000,
+        shipping_cost: 1500,
+        total: 49875,
+        payment_method: 'invoice',
+        payment_status: 'cancelled',
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    // Terminal and non-payable: neither the proforma email action nor the
+    // commercial download may render.
+    expect(
+      await screen.findByRole('heading', { name: /order confirmed!/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /download .* invoice pdf/i })
+    ).toBeNull();
+    expect(screen.queryByText(/was sent to/i)).toBeNull();
+    expect(screen.queryByText(/being prepared/i)).toBeNull();
+  });
+
   it('shows guests the sent invoice action once delivery lands', async () => {
     mockSearchParams.mockReturnValue(
       new URLSearchParams({

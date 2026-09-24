@@ -3095,18 +3095,24 @@ export async function POST(request: NextRequest) {
               });
               // Sent is terminal: replays observe it and skip. Failed
               // releases the claim so the next replay resumes delivery.
+              // The lease token (minted by our winning claim) fences
+              // completion to this attempt: a stale worker that outlives
+              // the reclaim window cannot complete the replacement's
+              // claim.
               await completeImmediateOrderNotificationWithProof(
                 notificationCtx.supabase,
                 order.id,
                 notificationCtx.trackingToken,
-                true
+                true,
+                notificationClaim.claimToken
               );
             } catch (emailError) {
               await completeImmediateOrderNotificationWithProof(
                 notificationCtx.supabase,
                 order.id,
                 notificationCtx.trackingToken,
-                false
+                false,
+                notificationClaim.claimToken
               );
               logger.error({
                 message: 'Error sending order confirmation email',

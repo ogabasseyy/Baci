@@ -57,6 +57,8 @@ interface StorefrontOrderPayload {
   total?: unknown;
   currency?: unknown;
   notification_delivered?: unknown;
+  amount_paid?: unknown;
+  shipping_status?: unknown;
   items?: unknown;
 }
 
@@ -129,6 +131,9 @@ export function useInvoiceGeneratedCapture({
             total: order.total,
             currency: order.currency ?? undefined,
             notificationDelivered: true,
+            // Prior-payment evidence for the proforma predicate (the
+            // tracking projection carries no shipping column).
+            amountPaid: order.amount_paid ?? undefined,
           },
           orderNumber: order.order_number,
           itemsSnapshot: toQuantityList(items),
@@ -165,6 +170,16 @@ export function useInvoiceGeneratedCapture({
             currency:
               typeof order.currency === 'string' ? order.currency : undefined,
             notificationDelivered: true,
+            // Prior-payment + shipping evidence for the proforma
+            // predicate (credited/shipping-cancelled are commercial).
+            amountPaid:
+              typeof order.amount_paid === 'number'
+                ? order.amount_paid
+                : undefined,
+            shippingStatus:
+              typeof order.shipping_status === 'string'
+                ? order.shipping_status
+                : undefined,
           },
           orderNumber:
             typeof order.order_number === 'string'

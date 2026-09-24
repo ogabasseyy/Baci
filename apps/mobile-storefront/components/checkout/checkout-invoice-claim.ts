@@ -21,9 +21,23 @@ interface MaybeCaptureCheckoutInvoiceParams {
      * conversion for generation that may still fail.
      */
     notificationDelivered?: boolean | null;
+    /**
+     * Prior-payment evidence for wallet/savings-credited invoices (the
+     * server emails those as commercial documents). Absent keeps the
+     * legacy unpaid-only read.
+     */
+    amountPaid?: number | null;
+    /** Shipping column for captured-but-shipping-cancelled orders. */
+    shippingStatus?: string | null;
   };
   orderNumber: string;
   itemsSnapshot: Array<{ quantity: number }>;
+}
+
+function isCancelledStatus(value: unknown): boolean {
+  const normalized =
+    typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return normalized === 'cancelled' || normalized === 'canceled';
 }
 
 /**
@@ -43,10 +57,23 @@ export async function maybeCaptureCheckoutInvoiceGenerated({
   orderNumber,
   itemsSnapshot,
 }: MaybeCaptureCheckoutInvoiceParams): Promise<void> {
-  const isUnpaidInvoiceOrder = order.payment_status !== 'paid';
+  // Genuine-proforma predicate (mirrors the web order-success lane):
+  // partially-paid, refunded, and cancelled orders are emailed as
+  // commercial documents or are no longer payable, and a positive
+  // credited amount means prior wallet/savings payment. Treating every
+  // non-paid status as a proforma would consume the durable analytics
+  // claim for a commercial document and suppress nothing else.
+  const credited = Number(order.amountPaid ?? 0);
+  const isProformaInvoiceOrder =
+    order.payment_status !== 'paid' &&
+    order.payment_status !== 'refunded' &&
+    order.payment_status !== 'partially_paid' &&
+    !isCancelledStatus(order.payment_status) &&
+    !isCancelledStatus(order.shippingStatus) &&
+    !(Number.isFinite(credited) && credited > 0);
   if (
     selectedPayment !== 'invoice' ||
-    !isUnpaidInvoiceOrder ||
+    !isProformaInvoiceOrder ||
     order.notificationDelivered !== true
   ) {
     return;

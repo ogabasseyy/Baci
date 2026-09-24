@@ -120,10 +120,11 @@ function OrderSuccessContent() {
   const isLoading = loading && Boolean(orderId);
   const hasValidatedOrder = Boolean(order);
   const hasRecoveryState = !isLoading && !hasValidatedOrder;
-  const { isInvoice, isInvoiceMethod } = resolveInvoicePresentation({
-    order,
-    type: _type,
-  });
+  const { isCancelled, isInvoice, isInvoiceMethod } =
+    resolveInvoicePresentation({
+      order,
+      type: _type,
+    });
   const payerHandoff = buildPayerHandoff({
     merchantCountry: merchant?.country,
     order,
@@ -243,16 +244,20 @@ function OrderSuccessContent() {
               </Link>
             )}
 
-            {isInvoiceMethod && customerSession.status !== 'loading' && (
-              <OrderSuccessInvoiceCta
-                archiveHref={asRoute(getHref('/receipts'))}
-                isAuthed={customerSession.isAuthenticated}
-                isDelivered={order?.notification_delivered ?? false}
-                isInvoice={isInvoice}
-                merchantSlug={merchant?.slug}
-                order={order}
-              />
-            )}
+            {/* Cancelled orders are terminal and non-payable: no invoice
+                actions at all, even though the method is still invoice. */}
+            {isInvoiceMethod &&
+              !isCancelled &&
+              customerSession.status !== 'loading' && (
+                <OrderSuccessInvoiceCta
+                  archiveHref={asRoute(getHref('/receipts'))}
+                  isAuthed={customerSession.isAuthenticated}
+                  isDelivered={order?.notification_delivered ?? false}
+                  isInvoice={isInvoice}
+                  merchantSlug={merchant?.slug}
+                  order={order}
+                />
+              )}
 
             <Link
               href={asRoute(getHref('/'))}

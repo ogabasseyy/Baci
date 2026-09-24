@@ -27,6 +27,7 @@ DECLARE
   v_col text;
   v_col_count integer;
   v_delivered boolean;
+  v_token uuid;
 BEGIN
   SELECT count(*) INTO v_proc_count
   FROM pg_proc
@@ -114,15 +115,19 @@ BEGIN
     'pending-token-002'
   );
 
-  PERFORM public.claim_immediate_order_notification(v_delivered_order_id);
+  SELECT claim_token INTO v_token
+  FROM public.claim_immediate_order_notification(v_delivered_order_id);
   PERFORM public.complete_immediate_order_notification(
     v_delivered_order_id,
-    true
+    true,
+    v_token
   );
-  PERFORM public.claim_immediate_order_notification(v_pending_order_id);
+  SELECT claim_token INTO v_token
+  FROM public.claim_immediate_order_notification(v_pending_order_id);
   PERFORM public.complete_immediate_order_notification(
     v_pending_order_id,
-    false
+    false,
+    v_token
   );
 
   SELECT notification_delivered INTO v_delivered

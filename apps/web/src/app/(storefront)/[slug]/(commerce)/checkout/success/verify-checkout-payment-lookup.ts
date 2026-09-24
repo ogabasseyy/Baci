@@ -155,23 +155,47 @@ export async function verifyCheckoutPaymentByLookup(
         scheduleFailedRedirect();
         return true;
       }
+      if (
+        lookupPaymentStatus === 'failed' ||
+        lookupPaymentStatus === 'abandoned'
+      ) {
+        // Terminal provider outcomes (abandoned = the shopper left the
+        // gateway page; the attempt can never settle): failure state
+        // with the cart intact, mirroring the reference path.
+        setStatus('failed');
+        setOrderNumber(data.order_number || data.short_id);
+        if (data.payment_method) {
+          setPaymentMethod(data.payment_method);
+        }
+        scheduleFailedRedirect();
+        return true;
+      }
+      if (lookupPaymentStatus !== 'paid') {
+        // Existence is not capture: pending/unpaid/processing rows stay
+        // pending for retry instead of clearing the cart and rendering
+        // payment success on an unproven order.
+        setStatus('pending');
+        setOrderNumber(data.order_number || data.short_id);
+        if (data.payment_method) {
+          setPaymentMethod(data.payment_method);
+        }
+        return true;
+      }
       clearCart();
       setStatus('success');
       setOrderNumber(data.order_number || data.short_id);
       if (data.payment_method) {
         setPaymentMethod(data.payment_method);
       }
-      if (data.payment_status === 'paid') {
-        const lookupTotal = Number(data.total);
-        const lookupCurrency = normalizeCurrencyCode(data.currency);
-        capturePaymentCompleted({
-          orderId,
-          orderNumber: data.order_number || data.short_id,
-          paymentMethod: data.payment_method || paymentMethod || 'paid_order',
-          ...(Number.isFinite(lookupTotal) ? { total: lookupTotal } : {}),
-          ...(lookupCurrency ? { currency: lookupCurrency } : {}),
-        });
-      }
+      const lookupTotal = Number(data.total);
+      const lookupCurrency = normalizeCurrencyCode(data.currency);
+      capturePaymentCompleted({
+        orderId,
+        orderNumber: data.order_number || data.short_id,
+        paymentMethod: data.payment_method || paymentMethod || 'paid_order',
+        ...(Number.isFinite(lookupTotal) ? { total: lookupTotal } : {}),
+        ...(lookupCurrency ? { currency: lookupCurrency } : {}),
+      });
     } else if (pendingRedvaultOrder) {
       // Fallback if API lookup fails: retain the REDVAULT cart instead of
       // confirming an order the lookup could not see.

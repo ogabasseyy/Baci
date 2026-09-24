@@ -30,7 +30,7 @@ export function resolveInvoicePresentation({
 }: {
   order: OrderData | null;
   type: string | null;
-}): { isInvoice: boolean; isInvoiceMethod: boolean } {
+}): { isCancelled: boolean; isInvoice: boolean; isInvoiceMethod: boolean } {
   // The `type` query value is caller-controlled: once the order loads, the
   // stored payment method rules — otherwise `?type=invoice` dresses any
   // pending order (Paystack, bank transfer, …) in proforma copy and
@@ -40,15 +40,17 @@ export function resolveInvoicePresentation({
     : type === 'invoice';
   const creditedAmount = Number(order?.amount_paid ?? 0);
   const hasPriorPayment = Number.isFinite(creditedAmount) && creditedAmount > 0;
+  const isCancelled =
+    isCancelledOrderStatus(order?.payment_status) ||
+    isCancelledOrderStatus(order?.shipping_status);
   const isInvoice =
     isInvoiceMethod &&
     order?.payment_status !== 'paid' &&
     order?.payment_status !== 'refunded' &&
     order?.payment_status !== 'partially_paid' &&
     !hasPriorPayment &&
-    !isCancelledOrderStatus(order?.payment_status) &&
-    !isCancelledOrderStatus(order?.shipping_status);
-  return { isInvoice, isInvoiceMethod };
+    !isCancelled;
+  return { isCancelled, isInvoice, isInvoiceMethod };
 }
 
 /**

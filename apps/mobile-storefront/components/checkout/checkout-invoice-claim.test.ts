@@ -59,6 +59,28 @@ describe('maybeCaptureCheckoutInvoiceGenerated', () => {
     );
   });
 
+  it.each([
+    ['partially_paid', {}, 'partially-paid'],
+    ['refunded', {}, 'refunded'],
+    ['cancelled', {}, 'payment-cancelled'],
+    ['canceled', {}, 'payment-canceled (legacy spelling)'],
+    ['unpaid', { shippingStatus: 'cancelled' }, 'shipping-cancelled'],
+    ['unpaid', { amountPaid: 4000 }, 'wallet/savings-credited'],
+  ])('withholds the event for a delivered %s invoice (commercial/non-payable)', async (payment_status, extra, _label) => {
+    await maybeCaptureCheckoutInvoiceGenerated({
+      selectedPayment: 'invoice',
+      order: { ...baseOrder, payment_status, ...extra },
+      orderNumber: 'INV-1',
+      itemsSnapshot: [{ quantity: 1 }],
+    });
+
+    // The durable analytics claim must not be consumed for a
+    // commercial document.
+    expect(mockedClaim).not.toHaveBeenCalled();
+    expect(mockedTrack).not.toHaveBeenCalled();
+    expect(mockedMark).not.toHaveBeenCalled();
+  });
+
   it('forwards the stamped order currency on the invoice stage', async () => {
     await maybeCaptureCheckoutInvoiceGenerated({
       selectedPayment: 'invoice',

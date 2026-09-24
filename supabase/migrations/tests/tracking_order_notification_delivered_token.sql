@@ -110,6 +110,7 @@ DECLARE
   v_merchant_id uuid := '9f000000-0000-4000-8000-000000000211';
   v_delivered_order_id uuid := '9f000000-0000-4000-8000-000000000212';
   v_delivered boolean;
+  v_token uuid;
 BEGIN
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (
@@ -130,10 +131,12 @@ BEGIN
     'delivered-token-001'
   );
 
-  PERFORM public.claim_immediate_order_notification(v_delivered_order_id);
+  SELECT claim_token INTO v_token
+  FROM public.claim_immediate_order_notification(v_delivered_order_id);
   PERFORM public.complete_immediate_order_notification(
     v_delivered_order_id,
-    true
+    true,
+    v_token
   );
 
   SELECT notification_delivered INTO v_delivered

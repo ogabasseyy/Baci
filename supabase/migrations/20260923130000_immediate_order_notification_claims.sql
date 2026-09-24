@@ -26,11 +26,21 @@ CREATE TABLE IF NOT EXISTS public.immediate_order_notification_claims (
     CHECK (status IN ('pending', 'processing', 'sent', 'failed')),
   attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
   locked_at timestamptz,
+  -- Lease token minted by the winning claim: completion must present it,
+  -- so a stale worker that outlives the reclaim window cannot complete
+  -- the replacement worker's claim.
+  claim_token uuid,
   sent_at timestamptz,
   last_error text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- The table grows one row per immediate order notification; PostgreSQL
+-- does not auto-index referencing columns, so without this every
+-- merchant delete scans the claims table to enforce ON DELETE CASCADE.
+CREATE INDEX IF NOT EXISTS immediate_order_notification_claims_merchant_id_idx
+  ON public.immediate_order_notification_claims (merchant_id);
 
 ALTER TABLE public.immediate_order_notification_claims ENABLE ROW LEVEL SECURITY;
 
@@ -59,7 +69,8 @@ CREATE OR REPLACE FUNCTION public.claim_immediate_order_notification(
 )
 RETURNS TABLE (
   claimed boolean,
-  claim_status text
+  claim_status text,
+  claim_token uuid
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -67,6 +78,7 @@ SET search_path = ''
 AS $$
 DECLARE
   v_updated integer;
+  v_claim_token uuid;
 BEGIN
   INSERT INTO public.immediate_order_notification_claims AS c
     (order_id, merchant_id, status)
@@ -83,6 +95,7 @@ BEGIN
     status = 'processing',
     attempt_count = c.attempt_count + 1,
     locked_at = now(),
+    claim_token = extensions.gen_random_uuid(),
     last_error = NULL,
     updated_at = now()
   WHERE c.order_id = p_order_id
@@ -93,11 +106,12 @@ BEGIN
         AND c.locked_at IS NOT NULL
         AND c.locked_at < now() - interval '5 minutes'
       )
-    );
+    )
+  RETURNING c.claim_token INTO v_claim_token;
 
   GET DIAGNOSTICS v_updated = ROW_COUNT;
   IF v_updated > 0 THEN
-    RETURN QUERY SELECT true, 'processing'::text;
+    RETURN QUERY SELECT true, 'processing'::text, v_claim_token;
   ELSE
     RETURN QUERY
       SELECT
@@ -109,7 +123,8 @@ BEGIN
             WHERE c.order_id = p_order_id
           ),
           'unknown'
-        );
+        ),
+        NULL::uuid;
   END IF;
 END;
 $$;
@@ -120,20 +135,22 @@ GRANT EXECUTE ON FUNCTION public.claim_immediate_order_notification(uuid)
   TO service_role;
 
 COMMENT ON FUNCTION public.claim_immediate_order_notification(uuid) IS
-  'Atomic delivery claim for immediate order notifications: ensures a pending row for the order, then takes ownership (pending/failed/stale-processing to processing). Only the claimed caller may run after() delivery; replays reclaim failed or crashed claims. Used by POST /api/orders for sessionless-safe resume.';
+  'Atomic delivery claim for immediate order notifications: ensures a pending row for the order, then takes ownership (pending/failed/stale-processing to processing), minting a lease token the winner must present at completion. Only the claimed caller may run after() delivery; replays reclaim failed or crashed claims. Used by POST /api/orders for sessionless-safe resume.';
 
 -- Records the delivery outcome. Sent is terminal (replays skip); failed
--- releases the claim for the next replay to resume. Fenced to the
--- processing owner: only the attempt currently holding the claim may
--- complete it. A stale worker outliving the five-minute reclaim window
--- must not mark a newer attempt sent, and — worse — must not finish with
--- p_sent=false after the newer attempt already succeeded: that would
--- downgrade a delivered row back to failed, resend the customer email on
--- the next replay, and leave notification_delivered false despite a
--- successful delivery.
+-- releases the claim for the next replay to resume. Fenced to the lease
+-- owner: completion must present the claim token the winning claim
+-- minted. A stale worker that outlives the five-minute reclaim window
+-- therefore cannot complete the replacement worker's claim — neither
+-- marking it sent early, nor finishing with p_sent=false while the
+-- replacement is sending (which would downgrade the row, make the
+-- replacement's completion no-op, and resend the customer a duplicate
+-- document on the next replay).
+DROP FUNCTION IF EXISTS public.complete_immediate_order_notification(uuid, boolean);
 CREATE OR REPLACE FUNCTION public.complete_immediate_order_notification(
   p_order_id uuid,
-  p_sent boolean
+  p_sent boolean,
+  p_claim_token uuid
 )
 RETURNS void
 LANGUAGE sql
@@ -146,13 +163,14 @@ AS $$
     sent_at = CASE WHEN p_sent THEN now() ELSE c.sent_at END,
     updated_at = now()
   WHERE c.order_id = p_order_id
-    AND c.status = 'processing';
+    AND c.status = 'processing'
+    AND c.claim_token = p_claim_token;
 $$;
 
-REVOKE ALL ON FUNCTION public.complete_immediate_order_notification(uuid, boolean)
+REVOKE ALL ON FUNCTION public.complete_immediate_order_notification(uuid, boolean, uuid)
   FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.complete_immediate_order_notification(uuid, boolean)
+GRANT EXECUTE ON FUNCTION public.complete_immediate_order_notification(uuid, boolean, uuid)
   TO service_role;
 
-COMMENT ON FUNCTION public.complete_immediate_order_notification(uuid, boolean) IS
-  'Records immediate order notification delivery: sent (terminal, replays skip) or failed (releasable, the next replay resumes). Used by POST /api/orders after() delivery.';
+COMMENT ON FUNCTION public.complete_immediate_order_notification(uuid, boolean, uuid) IS
+  'Records immediate order notification delivery: sent (terminal, replays skip) or failed (releasable, the next replay resumes). Lease-fenced: only the claim token holder may complete. Used by POST /api/orders after() delivery.';

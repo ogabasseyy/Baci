@@ -25,6 +25,7 @@ DECLARE
   v_order_id uuid := '9f000000-0000-4000-8000-000000000232';
   v_claimed boolean;
   v_status text;
+  v_token uuid;
 BEGIN
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (
@@ -45,13 +46,15 @@ BEGIN
     'proof-token-001'
   );
 
-  -- Correct proof wins and moves pending -> processing.
-  SELECT claimed, claim_status INTO v_claimed, v_status
+  -- Correct proof wins and moves pending -> processing, minting a
+  -- lease token the winner must present at completion.
+  SELECT claimed, claim_status, claim_token INTO v_claimed, v_status, v_token
   FROM public.claim_immediate_order_notification_with_proof(
     v_order_id, 'proof-token-001'
   );
   ASSERT v_claimed = true, 'proof claim must win';
   ASSERT v_status = 'processing', 'winner must observe processing';
+  ASSERT v_token IS NOT NULL, 'winner must receive a lease token';
 
   -- Wrong proof denies uniformly without revealing claim state.
   SELECT claimed, claim_status INTO v_claimed, v_status
@@ -63,16 +66,26 @@ BEGIN
 
   -- Wrong-proof completion is a no-op: the processing claim survives.
   PERFORM public.complete_immediate_order_notification_with_proof(
-    v_order_id, 'wrong-token', true
+    v_order_id, 'wrong-token', true, v_token
   );
   SELECT claimed, claim_status INTO v_claimed, v_status
   FROM public.claim_immediate_order_notification(v_order_id);
   ASSERT v_claimed = false, 'fresh processing claim must still block';
   ASSERT v_status = 'processing', 'wrong-proof complete must not advance state';
 
+  -- Wrong-token completion is a no-op even with correct proof: only the
+  -- lease holder completes.
+  PERFORM public.complete_immediate_order_notification_with_proof(
+    v_order_id, 'proof-token-001', true, '9f000000-0000-4000-8000-000000000299'
+  );
+  SELECT claimed, claim_status INTO v_claimed, v_status
+  FROM public.claim_immediate_order_notification(v_order_id);
+  ASSERT v_claimed = false, 'wrong-token complete must not release';
+  ASSERT v_status = 'processing', 'wrong-token complete must not move state';
+
   -- Correct-proof completion marks sent (terminal, replays skip).
   PERFORM public.complete_immediate_order_notification_with_proof(
-    v_order_id, 'proof-token-001', true
+    v_order_id, 'proof-token-001', true, v_token
   );
   SELECT claimed, claim_status INTO v_claimed, v_status
   FROM public.claim_immediate_order_notification_with_proof(
@@ -101,17 +114,17 @@ BEGIN
   END IF;
   IF NOT pg_catalog.has_function_privilege(
     'anon',
-    'public.complete_immediate_order_notification_with_proof(uuid,text,boolean)',
+    'public.complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid)',
     'EXECUTE'
   ) THEN
-    RAISE EXCEPTION 'anon must execute complete_immediate_order_notification_with_proof(uuid,text,boolean)';
+    RAISE EXCEPTION 'anon must execute complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid)';
   END IF;
   IF NOT pg_catalog.has_function_privilege(
     'authenticated',
-    'public.complete_immediate_order_notification_with_proof(uuid,text,boolean)',
+    'public.complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid)',
     'EXECUTE'
   ) THEN
-    RAISE EXCEPTION 'authenticated must execute complete_immediate_order_notification_with_proof(uuid,text,boolean)';
+    RAISE EXCEPTION 'authenticated must execute complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid)';
   END IF;
 END;
 $$;

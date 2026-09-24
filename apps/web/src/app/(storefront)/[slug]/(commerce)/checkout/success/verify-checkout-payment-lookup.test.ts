@@ -138,6 +138,32 @@ describe('verifyCheckoutPaymentByLookup', () => {
     expect(h.capturePaymentCompleted).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'invoice',
+    'pay_on_delivery',
+  ])('confirms an unpaid %s order without a capture (offline creation-success)', async (paymentMethod) => {
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: 'order-12345678',
+          order_number: 'BAC-5',
+          payment_method: paymentMethod,
+          payment_status: 'unpaid',
+        }),
+    } as Response);
+    const h = handlers();
+
+    await expect(verifyCheckoutPaymentByLookup(params(), h)).resolves.toBe(
+      true
+    );
+
+    expect(h.setStatus).toHaveBeenCalledWith('success');
+    expect(h.clearCart).toHaveBeenCalledTimes(1);
+    expect(h.capturePaymentCompleted).not.toHaveBeenCalled();
+  });
+
   it('routes refunded lookups to reconciling with the cart intact', async () => {
     vi.stubGlobal('fetch', mockFetch);
     mockFetch.mockResolvedValue({

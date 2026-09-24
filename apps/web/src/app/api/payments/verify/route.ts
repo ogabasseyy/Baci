@@ -462,13 +462,13 @@ export async function POST(request: NextRequest) {
   // authority. Denials are uniform (no existence oracle).
   const authorizationHeader = request.headers.get('authorization');
   if (authorizationHeader && /^bearer\s+.+$/i.test(authorizationHeader)) {
+    // Proof-bound authorization on the caller's own client (tracking
+    // token or bearer session): no privileged client is constructed
+    // for this user-facing lookup.
     const authorization = await authorizeSessionlessVerifyReference(
       request,
       parsedBody.data.reference,
-      parsedBody.data.trackingToken,
-      // Lazy: the tracking-token lane never invokes it, so denied or
-      // proof-carrying requests construct no privileged client.
-      () => createServiceClient()
+      parsedBody.data.trackingToken
     );
     if (!authorization.authorized) {
       return NextResponse.json(

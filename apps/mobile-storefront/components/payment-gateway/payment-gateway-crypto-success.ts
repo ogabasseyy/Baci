@@ -1,6 +1,9 @@
 import { router } from 'expo-router';
 import type { MutableRefObject } from 'react';
-import { trackCheckoutPaymentCompletedOnce } from '@/services/analytics';
+import {
+  trackCheckoutPaymentCompletedOnce,
+  trackCheckoutPaymentFailed,
+} from '@/services/analytics';
 import { PAYMENT_KINDS, type PaymentKind } from './payment-gateway.helpers';
 import { verifyOrderPaymentForCompletion } from './verify-order-payment';
 
@@ -159,7 +162,18 @@ export async function handleCryptoSuccessMessage(
   } else if (cryptoVerification.terminalFailure) {
     // Definitive gateway outcome: the payment cannot settle, so keep
     // the cart and the error/retry path instead of navigating to a
-    // false "Order Confirmed".
+    // false "Order Confirmed". Initialization already emitted
+    // payment_started for this attempt, so the funnel failure must be
+    // recorded here with the canonical total — otherwise every
+    // provider-declined crypto attempt strands unmatched.
+    await trackCheckoutPaymentFailed(
+      cryptoVerification.terminalFailure,
+      cryptoOrderId,
+      getTrimmedString(gateway) || 'crypto',
+      cryptoReference,
+      cryptoVerification.currency,
+      cryptoPurchaseTotal
+    );
     onTerminalVerificationFailure(cryptoVerification.terminalFailure);
     return;
   } else if (cryptoVerification.reconciliation) {

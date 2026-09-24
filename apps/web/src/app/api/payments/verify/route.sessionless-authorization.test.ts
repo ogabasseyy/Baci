@@ -25,6 +25,8 @@ vi.mock('@/lib/supabase/mobile-auth', () => ({
     mockGetAuthenticatedUser(...args),
 }));
 
+const mockBearerRpc = vi.fn();
+
 // The sessionless gate is proven before finalization; the finalizer
 // itself is unit-tested elsewhere.
 const mockFinalizeOrderGatewayPayment = vi.hoisted(() => vi.fn());
@@ -196,18 +198,22 @@ describe('POST /api/payments/verify — sessionless authorization', () => {
   });
 
   it('serves a validated user token bound to the order customer', async () => {
+    mockBearerRpc.mockResolvedValue({ data: ORDER_ID, error: null });
     mockGetAuthenticatedUser.mockResolvedValue({
       authMode: 'bearer',
       user: { id: 'user-9' },
-      supabase: {},
+      supabase: { rpc: mockBearerRpc },
     });
-    // customers.cust-9 belongs to user-9 (see serviceClientFor defaults).
     const response = await POST(
       postRequest({ reference: REFERENCE }, 'valid-user-session-token')
     );
     const body = await response.json();
 
     expect(mockGetAuthenticatedUser).toHaveBeenCalled();
+    expect(mockBearerRpc).toHaveBeenCalledWith(
+      'authorize_sessionless_verify_reference',
+      { p_gateway_reference: REFERENCE }
+    );
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ success: true, orderId: ORDER_ID });
   });
@@ -226,14 +232,12 @@ describe('POST /api/payments/verify — sessionless authorization', () => {
   });
 
   it('rejects a validated user whose customer does not own the order', async () => {
+    mockBearerRpc.mockResolvedValue({ data: null, error: null });
     mockGetAuthenticatedUser.mockResolvedValue({
       authMode: 'bearer',
       user: { id: 'user-intruder' },
-      supabase: {},
+      supabase: { rpc: mockBearerRpc },
     });
-    mockCreateServiceClient.mockReturnValue(
-      serviceClientFor({ customerRow: null })
-    );
 
     const response = await POST(
       postRequest({ reference: REFERENCE }, 'valid-but-unrelated-session')

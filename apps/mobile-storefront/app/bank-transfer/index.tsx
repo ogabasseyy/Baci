@@ -20,6 +20,14 @@ const copyToClipboard = async (text: string) => {
 
 const HEADER_CLOSE_STYLE = { padding: 8 } as const;
 
+// Server-stamped gateway reference for a finalized wallet-funded order
+// transaction (see the order_wallet_funding_intents completion and
+// WALLET_ORDER_GATEWAY_PREFIX on web): the success screen's settlement
+// proof resolves transaction gateway references, so wallet-funded
+// arrivals must hand it this reference — never the funding-intent UUID,
+// which /api/payments/verify answers with reference_not_found.
+const WALLET_ORDER_SETTLEMENT_REFERENCE_PREFIX = 'WALLET-DVA-ORDER-';
+
 const handleClose = (): void => {
   Alert.alert(
     'Leave Payment?',
@@ -137,6 +145,12 @@ export default function BankTransferScreen() {
     onCompleted: (intent) => {
       // The funding intent is confirmed: record the conversion before the
       // success route clears the cart (purchase capture needs cart items).
+      // The settlement proof binds to the finalized transaction's gateway
+      // reference, not the funding intent: stamping the intent UUID would
+      // leave the success screen polling an unresolvable reference.
+      const settlementReference = orderId
+        ? `${WALLET_ORDER_SETTLEMENT_REFERENCE_PREFIX}${orderId}`
+        : intent.id;
       if (orderId) {
         // Canonical full order value (single-source helper): the routed
         // total wins over the post-savings intent residual.
@@ -155,14 +169,14 @@ export default function BankTransferScreen() {
           orderId,
           orderNumber: orderNumber || orderId,
           paymentMethod: 'bank_transfer',
-          reference: intent.id,
+          reference: settlementReference,
           ...(routeShipping !== undefined && { shipping: routeShipping }),
           ...(routeSubtotal !== undefined && { subtotal: routeSubtotal }),
           ...(routeTax !== undefined && { tax: routeTax }),
           value: fundedTotal,
         });
       }
-      void routeToOrderSuccess({ successReference: intent.id });
+      void routeToOrderSuccess({ successReference: settlementReference });
     },
     onError: () => {
       Alert.alert(
@@ -201,7 +215,7 @@ export default function BankTransferScreen() {
     setIsLegacySubmitting(true);
     // The legacy DVA route requires the provider reference: forward it so
     // the deferred settlement capture can reconcile the conversion,
-    // mirroring the wallet-funded intent-id handoff.
+    // mirroring the wallet-funded settlement-reference handoff.
     void routeToOrderSuccess({
       successReference: legacyRouteData?.reference,
     });

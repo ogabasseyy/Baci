@@ -108,7 +108,10 @@ describe('BankTransferScreen wallet-funded completion', () => {
 
     // The durable claim must keep the guest identity, cart lines, and the
     // known subtotal/shipping/tax: the success screen cannot enrich the
-    // claim afterwards.
+    // claim afterwards. The stamped reference is the finalized
+    // transaction's gateway reference, not the funding-intent UUID:
+    // the success screen's settlement proof resolves transaction
+    // references, so an intent UUID would poll reference_not_found.
     await waitFor(() => {
       expect(mockTrackCompletedOnce).toHaveBeenCalledWith({
         customerEmail: 'guest@example.com',
@@ -117,7 +120,7 @@ describe('BankTransferScreen wallet-funded completion', () => {
         orderId: 'order-1',
         orderNumber: 'BAC-001',
         paymentMethod: 'bank_transfer',
-        reference: 'intent-1',
+        reference: 'WALLET-DVA-ORDER-order-1',
         shipping: 15000,
         subtotal: 450000,
         tax: 5000,
@@ -126,7 +129,10 @@ describe('BankTransferScreen wallet-funded completion', () => {
     });
     expect(mockRouterReplace).toHaveBeenCalledWith({
       pathname: '/order-success',
-      params: expect.objectContaining({ orderId: 'order-1' }),
+      params: expect.objectContaining({
+        orderId: 'order-1',
+        reference: 'WALLET-DVA-ORDER-order-1',
+      }),
     });
   });
 

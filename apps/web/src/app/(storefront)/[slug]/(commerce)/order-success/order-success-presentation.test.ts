@@ -26,7 +26,7 @@ describe('resolveInvoicePresentation', () => {
   it('keeps proforma presentation for an uncredited unpaid invoice', () => {
     expect(
       resolveInvoicePresentation({ order: invoiceOrder(), type: 'invoice' })
-    ).toEqual({ isInvoice: true, isInvoiceMethod: true });
+    ).toEqual({ isCancelled: false, isInvoice: true, isInvoiceMethod: true });
   });
 
   it.each([
@@ -44,7 +44,7 @@ describe('resolveInvoicePresentation', () => {
         order: invoiceOrder({ payment_status, shipping_status }),
         type: 'invoice',
       })
-    ).toEqual({ isInvoice: false, isInvoiceMethod: true });
+    ).toEqual({ isCancelled: true, isInvoice: false, isInvoiceMethod: true });
   });
 
   it('treats a credited unpaid invoice as a commercial document', () => {
@@ -56,7 +56,7 @@ describe('resolveInvoicePresentation', () => {
         order: invoiceOrder({ amount_paid: 4000 }),
         type: 'invoice',
       })
-    ).toEqual({ isInvoice: false, isInvoiceMethod: true });
+    ).toEqual({ isCancelled: false, isInvoice: false, isInvoiceMethod: true });
   });
 
   it('treats a credited pending invoice as a commercial document', () => {
@@ -65,7 +65,7 @@ describe('resolveInvoicePresentation', () => {
         order: invoiceOrder({ payment_status: 'pending', amount_paid: 1 }),
         type: 'invoice',
       })
-    ).toEqual({ isInvoice: false, isInvoiceMethod: true });
+    ).toEqual({ isCancelled: false, isInvoice: false, isInvoiceMethod: true });
   });
 
   it('keeps paid, refunded, and partially paid invoices commercial', () => {
@@ -75,7 +75,11 @@ describe('resolveInvoicePresentation', () => {
           order: invoiceOrder({ payment_status }),
           type: 'invoice',
         })
-      ).toEqual({ isInvoice: false, isInvoiceMethod: true });
+      ).toEqual({
+        isCancelled: false,
+        isInvoice: false,
+        isInvoiceMethod: true,
+      });
     }
   });
 
@@ -85,7 +89,7 @@ describe('resolveInvoicePresentation', () => {
         order: invoiceOrder({ amount_paid: 0 }),
         type: 'invoice',
       })
-    ).toEqual({ isInvoice: true, isInvoiceMethod: true });
+    ).toEqual({ isCancelled: false, isInvoice: true, isInvoiceMethod: true });
   });
 
   it('ignores a forged type=invoice hint on a non-invoice order', () => {
@@ -99,14 +103,15 @@ describe('resolveInvoicePresentation', () => {
         }),
         type: 'invoice',
       })
-    ).toEqual({ isInvoice: false, isInvoiceMethod: false });
+    ).toEqual({ isCancelled: false, isInvoice: false, isInvoiceMethod: false });
   });
 
   it('honors the type hint only before the order loads', () => {
     expect(
       resolveInvoicePresentation({ order: null, type: 'invoice' })
-    ).toEqual({ isInvoice: true, isInvoiceMethod: true });
+    ).toEqual({ isCancelled: false, isInvoice: true, isInvoiceMethod: true });
     expect(resolveInvoicePresentation({ order: null, type: null })).toEqual({
+      isCancelled: false,
       isInvoice: false,
       isInvoiceMethod: false,
     });
@@ -122,6 +127,7 @@ describe('buildOrderSuccessCopy', () => {
     const copy = buildOrderSuccessCopy({
       hasRecoveryState: false,
       hasValidatedOrder: true,
+      isDelivered: true,
       isInvoice,
       isPayForMeUnpaid: false,
       payerName: '',
@@ -129,6 +135,35 @@ describe('buildOrderSuccessCopy', () => {
 
     expect(copy.heading).toBe('Order Confirmed!');
     expect(copy.heading).not.toContain('Proforma');
+  });
+
+  it('claims a sent proforma only after delivery confirmation', () => {
+    const delivered = buildOrderSuccessCopy({
+      hasRecoveryState: false,
+      hasValidatedOrder: true,
+      isDelivered: true,
+      isInvoice: true,
+      isPayForMeUnpaid: false,
+      payerName: '',
+    });
+
+    expect(delivered.heading).toBe('Proforma Invoice Ready!');
+    expect(delivered.description).toContain('sent it to your email');
+  });
+
+  it('uses pending wording for an undelivered proforma', () => {
+    const pending = buildOrderSuccessCopy({
+      hasRecoveryState: false,
+      hasValidatedOrder: true,
+      isDelivered: false,
+      isInvoice: true,
+      isPayForMeUnpaid: false,
+      payerName: '',
+    });
+
+    expect(pending.heading).toBe('Preparing Your Proforma Invoice');
+    expect(pending.description).toContain('being prepared');
+    expect(pending.description).not.toContain('sent it to your email');
   });
 });
 

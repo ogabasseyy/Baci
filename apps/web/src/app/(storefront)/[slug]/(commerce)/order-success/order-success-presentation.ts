@@ -86,21 +86,33 @@ export function resolvePaidInvoiceDocument({
 export function buildOrderSuccessCopy({
   hasRecoveryState,
   hasValidatedOrder,
+  isDelivered,
   isInvoice,
   isPayForMeUnpaid,
   payerName,
 }: {
   hasRecoveryState: boolean;
   hasValidatedOrder: boolean;
+  /**
+   * Server-confirmed artifact delivery (notification_delivered). The
+   * invoice after() may still be generating the PDF when this page
+   * first renders — or may have failed — so undelivered proformas use
+   * pending wording (matching the delivery-gated CTA) instead of
+   * claiming a sent email.
+   */
+  isDelivered: boolean;
   isInvoice: boolean;
   isPayForMeUnpaid: boolean;
   payerName: string;
 }): { description: string; heading: string } {
+  const isDeliveredInvoice = isInvoice && isDelivered;
   const heading = hasValidatedOrder
     ? isPayForMeUnpaid
       ? 'Share the Payment Details'
       : isInvoice
-        ? 'Proforma Invoice Ready!'
+        ? isDelivered
+          ? 'Proforma Invoice Ready!'
+          : 'Preparing Your Proforma Invoice'
         : 'Order Confirmed!'
     : hasRecoveryState
       ? 'We could not confirm this order yet'
@@ -108,9 +120,11 @@ export function buildOrderSuccessCopy({
   const description = hasValidatedOrder
     ? isPayForMeUnpaid
       ? `Send the payment details below to ${payerName} — your order will be processed once payment is received.`
-      : isInvoice
+      : isDeliveredInvoice
         ? 'We have prepared your proforma invoice and sent it to your email. Share it with your company or procurement team.'
-        : 'Thank you for your purchase. Your order has been received.'
+        : isInvoice
+          ? 'Your proforma invoice PDF is being prepared — this page will update once it is ready and emailed to you.'
+          : 'Thank you for your purchase. Your order has been received.'
     : hasRecoveryState
       ? 'We could not validate this order from the current link. You can return to checkout or keep shopping while we sort it out.'
       : 'We are validating your order details now. This page will update as soon as your confirmation is ready.';

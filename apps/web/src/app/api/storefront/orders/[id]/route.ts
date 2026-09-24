@@ -150,9 +150,21 @@ export async function GET(
         } as typeof order & { order_payment_accounts?: unknown };
         delete orderForResponse.order_payment_accounts;
 
+        // Terminal after() delivery (invoice artifacts built and proforma
+        // emailed): signed-in success screens gate invoice_generated on
+        // this exactly like the guest/token branch below. The claims
+        // table stays RLS-denied to session callers, so the narrow
+        // ownership-checked RPC supplies the bit; a lookup failure
+        // reads as not delivered (the bounded refresh lane retries).
+        const { data: deliveredFlag } = await supabase.rpc(
+          'get_order_notification_delivered',
+          { p_order_id: order.id }
+        );
+
         return NextResponse.json(
           sanitizePublicOrder({
             ...orderForResponse,
+            notification_delivered: deliveredFlag === true,
             shipping_cost: order.shipping_fee,
             short_id: order.order_number,
             items: mapOrderItemsWithRoutes(items || []),

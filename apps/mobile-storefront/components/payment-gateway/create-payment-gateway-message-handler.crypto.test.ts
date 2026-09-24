@@ -9,11 +9,16 @@ import { PAYMENT_KINDS } from './payment-gateway.helpers';
 const mockTrackCheckoutPaymentCompletedOnce = jest.fn(
   async (_input: unknown) => true
 );
+const mockTrackCheckoutPaymentFailed = jest.fn(
+  async (..._args: unknown[]) => undefined
+);
 const mockTrackOrderCompleted = jest.fn();
 
 jest.mock('@/services/analytics', () => ({
   trackCheckoutPaymentCompletedOnce: (input: unknown) =>
     mockTrackCheckoutPaymentCompletedOnce(input),
+  trackCheckoutPaymentFailed: (...args: unknown[]) =>
+    mockTrackCheckoutPaymentFailed(...args),
   trackOrderCompleted: (...args: unknown[]) => mockTrackOrderCompleted(...args),
 }));
 
@@ -254,8 +259,17 @@ describe('createPaymentGatewayMessageHandler crypto success', () => {
     await sendMessage(handler, { type: 'crypto_success' });
 
     // Assert: no conversion, no cart clear, no success navigation — the
-    // error/retry path owns the terminal outcome.
+    // error/retry path owns the terminal outcome. The funnel failure is
+    // still recorded: initialization already emitted payment_started.
     expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(mockTrackCheckoutPaymentFailed).toHaveBeenCalledWith(
+      'failed',
+      'order-123',
+      'crypto',
+      'ref-123',
+      undefined,
+      0
+    );
     expect(onTerminalVerificationFailure).toHaveBeenCalledWith('failed');
     expect(clearCart).not.toHaveBeenCalled();
     expect(scheduleDelayedNavigation).not.toHaveBeenCalled();

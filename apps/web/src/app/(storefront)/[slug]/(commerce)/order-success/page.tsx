@@ -161,6 +161,7 @@ function OrderSuccessContent() {
   const { description, heading } = buildOrderSuccessCopy({
     hasRecoveryState,
     hasValidatedOrder,
+    isDelivered: order?.notification_delivered ?? false,
     isInvoice,
     isPayForMeUnpaid,
     payerName,

@@ -11,7 +11,7 @@ BEGIN;
 REVOKE ALL ON FUNCTION public.claim_immediate_order_notification(uuid)
   FROM anon, authenticated;
 REVOKE ALL ON FUNCTION public.complete_immediate_order_notification(
-  uuid, boolean, uuid
+  uuid, boolean
 )
   FROM anon, authenticated;
 

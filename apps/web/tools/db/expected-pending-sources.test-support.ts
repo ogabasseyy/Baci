@@ -335,6 +335,21 @@ export const EXPECTED_PENDING_SOURCES = [
     sha256: 'a55ec9470c3cd0a9c3d645d2dd3a5d09ab1dd37dd89cddb8123119e8d469df32',
   },
   {
+    repositoryPath:
+      'supabase/migrations/20260923150600_authorize_sessionless_verify_reference.sql',
+    sha256: 'b4f6c401030ca5622d1a43d3a629c32f089ae466de0d8b842702b83f0ef0a71a',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260923150700_order_notification_delivered_lookup.sql',
+    sha256: 'dd11de26ac256e7665a34756f2a50ffea229706732671a98cd3fdfa7a1ac6ddc',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260923150800_lease_immediate_order_notification_completion.sql',
+    sha256: 'c6f81e3a5a81c76f74f6dd912374b7c4332d130b5dbd2023577266fb017ada6a',
+  },
+  {
     repositoryPath: 'supabase/migrations/20260921180000_get_santa_catalog.sql',
     sha256: 'ccb69b3c76fc8fccdd2832177f66e2fb508afef422f554adf0ba9d792a58b19a',
   },

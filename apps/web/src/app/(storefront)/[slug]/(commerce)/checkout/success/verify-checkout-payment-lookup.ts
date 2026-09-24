@@ -155,31 +155,40 @@ export async function verifyCheckoutPaymentByLookup(
         scheduleFailedRedirect();
         return true;
       }
-      if (
-        lookupPaymentStatus === 'failed' ||
-        lookupPaymentStatus === 'abandoned'
-      ) {
-        // Terminal provider outcomes (abandoned = the shopper left the
-        // gateway page; the attempt can never settle): failure state
-        // with the cart intact, mirroring the reference path.
-        setStatus('failed');
-        setOrderNumber(data.order_number || data.short_id);
-        if (data.payment_method) {
-          setPaymentMethod(data.payment_method);
+      // Offline methods confirm the ORDER, not a capture: an unpaid
+      // invoice or pay-on-delivery row is the expected created state
+      // (payment lands later, physically or via the emailed proforma),
+      // so these keep creation-success instead of the paid gate below.
+      const isOfflineMethod =
+        data.payment_method === 'invoice' ||
+        data.payment_method === 'pay_on_delivery';
+      if (!isOfflineMethod) {
+        if (
+          lookupPaymentStatus === 'failed' ||
+          lookupPaymentStatus === 'abandoned'
+        ) {
+          // Terminal provider outcomes (abandoned = the shopper left the
+          // gateway page; the attempt can never settle): failure state
+          // with the cart intact, mirroring the reference path.
+          setStatus('failed');
+          setOrderNumber(data.order_number || data.short_id);
+          if (data.payment_method) {
+            setPaymentMethod(data.payment_method);
+          }
+          scheduleFailedRedirect();
+          return true;
         }
-        scheduleFailedRedirect();
-        return true;
-      }
-      if (lookupPaymentStatus !== 'paid') {
-        // Existence is not capture: pending/unpaid/processing rows stay
-        // pending for retry instead of clearing the cart and rendering
-        // payment success on an unproven order.
-        setStatus('pending');
-        setOrderNumber(data.order_number || data.short_id);
-        if (data.payment_method) {
-          setPaymentMethod(data.payment_method);
+        if (lookupPaymentStatus !== 'paid') {
+          // Existence is not capture: pending/unpaid/processing gateway
+          // rows stay pending for retry instead of clearing the cart
+          // and rendering payment success on an unproven order.
+          setStatus('pending');
+          setOrderNumber(data.order_number || data.short_id);
+          if (data.payment_method) {
+            setPaymentMethod(data.payment_method);
+          }
+          return true;
         }
-        return true;
       }
       clearCart();
       setStatus('success');
@@ -187,15 +196,17 @@ export async function verifyCheckoutPaymentByLookup(
       if (data.payment_method) {
         setPaymentMethod(data.payment_method);
       }
-      const lookupTotal = Number(data.total);
-      const lookupCurrency = normalizeCurrencyCode(data.currency);
-      capturePaymentCompleted({
-        orderId,
-        orderNumber: data.order_number || data.short_id,
-        paymentMethod: data.payment_method || paymentMethod || 'paid_order',
-        ...(Number.isFinite(lookupTotal) ? { total: lookupTotal } : {}),
-        ...(lookupCurrency ? { currency: lookupCurrency } : {}),
-      });
+      if (lookupPaymentStatus === 'paid') {
+        const lookupTotal = Number(data.total);
+        const lookupCurrency = normalizeCurrencyCode(data.currency);
+        capturePaymentCompleted({
+          orderId,
+          orderNumber: data.order_number || data.short_id,
+          paymentMethod: data.payment_method || paymentMethod || 'paid_order',
+          ...(Number.isFinite(lookupTotal) ? { total: lookupTotal } : {}),
+          ...(lookupCurrency ? { currency: lookupCurrency } : {}),
+        });
+      }
     } else if (pendingRedvaultOrder) {
       // Fallback if API lookup fails: retain the REDVAULT cart instead of
       // confirming an order the lookup could not see.

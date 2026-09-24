@@ -831,7 +831,7 @@ describe('storefront order success page', () => {
     );
   });
 
-  it('renders invoice specific heading and description for a stored invoice order', async () => {
+  it('renders invoice specific heading and description for a delivered invoice order', async () => {
     mockSearchParams.mockReturnValue(
       new URLSearchParams({
         orderId: 'order-123',
@@ -849,6 +849,7 @@ describe('storefront order success page', () => {
         customer_email: 'buyer@example.com',
         payment_status: 'unpaid',
         payment_method: 'invoice',
+        notification_delivered: true,
         items: [{ id: 'item-1', gtin: ' 0123456789012 ', quantity: 1 }],
         subtotal: 3500,
         shipping_cost: 0,
@@ -866,6 +867,49 @@ describe('storefront order success page', () => {
         /we have prepared your proforma invoice and sent it to your email/i
       )
     ).toBeInTheDocument();
+  });
+
+  it('renders pending copy for an undelivered invoice order', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'invoice',
+      })
+    );
+    // The after() callback may still be generating the PDF when this
+    // page first renders: pending wording until delivery confirms.
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        payment_status: 'unpaid',
+        payment_method: 'invoice',
+        notification_delivered: false,
+        items: [{ id: 'item-1', gtin: ' 0123456789012 ', quantity: 1 }],
+        subtotal: 3500,
+        shipping_cost: 0,
+        total: 3500,
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    expect(
+      await screen.findByRole('heading', {
+        name: /preparing your proforma invoice/i,
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /your proforma invoice pdf is being prepared — this page will update/i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/sent it to your email/i)
+    ).not.toBeInTheDocument();
   });
 
   it('does not render invoice copy for a forged type hint on a paystack order', async () => {

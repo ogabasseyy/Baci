@@ -36,19 +36,83 @@ INSERT INTO public.quiz_events(
   pg_catalog.clock_timestamp() + interval '1 hour', 60, false,
   'test', 2, 'guard-v2', NULL,
   'pending', 60, NULL, NULL, NULL
+), (
+  '75000000-0000-4000-8000-000000000005',
+  '75000000-0000-4000-8000-000000000002',
+  'start-guard-draft-live', 'Start guard draft live', 'draft',
+  pg_catalog.clock_timestamp() - interval '2 minutes',
+  pg_catalog.clock_timestamp() + interval '1 hour', 60, true,
+  'live', 2, 'guard-v2', NULL,
+  'pending', 60, 'free_skill_competition', 'Nigeria',
+  'automated migration replay evidence'
+), (
+  '75000000-0000-4000-8000-000000000006',
+  '75000000-0000-4000-8000-000000000002',
+  'start-guard-v1-live', 'Start guard v1 live', 'active',
+  pg_catalog.clock_timestamp() - interval '2 minutes',
+  pg_catalog.clock_timestamp() + interval '1 hour', 60, true,
+  'live', 1, 'guard-v1', NULL,
+  'pending', 60, 'free_skill_competition', 'Nigeria',
+  'automated migration replay evidence'
+), (
+  '75000000-0000-4000-8000-000000000007',
+  '75000000-0000-4000-8000-000000000002',
+  'start-guard-null-basis-live', 'Start guard null basis live', 'active',
+  pg_catalog.clock_timestamp() - interval '2 minutes',
+  pg_catalog.clock_timestamp() + interval '1 hour', 60, true,
+  'live', 2, 'guard-v2', NULL,
+  'pending', 60, NULL, 'Nigeria',
+  'automated migration replay evidence'
+);
+INSERT INTO public.customers(id, merchant_id, user_id) VALUES
+  (
+    '75000000-0000-4000-8000-000000000011',
+    '75000000-0000-4000-8000-000000000002',
+    '75000000-0000-4000-8000-000000000010'
+  ),
+  (
+    '75000000-0000-4000-8000-000000000013',
+    '75000000-0000-4000-8000-000000000002',
+    '75000000-0000-4000-8000-000000000012'
+  ),
+  (
+    '75000000-0000-4000-8000-000000000015',
+    '75000000-0000-4000-8000-000000000002',
+    '75000000-0000-4000-8000-000000000014'
+  );
+INSERT INTO public.quiz_event_testers(event_id, merchant_id, user_id) VALUES (
+  '75000000-0000-4000-8000-000000000004',
+  '75000000-0000-4000-8000-000000000002',
+  '75000000-0000-4000-8000-000000000010'
+);
+INSERT INTO public.quiz_event_testers(
+  event_id, merchant_id, user_id, revoked_at
+) VALUES (
+  '75000000-0000-4000-8000-000000000004',
+  '75000000-0000-4000-8000-000000000002',
+  '75000000-0000-4000-8000-000000000014',
+  pg_catalog.clock_timestamp()
 );
 
+SELECT pg_catalog.set_config(
+  'request.jwt.claims',
+  '{"role":"authenticated","sub":"75000000-0000-4000-8000-000000000010"}',
+  true
+);
+SET LOCAL ROLE authenticated;
 DO $$
 DECLARE
   v_context jsonb;
 BEGIN
+  -- Entitled customer + tester sees the approved live event.
   v_context := public.get_quiz_start_guard_context_v2(
     '75000000-0000-4000-8000-000000000001'
   );
-  IF COALESCE((v_context ->> 'found')::boolean, false) IS NOT TRUE
-    OR (v_context ->> 'mode') <> 'live'
-    OR (v_context ->> 'merchant_id') <> '75000000-0000-4000-8000-000000000002'
-    OR COALESCE((v_context ->> 'prize_approved')::boolean, false) IS NOT TRUE
+  IF (v_context ->> 'found')::boolean IS NOT TRUE
+    OR (v_context ->> 'mode') IS DISTINCT FROM 'live'
+    OR (v_context ->> 'merchant_id')
+      IS DISTINCT FROM '75000000-0000-4000-8000-000000000002'
+    OR NOT COALESCE((v_context ->> 'prize_approved')::boolean, false)
   THEN
     RAISE EXCEPTION 'approved live event did not return a positive verdict';
   END IF;
@@ -60,27 +124,132 @@ BEGIN
     RAISE EXCEPTION 'guard context exposed compliance evidence';
   END IF;
 
+  -- Unapproved live events are indistinguishable from missing ones.
   v_context := public.get_quiz_start_guard_context_v2(
     '75000000-0000-4000-8000-000000000003'
   );
-  IF COALESCE((v_context ->> 'prize_approved')::boolean, true) IS NOT FALSE THEN
-    RAISE EXCEPTION 'unverified live event returned a positive verdict';
+  IF (v_context ->> 'found')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'unverified live event leaked its context';
   END IF;
 
+  -- Testers see their private test event.
   v_context := public.get_quiz_start_guard_context_v2(
     '75000000-0000-4000-8000-000000000004'
   );
-  IF COALESCE((v_context ->> 'found')::boolean, false) IS NOT TRUE
-    OR (v_context ->> 'mode') <> 'test'
+  IF (v_context ->> 'found')::boolean IS NOT TRUE
+    OR (v_context ->> 'mode') IS DISTINCT FROM 'test'
   THEN
     RAISE EXCEPTION 'test event did not resolve its mode';
   END IF;
 
+  -- Draft, v1, and missing events stay hidden.
+  v_context := public.get_quiz_start_guard_context_v2(
+    '75000000-0000-4000-8000-000000000005'
+  );
+  IF (v_context ->> 'found')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'draft event leaked its context';
+  END IF;
+  v_context := public.get_quiz_start_guard_context_v2(
+    '75000000-0000-4000-8000-000000000006'
+  );
+  IF (v_context ->> 'found')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'v1 event leaked its context';
+  END IF;
   v_context := public.get_quiz_start_guard_context_v2(
     '75000000-0000-4000-8000-000000000009'
   );
-  IF COALESCE((v_context ->> 'found')::boolean, true) IS NOT FALSE THEN
+  IF (v_context ->> 'found')::boolean IS NOT FALSE THEN
     RAISE EXCEPTION 'missing event did not report found=false';
+  END IF;
+END;
+$$;
+
+-- Customer without a tester row: live visible, private test hidden.
+SELECT pg_catalog.set_config(
+  'request.jwt.claims',
+  '{"role":"authenticated","sub":"75000000-0000-4000-8000-000000000012"}',
+  true
+);
+DO $$
+DECLARE
+  v_context jsonb;
+BEGIN
+  v_context := public.get_quiz_start_guard_context_v2(
+    '75000000-0000-4000-8000-000000000001'
+  );
+  IF (v_context ->> 'found')::boolean IS NOT TRUE THEN
+    RAISE EXCEPTION 'customer without tester row lost live visibility';
+  END IF;
+  v_context := public.get_quiz_start_guard_context_v2(
+    '75000000-0000-4000-8000-000000000004'
+  );
+  IF (v_context ->> 'found')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'private test leaked to a non-tester';
+  END IF;
+END;
+$$;
+
+-- Revoked tester and non-customer stay hidden.
+SELECT pg_catalog.set_config(
+  'request.jwt.claims',
+  '{"role":"authenticated","sub":"75000000-0000-4000-8000-000000000014"}',
+  true
+);
+DO $$
+DECLARE
+  v_context jsonb;
+BEGIN
+  v_context := public.get_quiz_start_guard_context_v2(
+    '75000000-0000-4000-8000-000000000004'
+  );
+  IF (v_context ->> 'found')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'private test leaked to a revoked tester';
+  END IF;
+END;
+$$;
+SELECT pg_catalog.set_config(
+  'request.jwt.claims',
+  '{"role":"authenticated","sub":"75000000-0000-4000-8000-000000000016"}',
+  true
+);
+DO $$
+DECLARE
+  v_context jsonb;
+BEGIN
+  v_context := public.get_quiz_start_guard_context_v2(
+    '75000000-0000-4000-8000-000000000001'
+  );
+  IF (v_context ->> 'found')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'live event leaked to a non-customer';
+  END IF;
+END;
+$$;
+
+-- service_role bypasses caller checks; incomplete approvals read boolean false.
+SELECT pg_catalog.set_config(
+  'request.jwt.claims',
+  '{"role":"service_role"}',
+  true
+);
+SET LOCAL ROLE service_role;
+DO $$
+DECLARE
+  v_context jsonb;
+BEGIN
+  v_context := public.get_quiz_start_guard_context_v2(
+    '75000000-0000-4000-8000-000000000007'
+  );
+  IF (v_context ->> 'found')::boolean IS NOT TRUE
+    OR COALESCE((v_context ->> 'prize_approved')::boolean, true)
+  THEN
+    RAISE EXCEPTION 'null-basis record did not read boolean false';
+  END IF;
+  IF v_context ? 'regulatory_basis'
+    OR v_context ? 'regulatory_jurisdiction'
+    OR v_context ? 'regulatory_evidence_ref'
+    OR v_context ? 'compliance_verified'
+  THEN
+    RAISE EXCEPTION 'guard context exposed compliance evidence';
   END IF;
 END;
 $$;

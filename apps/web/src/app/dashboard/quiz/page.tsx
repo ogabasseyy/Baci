@@ -2,13 +2,14 @@ import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import {
+  expandPrizeProduct,
   isProductRow,
   isVariantRow,
-  mapBaseProduct,
-  mapVariantProduct,
+} from '@/app/api/merchant/quiz/prize-products/prize-product-mapping';
+import {
   PRODUCT_PROJECTION,
   VARIANT_PROJECTION,
-} from '@/app/api/merchant/quiz/prize-products/prize-product-mapping';
+} from '@/app/api/merchant/quiz/prize-products/prize-product-projections';
 import {
   ensurePermission,
   isMerchantPermissionRedirectError,
@@ -85,19 +86,18 @@ export async function loadPrizeProducts(merchantId: string) {
     }
   }
   const products = rows
-    .flatMap((row) => {
-      if (row.has_variants === true) {
-        const productVariants = variantsByProduct.get(row.id) ?? [];
-        return productVariants.map((variant) =>
-          mapVariantProduct(row, variant)
-        );
-      }
-      return [mapBaseProduct(row)];
-    })
+    .flatMap((row) =>
+      expandPrizeProduct(row, variantsByProduct.get(row.id) ?? [])
+    )
     .flatMap((product) => {
       const parsed = quizPrizeProductSchema.safeParse(product);
       return parsed.success ? [parsed.data] : [];
-    });
+    })
+    // Expansion multiplies rows: one parent can carry a large variant matrix.
+    // Cap the serialized initial page at the candidate limit so the dashboard
+    // payload never exceeds its pre-expansion size; search and pagination
+    // cover the rest. The continuation cursor still counts candidate rows.
+    .slice(0, INITIAL_PRIZE_PRODUCT_LIMIT);
 
   const total = typeof count === 'number' && count >= 0 ? count : null;
   const nextCursor =

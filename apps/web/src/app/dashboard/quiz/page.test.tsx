@@ -238,6 +238,37 @@ describe('QuizDashboardPage', () => {
     });
   });
 
+  it('caps the serialized initial page when variant expansion overflows', async () => {
+    mockProductsQuery.limit.mockResolvedValueOnce({
+      count: 1,
+      data: [
+        {
+          default_variant_id: null,
+          has_variants: true,
+          id: '55555555-5555-4555-8555-555555555555',
+          merchant_id: 'merchant-1',
+          name: 'Parent with a large matrix',
+          price: 100,
+        },
+      ],
+      error: null,
+    });
+    mockVariantsQuery.order.mockResolvedValueOnce({
+      data: Array.from({ length: 150 }, (_, index) => ({
+        id: `11111111-1111-4111-8111-${String(index).padStart(12, '0')}`,
+        merchant_id: 'merchant-1',
+        product_id: '55555555-5555-4555-8555-555555555555',
+        stock_quantity: 1,
+      })),
+      error: null,
+    });
+
+    const result = await loadPrizeProducts('merchant-1');
+
+    expect(result.error).toBeNull();
+    expect(result.products).toHaveLength(100);
+  });
+
   it('returns the exact inventory total and a continuation cursor after a capped load', async () => {
     const rows = Array.from({ length: 100 }, (_, index) => ({
       default_variant_id: null,

@@ -10,17 +10,18 @@ import {
   quizPrizeProductsResponseSchema,
 } from '@/schemas/quiz-prize-product';
 import {
+  expandPrizeProduct,
   isProductRow,
   isVariantRow,
-  mapBaseProduct,
-  mapVariantProduct,
-  PRODUCT_PROJECTION,
-  VARIANT_PROJECTION,
 } from './prize-product-mapping';
 import {
   decodePrizeProductCursor,
   paginatePrizeProducts,
 } from './prize-product-pagination';
+import {
+  PRODUCT_PROJECTION,
+  VARIANT_PROJECTION,
+} from './prize-product-projections';
 
 function prizeProductsResponse(payload: unknown) {
   const response = quizPrizeProductsResponseSchema.safeParse(payload);
@@ -194,14 +195,7 @@ export async function GET(request: Request) {
     }
     variants = (Array.isArray(variantData) ? variantData : [])
       .filter(isVariantRow)
-      .filter((variant) => variant.merchant_id === access.merchantId)
-      // Preserve `created_at` as the primary order and make only tied dates
-      // deterministic by ID before generating a selection cursor.
-      .sort(
-        (left, right) =>
-          (left.created_at ?? '').localeCompare(right.created_at ?? '') ||
-          left.id.localeCompare(right.id)
-      );
+      .filter((variant) => variant.merchant_id === access.merchantId);
   }
 
   const productById = new Map(products.map((product) => [product.id, product]));
@@ -213,14 +207,7 @@ export async function GET(request: Request) {
   const groups = candidates.ids.map((id) => {
     const product = productById.get(id);
     if (!product) return [];
-    const productVariants = variantsByProduct.get(id) ?? [];
-    if (product.has_variants === true && productVariants.length > 0) {
-      return productVariants.map((variant) =>
-        mapVariantProduct(product, variant)
-      );
-    }
-    if (product.has_variants === true) return [];
-    return [mapBaseProduct(product)];
+    return expandPrizeProduct(product, variantsByProduct.get(id) ?? []);
   });
   const page = paginatePrizeProducts({
     groups,

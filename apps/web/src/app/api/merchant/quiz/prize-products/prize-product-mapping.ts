@@ -6,11 +6,6 @@ import type {
   QuizPrizeVariantRow,
 } from '@/schemas/quiz-prize-product';
 
-export const PRODUCT_PROJECTION =
-  'id, merchant_id, name, price, images, condition, default_variant_id, has_variants, manage_stock, stock, stock_quantity';
-export const VARIANT_PROJECTION =
-  'id, merchant_id, product_id, attributes, condition, created_at, price_override, stock_quantity, primary_image, images, sku';
-
 export function isProductRow(value: unknown): value is QuizPrizeProductRow {
   if (!value || typeof value !== 'object') return false;
   const row = value as Partial<QuizPrizeProductRow>;
@@ -65,6 +60,20 @@ export function mapBaseProduct(product: QuizPrizeProductRow): QuizPrizeProduct {
     variantId: null,
     variantLabel: null,
   };
+}
+
+export function expandPrizeProduct(
+  product: QuizPrizeProductRow,
+  variants: QuizPrizeVariantRow[]
+): QuizPrizeProduct[] {
+  if (product.has_variants !== true) return [mapBaseProduct(product)];
+  return [...variants]
+    .sort(
+      (left, right) =>
+        (left.created_at ?? '').localeCompare(right.created_at ?? '') ||
+        left.id.localeCompare(right.id)
+    )
+    .map((variant) => mapVariantProduct(product, variant));
 }
 
 export function mapVariantProduct(

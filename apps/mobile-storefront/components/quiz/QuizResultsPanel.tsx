@@ -77,11 +77,17 @@ export function QuizResultsPanel({
       leaderboard?.entries.find((entry) => entry.isCurrentCustomer)?.submittedAt
   );
   if (lifecycle !== 'idle') {
+    const isCancelled =
+      (v2Result?.availability === 'unavailable' &&
+        v2Result.reason === 'event_cancelled') ||
+      lifecycle === 'event_cancelled';
     const title =
       v2Result?.availability === 'unavailable'
         ? v2Result.reason === 'tester_revoked'
           ? 'Quiz access ended'
-          : 'Quiz result unavailable'
+          : isCancelled
+            ? 'Quiz cancelled'
+            : 'Quiz result unavailable'
         : lifecycle === 'pending_results'
           ? "You're all done!"
           : lifecycle === 'event_cancelled'
@@ -115,7 +121,9 @@ export function QuizResultsPanel({
           <Text style={styles.eventMeta}>
             {v2Result.reason === 'tester_revoked'
               ? 'Your tester access was removed before this result was published.'
-              : 'We could not find this quiz attempt. Return to the quiz list and try again.'}
+              : isCancelled
+                ? 'This quiz event was cancelled. Return to the quiz list to join another event.'
+                : 'We could not find this quiz attempt. Return to the quiz list and try again.'}
           </Text>
         ) : lifecycle === 'pending_results' ? (
           <View style={styles.finishTimeCard}>

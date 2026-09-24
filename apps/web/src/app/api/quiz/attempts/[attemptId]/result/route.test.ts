@@ -148,6 +148,38 @@ describe('v2 quiz result route', () => {
     });
   });
 
+  it('returns a retryable failure when the prize projection errors', async () => {
+    const finalResult = {
+      data: {
+        attemptId: ATTEMPT_ID,
+        availability: 'final',
+        availableAt: AVAILABLE_AT,
+        claimMetadata: {
+          awardId: '33333333-3333-4333-8333-333333333333',
+          expiresAt: '2026-08-12T10:05:00.000Z',
+        },
+        rank: 1,
+        score: 20,
+        totalQuestions: 20,
+      },
+      error: null,
+    };
+    const rpc = authenticated(finalResult);
+    rpc.mockImplementation((name: string) =>
+      Promise.resolve(
+        name === 'quiz_runtime_contract_version'
+          ? { data: 2, error: null }
+          : name === 'get_quiz_prize_claim_v2'
+            ? { data: null, error: { message: 'transient outage' } }
+            : finalResult
+      )
+    );
+
+    const failed = await GET(request(), context());
+    expect(failed.status).toBe(500);
+    expect(await failed.json()).toEqual({ error: 'Quiz request failed' });
+  });
+
   it('returns unavailable states and bounds RPC failures', async () => {
     authenticated({
       data: {

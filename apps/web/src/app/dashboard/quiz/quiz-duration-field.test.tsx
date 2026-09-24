@@ -83,7 +83,7 @@ describe('QuizDurationField', () => {
     const { rerender } = render(
       <QuizDurationField
         expectedPlaySeconds={20}
-        maximumSeconds={null}
+        maximumSeconds={1000}
         minimumSeconds={10}
         mode="test"
         onDurationChange={onDurationChange}
@@ -96,6 +96,7 @@ describe('QuizDurationField', () => {
     await user.clear(input);
     await user.type(input, '200');
     expect(input).toHaveValue(200);
+    expect(onDurationChange).toHaveBeenLastCalledWith(200);
 
     rerender(
       <QuizDurationField
@@ -109,5 +110,6 @@ describe('QuizDurationField', () => {
     );
 
     expect(input).toHaveValue(140);
+    expect(onDurationChange).toHaveBeenLastCalledWith(140);
   });
 });

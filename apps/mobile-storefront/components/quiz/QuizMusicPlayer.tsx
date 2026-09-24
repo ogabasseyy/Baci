@@ -3,15 +3,13 @@ import type { QuizMusicPlaybackState } from './QuizMusicPlayerNative';
 
 interface QuizMusicPlayerProps {
   gameEndsIn?: string;
-  initialIsPlaying?: boolean;
-  initialTrackIndex?: number;
+  initialPlayback?: QuizMusicPlaybackState;
   onPlaybackChange?: (playback: QuizMusicPlaybackState) => void;
 }
 
 export function QuizMusicPlayer({
   gameEndsIn,
-  initialIsPlaying,
-  initialTrackIndex,
+  initialPlayback,
   onPlaybackChange,
 }: QuizMusicPlayerProps) {
   if (!isQuizAudioAvailable()) return null;
@@ -21,8 +19,7 @@ export function QuizMusicPlayer({
   return (
     <QuizMusicPlayerNative
       gameEndsIn={gameEndsIn}
-      initialIsPlaying={initialIsPlaying}
-      initialTrackIndex={initialTrackIndex}
+      initialPlayback={initialPlayback}
       onPlaybackChange={onPlaybackChange}
     />
   );

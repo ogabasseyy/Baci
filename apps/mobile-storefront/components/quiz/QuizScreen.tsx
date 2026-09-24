@@ -20,6 +20,7 @@ import { QuizGateModals } from './QuizGateModals';
 import { QuizLiveQuestionCard } from './QuizLiveQuestionCard';
 import { createQuizLobbyStyles } from './QuizLobby.styles';
 import { QuizMusicPlayer } from './QuizMusicPlayer';
+import type { QuizMusicPlaybackState } from './QuizMusicPlayerNative';
 import { QuizQuestionCard } from './QuizQuestionCard';
 import { QuizResultsSection } from './QuizResultsSection';
 import { createQuizStyles } from './QuizScreen.styles';
@@ -183,13 +184,13 @@ export function QuizScreen({
     serverNow: v2Attempt?.serverNow ?? terminalContext?.serverNow,
     status,
   });
-  const [musicPlayback, setMusicPlayback] = useState({
+  const [musicPlayback, setMusicPlayback] = useState<QuizMusicPlaybackState>({
     currentTrackIndex: 0,
     isPlaying: true,
+    positionSeconds: 0,
   });
   const musicPlayerPlayback = {
-    initialIsPlaying: musicPlayback.isPlaying,
-    initialTrackIndex: musicPlayback.currentTrackIndex,
+    initialPlayback: musicPlayback,
     onPlaybackChange: setMusicPlayback,
   };
 

@@ -35,6 +35,8 @@ jest.mock('@/components/quiz/QuizGameplayAdFooter', () => ({
 jest.mock('@/services/initialize-quiz-mobile-ads', () => ({
   ensureQuizMobileAdsReady: jest.fn(async () => undefined),
   initializeQuizMobileAds: jest.fn(async () => ({ canRequestAds: true })),
+  isQuizMobileAdsAttemptDisabled: jest.fn(() => false),
+  resetQuizMobileAdsAttempt: jest.fn(),
 }));
 
 // The username gate pulls in additional modules (UsernamePrompt, the zod

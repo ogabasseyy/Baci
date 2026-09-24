@@ -3,7 +3,10 @@ import { useEffect, useState } from 'react';
 import { isQuizMobileAdsAvailable } from '@/components/quiz/is-quiz-mobile-ads-available';
 import type { QuizMobileAdsConfig } from '@/config/quiz-mobile-ads';
 import { getFeatureFlagValue } from '@/services/analytics-core';
-import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
+import {
+  initializeQuizMobileAds,
+  isQuizMobileAdsAttemptDisabled,
+} from '@/services/initialize-quiz-mobile-ads';
 
 interface UseQuizMobileAdsOptions {
   config: QuizMobileAdsConfig;
@@ -58,6 +61,11 @@ export function useQuizMobileAds({
       if (!active) return;
 
       if (runtimeFlag === false) {
+        setState({ ...DISABLED_STATE, initialized: true });
+        return;
+      }
+
+      if (isQuizMobileAdsAttemptDisabled()) {
         setState({ ...DISABLED_STATE, initialized: true });
         return;
       }

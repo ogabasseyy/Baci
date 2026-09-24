@@ -36,6 +36,7 @@ import {
   QUIZ_TEST_MIN_MAX_ATTEMPTS,
   QUIZ_TEST_MIN_VARIANTS_PER_QUESTION,
   QUIZ_TEST_RULES_VERSION,
+  QUIZ_TEST_WINDOW_MAXIMUM_SECONDS,
 } from './quiz';
 
 describe('quiz constants', () => {
@@ -123,11 +124,19 @@ describe('quiz constants', () => {
 
   it('allows shorter QA windows only when they cover the first test question', () => {
     expect(getQuizWindowBounds('test', 20, 10)).toEqual({
-      maximumSeconds: null,
+      maximumSeconds: QUIZ_TEST_WINDOW_MAXIMUM_SECONDS,
       minimumSeconds: 10,
     });
     expect(isQuizWindowSecondsAllowed('test', 20, 10, 10)).toBe(true);
     expect(isQuizWindowSecondsAllowed('test', 20, 10, 9)).toBe(false);
+    expect(
+      isQuizWindowSecondsAllowed(
+        'test',
+        20,
+        10,
+        QUIZ_TEST_WINDOW_MAXIMUM_SECONDS + 1
+      )
+    ).toBe(false);
   });
 
   it('documents reset and revocation lifecycle semantics for later database use', () => {

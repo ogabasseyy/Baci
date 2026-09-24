@@ -94,6 +94,11 @@ export const QUIZ_LIVE_WINDOW_MINIMUM_GRACE_SECONDS = 30;
 export const QUIZ_LIVE_WINDOW_SUGGESTED_GRACE_SECONDS = 90;
 export const QUIZ_LIVE_WINDOW_MAXIMUM_GRACE_SECONDS = 120;
 export const QUIZ_WINDOW_ROUNDING_SECONDS = 60;
+/**
+ * Test rehearsal windows stay unbounded by play time, but must remain a
+ * representable end date when the activation resolver adds them to now.
+ */
+export const QUIZ_TEST_WINDOW_MAXIMUM_SECONDS = 24 * 60 * 60;
 
 /** Bounded client/server reconciliation and durable-generation policy. */
 export const QUIZ_ACTIVE_ATTEMPT_RECONCILIATION_CADENCE_SECONDS = 15;
@@ -229,7 +234,7 @@ export function getQuizWindowBounds(
 
   if (mode === 'test') {
     return {
-      maximumSeconds: null,
+      maximumSeconds: QUIZ_TEST_WINDOW_MAXIMUM_SECONDS,
       minimumSeconds: timePerQuestionSeconds,
     };
   }

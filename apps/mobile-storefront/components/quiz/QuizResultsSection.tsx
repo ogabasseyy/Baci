@@ -16,8 +16,7 @@ interface QuizResultsSectionProps {
   lifecycle: QuizV2LifecycleStatus;
   music: { gameEndsIn: string; shouldPlay: boolean };
   musicPlayerPlayback: {
-    initialIsPlaying: boolean;
-    initialTrackIndex: number;
+    initialPlayback: QuizMusicPlaybackState;
     onPlaybackChange: (playback: QuizMusicPlaybackState) => void;
   };
   styles: ReturnType<typeof createQuizStyles>;

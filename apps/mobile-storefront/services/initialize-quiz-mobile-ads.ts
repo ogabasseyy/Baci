@@ -9,6 +9,15 @@ interface QuizMobileAdsInitializationResult {
 const log = createLogger('QuizMobileAds');
 let initializationPromise: Promise<QuizMobileAdsInitializationResult> | null =
   null;
+let attemptDisabled = false;
+
+export function resetQuizMobileAdsAttempt(): void {
+  attemptDisabled = false;
+}
+
+export function isQuizMobileAdsAttemptDisabled(): boolean {
+  return attemptDisabled;
+}
 
 async function initialize(): Promise<QuizMobileAdsInitializationResult> {
   const {
@@ -54,5 +63,6 @@ export async function ensureQuizMobileAdsReady(): Promise<void> {
   if (!getQuizMobileAdsConfig().enabled) return;
   const runtimeFlag = await getFeatureFlagValue('quiz-mobile-ads');
   if (runtimeFlag === false) return;
-  await initializeQuizMobileAds().catch(() => null);
+  const result = await initializeQuizMobileAds().catch(() => null);
+  if (!result) attemptDisabled = true;
 }

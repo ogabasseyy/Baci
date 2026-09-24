@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { clampNumber, clampNumberInput } from './quiz-admin-actions';
 import { formatQuizDuration } from './quiz-duration';
 
@@ -13,7 +13,7 @@ export function QuizDurationField({
   totalDurationSeconds,
 }: {
   expectedPlaySeconds: number;
-  maximumSeconds: number | null;
+  maximumSeconds: number;
   minimumSeconds: number;
   mode: 'test' | 'live';
   onDurationChange: (seconds: number | null) => void;
@@ -21,16 +21,30 @@ export function QuizDurationField({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [inputValue, setInputValue] = useState('');
-  const maximumDurationSeconds = maximumSeconds ?? Number.MAX_SAFE_INTEGER;
+  const maximumDurationSeconds = maximumSeconds;
+  const previousBoundsRef = useRef({ maximumDurationSeconds, minimumSeconds });
 
   useEffect(() => {
-    if (!isExpanded) return;
-    setInputValue((current) =>
-      current === ''
-        ? current
-        : clampNumberInput(current, minimumSeconds, maximumDurationSeconds)
+    const previous = previousBoundsRef.current;
+    previousBoundsRef.current = { maximumDurationSeconds, minimumSeconds };
+    const boundsChanged =
+      previous.maximumDurationSeconds !== maximumDurationSeconds ||
+      previous.minimumSeconds !== minimumSeconds;
+    if (!isExpanded || !boundsChanged || inputValue === '') return;
+    const clamped = clampNumberInput(
+      inputValue,
+      minimumSeconds,
+      maximumDurationSeconds
     );
-  }, [isExpanded, maximumDurationSeconds, minimumSeconds]);
+    setInputValue(clamped);
+    if (clamped !== inputValue) onDurationChange(Number(clamped));
+  }, [
+    inputValue,
+    isExpanded,
+    maximumDurationSeconds,
+    minimumSeconds,
+    onDurationChange,
+  ]);
 
   const resetToDefault = () => {
     setInputValue('');
@@ -61,7 +75,7 @@ export function QuizDurationField({
             aria-label="Total quiz duration (seconds)"
             className="h-11 rounded-md border bg-background px-3"
             min={minimumSeconds}
-            max={maximumSeconds ?? undefined}
+            max={maximumSeconds}
             type="number"
             value={inputValue}
             onBlur={() =>

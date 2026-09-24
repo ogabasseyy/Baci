@@ -172,4 +172,28 @@ describe('ensureQuizMobileAdsReady', () => {
 
     await expect(ensureQuizMobileAdsReady()).resolves.toBeUndefined();
   });
+
+  it('disables the attempt after a failed readiness check until reset', async () => {
+    mockInitialize.mockRejectedValue(new Error('native module unavailable'));
+    const {
+      ensureQuizMobileAdsReady,
+      isQuizMobileAdsAttemptDisabled,
+      resetQuizMobileAdsAttempt,
+    } = await loadInitializer();
+
+    expect(isQuizMobileAdsAttemptDisabled()).toBe(false);
+    await ensureQuizMobileAdsReady();
+    expect(isQuizMobileAdsAttemptDisabled()).toBe(true);
+    resetQuizMobileAdsAttempt();
+    expect(isQuizMobileAdsAttemptDisabled()).toBe(false);
+  });
+
+  it('leaves the attempt armed when initialization succeeds', async () => {
+    const { ensureQuizMobileAdsReady, isQuizMobileAdsAttemptDisabled } =
+      await loadInitializer();
+
+    await ensureQuizMobileAdsReady();
+
+    expect(isQuizMobileAdsAttemptDisabled()).toBe(false);
+  });
 });

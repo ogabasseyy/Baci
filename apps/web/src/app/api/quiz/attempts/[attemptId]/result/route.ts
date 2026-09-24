@@ -75,6 +75,7 @@ export async function GET(
           message: 'Quiz prize claim projection failed',
           userId: auth.user.id,
         });
+        return rpcErrorResponse();
       } else {
         const parsedPrizeClaim =
           quizPrizeClaimProjectionSchema.safeParse(rawPrizeClaim);

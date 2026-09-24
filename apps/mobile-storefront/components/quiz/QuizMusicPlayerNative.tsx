@@ -22,14 +22,20 @@ const QUIZ_TRACKS = [
 export interface QuizMusicPlaybackState {
   currentTrackIndex: number;
   isPlaying: boolean;
+  positionSeconds: number;
 }
 
 interface QuizMusicPlayerNativeProps {
   gameEndsIn?: string;
-  initialIsPlaying?: boolean;
-  initialTrackIndex?: number;
+  initialPlayback?: QuizMusicPlaybackState;
   onPlaybackChange?: (playback: QuizMusicPlaybackState) => void;
 }
+
+const DEFAULT_PLAYBACK: QuizMusicPlaybackState = {
+  currentTrackIndex: 0,
+  isPlaying: true,
+  positionSeconds: 0,
+};
 
 function safelyControlPlaylist(control: () => void) {
   try {
@@ -41,15 +47,14 @@ function safelyControlPlaylist(control: () => void) {
 
 export function QuizMusicPlayerNative({
   gameEndsIn,
-  initialIsPlaying = true,
-  initialTrackIndex = 0,
+  initialPlayback = DEFAULT_PLAYBACK,
   onPlaybackChange,
 }: QuizMusicPlayerNativeProps) {
   const { colors } = useTheme();
-  const [currentTrackIndex, setCurrentTrackIndex] = useState(initialTrackIndex);
-  const [isPlaying, setIsPlaying] = useState(initialIsPlaying);
-  const isPlayingRef = useRef(initialIsPlaying);
-  const initialPlaybackRef = useRef({ initialIsPlaying, initialTrackIndex });
+  const [playback, setPlayback] = useState(initialPlayback);
+  const playbackRef = useRef(playback);
+  playbackRef.current = playback;
+  const initialPlaybackRef = useRef(initialPlayback);
   const onPlaybackChangeRef = useRef(onPlaybackChange);
   onPlaybackChangeRef.current = onPlaybackChange;
   const playlist = useAudioPlaylist({
@@ -57,7 +62,8 @@ export function QuizMusicPlayerNative({
     sources: QUIZ_TRACKS.map((track) => track.source),
     updateInterval: 10_000,
   });
-  const currentTrack = QUIZ_TRACKS[currentTrackIndex] ?? QUIZ_TRACKS[0];
+  const currentTrack =
+    QUIZ_TRACKS[playback.currentTrackIndex] ?? QUIZ_TRACKS[0];
   const status = useAudioPlaylistStatus(playlist);
   const progress =
     status.duration > 0
@@ -66,14 +72,24 @@ export function QuizMusicPlayerNative({
   const styles = createStyles(colors);
 
   useEffect(() => {
+    playbackRef.current = {
+      ...playbackRef.current,
+      positionSeconds: status.currentTime,
+    };
+  });
+
+  useEffect(() => {
     const subscription = playlist.addListener(
       'trackChanged',
       ({ currentIndex }) => {
-        setCurrentTrackIndex(currentIndex);
-        onPlaybackChangeRef.current?.({
+        const next = {
+          ...playbackRef.current,
           currentTrackIndex: currentIndex,
-          isPlaying: isPlayingRef.current,
-        });
+          positionSeconds: 0,
+        };
+        setPlayback(next);
+        playbackRef.current = next;
+        onPlaybackChangeRef.current?.(next);
       }
     );
     return () => subscription.remove();
@@ -82,12 +98,18 @@ export function QuizMusicPlayerNative({
   useEffect(() => {
     let cancelled = false;
     playlist.volume = QUIZ_MUSIC_VOLUME;
-    const {
-      initialIsPlaying: resumeIsPlaying,
-      initialTrackIndex: resumeTrackIndex,
-    } = initialPlaybackRef.current;
-    if (resumeTrackIndex > 0) {
-      safelyControlPlaylist(() => playlist.skipTo(resumeTrackIndex));
+    const resumePlayback = initialPlaybackRef.current;
+    if (resumePlayback.currentTrackIndex > 0) {
+      safelyControlPlaylist(() =>
+        playlist.skipTo(resumePlayback.currentTrackIndex)
+      );
+    }
+    if (resumePlayback.positionSeconds > 0) {
+      safelyControlPlaylist(() => {
+        void playlist
+          .seekTo(resumePlayback.positionSeconds)
+          .catch(() => undefined);
+      });
     }
 
     void setAudioModeAsync({
@@ -98,7 +120,7 @@ export function QuizMusicPlayerNative({
       shouldRouteThroughEarpiece: false,
     })
       .then(() => {
-        if (!cancelled && resumeIsPlaying) {
+        if (!cancelled && resumePlayback.isPlaying) {
           safelyControlPlaylist(() => playlist.play());
         }
       })
@@ -106,20 +128,21 @@ export function QuizMusicPlayerNative({
 
     return () => {
       cancelled = true;
+      onPlaybackChangeRef.current?.(playbackRef.current);
       safelyControlPlaylist(() => playlist.pause());
     };
   }, [playlist]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active' && isPlaying) {
+      if (nextState === 'active' && playback.isPlaying) {
         safelyControlPlaylist(() => playlist.play());
         return;
       }
       safelyControlPlaylist(() => playlist.pause());
     });
     return () => subscription.remove();
-  }, [isPlaying, playlist]);
+  }, [playback.isPlaying, playlist]);
 
   return (
     <View accessibilityLabel="Quiz music" style={styles.musicBar}>
@@ -137,27 +160,28 @@ export function QuizMusicPlayerNative({
         ) : null}
         <Pressable
           accessibilityLabel={
-            isPlaying ? 'Pause quiz music' : 'Play quiz music'
+            playback.isPlaying ? 'Pause quiz music' : 'Play quiz music'
           }
           accessibilityRole="button"
-          accessibilityState={{ selected: isPlaying }}
+          accessibilityState={{ selected: playback.isPlaying }}
           hitSlop={8}
           onPress={() => {
-            const nextIsPlaying = !isPlaying;
-            if (isPlaying) safelyControlPlaylist(() => playlist.pause());
+            const next = {
+              ...playbackRef.current,
+              isPlaying: !playback.isPlaying,
+            };
+            if (playback.isPlaying)
+              safelyControlPlaylist(() => playlist.pause());
             else safelyControlPlaylist(() => playlist.play());
-            setIsPlaying(nextIsPlaying);
-            isPlayingRef.current = nextIsPlaying;
-            onPlaybackChange?.({
-              currentTrackIndex,
-              isPlaying: nextIsPlaying,
-            });
+            setPlayback(next);
+            playbackRef.current = next;
+            onPlaybackChange?.(next);
           }}
           style={styles.playButton}
         >
           <Ionicons
             color={colors.text}
-            name={isPlaying ? 'pause' : 'play'}
+            name={playback.isPlaying ? 'pause' : 'play'}
             size={18}
           />
         </Pressable>

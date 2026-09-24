@@ -10,15 +10,22 @@ jest.mock('@/components/quiz/is-quiz-mobile-ads-available', () => ({
 
 jest.mock('@/services/initialize-quiz-mobile-ads', () => ({
   initializeQuizMobileAds: jest.fn(),
+  isQuizMobileAdsAttemptDisabled: jest.fn(() => false),
 }));
 
 import { isQuizMobileAdsAvailable } from '@/components/quiz/is-quiz-mobile-ads-available';
 import { getFeatureFlagValue } from '@/services/analytics-core';
-import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
+import {
+  initializeQuizMobileAds,
+  isQuizMobileAdsAttemptDisabled,
+} from '@/services/initialize-quiz-mobile-ads';
 import { useQuizMobileAds } from './use-quiz-mobile-ads';
 
 const mockGetFeatureFlagValue = jest.mocked(getFeatureFlagValue);
 const mockInitializeQuizMobileAds = jest.mocked(initializeQuizMobileAds);
+const mockIsQuizMobileAdsAttemptDisabled = jest.mocked(
+  isQuizMobileAdsAttemptDisabled
+);
 const mockIsQuizMobileAdsAvailable = jest.mocked(isQuizMobileAdsAvailable);
 
 const enabledConfig = {
@@ -33,6 +40,7 @@ describe('useQuizMobileAds', () => {
       .mockReset()
       .mockResolvedValue({ canRequestAds: true });
     mockIsQuizMobileAdsAvailable.mockReset().mockReturnValue(true);
+    mockIsQuizMobileAdsAttemptDisabled.mockReset().mockReturnValue(false);
   });
 
   it('does no ad work when gameplay has not requested the placement', () => {
@@ -67,6 +75,23 @@ describe('useQuizMobileAds', () => {
 
   it('honors the runtime kill switch without initializing the SDK', async () => {
     mockGetFeatureFlagValue.mockResolvedValue(false);
+    const { result } = renderHook(() =>
+      useQuizMobileAds({ config: enabledConfig, requested: true })
+    );
+
+    await waitFor(() => expect(result.current.initialized).toBe(true));
+
+    expect(result.current).toEqual({
+      bannerUnitId: null,
+      canRequestAds: false,
+      enabled: false,
+      initialized: true,
+    });
+    expect(mockInitializeQuizMobileAds).not.toHaveBeenCalled();
+  });
+
+  it('skips the gameplay retry when the pre-start attempt failed', async () => {
+    mockIsQuizMobileAdsAttemptDisabled.mockReturnValue(true);
     const { result } = renderHook(() =>
       useQuizMobileAds({ config: enabledConfig, requested: true })
     );

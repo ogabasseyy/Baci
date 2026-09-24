@@ -17,6 +17,7 @@ let mockTrackChanged:
   | ((data: { currentIndex: number; previousIndex: number }) => void)
   | undefined;
 const mockPlaylist = {
+  seekTo: jest.fn(async () => undefined),
   skipTo: jest.fn(),
   addListener: jest.fn(
     (
@@ -50,6 +51,7 @@ describe('QuizMusicPlayerNative', () => {
     mockPlaylist.addListener.mockClear();
     mockPlaylist.pause.mockClear();
     mockPlaylist.play.mockClear();
+    mockPlaylist.seekTo.mockClear();
     mockPlaylist.skipTo.mockClear();
     mockTrackChanged = undefined;
     mockSetAudioModeAsync.mockClear();
@@ -142,7 +144,15 @@ describe('QuizMusicPlayerNative', () => {
   });
 
   it('stays paused when remounting after the player was paused', async () => {
-    render(<QuizMusicPlayerNative initialIsPlaying={false} />);
+    render(
+      <QuizMusicPlayerNative
+        initialPlayback={{
+          currentTrackIndex: 0,
+          isPlaying: false,
+          positionSeconds: 12,
+        }}
+      />
+    );
 
     expect(
       screen.getByRole('button', { name: 'Play quiz music' })
@@ -151,10 +161,19 @@ describe('QuizMusicPlayerNative', () => {
     expect(mockPlaylist.play).not.toHaveBeenCalled();
   });
 
-  it('resumes the previous track when remounting', () => {
-    render(<QuizMusicPlayerNative initialTrackIndex={1} />);
+  it('resumes the previous track and position when remounting', () => {
+    render(
+      <QuizMusicPlayerNative
+        initialPlayback={{
+          currentTrackIndex: 1,
+          isPlaying: true,
+          positionSeconds: 42,
+        }}
+      />
+    );
 
     expect(mockPlaylist.skipTo).toHaveBeenCalledWith(1);
+    expect(mockPlaylist.seekTo).toHaveBeenCalledWith(42);
     expect(screen.getByText('Ogabassey No dey Disappoint 1')).toBeTruthy();
   });
 
@@ -168,10 +187,32 @@ describe('QuizMusicPlayerNative', () => {
     expect(onPlaybackChange).toHaveBeenCalledWith({
       currentTrackIndex: 0,
       isPlaying: false,
+      positionSeconds: 0,
     });
     expect(onPlaybackChange).toHaveBeenCalledWith({
       currentTrackIndex: 1,
       isPlaying: false,
+      positionSeconds: 0,
+    });
+  });
+
+  it('flushes the latest position when the player unmounts', () => {
+    mockUseAudioPlaylistStatus.mockReturnValue({
+      currentTime: 37,
+      duration: 100,
+    } as never);
+    const onPlaybackChange = jest.fn();
+    const { unmount } = render(
+      <QuizMusicPlayerNative onPlaybackChange={onPlaybackChange} />
+    );
+    onPlaybackChange.mockClear();
+
+    unmount();
+
+    expect(onPlaybackChange).toHaveBeenCalledWith({
+      currentTrackIndex: 0,
+      isPlaying: true,
+      positionSeconds: 37,
     });
   });
 });

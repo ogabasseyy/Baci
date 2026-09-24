@@ -11,9 +11,11 @@ const mockStartQuizAttempt = jest.fn<(args: unknown) => Promise<unknown>>();
 const mockStartQuizAttemptV2 = jest.fn<(args: unknown) => Promise<unknown>>();
 const mockGetFingerprint = jest.fn<() => Promise<string | null>>();
 const mockEnsureQuizMobileAdsReady = jest.fn<() => Promise<void>>();
+const mockResetQuizMobileAdsAttempt = jest.fn<() => void>();
 
 jest.mock('@/services/initialize-quiz-mobile-ads', () => ({
   ensureQuizMobileAdsReady: () => mockEnsureQuizMobileAdsReady(),
+  resetQuizMobileAdsAttempt: () => mockResetQuizMobileAdsAttempt(),
 }));
 
 // Captured so the test can drive the gate callbacks the flow wires up.
@@ -126,6 +128,21 @@ describe('useQuizStartFlow', () => {
     dobOnStart('event-1');
 
     await waitFor(() => expect(mockStartQuizAttempt).toHaveBeenCalled());
+  });
+
+  it('re-arms ads for the new attempt before checking readiness', async () => {
+    renderHook(() => useQuizStartFlow({ integrityTier: 'device', startEvent }));
+
+    dobOnStart('event-1');
+
+    await waitFor(() => expect(mockStartQuizAttempt).toHaveBeenCalled());
+    expect(mockResetQuizMobileAdsAttempt).toHaveBeenCalledTimes(1);
+    expect(
+      mockResetQuizMobileAdsAttempt.mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      mockEnsureQuizMobileAdsReady.mock.invocationCallOrder[0] ??
+        Number.POSITIVE_INFINITY
+    );
   });
 
   it('reopens the date-of-birth gate when the server rejects a stored DOB as under-18', async () => {

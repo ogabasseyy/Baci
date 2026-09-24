@@ -3,6 +3,6 @@ import { ensureQuizMobileAdsReady } from '@/services/initialize-quiz-mobile-ads'
 
 export function useQuizMobileAdsPrewarm(enabled: boolean): void {
   useEffect(() => {
-    if (enabled) void ensureQuizMobileAdsReady();
+    if (enabled) void ensureQuizMobileAdsReady().catch(() => undefined);
   }, [enabled]);
 }

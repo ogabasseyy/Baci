@@ -327,6 +327,29 @@ describe('QuizResultsPanel', () => {
     expect(useQuizStore.getState().status).toBe('idle');
   });
 
+  it('explains explicitly cancelled events instead of a missing attempt', () => {
+    render(
+      <QuizResultsPanel
+        legacyResult={null}
+        lifecycle="event_cancelled"
+        styles={createQuizStyles(colors)}
+        v2Result={{
+          attemptId: 'attempt-1',
+          availability: 'unavailable',
+          reason: 'event_cancelled',
+        }}
+      />
+    );
+
+    expect(screen.getByText('Quiz cancelled')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'This quiz event was cancelled. Return to the quiz list to join another event.'
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText('Quiz result unavailable')).toBeNull();
+  });
+
   it('returns to the event list from a legacy result', () => {
     useQuizStore.setState({ status: 'result' });
     render(

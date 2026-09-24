@@ -1,12 +1,13 @@
 import {
   getQuizWindowBounds,
   getSuggestedQuizLiveWindowSeconds,
+  QUIZ_TEST_WINDOW_MAXIMUM_SECONDS,
 } from '@baci/shared/constants';
 import { clampNumber } from './quiz-admin-actions';
 
 interface QuizDurationWindow {
   totalQuizDurationSeconds: number;
-  windowBounds: { maximumSeconds: number | null; minimumSeconds: number };
+  windowBounds: { maximumSeconds: number; minimumSeconds: number };
 }
 
 export function getQuizDurationWindow({
@@ -27,9 +28,14 @@ export function getQuizDurationWindow({
     questionCount > 0 &&
     Number.isInteger(timePerQuestionSeconds) &&
     timePerQuestionSeconds > 0;
-  const windowBounds = windowInputsValid
+  const sharedBounds = windowInputsValid
     ? getQuizWindowBounds(mode, questionCount, timePerQuestionSeconds)
-    : { maximumSeconds: null as number | null, minimumSeconds: 0 };
+    : null;
+  const windowBounds = {
+    maximumSeconds:
+      sharedBounds?.maximumSeconds ?? QUIZ_TEST_WINDOW_MAXIMUM_SECONDS,
+    minimumSeconds: sharedBounds?.minimumSeconds ?? 0,
+  };
   const defaultTotalDurationSeconds =
     mode === 'live' && windowInputsValid
       ? getSuggestedQuizLiveWindowSeconds(questionCount, timePerQuestionSeconds)
@@ -40,7 +46,7 @@ export function getQuizDurationWindow({
     totalQuizDurationSeconds: clampNumber(
       desiredTotalDurationSeconds,
       windowBounds.minimumSeconds,
-      windowBounds.maximumSeconds ?? desiredTotalDurationSeconds
+      windowBounds.maximumSeconds
     ),
     windowBounds,
   };

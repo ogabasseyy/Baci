@@ -23,6 +23,8 @@ export type QuizDraftConfiguration = {
    */
   endTouched: boolean;
   liveWindowMinutes: number;
+  /** Preserve manual immediate windows when generation changes the question count. */
+  windowTouched?: boolean;
   mode: 'test' | 'live';
   prizeProduct: QuizPrizeProduct;
   questionCountPerTopic: number;

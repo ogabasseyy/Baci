@@ -323,6 +323,7 @@ jobs:
           --sql-check supabase/migrations/tests/quiz_instant_retry_pending_health_v2.sql
           --sql-check supabase/migrations/tests/quiz_results_wakeup_player_access_v2.sql
           --sql-check supabase/migrations/tests/quiz_test_publication_control_rls_v2.sql
+          --sql-check supabase/migrations/tests/quiz_start_guard_context_v2.sql
           --sql-check supabase/migrations/tests/quiz_cascade_score_consistency_v2.sql
           --sql-check supabase/migrations/tests/quiz_runtime_gate_stale_health_v2.sql
           --sql-check supabase/migrations/tests/quiz_score_repair_quiescence_gate_v2.sql

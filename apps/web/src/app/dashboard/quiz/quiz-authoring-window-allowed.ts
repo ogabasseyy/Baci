@@ -34,7 +34,7 @@ export function isQuizAuthoringWindowAllowed({
       mode,
       questionCount,
       timePerQuestionSeconds,
-      liveWindowMinutes * 60
+      Math.round(liveWindowMinutes * 60)
     );
   }
   const interval = quizAuthoringIntervalMs(scheduledStart, scheduledEnd);

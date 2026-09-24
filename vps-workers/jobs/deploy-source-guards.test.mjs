@@ -218,10 +218,7 @@ describe('deploy source guards', () => {
       source,
       /tsx_bin="\$repo_dir\/apps\/web\/node_modules\/\.bin\/tsx"/
     );
-    assert.doesNotMatch(
-      source,
-      /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/
-    );
+    assert.match(source, /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/);
     assert.doesNotMatch(source, /pnpm .*exec tsx/);
   });
 });

@@ -280,6 +280,9 @@ BEGIN
 END;
 $$;
 
+-- The service_role block above cannot restore replication mode itself;
+-- drop back to the invoking role first (ROLLBACK would also restore it).
+RESET ROLE;
 SET LOCAL session_replication_role = origin;
 
 ROLLBACK;

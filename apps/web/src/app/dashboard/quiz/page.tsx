@@ -83,14 +83,20 @@ export async function loadPrizeProducts(merchantId: string) {
         ) {
           return Promise.resolve({ data: null, error: null });
         }
-        return supabase
-          .from('product_variants')
-          .select(VARIANT_PROJECTION)
-          .eq('merchant_id', merchantId)
-          .eq('product_id', item.id)
-          .order('created_at', { ascending: true, nullsFirst: true })
-          .order('id', { ascending: true })
-          .limit(chunkLimit);
+        return (
+          supabase
+            .from('product_variants')
+            .select(VARIANT_PROJECTION)
+            .eq('merchant_id', merchantId)
+            .eq('product_id', item.id)
+            // Anchors must be excluded before the lookahead limit: a fetched
+            // anchor would consume the truncation-proving row and strand the
+            // parent's remaining selectable variants without a cursor.
+            .eq('is_inventory_anchor', false)
+            .order('created_at', { ascending: true, nullsFirst: true })
+            .order('id', { ascending: true })
+            .limit(chunkLimit)
+        );
       })
     );
     for (const [index, item] of chunk.entries()) {

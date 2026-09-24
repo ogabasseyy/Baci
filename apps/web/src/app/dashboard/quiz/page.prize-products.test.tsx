@@ -19,11 +19,14 @@ const mockProductsQuery = {
 const variantRowsByParent: Record<string, unknown[]> = {};
 const mockVariantLimits: number[] = [];
 const mockVariantProductIds: string[] = [];
+const mockVariantAnchorFilters: unknown[] = [];
 function mockVariantsBuilder() {
   let productId = '';
   const builder = {
     eq: vi.fn((column: string, value: unknown) => {
       if (column === 'product_id') productId = value as string;
+      if (column === 'is_inventory_anchor')
+        mockVariantAnchorFilters.push(value);
       return builder;
     }),
     limit: vi.fn((count: number) => {
@@ -102,6 +105,7 @@ describe('loadPrizeProducts', () => {
     }
     mockVariantLimits.length = 0;
     mockVariantProductIds.length = 0;
+    mockVariantAnchorFilters.length = 0;
   });
 
   it('filters malformed inventory rows and safely normalizes stock', async () => {
@@ -260,6 +264,25 @@ describe('loadPrizeProducts', () => {
       productOffset: 10,
       variantOffset: 0,
     });
+  });
+
+  it('excludes inventory anchors in the hydration query before the lookahead limit', async () => {
+    mockProductsQuery.limit.mockResolvedValueOnce({
+      count: 1,
+      data: [parentRow(PARENT_ID, 'Parent with variants')],
+      error: null,
+    });
+    variantRowsByParent[PARENT_ID] = variantRows(
+      PARENT_ID,
+      '11111111-1111-4111-8111',
+      3
+    );
+
+    await loadPrizeProducts('merchant-1');
+
+    // A fetched anchor would otherwise consume the truncation-proving
+    // row and strand the parent's remaining selectable variants.
+    expect(mockVariantAnchorFilters).toEqual([false]);
   });
 
   it('returns the exact inventory total and a continuation cursor after a capped load', async () => {

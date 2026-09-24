@@ -224,5 +224,9 @@ describe('GET /api/merchant/quiz/prize-products variants', () => {
 
     expect(payload.products).toHaveLength(1);
     expect(payload.products[0]).toMatchObject({ variantId: VARIANT_ID });
+    expect(variantsBuilder.eq).toHaveBeenCalledWith(
+      'is_inventory_anchor',
+      false
+    );
   });
 });

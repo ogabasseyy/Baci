@@ -182,6 +182,9 @@ export async function GET(request: Request) {
       .from('product_variants')
       .select(VARIANT_PROJECTION)
       .eq('merchant_id', access.merchantId)
+      // Exclude serialized-inventory anchors in the database, matching the
+      // initial loader, so internal rows never reach variant expansion.
+      .eq('is_inventory_anchor', false)
       .in('product_id', variantProductIds)
       .order('created_at', { ascending: true });
     if (variantError) {

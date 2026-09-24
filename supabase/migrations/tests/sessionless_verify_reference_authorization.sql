@@ -27,6 +27,14 @@ DECLARE
   v_mine_order_id uuid := '9f000000-0000-4000-8000-000000000244';
   v_theirs_order_id uuid := '9f000000-0000-4000-8000-000000000245';
 BEGIN
+  -- customers.user_id references auth.users: the owner rows must exist.
+  INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+  VALUES
+    ('9f000000-0000-4000-8000-000000000249', '00000000-0000-0000-0000-000000000000',
+      'authenticated', 'authenticated', 'verify-auth-owner@example.com', 'test', now(), now(), now(), '{}', '{}'),
+    ('9f000000-0000-4000-8000-000000000248', '00000000-0000-0000-0000-000000000000',
+      'authenticated', 'authenticated', 'verify-auth-other@example.com', 'test', now(), now(), now(), '{}', '{}');
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (
     v_merchant_id,

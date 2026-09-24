@@ -71,22 +71,32 @@ export async function verifyOrderPaymentForCompletion({
     // return immediately with no reference lookup — the row already
     // settles the order.
     if (tracked.paid && reference) {
-      // A paid row alone is not inventory proof: a gateway finalizer
-      // may have flipped payment_status while serialized-inventory
-      // confirmation is still pending or failed. Both verify paths gate
-      // completion on that proof, so require it before completing —
-      // definitive reference outcomes win outright, while a transient
-      // answer stays pending (polling converges once the confirm step
-      // lands) instead of completing an unconfirmed order.
+      // A paid row is authoritative, but a definitive reference outcome
+      // refines it (a finalizer may have flipped payment_status while
+      // the reference tells the terminal story). A transient reference
+      // answer changes nothing: the paid row below still settles the
+      // order, exactly as without a reference.
       const settled = await checkReferenceSettled(
         orderId,
         reference,
         trackingToken
       );
       if (settled.paid || settled.reconciliation || settled.terminalFailure) {
-        return settled;
+        // The paid lookup carries the checkout identity and breakdown
+        // the verify envelope lacks (spread over its paid verdict at
+        // runtime): retain it like the pending merge below. The settled
+        // outcome fields — and the verify total/currency when present —
+        // win (same order, same money).
+        const paidAttribution =
+          tracked as unknown as TrackedCompletionAttribution;
+        return {
+          ...paidAttribution,
+          ...settled,
+          total: settled.total ?? paidAttribution.total,
+          currency: settled.currency ?? paidAttribution.currency,
+        };
       }
-      return { paid: false };
+      return tracked;
     }
     if (tracked.paid || tracked.reconciliation) {
       return tracked;

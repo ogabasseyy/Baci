@@ -46,8 +46,8 @@ import {
 import {
   claimImmediateOrderNotificationWithProof,
   completeImmediateOrderNotificationWithProof,
-  markImmediateOrderNotificationStartedWithProof,
 } from '@/lib/immediate-order/notification-claim';
+import { markImmediateOrderNotificationStartedWithProof } from '@/lib/immediate-order/notification-start-marker';
 import {
   buildImmediateInvoiceArtifacts,
   getOrderItemCondition,

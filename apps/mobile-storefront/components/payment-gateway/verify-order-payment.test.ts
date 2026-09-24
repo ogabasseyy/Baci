@@ -62,22 +62,39 @@ describe('verifyOrderPaymentForCompletion', () => {
     ).toBe(false);
   });
 
-  it('requires reference verification for a paid row when a reference is present', async () => {
+  it('refines a paid row with a definitive reference outcome and keeps lookup attribution', async () => {
     const fetchMock = mockFetch((url: string) =>
       String(url).includes('/api/payments/verify')
         ? new Response(JSON.stringify(completedVerification), { status: 200 })
-        : new Response(JSON.stringify(paidTrackedOrder), { status: 200 })
+        : new Response(
+            JSON.stringify({
+              order: {
+                id: 'order-1',
+                order_number: 'ORD-1',
+                payment_status: 'paid',
+                total: 5000,
+              },
+              customer: { email: 'ada@example.com', phone: '+2341' },
+            }),
+            { status: 200 }
+          )
     );
 
-    // A paid row alone is not inventory proof: the reference check (both
-    // server paths gate completion on it) must confirm before completing.
+    // The paid lookup carries the checkout identity the verify
+    // envelope lacks: a definitive reference outcome wins the verdict
+    // while the attribution survives.
     await expect(
       verifyOrderPaymentForCompletion({
         orderId: 'order-1',
         trackingToken: 'track-1',
         reference: 'ref-1',
       })
-    ).resolves.toEqual({ paid: true, total: 5000 });
+    ).resolves.toEqual({
+      paid: true,
+      total: 5000,
+      customerEmail: 'ada@example.com',
+      customerPhone: '+2341',
+    });
     expect(
       fetchMock.mock.calls.some(([url]) =>
         String(url).includes('/api/payments/verify')
@@ -85,7 +102,7 @@ describe('verifyOrderPaymentForCompletion', () => {
     ).toBe(true);
   });
 
-  it('stays pending when reference verification is transient for a paid row', async () => {
+  it('keeps a paid row settled when reference verification is transient', async () => {
     mockFetch((url: string) =>
       String(url).includes('/api/payments/verify')
         ? new Response(
@@ -100,15 +117,15 @@ describe('verifyOrderPaymentForCompletion', () => {
         : new Response(JSON.stringify(paidTrackedOrder), { status: 200 })
     );
 
-    // Paid row, unconfirmed inventory: never complete — polling
-    // converges once the finalizer's confirm step lands.
+    // A transient reference answer changes nothing: the paid row
+    // settles the order exactly as without a reference.
     await expect(
       verifyOrderPaymentForCompletion({
         orderId: 'order-1',
         trackingToken: 'track-1',
         reference: 'ref-1',
       })
-    ).resolves.toEqual({ paid: false });
+    ).resolves.toEqual({ paid: true, total: 5000 });
   });
 
   it('falls back to reference verification when the lookup is still pending', async () => {

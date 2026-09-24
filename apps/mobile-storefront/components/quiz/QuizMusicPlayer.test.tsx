@@ -6,7 +6,11 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
-import { setAudioModeAsync, useAudioPlaylist } from 'expo-audio';
+import {
+  setAudioModeAsync,
+  useAudioPlaylist,
+  useAudioPlaylistStatus,
+} from 'expo-audio';
 import { QuizMusicPlayerNative } from './QuizMusicPlayerNative';
 
 let mockTrackChanged:
@@ -31,10 +35,12 @@ const mockPlaylist = {
 jest.mock('expo-audio', () => ({
   setAudioModeAsync: jest.fn(async () => undefined),
   useAudioPlaylist: jest.fn(),
+  useAudioPlaylistStatus: jest.fn(),
 }));
 
 const mockSetAudioModeAsync = jest.mocked(setAudioModeAsync);
 const mockUseAudioPlaylist = jest.mocked(useAudioPlaylist);
+const mockUseAudioPlaylistStatus = jest.mocked(useAudioPlaylistStatus);
 
 describe('QuizMusicPlayerNative', () => {
   beforeEach(() => {
@@ -47,6 +53,11 @@ describe('QuizMusicPlayerNative', () => {
     mockSetAudioModeAsync.mockClear();
     mockUseAudioPlaylist.mockClear();
     mockUseAudioPlaylist.mockReturnValue(mockPlaylist as never);
+    mockUseAudioPlaylistStatus.mockReset();
+    mockUseAudioPlaylistStatus.mockReturnValue({
+      currentTime: 0,
+      duration: 0,
+    } as never);
   });
 
   it('starts the two Ogabassey tracks in the approved order at low volume', async () => {
@@ -108,5 +119,23 @@ describe('QuizMusicPlayerNative', () => {
     expect(
       screen.getByLabelText('Now playing Nobody does it better')
     ).toBeTruthy();
+  });
+
+  it('drives playback progress from the playlist status', () => {
+    mockUseAudioPlaylistStatus.mockReturnValue({
+      currentTime: 25,
+      duration: 100,
+    } as never);
+    render(<QuizMusicPlayerNative />);
+
+    const progress = screen.getByLabelText('Music playback progress');
+    expect(progress.props.accessibilityValue).toMatchObject({
+      max: 100,
+      min: 0,
+      now: 25,
+    });
+    expect(progress.props.children.props.style).toEqual(
+      expect.arrayContaining([{ width: '25%' }])
+    );
   });
 });

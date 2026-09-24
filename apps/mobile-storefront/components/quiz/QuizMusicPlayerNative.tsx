@@ -1,5 +1,9 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { setAudioModeAsync, useAudioPlaylist } from 'expo-audio';
+import {
+  setAudioModeAsync,
+  useAudioPlaylist,
+  useAudioPlaylistStatus,
+} from 'expo-audio';
 import { useEffect, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import nobodyDoesItBetter from '@/assets/quiz/audio/nobody-does-it-better.mp3';
@@ -39,6 +43,11 @@ export function QuizMusicPlayerNative({
     updateInterval: 10_000,
   });
   const currentTrack = QUIZ_TRACKS[currentTrackIndex] ?? QUIZ_TRACKS[0];
+  const status = useAudioPlaylistStatus(playlist);
+  const progress =
+    status.duration > 0
+      ? Math.min(1, Math.max(0, status.currentTime / status.duration))
+      : 0;
   const styles = createStyles(colors);
 
   useEffect(() => {
@@ -129,9 +138,14 @@ export function QuizMusicPlayerNative({
       <View
         accessibilityLabel="Music playback progress"
         accessibilityRole="progressbar"
+        accessibilityValue={{
+          max: 100,
+          min: 0,
+          now: Math.round(progress * 100),
+        }}
         style={styles.playbackTrack}
       >
-        <View style={styles.playbackFill} />
+        <View style={[styles.playbackFill, { width: `${progress * 100}%` }]} />
       </View>
     </View>
   );
@@ -201,7 +215,6 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: colors.primary,
       borderRadius: 999,
       height: '100%',
-      width: '38%',
     },
   });
 }

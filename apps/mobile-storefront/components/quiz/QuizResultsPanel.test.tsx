@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import {
   fetchQuizLeaderboard,
   fetchQuizLiveLeaderboard,
   fetchQuizParticipantCount,
 } from '@/services/quiz-leaderboard';
+import { useQuizStore } from '@/stores/quiz-store';
 import { QuizResultsPanel } from './QuizResultsPanel';
 import { createQuizStyles, type QuizThemeColors } from './QuizScreen.styles';
 
@@ -300,5 +301,52 @@ describe('QuizResultsPanel', () => {
     });
     expect(fetchQuizLeaderboard).toHaveBeenCalledTimes(2);
     jest.useRealTimers();
+  });
+
+  it('returns to the event list from a final result', () => {
+    useQuizStore.setState({ status: 'result' });
+    render(
+      <QuizResultsPanel
+        legacyResult={null}
+        lifecycle="final"
+        styles={createQuizStyles(colors)}
+        v2Result={{
+          attemptId: 'attempt-1',
+          availability: 'final',
+          availableAt: new Date().toISOString(),
+          rank: 1,
+          score: 8,
+          totalQuestions: 10,
+        }}
+      />
+    );
+
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Back to quiz events' })
+    );
+    expect(useQuizStore.getState().status).toBe('idle');
+  });
+
+  it('returns to the event list from a legacy result', () => {
+    useQuizStore.setState({ status: 'result' });
+    render(
+      <QuizResultsPanel
+        legacyResult={{
+          attemptId: 'attempt-1',
+          correctAnswers: 8,
+          prizeEligible: false,
+          status: 'completed',
+          totalQuestions: 10,
+        }}
+        lifecycle="idle"
+        styles={createQuizStyles(colors)}
+        v2Result={null}
+      />
+    );
+
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Back to quiz events' })
+    );
+    expect(useQuizStore.getState().status).toBe('idle');
   });
 });

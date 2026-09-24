@@ -1,9 +1,5 @@
 'use client';
 
-import {
-  getQuizWindowBounds,
-  getSuggestedQuizLiveWindowSeconds,
-} from '@baci/shared/constants';
 import { Loader2, Sparkles } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useState } from 'react';
@@ -15,6 +11,7 @@ import {
 } from './quiz-admin-actions';
 import { formatQuizDuration } from './quiz-duration';
 import { QuizDurationField } from './quiz-duration-field';
+import { getQuizDurationWindow } from './quiz-duration-window';
 import { QuizPlanSummary } from './quiz-plan-summary';
 import { QuizPrizeProductPicker } from './quiz-prize-product-picker';
 import { QuizTopicInput } from './quiz-topic-input';
@@ -82,25 +79,13 @@ export function QuizAuthoringForm({
   const questionCount = topics.length * clampNumber(Number(perTopic), 1, 20);
   const timePerQuestionSeconds = clampNumber(Number(time), 5, 60);
   const expectedPlaySeconds = questionCount * timePerQuestionSeconds;
-  const windowInputsValid =
-    Number.isInteger(questionCount) &&
-    questionCount > 0 &&
-    Number.isInteger(timePerQuestionSeconds) &&
-    timePerQuestionSeconds > 0;
-  const windowBounds = windowInputsValid
-    ? getQuizWindowBounds(mode, questionCount, timePerQuestionSeconds)
-    : { maximumSeconds: null as number | null, minimumSeconds: 0 };
-  const defaultTotalDurationSeconds =
-    mode === 'live' && windowInputsValid
-      ? getSuggestedQuizLiveWindowSeconds(questionCount, timePerQuestionSeconds)
-      : expectedPlaySeconds;
-  const desiredTotalDurationSeconds =
-    requestedTotalDurationSeconds ?? defaultTotalDurationSeconds;
-  const totalQuizDurationSeconds = clampNumber(
-    desiredTotalDurationSeconds,
-    windowBounds.minimumSeconds,
-    windowBounds.maximumSeconds ?? desiredTotalDurationSeconds
-  );
+  const { totalQuizDurationSeconds, windowBounds } = getQuizDurationWindow({
+    expectedPlaySeconds,
+    mode,
+    questionCount,
+    requestedTotalDurationSeconds,
+    timePerQuestionSeconds,
+  });
   const closesAt =
     timingKind === 'scheduled' && scheduledEnd
       ? new Date(scheduledEnd).toLocaleString()

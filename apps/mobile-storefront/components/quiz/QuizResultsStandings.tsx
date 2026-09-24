@@ -21,11 +21,15 @@ export function QuizResultsStandings({
   participantCount,
   styles,
 }: QuizResultsStandingsProps) {
+  const markedEntry =
+    leaderboard?.entries.find((entry) => entry.isCurrentCustomer) ?? null;
+  const topEntries = leaderboard?.entries.slice(0, 4) ?? [];
   const rows: QuizLeaderboardEntry[] = leaderboard
-    ? leaderboard.currentPlayer &&
-      !leaderboard.entries.some((entry) => entry.isCurrentCustomer)
-      ? [...leaderboard.entries.slice(0, 4), leaderboard.currentPlayer]
-      : leaderboard.entries.slice(0, 5)
+    ? leaderboard.currentPlayer && !markedEntry
+      ? [...topEntries, leaderboard.currentPlayer]
+      : markedEntry && !topEntries.includes(markedEntry)
+        ? [...topEntries, markedEntry]
+        : leaderboard.entries.slice(0, 5)
     : [];
 
   return (

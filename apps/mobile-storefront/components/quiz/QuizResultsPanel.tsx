@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import type { QuizResult, QuizV2Result } from '@/services/quiz-types';
 import type { QuizV2LifecycleStatus } from '@/stores/quiz-recovery-envelope';
+import { useQuizStore } from '@/stores/quiz-store';
 import { QuizPrizeClaimPanel } from './QuizPrizeClaimPanel';
 import { QuizResultsStandings } from './QuizResultsStandings';
 import type { createQuizStyles } from './QuizScreen.styles';
@@ -50,6 +51,7 @@ export function QuizResultsPanel({
   v2Result,
 }: QuizResultsPanelProps) {
   const router = useRouter();
+  const resetQuiz = useQuizStore((state) => state.reset);
   const { offsetMs } = useQuizServerClock(serverNow);
   const eventTimer = useQuizEventTimer({
     eventEndsAt,
@@ -148,33 +150,44 @@ export function QuizResultsPanel({
             styles={styles}
           />
         ) : null}
-        {v2Result?.availability === 'final' ? (
-          <>
-            {v2Result.prizeClaim ? (
-              <QuizPrizeClaimPanel
-                prizeClaim={v2Result.prizeClaim}
-                styles={styles}
-              />
-            ) : null}
-            <View style={styles.resultActionBox}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="View past quiz leaderboards"
-                onPress={() => router.push('/quiz/leaderboards')}
-                style={styles.resultAction}
-              >
-                <Text style={styles.secondaryButtonText}>
-                  View past leaderboards
-                </Text>
-                <Ionicons
-                  name="arrow-forward"
-                  size={20}
-                  color={styles.secondaryButtonText.color}
-                />
-              </Pressable>
-            </View>
-          </>
+        {v2Result?.availability === 'final' && v2Result.prizeClaim ? (
+          <QuizPrizeClaimPanel
+            prizeClaim={v2Result.prizeClaim}
+            styles={styles}
+          />
         ) : null}
+        <View style={styles.resultActionBox}>
+          {v2Result?.availability === 'final' ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View past quiz leaderboards"
+              onPress={() => router.push('/quiz/leaderboards')}
+              style={styles.resultAction}
+            >
+              <Text style={styles.secondaryButtonText}>
+                View past leaderboards
+              </Text>
+              <Ionicons
+                name="arrow-forward"
+                size={20}
+                color={styles.secondaryButtonText.color}
+              />
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to quiz events"
+            onPress={resetQuiz}
+            style={styles.resultAction}
+          >
+            <Text style={styles.secondaryButtonText}>Back to events</Text>
+            <Ionicons
+              name="arrow-back"
+              size={20}
+              color={styles.secondaryButtonText.color}
+            />
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -201,6 +214,21 @@ export function QuizResultsPanel({
             : 'Practice result only'}
         </Text>
       )}
+      <View style={styles.resultActionBox}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to quiz events"
+          onPress={resetQuiz}
+          style={styles.resultAction}
+        >
+          <Text style={styles.secondaryButtonText}>Back to events</Text>
+          <Ionicons
+            name="arrow-back"
+            size={20}
+            color={styles.secondaryButtonText.color}
+          />
+        </Pressable>
+      </View>
     </View>
   );
 }

@@ -12,7 +12,7 @@ export function QuizDurationField({
   totalDurationSeconds,
 }: {
   expectedPlaySeconds: number;
-  onDurationChange: (seconds: number) => void;
+  onDurationChange: (seconds: number | null) => void;
   totalDurationSeconds: number;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -25,7 +25,7 @@ export function QuizDurationField({
   const resetToExpectedPlay = () => {
     setInputValue('');
     setIsExpanded(false);
-    onDurationChange(expectedPlaySeconds);
+    onDurationChange(null);
   };
 
   return (

@@ -65,6 +65,25 @@ describe('QuizLeaderboardScreen', () => {
     expect(screen.queryByText('Current quiz')).toBeNull();
   });
 
+  it('hides non-terminal events even when the device clock is ahead', async () => {
+    jest.mocked(fetchQuizEvents).mockResolvedValue([
+      {
+        endsAt: '2020-01-01T00:00:00Z',
+        id: 'event-live',
+        prizeName: 'Phone',
+        questionCount: 20,
+        startsAt: '2019-12-31T23:00:00Z',
+        status: 'active',
+        title: 'Live quiz',
+      },
+    ]);
+
+    render(<QuizLeaderboardScreen />);
+    await screen.findByText('No previous quiz leaderboards yet.');
+
+    expect(screen.queryByText('Live quiz')).toBeNull();
+  });
+
   it('shows an accessible error when history cannot load', async () => {
     jest.mocked(fetchQuizEvents).mockRejectedValue(new Error('offline'));
     render(<QuizLeaderboardScreen />);

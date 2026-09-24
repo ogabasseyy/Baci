@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
+import { getQuizMobileAdsConfig } from '@/config/quiz-mobile-ads';
 import { useTheme } from '@/hooks/useTheme';
 import { createLogger } from '@/lib/logger';
+import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
 import {
   fetchQuizEvents,
   type QuizIntegrityTier,
@@ -123,6 +125,14 @@ export function QuizScreen({
     };
   }, [loadEvents, setError, status]);
 
+  const quizAdsEnabled = getQuizMobileAdsConfig().enabled;
+
+  useEffect(() => {
+    if (quizAdsEnabled) {
+      initializeQuizMobileAds().catch(() => null);
+    }
+  }, [quizAdsEnabled]);
+
   const { dobGate, requestStart, usernameGate } = useQuizStartFlow({
     events,
     integrityTier,
@@ -212,7 +222,10 @@ export function QuizScreen({
       ) : null}
 
       {(status === 'question' || status === 'submitting') && attempt ? (
-        <View style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          style={styles.gameplayScroll}
+        >
           <QuizMusicPlayer />
           <QuizQuestionCard
             attempt={attempt}
@@ -225,11 +238,14 @@ export function QuizScreen({
             selectedOptionId={selectedOptionId}
             styles={styles}
           />
-        </View>
+        </ScrollView>
       ) : null}
 
       {(status === 'question' || status === 'submitting') && v2Attempt ? (
-        <View style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          style={styles.gameplayScroll}
+        >
           {music.shouldPlay ? (
             <QuizMusicPlayer gameEndsIn={music.gameEndsIn} />
           ) : null}
@@ -244,7 +260,7 @@ export function QuizScreen({
             expiryRetryable={expiryRetryable}
             styles={styles}
           />
-        </View>
+        </ScrollView>
       ) : null}
 
       {status === 'result' && music.shouldPlay ? (

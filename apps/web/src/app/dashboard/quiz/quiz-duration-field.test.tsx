@@ -23,4 +23,23 @@ describe('QuizDurationField', () => {
 
     expect(onDurationChange).toHaveBeenLastCalledWith(90);
   });
+
+  it('clears the override when the merchant restores expected play time', async () => {
+    const onDurationChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <QuizDurationField
+        expectedPlaySeconds={70}
+        onDurationChange={onDurationChange}
+        totalDurationSeconds={120}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /extend play time/i }));
+    await user.click(
+      screen.getByRole('button', { name: /use expected play time/i })
+    );
+
+    expect(onDurationChange).toHaveBeenLastCalledWith(null);
+  });
 });

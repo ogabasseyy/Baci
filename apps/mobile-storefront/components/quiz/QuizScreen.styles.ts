@@ -26,6 +26,10 @@ export function createQuizStyles(colors: QuizThemeColors) {
         gap: 16,
         padding: 20,
       },
+      gameplayScroll: {
+        backgroundColor: colors.background,
+        flex: 1,
+      },
       musicContainer: {
         backgroundColor: colors.background,
         paddingHorizontal: 20,

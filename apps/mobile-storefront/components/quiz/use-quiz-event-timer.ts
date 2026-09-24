@@ -14,11 +14,13 @@ export function useQuizEventTimer({
   isActive,
   onExpire,
   serverClockOffsetMs = 0,
+  ticking = isActive,
 }: {
   eventEndsAt: string | null;
   isActive: boolean;
   onExpire: () => void;
   serverClockOffsetMs?: number;
+  ticking?: boolean;
 }): { remainingSeconds: number; hasEnded: boolean } {
   const deadlineMs = eventEndsAt ? Date.parse(eventEndsAt) : Number.NaN;
   const [remainingMs, setRemainingMs] = useState(() =>
@@ -39,7 +41,7 @@ export function useQuizEventTimer({
       }
     };
     evaluate();
-    if (!Number.isFinite(deadlineMs)) return;
+    if (!ticking || !Number.isFinite(deadlineMs)) return;
     const intervalId = setInterval(evaluate, TICK_INTERVAL_MS);
     const subscription = AppState.addEventListener('change', (next) => {
       if (next === 'active') evaluate();
@@ -48,7 +50,7 @@ export function useQuizEventTimer({
       clearInterval(intervalId);
       subscription?.remove?.();
     };
-  }, [deadlineMs, isActive, serverClockOffsetMs]);
+  }, [deadlineMs, isActive, serverClockOffsetMs, ticking]);
 
   return {
     hasEnded: remainingMs === 0,

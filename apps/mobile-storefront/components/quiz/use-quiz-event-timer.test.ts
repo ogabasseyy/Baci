@@ -36,4 +36,34 @@ describe('useQuizEventTimer', () => {
     );
     expect(result.current.remainingSeconds).toBe(55);
   });
+
+  it('does not tick for inactive cards', () => {
+    const onExpire = jest.fn();
+    const { result } = renderHook(() =>
+      useQuizEventTimer({
+        eventEndsAt: '2026-08-04T09:05:00.000Z',
+        isActive: false,
+        onExpire,
+      })
+    );
+    expect(result.current.remainingSeconds).toBe(60);
+    act(() => jest.advanceTimersByTime(60_000));
+    expect(result.current.remainingSeconds).toBe(60);
+    expect(onExpire).not.toHaveBeenCalled();
+  });
+
+  it('ticks for inactive countdowns that opt into ticking', () => {
+    const onExpire = jest.fn();
+    const { result } = renderHook(() =>
+      useQuizEventTimer({
+        eventEndsAt: '2026-08-04T09:05:00.000Z',
+        isActive: false,
+        onExpire,
+        ticking: true,
+      })
+    );
+    act(() => jest.advanceTimersByTime(60_000));
+    expect(result.current).toEqual({ hasEnded: true, remainingSeconds: 0 });
+    expect(onExpire).not.toHaveBeenCalled();
+  });
 });

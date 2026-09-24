@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react-native';
 import { QuizScreen } from '@/components/quiz/QuizScreen';
 import { getQuizDeviceFingerprint } from '@/lib/get-quiz-device-fingerprint';
+import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
 import type { QuizAttempt, QuizEvent, QuizResult } from '@/services/quiz';
 import {
   fetchQuizEvents,
@@ -30,6 +31,9 @@ jest.mock('@/components/quiz/QuizMusicPlayer', () => ({
 }));
 jest.mock('@/components/quiz/QuizGameplayAdFooter', () => ({
   QuizGameplayAdFooter: () => null,
+}));
+jest.mock('@/services/initialize-quiz-mobile-ads', () => ({
+  initializeQuizMobileAds: jest.fn(async () => ({ canRequestAds: true })),
 }));
 
 // The username gate pulls in additional modules (UsernamePrompt, the zod
@@ -249,6 +253,20 @@ describe('QuizScreen', () => {
         name: 'Play for free Daily Prize Quiz',
       })
     ).toBeTruthy();
+  });
+
+  it('prewarms mobile ads consent before timed gameplay starts', async () => {
+    process.env.EXPO_PUBLIC_QUIZ_ADS_ENABLED = 'true';
+    try {
+      render(<QuizScreen integrityTier="device" locale="en-US" />);
+
+      expect(await screen.findByText('Daily Prize Quiz')).toBeTruthy();
+      await waitFor(() =>
+        expect(jest.mocked(initializeQuizMobileAds)).toHaveBeenCalled()
+      );
+    } finally {
+      delete process.env.EXPO_PUBLIC_QUIZ_ADS_ENABLED;
+    }
   });
 
   it('disables start for scheduled quiz events', async () => {

@@ -82,10 +82,8 @@ export function QuizLeaderboardScreen() {
       .then((items) => {
         if (!active) return;
         setEvents(
-          items.filter(
-            (item) =>
-              ['completed', 'closed', 'cancelled'].includes(item.status) ||
-              Boolean(item.endsAt && Date.parse(item.endsAt) <= Date.now())
+          items.filter((item) =>
+            ['completed', 'closed', 'cancelled'].includes(item.status)
           )
         );
       })

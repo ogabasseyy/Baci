@@ -56,11 +56,21 @@ function request() {
 function mappingUpdate(update: (...args: unknown[]) => void) {
   return (...args: unknown[]) => {
     update(...args);
-    const resolved = Promise.resolve({ error: null });
+    const resolved = Promise.resolve({
+      data: { id: 'mapping-1' },
+      error: null,
+    });
     const builder = Object.assign(resolved, {
       eq: vi.fn(),
+      in: vi.fn(),
+      is: vi.fn(),
+      select: vi.fn(),
+      maybeSingle: vi.fn(() => resolved),
     });
     builder.eq.mockReturnValue(builder);
+    builder.in.mockReturnValue(builder);
+    builder.is.mockReturnValue(builder);
+    builder.select.mockReturnValue(builder);
     return builder;
   };
 }

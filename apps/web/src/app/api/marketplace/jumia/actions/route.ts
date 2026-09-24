@@ -143,9 +143,24 @@ export async function POST(request: NextRequest) {
       // sends the full item list. Compare against the provider's complete set.
       try {
         const orderItems = await getOrderItems(jumiaClient, orderId);
+        const orderItemIds = new Set(
+          orderItems?.items?.map((item) => item.id) ?? []
+        );
         const suppliedIds = new Set(targetItemIds);
+        const foreignIds = [...suppliedIds].filter(
+          (id) => !orderItemIds.has(id)
+        );
+        if (foreignIds.length > 0) {
+          // Acting on another order's items would leave that order's local
+          // status stale, since only orderId is ever updated below.
+          return NextResponse.json(
+            { error: 'Some items do not belong to this order' },
+            { status: 400 }
+          );
+        }
         isAllItems =
-          !!orderItems?.items?.length &&
+          orderItemIds.size > 0 &&
+          suppliedIds.size === orderItemIds.size &&
           orderItems.items.every((item) => suppliedIds.has(item.id));
       } catch (error: unknown) {
         // Proceed with the supplied IDs; only the order-level status sync is skipped.

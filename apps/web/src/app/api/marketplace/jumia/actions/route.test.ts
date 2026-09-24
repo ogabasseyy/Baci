@@ -118,4 +118,14 @@ describe('Jumia actions all-items detection', () => {
     expect(response.status).toBe(200);
     expect(m.syncStatus).not.toHaveBeenCalled();
   });
+
+  it("rejects explicit IDs that include another order's item", async () => {
+    const response = await postCancel(['ITEM-1', 'ITEM-2', 'ITEM-OTHER-ORDER']);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Some items do not belong to this order',
+    });
+    expect(m.cancel).not.toHaveBeenCalled();
+    expect(m.syncStatus).not.toHaveBeenCalled();
+  });
 });

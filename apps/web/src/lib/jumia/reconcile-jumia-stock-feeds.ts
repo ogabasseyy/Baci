@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { JumiaClient } from '@/lib/jumia/client';
 import { getFeedStatus } from '@/lib/jumia/feeds';
+import { JumiaApiError } from '@/lib/jumia/helpers';
 import { MAX_FEEDS_PER_REQUEST } from '@/lib/jumia/jumia-feed-reconciliation-batch';
 import {
   isAcceptedFeedStatus,
@@ -30,7 +31,9 @@ export interface JumiaStockFeedReconciliation {
  * - rejected feeds reset the stock cursor to NULL so the mapping is retried;
  * - accepted feeds clear `last_feed_id` so they are not re-checked, but
  *   rejected items inside an accepted feed still reset their cursor;
- * - lookup failures and still-processing feeds are left untouched.
+ * - missing (404) feeds reset the cursor: the outcome is unknowable and
+ *   replaying an absolute stock value is idempotent;
+ * - transient lookup failures and still-processing feeds are left untouched.
  *
  * Reset mappings are patched in place so the caller re-pushes them in the
  * same run. Never throws: reconciliation must not block the stock sync.
@@ -43,6 +46,16 @@ export interface JumiaStockFeedReconciliation {
  * stride would take hundreds of days to reach the tail; rotation by `limit`
  * inspects every outstanding feed over time without persisting a cursor.
  */
+function isMissingFeedLookup(error: unknown): boolean {
+  if (error instanceof JumiaApiError) return error.status === 404;
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    error.status === 404
+  );
+}
+
 export function selectStockFeedIdsForReconciliation(
   feedIds: readonly string[],
   limit: number,
@@ -90,8 +103,27 @@ export async function reconcileJumiaStockFeeds(
     try {
       feed = await getFeedStatus(client, feedId);
     } catch (error) {
-      // Unknown outcome (retention expiry, transport blip): leave the cursor
-      // so a transient lookup failure can never force a duplicate push.
+      if (isMissingFeedLookup(error)) {
+        // Retention expiry: the feed is gone and a rejected absolute stock
+        // value would never be resubmitted if the cursor were preserved.
+        // Replaying the absolute value is idempotent, so reset it.
+        logger.warn({
+          message: 'Resetting Jumia stock cursor after missing feed lookup',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          feed_id: feedId,
+        });
+        for (const mapping of mappingsForFeed) {
+          tallyStockCursorWrite(
+            result,
+            await resetStockCursor(supabase, mapping, feedId),
+            'cursorsReset'
+          );
+        }
+        result.feedsChecked++;
+        continue;
+      }
+      // Unknown transient outcome (transport blip): leave the cursor so a
+      // failing lookup can never force a duplicate push.
       logger.warn({
         message:
           'Skipping Jumia stock feed reconciliation after lookup failure',

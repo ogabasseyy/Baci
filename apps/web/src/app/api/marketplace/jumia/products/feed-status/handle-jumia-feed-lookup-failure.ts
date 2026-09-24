@@ -3,7 +3,10 @@ import { JumiaApiError } from '@/lib/jumia/helpers';
 import type { PendingFeedMapping } from '@/lib/jumia/jumia-feed-reconciliation-batch';
 import { logger } from '@/lib/logger';
 import { AMBIGUOUS_JUMIA_EXPORT_ERROR } from '../export/mark-ambiguous-jumia-export';
-import { jumiaFeedReconciliation } from './jumia-feed-reconciliation';
+import {
+  jumiaFeedReconciliation,
+  type ManualResolutionEntry,
+} from './jumia-feed-reconciliation';
 
 type FeedLookupFailureResult =
   | {
@@ -11,10 +14,7 @@ type FeedLookupFailureResult =
       failed: number;
       status: 'NOT_FOUND' | 'ERROR';
       feedFailed: number;
-      preservedForManualResolution: Array<{
-        mappingId: string;
-        sellerSku: string | null;
-      }>;
+      preservedForManualResolution: ManualResolutionEntry[];
     }
   | { kind: 'response'; response: Response };
 
@@ -43,12 +43,13 @@ export async function handleJumiaFeedLookupFailure(args: {
       // retention window. Marking these mappings as error would let the
       // export reservation delete them and submit a duplicate create feed,
       // so preserve them as ambiguous pending manual resolution instead.
-      await jumiaFeedReconciliation.markMappingsAsPendingForManualResolution(
-        args.supabase,
-        args.merchantId,
-        args.mappingsForFeed,
-        AMBIGUOUS_JUMIA_EXPORT_ERROR
-      );
+      const preservedForManualResolution =
+        await jumiaFeedReconciliation.markMappingsAsPendingForManualResolution(
+          args.supabase,
+          args.merchantId,
+          args.mappingsForFeed,
+          AMBIGUOUS_JUMIA_EXPORT_ERROR
+        );
       logger.error({
         message: 'Failed to read Jumia feed status',
         error: args.error,
@@ -59,10 +60,7 @@ export async function handleJumiaFeedLookupFailure(args: {
         failed: 0,
         status: 'NOT_FOUND',
         feedFailed: 0,
-        preservedForManualResolution: args.mappingsForFeed.map((mapping) => ({
-          mappingId: mapping.id,
-          sellerSku: mapping.jumia_seller_sku,
-        })),
+        preservedForManualResolution,
       };
     } catch (markError) {
       logger.error({
@@ -85,6 +83,13 @@ export async function handleJumiaFeedLookupFailure(args: {
     error: args.error,
     feed_id: args.feedId,
   });
+  // Rotate the bounded window: untouched timestamps would pin these feeds at
+  // the head and starve every newer feed behind them.
+  await jumiaFeedReconciliation.touchMappingsForFeedRetry(
+    args.supabase,
+    args.merchantId,
+    args.mappingsForFeed
+  );
   return {
     kind: 'continue',
     failed: 0,

@@ -448,6 +448,41 @@ describe('POST /api/marketplace/jumia/products/stock', () => {
     expect(body.error).toBe('Stock sync failed');
   });
 
+  it('reports failure instead of up-to-date when stock lookups fail', async () => {
+    setupAuth();
+    mockForIntegration.mockResolvedValue({
+      shopId: 'shop-1',
+      marketplaceKey: 'default',
+    });
+    mockMappingsSelect.mockResolvedValue({
+      data: [
+        {
+          id: 'm1',
+          product_id: 'p1',
+          variant_id: null,
+          jumia_seller_sku: 'SKU-001',
+          jumia_product_id: 'JP-001',
+          baci_stock_at_last_sync: null,
+          last_feed_id: null,
+        },
+      ],
+      error: null,
+    });
+    mockProductsIn.mockResolvedValue({
+      data: null,
+      error: { message: 'database unavailable' },
+    });
+
+    const res = await POST(makeRequest(INT_ID));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(false);
+    expect(body.updated).toBe(0);
+    expect(body.fetchErrors).toBe(1);
+    expect(body.message).toContain('could not read current inventory');
+    expect(mockUpdateStock).not.toHaveBeenCalled();
+  });
+
   it('re-pushes mappings whose previously accepted stock feed was rejected', async () => {
     setupAuth();
     mockForIntegration.mockResolvedValue({

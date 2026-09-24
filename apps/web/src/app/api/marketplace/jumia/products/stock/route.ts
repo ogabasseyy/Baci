@@ -176,6 +176,17 @@ export async function POST(request: NextRequest) {
     const skipped = initialSkipped + resolutionSkipped;
 
     if (stockUpdates.length === 0) {
+      if (fetchErrors > 0) {
+        // Nothing was read: reporting "up to date" would mask the failure.
+        return NextResponse.json({
+          success: false,
+          updated: 0,
+          skipped,
+          fetchErrors,
+          message:
+            'Stock sync could not read current inventory levels for some products',
+        });
+      }
       return NextResponse.json({
         success: true,
         updated: 0,

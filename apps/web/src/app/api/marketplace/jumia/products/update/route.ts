@@ -228,20 +228,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (overrides.jumia_prices) {
-      // Applied atomically: a mid-loop failure rolls back earlier rows so
-      // local prices never diverge from what the provider feed receives.
-      const priceResult = await applyJumiaVariantPriceUpdates({
-        supabase,
-        merchantId,
-        mappings: readyMappings,
-        prices: overrides.jumia_prices,
-      });
-      if (!priceResult.ok) {
-        return NextResponse.json({ error: priceResult.error }, { status: 500 });
-      }
-    }
-
     const feedIds: string[] = [];
     const feedErrors: string[] = [];
 
@@ -255,7 +241,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let priceFeedAccepted = false;
     if (needsPriceUpdate && marketplaceCurrency) {
+      const priceErrorsBefore = feedErrors.length;
       await pushPriceUpdates(
         client,
         mappings,
@@ -264,6 +252,21 @@ export async function POST(request: NextRequest) {
         feedIds,
         feedErrors
       );
+      priceFeedAccepted = feedErrors.length === priceErrorsBefore;
+    }
+
+    // Persist only what Jumia accepted: committing beforehand would leave
+    // local prices ahead of the provider when submission fails.
+    if (overrides.jumia_prices && priceFeedAccepted) {
+      const priceResult = await applyJumiaVariantPriceUpdates({
+        supabase,
+        merchantId,
+        mappings: readyMappings,
+        prices: overrides.jumia_prices,
+      });
+      if (!priceResult.ok) {
+        return NextResponse.json({ error: priceResult.error }, { status: 500 });
+      }
     }
 
     return NextResponse.json({

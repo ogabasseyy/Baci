@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { JumiaApiError } from '@/lib/jumia/helpers';
 import type { JumiaStockMapping } from './load-jumia-stock-mappings';
 
 const mockGetFeedStatus = vi.fn();
@@ -174,6 +175,23 @@ describe('reconcileJumiaStockFeeds', () => {
     expect(mappings[0]?.baci_stock_at_last_sync).toBe(5);
     expect(mappings[0]?.last_feed_id).toBe('feed-gone');
     expect(mappings[1]?.baci_stock_at_last_sync).toBeNull();
+  });
+
+  it('resets the cursor when a stock feed aged out of retention', async () => {
+    const mappings = [mapping({})];
+    mockGetFeedStatus.mockRejectedValueOnce(
+      new JumiaApiError(404, 'feed expired')
+    );
+
+    const result = await reconcileJumiaStockFeeds(supabase(), {} as never, {
+      mappings,
+    });
+
+    expect(result.feedsChecked).toBe(1);
+    expect(result.cursorsReset).toBe(1);
+    expect(result.failures).toBe(0);
+    expect(mappings[0]?.baci_stock_at_last_sync).toBeNull();
+    expect(mappings[0]?.last_feed_id).toBeNull();
   });
 
   it('resets rejected items inside an otherwise completed feed', async () => {

@@ -232,18 +232,14 @@ export async function POST(request: NextRequest) {
         unmatchedMappings.length > 0 &&
         (isAcceptedFeedStatus(feed.status) || isFailedFeedStatus(feed.status))
       ) {
-        await jumiaFeedReconciliation.markMappingsAsPendingForManualResolution(
-          auth.supabase,
-          merchantId,
-          unmatchedMappings,
-          AMBIGUOUS_JUMIA_EXPORT_ERROR
+        manualResolutionRequired.push(
+          ...(await jumiaFeedReconciliation.markMappingsAsPendingForManualResolution(
+            auth.supabase,
+            merchantId,
+            unmatchedMappings,
+            AMBIGUOUS_JUMIA_EXPORT_ERROR
+          ))
         );
-        for (const mapping of unmatchedMappings) {
-          manualResolutionRequired.push({
-            mappingId: mapping.id,
-            sellerSku: mapping.jumia_seller_sku,
-          });
-        }
       }
       const { error: cursorError } = await auth.supabase
         .from('jumia_product_mappings')

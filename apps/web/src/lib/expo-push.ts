@@ -22,6 +22,7 @@ import {
   type DeliveryStartOptions,
   sendPushNotificationChunks,
 } from './expo-push-chunk-delivery';
+import { excludeDeliveredTokens, withDeliveredTokens } from './expo-push-retry';
 
 // Module-scope cache: locale + minimumFractionDigits are static; currency varies.
 const _currencyFormatterCache = new Map<string, Intl.NumberFormat>();
@@ -178,9 +179,9 @@ export async function notifyMerchant(
 
   // Retries exclude tokens an earlier partial attempt already reached, so
   // delivered devices never get duplicates.
-  const excludedTokens = new Set(options?.excludeTokens ?? []);
-  const tokens = (fetchedTokens ?? []).filter(
-    (token) => !excludedTokens.has(token.token)
+  const tokens = excludeDeliveredTokens(
+    fetchedTokens ?? [],
+    options?.excludeTokens
   );
 
   if (tokens.length === 0) {
@@ -694,6 +695,13 @@ function derivePushAttemptStatus(
   return 'failed';
 }
 
+const PUSH_ATTEMPT_INSERT_ATTEMPTS = 3;
+const PUSH_ATTEMPT_INSERT_RETRY_DELAY_MS = 100;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function recordPushAttempt(
   supabase: ReturnType<typeof createAdminClient>,
   context: PushAttemptContext
@@ -705,7 +713,7 @@ export async function recordPushAttempt(
   // Persist per-token delivery state: retries read the union of delivered
   // tokens across partial attempts and resend only to the failed subset.
   const deliveredTokens = context.result.succeededTokens ?? [];
-  const { error } = await supabase.from('push_notification_attempts').insert({
+  const attemptRow = {
     merchant_id: context.merchantId ?? null,
     user_id: context.userId ?? null,
     app_type: context.appType ?? 'admin',
@@ -713,21 +721,38 @@ export async function recordPushAttempt(
     notification_type: notificationType,
     title: context.title,
     body: context.body,
-    payload: {
-      ...(context.payload ?? {}),
-      ...(deliveredTokens.length > 0
-        ? { delivered_tokens: deliveredTokens }
-        : {}),
-    },
+    payload: withDeliveredTokens(context.payload, deliveredTokens),
     token_count: context.tokenCount,
     sent_count: context.result.sent,
     failed_count: context.result.failed,
     status: derivePushAttemptStatus(context.tokenCount, context.result),
     errors: context.result.errors,
-  });
+  };
 
-  if (error) {
-    console.error('Failed to store push attempt:', error);
+  // A lost attempt row blinds the next retry's exclusion set and duplicates
+  // alerts on delivered devices, so transient write failures are retried.
+  for (let attempt = 1; ; attempt++) {
+    const { error } = await supabase
+      .from('push_notification_attempts')
+      .insert(attemptRow);
+    if (!error) {
+      return;
+    }
+    if (attempt >= PUSH_ATTEMPT_INSERT_ATTEMPTS) {
+      // Last resort: log loudly with enough context for manual
+      // reconciliation. The delivery result is intentionally NOT failed
+      // here — failing a delivered batch would park it for retry with an
+      // empty exclusion set and duplicate alerts on every device, which is
+      // worse than a missing log row.
+      console.error('Failed to store push attempt:', error, {
+        merchantId: context.merchantId ?? null,
+        notificationType,
+        tokenCount: context.tokenCount,
+        deliveredTokenCount: deliveredTokens.length,
+      });
+      return;
+    }
+    await sleep(PUSH_ATTEMPT_INSERT_RETRY_DELAY_MS * attempt);
   }
 }
 

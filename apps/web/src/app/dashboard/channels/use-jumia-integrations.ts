@@ -259,6 +259,11 @@ export async function syncStock(
         : data.error || 'Stock sync failed';
       return { ok: false, error: detail };
     }
+    // The route reports logical failures (nothing pushed) as HTTP 200 with
+    // `success: false`; surfacing those as success would toast a lie.
+    if (data.success === false) {
+      return { ok: false, error: data.message || 'Stock sync failed' };
+    }
     return { ok: true, message: data.message || 'Stock synced' };
   } catch {
     return { ok: false, error: 'Stock sync failed — please try again' };

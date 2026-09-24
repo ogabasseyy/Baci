@@ -23,6 +23,7 @@ import {
   disconnectIntegration,
   discoverJumiaShops,
   syncOrders,
+  syncStock,
   useJumiaIntegrations,
 } from './use-jumia-integrations';
 
@@ -389,6 +390,53 @@ describe('syncOrders', () => {
     expect(result).toEqual({
       ok: false,
       error: 'Token expired\nDetails: Refresh token is no longer valid',
+    });
+  });
+});
+
+describe('syncStock', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  it('returns ok true with the route message on success', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          updated: 2,
+          message: 'Pushed 2 stock updates to Jumia',
+        }),
+    } as Response);
+
+    const result = await syncStock('int-1');
+
+    expect(result).toEqual({
+      ok: true,
+      message: 'Pushed 2 stock updates to Jumia',
+    });
+  });
+
+  it('fails when a 200 response reports success false', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: false,
+          updated: 0,
+          message:
+            'Stock sync could not complete for some products; nothing was pushed',
+        }),
+    } as Response);
+
+    const result = await syncStock('int-1');
+
+    expect(result).toEqual({
+      ok: false,
+      error:
+        'Stock sync could not complete for some products; nothing was pushed',
     });
   });
 });

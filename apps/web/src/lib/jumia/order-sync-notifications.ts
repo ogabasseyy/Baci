@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { readDeliveredTokens } from '@/lib/expo-push-retry';
 import { logger } from '@/lib/logger';
 import type { JumiaOrder } from '@/schemas/jumia';
 import type { ExistingJumiaOrderRow } from './order-sync-mappers';
@@ -129,13 +130,8 @@ export async function getDeliveredJumiaNotificationTokens(
     }
     const delivered = new Set<string>();
     for (const row of data) {
-      const tokens = (row.payload as Record<string, unknown> | null)
-        ?.delivered_tokens;
-      if (!Array.isArray(tokens)) continue;
-      for (const token of tokens) {
-        if (typeof token === 'string') {
-          delivered.add(token);
-        }
+      for (const token of readDeliveredTokens(row.payload)) {
+        delivered.add(token);
       }
     }
     return [...delivered];

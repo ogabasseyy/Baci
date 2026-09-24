@@ -745,6 +745,94 @@ describe('notifyMerchant', () => {
       })
     );
   });
+
+  it('retries the attempt insert when the first write fails', async () => {
+    const mockChain = createChainableMock([
+      { token: 'ExponentPushToken[m1]' },
+      { token: 'ExponentPushToken[m2]' },
+    ]);
+    const insertMock = vi
+      .fn()
+      .mockResolvedValueOnce({ error: { message: 'transient write failure' } })
+      .mockResolvedValueOnce({ error: null });
+
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn((table: string) =>
+        table === 'push_notification_attempts'
+          ? { insert: insertMock }
+          : mockChain
+      ),
+    } as never);
+
+    mockSendPushNotificationsAsync.mockResolvedValueOnce([
+      { status: 'ok', id: 'ticket-1' },
+      {
+        status: 'error',
+        message: 'bad token',
+        details: { error: 'UnknownError' },
+      },
+    ]);
+
+    const result = await notifyMerchant('merchant-123', 'Test', 'Body', {
+      type: 'new_order',
+      jumia_order_id: 'order-1',
+    });
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(insertMock).toHaveBeenCalledTimes(2);
+    expect(insertMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: 'partial_failure',
+        payload: expect.objectContaining({
+          delivered_tokens: ['ExponentPushToken[m1]'],
+        }),
+      })
+    );
+  });
+
+  it('still resolves delivery when the attempt insert keeps failing', async () => {
+    const mockChain = createChainableMock([{ token: 'ExponentPushToken[m1]' }]);
+    const insertMock = vi
+      .fn()
+      .mockResolvedValue({ error: { message: 'database unavailable' } });
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      vi.mocked(createAdminClient).mockReturnValue({
+        from: vi.fn((table: string) =>
+          table === 'push_notification_attempts'
+            ? { insert: insertMock }
+            : mockChain
+        ),
+      } as never);
+
+      mockSendPushNotificationsAsync.mockResolvedValueOnce([
+        { status: 'ok', id: 'ticket-1' },
+      ]);
+
+      const result = await notifyMerchant('merchant-123', 'Test', 'Body', {
+        type: 'new_order',
+      });
+
+      // Failing a delivered batch would park it for retry with an empty
+      // exclusion set and duplicate alerts on every device.
+      expect(result).toEqual({
+        sent: 1,
+        failed: 0,
+        errors: [],
+        succeededTokens: ['ExponentPushToken[m1]'],
+      });
+      expect(insertMock).toHaveBeenCalledTimes(3);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Failed to store push attempt:',
+        expect.objectContaining({ message: 'database unavailable' }),
+        expect.objectContaining({ deliveredTokenCount: 1 })
+      );
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

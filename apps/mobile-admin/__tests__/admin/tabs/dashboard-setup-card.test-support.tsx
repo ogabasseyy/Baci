@@ -1,11 +1,28 @@
 import type React from 'react';
 import { vi } from 'vitest';
 
+type StoreReadinessMock = {
+  isReady: boolean;
+  isPublished: boolean;
+  overallProgress: number;
+};
+
+type StoreSetupStatusCardMockProps = {
+  isLoading: boolean;
+  readiness: StoreReadinessMock | null | undefined;
+};
+
 const mocks = vi.hoisted(() => ({
   branchScope: { isAllLocations: true },
-  invalidateQueries: vi.fn(),
-  pickAndUploadFavicon: vi.fn(),
+  isLive: true,
+  isReadinessLoading: false,
+  readiness: {
+    isReady: true,
+    isPublished: true,
+    overallProgress: 100,
+  } as StoreReadinessMock | null,
   safeAreaEdges: null as null | readonly string[],
+  storeSetupStatusCardProps: null as StoreSetupStatusCardMockProps | null,
 }));
 
 vi.mock('react-native', async () => {
@@ -13,6 +30,7 @@ vi.mock('react-native', async () => {
 
   return {
     StatusBar: () => null,
+    Alert: { alert: vi.fn() },
     Pressable: ({ children }: { children?: React.ReactNode }) =>
       React.createElement('button', null, children),
     RefreshControl: () => null,
@@ -42,12 +60,18 @@ vi.mock('react-native-safe-area-context', () => ({
 
 vi.mock('@react-native-vector-icons/ionicons', () => ({
   Ionicons: () => null,
+
   default: () => null,
   __esModule: true,
 }));
 
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ invalidateQueries: mocks.invalidateQueries }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+}));
+
+vi.mock('expo-image-picker', () => ({
+  requestMediaLibraryPermissionsAsync: vi.fn(),
+  launchImageLibraryAsync: vi.fn(),
 }));
 
 vi.mock('expo-router', () => ({
@@ -64,7 +88,6 @@ vi.mock('@/components/dashboard', async () => {
   return {
     BranchSwitcher: () => <Text>branch-switcher</Text>,
     InsightCard: () => <Text>insight-card</Text>,
-    ProgressCard: () => <Text>progress-card</Text>,
     QuickActionButton: ({
       label,
       onPress,
@@ -78,17 +101,11 @@ vi.mock('@/components/dashboard', async () => {
     ),
     RevenueChart: () => <Text>revenue-chart</Text>,
     StatCard: ({ label }: { label: string }) => <Text>{label}</Text>,
-    StoreSetupStatusCard: () => <Text>store-setup-status-card</Text>,
-    WelcomeHeader: ({ onAvatarPress }: { onAvatarPress?: () => void }) => (
-      <>
-        <button
-          aria-label="Change store avatar"
-          onClick={onAvatarPress}
-          type="button"
-        />
-        <Text>welcome-header</Text>
-      </>
-    ),
+    StoreSetupStatusCard: (props: StoreSetupStatusCardMockProps) => {
+      mocks.storeSetupStatusCardProps = props;
+      return <Text>store-setup-status-card</Text>;
+    },
+    WelcomeHeader: () => <Text>welcome-header</Text>,
   };
 });
 
@@ -114,7 +131,7 @@ vi.mock('@/hooks/useBranchScope', () => ({
 
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: () => ({
-    isLive: true,
+    isLive: mocks.isLive,
     merchant: {
       business_name: 'Ogabassey Services Limited',
       favicon_png_192_url: null,
@@ -129,7 +146,13 @@ vi.mock('@/hooks/useMerchant', () => ({
 
 vi.mock('@/hooks/useOrders', () => ({
   useOrders: () => ({
-    data: { pages: [{ orders: [] }] },
+    data: {
+      pages: [
+        {
+          orders: [],
+        },
+      ],
+    },
     isLoading: false,
   }),
 }));
@@ -149,8 +172,8 @@ vi.mock('@/hooks/useSettingsStore', () => ({
 
 vi.mock('@/hooks/useStoreReadiness', () => ({
   useStoreReadiness: () => ({
-    isLoading: false,
-    readiness: { isReady: true, overallProgress: 100 },
+    isLoading: mocks.isReadinessLoading,
+    readiness: mocks.readiness,
   }),
 }));
 
@@ -180,16 +203,46 @@ vi.mock('@/hooks/useTheme', () => ({
 }));
 
 vi.mock('@/lib/upload/pickAndUploadFavicon', () => ({
-  pickAndUploadFavicon: mocks.pickAndUploadFavicon,
+  pickAndUploadFavicon: vi.fn(),
 }));
 
-export const homeScreenTestSupport = {
+vi.mock('@/lib/supabase', () => ({
+  supabase: {
+    from: () => ({ update: () => ({ eq: vi.fn() }) }),
+    storage: {
+      from: () => ({
+        getPublicUrl: () => ({
+          data: { publicUrl: 'https://example.com/icon.png' },
+        }),
+        upload: vi.fn(),
+      }),
+    },
+  },
+}));
+
+vi.mock('@/types/upload', () => ({
+  createUploadFile: vi.fn(),
+}));
+
+vi.mock('@/lib/api-client', () => ({
+  BASE_URL: 'https://example.com',
+}));
+
+export const dashboardSetupCardTestSupport = {
   getMocks() {
     return mocks;
   },
   reset() {
     vi.clearAllMocks();
     mocks.branchScope = { isAllLocations: true };
+    mocks.isLive = true;
+    mocks.isReadinessLoading = false;
+    mocks.readiness = {
+      isReady: true,
+      isPublished: true,
+      overallProgress: 100,
+    };
     mocks.safeAreaEdges = null;
+    mocks.storeSetupStatusCardProps = null;
   },
 };

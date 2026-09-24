@@ -43,4 +43,49 @@ describe('Jumia token response contracts', () => {
       }).success
     ).toBe(false);
   });
+
+  it('rejects provider tokens that cannot fit credential storage', () => {
+    const oversized = 't'.repeat(8193);
+    const base = {
+      expires_in: 3600,
+      refresh_token: 'refresh-token',
+      refresh_expires_in: 86400,
+      token_type: 'Bearer',
+    };
+
+    expect(
+      JumiaSelfAuthorizationTokenResponseSchema.safeParse({
+        ...base,
+        access_token: oversized,
+      }).success
+    ).toBe(false);
+    expect(
+      JumiaSelfAuthorizationTokenResponseSchema.safeParse({
+        ...base,
+        access_token: 'access-token',
+        refresh_token: oversized,
+      }).success
+    ).toBe(false);
+    expect(
+      JumiaTokenResponseSchema.safeParse({
+        access_token: oversized,
+        expires_in: 3600,
+        token_type: 'Bearer',
+      }).success
+    ).toBe(false);
+  });
+
+  it('accepts max-length tokens that fit credential storage', () => {
+    const maxToken = 't'.repeat(8192);
+
+    expect(
+      JumiaSelfAuthorizationTokenResponseSchema.safeParse({
+        access_token: maxToken,
+        expires_in: 3600,
+        refresh_token: maxToken,
+        refresh_expires_in: 86400,
+        token_type: 'Bearer',
+      }).success
+    ).toBe(true);
+  });
 });

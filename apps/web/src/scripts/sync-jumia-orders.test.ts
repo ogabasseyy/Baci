@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -123,5 +125,20 @@ describe('runJumiaOrderSyncCli', () => {
       errors: ['merchant-2: API timeout'],
       orderErrors: 2,
     });
+  });
+
+  it('runs the sync command with the react-server condition', () => {
+    const packageJson = JSON.parse(
+      readFileSync(
+        path.join(import.meta.dirname, '../../package.json'),
+        'utf8'
+      )
+    ) as { scripts: Record<string, string> };
+
+    // The sync transitively imports server-only modules; without the
+    // condition the standalone command exits before syncing.
+    expect(packageJson.scripts['sync:jumia-orders']).toContain(
+      '--conditions=react-server'
+    );
   });
 });

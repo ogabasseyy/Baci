@@ -137,6 +137,21 @@ describe('Jumia authorization encryption', () => {
     ).toThrow(JumiaAuthorizationDecryptionError);
   });
 
+  it('keeps max-length credentials inside the ciphertext storage ceiling', () => {
+    const ciphertext = jumiaAuthorizationCrypto.encrypt(
+      {
+        clientId: 'c'.repeat(512),
+        refreshToken: 'r'.repeat(8192),
+        accessToken: 'a'.repeat(8192),
+      },
+      KEY,
+      CONTEXT
+    );
+
+    expect(ciphertext.length).toBeGreaterThanOrEqual(32);
+    expect(ciphertext.length).toBeLessThanOrEqual(32768);
+  });
+
   it('surfaces invalid encryption key errors separately from decryption failures', () => {
     const ciphertext = jumiaAuthorizationCrypto.encrypt(
       CREDENTIALS,

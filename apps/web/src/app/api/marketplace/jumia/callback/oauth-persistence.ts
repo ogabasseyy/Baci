@@ -8,7 +8,7 @@ import { persistJumiaOAuthIntegrations } from '@/lib/jumia/persist-jumia-oauth-i
 import { logger } from '@/lib/logger';
 import type { JumiaTokenResponse } from '@/schemas/jumia';
 
-type JumiaOAuthPersistenceResult =
+export type JumiaOAuthPersistenceResult =
   | { status: 'database_error' }
   | { status: 'shop_discovery_failed' }
   | { status: 'shop_already_self_authorized'; shopIds: string[] }

@@ -1,28 +1,24 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { NextRequest, NextResponse } from 'next/server';
-import type { JumiaTokenResponse } from '@/schemas/jumia';
-import { persistJumiaOAuthConnection } from './oauth-persistence';
+import { type NextRequest, type NextResponse } from 'next/server';
+import type { JumiaOAuthPersistenceResult } from './oauth-persistence';
 import { jumiaOAuthCallbackRedirect } from './oauth-redirect';
 
 /**
- * Persists the exchanged OAuth connection and maps the outcome to a
- * channels-page redirect. Only the success redirect clears OAuth cookies;
- * error redirects leave them for a retry.
+ * Maps an OAuth persistence outcome to a channels-page redirect. Only the
+ * success redirect clears OAuth cookies; error redirects leave them for a
+ * retry.
+ *
+ * Takes the persistence result instead of performing it: this module must
+ * stay a leaf off the credential import graph (the event-pipeline boundary
+ * contract allowlists exact import paths to the credential authority).
  */
-export async function redirectForJumiaOAuthPersistence(
+export function redirectForJumiaOAuthPersistence(
   request: NextRequest,
   args: {
-    merchantId: string;
-    supabase: SupabaseClient;
-    tokens: JumiaTokenResponse;
+    persistence: JumiaOAuthPersistenceResult;
     variantResult?: string;
   }
-): Promise<NextResponse> {
-  const persistence = await persistJumiaOAuthConnection({
-    merchantId: args.merchantId,
-    supabase: args.supabase,
-    tokens: args.tokens,
-  });
+): NextResponse {
+  const { persistence } = args;
   if (
     persistence.status === 'database_error' ||
     persistence.status === 'shop_discovery_failed'

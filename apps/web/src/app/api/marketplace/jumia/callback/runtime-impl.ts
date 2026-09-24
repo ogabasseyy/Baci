@@ -17,6 +17,7 @@ import { getMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { runJumiaOAuthCallbackDiagnostic } from './oauth-diagnostic';
 import { parseJumiaOAuthDiagnosticContext } from './oauth-diagnostic-context';
 import { exchangeJumiaOAuthTokens } from './oauth-exchange';
+import { persistJumiaOAuthConnection } from './oauth-persistence';
 import { redirectForJumiaOAuthPersistence } from './oauth-persistence-redirect';
 import { jumiaOAuthCallbackRedirect } from './oauth-redirect';
 
@@ -236,14 +237,17 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    const persistence = await persistJumiaOAuthConnection({
+      merchantId,
+      supabase: auth.supabase,
+      tokens,
+    });
     // VARIANT-TEST: REMOVE — append variant outcome to the browser URL.
     const variantResult = variant
       ? `${variant}:has_refresh=${tokens.refresh_token ? 'true' : 'false'},re_exp=${tokens.refresh_expires_in ?? 'null'}`
       : undefined;
     return redirectForJumiaOAuthPersistence(request, {
-      merchantId,
-      supabase: auth.supabase,
-      tokens,
+      persistence,
       variantResult,
     });
   } catch (error) {

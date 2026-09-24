@@ -22,13 +22,8 @@ SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 
 DO $$
 DECLARE
-  v_merchant_id uuid := '9f000000-0000-4000-8000-000000000211';
-  v_delivered_order_id uuid := '9f000000-0000-4000-8000-000000000212';
   v_proc_count integer;
   v_sig_count integer;
-  v_col text;
-  v_col_count integer;
-  v_delivered boolean;
 BEGIN
   SELECT count(*) INTO v_proc_count
   FROM pg_proc
@@ -49,43 +44,73 @@ BEGIN
     RAISE EXCEPTION 'notification_delivered projection absent'
       USING ERRCODE = 'P0003';
   END IF;
+END;
+$$;
 
-  FOR v_col IN
-    SELECT unnest(ARRAY[
-      'orders.amount_paid', 'orders.cancelled_at', 'orders.currency',
-      'orders.customer_email', 'orders.customer_name', 'orders.customer_phone',
-      'orders.delivered_at', 'orders.discount_amount', 'orders.external_source',
-      'orders.gift_wrapping_fee', 'orders.id', 'orders.import_job_id',
-      'orders.merchant_id', 'orders.order_number', 'orders.paid_at',
-      'orders.payment_method', 'orders.payment_status', 'orders.shipped_at',
-      'orders.shipping_address', 'orders.shipping_fee', 'orders.shipping_provider',
-      'orders.shipping_status', 'orders.subtotal', 'orders.tax_amount',
-      'orders.total', 'orders.tracking_number', 'orders.tracking_token',
-      'merchants.business_name', 'merchants.id', 'merchants.logo_url',
-      'merchants.phone', 'merchants.slug', 'merchants.support_email',
-      'merchants.support_phone', 'order_items.condition', 'order_items.id',
-      'order_items.image_url', 'order_items.line_id', 'order_items.name',
-      'order_items.order_id', 'order_items.price', 'order_items.product_id',
-      'order_items.quantity', 'order_items.variant_name', 'products.id',
-      'products.images', 'order_payment_accounts.account_name',
-      'order_payment_accounts.account_number',
-      'order_payment_accounts.assigned_at',
-      'order_payment_accounts.assignment_customer_email_source',
-      'order_payment_accounts.bank_name', 'order_payment_accounts.created_at',
-      'order_payment_accounts.expires_at', 'order_payment_accounts.order_id',
-      'order_payment_accounts.provider'
-    ])
-  LOOP
-    SELECT count(*) INTO v_col_count
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = split_part(v_col, '.', 1)
-      AND column_name = split_part(v_col, '.', 2);
-    IF v_col_count = 0 THEN
-      RAISE EXCEPTION 'body column absent: %', v_col USING ERRCODE = 'P0004';
-    END IF;
-  END LOOP;
+-- One presence probe per get_order_tracking body column. Each DO
+-- is its own statement so the replay harness line number names the column.
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'amount_paid'), 'orders.amount_paid absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'cancelled_at'), 'orders.cancelled_at absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'currency'), 'orders.currency absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'customer_email'), 'orders.customer_email absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'customer_name'), 'orders.customer_name absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'customer_phone'), 'orders.customer_phone absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'delivered_at'), 'orders.delivered_at absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'discount_amount'), 'orders.discount_amount absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'external_source'), 'orders.external_source absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'gift_wrapping_fee'), 'orders.gift_wrapping_fee absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'id'), 'orders.id absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'import_job_id'), 'orders.import_job_id absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'merchant_id'), 'orders.merchant_id absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'order_number'), 'orders.order_number absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'paid_at'), 'orders.paid_at absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'payment_method'), 'orders.payment_method absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'payment_status'), 'orders.payment_status absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'shipped_at'), 'orders.shipped_at absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'shipping_address'), 'orders.shipping_address absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'shipping_fee'), 'orders.shipping_fee absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'shipping_provider'), 'orders.shipping_provider absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'shipping_status'), 'orders.shipping_status absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'subtotal'), 'orders.subtotal absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'tax_amount'), 'orders.tax_amount absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'total'), 'orders.total absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'tracking_number'), 'orders.tracking_number absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'tracking_token'), 'orders.tracking_token absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'merchants' AND column_name = 'business_name'), 'merchants.business_name absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'merchants' AND column_name = 'id'), 'merchants.id absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'merchants' AND column_name = 'logo_url'), 'merchants.logo_url absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'merchants' AND column_name = 'phone'), 'merchants.phone absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'merchants' AND column_name = 'slug'), 'merchants.slug absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'merchants' AND column_name = 'support_email'), 'merchants.support_email absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'merchants' AND column_name = 'support_phone'), 'merchants.support_phone absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'condition'), 'order_items.condition absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'id'), 'order_items.id absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'image_url'), 'order_items.image_url absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'line_id'), 'order_items.line_id absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'name'), 'order_items.name absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'order_id'), 'order_items.order_id absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'price'), 'order_items.price absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'product_id'), 'order_items.product_id absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'quantity'), 'order_items.quantity absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'variant_name'), 'order_items.variant_name absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'products' AND column_name = 'id'), 'products.id absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'products' AND column_name = 'images'), 'products.images absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_payment_accounts' AND column_name = 'account_name'), 'order_payment_accounts.account_name absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_payment_accounts' AND column_name = 'account_number'), 'order_payment_accounts.account_number absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_payment_accounts' AND column_name = 'assigned_at'), 'order_payment_accounts.assigned_at absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_payment_accounts' AND column_name = 'assignment_customer_email_source'), 'order_payment_accounts.assignment_customer_email_source absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_payment_accounts' AND column_name = 'bank_name'), 'order_payment_accounts.bank_name absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_payment_accounts' AND column_name = 'created_at'), 'order_payment_accounts.created_at absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_payment_accounts' AND column_name = 'expires_at'), 'order_payment_accounts.expires_at absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_payment_accounts' AND column_name = 'order_id'), 'order_payment_accounts.order_id absent'; END $probe$;
+DO $probe$ BEGIN ASSERT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_payment_accounts' AND column_name = 'provider'), 'order_payment_accounts.provider absent'; END $probe$;
 
+DO $$
+DECLARE
+  v_merchant_id uuid := '9f000000-0000-4000-8000-000000000211';
+  v_delivered_order_id uuid := '9f000000-0000-4000-8000-000000000212';
+  v_delivered boolean;
+BEGIN
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (
     v_merchant_id,

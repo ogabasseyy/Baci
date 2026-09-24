@@ -18,7 +18,7 @@ describe('Jumia pending replay source rows', () => {
     expect(new Set(rows).size).toBe(rows.length);
     expect(versions).toEqual([...versions].sort());
     expect(rows.at(-1)).toContain(
-      '20260923130000_raise_jumia_credential_ciphertext_limit.sql'
+      '20260924120000_apply_jumia_variant_prices_atomically.sql'
     );
   });
 });

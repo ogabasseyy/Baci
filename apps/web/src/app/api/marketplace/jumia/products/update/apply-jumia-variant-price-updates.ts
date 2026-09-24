@@ -8,14 +8,14 @@ export type JumiaVariantPriceMapping = {
 };
 
 /**
- * Persists per-variant local prices in a single statement, so the write
- * is all-or-nothing: a failure leaves every row untouched instead of
- * committing a partial set the provider feed never received. No
- * compensating rollback is needed, which also removes the risk of a
- * rollback overwriting a concurrent newer price with a stale snapshot.
+ * Persists per-variant local prices atomically through a single RPC: the
+ * database updates every row in one transaction and fails closed when any
+ * target is missing, so a failure leaves all rows untouched instead of
+ * committing a partial set the provider feed never received.
  *
- * Row ids come from merchant-scoped mappings and each payload row carries
- * the merchant id, so RLS merchant scoping applies to the upsert.
+ * A partial-row upsert cannot provide this: PostgreSQL validates the
+ * candidate rows' NOT NULL columns before resolving the id conflict, so
+ * omitting columns like product_id would fail every call.
  */
 export async function applyJumiaVariantPriceUpdates(args: {
   supabase: SupabaseClient;
@@ -23,23 +23,21 @@ export async function applyJumiaVariantPriceUpdates(args: {
   mappings: readonly JumiaVariantPriceMapping[];
   prices: Record<string, number>;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const updatedAt = new Date().toISOString();
-  const rows = [];
+  const updates = [];
   for (const mapping of args.mappings) {
     const price = args.prices[mapping.jumia_sku];
     if (price == null) continue;
-    rows.push({
-      id: mapping.id,
-      merchant_id: args.merchantId,
-      jumia_price: price,
-      updated_at: updatedAt,
-    });
+    updates.push({ id: mapping.id, price });
   }
-  if (rows.length === 0) return { ok: true };
+  if (updates.length === 0) return { ok: true };
 
-  const { error: priceUpdateError } = await args.supabase
-    .from('jumia_product_mappings')
-    .upsert(rows, { onConflict: 'id' });
+  const { error: priceUpdateError } = await args.supabase.rpc(
+    'apply_jumia_variant_price_updates',
+    {
+      p_merchant_id: args.merchantId,
+      p_updates: updates,
+    }
+  );
   if (priceUpdateError) {
     logger.error({
       message: 'Local per-variant price update failed',

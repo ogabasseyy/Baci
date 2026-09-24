@@ -7,12 +7,10 @@ vi.mock('@/lib/logger', () => ({
 import { applyJumiaVariantPriceUpdates } from './apply-jumia-variant-price-updates';
 
 function createSupabaseStub(result: { error: unknown }) {
-  const upsert = vi.fn(() => Promise.resolve(result));
-  const from = vi.fn(() => ({ upsert }));
+  const rpc = vi.fn(() => Promise.resolve(result));
   return {
-    supabase: { from } as never,
-    from,
-    upsert,
+    supabase: { rpc } as never,
+    rpc,
   };
 }
 
@@ -26,8 +24,8 @@ describe('applyJumiaVariantPriceUpdates', () => {
     vi.clearAllMocks();
   });
 
-  it('writes every overridden variant price in a single upsert', async () => {
-    const { supabase, from, upsert } = createSupabaseStub({ error: null });
+  it('persists every overridden variant price in one RPC call', async () => {
+    const { supabase, rpc } = createSupabaseStub({ error: null });
 
     const result = await applyJumiaVariantPriceUpdates({
       supabase,
@@ -37,29 +35,18 @@ describe('applyJumiaVariantPriceUpdates', () => {
     });
 
     expect(result).toEqual({ ok: true });
-    expect(from).toHaveBeenCalledTimes(1);
-    expect(upsert).toHaveBeenCalledTimes(1);
-    expect(upsert).toHaveBeenCalledWith(
-      [
-        {
-          id: 'map-1',
-          merchant_id: 'merchant-1',
-          jumia_price: 900,
-          updated_at: expect.any(String),
-        },
-        {
-          id: 'map-2',
-          merchant_id: 'merchant-1',
-          jumia_price: 1800,
-          updated_at: expect.any(String),
-        },
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
+      p_merchant_id: 'merchant-1',
+      p_updates: [
+        { id: 'map-1', price: 900 },
+        { id: 'map-2', price: 1800 },
       ],
-      { onConflict: 'id' }
-    );
+    });
   });
 
-  it('skips mappings without an override and succeeds without writes when empty', async () => {
-    const { supabase, from, upsert } = createSupabaseStub({ error: null });
+  it('skips mappings without an override and succeeds without calls when empty', async () => {
+    const { supabase, rpc } = createSupabaseStub({ error: null });
 
     const result = await applyJumiaVariantPriceUpdates({
       supabase,
@@ -69,18 +56,11 @@ describe('applyJumiaVariantPriceUpdates', () => {
     });
 
     expect(result).toEqual({ ok: true });
-    expect(upsert).toHaveBeenCalledTimes(1);
-    expect(upsert).toHaveBeenCalledWith(
-      [
-        {
-          id: 'map-2',
-          merchant_id: 'merchant-1',
-          jumia_price: 1800,
-          updated_at: expect.any(String),
-        },
-      ],
-      { onConflict: 'id' }
-    );
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
+      p_merchant_id: 'merchant-1',
+      p_updates: [{ id: 'map-2', price: 1800 }],
+    });
 
     const empty = await applyJumiaVariantPriceUpdates({
       supabase,
@@ -89,12 +69,12 @@ describe('applyJumiaVariantPriceUpdates', () => {
       prices: {},
     });
     expect(empty).toEqual({ ok: true });
-    expect(from).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 
-  it('reports failure without partial writes when the statement fails', async () => {
-    const { supabase, upsert } = createSupabaseStub({
-      error: { message: 'statement failed' },
+  it('reports failure when the atomic statement fails', async () => {
+    const { supabase, rpc } = createSupabaseStub({
+      error: { message: 'target not found' },
     });
 
     const result = await applyJumiaVariantPriceUpdates({
@@ -108,8 +88,6 @@ describe('applyJumiaVariantPriceUpdates', () => {
       ok: false,
       error: 'Failed to update local mapping',
     });
-    // One statement only: either every row applies or none does, so no
-    // compensating rollback requests are ever issued.
-    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 });

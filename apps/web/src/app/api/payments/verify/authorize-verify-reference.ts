@@ -1,5 +1,6 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
-import { createServiceClient } from '@/lib/supabase/service';
+import type { Database } from '@/types/supabase';
 import { getGuestPaymentReferenceSnapshot } from './guest-payment-reference-snapshot';
 
 export interface SessionlessVerifyAuthorization {
@@ -11,6 +12,14 @@ export interface SessionlessVerifyAuthorization {
    */
   orderId: string | null;
 }
+
+/**
+ * Lazily supplies the service client for the bearer lane only. The
+ * tracking-token lane never calls it, so denied or proof-carrying
+ * requests construct no privileged client. Kept lazy (not a client
+ * value) so the caller builds it solely for validated bearer users.
+ */
+export type SessionlessServiceClientFactory = () => SupabaseClient<Database>;
 
 /**
  * Authorizes a sessionless POST /api/payments/verify caller before the
@@ -25,7 +34,8 @@ export interface SessionlessVerifyAuthorization {
 export async function authorizeSessionlessVerifyReference(
   request: Request,
   reference: string,
-  trackingToken?: string
+  trackingToken?: string,
+  getServiceClient?: SessionlessServiceClientFactory
 ): Promise<SessionlessVerifyAuthorization> {
   const denied = { authorized: false, orderId: null };
   if (trackingToken) {
@@ -45,8 +55,11 @@ export async function authorizeSessionlessVerifyReference(
   if (!bearerUser) {
     return denied;
   }
+  if (!getServiceClient) {
+    return denied;
+  }
   try {
-    const supabase = createServiceClient();
+    const supabase = getServiceClient();
     const { data: transaction } = await supabase
       .from('transactions')
       .select('order_id')

@@ -12,11 +12,6 @@ vi.mock('@/lib/supabase/mobile-auth', () => ({
     mockGetAuthenticatedUser(...args),
 }));
 
-const mockCreateServiceClient = vi.fn();
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => mockCreateServiceClient(),
-}));
-
 import { authorizeSessionlessVerifyReference } from './authorize-verify-reference';
 
 const REFERENCE = 'BAC-VERIFY-7';
@@ -56,6 +51,8 @@ function request() {
   });
 }
 
+const mockGetServiceClient = vi.fn();
+
 describe('authorizeSessionlessVerifyReference', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -69,6 +66,7 @@ describe('authorizeSessionlessVerifyReference', () => {
       authorizeSessionlessVerifyReference(request(), REFERENCE, TRACKING_TOKEN)
     ).resolves.toEqual({ authorized: true, orderId: ORDER_ID });
     expect(mockGetAuthenticatedUser).not.toHaveBeenCalled();
+    expect(mockGetServiceClient).not.toHaveBeenCalled();
   });
 
   it('denies when the tracking token snapshot misses', async () => {
@@ -81,14 +79,35 @@ describe('authorizeSessionlessVerifyReference', () => {
   it('denies bearer callers with no validated user', async () => {
     mockGetAuthenticatedUser.mockResolvedValue(null);
     await expect(
-      authorizeSessionlessVerifyReference(request(), REFERENCE)
+      authorizeSessionlessVerifyReference(
+        request(),
+        REFERENCE,
+        undefined,
+        mockGetServiceClient
+      )
     ).resolves.toEqual({ authorized: false, orderId: null });
-    expect(mockCreateServiceClient).not.toHaveBeenCalled();
+    expect(mockGetServiceClient).not.toHaveBeenCalled();
   });
 
   it('denies cookie sessions even when a user object exists', async () => {
     mockGetAuthenticatedUser.mockResolvedValue({
       authMode: 'cookie',
+      user: { id: 'user-7' },
+    });
+    await expect(
+      authorizeSessionlessVerifyReference(
+        request(),
+        REFERENCE,
+        undefined,
+        mockGetServiceClient
+      )
+    ).resolves.toEqual({ authorized: false, orderId: null });
+    expect(mockGetServiceClient).not.toHaveBeenCalled();
+  });
+
+  it('denies bearer callers when no service client is supplied', async () => {
+    mockGetAuthenticatedUser.mockResolvedValue({
+      authMode: 'bearer',
       user: { id: 'user-7' },
     });
     await expect(
@@ -108,10 +127,16 @@ describe('authorizeSessionlessVerifyReference', () => {
         return table({ data: { customer_id: 'cust-7' } });
       return table({ data: { id: 'cust-7' } });
     });
-    mockCreateServiceClient.mockReturnValue({ from });
+    mockGetServiceClient.mockReturnValue({ from });
     await expect(
-      authorizeSessionlessVerifyReference(request(), REFERENCE)
+      authorizeSessionlessVerifyReference(
+        request(),
+        REFERENCE,
+        undefined,
+        mockGetServiceClient
+      )
     ).resolves.toEqual({ authorized: true, orderId: ORDER_ID });
+    expect(mockGetServiceClient).toHaveBeenCalledTimes(1);
   });
 
   it('denies when the reference names no transaction', async () => {
@@ -119,11 +144,16 @@ describe('authorizeSessionlessVerifyReference', () => {
       authMode: 'bearer',
       user: { id: 'user-7' },
     });
-    mockCreateServiceClient.mockReturnValue({
+    mockGetServiceClient.mockReturnValue({
       from: vi.fn(() => table({ data: null })),
     });
     await expect(
-      authorizeSessionlessVerifyReference(request(), REFERENCE)
+      authorizeSessionlessVerifyReference(
+        request(),
+        REFERENCE,
+        undefined,
+        mockGetServiceClient
+      )
     ).resolves.toEqual({ authorized: false, orderId: null });
   });
 
@@ -139,22 +169,32 @@ describe('authorizeSessionlessVerifyReference', () => {
         return table({ data: { customer_id: 'cust-7' } });
       return table({ data: null });
     });
-    mockCreateServiceClient.mockReturnValue({ from });
+    mockGetServiceClient.mockReturnValue({ from });
     await expect(
-      authorizeSessionlessVerifyReference(request(), REFERENCE)
+      authorizeSessionlessVerifyReference(
+        request(),
+        REFERENCE,
+        undefined,
+        mockGetServiceClient
+      )
     ).resolves.toEqual({ authorized: false, orderId: null });
   });
 
-  it('denies when the service read throws', async () => {
+  it('denies when the service client factory throws', async () => {
     mockGetAuthenticatedUser.mockResolvedValue({
       authMode: 'bearer',
       user: { id: 'user-7' },
     });
-    mockCreateServiceClient.mockImplementation(() => {
+    mockGetServiceClient.mockImplementation(() => {
       throw new Error('service unavailable');
     });
     await expect(
-      authorizeSessionlessVerifyReference(request(), REFERENCE)
+      authorizeSessionlessVerifyReference(
+        request(),
+        REFERENCE,
+        undefined,
+        mockGetServiceClient
+      )
     ).resolves.toEqual({ authorized: false, orderId: null });
   });
 });

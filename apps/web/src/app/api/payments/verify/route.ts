@@ -465,7 +465,10 @@ export async function POST(request: NextRequest) {
     const authorization = await authorizeSessionlessVerifyReference(
       request,
       parsedBody.data.reference,
-      parsedBody.data.trackingToken
+      parsedBody.data.trackingToken,
+      // Lazy: the tracking-token lane never invokes it, so denied or
+      // proof-carrying requests construct no privileged client.
+      () => createServiceClient()
     );
     if (!authorization.authorized) {
       return NextResponse.json(

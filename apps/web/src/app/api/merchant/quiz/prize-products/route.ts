@@ -9,11 +9,8 @@ import {
   quizPrizeProductSearchQuerySchema,
   quizPrizeProductsResponseSchema,
 } from '@/schemas/quiz-prize-product';
-import {
-  expandPrizeProduct,
-  isProductRow,
-  isVariantRow,
-} from './prize-product-mapping';
+import { expandPrizeProduct } from './prize-product-expansion';
+import { isProductRow, isVariantRow } from './prize-product-mapping';
 import {
   decodePrizeProductCursor,
   paginatePrizeProducts,

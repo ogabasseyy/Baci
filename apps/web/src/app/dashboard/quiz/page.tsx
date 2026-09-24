@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { expandPrizeProduct } from '@/app/api/merchant/quiz/prize-products/prize-product-expansion';
 import {
-  expandPrizeProduct,
   isProductRow,
   isVariantRow,
 } from '@/app/api/merchant/quiz/prize-products/prize-product-mapping';

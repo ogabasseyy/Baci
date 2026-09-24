@@ -1,5 +1,6 @@
 import { QUIZ_DEFAULT_TIME_ZONE } from '@baci/shared';
 import { clampNumberInput } from './quiz-admin-actions';
+import { QUIZ_AUTHORING_MAX_DURATION_SECONDS } from './quiz-authoring-timing-limits';
 
 interface QuizAuthoringTimingFieldsProps {
   timingKind: 'immediate' | 'scheduled';
@@ -50,7 +51,7 @@ export function QuizAuthoringTimingFields({
           <input
             className="h-11 rounded-md border bg-background px-3"
             min={1}
-            max={7200}
+            max={QUIZ_AUTHORING_MAX_DURATION_SECONDS}
             step={1}
             type="number"
             value={Math.round(Number(windowMinutes) * 60)}
@@ -61,7 +62,7 @@ export function QuizAuthoringTimingFields({
                     clampNumberInput(
                       String(Math.round(Number(windowMinutes) * 60)),
                       1,
-                      7200
+                      QUIZ_AUTHORING_MAX_DURATION_SECONDS
                     )
                   ) / 60
                 )

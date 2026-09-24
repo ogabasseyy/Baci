@@ -62,20 +62,6 @@ export function mapBaseProduct(product: QuizPrizeProductRow): QuizPrizeProduct {
   };
 }
 
-export function expandPrizeProduct(
-  product: QuizPrizeProductRow,
-  variants: QuizPrizeVariantRow[]
-): QuizPrizeProduct[] {
-  if (product.has_variants !== true) return [mapBaseProduct(product)];
-  return [...variants]
-    .sort(
-      (left, right) =>
-        (left.created_at ?? '').localeCompare(right.created_at ?? '') ||
-        left.id.localeCompare(right.id)
-    )
-    .map((variant) => mapVariantProduct(product, variant));
-}
-
 export function mapVariantProduct(
   product: QuizPrizeProductRow,
   variant: QuizPrizeVariantRow

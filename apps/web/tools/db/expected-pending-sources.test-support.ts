@@ -434,7 +434,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260923130000_raise_jumia_credential_ciphertext_limit.sql',
-    sha256: '32dc21b9fd4ade7f529f416c32bb446461bd6dd4b28963d0c8a62cff11679d8b',
+    sha256: 'edaedf263179eedfc00b7ef6f37c72cd05a8ef9327c028b15c6795b53a739c8f',
   },
   {
     repositoryPath:

@@ -8,7 +8,7 @@ import {
 } from '@testing-library/react-native';
 import { QuizScreen } from '@/components/quiz/QuizScreen';
 import { getQuizDeviceFingerprint } from '@/lib/get-quiz-device-fingerprint';
-import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
+import { ensureQuizMobileAdsReady } from '@/services/initialize-quiz-mobile-ads';
 import type { QuizAttempt, QuizEvent, QuizResult } from '@/services/quiz';
 import {
   fetchQuizEvents,
@@ -33,6 +33,7 @@ jest.mock('@/components/quiz/QuizGameplayAdFooter', () => ({
   QuizGameplayAdFooter: () => null,
 }));
 jest.mock('@/services/initialize-quiz-mobile-ads', () => ({
+  ensureQuizMobileAdsReady: jest.fn(async () => undefined),
   initializeQuizMobileAds: jest.fn(async () => ({ canRequestAds: true })),
 }));
 
@@ -263,7 +264,7 @@ describe('QuizScreen', () => {
 
       expect(await screen.findByText('Daily Prize Quiz')).toBeTruthy();
       await waitFor(() =>
-        expect(jest.mocked(initializeQuizMobileAds)).toHaveBeenCalled()
+        expect(jest.mocked(ensureQuizMobileAdsReady)).toHaveBeenCalled()
       );
     } finally {
       delete process.env.EXPO_PUBLIC_QUIZ_ADS_ENABLED;

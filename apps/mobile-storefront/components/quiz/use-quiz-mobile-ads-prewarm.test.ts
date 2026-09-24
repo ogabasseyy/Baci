@@ -1,14 +1,10 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { renderHook, waitFor } from '@testing-library/react-native';
-import { getFeatureFlagValue } from '@/services/analytics-core';
-import { initializeQuizMobileAds } from '@/services/initialize-quiz-mobile-ads';
+import { ensureQuizMobileAdsReady } from '@/services/initialize-quiz-mobile-ads';
 import { useQuizMobileAdsPrewarm } from './use-quiz-mobile-ads-prewarm';
 
-jest.mock('@/services/analytics-core', () => ({
-  getFeatureFlagValue: jest.fn(),
-}));
 jest.mock('@/services/initialize-quiz-mobile-ads', () => ({
-  initializeQuizMobileAds: jest.fn(async () => ({ canRequestAds: true })),
+  ensureQuizMobileAdsReady: jest.fn(async () => undefined),
 }));
 
 describe('useQuizMobileAdsPrewarm', () => {
@@ -16,32 +12,17 @@ describe('useQuizMobileAdsPrewarm', () => {
     jest.clearAllMocks();
   });
 
-  it('initializes ads before timed gameplay starts', async () => {
-    jest.mocked(getFeatureFlagValue).mockResolvedValue(true);
-
+  it('prepares ads before timed gameplay starts', async () => {
     renderHook(() => useQuizMobileAdsPrewarm(true));
 
     await waitFor(() =>
-      expect(jest.mocked(initializeQuizMobileAds)).toHaveBeenCalled()
+      expect(jest.mocked(ensureQuizMobileAdsReady)).toHaveBeenCalled()
     );
-    expect(getFeatureFlagValue).toHaveBeenCalledWith('quiz-mobile-ads');
-  });
-
-  it('honors the runtime kill switch before initializing', async () => {
-    jest.mocked(getFeatureFlagValue).mockResolvedValue(false);
-
-    renderHook(() => useQuizMobileAdsPrewarm(true));
-
-    await waitFor(() =>
-      expect(jest.mocked(getFeatureFlagValue)).toHaveBeenCalled()
-    );
-    expect(jest.mocked(initializeQuizMobileAds)).not.toHaveBeenCalled();
   });
 
   it('stays idle when ads are disabled', () => {
     renderHook(() => useQuizMobileAdsPrewarm(false));
 
-    expect(jest.mocked(getFeatureFlagValue)).not.toHaveBeenCalled();
-    expect(jest.mocked(initializeQuizMobileAds)).not.toHaveBeenCalled();
+    expect(jest.mocked(ensureQuizMobileAdsReady)).not.toHaveBeenCalled();
   });
 });

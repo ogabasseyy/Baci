@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { getQuizMobileAdsConfig } from '@/config/quiz-mobile-ads';
@@ -183,6 +183,15 @@ export function QuizScreen({
     serverNow: v2Attempt?.serverNow ?? terminalContext?.serverNow,
     status,
   });
+  const [musicPlayback, setMusicPlayback] = useState({
+    currentTrackIndex: 0,
+    isPlaying: true,
+  });
+  const musicPlayerPlayback = {
+    initialIsPlaying: musicPlayback.isPlaying,
+    initialTrackIndex: musicPlayback.currentTrackIndex,
+    onPlaybackChange: setMusicPlayback,
+  };
 
   return (
     <View style={styles.screen}>
@@ -221,7 +230,7 @@ export function QuizScreen({
           contentContainerStyle={styles.container}
           style={styles.gameplayScroll}
         >
-          <QuizMusicPlayer />
+          <QuizMusicPlayer {...musicPlayerPlayback} />
           <QuizQuestionCard
             attempt={attempt}
             isSubmitting={status === 'submitting'}
@@ -242,7 +251,10 @@ export function QuizScreen({
           style={styles.gameplayScroll}
         >
           {music.shouldPlay ? (
-            <QuizMusicPlayer gameEndsIn={music.gameEndsIn} />
+            <QuizMusicPlayer
+              gameEndsIn={music.gameEndsIn}
+              {...musicPlayerPlayback}
+            />
           ) : null}
           <QuizLiveQuestionCard
             attempt={v2Attempt}
@@ -264,6 +276,7 @@ export function QuizScreen({
           legacyResult={result}
           lifecycle={v2LifecycleStatus}
           music={music}
+          musicPlayerPlayback={musicPlayerPlayback}
           styles={styles}
           terminalContext={terminalContext}
           v2Result={v2Result}

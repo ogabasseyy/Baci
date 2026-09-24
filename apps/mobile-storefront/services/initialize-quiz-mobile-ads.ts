@@ -1,4 +1,6 @@
+import { getQuizMobileAdsConfig } from '@/config/quiz-mobile-ads';
 import { createLogger } from '@/lib/logger';
+import { getFeatureFlagValue } from './analytics-core';
 
 interface QuizMobileAdsInitializationResult {
   canRequestAds: boolean;
@@ -46,4 +48,11 @@ export function initializeQuizMobileAds(): Promise<QuizMobileAdsInitializationRe
     });
   }
   return initializationPromise;
+}
+
+export async function ensureQuizMobileAdsReady(): Promise<void> {
+  if (!getQuizMobileAdsConfig().enabled) return;
+  const runtimeFlag = await getFeatureFlagValue('quiz-mobile-ads');
+  if (runtimeFlag === false) return;
+  await initializeQuizMobileAds().catch(() => null);
 }

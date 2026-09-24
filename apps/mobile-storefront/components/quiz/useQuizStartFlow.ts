@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { getQuizDeviceFingerprint } from '@/lib/get-quiz-device-fingerprint';
+import { ensureQuizMobileAdsReady } from '@/services/initialize-quiz-mobile-ads';
 import {
   type QuizAttempt,
   type QuizEvent,
@@ -82,6 +83,7 @@ export function useQuizStartFlow({
   const acceptedTermsEventIdsRef = useRef(new Set<string>());
 
   const handleStart = async (eventId: string) => {
+    await ensureQuizMobileAdsReady().catch(() => undefined);
     const event = events.find((candidate) => candidate.id === eventId);
     if (event?.contractVersion === 2) {
       if (!startEventV2) {

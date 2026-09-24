@@ -5,9 +5,19 @@ const mockGetConsentInfo = jest.fn<() => Promise<{ canRequestAds: boolean }>>();
 const mockInitialize = jest.fn<() => Promise<unknown>>();
 const mockSetRequestConfiguration = jest.fn<() => Promise<void>>();
 const mockWarn = jest.fn();
+const mockGetQuizMobileAdsConfig = jest.fn<() => { enabled: boolean }>();
+const mockGetFeatureFlagValue = jest.fn<(flag: string) => Promise<unknown>>();
 
 jest.mock('@/lib/logger', () => ({
   createLogger: () => ({ warn: mockWarn }),
+}));
+
+jest.mock('@/config/quiz-mobile-ads', () => ({
+  getQuizMobileAdsConfig: mockGetQuizMobileAdsConfig,
+}));
+
+jest.mock('./analytics-core', () => ({
+  getFeatureFlagValue: mockGetFeatureFlagValue,
 }));
 
 jest.mock('react-native-google-mobile-ads', () => ({
@@ -113,5 +123,53 @@ describe('initializeQuizMobileAds', () => {
     });
 
     expect(mockInitialize).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ensureQuizMobileAdsReady', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    mockGatherConsent.mockReset().mockResolvedValue({});
+    mockGetConsentInfo.mockReset().mockResolvedValue({ canRequestAds: true });
+    mockInitialize.mockReset().mockResolvedValue({});
+    mockSetRequestConfiguration.mockReset().mockResolvedValue(undefined);
+    mockWarn.mockReset();
+    mockGetQuizMobileAdsConfig.mockReset().mockReturnValue({ enabled: true });
+    mockGetFeatureFlagValue.mockReset().mockResolvedValue(true);
+  });
+
+  it('initializes when ads are enabled and the runtime flag allows them', async () => {
+    const { ensureQuizMobileAdsReady } = await loadInitializer();
+
+    await ensureQuizMobileAdsReady();
+
+    expect(mockGetFeatureFlagValue).toHaveBeenCalledWith('quiz-mobile-ads');
+    expect(mockInitialize).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips initialization when the runtime kill switch is off', async () => {
+    mockGetFeatureFlagValue.mockResolvedValue(false);
+    const { ensureQuizMobileAdsReady } = await loadInitializer();
+
+    await ensureQuizMobileAdsReady();
+
+    expect(mockInitialize).not.toHaveBeenCalled();
+  });
+
+  it('skips initialization when ads are disabled', async () => {
+    mockGetQuizMobileAdsConfig.mockReturnValue({ enabled: false });
+    const { ensureQuizMobileAdsReady } = await loadInitializer();
+
+    await ensureQuizMobileAdsReady();
+
+    expect(mockGetFeatureFlagValue).not.toHaveBeenCalled();
+    expect(mockInitialize).not.toHaveBeenCalled();
+  });
+
+  it('resolves when initialization fails so gameplay can proceed', async () => {
+    mockInitialize.mockRejectedValue(new Error('native module unavailable'));
+    const { ensureQuizMobileAdsReady } = await loadInitializer();
+
+    await expect(ensureQuizMobileAdsReady()).resolves.toBeUndefined();
   });
 });

@@ -76,4 +76,38 @@ describe('QuizDurationField', () => {
     );
     expect(onDurationChange).toHaveBeenLastCalledWith(null);
   });
+
+  it('synchronizes the input when its bounds change', async () => {
+    const onDurationChange = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <QuizDurationField
+        expectedPlaySeconds={20}
+        maximumSeconds={null}
+        minimumSeconds={10}
+        mode="test"
+        onDurationChange={onDurationChange}
+        totalDurationSeconds={20}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /extend play time/i }));
+    const input = screen.getByLabelText(/total quiz duration \(seconds\)/i);
+    await user.clear(input);
+    await user.type(input, '200');
+    expect(input).toHaveValue(200);
+
+    rerender(
+      <QuizDurationField
+        expectedPlaySeconds={20}
+        maximumSeconds={140}
+        minimumSeconds={50}
+        mode="live"
+        onDurationChange={onDurationChange}
+        totalDurationSeconds={140}
+      />
+    );
+
+    expect(input).toHaveValue(140);
+  });
 });

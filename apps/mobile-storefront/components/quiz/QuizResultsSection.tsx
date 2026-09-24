@@ -6,6 +6,7 @@ import type {
   QuizV2LifecycleStatus,
 } from '@/stores/quiz-recovery-envelope';
 import { QuizMusicPlayer } from './QuizMusicPlayer';
+import type { QuizMusicPlaybackState } from './QuizMusicPlayerNative';
 import { QuizResultsPanel } from './QuizResultsPanel';
 import type { createQuizStyles } from './QuizScreen.styles';
 
@@ -14,6 +15,11 @@ interface QuizResultsSectionProps {
   legacyResult: QuizResult | null;
   lifecycle: QuizV2LifecycleStatus;
   music: { gameEndsIn: string; shouldPlay: boolean };
+  musicPlayerPlayback: {
+    initialIsPlaying: boolean;
+    initialTrackIndex: number;
+    onPlaybackChange: (playback: QuizMusicPlaybackState) => void;
+  };
   styles: ReturnType<typeof createQuizStyles>;
   terminalContext: QuizTerminalContext | null;
   v2Result: QuizV2Result | null;
@@ -24,6 +30,7 @@ export function QuizResultsSection({
   legacyResult,
   lifecycle,
   music,
+  musicPlayerPlayback,
   styles,
   terminalContext,
   v2Result,
@@ -34,7 +41,10 @@ export function QuizResultsSection({
       style={styles.gameplayScroll}
     >
       {music.shouldPlay ? (
-        <QuizMusicPlayer gameEndsIn={music.gameEndsIn} />
+        <QuizMusicPlayer
+          gameEndsIn={music.gameEndsIn}
+          {...musicPlayerPlayback}
+        />
       ) : null}
       <QuizResultsPanel
         eventId={terminalContext?.eventId}

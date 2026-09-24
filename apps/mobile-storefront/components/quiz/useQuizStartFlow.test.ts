@@ -10,6 +10,11 @@ const mockUsernameRequestStart = jest.fn();
 const mockStartQuizAttempt = jest.fn<(args: unknown) => Promise<unknown>>();
 const mockStartQuizAttemptV2 = jest.fn<(args: unknown) => Promise<unknown>>();
 const mockGetFingerprint = jest.fn<() => Promise<string | null>>();
+const mockEnsureQuizMobileAdsReady = jest.fn<() => Promise<void>>();
+
+jest.mock('@/services/initialize-quiz-mobile-ads', () => ({
+  ensureQuizMobileAdsReady: () => mockEnsureQuizMobileAdsReady(),
+}));
 
 // Captured so the test can drive the gate callbacks the flow wires up.
 let dobOnStart: (eventId: string) => void = () => {};
@@ -79,6 +84,7 @@ describe('useQuizStartFlow', () => {
     mockGetFingerprint.mockImplementation(async () => 'fp');
     mockStartQuizAttempt.mockResolvedValue({ attemptId: 'attempt-1' });
     mockStartQuizAttemptV2.mockResolvedValue({ attemptId: 'attempt-v2' });
+    mockEnsureQuizMobileAdsReady.mockResolvedValue(undefined);
   });
 
   it('hands the username gate off to the date-of-birth gate', () => {
@@ -87,6 +93,39 @@ describe('useQuizStartFlow', () => {
     usernameOnStart('event-1');
 
     expect(mockDobRequestStart).toHaveBeenCalledWith('event-1');
+  });
+
+  it('waits for ad readiness before starting the timed attempt', async () => {
+    let resolveReady!: () => void;
+    const readyPromise = new Promise<void>((resolve) => {
+      resolveReady = resolve;
+    });
+    mockEnsureQuizMobileAdsReady.mockReturnValueOnce(readyPromise);
+    renderHook(() => useQuizStartFlow({ integrityTier: 'device', startEvent }));
+
+    dobOnStart('event-1');
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockStartQuizAttempt).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveReady();
+      await readyPromise;
+    });
+    await waitFor(() => expect(mockStartQuizAttempt).toHaveBeenCalled());
+  });
+
+  it('starts without ads when ad readiness fails', async () => {
+    mockEnsureQuizMobileAdsReady.mockRejectedValueOnce(
+      new Error('consent unavailable')
+    );
+    renderHook(() => useQuizStartFlow({ integrityTier: 'device', startEvent }));
+
+    dobOnStart('event-1');
+
+    await waitFor(() => expect(mockStartQuizAttempt).toHaveBeenCalled());
   });
 
   it('reopens the date-of-birth gate when the server rejects a stored DOB as under-18', async () => {

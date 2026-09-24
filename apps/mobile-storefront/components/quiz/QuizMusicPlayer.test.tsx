@@ -17,6 +17,7 @@ let mockTrackChanged:
   | ((data: { currentIndex: number; previousIndex: number }) => void)
   | undefined;
 const mockPlaylist = {
+  skipTo: jest.fn(),
   addListener: jest.fn(
     (
       _event: string,
@@ -49,6 +50,7 @@ describe('QuizMusicPlayerNative', () => {
     mockPlaylist.addListener.mockClear();
     mockPlaylist.pause.mockClear();
     mockPlaylist.play.mockClear();
+    mockPlaylist.skipTo.mockClear();
     mockTrackChanged = undefined;
     mockSetAudioModeAsync.mockClear();
     mockUseAudioPlaylist.mockClear();
@@ -137,5 +139,39 @@ describe('QuizMusicPlayerNative', () => {
     expect(progress.props.children.props.style).toEqual(
       expect.arrayContaining([{ width: '25%' }])
     );
+  });
+
+  it('stays paused when remounting after the player was paused', async () => {
+    render(<QuizMusicPlayerNative initialIsPlaying={false} />);
+
+    expect(
+      screen.getByRole('button', { name: 'Play quiz music' })
+    ).toBeTruthy();
+    await waitFor(() => expect(mockSetAudioModeAsync).toHaveBeenCalled());
+    expect(mockPlaylist.play).not.toHaveBeenCalled();
+  });
+
+  it('resumes the previous track when remounting', () => {
+    render(<QuizMusicPlayerNative initialTrackIndex={1} />);
+
+    expect(mockPlaylist.skipTo).toHaveBeenCalledWith(1);
+    expect(screen.getByText('Ogabassey No dey Disappoint 1')).toBeTruthy();
+  });
+
+  it('reports playback changes to its parent', () => {
+    const onPlaybackChange = jest.fn();
+    render(<QuizMusicPlayerNative onPlaybackChange={onPlaybackChange} />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Pause quiz music' }));
+    act(() => mockTrackChanged?.({ currentIndex: 1, previousIndex: 0 }));
+
+    expect(onPlaybackChange).toHaveBeenCalledWith({
+      currentTrackIndex: 0,
+      isPlaying: false,
+    });
+    expect(onPlaybackChange).toHaveBeenCalledWith({
+      currentTrackIndex: 1,
+      isPlaying: false,
+    });
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { clampNumber, clampNumberInput } from './quiz-admin-actions';
 import { formatQuizDuration } from './quiz-duration';
 
@@ -22,6 +22,15 @@ export function QuizDurationField({
   const [isExpanded, setIsExpanded] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const maximumDurationSeconds = maximumSeconds ?? Number.MAX_SAFE_INTEGER;
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    setInputValue((current) =>
+      current === ''
+        ? current
+        : clampNumberInput(current, minimumSeconds, maximumDurationSeconds)
+    );
+  }, [isExpanded, maximumDurationSeconds, minimumSeconds]);
 
   const resetToDefault = () => {
     setInputValue('');

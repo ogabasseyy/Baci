@@ -3,6 +3,12 @@ const UNIT_ID_PATTERN = /^ca-app-pub-\d+\/\d+$/;
 const SAMPLE_ANDROID_APP_ID = 'ca-app-pub-3940256099942544~3347511713';
 const SAMPLE_IOS_APP_ID = 'ca-app-pub-3940256099942544~1458002511';
 const SAMPLE_APP_IDS = new Set([SAMPLE_ANDROID_APP_ID, SAMPLE_IOS_APP_ID]);
+const SAMPLE_ANDROID_BANNER_UNIT_ID = 'ca-app-pub-3940256099942544/9214589741';
+const SAMPLE_IOS_BANNER_UNIT_ID = 'ca-app-pub-3940256099942544/2435281174';
+const SAMPLE_BANNER_UNIT_IDS = new Set([
+  SAMPLE_ANDROID_BANNER_UNIT_ID,
+  SAMPLE_IOS_BANNER_UNIT_ID,
+]);
 const TRACKING_USAGE_DESCRIPTION =
   'We use your activity to measure advertising performance and show more relevant offers across apps and websites.';
 
@@ -46,7 +52,12 @@ function buildGoogleMobileAdsExpoPlugin(environment) {
       'EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID',
       'EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID',
     ]) {
-      requiredIdentifier(environment, key, UNIT_ID_PATTERN);
+      requiredIdentifier(
+        environment,
+        key,
+        UNIT_ID_PATTERN,
+        SAMPLE_BANNER_UNIT_IDS
+      );
     }
   }
 

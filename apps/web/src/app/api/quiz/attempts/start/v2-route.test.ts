@@ -120,6 +120,19 @@ describe('v2 quiz start route', () => {
       expect.anything()
     );
   });
+  it('fails closed with a stable JSON error when guard lookup fails', async () => {
+    const rpc = authenticated();
+    vi.mocked(enforceQuizStartGuards).mockRejectedValueOnce(
+      new Error('Quiz start eligibility could not be verified')
+    );
+    const response = await postQuizStartV2(request({}));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'Quiz request failed' });
+    expect(rpc).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^start_quiz_attempt/),
+      expect.anything()
+    );
+  });
   it('authenticates before CSRF, validation, or RPC work', async () => {
     vi.mocked(requireQuizUser).mockResolvedValue({
       response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),

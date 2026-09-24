@@ -25,6 +25,7 @@ import {
   resolveQuizDevice,
 } from '@/lib/quiz/quiz-device-hash';
 import { buildQuizDeviceProofSubject } from '@/lib/quiz/quiz-device-proof-subject';
+import { QuizProductionNotApprovedError } from '@/lib/quiz-compliance-gate';
 import { startQuizAttemptV2RouteSchema } from '@/schemas/quiz';
 import { enforceQuizStartGuards } from './v2-start-guards';
 
@@ -62,9 +63,14 @@ export async function postQuizStartV2(request: NextRequest) {
       auth.user.id
     );
   } catch (error) {
-    return isQuizAgeGateError(error)
-      ? quizAgeGateErrorResponse(error)
-      : prizeGuardErrorResponse(error);
+    if (isQuizAgeGateError(error)) return quizAgeGateErrorResponse(error);
+    if (error instanceof QuizProductionNotApprovedError) {
+      return prizeGuardErrorResponse(error);
+    }
+    // Guard lookup and eligibility failures stay fail-closed behind the
+    // route's stable JSON error contract instead of escaping as a
+    // framework 500.
+    return rpcErrorResponse();
   }
 
   const rawFingerprint = request.headers.get('X-Baci-Quiz-Device-Fingerprint');

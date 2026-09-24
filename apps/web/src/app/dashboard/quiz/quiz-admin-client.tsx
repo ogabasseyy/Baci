@@ -18,9 +18,11 @@ import { quizDatetimeLocalToIso } from './quiz-datetime-local';
 import { suggestedQuizDuration } from './quiz-duration';
 
 export function QuizAdminClient({
+  initialNextCursor = null,
   initialPrizeProducts,
   initialPrizeProductsError = null,
 }: {
+  initialNextCursor?: string | null;
   initialPrizeProducts: QuizPrizeProduct[];
   initialPrizeProductsError?: string | null;
 }) {
@@ -178,6 +180,7 @@ export function QuizAdminClient({
       <QuizAuthoringForm
         disabled={isActivating}
         initialError={initialPrizeProductsError}
+        initialNextCursor={initialNextCursor}
         initialProducts={initialPrizeProducts}
         isGenerating={isGenerating}
         onGenerate={generate}

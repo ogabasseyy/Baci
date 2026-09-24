@@ -24,12 +24,14 @@ import { useQuizAuthoringWindowSync } from './use-quiz-authoring-window-sync';
 export function QuizAuthoringForm({
   disabled,
   initialError,
+  initialNextCursor = null,
   initialProducts,
   isGenerating,
   onGenerate,
 }: {
   disabled: boolean;
   initialError?: string | null;
+  initialNextCursor?: string | null;
   initialProducts: QuizPrizeProduct[];
   isGenerating: boolean;
   onGenerate: (configuration: QuizDraftConfiguration) => void;
@@ -160,6 +162,7 @@ export function QuizAuthoringForm({
           <QuizPrizeProductPicker
             disabled={disabled}
             initialError={initialError}
+            initialNextCursor={initialNextCursor}
             initialProducts={initialProducts}
             onSelect={setPrizeProduct}
             selectedProduct={prizeProduct}

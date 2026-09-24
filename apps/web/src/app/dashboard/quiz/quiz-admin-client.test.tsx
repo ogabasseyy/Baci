@@ -227,6 +227,20 @@ describe('QuizAdminClient', () => {
     ).toHaveLength(1);
   });
 
+  it('shows load-more when the initial inventory page has a cursor', async () => {
+    const user = userEvent.setup();
+    render(
+      <QuizAdminClient initialNextCursor="42" initialPrizeProducts={[prize]} />
+    );
+
+    await user.click(
+      screen.getByRole('combobox', { name: 'Search prize product inventory' })
+    );
+    expect(
+      screen.getByRole('button', { name: 'Load more inventory' })
+    ).toBeInTheDocument();
+  });
+
   it('explains that live prizes remain fail closed', async () => {
     const user = userEvent.setup();
     render(<QuizAdminClient initialPrizeProducts={[prize]} />);

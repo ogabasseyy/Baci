@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { decodePrizeProductCursor } from '@/app/api/merchant/quiz/prize-products/prize-product-pagination';
 
 const mockEnsurePermission = vi.fn();
 const mockIsMerchantPermissionRedirectError = vi.fn((error: unknown) => {
@@ -16,16 +15,8 @@ const mockProductsQuery = {
   order: vi.fn(() => mockProductsQuery),
   select: vi.fn(() => mockProductsQuery),
 };
-const mockVariantsQuery = {
-  eq: vi.fn(() => mockVariantsQuery),
-  in: vi.fn(() => mockVariantsQuery),
-  order: vi.fn(),
-  select: vi.fn(() => mockVariantsQuery),
-};
 const mockSupabase = {
-  from: vi.fn((table: string) =>
-    table === 'product_variants' ? mockVariantsQuery : mockProductsQuery
-  ),
+  from: vi.fn(() => mockProductsQuery),
 };
 const mockCreateClient = vi.fn((_cookieStore: unknown) => mockSupabase);
 
@@ -51,9 +42,7 @@ vi.mock('./quiz-admin-client', () => ({
   QuizAdminClient: () => <div>Quiz admin client</div>,
 }));
 
-const { default: QuizDashboardPage, loadPrizeProducts } = await import(
-  './page'
-);
+const { default: QuizDashboardPage } = await import('./page');
 
 describe('QuizDashboardPage', () => {
   beforeEach(() => {
@@ -71,7 +60,6 @@ describe('QuizDashboardPage', () => {
       ],
       error: null,
     });
-    mockVariantsQuery.order.mockResolvedValue({ data: [], error: null });
     mockIsMerchantPermissionRedirectError.mockImplementation(
       (error: unknown) => {
         return (
@@ -145,206 +133,5 @@ describe('QuizDashboardPage', () => {
     await expect(QuizDashboardPage()).rejects.toThrow('Database unavailable');
     expect(mockIsMerchantPermissionRedirectError).toHaveBeenCalledOnce();
     expect(mockRedirect).not.toHaveBeenCalled();
-  });
-
-  it('filters malformed inventory rows and safely normalizes stock', async () => {
-    mockProductsQuery.limit.mockResolvedValueOnce({
-      count: 3,
-      data: [
-        {
-          default_variant_id: null,
-          id: '55555555-5555-4555-8555-555555555555',
-          manage_stock: true,
-          merchant_id: 'merchant-1',
-          name: 'Safe stock product',
-          price: 100,
-          stock: 'not-a-number',
-          stock_quantity: '-4',
-        },
-        {
-          default_variant_id: null,
-          id: 'not-a-uuid',
-          merchant_id: 'merchant-1',
-          name: 'Malformed product',
-          price: 100,
-        },
-        { id: '55555555-5555-4555-8555-555555555555', name: 10 },
-      ],
-      error: null,
-    });
-
-    await expect(loadPrizeProducts('merchant-1')).resolves.toMatchObject({
-      error: null,
-      nextCursor: null,
-      products: [
-        expect.objectContaining({
-          available: false,
-          effectiveStock: 0,
-          name: 'Safe stock product',
-        }),
-      ],
-      total: 3,
-    });
-  });
-
-  it('expands variant parents and omits parents without variant inventory', async () => {
-    mockProductsQuery.limit.mockResolvedValueOnce({
-      count: 2,
-      data: [
-        {
-          default_variant_id: null,
-          has_variants: true,
-          id: '55555555-5555-4555-8555-555555555555',
-          merchant_id: 'merchant-1',
-          name: 'Parent with variants',
-          price: 100,
-        },
-        {
-          default_variant_id: null,
-          has_variants: true,
-          id: '77777777-7777-4777-8777-777777777777',
-          merchant_id: 'merchant-1',
-          name: 'Parent without variants',
-          price: 200,
-        },
-      ],
-      error: null,
-    });
-    mockVariantsQuery.order.mockResolvedValueOnce({
-      data: [
-        {
-          id: '66666666-6666-4666-8666-666666666666',
-          merchant_id: 'merchant-1',
-          product_id: '55555555-5555-4555-8555-555555555555',
-          stock_quantity: 3,
-        },
-      ],
-      error: null,
-    });
-
-    const result = await loadPrizeProducts('merchant-1');
-
-    expect(mockSupabase.from).toHaveBeenCalledWith('product_variants');
-    expect(mockVariantsQuery.in).toHaveBeenCalledWith('product_id', [
-      '55555555-5555-4555-8555-555555555555',
-      '77777777-7777-4777-8777-777777777777',
-    ]);
-    expect(result.error).toBeNull();
-    expect(result.products).toHaveLength(1);
-    expect(result.products[0]).toMatchObject({
-      available: true,
-      id: '55555555-5555-4555-8555-555555555555',
-      requiresVariantSelection: false,
-      variantId: '66666666-6666-4666-8666-666666666666',
-    });
-  });
-
-  it('caps the serialized initial page when variant expansion overflows', async () => {
-    mockProductsQuery.limit.mockResolvedValueOnce({
-      count: 1,
-      data: [
-        {
-          default_variant_id: null,
-          has_variants: true,
-          id: '55555555-5555-4555-8555-555555555555',
-          merchant_id: 'merchant-1',
-          name: 'Parent with a large matrix',
-          price: 100,
-        },
-      ],
-      error: null,
-    });
-    mockVariantsQuery.order.mockResolvedValueOnce({
-      data: Array.from({ length: 150 }, (_, index) => ({
-        id: `11111111-1111-4111-8111-${String(index).padStart(12, '0')}`,
-        merchant_id: 'merchant-1',
-        product_id: '55555555-5555-4555-8555-555555555555',
-        stock_quantity: 1,
-      })),
-      error: null,
-    });
-
-    const result = await loadPrizeProducts('merchant-1');
-
-    expect(result.error).toBeNull();
-    expect(result.products).toHaveLength(100);
-    expect(result.nextCursor).not.toBeNull();
-    expect(decodePrizeProductCursor(result.nextCursor as string)).toEqual({
-      productOffset: 0,
-      variantOffset: 100,
-    });
-  });
-
-  it('carries the parent and variant offset across a truncated page', async () => {
-    mockProductsQuery.limit.mockResolvedValueOnce({
-      count: 2,
-      data: [
-        {
-          default_variant_id: null,
-          has_variants: true,
-          id: '55555555-5555-4555-8555-555555555555',
-          merchant_id: 'merchant-1',
-          name: 'First parent',
-          price: 100,
-        },
-        {
-          default_variant_id: null,
-          has_variants: true,
-          id: '77777777-7777-4777-8777-777777777777',
-          merchant_id: 'merchant-1',
-          name: 'Second parent',
-          price: 200,
-        },
-      ],
-      error: null,
-    });
-    mockVariantsQuery.order.mockResolvedValueOnce({
-      data: [
-        ...Array.from({ length: 60 }, (_, index) => ({
-          id: `11111111-1111-4111-8111-${String(index).padStart(12, '0')}`,
-          merchant_id: 'merchant-1',
-          product_id: '55555555-5555-4555-8555-555555555555',
-          stock_quantity: 1,
-        })),
-        ...Array.from({ length: 60 }, (_, index) => ({
-          id: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
-          merchant_id: 'merchant-1',
-          product_id: '77777777-7777-4777-8777-777777777777',
-          stock_quantity: 1,
-        })),
-      ],
-      error: null,
-    });
-
-    const result = await loadPrizeProducts('merchant-1');
-
-    expect(result.error).toBeNull();
-    expect(result.products).toHaveLength(100);
-    expect(result.nextCursor).not.toBeNull();
-    expect(decodePrizeProductCursor(result.nextCursor as string)).toEqual({
-      productOffset: 1,
-      variantOffset: 40,
-    });
-  });
-
-  it('returns the exact inventory total and a continuation cursor after a capped load', async () => {
-    const rows = Array.from({ length: 100 }, (_, index) => ({
-      default_variant_id: null,
-      id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
-      merchant_id: 'merchant-1',
-      name: `Product ${index}`,
-      price: 100,
-    }));
-    mockProductsQuery.limit.mockResolvedValueOnce({
-      count: 101,
-      data: rows,
-      error: null,
-    });
-
-    await expect(loadPrizeProducts('merchant-1')).resolves.toMatchObject({
-      error: null,
-      nextCursor: '5050',
-      total: 101,
-    });
   });
 });

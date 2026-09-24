@@ -17,6 +17,7 @@ import {
 } from '@/lib/merchant-server';
 import { createClient } from '@/lib/supabase/server';
 import {
+  type QuizPrizeProduct,
   type QuizPrizeVariantRow,
   quizPrizeProductSchema,
   quizPrizeProductsResponseSchema,
@@ -52,57 +53,57 @@ export async function loadPrizeProducts(merchantId: string) {
   }
 
   const candidates = Array.isArray(data) ? data : [];
-  const rows = candidates
-    .filter(isProductRow)
-    .filter((row) => row.merchant_id === merchantId);
   // Mirror the prize API: expand variant parents into selectable variant rows
   // and omit parents with no concrete variant inventory, so the initial page
-  // never shows the unselectable parents that searches omit.
-  const variantParentIds = rows
-    .filter((row) => row.has_variants === true)
-    .map((row) => row.id);
-  const variantsByProduct = new Map<string, QuizPrizeVariantRow[]>();
-  if (variantParentIds.length > 0) {
-    const { data: variantData, error: variantError } = await supabase
-      .from('product_variants')
-      .select(VARIANT_PROJECTION)
-      .eq('merchant_id', merchantId)
-      .in('product_id', variantParentIds)
-      .order('created_at', { ascending: true });
-    if (variantError) {
-      return {
-        error: 'Failed to load prize products',
-        nextCursor: null,
-        products: [],
-        total: null,
-      };
+  // never shows the unselectable parents that searches omit. Hydrate one
+  // parent at a time, fetching at most the rows still needed to fill the
+  // page, so a large variant matrix cannot make this SSR request download
+  // unbounded inventory; the paginator's cursor resumes where hydration
+  // stopped. Dropped rows keep empty groups so group positions stay aligned
+  // with candidate offsets, like the API.
+  const groups: QuizPrizeProduct[][] = [];
+  let expandedCount = 0;
+  for (const item of candidates) {
+    if (expandedCount >= INITIAL_PRIZE_PRODUCT_LIMIT) break;
+    if (!isProductRow(item) || item.merchant_id !== merchantId) {
+      groups.push([]);
+      continue;
     }
-    for (const variant of (Array.isArray(variantData) ? variantData : [])
-      .filter(isVariantRow)
-      .filter((row) => row.merchant_id === merchantId)) {
-      const current = variantsByProduct.get(variant.product_id) ?? [];
-      variantsByProduct.set(variant.product_id, [...current, variant]);
+    let variants: QuizPrizeVariantRow[] = [];
+    if (item.has_variants === true) {
+      // Lookahead row (+1): fetching one row past the fill point proves
+      // whether the parent still has variants, so the paginator can emit a
+      // mid-group continuation cursor instead of wrongly ending the page.
+      const { data: variantData, error: variantError } = await supabase
+        .from('product_variants')
+        .select(VARIANT_PROJECTION)
+        .eq('merchant_id', merchantId)
+        .eq('product_id', item.id)
+        .order('created_at', { ascending: true })
+        .limit(INITIAL_PRIZE_PRODUCT_LIMIT - expandedCount + 1);
+      if (variantError) {
+        return {
+          error: 'Failed to load prize products',
+          nextCursor: null,
+          products: [],
+          total: null,
+        };
+      }
+      variants = (Array.isArray(variantData) ? variantData : [])
+        .filter(isVariantRow)
+        .filter((row) => row.merchant_id === merchantId);
     }
-  }
-  // Expansion multiplies rows: one parent can carry a large variant matrix.
-  // Paginate at the expanded-row boundary with the shared helper so a
-  // truncated page carries the variant offset instead of dropping variants
-  // that normal pagination could never reach. Dropped rows keep empty groups
-  // so group positions stay aligned with candidate offsets, like the API.
-  const groups = candidates.map((item) => {
-    if (!isProductRow(item) || item.merchant_id !== merchantId) return [];
-    return expandPrizeProduct(
-      item,
-      variantsByProduct.get(item.id) ?? []
-    ).flatMap((product) => {
+    const expanded = expandPrizeProduct(item, variants).flatMap((product) => {
       const parsed = quizPrizeProductSchema.safeParse(product);
       return parsed.success ? [parsed.data] : [];
     });
-  });
+    groups.push(expanded);
+    expandedCount += expanded.length;
+  }
   const total = typeof count === 'number' && count >= 0 ? count : null;
   const page = paginatePrizeProducts({
     groups,
-    hasMoreCandidates: total !== null && total > candidates.length,
+    hasMoreCandidates: total !== null && total > groups.length,
     limit: INITIAL_PRIZE_PRODUCT_LIMIT,
     start: { productOffset: 0, variantOffset: 0 },
   });
@@ -145,6 +146,7 @@ export default async function QuizDashboardPage() {
 
   return (
     <QuizAdminClient
+      initialNextCursor={prizeProductResult.nextCursor}
       initialPrizeProducts={prizeProductResult.products}
       initialPrizeProductsError={prizeProductResult.error}
     />

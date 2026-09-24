@@ -141,6 +141,8 @@ describe('verifyCheckoutPaymentByLookup', () => {
   it.each([
     'invoice',
     'pay_on_delivery',
+    // Order creation persists Pay on Delivery as 'pod'.
+    'pod',
   ])('confirms an unpaid %s order without a capture (offline creation-success)', async (paymentMethod) => {
     vi.stubGlobal('fetch', mockFetch);
     mockFetch.mockResolvedValue({

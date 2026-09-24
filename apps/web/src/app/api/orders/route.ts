@@ -46,6 +46,7 @@ import {
 import {
   claimImmediateOrderNotificationWithProof,
   completeImmediateOrderNotificationWithProof,
+  markImmediateOrderNotificationStartedWithProof,
 } from '@/lib/immediate-order/notification-claim';
 import {
   buildImmediateInvoiceArtifacts,
@@ -3061,6 +3062,18 @@ export async function POST(request: NextRequest) {
         if (notificationClaim.shouldDeliver) {
           after(async () => {
             try {
+              // Mark the won claim started (extends it to the full
+              // 5-minute crash window): fire-and-forget first step so
+              // the marker lands while artifacts build, without
+              // delaying the send. Never rejects (a marker failure
+              // keeps the short never-started grace, and completion
+              // stays lease-fenced either way).
+              void markImmediateOrderNotificationStartedWithProof(
+                notificationCtx.supabase,
+                order.id,
+                notificationCtx.trackingToken,
+                notificationClaim.claimToken
+              );
               let invoiceVirtualAccount: ReceiptOrder['virtual_account'] = null;
               let attachments:
                 | Array<{ name: string; content: string; mime_type: string }>

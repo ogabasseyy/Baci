@@ -49,9 +49,12 @@ export async function verifyGuestPaymentReferenceByQuery(
       { status: 403 }
     );
   }
-  return verifyGuestPaymentReference(snapshot);
+  return verifyGuestPaymentReference(snapshot, {
+    trackingToken: parsed.data.trackingToken,
+  });
 }
 
+import { flagGuestPaymentProviderConfirmed } from './flag-guest-payment-provider-confirmed';
 import {
   getVerifiedAmount,
   verifyGatewayPayment,
@@ -69,11 +72,15 @@ function guestOrderNumber(snapshot: GuestPaymentReferenceSnapshot): string {
  * transaction/order reads or payment-finalization writes outside the
  * proof-bound snapshot. A gateway-confirmed payment that is not yet
  * finalized reports pending — the gateway webhook owns finalization,
- * and settlement polling converges on the next pass. Never constructs
- * a service-role client.
+ * and settlement polling converges on the next pass. When the caller
+ * supplies the tracking token, the verified-pending row is also
+ * flagged for the privileged wedge sweep (which re-verifies before
+ * healing), so a lost webhook cannot strand a charged guest in
+ * pending forever. Never constructs a service-role client.
  */
 export async function verifyGuestPaymentReference(
-  snapshot: GuestPaymentReferenceSnapshot
+  snapshot: GuestPaymentReferenceSnapshot,
+  options?: { trackingToken?: string | null }
 ) {
   const derivedOrderNumber = guestOrderNumber(snapshot);
 
@@ -211,8 +218,17 @@ export async function verifyGuestPaymentReference(
   // Gateway-confirmed but not yet finalized: finalization (invoice
   // partials, the atomic order flip, outbox side effects) belongs to the
   // gateway webhook / service boundary, never to a sessionless
-  // user-facing request. Report pending with the proof-bound identity so
-  // settlement polling converges once the webhook lands.
+  // user-facing request. Flag the verified-pending row for the wedge
+  // sweep (best-effort: a flag failure keeps this pending response),
+  // then report pending with the proof-bound identity so settlement
+  // polling converges once the webhook — or the sweep — lands.
+  if (options?.trackingToken) {
+    await flagGuestPaymentProviderConfirmed(
+      snapshot.orderId,
+      options.trackingToken,
+      snapshot.gatewayReference
+    );
+  }
   return NextResponse.json({
     success: false,
     status: 'pending',

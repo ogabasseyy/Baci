@@ -26,7 +26,11 @@ DECLARE
   v_claimed boolean;
   v_status text;
   v_token uuid;
+  v_secret text := 'proof-claims-regression-secret-32-chars+';
+  v_proof text;
 BEGIN
+  -- Completion requires the provisioned server-only proof.
+  PERFORM public.set_immediate_notification_completion_hmac_secret(v_secret);
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (
     v_merchant_id,
@@ -66,7 +70,7 @@ BEGIN
 
   -- Wrong-proof completion is a no-op: the processing claim survives.
   PERFORM public.complete_immediate_order_notification_with_proof(
-    v_order_id, 'wrong-token', true, v_token
+    v_order_id, 'wrong-token', true, v_token, 'bogus-proof'
   );
   SELECT claimed, claim_status INTO v_claimed, v_status
   FROM public.claim_immediate_order_notification(v_order_id);
@@ -76,7 +80,8 @@ BEGIN
   -- Wrong-token completion is a no-op even with correct proof: only the
   -- lease holder completes.
   PERFORM public.complete_immediate_order_notification_with_proof(
-    v_order_id, 'proof-token-001', true, '9f000000-0000-4000-8000-000000000299'
+    v_order_id, 'proof-token-001', true, '9f000000-0000-4000-8000-000000000299',
+    'bogus-proof'
   );
   SELECT claimed, claim_status INTO v_claimed, v_status
   FROM public.claim_immediate_order_notification(v_order_id);
@@ -84,8 +89,16 @@ BEGIN
   ASSERT v_status = 'processing', 'wrong-token complete must not move state';
 
   -- Correct-proof completion marks sent (terminal, replays skip).
+  v_proof := encode(
+    extensions.hmac(
+      concat_ws('|', v_order_id::text, v_token::text, 'sent'),
+      v_secret,
+      'sha256'
+    ),
+    'hex'
+  );
   PERFORM public.complete_immediate_order_notification_with_proof(
-    v_order_id, 'proof-token-001', true, v_token
+    v_order_id, 'proof-token-001', true, v_token, v_proof
   );
   SELECT claimed, claim_status INTO v_claimed, v_status
   FROM public.claim_immediate_order_notification_with_proof(
@@ -114,17 +127,17 @@ BEGIN
   END IF;
   IF NOT pg_catalog.has_function_privilege(
     'anon',
-    'public.complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid)',
+    'public.complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid,text)',
     'EXECUTE'
   ) THEN
-    RAISE EXCEPTION 'anon must execute complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid)';
+    RAISE EXCEPTION 'anon must execute complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid,text)';
   END IF;
   IF NOT pg_catalog.has_function_privilege(
     'authenticated',
-    'public.complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid)',
+    'public.complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid,text)',
     'EXECUTE'
   ) THEN
-    RAISE EXCEPTION 'authenticated must execute complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid)';
+    RAISE EXCEPTION 'authenticated must execute complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid,text)';
   END IF;
 END;
 $$;

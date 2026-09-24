@@ -259,6 +259,12 @@ vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+// Server-only completion proof: fixed in route tests (the HMAC vector
+// itself is pinned in notification-completion-proof.test.ts).
+vi.mock('@/lib/immediate-order/notification-completion-proof', () => ({
+  createImmediateNotificationCompletionProof: () => 'proof-route-1',
+}));
+
 const MERCHANT_ID = '123e4567-e89b-12d3-a456-426614174000';
 const CUSTOMER_ID = '11111111-2222-3333-4444-555555555555';
 const AUTH_USER_ID = '123e4567-e89b-12d3-a456-426614174099';
@@ -307,6 +313,10 @@ interface RpcOverrides {
     error: unknown;
   };
   complete_immediate_order_notification_with_proof?: {
+    data: unknown;
+    error: unknown;
+  };
+  mark_immediate_order_notification_started_with_proof?: {
     data: unknown;
     error: unknown;
   };
@@ -510,6 +520,12 @@ function buildMockSupabase(
       },
       complete_immediate_order_notification_with_proof: {
         data: null,
+        error: null,
+      },
+      // The after() marks start as its first step: default to marked so
+      // the existing delivery assertions keep proving the send path.
+      mark_immediate_order_notification_started_with_proof: {
+        data: true,
         error: null,
       },
     };
@@ -7673,6 +7689,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
             p_tracking_token: 'track-default-1',
             p_sent: false,
             p_claim_token: 'lease-default-1',
+            p_completion_proof: 'proof-route-1',
           }
         ),
       { timeout: 1000 }
@@ -7688,6 +7705,47 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     );
   });
 
+  it('marks the won claim started before delivery artifacts build', async () => {
+    // The after() fires the start marker first (fire-and-forget) so
+    // the claim holds the full 5-minute crash window while artifacts
+    // build; a never-started claim keeps the short reclaim grace.
+    const supabase = buildMockSupabase({});
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'invoice',
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+    await vi.waitFor(
+      () =>
+        expect(supabase.rpc).toHaveBeenCalledWith(
+          'mark_immediate_order_notification_started_with_proof',
+          {
+            p_order_id: 'order-id',
+            p_tracking_token: 'track-default-1',
+            p_claim_token: 'lease-default-1',
+          }
+        ),
+      { timeout: 1000 }
+    );
+  });
   it('renders invoice attachments from persisted canonical order items', async () => {
     const supabase = buildMockSupabase({
       create_storefront_order: {
@@ -8491,6 +8549,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
             p_tracking_token: 'track-default-1',
             p_sent: false,
             p_claim_token: 'lease-default-1',
+            p_completion_proof: 'proof-route-1',
           }
         ),
       { timeout: 1000 }

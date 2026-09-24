@@ -159,9 +159,14 @@ export async function verifyCheckoutPaymentByLookup(
       // invoice or pay-on-delivery row is the expected created state
       // (payment lands later, physically or via the emailed proforma),
       // so these keep creation-success instead of the paid gate below.
+      // The order-creation path persists Pay on Delivery as 'pod'
+      // (pending-checkout-order.ts), while older rows and the generic
+      // checkout use 'pay_on_delivery': accept both like the orders
+      // route does, or unpaid POD orders stall on processing forever.
       const isOfflineMethod =
         data.payment_method === 'invoice' ||
-        data.payment_method === 'pay_on_delivery';
+        data.payment_method === 'pay_on_delivery' ||
+        data.payment_method === 'pod';
       if (!isOfflineMethod) {
         if (
           lookupPaymentStatus === 'failed' ||

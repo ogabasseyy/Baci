@@ -497,7 +497,9 @@ export async function POST(request: NextRequest) {
           { status: 403 }
         );
       }
-      return verifyGuestPaymentReference(guestSnapshot);
+      return verifyGuestPaymentReference(guestSnapshot, {
+        trackingToken: parsedBody.data.trackingToken,
+      });
     }
     const authed = await getAuthenticatedUser(request);
     const bearerClient =

@@ -4,10 +4,18 @@ import {
   claimImmediateOrderNotificationWithProof,
   completeImmediateOrderNotification,
   completeImmediateOrderNotificationWithProof,
+  markImmediateOrderNotificationStarted,
+  markImmediateOrderNotificationStartedWithProof,
 } from './notification-claim';
 
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+}));
+
+const proofMocks = vi.hoisted(() => ({ createProof: vi.fn() }));
+
+vi.mock('./notification-completion-proof', () => ({
+  createImmediateNotificationCompletionProof: proofMocks.createProof,
 }));
 
 function clientFor(rpc: ReturnType<typeof vi.fn>) {
@@ -17,6 +25,7 @@ function clientFor(rpc: ReturnType<typeof vi.fn>) {
 describe('immediate order notification claim', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    proofMocks.createProof.mockReturnValue('proof-1');
   });
 
   it('wins delivery on the first claim', async () => {
@@ -187,6 +196,11 @@ describe('immediate order notification claim', () => {
       true,
       'lease-1'
     );
+    expect(proofMocks.createProof).toHaveBeenCalledWith({
+      orderId: 'order-1',
+      claimToken: 'lease-1',
+      sent: true,
+    });
     expect(rpc).toHaveBeenCalledWith(
       'complete_immediate_order_notification_with_proof',
       {
@@ -194,8 +208,99 @@ describe('immediate order notification claim', () => {
         p_tracking_token: 'tok-1',
         p_sent: true,
         p_claim_token: 'lease-1',
+        p_completion_proof: 'proof-1',
       }
     );
+  });
+
+  it('skips proof completion when the server secret is unconfigured', async () => {
+    // An unconfigured secret throws inside the proof helper: the
+    // completion degrades to a skip (logged) exactly like an RPC
+    // failure — never a forged proof.
+    proofMocks.createProof.mockImplementation(() => {
+      throw new Error('not configured');
+    });
+    const rpc = vi.fn();
+
+    await expect(
+      completeImmediateOrderNotificationWithProof(
+        clientFor(rpc),
+        'order-1',
+        'tok-1',
+        true,
+        'lease-1'
+      )
+    ).resolves.toBeUndefined();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('marks started through the proof RPC and reports the lease verdict', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+
+    await expect(
+      markImmediateOrderNotificationStartedWithProof(
+        clientFor(rpc),
+        'order-1',
+        'tok-1',
+        'lease-1'
+      )
+    ).resolves.toBe(true);
+    expect(rpc).toHaveBeenCalledWith(
+      'mark_immediate_order_notification_started_with_proof',
+      {
+        p_order_id: 'order-1',
+        p_tracking_token: 'tok-1',
+        p_claim_token: 'lease-1',
+      }
+    );
+  });
+
+  it('reports a lost lease or marker failure as not started', async () => {
+    const lost = vi.fn().mockResolvedValue({ data: false, error: null });
+    await expect(
+      markImmediateOrderNotificationStartedWithProof(
+        clientFor(lost),
+        'order-1',
+        'tok-1',
+        'lease-1'
+      )
+    ).resolves.toBe(false);
+
+    const errored = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: new Error('db down') });
+    await expect(
+      markImmediateOrderNotificationStartedWithProof(
+        clientFor(errored),
+        'order-1',
+        'tok-1',
+        'lease-1'
+      )
+    ).resolves.toBe(false);
+
+    const base = vi.fn().mockResolvedValue({ data: true, error: null });
+    await expect(
+      markImmediateOrderNotificationStarted(
+        clientFor(base),
+        'order-1',
+        'lease-1'
+      )
+    ).resolves.toBe(true);
+    expect(base).toHaveBeenCalledWith(
+      'mark_immediate_order_notification_started',
+      { p_order_id: 'order-1', p_claim_token: 'lease-1' }
+    );
+
+    const missing = vi.fn();
+    await expect(
+      markImmediateOrderNotificationStartedWithProof(
+        clientFor(missing),
+        'order-1',
+        null,
+        'lease-1'
+      )
+    ).resolves.toBe(false);
+    expect(missing).not.toHaveBeenCalled();
   });
 
   it('skips proof completion without calling the RPC when the token is missing', async () => {

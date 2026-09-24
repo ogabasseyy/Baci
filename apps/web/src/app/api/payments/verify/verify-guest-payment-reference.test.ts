@@ -13,6 +13,12 @@ vi.mock('./verify-gateway-payment', () => ({
   verifyGatewayPayment: vi.fn(),
 }));
 
+const flagMocks = vi.hoisted(() => ({ flag: vi.fn() }));
+
+vi.mock('./flag-guest-payment-provider-confirmed', () => ({
+  flagGuestPaymentProviderConfirmed: flagMocks.flag,
+}));
+
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }));
@@ -41,6 +47,7 @@ function baseSnapshot() {
 describe('verifyGuestPaymentReference', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    flagMocks.flag.mockResolvedValue(true);
   });
 
   it('completes a paid order with the inventory proof', async () => {
@@ -83,6 +90,68 @@ describe('verifyGuestPaymentReference', () => {
       ...baseSnapshot(),
       orderPaymentStatus: 'pending',
     });
+    const body = await response.json();
+
+    expect(body).toMatchObject({
+      success: false,
+      status: 'pending',
+      orderId: 'order-1',
+    });
+  });
+
+  it('flags a gateway-confirmed payment for the wedge sweep', async () => {
+    mockedVerifyGatewayPayment.mockResolvedValue({
+      success: true,
+      status: 'success',
+      gatewayResponse: {},
+    } as never);
+    const response = await verifyGuestPaymentReference(
+      {
+        ...baseSnapshot(),
+        orderPaymentStatus: 'pending',
+      },
+      { trackingToken: 'tok-1' }
+    );
+    const body = await response.json();
+
+    expect(body).toMatchObject({ success: false, status: 'pending' });
+    expect(flagMocks.flag).toHaveBeenCalledWith(
+      'order-1',
+      'tok-1',
+      'BAC-REF-1'
+    );
+  });
+
+  it('skips the sweep flag without a tracking token', async () => {
+    mockedVerifyGatewayPayment.mockResolvedValue({
+      success: true,
+      status: 'success',
+      gatewayResponse: {},
+    } as never);
+    const response = await verifyGuestPaymentReference({
+      ...baseSnapshot(),
+      orderPaymentStatus: 'pending',
+    });
+    const body = await response.json();
+
+    expect(body).toMatchObject({ success: false, status: 'pending' });
+    expect(flagMocks.flag).not.toHaveBeenCalled();
+  });
+
+  it('stays pending when the sweep flag fails', async () => {
+    mockedVerifyGatewayPayment.mockResolvedValue({
+      success: true,
+      status: 'success',
+      gatewayResponse: {},
+    } as never);
+    flagMocks.flag.mockResolvedValue(false);
+    const response = await verifyGuestPaymentReference(
+      {
+        ...baseSnapshot(),
+        orderPaymentStatus: 'pending',
+      },
+      { trackingToken: 'tok-1' }
+    );
     const body = await response.json();
 
     expect(body).toMatchObject({

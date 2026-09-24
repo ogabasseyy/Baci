@@ -132,6 +132,9 @@ const mockSupabase = {
           error: null,
         });
       }
+      if (name === 'mark_immediate_order_notification_started_with_proof') {
+        return Promise.resolve({ data: true, error: null });
+      }
       if (name === 'complete_immediate_order_notification_with_proof') {
         return Promise.resolve({ data: null, error: null });
       }

@@ -15,6 +15,7 @@ describe('useStorefrontFeatures', () => {
     const { result } = renderHook(() => useStorefrontFeatures({}));
     expect(result.current.features.reviewsEnabled).toBe(true);
     expect(result.current.features.loyaltyEnabled).toBe(false);
+    expect(result.current.features.shippingProviders).toEqual([]);
     expect(result.current.isLoading).toBe(false);
   });
 

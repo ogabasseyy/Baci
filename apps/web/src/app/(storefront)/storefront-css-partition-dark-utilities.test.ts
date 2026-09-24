@@ -171,7 +171,7 @@ describe('storefront CSS partitioning (dark utilities)', () => {
   it('marks cart and checkout thumbnails as neutral image surfaces', () => {
     const imageSurfaceSourceFiles = [
       '../../components/storefront/ogabassey/pages/cart.tsx',
-      '../../components/storefront/ogabassey/components/CartSidebar.tsx',
+      '../../components/storefront/ogabassey/components/cart-sidebar-line-item.tsx',
       '../../components/storefront/ogabassey/pages/checkout-page.tsx',
       '../../components/storefront/ogabassey/components/MobileOrderSummary.tsx',
       '../../components/storefront/ogabassey/pages/receipts.tsx',

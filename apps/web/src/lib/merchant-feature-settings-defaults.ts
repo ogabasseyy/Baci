@@ -25,7 +25,9 @@ const DEFAULT_MERCHANT_FEATURE_SETTINGS = {
   klump_max_amount: 1000000,
   preferred_local_gateway: 'paystack' as const,
   preferred_international_gateway: 'korapay' as const,
-  shipping_providers: ['gigl', 'topship'],
+  // Carrier rates are opt-in per merchant. Stores can still use their own
+  // configured delivery rates and pickup options with no carrier enabled.
+  shipping_providers: [],
   free_shipping_threshold: null,
   shipping_markup_percentage: 0,
   checkout_collect_phone: true,

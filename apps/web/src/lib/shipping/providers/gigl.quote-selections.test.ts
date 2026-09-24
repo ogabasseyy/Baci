@@ -125,4 +125,36 @@ describe('runGiglQuoteSelections', () => {
       expect.objectContaining({ timeoutMs: 5000 })
     );
   });
+
+  it('rejects when every provider option times out without a parent abort', async () => {
+    const log = vi.fn();
+
+    await expect(
+      runGiglQuoteSelections({
+        selections: createGiglQuoteSelections(PickupOptions.HomeDelivery),
+        signal: new AbortController().signal,
+        timeoutMs: 5000,
+        log,
+        fetchQuote: vi
+          .fn()
+          .mockRejectedValue(
+            Object.assign(new Error('aborted'), { name: 'AbortError' })
+          ),
+      })
+    ).rejects.toThrow('GIGL quote request timed out after 5000ms');
+  });
+
+  it('rejects when every provider option fails', async () => {
+    const log = vi.fn();
+
+    await expect(
+      runGiglQuoteSelections({
+        selections: createGiglQuoteSelections(PickupOptions.HomeDelivery),
+        signal: new AbortController().signal,
+        timeoutMs: 5000,
+        log,
+        fetchQuote: vi.fn().mockRejectedValue(new Error('provider failure')),
+      })
+    ).rejects.toThrow('provider failure');
+  });
 });

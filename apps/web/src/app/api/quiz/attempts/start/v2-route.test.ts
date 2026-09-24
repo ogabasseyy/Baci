@@ -133,6 +133,19 @@ describe('v2 quiz start route', () => {
       expect.anything()
     );
   });
+  it('rejects a malformed fingerprint before guard or runtime lookups', async () => {
+    const rpc = authenticated();
+    const response = await postQuizStartV2(
+      request({}, { 'X-Baci-Quiz-Device-Fingerprint': 'not-a-fingerprint' })
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      details: { deviceFingerprint: ['Invalid header'] },
+      error: 'Invalid input',
+    });
+    expect(enforceQuizStartGuards).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
   it('authenticates before CSRF, validation, or RPC work', async () => {
     vi.mocked(requireQuizUser).mockResolvedValue({
       response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),

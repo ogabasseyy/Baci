@@ -53,6 +53,14 @@ export async function postQuizStartV2(request: NextRequest) {
   );
   if (mismatch) return mismatch;
 
+  // Reject a malformed fingerprint before any database work so invalid input
+  // cannot consume guard lookups or surface event-dependent failures.
+  const rawFingerprint = request.headers.get('X-Baci-Quiz-Device-Fingerprint');
+  const fingerprint = readQuizDeviceFingerprint(request);
+  if (rawFingerprint !== null && !fingerprint) {
+    return invalidInputResponse({ deviceFingerprint: ['Invalid header'] });
+  }
+
   const runtimeResponse = await requireQuizV2Runtime(auth.supabase);
   if (runtimeResponse) return runtimeResponse;
 
@@ -71,12 +79,6 @@ export async function postQuizStartV2(request: NextRequest) {
     // route's stable JSON error contract instead of escaping as a
     // framework 500.
     return rpcErrorResponse();
-  }
-
-  const rawFingerprint = request.headers.get('X-Baci-Quiz-Device-Fingerprint');
-  const fingerprint = readQuizDeviceFingerprint(request);
-  if (rawFingerprint !== null && !fingerprint) {
-    return invalidInputResponse({ deviceFingerprint: ['Invalid header'] });
   }
 
   const shouldResolveDevice =

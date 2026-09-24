@@ -150,10 +150,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 // immediate-notification claim rides the same client: fresh-order suites
 // default to won (preserving pre-claim delivery), while the idempotency
 // suite defaults to sent (the replayed first attempt already delivered).
-function primeAdminOrderCurrencyRead(
-  currency: string | null = 'NGN',
-  notificationClaim: 'won' | 'sent' = 'won'
-) {
+function primeAdminOrderCurrencyRead(currency: string | null = 'NGN') {
   mockCreateAdminClient.mockReturnValue({
     from: vi.fn(() => ({
       select: vi.fn().mockReturnThis(),
@@ -163,17 +160,11 @@ function primeAdminOrderCurrencyRead(
         error: null,
       }),
     })),
-    rpc: vi.fn(async (name: string) => {
-      if (name === 'claim_immediate_order_notification') {
-        return notificationClaim === 'won'
-          ? {
-              data: [{ claimed: true, claim_status: 'processing' }],
-              error: null,
-            }
-          : { data: [{ claimed: false, claim_status: 'sent' }], error: null };
-      }
-      return { data: null, error: null };
-    }),
+    // 04E: the route claims immediate-notification delivery on the
+    // request-scoped client with proof — never the admin client — so no
+    // claim RPC is served here. Only the stamped-currency read-back and a
+    // null default for any other service-role RPC remain.
+    rpc: vi.fn(async () => ({ data: null, error: null })),
   } as never);
 }
 
@@ -304,6 +295,18 @@ interface RpcOverrides {
   finalize_quiz_voucher_order_payment?: { data: unknown; error: unknown };
   get_checkout_shipping_quote?: { data: unknown; error: unknown };
   persist_storefront_order_delivery_metadata?: {
+    data: unknown;
+    error: unknown;
+  };
+  // Proof-bound immediate-notification claim/complete (04E: claimed on
+  // the request-scoped client with the creation tracking token — never
+  // the admin client). Defaults to claimed so delivery assertions keep
+  // proving the send path; replay/skip tests override per case.
+  claim_immediate_order_notification_with_proof?: {
+    data: unknown;
+    error: unknown;
+  };
+  complete_immediate_order_notification_with_proof?: {
     data: unknown;
     error: unknown;
   };
@@ -457,6 +460,7 @@ function buildMockSupabase(
             subtotal: 1000,
             shipping_fee: 0,
             customer_id: CUSTOMER_ID,
+            tracking_token: 'track-default-1',
           },
         ],
         error: null,
@@ -470,6 +474,7 @@ function buildMockSupabase(
             subtotal: 1000,
             shipping_fee: 0,
             customer_id: CUSTOMER_ID,
+            tracking_token: 'track-default-1',
           },
         ],
         error: null,
@@ -489,6 +494,18 @@ function buildMockSupabase(
         error: null,
       },
       persist_storefront_order_delivery_metadata: { data: false, error: null },
+      // 04E: the route claims immediate-notification delivery on the
+      // request-scoped client with the creation tracking token. Defaults
+      // to won so the existing delivery assertions keep proving the send
+      // path; replay/skip tests override per case.
+      claim_immediate_order_notification_with_proof: {
+        data: [{ claimed: true, claim_status: 'processing' }],
+        error: null,
+      },
+      complete_immediate_order_notification_with_proof: {
+        data: null,
+        error: null,
+      },
     };
 
   if (!overrides.create_storefront_order_with_savings) {
@@ -2029,7 +2046,17 @@ describe('POST /api/orders — quiz voucher guard', () => {
     vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'voucher-secret');
     const supabase = buildMockSupabase({
       create_storefront_order_with_quiz_voucher: {
-        data: [{ ...baseOrderRow, subtotal: 0, total: 0 }],
+        // The proof-bound notification claim needs the creation tracking
+        // token; without it delivery is (correctly) skipped and the email
+        // assertion below would fail.
+        data: [
+          {
+            ...baseOrderRow,
+            subtotal: 0,
+            total: 0,
+            tracking_token: 'track-quiz-1',
+          },
+        ],
         error: null,
       },
     });
@@ -3219,8 +3246,7 @@ describe('POST /api/orders — non-NGN currency guards', () => {
 describe('POST /api/orders — checkout idempotency', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    // Replays observe the first attempt's sent claim and skip redelivery.
-    primeAdminOrderCurrencyRead('NGN', 'sent');
+    primeAdminOrderCurrencyRead('NGN');
     vi.mocked(authenticateApiRequest).mockResolvedValue({
       user: null,
       error: 'Not authenticated',
@@ -3280,8 +3306,15 @@ describe('POST /api/orders — checkout idempotency', () => {
                 payment_method: 'credit_direct',
                 payment_status: 'bnpl_pending',
                 total: 300,
+                tracking_token: 'track-replay-sent-1',
               },
             ],
+            error: null,
+          },
+          // Replays observe the first attempt's sent claim and skip
+          // redelivery (claimed on the request client with proof).
+          claim_immediate_order_notification_with_proof: {
+            data: [{ claimed: false, claim_status: 'sent' }],
             error: null,
           },
           redeem_wallet_for_order: {
@@ -3330,7 +3363,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     // The first attempt died before after() delivery (no sent claim): the
     // replay wins the atomic claim and sends the payment document instead
     // of suppressing it forever. Merchant creation pings stay fresh-only.
-    primeAdminOrderCurrencyRead('NGN', 'won');
+    primeAdminOrderCurrencyRead('NGN');
     const supabaseMod = await import('@/lib/supabase/server');
     vi.mocked(supabaseMod.createClient).mockImplementation(
       () =>
@@ -3343,8 +3376,15 @@ describe('POST /api/orders — checkout idempotency', () => {
                 payment_method: 'credit_direct',
                 payment_status: 'bnpl_pending',
                 total: 300,
+                tracking_token: 'track-replay-resume-1',
               },
             ],
+            error: null,
+          },
+          // The replay wins the atomic proof claim (request client) and
+          // delivers the unfinished wallet-paid notification.
+          claim_immediate_order_notification_with_proof: {
+            data: [{ claimed: true, claim_status: 'processing' }],
             error: null,
           },
           redeem_wallet_for_order: {
@@ -6127,12 +6167,11 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       eq: vi.fn(() => orderItemsQuery),
       order: orderItemsOrder,
     };
-    // Atomic immediate-notification claim (service-role RPCs): the winner
-    // runs after() delivery, losers skip. Defaults to claimed so the
-    // existing delivery assertions keep proving the send path; resume/skip
-    // tests override per case.
+    // 04E: the route claims on the request-scoped client with proof, so
+    // the service-role client no longer serves the claim. Kept as a null
+    // default for any other background RPC.
     const notificationClaimRpc = vi.fn(async (name: string) => {
-      if (name === 'claim_immediate_order_notification') {
+      if (name === 'claim_immediate_order_notification_with_proof') {
         return {
           data: [{ claimed: true, claim_status: 'processing' }],
           error: null,
@@ -6645,7 +6684,37 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('skips invoice DVA provisioning for foreign-currency orders', async () => {
-    const supabase = buildMockSupabase();
+    // The canonical snapshot loads through the proof-bound RPC (tracking
+    // token authorizes the read) — never the admin order_items read.
+    const supabase = buildMockSupabase({
+      get_invoice_artifact_order_items: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
     const { backgroundSupabase } = createBackgroundSupabaseMock({
       orderItemsResponses: [
         { data: [], error: null },
@@ -6790,10 +6859,40 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
             subtotal: 0,
             shipping_fee: 0,
             customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
           },
         ],
         error: null,
       },
+      // The canonical snapshot loads through the proof-bound RPC (tracking
+      // token authorizes the read) — never the admin order_items read.
+      get_invoice_artifact_order_items: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
     });
     const { backgroundSupabase } = createBackgroundSupabaseMock({
       orderItemsResponses: [
@@ -7202,6 +7301,8 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
             subtotal: 0,
             shipping_fee: 0,
             customer_id: CUSTOMER_ID,
+            // Proof-bound claim needs the creation tracking token.
+            tracking_token: 'track-payforme-1',
           },
         ],
         error: null,
@@ -7470,8 +7571,16 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     );
   });
 
-  it('still sends the base invoice email when attachment generation cannot load persisted items', async () => {
-    const supabase = buildMockSupabase();
+  it('leaves the invoice email unsent when persisted items cannot load so a replay retries', async () => {
+    // The persisted-items read fails through the proof-bound RPC (tracking
+    // token authorizes the read) — never the admin order_items read — so
+    // the base invoice email still sends without attachments.
+    const supabase = buildMockSupabase({
+      get_invoice_artifact_order_items: {
+        data: null,
+        error: { message: 'order_items unavailable' },
+      },
+    });
     const { backgroundSupabase } = createBackgroundSupabaseMock({
       orderItems: [],
       orderItemsError: { message: 'order_items unavailable' },
@@ -7539,22 +7648,28 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     const response = await POST(request);
 
     expect(response.status).toBe(201);
-    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
-      timeout: 1000,
-    });
-    expect(mockGenerateReceiptBlob).not.toHaveBeenCalled();
-    // Attachment failure must not flip the subject to commercial: the
-    // unpaid invoice body is already rendered as proforma content.
-    expect(mockSendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: 'customer@example.com',
-        subject: expect.stringContaining('Proforma Invoice Generated'),
-        attachments: undefined,
-      })
+    // Unavailable persisted items reject the invoice artifacts (04L): the
+    // claim completes failed — never sent — so the next replay reclaims
+    // and retries instead of the shopper receiving an attachment-less
+    // message marked delivered.
+    await vi.waitFor(
+      () =>
+        expect(supabase.rpc).toHaveBeenCalledWith(
+          'complete_immediate_order_notification_with_proof',
+          {
+            p_order_id: 'order-id',
+            p_tracking_token: 'track-default-1',
+            p_sent: false,
+          }
+        ),
+      { timeout: 1000 }
     );
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(mockGenerateReceiptBlob).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'Failed to generate invoice PDF or log initial reminder',
+        message:
+          'Persisted order items unavailable for invoice email; skipping non-canonical invoice artifacts',
         orderId: 'order-id',
       })
     );
@@ -8233,7 +8348,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     );
   });
 
-  it('instructs the credited balance when DVA provisioning throws for a partial-credit order', async () => {
+  it('leaves the invoice email unsent when DVA provisioning throws so a replay retries', async () => {
     const supabase = buildMockSupabase({
       redeem_wallet_for_order: {
         data: [
@@ -8246,6 +8361,35 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
         ],
         error: null,
       },
+      // The canonical snapshot loads through the proof-bound RPC (tracking
+      // token authorizes the read) — never the admin order_items read.
+      get_invoice_artifact_order_items: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: true,
+              assurance_fee: 50,
+              item_description: null,
+              line_extension_amount: 1050,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
     });
     const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
@@ -8319,12 +8463,26 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     const response = await POST(request);
     expect(response.status).toBe(201);
 
-    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
-      timeout: 1000,
-    });
-    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ amountDue: 700 })
+    // A provider throw (unlike a reservation failure outcome, which
+    // degrades locally) rejects the invoice artifacts (04L): the claim
+    // completes failed — never sent — so the next replay reclaims and
+    // retries instead of sending a DVA-less message marked delivered.
+    // The credited-balance math stays covered by 'counts wallet credit
+    // as paid in generated invoice emails', which does send.
+    await vi.waitFor(
+      () =>
+        expect(supabase.rpc).toHaveBeenCalledWith(
+          'complete_immediate_order_notification_with_proof',
+          {
+            p_order_id: 'order-id',
+            p_tracking_token: 'track-default-1',
+            p_sent: false,
+          }
+        ),
+      { timeout: 1000 }
     );
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(generateOrderConfirmationEmail).not.toHaveBeenCalled();
   });
 });
 

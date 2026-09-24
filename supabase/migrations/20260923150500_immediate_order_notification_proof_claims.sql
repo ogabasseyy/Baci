@@ -41,8 +41,9 @@ BEGIN
   END IF;
 
   RETURN QUERY
-    SELECT claimed, claim_status
-    FROM public.claim_immediate_order_notification(p_order_id);
+    SELECT inner_claim.claimed, inner_claim.claim_status
+    FROM public.claim_immediate_order_notification(p_order_id)
+      AS inner_claim;
 END;
 $$;
 

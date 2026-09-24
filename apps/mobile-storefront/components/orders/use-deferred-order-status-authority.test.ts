@@ -9,7 +9,7 @@ jest.mock('@/hooks/use-receipts', () => ({
 
 const mockUseReceiptDetail = jest.mocked(useReceiptDetail);
 
-function mockGuestLookup(paymentStatus: string) {
+function mockGuestLookup(paymentStatus: string, status?: string) {
   global.fetch = jest.fn(
     async () =>
       new Response(
@@ -18,6 +18,7 @@ function mockGuestLookup(paymentStatus: string) {
             id: 'order-inv-1',
             order_number: 'ORD-INV-1',
             payment_status: paymentStatus,
+            status: status ?? 'processing',
             total: 50000,
           },
         }),
@@ -89,6 +90,60 @@ describe('useDeferredOrderStatusAuthority', () => {
     // must not relabel the preview).
     expect(result.current.receiptPaymentMethod).toBe('card');
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { payment_status: 'cancelled', shipping_status: 'pending' },
+    { payment_status: 'canceled', shipping_status: 'pending' },
+    { payment_status: 'pending', shipping_status: 'cancelled' },
+    { payment_status: 'pending', shipping_status: 'canceled' },
+    { payment_status: 'Cancelled', shipping_status: 'pending' },
+  ])('reports authenticated cancellation ($payment_status/$shipping_status)', ({
+    payment_status,
+    shipping_status,
+  }) => {
+    // Cancellation paths commonly set only shipping_status, and the
+    // guest token lookup is skipped for signed-in shoppers — so the
+    // receipt lookup is the only reporter on this path.
+    mockUseReceiptDetail.mockReturnValue({
+      data: {
+        payment_status,
+        shipping_status,
+        payment_method: 'invoice',
+        amount_paid: 0,
+      },
+      isSuccess: true,
+    } as never);
+    const fetchSpy = jest.fn(async () => new Response('{}', { status: 500 }));
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    const { result } = renderHook(() =>
+      useDeferredOrderStatusAuthority({
+        ...baseParams,
+        customer: { id: 'c-1' },
+      })
+    );
+
+    expect(result.current.isCancelledOrder).toBe(true);
+    expect(result.current.isPaidOrder).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('reports guest cancellation through the token lookup', async () => {
+    mockUseReceiptDetail.mockReturnValue({
+      data: undefined,
+      isSuccess: false,
+    } as never);
+    // Legacy rows keep payment pending on a cancelled order: the
+    // tracking status is the cancellation signal on this path.
+    mockGuestLookup('pending', 'cancelled');
+
+    const { result } = renderHook(() =>
+      useDeferredOrderStatusAuthority(baseParams)
+    );
+
+    await waitFor(() => expect(result.current.isCancelledOrder).toBe(true));
+    expect(result.current.isPaidOrder).toBe(false);
   });
 
   it('resolves guests through the token lookup', async () => {

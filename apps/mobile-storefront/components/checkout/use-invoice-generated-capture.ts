@@ -122,7 +122,17 @@ export function useInvoiceGeneratedCapture({
       if (order.id !== orderId || order.payment_status === 'paid') {
         return order.payment_status === 'paid';
       }
-      if (order.notification_delivered === true) {
+      // The tracked projection carries no payment_method, so it cannot
+      // prove this row is an invoice order: require a positive total
+      // before consuming the durable invoice_generated claim. A
+      // zero-total non-invoice row (fully covered/credited, completing
+      // on the paid path) must never book a proforma conversion; the
+      // storefront branch below still serves method-proven orders.
+      if (
+        order.notification_delivered === true &&
+        typeof order.total === 'number' &&
+        order.total > 0
+      ) {
         await maybeCaptureCheckoutInvoiceGenerated({
           selectedPayment: 'invoice',
           order: {

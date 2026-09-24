@@ -68,6 +68,9 @@ export const ReceiptDetailSchema = z.object({
   id: z.string(),
   order_number: z.string(),
   payment_status: z.string(),
+  // Cancellation often lands on the shipping column only: the success
+  // screen's terminal predicate needs it for signed-in shoppers.
+  shipping_status: z.string().nullable().optional(),
   payment_method: z.string().nullable(),
   total: z.number(),
   subtotal: z.number(),

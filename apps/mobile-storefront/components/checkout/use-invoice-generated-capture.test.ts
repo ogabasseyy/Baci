@@ -175,6 +175,26 @@ describe('useInvoiceGeneratedCapture', () => {
     }
   });
 
+  it('skips a delivered zero-total tracked row (no method proof)', async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetchSequence([
+        pendingTrackedOrder({ notification_delivered: true, total: 0 }),
+      ]);
+
+      renderHook(() => useInvoiceGeneratedCapture(baseParams));
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(60_000);
+
+      // The tracked projection carries no payment_method: a zero-total
+      // row could be a non-invoice order completing on the paid path,
+      // so it must not consume the durable invoice_generated claim.
+      expect(mockCaptureInvoice).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('does not poll for non-invoice methods', async () => {
     jest.useFakeTimers();
     try {

@@ -70,6 +70,7 @@ export default function OrderSuccessScreen() {
   const {
     deferredStatusAuthoritative,
     guestInvoice,
+    isCancelledOrder,
     isPaidOrder,
     receiptAmountPaid,
     receiptPaymentMethod,
@@ -91,7 +92,6 @@ export default function OrderSuccessScreen() {
   // A cancelled invoice or Pay for Me order cannot be fulfilled: like a
   // refund it renders reconciliation — never proforma/request copy with
   // live payment instructions, and never success side effects.
-  const isCancelledOrder = guestInvoice.status === 'cancelled';
   // Partially paid accepted money without settling: commercial
   // presentation, but the order stays active — never the reconciliation
   // state above.

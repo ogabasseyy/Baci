@@ -69,12 +69,19 @@ export async function checkReferenceSettled(
     if (!accessToken && !trackingToken) {
       return { paid: false, inconclusive: true };
     }
-    const verifyUrl = accessToken
+    // Prefer the proof-bound GET whenever the creation tracking token is
+    // available: it recognizes any completed/paid transaction, while the
+    // Bearer POST path only settles locally finalized Paystack, Korapay,
+    // and Juicyway rows — completed wallet references and asynchronously
+    // settled CredPal/Klump references would otherwise poll pending
+    // forever for signed-in shoppers.
+    const useBearerPost = !!accessToken && !trackingToken;
+    const verifyUrl = useBearerPost
       ? `${CHECKOUT_API_BASE_URL}/api/payments/verify`
       : `${CHECKOUT_API_BASE_URL}/api/payments/verify?reference=${encodeURIComponent(reference)}&trackingToken=${encodeURIComponent(trackingToken ?? '')}`;
     const response = await fetchWithTimeout(
       verifyUrl,
-      accessToken
+      useBearerPost
         ? {
             timeout: VERIFY_TIMEOUT_MS,
             method: 'POST',
@@ -82,10 +89,7 @@ export async function checkReferenceSettled(
               'Content-Type': 'application/json',
               Authorization: `Bearer ${accessToken}`,
             },
-            body: JSON.stringify({
-              reference,
-              ...(trackingToken ? { trackingToken } : {}),
-            }),
+            body: JSON.stringify({ reference }),
           }
         : { timeout: VERIFY_TIMEOUT_MS, method: 'GET' }
     );

@@ -336,13 +336,13 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20260923150600_authorize_sessionless_verify_reference.sql',
-    sha256: 'b4f6c401030ca5622d1a43d3a629c32f089ae466de0d8b842702b83f0ef0a71a',
+      'supabase/migrations/20260923150700_order_notification_delivered_lookup.sql',
+    sha256: 'dd11de26ac256e7665a34756f2a50ffea229706732671a98cd3fdfa7a1ac6ddc',
   },
   {
     repositoryPath:
-      'supabase/migrations/20260923150700_order_notification_delivered_lookup.sql',
-    sha256: 'dd11de26ac256e7665a34756f2a50ffea229706732671a98cd3fdfa7a1ac6ddc',
+      'supabase/migrations/20260923151000_sessionless_payment_reference_snapshot.sql',
+    sha256: 'e10d138131ec25153b611169724299051b64795e0048a16e76a5a2a3aa966401',
   },
   {
     repositoryPath:
@@ -352,7 +352,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260923150900_revoke_lookup_rpc_anon_execute.sql',
-    sha256: '6bbe88a477b941f611b420f0590e23897e932b39c80bf4affdc824c9d7e8bdcf',
+    sha256: '8543cae12a05a48853de05cb3292998b4140f1a1e22dc5cdeb7363a9cd598e19',
   },
   {
     repositoryPath: 'supabase/migrations/20260921180000_get_santa_catalog.sql',

@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { RedvaultCheckoutSchema } from '@/schemas/redvault-checkout';
+import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { getCheckoutAuthorizationHeaders } from '@/services/redvault';
 import {
   CHECKOUT_API_BASE_URL,
@@ -95,6 +96,17 @@ export async function initializeRedvaultCheckoutById({
     throw new RedvaultInitializationError('indeterminate');
   }
   if (!isActive()) return 'pending' as const;
+  // The provider reference is confirmed: open the funnel attempt now.
+  // The REDVAULT review path bypasses finalizeCheckoutPayment, so
+  // without this the later provider-verified payment_completed (and any
+  // cancellation/load-error event) would have no matching start.
+  const startedValue = amount !== undefined ? Number(amount) : Number.NaN;
+  await trackCheckoutPaymentStarted({
+    orderId,
+    paymentMethod: 'uba_redvault',
+    reference: body.reference,
+    ...(Number.isFinite(startedValue) ? { value: startedValue } : {}),
+  });
   if (onReady) {
     await onReady();
   }

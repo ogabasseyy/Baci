@@ -12,10 +12,23 @@ interface DeferredOrderStatusAuthorityInput {
   trackingToken?: string;
 }
 
+function isCancelledStatus(value: unknown): boolean {
+  const normalized =
+    typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return normalized === 'cancelled' || normalized === 'canceled';
+}
+
 export interface DeferredOrderStatusAuthority {
   guestInvoice: GuestInvoicePaymentState;
   isPaidOrder: boolean;
   receiptAmountPaid: number;
+  /**
+   * Cancelled on either path: the authenticated receipt lookup (either
+   * status column, either spelling — cancellation paths commonly set
+   * only shipping_status) or the guest token lookup (skipped for
+   * signed-in shoppers, so the receipt is their only reporter).
+   */
+  isCancelledOrder: boolean;
   receiptPaymentMethod: string | undefined;
   receiptPaymentStatus: string | undefined;
   /**
@@ -58,6 +71,10 @@ export function useDeferredOrderStatusAuthority({
     guestInvoice,
     isPaidOrder: receiptPaidOrder || guestInvoice.status === 'paid',
     receiptAmountPaid: Number(paidCheckOrder?.amount_paid ?? 0),
+    isCancelledOrder:
+      isCancelledStatus(paidCheckOrder?.payment_status) ||
+      isCancelledStatus(paidCheckOrder?.shipping_status) ||
+      guestInvoice.status === 'cancelled',
     // Stored payment method from the authenticated receipt lookup (only
     // on a successful result): screens use it to confirm a
     // caller-controlled route method before selecting the document kind.

@@ -35,7 +35,11 @@ function toFiniteNumber(value: unknown): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function toSnapshot(
+/**
+ * Shared row parser for the guest and sessionless (Bearer-owned)
+ * snapshot RPCs, which return the identical verification read model.
+ */
+export function parsePaymentReferenceSnapshotRow(
   row: Record<string, unknown>
 ): GuestPaymentReferenceSnapshot | null {
   if (
@@ -96,7 +100,7 @@ export async function getGuestPaymentReferenceSnapshot(
     if (!row || typeof row !== 'object') {
       return null;
     }
-    return toSnapshot(row as Record<string, unknown>);
+    return parsePaymentReferenceSnapshotRow(row as Record<string, unknown>);
   } catch {
     return null;
   }

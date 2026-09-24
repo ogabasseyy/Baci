@@ -2,6 +2,7 @@ import type { MutableRefObject } from 'react';
 import { releaseCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-release';
 import {
   claimCheckoutPurchaseTracking,
+  markCheckoutPurchaseEmitted,
   trackCreationPurchaseEmission,
 } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
@@ -94,9 +95,20 @@ export async function runCheckoutFinalization({
     // still be running, and a settlement landing in that window must
     // await it instead of trusting the claim.
     trackCreationPurchaseEmission(order.id, creationEmission);
-    void creationEmission.catch(() => {
-      void releaseCheckoutPurchaseTracking(order.id);
-    });
+    // Emission proof for crash recovery (mirrors the once-helper): a
+    // successful emission stamps the bare purchase claim so a restart
+    // after this point reads it as recorded at any age instead of
+    // orphaning it for recovery after the lease window (which would
+    // double-emit the ad purchase and order_completed). Failures keep
+    // the current release behavior.
+    void creationEmission.then(
+      () => {
+        void markCheckoutPurchaseEmitted(order.id);
+      },
+      () => {
+        void releaseCheckoutPurchaseTracking(order.id);
+      }
+    );
   }
   // invoice_generated is captured on the order-success screen only after
   // the server confirms terminal artifact delivery (see

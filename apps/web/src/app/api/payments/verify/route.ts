@@ -6,14 +6,19 @@ import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gatew
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import type { GatewayVerificationResult } from '@/lib/payments/types';
+import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { referenceSchema, verifyPaymentBodySchema } from '@/schemas/payments';
-import { authorizeSessionlessVerifyReference } from './authorize-verify-reference';
+import { getGuestPaymentReferenceSnapshot } from './guest-payment-reference-snapshot';
+import { getSessionlessPaymentReferenceSnapshot } from './sessionless-payment-reference-snapshot';
 import {
   getVerifiedAmount,
   verifyGatewayPayment,
 } from './verify-gateway-payment';
-import { verifyGuestPaymentReferenceByQuery } from './verify-guest-payment-reference';
+import {
+  verifyGuestPaymentReference,
+  verifyGuestPaymentReferenceByQuery,
+} from './verify-guest-payment-reference';
 
 // Read-only guest verification: CSRF validation covers non-GET requests
 // only, so sessionless callers prove their order here with the
@@ -48,11 +53,26 @@ async function verifyPaymentReference(
     .eq('gateway_reference', parsedReference.data)
     .maybeSingle();
 
-  if (transactionError || !transaction) {
+  if (transactionError) {
+    // Transient: a failed lookup proves nothing about the reference
+    // (outage, timeout), and native callers treat reference_not_found
+    // as a permanent terminal failure that stops settlement polling.
+    // A shopper whose payment was already captured must never be
+    // prompted to pay again because the database hiccuped.
     logger.warn({
       message: 'Payment verification transaction lookup failed',
       reference: parsedReference.data,
       error: transactionError,
+    });
+    return NextResponse.json(
+      { error: 'Verification unavailable' },
+      { status: 503 }
+    );
+  }
+  if (!transaction) {
+    logger.warn({
+      message: 'Payment verification reference not found',
+      reference: parsedReference.data,
     });
     // Permanent for this reference: no webhook or poll can materialize a
     // transaction row that the provider never created. The machine code
@@ -453,33 +473,52 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // checkCsrfProtection accepts any syntactic `Authorization: Bearer ...`
+  // checkCsrfProtection accepts any syntactic `Authorization: Bearer [REDACTED]`
   // (mobile callers hold no CSRF token), so a Bearer-carrying request is
-  // sessionless whatever string it bears: bind its reference to the
-  // caller — tracking-token proof or validated user-customer relationship
-  // — before the service-client read/finalization path below. Session
-  // (cookie-CSRF) requests carry no such header and keep their existing
-  // authority. Denials are uniform (no existence oracle).
+  // sessionless whatever string it bears. The sessionless lane is
+  // proof-bound READ-ONLY on the caller's own client and never constructs
+  // a service client: a presented tracking token uses the guest snapshot
+  // (no session needed), while a bare Bearer [REDACTED] must validate to a user
+  // session and then uses the ownership-checked sessionless snapshot
+  // (reference to order to customer.user_id = auth.uid()). Finalization
+  // stays on the webhook/service boundary; settlement polling converges
+  // on the next pass. Session (cookie-CSRF) requests carry no such header
+  // and keep their existing authority. Denials are uniform (no oracle).
   const authorizationHeader = request.headers.get('authorization');
   if (authorizationHeader && /^bearer\s+.+$/i.test(authorizationHeader)) {
-    // Proof-bound authorization on the caller's own client (tracking
-    // token or bearer session): no privileged client is constructed
-    // for this user-facing lookup.
-    const authorization = await authorizeSessionlessVerifyReference(
-      request,
-      parsedBody.data.reference,
-      parsedBody.data.trackingToken
-    );
-    if (!authorization.authorized) {
+    if (parsedBody.data.trackingToken) {
+      const guestSnapshot = await getGuestPaymentReferenceSnapshot(
+        parsedBody.data.reference,
+        parsedBody.data.trackingToken
+      );
+      if (!guestSnapshot) {
+        return NextResponse.json(
+          { error: 'Verification unavailable' },
+          { status: 403 }
+        );
+      }
+      return verifyGuestPaymentReference(guestSnapshot);
+    }
+    const authed = await getAuthenticatedUser(request);
+    const bearerClient =
+      authed?.authMode === 'bearer' ? authed.supabase : undefined;
+    if (!bearerClient) {
       return NextResponse.json(
         { error: 'Verification unavailable' },
         { status: 403 }
       );
     }
-    return verifyPaymentReference(
-      parsedBody.data.reference,
-      authorization.orderId
+    const sessionlessSnapshot = await getSessionlessPaymentReferenceSnapshot(
+      bearerClient,
+      parsedBody.data.reference
     );
+    if (!sessionlessSnapshot) {
+      return NextResponse.json(
+        { error: 'Verification unavailable' },
+        { status: 403 }
+      );
+    }
+    return verifyGuestPaymentReference(sessionlessSnapshot);
   }
 
   return verifyPaymentReference(parsedBody.data.reference);

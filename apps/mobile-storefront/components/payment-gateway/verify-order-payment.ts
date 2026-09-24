@@ -70,6 +70,24 @@ export async function verifyOrderPaymentForCompletion({
     // Terminal server state (paid, reconciling, or terminally failed):
     // return immediately with no reference lookup — the row already
     // settles the order.
+    if (tracked.paid && reference) {
+      // A paid row alone is not inventory proof: a gateway finalizer
+      // may have flipped payment_status while serialized-inventory
+      // confirmation is still pending or failed. Both verify paths gate
+      // completion on that proof, so require it before completing —
+      // definitive reference outcomes win outright, while a transient
+      // answer stays pending (polling converges once the confirm step
+      // lands) instead of completing an unconfirmed order.
+      const settled = await checkReferenceSettled(
+        orderId,
+        reference,
+        trackingToken
+      );
+      if (settled.paid || settled.reconciliation || settled.terminalFailure) {
+        return settled;
+      }
+      return { paid: false };
+    }
     if (tracked.paid || tracked.reconciliation) {
       return tracked;
     }

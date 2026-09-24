@@ -42,13 +42,35 @@ const completedVerification = {
 };
 
 describe('verifyOrderPaymentForCompletion', () => {
-  it('confirms paid from the order lookup without hitting verification', async () => {
+  it('confirms paid from the order lookup without hitting verification when no reference exists', async () => {
     const fetchMock = mockFetch((url: string) =>
       String(url).includes('/api/payments/verify')
         ? new Response('{}', { status: 500 })
         : new Response(JSON.stringify(paidTrackedOrder), { status: 200 })
     );
 
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+      })
+    ).resolves.toEqual({ paid: true, total: 5000 });
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes('/api/payments/verify')
+      )
+    ).toBe(false);
+  });
+
+  it('requires reference verification for a paid row when a reference is present', async () => {
+    const fetchMock = mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(JSON.stringify(completedVerification), { status: 200 })
+        : new Response(JSON.stringify(paidTrackedOrder), { status: 200 })
+    );
+
+    // A paid row alone is not inventory proof: the reference check (both
+    // server paths gate completion on it) must confirm before completing.
     await expect(
       verifyOrderPaymentForCompletion({
         orderId: 'order-1',
@@ -60,7 +82,33 @@ describe('verifyOrderPaymentForCompletion', () => {
       fetchMock.mock.calls.some(([url]) =>
         String(url).includes('/api/payments/verify')
       )
-    ).toBe(false);
+    ).toBe(true);
+  });
+
+  it('stays pending when reference verification is transient for a paid row', async () => {
+    mockFetch((url: string) =>
+      String(url).includes('/api/payments/verify')
+        ? new Response(
+            JSON.stringify({
+              success: false,
+              status: 'pending',
+              orderId: 'order-1',
+              orderNumber: 'ORD-1',
+            }),
+            { status: 200 }
+          )
+        : new Response(JSON.stringify(paidTrackedOrder), { status: 200 })
+    );
+
+    // Paid row, unconfirmed inventory: never complete — polling
+    // converges once the finalizer's confirm step lands.
+    await expect(
+      verifyOrderPaymentForCompletion({
+        orderId: 'order-1',
+        trackingToken: 'track-1',
+        reference: 'ref-1',
+      })
+    ).resolves.toEqual({ paid: false });
   });
 
   it('falls back to reference verification when the lookup is still pending', async () => {

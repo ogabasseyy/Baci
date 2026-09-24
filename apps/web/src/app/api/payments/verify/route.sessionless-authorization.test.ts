@@ -27,8 +27,8 @@ vi.mock('@/lib/supabase/mobile-auth', () => ({
 
 const mockBearerRpc = vi.fn();
 
-// The sessionless gate is proven before finalization; the finalizer
-// itself is unit-tested elsewhere.
+// The session (cookie-CSRF) path keeps the pre-existing service
+// authority; the finalizer itself is unit-tested elsewhere.
 const mockFinalizeOrderGatewayPayment = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/payments/finalize-order-gateway-payment', () => ({
   finalizeOrderGatewayPayment: (...args: unknown[]) =>
@@ -73,17 +73,9 @@ function chain(result: { data: unknown; error: null }) {
   };
 }
 
-// Locally-finalized paid order: the route answers from the stored rows
-// without provider calls or finalization writes.
-function serviceClientFor({
-  transactionOrderId = ORDER_ID,
-  orderCustomerId = 'cust-9',
-  customerRow = { id: 'cust-9' },
-}: {
-  transactionOrderId?: string | null;
-  orderCustomerId?: string | null;
-  customerRow?: Record<string, string> | null;
-} = {}) {
+// Locally-finalized paid order for the session (cookie-CSRF) path,
+// which keeps the pre-existing service authority.
+function serviceClientFor() {
   return {
     from: vi.fn((table: string) => {
       if (table === 'transactions') {
@@ -97,7 +89,7 @@ function serviceClientFor({
             id: 'txn-9',
             merchant_id: 'merchant-9',
             metadata: {},
-            order_id: transactionOrderId,
+            order_id: ORDER_ID,
             platform_fee: 0,
             status: 'completed',
           },
@@ -107,18 +99,15 @@ function serviceClientFor({
       if (table === 'orders') {
         return chain({
           data: {
-            id: transactionOrderId,
+            id: ORDER_ID,
             order_number: 'ORD-9',
             payment_status: 'paid',
             shipping_status: 'pending',
             total: 5000,
-            customer_id: orderCustomerId,
+            customer_id: 'cust-9',
           },
           error: null,
         });
-      }
-      if (table === 'customers') {
-        return chain({ data: customerRow, error: null });
       }
       throw new Error(`Unexpected table ${table}`);
     }),
@@ -141,6 +130,7 @@ describe('POST /api/payments/verify — sessionless authorization', () => {
     vi.clearAllMocks();
     mockCreateServiceClient.mockReturnValue(serviceClientFor());
     mockRpc.mockResolvedValue({ data: [snapshotRow()], error: null });
+    mockBearerRpc.mockResolvedValue({ data: [snapshotRow()], error: null });
     mockGetAuthenticatedUser.mockResolvedValue(null);
     mockProcessMerchantInvoicePartialPayment.mockResolvedValue({
       kind: 'none',
@@ -176,9 +166,10 @@ describe('POST /api/payments/verify — sessionless authorization', () => {
         p_tracking_token: TRACKING_TOKEN,
       }
     );
-    // The syntactic Bearer [REDACTED] alone authorizes nothing: no user-token
-    // validation is even attempted on the proof path.
+    // No session needed on the proof path, and no privileged client
+    // anywhere on the sessionless lane.
     expect(mockGetAuthenticatedUser).not.toHaveBeenCalled();
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
   });
 
   it('rejects a Bearer [REDACTED] caller whose tracking token mismatches', async () => {
@@ -197,8 +188,7 @@ describe('POST /api/payments/verify — sessionless authorization', () => {
     expect(mockCreateServiceClient).not.toHaveBeenCalled();
   });
 
-  it('serves a validated user token bound to the order customer', async () => {
-    mockBearerRpc.mockResolvedValue({ data: ORDER_ID, error: null });
+  it('serves a validated user token through the ownership-checked snapshot', async () => {
     mockGetAuthenticatedUser.mockResolvedValue({
       authMode: 'bearer',
       user: { id: 'user-9' },
@@ -211,11 +201,12 @@ describe('POST /api/payments/verify — sessionless authorization', () => {
 
     expect(mockGetAuthenticatedUser).toHaveBeenCalled();
     expect(mockBearerRpc).toHaveBeenCalledWith(
-      'authorize_sessionless_verify_reference',
+      'get_sessionless_payment_reference_snapshot',
       { p_gateway_reference: REFERENCE }
     );
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ success: true, orderId: ORDER_ID });
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
   });
 
   it('rejects an unvalidatable Bearer [REDACTED] without a tracking token', async () => {
@@ -228,11 +219,28 @@ describe('POST /api/payments/verify — sessionless authorization', () => {
 
     expect(response.status).toBe(403);
     expect(body).toStrictEqual({ error: 'Verification unavailable' });
+    expect(mockBearerRpc).not.toHaveBeenCalled();
     expect(mockCreateServiceClient).not.toHaveBeenCalled();
   });
 
+  it('rejects cookie sessions on the sessionless lane', async () => {
+    mockGetAuthenticatedUser.mockResolvedValue({
+      authMode: 'cookie',
+      user: { id: 'user-9' },
+    });
+
+    const response = await POST(
+      postRequest({ reference: REFERENCE }, 'cookie-session-value')
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body).toStrictEqual({ error: 'Verification unavailable' });
+    expect(mockBearerRpc).not.toHaveBeenCalled();
+  });
+
   it('rejects a validated user whose customer does not own the order', async () => {
-    mockBearerRpc.mockResolvedValue({ data: null, error: null });
+    mockBearerRpc.mockResolvedValue({ data: [], error: null });
     mockGetAuthenticatedUser.mockResolvedValue({
       authMode: 'bearer',
       user: { id: 'user-intruder' },
@@ -246,23 +254,7 @@ describe('POST /api/payments/verify — sessionless authorization', () => {
 
     expect(response.status).toBe(403);
     expect(body).toStrictEqual({ error: 'Verification unavailable' });
-  });
-
-  it('refuses when the reference resolves to a different order than proven', async () => {
-    mockCreateServiceClient.mockReturnValue(
-      serviceClientFor({ transactionOrderId: 'order-other' })
-    );
-
-    const response = await POST(
-      postRequest(
-        { reference: REFERENCE, trackingToken: TRACKING_TOKEN },
-        'any-opaque-sessionless-caller-token'
-      )
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(403);
-    expect(body).toStrictEqual({ error: 'Verification unavailable' });
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
   });
 
   it('keeps session (cookie-CSRF) authority without a tracking token', async () => {
@@ -272,6 +264,7 @@ describe('POST /api/payments/verify — sessionless authorization', () => {
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ success: true, orderId: ORDER_ID });
     expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockBearerRpc).not.toHaveBeenCalled();
     expect(mockGetAuthenticatedUser).not.toHaveBeenCalled();
   });
 });

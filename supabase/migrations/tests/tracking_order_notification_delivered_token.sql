@@ -115,7 +115,14 @@ BEGIN
   FROM public.get_order_tracking(
     'tracking-delivered-regression', NULL, NULL, NULL, 'delivered-token-001'
   );
-  ASSERT v_delivered = true, 'sent claim must project notification_delivered';
+  IF v_delivered IS NULL THEN
+    RAISE EXCEPTION 'token lookup returned no row'
+      USING ERRCODE = 'P0005';
+  END IF;
+  IF v_delivered = false THEN
+    RAISE EXCEPTION 'sent claim not projected as delivered'
+      USING ERRCODE = 'P0006';
+  END IF;
 END;
 $$;
 

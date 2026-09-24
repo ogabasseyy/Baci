@@ -129,7 +129,14 @@ BEGIN
   FROM public.get_order_tracking(
     'tracking-pending-regression', NULL, NULL, NULL, 'pending-token-002'
   );
-  ASSERT v_delivered = false, 'failed claim must not project delivered';
+  IF v_delivered IS NULL THEN
+    RAISE EXCEPTION 'pending token lookup returned no row'
+      USING ERRCODE = 'P0005';
+  END IF;
+  IF v_delivered = true THEN
+    RAISE EXCEPTION 'failed claim wrongly projects delivered'
+      USING ERRCODE = 'P0006';
+  END IF;
 
   SELECT notification_delivered INTO v_delivered
   FROM public.get_order_tracking(
@@ -139,7 +146,14 @@ BEGIN
     'delivered2@example.com',
     NULL
   );
-  ASSERT v_delivered = true, 'email lookup must project delivered';
+  IF v_delivered IS NULL THEN
+    RAISE EXCEPTION 'delivered email lookup returned no row'
+      USING ERRCODE = 'P0007';
+  END IF;
+  IF v_delivered = false THEN
+    RAISE EXCEPTION 'delivered email lookup not projected'
+      USING ERRCODE = 'P0008';
+  END IF;
 END;
 $$;
 

@@ -629,16 +629,51 @@ describe('storefront order success page', () => {
     render(<OrderSuccessPage />);
 
     // Anonymous: the /receipts archive would only bounce to login.
-    // The email also renders in the order summary, so assert the full
-    // action sentence to pin the address to the emailed action.
+    // Delivery runs in after(), after this lookup: until the server
+    // delivery flag lands, the action must promise preparation — never
+    // a sent PDF that may not exist yet.
     expect(
       await screen.findByText(
-        /proforma invoice pdf was sent to buyer@example\.com/i
+        /proforma invoice pdf is being prepared — we'll email it to buyer@example\.com/i
       )
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('link', { name: /download proforma invoice pdf/i })
     ).toBeNull();
+  });
+
+  it('shows guests the sent invoice action once delivery lands', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-123',
+        type: 'invoice',
+        trackingToken: 'track-token-123',
+      })
+    );
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        items: [],
+        subtotal: 45000,
+        shipping_cost: 1500,
+        total: 49875,
+        payment_method: 'invoice',
+        payment_status: 'unpaid',
+        notification_delivered: true,
+      }),
+    });
+
+    render(<OrderSuccessPage />);
+
+    expect(
+      await screen.findByText(
+        /proforma invoice pdf was sent to buyer@example\.com/i
+      )
+    ).toBeInTheDocument();
   });
 
   it('renders no invoice action while the customer session resolves', async () => {
@@ -947,6 +982,61 @@ describe('storefront order success page', () => {
       );
       expect(mockFetch).toHaveBeenCalledWith(
         '/api/storefront/orders/order-123?merchant_slug=test-store&token=track-token-123'
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries proof verification while a paid order stays unverified', async () => {
+    vi.useFakeTimers();
+    try {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-123',
+          reference: 'credpal-ref-1',
+          type: 'credpal',
+          trackingToken: 'track-token-123',
+        })
+      );
+      const paidOrder = {
+        id: 'order-123',
+        order_number: 'ORD-123',
+        tracking_token: 'track-token-123',
+        customer_email: 'buyer@example.com',
+        items: [],
+        subtotal: 45000,
+        shipping_cost: 1500,
+        total: 49875,
+        payment_method: 'credpal',
+        payment_status: 'paid',
+      };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => paidOrder,
+      });
+      // Inventory confirmation has not converged (or the request
+      // transiently failed): the first verdict is a non-success, not a
+      // negative — the lane must retry instead of losing the conversion.
+      mockVerifyBnplSettlementProof.mockResolvedValueOnce(false);
+
+      render(<OrderSuccessPage />);
+      await flushMicrotasks();
+      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
+
+      await advanceTimers(15000);
+      await flushMicrotasks();
+
+      expect(mockVerifyBnplSettlementProof).toHaveBeenCalledTimes(2);
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-123',
+        expect.objectContaining({
+          payment_method: 'credpal',
+          payment_status: 'paid',
+          reference: 'credpal-ref-1',
+          total: 49875,
+        })
       );
     } finally {
       vi.useRealTimers();

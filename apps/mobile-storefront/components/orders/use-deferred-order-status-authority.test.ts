@@ -57,12 +57,19 @@ describe('useDeferredOrderStatusAuthority', () => {
       expect(result.current.deferredStatusAuthoritative).toBe(false)
     );
     expect(result.current.isPaidOrder).toBe(false);
+    // No successful lookup: no stored method to agree with (callers keep
+    // the pre-resolution tone instead of a failed request's absence).
+    expect(result.current.receiptPaymentMethod).toBeUndefined();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('grants authority on a successful authenticated receipt', () => {
     mockUseReceiptDetail.mockReturnValue({
-      data: { payment_status: 'paid', amount_paid: 50000 },
+      data: {
+        payment_status: 'paid',
+        payment_method: 'card',
+        amount_paid: 50000,
+      },
       isSuccess: true,
     } as never);
     const fetchSpy = jest.fn(async () => new Response('{}', { status: 500 }));
@@ -78,6 +85,9 @@ describe('useDeferredOrderStatusAuthority', () => {
     expect(result.current.isPaidOrder).toBe(true);
     expect(result.current.deferredStatusAuthoritative).toBe(true);
     expect(result.current.receiptAmountPaid).toBe(50000);
+    // Stored method for document-kind agreement (crafted route params
+    // must not relabel the preview).
+    expect(result.current.receiptPaymentMethod).toBe('card');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

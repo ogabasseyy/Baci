@@ -123,7 +123,14 @@ COMMENT ON FUNCTION public.claim_immediate_order_notification(uuid) IS
   'Atomic delivery claim for immediate order notifications: ensures a pending row for the order, then takes ownership (pending/failed/stale-processing to processing). Only the claimed caller may run after() delivery; replays reclaim failed or crashed claims. Used by POST /api/orders for sessionless-safe resume.';
 
 -- Records the delivery outcome. Sent is terminal (replays skip); failed
--- releases the claim for the next replay to resume.
+-- releases the claim for the next replay to resume. Fenced to the
+-- processing owner: only the attempt currently holding the claim may
+-- complete it. A stale worker outliving the five-minute reclaim window
+-- must not mark a newer attempt sent, and — worse — must not finish with
+-- p_sent=false after the newer attempt already succeeded: that would
+-- downgrade a delivered row back to failed, resend the customer email on
+-- the next replay, and leave notification_delivered false despite a
+-- successful delivery.
 CREATE OR REPLACE FUNCTION public.complete_immediate_order_notification(
   p_order_id uuid,
   p_sent boolean
@@ -138,7 +145,8 @@ AS $$
     status = CASE WHEN p_sent THEN 'sent' ELSE 'failed' END,
     sent_at = CASE WHEN p_sent THEN now() ELSE c.sent_at END,
     updated_at = now()
-  WHERE c.order_id = p_order_id;
+  WHERE c.order_id = p_order_id
+    AND c.status = 'processing';
 $$;
 
 REVOKE ALL ON FUNCTION public.complete_immediate_order_notification(uuid, boolean)

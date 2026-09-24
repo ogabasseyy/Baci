@@ -95,7 +95,12 @@ export function useCheckoutSuccessVerification({
     // changes the query: without a reset, the previous checkout's
     // terminal status/order details linger and the guard below refuses
     // to verify the new identity at all.
-    const verificationIdentity = [orderId, reference, trackingToken].join('|');
+    const verificationIdentity = [
+      orderId,
+      reference,
+      trackingToken,
+      paymentMethodParam,
+    ].join('|');
     if (verificationIdentityRef.current !== verificationIdentity) {
       verificationIdentityRef.current = verificationIdentity;
       statusRef.current = 'pending';
@@ -274,6 +279,7 @@ export function useCheckoutSuccessVerification({
     reference,
     orderId,
     trackingToken,
+    paymentMethodParam,
     merchantSlug,
     clearCart,
     router,

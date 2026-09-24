@@ -72,6 +72,7 @@ export default function OrderSuccessScreen() {
     guestInvoice,
     isPaidOrder,
     receiptAmountPaid,
+    receiptPaymentMethod,
     receiptPaymentStatus,
   } = useDeferredOrderStatusAuthority({
     customer,
@@ -128,9 +129,16 @@ export default function OrderSuccessScreen() {
   // The proforma action opens this same preview: stamp the explicit kind so
   // the generated artifact and modal chrome read as a proforma, matching
   // the web success page (unpaid invoice orders only — paid orders keep the
-  // commercial receipt even if this screen was reached via invoice).
+  // commercial receipt even if this screen was reached via invoice). The
+  // route method is caller-controlled, so once the authenticated receipt
+  // lookup resolves, the stored method must agree: a stale or crafted
+  // invoice link for a card/Pay-for-Me/bank-transfer order must not
+  // relabel its preview as a proforma.
+  const storedMethodAgrees =
+    receiptPaymentMethod === undefined || receiptPaymentMethod === 'invoice';
   const isProformaDocument =
     paymentMethod === 'invoice' &&
+    storedMethodAgrees &&
     !isPaidOrder &&
     !wasPaidOrder &&
     !isCancelledOrder &&

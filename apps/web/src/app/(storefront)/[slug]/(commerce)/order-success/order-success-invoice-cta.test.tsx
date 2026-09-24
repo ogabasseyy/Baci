@@ -43,6 +43,7 @@ describe('OrderSuccessInvoiceCta', () => {
       <OrderSuccessInvoiceCta
         archiveHref={asRoute('/test-store/receipts')}
         isAuthed
+        isDelivered
         isInvoice={false}
         merchantSlug="test-store"
         order={paidOrder()}
@@ -62,6 +63,7 @@ describe('OrderSuccessInvoiceCta', () => {
       <OrderSuccessInvoiceCta
         archiveHref={asRoute('/test-store/receipts')}
         isAuthed
+        isDelivered
         isInvoice={false}
         merchantSlug="test-store"
         order={paidOrder({ shipping_status: 'delivered' })}
@@ -81,6 +83,7 @@ describe('OrderSuccessInvoiceCta', () => {
       <OrderSuccessInvoiceCta
         archiveHref={asRoute('/test-store/receipts')}
         isAuthed
+        isDelivered
         isInvoice
         merchantSlug="test-store"
         order={paidOrder({ payment_status: 'unpaid' })}
@@ -97,6 +100,7 @@ describe('OrderSuccessInvoiceCta', () => {
       <OrderSuccessInvoiceCta
         archiveHref={asRoute('/test-store/receipts')}
         isAuthed
+        isDelivered
         isInvoice={false}
         merchantSlug={null}
         order={paidOrder()}
@@ -108,11 +112,33 @@ describe('OrderSuccessInvoiceCta', () => {
     ).toHaveAttribute('href', '/test-store/receipts');
   });
 
-  it('gives guests the email action instead of the archive', () => {
+  it('gives guests the pending action until delivery lands', () => {
     render(
       <OrderSuccessInvoiceCta
         archiveHref={asRoute('/test-store/receipts')}
         isAuthed={false}
+        isDelivered={false}
+        isInvoice
+        merchantSlug="test-store"
+        order={paidOrder({ payment_status: 'unpaid' })}
+      />
+    );
+
+    // Delivery runs in after(), after the first lookup: no false "sent".
+    expect(
+      screen.getByText(
+        /proforma invoice pdf is being prepared — we'll email it to buyer@example\.com/i
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /download/i })).toBeNull();
+  });
+
+  it('gives guests the sent action once delivery lands', () => {
+    render(
+      <OrderSuccessInvoiceCta
+        archiveHref={asRoute('/test-store/receipts')}
+        isAuthed={false}
+        isDelivered
         isInvoice
         merchantSlug="test-store"
         order={paidOrder({ payment_status: 'unpaid' })}

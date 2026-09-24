@@ -34,6 +34,9 @@ function watchedOrder(overrides = {}) {
 
 function input(overrides = {}) {
   return {
+    // Genuine-proforma predicate from resolveInvoicePresentation; these
+    // fixtures exercise the proforma lane unless overridden.
+    isProforma: true,
     lookupEmail: null,
     merchantSlug: 'test-store',
     onOrder: vi.fn(),
@@ -94,6 +97,28 @@ describe('useInvoiceGeneratedCapture', () => {
       await vi.advanceTimersByTimeAsync(120_000);
     });
     expect(mockFetchOrder).toHaveBeenCalledTimes(2);
+  });
+
+  it('never captures for a wallet-credited commercial invoice', async () => {
+    // Partial wallet/savings credit is emailed as a commercial document:
+    // delivery of it must not book a proforma conversion, and the lane
+    // must not even poll.
+    const credited = watchedOrder({
+      amount_paid: 4000,
+      notification_delivered: true,
+    });
+    // The page derives isProforma from resolveInvoicePresentation, which
+    // is false for credited orders.
+    renderHook(() =>
+      useInvoiceGeneratedCapture(input({ order: credited, isProforma: false }))
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+    });
+
+    expect(mockCapture).not.toHaveBeenCalled();
+    expect(mockFetchOrder).not.toHaveBeenCalled();
   });
 
   it('never captures for a paid order', async () => {

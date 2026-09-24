@@ -708,6 +708,60 @@ describe('completion claim leases', () => {
     expect(readEnvelopeLeases()[CLAIM]?.claimedAt).toBe(START + DAY_MS + 1000);
   });
 
+  it('reconciles newer grants erased by a late emission-proof write', async () => {
+    jest.useFakeTimers();
+    try {
+      await expect(
+        fresh.claimCheckoutPurchaseTracking('order-late-emit', 'purchase')
+      ).resolves.toBe(true);
+      // The emission-proof write lands after the caller timeout: the
+      // caller returns, but the queue stays serialized on the
+      // compensation until the late write settles and reconciles.
+      mockSetItem.mockImplementationOnce(
+        (key: string, value: string) =>
+          new Promise<void>((resolve) => {
+            setTimeout(() => {
+              storage.set(key, value);
+              resolve();
+            }, 3500);
+          })
+      );
+      const emitted = fresh.markCheckoutPurchaseEmitted(
+        'order-late-emit',
+        'purchase'
+      );
+      await jest.advanceTimersByTimeAsync(3000);
+      await emitted;
+      // Granted after the emission task read its snapshot but before the
+      // late write lands: without compensation the stale snapshot erases
+      // it and the completion never emits. Advanced while pending — the
+      // grant queues behind the compensation.
+      const granting = expect(
+        fresh.claimCheckoutPurchaseTracking(
+          'order-late-emit',
+          'payment_completed'
+        )
+      ).resolves.toBe(true);
+      await jest.advanceTimersByTimeAsync(8000);
+      await granting;
+      const stored = parseStoredClaimsForTest(
+        storage.get(CHECKOUT_PURCHASE_TRACKING_STORAGE_KEY)
+      );
+      expect(stored).toContain('order-late-emit');
+      expect(stored).toContain('payment_completed:order-late-emit');
+      // The late emission-proof write still stamped its proof (fake
+      // timers own Date here, so assert presence, not the wall clock).
+      expect(readEnvelopeLeases()['order-late-emit']?.emittedAt).toEqual(
+        expect.any(Number)
+      );
+    } finally {
+      jest.useRealTimers();
+      mockSetItem.mockImplementation(async (key: string, value: string) => {
+        storage.set(key, value);
+      });
+    }
+  });
+
   it('never recovers an emitted claim, however old', async () => {
     await expect(
       fresh.claimCheckoutPurchaseTracking('order-lease-1', 'payment_completed')

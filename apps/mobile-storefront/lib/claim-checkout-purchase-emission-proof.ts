@@ -1,3 +1,5 @@
+import { trackCompensation } from './claim-checkout-purchase-reads';
+import { reconcileStoredClaims } from './claim-checkout-purchase-release';
 import {
   claimKey,
   log,
@@ -34,19 +36,35 @@ export function markCheckoutPurchaseEmitted(
         return { settled };
       }
       const now = Date.now();
-      await Promise.race([
-        persistClaimEnvelope({
-          claims: envelope.claims,
-          leases: {
-            ...envelope.leases,
-            [claim]: {
-              claimedAt: envelope.leases[claim]?.claimedAt ?? now,
-              emittedAt: now,
-            },
+      const write = persistClaimEnvelope({
+        claims: envelope.claims,
+        leases: {
+          ...envelope.leases,
+          [claim]: {
+            claimedAt: envelope.leases[claim]?.claimedAt ?? now,
+            emittedAt: now,
           },
-        }),
+        },
+      });
+      const written = await Promise.race([
+        write.then(() => true as const),
         storageTimeout(),
       ]);
+      if (written === STORAGE_TIMEOUT) {
+        // The caller returns now, but the queue stays serialized until
+        // this write settles, and a late landing is compensated like the
+        // grant path: the stale snapshot can erase newer claims/leases,
+        // so reconcileStoredClaims unions the in-process grant set back.
+        log.error(
+          'Failed to mark checkout purchase emitted: store write timed out.'
+        );
+        const compensation = write.then(
+          () => reconcileStoredClaims().catch(() => undefined),
+          () => undefined
+        );
+        trackCompensation(claim, compensation);
+        return { settled: compensation };
+      }
     } catch (error) {
       log.error('Failed to mark checkout purchase emitted:', error);
     }

@@ -149,6 +149,7 @@ function OrderSuccessContent() {
   // captures an already-delivered lookup immediately and otherwise
   // refreshes on a bounded lane until the flag lands.
   useInvoiceGeneratedCapture({
+    isProforma: isInvoice,
     lookupEmail,
     merchantSlug: merchant?.slug,
     onOrder: setOrder,
@@ -246,6 +247,7 @@ function OrderSuccessContent() {
               <OrderSuccessInvoiceCta
                 archiveHref={asRoute(getHref('/receipts'))}
                 isAuthed={customerSession.isAuthenticated}
+                isDelivered={order?.notification_delivered ?? false}
                 isInvoice={isInvoice}
                 merchantSlug={merchant?.slug}
                 order={order}

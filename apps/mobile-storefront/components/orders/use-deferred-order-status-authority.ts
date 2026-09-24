@@ -16,6 +16,7 @@ export interface DeferredOrderStatusAuthority {
   guestInvoice: GuestInvoicePaymentState;
   isPaidOrder: boolean;
   receiptAmountPaid: number;
+  receiptPaymentMethod: string | undefined;
   receiptPaymentStatus: string | undefined;
   /**
    * Whether the deferred-order status may drive purchase-success side
@@ -57,6 +58,12 @@ export function useDeferredOrderStatusAuthority({
     guestInvoice,
     isPaidOrder: receiptPaidOrder || guestInvoice.status === 'paid',
     receiptAmountPaid: Number(paidCheckOrder?.amount_paid ?? 0),
+    // Stored payment method from the authenticated receipt lookup (only
+    // on a successful result): screens use it to confirm a
+    // caller-controlled route method before selecting the document kind.
+    receiptPaymentMethod: isReceiptCheckSuccess
+      ? (paidCheckOrder?.payment_method ?? undefined)
+      : undefined,
     receiptPaymentStatus,
     deferredStatusAuthoritative:
       receiptAuthoritative && guestInvoice.isResolved,

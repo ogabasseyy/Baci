@@ -74,6 +74,15 @@ BEGIN
   ASSERT v_claimed = false, 'sent claim must never be reclaimable';
   ASSERT v_status = 'sent', 'replay must observe sent';
 
+  -- Completion is fenced to the processing owner: a stale worker that
+  -- outlives the reclaim window must not downgrade a delivered row back
+  -- to failed (which would resend the email on the next replay).
+  PERFORM public.complete_immediate_order_notification(v_order_id, false);
+  SELECT claimed, claim_status INTO v_claimed, v_status
+  FROM public.claim_immediate_order_notification(v_order_id);
+  ASSERT v_claimed = false, 'stale failed completion must not reopen sent';
+  ASSERT v_status = 'sent', 'stale failed completion must not downgrade sent';
+
   -- The claim RPCs are service-role-only (the user-facing route reaches
   -- them through its service client; guest checkouts hold no session that
   -- could). Same privilege shape as claim_order_notification_outbox.

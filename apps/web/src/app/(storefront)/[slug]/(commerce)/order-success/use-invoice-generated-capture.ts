@@ -25,6 +25,21 @@ function isUnpaidInvoiceOrder(order: StorefrontOrderData): boolean {
   return order.payment_method === 'invoice' && order.payment_status !== 'paid';
 }
 
+// Row-level proforma evidence for refreshed lookups, mirroring
+// resolveInvoicePresentation: the server emails credited (wallet/savings
+// amount_paid), refunded, and partially-paid invoices as commercial
+// documents, so their delivery must not book a proforma conversion even
+// when the lane started from a proforma-looking first read.
+function isProformaRow(order: StorefrontOrderData): boolean {
+  const credited = Number(order.amount_paid ?? 0);
+  return (
+    isUnpaidInvoiceOrder(order) &&
+    order.payment_status !== 'refunded' &&
+    order.payment_status !== 'partially_paid' &&
+    !(Number.isFinite(credited) && credited > 0)
+  );
+}
+
 function captureFor(order: StorefrontOrderData): void {
   captureCheckoutInvoiceGenerated({
     currency: order.currency,
@@ -39,6 +54,7 @@ function captureFor(order: StorefrontOrderData): void {
 }
 
 export function useInvoiceGeneratedCapture({
+  isProforma,
   lookupEmail,
   merchantSlug,
   onOrder,
@@ -46,6 +62,14 @@ export function useInvoiceGeneratedCapture({
   orderId,
   orderToken,
 }: {
+  /**
+   * Genuine-proforma predicate from resolveInvoicePresentation: invoice
+   * orders partially covered by wallet/savings credit are emailed as
+   * commercial documents, so capturing invoice_generated for them would
+   * contaminate the payment_intent=proforma_invoice funnel. False (or a
+   * null order pre-load) runs no lane and captures nothing.
+   */
+  isProforma: boolean;
   lookupEmail: string | null;
   merchantSlug: string | undefined;
   onOrder: (order: StorefrontOrderData) => void;
@@ -65,6 +89,12 @@ export function useInvoiceGeneratedCapture({
   }
   useEffect(() => {
     if (!orderId || !order || !isUnpaidInvoiceOrder(order)) {
+      return;
+    }
+    // Commercial (credited/refunded/partially-paid) invoice orders share
+    // the unpaid lane shape but belong to no proforma funnel: stop
+    // without capturing, polling, or spending the refresh budget.
+    if (!isProforma) {
       return;
     }
     // A later visit (or replay repaired since) can arrive already
@@ -92,8 +122,9 @@ export function useInvoiceGeneratedCapture({
       if (data) {
         onOrder(data);
         // Terminal delivery observed: the artifacts exist, so the
-        // proforma conversion is real — capture and stop.
-        if (isUnpaidInvoiceOrder(data) && data.notification_delivered) {
+        // proforma conversion is real — capture and stop. Re-check the
+        // row evidence: credit can first appear on a refresh.
+        if (isProformaRow(data) && data.notification_delivered) {
           captureFor(data);
           return;
         }
@@ -125,6 +156,7 @@ export function useInvoiceGeneratedCapture({
     // and an identity dep would restart the lane pointlessly. The
     // budget ref still bounds total attempts across restarts.
   }, [
+    isProforma,
     lookupEmail,
     merchantSlug,
     onOrder,

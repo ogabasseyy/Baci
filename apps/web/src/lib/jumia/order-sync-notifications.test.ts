@@ -40,6 +40,7 @@ import {
 } from './order-sync.test-helpers';
 import {
   getJumiaNotificationAttemptKey,
+  hasSentJumiaOrderNotification,
   markJumiaNotificationSent,
 } from './order-sync-notifications';
 
@@ -52,6 +53,67 @@ describe('Jumia order sync notification markers', () => {
     expect(getJumiaNotificationAttemptKey('merchant:1', 'order/1')).toBe(
       'merchant%3A1:order%2F1'
     );
+  });
+
+  it('detects a previously delivered push from the attempt log', async () => {
+    const attemptsQuery = createQuery(
+      { data: [{ id: 'attempt-1' }], error: null },
+      { terminalIn: true }
+    );
+    const supabase = createSupabaseMock({
+      push_notification_attempts: [attemptsQuery],
+    });
+
+    await expect(
+      hasSentJumiaOrderNotification(supabase, 'merchant-1', 'jumia-order-1')
+    ).resolves.toBe(true);
+    expect(attemptsQuery.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+    expect(attemptsQuery.eq).toHaveBeenCalledWith(
+      'notification_type',
+      'new_order'
+    );
+    expect(attemptsQuery.eq).toHaveBeenCalledWith(
+      'payload->>jumia_order_id',
+      'jumia-order-1'
+    );
+    expect(attemptsQuery.in).toHaveBeenCalledWith('status', [
+      'sent',
+      'partial_failure',
+    ]);
+  });
+
+  it('fails open when the delivery lookup errors', async () => {
+    const errorQuery = createQuery(
+      { data: null, error: { message: 'lookup offline' } },
+      { terminalIn: true }
+    );
+    const emptyQuery = createQuery(
+      { data: [], error: null },
+      { terminalIn: true }
+    );
+
+    await expect(
+      hasSentJumiaOrderNotification(
+        createSupabaseMock({ push_notification_attempts: [errorQuery] }),
+        'merchant-1',
+        'jumia-order-1'
+      )
+    ).resolves.toBe(false);
+    await expect(
+      hasSentJumiaOrderNotification(
+        createSupabaseMock({ push_notification_attempts: [emptyQuery] }),
+        'merchant-1',
+        'jumia-order-1'
+      )
+    ).resolves.toBe(false);
+    // Unknown tables throw inside the mock; the lookup still fails open.
+    await expect(
+      hasSentJumiaOrderNotification(
+        createSupabaseMock({}),
+        'merchant-1',
+        'jumia-order-1'
+      )
+    ).resolves.toBe(false);
   });
 
   it('retries notification_sent updates and scopes them to the merchant', async () => {

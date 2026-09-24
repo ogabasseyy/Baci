@@ -152,6 +152,67 @@ describe('runJumiaOrderAction', () => {
     );
   });
 
+  it('reports partial label generation while exposing successful labels', async () => {
+    fetchWithCsrf.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          status: 'partial',
+          successCount: 1,
+          errorCount: 1,
+          labels: [{ label: 'https://cdn.example/label.pdf' }],
+        }),
+        { status: 200 }
+      )
+    );
+    const actionCallbacks = callbacks();
+
+    await runJumiaOrderAction(
+      'print_label',
+      'order-1',
+      'integration-1',
+      ['item-1', 'item-2'],
+      actionCallbacks
+    );
+
+    expect(actionCallbacks.setLabelUrls).toHaveBeenCalledWith([
+      'https://cdn.example/label.pdf',
+    ]);
+    expect(actionCallbacks.toast).toHaveBeenCalledWith({
+      title: 'Partial Success',
+      description: '1 label ready, 1 failed.',
+      variant: 'destructive',
+    });
+    expect(actionCallbacks.refetch).toHaveBeenCalledOnce();
+  });
+
+  it('reports failed label generation instead of an empty neutral message', async () => {
+    fetchWithCsrf.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ status: 'failed', successCount: 0, errorCount: 2 }),
+        { status: 200 }
+      )
+    );
+    const actionCallbacks = callbacks();
+
+    await runJumiaOrderAction(
+      'print_label',
+      'order-1',
+      'integration-1',
+      ['item-1', 'item-2'],
+      actionCallbacks
+    );
+
+    expect(actionCallbacks.setLabelUrls).not.toHaveBeenCalledWith([
+      expect.anything(),
+    ]);
+    expect(actionCallbacks.toast).toHaveBeenCalledWith({
+      title: 'Action Failed',
+      description: 'Jumia rejected all 2 requested label(s).',
+      variant: 'destructive',
+    });
+    expect(actionCallbacks.refetch).toHaveBeenCalledOnce();
+  });
+
   it('sanitizes non-JSON action failures into a destructive toast', async () => {
     fetchWithCsrf.mockResolvedValueOnce(
       new Response('<h1>provider failed</h1>', { status: 502 })

@@ -31,6 +31,7 @@ import {
   GetOrdersInputSchema,
   ResendOrderConfirmationInputSchema,
 } from '@/schemas/dashboard-order-actions';
+import { resolveJumiaDashboardOrderScope } from './jumia-dashboard-order-scope';
 import type { JumiaOrder } from './map-jumia-dashboard-order';
 import { mapJumiaDashboardOrder } from './map-jumia-dashboard-order';
 import {
@@ -111,7 +112,8 @@ interface OrderFilters {
   paymentStatus?: PaymentStatus | 'All';
   shippingStatus?: ShippingStatus | 'All';
   search?: string;
-  source?: AgenticOrderSourceFilter;
+  source?: AgenticOrderSourceFilter | 'jumia';
+  jumiaIntegrationId?: string;
 }
 
 interface OrderConfirmationRecord {
@@ -252,6 +254,17 @@ export async function getOrders(
   const hasShippingFilter = isActiveFilter(shippingStatusFilter);
   const hasAgenticSourceFilter =
     validatedFilters.source === AGENTIC_ORDER_SOURCE_FILTER;
+  const hasJumiaSourceFilter = validatedFilters.source === 'jumia';
+  const jumiaScope = await resolveJumiaDashboardOrderScope(
+    supabase,
+    authorizedMerchantId,
+    validatedFilters.jumiaIntegrationId
+  );
+  if (validatedFilters.jumiaIntegrationId && !jumiaScope) return [];
+  // A Jumia source or integration scope restricts both the canonical list
+  // and the unlinked Jumia cache rows; per-integration links must not leak
+  // sibling-shop orders.
+  const scopeJumiaOrders = hasJumiaSourceFilter || Boolean(jumiaScope);
   const searchTerm = validatedFilters.search?.trim();
   const sanitizedSearch = searchTerm
     ? sanitizeLikePattern(sanitizeSearchQuery(searchTerm))
@@ -279,6 +292,15 @@ export async function getOrders(
     query = query.eq('source', AGENTIC_ORDER_SOURCE);
   }
 
+  if (scopeJumiaOrders) {
+    query = query.eq('source', 'jumia');
+  }
+  if (jumiaScope) {
+    query = query
+      .eq('import_metadata->>shopId', jumiaScope.shopId)
+      .in('import_metadata->>marketplaceKey', jumiaScope.marketplaceKeys);
+  }
+
   // Search by customer name or order number
   if (sanitizedSearch) {
     query = query.or(
@@ -303,7 +325,10 @@ export async function getOrders(
   // Jumia orders don't have standard payment/shipping statuses in the same way,
   // but we map them.
   let jumiaOrders: JumiaOrder[] = [];
-  if (!hasPaymentFilter && !hasShippingFilter && !hasAgenticSourceFilter) {
+  if (
+    (!hasPaymentFilter && !hasShippingFilter && !hasAgenticSourceFilter) ||
+    scopeJumiaOrders
+  ) {
     let jumiaQuery = supabase
       .from('jumia_orders')
       .select(
@@ -311,6 +336,11 @@ export async function getOrders(
       )
       .eq('merchant_id', authorizedMerchantId)
       .is('baci_order_id', null);
+    if (jumiaScope) {
+      jumiaQuery = jumiaQuery
+        .eq('jumia_shop_id', jumiaScope.shopId)
+        .in('marketplace_key', jumiaScope.marketplaceKeys);
+    }
     if (sanitizedSearch) {
       jumiaQuery = jumiaQuery.or(
         `customer_name.ilike.%${sanitizedSearch}%,jumia_order_number.ilike.%${sanitizedSearch}%`

@@ -28,6 +28,7 @@ import {
   isAgenticOrderSource,
   parseAgenticOrderSourceFilter,
 } from './agentic-order-source';
+import { parseJumiaOrderSourceFilter } from './jumia-order-source-filter';
 import type { PaymentStatus } from './order-statuses';
 import { OrdersFiltersBar } from './orders-filters-bar';
 import { OrdersListCard } from './orders-list-card';
@@ -109,9 +110,9 @@ export default function OrdersClientPage({
   );
   const agenticIssue = searchParams.get('agentic_issue');
   const agenticOrdersContext = getAgenticOrdersContext(agenticIssue);
-  const sourceFilter = parseAgenticOrderSourceFilter(
-    searchParams.get('source')
-  );
+  const sourceFilter =
+    parseAgenticOrderSourceFilter(searchParams.get('source')) ??
+    parseJumiaOrderSourceFilter(searchParams.get('source'));
   const requestedJumiaIntegrationId = searchParams.get('integrationId');
   const isHydrated = useRef(false);
   const merchantId = merchant?.id ?? null;
@@ -215,6 +216,9 @@ export default function OrdersClientPage({
         shippingStatus: shippingFilter,
         search: searchTerm,
         ...(sourceFilter ? { source: sourceFilter } : {}),
+        ...(requestedJumiaIntegrationId
+          ? { jumiaIntegrationId: requestedJumiaIntegrationId }
+          : {}),
       })
         .then((fetchedOrders) => {
           if (isStale) return;
@@ -250,6 +254,7 @@ export default function OrdersClientPage({
     initialOrders.length,
     merchantId,
     paymentFilter,
+    requestedJumiaIntegrationId,
     searchTerm,
     shippingFilter,
     sourceFilter,

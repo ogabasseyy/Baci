@@ -15,6 +15,7 @@ import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
 import { integrationIdSchema } from '@/schemas/marketplace';
 import { executePackAction } from './pack-action';
+import { updateJumiaActionOrderStatus } from './sync-jumia-action-status';
 
 /** Derive overall action status from Jumia success/error totals */
 function computeActionStatus(
@@ -27,28 +28,14 @@ function computeActionStatus(
   return 'failed';
 }
 
-/** Update local jumia_orders status and return a sync warning if the DB write fails */
-async function updateOrderStatus(
+/** Update local order status and return a sync warning if a DB write fails */
+function updateOrderStatus(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orderId: string,
   merchantId: string,
   newStatus: string
-): Promise<{ syncWarning: string; details: string } | undefined> {
-  const { error } = await supabase
-    .from('jumia_orders')
-    .update({ status: newStatus })
-    .eq('jumia_order_id', orderId)
-    .eq('merchant_id', merchantId);
-
-  if (error) {
-    logger.error({
-      message: `Failed to update order status to ${newStatus}`,
-      error,
-      orderId,
-    });
-    return { syncWarning: 'Failed to update local DB', details: error.message };
-  }
-  return undefined;
+) {
+  return updateJumiaActionOrderStatus(supabase, orderId, merchantId, newStatus);
 }
 
 const ActionSchema = z.object({

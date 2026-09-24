@@ -153,4 +153,32 @@ describe('resolveJumiaIntegrationId', () => {
       )
     ).toBeNull();
   });
+
+  it('treats the neutral shared scope as non-disambiguating', () => {
+    const integrations = [
+      {
+        id: 'integration-retail',
+        shop_id: 'shop-1',
+        marketplace_key: 'NG-RETAIL',
+      },
+      {
+        id: 'integration-express',
+        shop_id: 'shop-1',
+        marketplace_key: 'NG-EXPRESS',
+      },
+    ];
+    // A channel-scoped link still opens the modal for neutral orders.
+    expect(
+      resolveJumiaIntegrationId(
+        integrations,
+        'integration-express',
+        'shop-1',
+        'default'
+      )
+    ).toBe('integration-express');
+    // Without a link scope, neutral orders stay ambiguous across siblings.
+    expect(
+      resolveJumiaIntegrationId(integrations, null, 'shop-1', 'default')
+    ).toBeNull();
+  });
 });

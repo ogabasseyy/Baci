@@ -109,6 +109,20 @@ export async function runJumiaOrderAction(
       return;
     }
 
+    // Unlike other actions, label responses carry printable URLs alongside
+    // the per-item outcome: surface failures without hiding successes.
+    if (data.status === 'failed') {
+      toast({
+        title: 'Action Failed',
+        description:
+          data.message ||
+          `Jumia rejected all ${data.errorCount ?? 0} requested label(s).`,
+        variant: 'destructive',
+      });
+      refetch();
+      return;
+    }
+
     if (!data.labels || data.labels.length === 0) {
       toast({
         title: 'No Labels',
@@ -148,6 +162,17 @@ export async function runJumiaOrderAction(
 
     setLabelUrls(validLabels.map((entry) => entry.label));
     const count = validLabels.length;
+    if (data.status === 'partial') {
+      toast({
+        title: 'Partial Success',
+        description:
+          data.message ||
+          `${count} label${count === 1 ? '' : 's'} ready, ${data.errorCount ?? 0} failed.`,
+        variant: 'destructive',
+      });
+      refetch();
+      return;
+    }
     toast({
       title: 'Labels Generated',
       description: `${count} label${count === 1 ? '' : 's'} ready`,

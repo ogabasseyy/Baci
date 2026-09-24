@@ -20,8 +20,13 @@ export function resolveJumiaIntegrationId(
 
   // One shop can back several business clients; the order's marketplace
   // key selects among same-shop integrations before link scope applies.
+  // The neutral 'default' key is shared scope, not a business client, so it
+  // must not disambiguate: exact-matching it would eliminate every
+  // candidate before the requested link integration is considered.
   const candidates =
-    orderMarketplaceKey != null && orderMarketplaceKey !== ''
+    orderMarketplaceKey != null &&
+    orderMarketplaceKey !== '' &&
+    orderMarketplaceKey !== 'default'
       ? shopCandidates.filter(
           (integration) => integration.marketplace_key === orderMarketplaceKey
         )

@@ -36,6 +36,36 @@ export function getJumiaNotificationAttemptKey(
   return `${encodeURIComponent(merchantId)}:${encodeURIComponent(jumiaOrderId)}`;
 }
 
+/**
+ * Reports whether a new-order push for this Jumia order was already
+ * delivered, consulting the durable push-attempt log. When the provider
+ * accepts a push but the notification marker write keeps failing, the
+ * sync cursor parks with `notification_sent` false and the next run
+ * would resend; this pre-dispatch check closes that resend hole.
+ *
+ * Fails open: a lookup failure returns false so first-time
+ * notifications are never suppressed by a best-effort dedup query.
+ */
+export async function hasSentJumiaOrderNotification(
+  supabase: SupabaseClient,
+  merchantId: string,
+  jumiaOrderId: string
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('push_notification_attempts')
+      .select('id')
+      .eq('merchant_id', merchantId)
+      .eq('notification_type', 'new_order')
+      .eq('payload->>jumia_order_id', jumiaOrderId)
+      .in('status', ['sent', 'partial_failure']);
+    if (error || !data) return false;
+    return data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function markJumiaNotificationSent(
   supabase: SupabaseClient,
   merchantId: string,

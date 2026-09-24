@@ -168,6 +168,24 @@ describe('OrdersClientPage', () => {
     });
   });
 
+  it('threads the Jumia link scope into the order query', async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams('source=jumia&integrationId=int-1') as never
+    );
+
+    render(<OrdersClientPage />);
+
+    await waitFor(() => {
+      expect(mocks.getOrders).toHaveBeenCalledWith(
+        'm-1',
+        expect.objectContaining({
+          source: 'jumia',
+          jumiaIntegrationId: 'int-1',
+        })
+      );
+    });
+  });
+
   it('filters initial orders to agentic source when source=agentic is present', () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams('source=agentic') as never

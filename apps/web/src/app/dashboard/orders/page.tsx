@@ -2,6 +2,7 @@ import { getMerchantForUser } from '@/lib/merchant-server';
 import { getOrderStats, getOrders } from './actions';
 import { parseAgenticOrderSourceFilter } from './agentic-order-source';
 import OrdersClientPage from './client-page';
+import { parseJumiaOrderSourceFilter } from './jumia-order-source-filter';
 
 export const metadata = {
   title: 'Orders - Baci',
@@ -13,9 +14,14 @@ interface OrdersPageProps {
 
 export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   const resolvedSearchParams = (await searchParams) ?? {};
-  const sourceFilter = parseAgenticOrderSourceFilter(
-    resolvedSearchParams.source
-  );
+  const sourceFilter =
+    parseAgenticOrderSourceFilter(resolvedSearchParams.source) ??
+    parseJumiaOrderSourceFilter(resolvedSearchParams.source);
+  const jumiaIntegrationId =
+    typeof resolvedSearchParams.integrationId === 'string' &&
+    resolvedSearchParams.integrationId.trim().length > 0
+      ? resolvedSearchParams.integrationId.trim()
+      : undefined;
   const { merchant } = await getMerchantForUser();
 
   if (!merchant) {
@@ -24,8 +30,11 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
 
   // Use Promise.allSettled to handle partial failures gracefully
   const results = await Promise.allSettled([
-    sourceFilter
-      ? getOrders(merchant.id, { source: sourceFilter })
+    sourceFilter || jumiaIntegrationId
+      ? getOrders(merchant.id, {
+          ...(sourceFilter ? { source: sourceFilter } : {}),
+          ...(jumiaIntegrationId ? { jumiaIntegrationId } : {}),
+        })
       : getOrders(merchant.id),
     getOrderStats(merchant.id),
   ]);

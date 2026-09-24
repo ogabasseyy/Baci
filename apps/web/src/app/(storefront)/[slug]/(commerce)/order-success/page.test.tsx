@@ -15,6 +15,10 @@ let mockMerchant: { slug: string; country: string; payout_currency?: string } =
   { slug: 'test-store', country: 'NG' };
 const mockGoogleCustomerReviews = vi.hoisted(() => vi.fn());
 const mockCaptureCheckoutFunnelEventOnce = vi.hoisted(() => vi.fn());
+// 04b: BNPL capture requires the paid verify verdict, not the paid row
+// alone. Defaults to verified so the capture tests prove the
+// verify-then-capture path; denial tests override per case.
+const mockVerifyBnplSettlementProof = vi.hoisted(() => vi.fn(async () => true));
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => mockSearchParams(),
@@ -66,6 +70,11 @@ vi.mock('@/components/analytics/google-customer-reviews', () => ({
 vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
   captureCheckoutFunnelEventOnce: (...args: unknown[]) =>
     mockCaptureCheckoutFunnelEventOnce(...args),
+}));
+
+vi.mock('./verify-bnpl-settlement-proof', () => ({
+  verifyBnplSettlementProof: (...args: unknown[]) =>
+    mockVerifyBnplSettlementProof(...args),
 }));
 
 describe('storefront order success page', () => {

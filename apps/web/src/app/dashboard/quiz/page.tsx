@@ -1,14 +1,21 @@
-import { getEffectiveProductStock } from '@baci/shared';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import {
+  isProductRow,
+  isVariantRow,
+  mapBaseProduct,
+  mapVariantProduct,
+  PRODUCT_PROJECTION,
+  VARIANT_PROJECTION,
+} from '@/app/api/merchant/quiz/prize-products/prize-product-mapping';
+import {
   ensurePermission,
   isMerchantPermissionRedirectError,
 } from '@/lib/merchant-server';
-import { getPrimaryProductImage } from '@/lib/product-image';
 import { createClient } from '@/lib/supabase/server';
 import {
+  type QuizPrizeVariantRow,
   quizPrizeProductSchema,
   quizPrizeProductsResponseSchema,
 } from '@/schemas/quiz-prize-product';
@@ -19,19 +26,6 @@ export const metadata: Metadata = {
   description: 'Generate merchant quiz topics and questions with Gemma',
 };
 
-type PrizeProductRow = {
-  default_variant_id: string | null;
-  condition: string | null;
-  has_variants: boolean | null;
-  id: string;
-  images: Array<string | { url?: string | null }> | null;
-  name: string;
-  manage_stock: boolean | null;
-  price: number | string | null;
-  stock: number | string | null;
-  stock_quantity: number | string | null;
-};
-
 const INITIAL_PRIZE_PRODUCT_LIMIT = 100;
 
 function productOffsetCursor(productOffset: number): string {
@@ -39,20 +33,11 @@ function productOffsetCursor(productOffset: number): string {
   return String((productOffset * (productOffset + 1)) / 2);
 }
 
-function isPrizeProductRow(value: unknown): value is PrizeProductRow {
-  if (!value || typeof value !== 'object') return false;
-  const row = value as Partial<PrizeProductRow>;
-  return typeof row.id === 'string' && typeof row.name === 'string';
-}
-
 export async function loadPrizeProducts(merchantId: string) {
   const supabase = createClient(await cookies());
   const { count, data, error } = await supabase
     .from('products')
-    .select(
-      'id, name, price, images, condition, default_variant_id, has_variants, manage_stock, stock, stock_quantity',
-      { count: 'exact' }
-    )
+    .select(PRODUCT_PROJECTION, { count: 'exact' })
     .eq('merchant_id', merchantId)
     .eq('status', 'active')
     .order('updated_at', { ascending: false })
@@ -67,28 +52,47 @@ export async function loadPrizeProducts(merchantId: string) {
     };
   }
 
-  const rows = (Array.isArray(data) ? data : []).filter(isPrizeProductRow);
-  const products = rows
-    .map((row) => {
-      const manageStock = row.manage_stock === true;
-      const effectiveStock = manageStock ? getEffectiveProductStock(row) : null;
-      const hasVariants = row.has_variants === true;
+  const rows = (Array.isArray(data) ? data : [])
+    .filter(isProductRow)
+    .filter((row) => row.merchant_id === merchantId);
+  // Mirror the prize API: expand variant parents into selectable variant rows
+  // and omit parents with no concrete variant inventory, so the initial page
+  // never shows the unselectable parents that searches omit.
+  const variantParentIds = rows
+    .filter((row) => row.has_variants === true)
+    .map((row) => row.id);
+  const variantsByProduct = new Map<string, QuizPrizeVariantRow[]>();
+  if (variantParentIds.length > 0) {
+    const { data: variantData, error: variantError } = await supabase
+      .from('product_variants')
+      .select(VARIANT_PROJECTION)
+      .eq('merchant_id', merchantId)
+      .in('product_id', variantParentIds)
+      .order('created_at', { ascending: true });
+    if (variantError) {
       return {
-        available: !hasVariants && (!manageStock || (effectiveStock ?? 0) > 0),
-        condition: row.condition?.trim() || 'unspecified',
-        defaultVariantId: row.default_variant_id ?? null,
-        effectiveStock,
-        hasVariants,
-        id: row.id,
-        imageUrl: getPrimaryProductImage(row.images),
-        manageStock,
-        name: row.name,
-        price: Number(row.price ?? 0),
-        requiresVariantSelection: hasVariants,
-        selectionId: `${row.id}:product`,
-        variantId: null,
-        variantLabel: null,
+        error: 'Failed to load prize products',
+        nextCursor: null,
+        products: [],
+        total: null,
       };
+    }
+    for (const variant of (Array.isArray(variantData) ? variantData : [])
+      .filter(isVariantRow)
+      .filter((row) => row.merchant_id === merchantId)) {
+      const current = variantsByProduct.get(variant.product_id) ?? [];
+      variantsByProduct.set(variant.product_id, [...current, variant]);
+    }
+  }
+  const products = rows
+    .flatMap((row) => {
+      if (row.has_variants === true) {
+        const productVariants = variantsByProduct.get(row.id) ?? [];
+        return productVariants.map((variant) =>
+          mapVariantProduct(row, variant)
+        );
+      }
+      return [mapBaseProduct(row)];
     })
     .flatMap((product) => {
       const parsed = quizPrizeProductSchema.safeParse(product);

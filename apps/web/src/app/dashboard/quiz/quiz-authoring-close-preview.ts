@@ -1,6 +1,6 @@
 import { QUIZ_DEFAULT_TIME_ZONE } from '@baci/shared';
 import { quizDatetimeLocalToIso } from './quiz-datetime-local';
-import { formatQuizDuration } from './quiz-duration';
+import { formatQuizDuration } from './quiz-format-duration';
 
 /**
  * Preview text for when the quiz closes. Scheduled quizzes show the

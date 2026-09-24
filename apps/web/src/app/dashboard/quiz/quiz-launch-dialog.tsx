@@ -9,7 +9,7 @@ import type {
   QuizLaunchInput,
 } from './quiz-admin-actions';
 import { quizDatetimeLocalToIso } from './quiz-datetime-local';
-import { formatQuizDuration } from './quiz-duration';
+import { formatQuizDuration } from './quiz-format-duration';
 
 function formatPolicyInstant(value: string): string {
   // The offset-free field value is a policy-zone wall clock, not a

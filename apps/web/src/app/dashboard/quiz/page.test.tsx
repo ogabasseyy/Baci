@@ -15,8 +15,16 @@ const mockProductsQuery = {
   order: vi.fn(() => mockProductsQuery),
   select: vi.fn(() => mockProductsQuery),
 };
+const mockVariantsQuery = {
+  eq: vi.fn(() => mockVariantsQuery),
+  in: vi.fn(() => mockVariantsQuery),
+  order: vi.fn(),
+  select: vi.fn(() => mockVariantsQuery),
+};
 const mockSupabase = {
-  from: vi.fn(() => mockProductsQuery),
+  from: vi.fn((table: string) =>
+    table === 'product_variants' ? mockVariantsQuery : mockProductsQuery
+  ),
 };
 const mockCreateClient = vi.fn((_cookieStore: unknown) => mockSupabase);
 
@@ -55,12 +63,14 @@ describe('QuizDashboardPage', () => {
           default_variant_id: null,
           id: '55555555-5555-4555-8555-555555555555',
           images: [{ url: 'https://cdn.example.com/iphone.png' }],
+          merchant_id: 'merchant-1',
           name: 'iPhone 15 Pro Max',
           price: 2100000,
         },
       ],
       error: null,
     });
+    mockVariantsQuery.order.mockResolvedValue({ data: [], error: null });
     mockIsMerchantPermissionRedirectError.mockImplementation(
       (error: unknown) => {
         return (
@@ -80,7 +90,7 @@ describe('QuizDashboardPage', () => {
     expect(mockEnsurePermission).toHaveBeenCalledWith('marketing', 'edit');
     expect(mockSupabase.from).toHaveBeenCalledWith('products');
     expect(mockProductsQuery.select).toHaveBeenCalledWith(
-      'id, name, price, images, condition, default_variant_id, has_variants, manage_stock, stock, stock_quantity',
+      'id, merchant_id, name, price, images, condition, default_variant_id, has_variants, manage_stock, stock, stock_quantity',
       { count: 'exact' }
     );
     expect(
@@ -141,14 +151,22 @@ describe('QuizDashboardPage', () => {
       count: 3,
       data: [
         {
+          default_variant_id: null,
           id: '55555555-5555-4555-8555-555555555555',
           manage_stock: true,
+          merchant_id: 'merchant-1',
           name: 'Safe stock product',
           price: 100,
           stock: 'not-a-number',
           stock_quantity: '-4',
         },
-        { id: 'not-a-uuid', name: 'Malformed product', price: 100 },
+        {
+          default_variant_id: null,
+          id: 'not-a-uuid',
+          merchant_id: 'merchant-1',
+          name: 'Malformed product',
+          price: 100,
+        },
         { id: '55555555-5555-4555-8555-555555555555', name: 10 },
       ],
       error: null,
@@ -168,9 +186,63 @@ describe('QuizDashboardPage', () => {
     });
   });
 
+  it('expands variant parents and omits parents without variant inventory', async () => {
+    mockProductsQuery.limit.mockResolvedValueOnce({
+      count: 2,
+      data: [
+        {
+          default_variant_id: null,
+          has_variants: true,
+          id: '55555555-5555-4555-8555-555555555555',
+          merchant_id: 'merchant-1',
+          name: 'Parent with variants',
+          price: 100,
+        },
+        {
+          default_variant_id: null,
+          has_variants: true,
+          id: '77777777-7777-4777-8777-777777777777',
+          merchant_id: 'merchant-1',
+          name: 'Parent without variants',
+          price: 200,
+        },
+      ],
+      error: null,
+    });
+    mockVariantsQuery.order.mockResolvedValueOnce({
+      data: [
+        {
+          id: '66666666-6666-4666-8666-666666666666',
+          merchant_id: 'merchant-1',
+          product_id: '55555555-5555-4555-8555-555555555555',
+          stock_quantity: 3,
+        },
+      ],
+      error: null,
+    });
+
+    const result = await loadPrizeProducts('merchant-1');
+
+    expect(mockSupabase.from).toHaveBeenCalledWith('product_variants');
+    expect(mockVariantsQuery.in).toHaveBeenCalledWith('product_id', [
+      '55555555-5555-4555-8555-555555555555',
+      '77777777-7777-4777-8777-777777777777',
+    ]);
+    expect(result.error).toBeNull();
+    expect(result.products).toHaveLength(1);
+    expect(result.products[0]).toMatchObject({
+      available: true,
+      id: '55555555-5555-4555-8555-555555555555',
+      requiresVariantSelection: false,
+      variantId: '66666666-6666-4666-8666-666666666666',
+    });
+  });
+
   it('returns the exact inventory total and a continuation cursor after a capped load', async () => {
     const rows = Array.from({ length: 100 }, (_, index) => ({
+      default_variant_id: null,
       id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+      merchant_id: 'merchant-1',
       name: `Product ${index}`,
       price: 100,
     }));

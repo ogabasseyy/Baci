@@ -44,9 +44,29 @@ const mockSupabase = {
       });
       return {
         select: () => makeChain(4, 2),
-        update: (...args: unknown[]) => ({
-          eq: () => mockMappingUpdate(...args),
-        }),
+        update: (...args: unknown[]) => {
+          // Supports both the single-eq tracking write (awaited directly)
+          // and the guarded reconcile write (.eq().eq().select().maybeSingle()).
+          const chain = {} as {
+            eq: (...eqArgs: unknown[]) => unknown;
+            select: (...selectArgs: unknown[]) => unknown;
+            maybeSingle: () => unknown;
+            then: (
+              resolve: (value: unknown) => void,
+              reject: (reason?: unknown) => void
+            ) => unknown;
+          };
+          chain.eq = () => chain;
+          chain.select = () => chain;
+          chain.maybeSingle = () => mockMappingUpdate(...args);
+          // biome-ignore lint/suspicious/noThenProperty: mirrors supabase-js query builders, thenable at any point in the chain.
+          chain.then = (resolve, reject) =>
+            (mockMappingUpdate(...args) as Promise<unknown>).then(
+              resolve,
+              reject
+            );
+          return chain;
+        },
         upsert: (...args: unknown[]) => mockMappingUpsert(...args),
       };
     }
@@ -245,7 +265,7 @@ describe('POST /api/marketplace/jumia/products/stock', () => {
       error: null,
     });
     mockUpdateStock.mockResolvedValue('feed-123');
-    mockMappingUpdate.mockResolvedValue({ error: null });
+    mockMappingUpdate.mockResolvedValue({ data: { id: 'm1' }, error: null });
 
     const res = await POST(makeRequest(INT_ID));
     expect(res.status).toBe(200);
@@ -290,7 +310,7 @@ describe('POST /api/marketplace/jumia/products/stock', () => {
       error: null,
     });
     mockUpdateStock.mockResolvedValue('feed-456');
-    mockMappingUpdate.mockResolvedValue({ error: null });
+    mockMappingUpdate.mockResolvedValue({ data: { id: 'm1' }, error: null });
 
     const res = await POST(makeRequest(INT_ID));
     const body = await res.json();
@@ -460,7 +480,7 @@ describe('POST /api/marketplace/jumia/products/stock', () => {
       feedItems: [],
     });
     mockUpdateStock.mockResolvedValue('feed-retry');
-    mockMappingUpdate.mockResolvedValue({ error: null });
+    mockMappingUpdate.mockResolvedValue({ data: { id: 'm1' }, error: null });
 
     const res = await POST(makeRequest(INT_ID));
     expect(res.status).toBe(200);
@@ -511,7 +531,7 @@ describe('POST /api/marketplace/jumia/products/stock', () => {
       failed: 0,
       feedItems: [],
     });
-    mockMappingUpdate.mockResolvedValue({ error: null });
+    mockMappingUpdate.mockResolvedValue({ data: { id: 'm1' }, error: null });
 
     const res = await POST(makeRequest(INT_ID));
     expect(res.status).toBe(200);

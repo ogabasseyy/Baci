@@ -46,9 +46,18 @@ function feed(overrides: Record<string, unknown> = {}) {
 function supabase() {
   return {
     from: vi.fn(() => ({
-      update: (...args: unknown[]) => ({
-        eq: vi.fn().mockImplementation(() => mockUpdate(...args)),
-      }),
+      update: (...updateArgs: unknown[]) => {
+        const chain: {
+          eq: (...args: unknown[]) => unknown;
+          select: (...args: unknown[]) => unknown;
+          maybeSingle: (...args: unknown[]) => unknown;
+        } = {
+          eq: () => chain,
+          select: () => chain,
+          maybeSingle: () => mockUpdate(...updateArgs),
+        };
+        return chain;
+      },
     })),
   } as never;
 }
@@ -56,7 +65,7 @@ function supabase() {
 describe('reconcileJumiaStockFeeds', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUpdate.mockResolvedValue({ error: null });
+    mockUpdate.mockResolvedValue({ data: { id: 'mapping-1' }, error: null });
   });
 
   it('skips mappings without an advanced cursor or feed', async () => {
@@ -216,6 +225,79 @@ describe('reconcileJumiaStockFeeds', () => {
 
     expect(result).toMatchObject({ cursorsReset: 0, failures: 1 });
     expect(mappings[0]?.baci_stock_at_last_sync).toBe(5);
+    expect(mappings[0]?.last_feed_id).toBe('feed-1');
+  });
+
+  it('guards confirmation writes with the observed feed id', async () => {
+    const eqCalls: [unknown, unknown][] = [];
+    const from = vi.fn(() => ({
+      update: () => {
+        const chain: {
+          eq: (...args: unknown[]) => unknown;
+          select: (...args: unknown[]) => unknown;
+          maybeSingle: (...args: unknown[]) => unknown;
+        } = {
+          eq: (column: unknown, value: unknown) => {
+            eqCalls.push([column, value]);
+            return chain;
+          },
+          select: () => chain,
+          maybeSingle: () =>
+            Promise.resolve({ data: { id: 'mapping-1' }, error: null }),
+        };
+        return chain;
+      },
+    }));
+    mockGetFeedStatus.mockResolvedValueOnce(feed({ status: 'completed' }));
+
+    const result = await reconcileJumiaStockFeeds(
+      { from } as never,
+      {} as never,
+      { mappings: [mapping({})] }
+    );
+
+    expect(result.feedsConfirmed).toBe(1);
+    expect(eqCalls).toContainEqual(['id', 'mapping-1']);
+    expect(eqCalls).toContainEqual(['last_feed_id', 'feed-1']);
+  });
+
+  it('treats zero-row reset writes as stale instead of failing', async () => {
+    const mappings = [mapping({})];
+    mockGetFeedStatus.mockResolvedValueOnce(
+      feed({ status: 'failed', completed: 0, failed: 1 })
+    );
+    // A concurrent run recorded a newer feed after this run read feed-1.
+    mockUpdate.mockResolvedValueOnce({ data: null, error: null });
+
+    const result = await reconcileJumiaStockFeeds(supabase(), {} as never, {
+      mappings,
+    });
+
+    expect(result).toEqual({
+      feedsChecked: 1,
+      cursorsReset: 0,
+      feedsConfirmed: 0,
+      failures: 0,
+    });
+    expect(mappings[0]?.baci_stock_at_last_sync).toBe(5);
+    expect(mappings[0]?.last_feed_id).toBe('feed-1');
+  });
+
+  it('treats zero-row confirmation writes as stale instead of failing', async () => {
+    const mappings = [mapping({})];
+    mockGetFeedStatus.mockResolvedValueOnce(feed({ status: 'completed' }));
+    mockUpdate.mockResolvedValueOnce({ data: null, error: null });
+
+    const result = await reconcileJumiaStockFeeds(supabase(), {} as never, {
+      mappings,
+    });
+
+    expect(result).toEqual({
+      feedsChecked: 1,
+      cursorsReset: 0,
+      feedsConfirmed: 0,
+      failures: 0,
+    });
     expect(mappings[0]?.last_feed_id).toBe('feed-1');
   });
 });

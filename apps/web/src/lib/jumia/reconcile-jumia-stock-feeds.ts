@@ -107,11 +107,11 @@ export async function reconcileJumiaStockFeeds(
       (feed.feedItems.length === 0 && feed.failed > 0)
     ) {
       for (const mapping of mappingsForFeed) {
-        if (await resetStockCursor(supabase, mapping)) {
-          result.cursorsReset++;
-        } else {
-          result.failures++;
-        }
+        tallyStockCursorWrite(
+          result,
+          await resetStockCursor(supabase, mapping, feedId),
+          'cursorsReset'
+        );
       }
       continue;
     }
@@ -127,17 +127,17 @@ export async function reconcileJumiaStockFeeds(
       );
       if (!mapping) continue;
       if (isFailedFeedStatus(item.status)) {
-        if (await resetStockCursor(supabase, mapping)) {
-          result.cursorsReset++;
-        } else {
-          result.failures++;
-        }
+        tallyStockCursorWrite(
+          result,
+          await resetStockCursor(supabase, mapping, feedId),
+          'cursorsReset'
+        );
       } else if (isAcceptedFeedStatus(item.status)) {
-        if (await confirmStockFeed(supabase, mapping)) {
-          result.feedsConfirmed++;
-        } else {
-          result.failures++;
-        }
+        tallyStockCursorWrite(
+          result,
+          await confirmStockFeed(supabase, mapping, feedId),
+          'feedsConfirmed'
+        );
       }
     }
 
@@ -146,11 +146,11 @@ export async function reconcileJumiaStockFeeds(
       // longer carry this feed id.
       for (const mapping of mappingsForFeed) {
         if (mapping.last_feed_id !== feedId) continue;
-        if (await confirmStockFeed(supabase, mapping)) {
-          result.feedsConfirmed++;
-        } else {
-          result.failures++;
-        }
+        tallyStockCursorWrite(
+          result,
+          await confirmStockFeed(supabase, mapping, feedId),
+          'feedsConfirmed'
+        );
       }
     }
     // Otherwise the feed is still processing: pending mappings keep their
@@ -160,47 +160,73 @@ export async function reconcileJumiaStockFeeds(
   return result;
 }
 
+type StockCursorWriteOutcome = 'applied' | 'stale' | 'failed';
+
+function tallyStockCursorWrite(
+  result: JumiaStockFeedReconciliation,
+  outcome: StockCursorWriteOutcome,
+  appliedKey: 'cursorsReset' | 'feedsConfirmed'
+): void {
+  if (outcome === 'applied') {
+    result[appliedKey] += 1;
+  } else if (outcome === 'failed') {
+    result.failures += 1;
+  }
+  // 'stale': a concurrent run already recorded a newer feed on this
+  // mapping; leave it alone so the newer feed is reconciled in turn.
+}
+
 async function resetStockCursor(
   supabase: SupabaseClient,
-  mapping: JumiaStockMapping
-): Promise<boolean> {
-  const { error } = await supabase
+  mapping: JumiaStockMapping,
+  feedId: string
+): Promise<StockCursorWriteOutcome> {
+  const { data, error } = await supabase
     .from('jumia_product_mappings')
     .update({
       baci_stock_at_last_sync: null,
       last_stock_synced_at: null,
       last_feed_id: null,
     })
-    .eq('id', mapping.id);
+    .eq('id', mapping.id)
+    .eq('last_feed_id', feedId)
+    .select('id')
+    .maybeSingle<{ id: string }>();
   if (error) {
     logger.error({
       message: 'Failed to reset rejected Jumia stock cursor',
       error,
       mapping_id: mapping.id,
     });
-    return false;
+    return 'failed';
   }
+  if (!data) return 'stale';
   mapping.baci_stock_at_last_sync = null;
   mapping.last_feed_id = null;
-  return true;
+  return 'applied';
 }
 
 async function confirmStockFeed(
   supabase: SupabaseClient,
-  mapping: JumiaStockMapping
-): Promise<boolean> {
-  const { error } = await supabase
+  mapping: JumiaStockMapping,
+  feedId: string
+): Promise<StockCursorWriteOutcome> {
+  const { data, error } = await supabase
     .from('jumia_product_mappings')
     .update({ last_feed_id: null })
-    .eq('id', mapping.id);
+    .eq('id', mapping.id)
+    .eq('last_feed_id', feedId)
+    .select('id')
+    .maybeSingle<{ id: string }>();
   if (error) {
     logger.error({
       message: 'Failed to confirm Jumia stock feed',
       error,
       mapping_id: mapping.id,
     });
-    return false;
+    return 'failed';
   }
+  if (!data) return 'stale';
   mapping.last_feed_id = null;
-  return true;
+  return 'applied';
 }

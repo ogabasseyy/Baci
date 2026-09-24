@@ -134,6 +134,60 @@ describe('refreshJumiaClientAccessToken', () => {
     );
   });
 
+  it('routes lease and rotation calls through the credential client when provided', async () => {
+    const credentialRpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: 'lease-token', error: null })
+      .mockResolvedValueOnce({ data: 2, error: null });
+    const generalRpc = vi.fn();
+    const fetchWithThrottle = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: 'fresh-access-token',
+          refresh_token: 'fresh-refresh-token',
+          expires_in: 3600,
+          refresh_expires_in: 86400,
+          token_type: 'Bearer',
+        }),
+        { status: 200 }
+      )
+    );
+
+    const result = await refreshJumiaClientAccessToken(
+      {
+        integrationId: 'integration-1',
+        merchantId: 'merchant-1',
+        accessToken: 'stale-access',
+        refreshToken: 'refresh-token',
+        clientId: 'client-id',
+        authorizationId: 'auth-1',
+        authorizationRotationVersion: 1,
+        tokenExpiresAt: null,
+        refreshTokenExpiresAt: null,
+        supabase: { rpc: generalRpc } as never,
+        credentialClient: { rpc: credentialRpc } as never,
+        apiBase: 'https://api.jumia.test',
+      },
+      fetchWithThrottle
+    );
+
+    expect(result.accessToken).toBe('fresh-access-token');
+    expect(credentialRpc).toHaveBeenNthCalledWith(
+      1,
+      'claim_jumia_authorization_refresh_lease',
+      expect.objectContaining({ p_authorization_id: 'auth-1' })
+    );
+    expect(credentialRpc).toHaveBeenNthCalledWith(
+      2,
+      'rotate_jumia_authorization_credentials',
+      expect.objectContaining({
+        p_credential_ciphertext: 'encrypted-ciphertext',
+        p_refresh_lease_token: 'lease-token',
+      })
+    );
+    expect(generalRpc).not.toHaveBeenCalled();
+  });
+
   it('exchanges carried credentials when a rotation wins during the lease wait', async () => {
     vi.mocked(loadJumiaAuthorizationGrant).mockResolvedValue({
       credential_ciphertext: 'stored-ciphertext',

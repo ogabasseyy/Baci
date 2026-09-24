@@ -36,6 +36,7 @@ export type JumiaClientConfig = {
   tokenExpiresAt: Date | null;
   refreshTokenExpiresAt?: Date | null;
   supabase: SupabaseClient;
+  credentialClient?: JumiaCredentialServiceClient;
 };
 
 async function toJumiaClientConfig(
@@ -95,6 +96,9 @@ async function toJumiaClientConfig(
       ? new Date(refreshTokenExpiresAt)
       : null,
     supabase,
+    // Retain the restricted client so token refresh/rotation reuses the same
+    // credential boundary as the initial grant load.
+    credentialClient,
   };
 }
 

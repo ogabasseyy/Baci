@@ -38,6 +38,7 @@ export class JumiaClient {
   private authorizationRotationVersion: number | undefined;
   private environment: JumiaEnvironment;
   private supabase: SupabaseClient | null;
+  private credentialClient: JumiaCredentialServiceClient | null;
 
   constructor(config: {
     integrationId: string;
@@ -54,6 +55,7 @@ export class JumiaClient {
     refreshTokenExpiresAt?: Date | null;
     environment?: JumiaEnvironment;
     supabase?: SupabaseClient;
+    credentialClient?: JumiaCredentialServiceClient;
   }) {
     this.integrationId = config.integrationId;
     this.merchantId = config.merchantId;
@@ -72,6 +74,7 @@ export class JumiaClient {
     this.refreshTokenExpiresAt = config.refreshTokenExpiresAt ?? null;
     this.environment = config.environment ?? getJumiaEnvironment();
     this.supabase = config.supabase ?? null;
+    this.credentialClient = config.credentialClient ?? null;
   }
 
   static async forIntegration(
@@ -123,6 +126,7 @@ export class JumiaClient {
         tokenExpiresAt: this.tokenExpiresAt,
         refreshTokenExpiresAt: this.refreshTokenExpiresAt,
         supabase: this.supabase,
+        credentialClient: this.credentialClient,
         apiBase: this.apiBase,
       },
       (url, init) => this.fetchWithThrottle(url, init)

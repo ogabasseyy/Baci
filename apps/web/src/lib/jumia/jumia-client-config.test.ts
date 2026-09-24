@@ -226,15 +226,21 @@ describe('jumia-client-config', () => {
     });
     const credentialClient = { credential: true };
 
-    await loadJumiaIntegrationConfig(supabase, 'merchant-abc', 'int-123', {
-      credentialClient: credentialClient as never,
-    });
+    const config = await loadJumiaIntegrationConfig(
+      supabase,
+      'merchant-abc',
+      'int-123',
+      {
+        credentialClient: credentialClient as never,
+      }
+    );
 
     expect(mockLoadGrant).toHaveBeenCalledWith(
       credentialClient,
       'auth-1',
       'merchant-abc'
     );
+    expect(config.credentialClient).toBe(credentialClient);
   });
 
   it('throws when the self-authorization grant is unavailable', async () => {

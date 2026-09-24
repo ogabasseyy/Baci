@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { JumiaApiError } from '@/lib/jumia/helpers';
+import type { JumiaCredentialServiceClient } from '@/lib/supabase/service';
 import {
   JumiaSelfAuthorizationTokenResponseSchema,
   JumiaTokenResponseSchema,
@@ -35,6 +36,7 @@ export type JumiaClientTokenPersistenceState = {
   tokenExpiresAt: Date | null;
   refreshTokenExpiresAt?: Date | null;
   supabase: SupabaseClient | null;
+  credentialClient?: JumiaCredentialServiceClient | null;
   apiBase: string;
 };
 
@@ -111,13 +113,16 @@ async function refreshJumiaClientAccessTokenOnce(
   }
 
   const supabase = getScopedSupabaseForPersistence(state);
+  // Lease, grant-reload, and rotation calls touch authorization ciphertext,
+  // so they reuse the restricted credential client when one was provided.
+  const credentialScoped = state.credentialClient ?? supabase;
   let refreshLeaseToken: string | null = null;
   let carriedCredentials: CarriedJumiaAuthorizationCredentials | undefined;
 
   if (state.authorizationId) {
     const leaseResult = await acquireJumiaAuthorizationRefreshLease(
       toRefreshState(state),
-      supabase
+      credentialScoped
     );
     if ('reloaded' in leaseResult) {
       return leaseResult.reloaded;
@@ -193,7 +198,7 @@ async function refreshJumiaClientAccessTokenOnce(
                 carriedCredentials.authorizationRotationVersion,
             }
           : state,
-        supabase,
+        supabase: credentialScoped,
         refreshLeaseToken,
         data: selfAuthorizationData.data,
         tokenExpiresAt,
@@ -243,7 +248,7 @@ async function refreshJumiaClientAccessTokenOnce(
           authorizationId: state.authorizationId,
           merchantId: state.merchantId,
           leaseToken: refreshLeaseToken,
-          supabase,
+          supabase: credentialScoped,
         });
       } catch (releaseError) {
         console.error(

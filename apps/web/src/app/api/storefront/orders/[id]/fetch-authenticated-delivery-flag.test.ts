@@ -1,8 +1,9 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { fetchAuthenticatedDeliveryFlag } from './fetch-authenticated-delivery-flag';
 
 function clientFor(rpc: ReturnType<typeof vi.fn>) {
-  return { rpc };
+  return { rpc: rpc as unknown as SupabaseClient['rpc'] };
 }
 
 describe('fetchAuthenticatedDeliveryFlag', () => {

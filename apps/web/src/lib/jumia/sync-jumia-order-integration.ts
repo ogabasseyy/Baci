@@ -12,8 +12,7 @@ import {
 } from './order-sync-mappers';
 import {
   getJumiaNotificationAttemptKey,
-  hasSentJumiaOrderNotification,
-  markJumiaNotificationSent,
+  sendJumiaOrderNotification,
 } from './order-sync-notifications';
 import type {
   buildExistingJumiaCacheEntry,
@@ -155,85 +154,21 @@ export async function syncJumiaOrderIntegration(
       else result.canonicalCreated += 1;
 
       if (shouldNotify) {
-        // A previous run may have delivered the push while the marker
-        // write failed; the durable attempt log suppresses the resend and
-        // the marker is repaired best-effort below.
-        const alreadyDelivered = await hasSentJumiaOrderNotification(
-          supabase,
-          integration.merchant_id,
-          order.id
-        );
-        if (alreadyDelivered) {
-          await markJumiaNotificationSent(
-            supabase,
-            integration.merchant_id,
-            order.id
-          );
-        } else {
-          attemptedNotificationKeys.add(notificationKey);
-          const rawNotificationResult =
-            await dependencies.notifySyncedJumiaOrder(
-              integration.merchant_id,
-              order,
-              canonicalOrder.id
-            );
-          if (!rawNotificationResult) {
-            logger.warn({
-              message: 'Jumia order notification returned no delivery result',
-              merchantId: integration.merchant_id,
-              integrationId: integration.id,
-              jumiaOrderId: order.id,
-              baciOrderId: canonicalOrder.id,
-            });
-          }
-          const notificationResult = rawNotificationResult ?? {
-            sent: 0,
-            failed: 0,
-            errors: [],
-          };
-          if (notificationResult.sent > 0) {
+        await sendJumiaOrderNotification(supabase, {
+          merchantId: integration.merchant_id,
+          integrationId: integration.id,
+          order,
+          canonicalOrderId: canonicalOrder.id,
+          notificationKey,
+          attemptedNotificationKeys,
+          existingJumiaOrders,
+          notifySyncedJumiaOrder: dependencies.notifySyncedJumiaOrder,
+          buildExistingJumiaCacheEntry:
+            dependencies.buildExistingJumiaCacheEntry,
+          onNotified: () => {
             result.notified += 1;
-            // The push provider accepted the notification. Keep duplicated Jumia
-            // pages in this run from rebuilding a stale cache row as unnotified.
-            existingJumiaOrders.set(
-              order.id,
-              dependencies.buildExistingJumiaCacheEntry(
-                order.id,
-                true,
-                canonicalOrder.id
-              )
-            );
-            const notificationUpdateError = await markJumiaNotificationSent(
-              supabase,
-              integration.merchant_id,
-              order.id
-            );
-            if (notificationUpdateError) {
-              const markerErrorMessage = `Failed to mark Jumia notification as sent: ${notificationUpdateError.message}`;
-              logger.error({
-                message: 'Failed to mark Jumia order notification as sent',
-                merchantId: integration.merchant_id,
-                integrationId: integration.id,
-                jumiaOrderId: order.id,
-                error: notificationUpdateError,
-              });
-              throw new Error(markerErrorMessage);
-            }
-          }
-          if (
-            notificationResult.failed > 0 ||
-            notificationResult.errors.length > 0
-          ) {
-            const failureDetails = [
-              ...notificationResult.errors,
-              notificationResult.failed > 0 &&
-                `${notificationResult.failed} push notification(s) failed`,
-            ].filter(Boolean);
-            throw new Error(
-              `Failed to notify merchant for Jumia order: ${failureDetails.join('; ')}`
-            );
-          }
-        }
+          },
+        });
       }
 
       result.synced += 1;

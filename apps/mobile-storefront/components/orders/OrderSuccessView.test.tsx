@@ -82,17 +82,17 @@ describe('OrderSuccessView', () => {
       />
     );
 
-    expect(screen.getByText('Invoice ready')).toBeTruthy();
-    expect(screen.getByText('Invoice Created')).toBeTruthy();
+    expect(screen.getByText('Proforma invoice ready')).toBeTruthy();
+    expect(screen.getByText('Proforma Invoice Ready!')).toBeTruthy();
     expect(screen.queryByText('Order Placed!')).toBeNull();
     expect(screen.getByText('Delivery Timeline')).toBeTruthy();
     expect(screen.getByText('Shared after order confirmation')).toBeTruthy();
-    expect(screen.getByText('Invoice')).toBeTruthy();
-    expect(screen.getByText('View / Download Invoice')).toBeTruthy();
+    expect(screen.getByText('Proforma Invoice')).toBeTruthy();
+    expect(screen.getByText('View / Download Proforma Invoice')).toBeTruthy();
     expect(screen.queryByText('Payment Ref')).toBeNull();
 
     fireEvent.press(
-      screen.getByRole('button', { name: 'View / Download Invoice' })
+      screen.getByRole('button', { name: 'View / Download Proforma Invoice' })
     );
     expect(onViewDocument).toHaveBeenCalledTimes(1);
   });

@@ -75,8 +75,9 @@ describe('startWalletFundedBankTransferCheckout', () => {
   it('routes to wallet-funded bank transfer when intent creation succeeds', async () => {
     mockCreateWalletFundedBankTransferIntent.mockImplementation(
       async ({ onSuccess }) => {
-        onSuccess(createFundingResponse());
-        return true;
+        const response = createFundingResponse();
+        onSuccess(response);
+        return response;
       }
     );
     const isOrderInFlight = { current: true };
@@ -86,11 +87,12 @@ describe('startWalletFundedBankTransferCheckout', () => {
       isOrderInFlight,
       orderId: 'order-1',
       orderNumber: 'BAC-001',
+      orderTotal: 470000,
       setIsProcessing,
       trackingToken: 'tracking-token',
     });
 
-    expect(started).toBe(true);
+    expect(started).toBe('11111111-1111-4111-8111-111111111111');
     expect(isOrderInFlight.current).toBe(false);
     expect(setIsProcessing).toHaveBeenCalledWith(false);
     expect(mockRouterPush).toHaveBeenCalledWith({
@@ -103,8 +105,50 @@ describe('startWalletFundedBankTransferCheckout', () => {
         intentId: '11111111-1111-4111-8111-111111111111',
         orderId: 'order-1',
         orderNumber: 'BAC-001',
+        orderTotal: '470000',
         trackingToken: 'tracking-token',
         walletFunded: 'true',
+      }),
+    });
+  });
+
+  it('carries the checkout attribution snapshot onto the bank-transfer route', async () => {
+    mockCreateWalletFundedBankTransferIntent.mockImplementation(
+      async ({ onSuccess }) => {
+        const response = createFundingResponse();
+        onSuccess(response);
+        return response;
+      }
+    );
+
+    await startWalletFundedBankTransferCheckout({
+      attribution: {
+        customerEmail: 'guest@example.com',
+        customerPhone: '+2348123456789',
+        subtotal: 450000,
+        shipping: 15000,
+        tax: 5000,
+      },
+      isOrderInFlight: { current: true },
+      orderId: 'order-1',
+      orderNumber: 'BAC-001',
+      orderTotal: 470000,
+      setIsProcessing: jest.fn(),
+      trackingToken: 'tracking-token',
+    });
+
+    // The wallet-funded completion wins the durable claim after the cart
+    // may clear: identity and breakdown must travel on the route since the
+    // success screen cannot enrich the claim afterwards.
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/bank-transfer',
+      params: expect.objectContaining({
+        orderId: 'order-1',
+        customerEmail: 'guest@example.com',
+        customerPhone: '+2348123456789',
+        subtotal: '450000',
+        shipping: '15000',
+        tax: '5000',
       }),
     });
   });
@@ -118,7 +162,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
           error: new Error('Paystack unavailable'),
           message: 'Paystack unavailable',
         });
-        return false;
+        return null;
       }
     );
 
@@ -126,10 +170,11 @@ describe('startWalletFundedBankTransferCheckout', () => {
       isOrderInFlight: { current: true },
       orderId: 'order-1',
       orderNumber: 'BAC-001',
+      orderTotal: 470000,
       setIsProcessing: jest.fn(),
     });
 
-    expect(started).toBe(false);
+    expect(started).toBeNull();
     expect(mockTrackError).toHaveBeenCalledWith(
       'wallet_order_funding_intent_failed',
       'Paystack unavailable',
@@ -150,7 +195,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
     mockCreateWalletFundedBankTransferIntent.mockImplementation(
       async ({ requestConsent }) => {
         const consent = await requestConsent();
-        return consent;
+        return consent ? createFundingResponse() : null;
       }
     );
 
@@ -158,10 +203,11 @@ describe('startWalletFundedBankTransferCheckout', () => {
       isOrderInFlight: { current: true },
       orderId: 'order-1',
       orderNumber: 'BAC-001',
+      orderTotal: 470000,
       setIsProcessing: jest.fn(),
     });
 
-    expect(started).toBe(true);
+    expect(started).toBe('11111111-1111-4111-8111-111111111111');
     expect(mockAlert).not.toHaveBeenCalled();
   });
 });

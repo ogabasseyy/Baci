@@ -296,6 +296,13 @@ jobs:
           pnpm --filter @baci/web db:replay:chronological
           --sql-check supabase/tests/order_notification_outbox_rpc_privileges.sql
           --sql-check supabase/tests/paystack_order_dva_balance_refresh_permissions.sql
+          --sql-check supabase/migrations/tests/immediate_order_notification_claims.sql
+          --sql-check supabase/migrations/tests/immediate_order_notification_proof_claims.sql
+          --sql-check supabase/migrations/tests/sessionless_payment_reference_snapshot.sql
+          --sql-check supabase/migrations/tests/order_notification_delivered_lookup.sql
+          --sql-check supabase/migrations/tests/tracking_order_notification_delivered_token.sql
+          --sql-check supabase/migrations/tests/tracking_order_notification_pending.sql
+          --sql-check supabase/migrations/tests/tracking_order_notification_privileges.sql
           --sql-check supabase/tests/paystack_order_dva_balance_refresh_history.sql
           --sql-check supabase/tests/agentic_paystack_dva_alias_conflict.sql
           --sql-check supabase/tests/shipping_provider_settings.sql
@@ -337,6 +344,7 @@ jobs:
           --sql-check supabase/tests/repair_booking_rpc.sql
           --sql-check supabase/migrations/tests/normalize_product_key_specs_gpu.sql
           --sql-check supabase/migrations/tests/santa_catalog_projection.sql
+          --sql-check supabase/migrations/tests/guest_snapshot_inventory_proof.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

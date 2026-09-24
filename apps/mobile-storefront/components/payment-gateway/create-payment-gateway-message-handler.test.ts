@@ -8,6 +8,10 @@ jest.mock('expo-router', () => ({
   },
 }));
 
+jest.mock('@/services/tiktok-checkout-route-tracking', () => ({
+  trackCheckoutRoutePurchaseCompleted: jest.fn(),
+}));
+
 import {
   createHandler,
   sendMessage,

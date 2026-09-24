@@ -1,4 +1,8 @@
-import type { ReceiptMerchant, ReceiptOrder } from '@baci/shared';
+import {
+  type ReceiptMerchant,
+  type ReceiptOrder,
+  showMerchantBankDetails,
+} from '@baci/shared';
 import type {
   StorefrontAccountDocumentMerchantRow,
   StorefrontAccountDocumentOrderRow,
@@ -29,8 +33,13 @@ interface BuildReceiptOrderInput {
 }
 
 export function buildReceiptMerchant(
-  merchant: StorefrontAccountDocumentMerchantRow
+  merchant: StorefrontAccountDocumentMerchantRow,
+  orderCurrency: string
 ): ReceiptMerchant {
+  // Same foreign-currency rule as the order-create invoice email: the
+  // merchant-bank fallback must not print a naira account on a
+  // dollar-denominated download or preview.
+  const showBankDetails = showMerchantBankDetails(orderCurrency);
   return {
     business_name: merchant.business_name,
     logo_url: merchant.logo_url,
@@ -50,10 +59,10 @@ export function buildReceiptMerchant(
     ) as ReceiptMerchant['brand_colors'],
     vat_registration_status: merchant.vat_registration_status,
     vat_rate: merchant.vat_rate,
-    bank_code: merchant.bank_code,
-    bank_account_number: merchant.bank_account_number,
-    bank_name: merchant.bank_name,
-    bank_account_name: merchant.bank_account_name,
+    bank_code: showBankDetails ? merchant.bank_code : null,
+    bank_account_number: showBankDetails ? merchant.bank_account_number : null,
+    bank_name: showBankDetails ? merchant.bank_name : null,
+    bank_account_name: showBankDetails ? merchant.bank_account_name : null,
     social_media: asRecord(
       merchant.social_media
     ) as ReceiptMerchant['social_media'],
@@ -62,6 +71,12 @@ export function buildReceiptMerchant(
 }
 
 export function buildReceiptOrder(input: BuildReceiptOrderInput): ReceiptOrder {
+  // Same NGN-only rule as the merchant fallback above: the persisted
+  // Paystack DVA is an untyped naira account, so a foreign-currency
+  // document must not print it beside a dollar-denominated balance. The
+  // renderer prefers the order-level account, so gating only the merchant
+  // fields leaves the gap open.
+  const showBankDetails = showMerchantBankDetails(input.currency);
   return {
     order_number: input.order.order_number,
     created_at: input.order.created_at,
@@ -82,13 +97,14 @@ export function buildReceiptOrder(input: BuildReceiptOrderInput): ReceiptOrder {
     customer_email: input.customerEmail,
     customer_phone: input.customerPhone,
     shipping_address: input.shippingAddress,
-    virtual_account: input.paymentAccount
-      ? {
-          account_number: input.paymentAccount.account_number,
-          bank_name: input.paymentAccount.bank_name || '',
-          account_name: input.paymentAccount.account_name || '',
-        }
-      : null,
+    virtual_account:
+      showBankDetails && input.paymentAccount
+        ? {
+            account_number: input.paymentAccount.account_number,
+            bank_name: input.paymentAccount.bank_name || '',
+            account_name: input.paymentAccount.account_name || '',
+          }
+        : null,
     fulfillment_details: input.order.fulfillment_details
       ? (asRecord(
           input.order.fulfillment_details

@@ -291,11 +291,14 @@ describe('useCheckoutSubmit rollback credit', () => {
     // with an unpaid order and an empty cart.
     expect(mockRunFinalizeCheckoutPayment).not.toHaveBeenCalled();
     expect(mockRestore).not.toHaveBeenCalled();
+    // The order was still committed before the marker read failed, so the
+    // funnel failure carries its id and serializes behind order_created.
     expect(mockHandleSubmitError).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringMatching(/cart is unchanged/i),
       }),
-      'paystack'
+      'paystack',
+      'order-1'
     );
   });
 });

@@ -14,6 +14,9 @@ const walletFundingRecoveryClientBrand: unique symbol = Symbol(
 const shippingQuoteBookingEconomicsClientBrand: unique symbol = Symbol(
   'baci.shipping-quote-booking-economics.service-role-client'
 );
+const immediateNotificationCompletionClientBrand: unique symbol = Symbol(
+  'baci.immediate-notification-completion.service-role-client'
+);
 const serviceRoleBrandValue: true = true;
 
 export type ServiceRoleClient = SupabaseClient<Database> & {
@@ -56,6 +59,19 @@ export type ShippingQuoteBookingEconomicsServiceClient =
   };
 
 /**
+ * A service-role client reserved for immediate-notification completion
+ * HMAC provisioning.
+ *
+ * Keep this type distinct from `ServiceRoleClient` so the cron helper cannot be
+ * passed into event-pipeline helpers. Callers must authenticate with
+ * `CRON_SECRET` before constructing it.
+ */
+export type ImmediateNotificationCompletionServiceClient =
+  SupabaseClient<Database> & {
+    readonly [immediateNotificationCompletionClientBrand]: true;
+  };
+
+/**
  * Creates a Supabase client with service role key for admin operations.
  * This client bypasses RLS policies and should only be used in:
  * - Webhook handlers (no user context)
@@ -76,6 +92,9 @@ export function createServiceClient(
 export function createServiceClient(
   sentinel: 'shipping-quote-booking-economics'
 ): ShippingQuoteBookingEconomicsServiceClient;
+export function createServiceClient(
+  sentinel: 'immediate-notification-completion'
+): ImmediateNotificationCompletionServiceClient;
 export function createServiceClient(): SupabaseClient;
 export function createServiceClient(
   sentinel?:
@@ -83,6 +102,7 @@ export function createServiceClient(
     | 'ads-credentials'
     | 'wallet-funding-recovery'
     | 'shipping-quote-booking-economics'
+    | 'immediate-notification-completion'
 ) {
   const url = getSupabaseUrl();
   // `SUPABASE_ADS_CREDENTIAL_KEY` is the preferred deployment secret for the

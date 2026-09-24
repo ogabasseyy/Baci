@@ -1,5 +1,6 @@
 export * from './order-cancellation';
 export * from './order-confirmation';
+export * from './order-confirmation-text';
 export * from './order-delivered';
 export * from './order-shipped';
 export * from './order-updated';

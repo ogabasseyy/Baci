@@ -1,13 +1,4 @@
-import {
-  appendReceiptFulfillmentDescription,
-  formatCanonicalProductConditionLabel,
-  formatOrderItemDisplayName,
-  isDeviceReceiptItemName,
-  normalizeReceiptFulfillmentDetails,
-  type ReceiptFulfillmentDetails,
-  type ReceiptMerchant,
-  type ReceiptOrder,
-} from '@baci/shared';
+import type { ReceiptOrder } from '@baci/shared';
 import { cookies } from 'next/headers';
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { getQuizPhaseEnv, getQuizProductionApprovedEnv } from '@/env';
@@ -16,6 +7,7 @@ import {
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
+import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
@@ -28,7 +20,6 @@ import {
   computeRedvaultOrderQuote,
   type RedvaultOrderQuote,
 } from '@/lib/checkout/compute-redvault-order-quote';
-import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { createRedvaultCheckoutResponse } from '@/lib/checkout/create-redvault-checkout-response';
 import type { createTransactionDiscountProof } from '@/lib/checkout/create-transaction-discount-proof';
 import { createTransactionDiscountProofForCheckout } from '@/lib/checkout/create-transaction-discount-proof-for-checkout';
@@ -45,34 +36,37 @@ import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempote
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
 import { validateRedvaultRequest } from '@/lib/checkout/validate-redvault-request';
-import {
-  generateOrderConfirmationEmail,
-  generateOrderConfirmationText,
-} from '@/lib/email-templates';
 import { recordPlatformOrderCreatedEvent } from '@/lib/events/record-platform-order-created-event';
 import { hasPriceNegotiationEntitlement } from '@/lib/feature-flags';
-import { formatVariantAttributesLabel } from '@/lib/format-variant-attributes-label';
 import { detectPrivacyRegion } from '@/lib/geo-privacy';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
-import type {
-  InvoiceData,
-  InvoiceLineItem,
-  TaxSubtotal,
-} from '@/lib/invoice-generator';
-import { mergeReceiptItemsWithInvoiceMetadata } from '@/lib/invoice-receipt-item-metadata';
-import { logger } from '@/lib/logger';
-import { dispatchOrderCreationNotifications } from '@/lib/order-notification-dispatch';
-import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
-import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
-import { recordPreGatewayRedemption } from '@/lib/payments/record-pre-gateway-redemption';
-import { generatePaymentAccount } from '@/lib/paystack';
 import {
-  generatePeppolInvoiceXml,
-  PEPPOL_BIS_BILLING_COMPLIANCE_NOTE,
-} from '@/lib/peppol-ubl-invoice';
+  claimImmediateOrderNotificationWithProof,
+  completeImmediateOrderNotificationWithProof,
+} from '@/lib/immediate-order/notification-claim';
+import { markImmediateOrderNotificationStartedWithProof } from '@/lib/immediate-order/notification-start-marker';
+import {
+  buildImmediateInvoiceArtifacts,
+  getOrderItemCondition,
+  getOrderItemDisplayName,
+  getOrderItemProductId,
+  getOrderItemVariantLabel,
+  type ImmediateOrderNotificationContext,
+  type PreResponsePayformeProvisioning,
+  provisionPayformeRetryDva,
+  provisionPreResponsePayformeDva,
+  queueMerchantOrderNotifications,
+  roundCurrency,
+  SERVER_ASSURANCE_RATE,
+  sendImmediateOrderConfirmationEmail,
+  toFiniteNumber,
+} from '@/lib/immediate-order-notification';
+import { logger } from '@/lib/logger';
+import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
+import { recordPreGatewayRedemption } from '@/lib/payments/record-pre-gateway-redemption';
 import {
   enforcePrizeProductionGuard,
   QuizProductionNotApprovedError,
@@ -80,10 +74,7 @@ import {
 import { createQuizRpcServerProof } from '@/lib/quiz-proof';
 import { verifyQuizVoucherToken } from '@/lib/quiz-voucher-token';
 import { getClientIdentifier } from '@/lib/rate-limit';
-import {
-  generateReceiptBlob,
-  resolveReceiptLogoDataUri,
-} from '@/lib/receipt-pdf-generator';
+import { resolveImmediateOrderEmail } from '@/lib/resolve-immediate-order-email';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { sanitizeLikePattern, sanitizeSearchQuery } from '@/lib/sanitize-core';
 import { toInternationalQuoteValidationItemsFromOrder } from '@/lib/shipping/international-shipment-items';
@@ -103,7 +94,6 @@ import {
 } from '@/lib/shipping/order-quote-destination';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
-import { sendEmail } from '@/lib/zeptomail';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
 import { storefrontDiscountCodeRowSchema } from '@/schemas/storefront-discount';
 
@@ -154,10 +144,6 @@ function getSavingsRedemptionIdempotencyKey({
   ].join(':');
 }
 
-/** Server-authoritative assurance rate — never trust the client value. */
-const SERVER_ASSURANCE_RATE = DEFAULT_ASSURANCE_RATE;
-// Imported from @/lib/feature-flags
-
 type EmailOrderItem = {
   condition?: string | null;
   name?: string;
@@ -195,41 +181,6 @@ type VoucherPaymentStatusItem = {
   price: number | string;
   quantity: number | string;
 };
-type ImmediateInvoiceOrderItem = Omit<OrderCreateItem, 'assurance_fee'> & {
-  assurance_fee?: number;
-  item_description?: string | null;
-  line_extension_amount?: number | null;
-  sellers_item_id?: string | null;
-  unit_code?: string | null;
-  variant_name?: string | null;
-  vat_amount?: number | null;
-  vat_category_code?: string | null;
-  vat_rate?: number | null;
-};
-type PersistedInvoiceOrderItemRow = {
-  assurance_fee?: unknown;
-  condition?: unknown;
-  has_assurance?: unknown;
-  id?: unknown;
-  item_description?: unknown;
-  line_extension_amount?: unknown;
-  name?: unknown;
-  price?: unknown;
-  product_id?: unknown;
-  quantity?: unknown;
-  sellers_item_id?: unknown;
-  unit_code?: unknown;
-  variant_attributes?: unknown;
-  variant_id?: unknown;
-  variant_name?: unknown;
-  vat_amount?: unknown;
-  vat_category_code?: unknown;
-  vat_rate?: unknown;
-};
-
-const IMMEDIATE_INVOICE_DUE_DAYS = 14;
-const PERSISTED_INVOICE_ITEMS_LOOKUP_ATTEMPTS = 3;
-const PERSISTED_INVOICE_ITEMS_RETRY_DELAY_MS = 50;
 
 function hasNonEmptyVoucherIdentifier(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -264,175 +215,8 @@ function getQuizVoucherToken(item: QuizVoucherItemCandidate): string | null {
   return null;
 }
 
-function getOrderItemProductId(item: OrderCreateItem): string | undefined {
-  return item.product_id || item.productId || item.id;
-}
-
 function getOrderItemVariantId(item: OrderCreateItem): string | null {
   return item.variantId || item.variant_id || null;
-}
-
-function getOrderItemCondition(item: {
-  condition?: string | null;
-}): string | null {
-  return item.condition || null;
-}
-
-function getOrderItemBaseName(item: {
-  name?: string;
-  productName?: string;
-}): string {
-  return item.name || item.productName || 'Product';
-}
-
-function getOrderItemVariantLabel(
-  item: {
-    condition?: string | null;
-    variantAttributes?: Record<string, string>;
-    variant_attributes?: Record<string, string>;
-    variantName?: string | null;
-    variant_name?: unknown;
-  },
-  options: { includeConditionFallback?: boolean } = {}
-): string | null {
-  const variantName = item.variantName || item.variant_name;
-  if (typeof variantName === 'string' && variantName.trim().length > 0) {
-    return variantName.trim();
-  }
-
-  const label = formatVariantAttributesLabel(
-    item.variantAttributes || item.variant_attributes
-  );
-
-  if (label) {
-    return label;
-  }
-
-  return options.includeConditionFallback === false
-    ? null
-    : (formatCanonicalProductConditionLabel(item.condition) ?? null);
-}
-
-function getOrderItemDisplayName(item: {
-  condition?: string | null;
-  name?: string;
-  productName?: string;
-  variantAttributes?: Record<string, string>;
-  variant_attributes?: Record<string, string>;
-  variantName?: string | null;
-  variant_name?: unknown;
-}) {
-  return formatOrderItemDisplayName({
-    baseName: getOrderItemBaseName(item),
-    condition: getOrderItemCondition(item),
-    variantName: getOrderItemVariantLabel(item),
-  });
-}
-
-function getOrderFulfillmentDetails(
-  order: Record<string, unknown>
-): ReceiptFulfillmentDetails | null {
-  return normalizeReceiptFulfillmentDetails(order.fulfillment_details);
-}
-
-function toReceiptRecord<T>(value: unknown): T | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return undefined;
-  }
-
-  return value as T;
-}
-
-function buildImmediateInvoiceMerchant(merchant: {
-  bank_account_name?: string | null;
-  bank_account_number?: string | null;
-  bank_code?: string | null;
-  bank_name?: string | null;
-  brand_colors?: unknown;
-  business_address?: string | null;
-  business_name?: string | null;
-  cac_rc_number?: string | null;
-  email?: string | null;
-  legal_entity_name?: string | null;
-  logo_url?: string | null;
-  pages?: unknown;
-  phone?: string | null;
-  registered_address?: unknown;
-  social_media?: unknown;
-  support_email?: string | null;
-  support_phone?: string | null;
-  tax_identification_number?: string | null;
-  vat_rate?: number | null;
-  vat_registration_status?: string | null;
-}): ReceiptMerchant {
-  return {
-    business_name: merchant.business_name || null,
-    logo_url: merchant.logo_url || null,
-    email: merchant.email || merchant.support_email || '',
-    phone: merchant.phone || null,
-    support_email: merchant.support_email || null,
-    support_phone: merchant.support_phone || null,
-    business_address: merchant.business_address || null,
-    registered_address: toReceiptRecord<ReceiptMerchant['registered_address']>(
-      merchant.registered_address
-    ),
-    cac_rc_number: merchant.cac_rc_number || null,
-    tax_identification_number: merchant.tax_identification_number || null,
-    legal_entity_name: merchant.legal_entity_name || null,
-    brand_colors: toReceiptRecord<ReceiptMerchant['brand_colors']>(
-      merchant.brand_colors
-    ),
-    vat_registration_status: merchant.vat_registration_status || null,
-    vat_rate: merchant.vat_rate ?? null,
-    bank_code: merchant.bank_code || null,
-    bank_account_number: merchant.bank_account_number || null,
-    bank_name: merchant.bank_name || null,
-    bank_account_name: merchant.bank_account_name || null,
-    social_media: toReceiptRecord<ReceiptMerchant['social_media']>(
-      merchant.social_media
-    ),
-    pages: toReceiptRecord<ReceiptMerchant['pages']>(merchant.pages),
-  };
-}
-
-function buildImmediateInvoiceShippingAddress(
-  shippingAddress: OrderCreateInput['shipping_address']
-): ReceiptOrder['shipping_address'] {
-  if (!shippingAddress) {
-    return null;
-  }
-
-  return {
-    address_line1: shippingAddress.address,
-    city: shippingAddress.city,
-    state: shippingAddress.state,
-    postal_code: shippingAddress.postalCode,
-    country: shippingAddress.countryCode || shippingAddress.country || 'NG',
-  };
-}
-
-function roundCurrency(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function getImmediateInvoiceIssueDate(order: Record<string, unknown>) {
-  return new Date(
-    typeof order.created_at === 'string' ? order.created_at : Date.now()
-  );
-}
-
-function getImmediateInvoiceDueDate(order: Record<string, unknown>) {
-  const issueDate = getImmediateInvoiceIssueDate(order);
-
-  return new Date(
-    issueDate.getTime() + IMMEDIATE_INVOICE_DUE_DAYS * 24 * 60 * 60 * 1000
-  );
-}
-
-function toFiniteNumber(value: unknown): number | null {
-  const numericValue = Number(value);
-
-  return Number.isFinite(numericValue) ? numericValue : null;
 }
 
 function getVoucherOrderAmountDueBeforeGateway({
@@ -462,30 +246,6 @@ function getVoucherOrderAmountDueBeforeGateway({
     ),
     0
   );
-}
-
-function getOptionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0
-    ? value.trim()
-    : undefined;
-}
-
-function getStringRecord(value: unknown): Record<string, string> | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return undefined;
-  }
-
-  const entries = Object.entries(value as Record<string, unknown>)
-    .map(([key, entryValue]) =>
-      typeof entryValue === 'string' ? [key, entryValue] : null
-    )
-    .filter((entry): entry is [string, string] => entry !== null);
-
-  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
-}
-
-function getOrderItemUnitPrice(item: OrderCreateItem) {
-  return item.negotiatedPrice ?? item.price;
 }
 
 async function buildOrderQuoteValidationItems({
@@ -539,371 +299,6 @@ async function buildOrderQuoteValidationItems({
     }),
     { includeValue: true }
   );
-}
-
-function getOrderItemAssuranceFee(item: ImmediateInvoiceOrderItem) {
-  const persistedAssuranceFee = toFiniteNumber(item.assurance_fee);
-  if (persistedAssuranceFee !== null) {
-    return roundCurrency(persistedAssuranceFee);
-  }
-
-  const itemBaseTotal = item.quantity * getOrderItemUnitPrice(item);
-
-  return item.has_assurance
-    ? roundCurrency(itemBaseTotal * SERVER_ASSURANCE_RATE)
-    : 0;
-}
-
-function getOrderItemLineExtensionAmount(item: ImmediateInvoiceOrderItem) {
-  const persistedLineExtensionAmount = toFiniteNumber(
-    item.line_extension_amount
-  );
-
-  if (persistedLineExtensionAmount !== null) {
-    return roundCurrency(persistedLineExtensionAmount);
-  }
-
-  return roundCurrency(
-    item.quantity * getOrderItemUnitPrice(item) + getOrderItemAssuranceFee(item)
-  );
-}
-
-function normalizePersistedInvoiceOrderItems(
-  rows: unknown
-): ImmediateInvoiceOrderItem[] | null {
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return null;
-  }
-
-  const normalizedItems = rows
-    .map((row): ImmediateInvoiceOrderItem | null => {
-      if (!row || typeof row !== 'object') {
-        return null;
-      }
-
-      const typedRow = row as PersistedInvoiceOrderItemRow;
-      const quantity = toFiniteNumber(typedRow.quantity);
-      const price = toFiniteNumber(typedRow.price);
-      const name = getOptionalString(typedRow.name) ?? 'Product';
-      const fallbackIdentifier =
-        getOptionalString(typedRow.product_id) ??
-        getOptionalString(typedRow.id);
-
-      if (!quantity || quantity <= 0 || price === null || price < 0) {
-        return null;
-      }
-
-      return {
-        condition: getOptionalString(typedRow.condition) ?? undefined,
-        id: fallbackIdentifier,
-        product_id: getOptionalString(typedRow.product_id),
-        productName: undefined,
-        name,
-        quantity,
-        price,
-        variant_id: getOptionalString(typedRow.variant_id),
-        variantName: undefined,
-        variant_attributes: getStringRecord(typedRow.variant_attributes),
-        has_assurance: typedRow.has_assurance === true,
-        assurance_fee: toFiniteNumber(typedRow.assurance_fee) ?? undefined,
-        item_description: getOptionalString(typedRow.item_description) ?? null,
-        line_extension_amount: toFiniteNumber(typedRow.line_extension_amount),
-        sellers_item_id: getOptionalString(typedRow.sellers_item_id) ?? null,
-        unit_code: getOptionalString(typedRow.unit_code) ?? null,
-        variant_name: getOptionalString(typedRow.variant_name) ?? undefined,
-        vat_amount: toFiniteNumber(typedRow.vat_amount),
-        vat_category_code:
-          getOptionalString(typedRow.vat_category_code) ?? null,
-        vat_rate: toFiniteNumber(typedRow.vat_rate),
-      };
-    })
-    .filter((item): item is ImmediateInvoiceOrderItem => item !== null);
-
-  return normalizedItems.length > 0 ? normalizedItems : null;
-}
-
-async function delayPersistedInvoiceItemRetry(attempt: number) {
-  await new Promise((resolve) =>
-    setTimeout(resolve, attempt * PERSISTED_INVOICE_ITEMS_RETRY_DELAY_MS)
-  );
-}
-
-async function loadPersistedInvoiceOrderItems({
-  orderId,
-  supabase,
-}: {
-  orderId: string;
-  supabase: ReturnType<typeof createAdminClient>;
-}) {
-  let lastError: unknown = null;
-
-  for (
-    let attempt = 1;
-    attempt <= PERSISTED_INVOICE_ITEMS_LOOKUP_ATTEMPTS;
-    attempt += 1
-  ) {
-    const { data, error } = await supabase
-      .from('order_items')
-      .select(
-        'id, product_id, variant_id, variant_attributes, variant_name, condition, name, quantity, price, has_assurance, assurance_fee, item_description, line_extension_amount, vat_category_code, vat_rate, vat_amount, sellers_item_id, unit_code'
-      )
-      .eq('order_id', orderId)
-      .order('line_id', { ascending: true });
-
-    if (!error) {
-      const normalizedItems = normalizePersistedInvoiceOrderItems(data);
-      if (normalizedItems) {
-        return normalizedItems;
-      }
-
-      lastError = new Error('Persisted invoice items not visible yet');
-      if (attempt < PERSISTED_INVOICE_ITEMS_LOOKUP_ATTEMPTS) {
-        await delayPersistedInvoiceItemRetry(attempt);
-        continue;
-      }
-
-      return null;
-    }
-
-    lastError = error;
-    logger.error({
-      message: 'Failed to load persisted order items for invoice email',
-      alert: 'invoice_order_items_lookup_failed',
-      attempt,
-      attempts: PERSISTED_INVOICE_ITEMS_LOOKUP_ATTEMPTS,
-      orderId,
-      error,
-    });
-
-    if (attempt < PERSISTED_INVOICE_ITEMS_LOOKUP_ATTEMPTS) {
-      await delayPersistedInvoiceItemRetry(attempt);
-    }
-  }
-
-  logger.error({
-    message: 'Persisted order item lookup exhausted for invoice email',
-    alert: 'invoice_order_items_lookup_exhausted',
-    attempts: PERSISTED_INVOICE_ITEMS_LOOKUP_ATTEMPTS,
-    orderId,
-    error: lastError,
-  });
-  return null;
-}
-
-function allocateLineTax(input: {
-  index: number;
-  itemCount: number;
-  lineExtensionAmount: number;
-  lineExtensionTotal: number;
-  taxAmount: number;
-  allocatedTaxAmount: number;
-}) {
-  if (input.taxAmount <= 0 || input.lineExtensionTotal <= 0) {
-    return 0;
-  }
-
-  if (input.index === input.itemCount - 1) {
-    return roundCurrency(input.taxAmount - input.allocatedTaxAmount);
-  }
-
-  return roundCurrency(
-    (input.lineExtensionAmount / input.lineExtensionTotal) * input.taxAmount
-  );
-}
-
-function buildImmediatePeppolInvoiceData(input: {
-  customerEmail: string;
-  customerName: string;
-  customerPhone?: string;
-  fulfillment: ReceiptFulfillmentDetails | null;
-  items: ImmediateInvoiceOrderItem[];
-  merchant: {
-    bank_account_name?: string | null;
-    bank_account_number?: string | null;
-    bank_name?: string | null;
-    business_name: string;
-    cac_rc_number?: string | null;
-    legal_entity_name?: string | null;
-    logo_url?: string | null;
-    registered_address?: InvoiceData['merchant']['registered_address'] | null;
-    support_email?: string | null;
-    support_phone?: string | null;
-    tax_identification_number?: string | null;
-    vat_rate?: number | null;
-    vat_registration_status?: string | null;
-  };
-  notes?: string;
-  order: Record<string, unknown>;
-  orderNumber: string;
-  orderShippingFee: number;
-  orderSubtotal: number;
-  orderTotal: number;
-  paymentAccount: ReceiptOrder['virtual_account'];
-  shippingAddress: OrderCreateInput['shipping_address'];
-}): InvoiceData {
-  const taxAmount = Number(input.order.tax_amount || 0);
-  const discountAmount = Number(input.order.discount_amount || 0);
-  const currency =
-    typeof input.order.currency === 'string' && input.order.currency
-      ? input.order.currency
-      : 'NGN';
-  const vatCategoryCode =
-    input.merchant.vat_registration_status === 'registered' || taxAmount > 0
-      ? 'S'
-      : 'O';
-  const vatRate =
-    vatCategoryCode === 'S' ? (input.merchant.vat_rate ?? 7.5) : 0;
-  const lineExtensionTotal = input.items.reduce(
-    (total, item) => total + getOrderItemLineExtensionAmount(item),
-    0
-  );
-  const hasDeviceItem = input.items.some((item) =>
-    isDeviceReceiptItemName(getOrderItemBaseName(item))
-  );
-  const paymentAccount =
-    input.paymentAccount ||
-    (input.merchant.bank_account_number
-      ? {
-          account_number: input.merchant.bank_account_number,
-          account_name:
-            input.merchant.bank_account_name ||
-            input.merchant.business_name ||
-            undefined,
-          bank_name: input.merchant.bank_name || undefined,
-        }
-      : null);
-  let allocatedTaxAmount = 0;
-
-  const invoiceItems: InvoiceLineItem[] = input.items.map((item, index) => {
-    const itemAssuranceFee = getOrderItemAssuranceFee(item);
-    const lineExtensionAmount = getOrderItemLineExtensionAmount(item);
-    const persistedVatAmount = toFiniteNumber(item.vat_amount);
-    const vatAmount =
-      persistedVatAmount ??
-      allocateLineTax({
-        index,
-        itemCount: input.items.length,
-        lineExtensionAmount,
-        lineExtensionTotal,
-        taxAmount,
-        allocatedTaxAmount,
-      });
-    allocatedTaxAmount += vatAmount;
-
-    const persistedDescription =
-      typeof item.item_description === 'string' &&
-      item.item_description.trim().length > 0
-        ? item.item_description.trim()
-        : undefined;
-    const itemDescription = appendReceiptFulfillmentDescription({
-      description:
-        persistedDescription ??
-        getOrderItemVariantLabel(item, { includeConditionFallback: false }) ??
-        undefined,
-      fulfillment: input.fulfillment,
-      hasDeviceItem,
-      index,
-      itemName: getOrderItemBaseName(item),
-    });
-    const description = itemAssuranceFee
-      ? `${itemDescription ? `${itemDescription} ` : ''}Includes device assurance fee (${currency} ${itemAssuranceFee.toFixed(2)}).`
-      : itemDescription;
-
-    return {
-      line_id: index + 1,
-      product_id: getOrderItemProductId(item),
-      name: getOrderItemDisplayName(item),
-      description,
-      quantity: item.quantity,
-      unit_code: item.unit_code || 'EA',
-      price: getOrderItemUnitPrice(item),
-      line_extension_amount: lineExtensionAmount,
-      vat_category_code: item.vat_category_code || vatCategoryCode,
-      vat_rate: item.vat_rate ?? vatRate,
-      vat_amount: vatAmount,
-      sellers_item_id: item.sellers_item_id || undefined,
-    };
-  });
-  const taxExclusiveAmount = Math.max(
-    0,
-    input.orderSubtotal + input.orderShippingFee - discountAmount
-  );
-  const taxSubtotals: TaxSubtotal[] = [
-    {
-      vat_category_code: vatCategoryCode,
-      vat_rate: vatRate,
-      taxable_amount: taxExclusiveAmount,
-      tax_amount: taxAmount,
-      exemption_reason:
-        vatCategoryCode === 'O' ? 'Seller is not VAT registered' : undefined,
-    },
-  ];
-  const issueDate = getImmediateInvoiceIssueDate(input.order);
-
-  return {
-    invoice_number: input.orderNumber,
-    invoice_type_code: '380',
-    issue_date: issueDate,
-    due_date: getImmediateInvoiceDueDate(input.order),
-    currency,
-    buyer_reference: input.customerEmail || input.customerName,
-    merchant: {
-      business_name: input.merchant.business_name,
-      legal_entity_name: input.merchant.legal_entity_name || undefined,
-      tax_identification_number:
-        input.merchant.tax_identification_number || undefined,
-      cac_rc_number: input.merchant.cac_rc_number || undefined,
-      vat_registration_status:
-        input.merchant.vat_registration_status || 'not_registered',
-      vat_rate: input.merchant.vat_rate ?? vatRate,
-      registered_address: input.merchant.registered_address || undefined,
-      support_email: input.merchant.support_email || undefined,
-      support_phone: input.merchant.support_phone || undefined,
-      logo_url: input.merchant.logo_url || undefined,
-    },
-    customer: {
-      name: input.customerName,
-      email: input.customerEmail || undefined,
-      phone: input.customerPhone || undefined,
-      address: input.shippingAddress
-        ? {
-            street: input.shippingAddress.address,
-            city: input.shippingAddress.city,
-            state: input.shippingAddress.state,
-            country:
-              input.shippingAddress.countryCode ||
-              input.shippingAddress.country ||
-              'NG',
-          }
-        : undefined,
-    },
-    items: invoiceItems,
-    tax_subtotals: taxSubtotals,
-    subtotal: input.orderSubtotal,
-    tax_exclusive_amount: taxExclusiveAmount,
-    tax_amount: taxAmount,
-    tax_inclusive_amount: taxExclusiveAmount + taxAmount,
-    shipping_fee: input.orderShippingFee,
-    discount_amount: discountAmount,
-    total: input.orderTotal,
-    amount_paid: Number(input.order.amount_paid || 0),
-    notes: input.notes,
-    payment_account: paymentAccount
-      ? {
-          account_number: paymentAccount.account_number,
-          account_name: paymentAccount.account_name || undefined,
-          bank_name: paymentAccount.bank_name || undefined,
-        }
-      : undefined,
-    firs_irn:
-      typeof input.order.firs_irn === 'string'
-        ? input.order.firs_irn
-        : undefined,
-    firs_csid:
-      typeof input.order.firs_csid === 'string'
-        ? input.order.firs_csid
-        : undefined,
-  };
 }
 
 // `rejectedVoucherToken` (when known) lets checkout prune ONLY the failed
@@ -1068,6 +463,7 @@ export async function GET(request: NextRequest) {
 // CSRF exemption: This endpoint is called by unauthenticated storefront guests during checkout.
 // Guest users do not have CSRF tokens. Abuse is mitigated by rate limiting in proxy.ts,
 // Zod validates input shape, while the SECURITY DEFINER RPC enforces merchant + item authorization server-side.
+
 export async function POST(request: NextRequest) {
   try {
     // Optional auth: supports web cookies and mobile Bearer tokens, but still
@@ -3503,12 +2899,19 @@ export async function POST(request: NextRequest) {
       voucherOrderFullyCovered &&
       amountDueToGateway <= 0 &&
       (quizVoucherFinalized || order.payment_status === 'paid');
+    // No idempotencyReplayed gate: a replay whose first attempt never
+    // finished delivery must resume it (atomic claim below), not suppress
+    // it forever. Concurrent duplicates observe the fresh claim and skip.
     const shouldSendImmediateOrderNotifications =
-      !idempotencyReplayed &&
-      (isPayOnDelivery(effectivePaymentMethod) ||
-        effectivePaymentMethod === 'invoice' ||
-        isWalletFullyPaid ||
-        isQuizVoucherFullyPaid);
+      isPayOnDelivery(effectivePaymentMethod) ||
+      effectivePaymentMethod === 'invoice' ||
+      // Pay for Me keeps its distinct stored method (never collapsed to
+      // invoice), so it needs its own dispatch branch: without this the
+      // requester gets no payment document to forward to their payer,
+      // and mobile suppresses its local notification as server-confirmed.
+      effectivePaymentMethod === 'payforme' ||
+      isWalletFullyPaid ||
+      isQuizVoucherFullyPaid;
     if (shouldSendImmediateOrderNotifications) {
       if (merchant.business_name && merchant.slug) {
         const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
@@ -3520,7 +2923,21 @@ export async function POST(request: NextRequest) {
           price: item.price || 0,
         }));
 
-        const paymentLink = `${merchantUrl}/checkout/resume/${order.id}`;
+        // The emailed CTA must resolve to a served page: prefer the token
+        // lookup, falling back to the order id plus email pair (both
+        // auto-resolve on /track-order). There is no /checkout/resume
+        // route — linking it shipped a 404.
+        const paymentLink = buildOrderTrackingLink(
+          merchantUrl,
+          {
+            id: order.id,
+            tracking_token:
+              typeof order.tracking_token === 'string'
+                ? order.tracking_token
+                : null,
+          },
+          customer_email
+        );
 
         const emailData = {
           orderNumber: orderNum,
@@ -3544,8 +2961,31 @@ export async function POST(request: NextRequest) {
           paymentLink,
         };
 
-        const htmlContent = generateOrderConfirmationEmail(emailData);
-        const textContent = generateOrderConfirmationText(emailData);
+        // Single immediate-email classification (paid state, document
+        // kind, subject): wallet/quiz-voucher coverage finalizes
+        // server-side while the create-RPC row still carries the
+        // pre-coverage status.
+        const immediateEmail = resolveImmediateOrderEmail({
+          effectivePaymentMethod,
+          isWalletFullyPaid,
+          isQuizVoucherFullyPaid,
+          orderPaymentStatus: order.payment_status,
+          requestPaymentStatus: payment_status,
+          // Same credited-balance rule as the attached PDF below:
+          // credit already applied must not render quotation copy.
+          paymentStatus:
+            typeof order.payment_status === 'string'
+              ? order.payment_status
+              : payment_status,
+          amountPaid: Math.max(
+            Number(order.amount_paid || 0),
+            savingsAmountUsed + walletAmountUsed
+          ),
+          orderNumber: emailData.orderNumber,
+        });
+        // NOTE: htmlContent/textContent are rendered inside after(), after
+        // DVA provisioning, so the proforma body can include the
+        // bank-transfer payment instructions.
 
         const replyToEmail =
           merchant.support_email ||
@@ -3557,368 +2997,152 @@ export async function POST(request: NextRequest) {
             ? `${merchant.business_name} Orders`
             : undefined;
 
+        // Shared context for the extracted immediate-notification
+        // lifecycle (DVA provisioning, invoice artifacts, email render
+        // and send, merchant dispatch): the route keeps classification
+        // and response timing; the module owns the orchestration.
+        const notificationCtx: ImmediateOrderNotificationContext = {
+          supabase,
+          order,
+          orderNum,
+          merchant,
+          merchantId: merchant_id,
+          customerId: customer_id,
+          customerEmail: customer_email,
+          customerName: customer_name,
+          customerPhone: customer_phone,
+          effectivePaymentMethod,
+          paymentStatus: payment_status,
+          orderTotal,
+          orderSubtotal,
+          orderShippingFee,
+          orderCurrency,
+          amountDueToGateway,
+          savingsAmountUsed,
+          walletAmountUsed,
+          isWalletFullyPaid,
+          isQuizVoucherFullyPaid,
+          idempotencyReplayed,
+          emailData,
+          immediateEmail,
+          replyToEmail,
+          senderName,
+          paymentLink,
+          trackingToken:
+            typeof order.tracking_token === 'string'
+              ? order.tracking_token
+              : null,
+          notes,
+          shippingAddress: shippingAddressForOrder,
+        };
+
+        // Pay for Me DVA is provisioned BEFORE the response (not in
+        // after()): the requester navigates straight to the success page,
+        // whose single order lookup must already carry the bank account.
+        const preResponsePayforme: PreResponsePayformeProvisioning =
+          await provisionPreResponsePayformeDva(notificationCtx);
+
         // Fire-and-forget: send email after response is delivered so slow/failing
         // ZeptoMail calls never block or time out the order creation response.
-        after(async () => {
-          try {
-            let attachments:
-              | Array<{ name: string; content: string; mime_type: string }>
-              | undefined;
-            let backgroundSupabase: ReturnType<
-              typeof createAdminClient
-            > | null = null;
-
-            if (effectivePaymentMethod === 'invoice') {
-              try {
-                // Auto-generate Dedicated Virtual Account (DVA) for automatic confirmation
-                const nameParts = (customer_name || 'Customer')
-                  .trim()
-                  .split(' ');
-                const firstName = nameParts[0] || 'Customer';
-                const lastName = nameParts.slice(1).join(' ') || 'User';
-                let invoiceVirtualAccount: ReceiptOrder['virtual_account'] =
-                  null;
-                const invoiceTimingOrder = {
-                  ...(order as Record<string, unknown>),
-                  created_at:
-                    typeof order.created_at === 'string'
-                      ? order.created_at
-                      : new Date().toISOString(),
-                };
-                // The customer can send display-only item names/prices, while
-                // the storefront order RPC persists canonical product/variant
-                // snapshots. Render invoice artifacts from those persisted
-                // rows after the validated order exists.
-                backgroundSupabase ??= createAdminClient();
-                const persistedInvoiceItems =
-                  await loadPersistedInvoiceOrderItems({
-                    orderId: order.id,
-                    supabase: backgroundSupabase,
-                  });
-                if (!persistedInvoiceItems) {
-                  logger.error({
-                    message:
-                      'Persisted order items unavailable for invoice email; skipping non-canonical invoice artifacts',
-                    orderId: order.id,
-                  });
-                  throw new Error('PERSISTED_INVOICE_ITEMS_UNAVAILABLE');
-                }
-                const invoiceItems = persistedInvoiceItems;
-
-                const dvaResult = await generatePaymentAccount({
-                  email: customer_email || `${order.id}@orders.usebaci.com`,
-                  firstName,
-                  lastName,
-                  phone: customer_phone || merchant.phone || '08000000000',
-                  orderId: order.id,
-                });
-
-                if (dvaResult.success) {
-                  const generatedVirtualAccount = {
-                    account_number: dvaResult.data.account_number,
-                    bank_name: dvaResult.data.bank_name,
-                    account_name: dvaResult.data.account_name,
-                  };
-
-                  // System-owned DVA/reminder records are written after the
-                  // validated order exists; customers do not own these tables
-                  // through RLS, so the server-only admin client is scoped to
-                  // this post-response side effect and order.id.
-                  backgroundSupabase ??= createAdminClient();
-                  const persistenceFailure = await persistPaystackDvaAssignment(
-                    backgroundSupabase,
-                    {
-                      accountName: dvaResult.data.account_name,
-                      accountNumber: dvaResult.data.account_number,
-                      bankName: dvaResult.data.bank_name,
-                      customerEmail:
-                        customer_email || `${order.id}@orders.usebaci.com`,
-                      expiresAt:
-                        getImmediateInvoiceDueDate(
-                          invoiceTimingOrder
-                        ).toISOString(),
-                      orderId: order.id,
-                    }
-                  );
-
-                  if (persistenceFailure) {
-                    logger.error({
-                      message: 'Failed to store auto-generated invoice DVA',
-                      orderId: order.id,
-                    });
-                  } else {
-                    invoiceVirtualAccount = generatedVirtualAccount;
-                    logger.info({
-                      message: 'Stored auto-generated invoice DVA successfully',
-                      orderId: order.id,
-                      accountNumber: dvaResult.data.account_number,
-                    });
-                  }
-                } else {
-                  logger.error({
-                    message: 'Auto-generation of invoice DVA failed',
-                    orderId: order.id,
-                    error: dvaResult.error,
-                  });
-                }
-
-                const fulfillment = getOrderFulfillmentDetails(
-                  order as Record<string, unknown>
-                );
-                const hasDeviceItem = invoiceItems.some((item) =>
-                  isDeviceReceiptItemName(getOrderItemBaseName(item))
-                );
-                const amountPaid = Math.max(
-                  Number(order.amount_paid || 0),
-                  savingsAmountUsed + walletAmountUsed
-                );
-                const invoiceOrder = {
-                  ...invoiceTimingOrder,
-                  amount_paid: amountPaid,
-                  // The RPC return row carries no currency; without this the
-                  // Peppol XML falls back to NGN while the PDF/email use the
-                  // stamped order currency.
-                  currency: orderCurrency,
-                };
-                const receiptOrder: ReceiptOrder = {
-                  order_number: orderNum,
-                  created_at: String(
-                    order.created_at || new Date().toISOString()
-                  ),
-                  currency: orderCurrency,
-                  total: orderTotal,
-                  subtotal: orderSubtotal,
-                  shipping_fee: orderShippingFee,
-                  tax_amount: Number(order.tax_amount || 0),
-                  discount_amount: Number(order.discount_amount || 0),
-                  amount_paid: amountPaid,
-                  balance: Math.max(orderTotal - amountPaid, 0),
-                  payment_status: order.payment_status || payment_status,
-                  payment_method: effectivePaymentMethod,
-                  is_credit_order: Boolean(
-                    (order as Record<string, unknown>).is_credit_order
-                  ),
-                  customer_name,
-                  customer_email,
-                  customer_phone: customer_phone || null,
-                  shipping_address: buildImmediateInvoiceShippingAddress(
-                    shippingAddressForOrder
-                  ),
-                  virtual_account: invoiceVirtualAccount,
-                  fulfillment_details: fulfillment,
-                  items: invoiceItems.map((item, index) => {
-                    const variantName = getOrderItemVariantLabel(item, {
-                      includeConditionFallback: false,
-                    });
-
-                    return {
-                      line_id: index + 1,
-                      product_id: item.product_id || null,
-                      product_name: getOrderItemBaseName(item),
-                      condition: getOrderItemCondition(item),
-                      variant_id: item.variant_id || null,
-                      variant_name: variantName || undefined,
-                      description: appendReceiptFulfillmentDescription({
-                        description: undefined,
-                        fulfillment,
-                        hasDeviceItem,
-                        index,
-                        itemName: getOrderItemBaseName(item),
-                      }),
-                      quantity: item.quantity,
-                      price: item.negotiatedPrice ?? item.price,
-                    };
-                  }),
-                  transactions: [],
-                };
-                const receiptMerchant = buildImmediateInvoiceMerchant(merchant);
-                const peppolInvoiceData = buildImmediatePeppolInvoiceData({
-                  customerEmail: customer_email,
-                  customerName: customer_name,
-                  customerPhone: customer_phone,
-                  fulfillment,
-                  items: invoiceItems,
-                  merchant,
-                  notes,
-                  order: invoiceOrder,
-                  orderNumber: orderNum,
-                  orderShippingFee,
-                  orderSubtotal,
-                  orderTotal,
-                  paymentAccount: invoiceVirtualAccount,
-                  shippingAddress: shippingAddressForOrder,
-                });
-                let peppolInvoiceXml: string | null = null;
-
-                try {
-                  peppolInvoiceXml =
-                    generatePeppolInvoiceXml(peppolInvoiceData);
-                } catch (peppolError) {
-                  logger.error({
-                    message: 'Failed to generate Peppol UBL invoice XML',
-                    orderId: order.id,
-                    orderNumber: orderNum,
-                    error: peppolError,
-                  });
-                }
-
-                let logoDataUri: string | null = null;
-                try {
-                  logoDataUri =
-                    await resolveReceiptLogoDataUri(receiptMerchant);
-                } catch (logoError) {
-                  logger.warn({
-                    message:
-                      'Failed to resolve invoice logo; using fallback PDF branding',
-                    orderId: order.id,
-                    orderNumber: orderNum,
-                    error: logoError,
-                  });
-                }
-
-                const invoiceReceiptOrder: ReceiptOrder = {
-                  ...receiptOrder,
-                  items: mergeReceiptItemsWithInvoiceMetadata(
-                    receiptOrder.items,
-                    peppolInvoiceData.items
-                  ),
-                };
-                const pdfBlob = generateReceiptBlob(
-                  invoiceReceiptOrder,
-                  receiptMerchant,
-                  {
-                    buyerReference: peppolInvoiceData.buyer_reference,
-                    complianceNote: peppolInvoiceXml
-                      ? PEPPOL_BIS_BILLING_COMPLIANCE_NOTE
-                      : undefined,
-                    documentDate: peppolInvoiceData.issue_date,
-                    documentKind: 'invoice',
-                    dueDate: peppolInvoiceData.due_date,
-                    firsCsid: peppolInvoiceData.firs_csid,
-                    firsIrn: peppolInvoiceData.firs_irn,
-                    invoiceTypeCode: peppolInvoiceData.invoice_type_code,
-                    invoiceNotes: peppolInvoiceData.notes,
-                    logoDataUri,
-                    paymentTerms: peppolInvoiceData.payment_terms,
-                    taxSubtotals: peppolInvoiceData.tax_subtotals,
-                  }
-                );
-                const arrayBuffer = await pdfBlob.arrayBuffer();
-                const base64Content =
-                  Buffer.from(arrayBuffer).toString('base64');
-
-                attachments = [
-                  {
-                    name: `invoice-${orderNum}.pdf`,
-                    content: base64Content,
-                    mime_type: 'application/pdf',
-                  },
-                ];
-
-                if (peppolInvoiceXml) {
-                  attachments.push({
-                    name: `invoice-${orderNum}.xml`,
-                    content: Buffer.from(peppolInvoiceXml, 'utf8').toString(
-                      'base64'
-                    ),
-                    mime_type: 'application/xml',
-                  });
-                }
-
-                // Log standard initial reminder row in order_reminders
-                backgroundSupabase ??= createAdminClient();
-                const { error: reminderInsertError } = await backgroundSupabase
-                  .from('order_reminders')
-                  .insert({
-                    order_id: order.id,
-                    channel: 'email',
-                    payment_link: paymentLink,
-                  });
-
-                if (reminderInsertError) {
-                  logger.error({
-                    message: 'Failed to store initial invoice reminder',
-                    orderId: order.id,
-                    paymentLink,
-                    error: reminderInsertError,
-                  });
-                } else {
-                  logger.info({
-                    message: 'Stored initial invoice reminder successfully',
-                    orderId: order.id,
-                    paymentLink,
-                  });
-                }
-
-                logger.info({
-                  message:
-                    'Generated branded invoice PDF and logged initial reminder',
-                  orderId: order.id,
-                  orderNumber: orderNum,
-                });
-              } catch (err) {
-                logger.error({
-                  message:
-                    'Failed to generate invoice PDF or log initial reminder',
-                  orderId: order.id,
-                  error: err,
-                });
+        // Atomic delivery ownership is decided BEFORE the response (not in
+        // after()): the first attempt's after() may never run (process death
+        // between response and callback) or fail (provider error) — the
+        // replay with the same key reclaims the claim and delivers. Claiming
+        // here also keeps email dispatch first in the after() body so the
+        // confirmation send starts before the response settles.
+        // Proof-bound claim on the request-scoped client (AGENTS.md: never
+        // the admin client for user-facing operations): the RPC verifies
+        // the creation tracking token before touching claim state.
+        const notificationClaim =
+          await claimImmediateOrderNotificationWithProof(
+            notificationCtx.supabase,
+            order.id,
+            notificationCtx.trackingToken
+          );
+        if (notificationClaim.shouldDeliver) {
+          after(async () => {
+            try {
+              // Mark the won claim started (extends it to the full
+              // 5-minute crash window): fire-and-forget first step so
+              // the marker lands while artifacts build, without
+              // delaying the send. Never rejects (a marker failure
+              // keeps the short never-started grace, and completion
+              // stays lease-fenced either way).
+              void markImmediateOrderNotificationStartedWithProof(
+                notificationCtx.supabase,
+                order.id,
+                notificationCtx.trackingToken,
+                notificationClaim.claimToken
+              );
+              let invoiceVirtualAccount: ReceiptOrder['virtual_account'] = null;
+              let attachments:
+                | Array<{ name: string; content: string; mime_type: string }>
+                | undefined;
+              if (effectivePaymentMethod === 'invoice') {
+                // Invoice-only artifacts (persisted items, DVA, PDF,
+                // reminders); a failure rejects so the claim completes
+                // failed and a replay retries instead of sending an
+                // attachment-less message marked sent.
+                ({ attachments, invoiceVirtualAccount } =
+                  await buildImmediateInvoiceArtifacts(notificationCtx));
               }
-            }
-
-            const emailResult = await sendEmail({
-              to: customer_email,
-              toName: customer_name,
-              subject:
-                effectivePaymentMethod === 'invoice'
-                  ? `Invoice Generated - #${emailData.orderNumber}`
-                  : `Order Confirmation - #${emailData.orderNumber}`,
-              htmlContent,
-              textContent,
-              replyTo: replyToEmail,
-              emailType: 'orders',
-              fromName: senderName,
-              attachments,
-              auditContext: {
-                merchantId: merchant_id,
-                orderId: order.id,
-                customerId: customer_id,
-                metadata: {
-                  trigger: 'order_create_immediate_confirmation',
-                  paymentMethod: effectivePaymentMethod,
-                },
-              },
-            });
-
-            if (!emailResult.success) {
+              if (effectivePaymentMethod === 'payforme') {
+                // Pay for Me skips the invoice-only artifacts above and
+                // provisions through the proof-bound reservation RPC —
+                // never the service-role client (AGENTS.md).
+                const retryVirtualAccount = await provisionPayformeRetryDva(
+                  notificationCtx,
+                  preResponsePayforme
+                );
+                if (retryVirtualAccount) {
+                  invoiceVirtualAccount = retryVirtualAccount;
+                }
+              }
+              // Rendered here (not with emailData above) so the proforma
+              // body carries the provisioned DVA as bank-transfer payment
+              // instructions — the tracking link shows status only and
+              // cannot take payment.
+              await sendImmediateOrderConfirmationEmail(notificationCtx, {
+                attachments,
+                invoiceVirtualAccount,
+              });
+              // Sent is terminal: replays observe it and skip. Failed
+              // releases the claim so the next replay resumes delivery.
+              // The lease token (minted by our winning claim) fences
+              // completion to this attempt: a stale worker that outlives
+              // the reclaim window cannot complete the replacement's
+              // claim.
+              await completeImmediateOrderNotificationWithProof(
+                notificationCtx.supabase,
+                order.id,
+                notificationCtx.trackingToken,
+                true,
+                notificationClaim.claimToken
+              );
+            } catch (emailError) {
+              await completeImmediateOrderNotificationWithProof(
+                notificationCtx.supabase,
+                order.id,
+                notificationCtx.trackingToken,
+                false,
+                notificationClaim.claimToken
+              );
               logger.error({
-                message: 'Failed to send order confirmation email',
-                orderId: order.id,
-                paymentMethod: effectivePaymentMethod,
-                emailError: emailResult.error,
-                emailErrorCode: emailResult.errorCode,
-                emailErrorDetails: emailResult.errorDetails,
-              });
-            } else {
-              logger.info({
-                message: 'Order confirmation email sent',
-                orderId: order.id,
-                paymentMethod: effectivePaymentMethod,
-                messageId: emailResult.messageId,
+                message: 'Error sending order confirmation email',
+                error: emailError,
               });
             }
-          } catch (emailError) {
-            logger.error({
-              message: 'Error sending order confirmation email',
-              error: emailError,
-            });
-          }
-        });
+          });
+        }
       }
 
-      // Notify merchant of a new order or invoice — fire-and-forget via after().
-      after(() =>
-        dispatchOrderCreationNotifications({
+      // Notify merchant of a new order or invoice — fire-and-forget via
+      // after(). Fresh attempts only: unlike the customer payment
+      // document above, merchant creation pings carry no resume claim,
+      // so a replay must never duplicate them.
+      if (!idempotencyReplayed) {
+        queueMerchantOrderNotifications({
+          supabase,
           merchantId: merchant_id,
           orderId: order.id,
           orderNumber: orderNum,
@@ -3929,9 +3153,8 @@ export async function POST(request: NextRequest) {
           paymentStatus: order.payment_status,
           invoiceBalanceDue: Math.max(amountDueToGateway, 0),
           isWalletFullyPaid,
-          preferenceClient: supabase,
-        })
-      );
+        });
+      }
     }
 
     // The create RPC's RETURNS TABLE carries no currency column, so surface

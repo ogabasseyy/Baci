@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetKlumpSdkLoadForTests } from '@/lib/klump-sdk';
 import { BnplLauncher, KLUMP_REDIRECT_URL_KEY } from './bnpl-launcher';
@@ -55,6 +62,19 @@ vi.mock('@/lib/api-client', () => ({
   apiPost: (...args: unknown[]) => mockApiPost(...args),
   fetchWithCsrf: (input: RequestInfo | URL, init?: RequestInit) =>
     fetch(input, init),
+}));
+
+const mockCaptureCheckoutFunnelEventOnce = vi.fn();
+const mockCaptureClientEvent = vi.fn();
+
+vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
+  captureCheckoutFunnelEventOnce: (...args: unknown[]) =>
+    mockCaptureCheckoutFunnelEventOnce(...args),
+}));
+
+vi.mock('@/lib/posthog/capture-client-event', () => ({
+  captureClientEvent: (...args: unknown[]) =>
+    mockCaptureClientEvent(...args),
 }));
 
 describe('BnplLauncher', () => {
@@ -418,6 +438,118 @@ describe('BnplLauncher', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('bridges an opened CredPal SDK failure to React Native without rendering error UI', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'credpal',
+        merchant_slug: 'test-store',
+        trackingToken: 'tok-123',
+      })
+    );
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockOpenCredPalCheckout.mockImplementation(({ onLoad, onError }) => {
+      onLoad();
+      onError({ success: false, message: 'Provider declined' });
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    // Opened first (start recorded natively), then the SDK failure must
+    // reach the native failure recorder instead of stranding the start.
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'credpal',
+          orderId: 'order-1',
+          type: 'bnpl_provider_opened',
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'credpal',
+          orderId: 'order-1',
+          message: 'Provider declined',
+          type: 'bnpl_provider_error',
+        })
+      );
+    });
+    expect(screen.queryByText('Provider declined')).not.toBeInTheDocument();
+  });
+
+  it('keeps a pre-popup Credit Direct SDK failure local instead of bridging it', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockOpenCreditDirectCheckout.mockImplementation(({ onError }) => {
+      onError('Credit Direct unavailable');
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    // No popup ever opened, so no native payment_started exists to match:
+    // the failure must stay local instead of bridging an unmatched error.
+    expect(await screen.findByText('Credit Direct unavailable')).toBeInTheDocument();
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.stringContaining('bnpl_provider_error')
+    );
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.stringContaining('bnpl_provider_opened')
+    );
+  });
+
+  it('bridges an opened-then-failed Credit Direct attempt to React Native', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockOpenCreditDirectCheckout.mockImplementation(({ onPopup, onError }) => {
+      void onPopup({
+        checkoutTransactionId: 'cd-popup-bridge-1',
+        sessionId: 'signed-session-bridge-1',
+      }).then(() => {
+        onError('Credit Direct unavailable');
+      });
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'credit_direct',
+          orderId: 'order-1',
+          type: 'bnpl_provider_opened',
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'credit_direct',
+          orderId: 'order-1',
+          message: 'Credit Direct unavailable',
+          type: 'bnpl_provider_error',
+        })
+      );
+    });
+    expect(
+      screen.queryByText('Credit Direct unavailable')
+    ).not.toBeInTheDocument();
+  });
+
   it('logs and continues when Credit Direct popup reference persistence fails', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockApiPost.mockRejectedValueOnce(new Error('Update failed'));
@@ -466,6 +598,91 @@ describe('BnplLauncher', () => {
     });
   });
 
+  it('records a paid conversion only for approved CredPal results', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'credpal',
+        merchant_slug: 'test-store',
+        trackingToken: 'tok-123',
+      })
+    );
+    mockOpenCredPalCheckout.mockImplementation(({ onSuccess }) => {
+      onSuccess({ order_no: 'credpal-ref-1', status: 'success' });
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    await waitFor(() =>
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-1',
+        expect.objectContaining({ payment_status: 'paid' })
+      )
+    );
+  });
+
+  it('suppresses web attribution inside a native BNPL WebView', async () => {
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage: vi.fn() },
+    });
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'credpal',
+        merchant_slug: 'test-store',
+        trackingToken: 'tok-123',
+      })
+    );
+    mockOpenCredPalCheckout.mockImplementation(({ onSuccess }) => {
+      onSuccess({ order_no: 'credpal-ref-1', status: 'success' });
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(
+        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=success&trackingToken=track-order-token'
+      );
+    });
+    expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+      'payment_completed',
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it('skips the paid conversion for pending CredPal applications', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'credpal',
+        merchant_slug: 'test-store',
+        trackingToken: 'tok-123',
+      })
+    );
+    mockOpenCredPalCheckout.mockImplementation(({ onSuccess }) => {
+      onSuccess({ order_no: 'credpal-ref-1', status: 'pending' });
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(
+        '/order-success?orderId=order-1&reference=credpal-ref-1&type=credpal&credpalStatus=pending&trackingToken=track-order-token'
+      );
+    });
+    expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
+      'payment_completed',
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
   it('posts CredPal close events to the native WebView bridge', async () => {
     const postMessage = vi.fn();
     (window as TestReactNativeWebViewWindow).ReactNativeWebView = {
@@ -496,6 +713,37 @@ describe('BnplLauncher', () => {
       );
     });
     expect(screen.queryByText('Payment cancelled.')).not.toBeInTheDocument();
+  });
+
+  it('posts a provider-opened signal when the CredPal widget loads', async () => {
+    const postMessage = vi.fn();
+    (window as TestReactNativeWebViewWindow).ReactNativeWebView = {
+      postMessage,
+    };
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'credpal',
+        merchant_slug: 'test-store',
+        trackingToken: 'tok-123',
+      })
+    );
+    mockOpenCredPalCheckout.mockImplementation(({ onLoad }) => {
+      onLoad();
+      return Promise.resolve();
+    });
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'credpal',
+          orderId: 'order-1',
+          type: 'bnpl_provider_opened',
+        })
+      );
+    });
   });
 
   it('keeps the web CredPal cancellation fallback when no native bridge exists', async () => {
@@ -804,6 +1052,459 @@ describe('BnplLauncher', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('posts a provider-opened signal when the Klump widget opens', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+    // Constructing the widget must not signal opened: only onOpen proves
+    // the provider UI actually opened.
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.stringContaining('bnpl_provider_opened')
+    );
+
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onOpen?: () => void;
+    };
+    config.onOpen?.();
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'klump',
+          orderId: 'order-1',
+          reference: 'BAC-ABCD12345678',
+          type: 'bnpl_provider_opened',
+        })
+      );
+    });
+  });
+
+  it('bridges an opened-then-failed Klump attempt to React Native', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onOpen?: () => void;
+      onError?: (error: Error) => void;
+    };
+    config.onOpen?.();
+    config.onError?.(new Error('Klump declined the application'));
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'klump',
+          orderId: 'order-1',
+          reference: 'BAC-ABCD12345678',
+          type: 'bnpl_provider_opened',
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'klump',
+          orderId: 'order-1',
+          message: 'Klump declined the application',
+          reference: 'BAC-ABCD12345678',
+          type: 'bnpl_provider_error',
+        })
+      );
+    });
+    expect(
+      screen.queryByText('Klump declined the application')
+    ).not.toBeInTheDocument();
+    // The native shell attributes the bridged failure: no web event.
+    expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
+      'payment_failed',
+      expect.anything()
+    );
+  });
+
+  it('keeps a pre-open Klump SDK failure local instead of bridging it', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+
+    // onOpen never fired, so no native payment_started exists to match:
+    // the failure must stay local instead of bridging an unmatched error.
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onError?: (error: Error) => void;
+    };
+    config.onError?.(new Error('Klump unavailable'));
+
+    expect(await screen.findByText('Klump unavailable')).toBeInTheDocument();
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.stringContaining('bnpl_provider_error')
+    );
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.stringContaining('bnpl_provider_opened')
+    );
+  });
+
+  it('records the deferred web start when the Klump widget opens in a browser', async () => {
+    // No native bridge: an ordinary browser session.
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: 'order-1',
+          order_number: 'BAC-001',
+          total: 58088.5,
+          currency: 'NGN',
+          customer_email: 'customer@example.com',
+          customer_phone: '08012345678',
+          customer_name: 'John Doe',
+          items: [
+            {
+              product_id: 'product-1',
+              name: 'Capsule',
+              price: 51500,
+              quantity: 1,
+            },
+          ],
+        }),
+      })
+    );
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+    // Constructing the widget opens nothing yet: no web start.
+    expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
+      'payment_started',
+      expect.anything()
+    );
+
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onOpen?: () => void;
+    };
+    config.onOpen?.();
+
+    await waitFor(() => {
+      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
+        'payment_started',
+        expect.objectContaining({
+          channel: 'web',
+          currency: 'NGN',
+          order_id: 'order-1',
+          order_number: 'BAC-001',
+          payment_intent: 'installments',
+          payment_method: 'klump',
+          source: 'web_checkout',
+          total: 58088.5,
+        })
+      );
+    });
+  });
+
+  it('records no web start when the Klump SDK fails to load in a browser', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+    vi.stubGlobal('Klump', undefined);
+    window.Klump = undefined;
+
+    const originalAppendChild = document.head.appendChild.bind(document.head);
+    const appendSpy = vi
+      .spyOn(document.head, 'appendChild')
+      .mockImplementation(<T extends Node>(node: T): T => {
+        const result = originalAppendChild(node);
+        if (
+          node instanceof HTMLScriptElement &&
+          node.src === 'https://js.useklump.com/klump.js'
+        ) {
+          queueMicrotask(() => node.dispatchEvent(new Event('error')));
+        }
+        return result;
+      });
+
+    try {
+      render(<BnplLauncher />);
+
+      expect(
+        await screen.findByRole('heading', { name: 'Something went wrong' })
+      ).toBeInTheDocument();
+      expect(mockKlumpConstructor).not.toHaveBeenCalled();
+      // Pre-open failure: the widget never opened, so no web start may
+      // exist to strand unmatched.
+      expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
+        'payment_started',
+        expect.anything()
+      );
+    } finally {
+      appendSpy.mockRestore();
+    }
+  });
+
+  it('records a web failure for an opened-then-failed browser Klump attempt', async () => {
+    // No native bridge: an ordinary browser session.
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onOpen?: () => void;
+      onError?: (error: Error) => void;
+    };
+    config.onOpen?.();
+    // Checkout already navigated to the launcher: nothing else can close
+    // the onOpen start, so the failure must record here.
+    config.onError?.(new Error('Klump declined the application'));
+
+    await waitFor(() => {
+      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
+        'payment_started',
+        expect.objectContaining({ payment_method: 'klump' })
+      );
+    });
+    await waitFor(() => {
+      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
+        'payment_failed',
+        expect.objectContaining({
+          order_id: 'order-1',
+          payment_method: 'klump',
+          reason: 'klump_error',
+        })
+      );
+    });
+    expect(
+      await screen.findByText('Klump declined the application')
+    ).toBeInTheDocument();
+  });
+
+  it('stamps retried Klump starts with each issued reference', async () => {
+    // No native bridge: an ordinary browser session.
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+    const renderKlumpAttempt = async (reference: string) => {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-1',
+          gateway: 'klump',
+          merchant_slug: 'test-store',
+          reference,
+          trackingToken: 'tok-123',
+        })
+      );
+      render(<BnplLauncher />);
+      await waitFor(() => {
+        expect(mockKlumpConstructor).toHaveBeenCalled();
+      });
+      const config = mockKlumpConstructor.mock.calls.at(-1)?.[0] as {
+        onOpen?: () => void;
+        onError?: (error: Error) => void;
+      };
+      config.onOpen?.();
+      return config;
+    };
+
+    // First attempt opens with the original reference; the retry (new
+    // BAC-* reference from re-initialization) opens after remount.
+    await renderKlumpAttempt('BAC-ATTEMPT-1');
+    await waitFor(() => {
+      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
+        'payment_started',
+        expect.objectContaining({
+          order_id: 'order-1',
+          reference: 'BAC-ATTEMPT-1',
+        })
+      );
+    });
+    cleanup();
+    mockKlumpConstructor.mockClear();
+    const retryConfig = await renderKlumpAttempt('BAC-ATTEMPT-2');
+    retryConfig.onError?.(new Error('Klump declined the application'));
+
+    await waitFor(() => {
+      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
+        'payment_started',
+        expect.objectContaining({
+          order_id: 'order-1',
+          reference: 'BAC-ATTEMPT-2',
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(mockCaptureClientEvent).toHaveBeenCalledWith(
+        'payment_failed',
+        expect.objectContaining({
+          order_id: 'order-1',
+          reason: 'klump_error',
+          reference: 'BAC-ATTEMPT-2',
+        })
+      );
+    });
+  });
+
+  it('records no web failure for a pre-open browser Klump error', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+
+    // onOpen never fired: no start exists, so the failure stays local.
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onError?: (error: Error) => void;
+    };
+    config.onError?.(new Error('Klump unavailable'));
+
+    expect(await screen.findByText('Klump unavailable')).toBeInTheDocument();
+    expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
+      'payment_failed',
+      expect.anything()
+    );
+    expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
+      'payment_started',
+      expect.anything()
+    );
+  });
+
+  it('skips the web start for Klump opens inside a native shell', async () => {
+    const postMessage = vi.fn();
+    Object.defineProperty(window, 'ReactNativeWebView', {
+      configurable: true,
+      value: { postMessage },
+    });
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+      })
+    );
+    vi.stubEnv('NEXT_PUBLIC_KLUMP_PUBLIC_KEY', 'klp_pk_test_123');
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockKlumpConstructor).toHaveBeenCalled();
+    });
+
+    const config = mockKlumpConstructor.mock.calls[0][0] as {
+      onOpen?: () => void;
+    };
+    config.onOpen?.();
+
+    // The native shell records the start from the bridge: a web event
+    // here would double-attribute.
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'klump',
+          orderId: 'order-1',
+          reference: 'BAC-ABCD12345678',
+          type: 'bnpl_provider_opened',
+        })
+      );
+    });
+    expect(mockCaptureClientEvent).not.toHaveBeenCalledWith(
+      'payment_started',
+      expect.anything()
+    );
+  });
+
   it('marks Klump checkout cancelled when the stored SDK redirect belongs to a previous checkout', async () => {
     mockSearchParams.mockReturnValue(
       new URLSearchParams({
@@ -1013,6 +1714,142 @@ describe('BnplLauncher', () => {
     );
   });
 
+  it.each([
+    { paymentStatus: 'paid', captures: true },
+    { paymentStatus: 'pending', captures: false },
+  ])(
+    'counts the Klump conversion only when the order is server-confirmed paid ($paymentStatus)',
+    async ({ paymentStatus, captures }) => {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-1',
+          gateway: 'klump',
+          merchant_slug: 'test-store',
+          reference: 'BAC-ABCD12345678',
+          trackingToken: 'tok-123',
+          klump_callback: '1',
+          transaction_id: 'klump-txn-123',
+        })
+      );
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            id: 'order-1',
+            payment_status: paymentStatus,
+          }),
+        })
+      );
+
+      render(<BnplLauncher />);
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith(
+          '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+        );
+      });
+      // Attribution is detached from navigation: wait for the lookup to
+      // settle before asserting its outcome.
+      if (captures) {
+        await waitFor(() => {
+          expect(
+            mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+              ([event]) => event === 'payment_completed'
+            ).length
+          ).toBe(1);
+        });
+      } else {
+        await act(async () => {});
+        expect(
+          mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+            ([event]) => event === 'payment_completed'
+          ).length
+        ).toBe(0);
+      }
+    }
+  );
+
+  it('passes the verified total and currency into the Klump conversion', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+        klump_callback: '1',
+        transaction_id: 'klump-txn-123',
+      })
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: 'order-1',
+          payment_status: 'paid',
+          total: 20000,
+          currency: 'NGN',
+        }),
+      })
+    );
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(
+        '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+      );
+    });
+    await waitFor(() => {
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-1',
+        expect.objectContaining({
+          payment_method: 'klump',
+          payment_status: 'paid',
+          reference: 'BAC-ABCD12345678',
+          total: 20000,
+          currency: 'NGN',
+        })
+      );
+    });
+  });
+
+  it('redirects the Klump callback to success even when the settlement lookup hangs', async () => {
+    mockSearchParams.mockReturnValue(
+      new URLSearchParams({
+        orderId: 'order-1',
+        gateway: 'klump',
+        merchant_slug: 'test-store',
+        reference: 'BAC-ABCD12345678',
+        trackingToken: 'tok-123',
+        klump_callback: '1',
+        transaction_id: 'klump-txn-123',
+      })
+    );
+    // The record call succeeds but the settlement lookup never resolves:
+    // attribution is detached, so the redirect must not wait for it.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => new Promise(() => undefined))
+    );
+
+    render(<BnplLauncher />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(
+        '/order-success?orderId=order-1&reference=BAC-ABCD12345678&type=klump&trackingToken=tok-123'
+      );
+    });
+    expect(
+      mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
+        ([event]) => event === 'payment_completed'
+      ).length
+    ).toBe(0);
+  });
+
   it('shows an error state and does not redirect when order fetch fails', async () => {
     vi.stubGlobal(
       'fetch',
@@ -1203,6 +2040,51 @@ describe('BnplLauncher', () => {
       expect(mockOpenCreditDirectCheckout).not.toHaveBeenCalled();
     });
 
+    it('passes the verified total and currency into the Credit Direct conversion', async () => {
+      mockSearchParams.mockReturnValue(
+        new URLSearchParams({
+          orderId: 'order-1',
+          gateway: 'credit_direct',
+          merchant_slug: 'test-store',
+          creditDirectCompletion: 'txn-sdk-success',
+          trackingToken: 'tok-123',
+        })
+      );
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            id: 'order-1',
+            payment_status: 'bnpl_approved',
+            total: 42000,
+            currency: 'NGN',
+          }),
+        })
+      );
+
+      render(<BnplLauncher />);
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith(
+          '/order-success?orderId=order-1&reference=txn-sdk-success&type=credit_direct&trackingToken=tok-123'
+        );
+      });
+      // The first capture must carry revenue: the once-guard suppresses
+      // the richer order-success lookup that follows.
+      expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+        'payment_completed',
+        'order-1',
+        expect.objectContaining({
+          payment_method: 'credit_direct',
+          payment_status: 'paid',
+          reference: 'txn-sdk-success',
+          total: 42000,
+          currency: 'NGN',
+        })
+      );
+    });
+
     it('shows the cancelled state without clearing checkout recovery', async () => {
       seedPopupMarker('order-1', 'txn-123');
       seedCheckoutRecoveryState();
@@ -1249,6 +2131,41 @@ describe('BnplLauncher', () => {
 
       expect(readCreditDirectPopupMarker('order-1')?.transactionId).toBe(
         'txn-999'
+      );
+    });
+
+    it('posts a provider-opened signal when the Credit Direct popup opens', async () => {
+      const postMessage = vi.fn();
+      (window as TestReactNativeWebViewWindow).ReactNativeWebView = {
+        postMessage,
+      };
+      let capturedOnPopup:
+        | ((reference: {
+            checkoutTransactionId: string | null;
+            sessionId: string;
+          }) => Promise<void>)
+        | undefined;
+      mockOpenCreditDirectCheckout.mockImplementation(({ onPopup }) => {
+        capturedOnPopup = onPopup;
+        return Promise.resolve();
+      });
+
+      render(<BnplLauncher />);
+
+      await waitFor(() => {
+        expect(mockOpenCreditDirectCheckout).toHaveBeenCalled();
+      });
+      await capturedOnPopup?.({
+        checkoutTransactionId: 'txn-999',
+        sessionId: 'signed-session-1',
+      });
+
+      expect(postMessage).toHaveBeenCalledWith(
+        JSON.stringify({
+          gateway: 'credit_direct',
+          orderId: 'order-1',
+          type: 'bnpl_provider_opened',
+        })
       );
     });
 

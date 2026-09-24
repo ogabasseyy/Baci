@@ -24,6 +24,22 @@ export interface RedvaultPreparedOrder {
   orderId: string;
   checkoutFingerprint: string;
   trackingToken?: string;
+  /**
+   * Canonical order total and number stamped at creation: the prepared
+   * payment_started must carry the full revenue value, not the residual
+   * gateway due — matching the fresh-path start event. Optional so
+   * older persisted snapshots still parse.
+   */
+  total?: number;
+  orderNumber?: string;
+}
+
+export interface RedvaultPaymentStarted {
+  orderId: string;
+  currency: string;
+  reference?: string;
+  total?: number;
+  orderNumber?: string;
 }
 
 export interface SubmitRedvaultPreparedOrderOptions {
@@ -43,6 +59,12 @@ export interface SubmitRedvaultPreparedOrderOptions {
   firstName: string;
   lastName: string;
   merchantId: string;
+  /**
+   * Records the funnel start when initialization opens the provider
+   * flow: without it the attempt jumps from order_created straight to
+   * completion/failure.
+   */
+  onPaymentStarted?: (start: RedvaultPaymentStarted) => void;
 }
 
 /**
@@ -69,6 +91,7 @@ export async function submitRedvaultPreparedOrder({
   firstName,
   lastName,
   merchantId,
+  onPaymentStarted,
 }: SubmitRedvaultPreparedOrderOptions): Promise<boolean> {
   // A REDVAULT order prepared by an earlier click initializes here, AFTER
   // validation and fingerprinting. The prepared order is bound to the
@@ -209,6 +232,13 @@ export async function submitRedvaultPreparedOrder({
       isOrderInFlightRef.current = false;
       return true;
     }
+    onPaymentStarted?.({
+      orderId: activeRedvaultOrder.orderId,
+      currency: activeRedvaultOrder.currency,
+      reference: paymentResult.reference,
+      total: activeRedvaultOrder.total,
+      orderNumber: activeRedvaultOrder.orderNumber,
+    });
     window.location.assign(paymentResult.authorizationUrl);
     return true;
   }

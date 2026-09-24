@@ -7,6 +7,7 @@ import {
   frozenEventPipelineAuthoritySources,
 } from '@/lib/events/event-pipeline-frozen-authority-sources';
 import { EVENT_PIPELINE_FUNCTION_NAMES } from '@/lib/events/event-pipeline-function-names';
+import { eventPipelineImmediateOrderCredentialPaths } from '@/lib/events/event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from '@/lib/events/event-pipeline-jumia-credential-paths';
 import { eventPipelineLegacySdkImporters } from '@/lib/events/event-pipeline-legacy-sdk-importers';
 import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
@@ -135,6 +136,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
     ],
     credentialPaths: [
       ...eventPipelineCredentialPaths,
+      ...eventPipelineImmediateOrderCredentialPaths,
       ...eventPipelineJumiaCredentialPaths,
       ...eventPipelineRepairPickupCredentialPaths,
       ...eventPipelineRedvaultCredentialPaths,
@@ -168,6 +170,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/ads/server-credential-client.ts',
       'apps/web/src/lib/ads/server-spend-client.ts',
       'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
+      'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',

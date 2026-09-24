@@ -8,7 +8,7 @@ import {
   trackOrderCompleted,
 } from '@/services/analytics';
 
-interface CheckoutTrackingItem {
+export interface CheckoutTrackingItem {
   name?: string;
   negotiatedPrice?: number | null;
   price?: number;
@@ -16,18 +16,23 @@ interface CheckoutTrackingItem {
   quantity: number;
 }
 
-interface CheckoutPurchaseInput {
+export interface CheckoutPurchaseInput {
   customerEmail?: string;
   customerPhone?: string;
-  items: CheckoutTrackingItem[];
+  items?: CheckoutTrackingItem[];
   orderId: string;
-  orderNumber: string;
+  orderNumber?: string;
   paymentMethod: string;
-  shipping: number;
-  subtotal: number;
-  tax: number;
-  total: number;
+  shipping?: number;
+  subtotal?: number;
+  tax?: number;
+  total?: number;
   userId?: string;
+  /**
+   * Stamped order currency. Absent values keep the NGN default so
+   * callers without a currency source render exactly as before.
+   */
+  currency?: string;
 }
 
 function toAdItems(items: CheckoutTrackingItem[]) {
@@ -42,19 +47,27 @@ function toAdItems(items: CheckoutTrackingItem[]) {
 export function trackCheckoutRouteStarted({
   items,
   subtotal,
+  currency,
 }: {
   items: CheckoutTrackingItem[];
   subtotal: number;
+  /**
+   * Stamped checkout currency. Absent values keep the NGN default so
+   * callers without a currency source render exactly as before; a
+   * provided currency must reach every downstream stage, not just the
+   * first event.
+   */
+  currency?: string;
 }) {
   const itemCount = items.reduce((acc, item) => acc + item.quantity, 0);
   trackCheckoutStarted({
-    currency: 'NGN',
+    ...(currency ? { currency } : {}),
     itemCount,
     subtotal,
   });
 
   return trackAdCheckoutStarted({
-    currency: 'NGN',
+    ...(currency ? { currency } : {}),
     itemCount,
     items: toAdItems(items),
     subtotal,
@@ -65,33 +78,27 @@ export function trackCheckoutRoutePaymentInfo(paymentMethod: string) {
   return trackAdPaymentInfoAdded(paymentMethod);
 }
 
-export function trackCheckoutRoutePurchaseCompleted({
+export async function trackCheckoutRoutePurchaseCompleted({
   customerEmail,
   customerPhone,
-  items,
+  items = [],
   orderId,
-  orderNumber,
+  orderNumber = orderId,
   paymentMethod,
-  shipping,
-  subtotal,
-  tax,
-  total,
+  total = 0,
+  shipping = 0,
+  subtotal = total,
+  tax = 0,
   userId,
-}: CheckoutPurchaseInput) {
-  trackOrderCompleted({
-    currency: 'NGN',
-    itemCount: items.reduce((acc, item) => acc + item.quantity, 0),
-    orderId,
-    orderNumber,
-    paymentMethod,
-    shipping,
-    subtotal,
-    tax,
-    total,
-  });
-
-  return trackAdPurchase({
-    currency: 'NGN',
+  currency,
+}: CheckoutPurchaseInput): Promise<void> {
+  // Await the fallible ad purchase BEFORE the legacy order_completed
+  // event: if the ad emission rejects, the shared completion claim rolls
+  // back so a later poll or revisit can emit. Emitting order_completed
+  // first would let that escaped event double-count the conversion on
+  // retry, since a released claim cannot un-emit it.
+  await trackAdPurchase({
+    currency: currency ?? 'NGN',
     email: customerEmail,
     items: toAdItems(items),
     orderId,
@@ -103,5 +110,17 @@ export function trackCheckoutRoutePurchaseCompleted({
     tax,
     total,
     userId,
+  });
+
+  trackOrderCompleted({
+    currency: currency ?? 'NGN',
+    itemCount: items.reduce((acc, item) => acc + item.quantity, 0),
+    orderId,
+    orderNumber,
+    paymentMethod,
+    shipping,
+    subtotal,
+    tax,
+    total,
   });
 }

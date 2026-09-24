@@ -6,6 +6,14 @@ export interface OrderSuccessViewProps {
   isDark: boolean;
   isDocumentLoading?: boolean;
   /**
+   * Prior-payment evidence (partial payment or pre-gateway credit) that
+   * makes the generated preview a commercial invoice even though the
+   * order is not fully paid: the presentation must agree with the
+   * document instead of rendering proforma copy.
+   */
+  isCommercialDocument?: boolean;
+  isPaid?: boolean;
+  /**
    * While true the notification permission flow is in progress — including
    * the native system prompt after the soft-ask modal closes — so the
    * banner slot stays unmounted underneath it.

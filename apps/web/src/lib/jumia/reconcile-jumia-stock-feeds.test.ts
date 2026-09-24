@@ -245,4 +245,29 @@ describe('selectStockFeedIdsForReconciliation', () => {
     expect(dayFive).toContain('feed-29');
     expect(dayZero).not.toContain('feed-29');
   });
+
+  it('advances by a full batch per day so large backlogs rotate quickly', () => {
+    const feeds = Array.from(
+      { length: 100 },
+      (_, index) => `feed-${String(index).padStart(3, '0')}`
+    );
+    const dayZero = selectStockFeedIdsForReconciliation(feeds, 25, 0);
+    const dayOne = selectStockFeedIdsForReconciliation(feeds, 25, DAY_MS);
+
+    // Day one starts where day zero stopped instead of one position later,
+    // covering all 100 feeds within four days.
+    expect(dayZero[0]).toBe('feed-000');
+    expect(dayOne[0]).toBe('feed-025');
+    const covered = new Set<string>();
+    for (let day = 0; day < 4; day += 1) {
+      for (const feed of selectStockFeedIdsForReconciliation(
+        feeds,
+        25,
+        day * DAY_MS
+      )) {
+        covered.add(feed);
+      }
+    }
+    expect(covered.size).toBe(100);
+  });
 });

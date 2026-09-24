@@ -81,8 +81,9 @@ export async function syncJumiaOrderIntegration(
   let earliestFailedSyncMs: number | null = null;
   const attemptedNotificationKeys = new Set<string>();
   const syncStartedAt = formatJumiaOrderTimestamp(new Date());
+  const syncLowerBound = getJumiaSyncLowerBound(integration.last_sync_at);
   const orders = await dependencies.getAllOrders(client, {
-    updatedAfter: getJumiaSyncLowerBound(integration.last_sync_at),
+    updatedAfter: syncLowerBound,
     updatedBefore: syncStartedAt,
     size: 100,
     ...getJumiaOrderQueryFilters({
@@ -225,6 +226,11 @@ export async function syncJumiaOrderIntegration(
         ? previousFailureState.count + 1
         : 1;
     syncUpdate = {
+      // A never-synced integration has no cursor yet: persist this run's
+      // lower bound so failures stay retryable. Recomputing a moving
+      // seven-day lookback on every run would let an order that stays
+      // unprocessable for seven days fall out of the query window.
+      ...(integration.last_sync_at ? {} : { last_sync_at: syncLowerBound }),
       sync_error: `All ${integrationOrderErrors} Jumia order(s) failed; cursor not advanced (consecutive full failure ${fullFailureCount} at ${failureCursor}) so failed orders remain retryable`,
       sync_config: withFullFailureState(
         integration.sync_config,

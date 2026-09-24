@@ -38,9 +38,10 @@ export interface JumiaStockFeedReconciliation {
 
 /**
  * Selects the bounded feed window for one sync, rotating the starting offset
- * by UTC day. A fixed head slice would let stuck lookup-error feeds starve
- * newer feeds forever; rotation inspects every outstanding feed over time
- * without persisting a cursor.
+ * by a full batch per UTC day. A fixed head slice would let stuck
+ * lookup-error feeds starve newer feeds forever, and a one-position daily
+ * stride would take hundreds of days to reach the tail; rotation by `limit`
+ * inspects every outstanding feed over time without persisting a cursor.
  */
 export function selectStockFeedIdsForReconciliation(
   feedIds: readonly string[],
@@ -49,7 +50,8 @@ export function selectStockFeedIdsForReconciliation(
 ): string[] {
   const ordered = [...new Set(feedIds)].sort();
   if (ordered.length <= limit) return ordered;
-  const offset = Math.floor(nowMs / 86_400_000) % ordered.length;
+  const stride = Math.max(1, limit);
+  const offset = (Math.floor(nowMs / 86_400_000) * stride) % ordered.length;
   return Array.from(
     { length: limit },
     (_, index) => ordered[(offset + index) % ordered.length] as string

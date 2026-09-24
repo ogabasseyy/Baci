@@ -387,6 +387,58 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
     );
   });
 
+  it('persists a stable lower bound when a never-synced integration fully fails', async () => {
+    const marketplaceQuery = createQuery(
+      {
+        data: [
+          {
+            id: 'integration-1',
+            merchant_id: 'merchant-1',
+            shop_id: 'shop-1',
+            last_sync_at: null,
+            sync_config: { orders: true },
+          },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 2 }
+    );
+    const existingJumiaQuery = createQuery({ data: [], error: null });
+    const existingCanonicalQuery = createQuery({ data: [], error: null });
+    const syncCursorQuery = createQuery({ error: null }, { terminalEqCall: 1 });
+    const supabase = createSupabaseMock({
+      marketplace_integrations: [marketplaceQuery, syncCursorQuery],
+      jumia_orders: [existingJumiaQuery],
+      orders: [existingCanonicalQuery],
+    });
+
+    mocks.forIntegration.mockResolvedValue({ client: true });
+    vi.mocked(getAllOrders).mockResolvedValue([order]);
+    vi.mocked(getOrderItems).mockRejectedValue(new Error('item API timeout'));
+
+    const result = await syncJumiaOrdersForActiveIntegrations(supabase);
+
+    expect(result.orderErrors).toBe(1);
+    const updatePayload = syncCursorQuery.update.mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    // The persisted bound pins the next run's window instead of letting a
+    // recomputed seven-day lookback age the failed order out.
+    expect(typeof updatePayload?.last_sync_at).toBe('string');
+    const lowerBoundAgeMs =
+      Date.now() - Date.parse(updatePayload?.last_sync_at as string);
+    expect(lowerBoundAgeMs).toBeGreaterThan(6.9 * 86_400_000);
+    expect(lowerBoundAgeMs).toBeLessThan(7.1 * 86_400_000);
+    expect(updatePayload?.sync_config).toEqual(
+      expect.objectContaining({
+        jumia_full_failure: expect.objectContaining({
+          cursor: 'initial-sync',
+          count: 1,
+        }),
+      })
+    );
+  });
+
   it('parks the sync cursor at the earliest failed Jumia order', async () => {
     const secondOrder = {
       ...order,

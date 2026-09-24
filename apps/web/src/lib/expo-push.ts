@@ -659,7 +659,14 @@ export async function processTickets(
     }
   }
 
-  return { sent, failed, errors, succeededTokens };
+  // Omit the key when empty so fully-failed batches keep the historical
+  // result shape (the field is optional).
+  return {
+    sent,
+    failed,
+    errors,
+    ...(succeededTokens.length > 0 ? { succeededTokens } : {}),
+  };
 }
 
 export interface PushAttemptContext extends TicketContext {

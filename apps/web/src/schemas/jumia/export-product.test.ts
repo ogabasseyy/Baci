@@ -35,16 +35,16 @@ describe('jumiaExportProductSchema', () => {
         integrationId,
         productId,
         name: 'Product',
-        brand: { code: 0, name: '' },
-        category: { code: 0 },
+        brand: { code: 1, name: 'Brand' },
+        category: { code: 42 },
         variations: [{ sellerSku: 'SKU-1', price: 1 }],
       })
     ).toEqual({
       integrationId,
       productId,
       name: 'Product',
-      brand: { code: 0, name: '' },
-      category: { code: 0 },
+      brand: { code: 1, name: 'Brand' },
+      category: { code: 42 },
       variations: [{ sellerSku: 'SKU-1', price: 1, currency: 'NGN' }],
     });
   });

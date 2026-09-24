@@ -114,6 +114,75 @@ describe('resolveAuthorizedExportProduct', () => {
     });
   });
 
+  it('exports the legacy stock value when stock_quantity drifted to zero', async () => {
+    const supabase = createProductSupabase({
+      product: {
+        id: 'prod-1',
+        name: 'Phone',
+        description: 'A phone',
+        price: 100,
+        sku: 'SKU-1',
+        stock_quantity: 0,
+        stock: 7,
+        images: [],
+        has_variants: false,
+      },
+    });
+
+    const result = await resolveAuthorizedExportProduct(
+      supabase as never,
+      'merchant-1',
+      'prod-1',
+      'GHS'
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      product: expect.objectContaining({
+        variations: [
+          { sellerSku: 'SKU-1', price: 100, currency: 'GHS', stock: 7 },
+        ],
+      }),
+    });
+  });
+
+  it('omits stock when both stock fields are null', async () => {
+    const supabase = createProductSupabase({
+      product: {
+        id: 'prod-1',
+        name: 'Phone',
+        description: 'A phone',
+        price: 100,
+        sku: 'SKU-1',
+        stock_quantity: null,
+        stock: null,
+        images: [],
+        has_variants: false,
+      },
+    });
+
+    const result = await resolveAuthorizedExportProduct(
+      supabase as never,
+      'merchant-1',
+      'prod-1',
+      'GHS'
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      product: expect.objectContaining({
+        variations: [
+          {
+            sellerSku: 'SKU-1',
+            price: 100,
+            currency: 'GHS',
+            stock: undefined,
+          },
+        ],
+      }),
+    });
+  });
+
   it('returns 404 when the product is missing', async () => {
     const result = await resolveAuthorizedExportProduct(
       createProductSupabase({ product: null }) as never,

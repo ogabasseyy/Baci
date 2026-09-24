@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getEffectiveStock } from '@/lib/product-stock';
 import { sanitizeText, stripHtmlTags } from '@/lib/sanitize-core';
 
 export type ExportVariation = {
@@ -158,13 +159,16 @@ function buildVariationsFromProduct(
     };
   }
 
+  // Canonical fallback: a legacy product with stock_quantity = 0 but a
+  // positive legacy stock value exports the legacy value, not zero.
+  const hasStockValue = product.stock_quantity != null || product.stock != null;
   return {
     variations: [
       {
         sellerSku,
         price,
         currency,
-        stock: product.stock_quantity ?? product.stock ?? undefined,
+        stock: hasStockValue ? getEffectiveStock(product) : undefined,
       },
     ],
     variantIdsBySku,

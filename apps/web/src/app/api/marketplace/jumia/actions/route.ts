@@ -138,6 +138,19 @@ export async function POST(request: NextRequest) {
       }
       targetItemIds = orderItems.items.map((i) => i.id);
       isAllItems = true;
+    } else {
+      // Explicit IDs can still cover the whole order: the order modal always
+      // sends the full item list. Compare against the provider's complete set.
+      try {
+        const orderItems = await getOrderItems(jumiaClient, orderId);
+        const suppliedIds = new Set(targetItemIds);
+        isAllItems =
+          !!orderItems?.items?.length &&
+          orderItems.items.every((item) => suppliedIds.has(item.id));
+      } catch (error: unknown) {
+        // Proceed with the supplied IDs; only the order-level status sync is skipped.
+        logger.warn({ message: 'Jumia all-items check failed', error });
+      }
     }
 
     if (targetItemIds.length === 0) {

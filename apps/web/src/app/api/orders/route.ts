@@ -471,7 +471,15 @@ export async function POST(request: NextRequest) {
     const auth = await authenticateApiRequest(request);
     const supabase = auth.supabase ?? createClient(await cookies());
     const user = auth.user;
-    const json = await request.json();
+    let json: unknown;
+    try {
+      json = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON request body', code: 'INVALID_JSON' },
+        { status: 400 }
+      );
+    }
 
     // Capture IP and User Agent for enhanced ad tracking (improves Event Match Quality)
     // Use centralized IP resolution logic to prevent spoofing

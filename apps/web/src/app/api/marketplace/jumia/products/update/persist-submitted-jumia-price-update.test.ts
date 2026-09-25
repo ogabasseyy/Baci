@@ -86,6 +86,7 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
     expect(mockRpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
       p_merchant_id: MERCHANT_ID,
       p_updates: [{ id: 'map-1', price: 900 }],
+      p_expected_updated_at: UPDATED_AT,
     });
     // Optimistic guard: only rows still stamped with this request's
     // pre-push timestamp may be overwritten.
@@ -174,5 +175,104 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
       /Another save updated this product.*Refresh before retrying/
     );
     expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects a stale per-SKU save that resolves after a newer save', async () => {
+    const stampOlder = '2026-09-25T10:00:00.000Z';
+    const stampNewer = '2026-09-25T10:00:01.000Z';
+    const stampDbNow = '2026-09-25T10:00:02.000Z';
+    const rows = new Map([
+      ['map-1', { updated_at: stampOlder, jumia_price: 1000 }],
+    ]);
+    // Stateful stand-in that enforces the same contracts as Postgres: eq
+    // predicates filter, the RPC rejects stamps that no longer match.
+    const stateful = {
+      from: () => ({
+        update: (payload: Record<string, unknown>) => ({
+          in: (_column: string, ids: string[]) => ({
+            eq: (...first: [string, unknown]) => ({
+              eq: (...second: [string, unknown]) => ({
+                select: () => {
+                  const matched = ids.filter((id) => {
+                    const row = rows.get(id);
+                    if (!row) return false;
+                    return [first, second].every(
+                      ([column, value]) =>
+                        column === 'merchant_id' ||
+                        (row as Record<string, unknown>)[column] === value
+                    );
+                  });
+                  for (const id of matched) {
+                    const current = rows.get(id);
+                    if (current) rows.set(id, { ...current, ...payload });
+                  }
+                  return { data: matched.map((id) => ({ id })), error: null };
+                },
+              }),
+            }),
+          }),
+        }),
+      }),
+      rpc: (
+        _name: string,
+        params: {
+          p_updates: Array<{ id: string; price: number }>;
+          p_expected_updated_at: string;
+        }
+      ) => {
+        const stale = params.p_updates.some(
+          (update) =>
+            rows.get(update.id)?.updated_at !== params.p_expected_updated_at
+        );
+        if (stale) {
+          return {
+            error: {
+              message: 'Jumia price update superseded by a newer save',
+              code: '40001',
+            },
+          };
+        }
+        for (const update of params.p_updates) {
+          const current = rows.get(update.id);
+          if (current) {
+            rows.set(update.id, {
+              ...current,
+              jumia_price: update.price,
+              updated_at: stampDbNow,
+            });
+          }
+        }
+        return { error: null };
+      },
+    };
+    const mappings = [{ id: 'map-1', jumia_sku: 'SKU-1', jumia_price: 1000 }];
+
+    // The newer save lands first: its pre-push stamp replaces the older
+    // one, then its per-SKU prices persist.
+    const newerRow = rows.get('map-1');
+    if (newerRow) newerRow.updated_at = stampNewer;
+    const newer = await persistSubmittedJumiaPriceUpdate({
+      supabase: stateful as never,
+      merchantId: MERCHANT_ID,
+      mappings,
+      overrides: { jumia_prices: { 'SKU-1': 900 } },
+      submittedSkus: ['SKU-1'],
+      updatedAt: stampNewer,
+    });
+    expect(newer).toEqual({ ok: true });
+
+    // The older save resolves last: its RPC must be rejected and the
+    // newer price must survive.
+    const older = await persistSubmittedJumiaPriceUpdate({
+      supabase: stateful as never,
+      merchantId: MERCHANT_ID,
+      mappings,
+      overrides: { jumia_prices: { 'SKU-1': 700 } },
+      submittedSkus: ['SKU-1'],
+      updatedAt: stampOlder,
+    });
+    expect(older.ok).toBe(false);
+    expect(older.ok ? '' : older.error).toMatch(/Another save updated/);
+    expect(rows.get('map-1')?.jumia_price).toBe(900);
   });
 });

@@ -2,6 +2,7 @@ import { getCountryByCode } from '@/lib/countries';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 
 const currencyFormatterCache = new Map<string, Intl.NumberFormat>();
+const assignedCurrencies = new Set(Intl.supportedValuesOf('currency'));
 
 function getCurrencyFormatter(
   locale: string,
@@ -31,9 +32,11 @@ export function formatOrderCurrency(
   orderCurrency: string | null | undefined,
   merchantCountry: string | null | undefined
 ): string {
-  const trimmedCurrency = orderCurrency?.trim();
-  if (trimmedCurrency && /^[A-Za-z]{3}$/.test(trimmedCurrency)) {
-    return formatDisplayCurrency(amount, trimmedCurrency.toUpperCase());
+  const trimmedCurrency = orderCurrency?.trim().toUpperCase();
+  // Intl only checks a code's shape, so an unassigned value like ZZZ would
+  // render literally; fall back unless the code is actually assigned.
+  if (trimmedCurrency && assignedCurrencies.has(trimmedCurrency)) {
+    return formatDisplayCurrency(amount, trimmedCurrency);
   }
   const country = merchantCountry
     ? getCountryByCode(merchantCountry)

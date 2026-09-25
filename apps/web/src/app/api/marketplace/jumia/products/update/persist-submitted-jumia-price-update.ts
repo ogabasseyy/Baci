@@ -99,8 +99,15 @@ export async function persistSubmittedJumiaPriceUpdate(args: {
       merchantId,
       mappings,
       prices: submittedPrices,
+      expectedUpdatedAt: updatedAt,
     });
     if (!priceResult.ok) {
+      if (priceResult.code === '40001') {
+        return {
+          ok: false,
+          error: `Another save updated this product while the Jumia feed was submitting. ${ACCEPTED_FEED_RETRY_GUIDANCE}`,
+        };
+      }
       return {
         ok: false,
         error: `Jumia accepted the price feed but the local variant prices could not be saved. ${ACCEPTED_FEED_RETRY_GUIDANCE}`,

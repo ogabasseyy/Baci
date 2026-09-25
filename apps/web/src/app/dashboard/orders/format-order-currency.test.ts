@@ -18,6 +18,18 @@ describe('formatOrderCurrency', () => {
     );
   });
 
+  it('falls back for a well-formed but unassigned currency code', () => {
+    const supported = new Set(Intl.supportedValuesOf('currency'));
+    const unassigned = ['ZZZ', 'ABC', 'QQQ'].find(
+      (code) => !supported.has(code)
+    );
+    expect(unassigned).toBeDefined();
+    if (!unassigned) return;
+    expect(formatOrderCurrency(25000, unassigned, 'NG')).toBe(
+      formatOrderCurrency(25000, null, 'NG')
+    );
+  });
+
   it('falls back to USD without a merchant country', () => {
     expect(formatOrderCurrency(25000, null, null)).toBe('$25,000.00');
     expect(formatOrderCurrency(25000, undefined, undefined)).toBe('$25,000.00');

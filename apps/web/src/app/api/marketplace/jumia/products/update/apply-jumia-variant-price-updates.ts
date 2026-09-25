@@ -22,7 +22,8 @@ export async function applyJumiaVariantPriceUpdates(args: {
   merchantId: string;
   mappings: readonly JumiaVariantPriceMapping[];
   prices: Record<string, number>;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+  expectedUpdatedAt: string;
+}): Promise<{ ok: true } | { ok: false; error: string; code?: string }> {
   const updates = [];
   for (const mapping of args.mappings) {
     const price = args.prices[mapping.jumia_sku];
@@ -36,6 +37,7 @@ export async function applyJumiaVariantPriceUpdates(args: {
     {
       p_merchant_id: args.merchantId,
       p_updates: updates,
+      p_expected_updated_at: args.expectedUpdatedAt,
     }
   );
   if (priceUpdateError) {
@@ -43,7 +45,11 @@ export async function applyJumiaVariantPriceUpdates(args: {
       message: 'Local per-variant price update failed',
       error: priceUpdateError,
     });
-    return { ok: false, error: 'Failed to update local mapping' };
+    return {
+      ok: false,
+      error: 'Failed to update local mapping',
+      code: priceUpdateError.code,
+    };
   }
   return { ok: true };
 }

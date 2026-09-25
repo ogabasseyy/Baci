@@ -32,6 +32,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: { 'SKU-1': 900, 'SKU-2': 1800 },
+      expectedUpdatedAt: '2026-09-25T00:00:00.000Z',
     });
 
     expect(result).toEqual({ ok: true });
@@ -42,6 +43,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
         { id: 'map-1', price: 900 },
         { id: 'map-2', price: 1800 },
       ],
+      p_expected_updated_at: '2026-09-25T00:00:00.000Z',
     });
   });
 
@@ -53,6 +55,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: { 'SKU-2': 1800 },
+      expectedUpdatedAt: '2026-09-25T00:00:00.000Z',
     });
 
     expect(result).toEqual({ ok: true });
@@ -60,6 +63,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
     expect(rpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
       p_merchant_id: 'merchant-1',
       p_updates: [{ id: 'map-2', price: 1800 }],
+      p_expected_updated_at: '2026-09-25T00:00:00.000Z',
     });
 
     const empty = await applyJumiaVariantPriceUpdates({
@@ -67,6 +71,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: {},
+      expectedUpdatedAt: '2026-09-25T00:00:00.000Z',
     });
     expect(empty).toEqual({ ok: true });
     expect(rpc).toHaveBeenCalledTimes(1);
@@ -82,12 +87,34 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: { 'SKU-1': 900, 'SKU-2': 1800 },
+      expectedUpdatedAt: '2026-09-25T00:00:00.000Z',
     });
 
     expect(result).toEqual({
       ok: false,
       error: 'Failed to update local mapping',
+      code: undefined,
     });
     expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('threads the database error code through for superseded writes', async () => {
+    const { supabase } = createSupabaseStub({
+      error: { message: 'superseded', code: '40001' },
+    });
+
+    const result = await applyJumiaVariantPriceUpdates({
+      supabase,
+      merchantId: 'merchant-1',
+      mappings: MAPPINGS,
+      prices: { 'SKU-1': 900 },
+      expectedUpdatedAt: '2026-09-25T00:00:00.000Z',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'Failed to update local mapping',
+      code: '40001',
+    });
   });
 });

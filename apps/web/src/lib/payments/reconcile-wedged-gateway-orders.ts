@@ -12,10 +12,11 @@ import {
   verifyGatewayCharge,
 } from '@/lib/payments/verify-gateway-charge';
 
-// Wedged gateway payments (completed txn, order never flipped) and pending
-// Juicyway sessions whose success webhook never arrived: heal after
-// re-verifying with the gateway. Terminal outcomes file a review and stamp the
-// row once.
+// Wedged gateway payments (completed txn, order never flipped), pending
+// Juicyway sessions whose success webhook never arrived, and pending rows
+// the sessionless verify GET already confirmed with the provider (flagged
+// through the proof-bound flag RPC): heal after re-verifying with the
+// gateway. Terminal outcomes file a review and stamp the row once.
 
 const AMOUNT_TOLERANCE_MAJOR_UNITS = 0.01;
 const DEFAULT_LIMIT = 10;
@@ -76,7 +77,13 @@ export async function reconcileWedgedGatewayOrders({
       'id, created_at, order_id, merchant_id, amount, currency, platform_fee, gateway, gateway_reference, metadata, status, orders!transactions_order_id_fkey!inner(id, payment_status, cancelled_at)'
     )
     .eq('transaction_type', 'payment')
-    .or('status.eq.completed,and(status.eq.pending,gateway.eq.juicyway)')
+    // Pending Paystack/Korapay rows enter only via the provider-confirmed
+    // flag (first flag wins, so re-polls do not extend the webhook grace
+    // below): abandoned attempts without provider confirmation stay out
+    // of the sweep instead of retiring with ops reviews.
+    .or(
+      'status.eq.completed,and(status.eq.pending,gateway.eq.juicyway),and(status.eq.pending,metadata->>guest_provider_confirmed.eq.true)'
+    )
     .not('order_id', 'is', null)
     .lt('updated_at', cutoff)
     .neq('orders.payment_status', 'paid')

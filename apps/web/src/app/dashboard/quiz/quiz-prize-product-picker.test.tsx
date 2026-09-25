@@ -176,4 +176,18 @@ describe('QuizPrizeProductPicker', () => {
       await screen.findByRole('option', { name: /Samsung Galaxy S25/i })
     ).toBeInTheDocument();
   });
+
+  it('keeps the result list overlaid so it does not resize the form grid', async () => {
+    render(
+      <QuizPrizeProductPicker
+        initialProducts={[initialProduct]}
+        onSelect={vi.fn()}
+        selectedProduct={null}
+      />
+    );
+
+    fireEvent.focus(screen.getByRole('combobox'));
+
+    expect(screen.getByRole('listbox')).toHaveClass('absolute', 'z-50');
+  });
 });

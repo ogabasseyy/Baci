@@ -66,8 +66,8 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
   },
   {
     id: 'invoice',
-    label: 'Generate Invoice',
-    description: 'Create an invoice for later payment',
+    label: 'Get a Proforma Invoice',
+    description: 'Send it to your company',
     icon: 'receipt-outline',
     tab: 'pay_later',
   },

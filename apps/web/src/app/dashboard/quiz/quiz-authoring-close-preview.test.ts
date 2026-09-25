@@ -17,14 +17,14 @@ describe('resolveQuizAuthoringClosesAt', () => {
         timingKind: 'immediate',
         windowMinutes: '5',
       })
-    ).toBe('About 5 minutes after launch');
+    ).toBe('After 5m');
     expect(
       resolveQuizAuthoringClosesAt({
         scheduledEnd: '',
         timingKind: 'immediate',
         windowMinutes: '1',
       })
-    ).toBe('About 1 minute after launch');
+    ).toBe('After 1m');
   });
 
   it('falls back to the window text when no end is scheduled yet', () => {
@@ -36,7 +36,7 @@ describe('resolveQuizAuthoringClosesAt', () => {
     });
 
     // Assert
-    expect(closesAt).toBe('About 5 minutes after launch');
+    expect(closesAt).toBe('After 5m');
   });
 
   it('renders the scheduled end from the policy zone', () => {

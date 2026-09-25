@@ -26,6 +26,8 @@ export interface PaymentGatewayRefs {
   loadTimeoutRef: RefObject<ReturnType<typeof setTimeout> | null>;
   navigationTimeoutRef: RefObject<ReturnType<typeof setTimeout> | null>;
   paymentCompletionStartedRef: RefObject<boolean>;
+  paymentFailureRecordedRef: RefObject<boolean>;
+  paymentFailureReferenceRef: RefObject<string | undefined>;
   savingsAuthorizationAbortRef: RefObject<AbortController | null>;
   statusRef: RefObject<PaymentGatewayStatus>;
   vtuConfirmationTokenRef: RefObject<number>;

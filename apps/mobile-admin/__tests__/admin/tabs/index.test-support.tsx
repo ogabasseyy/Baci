@@ -78,6 +78,7 @@ vi.mock('@/components/dashboard', async () => {
     ),
     RevenueChart: () => <Text>revenue-chart</Text>,
     StatCard: ({ label }: { label: string }) => <Text>{label}</Text>,
+    StoreSetupStatusCard: () => <Text>store-setup-status-card</Text>,
     WelcomeHeader: ({ onAvatarPress }: { onAvatarPress?: () => void }) => (
       <>
         <button

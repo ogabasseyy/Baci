@@ -6,7 +6,7 @@ import type { QuizSupabaseClient } from './quiz-generate-helpers';
 const PRODUCT_COLUMNS =
   'id, merchant_id, name, images, condition, default_variant_id, has_variants, manage_stock, stock, stock_quantity';
 const VARIANT_COLUMNS =
-  'id, merchant_id, product_id, condition, stock_quantity, primary_image, images';
+  'id, merchant_id, product_id, condition, stock_quantity, primary_image, images, is_inventory_anchor';
 
 type ProductRow = {
   condition: string | null;
@@ -25,6 +25,7 @@ type VariantRow = {
   condition: string | null;
   id: string;
   images: Array<string | { url?: string | null }> | null;
+  is_inventory_anchor: boolean | null;
   merchant_id: string;
   primary_image: string | null;
   product_id: string;
@@ -72,7 +73,13 @@ export async function resolveQuizPrizeSelection(
       .maybeSingle();
     if (variantError || !variantData) return null;
     const variant = variantData as VariantRow;
-    if (variant.merchant_id !== merchantId || variant.product_id !== product.id)
+    if (
+      variant.merchant_id !== merchantId ||
+      variant.product_id !== product.id ||
+      // Stale clients can still submit an anchor id; the prize reserve
+      // RPC rejects anchors, so refuse them at selection time too.
+      variant.is_inventory_anchor === true
+    )
       return null;
     variantId = variant.id;
     condition = variant.condition?.trim() || condition;

@@ -1,3 +1,4 @@
+import { toMoneyRouteParam } from '@/components/bnpl-checkout/bnpl-params.schema';
 import type {
   SavingsSelection,
   WalletSelection,
@@ -115,7 +116,7 @@ export function buildKlumpBnplRouteParams({
   trackingToken,
 }: BuildKlumpBnplRouteParamsInput) {
   return {
-    amount: String(amount),
+    amount: toMoneyRouteParam(amount),
     authorizationUrl,
     customerEmail,
     customerName,

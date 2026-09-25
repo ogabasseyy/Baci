@@ -9,6 +9,10 @@ export const eventPipelineAuthorityServicePaths = [
     'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
   ],
   [
+    'apps/web/src/app/api/cron/provision-immediate-notification-completion-hmac/route.ts',
+    'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
+  ],
+  [
     'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
     'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
   ],

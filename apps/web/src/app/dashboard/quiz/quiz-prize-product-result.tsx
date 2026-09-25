@@ -3,6 +3,7 @@
 import { Check, ImageIcon } from 'lucide-react';
 import { ThumbnailImage } from '@/components/optimized-image';
 import { formatCurrency } from '@/lib/currency';
+import { PRODUCT_IMAGE_PLACEHOLDER_URL } from '@/lib/product-image';
 import { cn } from '@/lib/utils';
 import type { QuizPrizeProduct } from '@/schemas/quiz-prize-product';
 
@@ -58,8 +59,10 @@ export function QuizPrizeProductResult({
             alt={`${product.name}${product.variantLabel ? ` ${product.variantLabel}` : ''}`}
             className="object-cover"
             fill
+            fallbackSrc={PRODUCT_IMAGE_PLACEHOLDER_URL}
             sizes="52px"
             src={product.imageUrl}
+            unoptimized
           />
         ) : (
           <ImageIcon

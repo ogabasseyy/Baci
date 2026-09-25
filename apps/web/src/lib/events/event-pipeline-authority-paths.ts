@@ -11,4 +11,9 @@ export const eventPipelineAdminImporters = [
   'apps/web/src/lib/shipping/persist-admin-gigl-quote.ts',
   'apps/web/src/lib/shipping/persist-refreshed-shipping-quote.ts',
   'apps/web/src/lib/payments/resolve-order-gateway-completion.ts',
+  // Audited immediate-order notification senders (invoice funnel): build
+  // invoice/proforma artifacts and confirmation mail with the admin client,
+  // matching repair-notifications.ts above.
+  'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
+  'apps/web/src/lib/immediate-order/confirmation-email.ts',
 ] as const;

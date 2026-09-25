@@ -21,7 +21,7 @@ describe('PAYMENT_INTENTS', () => {
     ]);
   });
 
-  it('maps each intent onto a payment tab, pinning a method only for pay_later', () => {
+  it('maps each intent onto a payment tab, pinning a method for direct intents', () => {
     expect(intentById('full').tab).toBe('full');
     expect(intentById('full').method).toBeUndefined();
 
@@ -49,7 +49,7 @@ describe('isIntentSelected', () => {
     expect(isIntentSelected(full, 'installments', 'paystack')).toBe(false);
   });
 
-  it('requires both tab and method to match for a terminal pay_later intent', () => {
+  it('requires both tab and method to match for a terminal intent', () => {
     const payforme = intentById('payforme');
     const invoice = intentById('invoice');
 

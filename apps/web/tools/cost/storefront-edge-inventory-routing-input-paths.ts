@@ -74,7 +74,6 @@ export const STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS = [
   'apps/web/src/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/insurance/insurance-policy-client.tsx',
   'apps/web/src/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/insurance/insurance-policy-footer-actions.tsx',
   'apps/web/src/components/storefront/ogabassey/components/chat/markdown-renderer.tsx',
-  'apps/web/src/components/storefront/ogabassey/pages/order-success-page.tsx',
   'apps/web/src/app/(storefront)/[slug]/(blog)/blog/[postSlug]/BlogVideoPanel.tsx',
   'apps/web/src/components/analytics/analytics-pixel-provider.tsx',
   'apps/web/src/components/analytics/facebook-pixel.tsx',

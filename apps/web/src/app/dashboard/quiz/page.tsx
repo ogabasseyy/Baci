@@ -1,14 +1,23 @@
-import { getEffectiveProductStock } from '@baci/shared';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { expandPrizeProduct } from '@/app/api/merchant/quiz/prize-products/prize-product-expansion';
+import {
+  isProductRow,
+  isVariantRow,
+} from '@/app/api/merchant/quiz/prize-products/prize-product-mapping';
+import { paginatePrizeProducts } from '@/app/api/merchant/quiz/prize-products/prize-product-pagination';
+import {
+  PRODUCT_PROJECTION,
+  VARIANT_PROJECTION,
+} from '@/app/api/merchant/quiz/prize-products/prize-product-projections';
 import {
   ensurePermission,
   isMerchantPermissionRedirectError,
 } from '@/lib/merchant-server';
-import { getPrimaryProductImage } from '@/lib/product-image';
 import { createClient } from '@/lib/supabase/server';
 import {
+  type QuizPrizeProduct,
   quizPrizeProductSchema,
   quizPrizeProductsResponseSchema,
 } from '@/schemas/quiz-prize-product';
@@ -19,43 +28,19 @@ export const metadata: Metadata = {
   description: 'Generate merchant quiz topics and questions with Gemma',
 };
 
-type PrizeProductRow = {
-  default_variant_id: string | null;
-  condition: string | null;
-  has_variants: boolean | null;
-  id: string;
-  images: Array<string | { url?: string | null }> | null;
-  name: string;
-  manage_stock: boolean | null;
-  price: number | string | null;
-  stock: number | string | null;
-  stock_quantity: number | string | null;
-};
-
 const INITIAL_PRIZE_PRODUCT_LIMIT = 100;
-
-function productOffsetCursor(productOffset: number): string {
-  // Matches the product-offset/zero-variant cursor consumed by the prize API.
-  return String((productOffset * (productOffset + 1)) / 2);
-}
-
-function isPrizeProductRow(value: unknown): value is PrizeProductRow {
-  if (!value || typeof value !== 'object') return false;
-  const row = value as Partial<PrizeProductRow>;
-  return typeof row.id === 'string' && typeof row.name === 'string';
-}
+const VARIANT_HYDRATION_CHUNK_SIZE = 10;
 
 export async function loadPrizeProducts(merchantId: string) {
   const supabase = createClient(await cookies());
   const { count, data, error } = await supabase
     .from('products')
-    .select(
-      'id, name, price, images, condition, default_variant_id, has_variants, manage_stock, stock, stock_quantity',
-      { count: 'exact' }
-    )
+    .select(PRODUCT_PROJECTION, { count: 'exact' })
     .eq('merchant_id', merchantId)
     .eq('status', 'active')
     .order('updated_at', { ascending: false })
+    // Match the API candidate order so continuation cursors resume coherently.
+    .order('id', { ascending: true })
     .limit(INITIAL_PRIZE_PRODUCT_LIMIT);
 
   if (error) {
@@ -67,45 +52,93 @@ export async function loadPrizeProducts(merchantId: string) {
     };
   }
 
-  const rows = (Array.isArray(data) ? data : []).filter(isPrizeProductRow);
-  const products = rows
-    .map((row) => {
-      const manageStock = row.manage_stock === true;
-      const effectiveStock = manageStock ? getEffectiveProductStock(row) : null;
-      const hasVariants = row.has_variants === true;
-      return {
-        available: !hasVariants && (!manageStock || (effectiveStock ?? 0) > 0),
-        condition: row.condition?.trim() || 'unspecified',
-        defaultVariantId: row.default_variant_id ?? null,
-        effectiveStock,
-        hasVariants,
-        id: row.id,
-        imageUrl: getPrimaryProductImage(row.images),
-        manageStock,
-        name: row.name,
-        price: Number(row.price ?? 0),
-        requiresVariantSelection: hasVariants,
-        selectionId: `${row.id}:product`,
-        variantId: null,
-        variantLabel: null,
-      };
-    })
-    .flatMap((product) => {
-      const parsed = quizPrizeProductSchema.safeParse(product);
-      return parsed.success ? [parsed.data] : [];
-    });
-
+  const candidates = Array.isArray(data) ? data : [];
+  // Mirror the prize API: expand variant parents into selectable variant rows
+  // and omit parents with no concrete variant inventory, so the initial page
+  // never shows the unselectable parents that searches omit. Hydrate variant
+  // parents in bounded concurrent chunks, fetching at most the rows still
+  // needed to fill the page (plus a lookahead row proving truncation), so a
+  // large variant matrix cannot make this SSR request download unbounded
+  // inventory; the paginator's cursor resumes where hydration stopped.
+  // Dropped rows keep empty groups so group positions stay aligned with
+  // candidate offsets, like the API.
+  const groups: QuizPrizeProduct[][] = [];
+  let expandedCount = 0;
+  let processedCount = 0;
+  while (
+    processedCount < candidates.length &&
+    expandedCount < INITIAL_PRIZE_PRODUCT_LIMIT
+  ) {
+    const chunk = candidates.slice(
+      processedCount,
+      processedCount + VARIANT_HYDRATION_CHUNK_SIZE
+    );
+    const chunkLimit = INITIAL_PRIZE_PRODUCT_LIMIT - expandedCount + 1;
+    const chunkResults = await Promise.all(
+      chunk.map((item) => {
+        if (
+          !isProductRow(item) ||
+          item.merchant_id !== merchantId ||
+          item.has_variants !== true
+        ) {
+          return Promise.resolve({ data: null, error: null });
+        }
+        return (
+          supabase
+            .from('product_variants')
+            .select(VARIANT_PROJECTION)
+            .eq('merchant_id', merchantId)
+            .eq('product_id', item.id)
+            // Anchors must be excluded before the lookahead limit: a fetched
+            // anchor would consume the truncation-proving row and strand the
+            // parent's remaining selectable variants without a cursor.
+            .eq('is_inventory_anchor', false)
+            .order('created_at', { ascending: true, nullsFirst: true })
+            .order('id', { ascending: true })
+            .limit(chunkLimit)
+        );
+      })
+    );
+    for (const [index, item] of chunk.entries()) {
+      const fetched = chunkResults[index];
+      if (fetched.error) {
+        return {
+          error: 'Failed to load prize products',
+          nextCursor: null,
+          products: [],
+          total: null,
+        };
+      }
+      if (!isProductRow(item) || item.merchant_id !== merchantId) {
+        groups.push([]);
+        continue;
+      }
+      const variants = (Array.isArray(fetched.data) ? fetched.data : [])
+        .filter(isVariantRow)
+        .filter((row) => row.merchant_id === merchantId)
+        // Serialized-inventory anchors are internal rows the prize reserve
+        // RPC rejects; never offer them as selectable prize variants.
+        .filter((row) => row.is_inventory_anchor !== true);
+      const expanded = expandPrizeProduct(item, variants).flatMap((product) => {
+        const parsed = quizPrizeProductSchema.safeParse(product);
+        return parsed.success ? [parsed.data] : [];
+      });
+      groups.push(expanded);
+      expandedCount += expanded.length;
+    }
+    processedCount += chunk.length;
+  }
   const total = typeof count === 'number' && count >= 0 ? count : null;
-  const nextCursor =
-    total !== null &&
-    rows.length === INITIAL_PRIZE_PRODUCT_LIMIT &&
-    total > rows.length
-      ? productOffsetCursor(rows.length)
-      : null;
+  const page = paginatePrizeProducts({
+    groups,
+    hasMoreCandidates: total !== null && total > groups.length,
+    limit: INITIAL_PRIZE_PRODUCT_LIMIT,
+    start: { productOffset: 0, variantOffset: 0 },
+  });
 
   const response = quizPrizeProductsResponseSchema.safeParse({
-    nextCursor,
-    products,
+    nextCursor: page.nextCursor,
+    products: page.products,
     total,
   });
   if (!response.success) {
@@ -141,6 +174,7 @@ export default async function QuizDashboardPage() {
 
   return (
     <QuizAdminClient
+      initialNextCursor={prizeProductResult.nextCursor}
       initialPrizeProducts={prizeProductResult.products}
       initialPrizeProductsError={prizeProductResult.error}
     />

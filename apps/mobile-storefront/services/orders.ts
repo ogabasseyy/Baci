@@ -11,7 +11,6 @@ import {
   supabaseAuthStorage,
   supabaseAuthStorageKey,
 } from '@/lib/supabase';
-import { trackEvent } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 import {
   mapCreateOrderException,
@@ -24,6 +23,7 @@ import {
   CreateOrderRequestSchema,
   type OrderResponse,
 } from './orders.schemas';
+import { recordOrderCreatedAnalytics } from './orders-analytics';
 import { resolveCheckoutAuth } from './orders-auth';
 import { buildSnapshottedOrderPayload } from './orders-credit-freeze';
 import { releaseCreditAfterDefinitiveRejection } from './orders-credit-release';
@@ -56,6 +56,7 @@ async function checkNetwork(): Promise<boolean> {
 
 export type CreateOrderOptions = {
   checkoutGeneration?: string;
+  analyticsPaymentMethod?: string;
   expectedOwner?: string;
   queuedReplay?: boolean;
 };
@@ -210,17 +211,12 @@ export async function createOrder(
       response.headers.get('x-idempotency-replayed') === 'true' ||
       normalizedOrderResponse.idempotency?.replayed === true;
 
-    if (!replayed) {
-      trackEvent('order_created', {
-        orderId: normalizedOrderResponse.order.id,
-        orderNumber: normalizedOrderResponse.order.order_number ?? 'N/A',
-        total: normalizedOrderResponse.order.total,
-        itemCount: request.items.length,
-        paymentMethod: request.payment_method,
-        duration_ms: Date.now() - startTime,
-        source: 'mobile_app',
-      });
-    }
+    recordOrderCreatedAnalytics(
+      normalizedOrderResponse,
+      request,
+      startTime,
+      options?.analyticsPaymentMethod
+    );
 
     // The submitted generation travels with the response so rollback
     // recovery replays this exact order identity on retry.

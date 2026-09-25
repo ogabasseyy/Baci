@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  generateOrderConfirmationEmail,
-  generateOrderConfirmationText,
-} from './order-confirmation';
+import { generateOrderConfirmationEmail } from './order-confirmation';
+import { generateOrderConfirmationText } from './order-confirmation-text';
 
 const baseOrderData = {
   orderNumber: 'ORD-001',
@@ -87,6 +85,60 @@ describe('Order confirmation email', () => {
       expect(text).toContain('Widget');
       expect(text).toContain('11,500');
     });
+
+    it('uses quotation semantics for proforma documents', () => {
+      const payload = { ...baseOrderData, documentKind: 'proforma' as const };
+      const html = generateOrderConfirmationEmail(payload);
+      const text = generateOrderConfirmationText(payload);
+
+      expect(html).toContain('Proforma Invoice #ORD-001');
+      expect(html).not.toContain('Order #ORD-001 Confirmed');
+      expect(html).toContain('no payment taken yet');
+      expect(html).toContain('will be processed once payment is received');
+      expect(html).toContain('Track Order Status');
+      expect(html).not.toContain('View Proforma Invoice');
+      expect(text).toContain('Proforma Invoice');
+      expect(text).not.toContain('Order Confirmed!');
+      expect(text).toContain('a quotation, not a confirmed order');
+      expect(text).not.toContain('will be shipped soon');
+    });
+
+    it('keeps confirmation semantics by default', () => {
+      const html = generateOrderConfirmationEmail(baseOrderData);
+      const text = generateOrderConfirmationText(baseOrderData);
+
+      expect(html).toContain('Order #ORD-001 Confirmed');
+      expect(html).not.toContain('Proforma Invoice');
+      expect(text).toContain('Order Confirmed!');
+      expect(text).toContain('will be shipped soon');
+    });
+
+    it('carries balance instructions on flagged credited confirmations', () => {
+      const payload = {
+        ...baseOrderData,
+        documentKind: 'confirmation' as const,
+        amountDue: 6500,
+        balanceDueInstructions: true,
+        virtualAccount: {
+          bankName: 'Test Bank',
+          accountNumber: '0123456789',
+          accountName: 'Baci / Ada',
+        },
+      };
+      const html = generateOrderConfirmationEmail(payload);
+      const text = generateOrderConfirmationText(payload);
+
+      // Commercial classification everywhere, transfer instructions added.
+      expect(html).toContain('Order #ORD-001 Confirmed');
+      expect(html).not.toContain('Proforma Invoice');
+      expect(html).toContain('Complete Your Bank Transfer');
+      expect(html).toContain('0123456789');
+      expect(html).toContain('outstanding balance');
+      expect(text).toContain('Order Confirmed!');
+      expect(text).toContain('outstanding balance');
+      expect(text).toContain('0123456789');
+      expect(text).not.toContain('will be shipped soon');
+    });
   });
 
   describe('currency formatting', () => {
@@ -149,6 +201,208 @@ describe('Order confirmation email', () => {
       expect(html).not.toContain('<script>alert(1)</script>');
       expect(html).not.toContain('javascript:alert(1)');
       expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    });
+  });
+
+  describe('proforma CTA destination', () => {
+    const proformaPayload = {
+      ...baseOrderData,
+      documentKind: 'proforma' as const,
+      paymentLink: 'https://testshop.usebaci.com/track-order?token=track-123',
+    };
+
+    it('labels the tracking anchor as status tracking on both deferred variants', () => {
+      // The CTA resolves to the status-only tracking page (the quote
+      // travels as the attached PDF): the label must not promise the
+      // document on either variant.
+      for (const documentKind of ['proforma', 'payment_request'] as const) {
+        const html = generateOrderConfirmationEmail({
+          ...proformaPayload,
+          documentKind,
+        });
+
+        expect(html).toContain('Track Order Status');
+        expect(html).not.toContain('View Proforma Invoice');
+        expect(html).not.toContain('View Payment Request');
+        expect(html).toContain(
+          'href="https://testshop.usebaci.com/track-order?token=track-123"'
+        );
+      }
+    });
+
+    it('includes the payment link in the plain-text next steps', () => {
+      const text = generateOrderConfirmationText(proformaPayload);
+
+      expect(text).toContain(
+        'https://testshop.usebaci.com/track-order?token=track-123'
+      );
+    });
+
+    it('renders bank-transfer instructions the reader can act on', () => {
+      const html = generateOrderConfirmationEmail({
+        ...proformaPayload,
+        virtualAccount: {
+          bankName: 'Wema Bank',
+          accountNumber: '1234567890',
+          accountName: 'OgaBassey-Test',
+        },
+      });
+
+      // The tracking link cannot take payment: the reader pays by
+      // transfer, so the account details must be in the email itself.
+      expect(html).toContain('Complete Your Bank Transfer');
+      expect(html).toContain('Wema Bank');
+      expect(html).toContain('OgaBassey-Test');
+      expect(html).toContain('1234567890');
+      expect(html).not.toContain('pay using the invoice link');
+    });
+
+    it('routes text payment through the transfer details, not the link', () => {
+      const text = generateOrderConfirmationText({
+        ...proformaPayload,
+        virtualAccount: {
+          bankName: 'Wema Bank',
+          accountNumber: '1234567890',
+          accountName: 'OgaBassey-Test',
+        },
+      });
+
+      expect(text).toContain('Payment Details (bank transfer)');
+      expect(text).toContain('Account Number: 1234567890');
+      expect(text).toContain('Complete your bank transfer');
+      expect(text).not.toContain('Complete payment using your invoice link');
+    });
+
+    it('falls back to merchant contact when no account was assigned', () => {
+      const html = generateOrderConfirmationEmail(proformaPayload);
+      const text = generateOrderConfirmationText(proformaPayload);
+
+      expect(html).not.toContain('Complete Your Bank Transfer');
+      expect(text).not.toContain('Payment Details (bank transfer)');
+      expect(text).toContain('please contact TestShop for payment details');
+    });
+
+    it('directs HTML readers to the merchant when no account was assigned', () => {
+      const html = generateOrderConfirmationEmail(proformaPayload);
+
+      // Without a DVA the payment-details block is omitted: the HTML
+      // intro must not promise details "in this email" but match the
+      // text fallback so the reader still has a payable path.
+      expect(html).not.toContain('payment details in this email');
+      expect(html).toContain('contact TestShop for payment details');
+    });
+
+    it('charges only the outstanding balance after partial credit', () => {
+      const payload = {
+        ...proformaPayload,
+        total: 11500,
+        amountDue: 1500,
+        virtualAccount: {
+          bankName: 'Wema Bank',
+          accountNumber: '1234567890',
+          accountName: 'OgaBassey-Test',
+        },
+      };
+      const html = generateOrderConfirmationEmail(payload);
+      const text = generateOrderConfirmationText(payload);
+
+      // 10000 of credit already applied: instructing the full 11500
+      // would overcharge the customer.
+      expect(html).toContain('Transfer <strong>₦1,500.00</strong>');
+      expect(html).not.toContain('Transfer <strong>₦11,500.00</strong>');
+      expect(text).toContain('Complete your bank transfer of ₦1,500.00');
+      expect(text).not.toContain('Complete your bank transfer of ₦11,500.00');
+    });
+
+    it('falls back to merchant contact for foreign-currency quotes', () => {
+      // Paystack DVAs settle in NGN only: a USD quote must not print a
+      // naira account beside a dollar amount, even if a stale account
+      // object is passed.
+      const payload = {
+        ...proformaPayload,
+        currency: 'USD',
+        virtualAccount: {
+          bankName: 'Wema Bank',
+          accountNumber: '1234567890',
+          accountName: 'OgaBassey-Test',
+        },
+      };
+      const html = generateOrderConfirmationEmail(payload);
+      const text = generateOrderConfirmationText(payload);
+
+      expect(html).not.toContain('Complete Your Bank Transfer');
+      expect(html).not.toContain('1234567890');
+      expect(html).toContain('contact TestShop for payment details');
+      expect(text).not.toContain('Payment Details (bank transfer)');
+      expect(text).not.toContain('Account Number: 1234567890');
+      expect(text).toContain('please contact TestShop for payment details');
+    });
+
+    it('omits transfer instructions when nothing is due', () => {
+      // A 100% discount leaves amountDue at 0: instructing a ₦0.00
+      // transfer (which can never confirm the order) is an impossible
+      // next step, so the quote states that no payment is due instead.
+      const payload = {
+        ...proformaPayload,
+        total: 11500,
+        amountDue: 0,
+        virtualAccount: {
+          bankName: 'Wema Bank',
+          accountNumber: '1234567890',
+          accountName: 'OgaBassey-Test',
+        },
+      };
+      const html = generateOrderConfirmationEmail(payload);
+      const text = generateOrderConfirmationText(payload);
+
+      expect(html).not.toContain('Complete Your Bank Transfer');
+      expect(html).not.toContain('1234567890');
+      expect(html).toContain('No payment is due on this quote');
+      expect(text).not.toContain('Payment Details (bank transfer)');
+      expect(text).not.toContain('Complete your bank transfer');
+      expect(text).toContain('No payment is due on this quote');
+    });
+
+    it('renders payment requests with request semantics and transfer instructions', () => {
+      // Pay for Me keeps its distinct document kind (never proforma) while
+      // sharing the transfer-instruction mechanics: the requester forwards
+      // these details to their payer.
+      const payload = {
+        ...proformaPayload,
+        documentKind: 'payment_request' as const,
+        virtualAccount: {
+          bankName: 'Wema Bank',
+          accountNumber: '1234567890',
+          accountName: 'OgaBassey-Test',
+        },
+      };
+      const html = generateOrderConfirmationEmail(payload);
+      const text = generateOrderConfirmationText(payload);
+
+      expect(html).toContain('Payment Request #ORD-001');
+      expect(html).toContain('Share the transfer details with your payer');
+      expect(html).toContain('Complete Your Bank Transfer');
+      expect(html).toContain('1234567890');
+      expect(html).toContain('Track Order Status');
+      expect(html).not.toContain('View Payment Request');
+      expect(html).not.toContain('Proforma Invoice');
+      expect(html).not.toContain('procurement team');
+      expect(text).toContain('Payment Request');
+      expect(text).toContain('Share the transfer details with your payer');
+      expect(text).toContain('Payment Details (bank transfer)');
+      expect(text).toContain('Account Number: 1234567890');
+      expect(text).not.toContain('Proforma Invoice');
+    });
+
+    it('keeps the confirmation CTA on the storefront homepage', () => {
+      const html = generateOrderConfirmationEmail({
+        ...baseOrderData,
+        paymentLink: 'https://testshop.usebaci.com/track-order?token=track-123',
+      });
+
+      expect(html).toContain('View Order');
+      expect(html).toContain('href="https://testshop.usebaci.com/"');
+      expect(html).not.toContain('track-order?token=track-123');
     });
   });
 });

@@ -28,6 +28,9 @@ export const mockSearchParamsHolder: { current: Record<string, string> } = {
 export const mockReceiptDismissalHolder: {
   current: (() => void) | undefined;
 } = { current: undefined };
+export const mockPaidCheckOrderHolder: {
+  current: { payment_status?: string } | null;
+} = { current: null };
 export const mockMaybeShowPostOrderInterstitial = jest.fn<
   (options?: {
     isCancelled?: () => boolean;
@@ -56,18 +59,38 @@ export function mockOrderSuccessViewModule(): unknown {
   };
 }
 
+export const mockOrderReconciliationView = jest.fn();
+
+export function mockOrderReconciliationViewModule(): unknown {
+  return {
+    OrderReconciliationView: (props: unknown) => {
+      const { View } =
+        jest.requireActual<typeof import('react-native')>('react-native');
+      mockOrderReconciliationView(props);
+      return <View testID="order-reconciliation-view" />;
+    },
+  };
+}
+
+export const mockReceiptPreviewModalHolder: {
+  current: { documentType?: string } | null;
+} = { current: null };
+
 export function mockReceiptPreviewModalModule(): unknown {
   return {
     ReceiptPreviewModal: ({
       onDismissed,
       visible,
+      documentType,
     }: {
       onDismissed?: () => void;
       visible: boolean;
+      documentType?: string;
     }) => {
       const { View } =
         jest.requireActual<typeof import('react-native')>('react-native');
       mockReceiptDismissalHolder.current = onDismissed;
+      mockReceiptPreviewModalHolder.current = { documentType };
       return visible ? <View testID="receipt-preview-modal" /> : null;
     },
   };
@@ -100,10 +123,15 @@ export function mockReceiptPreviewModule(): unknown {
   };
 }
 
+export const mockAuthCustomerHolder: {
+  current: { id: string } | null;
+} = { current: { id: 'user-1' } };
+
 export function mockAuthStoreModule(): unknown {
   return {
-    useAuthStore: (selector: (state: { customer: null }) => unknown) =>
-      selector({ customer: null }),
+    useAuthStore: (
+      selector: (state: { customer: { id: string } | null }) => unknown
+    ) => selector({ customer: mockAuthCustomerHolder.current }),
   };
 }
 
@@ -128,13 +156,31 @@ export function mockPostOrderInterstitialModule(): unknown {
   };
 }
 
+export const mockReceiptFetchedHolder: { current: boolean } = {
+  current: true,
+};
+
+export function mockUseReceiptsModule(): unknown {
+  return {
+    useReceiptDetail: () => ({
+      data: mockPaidCheckOrderHolder.current,
+      isFetched: mockReceiptFetchedHolder.current,
+    }),
+  };
+}
+
 export function setupOrderSuccessMocks(): void {
   jest.clearAllMocks();
   mockScheduleLocalNotification.mockResolvedValue(undefined);
   mockOrderSuccessView.mockClear();
+  mockOrderReconciliationView.mockClear();
   mockReceiptState.isLoading = false;
   mockReceiptState.isOpen = false;
   mockReceiptDismissalHolder.current = undefined;
+  mockReceiptPreviewModalHolder.current = null;
+  mockPaidCheckOrderHolder.current = null;
+  mockReceiptFetchedHolder.current = true;
+  mockAuthCustomerHolder.current = { id: 'user-1' };
   mockSearchParamsHolder.current = {
     orderId: 'order-1',
     orderNumber: 'BAC-001',

@@ -116,6 +116,45 @@ describe('submitRedvaultPreparedOrder', () => {
     expect(options.setRedvaultStatus).toHaveBeenCalledWith('pending');
   });
 
+  it('reports the payment start with the init reference before redirecting', async () => {
+    mockFetch.mockResolvedValueOnce(
+      Response.json({
+        authorization_url: 'https://paystack.test/pay/1',
+        reference: 'rv-ref-1',
+      })
+    );
+    const onPaymentStarted = vi.fn();
+    const options = buildOptions({
+      onPaymentStarted,
+      redvaultOrderReady: preparedOrder({
+        total: 5000,
+        orderNumber: 'ORD-RV-1',
+      }),
+    });
+
+    await expect(submitRedvaultPreparedOrder(options)).resolves.toBe(true);
+    expect(onPaymentStarted).toHaveBeenCalledTimes(1);
+    expect(onPaymentStarted).toHaveBeenCalledWith({
+      orderId: 'order-1',
+      currency: 'NGN',
+      reference: 'rv-ref-1',
+      total: 5000,
+      orderNumber: 'ORD-RV-1',
+    });
+  });
+
+  it('reports no start when initialization never opens a provider flow', async () => {
+    const onPaymentStarted = vi.fn();
+    mockFetch.mockResolvedValueOnce(
+      Response.json({ code: 'REDVAULT_CAPTURE_HELD' }, { status: 202 })
+    );
+
+    await expect(
+      submitRedvaultPreparedOrder(buildOptions({ onPaymentStarted }))
+    ).resolves.toBe(true);
+    expect(onPaymentStarted).not.toHaveBeenCalled();
+  });
+
   it('cancels a stale prepared order and continues with a fresh one', async () => {
     mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }));
     const options = buildOptions({

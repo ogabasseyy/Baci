@@ -34,9 +34,11 @@ const ACCOUNT = {
 
 const START_ARGS = {
   checkoutFingerprint: 'fingerprint-1',
+  currency: 'NGN',
   merchantId: 'merchant-1',
   merchantSlug: 'test-store',
   orderId: 'order-1',
+  orderNumber: 'ORD-1',
   trackingToken: 'track-1',
 };
 
@@ -67,7 +69,7 @@ describe('useWalletFundedBankTransfer', () => {
 
     const { view } = renderWalletTransfer();
 
-    let started: string | undefined;
+    let started: unknown;
     await act(async () => {
       started = await view.result.current.start(START_ARGS);
     });
@@ -90,7 +92,7 @@ describe('useWalletFundedBankTransfer', () => {
 
     const { view } = renderWalletTransfer();
 
-    let started: string | undefined;
+    let started: unknown;
     await act(async () => {
       started = await view.result.current.start(START_ARGS);
     });
@@ -106,12 +108,12 @@ describe('useWalletFundedBankTransfer', () => {
 
     const { view } = renderWalletTransfer();
 
-    let started: string | undefined;
+    let started: unknown;
     await act(async () => {
       started = await view.result.current.start(START_ARGS);
     });
 
-    expect(started).toBe('started');
+    expect(started).toEqual({ status: 'started', intentId: 'intent-1' });
     expect(view.result.current.account).toEqual(ACCOUNT);
     await waitFor(() => {
       expect(getIntentMock).toHaveBeenCalledWith({
@@ -140,9 +142,42 @@ describe('useWalletFundedBankTransfer', () => {
     await waitFor(() => {
       expect(onOrderPaid).toHaveBeenCalledWith({
         checkoutFingerprint: 'fingerprint-1',
+        currency: 'NGN',
+        intentId: 'intent-1',
         orderId: 'order-1',
+        orderNumber: 'ORD-1',
+        total: 5000,
         trackingToken: 'track-1',
       });
+    });
+  });
+
+  it('reports the canonical order total when savings shrink the intent target', async () => {
+    // The intent targets the post-savings residual, but the completed
+    // purchase revenue is the whole order.
+    const savingsIntent = { ...INTENT, targetOrderAmount: 4750 };
+    startMock.mockResolvedValue({
+      account: ACCOUNT,
+      intent: savingsIntent,
+      kind: 'intent',
+    });
+    getIntentMock.mockResolvedValue({
+      ...savingsIntent,
+      fundedAmount: 4750,
+      orderPaid: true,
+      status: 'completed',
+    });
+
+    const { onOrderPaid, view } = renderWalletTransfer();
+
+    await act(async () => {
+      await view.result.current.start({ ...START_ARGS, orderTotal: 5750 });
+    });
+
+    await waitFor(() => {
+      expect(onOrderPaid).toHaveBeenCalledWith(
+        expect.objectContaining({ total: 5750 })
+      );
     });
   });
 
@@ -174,7 +209,7 @@ describe('useWalletFundedBankTransfer', () => {
 
     const { view } = renderWalletTransfer();
 
-    let startedPromise: Promise<string> | undefined;
+    let startedPromise: Promise<unknown> | undefined;
     await act(async () => {
       startedPromise = view.result.current.start(START_ARGS);
     });
@@ -187,7 +222,10 @@ describe('useWalletFundedBankTransfer', () => {
       view.result.current.acceptConsent();
     });
 
-    await expect(startedPromise).resolves.toBe('started');
+    await expect(startedPromise).resolves.toEqual({
+      status: 'started',
+      intentId: 'intent-1',
+    });
     expect(view.result.current.consentRequested).toBe(false);
   });
 
@@ -203,7 +241,7 @@ describe('useWalletFundedBankTransfer', () => {
 
     const { view } = renderWalletTransfer();
 
-    let startedPromise: Promise<string> | undefined;
+    let startedPromise: Promise<unknown> | undefined;
     await act(async () => {
       startedPromise = view.result.current.start(START_ARGS);
     });

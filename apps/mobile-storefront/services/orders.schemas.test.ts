@@ -1,5 +1,8 @@
 import { describe, expect, it } from '@jest/globals';
-import { CreateOrderRequestSchema } from './orders.schemas';
+import {
+  CreateOrderRequestSchema,
+  OrderResponseSchema,
+} from './orders.schemas';
 
 const baseOrder = {
   customer_email: 'ada@example.com',
@@ -123,5 +126,40 @@ describe('CreateOrderRequestSchema REDVAULT credits', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe('OrderResponseSchema currency', () => {
+  const baseResponse = {
+    order: {
+      id: 'order-1',
+      order_number: 'ORD-1',
+      total: 5750,
+      payment_status: 'pending',
+      shipping_status: 'pending',
+    },
+    wallet: null,
+    amountDueToGateway: 5750,
+  };
+
+  it('preserves the stamped order currency instead of stripping it', () => {
+    const result = OrderResponseSchema.safeParse({
+      ...baseResponse,
+      order: { ...baseResponse.order, currency: 'KES' },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.order.currency).toBe('KES');
+    }
+  });
+
+  it('leaves currency undefined for older responses that omit it', () => {
+    const result = OrderResponseSchema.safeParse(baseResponse);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.order.currency).toBeUndefined();
+    }
   });
 });

@@ -62,6 +62,7 @@ jest.mock('@/lib/supabase', () => ({
 jest.mock('@/services/analytics', () => ({
   trackEvent: jest.fn(),
   trackError: jest.fn(),
+  trackCheckoutPaymentStarted: jest.fn(),
 }));
 
 const mockFetch = jest.fn<typeof fetch>();

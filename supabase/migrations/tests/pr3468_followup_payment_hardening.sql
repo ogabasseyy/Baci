@@ -83,24 +83,31 @@ DECLARE
   v_legacy_count integer;
   v_proofed_count integer;
 BEGIN
+  -- Match overloads by OID vector, not the formatted identity string:
+  -- pg_get_function_identity_arguments renders parameter names
+  -- ('p_order_id uuid, ...'), so a typelist comparison never matches.
+  -- OIDs are pinned bootstrap values: 2950 uuid, 25 text, 16 boolean.
   SELECT count(*) INTO v_legacy_count
   FROM pg_catalog.pg_proc AS p
   JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace
   WHERE n.nspname = 'public'
     AND p.proname = 'complete_immediate_order_notification_with_proof'
-    AND pg_catalog.pg_get_function_identity_arguments(p.oid) = 'uuid, text, boolean, uuid';
+    AND p.proargtypes::pg_catalog.text = '2950 25 16 2950';
   ASSERT v_legacy_count = 0, 'proof-less 4-arg completion overload must be dropped';
   SELECT count(*) INTO v_proofed_count
   FROM pg_catalog.pg_proc AS p
   JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace
   WHERE n.nspname = 'public'
     AND p.proname = 'complete_immediate_order_notification_with_proof'
-    AND pg_catalog.pg_get_function_identity_arguments(p.oid) = 'uuid, text, boolean, uuid, text';
+    AND p.proargtypes::pg_catalog.text = '2950 25 16 2950 25';
   ASSERT v_proofed_count = 1, 'proof-bound 5-arg completion overload must survive';
 END;
 $$;
 
-SET LOCAL ROLE authenticated;
+-- Stay service_role: the flag RPC reads ownership from auth.uid() (JWT
+-- claim, role-independent) and is SECURITY DEFINER, while the
+-- verification reads/writes below need to bypass transactions RLS.
+-- The authenticated/anon EXECUTE shape is asserted explicitly.
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT pg_catalog.set_config(
   'request.jwt.claim.sub', '9f000000-0000-4000-8000-000000000719', true

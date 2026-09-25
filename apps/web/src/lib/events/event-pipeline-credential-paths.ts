@@ -278,4 +278,12 @@ export const eventPipelineCredentialPaths = [
     'apps/web/src/lib/supabase/admin.ts',
     'apps/web/src/env.ts',
   ],
+  // Extracted Credit Direct failure responder (PR 3498): files the same
+  // audited inventory-confirmation review through the shared helper.
+  [
+    'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
+    'apps/web/src/lib/payments/file-inventory-confirmation-review.ts',
+    'apps/web/src/lib/supabase/admin.ts',
+    'apps/web/src/env.ts',
+  ],
 ] as const;

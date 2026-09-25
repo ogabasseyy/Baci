@@ -21,6 +21,7 @@ interface CartPageWrapperProps {
 
 interface FetchAndAddCartItemsOptions {
   itemIds: string;
+  quantity: number;
   quizAwardId: string | null;
   quizVoucherToken: string | null;
   variantId?: string;
@@ -36,6 +37,7 @@ interface FetchAndAddCartItemsOptions {
 // React Compiler can memoize CartPageWrapper.
 async function fetchAndAddCartItems({
   itemIds,
+  quantity,
   quizAwardId,
   quizVoucherToken,
   variantId,
@@ -121,7 +123,7 @@ async function fetchAndAddCartItems({
             image: resolvedImage,
             imageLarge: resolvedImage,
           },
-          1,
+          hasQuizPrizeVoucher ? 1 : quantity,
           hasQuizPrizeVoucher
             ? {
                 condition,
@@ -148,6 +150,7 @@ async function fetchAndAddCartItems({
     // Clean up URL by removing item_id parameter
     const url = new URL(window.location.href);
     url.searchParams.delete('item_id');
+    url.searchParams.delete('qty');
     url.searchParams.delete('quiz_award_id');
     url.searchParams.delete('quiz_voucher_token');
     url.searchParams.delete('variant_id');
@@ -184,6 +187,11 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
 
   useEffect(() => {
     const itemIds = searchParams.get('item_id');
+    const rawQuantity = searchParams.get('qty');
+    const parsedQuantity = rawQuantity && /^\d+$/.test(rawQuantity) ? Number(rawQuantity) : 1;
+    const quantity = Number.isSafeInteger(parsedQuantity) && parsedQuantity >= 1 && parsedQuantity <= 10
+      ? parsedQuantity
+      : 1;
     const quizAwardId = searchParams.get('quiz_award_id')?.trim() || null;
     const quizVoucherToken =
       searchParams.get('quiz_voucher_token')?.trim() || null;
@@ -227,6 +235,7 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
 
     void fetchAndAddCartItems({
       itemIds,
+      quantity,
       quizAwardId,
       quizVoucherToken,
       variantId,

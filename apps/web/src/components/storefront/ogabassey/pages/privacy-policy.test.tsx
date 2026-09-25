@@ -71,6 +71,8 @@ describe('OgabasseyV2PrivacyPolicy', () => {
     it('renders without crashing when no merchant prop is provided', () => {
       render(<OgabasseyV2PrivacyPolicy />);
 
+      expect(screen.getByRole('heading', { name: 'How Long We Keep Your Information' })).toBeInTheDocument();
+
       expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     });
 
@@ -109,9 +111,9 @@ describe('OgabasseyV2PrivacyPolicy', () => {
     it('renders the default email in the contact section', () => {
       render(<OgabasseyV2PrivacyPolicy />);
 
-      expect(
-        screen.getByRole('link', { name: 'support@ogabassey.com' }),
-      ).toHaveAttribute('href', 'mailto:support@ogabassey.com');
+      for (const link of screen.getAllByRole('link', { name: 'support@ogabassey.com' })) {
+        expect(link).toHaveAttribute('href', 'mailto:support@ogabassey.com');
+      }
     });
 
     it('renders the default business_address in the contact section', () => {

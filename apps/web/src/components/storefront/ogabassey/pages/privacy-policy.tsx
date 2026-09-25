@@ -27,7 +27,7 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
   const email = merchant?.email || 'support@ogabassey.com';
   const address = merchant?.business_address || 'Lagos, Nigeria';
   const customContent = merchant?.pages?.privacy;
-  const isOgabassey = merchant?.slug === 'ogabassey';
+  const isOgabassey = !merchant || merchant.slug === 'ogabassey';
 
   const sections = [
     {

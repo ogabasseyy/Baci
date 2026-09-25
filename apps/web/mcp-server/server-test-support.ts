@@ -91,10 +91,13 @@ async function startPostgrestStub() {
         response.end(JSON.stringify({ id: 'variant-sold-out-product', name: 'Variant Sold Out Phone', slug: 'variant-sold-out-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
       } else if (url.searchParams.get('id') === 'eq.variant-available-product') {
         response.end(JSON.stringify({ id: 'variant-available-product', name: 'Variant Available Phone', slug: 'variant-available-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
+      } else if (url.searchParams.get('id') === 'eq.untracked-offer-product') {
+        response.end(JSON.stringify({ id: 'untracked-offer-product', name: 'Untracked Offer Phone', slug: 'untracked-offer-phone', price: 100000, manage_stock: false, stock_quantity: 0, has_condition_offers: true }));
       } else if (!url.searchParams.has('id') && !url.searchParams.has('name')) {
         response.end(JSON.stringify([
           { id: 'available-product', name: 'Test Phone', slug: 'test-phone', price: 100000, compare_at_price: 120000, images: ['https://images.example.test/phone.jpg'], manage_stock: false, stock_quantity: 0, has_variants: false },
           { id: 'avif-product', name: 'AVIF Phone', slug: 'avif-phone', price: 120000, images: ['https://cdn.ogabassey.com/core-assets/products/redmi-15-midnight-black.avif'], manage_stock: false, stock_quantity: 0, has_variants: false },
+          { id: 'object-image-product', name: 'Object Image Phone', slug: 'object-image-phone', price: 130000, images: [{ url: 'https://cdn.ogabassey.com/core-assets/products/redmi-15-midnight-black.avif' }], manage_stock: false, stock_quantity: 0, has_variants: false },
         ]));
       } else {
         response.statusCode = 406;
@@ -121,7 +124,14 @@ async function startPostgrestStub() {
       return;
     }
     if (url.pathname.endsWith('/rest/v1/rpc/get_product_offers')) {
-      response.end('[]');
+      let body = '';
+      request.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      request.on('end', () => {
+        const requested = JSON.parse(body) as { p_product_id?: string };
+        response.end(JSON.stringify(requested.p_product_id === 'untracked-offer-product'
+          ? [{ condition: 'used', price: 80000, stock_quantity: 0, grade: 'A', condition_notes: null }]
+          : []));
+      });
       return;
     }
     if (url.pathname.endsWith('/rest/v1/product_offers')) {

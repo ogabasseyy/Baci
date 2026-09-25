@@ -85,6 +85,17 @@ describe('getMcpProductStockSummary', () => {
     });
   });
 
+  it('uses variant quantities for tracked variant products', () => {
+    expect(getMcpProductStockSummary(
+      { has_variants: true, manage_stock: true, stock_quantity: 0 },
+      [{ stock_quantity: 0 }, { stock_quantity: 2 }]
+    )).toEqual({ confidence: 'low', inStock: true, level: 'Last Units' });
+
+    expect(getMcpProductStockSummary(
+      { has_variants: true, manage_stock: true, stock_quantity: 0 }
+    )).toEqual({ confidence: 'unconfirmed', inStock: null, level: 'Confirm availability' });
+  });
+
   it('keeps nullish stock inputs on the documented default paths', () => {
     expect(
       getMcpProductStockSummary({

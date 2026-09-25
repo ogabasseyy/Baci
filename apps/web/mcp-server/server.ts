@@ -45,7 +45,7 @@ import { resolveMcpPaystackDvaAccess } from './mcp-paystack-dva-access';
 import { registerAgenticUcpTools } from './agentic-ucp-tools';
 import { resolveMcpSearchProductCondition } from './product-condition-filter';
 import { loadMcpSearchProducts } from './search-products-query';
-import { getMcpProductStockSummary } from './product-stock-summary';
+import { getMcpOfferAvailability, getMcpProductStockSummary } from './product-stock-summary';
 import { serveProductImage } from './product-image-proxy';
 
 // =============================================================================
@@ -1070,7 +1070,7 @@ const widgetHtml = `<!DOCTYPE html>
             '<p class="product-name">' + escapeHtml(p.name) + '</p>' +
             '<div class="product-meta">' +
               (p.brand ? '<span class="product-brand">' + escapeHtml(p.brand) + '</span>' : '') +
-              (p.in_stock !== false ? '<span class="in-stock">In Stock</span>' : '') +
+              '<span class="in-stock">' + (p.in_stock === true ? 'In Stock' : p.in_stock === false ? 'Out of Stock' : 'Confirm availability') + '</span>' +
             '</div>' +
             '<div class="price-row">' +
               '<span class="product-price">' + formatPrice(p.price) + '</span>' +
@@ -1319,7 +1319,7 @@ function createOgabasseyServer() {
 
         // 3. Buyer Intelligence & Formatting
         const formatted = products.map((p) => {
-          const stockSummary = getMcpProductStockSummary(p);
+          const stockSummary = getMcpProductStockSummary(p, p.has_variants ? variantsMap.get(p.id) : undefined);
 
           // A compare-at price indicates a listed discount, not a price trend.
           const isDiscounted =
@@ -1951,7 +1951,7 @@ function createOgabasseyServer() {
       const rating = product.schema_markup?.aggregateRating?.ratingValue;
       const reviewCount = product.schema_markup?.aggregateRating?.reviewCount;
 
-      const stockSummary = getMcpProductStockSummary(product);
+      const stockSummary = getMcpProductStockSummary(product, product.has_variants ? variants : undefined);
       const formatted = {
         id: product.id,
         name: product.name,
@@ -2023,13 +2023,13 @@ function createOgabasseyServer() {
         text += '\n\n**Available Conditions:**\n';
         for (const offer of conditionOffers) {
           text += `• ${offer.condition}${offer.grade ? ` (Grade ${offer.grade})` : ''}: ${formatPrice(offer.price)}`;
-          if (offer.stock_quantity > 0) text += ' - In Stock';
+          text += ` - ${getMcpOfferAvailability(product.manage_stock, offer.stock_quantity).label}`;
           text += '\n';
         }
       }
 
       // Stock & Link
-      text += `\n**Availability:** ${product.manage_stock === true ? (formatted.in_stock ? 'In Stock' : 'Out of Stock') : 'Confirm at checkout'}`;
+      text += `\n**Availability:** ${formatted.in_stock === true ? 'In Stock' : formatted.in_stock === false ? 'Out of Stock' : 'Confirm at checkout'}`;
       const productPageUrl = product.slug
         ? `https://ogabassey.com/products/${encodeURIComponent(product.slug)}`
         : 'https://ogabassey.com/products';
@@ -2045,7 +2045,11 @@ function createOgabasseyServer() {
             stock: v.stock_quantity,
             condition: v.condition,
           })),
-          condition_offers: conditionOffers,
+          condition_offers: conditionOffers.map((offer) => ({
+            ...offer,
+            stock_quantity: product.manage_stock ? offer.stock_quantity : null,
+            availability: getMcpOfferAvailability(product.manage_stock, offer.stock_quantity).availability,
+          })),
         },
         _meta: {
           'openai/outputTemplate': 'ui://widget/store.html',
@@ -2294,7 +2298,7 @@ function createOgabasseyServer() {
         name: p.name,
         slug: p.slug,
         price: p.price,
-        image: getSafeCatalogImageUrl(p.images?.[0]),
+        image: getSafeCatalogImageUrl(p.images?.[0]?.url || p.images?.[0]),
       }));
 
       return {
@@ -2467,7 +2471,7 @@ function createOgabasseyServer() {
         text += '\n**Condition Options:**\n';
         for (const o of offers) {
           const grade = o.grade ? ` (Grade ${o.grade})` : '';
-          const stock = o.stock_quantity > 0 ? 'In Stock' : 'Out of Stock';
+          const stock = getMcpOfferAvailability(product.manage_stock, o.stock_quantity).label;
           text += `• ${o.condition}${grade}: ${formatPrice(o.price)} - ${stock}\n`;
           if (o.condition_notes) text += `  Note: ${o.condition_notes}\n`;
         }
@@ -2486,7 +2490,11 @@ function createOgabasseyServer() {
                 ? 'in_stock'
                 : 'out_of_stock',
           })),
-          condition_offers: offers || [],
+          condition_offers: (offers || []).map((offer) => ({
+            ...offer,
+            stock_quantity: product.manage_stock ? offer.stock_quantity : null,
+            availability: getMcpOfferAvailability(product.manage_stock, offer.stock_quantity).availability,
+          })),
         },
       };
     }

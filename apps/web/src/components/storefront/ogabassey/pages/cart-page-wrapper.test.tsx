@@ -143,6 +143,32 @@ describe('CartPageWrapper', () => {
     });
   });
 
+  it('uses a valid cart handoff quantity and removes it from the URL', async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=3') as ReturnType<typeof useSearchParams>
+    );
+    window.history.pushState({}, '', '/ogabassey/cart?item_id=55555555-5555-4555-8555-555555555555&qty=3');
+    const addToCart = mockUseCart();
+    setupProductsQuery({ data: [{ id: '55555555-5555-4555-8555-555555555555', name: 'Phone', status: 'active', images: [] }], error: null });
+
+    render(<CartPageWrapper merchantId="merchant-1" />);
+
+    await waitFor(() => expect(addToCart).toHaveBeenCalledWith(expect.objectContaining({ id: '55555555-5555-4555-8555-555555555555' }), 3, undefined));
+    expect(window.location.search).toBe('');
+  });
+
+  it('falls back to one unit for an invalid handoff quantity', async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=0') as ReturnType<typeof useSearchParams>
+    );
+    const addToCart = mockUseCart();
+    setupProductsQuery({ data: [{ id: '55555555-5555-4555-8555-555555555555', name: 'Phone', status: 'active', images: [] }], error: null });
+
+    render(<CartPageWrapper merchantId="merchant-1" />);
+
+    await waitFor(() => expect(addToCart).toHaveBeenCalledWith(expect.any(Object), 1, undefined));
+  });
+
   it('blocks a prize claim into a cart that already holds paid items', async () => {
     // A normal paid line (no quizAwardId) already in the cart.
     const addToCart = mockUseCart({ cart: [{ id: 'paid-1', quantity: 1 }] });

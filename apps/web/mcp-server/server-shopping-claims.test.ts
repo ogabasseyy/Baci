@@ -31,10 +31,10 @@ describe('MCP shopping claims', () => {
         })
       );
       expect(result.structuredContent).toMatchObject({
-        products: [
-          { price_status: 'discounted' },
-          { image: 'https://mcp.ogabassey.com/images/core-assets/products/redmi-15-midnight-black.avif' },
-        ],
+        products: expect.arrayContaining([
+          expect.objectContaining({ price_status: 'discounted' }),
+          expect.objectContaining({ image: 'https://mcp.ogabassey.com/images/core-assets/products/redmi-15-midnight-black.avif' }),
+        ]),
       });
       expect(JSON.stringify(result)).not.toMatch(/price_trend|Standard Warranty/);
       expect(JSON.stringify(result)).not.toContain('images.example.test');
@@ -61,6 +61,60 @@ describe('MCP shopping claims', () => {
       });
       expect(JSON.stringify(result)).toContain('Confirm availability');
       expect(JSON.stringify(result)).not.toContain('Out of Stock');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('uses tracked variant quantities when reporting product availability', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 21,
+        method: 'tools/call',
+        params: { name: 'get_product', arguments: { product_id: 'variant-available-product' } },
+      }));
+      expect(result.structuredContent).toMatchObject({ products: [{ in_stock: true, stock_level: 'Last Units' }] });
+      expect(JSON.stringify(result)).toContain('**Availability:** In Stock');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('keeps untracked condition offers available for confirmation', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      for (const name of ['get_product', 'get_product_variants']) {
+        const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+          id: 22,
+          method: 'tools/call',
+          params: { name, arguments: { product_id: 'untracked-offer-product' } },
+        }));
+        expect(result.structuredContent).toMatchObject({
+          condition_offers: [{ availability: 'unconfirmed', stock_quantity: null }],
+        });
+        expect(JSON.stringify(result)).toContain('Confirm availability');
+        expect(JSON.stringify(result)).not.toContain('Out of Stock');
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('preserves an object-shaped catalog image in recommendations', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 23,
+        method: 'tools/call',
+        params: { name: 'get_recommendations', arguments: { use_case: 'phone' } },
+      }));
+      expect(result.structuredContent).toMatchObject({ products: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'object-image-product',
+          image: 'https://mcp.ogabassey.com/images/core-assets/products/redmi-15-midnight-black.avif',
+        }),
+      ]) });
     } finally {
       await server.close();
     }

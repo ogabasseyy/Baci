@@ -10,7 +10,7 @@ const migrationsRoot = path.resolve(
 const migration = readFileSync(
   path.join(
     migrationsRoot,
-    '20260923130000_raise_jumia_credential_ciphertext_limit.sql'
+    '20260925120000_raise_jumia_credential_ciphertext_limit.sql'
   ),
   'utf8'
 );

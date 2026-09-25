@@ -345,11 +345,6 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20260923130000_raise_jumia_credential_ciphertext_limit.sql',
-    sha256: 'edaedf263179eedfc00b7ef6f37c72cd05a8ef9327c028b15c6795b53a739c8f',
-  },
-  {
-    repositoryPath:
       'supabase/migrations/20260924120000_apply_jumia_variant_prices_atomically.sql',
     sha256: 'a0acfada91ec1a64c1ff238832e9b5b38aa99f0ae8a3432a58a3ace867693ac9',
   },
@@ -372,6 +367,11 @@ export const EXPECTED_PENDING_SOURCES = [
     repositoryPath:
       'supabase/migrations/20260924160000_jumia_credential_loader_capability.sql',
     sha256: '933390d3e7b821bfeb047a58653a968bcf11fe12fae9c47e75f1c6e89f7cd414',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260925120000_raise_jumia_credential_ciphertext_limit.sql',
+    sha256: 'edaedf263179eedfc00b7ef6f37c72cd05a8ef9327c028b15c6795b53a739c8f',
   },
   {
     repositoryPath:

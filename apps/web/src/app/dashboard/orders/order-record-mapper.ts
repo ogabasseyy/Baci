@@ -90,7 +90,7 @@ export function mapDashboardOrderRecord(
     customerName: formatPersonName(order.customer_name || 'Customer'),
     total: Number.parseFloat(order.total),
     ...mapOrderFinancialFields(order),
-    currency: order.currency || 'NGN',
+    currency: order.currency?.trim() || null,
     shippingStatus: formatStatus(order.shipping_status) as ShippingStatus,
     paymentStatus: formatStatus(order.payment_status) as PaymentStatus,
     paymentMethod: order.payment_method,

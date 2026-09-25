@@ -59,7 +59,12 @@ export interface Order extends OrderFinancialFields {
   orderNumber: string;
   customerName: string;
   total: number;
-  currency: string;
+  /**
+   * Order currency when recorded; null for legacy rows. Renderers fall back
+   * to the merchant currency on null — mappers must not substitute a
+   * synthetic default that would mislabel non-NGN merchants.
+   */
+  currency: string | null;
   shippingStatus: ShippingStatus;
   paymentStatus: PaymentStatus;
   paymentMethod: string | null;

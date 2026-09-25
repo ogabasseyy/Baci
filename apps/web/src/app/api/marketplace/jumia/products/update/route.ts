@@ -10,7 +10,6 @@ import { logger } from '@/lib/logger';
 import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { createClient } from '@/lib/supabase/server';
 import { jumiaProductUpdateSchema } from '@/schemas/jumia-product-update';
-import { applyJumiaVariantPriceUpdates } from './apply-jumia-variant-price-updates';
 import {
   getJumiaPriceOverrideError,
   getJumiaProductUpdateReadiness,
@@ -18,6 +17,7 @@ import {
   pushPriceUpdates,
   pushStatusUpdates,
 } from './jumia-product-update-feeds';
+import { persistSubmittedJumiaPriceUpdate } from './persist-submitted-jumia-price-update';
 import { verifyJumiaUpdateOAuthScope } from './verify-jumia-update-oauth-scope';
 
 export async function POST(request: NextRequest) {
@@ -249,61 +249,22 @@ export async function POST(request: NextRequest) {
 
     // Persist only what Jumia accepted: committing beforehand would leave
     // local prices ahead of the provider when submission fails, while a
-    // partial feed must still persist its submitted subset.
-    const submittedPriceUpdate: Record<string, unknown> = {
-      updated_at: updatedAt,
-    };
-    if (Object.hasOwn(overrides, 'jumia_price')) {
-      submittedPriceUpdate.jumia_price = overrides.jumia_price;
-    }
-    if (Object.hasOwn(overrides, 'jumia_sale_price')) {
-      submittedPriceUpdate.jumia_sale_price = overrides.jumia_sale_price;
-    }
-    if (Object.hasOwn(overrides, 'jumia_sale_start')) {
-      submittedPriceUpdate.jumia_sale_start = overrides.jumia_sale_start;
-    }
-    if (Object.hasOwn(overrides, 'jumia_sale_end')) {
-      submittedPriceUpdate.jumia_sale_end = overrides.jumia_sale_end;
-    }
-    const submittedMappingIds = readyMappings
-      .filter((mapping) => submittedPriceSkus.includes(mapping.jumia_sku))
-      .map((mapping) => mapping.id);
-    if (
-      Object.keys(submittedPriceUpdate).length > 1 &&
-      submittedMappingIds.length > 0
-    ) {
-      const { error: submittedPriceError } = await supabase
-        .from('jumia_product_mappings')
-        .update(submittedPriceUpdate)
-        .in('id', submittedMappingIds)
-        .eq('merchant_id', merchantId);
-      if (submittedPriceError) {
-        logger.error({
-          message: 'Local submitted-price update failed',
-          error: submittedPriceError,
-        });
-        return NextResponse.json(
-          { error: 'Failed to update local mapping' },
-          { status: 500 }
-        );
-      }
-    }
-
-    if (overrides.jumia_prices) {
-      const submittedPrices = Object.fromEntries(
-        Object.entries(overrides.jumia_prices).filter(([sku]) =>
-          submittedPriceSkus.includes(sku)
-        )
+    // partial feed must still persist its submitted subset. A post-push
+    // persistence failure keeps the accepted feed ids so the caller can
+    // reconcile instead of blindly resubmitting.
+    const persistResult = await persistSubmittedJumiaPriceUpdate({
+      supabase,
+      merchantId,
+      mappings: readyMappings,
+      overrides,
+      submittedSkus: submittedPriceSkus,
+      updatedAt,
+    });
+    if (!persistResult.ok) {
+      return NextResponse.json(
+        { success: false, feedIds, errors: [persistResult.error] },
+        { status: 200 }
       );
-      const priceResult = await applyJumiaVariantPriceUpdates({
-        supabase,
-        merchantId,
-        mappings: readyMappings,
-        prices: submittedPrices,
-      });
-      if (!priceResult.ok) {
-        return NextResponse.json({ error: priceResult.error }, { status: 500 });
-      }
     }
 
     return NextResponse.json({

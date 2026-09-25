@@ -45,7 +45,7 @@ export function mapJumiaDashboardOrder(jOrder: JumiaOrder) {
     jumiaOrderId: jOrder.jumia_order_id ?? undefined,
     customerName: formatPersonName(jOrder.customer_name || 'Jumia Customer'),
     total: Number.parseFloat(jOrder.total_amount),
-    currency: jOrder.currency?.trim() || 'NGN',
+    currency: jOrder.currency?.trim() || null,
     shippingStatus,
     paymentStatus,
     paymentMethod: 'Jumia Payout',

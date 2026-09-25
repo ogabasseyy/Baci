@@ -15,6 +15,13 @@
 
 BEGIN;
 
+-- merchants writes fire the identity-audit trigger, whose canonical writer
+-- requires an audit actor (raises audit_actor_required/28000 without one):
+-- run fixtures as service_role like the other merchants-seeding replay
+-- checks (e.g. repair_booking_rpc, santa_catalog_projection).
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
 DO $$
 DECLARE
   v_owner_user_id uuid := '00000000-0000-4000-8000-00000000f100';
@@ -22,12 +29,7 @@ DECLARE
   v_product_id uuid := '00000000-0000-4000-8000-00000000f201';
   v_mapping_id uuid := '00000000-0000-4000-8000-00000000f301';
   v_unstamped_id uuid := '00000000-0000-4000-8000-00000000f303';
-  v_missing_id uuid := '00000000-0000-4000-8000-00000000f302';
   v_token_older text := '00000000-0000-4000-8000-00000000f401';
-  v_token_newer text := '00000000-0000-4000-8000-00000000f402';
-  v_token_claim text := '00000000-0000-4000-8000-00000000f403';
-  v_price numeric;
-  v_token text;
 BEGIN
   INSERT INTO auth.users (
     id,
@@ -92,13 +94,35 @@ BEGIN
     2000,
     NULL
   );
+END $$;
 
-  PERFORM set_config(
-    'request.jwt.claims',
-    json_build_object('sub', v_owner_user_id, 'role', 'authenticated')::text,
-    true
-  );
+-- The owner session authorizes the guarded RPC and reads back its own
+-- mapping rows through the merchant RLS policies.
+SET LOCAL ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub', '00000000-0000-4000-8000-00000000f100', true
+);
+SELECT pg_catalog.set_config(
+  'request.jwt.claims',
+  pg_catalog.jsonb_build_object(
+    'role', 'authenticated', 'sub', '00000000-0000-4000-8000-00000000f100'
+  )::text,
+  true
+);
 
+DO $$
+DECLARE
+  v_merchant_id uuid := '00000000-0000-4000-8000-00000000f101';
+  v_mapping_id uuid := '00000000-0000-4000-8000-00000000f301';
+  v_unstamped_id uuid := '00000000-0000-4000-8000-00000000f303';
+  v_missing_id uuid := '00000000-0000-4000-8000-00000000f302';
+  v_token_older text := '00000000-0000-4000-8000-00000000f401';
+  v_token_newer text := '00000000-0000-4000-8000-00000000f402';
+  v_token_claim text := '00000000-0000-4000-8000-00000000f403';
+  v_price numeric;
+  v_token text;
+BEGIN
   -- Matching baseline: the price update applies and claims the row.
   PERFORM public.apply_jumia_variant_price_updates(
     v_merchant_id,

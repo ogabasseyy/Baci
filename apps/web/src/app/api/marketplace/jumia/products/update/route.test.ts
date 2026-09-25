@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { updateRouteTestHarness as harness } from './route-test-harness';
+import { updateRouteTestHarness as harness } from './route.test-support';
 
 const { INTEGRATION_ID, MERCHANT_ID, PRODUCT_ID } = harness.ids;
 

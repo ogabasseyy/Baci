@@ -229,7 +229,12 @@ describe('MCP shopping claims', () => {
           },
         })
       );
-      expect(availableVariant.structuredContent).toMatchObject({ success: true });
+      expect(availableVariant.structuredContent).toMatchObject({
+        success: false,
+        requires_variant_selection: true,
+        product_url: 'https://ogabassey.com/products/variant-available-phone',
+      });
+      expect(JSON.stringify(availableVariant)).not.toContain('cart_url');
 
       const insufficientVariantQuantity = getResultRecord(
         await postMcpJsonRpc(server.baseUrl, {

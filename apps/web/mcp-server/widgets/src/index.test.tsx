@@ -34,7 +34,7 @@ describe('Ogabassey cart handoff widget', () => {
     };
     render(<App />);
 
-    const buttons = screen.getAllByRole('button', { name: 'Prepare Cart Link' });
+    const buttons = screen.getAllByRole('button', { name: 'Prepare Shopping Link' });
     fireEvent.click(buttons[0]);
     fireEvent.click(buttons[1]);
 
@@ -66,7 +66,7 @@ describe('Ogabassey cart handoff widget', () => {
     };
     render(<App />);
 
-    expect(screen.getAllByRole('button', { name: 'Prepare Cart Link' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Prepare Shopping Link' })).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Review Cart on Ogabassey →' })).toBeNull();
   });
 
@@ -80,5 +80,57 @@ describe('Ogabassey cart handoff widget', () => {
 
     expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/phone-one' });
     expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it('opens the exact product page when a variant must be selected', async () => {
+    const openExternal = vi.fn();
+    window.openai = {
+      toolOutput: { products },
+      openExternal,
+      callTool: vi.fn().mockResolvedValue({
+        structuredContent: {
+          success: false,
+          requires_variant_selection: true,
+          product_id: 'phone-1',
+          product_url: 'https://ogabassey.com/products/phone-one',
+        },
+      }),
+    };
+    render(<App />);
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: 'Prepare Shopping Link' })[0]);
+    });
+
+    expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/phone-one' });
+    expect(screen.queryByRole('button', { name: 'Review Cart on Ogabassey →' })).toBeNull();
+  });
+
+  it('clears an older cart handoff when a variant needs selection', async () => {
+    const openExternal = vi.fn();
+    window.openai = {
+      toolOutput: { products },
+      widgetState: {
+        cart: [{ product: products[1], quantity: 1 }],
+        cartUrl: 'https://ogabassey.com/cart?item_id=phone-2',
+      },
+      openExternal,
+      callTool: vi.fn().mockResolvedValue({
+        structuredContent: {
+          success: false,
+          requires_variant_selection: true,
+          product_id: 'phone-1',
+          product_url: 'https://ogabassey.com/products/phone-one',
+        },
+      }),
+    };
+    render(<App />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Prepare Shopping Link' }));
+    });
+
+    expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/phone-one' });
+    expect(screen.queryByRole('button', { name: 'Review Cart on Ogabassey →' })).toBeNull();
   });
 });

@@ -46,6 +46,7 @@ import { registerAgenticUcpTools } from './agentic-ucp-tools';
 import { resolveMcpSearchProductCondition } from './product-condition-filter';
 import { loadMcpSearchProducts } from './search-products-query';
 import { getMcpProductStockSummary } from './product-stock-summary';
+import { serveProductImage } from './product-image-proxy';
 
 // =============================================================================
 // CONFIGURATION
@@ -1423,7 +1424,7 @@ function createOgabasseyServer() {
 
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Prepare an Ogabassey cart handoff link for a public product. This tool does not save an item to a server-side cart or start checkout.',
+        'Prepare an Ogabassey shopping handoff for a public product. Products with variants link to their product page for option selection; simple products can link to the cart. This tool does not save an item to a server-side cart or start checkout.',
       inputSchema: {
         product_id: z.string().describe('The product ID to add to cart'),
         quantity: z
@@ -1451,7 +1452,7 @@ function createOgabasseyServer() {
 
         const { data: product, error: productError } = await supabase
           .from('products')
-          .select('name, price, manage_stock, stock_quantity, has_variants')
+          .select('name, slug, price, manage_stock, stock_quantity, has_variants')
           .eq('id', args.product_id)
           .eq('merchant_id', merchantId)
           .eq('status', 'active')
@@ -1478,6 +1479,28 @@ function createOgabasseyServer() {
           return {
             content: [{ type: 'text', text: 'This product is not currently available for cart handoff.' }],
             structuredContent: { success: false },
+          };
+        }
+
+        if (product.has_variants === true) {
+          if (!product.slug) {
+            return {
+              content: [{ type: 'text', text: 'This product needs variant selection on Ogabassey, but its product page is unavailable.' }],
+              structuredContent: { success: false },
+            };
+          }
+          const productUrl = `https://ogabassey.com/products/${encodeURIComponent(product.slug)}`;
+          return {
+            content: [{
+              type: 'text',
+              text: `Choose the color, storage, and other options for **${product.name}** on Ogabassey before adding it to your cart.\n\n[Select product options](${productUrl})`,
+            }],
+            structuredContent: {
+              success: false,
+              requires_variant_selection: true,
+              product_id: args.product_id,
+              product_url: productUrl,
+            },
           };
         }
 
@@ -3096,44 +3119,9 @@ const httpServer = createServer(
       return;
     }
 
-    // The CDN's hotlink policy blocks ChatGPT's sandbox referrer. Fetch only
-    // published product assets from the fixed CDN origin and serve them here.
+    // Proxy only published product images through the fixed CDN origin.
     if (req.method === 'GET' && url.pathname.startsWith('/images/')) {
-      if (!url.pathname.startsWith('/images/core-assets/products/')) {
-        res.writeHead(404).end('Not Found');
-        return;
-      }
-      const assetPath = url.pathname.slice('/images'.length);
-      try {
-        const cdnUrl = `https://cdn.ogabassey.com/image/width=640,quality=70,format=webp${assetPath}`;
-        const upstream = await fetch(cdnUrl, {
-          redirect: 'error',
-          signal: AbortSignal.timeout(8000),
-        });
-        const contentType = upstream.headers.get('content-type') || '';
-        if (!upstream.ok || !/^image\/(?:avif|jpeg|png|webp)(?:;|$)/i.test(contentType)) {
-          res.writeHead(404).end('Not Found');
-          return;
-        }
-        const contentLength = Number(upstream.headers.get('content-length'));
-        if (Number.isFinite(contentLength) && contentLength > 5_000_000) {
-          res.writeHead(502).end('Image too large');
-          return;
-        }
-        const image = Buffer.from(await upstream.arrayBuffer());
-        if (image.byteLength > 5_000_000) {
-          res.writeHead(502).end('Image too large');
-          return;
-        }
-        res.writeHead(200, {
-          'Access-Control-Allow-Origin': '*',
-          'Cache-Control': 'public, max-age=3600',
-          'Content-Type': contentType,
-        });
-        res.end(image);
-      } catch {
-        res.writeHead(502).end('Image unavailable');
-      }
+      await serveProductImage(url.pathname, res);
       return;
     }
 

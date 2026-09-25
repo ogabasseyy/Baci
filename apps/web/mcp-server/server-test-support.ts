@@ -88,9 +88,9 @@ async function startPostgrestStub() {
       } else if (url.searchParams.get('id') === 'eq.sold-out-product') {
         response.end(JSON.stringify({ id: 'sold-out-product', name: 'Sold Out Phone', slug: 'sold-out-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: false }));
       } else if (url.searchParams.get('id') === 'eq.variant-sold-out-product') {
-        response.end(JSON.stringify({ id: 'variant-sold-out-product', name: 'Variant Sold Out Phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
+        response.end(JSON.stringify({ id: 'variant-sold-out-product', name: 'Variant Sold Out Phone', slug: 'variant-sold-out-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
       } else if (url.searchParams.get('id') === 'eq.variant-available-product') {
-        response.end(JSON.stringify({ id: 'variant-available-product', name: 'Variant Available Phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
+        response.end(JSON.stringify({ id: 'variant-available-product', name: 'Variant Available Phone', slug: 'variant-available-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
       } else if (!url.searchParams.has('id') && !url.searchParams.has('name')) {
         response.end(JSON.stringify([
           { id: 'available-product', name: 'Test Phone', slug: 'test-phone', price: 100000, compare_at_price: 120000, images: ['https://images.example.test/phone.jpg'], manage_stock: false, stock_quantity: 0, has_variants: false },

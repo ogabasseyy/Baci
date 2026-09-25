@@ -87,6 +87,30 @@ describe('loadMcpSearchProducts', () => {
     expect(result.products).toEqual([]);
   });
 
+  it('keeps mixed phone and tablet searches open to both categories', async () => {
+    const { supabase } = createRankedSearchSupabase('Tablets');
+    const result = await loadMcpSearchProducts({
+      args: { query: 'phones and tablets', limit: 2 },
+      merchantId: 'merchant-1',
+      sanitizeString: (input) => input,
+      supabase,
+    });
+
+    expect(result.products).toHaveLength(2);
+  });
+
+  it('does not force phone accessories into the Smartphones category', async () => {
+    const { supabase } = createRankedSearchSupabase('Accessories');
+    const result = await loadMcpSearchProducts({
+      args: { query: 'phone screen protector', limit: 2 },
+      merchantId: 'merchant-1',
+      sanitizeString: (input) => input,
+      supabase,
+    });
+
+    expect(result.products).toHaveLength(2);
+  });
+
   it('caps ranked post-filter pagination when hydrated rows keep failing filters', async () => {
     const { rpc, select, supabase } = createRankedSearchSupabase();
 

@@ -257,7 +257,7 @@ export async function loadMcpSearchProducts({
   const sanitizedBrand = args.brand ? sanitizeString(args.brand, 50) : undefined;
   const inferredCategory = !args.category && sanitizedQuery &&
     /\b(?:smartphones?|mobile phones?|phones?)\b/i.test(sanitizedQuery) &&
-    !/\b(?:cases?|accessories|chargers?)\b/i.test(sanitizedQuery)
+    !/\b(?:tablets?|ipads?|laptops?|computers?|cases?|covers?|accessories|chargers?|screen protectors?|repairs?|parts?|batteries|cables?)\b/i.test(sanitizedQuery)
       ? 'Smartphones'
       : undefined;
   const sanitizedCategory = args.category

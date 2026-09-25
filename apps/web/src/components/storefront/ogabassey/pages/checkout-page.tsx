@@ -2825,7 +2825,7 @@ export const CheckoutPage: React.FC = () => {
             <div className="size-8 rounded-full bg-gray-100 flex items-center justify-center group-hover:bg-store-primary/5 transition-colors">
               <ChevronRight className="size-4 rotate-180 group-hover:text-store-primary transition-colors" />
             </div>
-            <span className="hidden sm:inline">Return to Cart</span>
+            <span className="max-sm:hidden sm:inline">Return to Cart</span>
           </button>
 
           <div className="flex flex-col items-center">
@@ -2836,7 +2836,7 @@ export const CheckoutPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-full border border-green-100">
+            <div className="max-sm:hidden sm:flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-full border border-green-100">
               <div className="size-1.5 rounded-full bg-green-500 animate-pulse" />
               Encrypted
             </div>
@@ -3918,7 +3918,7 @@ export const CheckoutPage: React.FC = () => {
           </div>
 
           {/* RIGHT COLUMN: Order Summary */}
-          <div className="hidden lg:block lg:col-span-4 lg:sticky lg:top-24 space-y-6">
+          <div className="max-lg:hidden lg:block lg:col-span-4 lg:sticky lg:top-24 space-y-6">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <span aria-hidden="true" className="flex size-6 items-center justify-center rounded-full bg-store-primary/10 text-store-primary">
@@ -4094,7 +4094,7 @@ export const CheckoutPage: React.FC = () => {
                   (remainingAmount > 0 && !paymentMethod) ||
                   (paymentMethod === 'payforme' && !isPayForMeValid)
                 }
-                className="hidden lg:flex w-full bg-store-primary hover:bg-store-primary/90 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3.5 px-4 rounded-xl items-center justify-center gap-2 transition-all shadow-lg hover:shadow-store-primary/20 active:scale-[0.98]"
+                className="max-lg:hidden lg:flex w-full bg-store-primary hover:bg-store-primary/90 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3.5 px-4 rounded-xl items-center justify-center gap-2 transition-all shadow-lg hover:shadow-store-primary/20 active:scale-[0.98]"
               >
                 {isProcessing ? (
                   <Loader2 className="animate-spin" />

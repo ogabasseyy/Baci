@@ -461,6 +461,27 @@ describe('CheckoutPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps the desktop summary and order action out of the base hidden utility', async () => {
+    mockCheckoutSubmissionState();
+
+    render(<CheckoutPage />);
+
+    const desktopSummary = screen
+      .getByRole('heading', { name: /order summary/i })
+      .closest('[class*="lg:block"]');
+    const desktopAction = (await screen.findAllByRole('button', {
+      name: /place order/i,
+      hidden: true,
+    })).find((button) => button.classList.contains('lg:flex'));
+
+    expect(desktopSummary).not.toBeNull();
+    expect(desktopSummary).toHaveClass('max-lg:hidden');
+    expect(desktopSummary).not.toHaveClass('hidden');
+    expect(desktopAction).toBeDefined();
+    expect(desktopAction).toHaveClass('max-lg:hidden');
+    expect(desktopAction).not.toHaveClass('hidden');
+  });
+
   it('shows Klump in installment checkout when the merchant enables it', async () => {
     vi.mocked(useCart).mockReturnValue({
       cart: [

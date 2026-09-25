@@ -1,35 +1,27 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import type { GatewayVerificationResult } from '@/lib/payments/types';
-import { referenceSchema } from '@/schemas/payments';
+import { guestPaymentVerificationQuerySchema } from '@/schemas/guest-payment-verification-query';
 import {
   type GuestPaymentReferenceSnapshot,
   getGuestPaymentReferenceSnapshot,
 } from './guest-payment-reference-snapshot';
 
 /**
- * Loads the guest snapshot over the anon client through the narrow
- * snapshot RPC. Returns null on mismatch, on malformed rows, and on
- * lookup errors (fail closed with no existence oracle). Never touches a
- * service-role table client.
- */
-const guestVerificationQuerySchema = z.object({
-  reference: referenceSchema,
-  trackingToken: z.string().trim().min(1).max(256),
-});
-
-/**
  * Read-only GET entry for the guest tracking-token proof: CSRF validation
  * covers non-GET requests only, so sessionless callers verify here
- * instead of POSTing through a CSRF failure. Fails closed with a
- * uniform 403 (no existence oracle) when the proof is missing or the
- * snapshot RPC returns no row.
+ * instead of POSTing through a CSRF failure. Loads the guest snapshot
+ * over the anon client through the narrow snapshot RPC. Returns null
+ * on mismatch, on malformed rows, and on lookup errors (fail closed
+ * with no existence oracle). Never touches a service-role table
+ * client. Fails closed with a uniform 403 (no existence oracle) when
+ * the proof is missing or the snapshot RPC returns no row.
  */
 export async function verifyGuestPaymentReferenceByQuery(
   searchParams: URLSearchParams
 ) {
-  const parsed = guestVerificationQuerySchema.safeParse({
+  const parsed = guestPaymentVerificationQuerySchema.safeParse({
     reference: searchParams.get('reference'),
     trackingToken: searchParams.get('trackingToken'),
   });
@@ -55,6 +47,7 @@ export async function verifyGuestPaymentReferenceByQuery(
 }
 
 import { flagGuestPaymentProviderConfirmed } from './flag-guest-payment-provider-confirmed';
+import { flagSessionlessPaymentProviderConfirmed } from './flag-sessionless-payment-provider-confirmed';
 import {
   getVerifiedAmount,
   verifyGatewayPayment,
@@ -76,11 +69,17 @@ function guestOrderNumber(snapshot: GuestPaymentReferenceSnapshot): string {
  * supplies the tracking token, the verified-pending row is also
  * flagged for the privileged wedge sweep (which re-verifies before
  * healing), so a lost webhook cannot strand a charged guest in
- * pending forever. Never constructs a service-role client.
+ * pending forever. A bearer-authenticated caller without a tracking
+ * token instead passes its ownership-scoped client, which flags
+ * through the sessionless ownership-bound RPC. Never constructs a
+ * service-role client.
  */
 export async function verifyGuestPaymentReference(
   snapshot: GuestPaymentReferenceSnapshot,
-  options?: { trackingToken?: string | null }
+  options?: {
+    trackingToken?: string | null;
+    sessionlessClient?: SupabaseClient;
+  }
 ) {
   const derivedOrderNumber = guestOrderNumber(snapshot);
 
@@ -226,6 +225,11 @@ export async function verifyGuestPaymentReference(
     await flagGuestPaymentProviderConfirmed(
       snapshot.orderId,
       options.trackingToken,
+      snapshot.gatewayReference
+    );
+  } else if (options?.sessionlessClient) {
+    await flagSessionlessPaymentProviderConfirmed(
+      options.sessionlessClient,
       snapshot.gatewayReference
     );
   }

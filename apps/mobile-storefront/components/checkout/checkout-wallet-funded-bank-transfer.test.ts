@@ -128,6 +128,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
         subtotal: 450000,
         shipping: 15000,
         tax: 5000,
+        currency: 'USD',
       },
       isOrderInFlight: { current: true },
       orderId: 'order-1',
@@ -138,8 +139,8 @@ describe('startWalletFundedBankTransferCheckout', () => {
     });
 
     // The wallet-funded completion wins the durable claim after the cart
-    // may clear: identity and breakdown must travel on the route since the
-    // success screen cannot enrich the claim afterwards.
+    // may clear: identity, breakdown, and currency must travel on the
+    // route since the success screen cannot enrich the claim afterwards.
     expect(mockRouterPush).toHaveBeenCalledWith({
       pathname: '/bank-transfer',
       params: expect.objectContaining({
@@ -149,6 +150,7 @@ describe('startWalletFundedBankTransferCheckout', () => {
         subtotal: '450000',
         shipping: '15000',
         tax: '5000',
+        currency: 'USD',
       }),
     });
   });

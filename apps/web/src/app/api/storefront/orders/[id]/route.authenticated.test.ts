@@ -356,6 +356,58 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
     );
   });
 
+  it.each([
+    true,
+    false,
+  ])('returns inventory_confirmed=%s from the proof RPC', async (confirmed) => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123?token=track-token-123'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: { id: 'user-123' } },
+    });
+
+    const mockOrderQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: mockOrderData,
+        error: null,
+      }),
+    };
+    const mockItemsQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
+    };
+    mockSupabaseClient.from.mockImplementation((table: string) => {
+      if (table === 'orders') return mockOrderQuery;
+      if (table === 'order_items') return mockItemsQuery;
+      return {};
+    });
+    mockSupabaseClient.rpc.mockImplementation((name: string) => {
+      if (name === 'get_order_inventory_proof') {
+        return Promise.resolve({ data: confirmed, error: null });
+      }
+      return Promise.resolve({ data: [], error: null });
+    });
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.inventory_confirmed).toBe(confirmed);
+    expect(mockSupabaseClient.rpc).toHaveBeenCalledWith(
+      'get_order_inventory_proof',
+      {
+        p_order_id: mockOrderData.id,
+        p_tracking_token: 'track-token-123',
+        p_email: null,
+      }
+    );
+  });
+
   it('reads notification_delivered as false when the delivery RPC errors', async () => {
     const request = new NextRequest(
       'http://localhost/api/storefront/orders/order-uuid-123'

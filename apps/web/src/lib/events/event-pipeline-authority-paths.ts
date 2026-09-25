@@ -16,4 +16,7 @@ export const eventPipelineAdminImporters = [
   // matching repair-notifications.ts above.
   'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
   'apps/web/src/lib/immediate-order/confirmation-email.ts',
+  // Extracted Credit Direct failure responder (PR 3498): reaches the admin
+  // client only through the audited file-inventory-confirmation-review.
+  'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
 ] as const;

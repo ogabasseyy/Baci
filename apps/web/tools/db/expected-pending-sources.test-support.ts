@@ -515,6 +515,16 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260924090000_quiz_start_guard_context_v2.sql',
     sha256: 'ad1b4afac28db2099449ef0f63208ef0401ea9bad9e9f0dfbee1041effd83bd2',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260925090000_pr3468_followup_payment_hardening.sql',
+    sha256: 'e92fdbcad279fb7cbf8bc1553404b5e54026c124e2b0c5c29d334b9cd2b1bad7',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260925100000_credit_direct_inventory_proof.sql',
+    sha256: 'd48421f956f86ef4c18a4fcf84eb74f0f4ea9a486393fc957e5ac659d1691eea',
+  },
 ]
   .sort((left, right) =>
     left.repositoryPath.localeCompare(right.repositoryPath)

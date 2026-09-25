@@ -322,6 +322,12 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/env.ts',
       ],
       [
+        'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
+        'apps/web/src/lib/payments/file-inventory-confirmation-review.ts',
+        'apps/web/src/lib/supabase/admin.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
         'apps/web/src/app/api/cron/purge-jumia-self-authorization-discoveries/route.ts',
         'apps/web/src/lib/supabase/admin.ts',
         'apps/web/src/env.ts',

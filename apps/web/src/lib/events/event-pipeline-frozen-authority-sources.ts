@@ -24,7 +24,7 @@ export const eventPipelineFrozenRoutes = {
   // Refreshed for malformed-JSON rejection before business data access; the
   // inherited notification/payment authority and database operations are unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '31d176483d4f47245ba927d0440b76375441b7317e08641d4ab4f5eb332637ca',
+    'b772d23ef6f99f375ff26d9eddd55fb92fc0fa1e3b0bc2a317c760f5f39fec5e',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

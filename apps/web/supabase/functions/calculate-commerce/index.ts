@@ -1,4 +1,5 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import { calculateOrderTotals } from '../../../src/lib/checkout/calculate-order-totals.ts';
 import { calculateLoyaltyRedemption } from '../../../src/lib/commerce-loyalty-redemption.ts';
 import {
   getProviderVtuCommissionRate,
@@ -59,13 +60,7 @@ Deno.serve(async (req) => {
 
       case 'calculate_order': {
         const { subtotal, taxRate = 0.075, shippingFee = 0 } = data;
-        const taxAmount = subtotal * taxRate;
-        const total = subtotal + taxAmount + shippingFee;
-
-        result = {
-          taxAmount: Math.round(taxAmount * 100) / 100,
-          total: Math.round(total * 100) / 100,
-        };
+        result = calculateOrderTotals({ subtotal, shippingFee, taxRate });
         break;
       }
 

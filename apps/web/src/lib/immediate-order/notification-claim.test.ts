@@ -215,13 +215,15 @@ describe('immediate order notification claim', () => {
   it('records proof completions with the tracking token', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
 
-    await completeImmediateOrderNotificationWithProof(
-      clientFor(rpc),
-      'order-1',
-      'tok-1',
-      true,
-      'lease-1'
-    );
+    await expect(
+      completeImmediateOrderNotificationWithProof(
+        clientFor(rpc),
+        'order-1',
+        'tok-1',
+        true,
+        'lease-1'
+      )
+    ).resolves.toBe(true);
     expect(proofMocks.createProof).toHaveBeenCalledWith({
       orderId: 'order-1',
       claimToken: 'lease-1',
@@ -256,20 +258,38 @@ describe('immediate order notification claim', () => {
         true,
         'lease-1'
       )
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('reports unaccepted when the completion RPC errors', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: new Error('db down') });
+
+    await expect(
+      completeImmediateOrderNotificationWithProof(
+        clientFor(rpc),
+        'order-1',
+        'tok-1',
+        false,
+        'lease-1'
+      )
+    ).resolves.toBe(false);
   });
 
   it('skips proof completion without calling the RPC when the token is missing', async () => {
     const rpc = vi.fn();
 
-    await completeImmediateOrderNotificationWithProof(
-      clientFor(rpc),
-      'order-1',
-      null,
-      true,
-      'lease-1'
-    );
+    await expect(
+      completeImmediateOrderNotificationWithProof(
+        clientFor(rpc),
+        'order-1',
+        null,
+        true,
+        'lease-1'
+      )
+    ).resolves.toBe(false);
     expect(rpc).not.toHaveBeenCalled();
   });
 });

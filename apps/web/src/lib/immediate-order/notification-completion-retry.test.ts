@@ -174,6 +174,25 @@ describe('provisioning completion retry', () => {
     );
   });
 
+  it('reports failed outcomes uncompleted when the completion RPC errors', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: new Error('db down') });
+
+    await expect(
+      completeNotificationWithProvisioningRetry(
+        clientFor(rpc),
+        'order-1',
+        'tok-1',
+        false,
+        'lease-1'
+      )
+    ).resolves.toEqual({ completed: false });
+    // Still exactly one attempt and no reclaiming status check: the
+    // row stays processing for the stale-window reclaim.
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
   it('returns uncompleted without calling the RPC when tokens are missing', async () => {
     const rpc = vi.fn();
 

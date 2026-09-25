@@ -1991,6 +1991,12 @@ describe('BnplLauncher', () => {
       expect(
         await screen.findByRole('heading', { name: 'Confirming your payment' })
       ).toBeInTheDocument();
+      // The heading renders when polling starts, before the mocked
+      // order-status response resolves: flush the response so the
+      // assertions below observe the post-approval state rather than
+      // racing it.
+      await waitFor(() => expect(fetch).toHaveBeenCalled());
+      await act(async () => {});
       expect(mockPush).not.toHaveBeenCalled();
       expect(mockClearCart).not.toHaveBeenCalled();
       expect(readCreditDirectPopupMarker('order-1')).not.toBeNull();

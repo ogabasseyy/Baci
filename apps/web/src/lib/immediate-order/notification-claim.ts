@@ -162,7 +162,11 @@ export async function claimImmediateOrderNotificationWithProof(
  * and never-rejecting like the claim itself. The server-only HMAC
  * proof is computed inside the try: an unconfigured secret degrades
  * to a skipped completion (logged) exactly like an RPC failure —
- * never a forged proof.
+ * never a forged proof. Returns whether the completion RPC accepted
+ * the call — not whether the status recorded: the void RPC cannot
+ * distinguish a no-op (unprovisioned secret) from a landed write
+ * without oracling, so callers that need recorded-status must
+ * re-read (sent rows are never reclaimable).
  */
 export async function completeImmediateOrderNotificationWithProof(
   supabase: SupabaseClient,
@@ -170,9 +174,9 @@ export async function completeImmediateOrderNotificationWithProof(
   trackingToken: string | null,
   sent: boolean,
   claimToken: string | null
-): Promise<void> {
+): Promise<boolean> {
   if (!trackingToken || !claimToken) {
-    return;
+    return false;
   }
   try {
     const { error } = await supabase.rpc(
@@ -196,7 +200,9 @@ export async function completeImmediateOrderNotificationWithProof(
         orderId,
         sent,
       });
+      return false;
     }
+    return true;
   } catch (error) {
     logger.error({
       message: 'Immediate order notification proof completion raised',
@@ -204,6 +210,7 @@ export async function completeImmediateOrderNotificationWithProof(
       orderId,
       sent,
     });
+    return false;
   }
 }
 

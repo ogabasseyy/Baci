@@ -60,18 +60,19 @@ export async function completeNotificationWithProvisioningRetry(
   if (!sent) {
     // Failed releases the claim for replay; a status check here
     // would reclaim the failed row it is looking for (failed rows
-    // are immediately reclaimable), so complete once and report the
-    // attempt. The delivery helper treats failed as best-effort:
-    // nothing replays the claim yet, and a no-op (unprovisioned)
+    // are immediately reclaimable), so complete once and report
+    // whether the RPC accepted the call. A transport failure
+    // reports uncompleted (the row stays processing for the
+    // stale-window reclaim); an accepted no-op (unprovisioned)
     // simply keeps the never-started grace before the same outcome.
-    await completeImmediateOrderNotificationWithProof(
+    const accepted = await completeImmediateOrderNotificationWithProof(
       supabase,
       orderId,
       trackingToken,
       false,
       claimToken
     );
-    return { completed: true };
+    return { completed: accepted };
   }
   const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;

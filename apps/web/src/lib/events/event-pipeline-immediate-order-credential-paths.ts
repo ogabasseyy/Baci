@@ -105,4 +105,25 @@ export const eventPipelineImmediateOrderCredentialPaths = [
     envPath,
   ],
   [deliverClaimedPath, invoiceArtifactsPath, persistPath, reservePath, envPath],
+  // Remaining deliver-rooted branches, mirroring the audited
+  // notification-rooted shapes above: the invoice admin hop, the
+  // Pay for Me provisioning branch, and the orders-rooted admin hop.
+  [deliverClaimedPath, invoiceArtifactsPath, adminPath, envPath],
+  [deliverClaimedPath, payformeDvaPath, persistPath, reservePath, envPath],
+  [
+    ordersRoutePath,
+    deliverClaimedPath,
+    confirmationEmailPath,
+    zeptomailPath,
+    adminPath,
+    envPath,
+  ],
+  [
+    ordersRoutePath,
+    deliverClaimedPath,
+    payformeDvaPath,
+    persistPath,
+    reservePath,
+    envPath,
+  ],
 ] as const;

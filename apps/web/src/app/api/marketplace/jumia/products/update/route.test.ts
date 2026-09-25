@@ -5,6 +5,7 @@ const mockGetUser = vi.fn();
 const mockMerchantSingle = vi.fn();
 const mockMappingsOrder = vi.fn();
 const mockMappingUpdate = vi.fn();
+const mockMappingUpdateIn = vi.fn();
 const mockRpc = vi.fn();
 const mockForIntegration = vi.fn();
 const mockRequireMerchantFeatureAccess = vi.fn();
@@ -41,9 +42,12 @@ const mockSupabase = {
           eq: () => ({
             eq: () => mockMappingUpdate(...args),
           }),
-          in: () => ({
-            eq: () => mockMappingUpdate(...args),
-          }),
+          in: (...inArgs: unknown[]) => {
+            mockMappingUpdateIn(...inArgs);
+            return {
+              eq: () => mockMappingUpdate(...args),
+            };
+          },
         }),
       };
     }
@@ -431,5 +435,107 @@ describe('POST /api/marketplace/jumia/products/update', () => {
       p_merchant_id: MERCHANT_ID,
       p_updates: [{ id: 'map-1', price: 900 }],
     });
+  });
+
+  it('scopes sale metadata writes to the submitted SKU subset', async () => {
+    vi.mocked(loadJumiaMarketplaceCurrency).mockResolvedValue({
+      ok: true,
+      currency: 'NGN',
+    });
+    mockMappingsOrder.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'map-1',
+          product_id: PRODUCT_ID,
+          variant_id: null,
+          jumia_sku: 'SKU-1',
+          jumia_seller_sku: 'SKU-1',
+          jumia_product_id: 'JUMIA-1',
+          jumia_price: 1000,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+          is_active: true,
+        },
+        {
+          id: 'map-2',
+          product_id: PRODUCT_ID,
+          variant_id: null,
+          jumia_sku: 'SKU-2',
+          jumia_seller_sku: 'SKU-2',
+          jumia_product_id: 'JUMIA-2',
+          jumia_price: 2000,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+          is_active: true,
+        },
+      ],
+      error: null,
+    });
+    mockPushPriceUpdates.mockResolvedValue({ submittedSkus: ['SKU-1'] });
+
+    const response = await POST(
+      makeRequest({
+        integrationId: INTEGRATION_ID,
+        overrides: {
+          jumia_prices: { 'SKU-1': 900 },
+          jumia_sale_price: 800,
+          jumia_sale_start: '2026-09-01T00:00:00Z',
+          jumia_sale_end: '2026-09-30T00:00:00Z',
+        },
+        productId: PRODUCT_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    // Pre-push blanket write carries status fields only; the sale write is
+    // scoped to the submitted mapping.
+    expect(mockMappingUpdate).toHaveBeenCalledTimes(2);
+    expect(mockMappingUpdate.mock.calls[0][0]).not.toHaveProperty(
+      'jumia_sale_price'
+    );
+    expect(mockMappingUpdateIn.mock.calls[0]).toEqual([
+      'id',
+      ['map-1', 'map-2'],
+    ]);
+    expect(mockMappingUpdate.mock.calls[1][0]).toMatchObject({
+      jumia_sale_price: 800,
+      jumia_sale_start: '2026-09-01T00:00:00Z',
+      jumia_sale_end: '2026-09-30T00:00:00Z',
+    });
+    expect(mockMappingUpdateIn.mock.calls[1]).toEqual(['id', ['map-1']]);
+  });
+
+  it('skips sale metadata writes when the price feed fails', async () => {
+    vi.mocked(loadJumiaMarketplaceCurrency).mockResolvedValue({
+      ok: true,
+      currency: 'NGN',
+    });
+    mockPushPriceUpdates.mockImplementationOnce(async (...args: unknown[]) => {
+      (args[5] as string[]).push('Price feed rejected');
+      return { submittedSkus: [] as string[] };
+    });
+
+    const response = await POST(
+      makeRequest({
+        integrationId: INTEGRATION_ID,
+        overrides: {
+          jumia_price: 900,
+          jumia_sale_price: 800,
+        },
+        productId: PRODUCT_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(false);
+    expect(mockMappingUpdate).toHaveBeenCalledTimes(1);
+    expect(mockMappingUpdate.mock.calls[0][0]).not.toHaveProperty(
+      'jumia_sale_price'
+    );
   });
 });

@@ -192,23 +192,16 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+    const updatedAt = new Date().toISOString();
+    // Status pushes target every ready variant, so the local status write
+    // keeps the pre-push blanket scope. Price/sale fields are persisted after
+    // the feed instead, scoped to submitted SKUs: a jumia_prices subset must
+    // not stamp sale metadata on variants Jumia never received.
     const mappingUpdate: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
     };
-    if (Object.hasOwn(overrides, 'jumia_price')) {
-      mappingUpdate.jumia_price = overrides.jumia_price;
-    }
     if (Object.hasOwn(overrides, 'is_active')) {
       mappingUpdate.is_active = overrides.is_active;
-    }
-    if (Object.hasOwn(overrides, 'jumia_sale_price')) {
-      mappingUpdate.jumia_sale_price = overrides.jumia_sale_price;
-    }
-    if (Object.hasOwn(overrides, 'jumia_sale_start')) {
-      mappingUpdate.jumia_sale_start = overrides.jumia_sale_start;
-    }
-    if (Object.hasOwn(overrides, 'jumia_sale_end')) {
-      mappingUpdate.jumia_sale_end = overrides.jumia_sale_end;
     }
     const mappingIds = readyMappings.map((mapping) => mapping.id);
     const { error: updateError } = await supabase
@@ -257,6 +250,45 @@ export async function POST(request: NextRequest) {
     // Persist only what Jumia accepted: committing beforehand would leave
     // local prices ahead of the provider when submission fails, while a
     // partial feed must still persist its submitted subset.
+    const submittedPriceUpdate: Record<string, unknown> = {
+      updated_at: updatedAt,
+    };
+    if (Object.hasOwn(overrides, 'jumia_price')) {
+      submittedPriceUpdate.jumia_price = overrides.jumia_price;
+    }
+    if (Object.hasOwn(overrides, 'jumia_sale_price')) {
+      submittedPriceUpdate.jumia_sale_price = overrides.jumia_sale_price;
+    }
+    if (Object.hasOwn(overrides, 'jumia_sale_start')) {
+      submittedPriceUpdate.jumia_sale_start = overrides.jumia_sale_start;
+    }
+    if (Object.hasOwn(overrides, 'jumia_sale_end')) {
+      submittedPriceUpdate.jumia_sale_end = overrides.jumia_sale_end;
+    }
+    const submittedMappingIds = readyMappings
+      .filter((mapping) => submittedPriceSkus.includes(mapping.jumia_sku))
+      .map((mapping) => mapping.id);
+    if (
+      Object.keys(submittedPriceUpdate).length > 1 &&
+      submittedMappingIds.length > 0
+    ) {
+      const { error: submittedPriceError } = await supabase
+        .from('jumia_product_mappings')
+        .update(submittedPriceUpdate)
+        .in('id', submittedMappingIds)
+        .eq('merchant_id', merchantId);
+      if (submittedPriceError) {
+        logger.error({
+          message: 'Local submitted-price update failed',
+          error: submittedPriceError,
+        });
+        return NextResponse.json(
+          { error: 'Failed to update local mapping' },
+          { status: 500 }
+        );
+      }
+    }
+
     if (overrides.jumia_prices) {
       const submittedPrices = Object.fromEntries(
         Object.entries(overrides.jumia_prices).filter(([sku]) =>

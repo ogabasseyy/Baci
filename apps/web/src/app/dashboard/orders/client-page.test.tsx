@@ -245,4 +245,69 @@ describe('OrdersClientPage', () => {
       screen.queryByText('1 item: WhatsApp Phone')
     ).not.toBeInTheDocument();
   });
+
+  it('renders the total in the order currency, not the merchant currency', () => {
+    render(
+      <OrdersClientPage
+        initialOrders={[
+          {
+            id: 'order-jumia-ke',
+            orderNumber: 'ORD-JUMIA-KE',
+            customerName: 'Wanjiku Kamau',
+            total: 25000,
+            currency: 'KES',
+            shippingStatus: 'Pending',
+            paymentStatus: 'Paid',
+            paymentMethod: 'Jumia Payout',
+            date: 'Sep 25, 2026',
+            createdAt: Date.now(),
+            source: 'jumia',
+            items: [
+              {
+                id: 'item-ke',
+                name: 'Nairobi Widget',
+                quantity: 1,
+                price: 25000,
+              },
+            ],
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText(/ksh\s*25,?000/i)).toBeInTheDocument();
+  });
+
+  it('falls back to the merchant currency for an invalid order currency', () => {
+    render(
+      <OrdersClientPage
+        initialOrders={[
+          {
+            id: 'order-bad-currency',
+            orderNumber: 'ORD-BAD-CUR',
+            customerName: 'Ada Lovelace',
+            total: 25000,
+            currency: 'XX!',
+            shippingStatus: 'Pending',
+            paymentStatus: 'Pending',
+            paymentMethod: 'card',
+            date: 'Sep 25, 2026',
+            createdAt: Date.now(),
+            source: 'website',
+            items: [
+              {
+                id: 'item-bad',
+                name: 'Widget',
+                quantity: 1,
+                price: 25000,
+              },
+            ],
+          },
+        ]}
+      />
+    );
+
+    // Mocked merchant has no country, so the fallback is USD.
+    expect(screen.getByText('$25,000.00')).toBeInTheDocument();
+  });
 });

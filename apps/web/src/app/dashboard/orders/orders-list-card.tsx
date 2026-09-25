@@ -45,7 +45,7 @@ export function OrdersListCard({
   onMarkUnpaid: () => void;
   onFulfillOrders: () => void;
   onDeleteSelected: () => void;
-  formatCurrency: (amount: number) => string;
+  formatCurrency: (amount: number, currency?: string | null) => string;
 }) {
   const allSelected =
     filteredOrders.length > 0 && selectedOrders.size === filteredOrders.length;

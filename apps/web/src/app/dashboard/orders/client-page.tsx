@@ -17,6 +17,7 @@ import { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { apiPatch } from '@/lib/api-client';
 import { getCountryByCode } from '@/lib/countries';
+import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import {
   getOrders,
   type Order,
@@ -304,13 +305,21 @@ export default function OrdersClientPage({
     }
   };
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number, currency?: string | null) => {
+    // Prefer the order's own currency: a Jumia order settled in KES under an
+    // NGN merchant must not render under the merchant's symbol. Anything that
+    // is not a plausible ISO code falls back to the merchant currency so a
+    // corrupt row cannot crash rendering via Intl.
+    const trimmedCurrency = currency?.trim();
+    if (trimmedCurrency && /^[A-Za-z]{3}$/.test(trimmedCurrency)) {
+      return formatDisplayCurrency(amount, trimmedCurrency.toUpperCase());
+    }
     const country = merchant?.country
       ? getCountryByCode(merchant.country)
       : undefined;
     const locale = country ? `en-${country.code}` : 'en-US';
-    const currency = country ? country.currency : 'USD';
-    return getCurrencyFormatter(locale, currency).format(amount);
+    const fallbackCurrency = country ? country.currency : 'USD';
+    return getCurrencyFormatter(locale, fallbackCurrency).format(amount);
   };
 
   const filteredOrders = orders.filter((order) => {

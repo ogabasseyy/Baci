@@ -114,7 +114,26 @@ export async function runCheckoutFinalization({
   // the server confirms terminal artifact delivery (see
   // useInvoiceGeneratedCapture) — never optimistically here, where the
   // after() generation may still fail.
+  // Completion attribution for the fallback emission lanes: if the
+  // creation purchase above fails, the fully-paid / wallet-funded paths
+  // emit the conversion instead and need identity, breakdown, and
+  // currency now — the durable claim prevents a later richer retry.
+  const finalizedCurrency =
+    typeof orderResponse.order.currency === 'string' &&
+    orderResponse.order.currency.trim() !== ''
+      ? orderResponse.order.currency
+      : undefined;
   await runFinalizeCheckoutPayment({
+    attribution: {
+      customerEmail,
+      customerPhone,
+      ...(user?.id ? { userId: user.id } : {}),
+      items: itemsSnapshot,
+      subtotal: snapshot.subtotal,
+      shipping: snapshot.deliveryFee,
+      tax: snapshot.taxAmount,
+      ...(finalizedCurrency ? { currency: finalizedCurrency } : {}),
+    },
     clearCart,
     customerEmail,
     customerName,

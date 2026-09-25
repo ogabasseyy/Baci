@@ -505,15 +505,61 @@ export async function POST(request: NextRequest) {
             orderId: order.id,
             error: inventoryError,
           });
-          return NextResponse.json(
-            {
-              error:
-                inventoryError instanceof Error
-                  ? inventoryError.message
-                  : 'Inventory confirmation failed',
-            },
-            { status: 409 }
-          );
+
+          // Roll the bnpl_approved flip back: without this the order
+          // keeps a confirming status with unconfirmed inventory, and
+          // the status poll treats it as confirmed. The customer
+          // branch sets no amount_paid, so only the statuses restore.
+          // (When the order was already approved this restores the
+          // same values — a harmless no-op.)
+          try {
+            await rollbackOrderStatusAfterInventoryConfirmationFailure(
+              supabase,
+              order.merchant_id,
+              order.id,
+              {
+                payment_status: order.payment_status ?? null,
+                shipping_status: order.shipping_status ?? null,
+              }
+            );
+          } catch (rollbackError) {
+            await fileInventoryConfirmationFailureReview({
+              gatewayReference: payload.checkoutTransactionId,
+              merchantId: order.merchant_id,
+              metadata: {
+                inventoryError:
+                  inventoryError instanceof Error
+                    ? inventoryError.message
+                    : inventoryError,
+                rollbackError:
+                  rollbackError instanceof Error
+                    ? rollbackError.message
+                    : rollbackError,
+                source:
+                  'credit_direct_customer_inventory_confirmation_rollback',
+              },
+              orderId: order.id,
+              reason:
+                'Credit Direct customer approval reached bnpl_approved state, but serialized inventory confirmation and status rollback both failed.',
+              transactionId: null,
+            });
+            return NextResponse.json(
+              {
+                code: 'INVENTORY_CONFIRMATION_CLEANUP_FAILED',
+                error: 'Inventory confirmation cleanup failed',
+              },
+              { status: 500 }
+            );
+          }
+
+          const responsePayload =
+            buildInventoryConfirmationFailurePayload(inventoryError);
+          return NextResponse.json(responsePayload, {
+            status:
+              responsePayload.code === 'serialized_inventory_unavailable'
+                ? 409
+                : 500,
+          });
         }
 
         logger.info({

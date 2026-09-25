@@ -46,6 +46,7 @@ import {
 import {
   claimImmediateOrderNotificationWithProof,
   completeImmediateOrderNotificationWithProof,
+  probeImmediateNotificationCompletionProvisioned,
 } from '@/lib/immediate-order/notification-claim';
 import { markImmediateOrderNotificationStartedWithProof } from '@/lib/immediate-order/notification-start-marker';
 import {
@@ -3061,7 +3062,32 @@ export async function POST(request: NextRequest) {
           );
         if (notificationClaim.shouldDeliver) {
           after(async () => {
+            // Hoisted for the catch: a mid-send failure completes
+            // failed on the probe's fresh lease (never null here —
+            // an unprovisioned probe returns before any throw — but
+            // the completion helper no-ops null leases regardless).
+            let deliveryClaimToken: string | null = null;
             try {
+              // Gate the send on completion provisioning: when the
+              // HMAC secret is not yet provisioned, completion
+              // silently no-ops — sending first would leave a
+              // delivered email stuck in processing (or duplicated by
+              // a later reclaim). The probe re-wins our own claim with
+              // a fresh lease when provisioned; otherwise it returns
+              // unprovisioned and this attempt sends nothing — the
+              // never-started claim expires on its short grace and a
+              // replay resumes delivery after provisioning.
+              const provisionProbe =
+                await probeImmediateNotificationCompletionProvisioned(
+                  notificationCtx.supabase,
+                  order.id,
+                  notificationCtx.trackingToken,
+                  notificationClaim.claimToken
+                );
+              if (!provisionProbe.provisioned || !provisionProbe.claimToken) {
+                return;
+              }
+              deliveryClaimToken = provisionProbe.claimToken;
               // Mark the won claim started (extends it to the full
               // 5-minute crash window): fire-and-forget first step so
               // the marker lands while artifacts build, without
@@ -3072,7 +3098,7 @@ export async function POST(request: NextRequest) {
                 notificationCtx.supabase,
                 order.id,
                 notificationCtx.trackingToken,
-                notificationClaim.claimToken
+                deliveryClaimToken
               );
               let invoiceVirtualAccount: ReceiptOrder['virtual_account'] = null;
               let attachments:
@@ -3117,7 +3143,7 @@ export async function POST(request: NextRequest) {
                 order.id,
                 notificationCtx.trackingToken,
                 true,
-                notificationClaim.claimToken
+                deliveryClaimToken
               );
             } catch (emailError) {
               await completeImmediateOrderNotificationWithProof(
@@ -3125,7 +3151,7 @@ export async function POST(request: NextRequest) {
                 order.id,
                 notificationCtx.trackingToken,
                 false,
-                notificationClaim.claimToken
+                deliveryClaimToken
               );
               logger.error({
                 message: 'Error sending order confirmation email',

@@ -40,7 +40,10 @@ export interface CreditDirectConfirmedOrder {
  * is pending confirmation. Credit Direct's SDK offers no redirect URL or
  * status API, so once its hosted popup replaces the launcher page the only
  * way to detect completion is watching the order's payment_status flip to
- * bnpl_approved/paid via the provider webhook.
+ * bnpl_approved/paid via the provider webhook. Confirmation additionally
+ * requires the approved status to persist across two consecutive reads: the
+ * webhook writes approval before inventory confirmation lands (rolling it
+ * back on failure), so a single read can observe a transient approval.
  */
 export function useCreditDirectVerification({
   active,
@@ -78,6 +81,9 @@ export function useCreditDirectVerification({
     if (lookupEmail) query.set('email', lookupEmail);
     const orderUrl = `/api/storefront/orders/${orderId}?${query.toString()}`;
     const startedAt = Date.now();
+    // Last consecutive approved read (persistence gate): reset by any
+    // other status, failed request, or non-OK response.
+    let lastApprovedStatus: string | null = null;
 
     const checkOnce = async () => {
       // Abort each poll request on its own deadline so a hung fetch on a
@@ -96,30 +102,46 @@ export function useCreditDirectVerification({
           const order = (await response.json()) as OrderStatusResponse;
           const paymentStatus = order.payment_status || '';
           if (CONFIRMED_PAYMENT_STATUSES.has(paymentStatus)) {
-            if (!disposed) {
-              const confirmedTotal = Number(order.total);
-              const confirmedCurrency =
-                typeof order.currency === 'string' && order.currency.trim()
-                  ? order.currency.trim()
-                  : undefined;
-              setConfirmedOrder({
-                ...(Number.isFinite(confirmedTotal)
-                  ? { total: confirmedTotal }
-                  : {}),
-                ...(confirmedCurrency ? { currency: confirmedCurrency } : {}),
-              });
-              setPhase('confirmed');
+            // Persistence gate: confirm only when the same approved
+            // status survives two consecutive reads a full poll
+            // interval apart. A first sighting keeps polling; the
+            // webhook's inventory rollback (on failure) lands between
+            // reads and flips the status back before it can confirm.
+            if (lastApprovedStatus === paymentStatus) {
+              if (!disposed) {
+                const confirmedTotal = Number(order.total);
+                const confirmedCurrency =
+                  typeof order.currency === 'string' && order.currency.trim()
+                    ? order.currency.trim()
+                    : undefined;
+                setConfirmedOrder({
+                  ...(Number.isFinite(confirmedTotal)
+                    ? { total: confirmedTotal }
+                    : {}),
+                  ...(confirmedCurrency
+                    ? { currency: confirmedCurrency }
+                    : {}),
+                });
+                setPhase('confirmed');
+              }
+              return;
             }
-            return;
+            lastApprovedStatus = paymentStatus;
+          } else {
+            lastApprovedStatus = null;
+            if (CANCELLED_PAYMENT_STATUSES.has(paymentStatus)) {
+              if (!disposed) setPhase('cancelled');
+              return;
+            }
           }
-          if (CANCELLED_PAYMENT_STATUSES.has(paymentStatus)) {
-            if (!disposed) setPhase('cancelled');
-            return;
-          }
+        } else {
+          lastApprovedStatus = null;
         }
       } catch {
         // Transient network failure or aborted request — keep polling
-        // until the deadline.
+        // until the deadline. The persistence gate restarts: only two
+        // consecutive successful approved reads confirm.
+        lastApprovedStatus = null;
       } finally {
         clearTimeout(requestDeadline);
       }

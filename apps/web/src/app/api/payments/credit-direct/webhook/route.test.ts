@@ -50,6 +50,25 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 vi.mock('@/lib/payments/ensure-paid-order-inventory-confirmed', () => ({
   ensurePaidOrderInventoryConfirmed: vi.fn().mockResolvedValue(undefined),
+  rollbackOrderStatusAfterInventoryConfirmationFailure: vi
+    .fn()
+    .mockResolvedValue(undefined),
+}));
+
+vi.mock('@/lib/payments/file-inventory-confirmation-review', () => ({
+  fileInventoryConfirmationFailureReview: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@/lib/payments/inventory-confirmation-response', () => ({
+  buildInventoryConfirmationFailurePayload: vi.fn((error: unknown) => ({
+    code:
+      error instanceof Error &&
+      error.message === 'serialized_inventory_unavailable'
+        ? 'serialized_inventory_unavailable'
+        : 'INVENTORY_CONFIRMATION_FAILED',
+    error:
+      error instanceof Error ? error.message : 'Inventory confirmation failed',
+  })),
 }));
 
 vi.mock('@/lib/payments/resolve-credit-direct-confirmation-review', () => ({
@@ -84,8 +103,12 @@ const actualCreditDirect = await vi.importActual<
 >('@/lib/credit-direct');
 const { createServiceClient } = await import('@/lib/supabase/service');
 const { logger } = await import('@/lib/logger');
-const { ensurePaidOrderInventoryConfirmed } = await import(
-  '@/lib/payments/ensure-paid-order-inventory-confirmed'
+const {
+  ensurePaidOrderInventoryConfirmed,
+  rollbackOrderStatusAfterInventoryConfirmationFailure,
+} = await import('@/lib/payments/ensure-paid-order-inventory-confirmed');
+const { fileInventoryConfirmationFailureReview } = await import(
+  '@/lib/payments/file-inventory-confirmation-review'
 );
 const { resolveCreditDirectConfirmationReview } = await import(
   '@/lib/payments/resolve-credit-direct-confirmation-review'
@@ -864,6 +887,112 @@ describe('POST /api/payments/credit-direct/webhook', () => {
         orderId: 'order_abc',
         transactionId: 'txn_123456789',
       });
+    });
+
+    it('rolls back the approval when customer-branch inventory confirmation fails', async () => {
+      vi.mocked(parseWebhookPayload).mockReturnValue(customerPaymentPayload);
+      vi.mocked(ensurePaidOrderInventoryConfirmed).mockRejectedValueOnce(
+        new Error('serialized_inventory_unavailable')
+      );
+
+      const supabaseMock = createMockSupabaseClient();
+      vi.mocked(createServiceClient).mockReturnValue(supabaseMock as never);
+
+      let fromCallCount = 0;
+      supabaseMock.from.mockImplementation((table: string) => {
+        fromCallCount++;
+        if (fromCallCount === 1) {
+          const orderLookupChain = {
+            ...createMockSupabaseClient().from('orders'),
+          };
+          orderLookupChain.select = vi.fn().mockReturnValue(orderLookupChain);
+          orderLookupChain.eq = vi.fn().mockReturnValue(orderLookupChain);
+          orderLookupChain.ilike = vi.fn().mockResolvedValue({
+            data: [mockOrder],
+            error: null,
+          });
+          return orderLookupChain;
+        }
+        const updateChain = { ...createMockSupabaseClient().from(table) };
+        updateChain.update = vi.fn().mockReturnValue(updateChain);
+        updateChain.eq = vi.fn().mockReturnValue(updateChain);
+        updateChain.in = vi.fn().mockReturnValue(updateChain);
+        updateChain.select = vi.fn().mockReturnValue(updateChain);
+        updateChain.maybeSingle = vi
+          .fn()
+          .mockResolvedValue({ data: { id: 'order_abc' }, error: null });
+        return updateChain;
+      });
+
+      const request = createMockRequest(customerPaymentPayload);
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(409);
+      expect(data.code).toBe('serialized_inventory_unavailable');
+      // The bnpl_approved flip rolls back to the pre-webhook statuses
+      // (the customer branch sets no amount_paid) so the status poll
+      // cannot confirm an order with unconfirmed inventory.
+      expect(
+        rollbackOrderStatusAfterInventoryConfirmationFailure
+      ).toHaveBeenCalledWith(supabaseMock, 'merchant_123', 'order_abc', {
+        payment_status: 'pending',
+        shipping_status: null,
+      });
+      expect(fileInventoryConfirmationFailureReview).not.toHaveBeenCalled();
+    });
+
+    it('files a reconciliation review when customer-branch rollback also fails', async () => {
+      vi.mocked(parseWebhookPayload).mockReturnValue(customerPaymentPayload);
+      vi.mocked(ensurePaidOrderInventoryConfirmed).mockRejectedValueOnce(
+        new Error('boom')
+      );
+      vi.mocked(
+        rollbackOrderStatusAfterInventoryConfirmationFailure
+      ).mockRejectedValueOnce(new Error('rollback boom'));
+
+      const supabaseMock = createMockSupabaseClient();
+      vi.mocked(createServiceClient).mockReturnValue(supabaseMock as never);
+
+      let fromCallCount = 0;
+      supabaseMock.from.mockImplementation((table: string) => {
+        fromCallCount++;
+        if (fromCallCount === 1) {
+          const orderLookupChain = {
+            ...createMockSupabaseClient().from('orders'),
+          };
+          orderLookupChain.select = vi.fn().mockReturnValue(orderLookupChain);
+          orderLookupChain.eq = vi.fn().mockReturnValue(orderLookupChain);
+          orderLookupChain.ilike = vi.fn().mockResolvedValue({
+            data: [mockOrder],
+            error: null,
+          });
+          return orderLookupChain;
+        }
+        const updateChain = { ...createMockSupabaseClient().from(table) };
+        updateChain.update = vi.fn().mockReturnValue(updateChain);
+        updateChain.eq = vi.fn().mockReturnValue(updateChain);
+        updateChain.in = vi.fn().mockReturnValue(updateChain);
+        updateChain.select = vi.fn().mockReturnValue(updateChain);
+        updateChain.maybeSingle = vi
+          .fn()
+          .mockResolvedValue({ data: { id: 'order_abc' }, error: null });
+        return updateChain;
+      });
+
+      const request = createMockRequest(customerPaymentPayload);
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.code).toBe('INVENTORY_CONFIRMATION_CLEANUP_FAILED');
+      expect(fileInventoryConfirmationFailureReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 'order_abc',
+          merchantId: 'merchant_123',
+          transactionId: null,
+        })
+      );
     });
 
     it('returns 500 when order update fails for customer payment', async () => {

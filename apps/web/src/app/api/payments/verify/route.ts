@@ -520,7 +520,9 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
-    return verifyGuestPaymentReference(sessionlessSnapshot);
+    return verifyGuestPaymentReference(sessionlessSnapshot, {
+      sessionlessClient: bearerClient,
+    });
   }
 
   return verifyPaymentReference(parsedBody.data.reference);

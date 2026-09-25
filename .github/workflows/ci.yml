@@ -345,6 +345,8 @@ jobs:
           --sql-check supabase/migrations/tests/normalize_product_key_specs_gpu.sql
           --sql-check supabase/migrations/tests/santa_catalog_projection.sql
           --sql-check supabase/migrations/tests/guest_snapshot_inventory_proof.sql
+          --sql-check supabase/migrations/tests/immediate_notification_completion_proof.sql
+          --sql-check supabase/migrations/tests/pr3468_followup_payment_hardening.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

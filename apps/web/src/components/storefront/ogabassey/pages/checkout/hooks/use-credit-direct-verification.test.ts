@@ -62,12 +62,18 @@ describe('useCreditDirectVerification', () => {
   it('confirms once the payment status flips to bnpl_approved', async () => {
     fetchMock
       .mockResolvedValueOnce(orderResponse('bnpl_pending'))
-      .mockResolvedValueOnce(orderResponse('bnpl_approved'));
+      .mockResolvedValue(orderResponse('bnpl_approved'));
 
     const { result } = renderHook(() =>
       useCreditDirectVerification(baseOptions),
     );
     await act(async () => {});
+    expect(result.current.phase).toBe('polling');
+
+    // First approved sighting keeps polling (persistence gate).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
     expect(result.current.phase).toBe('polling');
 
     await act(async () => {
@@ -84,8 +90,31 @@ describe('useCreditDirectVerification', () => {
       useCreditDirectVerification(baseOptions),
     );
     await act(async () => {});
+    expect(result.current.phase).toBe('polling');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
 
     expect(result.current.phase).toBe('confirmed');
+  });
+
+  it('ignores a transient approval that flips back before the next read', async () => {
+    fetchMock
+      .mockResolvedValueOnce(orderResponse('bnpl_approved'))
+      .mockResolvedValue(orderResponse('bnpl_pending'));
+
+    const { result } = renderHook(() =>
+      useCreditDirectVerification(baseOptions),
+    );
+    await act(async () => {});
+    expect(result.current.phase).toBe('polling');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30);
+    });
+
+    expect(result.current.phase).toBe('polling');
   });
 
   it('reports cancellation when the order was cancelled', async () => {
@@ -102,12 +131,44 @@ describe('useCreditDirectVerification', () => {
   it('keeps polling through transient fetch failures', async () => {
     fetchMock
       .mockRejectedValueOnce(new Error('network down'))
-      .mockResolvedValueOnce(orderResponse('bnpl_approved'));
+      .mockResolvedValue(orderResponse('bnpl_approved'));
 
     const { result } = renderHook(() =>
       useCreditDirectVerification(baseOptions),
     );
     await act(async () => {});
+    expect(result.current.phase).toBe('polling');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.phase).toBe('polling');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    expect(result.current.phase).toBe('confirmed');
+  });
+
+  it('restarts the persistence gate after a failure between approvals', async () => {
+    fetchMock
+      .mockResolvedValueOnce(orderResponse('bnpl_approved'))
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValue(orderResponse('bnpl_approved'));
+
+    const { result } = renderHook(() =>
+      useCreditDirectVerification(baseOptions),
+    );
+    await act(async () => {});
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    // Approved, failed, approved: the gate restarted, still polling.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
     expect(result.current.phase).toBe('polling');
 
     await act(async () => {
@@ -171,6 +232,11 @@ describe('useCreditDirectVerification', () => {
       result.current.restart();
     });
     await act(async () => {});
+    expect(result.current.phase).toBe('polling');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
 
     expect(result.current.phase).toBe('confirmed');
   });

@@ -7681,7 +7681,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     // and retries instead of the shopper receiving an attachment-less
     // message marked delivered.
     await vi.waitFor(
-      () =>
+      () => {
         expect(supabase.rpc).toHaveBeenCalledWith(
           'complete_immediate_order_notification_with_proof',
           {
@@ -7691,18 +7691,22 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
             p_claim_token: 'lease-default-1',
             p_completion_proof: 'proof-route-1',
           }
-        ),
+        );
+        // The provisioning probe issues the same failed-completion call
+        // before artifacts build, so gate on the artifacts error log —
+        // only the failed-artifacts path emits it.
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message:
+              'Persisted order items unavailable for invoice email; skipping non-canonical invoice artifacts',
+            orderId: 'order-id',
+          })
+        );
+      },
       { timeout: 1000 }
     );
     expect(mockSendEmail).not.toHaveBeenCalled();
     expect(mockGenerateReceiptBlob).not.toHaveBeenCalled();
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message:
-          'Persisted order items unavailable for invoice email; skipping non-canonical invoice artifacts',
-        orderId: 'order-id',
-      })
-    );
   });
 
   it('marks the won claim started before delivery artifacts build', async () => {
@@ -7744,6 +7748,75 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
           }
         ),
       { timeout: 1000 }
+    );
+  });
+
+  it('skips the send when the completion provisioning probe loses', async () => {
+    // First claim wins, but the probe reclaim loses (completion secret
+    // unprovisioned): after() sends nothing and marks nothing — the
+    // never-started claim expires and a replay resumes delivery.
+    const supabase = buildMockSupabase({
+      claim_immediate_order_notification_with_proof: [
+        {
+          data: [
+            {
+              claimed: true,
+              claim_status: 'processing',
+              claim_token: 'lease-default-1',
+            },
+          ],
+          error: null,
+        },
+        {
+          data: [
+            {
+              claimed: false,
+              claim_status: 'processing',
+              claim_token: null,
+            },
+          ],
+          error: null,
+        },
+      ] as never,
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'invoice',
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+    await vi.waitFor(
+      () =>
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message:
+              'Immediate order notification completion secret unprovisioned; deferring delivery to replay',
+            orderId: 'order-id',
+          })
+        ),
+      { timeout: 1000 }
+    );
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'mark_immediate_order_notification_started_with_proof',
+      expect.anything()
     );
   });
   it('renders invoice attachments from persisted canonical order items', async () => {
@@ -8540,8 +8613,11 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     // retries instead of sending a DVA-less message marked delivered.
     // The credited-balance math stays covered by 'counts wallet credit
     // as paid in generated invoice emails', which does send.
+    // The provisioning probe issues the same failed-completion call
+    // before artifacts build, so gate on the after() catch log — only
+    // the failed-artifacts path emits it.
     await vi.waitFor(
-      () =>
+      () => {
         expect(supabase.rpc).toHaveBeenCalledWith(
           'complete_immediate_order_notification_with_proof',
           {
@@ -8551,7 +8627,13 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
             p_claim_token: 'lease-default-1',
             p_completion_proof: 'proof-route-1',
           }
-        ),
+        );
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Error sending order confirmation email',
+          })
+        );
+      },
       { timeout: 1000 }
     );
     expect(mockSendEmail).not.toHaveBeenCalled();

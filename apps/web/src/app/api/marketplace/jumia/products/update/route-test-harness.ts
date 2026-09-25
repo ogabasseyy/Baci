@@ -57,6 +57,7 @@ const mockSupabase = {
               eq: () =>
                 Object.assign(run(), {
                   eq: () => ({ select: () => run() }),
+                  is: () => ({ select: () => run() }),
                 }),
             };
           },
@@ -174,6 +175,7 @@ function reset() {
         sync_error: null,
         created_at: '2026-08-13T10:00:00Z',
         updated_at: '2026-08-13T10:00:00Z',
+        update_token: 'token-0',
       },
     ],
     error: null,

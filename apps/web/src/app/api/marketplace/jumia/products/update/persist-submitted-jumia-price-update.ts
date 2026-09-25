@@ -54,35 +54,50 @@ export async function persistSubmittedJumiaPriceUpdate(args: {
   if (Object.hasOwn(overrides, 'jumia_sale_end')) {
     submittedPriceUpdate.jumia_sale_end = overrides.jumia_sale_end;
   }
-  const submittedMappingIds = mappings
-    .filter((mapping) => submittedSkus.includes(mapping.jumia_sku))
-    .map((mapping) => mapping.id);
+  const submittedMappings = mappings.filter((mapping) =>
+    submittedSkus.includes(mapping.jumia_sku)
+  );
   if (
     Object.keys(submittedPriceUpdate).length > 1 &&
-    submittedMappingIds.length > 0
+    submittedMappings.length > 0
   ) {
-    // Optimistic guard: only overwrite rows still stamped with this
-    // request's unique pre-push token. A concurrent save restamps with its
-    // own token, so a shortfall means this feed was superseded and must
-    // reconcile instead of regressing the newer local values.
-    const { data: updatedRows, error: submittedPriceError } = await supabase
-      .from('jumia_product_mappings')
-      .update(submittedPriceUpdate)
-      .in('id', submittedMappingIds)
-      .eq('merchant_id', merchantId)
-      .eq('update_token', updateToken)
-      .select('id');
-    if (submittedPriceError) {
-      logger.error({
-        message: 'Local submitted-price update failed',
-        error: submittedPriceError,
-      });
-      return {
-        ok: false,
-        error: `Jumia accepted the price feed but the local sale details could not be saved. ${ACCEPTED_FEED_RETRY_GUIDANCE}`,
-      };
+    // Write-time claim: only rows still carrying the token observed at
+    // load may be overwritten, and the write restamps them with this
+    // request's token. Failed saves never stamp, so only an accepted save
+    // can supersede another save. Baselines are grouped because a prior
+    // per-SKU save may have claimed a subset of these rows.
+    const claimUpdate = { ...submittedPriceUpdate, update_token: updateToken };
+    const baselineGroups = new Map<string | null, string[]>();
+    for (const mapping of submittedMappings) {
+      const baseline = mapping.update_token ?? null;
+      const group = baselineGroups.get(baseline);
+      if (group) group.push(mapping.id);
+      else baselineGroups.set(baseline, [mapping.id]);
     }
-    if (!updatedRows || updatedRows.length < submittedMappingIds.length) {
+    let matchedRows = 0;
+    for (const [baseline, ids] of baselineGroups) {
+      const guarded = supabase
+        .from('jumia_product_mappings')
+        .update(claimUpdate)
+        .in('id', ids)
+        .eq('merchant_id', merchantId);
+      const { data: updatedRows, error: submittedPriceError } =
+        baseline === null
+          ? await guarded.is('update_token', null).select('id')
+          : await guarded.eq('update_token', baseline).select('id');
+      if (submittedPriceError) {
+        logger.error({
+          message: 'Local submitted-price update failed',
+          error: submittedPriceError,
+        });
+        return {
+          ok: false,
+          error: `Jumia accepted the price feed but the local sale details could not be saved. ${ACCEPTED_FEED_RETRY_GUIDANCE}`,
+        };
+      }
+      matchedRows += updatedRows?.length ?? 0;
+    }
+    if (matchedRows < submittedMappings.length) {
       return {
         ok: false,
         error: `Another save updated this product while the Jumia feed was submitting. ${ACCEPTED_FEED_RETRY_GUIDANCE}`,
@@ -101,7 +116,7 @@ export async function persistSubmittedJumiaPriceUpdate(args: {
       merchantId,
       mappings,
       prices: submittedPrices,
-      expectedUpdateToken: updateToken,
+      updateToken,
     });
     if (!priceResult.ok) {
       if (priceResult.code === '40001') {

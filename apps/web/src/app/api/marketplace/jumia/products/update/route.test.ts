@@ -170,8 +170,8 @@ describe('POST /api/marketplace/jumia/products/update', () => {
       'apply_jumia_variant_price_updates',
       {
         p_merchant_id: MERCHANT_ID,
-        p_updates: [{ id: 'map-1', price: 900 }],
-        p_expected_update_token: expect.any(String),
+        p_updates: [{ id: 'map-1', price: 900, expected_token: 'token-0' }],
+        p_update_token: expect.any(String),
       }
     );
   });

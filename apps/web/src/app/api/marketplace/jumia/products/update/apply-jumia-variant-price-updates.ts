@@ -5,6 +5,7 @@ export type JumiaVariantPriceMapping = {
   id: string;
   jumia_sku: string;
   jumia_price: number | null;
+  update_token: string | null;
 };
 
 /**
@@ -22,13 +23,17 @@ export async function applyJumiaVariantPriceUpdates(args: {
   merchantId: string;
   mappings: readonly JumiaVariantPriceMapping[];
   prices: Record<string, number>;
-  expectedUpdateToken: string;
+  updateToken: string;
 }): Promise<{ ok: true } | { ok: false; error: string; code?: string }> {
   const updates = [];
   for (const mapping of args.mappings) {
     const price = args.prices[mapping.jumia_sku];
     if (price == null) continue;
-    updates.push({ id: mapping.id, price });
+    updates.push({
+      id: mapping.id,
+      price,
+      expected_token: mapping.update_token,
+    });
   }
   if (updates.length === 0) return { ok: true };
 
@@ -37,7 +42,7 @@ export async function applyJumiaVariantPriceUpdates(args: {
     {
       p_merchant_id: args.merchantId,
       p_updates: updates,
-      p_expected_update_token: args.expectedUpdateToken,
+      p_update_token: args.updateToken,
     }
   );
   if (priceUpdateError) {

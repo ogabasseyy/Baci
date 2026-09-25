@@ -9,6 +9,7 @@ import { persistSubmittedJumiaPriceUpdate } from './persist-submitted-jumia-pric
 
 const mockUpdateIn = vi.fn();
 const mockUpdateEq = vi.fn();
+const mockUpdateIs = vi.fn();
 const mockRpc = vi.fn();
 
 function stubSupabase(updateResult: { data: unknown; error: unknown }) {
@@ -23,6 +24,10 @@ function stubSupabase(updateResult: { data: unknown; error: unknown }) {
               return {
                 eq: (...guardArgs: unknown[]) => {
                   mockUpdateEq(...guardArgs);
+                  return { select: () => updateResult };
+                },
+                is: (...guardArgs: unknown[]) => {
+                  mockUpdateIs(...guardArgs);
                   return { select: () => updateResult };
                 },
               };
@@ -40,6 +45,7 @@ function mapping(overrides: Partial<JumiaVariantPriceMapping> = {}) {
     id: 'map-1',
     jumia_sku: 'SKU-1',
     jumia_price: 1000,
+    update_token: 'token-0',
     ...overrides,
   };
 }
@@ -81,18 +87,20 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
         jumia_sale_price: 800,
         jumia_sale_start: '2026-09-01T00:00:00Z',
         jumia_sale_end: '2026-09-30T00:00:00Z',
+        update_token: UPDATE_TOKEN,
       },
       'id',
       ['map-1']
     );
     expect(mockRpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
       p_merchant_id: MERCHANT_ID,
-      p_updates: [{ id: 'map-1', price: 900 }],
-      p_expected_update_token: UPDATE_TOKEN,
+      p_updates: [{ id: 'map-1', price: 900, expected_token: 'token-0' }],
+      p_update_token: UPDATE_TOKEN,
     });
-    // Optimistic guard: only rows still stamped with this request's
-    // unique pre-push token may be overwritten.
-    expect(mockUpdateEq).toHaveBeenCalledWith('update_token', UPDATE_TOKEN);
+    // Write-time claim: only rows still carrying the load-time baseline
+    // may be overwritten, and the write restamps them with this
+    // request's token.
+    expect(mockUpdateEq).toHaveBeenCalledWith('update_token', 'token-0');
   });
 
   it('persists nothing when the feed submitted no SKUs', async () => {
@@ -184,53 +192,50 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
+  it('claims unstamped rows through the null-baseline partition', async () => {
+    const result = await persistSubmittedJumiaPriceUpdate({
+      supabase: stubSupabase({ data: [{ id: 'map-1' }], error: null }) as never,
+      merchantId: MERCHANT_ID,
+      mappings: [mapping({ update_token: null })],
+      overrides: { jumia_sale_price: 800 },
+      submittedSkus: ['SKU-1'],
+      updatedAt: UPDATED_AT,
+      updateToken: UPDATE_TOKEN,
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(mockUpdateIs).toHaveBeenCalledWith('update_token', null);
+  });
+
   it('rejects a stale per-SKU save that resolves after a newer save', async () => {
-    // Both saves start within the same millisecond tick: only the unique
-    // request tokens distinguish them.
-    const sameTick = '2026-09-25T10:00:00.000Z';
+    // Both saves load the same baseline token; the newer save claims the
+    // row first, so the older save must lose the write-time guard.
     const rows = new Map([
-      ['map-1', { update_token: 'token-older', jumia_price: 1000 }],
+      ['map-1', { update_token: 'token-0', jumia_price: 1000 }],
     ]);
-    // Stateful stand-in that enforces the same contracts as Postgres: eq
-    // predicates filter, the RPC rejects tokens that no longer match.
+    // Stateful stand-in that enforces the same contracts as Postgres: the
+    // RPC rejects baselines that no longer match and claims on success.
     const stateful = {
       from: () => ({
-        update: (payload: Record<string, unknown>) => ({
-          in: (_column: string, ids: string[]) => ({
-            eq: (...first: [string, unknown]) => ({
-              eq: (...second: [string, unknown]) => ({
-                select: () => {
-                  const matched = ids.filter((id) => {
-                    const row = rows.get(id);
-                    if (!row) return false;
-                    return [first, second].every(
-                      ([column, value]) =>
-                        column === 'merchant_id' ||
-                        (row as Record<string, unknown>)[column] === value
-                    );
-                  });
-                  for (const id of matched) {
-                    const current = rows.get(id);
-                    if (current) rows.set(id, { ...current, ...payload });
-                  }
-                  return { data: matched.map((id) => ({ id })), error: null };
-                },
-              }),
-            }),
-          }),
-        }),
+        update: () => {
+          throw new Error('per-SKU-only saves must not issue scalar writes');
+        },
       }),
       rpc: (
         _name: string,
         params: {
-          p_updates: Array<{ id: string; price: number }>;
-          p_expected_update_token: string;
+          p_updates: Array<{
+            id: string;
+            price: number;
+            expected_token: string | null;
+          }>;
+          p_update_token: string;
         }
       ) => {
-        const stale = params.p_updates.some(
-          (update) =>
-            rows.get(update.id)?.update_token !== params.p_expected_update_token
-        );
+        const stale = params.p_updates.some((update) => {
+          const current = rows.get(update.id)?.update_token ?? null;
+          return current !== update.expected_token;
+        });
         if (stale) {
           return {
             error: {
@@ -245,42 +250,131 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
             rows.set(update.id, {
               ...current,
               jumia_price: update.price,
+              update_token: params.p_update_token,
             });
           }
         }
         return { error: null };
       },
     };
-    const mappings = [{ id: 'map-1', jumia_sku: 'SKU-1', jumia_price: 1000 }];
+    const mappings = [
+      {
+        id: 'map-1',
+        jumia_sku: 'SKU-1',
+        jumia_price: 1000,
+        update_token: 'token-0',
+      },
+    ];
 
-    // The newer save lands first: its pre-push token replaces the older
-    // one, then its per-SKU prices persist.
-    const newerRow = rows.get('map-1');
-    if (newerRow) newerRow.update_token = 'token-newer';
     const newer = await persistSubmittedJumiaPriceUpdate({
       supabase: stateful as never,
       merchantId: MERCHANT_ID,
       mappings,
       overrides: { jumia_prices: { 'SKU-1': 900 } },
       submittedSkus: ['SKU-1'],
-      updatedAt: sameTick,
+      updatedAt: UPDATED_AT,
       updateToken: 'token-newer',
     });
     expect(newer).toEqual({ ok: true });
 
-    // The older save resolves last: its RPC must be rejected and the
-    // newer price must survive.
     const older = await persistSubmittedJumiaPriceUpdate({
       supabase: stateful as never,
       merchantId: MERCHANT_ID,
       mappings,
       overrides: { jumia_prices: { 'SKU-1': 700 } },
       submittedSkus: ['SKU-1'],
-      updatedAt: sameTick,
+      updatedAt: UPDATED_AT,
       updateToken: 'token-older',
     });
     expect(older.ok).toBe(false);
     expect(older.ok ? '' : older.error).toMatch(/Another save updated/);
     expect(rows.get('map-1')?.jumia_price).toBe(900);
+  });
+
+  it('lets an accepted save through after an overlapping save fails its feed', async () => {
+    // Failed saves perform no writes at all, so they must not poison the
+    // token an overlapping accepted save claims.
+    const rows = new Map([
+      ['map-1', { update_token: 'token-0', jumia_price: 1000 }],
+    ]);
+    let updateCalls = 0;
+    const stateful = {
+      from: () => ({
+        update: () => {
+          updateCalls += 1;
+          throw new Error('failed saves must not write');
+        },
+      }),
+      rpc: (
+        _name: string,
+        params: {
+          p_updates: Array<{
+            id: string;
+            price: number;
+            expected_token: string | null;
+          }>;
+          p_update_token: string;
+        }
+      ) => {
+        const stale = params.p_updates.some((update) => {
+          const current = rows.get(update.id)?.update_token ?? null;
+          return current !== update.expected_token;
+        });
+        if (stale) {
+          return {
+            error: {
+              message: 'Jumia price update superseded by a newer save',
+              code: '40001',
+            },
+          };
+        }
+        for (const update of params.p_updates) {
+          const current = rows.get(update.id);
+          if (current) {
+            rows.set(update.id, {
+              ...current,
+              jumia_price: update.price,
+              update_token: params.p_update_token,
+            });
+          }
+        }
+        return { error: null };
+      },
+    };
+    const mappings = [
+      {
+        id: 'map-1',
+        jumia_sku: 'SKU-1',
+        jumia_price: 1000,
+        update_token: 'token-0',
+      },
+    ];
+
+    const failed = await persistSubmittedJumiaPriceUpdate({
+      supabase: stateful as never,
+      merchantId: MERCHANT_ID,
+      mappings,
+      overrides: { jumia_prices: { 'SKU-1': 950 }, jumia_sale_price: 700 },
+      submittedSkus: [],
+      updatedAt: UPDATED_AT,
+      updateToken: 'token-failed',
+    });
+    expect(failed).toEqual({ ok: true });
+    expect(updateCalls).toBe(0);
+
+    const accepted = await persistSubmittedJumiaPriceUpdate({
+      supabase: stateful as never,
+      merchantId: MERCHANT_ID,
+      mappings,
+      overrides: { jumia_prices: { 'SKU-1': 900 } },
+      submittedSkus: ['SKU-1'],
+      updatedAt: UPDATED_AT,
+      updateToken: 'token-accepted',
+    });
+    expect(accepted).toEqual({ ok: true });
+    expect(rows.get('map-1')).toEqual({
+      update_token: 'token-accepted',
+      jumia_price: 900,
+    });
   });
 });

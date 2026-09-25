@@ -204,7 +204,6 @@ export async function POST(request: NextRequest) {
     // not stamp sale metadata on variants Jumia never received.
     const mappingUpdate: Record<string, unknown> = {
       updated_at: updatedAt,
-      update_token: updateToken,
     };
     if (Object.hasOwn(overrides, 'is_active')) {
       mappingUpdate.is_active = overrides.is_active;

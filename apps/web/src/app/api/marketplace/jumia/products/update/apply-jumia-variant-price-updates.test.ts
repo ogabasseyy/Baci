@@ -15,8 +15,13 @@ function createSupabaseStub(result: { error: unknown }) {
 }
 
 const MAPPINGS = [
-  { id: 'map-1', jumia_sku: 'SKU-1', jumia_price: 1000 },
-  { id: 'map-2', jumia_sku: 'SKU-2', jumia_price: 2000 },
+  {
+    id: 'map-1',
+    jumia_sku: 'SKU-1',
+    jumia_price: 1000,
+    update_token: 'token-0',
+  },
+  { id: 'map-2', jumia_sku: 'SKU-2', jumia_price: 2000, update_token: null },
 ];
 
 describe('applyJumiaVariantPriceUpdates', () => {
@@ -32,7 +37,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: { 'SKU-1': 900, 'SKU-2': 1800 },
-      expectedUpdateToken: 'token-1',
+      updateToken: 'token-1',
     });
 
     expect(result).toEqual({ ok: true });
@@ -40,10 +45,10 @@ describe('applyJumiaVariantPriceUpdates', () => {
     expect(rpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
       p_merchant_id: 'merchant-1',
       p_updates: [
-        { id: 'map-1', price: 900 },
-        { id: 'map-2', price: 1800 },
+        { id: 'map-1', price: 900, expected_token: 'token-0' },
+        { id: 'map-2', price: 1800, expected_token: null },
       ],
-      p_expected_update_token: 'token-1',
+      p_update_token: 'token-1',
     });
   });
 
@@ -55,15 +60,15 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: { 'SKU-2': 1800 },
-      expectedUpdateToken: 'token-1',
+      updateToken: 'token-1',
     });
 
     expect(result).toEqual({ ok: true });
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(rpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
       p_merchant_id: 'merchant-1',
-      p_updates: [{ id: 'map-2', price: 1800 }],
-      p_expected_update_token: 'token-1',
+      p_updates: [{ id: 'map-2', price: 1800, expected_token: null }],
+      p_update_token: 'token-1',
     });
 
     const empty = await applyJumiaVariantPriceUpdates({
@@ -71,7 +76,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: {},
-      expectedUpdateToken: 'token-1',
+      updateToken: 'token-1',
     });
     expect(empty).toEqual({ ok: true });
     expect(rpc).toHaveBeenCalledTimes(1);
@@ -87,7 +92,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: { 'SKU-1': 900, 'SKU-2': 1800 },
-      expectedUpdateToken: 'token-1',
+      updateToken: 'token-1',
     });
 
     expect(result).toEqual({
@@ -108,7 +113,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: { 'SKU-1': 900 },
-      expectedUpdateToken: 'token-1',
+      updateToken: 'token-1',
     });
 
     expect(result).toEqual({

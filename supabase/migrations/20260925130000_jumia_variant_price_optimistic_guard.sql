@@ -1,13 +1,16 @@
 -- Guard per-variant Jumia price writes against concurrent saves.
 --
--- The product update route stamps every ready mapping with a unique
--- per-request token before submitting the provider feed. Two overlapping
--- saves can otherwise interleave so the earlier request's feed resolves
--- last and overwrites the later request's local prices. The expected
--- token is a predicate of the atomic update: rows restamped by a newer
--- save no longer match, the row-count check reports the call as
--- superseded (SQLSTATE 40001) instead of silently regressing them, and
--- genuinely missing targets keep the original 22023 failure.
+-- Each update carries the token its caller observed when the mappings
+-- were loaded, and the atomic statement only overwrites rows still
+-- carrying that baseline, restamping them with the caller's claim token.
+-- Two overlapping saves can otherwise interleave so the earlier
+-- request's feed resolves last and overwrites the later request's local
+-- prices; rows claimed by a newer save no longer match, the row-count
+-- check reports the call as superseded (SQLSTATE 40001) instead of
+-- silently regressing them, and genuinely missing targets keep the
+-- original 22023 failure. Claims happen at write time (never before the
+-- provider feed is accepted), so a failed save cannot poison the token
+-- an overlapping accepted save relies on.
 --
 -- Predeploy safety: the live route still calls the two-argument signature
 -- while this migration runs ahead of the Vercel deploy, so the unguarded
@@ -76,7 +79,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.apply_jumia_variant_price_updates(
   p_merchant_id uuid,
   p_updates jsonb,
-  p_expected_update_token text
+  p_update_token text
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -103,7 +106,8 @@ BEGIN
     OR jsonb_array_length(p_updates) < 1
     OR EXISTS (
       SELECT 1
-      FROM jsonb_to_recordset(p_updates) AS update_row(id uuid, price numeric)
+      FROM jsonb_to_recordset(p_updates)
+        AS update_row(id uuid, price numeric, expected_token text)
       WHERE update_row.id IS NULL
         OR update_row.price IS NULL
         OR update_row.price <= 0
@@ -115,17 +119,20 @@ BEGIN
   UPDATE public.jumia_product_mappings AS mapping
   SET
     jumia_price = update_row.price,
-    updated_at = now()
-  FROM jsonb_to_recordset(p_updates) AS update_row(id uuid, price numeric)
+    updated_at = now(),
+    update_token = p_update_token
+  FROM jsonb_to_recordset(p_updates)
+    AS update_row(id uuid, price numeric, expected_token text)
   WHERE mapping.id = update_row.id
     AND mapping.merchant_id = p_merchant_id
-    AND mapping.update_token = p_expected_update_token;
+    AND mapping.update_token IS NOT DISTINCT FROM update_row.expected_token;
 
   GET DIAGNOSTICS v_update_count = ROW_COUNT;
   IF v_update_count <> jsonb_array_length(p_updates) THEN
     IF EXISTS (
       SELECT 1
-      FROM jsonb_to_recordset(p_updates) AS update_row(id uuid, price numeric)
+      FROM jsonb_to_recordset(p_updates)
+        AS update_row(id uuid, price numeric, expected_token text)
       WHERE NOT EXISTS (
         SELECT 1 FROM public.jumia_product_mappings AS mapping
         WHERE mapping.id = update_row.id

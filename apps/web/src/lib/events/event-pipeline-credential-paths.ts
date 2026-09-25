@@ -295,9 +295,4 @@ export const eventPipelineCredentialPaths = [
     'apps/web/src/lib/supabase/admin.ts',
     'apps/web/src/env.ts',
   ],
-  [
-    'apps/web/src/app/api/cron/purge-jumia-self-authorization-discoveries/route.ts',
-    'apps/web/src/lib/supabase/admin.ts',
-    'apps/web/src/env.ts',
-  ],
 ] as const;

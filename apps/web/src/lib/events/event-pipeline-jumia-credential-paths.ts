@@ -269,6 +269,11 @@ export const eventPipelineJumiaCredentialPaths = [
     'apps/web/src/app/api/cron/purge-jumia-self-authorization-discoveries/route.ts',
     envPath,
   ],
+  [
+    'apps/web/src/app/api/cron/purge-jumia-self-authorization-discoveries/route.ts',
+    supabaseAdmin,
+    envPath,
+  ],
   [mobileTicket, envPath],
   [
     'apps/web/src/app/api/marketplace/jumia/connect/route.ts',
